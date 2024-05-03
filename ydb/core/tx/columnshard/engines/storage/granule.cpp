@@ -7,15 +7,6 @@
 
 namespace NKikimr::NOlap {
 
-TGranuleAdditiveSummary::ECompactionClass TGranuleMeta::GetCompactionType(const TCompactionLimits& limits) const {
-    return GetAdditiveSummary().GetCompactionClass(
-        limits, ModificationLastTime, TMonotonic::Now());
-}
-
-ui64 TGranuleMeta::Size() const {
-    return GetAdditiveSummary().GetGranuleSize();
-}
-
 void TGranuleMeta::UpsertPortion(const TPortionInfo& info) {
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "upsert_portion")("portion", info.DebugString())("path_id", GetPathId());
     auto it = Portions.find(info.GetPortion());
@@ -52,13 +43,6 @@ bool TGranuleMeta::ErasePortion(const ui64 portion) {
     return true;
 }
 
-void TGranuleMeta::AddColumnRecordOnLoad(const TIndexInfo& indexInfo, const TPortionInfo& portion, const TColumnChunkLoadContext& rec, const NKikimrTxColumnShard::TIndexPortionMeta* portionMeta) {
-    std::shared_ptr<TPortionInfo> pInfo = UpsertPortionOnLoad(portion);
-    TColumnRecord cRecord(pInfo->RegisterBlobId(rec.GetBlobRange().GetBlobId()), rec, indexInfo.GetColumnFeaturesVerified(rec.GetAddress().GetColumnId()));
-    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "AddColumnRecordOnLoad")("portion_info", portion.DebugString())("record", cRecord.DebugString());
-    pInfo->AddRecord(indexInfo, cRecord, portionMeta);
-}
-
 void TGranuleMeta::OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter, NStorageOptimizer::IOptimizerPlanner::TModificationGuard* modificationGuard) {
     if (portionAfter) {
         AFL_VERIFY(PortionsByPK[portionAfter->IndexKeyStart()].emplace(portionAfter->GetPortion(), portionAfter).second);
@@ -73,16 +57,17 @@ void TGranuleMeta::OnAfterChangePortion(const std::shared_ptr<TPortionInfo> port
             NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
             ActualizationIndex->AddPortion(portionAfter, context);
         }
+        Stats->OnAddPortion(*portionAfter);
     }
     if (!!AdditiveSummaryCache) {
-        auto g = AdditiveSummaryCache->StartEdit(Counters);
         if (portionAfter && !portionAfter->HasRemoveSnapshot()) {
+            auto g = AdditiveSummaryCache->StartEdit(Counters);
             g.AddPortion(*portionAfter);
         }
     }
 
     ModificationLastTime = TMonotonic::Now();
-    Owner->UpdateGranuleInfo(*this);
+    Stats->UpdateGranuleInfo(*this);
 }
 
 void TGranuleMeta::OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> portionBefore) {
@@ -103,10 +88,11 @@ void TGranuleMeta::OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> por
             OptimizerPlanner->StartModificationGuard().RemovePortion(portionBefore);
             ActualizationIndex->RemovePortion(portionBefore);
         }
+        Stats->OnRemovePortion(*portionBefore);
     }
     if (!!AdditiveSummaryCache) {
-        auto g = AdditiveSummaryCache->StartEdit(Counters);
         if (portionBefore && !portionBefore->HasRemoveSnapshot()) {
+            auto g = AdditiveSummaryCache->StartEdit(Counters);
             g.RemovePortion(*portionBefore);
         }
     }
@@ -116,14 +102,14 @@ void TGranuleMeta::OnCompactionFinished() {
     AllowInsertionFlag = false;
     Y_ABORT_UNLESS(Activity.erase(EActivity::GeneralCompaction));
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "OnCompactionFinished")("info", DebugString());
-    Owner->UpdateGranuleInfo(*this);
+    Stats->UpdateGranuleInfo(*this);
 }
 
 void TGranuleMeta::OnCompactionFailed(const TString& reason) {
     AllowInsertionFlag = false;
     Y_ABORT_UNLESS(Activity.erase(EActivity::GeneralCompaction));
     AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "OnCompactionFailed")("reason", reason)("info", DebugString());
-    Owner->UpdateGranuleInfo(*this);
+    Stats->UpdateGranuleInfo(*this);
 }
 
 void TGranuleMeta::OnCompactionStarted() {
@@ -153,14 +139,13 @@ const NKikimr::NOlap::TGranuleAdditiveSummary& TGranuleMeta::GetAdditiveSummary(
     return *AdditiveSummaryCache;
 }
 
-TGranuleMeta::TGranuleMeta(const ui64 pathId, std::shared_ptr<TGranulesStorage> owner, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex)
+TGranuleMeta::TGranuleMeta(const ui64 pathId, const TGranulesStorage& owner, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex)
     : PathId(pathId)
-    , Owner(owner)
     , Counters(counters)
-    , PortionInfoGuard(Owner->GetCounters().BuildPortionBlobsGuard())
+    , PortionInfoGuard(owner.GetCounters().BuildPortionBlobsGuard())
+    , Stats(owner.GetStats())
 {
-    Y_ABORT_UNLESS(Owner);
-    OptimizerPlanner = std::make_shared<NStorageOptimizer::NBuckets::TOptimizerPlanner>(PathId, owner->GetStoragesManager(), versionedIndex.GetLastSchema()->GetIndexInfo().GetReplaceKey());
+    OptimizerPlanner = std::make_shared<NStorageOptimizer::NBuckets::TOptimizerPlanner>(PathId, owner.GetStoragesManager(), versionedIndex.GetLastSchema()->GetIndexInfo().GetReplaceKey());
     ActualizationIndex = std::make_shared<NActualizer::TGranuleActualizationIndex>(PathId, versionedIndex);
 
 }
@@ -169,17 +154,11 @@ bool TGranuleMeta::InCompaction() const {
     return Activity.contains(EActivity::GeneralCompaction);
 }
 
-std::shared_ptr<NKikimr::NOlap::TPortionInfo> TGranuleMeta::UpsertPortionOnLoad(const TPortionInfo& portion) {
-    auto it = Portions.find(portion.GetPortion());
-    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "UpsertPortionOnLoad")("portion_info", portion.DebugString());
-    if (it == Portions.end()) {
-        Y_ABORT_UNLESS(portion.Records.empty());
-        auto portionNew = std::make_shared<TPortionInfo>(portion);
-        it = Portions.emplace(portion.GetPortion(), portionNew).first;
-    } else {
-        AFL_VERIFY(it->second->IsEqualWithSnapshots(portion))("self", it->second->DebugString())("item", portion.DebugString());
-    }
-    return it->second;
+std::shared_ptr<TPortionInfo> TGranuleMeta::UpsertPortionOnLoad(TPortionInfo&& portion) {
+    auto portionId = portion.GetPortionId();
+    auto emplaceInfo = Portions.emplace(portionId, std::make_shared<TPortionInfo>(std::move(portion)));
+    AFL_VERIFY(emplaceInfo.second);
+    return emplaceInfo.first->second;
 }
 
 } // namespace NKikimr::NOlap

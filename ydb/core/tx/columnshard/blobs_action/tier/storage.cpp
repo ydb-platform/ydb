@@ -34,12 +34,14 @@ std::shared_ptr<IBlobsGCAction> TOperator::DoStartGCAction(const std::shared_ptr
     {
         TTabletsByBlob deleteBlobIds;
         if (!GCInfo->ExtractForGC(draftBlobIds, deleteBlobIds, 100000)) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "start_gc_skipped")("reason", "cannot_extract");
             return nullptr;
         }
         categories = GetSharedBlobs()->BuildRemoveCategories(std::move(deleteBlobIds));
     }
     auto gcTask = std::make_shared<TGCTask>(GetStorageId(), std::move(draftBlobIds), GetCurrentOperator(), std::move(categories), counters);
     if (gcTask->IsEmpty()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "start_gc_skipped")("reason", "task_empty");
         return nullptr;
     }
     TActorContext::AsActorContext().Register(new TGarbageCollectionActor(gcTask, TabletActorId, GetSelfTabletId()));

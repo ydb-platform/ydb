@@ -53,3 +53,21 @@ Y_UNIT_TEST_SUITE(FormatTimes) {
         UNIT_ASSERT_EQUAL(NFq::ParseDuration("3000h"), TDuration::Hours(3000));
     }
 }
+
+Y_UNIT_TEST_SUITE(StatsFormat) {
+    Y_UNIT_TEST(FullStat) {
+        auto stats = NFq::GetV1StatFromV2Plan(NResource::Find("plan.json"));
+        stats = NFq::GetPrettyStatistics(stats);
+        UNIT_ASSERT_EQUAL(stats, NResource::Find("stat.json"));
+    }
+
+    Y_UNIT_TEST(AggregateStat) {
+        auto res = NFq::AggregateStats(NResource::Find("plan.json"));
+        UNIT_ASSERT_EQUAL(res["IngressBytes"], 6333256);
+        UNIT_ASSERT_EQUAL(res["EgressBytes"], 0);
+        UNIT_ASSERT_EQUAL(res["InputBytes"], 1044);
+        UNIT_ASSERT_EQUAL(res["OutputBytes"], 2088);
+        UNIT_ASSERT_EQUAL(res["CpuTimeUs"], 3493);
+        UNIT_ASSERT_EQUAL(res["S3Source"], 6333256);
+    }
+}

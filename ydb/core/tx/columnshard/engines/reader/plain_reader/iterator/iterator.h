@@ -58,9 +58,16 @@ private:
     std::shared_ptr<IDataReader> IndexedData;
     ui64 ItemsRead = 0;
     const i64 MaxRowsInBatch = 5000;
+    virtual void DoOnSentDataFromInterval(const ui32 intervalIdx) const override;
+
 public:
     TColumnShardScanIterator(const std::shared_ptr<TReadContext>& context, const TReadMetadata::TConstPtr& readMetadata);
     ~TColumnShardScanIterator();
+
+    virtual TConclusionStatus Start() override {
+        AFL_VERIFY(IndexedData);
+        return IndexedData->Start();
+    }
 
     virtual std::optional<ui32> GetAvailableResultsCount() const override {
         return ReadyResults.size();
@@ -83,10 +90,10 @@ public:
         return IndexedData->IsFinished() && ReadyResults.empty();
     }
 
-    std::optional<TPartialReadResult> GetBatch() override;
+    TConclusion<std::optional<TPartialReadResult>> GetBatch() override;
     virtual void PrepareResults() override;
 
-    virtual bool ReadNextInterval() override;
+    virtual TConclusion<bool> ReadNextInterval() override;
 
 private:
     void FillReadyResults();

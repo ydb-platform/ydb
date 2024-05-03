@@ -89,7 +89,6 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
 
     TKikimrSettings()
     {
-        FeatureFlags.SetForceColumnTablesCompositeMarks(true);
         auto* tableServiceConfig = AppConfig.MutableTableServiceConfig();
         auto* infoExchangerRetrySettings = tableServiceConfig->MutableResourceManager()->MutableInfoExchangerSettings();
         auto* exchangerSettings = infoExchangerRetrySettings->MutableExchangerSettings();

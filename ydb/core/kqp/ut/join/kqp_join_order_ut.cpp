@@ -744,8 +744,73 @@ static TKikimrRunner GetKikimrWithJoinSettings(){
     return TKikimrRunner(settings);
 }
 
+class TChainConstructor {
+public:
+    TChainConstructor(size_t chainSize)
+        : Kikimr_(GetKikimrWithJoinSettings())
+        , TableClient_(Kikimr_.GetTableClient())
+        , Session_(TableClient_.CreateSession().GetValueSync().GetSession())
+        , ChainSize_(chainSize)
+    {}
+
+    void CreateTables() {
+        for (size_t i = 0; i < ChainSize_; ++i) {
+            TString tableName;
+            
+            tableName
+                .append("/Root/table_").append(ToString(i));;
+
+            TString createTable;
+            createTable
+                += "CREATE TABLE `" +  tableName + "` (id"
+                +  ToString(i) + " Int32, " 
+                +  "PRIMARY KEY (id" + ToString(i) + "));";
+
+            std::cout << createTable << std::endl;
+            auto res = Session_.ExecuteSchemeQuery(createTable).GetValueSync();
+            std::cout << res.GetIssues().ToString() << std::endl;
+            UNIT_ASSERT(res.IsSuccess());
+        }
+    }
+
+    void JoinTables() {
+        TString joinRequest;
+
+        joinRequest.append("SELECT * FROM `/Root/table_0` as t0 ");
+
+        for (size_t i = 1; i < ChainSize_; ++i) {
+            TString table = "/Root/table_" + ToString(i);
+
+            TString prevAliasTable = "t" + ToString(i - 1);
+            TString aliasTable = "t" + ToString(i);
+
+            joinRequest
+                += "INNER JOIN `" + table + "`" + " AS " + aliasTable + " ON "
+                +  aliasTable + ".id" + ToString(i) + "=" + prevAliasTable + ".id" 
+                +  ToString(i-1) + " ";
+        }
+
+        auto result = Session_.ExecuteDataQuery(joinRequest, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+        std::cout << result.GetIssues().ToString() << std::endl;
+        std::cout << joinRequest << std::endl;
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+    }
+
+private:
+    TKikimrRunner Kikimr_;
+    NYdb::NTable::TTableClient TableClient_;
+    TSession Session_;
+    size_t ChainSize_; 
+};
 
 Y_UNIT_TEST_SUITE(KqpJoinOrder) {
+    Y_UNIT_TEST(Chain65Nodes) {
+        TChainConstructor chain(65);
+        chain.CreateTables();
+        chain.JoinTables();
+    }
+
     Y_UNIT_TEST(FiveWayJoin) {
 
         auto kikimr = GetKikimrWithJoinSettings();

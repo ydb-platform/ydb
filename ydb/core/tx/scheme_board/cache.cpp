@@ -190,8 +190,8 @@ namespace {
             return entry.KeyDescription->SecurityObject;
         }
 
-        static ui32 GetAccess(const TNavigate::TEntry&) {
-            return NACLib::EAccessRights::DescribeSchema;
+        static ui32 GetAccess(const TNavigate::TEntry& entry) {
+            return entry.Access;
         }
 
         static ui32 GetAccess(const TResolve::TEntry& entry) {
@@ -851,6 +851,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 }
             }
 
+            SchemaVersion = schemaDesc.GetVersion();
             KeyColumnTypes.resize(schemaDesc.KeyColumnNamesSize());
             for (ui32 i : xrange(schemaDesc.KeyColumnNamesSize())) {
                 auto* pcolid = nameToId.FindPtr(schemaDesc.GetKeyColumnNames(i));
@@ -1527,7 +1528,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 FillInfo(Kind, ViewInfo, std::move(*pathDesc.MutableViewDescription()));
                 break;
             case NKikimrSchemeOp::EPathTypeInvalid:
-                Y_DEBUG_ABORT_UNLESS(false, "Invalid path type");
+                Y_DEBUG_ABORT("Invalid path type");
                 break;
             }
 
@@ -1598,7 +1599,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                         break;
                     case NKikimrSchemeOp::EPathTypeTableIndex:
                     case NKikimrSchemeOp::EPathTypeInvalid:
-                        Y_DEBUG_ABORT_UNLESS(false, "Invalid path type");
+                        Y_DEBUG_ABORT("Invalid path type");
                         break;
                     }
                 }
@@ -1778,7 +1779,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             entry.CreateStep = CreateStep;
 
             if (entry.RequestType == TNavigate::TEntry::ERequestType::ByPath) {
-                if (Kind == TNavigate::KindTable) {
+                if (Kind == TNavigate::KindTable || Kind == TNavigate::KindColumnTable) {
                     entry.TableId = TTableId(PathId.OwnerId, PathId.LocalPathId, SchemaVersion);
                 } else {
                     entry.TableId = TTableId(PathId.OwnerId, PathId.LocalPathId);

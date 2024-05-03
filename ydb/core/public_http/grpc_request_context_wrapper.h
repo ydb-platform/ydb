@@ -48,6 +48,7 @@ public:
     virtual bool IsClientLost() const { return false; }
     virtual TString GetPeer() const { return {}; }
     virtual bool SslServer() const { return false; }
+    virtual bool IsStreamCall() const { return false; }
 };
 
 } // namespace NKikimr::NPublicHttp

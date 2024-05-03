@@ -898,8 +898,11 @@ public:
 
     void Handle(TEvHive::TEvResponseHiveNodeStats::TPtr& ev) {
         TTabletId hiveId = TabletRequests.CompleteRequest(ev->Cookie);
+        TInstant aliveBarrier = TInstant::Now() - TDuration::Minutes(5);
         for (const NKikimrHive::THiveNodeStats& hiveStat : ev->Get()->Record.GetNodeStats()) {
-            RequestComputeNode(hiveStat.GetNodeId());
+            if (!hiveStat.HasLastAliveTimestamp() || TInstant::MilliSeconds(hiveStat.GetLastAliveTimestamp()) > aliveBarrier) {
+                RequestComputeNode(hiveStat.GetNodeId());
+            }
         }
         HiveNodeStats[hiveId] = std::move(ev->Release());
         RequestDone("TEvResponseHiveNodeStats");
@@ -1121,10 +1124,18 @@ public:
         }
     }
 
-    Ydb::Monitoring::StatusFlag::Status FillSystemTablets(TSelfCheckContext context) {
+    Ydb::Monitoring::StatusFlag::Status FillSystemTablets(TDatabaseState& databaseState, TSelfCheckContext context) {
         TString databaseId = context.Location.database().name();
         for (auto& [tabletId, tablet] : TabletRequests.TabletStates) {
             if (tablet.Database == databaseId) {
+                auto tabletIt = databaseState.MergedTabletState.find(std::make_pair(tabletId, 0));
+                if (tabletIt != databaseState.MergedTabletState.end()) {
+                    auto nodeId = tabletIt->second->GetNodeID();
+                    if (nodeId) {
+                        FillNodeInfo(nodeId, context.Location.mutable_node());
+                    }
+                }
+
                 context.Location.mutable_compute()->clear_tablet();
                 auto& protoTablet = *context.Location.mutable_compute()->mutable_tablet();
                 auto timeoutMs = Timeout.MilliSeconds();
@@ -1160,6 +1171,7 @@ public:
                 if (count.Count > 0) {
                     TSelfCheckContext tabletContext(&tabletsContext, "TABLET");
                     auto& protoTablet = *tabletContext.Location.mutable_compute()->mutable_tablet();
+                    FillNodeInfo(nodeId, tabletContext.Location.mutable_node());
                     protoTablet.set_type(TTabletTypes::EType_Name(count.Type));
                     protoTablet.set_count(count.Count);
                     if (!count.Identifiers.empty()) {
@@ -1283,7 +1295,7 @@ public:
         if (computeNodeIds->empty()) {
             context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "There are no compute nodes", ETags::ComputeState);
         } else {
-            Ydb::Monitoring::StatusFlag::Status systemStatus = FillSystemTablets({&context, "SYSTEM_TABLET"});
+            Ydb::Monitoring::StatusFlag::Status systemStatus = FillSystemTablets(databaseState, {&context, "SYSTEM_TABLET"});
             if (systemStatus != Ydb::Monitoring::StatusFlag::GREEN && systemStatus != Ydb::Monitoring::StatusFlag::GREY) {
                 context.ReportStatus(systemStatus, "Compute has issues with system tablets", ETags::ComputeState, {ETags::SystemTabletState});
             }
@@ -2083,7 +2095,8 @@ public:
             tabletContext.Location.mutable_database()->set_name(DomainPath);
             databaseStatus.set_name(DomainPath);
             {
-                FillSystemTablets({&tabletContext, "SYSTEM_TABLET"});
+                TDatabaseState databaseState;
+                FillSystemTablets(databaseState, {&tabletContext, "SYSTEM_TABLET"});
                 context.UpdateMaxStatus(tabletContext.GetOverallStatus());
             }
         }
@@ -2158,6 +2171,8 @@ public:
 
         FillResult({&result});
         RemoveUnrequestedEntries(result, Request->Request);
+
+        FillNodeInfo(SelfId().NodeId(), result.mutable_location());
 
         auto byteSize = result.ByteSizeLong();
         auto byteLimit = 50_MB - 1_KB; // 1_KB - for HEALTHCHECK STATUS issue going last

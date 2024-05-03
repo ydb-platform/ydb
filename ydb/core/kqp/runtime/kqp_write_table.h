@@ -23,7 +23,10 @@ public:
 
     using TBatches = THashMap<ui64, std::deque<TString>>;
 
-    virtual TBatches FlushBatches(const bool force = false) = 0;
+    virtual TBatches FlushBatchesForce() = 0;
+
+    virtual TString FlushBatch(ui64 shardId) = 0;
+    virtual const THashSet<ui64>& GetShardIds() const = 0;
 
     virtual i64 GetMemory() = 0;
 };
@@ -32,6 +35,12 @@ using IPayloadSerializerPtr = TIntrusivePtr<IPayloadSerializer>;
 
 IPayloadSerializerPtr CreateColumnShardPayloadSerializer(
     const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
+    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
+    const NMiniKQL::TTypeEnvironment& typeEnv);
+
+IPayloadSerializerPtr CreateDataShardPayloadSerializer(
+    const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
+    const NSchemeCache::TSchemeCacheRequest::TEntry& partitionsEntry,
     const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
     const NMiniKQL::TTypeEnvironment& typeEnv);
 

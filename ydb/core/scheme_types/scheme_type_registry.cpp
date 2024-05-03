@@ -40,6 +40,8 @@ TTypeRegistry::TTypeRegistry()
     RegisterType<TInterval>();
     RegisterType<TDyNumber>();
     RegisterType<TUuid>();
+    RegisterType<TTimestamp64>();
+    RegisterType<TInterval64>();
 }
 
 void TTypeRegistry::CalculateMetadataEtag() {

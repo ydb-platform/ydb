@@ -216,6 +216,9 @@ struct IServiceContext
      */
     virtual void SetRawResponseInfo(TString info, bool incremental) = 0;
 
+    //! Returns the memory usage tracker for request/response messages.
+    virtual const IMemoryUsageTrackerPtr& GetMemoryUsageTracker() const = 0;
+
     //! Returns the logger for request/response messages.
     virtual const NLogging::TLogger& GetLogger() const = 0;
 
@@ -235,6 +238,9 @@ struct IServiceContext
     //! Returnes true if response body has been serialized with compression.
     virtual bool IsResponseBodySerializedWithCompression() const = 0;
     virtual void SetResponseBodySerializedWithCompression() = 0;
+
+    //! Return total size of request. Sum of Header, Body, Attachments, TServiceContext, parsed RequestHeaderProto and TraceContext.
+    virtual i64 GetTotalSize() const = 0;
 
     // Extension methods.
 

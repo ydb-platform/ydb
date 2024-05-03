@@ -947,7 +947,7 @@ bool ValidateOlapFilterConditions(const TExprNode* node, const TStructExprType* 
         if (!EnsureAtom(*op, ctx)) {
             return false;
         }
-        if (!op->IsAtom({"minus", "abs", "not", "size", "exists", "empty"})) {
+        if (!op->IsAtom({"minus", "abs", "not", "size", "exists", "empty", "just"})) {
             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()),
                 TStringBuilder() << "Unexpected OLAP unary operation: " << op->Content()
             ));
@@ -967,6 +967,20 @@ bool ValidateOlapFilterConditions(const TExprNode* node, const TStructExprType* 
         }
         return ValidateOlapFilterConditions(node->Child(TKqpOlapFilterBinaryOp::idx_Left), itemType, ctx)
             && ValidateOlapFilterConditions(node->Child(TKqpOlapFilterBinaryOp::idx_Right), itemType, ctx);
+    } else if (TKqpOlapFilterTernaryOp::Match(node)) {
+        const auto op = node->Child(TKqpOlapFilterTernaryOp::idx_Operator);
+        if (!EnsureAtom(*op, ctx)) {
+            return false;
+        }
+        if (!op->IsAtom("if")) { // TODO: +substring
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()),
+                TStringBuilder() << "Unexpected OLAP ternary operation: " << op->Content()
+            ));
+            return false;
+        }
+        return ValidateOlapFilterConditions(node->Child(TKqpOlapFilterTernaryOp::idx_First), itemType, ctx)
+            && ValidateOlapFilterConditions(node->Child(TKqpOlapFilterTernaryOp::idx_Second), itemType, ctx)
+            && ValidateOlapFilterConditions(node->Child(TKqpOlapFilterTernaryOp::idx_Third), itemType, ctx);
     } else if (TKqpOlapFilterExists::Match(node)) {
         if (!EnsureArgsCount(*node, 1, ctx)) {
             return false;
@@ -1718,9 +1732,10 @@ TStatus AnnotateIndexLookupJoin(const TExprNode::TPtr& node, TExprContext& ctx) 
 
     TVector<const TItemExprType*> resultStructItems;
     for (const auto& item : leftRowType->GetItems()) {
-        resultStructItems.emplace_back(
-            ctx.MakeType<TItemExprType>(TString::Join(leftLabel.Value(), ".", item->GetName()), item->GetItemType())
-        );
+        TString itemName = leftLabel.Value().empty()
+            ? TString(item->GetName())
+            : TString::Join(leftLabel.Value(), ".", item->GetName());
+        resultStructItems.emplace_back(ctx.MakeType<TItemExprType>(itemName, item->GetItemType()));
     }
 
     if (RightJoinSideAllowed(joinType.Value())) {
@@ -1731,9 +1746,10 @@ TStatus AnnotateIndexLookupJoin(const TExprNode::TPtr& node, TExprContext& ctx) 
                 ? ctx.MakeType<TOptionalExprType>(item->GetItemType())
                 : item->GetItemType();
 
-            resultStructItems.emplace_back(
-                ctx.MakeType<TItemExprType>(TString::Join(rightLabel.Value(), ".", item->GetName()), itemType)
-            );
+            TString itemName = rightLabel.Value().empty()
+                ? TString(item->GetName())
+                : TString::Join(rightLabel.Value(), ".", item->GetName());
+            resultStructItems.emplace_back(ctx.MakeType<TItemExprType>(itemName, itemType));
         }
     }
 

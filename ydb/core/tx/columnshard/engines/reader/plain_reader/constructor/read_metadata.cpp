@@ -49,8 +49,8 @@ std::shared_ptr<IDataReader> TReadMetadata::BuildReader(const std::shared_ptr<TR
     return std::make_shared<TPlainReadData>(context);
 }
 
-NIndexedReader::TSortableBatchPosition TReadMetadata::BuildSortedPosition(const NArrow::TReplaceKey& key) const {
-    return NIndexedReader::TSortableBatchPosition(key.ToBatch(GetReplaceKey()), 0,
+NArrow::NMerger::TSortableBatchPosition TReadMetadata::BuildSortedPosition(const NArrow::TReplaceKey& key) const {
+    return NArrow::NMerger::TSortableBatchPosition(key.ToBatch(GetReplaceKey()), 0,
         GetReplaceKey()->field_names(), {}, IsDescSorted());
 }
 

@@ -13,6 +13,11 @@ namespace NKqpRun {
 
 class TKqpRunner::TImpl {
 public:
+    enum class EQueryType {
+        ScriptQuery,
+        YqlScriptQuery
+    };
+
     explicit TImpl(const TRunnerOptions& options)
         : Options_(options)
         , YdbSetup_(options.YdbSettings)
@@ -50,11 +55,21 @@ public:
         return WaitScriptExecutionOperation();
     }
 
-    bool ExecuteQuery(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId) {
+    bool ExecuteQuery(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, EQueryType queryType) {
         StartScriptTraceOpt();
 
         TQueryMeta meta;
-        TRequestResult status = YdbSetup_.QueryRequest(query, action, traceId, meta, ResultSets_);
+        TRequestResult status;
+        switch (queryType) {
+        case EQueryType::ScriptQuery:
+            status = YdbSetup_.QueryRequest(query, action, traceId, meta, ResultSets_);
+            break;
+
+        case EQueryType::YqlScriptQuery:
+            status = YdbSetup_.YqlScriptRequest(query, action, traceId, meta, ResultSets_);
+            break;
+        }
+
         TYdbSetup::StopTraceOpt();
 
         PrintScriptAst(meta.Ast);
@@ -62,6 +77,10 @@ public:
         if (!status.IsSuccess()) {
             Cerr << CerrColors_.Red() << "Failed to execute query, reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
             return false;
+        }
+
+        if (!status.Issues.Empty()) {
+            Cerr << CerrColors_.Red() << "Request finished with issues:" << CerrColors_.Default() << Endl << status.Issues.ToString() << Endl;
         }
 
         PrintScriptPlan(meta.Plan);
@@ -72,6 +91,7 @@ public:
     bool FetchScriptResults() {
         TYdbSetup::StopTraceOpt();
 
+        ResultSets_.clear();
         ResultSets_.resize(ExecutionMeta_.ResultSetsCount);
         for (i32 resultSetId = 0; resultSetId < ExecutionMeta_.ResultSetsCount; ++resultSetId) {
             TRequestResult status = YdbSetup_.FetchScriptExecutionResultsRequest(ExecutionOperation_, resultSetId, ResultSets_[resultSetId]);
@@ -80,6 +100,19 @@ public:
                 Cerr << CerrColors_.Red() << "Failed to fetch result set with id " << resultSetId << ", reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
                 return false;
             }
+        }
+
+        return true;
+    }
+
+    bool ForgetExecutionOperation() {
+        TYdbSetup::StopTraceOpt();
+
+        TRequestResult status = YdbSetup_.ForgetScriptExecutionOperationRequest(ExecutionOperation_);
+
+        if (!status.IsSuccess()) {
+            Cerr << CerrColors_.Red() << "Failed to forget script execution operation, reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
+            return false;
         }
 
         return true;
@@ -118,6 +151,10 @@ private:
         if (!status.IsSuccess() || ExecutionMeta_.ExecutionStatus != NYdb::NQuery::EExecStatus::Completed) {
             Cerr << CerrColors_.Red() << "Failed to execute script, invalid final status, reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
             return false;
+        }
+
+        if (!status.Issues.Empty()) {
+            Cerr << CerrColors_.Red() << "Request finished with issues:" << CerrColors_.Default() << Endl << status.Issues.ToString() << Endl;
         }
 
         PrintScriptPlan(ExecutionMeta_.Plan);
@@ -208,11 +245,19 @@ bool TKqpRunner::ExecuteScript(const TString& script, NKikimrKqp::EQueryAction a
 }
 
 bool TKqpRunner::ExecuteQuery(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId) const {
-    return Impl_->ExecuteQuery(query, action, traceId);
+    return Impl_->ExecuteQuery(query, action, traceId, TImpl::EQueryType::ScriptQuery);
+}
+
+bool TKqpRunner::ExecuteYqlScript(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId) const {
+    return Impl_->ExecuteQuery(query, action, traceId, TImpl::EQueryType::YqlScriptQuery);
 }
 
 bool TKqpRunner::FetchScriptResults() {
     return Impl_->FetchScriptResults();
+}
+
+bool TKqpRunner::ForgetExecutionOperation() {
+    return Impl_->ForgetExecutionOperation();
 }
 
 void TKqpRunner::PrintScriptResults() const {

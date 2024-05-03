@@ -183,7 +183,6 @@ public:
                                    const TString& contentType = "application/json") {
         TNetworkAddress addr("::", HttpServicePort);
         TSocket sock(addr);
-        sock.SetSockOpt(IPPROTO_TCP, TCP_USER_TIMEOUT, 1000);
         TSocketOutput so(sock);
         THttpOutput output(&so);
 
@@ -242,7 +241,6 @@ public:
                                    const TString& contentType = "application/json") {
         TNetworkAddress addr("::", HttpServicePort);
         TSocket sock(addr);
-        sock.SetSockOpt(IPPROTO_TCP, TCP_USER_TIMEOUT, 1000);
         TSocketOutput so(sock);
         THttpOutput output(&so);
 

@@ -63,101 +63,8 @@ public:
 
 }
 
-bool TClickBenchCommandRun::TQueryFullInfo::CompareValue(const NYdb::TValue& v, const TStringBuf vExpected) const {
-    const auto& vp = v.GetProto();
-    if (vp.has_bool_value()) {
-        return CompareValueImpl<bool>(vp.bool_value(), vExpected);
-    }
-    if (vp.has_int32_value()) {
-        return CompareValueImpl<i32>(vp.int32_value(), vExpected);
-    }
-    if (vp.has_uint32_value()) {
-        return CompareValueImpl<ui32>(vp.uint32_value(), vExpected);
-    }
-    if (vp.has_int64_value()) {
-        return CompareValueImpl<i64>(vp.int64_value(), vExpected);
-    }
-    if (vp.has_uint64_value()) {
-        return CompareValueImpl<ui64>(vp.uint64_value(), vExpected);
-    }
-    if (vp.has_float_value()) {
-        return CompareValueImpl<float>(vp.float_value(), vExpected);
-    }
-    if (vp.has_double_value()) {
-        return CompareValueImpl<double>(vp.double_value(), vExpected);
-    }
-    if (vp.has_text_value()) {
-        return CompareValueImpl<TString>(TString(vp.text_value().data(), vp.text_value().size()), vExpected);
-    }
-    if (vp.has_null_flag_value()) {
-        return vExpected == "";
-    }
-    Cerr << "unexpected type for comparision: " << vp.DebugString() << Endl;
-    return false;
-}
-
 bool TClickBenchCommandRun::TQueryFullInfo::IsCorrectResult(const BenchmarkUtils::TQueryResultInfo& resultFull) const {
-    if (!ExpectedResult) {
-        return true;
-    }
-    const auto expectedLines = StringSplitter(ExpectedResult).Split('\n').SkipEmpty().ToList<TString>();
-    auto& result = resultFull.GetResult();
-    if (result.size() + 1 != expectedLines.size()) {
-        Cerr << "has diff: incorrect lines count (" << result.size() << " in result, but " << expectedLines.size() << " expected with header)" << Endl;
-        return false;
-    }
-
-    std::vector<ui32> columnIndexes;
-    {
-        const std::map<TString, ui32> columns = resultFull.GetColumnsRemap();
-        auto copy = expectedLines.front();
-        NCsvFormat::CsvSplitter splitter(copy);
-        while (true) {
-            auto cName = splitter.Consume();
-            auto it = columns.find(TString(cName.data(), cName.size()));
-            if (it == columns.end()) {
-                columnIndexes.clear();
-                for (ui32 i = 0; i < columns.size(); ++i) {
-                    columnIndexes.emplace_back(i);
-                }
-                break;
-            } else {
-                columnIndexes.emplace_back(it->second);
-            }
-
-            if (!splitter.Step()) {
-                break;
-            }
-        }
-        if (columnIndexes.size() != columns.size()) {
-            Cerr << "there are unexpected columns in result" << Endl;
-            return false;
-        }
-    }
-
-    for (ui32 i = 0; i < result.size(); ++i) {
-        TString copy = expectedLines[i + 1];
-        NCsvFormat::CsvSplitter splitter(copy);
-        bool isCorrectCurrent = true;
-        for (ui32 cIdx = 0; cIdx < columnIndexes.size(); ++cIdx) {
-            const NYdb::TValue& resultValue = result[i][columnIndexes[cIdx]];
-            if (!isCorrectCurrent) {
-                Cerr << "has diff: no element in expectation" << Endl;
-                return false;
-            }
-            TStringBuf cItem = splitter.Consume();
-            if (!CompareValue(resultValue, cItem)) {
-                Cerr << "has diff: " << resultValue.GetProto().DebugString() << ";EXPECTED:" << cItem << Endl;
-                return false;
-            }
-            isCorrectCurrent = splitter.Step();
-        }
-        if (isCorrectCurrent) {
-            Cerr << "expected more items than have in result" << Endl;
-            return false;
-        }
-    }
-    return true;
+    return resultFull.IsExpected(ExpectedResult);
 }
 
 TVector<TClickBenchCommandRun::TQueryFullInfo> TClickBenchCommandRun::GetQueries(const TString& fullTablePath) const {
@@ -414,13 +321,13 @@ void TClickBenchCommandInit::Config(TConfig& config) {
 
 int TClickBenchCommandInit::Run(TConfig& config) {
     StoreType = to_lower(StoreType);
-    TString partitionBy = "";
-    TString storageType = "";
+    TString partitionBy = "--";
+    TString storageType = "--";
     TString notNull = "";
     if (StoreType == "column") {
         //partitionBy = "PARTITION BY HASH(CounterID)"; Not enough cardinality in CounterID column @sa KIKIMR-16478
-        partitionBy = "PARTITION BY HASH(EventTime)";
-        storageType = "STORE = COLUMN,";
+        partitionBy = "PARTITION BY HASH";
+        storageType = "STORE = COLUMN, --";
         notNull = "NOT NULL";
     } else if (StoreType != "row") {
         throw yexception() << "Incorrect storage type. Available options: \"row\", \"column\"." << Endl;
@@ -431,10 +338,14 @@ int TClickBenchCommandInit::Run(TConfig& config) {
     TString createSql = NResource::Find("click_bench_schema.sql");
     TTableClient client(driver);
 
-    SubstGlobal(createSql, "{table}", FullTablePath(config.Database, Table));
+    SubstGlobal(createSql, "{path}", FullTablePath(config.Database, Table));
     SubstGlobal(createSql, "{notnull}", notNull);
-    SubstGlobal(createSql, "{partition}", partitionBy);
+    SubstGlobal(createSql, "{partition_by}", partitionBy);
     SubstGlobal(createSql, "{store}", storageType);
+    SubstGlobal(createSql, "{partitioning}", "AUTO_PARTITIONING_MIN_PARTITIONS_COUNT");
+    SubstGlobal(createSql, "{primary_key}", ", PRIMARY KEY");
+    SubstGlobal(createSql, "{external}", "");
+    SubstGlobal(createSql, "{createExternal}", "");
 
     ThrowOnError(client.RetryOperationSync([createSql](TSession session) {
         return session.ExecuteSchemeQuery(createSql).GetValueSync();

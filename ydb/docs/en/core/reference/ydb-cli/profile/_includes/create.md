@@ -99,10 +99,10 @@ You can now use much shorter syntax to re-write the original command:
 
 #### Profile to connect to a local database {#cmdline-example-local}
 
-Creating/replacing a `local` profile to connect to a local YDB database deployed using rapid-deployment scripts from a [binary file](../../../../getting_started/self_hosted/ydb_local.md) or [in Docker](../../../../getting_started/self_hosted/ydb_docker.md):
+Creating/replacing a `local` profile to connect to a local {{ ydb-short-name }} database deployed using [quick start](../../../../quickstart.md):
 
 ```bash
-{{ydb-cli}} config profile replace local --endpoint grpc://localhost:2136 --database /Root/test
+{{ydb-cli}} config profile replace local --endpoint grpc://localhost:2136 --database /Root/local
 ```
 
 Defining the login and password authentication method in the `local` profile:

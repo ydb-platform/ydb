@@ -44,6 +44,8 @@ public:
             case NScheme::NTypeIds::Float:
             case NScheme::NTypeIds::Datetime:
             case NScheme::NTypeIds::Date:
+            case NScheme::NTypeIds::Timestamp64:
+            case NScheme::NTypeIds::Interval64:
                 return true;
             default:
                 break;

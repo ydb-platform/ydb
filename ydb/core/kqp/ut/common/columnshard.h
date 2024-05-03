@@ -5,7 +5,7 @@
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
-#include <ydb/core/tx/columnshard/columnshard_ut_common.h>
+#include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 
 #include <ydb/core/formats/arrow/simple_builder/filler.h>
 #include <ydb/core/formats/arrow/simple_builder/array.h>
@@ -18,8 +18,10 @@ namespace NKqp {
     class TTestHelper {
     public:
         class TColumnSchema {
+            using TTypeDesc = void*;
             YDB_ACCESSOR_DEF(TString, Name);
             YDB_ACCESSOR_DEF(NScheme::TTypeId, Type);
+            YDB_ACCESSOR_DEF(TTypeDesc, TypeDesc);
             YDB_FLAG_ACCESSOR(Nullable, true);
         public:
             TString BuildQuery() const;
@@ -47,7 +49,7 @@ namespace NKqp {
         private:
             virtual TString GetObjectType() const = 0;
             TString BuildColumnsStr(const TVector<TColumnSchema>& clumns) const;
-            std::shared_ptr<arrow::Field> BuildField(const TString name, const NScheme::TTypeId& typeId, bool nullable) const;
+            std::shared_ptr<arrow::Field> BuildField(const TString name, const NScheme::TTypeId typeId, void*const typeDesc, bool nullable) const;
         };
 
         class TColumnTable : public TColumnTableBase {

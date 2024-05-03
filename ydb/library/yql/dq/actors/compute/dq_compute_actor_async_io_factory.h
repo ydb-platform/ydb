@@ -112,16 +112,16 @@ public:
     }
 
     void RegisterLookupSource(const TString& type, TLookupSourceCreatorFunction creator);
-    template <class TDataSourceProtoMsg, TLookupSourceCreatorFunc<TDataSourceProtoMsg> TCreatorFunc>
+    template <class TLookupSourceProtoMsg, TLookupSourceCreatorFunc<TLookupSourceProtoMsg> TCreatorFunc>
     void RegisterLookupSource(const TString& type, TCreatorFunc creator) {
         RegisterLookupSource(type,
             [creator = std::move(creator), type](TLookupSourceArguments&& args)
             {
-                YQL_ENSURE(args.DataSource.Is<TDataSourceProtoMsg>(),
-                    "LookupSource \"" << type << "\" settings are expected to have protobuf type " << TDataSourceProtoMsg::descriptor()->full_name()
-                    << ", but got " << args.DataSource.type_url());
-                TDataSourceProtoMsg dataSource;
-                YQL_ENSURE(args.DataSource.UnpackTo(&dataSource), "Failed to unpack settings of type \"" << type << "\"");
+                YQL_ENSURE(args.LookupSource.Is<TLookupSourceProtoMsg>(),
+                    "LookupSource \"" << type << "\" settings are expected to have protobuf type " << TLookupSourceProtoMsg::descriptor()->full_name()
+                    << ", but got " << args.LookupSource.type_url());
+                TLookupSourceProtoMsg dataSource;
+                YQL_ENSURE(args.LookupSource.UnpackTo(&dataSource), "Failed to unpack settings of type \"" << type << "\"");
                 return creator(std::move(dataSource), std::move(args));
         });
     }

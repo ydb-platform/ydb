@@ -83,6 +83,11 @@ public:
         return *FilteredSchema;
     }
 
+    const std::shared_ptr<ISnapshotSchema>& GetFilteredSchemaPtrVerified() const {
+        AFL_VERIFY(FilteredSchema);
+        return FilteredSchema;
+    }
+
     bool Contains(const std::shared_ptr<TColumnsSet>& columnsSet) const {
         if (!columnsSet) {
             return true;
@@ -113,6 +118,16 @@ public:
             }
         }
         return false;
+    }
+
+    std::set<ui32> Intersect(const TColumnsSet& columnsSet) const {
+        std::set<ui32> result;
+        for (auto&& i : columnsSet.ColumnIds) {
+            if (ColumnIds.contains(i)) {
+                result.emplace(i);
+            }
+        }
+        return result;
     }
 
     bool IsEqual(const TColumnsSet& columnsSet) const {

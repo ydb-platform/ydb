@@ -22,7 +22,7 @@ struct TWithTag {
     size_t Tag;
 };
 
-class TSamplingThrottlingConfigurator {
+class TSamplingThrottlingConfigurator: private TMoveOnly {
 public:
     TSamplingThrottlingConfigurator(TIntrusivePtr<ITimeProvider> timeProvider,
                                     TIntrusivePtr<IRandomProvider>& randomProvider);

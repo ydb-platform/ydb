@@ -10,6 +10,7 @@
 #include <util/stream/str.h>
 #include <util/string/hex.h>
 #include <util/string/vector.h>
+#include <util/string/join.h>
 
 namespace NYdb::NConsoleClient {
     namespace {
@@ -114,16 +115,11 @@ namespace {
         TString description = PrepareAllowedCodecsDescription("Comma-separated list of supported codecs", supportedCodecs);
         config.Opts->AddLongOption("supported-codecs", description)
             .RequiredArgument("STRING")
-            .StoreResult(&SupportedCodecsStr_)
-            .DefaultValue((TStringBuilder() << NTopic::ECodec::RAW));
+            .StoreResult(&SupportedCodecsStr_);
         AllowedCodecs_ = supportedCodecs;
     }
 
     void TCommandWithSupportedCodecs::ParseCodecs() {
-        if (SupportedCodecsStr_.empty()) {
-            throw TMisuseException() << "You can't specify empty set of codecs";
-        }
-
         TVector<NTopic::ECodec> parsedCodecs;
         TVector<TString> split = SplitString(SupportedCodecsStr_, ",");
         for (const TString& codecStr : split) {
@@ -228,7 +224,12 @@ namespace {
         settings.PartitioningSettings(PartitionsCount_, PartitionsCount_);
         settings.PartitionWriteBurstBytes(PartitionWriteSpeedKbps_ * 1_KB);
         settings.PartitionWriteSpeedBytesPerSecond(PartitionWriteSpeedKbps_ * 1_KB);
-        settings.SetSupportedCodecs(GetCodecs());
+
+        auto codecs = GetCodecs();
+        if (codecs.empty()) {
+            codecs.push_back(NTopic::ECodec::RAW);
+        }
+        settings.SetSupportedCodecs(codecs);
 
         if (GetMeteringMode() != NTopic::EMeteringMode::Unspecified) {
             settings.MeteringMode(GetMeteringMode());
@@ -398,12 +399,13 @@ namespace {
         if (StartingMessageTimestamp_.Defined()) {
             consumerSettings.ReadFrom(TInstant::Seconds(*StartingMessageTimestamp_));
         }
-        const TVector<NTopic::ECodec> codecs = GetCodecs();
-        if (!codecs.empty()) {
-            consumerSettings.SetSupportedCodecs(codecs);
-        } else {
-            consumerSettings.SetSupportedCodecs(AllowedCodecs);
+
+        TVector<NTopic::ECodec> codecs = GetCodecs();
+        if (codecs.empty()) {
+            codecs.push_back(NTopic::ECodec::RAW);
         }
+        consumerSettings.SetSupportedCodecs(codecs);
+
         readRuleSettings.AppendAddConsumers(consumerSettings);
 
         TStatus status = topicClient.AlterTopic(TopicName, readRuleSettings).GetValueSync();

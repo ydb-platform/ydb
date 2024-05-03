@@ -2,9 +2,9 @@ Prepare a configuration file for {{ ydb-short-name }}:
 
 1. Download a sample config for the appropriate failure model of your cluster:
 
-   * [block-4-2](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/yaml_config_examples/block-4-2.yaml): For a single-data center cluster.
-   * [mirror-3dc](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/yaml_config_examples/mirror-3dc-9-nodes.yaml): For a cross-data center cluster consisting of 9 nodes.
-   * [mirror-3dc-3nodes](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/yaml_config_examples/mirror-3dc-3-nodes.yaml): For a cross-data center cluster consisting of 3 nodes.
+   * [block-4-2](https://github.com/ydb-platform/ydb/blob/stable-23-3/ydb/deploy/yaml_config_examples/block-4-2.yaml): For a single-data center cluster.
+   * [mirror-3dc](https://github.com/ydb-platform/ydb/blob/stable-23-3/ydb/deploy/yaml_config_examples/mirror-3dc-9-nodes.yaml): For a cross-data center cluster consisting of 9 nodes.
+   * [mirror-3dc-3nodes](https://github.com/ydb-platform/ydb/blob/stable-23-3/ydb/deploy/yaml_config_examples/mirror-3dc-3-nodes.yaml): For a cross-data center cluster consisting of 3 nodes.
 
 1. In the `host_configs` section, specify all disks and their types on each cluster node. Possible disk types:
    * ROT: Rotational, HDD.

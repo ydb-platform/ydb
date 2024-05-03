@@ -1985,6 +1985,9 @@ void THive::Handle(TEvHive::TEvRequestHiveNodeStats::TPtr& ev) {
         if (!node.ServicedDomains.empty()) {
             nodeStats.MutableNodeDomain()->CopyFrom(node.ServicedDomains.front());
         }
+        if (!node.Name.empty()) {
+            nodeStats.SetNodeName(node.Name);
+        }
         if (request.GetReturnExtendedTabletInfo()) {
             if (request.HasFilterTabletsByPathId()) {
                 auto itTabletsOfObject = node.TabletsOfObject.find({request.GetFilterTabletsBySchemeShardId(), request.GetFilterTabletsByPathId()});
@@ -2123,10 +2126,20 @@ void THive::Handle(TEvHive::TEvCutTabletHistory::TPtr& ev) {
 }
 
 void THive::Handle(TEvHive::TEvDrainNode::TPtr& ev) {
+    NKikimrHive::EDrainDownPolicy policy;
+    if (!ev->Get()->Record.HasDownPolicy() && ev->Get()->Record.HasKeepDown()) {
+        if (ev->Get()->Record.GetKeepDown()) {
+            policy = NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_KEEP_DOWN;
+        } else {
+            policy = NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_NO_DOWN;
+        }
+    } else {
+        policy = ev->Get()->Record.GetDownPolicy();
+    }
     Execute(CreateSwitchDrainOn(ev->Get()->Record.GetNodeID(),
     {
         .Persist = ev->Get()->Record.GetPersist(),
-        .KeepDown = ev->Get()->Record.GetKeepDown(),
+        .DownPolicy = policy,
         .DrainInFlight = ev->Get()->Record.GetDrainInFlight(),
     }, ev->Sender));
 }
@@ -2360,7 +2373,7 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
             case EResourceToBalance::Network:
                 balancerType = EBalancerType::ScatterNetwork;
                 break;
-            case EResourceToBalance::Dominant:
+            case EResourceToBalance::ComputeResources:
                 balancerType = EBalancerType::Scatter;
                 break;
         }

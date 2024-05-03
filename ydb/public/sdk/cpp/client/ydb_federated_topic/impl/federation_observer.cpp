@@ -1,4 +1,4 @@
-#include "ydb/public/sdk/cpp/client/ydb_topic/impl/log_lazy.h"
+#include "ydb/public/sdk/cpp/client/ydb_topic/common/log_lazy.h"
 #include <ydb/public/api/grpc/ydb_federation_discovery_v1.grpc.pb.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_federated_topic/impl/federation_observer.h>
@@ -155,6 +155,9 @@ void TFederatedDbObserverImpl::OnFederationDiscovery(TStatus&& status, Ydb::Fede
                     ScheduleFederationDiscoveryImpl(*retryDelay);
                     return;
                 }
+                // If retryDelay is Nothing, meaning there won't be another retry,
+                // we replace FederatedDbState with the unsuccessful one and then set the PromiseToInitState if needed,
+                // and the observer becomes stale (see IsStale method).
             } else {
                 ScheduleFederationDiscoveryImpl(REDISCOVERY_DELAY);
             }

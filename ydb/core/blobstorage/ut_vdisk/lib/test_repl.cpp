@@ -206,6 +206,7 @@ private:
                 nullptr,
                 nullptr, // PDiskCtx
                 nullptr, // HugeBlobCtx
+                4097,
                 nullptr,
                 MakeIntrusive<TBlobStorageGroupInfo>(groupInfo),
                 ctx.SelfID,

@@ -17,16 +17,13 @@ namespace NYql::NDq {
                                           args.SecureParams, args.TaskParams, args.ComputeActorId, credentialsFactory, args.HolderFactory);
         };
 
-        auto lookupActorFactory = [credentialsFactory, genericClient](NConnector::NApi::TDataSourceInstance&& dataSource, IDqAsyncIoFactory::TLookupSourceArguments&& args) {
+        auto lookupActorFactory = [credentialsFactory, genericClient](NYql::Generic::TLookupSource&& lookupSource, IDqAsyncIoFactory::TLookupSourceArguments&& args) {
             return CreateGenericLookupActor(
                 genericClient,
-                std::move(args.ServiceAccountId),
-                std::move(args.ServiceAccountSignature),
                 credentialsFactory,
                 std::move(args.ParentId),
                 args.Alloc,
-                std::move(dataSource),
-                std::move(args.Table),
+                std::move(lookupSource),
                 args.KeyType,
                 args.PayloadType,
                 args.TypeEnv,
@@ -36,7 +33,7 @@ namespace NYql::NDq {
 
         for (auto& name : {"ClickHouseGeneric", "PostgreSqlGeneric", "YdbGeneric"}) {
             factory.RegisterSource<Generic::TSource>(name, readActorFactory);
-            factory.RegisterLookupSource<NConnector::NApi::TDataSourceInstance>(name, lookupActorFactory);
+            factory.RegisterLookupSource<Generic::TLookupSource>(name, lookupActorFactory);
         }
     }
 

@@ -155,7 +155,8 @@ class TDecimalWithPrecisionTest
     , public ::testing::WithParamInterface<int>
 {
 public:
-    static std::vector<int> GetAllPossiblePrecisions() {
+    static std::vector<int> GetAllPossiblePrecisions()
+    {
         std::vector<int> result;
         for (int i = 1; i <= TDecimal::MaxPrecision; ++i) {
             result.push_back(i);

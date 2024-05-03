@@ -8,13 +8,13 @@ from ydb.library.yql.providers.generic.connector.tests.utils.database import Dat
 from ydb.library.yql.providers.generic.connector.tests.utils.log import make_logger, debug_with_limit
 from ydb.library.yql.providers.generic.connector.tests.utils.schema import Schema
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
-from ydb.library.yql.providers.generic.connector.tests.utils.runner import Runner
+from ydb.library.yql.providers.generic.connector.tests.utils.run.parent import Runner
 from ydb.library.yql.providers.generic.connector.tests.utils.sql import format_values_for_bulk_sql_insert
 from ydb.library.yql.providers.generic.connector.tests.utils.clients.postgresql import Client
 
-import ydb.library.yql.providers.generic.connector.tests.test_cases.select_positive_common as tc_select_positive_common
-import ydb.library.yql.providers.generic.connector.tests.test_cases.select_missing_database as tc_select_missing_database
-import ydb.library.yql.providers.generic.connector.tests.test_cases.select_missing_table as tc_select_missing_table
+import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_positive_common as tc_select_positive_common
+import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_missing_database as tc_select_missing_database
+import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_missing_table as tc_select_missing_table
 
 LOGGER = make_logger(__name__)
 
@@ -118,7 +118,7 @@ def select_positive(
         generic_settings=test_case.generic_settings,
     )
 
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == 0, result.output
 
     assert data_outs_equal(test_case.data_out, result.data_out_with_types), (
         test_case.data_out,
@@ -146,7 +146,7 @@ def select_missing_database(
         generic_settings=test_case.generic_settings,
     )
 
-    assert test_case.database.missing_database_msg() in result.stderr, result.stderr
+    assert test_case.database.missing_database_msg() in result.output, result.output
 
 
 def select_missing_table(
@@ -182,7 +182,7 @@ def select_missing_table(
         generic_settings=test_case.generic_settings,
     )
 
-    assert test_case.database.missing_table_msg() in result.stderr, result.stderr
+    assert test_case.database.missing_table_msg() in result.output, result.output
 
 
 def select_pg_schema(
@@ -213,7 +213,7 @@ def select_pg_schema(
         generic_settings=test_case.generic_settings,
     )
 
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == 0, result.output
 
     assert data_outs_equal(test_case.data_out, result.data_out_with_types), (
         test_case.data_out,

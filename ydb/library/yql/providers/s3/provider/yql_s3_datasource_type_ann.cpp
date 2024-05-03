@@ -282,6 +282,18 @@ bool ExtractSettingValue(const TExprNode& value, TStringBuf settingName, TString
 
 }
 
+bool EnsureParquetTypeSupported(TPositionHandle position, const TTypeAnnotationNode* type, TExprContext& ctx, const IArrowResolver::TPtr& arrowResolver) {
+    auto resolveStatus = arrowResolver->AreTypesSupported(ctx.GetPosition(position), { type }, ctx);
+    YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
+
+    if (resolveStatus != IArrowResolver::OK) {
+        ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Type " << *type << " is not supported for parquet"));
+        return false;
+    }
+
+    return true;
+}
+
 class TS3DataSourceTypeAnnotationTransformer : public TVisitorTransformerBase {
 public:
     TS3DataSourceTypeAnnotationTransformer(TS3State::TPtr state)
@@ -345,7 +357,7 @@ public:
         }
 
         if (!EnsureAtom(*input->Child(TS3ParseSettings::idx_Format), ctx) ||
-            !NCommon::ValidateFormatForInput(input->Child(TS3ParseSettings::idx_Format)->Content(), ctx))
+            !NCommon::ValidateFormatForInput(input->Child(TS3ParseSettings::idx_Format)->Content(), nullptr, nullptr, ctx))
         {
             return TStatus::Error;
         }
@@ -407,7 +419,8 @@ public:
             return TStatus::Error;
         }
 
-        if (!TS3Object::Match(input->Child(TS3ReadObject::idx_Object))) {
+        const auto& objectNode = input->Child(TS3ReadObject::idx_Object);
+        if (!TS3Object::Match(objectNode)) {
             ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3ReadObject::idx_Object)->Pos()), "Expected S3 object."));
             return TStatus::Error;
         }
@@ -425,13 +438,15 @@ public:
         std::vector<TString> partitionedBy;
         TString projection;
         {
-            THashSet<TStringBuf> columns;
+            TS3Object s3Object(input->Child(TS3ReadObject::idx_Object));
+            auto format = s3Object.Format().Ref().Content();
             const TStructExprType* structRowType = rowType->Cast<TStructExprType>();
+
+            THashSet<TStringBuf> columns;
             for (const TItemExprType* item : structRowType->GetItems()) {
                 columns.emplace(item->GetName());
             }
-
-            TS3Object s3Object(input->Child(TS3ReadObject::idx_Object));
+            
             if (TMaybeNode<TExprBase> settings = s3Object.Settings()) {
                 for (auto& settingNode : settings.Raw()->ChildrenList()) {
                     const TStringBuf name = settingNode->Head().Content();
@@ -448,12 +463,20 @@ public:
                             ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Table contains no columns except partitioning columns"));
                             return TStatus::Error;
                         }
-
                     }
                     if (name == "projection"sv) {
                         projection = settingNode->Tail().Content();
                     }
                 }
+            }
+
+            TSet<TString> partitionedBySet{partitionedBy.begin(), partitionedBy.end()};
+            if (!NCommon::ValidateFormatForInput(
+                format,
+                structRowType,
+                [partitionedBySet](TStringBuf fieldName) {return partitionedBySet.contains(fieldName); },
+                ctx)) {
+                return TStatus::Error;
             }
         }
 
@@ -465,6 +488,19 @@ public:
                 ctx,
                 State_->Configuration->GeneratorPathsLimit)) {
             return TStatus::Error;
+        }
+
+        if (objectNode->Child(TS3Object::idx_Format)->Content() == "parquet") {
+            YQL_ENSURE(State_->Types->ArrowResolver);
+            bool allTypesSupported = true;
+            for (const auto& item : rowType->Cast<TStructExprType>()->GetItems()) {
+                if (!EnsureParquetTypeSupported(input->Pos(), item->GetItemType(), ctx, State_->Types->ArrowResolver)) {
+                    allTypesSupported = false;
+                }
+            }
+            if (!allTypesSupported) {
+                return TStatus::Error;
+            }
         }
 
         input->SetTypeAnn(ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
@@ -524,7 +560,7 @@ public:
         }
 
         const auto format = input->Child(TS3Object::idx_Format)->Content();
-        if (!EnsureAtom(*input->Child(TS3Object::idx_Format), ctx) || !NCommon::ValidateFormatForInput(format, ctx)) {
+        if (!EnsureAtom(*input->Child(TS3Object::idx_Format), ctx) || !NCommon::ValidateFormatForInput(format, nullptr, nullptr, ctx)) {
             return TStatus::Error;
         }
 

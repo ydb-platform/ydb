@@ -20,6 +20,8 @@ class TStringValue
 {
     friend class TUnboxedValue;
     friend class TUnboxedValuePod;
+    friend class TBlockItem;
+    friend struct TRawStringValue;
 
     class TData {
         friend class TStringValue;

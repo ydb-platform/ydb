@@ -335,6 +335,10 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
             txc);
     }
 
+    if (tx->GetDataTx()->GetPerformedUserReads()) {
+        tx->SetPerformedUserReads(true);
+    }
+
     AddLocksToResult(op, ctx);
 
     Pipeline.AddCommittingOp(op);

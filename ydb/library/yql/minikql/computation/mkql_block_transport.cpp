@@ -511,6 +511,11 @@ struct TSerializerTraits {
         }
         return std::make_unique<TStrings<arrow::BinaryType, true>>();
     }
+
+    static std::unique_ptr<TResult> MakeResource(bool isOptional) {
+        Y_UNUSED(isOptional);
+        ythrow yexception() << "Serializer not implemented for block resources";
+    }
 };
 
 struct TDeserializerTraits {
@@ -529,6 +534,11 @@ struct TDeserializerTraits {
             return std::make_unique<TFixedSize<ui64, true>>();
         }
         return std::make_unique<TStrings<arrow::BinaryType, true>>();
+    }
+
+    static std::unique_ptr<TResult> MakeResource(bool isOptional) {
+        Y_UNUSED(isOptional);
+        ythrow yexception() << "Deserializer not implemented for block resources";
     }
 };
 

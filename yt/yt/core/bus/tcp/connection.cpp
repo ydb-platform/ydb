@@ -1475,7 +1475,7 @@ bool TTcpConnection::MaybeEncodeFragments()
     size_t encodedSize = 0;
     size_t coalescedSize = 0;
 
-    auto flushCoalesced = [&] () {
+    auto flushCoalesced = [&] {
         if (coalescedSize > 0) {
             EncodedFragments_.push(TRef(buffer->End() - coalescedSize, coalescedSize));
             coalescedSize = 0;

@@ -141,6 +141,9 @@ message TConfigItem {
 
         NamedConfigsItem = 100;
         ClusterYamlConfigItem = 101;
+
+        // synthetic kind for audit purposes only
+        YamlConfigChangeItem = 32768;
     }
 
     enum EMergeStrategy {

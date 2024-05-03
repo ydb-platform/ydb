@@ -4,6 +4,7 @@ default:
   backend_name_lower: ydb
   ydb: true
   example_cluster: ydbtest
+  feature_codegen: true
   feature_secondary_index: true
   feature_changefeed: true
   feature_replace: true
@@ -38,10 +39,11 @@ default:
   objstorage-name: Object Storage
   ydb-cli: ydb
   k8s: Kubernetes
-  quickstart-path: ../../../../getting_started/quickstart.md
+  quickstart-path: ../../../../quickstart.md
   oss: true
   feature_not_null_for_pk: true
   feature_not_null: true
+  feature_temp_tables: true
   has_create_table_link: true
   ydb_non_deterministic_functions: true
 

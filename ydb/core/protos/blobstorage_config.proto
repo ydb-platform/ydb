@@ -246,18 +246,13 @@ message TQueryBaseConfig {
 message TReadSettings {
 }
 
-message TPDiskId {
-    uint32 NodeId = 1;
-    uint32 PDiskId = 2;
-}
-
 message TReassignGroupDisk {
     uint32 GroupId = 1;
     uint32 GroupGeneration = 2;
     uint32 FailRealmIdx = 3;
     uint32 FailDomainIdx = 4;
     uint32 VDiskIdx = 5;
-    TPDiskId TargetPDiskId = 6; // optional; when not specified, selected automatically
+    NKikimrBlobStorage.TPDiskId TargetPDiskId = 6; // optional; when not specified, selected automatically
     bool SuppressDonorMode = 7; // when set, donor mode is not used even if it is enabled through BSC
     reserved 8;
 }
@@ -400,6 +395,10 @@ message TWipeVDisk {
     NKikimrBlobStorage.TVDiskID VDiskId = 2;
 }
 
+message TRestartPDisk {
+    NKikimrBlobStorage.TPDiskId TargetPDiskId = 1;
+}
+
 message TSetScrubPeriodicity {
     uint32 ScrubPeriodicity = 1; // in seconds; 0 = disable
 }
@@ -532,6 +531,7 @@ message TConfigRequest {
             TReadSettings ReadSettings = 43;
             TCancelVirtualGroup CancelVirtualGroup = 44;
             TSetVDiskReadOnly SetVDiskReadOnly = 47;
+            TRestartPDisk RestartPDisk = 48;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;

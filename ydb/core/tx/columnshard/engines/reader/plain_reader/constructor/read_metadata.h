@@ -2,8 +2,8 @@
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
 #include <ydb/core/formats/arrow/replace_key.h>
-#include <ydb/core/formats/arrow/reader/read_filter_merger.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/stats.h>
+#include <ydb/core/formats/arrow/reader/position.h>
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
@@ -13,7 +13,7 @@ struct TReadMetadata : public TReadMetadataBase {
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadata>;
 
-    NIndexedReader::TSortableBatchPosition BuildSortedPosition(const NArrow::TReplaceKey& key) const;
+    NArrow::NMerger::TSortableBatchPosition BuildSortedPosition(const NArrow::TReplaceKey& key) const;
     std::shared_ptr<IDataReader> BuildReader(const std::shared_ptr<TReadContext>& context) const;
 
     bool HasProcessingColumnIds() const {
@@ -32,15 +32,15 @@ public:
     }
 
     virtual std::vector<TNameTypeInfo> GetKeyYqlSchema() const override {
-        return GetLoadSchema()->GetIndexInfo().GetPrimaryKeyColumns();
+        return GetResultSchema()->GetIndexInfo().GetPrimaryKeyColumns();
     }
 
     TConclusionStatus Init(const TReadDescription& readDescription, const TDataStorageAccessor& dataAccessor);
 
     std::vector<std::string> GetColumnsOrder() const {
-        auto loadSchema = GetLoadSchema(GetRequestSnapshot());
+        auto schema = GetResultSchema();
         std::vector<std::string> result;
-        for (auto&& i : loadSchema->GetSchema()->fields()) {
+        for (auto&& i : schema->GetSchema()->fields()) {
             result.emplace_back(i->name());
         }
         return result;
@@ -74,7 +74,8 @@ public:
             << " at snapshot: " << GetRequestSnapshot().DebugString();
         TBase::Dump(out);
         if (SelectInfo) {
-            out << ", " << *SelectInfo;
+            out << ", ";
+            SelectInfo->DebugStream(out);
         }
     }
 

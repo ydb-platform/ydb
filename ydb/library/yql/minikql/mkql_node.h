@@ -168,30 +168,30 @@ public:
     TTypeBase(const TTypeBase& other)
         : TNode(other.Type)
         , Kind(other.Kind)
+        , SupportsPresort(other.SupportsPresort)
     {}
 
 protected:
-    TTypeBase(EKind kind, TTypeType* type);
+    TTypeBase(EKind kind, TTypeType* type, bool supportsPresort);
     TTypeBase()
         : TNode(nullptr)
         , Kind(EKind::Type)
+        , SupportsPresort(false)
     {}
 
     const EKind Kind;
-    TMaybe<bool> SupportsPresort; // transient
+    const bool SupportsPresort;
 };
 
 class TType: public TTypeBase {
 protected:
-    TType(EKind kind, TTypeType* type)
-      : TTypeBase(kind, type)
+    TType(EKind kind, TTypeType* type, bool supportsPresort)
+      : TTypeBase(kind, type, supportsPresort)
     {}
 
     TType()
       : TTypeBase()
     {}
-
-    virtual bool CalculatePresortSupport() = 0;
 
 public:
     static TStringBuf KindAsStr(EKind kind);
@@ -211,12 +211,8 @@ public:
     void UpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* CloneOnCallableWrite(const TTypeEnvironment& env) const;
     void Freeze(const TTypeEnvironment& env);
-    bool IsPresortSupported() {
-        if (!SupportsPresort) {
-            SupportsPresort = CalculatePresortSupport();
-        }
-
-        return *SupportsPresort;
+    bool IsPresortSupported() const {
+        return SupportsPresort;
     }
 };
 
@@ -240,7 +236,6 @@ private:
     void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
-    bool CalculatePresortSupport() override;
 
     static TTypeType* Create(const TTypeEnvironment& env);
 };
@@ -259,13 +254,12 @@ public:
 
 private:
     TSingularType(TTypeType* type)
-        : TType(SingularKind, type)
+        : TType(SingularKind, type, true)
     {}
 
     void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
-    bool CalculatePresortSupport() override;
 
     static TSingularType<SingularKind>* Create(TTypeType* type, const TTypeEnvironment& env);
 };
@@ -532,7 +526,6 @@ protected:
     void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
-    bool CalculatePresortSupport() override;
 
 private:
     const NUdf::TDataTypeId SchemeType;
@@ -604,7 +597,6 @@ protected:
     void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
-    bool CalculatePresortSupport() override;
 
 private:
     const ui32 TypeId;
@@ -674,7 +666,7 @@ private:
     void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
-    bool CalculatePresortSupport() override;
+    static bool CalculatePresortSupport(ui32 membersCount, std::pair<TInternName, TType*>* members);
 
 private:
     ui32 MembersCount;
@@ -739,7 +731,6 @@ private:
     void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
-    bool CalculatePresortSupport() override;
 
 private:
     TType* Data;
@@ -799,7 +790,6 @@ private:
     void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
-    bool CalculatePresortSupport() override;
 
 private:
     TType* Data;
@@ -827,7 +817,6 @@ private:
     void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
-    bool CalculatePresortSupport() override;
 
 private:
     TType* Data;
@@ -855,7 +844,6 @@ private:
     void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
-    bool CalculatePresortSupport() override;
 
 private:
     TType* Data;
@@ -922,7 +910,6 @@ private:
     void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
-    bool CalculatePresortSupport() override;
 
 private:
     TType* KeyType;
@@ -1019,7 +1006,6 @@ private:
     void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
-    bool CalculatePresortSupport() override;
 
 private:
     bool IsMergeDisabled0;
@@ -1106,9 +1092,10 @@ private:
     TRuntimeNode Result;
 };
 
-inline TTypeBase::TTypeBase(EKind kind, TTypeType* type)
+inline TTypeBase::TTypeBase(EKind kind, TTypeType* type, bool supportsPresort)
     : TNode(type)
     , Kind(kind)
+    , SupportsPresort(supportsPresort)
 {
     Y_DEBUG_ABORT_UNLESS(kind != EKind::Type);
 }
@@ -1138,7 +1125,7 @@ public:
 
 private:
     TAnyType(TTypeType* type)
-        : TType(EKind::Any, type)
+        : TType(EKind::Any, type, false)
     {}
 
     static TAnyType* Create(TTypeType* type, const TTypeEnvironment& env);
@@ -1146,7 +1133,6 @@ private:
     void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
-    bool CalculatePresortSupport() override;
 };
 
 class TAny : public TNode {
@@ -1260,7 +1246,7 @@ public:
 
   protected:
     TTupleLikeType(ui32 elementsCount, TType** elements, const TTypeEnvironment& env)
-        : TType(DerivedKind, env.GetTypeOfTypeLazy())
+        : TType(DerivedKind, env.GetTypeOfTypeLazy(), CalculatePresortSupport(elementsCount, elements))
         , ElementsCount(elementsCount)
         , Elements(elements)
     {
@@ -1311,9 +1297,9 @@ private:
             Y_UNUSED(env);
     }
 
-    bool CalculatePresortSupport() override {
-        for (ui32 i = 0; i < ElementsCount; ++i) {
-            if (!Elements[i]->IsPresortSupported()) {
+    static bool CalculatePresortSupport(ui32 elementsCount, TType** elements) {
+        for (ui32 i = 0; i < elementsCount; ++i) {
+            if (!elements[i]->IsPresortSupported()) {
                 return false;
             }
         }
@@ -1405,14 +1391,13 @@ public:
 
 private:
     TResourceType(TTypeType* type, TInternName tag)
-        : TType(EKind::Resource, type)
+        : TType(EKind::Resource, type, false)
         , Tag(tag)
     {}
 
     void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
-    bool CalculatePresortSupport() override;
 
 private:
     TInternName const Tag;
@@ -1448,7 +1433,6 @@ private:
     void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
-    bool CalculatePresortSupport() override;
 
 private:
     TType* BaseType;
@@ -1494,7 +1478,6 @@ private:
     void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
-    bool CalculatePresortSupport() override;
 
 private:
     TType* Data;
@@ -1564,7 +1547,6 @@ private:
     void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
-    bool CalculatePresortSupport() override;
 
 private:
     TType* ItemType;
@@ -1642,11 +1624,6 @@ TNode* TSingularType<SingularKind>::DoCloneOnCallableWrite(const TTypeEnvironmen
 template <TType::EKind SingularKind>
 void TSingularType<SingularKind>::DoFreeze(const TTypeEnvironment& env) {
     Y_UNUSED(env);
-}
-
-template <TType::EKind SingularKind>
-bool TSingularType<SingularKind>::CalculatePresortSupport() {
-    return true;
 }
 
 template <TType::EKind SingularKind>

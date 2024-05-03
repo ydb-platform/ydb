@@ -4,6 +4,9 @@
 #include <ydb/core/tx/columnshard/engines/insert_table/insert_table.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 
+namespace NKikimr::NOlap {
+    class TPortionInfo;
+}
 namespace NKikimr::NOlap::NReader {
 
 class TScanIteratorBase;
@@ -55,19 +58,15 @@ public:
         return *PKRangesFilter;
     }
 
-    ISnapshotSchema::TPtr GetSnapshotSchema(const TSnapshot& version) const {
-        if (version >= RequestSnapshot) {
-            return ResultIndexSchema;
-        }
-        return GetIndexVersions().GetSchema(version);
+    ISnapshotSchema::TPtr GetResultSchema() const {
+        return ResultIndexSchema;
     }
 
-    ISnapshotSchema::TPtr GetLoadSchema(const std::optional<TSnapshot>& version = {}) const {
-        if (!version) {
-            return ResultIndexSchema;
-        }
-        return GetIndexVersions().GetSchema(*version);
+    bool HasGuaranteeExclusivePK() const {
+        return GetIndexInfo().GetExternalGuaranteeExclusivePK();
     }
+
+    ISnapshotSchema::TPtr GetLoadSchemaVerified(const TPortionInfo& porition) const;
 
     std::shared_ptr<arrow::Schema> GetBlobSchema(const ui64 version) const {
         return GetIndexVersions().GetSchema(version)->GetIndexInfo().ArrowSchema();

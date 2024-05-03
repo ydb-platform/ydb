@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defs.h"
+#include "mood.h"
 
 namespace NKikimr {
 namespace NBsController {
@@ -40,10 +41,11 @@ struct Schema : NIceDb::Schema {
         struct LastSeenSerial : Column<15, NScheme::NTypeIds::String> {};
         struct LastSeenPath : Column<16, NScheme::NTypeIds::String> {};
         struct DecommitStatus : Column<17, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::EDecommitStatus; static constexpr Type Default = Type::DECOMMIT_NONE; };
+        struct Mood : Column<18, NScheme::NTypeIds::Uint8> { using Type = TPDiskMood::EValue; static constexpr Type Default = Type::Normal; };
 
         using TKey = TableKey<NodeID, PDiskID>; // order is important
         using TColumns = TableColumns<NodeID, PDiskID, Path, Category, Guid, SharedWithOs, ReadCentric, NextVSlotId,
-              Status, Timestamp, PDiskConfig, ExpectedSerial, LastSeenSerial, LastSeenPath, DecommitStatus>;
+              Status, Timestamp, PDiskConfig, ExpectedSerial, LastSeenSerial, LastSeenPath, DecommitStatus, Mood>;
     };
 
     struct Group : Table<4> {

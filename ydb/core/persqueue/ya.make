@@ -21,6 +21,8 @@ SRCS(
     partition_init.cpp
     partition_monitoring.cpp
     partition_read.cpp
+    partition_scale_request.cpp
+    partition_scale_manager.cpp
     partition_sourcemanager.cpp
     partition_write.cpp
     partition.cpp
@@ -31,6 +33,7 @@ SRCS(
     pq_l2_cache.cpp
     pq_rl_helpers.cpp
     quota_tracker.cpp
+    read_balancer__types.cpp
     read_balancer.cpp
     account_read_quoter.cpp
     read_quoter.cpp
@@ -66,6 +69,7 @@ PEERDIR(
     ydb/library/logger
     ydb/library/persqueue/counter_time_keeper
     ydb/library/persqueue/topic_parser
+    ydb/library/protobuf_printer
     ydb/public/lib/base
     ydb/public/sdk/cpp/client/ydb_persqueue_public
 )

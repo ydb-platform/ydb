@@ -225,6 +225,8 @@ private:
     void ScheduleEpochUpdate(const TActorContext &ctx);
     void FillNodeInfo(const TNodeInfo &node,
                       NKikimrNodeBroker::TNodeInfo &info) const;
+    void FillNodeName(const std::optional<ui32> &slotIndex,
+                      NKikimrNodeBroker::TNodeInfo &info) const;
 
     void ComputeNextEpochDiff(TStateDiff &diff);
     void ApplyStateDiff(const TStateDiff &diff);
@@ -301,7 +303,7 @@ private:
     TDynBitMap FreeIds;
     // Maps tenant to its slot indexes pool.
     std::unordered_map<TSubDomainKey, TSlotIndexesPool, THash<TSubDomainKey>> SlotIndexesPools;
-    bool EnableSlotNameGeneration = false;
+    bool EnableDynamicNodeNameGeneration = false;
     // Epoch info.
     TEpochInfo Epoch;
     // Current config.

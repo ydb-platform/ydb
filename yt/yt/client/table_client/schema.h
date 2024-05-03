@@ -107,6 +107,9 @@ bool operator == (const TLockMask& lhs, const TLockMask& rhs);
 
 TLockMask MaxMask(TLockMask lhs, TLockMask rhs);
 
+void ToProto(NTabletClient::NProto::TLockMask* protoLockMask, const TLockMask& lockMask);
+void FromProto(TLockMask* lockMask, const NTabletClient::NProto::TLockMask& protoLockMask);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TColumnSchema
@@ -283,6 +286,7 @@ public:
     bool IsUniqueKeys() const;
     bool HasRenamedColumns() const;
     bool IsEmpty() const;
+    bool IsCGCompatarorApplicable() const;
 
     std::optional<int> GetTtlColumnIndex() const;
 
@@ -339,6 +343,10 @@ public:
     //! For ordered tables, returns an empty schema.
     TTableSchemaPtr ToDelete() const;
 
+    //! For sorted tables, returns the non-computed key columns.
+    //! For ordered tables, returns an empty schema.
+    TTableSchemaPtr ToLock() const;
+
     //! Returns just the key columns.
     TTableSchemaPtr ToKeys() const;
 
@@ -373,7 +381,7 @@ public:
 
     TTableSchemaPtr ToModifiedSchema(ETableSchemaModification schemaModification) const;
 
-    TComparator ToComparator() const;
+    TComparator ToComparator(TCallback<TUUComparerSignature> cgComparator = {}) const;
 
     TKeyColumnTypes GetKeyColumnTypes() const;
 

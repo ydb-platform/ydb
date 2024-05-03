@@ -3,6 +3,8 @@
 #include <ydb/core/tx/columnshard/defs.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 namespace NKikimr::NOlap {
 
@@ -17,7 +19,7 @@ TCompactedWriteController::TCompactedWriteController(const TActorId& dstActor, T
         }
         auto* pInfo = changes.GetWritePortionInfo(i);
         Y_ABORT_UNLESS(pInfo);
-        TPortionInfoWithBlobs& portionWithBlobs = *pInfo;
+        TWritePortionInfoWithBlobs& portionWithBlobs = *pInfo;
         for (auto&& b : portionWithBlobs.GetBlobs()) {
             auto& task = AddWriteTask(TBlobWriteInfo::BuildWriteTask(b.GetBlob(), changes.MutableBlobsAction().GetWriting(b.GetOperator()->GetStorageId())));
             b.RegisterBlobId(portionWithBlobs, task.GetBlobId());
@@ -26,13 +28,23 @@ TCompactedWriteController::TCompactedWriteController(const TActorId& dstActor, T
 }
 
 void TCompactedWriteController::DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) {
-    WriteIndexEv->PutResult = putResult;
+    WriteIndexEv->PutResult = NYDBTest::TControllers::GetColumnShardController()->OverrideBlobPutResultOnCompaction(putResult, GetBlobActions());
     ctx.Send(DstActor, WriteIndexEv.Release());
 }
 
 TCompactedWriteController::~TCompactedWriteController() {
     if (WriteIndexEv && WriteIndexEv->IndexChanges) {
-        WriteIndexEv->IndexChanges->AbortEmergency();
+        WriteIndexEv->IndexChanges->AbortEmergency("TCompactedWriteController destructed with WriteIndexEv and WriteIndexEv->IndexChanges");
+    }
+}
+
+const NKikimr::NOlap::TBlobsAction& TCompactedWriteController::GetBlobsAction() {
+    return WriteIndexEv->IndexChanges->GetBlobsAction();
+}
+
+void TCompactedWriteController::DoAbort(const TString& reason) {
+    if (WriteIndexEv && WriteIndexEv->IndexChanges) {
+        WriteIndexEv->IndexChanges->AbortEmergency("TCompactedWriteController aborted: " + reason);
     }
 }
 

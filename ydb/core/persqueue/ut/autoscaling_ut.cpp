@@ -6,6 +6,20 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_env.h>
 
+#include <util/stream/output.h>
+
+/*
+static inline IOutputStream& operator<<(IOutputStream& o, const std::optional<std::set<size_t>> t) {
+    if (t) {
+        o << t.value();
+    } else {
+        o << "[empty]";
+    }
+
+    return o;
+}
+*/
+
 namespace NKikimr {
 
 using namespace NYdb::NTopic;
@@ -23,14 +37,15 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
         auto writeSession1 = CreateWriteSession(client, "producer-1");
         auto writeSession2 = CreateWriteSession(client, "producer-2");
 
-        TTestReadSession ReadSession(client, 2);
+        TTestReadSession readSession("Session-0", client, 2);
+        readSession.Run();
 
         UNIT_ASSERT(writeSession1->Write(Msg("message_1.1", 2)));
         UNIT_ASSERT(writeSession2->Write(Msg("message_2.1", 3)));
 
-        ReadSession.WaitAllMessages();
+        readSession.WaitAllMessages();
 
-        for(const auto& info : ReadSession.ReceivedMessages) {
+        for(const auto& info : readSession.ReceivedMessages) {
             if (info.Data == "message_1.1") {
                 UNIT_ASSERT_EQUAL(0, info.PartitionId);
                 UNIT_ASSERT_EQUAL(2, info.SeqNo);
@@ -44,6 +59,7 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
 
         writeSession1->Close(TDuration::Seconds(1));
         writeSession2->Close(TDuration::Seconds(1));
+        readSession.Close();
     }
 
     Y_UNIT_TEST(PartitionSplit) {
@@ -54,7 +70,8 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
 
         auto writeSession = CreateWriteSession(client, "producer-1");
 
-        TTestReadSession ReadSession(client, 2, false);
+        TTestReadSession readSession("Session-0",client, 2, false);
+        readSession.Run();
 
         UNIT_ASSERT(writeSession->Write(Msg("message_1.1", 2)));
 
@@ -65,12 +82,16 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
 
         Sleep(TDuration::Seconds(1)); // Wait read session events
 
-        UNIT_ASSERT_EQUAL_C(1, ReadSession.Partitions.size(), "We are reading only one partitions because offset is not commited");
-        ReadSession.Commit();
+        readSession.WaitAndAssertPartitions({0}, "We are reading only one partition because offset is not commited");
+        readSession.Run();
+        readSession.AutoCommit = true;
+        readSession.Commit();
+        readSession.WaitAndAssertPartitions({0, 1, 2}, "We are reading all partitions because offset is commited");
+        readSession.Run();
 
-        ReadSession.WaitAllMessages();
+        readSession.WaitAllMessages();
 
-        for(const auto& info : ReadSession.ReceivedMessages) {
+        for(const auto& info : readSession.ReceivedMessages) {
             if (info.Data == "message_1.1") {
                 UNIT_ASSERT_EQUAL(0, info.PartitionId);
                 UNIT_ASSERT_EQUAL(2, info.SeqNo);
@@ -83,6 +104,7 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
         }
 
         writeSession->Close(TDuration::Seconds(1));
+        readSession.Close();
     }
 
     Y_UNIT_TEST(PartitionSplit_PreferedPartition) {
@@ -95,7 +117,8 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
         auto writeSession2 = CreateWriteSession(client, "producer-2");
         auto writeSession3 = CreateWriteSession(client, "producer-3", 0);
 
-        TTestReadSession ReadSession(client, 6);
+        TTestReadSession readSession("Session-0", client, 6);
+        readSession.Run();
 
         UNIT_ASSERT(writeSession1->Write(Msg("message_1.1", 2)));
         UNIT_ASSERT(writeSession2->Write(Msg("message_2.1", 3)));
@@ -116,11 +139,11 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
         auto writeSession4 = client.CreateSimpleBlockingWriteSession(writeSettings4);
         writeSession4->Write(TWriteMessage("message_4.1"));
 
-        ReadSession.WaitAllMessages();
+        readSession.WaitAllMessages();
 
         Cerr << ">>>>> All messages received" << Endl;
 
-        for(const auto& info : ReadSession.ReceivedMessages) {
+        for(const auto& info : readSession.ReceivedMessages) {
             if (info.Data == "message_1.1") {
                 UNIT_ASSERT_EQUAL(0, info.PartitionId);
                 UNIT_ASSERT_EQUAL(2, info.SeqNo);
@@ -147,6 +170,9 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
         writeSession1->Close(TDuration::Seconds(1));
         writeSession2->Close(TDuration::Seconds(1));
         writeSession3->Close(TDuration::Seconds(1));
+        writeSession4->Close(TDuration::Seconds(1));
+
+        readSession.Close();
     }
 
     Y_UNIT_TEST(PartitionMerge_PreferedPartition) {
@@ -158,7 +184,8 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
         auto writeSession1 = CreateWriteSession(client, "producer-1", 0);
         auto writeSession2 = CreateWriteSession(client, "producer-2", 1);
 
-        TTestReadSession ReadSession(client, 3);
+        TTestReadSession readSession("Session-0", client, 3);
+        readSession.Run();
 
         UNIT_ASSERT(writeSession1->Write(Msg("message_1.1", 2)));
         UNIT_ASSERT(writeSession2->Write(Msg("message_2.1", 3)));
@@ -174,9 +201,9 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
         UNIT_ASSERT(writeSession3->Write(Msg("message_3.1", 2)));  // Will be ignored because duplicated SeqNo
         UNIT_ASSERT(writeSession3->Write(Msg("message_3.2", 11)));
 
-        ReadSession.WaitAllMessages();
+        readSession.WaitAllMessages();
 
-        for(const auto& info : ReadSession.ReceivedMessages) {
+        for(const auto& info : readSession.ReceivedMessages) {
             if (info.Data == TString("message_1.1")) {
                 UNIT_ASSERT_EQUAL(0, info.PartitionId);
                 UNIT_ASSERT_EQUAL(2, info.SeqNo);
@@ -194,8 +221,121 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
         writeSession1->Close(TDuration::Seconds(1));
         writeSession2->Close(TDuration::Seconds(1));
         writeSession3->Close(TDuration::Seconds(1));
+        readSession.Close();
     }
 
+    Y_UNIT_TEST(PartitionSplit_ReadEmptyPartitions) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1, 100);
+
+        TTopicClient client = setup.MakeClient();
+        TTestReadSession readSession("session-0", client, Max<size_t>(), false);
+
+        readSession.WaitAndAssertPartitions({0}, "Must read all exists partitions");
+
+        ui64 txId = 1023;
+        SplitPartition(setup, ++txId, 0, "a");
+
+        readSession.WaitAndAssertPartitions({0, 1, 2}, "After split must read all partitions because parent partition is empty");
+
+        readSession.Close();
+    }
+
+    Y_UNIT_TEST(PartitionSplit_ReadNotEmptyPartitions) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1, 100);
+
+        TTopicClient client = setup.MakeClient();
+        TTestReadSession readSession("Session-0", client, Max<size_t>(), false);
+
+        auto writeSession = CreateWriteSession(client, "producer-1", 0);
+
+        readSession.WaitAndAssertPartitions({0}, "Must read all exists partitions");
+
+        UNIT_ASSERT(writeSession->Write(Msg("message_1", 2)));
+
+        ui64 txId = 1023;
+        SplitPartition(setup, ++txId, 0, "a");
+
+        readSession.WaitAndAssertPartitions({0}, "After split must read only 0 partition because had been read not from the end of partition");
+        readSession.WaitAndAssertPartitions({}, "Partition must be released for secondary read after 1 second");
+        readSession.WaitAndAssertPartitions({0}, "Must secondary read for check read from end");
+        readSession.WaitAndAssertPartitions({}, "Partition must be released for secondary read because start not from the end of partition after 2 seconds");
+
+        readSession.Offsets[0] = 1;
+        readSession.WaitAndAssertPartitions({0, 1, 2}, "Must read from all partitions because had been read from the end of partition");
+
+        readSession.Close();
+    }
+
+    Y_UNIT_TEST(PartitionSplit_ManySession) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1, 100);
+
+        TTopicClient client = setup.MakeClient();
+
+        auto writeSession = CreateWriteSession(client, "producer-1", 0);
+        UNIT_ASSERT(writeSession->Write(Msg("message_1", 2)));
+
+        ui64 txId = 1023;
+        SplitPartition(setup, ++txId, 0, "a");
+
+        TTestReadSession readSession1("Session-0", client, Max<size_t>(), false);
+        readSession1.Offsets[0] = 1;
+        readSession1.WaitAndAssertPartitions({0, 1, 2}, "Must read all exists partitions because read the partition 0 from offset 1");
+        readSession1.Offsets[0] = 0;
+
+        TTestReadSession readSession2("Session-1", client, Max<size_t>(), false, 0);
+        readSession2.Offsets[0] = 0;
+
+        auto p1 = readSession1.Wait({}, "Must release all partitions becase readSession2 read not from EndOffset");
+        auto p2 = readSession2.Wait({0}, "Must read partition 0 because it defined in the readSession");
+
+        p1.Wait(TDuration::Seconds(5));
+        readSession1.Assert({}, p1, "");
+        readSession1.Run();
+
+        p2.Wait(TDuration::Seconds(5));
+        readSession2.Assert({0}, p2, "");
+
+        readSession2.WaitAndAssertPartitions({}, "Partition must be released because reding finished");
+        readSession2.Run();
+
+        readSession1.WaitAndAssertPartitions({}, "Partitions must be read only from Session-1");
+        readSession1.WaitAndAssertPartitions({0}, "Partition 0 must rebalance to other sessions (Session-0)");
+
+        readSession1.Close();
+        readSession2.Close();
+    }
+
+    Y_UNIT_TEST(CommitTopPast) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1, 100);
+
+        TTopicClient client = setup.MakeClient();
+
+        auto writeSession = CreateWriteSession(client, "producer-1", 0);
+        UNIT_ASSERT(writeSession->Write(Msg("message_1", 2)));
+        UNIT_ASSERT(writeSession->Write(Msg("message_2", 3)));
+
+        ui64 txId = 1023;
+        SplitPartition(setup, ++txId, 0, "a");
+
+        auto status = client.CommitOffset(TEST_TOPIC, 0, TEST_CONSUMER, 0).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(NYdb::EStatus::SUCCESS, status.GetStatus(), "The consumer has just started reading the inactive partition and he can commit");
+
+        status = client.CommitOffset(TEST_TOPIC, 0, TEST_CONSUMER, 1).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(NYdb::EStatus::SUCCESS, status.GetStatus(), "A consumer who has not read to the end can commit messages forward.");
+
+        status = client.CommitOffset(TEST_TOPIC, 0, TEST_CONSUMER, 0).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(NYdb::EStatus::SUCCESS, status.GetStatus(), "A consumer who has not read to the end can commit messages back.");
+
+        status = client.CommitOffset(TEST_TOPIC, 0, TEST_CONSUMER, 2).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(NYdb::EStatus::SUCCESS, status.GetStatus(), "The consumer can commit at the end of the inactive partition.");
+
+        status = client.CommitOffset(TEST_TOPIC, 0, TEST_CONSUMER, 0).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(NYdb::EStatus::BAD_REQUEST, status.GetStatus(), "The consumer cannot commit an offset for inactive, read-to-the-end partitions.");
+    }
 }
 
 } // namespace NKikimr

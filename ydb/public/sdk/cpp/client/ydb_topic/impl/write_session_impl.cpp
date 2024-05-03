@@ -1,8 +1,7 @@
 #include "write_session_impl.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/log_lazy.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/trace_lazy.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/log_lazy.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/trace_lazy.h>
 
 #include <library/cpp/string_utils/url/url.h>
 
@@ -540,19 +539,20 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
         LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Start write session. Will connect to nodeId: " << PreferredPartitionLocation.Endpoint.NodeId);
 
         ++ConnectionGeneration;
-        auto subclient = Client;
-        connectionFactory = subclient->CreateWriteSessionConnectionProcessorFactory();
-        auto clientContext = subclient->CreateContext();
-        ConnectionFactory = connectionFactory;
-
-        ClientContext = std::move(clientContext);
-        ServerMessage = std::make_shared<TServerMessage>();
 
         if (!ClientContext) {
-            AbortImpl();
-            // Grpc and WriteSession is closing right now.
-            return;
+            ClientContext = Client->CreateContext();
+            if (!ClientContext) {
+                AbortImpl();
+                // Grpc and WriteSession is closing right now.
+                return;
+            }
         }
+
+        ServerMessage = std::make_shared<TServerMessage>();
+
+        connectionFactory = Client->CreateWriteSessionConnectionProcessorFactory();
+        ConnectionFactory = connectionFactory;
 
         connectContext = ClientContext->CreateContext();
         if (delay)
@@ -1192,6 +1192,11 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
         TBlock block{};
         for (; block.OriginalSize < MaxBlockSize && i != CurrentBatch.Messages.size(); ++i) {
             auto& currMessage = CurrentBatch.Messages[i];
+
+            // If MaxBlockSize or MaxBlockMessageCount values are ever changed from infinity and 1 correspondingly,
+            // create a new block, if the existing one is non-empty AND (adding another message will overflow it OR
+            //                                                           its codec is different from the codec of the next message).
+
             auto id = currMessage.Id;
             auto createTs = currMessage.CreatedAt;
 
@@ -1264,41 +1269,47 @@ void TWriteSessionImpl::UpdateTokenIfNeededImpl() {
 
     LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session: try to update token");
 
-    if (!DbDriverState->CredentialsProvider || UpdateTokenInProgress || !SessionEstablished)
+    if (!DbDriverState->CredentialsProvider || UpdateTokenInProgress || !SessionEstablished) {
         return;
-    TClientMessage clientMessage;
-    auto* updateRequest = clientMessage.mutable_update_token_request();
+    }
+
     auto token = DbDriverState->CredentialsProvider->GetAuthInfo();
-    if (token == PrevToken)
+    if (token == PrevToken) {
         return;
-    UpdateTokenInProgress = true;
-    updateRequest->set_token(token);
-    PrevToken = token;
+    }
 
     LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session: updating token");
 
+    UpdateTokenInProgress = true;
+    PrevToken = token;
+
+    TClientMessage clientMessage;
+    clientMessage.mutable_update_token_request()->set_token(token);
     Processor->Write(std::move(clientMessage));
 }
 
 void TWriteSessionImpl::SendImpl() {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
-    // External cycle splits ready blocks into multiple gRPC messages. Current gRPC message size hard limit is 64MiB
-    while(IsReadyToSendNextImpl()) {
+    // External cycle splits ready blocks into multiple gRPC messages. Current gRPC message size hard limit is 64MiB.
+    while (IsReadyToSendNextImpl()) {
         TClientMessage clientMessage;
         auto* writeRequest = clientMessage.mutable_write_request();
-
-        // Sent blocks while we can without messages reordering
+        ui32 prevCodec = 0;
+        // Send blocks while we can without messages reordering.
         while (IsReadyToSendNextImpl() && clientMessage.ByteSizeLong() < GetMaxGrpcMessageSize()) {
             const auto& block = PackedMessagesToSend.top();
             Y_ABORT_UNLESS(block.Valid);
+            if (writeRequest->messages_size() > 0 && prevCodec != block.CodecID) {
+                break;
+            }
+            prevCodec = block.CodecID;
             writeRequest->set_codec(static_cast<i32>(block.CodecID));
             Y_ABORT_UNLESS(block.MessageCount == 1);
             for (size_t i = 0; i != block.MessageCount; ++i) {
                 Y_ABORT_UNLESS(!OriginalMessagesToSend.empty());
 
                 auto& message = OriginalMessagesToSend.front();
-
                 auto* msgData = writeRequest->add_messages();
 
                 if (message.Tx) {
@@ -1309,26 +1320,23 @@ void TWriteSessionImpl::SendImpl() {
                 msgData->set_seq_no(GetSeqNoImpl(message.Id));
                 *msgData->mutable_created_at() = ::google::protobuf::util::TimeUtil::MillisecondsToTimestamp(message.CreatedAt.MilliSeconds());
 
-                if (!message.MessageMeta.empty()) {
-                    for (auto& [k, v] : message.MessageMeta) {
-                        auto* pair = msgData->add_metadata_items();
-                        pair->set_key(k);
-                        pair->set_value(v);
-                    }
+                for (auto& [k, v] : message.MessageMeta) {
+                    auto* pair = msgData->add_metadata_items();
+                    pair->set_key(k);
+                    pair->set_value(v);
                 }
                 SentOriginalMessages.emplace(std::move(message));
                 OriginalMessagesToSend.pop();
 
                 msgData->set_uncompressed_size(block.OriginalSize);
-                if (block.Compressed)
+                if (block.Compressed) {
                     msgData->set_data(block.Data.data(), block.Data.size());
-                else {
+                } else {
                     for (auto& buffer: block.OriginalDataRefs) {
                         msgData->set_data(buffer.data(), buffer.size());
                     }
                 }
             }
-
 
             TBlock moveBlock;
             moveBlock.Move(block);

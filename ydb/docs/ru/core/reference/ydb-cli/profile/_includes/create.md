@@ -99,7 +99,7 @@ ydb config profile create quickstart --endpoint grpc://localhost:2136 --database
 
 #### Профиль для соединения с локальной базой данных {#cmdline-example-local}
 
-Создание/замена профиля `local` для соединения с локальной БД YDB, развернутой сценариями быстрого развертывания из [бинарного файла](../../../../getting_started/self_hosted/ydb_local.md) или [в Docker](../../../../getting_started/self_hosted/ydb_docker.md):
+Создание/замена профиля `local` для соединения с локальной БД YDB, развернутой сценариями [быстрого развертывания](../../../../quickstart.md):
 
 ```bash
 {{ydb-cli}} config profile replace local --endpoint grpc://localhost:2136 --database /Root/test

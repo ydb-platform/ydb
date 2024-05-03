@@ -834,7 +834,7 @@ bool TWinRank::DoInit(TContext& ctx, ISource* src) {
 
     if (Args.empty()) {
         for (const auto& spec: orderSpec) {
-            Args.push_back(spec->OrderExpr->Clone());
+            Args.push_back(spec->Clone()->OrderExpr);
         }
 
         if (Args.size() != 1) {
@@ -1032,11 +1032,15 @@ bool TColumns::IsColumnPossible(TContext& ctx, const TString& name) {
     return false;
 }
 
+TSortSpecification::TSortSpecification(const TNodePtr& orderExpr, bool ascending)
+    : OrderExpr(orderExpr->Clone())
+    , Ascending(ascending)
+    , CleanOrderExpr(orderExpr->Clone())
+{
+}
+
 TSortSpecificationPtr TSortSpecification::Clone() const {
-    auto res = MakeIntrusive<TSortSpecification>();
-    res->OrderExpr = OrderExpr->Clone();
-    res->Ascending = Ascending;
-    return res;
+    return MakeIntrusive<TSortSpecification>(CleanOrderExpr, Ascending);
 }
 
 TFrameBoundPtr TFrameBound::Clone() const {

@@ -1,0 +1,19 @@
+generic:
+  mlock: false
+
+  logging:
+    stderr: false
+
+  server:
+    http_port: 8788
+    https_port: 8789
+    ca_cert_file: path/to/ca.crt
+    ssl_cert_file: path/to/ssl.crt
+
+  auth:
+    token: your_ydb_token
+    token_file: path/to/ydb_token
+
+meta:
+  meta_api_endpoint: grpc://lb.ydb-ui.ydb.nemax.nebiuscloud.net:2135
+  meta_database: /nemax_global/ydb-ui

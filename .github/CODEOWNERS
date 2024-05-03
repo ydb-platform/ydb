@@ -12,5 +12,6 @@
 /ydb/library/yql/providers/s3 @ydb-platform/fq
 /ydb/library/yql/providers/solomon @ydb-platform/fq
 
-/ydb/services/fq/ @ydb-platform/fq
+/ydb/library/yql/yt @Krock21 @Krisha11 @zlobober @gritukan
 
+/ydb/services/fq/ @ydb-platform/fq

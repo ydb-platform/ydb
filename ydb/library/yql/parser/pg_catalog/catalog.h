@@ -353,8 +353,8 @@ struct TColumnInfo {
 };
 
 const TVector<TTableInfo>& GetStaticTables();
+const TTableInfo& LookupStaticTable(const TTableInfoKey& tableKey);
 const THashMap<TTableInfoKey, TVector<TColumnInfo>>& GetStaticColumns();
-
 }
 
 template <>

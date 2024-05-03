@@ -28,12 +28,12 @@ struct TTaskRunnerEvents {
 
         EvOutputChannelDataRequest,
         EvOutputChannelData,
-
-	EvInputChannelData,
+        
+        EvInputChannelData,
         EvInputChannelDataAck,
-
-	// EvContinueRun -> TaskRunner->Run() -> TEvTaskRunFinished
-        EvContinueRun,
+        
+        // EvContinueRun -> TaskRunner->Run() -> TEvTaskRunFinished
+        EvContinueRun, 
         EvRunFinished,
 
         EvSourceDataAck,
@@ -171,21 +171,34 @@ struct TEvTaskRunnerCreateFinished
     : NActors::TEventLocal<TEvTaskRunnerCreateFinished, TTaskRunnerEvents::EvCreateFinished>
 {
 
-    TEvTaskRunnerCreateFinished() = default;
     TEvTaskRunnerCreateFinished(
         const THashMap<TString, TString>& secureParams,
         const THashMap<TString, TString>& taskParams,
         const TVector<TString>& readRanges,
         const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-        const TTaskRunnerActorSensors& sensors = {})
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
+        THashMap<ui64, std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr>>&& inputTransforms,
+        const TTaskRunnerActorSensors& sensors = {}
+    )
         : Sensors(sensors)
         , SecureParams(secureParams)
         , TaskParams(taskParams)
         , ReadRanges(readRanges)
         , TypeEnv(typeEnv)
         , HolderFactory(holderFactory)
-    { }
+        , Alloc(alloc)
+        , InputTransforms(std::move(inputTransforms))
+    { 
+        Y_ABORT_UNLESS(inputTransforms.empty() || Alloc);
+    }
+
+    ~TEvTaskRunnerCreateFinished() {
+        if (!InputTransforms.empty()) {
+            auto guard = Guard(*Alloc);
+            InputTransforms.clear();
+        }
+    }
 
     TTaskRunnerActorSensors Sensors;
 
@@ -195,6 +208,8 @@ struct TEvTaskRunnerCreateFinished
     const TVector<TString>& ReadRanges;
     const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
     const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+    THashMap<ui64, std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr>> InputTransforms; //can'not be const, because we need to explicitly clear it in destructor
 };
 
 struct TEvTaskRunFinished

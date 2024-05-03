@@ -114,6 +114,7 @@
 #include <ydb/services/ydb/ydb_dummy.h>
 #include <ydb/services/ydb/ydb_export.h>
 #include <ydb/services/ydb/ydb_import.h>
+#include <ydb/services/backup/grpc_service.h>
 #include <ydb/services/ydb/ydb_logstore.h>
 #include <ydb/services/ydb/ydb_operation.h>
 #include <ydb/services/ydb/ydb_query.h>
@@ -586,10 +587,6 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         TServiceCfg hasKeyValue = services.empty();
         names["keyvalue"] = &hasKeyValue;
 
-        if (hasTableService || hasYql) {
-            hasQueryService = true;
-        }
-
         std::unordered_set<TString> enabled;
         for (const auto& name : services) {
             enabled.insert(name);
@@ -641,6 +638,10 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         if (hasExport || hasImport) {
             hasExport = true;
             hasImport = true;
+        }
+
+        if (hasTableService || hasYql) {
+            hasQueryService = true;
         }
 
         // Enable RL for all services if enabled list is empty
@@ -748,6 +749,11 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         if (hasImport) {
             server.AddService(new NGRpcService::TGRpcYdbImportService(ActorSystem.Get(), Counters,
                 grpcRequestProxies[0], hasImport.IsRlAllowed()));
+        }
+
+        if (hasImport && hasExport && appConfig.GetFeatureFlags().GetEnableBackupService()) {
+            server.AddService(new NGRpcService::TGRpcBackupService(ActorSystem.Get(), Counters,
+                grpcRequestProxies[0], hasExport.IsRlAllowed()));
         }
 
         if (hasKesus) {
@@ -1081,6 +1087,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     }
 
     AppData->TenantName = runConfig.TenantName;
+
+    if (runConfig.AppConfig.GetDynamicNodeConfig().GetNodeInfo().HasName()) {
+        AppData->NodeName = runConfig.AppConfig.GetDynamicNodeConfig().GetNodeInfo().GetName();
+    }
 
     if (runConfig.AppConfig.HasBootstrapConfig()) {
         AppData->BootstrapConfig = runConfig.AppConfig.GetBootstrapConfig();

@@ -73,6 +73,8 @@ namespace NBalancing {
 
                 if (Stats.SendPartsLeft != 0 || Stats.DeletePartsLeft != 0) {
                     // sender or deleter has not finished yet
+                    Stats.SendCompleted = Stats.SendPartsLeft == 0;
+                    Stats.DeleteCompleted = Stats.DeletePartsLeft == 0;
                     ContinueBalancing();
                     return;
                 }
@@ -129,6 +131,8 @@ namespace NBalancing {
 
             STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB08, VDISKP(Ctx->VCtx, "Keys collected"),
                 (SendOnMainParts, SendOnMainParts.size()), (TryDeleteParts, TryDeleteParts.size()));
+            Ctx->MonGroup.PlannedToSendOnMain() = SendOnMainParts.size();
+            Ctx->MonGroup.CandidatesToDelete() = TryDeleteParts.size();
 
             // register sender and deleter actors
             SenderId = TlsActivationContext->Register(CreateSenderActor(SelfId(), std::move(SendOnMainParts), QueueActorMapPtr, Ctx));

@@ -6,6 +6,7 @@
 #include <ydb/core/protos/counters_statistics_aggregator.pb.h>
 
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/statistics/common.h>
 #include <ydb/core/statistics/events.h>
 
@@ -13,6 +14,9 @@
 #include <ydb/core/cms/console/console.h>
 
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/util/count_min_sketch.h>
 
 #include <random>
 
@@ -37,6 +41,12 @@ private:
     struct TTxInit;
     struct TTxConfigure;
     struct TTxSchemeShardStats;
+    struct TTxScanTable;
+    struct TTxNavigate;
+    struct TTxResolve;
+    struct TTxStatisticsScanResponse;
+    struct TTxSaveQueryResponse;
+    struct TTxScheduleScan;
 
     struct TEvPrivate {
         enum EEv {
@@ -44,6 +54,7 @@ private:
             EvFastPropagateCheck,
             EvProcessUrgent,
             EvPropagateTimeout,
+            EvScheduleScan,
 
             EvEnd
         };
@@ -52,6 +63,7 @@ private:
         struct TEvFastPropagateCheck : public TEventLocal<TEvFastPropagateCheck, EvFastPropagateCheck> {};
         struct TEvProcessUrgent : public TEventLocal<TEvProcessUrgent, EvProcessUrgent> {};
         struct TEvPropagateTimeout : public TEventLocal<TEvPropagateTimeout, EvPropagateTimeout> {};
+        struct TEvScheduleScan : public TEventLocal<TEvScheduleScan, EvScheduleScan> {};
     };
 
 private:
@@ -88,7 +100,25 @@ private:
     size_t PropagatePart(const std::vector<TNodeId>& nodeIds, const std::vector<TSSId>& ssIds,
         size_t lastSSIndex, bool useSizeLimit);
 
+    void Handle(TEvStatistics::TEvScanTable::TPtr& ev);
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
+    void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev);
+    void Handle(TEvDataShard::TEvStatisticsScanResponse::TPtr& ev);
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev);
+    void Handle(TEvStatistics::TEvStatTableCreationResponse::TPtr& ev);
+    void Handle(TEvStatistics::TEvSaveStatisticsQueryResponse::TPtr& ev);
+    void Handle(TEvPrivate::TEvScheduleScan::TPtr& ev);
+
+    void Initialize();
+    void Navigate();
+    void Resolve();
+    void NextRange();
+    void SaveStatisticsToTable();
+    void ScheduleNextScan();
+
     void PersistSysParam(NIceDb::TNiceDb& db, ui64 id, const TString& value);
+    void PersistScanTableId(NIceDb::TNiceDb& db);
+    void PersistScanStartTime(NIceDb::TNiceDb& db);
 
     STFUNC(StateInit) {
         StateInitImpl(ev, SelfId());
@@ -110,6 +140,15 @@ private:
             hFunc(TEvStatistics::TEvPropagateStatisticsResponse, Handle);
             hFunc(TEvPrivate::TEvProcessUrgent, Handle);
             hFunc(TEvPrivate::TEvPropagateTimeout, Handle);
+
+            hFunc(TEvStatistics::TEvScanTable, Handle);
+            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+            hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);
+            hFunc(TEvDataShard::TEvStatisticsScanResponse, Handle);
+            hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+            hFunc(TEvStatistics::TEvStatTableCreationResponse, Handle);
+            hFunc(TEvStatistics::TEvSaveStatisticsQueryResponse, Handle);
+            hFunc(TEvPrivate::TEvScheduleScan, Handle);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
                     LOG_CRIT(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
@@ -154,6 +193,48 @@ private:
 
     std::queue<TEvStatistics::TEvRequestStats::TPtr> PendingRequests;
     bool ProcessUrgentInFlight = false;
+
+    //
+
+    TTableId ScanTableId; // stored in local db
+    TActorId ReplyToActorId;
+
+    bool IsStatisticsTableCreated = false;
+    bool PendingSaveStatistics = false;
+
+    std::vector<NScheme::TTypeInfo> KeyColumnTypes;
+    TVector<TKeyDesc::TColumnOp> Columns;
+    std::unordered_map<ui32, TString> ColumnNames;
+
+    struct TRange {
+        TSerializedCellVec EndKey;
+        ui64 DataShardId = 0;
+    };
+    std::deque<TRange> ShardRanges;
+
+    bool InitStartKey = true;
+    TSerializedCellVec StartKey; // stored in local db
+
+    std::unordered_map<ui32, std::unique_ptr<TCountMinSketch>> CountMinSketches; // stored in local db
+
+    static constexpr TDuration ScanIntervalTime = TDuration::Hours(24);
+
+    struct TScanTable {
+        TPathId PathId;
+        ui64 SchemeShardId = 0;
+        TInstant LastUpdateTime;
+    };
+    struct TScanTableLess {
+        bool operator()(const TScanTable& l, const TScanTable& r) {
+            return l.LastUpdateTime > r.LastUpdateTime;
+        }
+    };
+    typedef std::priority_queue<TScanTable, std::vector<TScanTable>, TScanTableLess>
+        TScanTableQueue;
+
+    TScanTableQueue ScanTablesByTime; // stored in local db
+    std::unordered_map<ui64, std::unordered_set<TPathId>> ScanTablesBySchemeShard; // stored in local db
+    TInstant ScanStartTime; // stored in local db
 };
 
 } // NKikimr::NStat

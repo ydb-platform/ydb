@@ -152,14 +152,6 @@ public:
         }
     }
 
-    void Reply(const NKikimrClient::TDsTestLoadResponse& resp) override {
-        if (const TOut* x = dynamic_cast<const TOut*>(&resp)) {
-            Finish(*x, 0);
-        } else {
-            ReplyError("request failed");
-        }
-    }
-
     void Reply(const NKikimrClient::TBsTestLoadResponse& resp) override {
         if (const TOut* x = dynamic_cast<const TOut*>(&resp)) {
             Finish(*x, 0);
@@ -265,7 +257,7 @@ private:
 
     void Finish(const TOut& resp, ui32 status) {
         LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] issuing response Name# %s data# %s peer# %s", this,
-            Name, NYdbGrpc::FormatMessage(resp).data(), GetPeerName().c_str());
+            Name, NYdbGrpc::FormatMessage<TOut>(resp).data(), GetPeerName().c_str());
         ResponseSize = resp.ByteSize();
         ResponseStatus = status;
         StateFunc = &TSimpleRequest::FinishDone;
@@ -292,7 +284,7 @@ private:
         OnAfterCall();
 
         LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] received request Name# %s ok# %s data# %s peer# %s current inflight# %li", this,
-            Name, ok ? "true" : "false", NYdbGrpc::FormatMessage(Request, ok).data(), GetPeerName().c_str(), Server->GetCurrentInFlight());
+            Name, ok ? "true" : "false", NYdbGrpc::FormatMessage<TIn>(Request, ok).data(), GetPeerName().c_str(), Server->GetCurrentInFlight());
 
         if (Context.c_call() == nullptr) {
             Y_ABORT_UNLESS(!ok);

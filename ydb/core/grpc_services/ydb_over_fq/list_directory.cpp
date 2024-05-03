@@ -31,8 +31,7 @@ public:
         req.set_limit(Limit);
         req.set_page_token(std::move(continuationToken));
 
-        LOG_DEBUG_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE,
-            "YdbOverFq::ListDirectories actorId: " << SelfId().ToString() << ", listing bindings");
+        SRC_LOG_T("listing bindings");
 
         Become(&ListDirectoryRPC::ListBindingsState);
         MakeLocalCall(std::move(req), ctx);

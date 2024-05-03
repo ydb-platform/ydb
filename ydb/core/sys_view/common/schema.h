@@ -33,8 +33,10 @@ constexpr TStringBuf QueryMetricsName = "query_metrics_one_minute";
 
 constexpr TStringBuf StorePrimaryIndexStatsName = "store_primary_index_stats";
 constexpr TStringBuf StorePrimaryIndexPortionStatsName = "store_primary_index_portion_stats";
+constexpr TStringBuf StorePrimaryIndexGranuleStatsName = "store_primary_index_granule_stats";
 constexpr TStringBuf TablePrimaryIndexStatsName = "primary_index_stats";
 constexpr TStringBuf TablePrimaryIndexPortionStatsName = "primary_index_portion_stats";
+constexpr TStringBuf TablePrimaryIndexGranuleStatsName = "primary_index_granule_stats";
 
 constexpr TStringBuf TopPartitions1MinuteName = "top_partitions_one_minute";
 constexpr TStringBuf TopPartitions1HourName = "top_partitions_one_hour";
@@ -529,6 +531,23 @@ struct Schema : NIceDb::Schema {
             Activity,
             TierName,
             Stats
+        >;
+    };
+
+    struct PrimaryIndexGranuleStats: Table<14> {
+        struct PathId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct TabletId: Column<2, NScheme::NTypeIds::Uint64> {};
+        struct PortionsCount: Column<3, NScheme::NTypeIds::Uint64> {};
+        struct HostName: Column<4, NScheme::NTypeIds::Utf8> {};
+        struct NodeId: Column<5, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<PathId, TabletId>;
+        using TColumns = TableColumns<
+            PathId,
+            TabletId,
+            PortionsCount,
+            HostName,
+            NodeId
         >;
     };
 

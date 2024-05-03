@@ -381,9 +381,9 @@ the command line help.
 
 You may directly download automatically generated single-header files:
 
-https://github.com/fastfloat/fast_float/releases/download/v6.1.0/fast_float.h
+https://github.com/fastfloat/fast_float/releases/download/v6.1.1/fast_float.h
 
-## RFC 7159 
+## RFC 7159
 
 If you need support for RFC 7159 (JSON standard), you may want to consider using the [fast_double_parser](https://github.com/lemire/fast_double_parser/) library instead.
 

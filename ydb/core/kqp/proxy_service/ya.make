@@ -41,10 +41,6 @@ YQL_LAST_ABI_VERSION()
 
 END()
 
-RECURSE(
-    proto
-)
-
 RECURSE_FOR_TESTS(
     ut
 )

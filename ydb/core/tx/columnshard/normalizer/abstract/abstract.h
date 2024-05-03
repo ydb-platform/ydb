@@ -5,7 +5,6 @@
 
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
-
 #include <ydb/library/conclusion/result.h>
 
 namespace NKikimr::NOlap {
@@ -71,7 +70,20 @@ namespace NKikimr::NOlap {
         using TPtr = std::shared_ptr<INormalizerChanges>;
         virtual ~INormalizerChanges() {}
 
-        virtual bool Apply(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& normalizationContext) const = 0;
+        virtual bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& normalizationContext) const = 0;
+        virtual void ApplyOnComplete(const TNormalizationController& normalizationContext) const {
+            Y_UNUSED(normalizationContext);
+        }
+    };
+
+    class TTrivialNormalizerTask : public INormalizerTask {
+        INormalizerChanges::TPtr Changes;
+    public:
+        TTrivialNormalizerTask(const INormalizerChanges::TPtr& changes)
+            : Changes(changes)
+        {}
+
+        void Start(const TNormalizationController& /* controller */, const TNormalizationContext& /*nCtx*/) override;
     };
 
     class INormalizerComponent {

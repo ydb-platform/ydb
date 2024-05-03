@@ -9,10 +9,6 @@
 namespace NActors {
     static constexpr TDuration GetNodeRequestTimeout = TDuration::Seconds(5);
 
-    static constexpr TDuration FirstErrorSleep = TDuration::MilliSeconds(10);
-    static constexpr TDuration MaxErrorSleep = TDuration::Seconds(10);
-    static constexpr ui32 SleepRetryMultiplier = 4;
-
     static TString PeerNameForHuman(ui32 nodeNum, const TString& longName, ui16 port) {
         TStringBuf token;
         TStringBuf(longName).NextTok('.', token);
@@ -62,6 +58,11 @@ namespace NActors {
 
     void TInterconnectProxyTCP::RequestNodeInfo(STATEFN_SIG) {
         ICPROXY_PROFILED;
+
+        if (ev->GetTypeRewrite() == TEvents::TSystem::Unsubscribe) {
+            // do not initiate new session upon receiving this event
+            return;
+        }
 
         Y_ABORT_UNLESS(!IncomingHandshakeActor && !OutgoingHandshakeActor && !PendingIncomingHandshakeEvents && !PendingSessionEvents);
         EnqueueSessionEvent(ev);
@@ -758,9 +759,10 @@ namespace NActors {
 
         // recalculate wakeup timeout -- if this is the first failure, then we sleep for default timeout; otherwise we
         // sleep N times longer than the previous try, but not longer than desired number of seconds
+        auto& s = Common->Settings;
         HoldByErrorWakeupDuration = HoldByErrorWakeupDuration != TDuration::Zero()
-                                        ? Min(HoldByErrorWakeupDuration * SleepRetryMultiplier, MaxErrorSleep)
-                                        : FirstErrorSleep;
+            ? Min(HoldByErrorWakeupDuration * s.ErrorSleepRetryMultiplier, s.MaxErrorSleep)
+            : Common->Settings.FirstErrorSleep;
 
         // transit to required state and arm wakeup timer
         if (Terminated) {

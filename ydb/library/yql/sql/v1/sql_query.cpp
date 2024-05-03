@@ -40,21 +40,48 @@ void TSqlQuery::AddStatementToBlocks(TVector<TNodePtr>& blocks, TNodePtr node) {
     blocks.emplace_back(node);
 }
 
-static bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out, const TRule_replication_settings_entry& in, TTranslation& ctx) {
-    auto key = Id(in.GetRule_an_id1(), ctx);
+static bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
+        const TRule_replication_settings_entry& in, TTranslation& ctx, bool alter)
+{
+    auto key = IdEx(in.GetRule_an_id1(), ctx);
     auto value = BuildLiteralSmartString(ctx.Context(), ctx.Token(in.GetToken3()));
-    // TODO(ilnaz): validate
-    out.emplace(std::move(key), value);
+
+    THashMap<TString, bool> settings = {
+        {"connection_string", false},
+        {"endpoint", false},
+        {"database", false},
+        {"token", false},
+        {"user", false},
+        {"password", false},
+        {"state", true},
+        {"failover_mode", true},
+    };
+
+    auto it = settings.find(to_lower(key.Name));
+    if (it == settings.end()) {
+        ctx.Context().Error() << "Unknown replication setting: " << key.Name;
+        return false;
+    } else if (alter != it->second) {
+        ctx.Context().Error() << key.Name << " is not supported in " << (alter ? "ALTER" : "CREATE");
+        return false;
+    }
+
+    if (!out.emplace(it->first, value).second) {
+        ctx.Context().Error() << "Duplicate replication setting: " << key.Name;
+    }
+
     return true;
 }
 
-static bool AsyncReplicationSettings(std::map<TString, TNodePtr>& out, const TRule_replication_settings& in, TTranslation& ctx) {
-    if (!AsyncReplicationSettingsEntry(out, in.GetRule_replication_settings_entry1(), ctx)) {
+static bool AsyncReplicationSettings(std::map<TString, TNodePtr>& out,
+        const TRule_replication_settings& in, TTranslation& ctx, bool alter = false)
+{
+    if (!AsyncReplicationSettingsEntry(out, in.GetRule_replication_settings_entry1(), ctx, alter)) {
         return false;
     }
 
     for (auto& block : in.GetBlock2()) {
-        if (!AsyncReplicationSettingsEntry(out, block.GetRule_replication_settings_entry2(), ctx)) {
+        if (!AsyncReplicationSettingsEntry(out, block.GetRule_replication_settings_entry2(), ctx, alter)) {
             return false;
         }
     }
@@ -62,11 +89,20 @@ static bool AsyncReplicationSettings(std::map<TString, TNodePtr>& out, const TRu
     return true;
 }
 
-static bool AsyncReplicationTarget(std::vector<std::pair<TString, TString>>& out, const TRule_replication_target& in, TTranslation& ctx) {
+static bool AsyncReplicationTarget(std::vector<std::pair<TString, TString>>& out, TStringBuf prefixPath,
+        const TRule_replication_target& in, TTranslation& ctx)
+{
     const TString remote = Id(in.GetRule_object_ref1().GetRule_id_or_at2(), ctx).second;
     const TString local = Id(in.GetRule_object_ref3().GetRule_id_or_at2(), ctx).second;
-    out.emplace_back(remote, local);
+    out.emplace_back(remote, BuildTablePath(prefixPath, local));
     return true;
+}
+
+static bool AsyncReplicationAlterAction(std::map<TString, TNodePtr>& settings,
+        const TRule_alter_replication_action& in, TTranslation& ctx)
+{
+    // TODO(ilnaz): support other actions
+    return AsyncReplicationSettings(settings, in.GetRule_alter_replication_set_setting1().GetRule_replication_settings3(), ctx, true);
 }
 
 bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& core) {
@@ -894,12 +930,14 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 }
             }
 
+            auto prefixPath = Ctx.GetPrefixPath(context.ServiceId, context.Cluster);
+
             std::vector<std::pair<TString, TString>> targets;
-            if (!AsyncReplicationTarget(targets, node.GetRule_replication_target6(), *this)) {
+            if (!AsyncReplicationTarget(targets, prefixPath, node.GetRule_replication_target6(), *this)) {
                 return false;
             }
             for (auto& block : node.GetBlock7()) {
-                if (!AsyncReplicationTarget(targets, block.GetRule_replication_target2(), *this)) {
+                if (!AsyncReplicationTarget(targets, prefixPath, block.GetRule_replication_target2(), *this)) {
                     return false;
                 }
             }
@@ -910,7 +948,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             const TString id = Id(node.GetRule_object_ref4().GetRule_id_or_at2(), *this).second;
-            AddStatementToBlocks(blocks, BuildCreateAsyncReplication(Ctx.Pos(), id, std::move(targets), std::move(settings), context));
+            AddStatementToBlocks(blocks, BuildCreateAsyncReplication(Ctx.Pos(), BuildTablePath(prefixPath, id),
+                std::move(targets), std::move(settings), context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore34: {
@@ -925,7 +964,9 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             const TString id = Id(node.GetRule_object_ref4().GetRule_id_or_at2(), *this).second;
-            AddStatementToBlocks(blocks, BuildDropAsyncReplication(Ctx.Pos(), id, node.HasBlock5(), context));
+            AddStatementToBlocks(blocks, BuildDropAsyncReplication(Ctx.Pos(),
+                BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), id),
+                node.HasBlock5(), context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore35: {
@@ -1180,6 +1221,33 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                                                           false,
                                                           {},
                                                           context));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore44: {
+            // alter_replication_stmt: ALTER ASYNC REPLICATION
+            auto& node = core.GetAlt_sql_stmt_core44().GetRule_alter_replication_stmt1();
+            TObjectOperatorContext context(Ctx.Scoped);
+            if (node.GetRule_object_ref4().HasBlock1()) {
+                const auto& cluster = node.GetRule_object_ref4().GetBlock1().GetRule_cluster_expr1();
+                if (!ClusterExpr(cluster, false, context.ServiceId, context.Cluster)) {
+                    return false;
+                }
+            }
+
+            std::map<TString, TNodePtr> settings;
+            if (!AsyncReplicationAlterAction(settings, node.GetRule_alter_replication_action5(), *this)) {
+                return false;
+            }
+            for (auto& block : node.GetBlock6()) {
+                if (!AsyncReplicationAlterAction(settings, block.GetRule_alter_replication_action2(), *this)) {
+                    return false;
+                }
+            }
+
+            const TString id = Id(node.GetRule_object_ref4().GetRule_id_or_at2(), *this).second;
+            AddStatementToBlocks(blocks, BuildAlterAsyncReplication(Ctx.Pos(),
+                BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), id),
+                std::move(settings), context));
             break;
         }
         case TRule_sql_stmt_core::ALT_NOT_SET:
@@ -2306,6 +2374,12 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disableansilike") {
             Ctx.AnsiLike = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableAnsiLike");
+        } else if (normalizedPragma == "unorderedresult") {
+            Ctx.UnorderedResult = true;
+            Ctx.IncrementMonCounter("sql_pragma", "UnorderedResult");
+        } else if (normalizedPragma == "disableunorderedresult") {
+            Ctx.UnorderedResult = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableUnorderedResult");
         } else if (normalizedPragma == "featurer010") {
             if (values.size() == 1 && values[0].GetLiteral()) {
                 const auto& value = *values[0].GetLiteral();
@@ -2453,6 +2527,12 @@ TNodePtr TSqlQuery::Build(const TRule_delete_stmt& stmt) {
 
     TSourcePtr source = BuildTableSource(Ctx.Pos(), table);
 
+    TNodePtr options = nullptr;
+    if (stmt.HasBlock5()) {
+        options = ReturningList(stmt.GetBlock5().GetRule_returning_columns_list1());
+        options = options->Y(options);
+    }
+
     if (stmt.HasBlock4()) {
         switch (stmt.GetBlock4().Alt_case()) {
             case TRule_delete_stmt_TBlock4::kAlt1: {
@@ -2476,7 +2556,7 @@ TNodePtr TSqlQuery::Build(const TRule_delete_stmt& stmt) {
                     return nullptr;
                 }
 
-                return BuildWriteColumns(Ctx.Pos(), Ctx.Scoped, table, EWriteColumnMode::DeleteOn, std::move(values));
+                return BuildWriteColumns(Ctx.Pos(), Ctx.Scoped, table, EWriteColumnMode::DeleteOn, std::move(values), options);
             }
 
             case TRule_delete_stmt_TBlock4::ALT_NOT_SET:
@@ -2484,7 +2564,7 @@ TNodePtr TSqlQuery::Build(const TRule_delete_stmt& stmt) {
         }
     }
 
-    return BuildDelete(Ctx.Pos(), Ctx.Scoped, table, std::move(source));
+    return BuildDelete(Ctx.Pos(), Ctx.Scoped, table, std::move(source), options);
 }
 
 TNodePtr TSqlQuery::Build(const TRule_update_stmt& stmt) {
@@ -2498,6 +2578,12 @@ TNodePtr TSqlQuery::Build(const TRule_update_stmt& stmt) {
     if (!isKikimr) {
         Ctx.Error(GetPos(stmt.GetToken1())) << "UPDATE is unsupported for " << table.Service;
         return nullptr;
+    }
+
+    TNodePtr options = nullptr;
+    if (stmt.HasBlock4()) {
+        options = ReturningList(stmt.GetBlock4().GetRule_returning_columns_list1());
+        options = options->Y(options);
     }
 
     switch (stmt.GetBlock3().Alt_case()) {
@@ -2516,7 +2602,7 @@ TNodePtr TSqlQuery::Build(const TRule_update_stmt& stmt) {
                 source->AddFilter(Ctx, whereExpr);
             }
 
-            return BuildUpdateColumns(Ctx.Pos(), Ctx.Scoped, table, std::move(values), std::move(source));
+            return BuildUpdateColumns(Ctx.Pos(), Ctx.Scoped, table, std::move(values), std::move(source), options);
         }
 
         case TRule_update_stmt_TBlock3::kAlt2: {
@@ -2527,7 +2613,7 @@ TNodePtr TSqlQuery::Build(const TRule_update_stmt& stmt) {
                 return nullptr;
             }
 
-            return BuildWriteColumns(Ctx.Pos(), Ctx.Scoped, table, EWriteColumnMode::UpdateOn, std::move(values));
+            return BuildWriteColumns(Ctx.Pos(), Ctx.Scoped, table, EWriteColumnMode::UpdateOn, std::move(values), options);
         }
 
         case TRule_update_stmt_TBlock3::ALT_NOT_SET:

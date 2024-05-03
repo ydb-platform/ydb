@@ -213,10 +213,12 @@ namespace NSchemeShardUT_Private {
     // sequence
     GENERIC_HELPERS(CreateSequence);
     GENERIC_HELPERS(DropSequence);
+    GENERIC_HELPERS(AlterSequence);
     DROP_BY_PATH_ID_HELPERS(DropSequence);
 
     // replication
     GENERIC_HELPERS(CreateReplication);
+    GENERIC_HELPERS(AlterReplication);
     GENERIC_HELPERS(DropReplication);
     DROP_BY_PATH_ID_HELPERS(DropReplication);
 
@@ -553,7 +555,11 @@ namespace NSchemeShardUT_Private {
     void WriteRow(TTestActorRuntime& runtime, const ui64 txId, const TString& tablePath, int partitionIdx, const ui32 key, const TString& value, bool successIsExpected = true);
 
     void SendNextValRequest(TTestActorRuntime& runtime, const TActorId& sender, const TString& path);
-    i64 WaitNextValResult(TTestActorRuntime& runtime, const TActorId& sender);
-    i64 DoNextVal(TTestActorRuntime& runtime, const TString& path);
+    i64 WaitNextValResult(
+        TTestActorRuntime& runtime, const TActorId& sender,
+        Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    i64 DoNextVal(
+        TTestActorRuntime& runtime, const TString& path,
+        Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
 
 } //NSchemeShardUT_Private

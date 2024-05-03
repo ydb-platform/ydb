@@ -495,6 +495,7 @@ message TStorageTierConfig {
 
 message TColumnTableSchemeOptions {
     optional bool SchemeNeedActualization = 1 [default = false];
+    optional bool ExternalGuaranteeExclusivePK = 2 [default = false];
 }
 
 message TColumnTableSchema {
@@ -515,7 +516,7 @@ message TColumnTableSchema {
     //optional int32 DefaultCompressionLevel = 7; // deprecated, not used before replace
     optional TCompressionOptions DefaultCompression = 8;
 
-    optional bool CompositeMarks = 9 [ default = false ];
+    optional bool CompositeMarksDeprecated = 9 [ default = false ];
     repeated TOlapIndexDescription Indexes = 10;
     repeated NKikimrColumnShardStatisticsProto.TOperatorContainer Statistics = 11;
     optional TColumnTableSchemeOptions Options = 12;
@@ -523,6 +524,7 @@ message TColumnTableSchema {
 
 message TColumnTableRequestedOptions {
     optional bool SchemeNeedActualization = 1 [default = false];
+    optional bool ExternalGuaranteeExclusivePK = 2;
 }
 
 message TAlterColumnTableSchema {
@@ -619,7 +621,6 @@ message TColumnStorageConfig {
 
 // This is used internally by schemeshard
 message TColumnStoreSharding {
-    repeated TShardIdx MetaShards = 1;
     repeated TShardIdx ColumnShards = 2;
 }
 
@@ -657,20 +658,6 @@ message TColumnTableSharding {
     // This field is managed by the system.
     repeated uint64 ColumnShards = 2;
 
-    // An unordered list of additional column shards that may have stored data
-    // using an older sharding method. Readers may need to include these
-    // shards when performing queries.
-    // This field is managed by the system.
-    repeated uint64 AdditionalColumnShards = 3;
-
-    // When true the mapping of primary key to column shard is unique.
-    // One example when this is false is when sharding for new data is random,
-    // the same primary key may have been written to multiple column shards.
-    // One example when this is true is hash partitioning using primary key,
-    // when each unique primary key is only mapped to one column shard.
-    // This field is managed by the system.
-    optional bool UniquePrimaryKey = 4;
-
     // Random sharding chooses a random shard for new data at write time
     message TRandomSharding {
         // No additional fields
@@ -690,12 +677,6 @@ message TColumnTableSharding {
 
         // A list of columns used for hashing, must not be empty
         repeated string Columns = 2;
-
-        // When true the mapping of column values to column shard is unique.
-        // One example when this may become false is when table sharding is
-        // changed and older data with the same column values may be left on
-        // a different shard.
-        optional bool UniqueShardKey = 3;
 
         // Argument for HASH_FUNCTION_CLOUD_LOGS
         optional uint32 ActiveShardsCount = 4;
@@ -1297,6 +1278,10 @@ message TMoveIndex {
 }
 
 message TSequenceDescription {
+    message TSetVal {
+        optional sint64 NextValue = 1;
+        optional bool NextUsed = 2;
+    }
     optional string Name = 1; // mandatory
     optional NKikimrProto.TPathID PathId = 2; // sequence path id, assigned by schemeshard
     optional uint64 Version = 3; // incremented every time sequence is altered
@@ -1308,6 +1293,7 @@ message TSequenceDescription {
     optional uint64 Cache = 8; // number of items to cache, defaults to 1
     optional sint64 Increment = 9; // increment at each call, defaults to 1
     optional bool Cycle = 10; // true when cycle on overflow is allowed
+    optional TSetVal SetVal = 11; // SetVal(NextValue, NextUsed) is executed atomically when creating
 }
 
 message TSequenceSharding {
@@ -1321,6 +1307,7 @@ message TReplicationDescription {
     optional NKikimrProto.TPathID PathId = 3; // path id assigned by schemeshard
     optional uint64 Version = 4;
     optional uint64 ControllerId = 5; // replication controller's tablet id
+    optional NKikimrReplication.TReplicationState State = 6;
 }
 
 message TBlobDepotDescription {
@@ -1595,6 +1582,7 @@ message TModifyScheme {
     optional NActorsProto.TActorId TempTableOwnerActorId = 65;
 
     optional TCopySequence CopySequence = 66;
+    optional TReplicationDescription AlterReplication = 67;
 }
 
 message TCopySequence {
@@ -1616,6 +1604,7 @@ message TDescribeOptions {
     optional bool ShowPrivateTable = 7 [default = false];
     optional bool ReturnChannelsBinding = 8 [default = false];
     optional bool ReturnRangeKey = 9 [default = true];
+    optional bool ReturnSetVal = 10 [default = false];
 }
 
 // Request to read scheme for a specific path

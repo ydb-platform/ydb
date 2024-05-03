@@ -3,7 +3,7 @@
 #include "defs.h"
 
 #include <ydb/library/actors/util/datetime.h>
-#include <ydb/library/actors/util/mpmc_ring_queue.h>
+#include <ydb/library/actors/queues/mpmc_ring_queue.h>
 
 #include <util/system/tls.h>
 
@@ -11,25 +11,10 @@
 namespace NActors {
 
     class IExecutorPool;
+    struct TWorkerContext;
 
     template <typename T>
     struct TWaitingStats;
-
-    struct TTimers {
-        NHPTimer::STime Elapsed = 0;
-        NHPTimer::STime Parked = 0;
-        NHPTimer::STime Blocked = 0;
-        NHPTimer::STime HPStart = GetCycleCountFast();
-        NHPTimer::STime HPNow;
-
-        void Reset() {
-            Elapsed = 0;
-            Parked = 0;
-            Blocked = 0;
-            HPStart = GetCycleCountFast();
-            HPNow = HPStart;
-        }
-    };
 
     struct TThreadContext {
         IExecutorPool *Pool = nullptr;
@@ -42,8 +27,12 @@ namespace NActors {
         ui16 LocalQueueSize = 0;
         TWaitingStats<ui64> *WaitingStats = nullptr;
         bool IsCurrentRecipientAService = false;
-        TTimers Timers;
         TMPMCRingQueue<20>::EPopMode ActivationPopMode = TMPMCRingQueue<20>::EPopMode::ReallySlow;
+
+        std::atomic<ui64> StartOfElapsingTime = 0;
+        std::atomic<ui64> ElapsingActorActivity = 0;
+        TWorkerContext *WorkerCtx = nullptr;
+        ui32 ActorSystemIndex = 0;
     };
 
     extern Y_POD_THREAD(TThreadContext*) TlsThreadContext; // in actor.cpp

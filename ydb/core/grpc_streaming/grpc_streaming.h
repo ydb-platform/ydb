@@ -339,7 +339,7 @@ private:
             ReadInProgress = MakeHolder<typename IContext::TEvReadFinished>();
             Stream.Read(&ReadInProgress->Record, OnReadDoneTag.Prepare());
         } else {
-            Y_DEBUG_ABORT_UNLESS(false, "Multiple outstanding reads are unsafe in grpc streaming");
+            Y_DEBUG_ABORT("Multiple outstanding reads are unsafe in grpc streaming");
         }
 
         return true;
@@ -349,7 +349,7 @@ private:
         LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] read finished Name# %s ok# %s data# %s peer# %s",
             this, Name,
             status == NYdbGrpc::EQueueEventStatus::OK ? "true" : "false",
-            NYdbGrpc::FormatMessage(ReadInProgress->Record, status == NYdbGrpc::EQueueEventStatus::OK).c_str(),
+            NYdbGrpc::FormatMessage<TIn>(ReadInProgress->Record, status == NYdbGrpc::EQueueEventStatus::OK).c_str(),
             this->GetPeerName().c_str());
 
         // Take current in-progress read first
@@ -380,7 +380,7 @@ private:
             }
         } else {
             // We need to perform another read (likely unsafe)
-            Y_DEBUG_ABORT_UNLESS(false, "Multiple outstanding reads are unsafe in grpc streaming");
+            Y_DEBUG_ABORT("Multiple outstanding reads are unsafe in grpc streaming");
             ReadInProgress = MakeHolder<typename IContext::TEvReadFinished>();
             Stream.Read(&ReadInProgress->Record, OnReadDoneTag.Prepare());
         }
@@ -390,14 +390,14 @@ private:
         if (status) {
             LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] facade write Name# %s data# %s peer# %s grpc status# (%d) message# %s",
                 this, Name,
-                NYdbGrpc::FormatMessage(message).c_str(),
+                NYdbGrpc::FormatMessage<TOut>(message).c_str(),
                 this->GetPeerName().c_str(),
                 static_cast<int>(status->error_code()),
                 status->error_message().c_str());
         } else {
             LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] facade write Name# %s data# %s peer# %s",
                 this, Name,
-                NYdbGrpc::FormatMessage(message).c_str(),
+                NYdbGrpc::FormatMessage<TOut>(message).c_str(),
                 this->GetPeerName().c_str());
         }
 

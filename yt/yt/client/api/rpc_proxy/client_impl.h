@@ -323,7 +323,7 @@ public:
     TFuture<TCellIdToSnapshotIdMap> BuildMasterSnapshots(
         const TBuildMasterSnapshotsOptions& options) override;
 
-    TFuture<TCellIdToSequenceNumberMap> GetMasterConsistentState(
+    TFuture<TCellIdToConsistentStateMap> GetMasterConsistentState(
         const TGetMasterConsistentStateOptions& options) override;
 
     TFuture<void> ExitReadOnly(
@@ -548,7 +548,7 @@ private:
 
     NTransactionClient::ITimestampProviderPtr CreateTimestampProvider() const;
 
-    NRpc::IChannelPtr MaybeCreateRetryingChannel(NRpc::IChannelPtr channel, bool retryProxyBanned) const;
+    NRpc::IChannelPtr CreateSequoiaAwareRetryingChannel(NRpc::IChannelPtr channel, bool retryProxyBanned) const;
     // Returns an RPC channel to use for API calls to the particular address (e.g.: AttachTransaction).
     // The channel is non-retrying, so should be wrapped into retrying channel on demand.
     NRpc::IChannelPtr CreateNonRetryingChannelByAddress(const TString& address) const;

@@ -69,12 +69,12 @@ std::vector<TPartialReadResult> TPlainReadData::DoExtractReadyResults(const int6
     return result;
 }
 
-bool TPlainReadData::DoReadNextInterval() {
+TConclusion<bool> TPlainReadData::DoReadNextInterval() {
     return Scanner->BuildNextInterval();
 }
 
 void TPlainReadData::OnIntervalResult(const std::shared_ptr<TPartialReadResult>& result) {
-    result->GetResourcesGuardOnly()->Update(result->GetMemorySize());
+//    result->GetResourcesGuardOnly()->Update(result->GetMemorySize());
     ReadyResultsCount += result->GetRecordsCount();
     PartialResults.emplace_back(std::move(*result));
 }

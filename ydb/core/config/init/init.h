@@ -315,4 +315,10 @@ private:
     std::unique_ptr<IInitialConfigurator> Impl;
 };
 
+enum class EWorkload {
+    Hybrid /* "hybrid" */,
+    Analyitical /* "analytical" */,
+    Operational /* "operational" */,
+};
+
 } // namespace NKikimr::NConfig

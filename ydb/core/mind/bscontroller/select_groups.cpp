@@ -32,7 +32,7 @@ public:
         out.SetNewStyleQuerySupported(true);
 
         if (!record.GetReturnAllMatchingGroups()) {
-            Y_DEBUG_ABORT_UNLESS(false, "obsolete command");
+            Y_DEBUG_ABORT("obsolete command");
             out.SetStatus(NKikimrProto::ERROR);
         } else {
             TVector<const TGroupInfo*> groups;

@@ -614,16 +614,37 @@ namespace {
                 return IGraphTransformer::TStatus::Error;
             }
 
-            auto finishItemType = RemoveOptionalType(&finishType);
-            if (finishItemType->GetKind() != ETypeAnnotationKind::Null) {
-                auto arg = ctx.Expr.NewArgument(defaultValue->Pos(), "arg");
-                auto status = TrySilentConvertTo(arg, *defaultValue->GetTypeAnn(), finishType, ctx.Expr);
-                if (status == IGraphTransformer::TStatus::Error) {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(defaultValue->Pos()),
-                        TStringBuilder() << "Uncompatible types of default value and " << finishName
-                                         << " : " << *defaultValue->GetTypeAnn() << " != " << finishType));
-                    return status;
-                }
+            // defaultValue should have such type that expression (<value-of-finishType> ?? defaultValue) is the correct one
+            const auto leftType = &finishType;
+            const auto rightType = defaultValue->GetTypeAnn();
+
+            auto leftItemType = leftType;
+            if (leftType->GetKind() == ETypeAnnotationKind::Optional) {
+                leftItemType = leftType->Cast<TOptionalExprType>()->GetItemType();
+            }
+
+            auto rightItemType = rightType;
+            if (leftType->GetKind() != ETypeAnnotationKind::Optional &&
+                rightType->GetKind() == ETypeAnnotationKind::Optional) {
+                rightItemType = rightType->Cast<TOptionalExprType>()->GetItemType();
+            }
+
+            TExprNode::TPtr arg1 = ctx.Expr.NewArgument(input->Pos(), "arg1");
+            TExprNode::TPtr arg2 = defaultValue;
+            auto convertedArg2 = arg2;
+            const TTypeAnnotationNode* commonItemType = nullptr;
+            auto status = SilentInferCommonType(convertedArg2, *rightItemType, arg1, *leftItemType, ctx.Expr, commonItemType,
+                TConvertFlags().Set(NConvertFlags::AllowUnsafeConvert));
+            if (status == IGraphTransformer::TStatus::Error) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(defaultValue->Pos()),
+                    TStringBuilder() << "Uncompatible types of default value and " << finishName
+                                     << " : " << *defaultValue->GetTypeAnn() << " vs " << finishType));
+                return status;
+            }
+
+            if (arg2 != convertedArg2) {
+                output = ctx.Expr.ChangeChild(*input, defaultValueIndex, std::move(convertedArg2));
+                return IGraphTransformer::TStatus::Repeat;
             }
         }
 
@@ -2173,7 +2194,10 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (const auto stepSlot = IsDataTypeDateOrTzDateOrInterval(slot) ? EDataSlot::Interval : MakeSigned(slot); stepItemType) {
+        const auto stepSlot = IsDataTypeDateOrTzDateOrInterval(slot)
+            ? (IsDataTypeBigDate(slot) ? EDataSlot::Interval64 : EDataSlot::Interval)
+            : MakeSigned(slot);
+        if (stepItemType) {
             if (const auto requredStepType = slot == stepSlot ? commonItemType : ctx.Expr.MakeType<TDataExprType>(stepSlot); !IsSameAnnotation(*stepItemType, *requredStepType)) {
                 if (const auto status = TrySilentConvertTo(input->ChildRef(2U), *requredStepType, ctx.Expr); status == IGraphTransformer::TStatus::Repeat)
                     return status;
@@ -4980,35 +5004,26 @@ namespace {
                                 !item->IsOptionalOrNull() ? ctx.Expr.MakeType<TOptionalExprType>(item) : item));
                     }
                 } else {
-                    const TTypeAnnotationNode* defValType;
-                    bool isDefNull;
-                    if (isTraits) {
-                        auto defVal = child->Child(1)->Child(7);
-                        isDefNull = defVal->IsCallable("Null");
-                        defValType = defVal->GetTypeAnn();
-                    } else {
-                        auto name = child->Child(1)->Child(0)->Content();
-                        if (name == "count" || name == "count_all") {
-                            isDefNull = false;
-                            defValType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64);
+                    if (input->Child(1)->ChildrenSize() == 0 && !isHopping) {
+                        if (isTraits) {
+                            // need to apply default value
+                            auto defVal = child->Child(1)->ChildPtr(7);
+                            if (!defVal->IsCallable("Null")) {
+                                finishType = defVal->GetTypeAnn();
+                            } else if (!finishType->IsOptionalOrNull()) {
+                                finishType = ctx.Expr.MakeType<TOptionalExprType>(finishType);
+                            }
                         } else {
-                            isDefNull = true;
-                            defValType = ctx.Expr.MakeType<TNullExprType>();
+                            auto name = child->Child(1)->Child(0)->Content();
+                            if ((name == "count" || name == "count_all")) {
+                                if (isOptional) {
+                                    finishType = finishType->Cast<TOptionalExprType>()->GetItemType();
+                                }
+                            } else if (!finishType->IsOptionalOrNull()) {
+                                finishType = ctx.Expr.MakeType<TOptionalExprType>(finishType);
+                            }
                         }
                     }
-
-                    if (isDefNull && !isOptional && !isHopping && input->Child(1)->ChildrenSize() == 0) {
-                        if (finishType->GetKind() != ETypeAnnotationKind::Null &&
-                            finishType->GetKind() != ETypeAnnotationKind::Pg) {
-                            finishType = ctx.Expr.MakeType<TOptionalExprType>(finishType);
-                        }
-                    } else if (!isDefNull && defValType->GetKind() != ETypeAnnotationKind::Optional
-                        && finishType->GetKind() == ETypeAnnotationKind::Optional) {
-                        finishType = finishType->Cast<TOptionalExprType>()->GetItemType();
-                    } else if (!isDefNull && finishType->GetKind() == ETypeAnnotationKind::Null && input->Child(1)->ChildrenSize() == 0) {
-                        finishType = defValType;
-                    }
-
                     rowColumns.push_back(ctx.Expr.MakeType<TItemExprType>(child->Head().Content(), finishType));
                 }
             } else if (suffix == "Combine" || suffix == "CombineState" || suffix == "MergeState") {

@@ -151,7 +151,6 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TChunksNormalizer::DoInit(const 
     if (package.size() > 0) {
         tasks.emplace_back(std::make_shared<TPortionsNormalizerTask<TRowsAndBytesChangesTask>>(std::move(package)));
     }
-    AtomicSet(ActiveTasksCount, tasks.size());
     return tasks;
 }
 

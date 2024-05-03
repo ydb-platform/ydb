@@ -90,7 +90,8 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
         ETxTypes_descriptor
     >());
     TabletCounters = TabletCountersPtr.get();
-    NormalizerController.InitNormalizers(Info());
+    NOlap::TNormalizationController::TInitContext initCtx(Info());
+    NormalizerController.InitNormalizers(initCtx);
 }
 
 void TColumnShard::OnDetach(const TActorContext& ctx) {

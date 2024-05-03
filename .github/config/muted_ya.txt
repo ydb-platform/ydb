@@ -11,6 +11,10 @@ ydb/core/kqp/ut/olap KqpOlapBlobsSharing.*
 ydb/core/kqp/ut/olap KqpOlap.ScanQueryOltpAndOlap
 ydb/core/kqp/ut/olap KqpOlapStatistics.StatsUsageWithTTL
 ydb/core/kqp/ut/olap KqpOlap.YqlScriptOltpAndOlap
+ydb/core/kqp/ut/olap KqpOlap.OlapRead_GenericQuerys
+ydb/core/kqp/ut/olap KqpOlap.OlapRead_StreamGenericQuery
+ydb/core/kqp/ut/olap KqpOlap.OlapRead_UsesGenericQueryOnJoinWithDataShardTable
+ydb/core/kqp/ut/service KqpQueryService.TableSink_ReplaceFromSelectLargeOlap
 ydb/core/kqp/ut/pg KqpPg.CreateIndex
 ydb/core/kqp/ut/query KqpLimits.QueryReplySize
 ydb/core/kqp/ut/query KqpQuery.QueryTimeout

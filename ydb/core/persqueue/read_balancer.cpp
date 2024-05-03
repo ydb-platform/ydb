@@ -160,6 +160,7 @@ void TPersQueueReadBalancer::HandleWakeup(TEvents::TEvWakeup::TPtr& ev, const TA
             if (PartitionsScaleManager && SplitMergeEnabled(TabletConfig)) {
                 PartitionsScaleManager->TrySendScaleRequest(ctx);
             }
+            break;
         }
         default: {
             GetStat(ctx); //TODO: do it only on signals from outerspace right now
@@ -505,7 +506,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     std::vector<std::pair<ui64, TTabletInfo>> newTablets;
     std::vector<std::pair<ui32, ui32>> newGroups;
     std::vector<std::pair<ui64, TTabletInfo>> reallocatedTablets;
-    
+
     if (SplitMergeEnabled(TabletConfig)) {
         if (!PartitionsScaleManager) {
             PartitionsScaleManager = std::make_unique<TPartitionScaleManager>(Topic, DatabasePath, record);
@@ -768,7 +769,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
         partRes.GetScaleStatus();
 
         AggregatedStats.AggrStats(partitionId, partRes.GetPartitionSize(), partRes.GetUsedReserveSize());
-        AggregatedStats.AggrStats(partRes.GetAvgWriteSpeedPerSec(), partRes.GetAvgWriteSpeedPerMin(), 
+        AggregatedStats.AggrStats(partRes.GetAvgWriteSpeedPerSec(), partRes.GetAvgWriteSpeedPerMin(),
             partRes.GetAvgWriteSpeedPerHour(), partRes.GetAvgWriteSpeedPerDay());
         AggregatedStats.Stats[partitionId].Counters = partRes.GetAggregatedCounters();
         AggregatedStats.Stats[partitionId].HasCounters = true;

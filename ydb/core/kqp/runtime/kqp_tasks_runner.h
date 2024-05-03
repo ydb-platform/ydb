@@ -59,7 +59,7 @@ private:
     TMap<ui64, NYql::NDq::TDqTaskSettings> Tasks;
     TMap<ui64, const NYql::NDq::TDqTaskRunnerStats*> Stats;
     NYql::NDq::TLogFunc LogFunc;
-   std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     NMiniKQL::TKqpComputeContextBase* ComputeCtx;
     NMiniKQL::TKqpDatashardApplyContext* ApplyCtx;
 

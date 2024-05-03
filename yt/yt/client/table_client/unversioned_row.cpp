@@ -1279,7 +1279,7 @@ bool ValidateNonKeyColumnsAgainstLock(
         int mappedId = ApplyIdMapping(value, &idMapping);
         if (mappedId < 0 || mappedId >= std::ssize(schema.Columns())) {
             int size = nameTable->GetSize();
-            if (value.Id < 0 || value.Id >= size) {
+            if (value.Id >= size) {
                 THROW_ERROR_EXCEPTION("Expected value id in range [0:%v] but got %v",
                     size - 1,
                     value.Id);

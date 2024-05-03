@@ -188,6 +188,7 @@ public:
 
     void ThrowOnError() const;
 
+    std::optional<TError> FindMatching(std::function<bool(const TError&)> filter) const;
     std::optional<TError> FindMatching(std::function<bool(TErrorCode)> filter) const;
     std::optional<TError> FindMatching(TErrorCode code) const;
     std::optional<TError> FindMatching(const THashSet<TErrorCode>& codes) const;

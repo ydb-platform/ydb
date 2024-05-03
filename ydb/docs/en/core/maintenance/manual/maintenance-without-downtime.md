@@ -18,7 +18,7 @@ During maintenance activities whose safety is guaranteed by the CMS, faults unre
 A *maintenance task* is a set of *actions* that the user asks the CMS to perform for safe maintenance.
 
 Supported actions:
-- Taking an exclusive lock on a cluster component - node or host.
+- Taking an exclusive lock on a cluster component — node or host.
 
 In a task, actions are divided into groups. Actions from the same group are performed atomically. Currently, groups can consist of only one action.
 

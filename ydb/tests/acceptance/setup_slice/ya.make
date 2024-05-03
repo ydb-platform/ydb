@@ -8,7 +8,6 @@ PY_SRCS(
 
 PEERDIR(
     ydb/tools/cfg
-    ydb/tools/ydbd_slice
     ydb/tests/library
 )
 

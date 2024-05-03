@@ -3,6 +3,7 @@
 #include <util/system/types.h>
 #include <util/datetime/base.h>
 #include <util/generic/size_literals.h>
+#include <util/generic/set.h>
 
 namespace NYql {
 
@@ -55,6 +56,7 @@ constexpr bool DEFAULT_JOIN_COMMON_USE_MULTI_OUT = false;
 constexpr bool DEFAULT_USE_RPC_READER_IN_DQ = false;
 constexpr size_t DEFAULT_RPC_READER_INFLIGHT = 1;
 constexpr TDuration DEFAULT_RPC_READER_TIMEOUT = TDuration::Seconds(120);
+const TSet<TString> DEFAULT_BLOCK_READER_SUPPORTED_TYPES = {"pg","int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64", "string", "yson", "json", "bool", "double", "tuple"};
 
 constexpr auto DEFAULT_SWITCH_MEMORY_LIMIT = 128_MB;
 

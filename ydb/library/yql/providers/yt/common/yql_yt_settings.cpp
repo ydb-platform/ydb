@@ -460,6 +460,7 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, UseRPCReaderInDQ);
     REGISTER_SETTING(*this, DQRPCReaderInflight).Lower(1);
     REGISTER_SETTING(*this, DQRPCReaderTimeout);
+    REGISTER_SETTING(*this, BlockReaderSupportedTypes);
     REGISTER_SETTING(*this, MaxCpuUsageToFuseMultiOuts).Lower(1.0);
     REGISTER_SETTING(*this, MaxReplicationFactorToFuseMultiOuts).Lower(1.0);
     REGISTER_SETTING(*this, ApplyStoredConstraints)

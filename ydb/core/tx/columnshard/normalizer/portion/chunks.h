@@ -83,14 +83,14 @@ namespace NKikimr::NOlap {
             }
         };
 
-        static inline INormalizerComponent::TFactory::TRegistrator<TChunksNormalizer> Registrator = INormalizerComponent::TFactory::TRegistrator<TChunksNormalizer>(ENormalizersList::Chunks);
+        static inline INormalizerComponent::TFactory::TRegistrator<TChunksNormalizer> Registrator = INormalizerComponent::TFactory::TRegistrator<TChunksNormalizer>(ENormalizerSequentialId::Chunks);
     public:
-        TChunksNormalizer(TTabletStorageInfo* info)
-            : DsGroupSelector(info)
+        TChunksNormalizer(const TNormalizationController::TInitContext& info)
+            : DsGroupSelector(info.GetStorageInfo())
         {}
 
-        virtual ENormalizersList GetType() const override {
-            return ENormalizersList::Chunks;
+        virtual ENormalizerSequentialId GetType() const override {
+            return ENormalizerSequentialId::Chunks;
         }
 
         virtual TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override;

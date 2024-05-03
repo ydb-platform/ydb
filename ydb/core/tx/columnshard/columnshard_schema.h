@@ -77,7 +77,7 @@ struct Schema : NIceDb::Schema {
         OwnerPath = 12,
         LastCompletedStep = 13,
         LastCompletedTxId = 14,
-        LastNormalizerVersion = 15,
+        LastNormalizerSequentialId = 15,
     };
 
     enum class EInsertTableIds : ui8 {

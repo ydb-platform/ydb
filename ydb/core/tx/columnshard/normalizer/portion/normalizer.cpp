@@ -100,8 +100,6 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::DoInit(
     if (package.size() > 0) {
         tasks.emplace_back(BuildTask(std::move(package), schemas));
     }
-
-    AtomicSet(ActiveTasksCount, tasks.size());
     ACFL_INFO("normalizer", "TPortionsNormalizer")("message", TStringBuilder() << brokenPortioncCount << " portions found");
     return tasks;
 }

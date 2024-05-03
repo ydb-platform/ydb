@@ -326,8 +326,10 @@ bool TTxApplyNormalizer::Execute(TTransactionContext& txc, const TActorContext&)
         return false;
     }
 
-    NIceDb::TNiceDb db(txc.DB);
-    Schema::SaveSpecialValue(db, Schema::EValueIds::LastNormalizerVersion, (ui64)Self->NormalizerController.GetNormalizer()->GetType());
+    if (Self->NormalizerController.GetNormalizer()->GetActiveTasksCount() == 1) {
+        NIceDb::TNiceDb db(txc.DB);
+        Self->NormalizerController.UpdateControllerSate(db);
+    }
     return true;
 }
 
@@ -336,7 +338,7 @@ void TTxApplyNormalizer::Complete(const TActorContext& ctx) {
     AFL_VERIFY(!Self->NormalizerController.IsNormalizationFinished())("details", Self->NormalizerController.DebugString());
     Changes->ApplyOnComplete(Self->NormalizerController);
     Self->NormalizerController.GetNormalizer()->OnResultReady();
-    if (Self->NormalizerController.GetNormalizer()->WaitResult()) {
+    if (Self->NormalizerController.GetNormalizer()->HasActiveTasks()) {
         return;
     }
 
@@ -377,12 +379,8 @@ bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
         }
     }
 
-
-//    NIceDb::TNiceDb db(txc.DB);
-//    ui64 lastVersion;
-//    if (Schema::GetSpecialValue(db, Schema::EValueIds::LastNormalizerVersion, lastVersion)) {
-//        Self->NormalizerController.SetLastKnownVersion(lastVersion);
-//    }
+    // NIceDb::TNiceDb db(txc.DB);
+    // Self->NormalizerController.InitControllerState(db);
 
     // Enable compression for the SmallBlobs table
     const auto* smallBlobsDefaultColumnFamily = txc.DB.GetScheme().DefaultFamilyFor(Schema::SmallBlobs::TableId);

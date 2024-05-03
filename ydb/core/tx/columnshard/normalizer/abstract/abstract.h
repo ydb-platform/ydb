@@ -8,6 +8,10 @@
 #include <ydb/library/conclusion/result.h>
 #include <library/cpp/object_factory/object_factory.h>
 
+namespace NKikimr::NIceDb {
+    class TNiceDb;
+}
+
 namespace NKikimr::NOlap {
 
     class TNormalizerCounters: public NColumnShard::TCommonCountersOwner {
@@ -46,8 +50,7 @@ namespace NKikimr::NOlap {
         }
     };
 
-
-    enum class ENormalizersList : ui32 {
+    enum class ENormalizerSequentialId : ui32 {
         Granules = 1,
         Chunks,
         PortionsMetadata,
@@ -99,14 +102,26 @@ namespace NKikimr::NOlap {
 
     class TNormalizationController {
     public:
+        class TInitContext {
+            TIntrusiveConstPtr<TTabletStorageInfo> StorageInfo;
+        public:
+            TInitContext(TTabletStorageInfo* info)
+                : StorageInfo(info)
+            {}
+
+            TIntrusiveConstPtr<TTabletStorageInfo> GetStorageInfo() const {
+                return StorageInfo;
+            }
+        };
+
         class INormalizerComponent {
         public:
             using TPtr = std::shared_ptr<INormalizerComponent>;
-            using TFactory = NObjectFactory::TParametrizedObjectFactory<INormalizerComponent, ENormalizersList, TTabletStorageInfo*>;
+            using TFactory = NObjectFactory::TParametrizedObjectFactory<INormalizerComponent, ENormalizerSequentialId, TInitContext>;
 
             virtual ~INormalizerComponent() {}
 
-            bool WaitResult() const {
+            bool HasActiveTasks() const {
                 return AtomicGet(ActiveTasksCount) > 0;
             }
 
@@ -115,21 +130,34 @@ namespace NKikimr::NOlap {
                 AtomicDecrement(ActiveTasksCount);
             }
 
-            virtual ENormalizersList GetType() const = 0;
+            i64 GetActiveTasksCount() const {
+                return AtomicGet(ActiveTasksCount);
+            }
+
+            virtual ENormalizerSequentialId GetType() const = 0;
 
             const TString& GetName() const {
                 static TString name = ToString(GetType());
                 return name;
             }
 
-            TConclusion<std::vector<INormalizerTask::TPtr>> Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
-                if (controller.HasLastKnownVersion() && controller.GetLastKnownVersionUnsafe() >= (ui32) GetType()) {
-                    return std::vector<INormalizerTask::TPtr>();
-                }
-                return DoInit(controller, txc);
+            ui32 GetSequentialId() const {
+                return (ui32) GetType();
             }
 
-        protected:
+            TConclusion<std::vector<INormalizerTask::TPtr>> Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
+                if (controller.HasLastAppliedNormalizerId() && controller.GetLastAppliedNormalizerIdUnsafe() >= GetSequentialId()) {
+                    return std::vector<INormalizerTask::TPtr>();
+                }
+                auto result = DoInit(controller, txc);
+                if (!result.IsSuccess()) {
+                    return result;
+                }
+                AtomicSet(ActiveTasksCount, result.GetResult().size());
+                return result;
+            }
+
+        private:
             virtual TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) = 0;
 
             TAtomic ActiveTasksCount = 0;
@@ -143,8 +171,7 @@ namespace NKikimr::NOlap {
         std::vector<INormalizerComponent::TPtr> Normalizers;
         ui64 CurrentNormalizerIndex = 0;
         std::vector<TNormalizerCounters> Counters;
-        YDB_READONLY(ENormalizersList, LastRegisteredNormalizer, ENormalizersList::Granules);
-        YDB_OPT(ui32, LastKnownVersion);
+        YDB_READONLY_OPT(ui32, LastAppliedNormalizerId);
 
     private:
         void RegisterNormalizer(INormalizerComponent::TPtr normalizer);
@@ -158,13 +185,13 @@ namespace NKikimr::NOlap {
             return TaskSubscription;
         }
 
-        void InitNormalizers(TTabletStorageInfo* info) {
-            auto normalizers = GetEnumAllValues<ENormalizersList>();
-            for (auto nType : normalizers) {
-                RegisterNormalizer(std::shared_ptr<INormalizerComponent>(INormalizerComponent::TFactory::Construct(nType, info)));
-                AFL_VERIFY(LastRegisteredNormalizer <= nType)("current", ToString(nType))("last", ToString(LastRegisteredNormalizer));
-                LastRegisteredNormalizer = nType;
-            }
+        void InitNormalizers(const TInitContext& ctx);
+        void UpdateControllerState(NIceDb::TNiceDb& db);
+        void InitControllerState(NIceDb::TNiceDb& db);
+
+        ui32 GetLastNormalizerSequentialId() {
+            AFL_VERIFY(!Normalizers.empty());
+            return Normalizers.back()->GetSequentialId();
         }
 
         std::shared_ptr<IStoragesManager> GetStoragesManager() const {

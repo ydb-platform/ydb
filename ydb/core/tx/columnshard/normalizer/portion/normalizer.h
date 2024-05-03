@@ -81,8 +81,8 @@ public:
 
 class TPortionsNormalizerBase : public TNormalizationController::INormalizerComponent {
 public:
-    TPortionsNormalizerBase(TTabletStorageInfo* info)
-        : DsGroupSelector(info)
+    TPortionsNormalizerBase(const TNormalizationController::TInitContext& info)
+        : DsGroupSelector(info.GetStorageInfo())
     {}
 
     virtual TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override final;

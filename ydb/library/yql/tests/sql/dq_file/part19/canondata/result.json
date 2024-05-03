@@ -3014,6 +3014,28 @@
         }
     ],
     "test.test[window-full/session--Results]": [],
+    "test.test[window-udaf_with_def_value-default.txt-Analyze]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1871182/90cd88ea2a475c617af2c5f379760c2ad7b2e034/resource.tar.gz#test.test_window-udaf_with_def_value-default.txt-Analyze_/plan.txt"
+        }
+    ],
+    "test.test[window-udaf_with_def_value-default.txt-Debug]": [
+        {
+            "checksum": "8078322969fc967271c318b8e513e1b7",
+            "size": 2816,
+            "uri": "https://{canondata_backend}/1871182/90cd88ea2a475c617af2c5f379760c2ad7b2e034/resource.tar.gz#test.test_window-udaf_with_def_value-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[window-udaf_with_def_value-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1871182/90cd88ea2a475c617af2c5f379760c2ad7b2e034/resource.tar.gz#test.test_window-udaf_with_def_value-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[window-udaf_with_def_value-default.txt-Results]": [],
     "test.test[window-win_func_lead_lag_opt--Analyze]": [
         {
             "checksum": "5717d9ad8e7b0d1eef92f4a836cc3abc",

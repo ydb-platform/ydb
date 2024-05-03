@@ -1306,6 +1306,11 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                             if (!ParseConstraintNode(ctx, columnMeta, columnTuple, constraint, SessionCtx->Config(), needEval, true)) {
                                 return TStatus::Error;
                             }
+
+                            if (needEval) {
+                                ctx.Step.Repeat(TExprStep::ExprEval);
+                                return TStatus(TStatus::Repeat, true);
+                            }
                         }
                     }
 

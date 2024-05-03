@@ -1416,6 +1416,15 @@ namespace {
     }
 
     IGraphTransformer::TStatus ListTopSortWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        TStringBuf newName = input->Content();
+        newName.Skip(4);
+        bool desc = false;
+        if (newName.EndsWith("Asc")) {
+            newName.Chop(3);
+        } else if (newName.EndsWith("Desc")) {
+            newName.Chop(4);
+            desc = true;
+        }
         TExprNode::TPtr outputPre = nullptr;
         auto res = OptListWrapperImpl<2U, 3U>(input, outputPre, ctx, input->Content().Skip(4));
         if (res != IGraphTransformer::TStatus::Repeat) {
@@ -1433,11 +1442,11 @@ namespace {
             .Build();
         }
         output = ctx.Expr.Builder(input->Pos())
-            .Callable(outputPre->Content())
+            .Callable(newName)
                 .Add(0, outputPre->ChildPtr(0))
                 .Add(1, outputPre->ChildPtr(1))
                 .Callable(2, "Bool")
-                    .Atom(0, "true")
+                    .Atom(0, desc ? "false" : "true")
                 .Seal()
                 .Add(3, sortLambda)
             .Seal()

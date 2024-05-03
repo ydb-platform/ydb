@@ -41,15 +41,16 @@ FluentBit – инструмент, который может собирать �
 
 ```sql
 CREATE TABLE `fluent-bit/log` (
-	`timestamp`         Timestamp NOT NULL,
+    `timestamp`         Timestamp NOT NULL,
     `file`              Text NOT NULL,
     `pipe`              Text NOT NULL,
     `message`           Text NULL,
+    `datahash`          Uint64 NOT NULL,
     `message_parsed`    JSON NULL,
     `kubernetes`        JSON NULL,
 
     PRIMARY KEY (
-         `timestamp`, `input`
+         `timestamp`, `input`, `datahash`
     )
 )
 ```
@@ -63,6 +64,8 @@ CREATE TABLE `fluent-bit/log` (
 * pipe – stdout или stderr поток, куда была осуществлена запись на уровне приложения
 
 * message – непосредственно само сообщение лога
+
+* datahash – CityHash сообщение лога (для исключения перезаписи сообщений из одного и того же источника pipe и с одинаковым timestamp)
 
 * message_parsed – структурированное сообщение лога, если его удалось разобрать с помощью механизма парсеров в fluent-bit
 
@@ -78,7 +81,7 @@ CREATE TABLE `fluent-bit/log` (
 ```yaml
 image:
   repository: ghcr.io/ydb-platform/fluent-bit-ydb
-  tag: v1.0.0
+  tag: latest
 ```
 
 В данном образе добавлена библиотека-плагин, реализующая поддержку YDB. Исходный код доступен [здесь](https://github.com/ydb-platform/fluent-bit-ydb)
@@ -159,7 +162,7 @@ config:
         Name ydb
         Match kube.*
         TablePath fluent-bit/log
-        Columns {".timestamp":"timestamp",".input":"file","log":"message","log_parsed":"message_structured","stream":"pipe","kubernetes":"metadata"}
+        Columns {".timestamp":"timestamp",".input":"file",".hash":"datahash","log":"message","log_parsed":"message_structured","stream":"pipe","kubernetes":"metadata"}
         ConnectionURL ${OUTPUT_YDB_CONNECTION_URL}
         CredentialsToken ${OUTPUT_YDB_CREDENTIALS_TOKEN}
 ```

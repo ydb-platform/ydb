@@ -75,7 +75,7 @@ If the checks are successful, the action can be performed and a temporary locks 
 
 The [ydbops](https://github.com/ydb-platform/ydbops) utility tool uses CMS for cluster maintenance without downtime. You can also use the CMS directly through the [gRPC API](https://github.com/ydb-platform/ydb/blob/main/ydb/public/api/grpc/draft/ydb_maintenance_v1.proto).
 
-#### Take out a node for maintenance {#node-maintenance}
+### Take out a node for maintenance {#node-maintenance}
 
 {% note info "Functionality in development" %}
 

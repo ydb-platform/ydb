@@ -62,11 +62,12 @@ class TestS3(TestYdsBase):
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
 
+        expected_status = fq.QueryMeta.COMPLETED
         if kikimr_params.param['raw'] < min(len(info), limit):
-            client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-        else:
-            client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+            expected_status = fq.QueryMeta.FAILED
+        client.wait_query_status(query_id, expected_status)
 
+        if expected_status == fq.QueryMeta.COMPLETED:
             data = client.get_result_data(query_id)
             result_set = data.result.result_set
             result = result_set.rows[0].items[0].bytes_value

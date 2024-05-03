@@ -512,7 +512,9 @@ public:
                 // skip 'directories'
                 continue;
             }
-            if (object.Size > std::min(FileSizeLimit, ReadLimit)) {
+
+            const ui64 bytesUsed = std::min(object.Size, ReadLimit);
+            if (bytesUsed > FileSizeLimit) {
                 auto errorMessage = TStringBuilder()
                                     << "Size of object " << object.Path << " = "
                                     << object.Size
@@ -524,10 +526,10 @@ public:
             LOG_T("TS3FileQueueActor", "SaveRetrievedResults adding path: " << object.Path);
             TObjectPath objectPath;
             objectPath.SetPath(object.Path);
-            objectPath.SetSize(std::min(object.Size, ReadLimit));
+            objectPath.SetSize(bytesUsed);
             objectPath.SetPathIndex(CurrentDirectoryPathIndex);
             Objects.emplace_back(std::move(objectPath));
-            ObjectsTotalSize += std::min(object.Size, ReadLimit);
+            ObjectsTotalSize += bytesUsed;
         }
         return true;
     }

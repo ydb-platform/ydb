@@ -252,13 +252,14 @@ public:
                             UnpackPathsList(packed, isTextEncoded, paths);
 
                             for (auto& entry : paths) {
-                                if (std::min(entry.Size, userSizeLimit) > fileSizeLimit) {
+                                const ui64 bytesUsed = std::min(entry.Size, userSizeLimit);
+                                if (bytesUsed > fileSizeLimit) {
                                     ctx.AddError(TIssue(ctx.GetPosition(batch.Pos()),
                                         TStringBuilder() << "Size of object " << entry.Path << " = " << entry.Size << " and exceeds limit = " << fileSizeLimit << " specified for format " << formatName));
                                     hasErr = true;
                                     return false;
                                 }
-                                totalSize += std::min(entry.Size, userSizeLimit);
+                                totalSize += bytesUsed;
                                 ++count;
                             }
                         }

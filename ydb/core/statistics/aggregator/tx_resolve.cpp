@@ -6,6 +6,7 @@ namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxResolve : public TTxBase {
     std::unique_ptr<NSchemeCache::TSchemeCacheRequest> Request;
+    bool Cancelled = false;
 
     TTxResolve(TSelf* self, NSchemeCache::TSchemeCacheRequest* request)
         : TTxBase(self)
@@ -21,6 +22,22 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
 
         Y_ABORT_UNLESS(Request->ResultSet.size() == 1);
         const auto& entry = Request->ResultSet.front();
+
+        if (entry.Status != NSchemeCache::TSchemeCacheRequest::EStatus::OkData) {
+            Cancelled = true;
+
+            if (!Self->ScanTablesByTime.empty()) {
+                auto& topTable = Self->ScanTablesByTime.top();
+                auto pathId = topTable.PathId;
+                if (pathId == Self->ScanTableId.PathId) {
+                    Self->ScanTablesByTime.pop();
+                    db.Table<Schema::ScanTables>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
+                }
+            }
+
+            Self->ResetScanState(db);
+            return true;
+        }
 
         Self->ShardRanges.clear();
 
@@ -39,6 +56,11 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
 
     void Complete(const TActorContext&) override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxResolve::Complete");
+
+        if (Cancelled) {
+            Self->ScheduleNextScan();
+            return;
+        }
 
         Self->NextRange();
     }

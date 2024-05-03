@@ -50,6 +50,16 @@ void CreateUniformTable(TTestEnv& env, const TString& databaseName, const TStrin
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
+void DropTable(TTestEnv& env, const TString& databaseName, const TString& tableName) {
+    TTableClient client(env.GetDriver());
+    auto session = client.CreateSession().GetValueSync().GetSession();
+
+    auto result = session.ExecuteSchemeQuery(Sprintf(R"(
+        DROP TABLE `Root/%s/%s`;
+    )", databaseName.c_str(), tableName.c_str())).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
 void ValidateCountMin(TTestActorRuntime& runtime, TPathId pathId) {
     auto statServiceId = NStat::MakeStatServiceID(runtime.GetNodeId(1));
 
@@ -228,6 +238,39 @@ Y_UNIT_TEST_SUITE(StatisticsAggregator) {
         auto pathId2 = ResolvePathId(runtime, "/Root/Serverless2/Table2");
         ValidateCountMin(runtime, pathId1);
         ValidateCountMin(runtime, pathId2);
+    }
+
+    Y_UNIT_TEST(DropTableNavigateError) {
+        TTestEnv env(1, 1);
+        auto init = [&] () {
+            CreateDatabase(env, "Database");
+            CreateUniformTable(env, "Database", "Table");
+        };
+        std::thread initThread(init);
+
+        auto& runtime = *env.GetServer().GetRuntime();
+        runtime.SimulateSleep(TDuration::Seconds(5));
+        initThread.join();
+
+        ui64 tabletId = 0;
+        auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &tabletId);
+
+        auto init2 = [&] () {
+            DropTable(env, "Database", "Table");
+        };
+        std::thread init2Thread(init2);
+
+        runtime.SimulateSleep(TDuration::Seconds(5));
+        init2Thread.join();
+
+        auto ev = std::make_unique<TEvStatistics::TEvScanTable>();
+        auto& record = ev->Record;
+        PathIdFromPathId(pathId, record.MutablePathId());
+
+        auto sender = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(tabletId, sender, ev.release());
+
+        runtime.SimulateSleep(TDuration::Seconds(60));
     }
 
 }

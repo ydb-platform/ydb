@@ -96,7 +96,7 @@ Returns the first N elements that are less or equal to the N+1 element if the en
 
 Attribute | Description
 --- | ---
-TopBy | columns by which the first N rows will be taken
+TopBy | columns or expressions by which the first N rows will be taken
 Limit | rows limit
 
 #### Limit

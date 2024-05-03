@@ -49,6 +49,8 @@ const TString SourceCodeLabel = "SourceCode";
 const TString GatewaysLabel = "Gateways";
 const TString ParametersLabel = "Parameters";
 const TString TranslationLabel = "Translation";
+const TString StaticUserFilesLabel = "UserFiles";
+const TString DynamicUserFilesLabel = "DynamicUserFiles";
 
 class TUrlLoader : public IUrlLoader {
 public:
@@ -153,7 +155,7 @@ void TProgramFactory::EnableRangeComputeFor() {
 }
 
 void TProgramFactory::AddUserDataTable(const TUserDataTable& userDataTable) {
-    for (auto& p : userDataTable) {
+    for (const auto& p : userDataTable) {
         if (!UserDataTable_.emplace(p).second) {
             ythrow yexception() << "UserDataTable already has user data block with key " << p.first;
         }
@@ -272,7 +274,6 @@ TProgram::TProgram(
     , UdfIndexPackageSet_(udfIndexPackageSet)
     , FileStorage_(fileStorage)
     , SavedUserDataTable_(userDataTable)
-    , UserDataStorage_(MakeIntrusive<TUserDataStorage>(fileStorage, userDataTable, udfResolver, udfIndex))
     , GatewaysConfig_(gatewaysConfig)
     , Filename_(filename)
     , SourceCode_(sourceCode)
@@ -294,6 +295,30 @@ TProgram::TProgram(
         SessionId_ = CreateGuidAsString();
     }
 
+    if (QContext_.CanWrite() && !SavedUserDataTable_.empty()) {
+        NYT::TNode userFilesNode;
+        for (const auto& p : SavedUserDataTable_) {
+            userFilesNode.Add(p.first.Alias());
+        }
+
+        auto userFiles = NYT::NodeToYsonString(userFilesNode, NYT::NYson::EYsonFormat::Binary);
+        QContext_.GetWriter()->Put({FacadeComponent, StaticUserFilesLabel}, userFiles).GetValueSync();
+    } else if (QContext_.CanRead()) {
+        SavedUserDataTable_.clear();
+        for (const auto& label : {StaticUserFilesLabel, DynamicUserFilesLabel}) {
+            auto item = QContext_.GetReader()->Get({FacadeComponent, label}).GetValueSync();
+            if (item) {
+                auto node = NYT::NodeFromYsonString(item->Value);
+                for (const auto& alias : node.AsList()) {
+                    TUserDataBlock block;
+                    block.Type = EUserDataType::RAW_INLINE_DATA;
+                    YQL_ENSURE(SavedUserDataTable_.emplace(TUserDataKey::File(alias.AsString()), block).second);
+                }
+            }
+        }
+    }
+
+    UserDataStorage_ = MakeIntrusive<TUserDataStorage>(fileStorage, SavedUserDataTable_, udfResolver, udfIndex);
     if (auto modules = dynamic_cast<TModuleResolver*>(Modules_.get())) {
         modules->AttachUserData(UserDataStorage_);
         modules->SetUrlLoader(new TUrlLoader(FileStorage_));
@@ -517,6 +542,16 @@ void TProgram::AddUserDataTable(const TUserDataTable& userDataTable) {
             ythrow yexception() << "UserDataTable already has user data block with key " << p.first;
         }
         UserDataStorage_->AddUserDataBlock(p.first, p.second);
+    }
+
+    if (QContext_.CanWrite()) {
+        NYT::TNode userFilesNode;
+        for (const auto& p : userDataTable) {
+            userFilesNode.Add(p.first.Alias());
+        }
+
+        auto userFiles = NYT::NodeToYsonString(userFilesNode, NYT::NYson::EYsonFormat::Binary);
+        QContext_.GetWriter()->Put({FacadeComponent, DynamicUserFilesLabel}, userFiles).GetValueSync();
     }
 }
 

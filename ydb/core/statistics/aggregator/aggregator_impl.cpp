@@ -523,6 +523,22 @@ void TStatisticsAggregator::PersistScanStartTime(NIceDb::TNiceDb& db) {
     PersistSysParam(db, Schema::SysParam_ScanStartTime, ToString(ScanStartTime.MicroSeconds()));
 }
 
+void TStatisticsAggregator::ResetScanState(NIceDb::TNiceDb& db) {
+    ScanTableId.PathId = TPathId();
+    PersistScanTableId(db);
+
+    for (auto& [tag, _] : CountMinSketches) {
+        db.Table<Schema::Statistics>().Key(tag).Delete();
+    }
+    CountMinSketches.clear();
+
+    ShardRanges.clear();
+
+    KeyColumnTypes.clear();
+    Columns.clear();
+    ColumnNames.clear();
+}
+
 template <typename T, typename S>
 void PrintContainerStart(const T& container, size_t count, TStringStream& str,
     std::function<S(const typename T::value_type&)> extractor)

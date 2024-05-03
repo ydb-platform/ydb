@@ -30,5 +30,5 @@ struct TMainContext {
     TString LastError;
     TGUCSettings::TPtr GUCSettings;
     HeapTuple CurrentDatabaseName = nullptr;
-    HeapTuple PrevDatabaseName = nullptr;
+    HeapTuple CurrentUserName = nullptr;
 };

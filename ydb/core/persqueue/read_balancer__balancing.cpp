@@ -104,6 +104,10 @@ bool TPartitionFamily::IsRelesing() const {
     return Status == EStatus::Releasing;
 }
 
+bool TPartitionFamily::IsCommon() const {
+    return SpecialSessions.empty();
+}
+
 bool TPartitionFamily::IsLonely() const {
     return Partitions.size() == 1;
 }
@@ -1146,7 +1150,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
 
     // We try to balance the partitions by sessions that clearly want to read them, even if the distribution is not uniform.
     for (auto& [_, family] : Families) {
-        if (family->Status != TPartitionFamily::EStatus::Active || family->SpecialSessions.empty()) {
+        if (family->Status != TPartitionFamily::EStatus::Active || family->IsCommon()) {
             continue;
         }
         if (!family->SpecialSessions.contains(family->Session->Pipe)) {
@@ -1166,7 +1170,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
         for (auto it = families.rbegin(); it != families.rend(); ++it) {
             auto* family = *it;
             TOrderedSessions specialSessions;
-            auto& sessions = (family->SpecialSessions.empty()) ? commonSessions : (specialSessions = OrderSessions(family->SpecialSessions));
+            auto& sessions = (family->IsCommon()) ? commonSessions : (specialSessions = OrderSessions(family->SpecialSessions));
 
             auto sit = sessions.begin();
             for (;sit != sessions.end() && sessions.size() > 1 && !family->PossibleForBalance(*sit); ++sit) {
@@ -1198,7 +1202,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
     // Rebalancing reading sessions with a large number of readable partitions.
     if (!commonSessions.empty()) {
         auto familyCount = GetStatistics(Families, [](auto* family) {
-            return family->SpecialSessions.empty();
+            return family->IsCommon();
         });
 
         auto desiredFamilyCount = familyCount / commonSessions.size();

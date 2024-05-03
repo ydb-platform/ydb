@@ -101,6 +101,7 @@ struct TPartitionFamily {
     bool IsFree() const;
     bool IsRelesing() const;
 
+    bool IsCommon() const;
     bool IsLonely() const;
     bool HasActivePartitions() const;
 

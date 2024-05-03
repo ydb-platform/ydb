@@ -1,8 +1,8 @@
 # Deploying {{ ydb-short-name }} cluster with Ansible
 
-This guide outlines the process of deploying a {{ ydb-short-name }} cluster on a group of servers using Ansible. {{ ydb-short-name }} can be deployed on any desired number of servers, but the minimum number of servers in the cluster should not be less than eight for the `block-4-2` redundancy model and nine servers for the `mirror-3-dc` redundancy model. You can learn about redundancy models from the article [{#T}](../../deploy/configuration/config.md#domains-blob).
+This guide outlines the process of deploying a {{ ydb-short-name }} cluster on a group of servers using [Ansible](https://www.ansible.com/). The recommended setup to get started is 3 servers with 3 disk drives for user data each. For reliability purposes each server should have as independent infrastructure as possible: they'd better be each in a separate datacenter or availability zone, or at least in different server racks. But don't  
 
-During operation, the cluster can be [expanded](../../maintenance/manual/cluster_expansion.md) without suspending user access to the databases.
+For large-scale setups, it is recommended to use at least 9 nodes for highly available clusters (`mirror-3-dc`) or 8 nodes for single-datacenter clusters (`block-4-2`). In these cases, servers can have only one disk drive for data each, but they'd better have an additional small drive for the operating system.You can learn about redundancy models available in {{ ydb-short-name }} from the [{#T}](../../concepts/topology.md) article. During operation, the cluster can be [expanded](../../maintenance/manual/cluster_expansion.md) without suspending user access to the databases.
 
 {% note info %}
 
@@ -10,15 +10,15 @@ During operation, the cluster can be [expanded](../../maintenance/manual/cluster
 
 * 16 CPUs (calculated based on the utilization of 8 CPUs by the storage node and 8 CPUs by the dynamic node).
 * 16 GB RAM (recommended minimum RAM).
-* An additional 120 GB network SSD drive (cannot be smaller – installation requirements for {{ ydb-short-name }}).
-* SSH access;
+* Additional SSD drives for data, at least 120 GB each.
+* SSH access.
 * Network connectivity between machines in the cluster.
 * OS: Ubuntu 18+, Debian 9+. 
 * Internet access is needed to update repositories and download necessary packages.
 
 {% endnote %}
 
-You can download the repository with the playbook for installing {{ ydb-short-name }} on the cluster from GitHub – `git clone https://github.com/ydb-platform/ydb-ansible-examples.git`. This repository contains installation templates for deploying {{ ydb-short-name }} on a cluster of eight servers – `8-nodes-block-4-2`, and nine servers – `9-nodes-mirror-3-dc`, as well as scripts for generating TLS certificates and requirement files for installing necessary Python packages.
+You can download the repository with example playbooks for installing {{ ydb-short-name }} on the cluster from GitHub – `git clone https://github.com/ydb-platform/ydb-ansible-examples.git`. This repository contains a few installation templates for deploying {{ ydb-short-name }} clusters in subfolders, as well as scripts for generating TLS certificates and requirement files for installing necessary Python packages. In this article, we'll use the `3-nodes-mirror-3-dc` subfolder for the most simple setup. Alternatively, you can similarly use `8-nodes-block-4-2` or `9-nodes-mirror-3-dc` if you have the necessary number of servers.
 
 {% cut "Repository Structure" %}
 
@@ -68,12 +68,6 @@ Next, you can go to the TLS directory and specify in the file ydb-ca-nodes.txt a
 static-node-1 static-node-1.ydb-cluster.com
 static-node-2 static-node-2.ydb-cluster.com
 static-node-3 static-node-3.ydb-cluster.com
-static-node-4 static-node-4.ydb-cluster.com
-static-node-5 static-node-5.ydb-cluster.com
-static-node-6 static-node-6.ydb-cluster.com
-static-node-7 static-node-7.ydb-cluster.com
-static-node-8 static-node-8.ydb-cluster.com
-static-node-9 static-node-9.ydb-cluster.com
 ```
 
 Generate a set of TLS certificates, which will be placed in the CA subdirectory (`TLS/CA/certs/<create date_crete time>`) using the script `ydb-ca-update.sh`.
@@ -93,12 +87,6 @@ In the inventory file `50-inventory.yaml`, you need to specify the current list 
           static-node-1.ydb-cluster.com:
           static-node-2.ydb-cluster.com:
           static-node-3.ydb-cluster.com:
-          static-node-4.ydb-cluster.com:
-          static-node-5.ydb-cluster.com:
-          static-node-6.ydb-cluster.com:
-          static-node-7.ydb-cluster.com:
-          static-node-8.ydb-cluster.com:
-          static-node-9.ydb-cluster.com:
   ```
 
 Next, you need to make the following changes in the `vars` section of the inventory file:
@@ -197,7 +185,7 @@ In `mirror-3-dc` servers should be distributed across three availability zones o
 The [repository](https://github.com/ydb-platform/ydb-ansible-examples) contains two ready sets of templates for deploying a {{ ydb-short-name }} cluster of eight (redundancy model `block-4-2`) and nine servers (`mirror-3-dc`). Both options can be scaled to any required number of servers, considering a number of technical requirements.
 
 To prepare your template, you can follow the instructions below:
-1. Create a copy of the directory with the ready example (`9-nodes-mirror-3-dc` or `8-nodes-block-4-2`).
+1. Create a copy of the directory with the ready example (`3-nodes-mirror-3-dc`, `9-nodes-mirror-3-dc`, or `8-nodes-block-4-2`).
 2. Specify the FQDNs of the servers in the file `TLS/ydb-ca-nodes.txt` and execute the script `ydb-ca-update.sh` to generate sets of TLS certificates.
 3. Change the template's inventory files according to the [instructions](#inventory-edit).
 4. Make changes to the {{ ydb-short-name }} configuration file according to the [instructions](#ydb-config-prepare).
@@ -259,7 +247,7 @@ Command parameters and their values:
 
 * `config profile create` – This command is used to create a connection profile. You specify the profile name. More detailed information on how to create and modify profiles can be found in the article [{#T}](../../reference/ydb-cli/profile/create.md).
 * `-e` – Endpoint, a string in the format `protocol://host:port`. You can specify the FQDN of any cluster node and omit the port. By default, port 2135 is used.
-* `--ca-file` – Path to the root certificate for connections to the database using `grpcs`. The certificate is created by the `ydb-ca-update.sh` script in the `TLS` directory and is located at the path `TLS/CA/certs/` relative to the root of the ydb-ansible-examples repository.
+* `--ca-file` – Path to the root certificate for connections to the database using `grpcs`. The certificate is created by the `ydb-ca-update.sh` script in the `TLS` directory and is located at the path `TLS/CA/certs/` relative to the root of the `ydb-ansible-examples` repository.
 * `--user` – The user for connecting to the database. By default, the user `root` is created when executing the `setup_playbook.yaml` playbook.
 * `--password-file` – Path to the password file. In each folder with a YDB cluster deployment template, there is an `ansible_vault_password_file` that contains the password for the user `root`.
 

@@ -4,3 +4,5 @@ SELECT ListTop([4, 2, 3, 1], 2);
 SELECT ListTop([4, 2, 3, 1], 2, ($x) -> {return -$x; });
 SELECT ListTopSort([4, 2, 3, 1], 2);
 SELECT ListTopSort([4, 2, 3, 1], 2, ($x) -> {return -$x; });
+SELECT ListTopDesc([4, 2, 3, 1], 2);
+SELECT ListTopSortDesc([4, 2, 3, 1], 2);

@@ -942,8 +942,9 @@ namespace NTypeAnnImpl {
         }
 
         // TODO: Collect type annotation directly from AST.
-        auto callableTransformer = CreateExtCallableTypeAnnotationTransformer(ctx.Types);
-        auto typeTransformer = CreateTypeAnnotationTransformer(callableTransformer, ctx.Types);
+        NYql::TTypeAnnotationContext cleanTypes;
+        auto callableTransformer = CreateExtCallableTypeAnnotationTransformer(cleanTypes);
+        auto typeTransformer = CreateTypeAnnotationTransformer(callableTransformer, cleanTypes);
         if (InstantTransform(*typeTransformer, exprRoot, ctx.Expr) != IGraphTransformer::TStatus::Ok) {
             return IGraphTransformer::TStatus::Error;
         }

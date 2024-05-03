@@ -5,7 +5,7 @@ Periodically, the {{ ydb-short-name }} cluster needs to be maintained, such as u
 - Exceeding the [State Storage](../../deploy/configuration/config.md#domains-state) failure model.
 - Lack of computational resources due to stopping too many [dynamic nodes](../../concepts/cluster/common_scheme_ydb.md#nodes).
 
-To avoid such situations, {{ ydb-short-name }} has a system [tablet](./concepts/cluster/common_scheme_ydb.md#tablets) that monitors the state of the cluster - the *Cluster Management System (CMS)*. The CMS allows you to answer the question of whether a {{ ydb-short-name }} node or host running {{ ydb-short-name }} nodes can be safely taken out for maintenance. To do this, create a [maintenance task](#maintenance-task) in the CMS and specify in it to take exclusive locks on the nodes or hosts that will be involved in the maintenance. The cluster components on which the locks are taken are considered unavailable from the CMS perspective and can be safely maintained. The CMS will [check](#checking-algorithm) the current state of the cluster and take locks only if the maintenance comply with the [availability mode](#availability-mode) and [unavailable node limits](#unavailable-node-limits).
+To avoid such situations, {{ ydb-short-name }} has a system [tablet](../../concepts/cluster/common_scheme_ydb.md#tablets) that monitors the state of the cluster - the *Cluster Management System (CMS)*. The CMS allows you to answer the question of whether a {{ ydb-short-name }} node or host running {{ ydb-short-name }} nodes can be safely taken out for maintenance. To do this, create a [maintenance task](#maintenance-task) in the CMS and specify in it to take exclusive locks on the nodes or hosts that will be involved in the maintenance. The cluster components on which the locks are taken are considered unavailable from the CMS perspective and can be safely maintained. The CMS will [check](#checking-algorithm) the current state of the cluster and take locks only if the maintenance comply with the [availability mode](#availability-mode) and [unavailable node limits](#unavailable-node-limits).
 
 {% note warning "Faults during maintenance" %}
 
@@ -41,8 +41,8 @@ In a maintenance task, you need to specify the availability mode of the cluster 
     - No more than one unavailable [VDisk](../../concepts/cluster/distributed_storage.md#storage-groups) is allowed in each affected storage group.
     - No more than one unavailable State Storage ring is allowed.
 - **Weak** - a mode that does not allow exceeding the failure model.
-    - No more than two unavailable VDisks are allowed for affected storage groups with the [block-4-2](../../administration/production-storage-config.md#reliability) scheme.
-    - No more than four unavailable VDisks, three of which must be in the same data center, are allowed for affected storage groups with the [mirror-3-dc](../../administration/production-storage-config.md#reliability) scheme. 
+    - No more than two unavailable VDisks are allowed for affected storage groups with the [block-4-2](../../deploy/configuration/config.md#reliability) scheme.
+    - No more than four unavailable VDisks, three of which must be in the same data center, are allowed for affected storage groups with the [mirror-3-dc](../../deploy/configuration/config.md#reliability) scheme. 
     - No more than `(nto_select - 1) / 2` unavailable State Storage rings are allowed.
 - **Force** - forced mode, the failure model is ignored. Not recommended for use.
 

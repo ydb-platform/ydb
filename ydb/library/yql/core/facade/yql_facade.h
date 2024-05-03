@@ -409,7 +409,7 @@ private:
     const TUdfIndexPackageSet::TPtr UdfIndexPackageSet_;
     const TFileStoragePtr FileStorage_;
     TUserDataTable SavedUserDataTable_;
-    const TUserDataStorage::TPtr UserDataStorage_;
+    TUserDataStorage::TPtr UserDataStorage_;
     const TGatewaysConfig* GatewaysConfig_;
     TGatewaysConfig LoadedGatewaysConfig_;
     TString Filename_;

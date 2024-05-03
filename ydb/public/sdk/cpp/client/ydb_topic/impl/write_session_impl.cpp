@@ -19,6 +19,34 @@ const TDuration UPDATE_TOKEN_PERIOD = TDuration::Hours(1);
 // Error code from file ydb/public/api/protos/persqueue_error_codes_v1.proto
 const ui64 WRITE_ERROR_PARTITION_INACTIVE = 500029;
 
+namespace {
+
+using TTxId = std::pair<std::string_view, std::string_view>;
+using TTxIdOpt = std::optional<TTxId>;
+
+TTxIdOpt GetTransactionId(const Ydb::Topic::StreamWriteMessage_WriteRequest& request)
+{
+    Y_ABORT_UNLESS(request.messages_size());
+
+    if (!request.has_tx()) {
+        return std::nullopt;
+    }
+
+    const Ydb::Topic::TransactionIdentity& tx = request.tx();
+    return TTxId(tx.session(), tx.id());
+}
+
+TTxIdOpt GetTransactionId(const NTable::TTransaction* tx)
+{
+    if (!tx) {
+        return std::nullopt;
+    }
+
+    return TTxId(tx->GetSession().GetId(), tx->GetId());
+}
+
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TWriteSessionImpl
 
@@ -1288,6 +1316,19 @@ void TWriteSessionImpl::UpdateTokenIfNeededImpl() {
     Processor->Write(std::move(clientMessage));
 }
 
+bool TWriteSessionImpl::TxIsChanged(const Ydb::Topic::StreamWriteMessage_WriteRequest* writeRequest) const
+{
+    Y_ABORT_UNLESS(writeRequest);
+
+    if (!writeRequest->messages_size()) {
+        return false;
+    }
+
+    Y_ABORT_UNLESS(!OriginalMessagesToSend.empty());
+
+    return GetTransactionId(*writeRequest) != GetTransactionId(OriginalMessagesToSend.front().Tx);
+}
+
 void TWriteSessionImpl::SendImpl() {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
@@ -1301,6 +1342,9 @@ void TWriteSessionImpl::SendImpl() {
             const auto& block = PackedMessagesToSend.top();
             Y_ABORT_UNLESS(block.Valid);
             if (writeRequest->messages_size() > 0 && prevCodec != block.CodecID) {
+                break;
+            }
+            if (TxIsChanged(writeRequest)) {
                 break;
             }
             prevCodec = block.CodecID;

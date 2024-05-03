@@ -323,6 +323,9 @@ TProgram::TProgram(
         modules->AttachUserData(UserDataStorage_);
         modules->SetUrlLoader(new TUrlLoader(FileStorage_));
         modules->SetCredentials(Credentials_);
+        if (QContext_) {
+            modules->SetQContext(QContext_);
+        }
     }
 
     if (UrlListerManager_) {

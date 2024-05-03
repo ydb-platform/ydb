@@ -7,6 +7,7 @@
 #include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/core/file_storage/file_storage.h>
+#include <ydb/library/yql/core/services/mounts/yql_mounts.h>
 
 #include <library/cpp/yson/node/node_io.h>
 
@@ -79,8 +80,19 @@ bool RunProgram(bool replay, const TString& query, const TQContext& qContext, co
 
     TVector<TDataProviderInitializer> dataProvidersInit;
     dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytGateway));
+
+    TExprContext modulesCtx;
+    IModuleResolver::TPtr moduleResolver;
+    if (!GetYqlDefaultModuleResolver(modulesCtx, moduleResolver)) {
+        Cerr << "Errors loading default YQL libraries:" << Endl;
+        modulesCtx.IssueManager.GetIssues().PrintTo(Cerr);
+        return false;
+    }
+    TExprContext::TFreezeGuard freezeGuard(modulesCtx);
+
     TProgramFactory factory(true, functionRegistry.Get(), 0ULL, dataProvidersInit, "ut");
     factory.SetUdfResolver(NCommon::CreateSimpleUdfResolver(functionRegistry.Get()));
+    factory.SetModules(moduleResolver);
 
     if (!replay && (!runSettings.StaticFiles.empty() || !runSettings.DynamicFiles.empty())) {
         TFileStorageConfig fsConfig;
@@ -225,6 +237,13 @@ Y_UNIT_TEST_SUITE(QPlayerTests) {
         TRunSettings runSettings;
         runSettings.StaticFiles["a"] = "1";
         runSettings.DynamicFiles["b"] = "2";
+        CheckProgram(s, runSettings);
+    }
+
+    Y_UNIT_TEST(Libraries) {
+        auto s = "pragma library('a.sql'); import a symbols $f; select $f(1)";
+        TRunSettings runSettings;
+        runSettings.StaticFiles["a.sql"] = "$f = ($x)->($x+1); export $f";
         CheckProgram(s, runSettings);
     }
 }

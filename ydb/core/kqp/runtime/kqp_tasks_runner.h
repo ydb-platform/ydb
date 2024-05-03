@@ -73,7 +73,7 @@ private:
 
 
 TIntrusivePtr<TKqpTasksRunner> CreateKqpTasksRunner(google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>&& tasks,
-    NKikimr::NMiniKQL::TScopedAlloc& alloc,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
     const NYql::NDq::TDqTaskRunnerContext& execCtx, const NYql::NDq::TDqTaskRunnerSettings& settings,
     const NYql::NDq::TLogFunc& logFunc);
 

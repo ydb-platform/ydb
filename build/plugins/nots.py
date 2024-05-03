@@ -373,11 +373,12 @@ def _setup_eslint(unit):
     if not lint_files:
         return
 
+    mod_dir = unit.get("MODDIR")
+
     unit.on_peerdir_ts_resource("eslint")
     user_recipes = unit.get("TEST_RECIPES_VALUE")
-    unit.on_setup_extract_node_modules_recipe(unit.get("MODDIR"))
+    unit.on_setup_install_node_modules_recipe()
 
-    mod_dir = unit.get("MODDIR")
     lint_files = _resolve_module_files(unit, mod_dir, lint_files)
     deps = _create_pm(unit).get_peers_from_package_json()
     test_record = {
@@ -385,7 +386,7 @@ def _setup_eslint(unit):
         "LINT-FILE-PROCESSING-TIME": str(ESLINT_FILE_PROCESSING_TIME_DEFAULT),
     }
 
-    _add_test(unit, "eslint", lint_files, deps, test_record, mod_dir)
+    _add_test(unit, "eslint.new", lint_files, deps, test_record, mod_dir)
     unit.set(["TEST_RECIPES_VALUE", user_recipes])
 
 
@@ -461,7 +462,7 @@ def _add_test(unit, test_type, test_files, deps=None, test_record=None, test_cwd
         # Key to discover suite (see devtools/ya/test/explore/__init__.py#gen_suite)
         "SCRIPT-REL-PATH": test_type,
         # Test name as shown in PR check, should be unique inside one module
-        "TEST-NAME": test_type.lower(),
+        "TEST-NAME": test_type.lower().replace(".new", ""),
         "TEST-TIMEOUT": unit.get("TEST_TIMEOUT") or "",
         "TEST-ENV": ytest.prepare_env(unit.get("TEST_ENV_VALUE")),
         "TESTED-PROJECT-NAME": os.path.splitext(unit.filename())[0],

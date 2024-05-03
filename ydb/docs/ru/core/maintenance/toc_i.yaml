@@ -12,7 +12,7 @@ items:
   - name: Изменение конфигурации актор-системы
     href: manual/change_actorsystem_configs.md
   - name: Обслуживание кластера без потери доступности
-    href: maintenance-without-outages.md
+    href: manual/maintenance-without-downtime.md
   - name: Управление конфигурацией кластера
     items:
     - name: Обзор конфигурации

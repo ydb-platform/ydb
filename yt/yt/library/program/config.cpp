@@ -10,7 +10,7 @@ void THeapSizeLimit::Register(TRegistrar registrar)
 {
     registrar.Parameter("container_memory_ratio", &TThis::ContainerMemoryRatio)
         .Optional();
-    registrar.Parameter("is_hard", &TThis::IsHard)
+    registrar.Parameter("hard", &TThis::Hard)
         .Default(false);
 }
 

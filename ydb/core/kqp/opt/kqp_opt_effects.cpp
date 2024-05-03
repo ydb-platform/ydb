@@ -321,11 +321,19 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
     auto input = program.Body();
 
     if (sinkEffect) {
+        const auto rowArgument = Build<TCoArgument>(ctx, node.Pos())
+            .Name("row")
+            .Done();
+
         stageInput = Build<TDqStage>(ctx, node.Pos())
-            .Inputs(stage.Inputs())
+            .Inputs()
+                .Add(dqUnion)
+                .Build()
             .Program()
-                .Args(program.Args())
-                .Body(input)
+                .Args({rowArgument})
+                .Body<TCoToFlow>()
+                    .Input(rowArgument)
+                    .Build()
                 .Build()
             .Outputs<TDqStageOutputsList>()
                 .Add<TDqSink>()
@@ -350,6 +358,7 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
             .SinkIndex().Build("0")
             .Done();
     } else if (InplaceUpdateEnabled(*kqpCtx.Config, table, node.Columns()) && IsMapWrite(table, input, ctx)) {
+        // TODO: inplace update for sink
         stageInput = Build<TKqpCnMapShard>(ctx, node.Pos())
             .Output()
                 .Stage(stage)

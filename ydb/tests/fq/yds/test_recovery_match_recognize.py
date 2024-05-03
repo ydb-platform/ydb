@@ -34,12 +34,6 @@ class TestRecoveryMatchRecognize(TestYdsBase):
         # for retry
         cls.retry_conf = retry.RetryConf().upto(seconds=30).waiting(0.1)
 
-    def get_ca_count(self, kikimr, node_index):
-        result = kikimr.control_plane.get_sensors(node_index, "utils").find_sensor(
-            {"activity": "DQ_COMPUTE_ACTOR", "sensor": "ActorsAliveByActivity", "execpool": "User"}
-        )
-        return result if result is not None else 0
-
     def dump_workers(self, kikimr, worker_count, ca_count, wait_time=yatest_common.plain_or_under_sanitizer(30, 150)):
         deadline = time.time() + wait_time
         while True:
@@ -48,7 +42,7 @@ class TestRecoveryMatchRecognize(TestYdsBase):
             list = []
             for node_index in kikimr.control_plane.kikimr_cluster.nodes:
                 wc = kikimr.control_plane.get_worker_count(node_index)
-                cc = self.get_ca_count(kikimr, node_index)
+                cc = kikimr.control_plane.get_ca_count(node_index)
                 wcs += wc
                 ccs += cc
                 list.append([node_index, wc, cc])

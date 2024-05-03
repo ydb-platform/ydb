@@ -1,4 +1,3 @@
-#include "impl/trace_lazy.h"
 #include "ut_utils/topic_sdk_test_setup.h"
 
 #include <format>
@@ -6,6 +5,7 @@
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/log_lazy.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/common.h>
 
 #include <library/cpp/testing/unittest/registar.h>

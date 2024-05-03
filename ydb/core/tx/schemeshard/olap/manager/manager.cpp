@@ -54,6 +54,12 @@ TTablesStorage::TTableExtractedGuard TTablesStorage::TakeAlterVerified(const TPa
     return TTableExtractedGuard(*this, id, ExtractPtr(id), true);
 }
 
+ TColumnTableInfo::TPtr TTablesStorage::GetVerifiedPtr(const TPathId& id) const {
+    auto it = Tables.find(id);
+    Y_ABORT_UNLESS(it != Tables.end());
+    return it->second;
+}
+
 TTablesStorage::TTableReadGuard TTablesStorage::GetVerified(const TPathId& id) const {
     auto it = Tables.find(id);
     Y_ABORT_UNLESS(it != Tables.end());

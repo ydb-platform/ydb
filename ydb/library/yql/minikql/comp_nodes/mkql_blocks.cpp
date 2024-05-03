@@ -698,17 +698,20 @@ private:
         TUnboxedValueVector Values_;
         std::vector<std::unique_ptr<IBlockReader>> Readers_;
         std::vector<std::unique_ptr<IBlockItemConverter>> Converters_;
+        const std::vector<arrow::ValueDescr> ValuesDescr_;
 
         TState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TVector<TType*>& types)
             : TComputationValue(memInfo)
             , Values_(types.size() + 1)
+            , ValuesDescr_(ToValueDescr(types))
         {
             Pointer_ = Values_.data();
 
             const auto& pgBuilder = ctx.Builder->GetPgBuilder();
             for (size_t i = 0; i < types.size(); ++i) {
-                Readers_.push_back(MakeBlockReader(TTypeInfoHelper(), types[i]));
-                Converters_.push_back(MakeBlockItemConverter(TTypeInfoHelper(), types[i], pgBuilder));
+                const TType* blockItemType = AS_TYPE(TBlockType, types[i])->GetItemType();
+                Readers_.push_back(MakeBlockReader(TTypeInfoHelper(), blockItemType));
+                Converters_.push_back(MakeBlockItemConverter(TTypeInfoHelper(), blockItemType, pgBuilder));
             }
         }
 
@@ -718,7 +721,9 @@ private:
 
         NUdf::TUnboxedValuePod Get(const THolderFactory& holderFactory, size_t idx) const {
             TBlockItem item;
-            if (const auto& datum = TArrowBlock::From(Values_[idx]).GetDatum(); datum.is_scalar()) {
+            const auto& datum = TArrowBlock::From(Values_[idx]).GetDatum();
+            Y_DEBUG_ABORT_UNLESS(ValuesDescr_[idx] == datum.descr());
+            if (datum.is_scalar()) {
                 item = Readers_[idx]->GetScalarItem(*datum.scalar());
             } else {
                 MKQL_ENSURE(datum.is_array(), "Expecting array");
@@ -1230,8 +1235,7 @@ IComputationNode* WrapWideFromBlocks(TCallable& callable, const TComputationNode
     MKQL_ENSURE(wideComponents.size() > 0, "Expected at least one column");
     TVector<TType*> items;
     for (ui32 i = 0; i < wideComponents.size() - 1; ++i) {
-        const auto blockType = AS_TYPE(TBlockType, wideComponents[i]);
-        items.push_back(blockType->GetItemType());
+        items.push_back(AS_TYPE(TBlockType, wideComponents[i]));
     }
 
     const auto wideFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 0));

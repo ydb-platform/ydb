@@ -790,6 +790,7 @@ public:
         std::optional<TInstant> stopInstant;
         const ui64 memLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetCompactionMemoryLimit() : 512 * 1024 * 1024;
         std::vector<std::shared_ptr<TPortionInfo>> portions = Others.GetOptimizerTaskPortions(memLimit, stopPoint);
+        bool forceMergeForTests = false;
         if (nextBorder) {
             if (MainPortion) {
                 portions.emplace_back(MainPortion);
@@ -800,6 +801,8 @@ public:
         } else {
             if (MainPortion) {
                 if (portions.size() == 1) {
+                    AFL_VERIFY(NYDBTest::TControllers::GetColumnShardController()->GetCompactionControl() == NYDBTest::EOptimizerCompactionWeightControl::Force);
+                    forceMergeForTests = true;
                     portions.emplace_back(MainPortion);
                 } else {
                     for (auto&& i : portions) {
@@ -830,9 +833,9 @@ public:
         auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, portions, saverContext);
         if (MainPortion) {
             NArrow::NMerger::TSortableBatchPosition pos(MainPortion->IndexKeyStart().ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false);
-            result->AddCheckPoint(pos, true, false);
+            result->AddCheckPoint(pos, false, false);
         }
-        if (!nextBorder && MainPortion) {
+        if (!nextBorder && MainPortion && !forceMergeForTests) {
             NArrow::NMerger::TSortableBatchPosition pos(MainPortion->IndexKeyEnd().ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false);
             result->AddCheckPoint(pos, true, false);
         }

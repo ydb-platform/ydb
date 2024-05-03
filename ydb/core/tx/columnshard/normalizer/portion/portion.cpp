@@ -18,7 +18,7 @@ public:
         , Schemas(schemas)
     {}
 
-    bool Apply(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /* normController */) const override {
+    bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /* normController */) const override {
         using namespace NColumnShard;
         TDbWrapper db(txc.DB, nullptr);
 
@@ -31,24 +31,12 @@ public:
     }
 };
 
-class TPortionsNormalizer::TTask : public INormalizerTask {
-    INormalizerChanges::TPtr Changes;
-public:
-    TTask(const INormalizerChanges::TPtr& changes)
-        : Changes(changes)
-    {}
-
-    void Start(const TNormalizationController& /* controller */, const TNormalizationContext& nCtx) override {
-        TActorContext::AsActorContext().Send(nCtx.GetColumnshardActor(), std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(Changes));
-    }
-};
-
-bool TPortionsNormalizer::CheckPortion(const TPortionInfo& portionInfo) const {
+bool TPortionsNormalizer::CheckPortion(const NColumnShard::TTablesManager&, const TPortionInfo& portionInfo) const {
     return KnownPortions.contains(portionInfo.GetAddress());
 }
 
 INormalizerTask::TPtr TPortionsNormalizer::BuildTask(std::vector<std::shared_ptr<TPortionInfo>>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas) const {
-    return std::make_shared<TPortionsNormalizer::TTask>(std::make_shared<TNormalizerResult>(std::move(portions), schemas));
+    return std::make_shared<TTrivialNormalizerTask>(std::make_shared<TNormalizerResult>(std::move(portions), schemas));
 }
 
  TConclusion<bool> TPortionsNormalizer::DoInit(const TNormalizationController&, NTabletFlatExecutor::TTransactionContext& txc) {

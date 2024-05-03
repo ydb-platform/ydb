@@ -4,7 +4,7 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/ut_utils.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/trace_lazy.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/trace_lazy.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/ut/ut_utils/trace.h>
 

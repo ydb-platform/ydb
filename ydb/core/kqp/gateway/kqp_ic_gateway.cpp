@@ -966,6 +966,14 @@ public:
         return NotImplemented<TGenericResult>();
     }
 
+    TFuture<TGenericResult> AlterSequence(const TString& cluster,
+            const NYql::TAlterSequenceSettings& settings, bool missingOk) override {
+        Y_UNUSED(cluster);
+        Y_UNUSED(settings);
+        Y_UNUSED(missingOk);
+        return NotImplemented<TGenericResult>();
+    }
+
     TFuture<TGenericResult> CreateTopic(const TString& cluster, Ydb::Topic::CreateTopicRequest&& request) override {
         try {
             if (!CheckCluster(cluster)) {

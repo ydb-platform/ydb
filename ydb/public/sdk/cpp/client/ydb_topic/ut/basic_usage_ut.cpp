@@ -256,7 +256,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         NPersQueue::TWriteSessionSettings writeSettings;
         writeSettings.Path(setup->GetTestTopic()).MessageGroupId(TEST_MESSAGE_GROUP_ID);
         writeSettings.Codec(NPersQueue::ECodec::RAW);
-        NPersQueue::IExecutor::TPtr executor = new NPersQueue::TSyncExecutor();
+        IExecutor::TPtr executor = new TSyncExecutor();
         writeSettings.CompressionExecutor(executor);
 
         ui64 count = 100u;
@@ -609,7 +609,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         NPersQueue::TWriteSessionSettings writeSettings;
         writeSettings.Path(setup->GetTestTopic()).MessageGroupId("src_id");
         writeSettings.Codec(NPersQueue::ECodec::RAW);
-        NPersQueue::IExecutor::TPtr executor = new NPersQueue::TSyncExecutor();
+        IExecutor::TPtr executor = new TSyncExecutor();
         writeSettings.CompressionExecutor(executor);
 
         auto& client = setup->GetPersQueueClient();

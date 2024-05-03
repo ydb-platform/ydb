@@ -344,7 +344,12 @@ NUdf::TUnboxedValue UnpackFromChunkedBuffer(const TType* type, TChunkedInputBuff
         case NUdf::EDataSlot::Decimal: {
             return NUdf::TUnboxedValuePod(UnpackDecimal(buf));
         }
-        default:
+        case NUdf::EDataSlot::String:
+        case NUdf::EDataSlot::Utf8:
+        case NUdf::EDataSlot::Yson:
+        case NUdf::EDataSlot::Json:
+        case NUdf::EDataSlot::JsonDocument:
+        case NUdf::EDataSlot::DyNumber: {
             ui32 size = 0;
             if constexpr (Fast) {
                 size = NDetails::GetRawData<ui32>(buf);
@@ -356,6 +361,7 @@ NUdf::TUnboxedValue UnpackFromChunkedBuffer(const TType* type, TChunkedInputBuff
                 }
             }
             return UnpackString(buf, size);
+        }
         }
         break;
     }
@@ -669,7 +675,12 @@ void PackImpl(const TType* type, TBuf& buffer, const NUdf::TUnboxedValuePod& val
             PackDecimal(value.GetInt128(), buffer);
             break;
         }
-        default: {
+        case NUdf::EDataSlot::String:
+        case NUdf::EDataSlot::Utf8:
+        case NUdf::EDataSlot::Yson:
+        case NUdf::EDataSlot::Json:
+        case NUdf::EDataSlot::JsonDocument:
+        case NUdf::EDataSlot::DyNumber: {
             auto stringRef = value.AsStringRef();
             if constexpr (Fast) {
                 static_assert(std::is_same_v<decltype(stringRef.Size()), ui32>);

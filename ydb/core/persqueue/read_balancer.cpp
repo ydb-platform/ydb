@@ -158,6 +158,7 @@ void TPersQueueReadBalancer::HandleWakeup(TEvents::TEvWakeup::TPtr& ev, const TA
             if (PartitionsScaleManager && SplitMergeEnabled(TabletConfig)) {
                 PartitionsScaleManager->TrySendScaleRequest(ctx);
             }
+            break;
         }
         default: {
             GetStat(ctx); //TODO: do it only on signals from outerspace right now

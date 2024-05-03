@@ -1,3 +1,8 @@
+#include <ydb/library/yql/minikql/mkql_alloc.h>
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/context.h>
+#include <ydb/library/yql/parser/pg_wrapper/memory_context.h>
+
 #define SortBy PG_SortBy
 #define TypeName PG_TypeName
 
@@ -36,7 +41,6 @@ extern "C" {
 #include "arena_ctx.h"
 #include "utils.h"
 
-#include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <unordered_map>
 #include <functional>
 #include <tuple>
@@ -181,6 +185,7 @@ struct TSysCacheItem {
     TMaybe<TSysCacheRangeMap> RangeMap1;
     TupleDesc Desc;
     CatCList* EmptyCList = nullptr;
+    std::function<std::optional<HeapTuple>(const THeapTupleKey&)> PgThreadContextLookup = nullptr;
 };
 
 struct TSysCache {
@@ -461,6 +466,31 @@ struct TSysCache {
 
     }
 
+    static HeapTuple MakePgDatabaseHeapTuple(ui32 oid, const char* name) {
+        TupleDesc tupleDesc = CreateTemplateTupleDesc(Natts_pg_database);
+        FillAttr(tupleDesc, Anum_pg_database_oid, OIDOID);
+        FillAttr(tupleDesc, Anum_pg_database_datname, NAMEOID);
+        FillAttr(tupleDesc, Anum_pg_database_datdba, OIDOID);
+        FillAttr(tupleDesc, Anum_pg_database_encoding, INT4OID);
+        FillAttr(tupleDesc, Anum_pg_database_datcollate, NAMEOID);
+        FillAttr(tupleDesc, Anum_pg_database_datctype, NAMEOID);
+        FillAttr(tupleDesc, Anum_pg_database_datistemplate, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_database_datallowconn, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_database_datconnlimit, INT4OID);
+        FillAttr(tupleDesc, Anum_pg_database_datlastsysoid, OIDOID);
+        FillAttr(tupleDesc, Anum_pg_database_datfrozenxid, XIDOID);
+        FillAttr(tupleDesc, Anum_pg_database_datminmxid, XIDOID);
+        FillAttr(tupleDesc, Anum_pg_database_dattablespace, OIDOID);
+        FillAttr(tupleDesc, Anum_pg_database_datacl, ACLITEMARRAYOID);
+        Datum values[Natts_pg_database];
+        bool nulls[Natts_pg_database];
+        Zero(values);
+        std::fill_n(nulls, Natts_pg_database, true);
+        FillDatum(Natts_pg_database, values, nulls, Anum_pg_database_oid, (Datum)oid);
+        FillDatum(Natts_pg_database, values, nulls, Anum_pg_database_datname, (Datum)MakeFixedString(name, NAMEDATALEN));
+        return heap_form_tuple(tupleDesc, values, nulls);
+    }
+
     void InitializeDatabase() {
         TupleDesc tupleDesc = CreateTemplateTupleDesc(Natts_pg_database);
         FillAttr(tupleDesc, Anum_pg_database_oid, OIDOID);
@@ -489,6 +519,7 @@ struct TSysCache {
             std::fill_n(nulls, Natts_pg_database, true);
             FillDatum(Natts_pg_database, values, nulls, Anum_pg_database_oid, (Datum)oid);
             const char* name = nullptr;
+
             switch (oid) {
             case 1: name = "template1"; break;
             case 2: name = "template0"; break;
@@ -502,9 +533,22 @@ struct TSysCache {
             Y_ENSURE(strcmp(NameStr(row->datname), name) == 0);
             lookupMap.emplace(key, h);
         }
+
+        //add specific lookup for 4 to cacheItem. save heaptuple to MainContext_.
+        auto threadContextLookup = [&] (const THeapTupleKey& key) -> std::optional<HeapTuple> {
+            if (std::get<0>(key) == 4 && NKikimr::NMiniKQL::TlsAllocState) {
+                auto ctx = (TMainContext*)NKikimr::NMiniKQL::TlsAllocState->MainContext;
+                if (ctx && ctx->CurrentDatabaseName) {
+                    return ctx->CurrentDatabaseName;
+                }
+            }
+            return std::nullopt;
+        };
+
+        cacheItem->PgThreadContextLookup = std::move(threadContextLookup);
     }
 
-    void InitializeAuthId() {
+    static HeapTuple MakePgRolesHeapTuple(ui32 oid, const char* rolname) {
         TupleDesc tupleDesc = CreateTemplateTupleDesc(Natts_pg_authid);
         FillAttr(tupleDesc, Anum_pg_authid_oid, OIDOID);
         FillAttr(tupleDesc, Anum_pg_authid_rolname, NAMEOID);
@@ -518,13 +562,6 @@ struct TSysCache {
         FillAttr(tupleDesc, Anum_pg_authid_rolconnlimit, INT4OID);
         FillAttr(tupleDesc, Anum_pg_authid_rolpassword, TEXTOID);
         FillAttr(tupleDesc, Anum_pg_authid_rolvaliduntil, TIMESTAMPTZOID);
-        auto& cacheItem = Items[AUTHOID] = std::make_unique<TSysCacheItem>(OidHasher1, OidEquals1, tupleDesc);
-        auto& lookupMap = cacheItem->LookupMap;
-
-        auto key = THeapTupleKey(1, 0, 0, 0);
-
-        const char* rolname = "postgres";
-        const ui32 oid = 1;
         Datum values[Natts_pg_authid];
         bool nulls[Natts_pg_authid];
         Zero(values);
@@ -551,7 +588,40 @@ struct TSysCache {
         Y_ENSURE(row->rolreplication);
         Y_ENSURE(row->rolbypassrls);
         Y_ENSURE(row->rolconnlimit == -1);
-        lookupMap.emplace(key, h);
+        return h;
+    }
+
+    void InitializeAuthId() {
+        TupleDesc tupleDesc = CreateTemplateTupleDesc(Natts_pg_authid);
+        FillAttr(tupleDesc, Anum_pg_authid_oid, OIDOID);
+        FillAttr(tupleDesc, Anum_pg_authid_rolname, NAMEOID);
+        FillAttr(tupleDesc, Anum_pg_authid_rolsuper, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_authid_rolinherit, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_authid_rolcreaterole, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_authid_rolcreatedb, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_authid_rolcanlogin, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_authid_rolreplication, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_authid_rolbypassrls, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_authid_rolconnlimit, INT4OID);
+        FillAttr(tupleDesc, Anum_pg_authid_rolpassword, TEXTOID);
+        FillAttr(tupleDesc, Anum_pg_authid_rolvaliduntil, TIMESTAMPTZOID);
+        auto& cacheItem = Items[AUTHOID] = std::make_unique<TSysCacheItem>(OidHasher1, OidEquals1, tupleDesc);
+        auto& lookupMap = cacheItem->LookupMap;
+
+        auto key = THeapTupleKey(1, 0, 0, 0);
+        lookupMap.emplace(key, MakePgRolesHeapTuple(1, "postgres"));
+
+        auto threadContextLookup = [&] (const THeapTupleKey& key) -> std::optional<HeapTuple> {
+            if (std::get<0>(key) == 2 && NKikimr::NMiniKQL::TlsAllocState) {
+                auto ctx = (TMainContext*)NKikimr::NMiniKQL::TlsAllocState->MainContext;
+                if (ctx && ctx->CurrentUserName) {
+                    return ctx->CurrentUserName;
+                }
+            }
+            return std::nullopt;
+        };
+
+        cacheItem->PgThreadContextLookup = std::move(threadContextLookup);
     }
 
     void InitializeNameNamespaces() {
@@ -619,7 +689,23 @@ struct TSysCache {
 
 }
 }
+namespace NKikimr {
+namespace NMiniKQL {
 
+void PgCreateSysCacheEntries(void* ctx) {
+    auto main = (TMainContext*)ctx;
+    if (main->GUCSettings) {
+        if (main->GUCSettings->Get("ydb_database")) {
+            main->CurrentDatabaseName = NYql::TSysCache::MakePgDatabaseHeapTuple(4, main->GUCSettings->Get("ydb_database")->c_str());
+        }
+        if (main->GUCSettings->Get("ydb_user")) {
+            main->CurrentUserName = NYql::TSysCache::MakePgRolesHeapTuple(2, main->GUCSettings->Get("ydb_user")->c_str());
+        }
+    }
+}
+
+} //namespace NKikimr
+} //namespace NMiniKQL
 
 HeapTuple SearchSysCache(int cacheId, Datum key1, Datum key2, Datum key3, Datum key4) {
     Y_ENSURE(cacheId >= 0 && cacheId < SysCacheSize);
@@ -627,10 +713,14 @@ HeapTuple SearchSysCache(int cacheId, Datum key1, Datum key2, Datum key3, Datum 
     if (!cacheItem) {
         return nullptr;
     }
-
     const auto& lookupMap = cacheItem->LookupMap;
     auto it = lookupMap.find(std::make_tuple(key1, key2, key3, key4));
     if (it == lookupMap.end()) {
+        if (cacheItem->PgThreadContextLookup) {
+            if (auto value = cacheItem->PgThreadContextLookup(std::make_tuple(key1, key2, key3, key4))) {
+                return *value;
+            }
+        }
         return nullptr;
     }
 

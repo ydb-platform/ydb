@@ -1468,6 +1468,13 @@ public:
             const NYql::TDropSequenceSettings& settings, bool missingOk) override {
         CHECK_PREPARED_DDL(DropSequence);
 
+        if (!SessionCtx->Config().EnableSequences) {
+            IKqpGateway::TGenericResult errResult;
+            errResult.AddIssue(NYql::TIssue("Sequences are not supported yet."));
+            errResult.SetStatus(NYql::YqlStatusFromYdbStatus(Ydb::StatusIds::UNSUPPORTED));
+            return MakeFuture(std::move(errResult));
+        }
+
         try {
             if (cluster != SessionCtx->GetCluster()) {
                 return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
@@ -1494,6 +1501,76 @@ public:
                 auto& phyTx = *phyQuery.AddTransactions();
                 phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
                 phyTx.MutableSchemeOperation()->MutableDropSequence()->Swap(&schemeTx);
+
+                TGenericResult result;
+                result.SetSuccess();
+                return MakeFuture(result);
+            } else {
+                return Gateway->ModifyScheme(std::move(schemeTx));
+            }
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
+    TFuture<TGenericResult> AlterSequence(const TString& cluster,
+            const TAlterSequenceSettings& settings, bool missingOk) override {
+        CHECK_PREPARED_DDL(AlterSequence);
+
+        if (!SessionCtx->Config().EnableSequences) {
+            IKqpGateway::TGenericResult errResult;
+            errResult.AddIssue(NYql::TIssue("Sequences are not supported yet."));
+            errResult.SetStatus(NYql::YqlStatusFromYdbStatus(Ydb::StatusIds::UNSUPPORTED));
+            return MakeFuture(std::move(errResult));
+        }
+
+        try {
+
+            if (cluster != SessionCtx->GetCluster()) {
+                return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
+            }
+
+            std::pair<TString, TString> pathPair;
+            {
+                TString error;
+                if (!NSchemeHelpers::SplitTablePath(settings.Name, GetDatabase(), pathPair, error, false)) {
+                    return MakeFuture(ResultFromError<TGenericResult>(error));
+                }
+            }
+
+            NKikimrSchemeOp::TModifyScheme schemeTx;
+            schemeTx.SetWorkingDir(pathPair.first);
+            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterSequence);
+            schemeTx.SetSuccessOnNotExist(missingOk);
+
+            NKikimrSchemeOp::TSequenceDescription* seqDesc = schemeTx.MutableSequence();
+            seqDesc->SetName(pathPair.second);
+
+            if (settings.SequenceSettings.MinValue) {
+                seqDesc->SetMinValue(*settings.SequenceSettings.MinValue);
+            }
+            if (settings.SequenceSettings.MaxValue) {
+                seqDesc->SetMaxValue(*settings.SequenceSettings.MaxValue);
+            }
+            if (settings.SequenceSettings.Increment) {
+                seqDesc->SetIncrement(*settings.SequenceSettings.Increment);
+            }
+            if (settings.SequenceSettings.StartValue) {
+                seqDesc->SetStartValue(*settings.SequenceSettings.StartValue);
+            }
+            if (settings.SequenceSettings.Cache) {
+                seqDesc->SetCache(*settings.SequenceSettings.Cache);
+            }
+            if (settings.SequenceSettings.Cycle) {
+                seqDesc->SetCycle(*settings.SequenceSettings.Cycle);
+            }
+
+            if (IsPrepare()) {
+                auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+                auto& phyTx = *phyQuery.AddTransactions();
+                phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+                phyTx.MutableSchemeOperation()->MutableAlterSequence()->Swap(&schemeTx);
 
                 TGenericResult result;
                 result.SetSuccess();

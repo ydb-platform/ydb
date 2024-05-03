@@ -2813,14 +2813,10 @@ public:
     [[nodiscard]]
     TAstNode* ParseAlterSeqStmt(const AlterSeqStmt* value) {
 
-        if (value->missing_ok) {
-            AddError("alter if exists is not supported yet");
-            return nullptr;
-        }
-
         std::vector<TAstNode*> options;
+        TString mode = (value->missing_ok) ? "alter_if_exists" : "alter";
 
-        options.push_back(QL(QA("mode"), QA("alter")));
+        options.push_back(QL(QA("mode"), QA(mode)));
 
         auto [sink, key] = ParseQualifiedPgObjectName(
             value->sequence->catalogname,
@@ -3397,8 +3393,14 @@ public:
         case SVFOP_CURRENT_ROLE:
         case SVFOP_USER:
             return L(A("PgConst"), QA("postgres"), L(A("PgType"), QA("name")));
-        case SVFOP_CURRENT_CATALOG:
-            return L(A("PgConst"), QA("postgres"), L(A("PgType"), QA("name")));
+        case SVFOP_CURRENT_CATALOG: {
+            std::optional<TString> database;
+            if (Settings.GUCSettings) {
+                database = Settings.GUCSettings->Get("ydb_database");
+            }
+
+            return L(A("PgConst"), QA(database ? *database : "postgres"), L(A("PgType"), QA("name")));
+        }
         case SVFOP_CURRENT_SCHEMA: {
             std::optional<TString> searchPath;
             if (Settings.GUCSettings) {

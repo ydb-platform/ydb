@@ -4,26 +4,111 @@
 #include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.h>
 #include <ydb/library/yql/core/facade/yql_facade.h>
 #include <ydb/library/yql/core/qplayer/storage/memory/yql_qstorage_memory.h>
+#include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/core/file_storage/file_storage.h>
+
+#include <library/cpp/yson/node/node_io.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/system/user.h>
+#include <util/system/tempfile.h>
 
 using namespace NYql;
 
-bool RunProgram(const TString& sourceCode, const TQContext& qContext, bool isSql) {
+template <typename F>
+void WithTables(const F&& f) {
+    static const TStringBuf KSV_ATTRS =
+        "{\"_yql_row_spec\" = {\"Type\" = [\"StructType\";["
+        "[\"key\";[\"DataType\";\"String\"]];"
+        "[\"subkey\";[\"DataType\";\"String\"]];"
+        "[\"value\";[\"DataType\";\"String\"]]"
+        "]]}}"
+        ;
+
+    TTempFileHandle inputFile;
+    TTempFileHandle inputFileAttrs(inputFile.Name() + ".attr");
+
+    TStringBuf data =
+        "{\"key\"=\"075\";\"subkey\"=\".\";\"value\"=\"abc\"};\n"
+        "{\"key\"=\"800\";\"subkey\"=\".\";\"value\"=\"ddd\"};\n"
+        "{\"key\"=\"020\";\"subkey\"=\".\";\"value\"=\"q\"};\n"
+        "{\"key\"=\"150\";\"subkey\"=\".\";\"value\"=\"qzz\"};\n"sv
+        ;
+
+    inputFile.Write(data.data(), data.size());
+    inputFile.FlushData();
+    inputFileAttrs.Write(KSV_ATTRS.data(), KSV_ATTRS.size());
+    inputFileAttrs.FlushData();
+
+    THashMap<TString, TString> tables;
+    tables["yt.plato.Input"] = inputFile.Name();
+    f(tables);
+}
+
+struct TRunSettings {
+    bool IsSql = true;
+    THashMap<TString, TString> Tables;
+    TMaybe<TString> ParametersYson;
+    THashMap<TString, TString> StaticFiles, DynamicFiles;
+};
+
+TUserDataTable MakeUserTables(const THashMap<TString, TString>& map) {
+    TUserDataTable userDataTable;
+    for (const auto& f : map) {
+        TUserDataBlock block;
+        block.Type = EUserDataType::RAW_INLINE_DATA;
+        block.Data = f.second;
+        userDataTable[TUserDataKey::File(GetDefaultFilePrefix() + f.first)] = block;
+    }
+
+    return userDataTable;
+};
+
+bool RunProgram(bool replay, const TString& query, const TQContext& qContext, const TRunSettings& runSettings) {
     auto functionRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry());
-    auto yqlNativeServices = NFile::TYtFileServices::Make(functionRegistry.Get(), {}, {}, "");
+    if (!replay) {
+        auto cloned = functionRegistry->Clone();
+        NKikimr::NMiniKQL::FillStaticModules(*cloned);
+        functionRegistry = cloned;
+    }
+
+    auto yqlNativeServices = NFile::TYtFileServices::Make(functionRegistry.Get(), runSettings.Tables, {}, "");
     auto ytGateway = CreateYtFileGateway(yqlNativeServices);
 
     TVector<TDataProviderInitializer> dataProvidersInit;
     dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytGateway));
     TProgramFactory factory(true, functionRegistry.Get(), 0ULL, dataProvidersInit, "ut");
+    factory.SetUdfResolver(NCommon::CreateSimpleUdfResolver(functionRegistry.Get()));
 
-    TProgramPtr program = factory.Create("-stdin-", sourceCode);
-    program->SetQContext(qContext);
-    if (isSql) {
-        if (!program->ParseSql()) {
+    if (!replay && (!runSettings.StaticFiles.empty() || !runSettings.DynamicFiles.empty())) {
+        TFileStorageConfig fsConfig;
+        LoadFsConfigFromResource("fs.conf", fsConfig);
+        auto storage = WithAsync(CreateFileStorage(fsConfig));
+        factory.SetFileStorage(storage);
+    }
+
+    if (!replay && !runSettings.StaticFiles.empty()) {
+        factory.AddUserDataTable(MakeUserTables(runSettings.StaticFiles));
+    }
+
+    TProgramPtr program = factory.Create("-stdin-", query, "", EHiddenMode::Disable, qContext);
+    if (!replay && runSettings.ParametersYson) {
+        program->SetParametersYson(*runSettings.ParametersYson);
+    }
+
+    if (!replay && !runSettings.DynamicFiles.empty()) {
+        program->AddUserDataTable(MakeUserTables(runSettings.DynamicFiles));
+    }
+
+    if (runSettings.IsSql) {
+        NSQLTranslation::TTranslationSettings settings;
+        if (!replay) {
+            settings.ClusterMapping["plato"] = TString(YtProviderName);
+        }
+
+        if (!program->ParseSql(settings)) {
             program->PrintErrorsTo(Cerr);
             return false;
         } 
@@ -37,7 +122,9 @@ bool RunProgram(const TString& sourceCode, const TQContext& qContext, bool isSql
         return false;
     }
 
-    TProgram::TStatus status = program->Optimize(GetUsername());
+    TProgram::TStatus status = replay ? 
+        program->Optimize(GetUsername()) :
+        program->Run(GetUsername());
     if (status == TProgram::TStatus::Error) {
         program->PrintErrorsTo(Cerr);
     }
@@ -45,13 +132,13 @@ bool RunProgram(const TString& sourceCode, const TQContext& qContext, bool isSql
     return status == TProgram::TStatus::Ok;
 }
 
-void CheckProgram(const TString& sql, bool isSql = true) {
+void CheckProgram(const TString& query, const TRunSettings& runSettings) {
     auto qStorage = MakeMemoryQStorage();
-    TQContext savingCtx(qStorage->MakeWriter("foo"));
-    UNIT_ASSERT(RunProgram(sql, savingCtx, isSql));
+    TQContext savingCtx(qStorage->MakeWriter("foo", {}));
+    UNIT_ASSERT(RunProgram(false, query, savingCtx, runSettings));
     savingCtx.GetWriter()->Commit().GetValueSync();
-    TQContext loadingCtx(qStorage->MakeReader("foo"));
-    UNIT_ASSERT(RunProgram("", loadingCtx, isSql));
+    TQContext loadingCtx(qStorage->MakeReader("foo", {}));
+    UNIT_ASSERT(RunProgram(true, "", loadingCtx, runSettings));
 }
 
 Y_UNIT_TEST_SUITE(QPlayerTests) {
@@ -90,11 +177,54 @@ Y_UNIT_TEST_SUITE(QPlayerTests) {
 )
         )";
         
-        CheckProgram(s, false);
+        TRunSettings runSettings;
+        runSettings.IsSql = false;
+        CheckProgram(s, runSettings);
     }
 
     Y_UNIT_TEST(SimpleSql) {
         auto s = "select 1";
-        CheckProgram(s);
+        TRunSettings runSettings;
+        CheckProgram(s, runSettings);
+    }
+
+    Y_UNIT_TEST(Udf) {
+        auto s = "select String::AsciiToUpper('a')";
+        TRunSettings runSettings;
+        CheckProgram(s, runSettings);
+    }
+    
+    Y_UNIT_TEST(YtGetFolder) {
+        auto s = "select * from plato.folder('','_yql_row_spec')";
+        WithTables([&](const auto& tables) {
+            TRunSettings runSettings;
+            runSettings.Tables = tables;
+            CheckProgram(s, runSettings);
+        });
+    }
+
+    Y_UNIT_TEST(YtGetTableInfo) {
+        auto s = "select * from plato.Input";
+        WithTables([&](const auto& tables) {
+            TRunSettings runSettings;
+            runSettings.Tables = tables;
+            CheckProgram(s, runSettings);
+        });
+    }
+
+    Y_UNIT_TEST(Parameters) {
+        auto s = "declare $x as String; select $x";
+        TRunSettings runSettings;
+        runSettings.ParametersYson = NYT::NodeToYsonString(NYT::TNode()
+            ("$x", NYT::TNode()("Data", "value")));
+        CheckProgram(s, runSettings);
+    }
+
+    Y_UNIT_TEST(Files) {
+        auto s = "select FileContent('a'), FileContent('b')";
+        TRunSettings runSettings;
+        runSettings.StaticFiles["a"] = "1";
+        runSettings.DynamicFiles["b"] = "2";
+        CheckProgram(s, runSettings);
     }
 }

@@ -214,7 +214,7 @@ private:
 
     Y_FORCE_INLINE char* MakeIterator(const ui64 hash, char* data, ui64 capacity) {
         // https://probablydance.com/2018/06/16/fibonacci-hashing-the-optimization-that-the-world-forgot-or-a-better-alternative-to-integer-modulo/        
-        ui64 bucket = ((SelfHash ^ hash) * 11400714819323198485llu) & (capacity - 1);
+        ui64 bucket = (((unsigned __int128)(SelfHash ^ hash) * 11400714819323198485llu) >> 64) & (capacity - 1);
         char* ptr = data + AsDeriv().GetCellSize() * bucket;
         return ptr;
     }

@@ -313,7 +313,7 @@ void ValidateYTreeKey(TStringBuf key)
 #endif
 }
 
-void ValidateYPathResolutionDepth(const TYPath& path, int depth)
+void ValidateYPathResolutionDepth(TYPathBuf path, int depth)
 {
     if (depth > MaxYPathResolveIterations) {
         THROW_ERROR_EXCEPTION(

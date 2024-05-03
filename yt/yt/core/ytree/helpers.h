@@ -48,7 +48,7 @@ struct TAttributeDictionarySerializer
 
 void ValidateYTreeKey(TStringBuf key);
 
-void ValidateYPathResolutionDepth(const NYPath::TYPath& path, int depth);
+void ValidateYPathResolutionDepth(TYPathBuf path, int depth);
 
 //! Helps implementing IAttributeDictionary::ListPairs by delegating to
 //! IAttributeDictionary::ListKeys and IAttributeDictionary::FindYson for those not capable

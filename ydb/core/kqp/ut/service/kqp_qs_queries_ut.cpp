@@ -2373,14 +2373,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             PARTITION BY HASH(Col1)
             WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10);
 
-            CREATE TABLE `/Root/DataShard1` (
-                Col1 Uint64 NOT NULL,
-                Col2 String,
-                Col3 Int32 NOT NULL,
-                PRIMARY KEY (Col1)
-            )
-            WITH (UNIFORM_PARTITIONS = 2, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
-
             CREATE TABLE `/Root/ColumnShard1` (
                 Col1 Uint64 NOT NULL,
                 Col2 String,
@@ -2398,23 +2390,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             )
             PARTITION BY HASH(Col1)
             WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 16);
-
-            CREATE TABLE `/Root/ColumnShard3` (
-                Col1 Uint64 NOT NULL,
-                Col2 String,
-                Col3 Int32 NOT NULL,
-                PRIMARY KEY (Col1)
-            )
-            PARTITION BY HASH(Col1)
-            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 16);
-
-            CREATE TABLE `/Root/DataShard2` (
-                Col1 Uint64 NOT NULL,
-                Col2 String,
-                Col3 Int32 NOT NULL,
-                PRIMARY KEY (Col1)
-            )
-            WITH (UNIFORM_PARTITIONS = 3, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 3);
         )";
 
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();

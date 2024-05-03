@@ -520,7 +520,11 @@ public:                                                                         
             }
                 
             void MinHugeBlobInBytes(ui32 size) {
+                if (PrevMinHugeBlobInBytes) {
+                    GroupCounters->GetNamedCounter("MinHugeBlobInBytes", ToString(PrevMinHugeBlobInBytes), false)->Dec();
+                }
                 GroupCounters->GetNamedCounter("MinHugeBlobInBytes", ToString(size), false)->Inc();
+                PrevMinHugeBlobInBytes = size;
             }
 
             COUNTER_DEF(MovedPatchMsgs);
@@ -564,6 +568,8 @@ public:                                                                         
 
             COUNTER_DEF(PutTotalBytes);
             COUNTER_DEF(GetTotalBytes);
+        private:
+            ui32 PrevMinHugeBlobInBytes = 0;
         };
 
         ///////////////////////////////////////////////////////////////////////////////////

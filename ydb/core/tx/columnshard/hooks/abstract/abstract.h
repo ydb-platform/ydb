@@ -174,7 +174,7 @@ public:
         return def;
     }
     virtual EOptimizerCompactionWeightControl GetCompactionControl() const {
-        return EOptimizerCompactionWeightControl::Force;
+        return EOptimizerCompactionWeightControl::Default;
     }
     virtual TDuration GetTTLDefaultWaitingDuration(const TDuration defaultValue) const {
         return defaultValue;

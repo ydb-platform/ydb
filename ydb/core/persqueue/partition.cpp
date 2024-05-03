@@ -1005,7 +1005,13 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoResponse::TPtr& ev, const TActorCo
             predicate = false;
         }
 
-        ProcessImmediateTx(t->Record, predicate, ctx);
+        auto tx = std::move(t->Record);
+
+        // This is a transaction for a write operation. Write operations will be added to the head of the queue
+        UserActionAndTransactionEvents.pop_front();
+        --ImmediateTxCount;
+
+        ProcessImmediateTx(tx, predicate, ctx);
         TxInProgress = false;
         ContinueProcessTxsAndUserActs(ctx);
 
@@ -2198,6 +2204,7 @@ TPartition::EProcessResult TPartition::ProcessUserActionOrTransaction(const TEvP
             result = EProcessResult::Abort;
         }
     } else {
+        // This is a transaction for a read operation
         ProcessImmediateTx(event.Record, true, ctx);
         --ImmediateTxCount;
 
@@ -2262,15 +2269,10 @@ void TPartition::ProcessImmediateTx(const NKikimrPQ::TEvProposeTransaction& tx,
         userInfo.Offset = operation.GetEnd();
     }
 
-    if (WriteInfoResponse) {
-        UserActionAndTransactionEvents.pop_front();
-        --ImmediateTxCount;
-    }
-
-    CommitWriteOperations(ctx);
-
     ScheduleReplyPropose(tx,
                          NKikimrPQ::TEvProposeTransactionResult::COMPLETE);
+
+    CommitWriteOperations(ctx);
 }
 
 TPartition::EProcessResult TPartition::ProcessUserActionOrTransaction(TEvPQ::TEvSetClientInfo& act,
@@ -2450,6 +2452,15 @@ void TPartition::ProcessUserAct(TEvPQ::TEvSetClientInfo& act,
         userInfo.UserActrs.pop_front();
         continue;
 */
+    }
+
+    if (!IsActive() && act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && static_cast<i64>(EndOffset) == userInfo.Offset && offset < EndOffset) {
+        TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
+        ScheduleReplyError(act.Cookie,
+                           NPersQueue::NErrorCode::SET_OFFSET_ERROR_COMMIT_TO_PAST,
+                           TStringBuilder() << "set offset " <<  act.Offset << " to past for consumer " << act.ClientId << " for inactive partition");
+
+        return;
     }
 
     EmulatePostProcessUserAct(act, userInfo, ctx);

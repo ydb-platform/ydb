@@ -1108,7 +1108,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         }
     }
 
-    void JsonAutocompleteTest(HTTP_METHOD method, NJson::TJsonValue& value, TString prefix = "", TString database = "", TVector<TString> tables = {}, ui32 limit = 10) {
+    void JsonAutocompleteTest(HTTP_METHOD method, NJson::TJsonValue& value, TString prefix = "", TString database = "", TVector<TString> tables = {}, ui32 limit = 10, bool lowerCaseContentType = false) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -1148,7 +1148,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 {"prefix", prefix}
             };
             httpReq.PostContent = NJson::WriteJson(root);
-            httpReq.HttpHeaders.AddHeader("Content-Type", "application/json");
+            auto contType = lowerCaseContentType ? "content-type" : "Content-Type";
+            httpReq.HttpHeaders.AddHeader(contType, "application/json");
         }
         httpReq.CgiParameters.emplace("limit", ToString(limit));
         httpReq.CgiParameters.emplace("direct", "1");
@@ -1275,6 +1276,13 @@ Y_UNIT_TEST_SUITE(Viewer) {
             "/Root/MyDatabase",
             "/Root/TestDatabase"
         });
+
+        JsonAutocompleteTest(HTTP_METHOD_POST, value, "/Root/Database", "", {}, 2, true);
+        VerifyJsonAutocompleteSuccess(value, {
+            "/Root/MyDatabase",
+            "/Root/TestDatabase"
+        });
+
     }
 
     Y_UNIT_TEST(JsonAutocompleteScheme) {
@@ -1316,5 +1324,195 @@ Y_UNIT_TEST_SUITE(Viewer) {
             "id",
             "description",
         });
+    }
+
+    void ChangeBSGroupStateResponse(TEvWhiteboard::TEvBSGroupStateResponse::TPtr* ev) {
+        ui64 nodeId = (*ev)->Cookie;
+        auto& pbRecord = (*ev)->Get()->Record;
+
+        pbRecord.clear_bsgroupstateinfo();
+
+        for (ui64 groupId = 1; groupId <= 9; groupId++) {
+            if (groupId % 9 == nodeId % 9) {
+                continue;
+            }
+            auto state = pbRecord.add_bsgroupstateinfo();
+            state->set_groupid(groupId);
+            state->set_storagepoolname("/Root:test");
+            state->set_nodeid(nodeId);
+            for (int k = 1; k <= 8; k++) {
+                auto vdisk = groupId * 8 + k;
+                auto vdiskId = state->add_vdiskids();
+                vdiskId->set_groupid(groupId);
+                vdiskId->set_groupgeneration(1);
+                vdiskId->set_vdisk(vdisk);
+            }
+        }
+    }
+
+    void ChangePDiskStateResponse(TEvWhiteboard::TEvPDiskStateResponse::TPtr* ev) {
+        auto& pbRecord = (*ev)->Get()->Record;
+        pbRecord.clear_pdiskstateinfo();
+        for (int k = 0; k < 2; k++) {
+            auto state = pbRecord.add_pdiskstateinfo();
+            state->set_pdiskid(k);
+        }
+    }
+
+    void ChangeVDiskStateOn9NodeResponse(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateResponse::TPtr* ev) {
+        ui64 nodeId = (*ev)->Cookie;
+        auto& pbRecord = (*ev)->Get()->Record;
+
+        pbRecord.clear_vdiskstateinfo();
+
+        for (int k = 0; k < 8; k++) {
+            auto groupId = (nodeId + k) % 9 + 1;
+            auto vdisk = groupId * 8 + k + 1;
+            ui32 pdisk = k / 4;
+            ui32 slotid = k % 4;
+            auto state = pbRecord.add_vdiskstateinfo();
+            state->set_pdiskid(pdisk);
+            state->set_vdiskslotid(slotid);
+            state->mutable_vdiskid()->set_groupid(groupId);
+            state->mutable_vdiskid()->set_groupgeneration(1);
+            state->mutable_vdiskid()->set_vdisk(vdisk++);
+            state->set_vdiskstate(NKikimrWhiteboard::EVDiskState::OK);
+            state->set_nodeid(nodeId);
+        }
+    }
+
+    void AddGroupsInControllerSelectGroupsResult(TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr* ev,  int groupCount) {
+        auto& pbRecord = (*ev)->Get()->Record;
+        auto pbMatchGroups = pbRecord.mutable_matchinggroups(0);
+
+        auto sample = pbMatchGroups->groups(0);
+        pbMatchGroups->ClearGroups();
+
+        for (int groupId = 1; groupId <= groupCount; groupId++) {
+            auto group = pbMatchGroups->add_groups();
+            group->CopyFrom(sample);
+            group->set_groupid(groupId++);
+            group->set_storagepoolname("/Root:test");
+        }
+    };
+
+    void JsonStorage9Nodes9GroupsListingTest(TString version, bool groupFilter, bool nodeFilter, bool pdiskFilter, ui32 expectedFoundGroups, ui32 expectedTotalGroups) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(9)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        THttpRequest httpReq(HTTP_METHOD_GET);
+        httpReq.CgiParameters.emplace("with", "all");
+        httpReq.CgiParameters.emplace("version", version);
+        if (groupFilter) {
+            httpReq.CgiParameters.emplace("group_id", "1");
+        }
+        if (nodeFilter) {
+            httpReq.CgiParameters.emplace("node_id", ToString(runtime.GetFirstNodeId()));
+        }
+        if (pdiskFilter) {
+            httpReq.CgiParameters.emplace("pdisk_id", "0");
+        }
+        auto page = MakeHolder<TMonPage>("viewer", "title");
+        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/storage", nullptr);
+        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+            Y_UNUSED(ev);
+            switch (ev->GetTypeRewrite()) {
+                case NConsole::TEvConsole::EvListTenantsResponse: {
+                    auto *x = reinterpret_cast<NConsole::TEvConsole::TEvListTenantsResponse::TPtr*>(&ev);
+                    Ydb::Cms::ListDatabasesResult listTenantsResult;
+                    (*x)->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
+                    listTenantsResult.Addpaths("/Root");
+                    (*x)->Get()->Record.MutableResponse()->mutable_operation()->mutable_result()->PackFrom(listTenantsResult);
+                    break;
+                }
+                case TEvWhiteboard::EvBSGroupStateResponse: {
+                    auto *x = reinterpret_cast<TEvWhiteboard::TEvBSGroupStateResponse::TPtr*>(&ev);
+                    ChangeBSGroupStateResponse(x);
+                    break;
+                }
+                case TEvWhiteboard::EvVDiskStateResponse: {
+                    auto *x = reinterpret_cast<TEvWhiteboard::TEvVDiskStateResponse::TPtr*>(&ev);
+                    ChangeVDiskStateOn9NodeResponse(x);
+                    break;
+                }
+                case TEvWhiteboard::EvPDiskStateResponse: {
+                    auto *x = reinterpret_cast<TEvWhiteboard::TEvPDiskStateResponse::TPtr*>(&ev);
+                    ChangePDiskStateResponse(x);
+                    break;
+                }
+                case TEvBlobStorage::EvControllerSelectGroupsResult: {
+                    auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr*>(&ev);
+                    AddGroupsInControllerSelectGroupsResult(x, 9);
+                    break;
+                }
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
+        NMon::TEvHttpInfoRes* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+
+        size_t pos = result->Answer.find('{');
+        TString jsonResult = result->Answer.substr(pos);
+        NJson::TJsonValue json;
+        try {
+            NJson::ReadJsonTree(jsonResult, &json, true);
+        }
+        catch (yexception ex) {
+            Ctest << ex.what() << Endl;
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("FoundGroups"), ToString(expectedFoundGroups));
+        UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("TotalGroups"), ToString(expectedTotalGroups));
+    }
+
+    Y_UNIT_TEST(JsonStorageListingV1) {
+        JsonStorage9Nodes9GroupsListingTest("v1", false, false, false, 9, 9);
+    }
+
+    Y_UNIT_TEST(JsonStorageListingV2) {
+        JsonStorage9Nodes9GroupsListingTest("v2", false, false, false, 9, 9);
+    }
+
+    Y_UNIT_TEST(JsonStorageListingV1GroupIdFilter) {
+        JsonStorage9Nodes9GroupsListingTest("v1", true, false, false, 1, 9);
+    }
+
+    Y_UNIT_TEST(JsonStorageListingV2GroupIdFilter) {
+        JsonStorage9Nodes9GroupsListingTest("v2", true, false, false, 1, 9);
+    }
+
+    Y_UNIT_TEST(JsonStorageListingV1NodeIdFilter) {
+        JsonStorage9Nodes9GroupsListingTest("v1", false, true, false, 8, 8);
+    }
+
+    Y_UNIT_TEST(JsonStorageListingV2NodeIdFilter) {
+        JsonStorage9Nodes9GroupsListingTest("v2", false, true, false, 8, 8);
+    }
+
+    Y_UNIT_TEST(JsonStorageListingV1PDiskIdFilter) {
+        JsonStorage9Nodes9GroupsListingTest("v1", false, true, true, 4, 8);
+        JsonStorage9Nodes9GroupsListingTest("v1", false, true, true, 4, 8);
+    }
+
+    Y_UNIT_TEST(JsonStorageListingV2PDiskIdFilter) {
+        JsonStorage9Nodes9GroupsListingTest("v2", false, true, true, 4, 8);
     }
 }

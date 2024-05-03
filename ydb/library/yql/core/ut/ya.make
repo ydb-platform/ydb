@@ -21,6 +21,7 @@ PEERDIR(
     ydb/library/yql/core
     ydb/library/yql/core/facade
     ydb/library/yql/core/services
+    ydb/library/yql/core/file_storage
     ydb/library/yql/core/qplayer/storage/memory
     ydb/library/yql/providers/common/udf_resolve
     ydb/library/yql/public/udf
@@ -38,6 +39,10 @@ PEERDIR(
     ydb/library/yql/minikql/invoke_builtins/llvm14
     ydb/library/yql/sql/pg
     ydb/library/yql/udfs/common/string
+)
+
+RESOURCE(
+    ydb/library/yql/cfg/tests/fs.conf fs.conf
 )
 
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)

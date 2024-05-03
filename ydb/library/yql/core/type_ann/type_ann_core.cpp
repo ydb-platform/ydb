@@ -6075,7 +6075,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
     }
 
     IGraphTransformer::TStatus StructMergeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 2, 3, ctx.Expr)) {
+        auto maxArgc = (input->Content() == "StructDifference" || input->Content() == "StructSymmetricDifference") ? 2 : 3;
+        if (!EnsureMinMaxArgsCount(*input, 2, maxArgc, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 

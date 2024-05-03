@@ -3072,8 +3072,8 @@ struct TBuiltinFuncData {
             {"staticzip", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StaticZip", 1, -1) },
             {"structunion", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StructUnion", 2, 3)},
             {"structintersection", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StructIntersection", 2, 3)},
-            {"structdifference", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StructDifference", 2, 3)},
-            {"structsymmetricdifference", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StructSymmetricDifference", 2, 3)},
+            {"structdifference", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StructDifference", 2, 2)},
+            {"structsymmetricdifference", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StructSymmetricDifference", 2, 2)},
             {"staticfold", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StaticFold", 3, 3)},
             {"staticfold1", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StaticFold1", 3, 3)},
 

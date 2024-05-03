@@ -1157,7 +1157,8 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartit
         return;
     }
 
-    const auto name = converterIter->second->GetInternalName();
+    auto& converter = converterIter->second;
+    const auto name = converter->GetInternalName();
 
     {
         auto it = Topics.find(name);
@@ -1168,12 +1169,14 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartit
             return;
         }
 
+        auto& topic = it->second;
+
         // TODO: counters
         if (NumPartitionsFromTopic[name]++ == 0) {
             if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
-                SetupTopicCounters(converterIter->second, it->second.CloudId, it->second.DbId, it->second.DbPath, it->second.IsServerless, it->second.FolderId);
+                SetupTopicCounters(converter, topic.CloudId, topic.DbId, topic.DbPath, topic.IsServerless, topic.FolderId);
             } else {
-                SetupTopicCounters(converterIter->second);
+                SetupTopicCounters(converter);
             }
         }
     }
@@ -2334,6 +2337,33 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReadingFinis
 
     auto& topic = it->second;
     NTabletPipe::SendData(ctx, topic.PipeClient, new TEvPersQueue::TEvReadingPartitionFinishedRequest(ClientId, msg->PartitionId, newSDK, msg->FirstMessage));
+
+
+    if constexpr (!UseMigrationProtocol) {
+        TPartitionActorInfo* partitionInfo = nullptr;
+        for (auto& [_, p] : Partitions) {
+            if (p.Partition.Partition == msg->PartitionId) {
+                partitionInfo = &p;
+                break;
+            }
+        }
+
+        if (!partitionInfo) {
+            return CloseSession(PersQueue::ErrorCode::ERROR, TStringBuilder()
+                << "Inconsistent state #04", ctx);
+        }
+
+        TServerMessage result;
+        result.set_status(Ydb::StatusIds::SUCCESS);
+        auto* r = result.mutable_end_partition_session();
+        r->set_partition_session_id(partitionInfo->Partition.AssignId);
+
+
+        r->add_adjacent_partition_ids(1);
+
+        LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " sending to client end partition stream event");
+        SendControlMessage(partitionInfo->Partition, std::move(result), ctx);
+    }
 }
 
 

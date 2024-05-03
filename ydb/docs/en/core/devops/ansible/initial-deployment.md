@@ -1,8 +1,8 @@
 # Deploying {{ ydb-short-name }} cluster with Ansible
 
-This guide outlines the process of deploying a {{ ydb-short-name }} cluster on a group of servers using [Ansible](https://www.ansible.com/). The recommended setup to get started is 3 servers with 3 disk drives for user data each. For reliability purposes each server should have as independent infrastructure as possible: they'd better be each in a separate datacenter or availability zone, or at least in different server racks. But don't  
+This guide outlines the process of deploying a {{ ydb-short-name }} cluster on a group of servers using [Ansible](https://www.ansible.com/). The recommended setup to get started is 3 servers with 3 disk drives for user data each. For reliability purposes each server should have as independent infrastructure as possible: they'd better be each in a separate datacenter or availability zone, or at least in different server racks.
 
-For large-scale setups, it is recommended to use at least 9 nodes for highly available clusters (`mirror-3-dc`) or 8 nodes for single-datacenter clusters (`block-4-2`). In these cases, servers can have only one disk drive for data each, but they'd better have an additional small drive for the operating system.You can learn about redundancy models available in {{ ydb-short-name }} from the [{#T}](../../concepts/topology.md) article. During operation, the cluster can be [expanded](../../maintenance/manual/cluster_expansion.md) without suspending user access to the databases.
+For large-scale setups, it is recommended to use at least 9 nodes for highly available clusters (`mirror-3-dc`) or 8 nodes for single-datacenter clusters (`block-4-2`). In these cases, servers can have only one disk drive for user data each, but they'd better have an additional small drive for the operating system. You can learn about redundancy models available in {{ ydb-short-name }} from the [{#T}](../../concepts/topology.md) article. During operation, the cluster can be [expanded](../../maintenance/manual/cluster_expansion.md) without suspending user access to the databases.
 
 {% note info %}
 

@@ -1416,6 +1416,10 @@ namespace {
     }
 
     IGraphTransformer::TStatus ListTopSortWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (!EnsureMinMaxArgsCount(*input, 2, 3, ctx.Expr)) { 
+            return IGraphTransformer::TStatus::Error;
+        }
+        
         TStringBuf newName = input->Content();
         newName.Skip(4);
         bool desc = false;
@@ -1425,14 +1429,10 @@ namespace {
             newName.Chop(4);
             desc = true;
         }
-        TExprNode::TPtr outputPre = nullptr;
-        auto res = OptListWrapperImpl<2U, 3U>(input, outputPre, ctx, input->Content().Skip(4));
-        if (res != IGraphTransformer::TStatus::Repeat) {
-            return res;
-        }
+
         TExprNode::TPtr sortLambda = nullptr;
-        if (outputPre->ChildrenSize() == 3) {
-            sortLambda = outputPre->ChildPtr(2);
+        if (input->ChildrenSize() == 3) {
+            sortLambda = input->ChildPtr(2);
         } else {
             sortLambda = ctx.Expr.Builder(input->Pos())
                 .Lambda()
@@ -1441,17 +1441,17 @@ namespace {
                 .Seal()
             .Build();
         }
-        output = ctx.Expr.Builder(input->Pos())
+        
+        return OptListWrapperImpl<4U, 4U>(ctx.Expr.Builder(input->Pos())
             .Callable(newName)
-                .Add(0, outputPre->ChildPtr(0))
-                .Add(1, outputPre->ChildPtr(1))
+                .Add(0, input->ChildPtr(0))
+                .Add(1, input->ChildPtr(1))
                 .Callable(2, "Bool")
                     .Atom(0, desc ? "false" : "true")
                 .Seal()
                 .Add(3, sortLambda)
             .Seal()
-        .Build();
-        return res;
+        .Build(), output, ctx, newName);
     }
 
     IGraphTransformer::TStatus ListExtractWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {

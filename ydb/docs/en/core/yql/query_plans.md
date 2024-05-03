@@ -81,14 +81,14 @@ Sorting rows.
 
 Attribute | Description
 --- | ---
-SortBy | columns used for sorting
+SortBy | columns or expressions used for sorting
 
 #### TopSort
 Partial rows sorting with a specified limit.
 
 Attribute | Description
 --- | ---
-TopSortBy | columns used for sorting
+TopSortBy | columns or expressions used for sorting
 Limit | rows limit
 
 #### Top

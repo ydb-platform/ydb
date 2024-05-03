@@ -836,13 +836,6 @@ private:
 
 class TForgetScriptExecutionOperationQueryActor : public TQueryBase {
     static constexpr i64 MAX_NUMBER_ROWS_IN_BATCH = 100000;
-    static constexpr i64 MAX_BATCH_SIZE = 10_MB;
-
-    struct TResultSetDescription {
-        i64 MaxRowId;
-        i64 MaxAccumulatedSize;
-        i32 ResultSetId;
-    };
 
 public:
     TForgetScriptExecutionOperationQueryActor(const TString& executionId, const TString& database, TInstant operationDeadline)
@@ -852,10 +845,6 @@ public:
     {}
 
     void OnRunQuery() override {
-        if (!CheckDeadline()) {
-            return;
-        }
-
         TString sql = R"(
             -- TForgetScriptExecutionOperationQueryActor::OnRunQuery
             DECLARE $database AS Text;
@@ -865,10 +854,10 @@ public:
             FROM `.metadata/script_executions`
             WHERE database = $database AND execution_id = $execution_id;
 
-            SELECT result_set_id, MAX(row_id) AS max_row_id, MAX(accumulated_size) AS max_accumulated_size
+            SELECT MAX(result_set_id) AS max_result_set_id, MAX(row_id) AS max_row_id
             FROM `.metadata/result_sets`
-            WHERE database = $database AND execution_id = $execution_id
-            GROUP BY result_set_id;
+            WHERE database = $database AND execution_id = $execution_id AND
+                  (expire_at > CurrentUtcTimestamp() OR expire_at IS NULL);
 
             DELETE
             FROM `.metadata/script_execution_leases`
@@ -895,69 +884,44 @@ public:
         }
 
         NYdb::TResultSetParser result(ResultSets[0]);
-        if (result.RowsCount() == 0) {
-            Finish();
+        if (result.RowsCount() != 1) {
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
             return;
         }
 
-        ResultSetsDescription.reserve(result.RowsCount());
-        while (result.TryNextRow()) {
-            TMaybe<i32> resultSetId = result.ColumnParser("result_set_id").GetOptionalInt32();
-            if (!resultSetId) {
-                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result set id is not specified");
-                return;
-            }
+        result.TryNextRow();
 
-            TMaybe<i64> maxRowId = result.ColumnParser("max_row_id").GetOptionalInt64();
-            if (!maxRowId) {
-                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result set row id is not specified");
-                return;
-            }
-
-            i64 maxAccumulatedSize = result.ColumnParser("max_accumulated_size").GetOptionalInt64().GetOrElse(0);
-
-            ResultSetsDescription.emplace_back(TResultSetDescription{*maxRowId, maxAccumulatedSize, *resultSetId});
+        TMaybe<i64> maxResultSetId = result.ColumnParser("max_result_set_id").GetOptionalInt32();
+        if (!maxResultSetId) {
+            Finish();
+            return;
         }
+        NumberRowsInBatch = std::max(MAX_NUMBER_ROWS_IN_BATCH / (*maxResultSetId + 1), 1l);
 
+        TMaybe<i64> maxRowId = result.ColumnParser("max_row_id").GetOptionalInt64();
+        if (!maxRowId) {
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result set row id is not specified");
+            return;
+        }
+        MaxRowId = *maxRowId;
+
+        ClearTimeInfo();
         DeleteScriptResults();
     }
 
     void DeleteScriptResults() {
-        if (ResultSetsDescription.empty()) {
-            Finish();
-            return;
-        }
-
-        if (!CheckDeadline()) {
-            return;
-        }
-
-        const TResultSetDescription& resultSet = ResultSetsDescription.back();
-
         TString sql = R"(
             -- TForgetScriptExecutionOperationQueryActor::DeleteScriptResults
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
-            DECLARE $result_set_id AS Int32;
+            DECLARE $min_row_id AS Int64;
             DECLARE $max_row_id AS Int64;
-            DECLARE $max_rows_in_batch AS Int64;
-            DECLARE $min_accumulated_size AS Int64;
 
-            DELETE
-            FROM `.metadata/result_sets`
+            UPDATE `.metadata/result_sets`
+            SET expire_at = CurrentUtcTimestamp()
             WHERE database = $database
               AND execution_id = $execution_id
-              AND result_set_id = $result_set_id
-              AND (row_id = $max_row_id OR (
-                   $max_row_id - row_id < $max_rows_in_batch
-                   AND (accumulated_size IS NULL OR accumulated_size - LEN(result_set) >= $min_accumulated_size)
-              ));
-
-            SELECT MAX(row_id) AS max_row_id, MAX(accumulated_size) AS max_accumulated_size
-            FROM `.metadata/result_sets`
-            WHERE database = $database
-              AND execution_id = $execution_id
-              AND result_set_id = $result_set_id;
+              AND $min_row_id < row_id AND row_id <= $max_row_id;
         )";
 
         NYdb::TParamsBuilder params;
@@ -968,17 +932,11 @@ public:
             .AddParam("$execution_id")
                 .Utf8(ExecutionId)
                 .Build()
-            .AddParam("$result_set_id")
-                .Int32(resultSet.ResultSetId)
+            .AddParam("$min_row_id")
+                .Int64(MaxRowId - NumberRowsInBatch)
                 .Build()
             .AddParam("$max_row_id")
-                .Int64(resultSet.MaxRowId)
-                .Build()
-            .AddParam("$max_rows_in_batch")
-                .Int64(MAX_NUMBER_ROWS_IN_BATCH)
-                .Build()
-            .AddParam("$min_accumulated_size")
-                .Int64(resultSet.MaxAccumulatedSize - MAX_BATCH_SIZE)
+                .Int64(MaxRowId)
                 .Build();
 
         RunDataQuery(sql, &params);
@@ -986,26 +944,15 @@ public:
     }
 
     void OnResultsDeleted() {
-        if (ResultSets.size() != 1) {
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
+        MaxRowId -= NumberRowsInBatch;
+        if (MaxRowId < 0) {
+            Finish();
             return;
         }
 
-        NYdb::TResultSetParser result(ResultSets[0]);
-        if (result.RowsCount() != 1) {
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
+        if (TInstant::Now() + TDuration::Seconds(1) + GetAverageTime() >= Deadline) {
+            Finish(Ydb::StatusIds::TIMEOUT, ForgetOperationTimeoutIssues());
             return;
-        }
-
-        result.TryNextRow();
-        TMaybe<i64> maxRowId = result.ColumnParser("max_row_id").GetOptionalInt64();
-        TMaybe<i64> maxAccumulatedSize = result.ColumnParser("max_accumulated_size").GetOptionalInt64();
-
-        if (maxRowId) {
-            ResultSetsDescription.back().MaxRowId = *maxRowId;
-            ResultSetsDescription.back().MaxAccumulatedSize = maxAccumulatedSize.GetOrElse(0);
-        } else {
-            ResultSetsDescription.pop_back();
         }
 
         DeleteScriptResults();
@@ -1020,19 +967,11 @@ public:
     }
 
 private:
-    bool CheckDeadline() {
-        if (TInstant::Now() >= Deadline) {
-            Finish(Ydb::StatusIds::TIMEOUT, ForgetOperationTimeoutIssues());
-            return false;
-        }
-        return true;
-    }
-
-private:
     TString ExecutionId;
     TString Database;
     TInstant Deadline;
-    std::vector<TResultSetDescription> ResultSetsDescription;
+    i64 NumberRowsInBatch = 0;
+    i64 MaxRowId = 0;
 };
 
 class TForgetScriptExecutionOperationActor : public TActorBootstrapped<TForgetScriptExecutionOperationActor> {
@@ -1075,7 +1014,7 @@ public:
         }
 
         TDuration minDelay = TDuration::MilliSeconds(10);
-        TDuration maxTime = Request->Get()->Deadline - TInstant::Now() - TDuration::Seconds(1);
+        TDuration maxTime = Request->Get()->Deadline - TInstant::Now();
         if (maxTime <= minDelay) {
             Reply(Ydb::StatusIds::TIMEOUT, TForgetScriptExecutionOperationQueryActor::ForgetOperationTimeoutIssues());
             return;
@@ -1962,9 +1901,18 @@ std::optional<std::pair<TDuration, TDuration>> GetTtlFromSerializedMeta(const TS
 }
 
 class TGetScriptExecutionResultQueryActor : public TQueryBase {
+    static constexpr i64 MAX_NUMBER_ROWS_IN_BATCH = 100000;
+    static constexpr i64 MAX_BATCH_SIZE = 20_MB;
+
 public:
     TGetScriptExecutionResultQueryActor(const TString& database, const TString& executionId, i32 resultSetIndex, i64 offset, i64 rowsLimit, i64 sizeLimit, TInstant deadline)
-        : Database(database), ExecutionId(executionId), ResultSetIndex(resultSetIndex), Offset(offset), RowsLimit(rowsLimit), SizeLimit(sizeLimit), Deadline(GetDeadline(deadline))
+        : Database(database)
+        , ExecutionId(executionId)
+        , ResultSetIndex(resultSetIndex)
+        , Offset(offset)
+        , RowsLimit(rowsLimit ? rowsLimit : std::numeric_limits<i64>::max())
+        , SizeLimit(sizeLimit ? sizeLimit : std::numeric_limits<i64>::max())
+        , Deadline(rowsLimit ? TInstant::Max() : deadline)
     {}
 
     void OnRunQuery() override {
@@ -2120,10 +2068,6 @@ public:
                 return;
             }
             MaxRowId = *maxRowId;
-
-            if (RowsLimit == 0) {
-                RowsLimit = MaxRowId - Offset + 1;
-            }
         }
 
         { // start accumulated size
@@ -2137,6 +2081,7 @@ public:
             StartAccumulatedSize = result.ColumnParser("start_accumulated_size").GetOptionalInt64().GetOrElse(0);
         }
 
+        ClearTimeInfo();
         FetchScriptResults();
     }
 
@@ -2147,17 +2092,17 @@ public:
             DECLARE $execution_id AS Text;
             DECLARE $result_set_id AS Int32;
             DECLARE $offset AS Int64;
-            DECLARE $limit AS int64;
+            DECLARE $limit AS Uint64;
             DECLARE $max_accumulated_size AS int64;
 
-            SELECT row_id, result_set
+            SELECT database, execution_id, result_set_id, row_id, result_set
             FROM `.metadata/result_sets`
             WHERE database = $database
               AND execution_id = $execution_id
               AND result_set_id = $result_set_id
               AND row_id >= $offset
               AND (accumulated_size IS NULL OR accumulated_size <= $max_accumulated_size)
-            ORDER BY row_id
+            ORDER BY database, execution_id, result_set_id, row_id
             LIMIT $limit;
         )";
 
@@ -2176,10 +2121,10 @@ public:
                 .Int64(Offset)
                 .Build()
             .AddParam("$limit")
-                .Int64(RowsLimit)
+                .Uint64(std::min(RowsLimit, MAX_NUMBER_ROWS_IN_BATCH))
                 .Build()
             .AddParam("$max_accumulated_size")
-                .Int64(SizeLimit ? StartAccumulatedSize + SizeLimit : std::numeric_limits<i64>::max())
+                .Int64(StartAccumulatedSize + std::min(SizeLimit, MAX_BATCH_SIZE))
                 .Build();
 
         RunDataQuery(sql, &params);
@@ -2192,7 +2137,7 @@ public:
             return;
         }
 
-        NYdb::TResultSetParser result(ResultSets[1]);
+        NYdb::TResultSetParser result(ResultSets[0]);
 
         if (result.RowsCount() == 0) {
             if (ResultSet.rows_size() > 0) {
@@ -2224,6 +2169,8 @@ public:
                 return;
             }
 
+            StartAccumulatedSize += serializedRow->size();
+            SizeLimit -= serializedRow->size();
             if (!ResultSet.add_rows()->ParseFromString(*serializedRow)) {
                 Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result set row is corrupted");
                 return;
@@ -2239,7 +2186,7 @@ public:
         Offset += result.RowsCount();
         RowsLimit -= result.RowsCount();
 
-        if (RowsLimit == 0 || TInstant::Now() + TDuration::Seconds(1) >= Deadline) {
+        if (RowsLimit <= 0 || SizeLimit <= 0 || TInstant::Now() + TDuration::Seconds(5) + GetAverageTime() >= Deadline) {
             Finish();
             return;
         }
@@ -2253,12 +2200,6 @@ public:
         } else {
             Send(Owner, new TEvFetchScriptResultsResponse(status, std::nullopt, true, std::move(issues)));
         }
-    }
-
-private:
-    TInstant GetDeadline(TInstant deadline) const {
-        // Truncate results by operation deadline only in case of unspecified rows limit
-        return RowsLimit ? TInstant::Max() : deadline;
     }
 
 private:
@@ -2281,7 +2222,10 @@ class TGetScriptExecutionResultActor : public TActorBootstrapped<TGetScriptExecu
 public:
     TGetScriptExecutionResultActor(const TActorId& replyActorId, const TString& database, const TString& executionId, i32 resultSetIndex, i64 offset, i64 rowsLimit, i64 sizeLimit, TInstant operationDeadline)
         : ReplyActorId(replyActorId), Database(database), ExecutionId(executionId), ResultSetIndex(resultSetIndex), Offset(offset), RowsLimit(rowsLimit), SizeLimit(sizeLimit), OperationDeadline(operationDeadline)
-    {}
+    {
+        Y_ENSURE(RowsLimit >= 0);
+        Y_ENSURE(SizeLimit >= 0);
+    }
 
     void Bootstrap() {
         Register(new TGetScriptExecutionResultQueryActor(Database, ExecutionId, ResultSetIndex, Offset, RowsLimit, SizeLimit, OperationDeadline));

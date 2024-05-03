@@ -1753,7 +1753,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         UNIT_ASSERT_VALUES_EQUAL(rowsFetched, numberRows);
 
         // Test forget operation
-        TInstant forgetOperationTimeout = TInstant::Now() + NSan::PlainOrUnderSanitizer(TDuration::Minutes(4), TDuration::Minutes(20));
+        TInstant forgetOperationTimeout = TInstant::Now() + NSan::PlainOrUnderSanitizer(TDuration::Minutes(5), TDuration::Minutes(20));
         NYdb::NOperation::TOperationClient operationClient(kikimr->GetDriver());
         while (TInstant::Now() < forgetOperationTimeout) {
             auto status = operationClient.Forget(scriptExecutionOperation.Id()).ExtractValueSync();
@@ -1765,10 +1765,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
             if (status.GetStatus() == NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED) {
                 // Wait until last forget is not finished
-                Sleep(TDuration::Seconds(1));
+                Sleep(TDuration::Seconds(30));
             }
         }
-        UNIT_ASSERT_C(false, "Forget operation retry limit exceeded");
+        UNIT_ASSERT_C(false, "Forget operation timeout");
     }
 
     Y_UNIT_TEST(ExecuteScriptWithLargeStrings) {

@@ -70,7 +70,7 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
                 ui32 part = partsRowset.GetValue<Schema::Partitions::Partition>();
                 ui64 tabletId = partsRowset.GetValue<Schema::Partitions::TabletId>();
 
-                Self->PartitionsInfo[part] = {tabletId, {}};
+                partitionsInfo = {tabletId, {}};
                 Self->AggregatedStats.AggrStats(part, partsRowset.GetValue<Schema::Partitions::DataSize>(),
                                                 partsRowset.GetValue<Schema::Partitions::UsedReserveSize>());
 

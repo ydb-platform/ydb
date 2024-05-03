@@ -340,6 +340,7 @@ message TSessionInfo {
     optional int64 StateChangeAt = 13;
     optional string UserSID = 14;
     optional bool PgWire = 15 [default = false];
+    optional string UserName = 16;
 }
 
 message TEvListSessionsRequest {
@@ -370,7 +371,6 @@ message TKqpDefaultSettings {
 
 message TCreateSessionRequest {
     optional string Database = 1;
-    optional string ApplicationName = 2;
 }
 
 message TEvCreateSessionRequest {
@@ -391,6 +391,7 @@ message TEvCreateSessionRequest {
     optional string ClientSdkBuildInfo = 10;
     optional string ApplicationName = 11;
     optional string UserSID = 12;
+    optional string UserName = 13;
 }
 
 message TCreateSessionResponse {

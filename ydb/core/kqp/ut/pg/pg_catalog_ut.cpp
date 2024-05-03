@@ -399,7 +399,6 @@ Y_UNIT_TEST_SUITE(PgCatalog) {
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             UNIT_ASSERT_C(!result.GetResultSets().empty(), "no result sets");
-            // userName not set to GUCSettings yet
             CompareYson(R"([
                 ["postgres"]
             ])", FormatResultSetYson(result.GetResultSet(0)));

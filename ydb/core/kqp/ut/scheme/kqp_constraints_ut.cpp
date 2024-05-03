@@ -974,6 +974,92 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 [[1u];["Old"];1;7;-24;-25];[[2u];["New"];1;7;-24;-25]
             ]
         )");
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/AlterTableAddNotNullColumn` ADD COLUMN Value6 Float NOT NULL DEFAULT Float("1.0");
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+                                       result.GetIssues().ToString());
+        }
+
+         fCompareTable(R"(
+            [
+                [[1u];["Old"];1;7;-24;-25;1.];[[2u];["New"];1;7;-24;-25;1.]
+            ]
+        )");
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/AlterTableAddNotNullColumn` ADD COLUMN Value7 Double NOT NULL DEFAULT Double("1.0");
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+                                       result.GetIssues().ToString());
+        }
+
+         fCompareTable(R"(
+            [
+                [[1u];["Old"];1;7;-24;-25;1.;1.];[[2u];["New"];1;7;-24;-25;1.;1.]
+            ]
+        )");
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/AlterTableAddNotNullColumn` ADD COLUMN Value8 Yson NOT NULL DEFAULT Yson("[123]");
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+                                       result.GetIssues().ToString());
+        }
+
+         fCompareTable(R"(
+            [
+                [[1u];["Old"];1;7;-24;-25;1.;1.;"[123]"];[[2u];["New"];1;7;-24;-25;1.;1.;"[123]"]
+            ]
+        )");
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/AlterTableAddNotNullColumn` ADD COLUMN Value9 Json NOT NULL DEFAULT Json("{\"age\" : 22}");
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+                                       result.GetIssues().ToString());
+        }
+
+         fCompareTable(R"(
+            [
+                [[1u];["Old"];1;7;-24;-25;1.;1.;"[123]";"{\"age\" : 22}"];[[2u];["New"];1;7;-24;-25;1.;1.;"[123]";"{\"age\" : 22}"]
+            ]
+        )");
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/AlterTableAddNotNullColumn` ADD COLUMN Valuf1 Decimal(22,9) NOT NULL DEFAULT Decimal("1.11", 22, 9);
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+                                       result.GetIssues().ToString());
+        }
+
+         fCompareTable(R"(
+            [
+                [[1u];["Old"];1;7;-24;-25;1.;1.;"[123]";"{\"age\" : 22}";"1.11"];[[2u];["New"];1;7;-24;-25;1.;1.;"[123]";"{\"age\" : 22}";"1.11"]
+            ]
+        )");
+
     }
 
     Y_UNIT_TEST(Utf8AndDefault) {

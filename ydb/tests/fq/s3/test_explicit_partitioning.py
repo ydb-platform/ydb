@@ -1295,3 +1295,4 @@ Banana,3,100'''
         issues = str(client.describe_query(query_id).result.query.issue)
 
         assert 'BAD_REQUEST' in issues
+        assert 'Mismatch type for field: foo, expected: binary, got: int32' in issues

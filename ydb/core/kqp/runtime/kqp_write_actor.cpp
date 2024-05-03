@@ -62,7 +62,7 @@ namespace {
 
         public:
             struct TInFlightBatch {
-                TString Data;
+                NKikimr::NKqp::IPayloadSerializer::IBatchPtr Batch;
             };
 
             size_t Size() const {
@@ -101,30 +101,22 @@ namespace {
                 return Batches.at(index);
             }
 
-            std::optional<ui64> PopBatches(const ui64 cookie) {
-                if (BatchesInFlight != 0 && Cookie == cookie) {
-                    ui64 dataSize = 0;
-                    for (size_t index = 0; index < BatchesInFlight; ++index) {
-                        dataSize += Batches.front().Data.size();
-                        Batches.pop_front();
-                    }
-
-                    ++Cookie;
-                    SendAttempts = 0;
-                    BatchesInFlight = 0;
-
-                    Memory -= dataSize;
-                    return dataSize;
+            std::optional<TInFlightBatch> PopBatch(const ui64 Cookie) {
+                if (!IsEmpty() && Cookie == CurrentBatch().Cookie) {
+                    auto batch = std::move(Batches.front());
+                    Batches.pop_front();
+                    Memory -= batch.Batch->GetMemory();
+                    return std::move(batch);
                 }
                 return std::nullopt;
             }
 
-            void PushBatch(TString&& data) {
+            void PushBatch(NKikimr::NKqp::IPayloadSerializer::IBatchPtr&& batch) {
                 YQL_ENSURE(!IsClosed());
                 Batches.push_back(TInFlightBatch{
-                    .Data = std::move(data)
+                    .Batch = std::move(batch),
                 });
-                Memory += Batches.back().Data.size();
+                Memory += Batches.back().Batch->GetMemory();
             }
 
             bool AddAndCheckLock(const NKikimrDataEvents::TLock& lock) {
@@ -610,8 +602,8 @@ private:
     void PopShardBatch(ui64 shardId, ui64 cookie) {
         TResumeNotificationManager resumeNotificator(*this);
         auto& shardInfo = ShardsInfo.GetShard(shardId);
-        if (const auto removedDataSize = shardInfo.PopBatches(cookie); removedDataSize) {
-            EgressStats.Bytes += *removedDataSize;
+        if (const auto batch = shardInfo.PopBatch(cookie); batch) {
+            EgressStats.Bytes += batch->Batch->GetMemory();
             EgressStats.Chunks++;
             EgressStats.Splits++;
             EgressStats.Resume();
@@ -635,10 +627,9 @@ private:
             auto& shard = ShardsInfo.GetShard(shardId);
             while (true) {
                 auto batch = Serializer->FlushBatch(shardId);
-                if (batch.empty()) {
-                    break;
+                if (batch && !batch->IsEmpty()) {
+                    shard.PushBatch(std::move(batch));
                 }
-                shard.PushBatch(std::move(batch));
             }
             if (shard.GetBatchesInFlight() == 0) {
                 shard.MakeNextBatches(
@@ -697,10 +688,10 @@ private:
         ui64 totalDataSize = 0;
         for (size_t index = 0; index < shard.GetBatchesInFlight(); ++index) {
             const auto& inFlightBatch = shard.GetBatch(index);
-            YQL_ENSURE(!inFlightBatch.Data.empty());
-            totalDataSize += inFlightBatch.Data.size();
+            YQL_ENSURE(!inFlightBatch.Batch->IsEmpty());
+            totalDataSize += inFlightBatch.Batch->GetMemory();
             const ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite)
-                    .AddDataToPayload(TString(inFlightBatch.Data));
+                    .AddDataToPayload(inFlightBatch.Batch->SerializeToString());
             evWrite->AddOperation(
                 NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE,
                 {

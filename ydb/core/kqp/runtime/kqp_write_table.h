@@ -12,7 +12,19 @@ namespace NKqp {
 
 class IPayloadSerializer : public TThrRefBase {
 public:
+    class IBatch : public TThrRefBase {
+    public:
+        virtual TString SerializeToString() const = 0;
+        virtual i64 GetMemory() const = 0;
+        bool IsEmpty() const;
+    };
+
+    using IBatchPtr = TIntrusivePtr<IBatch>;
+
     virtual void AddData(NMiniKQL::TUnboxedValueBatch&& data, bool close) = 0;
+    virtual void ReturnBatch(IBatchPtr&& batch) = 0;
+
+    virtual void Close() = 0;
 
     virtual bool IsClosed() = 0;
     virtual bool IsEmpty() = 0;
@@ -21,11 +33,11 @@ public:
     virtual NKikimrDataEvents::EDataFormat GetDataFormat() = 0;
     virtual std::vector<ui32> GetWriteColumnIds() = 0;
 
-    using TBatches = THashMap<ui64, std::deque<TString>>;
+    using TBatches = THashMap<ui64, std::deque<IBatchPtr>>;
 
     virtual TBatches FlushBatchesForce() = 0;
 
-    virtual TString FlushBatch(ui64 shardId) = 0;
+    virtual IBatchPtr FlushBatch(ui64 shardId) = 0;
     virtual const THashSet<ui64>& GetShardIds() const = 0;
 
     virtual i64 GetMemory() = 0;

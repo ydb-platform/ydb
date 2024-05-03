@@ -146,6 +146,22 @@ TVector<NScheme::TTypeInfo> BuildKeyColumnTypes(
 class TColumnShardPayloadSerializer : public IPayloadSerializer {
     using TRecordBatchPtr = std::shared_ptr<arrow::RecordBatch>;
 
+    class TBatch : public IPayloadSerializer::IBatch {
+    public:
+        TString SerializeToString() const override {
+            return Data;
+        }
+
+        i64 GetMemory() const override {
+            return Data.size();
+        }
+
+        TBatch(TString&& data) : Data(std::move(data)) {}
+        TBatch(const TString& data) : Data(data) {}
+
+        TString Data;
+    };
+
 public:
     TColumnShardPayloadSerializer(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
@@ -196,14 +212,19 @@ public:
 
             for (auto& [shard, infos] : splittedData.GetShardsInfo()) {
                 for (auto&& shardInfo : infos) {
-                    auto& batch = Batches[shard].emplace_back();
-                    batch = shardInfo->GetData();
-                    Memory += batch.size();
-                    YQL_ENSURE(!batch.empty());
+                    auto& batch = Batches[shard].emplace_back(
+                        MakeIntrusive<TBatch>(shardInfo->GetData())); // TODO: get rid of copy
+                    //batch = shardInfo->GetData();
+                    Memory += batch->GetMemory();
+                    YQL_ENSURE(batch->GetMemory() != 0);
                 }
                 ShardIds.insert(shard);
             }
         }
+    }
+
+    void ReturnBatch(IPayloadSerializer::IBatchPtr&& batch) override {
+        Y_UNUSED(batch);
     }
 
     NKikimrDataEvents::EDataFormat GetDataFormat() override {
@@ -216,6 +237,11 @@ public:
 
     i64 GetMemory() override {
         return Memory;
+    }
+
+    void Close() override {
+        YQL_ENSURE(!Closed);
+        Closed = true;
     }
 
     bool IsClosed() override {
@@ -237,7 +263,7 @@ public:
         return std::move(newBatches);
     }
 
-    TString FlushBatch(ui64 shardId) override {
+    IBatchPtr FlushBatch(ui64 shardId) override {
         if (!Batches.contains(shardId)) {
             return {};
         }
@@ -295,9 +321,39 @@ private:
 };
 
 class TDataShardPayloadSerializer : public IPayloadSerializer {
-    struct TBatch {
+    /*class TBatch : public IPayloadSerializer::IBatch {
+    public:
+        TString SerializeToString() const override {
+            return ;
+        }
+
+        i64 GetMemory() const override {
+            return Size;
+        }
+
+        std::vector<TCell> Extract() {
+            Size = 0;
+            return std::move(Data);
+        }
+
+    private:
         std::vector<TCell> Data;
         ui64 Size = 0;
+    };*/
+
+    class TBatch : public IPayloadSerializer::IBatch {
+    public:
+        TString SerializeToString() const override {
+            return Data;
+        }
+
+        i64 GetMemory() const override {
+            return Data.size();
+        }
+
+        TBatch(TString&& data) : Data(std::move(data)) {}
+
+        TString Data;
     };
 
 public:
@@ -357,6 +413,10 @@ public:
         });
     }
 
+    void ReturnBatch(IPayloadSerializer::IBatchPtr&& batch) override {
+        Y_UNUSED(batch);
+    }
+
     NKikimrDataEvents::EDataFormat GetDataFormat() override {
         return NKikimrDataEvents::FORMAT_CELLVEC;
     }
@@ -367,6 +427,11 @@ public:
 
     i64 GetMemory() override {
         return Memory;
+    }
+
+    void Close() override {
+        YQL_ENSURE(!Closed);
+        Closed = true;
     }
 
     bool IsClosed() override {
@@ -395,19 +460,19 @@ public:
                 if (batch.empty()) {
                     break;
                 }
-                result[shardId].emplace_back(std::move(batch));
+                result[shardId].emplace_back(MakeIntrusive<TBatch>(std::move(batch)));
             };
         }
         Batchers.clear();
         return result;
     }
 
-    TString FlushBatch(ui64 shardId) override {
+    IBatchPtr FlushBatch(ui64 shardId) override {
         if (!Batchers.contains(shardId)) {
             return {};
         }
         auto& batcher = Batchers.at(shardId);
-        return ExtractNextBatch(batcher, false);
+        return MakeIntrusive<TBatch>(ExtractNextBatch(batcher, false));
     }
 
     const THashSet<ui64>& GetShardIds() const override {
@@ -436,6 +501,10 @@ private:
     bool Closed = false;
 };
 
+}
+
+bool IPayloadSerializer::IBatch::IsEmpty() const {
+    return GetMemory() == 0;
 }
 
 IPayloadSerializerPtr CreateColumnShardPayloadSerializer(

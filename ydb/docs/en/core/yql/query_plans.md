@@ -73,7 +73,7 @@ Grouping rows by the values of the specified columns or expressions.
 
 Attribute | Description
 --- | ---
-GroupBy | columns used for aggregation
+GroupBy | columns or expressions used for aggregation
 Aggregation | aggregate function
 
 #### Sort

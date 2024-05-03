@@ -10,6 +10,7 @@
 #include <ydb/library/yql/public/udf/udf_validate.h>
 #include <ydb/library/yql/core/credentials/yql_credentials.h>
 #include <ydb/library/yql/core/url_lister/interface/url_lister_manager.h>
+#include <ydb/library/yql/core/qplayer/storage/interface/yql_qstorage.h>
 #include <ydb/library/yql/ast/yql_expr.h>
 
 #include <library/cpp/yson/node/node.h>
@@ -84,6 +85,10 @@ public:
         Credentials = std::move(credentials);
     }
 
+    void SetQContext(const TQContext& qContext) {
+        QContext = qContext;
+    }
+
     void RegisterPackage(const TString& package) override;
     bool SetPackageDefaultVersion(const TString& package, ui32 version) override;
     const TExportTable* GetModule(const TString& module) const override;
@@ -111,6 +116,7 @@ private:
     IUrlLoader::TPtr UrlLoader;
     TMaybe<NYT::TNode> Parameters;
     TCredentials::TPtr Credentials;
+    TQContext QContext;
     TExprContext LibsContext;
     TSet<TString> KnownPackages;
     THashMap<TString, ui32> PackageVersions;

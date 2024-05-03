@@ -246,4 +246,30 @@ Y_UNIT_TEST_SUITE(QPlayerTests) {
         runSettings.StaticFiles["a.sql"] = "$f = ($x)->($x+1); export $f";
         CheckProgram(s, runSettings);
     }
+
+    Y_UNIT_TEST(Evaluation) {
+        auto s = "$c = select count(*) from plato.Input; select EvaluateExpr($c)";
+        WithTables([&](const auto& tables) {
+            TRunSettings runSettings;
+            runSettings.Tables = tables;
+            CheckProgram(s, runSettings);
+        });
+    }
+
+    Y_UNIT_TEST(WalkFolders) {
+        auto s = R"(
+$postHandler = ($nodes, $state, $level) -> {
+    $tables = ListFilter($nodes, ($x)->($x.Type = "table"));
+    return ListExtend($state, ListExtract($tables, "Path"));
+};
+
+SELECT State FROM plato.WalkFolders(``, $postHandler AS PostHandler);
+    )";
+
+        WithTables([&](const auto& tables) {
+            TRunSettings runSettings;
+            runSettings.Tables = tables;
+            CheckProgram(s, runSettings);
+        });
+    }
 }

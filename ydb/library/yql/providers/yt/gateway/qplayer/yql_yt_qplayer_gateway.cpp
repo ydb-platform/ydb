@@ -21,6 +21,7 @@ namespace {
 const TString YtGateway_CanonizePaths = "YtGateway_CanonizePaths";
 const TString YtGateway_GetTableInfo = "YtGateway_GetTableInfo";
 const TString YtGateway_GetFolder = "YtGateway_GetFolder";
+const TString YtGateway_GetFolders = "YtGateway_GetFolders";
 
 TString MakeHash(const TString& str) {
     SHA256_CTX sha;
@@ -131,7 +132,7 @@ public:
                     const auto& canon = res.Data[i];
                     valueNode("Path", canon.Path);
                     if (canon.Columns) {
-                        NYT::TNode columnsNode;
+                        NYT::TNode columnsNode = NYT::TNode::CreateList();
                         for (const auto& c : *canon.Columns) {
                             columnsNode.Add(NYT::TNode(c));
                         }
@@ -140,7 +141,7 @@ public:
                     }
 
                     if (canon.Ranges) {
-                        NYT::TNode rangesNode;
+                        NYT::TNode rangesNode = NYT::TNode::CreateList();
                         for (const auto& r : *canon.Ranges) {
                             NYT::TNode rangeNode;
                             NYT::TNodeBuilder builder(&rangeNode);
@@ -299,17 +300,62 @@ public:
     }
 
     static TString MakeGetFolderKey(const TFolderOptions& options) {
-        auto attrNode = NYT::TNode();
+        auto attrNode = NYT::TNode::CreateList();
         for (const auto& attr : options.Attributes()) {
             attrNode.Add(NYT::TNode(attr));
         }
 
         auto keyNode = NYT::TNode()
-            ("Cluster", NYT::TNode(options.Cluster()))
-            ("Prefix", NYT::TNode(options.Prefix()))
+            ("Cluster", options.Cluster())
+            ("Prefix", options.Prefix())
             ("Attributes", attrNode);
 
         return MakeHash(NYT::NodeToCanonicalYsonString(keyNode, NYT::NYson::EYsonFormat::Binary));
+    }
+
+    static TString MakeGetFoldersKey(const TBatchFolderOptions& options) {
+        auto itemsNode = NYT::TNode();
+        TMap<TString, size_t> order;
+        for (size_t i = 0; i < options.Folders().size(); ++i) {
+            order[options.Folders()[i].Prefix] = i;
+        }
+
+        for (const auto& o : order) {
+            const auto& folder = options.Folders()[o.second];
+            auto attrNode = NYT::TNode::CreateList();
+            for (const auto& attr : folder.AttrKeys) {
+                attrNode.Add(NYT::TNode(attr));
+            }
+
+            itemsNode.Add(NYT::TNode()
+                ("Prefix", folder.Prefix)
+                ("Attrs", attrNode));
+        }
+
+        auto keyNode = NYT::TNode()
+            ("Cluster", options.Cluster())
+            ("Items", itemsNode);
+
+        return MakeHash(NYT::NodeToCanonicalYsonString(keyNode, NYT::NYson::EYsonFormat::Binary));
+    }    
+
+    template <typename T>
+    static NYT::TNode SerializeFolderItem(const T& item) {
+        return NYT::TNode()
+            ("Path", item.Path)
+            ("Type", item.Type)
+            ("Attributes", item.Attributes);
+    }
+
+    template <typename T>
+    static void DeserializeFolderItem(T& item, const NYT::TNode& node) {
+        item.Path = node["Path"].AsString();
+        item.Type = node["Type"].AsString();
+        if constexpr (std::is_same_v<decltype(item.Attributes), TString>) {
+            item.Attributes = node["Attributes"].AsString();
+        } else {
+            item.Attributes = node["Attributes"];
+        }
     }
 
     NThreading::TFuture<TFolderResult> GetFolder(TFolderOptions&& options) final {
@@ -332,9 +378,7 @@ public:
                 TVector<TFolderResult::TFolderItem> items;
                 for (const auto& child : valueNode.AsList()) {
                     TFolderResult::TFolderItem item;
-                    item.Path = child["Path"].AsString();
-                    item.Type = child["Type"].AsString();
-                    item.Attributes = child["Attributes"].AsString();
+                    DeserializeFolderItem(item, child);
                     items.push_back(item);
                 }
 
@@ -362,14 +406,10 @@ public:
                     const auto& file = std::get<TFileLinkPtr>(res.ItemsOrFileLink);
                     valueNode = NYT::TNode(TFileInput(file->GetPath()).ReadAll());
                 } else {
+                    valueNode = NYT::TNode::CreateList();
                     const auto& items = std::get<TVector<TFolderResult::TFolderItem>>(res.ItemsOrFileLink);
                     for (const auto& item: items) {
-                        valueNode.Add(
-                            NYT::TNode()
-                                ("Path", NYT::TNode(item.Path))
-                                ("Type", NYT::TNode(item.Type))
-                                ("Attributes", NYT::TNode(item.Attributes))
-                        );
+                        valueNode.Add(SerializeFolderItem(item));
                     }
                 }
 
@@ -388,10 +428,45 @@ public:
 
     NThreading::TFuture<TBatchFolderResult> GetFolders(TBatchFolderOptions&& options) final {
         if (QContext_.CanRead()) {
-            throw yexception() << "Can't replay GetFolders";
+            TBatchFolderResult res;
+            res.SetSuccess();
+            const auto& key = MakeGetFoldersKey(options);
+            auto item = QContext_.GetReader()->Get({YtGateway_GetFolders, key}).GetValueSync();
+            if (!item) {
+                throw yexception() << "Missing replay data";
+            }
+
+            auto valueNode = NYT::NodeFromYsonString(TStringBuf(item->Value));
+            for (const auto& child : valueNode.AsList()) {
+                TBatchFolderResult::TFolderItem folderItem;
+                DeserializeFolderItem(folderItem, child);
+                res.Items.push_back(folderItem);
+            }
+
+            return NThreading::MakeFuture<TBatchFolderResult>(res);
         }
 
-        return Inner_->GetFolders(std::move(options));
+        auto optionsDup = options;
+        return Inner_->GetFolders(std::move(options))
+            .Subscribe([optionsDup, qContext = QContext_](const NThreading::TFuture<TBatchFolderResult>& future) {
+                if (!qContext.CanWrite() || future.HasException()) {
+                    return;
+                }
+
+                const auto& res = future.GetValueSync();
+                if (!res.Success()) {
+                    return;
+                }
+
+                const auto& key = MakeGetFoldersKey(optionsDup);
+                NYT::TNode valueNode = NYT::TNode::CreateList();
+                for (const auto& item : res.Items) {
+                    valueNode.Add(SerializeFolderItem(item));
+                }
+
+                auto value = NYT::NodeToYsonString(valueNode, NYT::NYson::EYsonFormat::Binary);
+                qContext.GetWriter()->Put({YtGateway_GetFolders, key}, value).GetValueSync();
+        });
     }
 
     NThreading::TFuture<TResOrPullResult> ResOrPull(const TExprNode::TPtr& node, TExprContext& ctx, TResOrPullOptions&& options) final {

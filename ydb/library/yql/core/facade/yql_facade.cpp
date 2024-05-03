@@ -1688,6 +1688,7 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     }
     typeAnnotationContext->ArrowResolver = ArrowResolver_;
     typeAnnotationContext->FileStorage = FileStorage_;
+    typeAnnotationContext->QContext = QContext_;
     typeAnnotationContext->HiddenMode = HiddenMode_;
 
     if (UdfIndex_ && UdfIndexPackageSet_) {

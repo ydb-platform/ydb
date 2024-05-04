@@ -1065,7 +1065,7 @@ int RunMain(int argc, const char* argv[])
         SerializeToTextFormat(snapshot, *output.Get());
     }
 
-    if (res.Has("capture")) {
+    if (result == 0 && res.Has("capture")) {
         qContext.GetWriter()->Commit().GetValueSync();
     }
 

@@ -12,9 +12,19 @@ using namespace NYql;
 using namespace NYql::NUdf;
 
 
-SIMPLE_STRICT_UDF(TToBinaryString, char*(TAutoMap<TListType<float>>)) {
+SIMPLE_STRICT_UDF_WITH_OPTIONAL_ARGS(TToBinaryString, char*(TAutoMap<TListType<float>>, TOptional<const char*>), 1) {
     const TUnboxedValuePod x = args[0];
-    const EFormat format = EFormat::FloatVector; // will be taken from args in future
+
+    EFormat format = EFormat::FloatVector;
+    if(args[1]) {
+        const TStringRef formatStr = args[1].AsStringRef();
+        if (formatStr == "float")
+            format = EFormat::FloatVector;
+        else if (formatStr == "bit")
+            format = EFormat::BitVector;
+        else
+            return {};
+    }
     
     return TSerializerFacade::Serialize(format, valueBuilder, x);
 }
@@ -64,12 +74,6 @@ SIMPLE_STRICT_UDF(TCosineDistance, TOptional<float>(TAutoMap<const char*>, TAuto
     const auto [ll, lr, rr] = TriWayDotProduct(vector1.data(), vector2.data(), vector1.size());
     const float cosine = lr / std::sqrt(ll * rr);
     return TUnboxedValuePod{1 - cosine};
-}
-
-SIMPLE_STRICT_UDF(TToBitString, char*(TAutoMap<TListType<float>>)) {
-    const TUnboxedValuePod x = args[0];
-    
-    return TBitVectorSerializer::Serialize(valueBuilder, x);
 }
 
 ui16 GetManhattenDistance(const TArrayRef<const ui64> vector1, const TArrayRef<const ui64> vector2) {
@@ -128,7 +132,6 @@ SIMPLE_MODULE(TKnnModule,
     TInnerProductSimilarity,
     TCosineSimilarity,
     TCosineDistance,
-    TToBitString,
     TBitIndexes
     )
 

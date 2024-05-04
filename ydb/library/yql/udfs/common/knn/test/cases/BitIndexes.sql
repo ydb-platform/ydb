@@ -10,7 +10,6 @@ select $negative_and_positive;
 $negative_and_positive_striped = Knn::ToBinaryString(ListFlatten(ListReplicate([-1.0f, 1.0f], 32)), "bit");
 select $negative_and_positive_striped;
 
-
 --bit indexes
 $stored_vector = Knn::ToBinaryString(ListFromRange(-319.0f, 640.1f), "bit");
 $indexes = Knn::BitIndexes($positive, $stored_vector, 10, 1000, 0);

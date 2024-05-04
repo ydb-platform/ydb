@@ -38,5 +38,10 @@
         {
             "uri": "file://test.test_ListSerialization_/results.txt"
         }
+    ],
+    "test.test[ManhattenDistance]": [
+        {
+            "uri": "file://test.test_ManhattenDistance_/results.txt"
+        }
     ]
 }

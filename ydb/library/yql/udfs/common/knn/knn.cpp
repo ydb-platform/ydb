@@ -77,14 +77,27 @@ SIMPLE_STRICT_UDF(TCosineDistance, TOptional<float>(TAutoMap<const char*>, TAuto
 }
 
 ui16 GetManhattenDistance(const TArrayRef<const ui64> vector1, const TArrayRef<const ui64> vector2) {
-    Y_ABORT_UNLESS(vector1.size() == vector2.size());
-    Y_ABORT_UNLESS(vector1.size() <= UINT16_MAX);
+    Y_DEBUG_ABORT_UNLESS(vector1.size() == vector2.size());
+    Y_DEBUG_ABORT_UNLESS(vector1.size() <= UINT16_MAX);
 
     ui16 ret = 0;
     for (size_t i = 0; i < vector1.size(); ++i) {
         ret += __builtin_popcountll(vector1[i] ^ vector2[i]);
     }
     return ret;
+}
+
+SIMPLE_STRICT_UDF(TManhattenDistance, TOptional<ui16>(TAutoMap<const char*>, TAutoMap<const char*>)) {
+    Y_UNUSED(valueBuilder);
+
+    const TArrayRef<const ui64> vector1 = TBitVectorSerializer::GetArray64(args[0].AsStringRef()); 
+    const TArrayRef<const ui64> vector2 = TBitVectorSerializer::GetArray64(args[1].AsStringRef()); 
+
+    if (vector1.size() != vector2.size() || vector1.empty() || vector1.size() > UINT16_MAX)
+        return {};    
+
+    const ui16 ret = GetManhattenDistance(vector1, vector2);
+    return TUnboxedValuePod{ret};
 }
 
 SIMPLE_STRICT_UDF(TBitIndexes, TOptional<TListType<ui64>>(TAutoMap<const char*>, TAutoMap<const char*>, ui16, ui16, ui64)) {
@@ -132,6 +145,7 @@ SIMPLE_MODULE(TKnnModule,
     TInnerProductSimilarity,
     TCosineSimilarity,
     TCosineDistance,
+    TManhattenDistance,
     TBitIndexes
     )
 

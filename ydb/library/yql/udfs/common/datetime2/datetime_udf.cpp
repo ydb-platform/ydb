@@ -519,6 +519,7 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
             builder.UserType(userType);
             builder.Args()->Add<TUserDataType>().Flags(ICallablePayload::TArgumentFlags::AutoMap);
             builder.Returns(builder.Resource(TMResourceName));
+            builder.IsStrict();
 
             if (!typesOnly) {
                 builder.Implementation(new TSplit<TUserDataType>(builder.GetSourcePosition()));

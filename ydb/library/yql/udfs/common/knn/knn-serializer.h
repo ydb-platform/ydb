@@ -1,24 +1,16 @@
 #pragma once
 
+#include "knn-defines.h"
 #include "knn-enumerator.h"
 
 #include <ydb/library/yql/public/udf/udf_helpers.h>
 
-#include <library/cpp/dot_product/dot_product.h>
 #include <util/generic/array_ref.h>
 #include <util/generic/buffer.h>
 #include <util/stream/format.h>
 
 using namespace NYql;
 using namespace NYql::NUdf;
-
-enum EFormat : ui8 {
-    FloatVector = 1,        // 4-byte per element
-    FloatByteVector = 2,    // 1-byte per element
-    BitVector = 10          // 1-bit per element
-};
-
-static constexpr size_t HeaderLen = sizeof(ui8);
 
 template<typename T, EFormat Format>
 class TKnnVectorSerializer {
@@ -53,7 +45,7 @@ public:
         const char* buf = str.Data();
         const size_t len = str.Size() - HeaderLen;
 
-        if (len % sizeof(T) != 0)    
+        if (Y_UNLIKELY(len % sizeof(T) != 0))
             return {};
         
         const ui32 count = len / sizeof(T);
@@ -64,7 +56,7 @@ public:
         TMemoryInput inStr(buf, len);
         for (ui32 i = 0; i < count; ++i) {
             T element;
-            if (inStr.Read(&element, sizeof(T)) != sizeof(T))
+            if (Y_UNLIKELY(inStr.Read(&element, sizeof(T)) != sizeof(T)))
                 return {};
             *items++ = TUnboxedValuePod{static_cast<float>(element)};
         }
@@ -76,7 +68,7 @@ public:
         const char* buf = str.Data();
         const size_t len = str.Size() - HeaderLen;
 
-        if (len % sizeof(T) != 0)    
+        if (Y_UNLIKELY(len % sizeof(T) != 0))
             return {};
         
         const ui32 count = len / sizeof(T);
@@ -111,11 +103,11 @@ public:
             });
 
             // only vector sizes divisible by 64 are supported 
-            if (filledBits)
+            if (Y_UNLIKELY(filledBits))
                 return false;
             
             // max vector lenght is 32767
-            if (lenght > UINT16_MAX)
+            if (Y_UNLIKELY(lenght > UINT16_MAX))
                 return false;
 
             const EFormat format = EFormat::BitVector;
@@ -129,7 +121,7 @@ public:
             auto strRef = str.AsStringRef();
             TMemoryOutput memoryOutput(strRef.Data(), strRef.Size());
 
-            if (!serialize(memoryOutput))
+            if (Y_UNLIKELY(!serialize(memoryOutput)))
                 return {};
             
             return str;
@@ -137,7 +129,7 @@ public:
             TString str;
             TStringOutput stringOutput(str);
 
-            if (!serialize(stringOutput))
+            if (Y_UNLIKELY(!serialize(stringOutput)))
                 return {};
 
             return valueBuilder->NewString(str);
@@ -184,76 +176,9 @@ public:
         }
     }
 
-    static std::optional<float> DotProduct(const TStringRef& str1, const TStringRef& str2) {
-        const ui8 format1 = str1.Data()[str1.Size() - HeaderLen];
-        const ui8 format2 = str2.Data()[str2.Size() - HeaderLen];
-
-        if (Y_UNLIKELY(format1 != format2))
-            return {};
-
-        switch (format1) {
-            case EFormat::FloatVector: {
-                const TArrayRef<const float> vector1 = GetArray<float>(str1); 
-                const TArrayRef<const float> vector2 = GetArray<float>(str2); 
-
-                if (vector1.size() != vector2.size() || vector1.empty() || vector2.empty())
-                    return {};
-
-                return ::DotProduct(vector1.data(), vector2.data(), vector1.size());
-            }
-            case EFormat::FloatByteVector: {
-                const TArrayRef<const ui8> vector1 = GetArray<ui8>(str1); 
-                const TArrayRef<const ui8> vector2 = GetArray<ui8>(str2); 
-
-                if (vector1.size() != vector2.size() || vector1.empty() || vector2.empty())
-                    return {};
-
-                return ::DotProduct(vector1.data(), vector2.data(), vector1.size());
-            }
-            default:
-                return {};
-        }
-    }
-
-    static std::optional<TTriWayDotProduct<float>> TriWayDotProduct(const TStringRef& str1, const TStringRef& str2) {
-        const ui8 format1 = str1.Data()[str1.Size() - HeaderLen];
-        const ui8 format2 = str2.Data()[str2.Size() - HeaderLen];
-
-        if (Y_UNLIKELY(format1 != format2))
-            return {};
-
-        switch (format1) {
-            case EFormat::FloatVector: {
-                const TArrayRef<const float> vector1 = GetArray<float>(str1); 
-                const TArrayRef<const float> vector2 = GetArray<float>(str2); 
-
-                if (vector1.size() != vector2.size() || vector1.empty() || vector2.empty())
-                    return {};
-
-                return ::TriWayDotProduct(vector1.data(), vector2.data(), vector1.size());
-            }
-            case EFormat::FloatByteVector: {
-                const TArrayRef<const ui8> vector1 = GetArray<ui8>(str1); 
-                const TArrayRef<const ui8> vector2 = GetArray<ui8>(str2); 
-
-                if (vector1.size() != vector2.size() || vector1.empty() || vector2.empty())
-                    return {};
-
-                TTriWayDotProduct<float> result;
-                result.LL = ::DotProduct(vector1.data(), vector1.data(), vector1.size());
-                result.LR = ::DotProduct(vector1.data(), vector2.data(), vector1.size());
-                result.RR = ::DotProduct(vector2.data(), vector2.data(), vector1.size());
-                return result;
-            }
-            default:
-                return {};
-        }
-    }
-
-private:
     template<typename T>
     static const TArrayRef<const T> GetArray(const TStringRef& str) {
-        if (str.Size() == 0)
+        if (Y_UNLIKELY(str.Size() == 0))
             return {};
 
         const ui8 format = str.Data()[str.Size() - HeaderLen];

@@ -1,5 +1,6 @@
 #include "knn-enumerator.h"
 #include "knn-serializer.h"
+#include "knn-distance.h"
 
 #include <ydb/library/yql/public/udf/udf_helpers.h>
 
@@ -39,7 +40,7 @@ SIMPLE_STRICT_UDF(TFromBinaryString, TOptional<TListType<float>>(TAutoMap<const 
 SIMPLE_STRICT_UDF(TInnerProductSimilarity, TOptional<float>(TAutoMap<const char*>, TAutoMap<const char*>)) {
     Y_UNUSED(valueBuilder);
 
-    const auto ret = TKnnSerializerFacade::DotProduct(args[0].AsStringRef(), args[1].AsStringRef());
+    const auto ret = KnnDotProduct(args[0].AsStringRef(), args[1].AsStringRef());
     if (Y_UNLIKELY(!ret))
         return {};
 
@@ -49,7 +50,7 @@ SIMPLE_STRICT_UDF(TInnerProductSimilarity, TOptional<float>(TAutoMap<const char*
 SIMPLE_STRICT_UDF(TCosineSimilarity, TOptional<float>(TAutoMap<const char*>, TAutoMap<const char*>)) {
     Y_UNUSED(valueBuilder);
 
-    const auto ret = TKnnSerializerFacade::TriWayDotProduct(args[0].AsStringRef(), args[1].AsStringRef());
+    const auto ret = KnnTriWayDotProduct(args[0].AsStringRef(), args[1].AsStringRef());
     if (Y_UNLIKELY(!ret))
         return {};
 
@@ -61,7 +62,7 @@ SIMPLE_STRICT_UDF(TCosineSimilarity, TOptional<float>(TAutoMap<const char*>, TAu
 SIMPLE_STRICT_UDF(TCosineDistance, TOptional<float>(TAutoMap<const char*>, TAutoMap<const char*>)) {
     Y_UNUSED(valueBuilder);
 
-    const auto ret = TKnnSerializerFacade::TriWayDotProduct(args[0].AsStringRef(), args[1].AsStringRef());
+    const auto ret = KnnTriWayDotProduct(args[0].AsStringRef(), args[1].AsStringRef());
     if (Y_UNLIKELY(!ret))
         return {};
 
@@ -70,28 +71,16 @@ SIMPLE_STRICT_UDF(TCosineDistance, TOptional<float>(TAutoMap<const char*>, TAuto
     return TUnboxedValuePod{1 - cosine};
 }
 
-ui16 GetManhattenDistance(const TArrayRef<const ui64> vector1, const TArrayRef<const ui64> vector2) {
-    Y_DEBUG_ABORT_UNLESS(vector1.size() == vector2.size());
-    Y_DEBUG_ABORT_UNLESS(vector1.size() <= UINT16_MAX);
 
-    ui16 ret = 0;
-    for (size_t i = 0; i < vector1.size(); ++i) {
-        ret += __builtin_popcountll(vector1[i] ^ vector2[i]);
-    }
-    return ret;
-}
 
 SIMPLE_STRICT_UDF(TManhattenDistance, TOptional<ui16>(TAutoMap<const char*>, TAutoMap<const char*>)) {
     Y_UNUSED(valueBuilder);
 
-    const TArrayRef<const ui64> vector1 = TKnnBitVectorSerializer::GetArray64(args[0].AsStringRef()); 
-    const TArrayRef<const ui64> vector2 = TKnnBitVectorSerializer::GetArray64(args[1].AsStringRef()); 
+    const auto ret = KnnManhattenDistance(args[0].AsStringRef(), args[1].AsStringRef());
+    if (Y_UNLIKELY(!ret))
+        return {};
 
-    if (vector1.size() != vector2.size() || vector1.empty() || vector1.size() > UINT16_MAX)
-        return {};    
-
-    const ui16 ret = GetManhattenDistance(vector1, vector2);
-    return TUnboxedValuePod{ret};
+    return TUnboxedValuePod{ret.value()};
 }
 
 SIMPLE_STRICT_UDF(TBitIndexes, TOptional<TListType<ui64>>(TAutoMap<const char*>, TAutoMap<const char*>, ui16, ui16, ui64)) {
@@ -103,7 +92,7 @@ SIMPLE_STRICT_UDF(TBitIndexes, TOptional<TListType<ui64>>(TAutoMap<const char*>,
     const ui16 distanceThreshold = args[3].Get<ui16>();
     const ui64 seed = args[4].Get<ui64>();
 
-    if (targetVector.empty() || storedVector.empty() || storedVector.size() % targetVector.size() != 0)
+    if (Y_UNLIKELY(targetVector.empty() || storedVector.empty() || storedVector.size() % targetVector.size() != 0))
         return {};    
 
     constexpr ui16 MAX_INDEXES = 128;
@@ -114,7 +103,7 @@ SIMPLE_STRICT_UDF(TBitIndexes, TOptional<TListType<ui64>>(TAutoMap<const char*>,
     const ui32 totalVectors = storedVector.size() / targetVector.size();
     for (ui32 index = 0; index < totalVectors; ++index) {
         const TArrayRef<const ui64> nextVector = {storedVector.data() + index * targetVector.size(), targetVector.size()};
-        ui32 distance = GetManhattenDistance(targetVector, nextVector);
+        ui32 distance = KnnManhattenDistance(targetVector, nextVector);
         if (distance > distanceThreshold)
             continue;
         heap.push({distance, index});

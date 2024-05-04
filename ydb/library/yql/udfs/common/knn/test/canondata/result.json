@@ -24,6 +24,11 @@
             "uri": "file://test.test_DeserializationError_/results.txt"
         }
     ],
+    "test.test[FloatByteSerialization]": [
+        {
+            "uri": "file://test.test_FloatByteSerialization_/results.txt"
+        }
+    ],
     "test.test[InnerProductSimilarity]": [
         {
             "uri": "file://test.test_InnerProductSimilarity_/results.txt"

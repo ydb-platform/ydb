@@ -20,7 +20,6 @@
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/core/services/yql_transform_pipeline.h>
 #include <ydb/library/yql/core/yql_opt_proposed_by_data.h>
-#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
 
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 

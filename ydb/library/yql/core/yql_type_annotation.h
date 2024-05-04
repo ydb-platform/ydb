@@ -268,6 +268,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     TMaybe<bool> PgEmitAggApply;
     IArrowResolver::TPtr ArrowResolver;
     TFileStoragePtr FileStorage;
+    TQContext QContext;
     ECostBasedOptimizerType CostBasedOptimizer = ECostBasedOptimizerType::Disable;
     bool MatchRecognize = false;
     EMatchRecognizeStreamingMode MatchRecognizeStreaming = EMatchRecognizeStreamingMode::Force;

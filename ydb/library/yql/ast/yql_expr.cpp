@@ -1708,6 +1708,7 @@ namespace {
         size_t Order = 0ULL;
         bool RefAtoms = false;
         bool AllowFreeArgs = false;
+        bool NormalizeAtomFlags = false;
         TNodeMap<size_t> FreeArgs;
         std::unique_ptr<TMemoryPool> Pool;
         std::vector<TFrameContext> Frames;
@@ -1832,10 +1833,11 @@ namespace {
             case TExprNode::Atom:
                 {
                     auto quote = AnnotateAstNode(&TAstNode::QuoteAtom, nullptr, annotationFlags, pool, ctx.RefAtoms);
+                    auto flags = ctx.NormalizeAtomFlags ? TNodeFlags::ArbitraryContent : node.Flags();
                     auto content = AnnotateAstNode(
                         ctx.RefAtoms ?
-                            TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node.Pos()), node.Content(), pool, node.Flags()) :
-                            TAstNode::NewAtom(ctx.Expr.GetPosition(node.Pos()), node.Content(), pool, node.Flags()),
+                            TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node.Pos()), node.Content(), pool, flags) :
+                            TAstNode::NewAtom(ctx.Expr.GetPosition(node.Pos()), node.Content(), pool, flags),
                         &node, annotationFlags, pool, ctx.RefAtoms);
 
                     res = TAstNode::NewList(ctx.Expr.GetPosition(node.Pos()), pool, quote, content);
@@ -2712,6 +2714,7 @@ TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, c
     TVisitNodeContext ctx(exprContext);
     ctx.RefAtoms = settings.RefAtoms;
     ctx.AllowFreeArgs = settings.AllowFreeArgs;
+    ctx.NormalizeAtomFlags = settings.NormalizeAtomFlags;
     ctx.Pool = std::make_unique<TMemoryPool>(4096);
     ctx.Frames.push_back(TFrameContext());
     ctx.CurrentFrame = &ctx.Frames.front();

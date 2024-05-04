@@ -25,12 +25,6 @@ static ui16 KnnManhattenDistance(const TArrayRef<const ui64> vector1, const TArr
 }
 
 static std::optional<ui16> KnnManhattenDistance(const TStringRef& str1, const TStringRef& str2) {
-    const ui8 format1 = str1.Data()[str1.Size() - HeaderLen];
-    const ui8 format2 = str2.Data()[str2.Size() - HeaderLen];
-
-    if (Y_UNLIKELY(format1 != format2 || format1 != EFormat::BitVector))
-        return {};
-
     const TArrayRef<const ui64> vector1 = TKnnBitVectorSerializer::GetArray64(str1); 
     const TArrayRef<const ui64> vector2 = TKnnBitVectorSerializer::GetArray64(str2); 
 

@@ -2685,9 +2685,9 @@
     ],
     "test.test[window-leading/aggregations--Debug]": [
         {
-            "checksum": "b927edc1cfaadc124d14fd54aaeb63f5",
-            "size": 7370,
-            "uri": "https://{canondata_backend}/1923547/3632e3870cc25d80ec68458d3729f32c8b6c30f3/resource.tar.gz#test.test_window-leading_aggregations--Debug_/opt.yql"
+            "checksum": "db720bf9ce80d44e6c9ab71acd8acc35",
+            "size": 7349,
+            "uri": "https://{canondata_backend}/1600758/1bdefc776c09f01689112d86cd62eb2708c2f27f/resource.tar.gz#test.test_window-leading_aggregations--Debug_/opt.yql"
         }
     ],
     "test.test[window-leading/aggregations--Plan]": [
@@ -2727,9 +2727,9 @@
     ],
     "test.test[window-win_by_all_percentile_interval-default.txt-Debug]": [
         {
-            "checksum": "1da7970269498a0e3200abfff73a8282",
-            "size": 5717,
-            "uri": "https://{canondata_backend}/937458/c1365f21ada77805f3ca6623e256eeadb801d609/resource.tar.gz#test.test_window-win_by_all_percentile_interval-default.txt-Debug_/opt.yql"
+            "checksum": "7358664e60d9b60d828f34edfc7eaeab",
+            "size": 5693,
+            "uri": "https://{canondata_backend}/1600758/1bdefc776c09f01689112d86cd62eb2708c2f27f/resource.tar.gz#test.test_window-win_by_all_percentile_interval-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[window-win_by_all_percentile_interval-default.txt-Plan]": [
@@ -2748,9 +2748,9 @@
     ],
     "test.test[window-win_func_aggr_stat--Debug]": [
         {
-            "checksum": "ef887047ea7823dd779c4074c90c5c0c",
-            "size": 5298,
-            "uri": "https://{canondata_backend}/937458/c1365f21ada77805f3ca6623e256eeadb801d609/resource.tar.gz#test.test_window-win_func_aggr_stat--Debug_/opt.yql"
+            "checksum": "272bc6ff31e2f1dbde7bc39b378a4fea",
+            "size": 5295,
+            "uri": "https://{canondata_backend}/1600758/1bdefc776c09f01689112d86cd62eb2708c2f27f/resource.tar.gz#test.test_window-win_func_aggr_stat--Debug_/opt.yql"
         }
     ],
     "test.test[window-win_func_aggr_stat--Plan]": [

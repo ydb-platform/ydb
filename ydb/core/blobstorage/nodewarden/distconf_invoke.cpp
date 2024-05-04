@@ -176,9 +176,15 @@ namespace NKikimr::NStorage {
             }
 
             bool found = false;
-            const ui32 groupId = cmd.GetVDiskId().GetGroupID();
+            const TVDiskID vdiskId = VDiskIDFromVDiskID(cmd.GetVDiskId());
             for (const auto& group : Self->StorageConfig->GetBlobStorageConfig().GetServiceSet().GetGroups()) {
-                if (group.GetGroupID() == groupId) {
+                if (group.GetGroupID() == vdiskId.GroupID) {
+                    if (group.GetGroupGeneration() != vdiskId.GroupGeneration) {
+                        return FinishWithError(TResult::ERROR, TStringBuilder() << "group generation mismatch"
+                            << " GroupId# " << group.GetGroupID()
+                            << " Generation# " << group.GetGroupGeneration()
+                            << " VDiskId# " << vdiskId);
+                    }
                     found = true;
                     if (!cmd.GetIgnoreGroupFailModelChecks()) {
                         IssueVStatusQueries(group);
@@ -187,7 +193,7 @@ namespace NKikimr::NStorage {
                 }
             }
             if (!found) {
-                return FinishWithError(TResult::ERROR, TStringBuilder() << "GroupId# " << groupId << " not found");
+                return FinishWithError(TResult::ERROR, TStringBuilder() << "GroupId# " << vdiskId.GroupID << " not found");
             }
 
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryBaseConfig);

@@ -73,10 +73,10 @@ SIMPLE_STRICT_UDF(TCosineDistance, TOptional<float>(TAutoMap<const char*>, TAuto
 
 
 
-SIMPLE_STRICT_UDF(TManhattenDistance, TOptional<ui16>(TAutoMap<const char*>, TAutoMap<const char*>)) {
+SIMPLE_STRICT_UDF(TManhattanDistance, TOptional<ui16>(TAutoMap<const char*>, TAutoMap<const char*>)) {
     Y_UNUSED(valueBuilder);
 
-    const auto ret = KnnManhattenDistance(args[0].AsStringRef(), args[1].AsStringRef());
+    const auto ret = KnnManhattanDistance(args[0].AsStringRef(), args[1].AsStringRef());
     if (Y_UNLIKELY(!ret))
         return {};
 
@@ -103,7 +103,7 @@ SIMPLE_STRICT_UDF(TBitIndexes, TOptional<TListType<ui64>>(TAutoMap<const char*>,
     const ui32 totalVectors = storedVector.size() / targetVector.size();
     for (ui32 index = 0; index < totalVectors; ++index) {
         const TArrayRef<const ui64> nextVector = {storedVector.data() + index * targetVector.size(), targetVector.size()};
-        ui32 distance = KnnManhattenDistance(targetVector, nextVector);
+        ui32 distance = KnnManhattanDistance(targetVector, nextVector);
         if (distance > distanceThreshold)
             continue;
         heap.push({distance, index});
@@ -128,7 +128,7 @@ SIMPLE_MODULE(TKnnModule,
     TInnerProductSimilarity,
     TCosineSimilarity,
     TCosineDistance,
-    TManhattenDistance,
+    TManhattanDistance,
     TBitIndexes
     )
 

@@ -44,9 +44,9 @@
             "uri": "file://test.test_ListSerialization_/results.txt"
         }
     ],
-    "test.test[ManhattenDistance]": [
+    "test.test[ManhattanDistance]": [
         {
-            "uri": "file://test.test_ManhattenDistance_/results.txt"
+            "uri": "file://test.test_ManhattanDistance_/results.txt"
         }
     ]
 }

@@ -13,7 +13,7 @@
 using namespace NYql;
 using namespace NYql::NUdf;
 
-static ui16 KnnManhattenDistance(const TArrayRef<const ui64> vector1, const TArrayRef<const ui64> vector2) {
+static ui16 KnnManhattanDistance(const TArrayRef<const ui64> vector1, const TArrayRef<const ui64> vector2) {
     Y_DEBUG_ABORT_UNLESS(vector1.size() == vector2.size());
     Y_DEBUG_ABORT_UNLESS(vector1.size() <= UINT16_MAX);
 
@@ -24,14 +24,14 @@ static ui16 KnnManhattenDistance(const TArrayRef<const ui64> vector1, const TArr
     return ret;
 }
 
-static std::optional<ui16> KnnManhattenDistance(const TStringRef& str1, const TStringRef& str2) {
+static std::optional<ui16> KnnManhattanDistance(const TStringRef& str1, const TStringRef& str2) {
     const TArrayRef<const ui64> vector1 = TKnnBitVectorSerializer::GetArray64(str1); 
     const TArrayRef<const ui64> vector2 = TKnnBitVectorSerializer::GetArray64(str2); 
 
     if (Y_UNLIKELY(vector1.size() != vector2.size() || vector1.empty() || vector1.size() > UINT16_MAX))
         return {};   
 
-    return KnnManhattenDistance(vector1, vector2);
+    return KnnManhattanDistance(vector1, vector2);
 }
 
 static std::optional<float> KnnDotProduct(const TStringRef& str1, const TStringRef& str2) {

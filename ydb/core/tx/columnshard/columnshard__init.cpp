@@ -275,6 +275,8 @@ bool TTxUpdateSchema::Execute(TTransactionContext& txc, const TActorContext&) {
             if (!NormalizerTasks.empty()) {
                 break;
             }
+            NIceDb::TNiceDb db(txc.DB);
+            Self->NormalizerController.UpdateControllerState(db);
             Self->NormalizerController.SwitchNormalizer();
         } else {
             Self->NormalizerController.GetCounters().OnNormalizerFails();

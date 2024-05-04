@@ -50,7 +50,7 @@ CREATE TABLE `fluent-bit/log` (
     `kubernetes`        JSON NULL,
 
     PRIMARY KEY (
-         `timestamp`, `input`, `datahash`
+         `timestamp`, `file`, `datahash`
     )
 )
 ```
@@ -65,7 +65,7 @@ CREATE TABLE `fluent-bit/log` (
 
 * message – непосредственно само сообщение лога
 
-* datahash – CityHash сообщение лога (для исключения перезаписи сообщений из одного и того же источника pipe и с одинаковым timestamp)
+* datahash – Хеш-код CityHash64, вычисленный над сообщением лога (требуется для исключения перезаписи сообщений из одного и того же источника и с одинаковой меткой времени)
 
 * message_parsed – структурированное сообщение лога, если его удалось разобрать с помощью механизма парсеров в fluent-bit
 

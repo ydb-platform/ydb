@@ -44,13 +44,13 @@ EFrameBoundsType FrameBoundsType(const TWindowFrameSettings& settings) {
     return EFrameBoundsType::GENERIC;
 }
 
-TExprNode::TPtr ReplaceLastLambdaArgWithStringLiteral(const TExprNode& lambda, TStringBuf literal, TExprContext& ctx) {
+TExprNode::TPtr ReplaceLastLambdaArgWithUnsignedLiteral(const TExprNode& lambda, ui32 literal, TExprContext& ctx) {
     YQL_ENSURE(lambda.IsLambda());
     TExprNodeList args = lambda.ChildPtr(0)->ChildrenList();
     YQL_ENSURE(!args.empty());
 
     auto literalNode = ctx.Builder(lambda.Pos())
-        .Callable("String")
+        .Callable("Uint32")
             .Atom(0, literal)
         .Seal()
         .Build();
@@ -220,11 +220,11 @@ TCalcOverWindowTraits ExtractCalcOverWindowTraits(const TExprNode::TPtr& frames,
                 YQL_ENSURE(rawTraits.OutputType);
 
                 if (initLambda->Child(0)->ChildrenSize() == 2) {
-                    initLambda = ReplaceLastLambdaArgWithStringLiteral(*initLambda, name, ctx);
+                    initLambda = ReplaceLastLambdaArgWithUnsignedLiteral(*initLambda, i, ctx);
                 }
 
                 if (updateLambda->Child(0)->ChildrenSize() == 3) {
-                    updateLambda = ReplaceLastLambdaArgWithStringLiteral(*updateLambda, name, ctx);
+                    updateLambda = ReplaceLastLambdaArgWithUnsignedLiteral(*updateLambda, i, ctx);
                 }
 
                 auto lambdaInputType = traits->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
@@ -1752,7 +1752,7 @@ TExprNode::TPtr BuildFold1Lambda(TPositionHandle pos, const TExprNode::TPtr& fra
                 case EFold1LambdaKind::INIT: {
                     auto lambda = traits->ChildPtr(1);
                     if (lambda->Child(0)->ChildrenSize() == 2) {
-                        lambda = ReplaceLastLambdaArgWithStringLiteral(*lambda, column->Content(), ctx);
+                        lambda = ReplaceLastLambdaArgWithUnsignedLiteral(*lambda, i, ctx);
                     }
                     lambda = ReplaceFirstLambdaArgWithCastStruct(*lambda, *rowInputType, ctx);
                     YQL_ENSURE(lambda->Child(0)->ChildrenSize() == 1);
@@ -1781,7 +1781,7 @@ TExprNode::TPtr BuildFold1Lambda(TPositionHandle pos, const TExprNode::TPtr& fra
                 case EFold1LambdaKind::UPDATE: {
                     auto lambda = traits->ChildPtr(2);
                     if (lambda->Child(0)->ChildrenSize() == 3) {
-                        lambda = ReplaceLastLambdaArgWithStringLiteral(*lambda, column->Content(), ctx);
+                        lambda = ReplaceLastLambdaArgWithUnsignedLiteral(*lambda, i, ctx);
                     }
                     lambda = ReplaceFirstLambdaArgWithCastStruct(*lambda, *rowInputType, ctx);
                     YQL_ENSURE(lambda->Child(0)->ChildrenSize() == 2);

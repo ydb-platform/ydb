@@ -2578,9 +2578,9 @@
     ],
     "test.test[window-generic/aggregations_before_current--Debug]": [
         {
-            "checksum": "7cbd7e87b710e5169c98f1ed5cedd003",
-            "size": 7259,
-            "uri": "https://{canondata_backend}/1809005/b5fd98a03b02a29344a248fc7017d3e834d02658/resource.tar.gz#test.test_window-generic_aggregations_before_current--Debug_/opt.yql_patched"
+            "checksum": "7c7d30f41f9eebf6bb05c901fd5b8dbf",
+            "size": 7196,
+            "uri": "https://{canondata_backend}/1937429/231d22d843eec78552d52ff0253bfa29e1a7a389/resource.tar.gz#test.test_window-generic_aggregations_before_current--Debug_/opt.yql_patched"
         }
     ],
     "test.test[window-generic/aggregations_before_current--Plan]": [
@@ -2600,9 +2600,9 @@
     ],
     "test.test[window-win_by_all_aggregate--Debug]": [
         {
-            "checksum": "86ba757e3c824f86e237a974a88e3a7c",
-            "size": 13944,
-            "uri": "https://{canondata_backend}/1937424/4b576a9145599276a930fecbf8d3c34578bbcfd5/resource.tar.gz#test.test_window-win_by_all_aggregate--Debug_/opt.yql_patched"
+            "checksum": "9231fe25dddc56f449276305484756c6",
+            "size": 13920,
+            "uri": "https://{canondata_backend}/1937429/231d22d843eec78552d52ff0253bfa29e1a7a389/resource.tar.gz#test.test_window-win_by_all_aggregate--Debug_/opt.yql_patched"
         }
     ],
     "test.test[window-win_by_all_aggregate--Plan]": [
@@ -2625,9 +2625,9 @@
     ],
     "test.test[window-win_func_aggr_hist--Debug]": [
         {
-            "checksum": "30be7c33f2602edf122fc9cc0dfa4441",
-            "size": 4906,
-            "uri": "https://{canondata_backend}/1871002/aabb588bc49c7d9d5fb52f9cabf8713d4f524b1a/resource.tar.gz#test.test_window-win_func_aggr_hist--Debug_/opt.yql_patched"
+            "checksum": "d2757ff2400ff565d0abf142a4ccf31b",
+            "size": 4897,
+            "uri": "https://{canondata_backend}/1937429/231d22d843eec78552d52ff0253bfa29e1a7a389/resource.tar.gz#test.test_window-win_func_aggr_hist--Debug_/opt.yql_patched"
         }
     ],
     "test.test[window-win_func_aggr_hist--Plan]": [

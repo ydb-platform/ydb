@@ -20,6 +20,7 @@
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/core/services/yql_transform_pipeline.h>
 #include <ydb/library/yql/core/yql_opt_proposed_by_data.h>
+#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
 
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 
@@ -317,17 +318,12 @@ private:
             .Add(CreateKqpStatisticsTransformer(OptimizeCtx, *typesCtx, Config, Pctx), "Statistics")
             .Build(false);
 
-        auto dqIntegrationPeephole = TTransformationPipeline(typesCtx);
-        for (auto* dqIntegration : GetUniqueIntegrations(*typesCtx)) {
-            dqIntegration->ConfigurePeepholePipeline(true, {}, &dqIntegrationPeephole);
-        }
-
         auto physicalPeepholeTransformer = TTransformationPipeline(typesCtx)
             .AddServiceTransformers()
             .Add(Log("PhysicalPeephole"), "LogPhysicalPeephole")
             .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config))
             .AddPostTypeAnnotation()
-            .Add(dqIntegrationPeephole.Build(), "DqIntegrationPeephole")
+            .Add(GetDqIntegrationPeepholeTransformer(false, typesCtx), "DqIntegrationPeephole")
             .Add(
                 CreateKqpTxsPeepholeTransformer(
                     CreateTypeAnnotationTransformer(

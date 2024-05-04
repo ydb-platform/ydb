@@ -2,6 +2,8 @@
 
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <ydb/library/yql/core/services/yql_transform_pipeline.h>
+#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
 
 namespace NYql {
 
@@ -454,21 +456,12 @@ TString PrintKqpStageOnly(const TDqStageBase& stage, TExprContext& ctx) {
     return KqpExprToPrettyString(TExprBase(newStage), ctx);
 }
 
-std::unordered_set<IDqIntegration*> GetUniqueIntegrations(TTypeAnnotationContext& typesCtx) {
-    std::unordered_set<IDqIntegration*> uniqueIntegrations;
-    for (const auto& provider : typesCtx.DataSources) {
-        if (auto* dqIntegration = provider->GetDqIntegration()) {
-            uniqueIntegrations.emplace(dqIntegration);
-        }
+TAutoPtr<IGraphTransformer> GetDqIntegrationPeepholeTransformer(bool beforeDqTransforms, TIntrusivePtr<TTypeAnnotationContext> typesCtx) {
+    TTransformationPipeline dqIntegrationPeepholePipeline(typesCtx);
+    for (auto* dqIntegration : GetUniqueIntegrations(*typesCtx)) {
+        dqIntegration->ConfigurePeepholePipeline(beforeDqTransforms, {}, &dqIntegrationPeepholePipeline);
     }
-
-    for (const auto& provider : typesCtx.DataSinks) {
-        if (auto* dqIntegration = provider->GetDqIntegration()) {
-            uniqueIntegrations.emplace(dqIntegration);
-        }
-    }
-
-    return uniqueIntegrations;
+    return dqIntegrationPeepholePipeline.Build();
 }
 
 } // namespace NYql

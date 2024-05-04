@@ -36,6 +36,7 @@ PEERDIR(
     ydb/library/yql/dq/expr_nodes
     ydb/library/aclib
     ydb/library/yql/core/issue
+    ydb/library/yql/core/services
     ydb/library/yql/dq/actors
     ydb/library/yql/dq/common
     ydb/library/yql/dq/integration

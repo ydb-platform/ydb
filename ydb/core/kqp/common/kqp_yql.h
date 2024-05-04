@@ -3,7 +3,6 @@
 #include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/library/yql/ast/yql_pos_handle.h>
 #include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
 
 namespace NYql {
 
@@ -125,6 +124,8 @@ TString KqpExprToPrettyString(const NNodes::TExprBase& expr, TExprContext& ctx);
 
 TString PrintKqpStageOnly(const NNodes::TDqStageBase& stage, TExprContext& ctx);
 
-std::unordered_set<IDqIntegration*> GetUniqueIntegrations(TTypeAnnotationContext& typesCtx);
+class IGraphTransformer;
+struct TTypeAnnotationContext;
+TAutoPtr<IGraphTransformer> GetDqIntegrationPeepholeTransformer(bool beforeDqTransforms, TIntrusivePtr<TTypeAnnotationContext> typesCtx);
 
 } // namespace NYql

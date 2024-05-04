@@ -19,7 +19,11 @@ protected:
     TWriterBase(TFsPath& path, TInstant writtenAt)
         : Path_(path)
         , WrittenAt_(writtenAt)
-    {}
+    {
+        NFs::Remove(Path_.GetPath() + ".dat");
+        NFs::Remove(Path_.GetPath() + ".idx");
+        NFs::Remove(Path_.GetPath() + ".idx.tmp");
+    }
 
 protected:
     void WriteIndex(ui64 totalItems, ui64 totalBytes, ui64 checksum) const {
@@ -100,9 +104,16 @@ public:
     TUnbufferedWriter(TFsPath& path, TInstant writtenAt, const TQWriterSettings& settings)
         : TWriterBase(path, writtenAt)
         , Settings_(settings)
-        , DataFile_(Path_.GetPath() + ".dat")
     {
-        DataFile_.Write(&WrittenAt_, sizeof(WrittenAt_));
+        DataFile_.ConstructInPlace(Path_.GetPath() + ".dat");
+        DataFile_->Write(&WrittenAt_, sizeof(WrittenAt_));
+    }
+
+    ~TUnbufferedWriter() {
+        if (!Committed_) {
+            DataFile_.Clear();
+            NFs::Remove(Path_.GetPath() + ".dat");
+        }
     }
 
     NThreading::TFuture<void> Put(const TQItemKey& key, const TString& value) final {
@@ -110,9 +121,9 @@ public:
             Y_ENSURE(!Committed_);
             if (!Overflow_) {
                 if (Keys_.emplace(key).second) {
-                    SaveString(DataFile_, key.Component, TotalBytes_, Checksum_);
-                    SaveString(DataFile_, key.Label, TotalBytes_, Checksum_);
-                    SaveString(DataFile_, value, TotalBytes_, Checksum_);
+                    SaveString(*DataFile_, key.Component, TotalBytes_, Checksum_);
+                    SaveString(*DataFile_, key.Label, TotalBytes_, Checksum_);
+                    SaveString(*DataFile_, value, TotalBytes_, Checksum_);
                     ++TotalItems_;
                 }
 
@@ -137,7 +148,8 @@ public:
 
             Y_ENSURE(!Committed_);
             Committed_ = true;
-            DataFile_.Finish();
+            DataFile_->Finish();
+            DataFile_.Clear();
             WriteIndex(TotalItems_, TotalBytes_, Checksum_);
             return NThreading::MakeFuture();
         }
@@ -146,7 +158,7 @@ public:
 private:
     const TQWriterSettings Settings_;
     TMutex Mutex_;
-    TFileOutput DataFile_;
+    TMaybe<TFileOutput> DataFile_;
     ui64 TotalItems_ = 0;
     ui64 TotalBytes_ = 0;
     ui64 Checksum_ = 0;

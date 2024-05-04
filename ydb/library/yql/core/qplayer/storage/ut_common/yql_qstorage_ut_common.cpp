@@ -23,6 +23,11 @@ void QStorageTestEmpty_Impl(const NYql::IQStoragePtr& storage) {
     UNIT_ASSERT(!iterator->Next().GetValueSync().Defined());
 }
 
+void QStorageTestNoCommit_Impl(const NYql::IQStoragePtr& storage) {
+    auto writer = storage->MakeWriter("foo", {});
+    writer->Put({"comp", "label"}, "value").GetValueSync();
+}
+
 void QStorageTestOne_Impl(const NYql::IQStoragePtr& storage) {
     auto writer = storage->MakeWriter("foo", {});
     writer->Put({"comp", "label"}, "value").GetValueSync();

@@ -3,7 +3,6 @@
 
 #include <ydb/library/yql/public/udf/udf_helpers.h>
 
-#include <library/cpp/dot_product/dot_product.h>
 #include <util/generic/buffer.h>
 #include <util/generic/queue.h>
 #include <util/stream/format.h>
@@ -20,44 +19,41 @@ SIMPLE_STRICT_UDF_WITH_OPTIONAL_ARGS(TToBinaryString, char*(TAutoMap<TListType<f
         const TStringRef formatStr = args[1].AsStringRef();
         if (formatStr == "float")
             format = EFormat::FloatVector;
+        if (formatStr == "floatbyte")
+            format = EFormat::FloatByteVector;
         else if (formatStr == "bit")
             format = EFormat::BitVector;
         else
             return {};
     }
     
-    return TSerializerFacade::Serialize(format, valueBuilder, x);
+    return TKnnSerializerFacade::Serialize(format, valueBuilder, x);
 }
 
 SIMPLE_STRICT_UDF(TFromBinaryString, TOptional<TListType<float>>(TAutoMap<const char*>)) {
     TStringRef str = args[0].AsStringRef();
 
-    return TSerializerFacade::Deserialize(valueBuilder, str);
+    return TKnnSerializerFacade::Deserialize(valueBuilder, str);
 }
 
 SIMPLE_STRICT_UDF(TInnerProductSimilarity, TOptional<float>(TAutoMap<const char*>, TAutoMap<const char*>)) {
     Y_UNUSED(valueBuilder);
 
-    const TArrayRef<const float> vector1 = TSerializerFacade::GetArray(args[0].AsStringRef()); 
-    const TArrayRef<const float> vector2 = TSerializerFacade::GetArray(args[1].AsStringRef()); 
-
-    if (vector1.size() != vector2.size() || vector1.empty() || vector2.empty())
+    const auto ret = TKnnSerializerFacade::DotProduct(args[0].AsStringRef(), args[1].AsStringRef());
+    if (Y_UNLIKELY(!ret))
         return {};
 
-    const float dotProduct = DotProduct(vector1.data(), vector2.data(), vector1.size());
-    return TUnboxedValuePod{dotProduct};
+    return TUnboxedValuePod{ret.value()};
 }
 
 SIMPLE_STRICT_UDF(TCosineSimilarity, TOptional<float>(TAutoMap<const char*>, TAutoMap<const char*>)) {
     Y_UNUSED(valueBuilder);
 
-    const TArrayRef<const float> vector1 = TSerializerFacade::GetArray(args[0].AsStringRef()); 
-    const TArrayRef<const float> vector2 = TSerializerFacade::GetArray(args[1].AsStringRef()); 
+    const auto ret = TKnnSerializerFacade::TriWayDotProduct(args[0].AsStringRef(), args[1].AsStringRef());
+    if (Y_UNLIKELY(!ret))
+        return {};
 
-    if (vector1.size() != vector2.size() || vector1.empty() || vector2.empty())
-        return {};    
-
-    const auto [ll, lr, rr] = TriWayDotProduct(vector1.data(), vector2.data(), vector1.size());
+    const auto& [ll, lr, rr] = ret.value();
     const float cosine = lr / std::sqrt(ll * rr);
     return TUnboxedValuePod{cosine};
 }
@@ -65,13 +61,11 @@ SIMPLE_STRICT_UDF(TCosineSimilarity, TOptional<float>(TAutoMap<const char*>, TAu
 SIMPLE_STRICT_UDF(TCosineDistance, TOptional<float>(TAutoMap<const char*>, TAutoMap<const char*>)) {
     Y_UNUSED(valueBuilder);
 
-    const TArrayRef<const float> vector1 = TSerializerFacade::GetArray(args[0].AsStringRef()); 
-    const TArrayRef<const float> vector2 = TSerializerFacade::GetArray(args[1].AsStringRef()); 
+    const auto ret = TKnnSerializerFacade::TriWayDotProduct(args[0].AsStringRef(), args[1].AsStringRef());
+    if (Y_UNLIKELY(!ret))
+        return {};
 
-    if (vector1.size() != vector2.size() || vector1.empty() || vector2.empty())
-        return {};    
-
-    const auto [ll, lr, rr] = TriWayDotProduct(vector1.data(), vector2.data(), vector1.size());
+    const auto& [ll, lr, rr] = ret.value();
     const float cosine = lr / std::sqrt(ll * rr);
     return TUnboxedValuePod{1 - cosine};
 }
@@ -90,8 +84,8 @@ ui16 GetManhattenDistance(const TArrayRef<const ui64> vector1, const TArrayRef<c
 SIMPLE_STRICT_UDF(TManhattenDistance, TOptional<ui16>(TAutoMap<const char*>, TAutoMap<const char*>)) {
     Y_UNUSED(valueBuilder);
 
-    const TArrayRef<const ui64> vector1 = TBitVectorSerializer::GetArray64(args[0].AsStringRef()); 
-    const TArrayRef<const ui64> vector2 = TBitVectorSerializer::GetArray64(args[1].AsStringRef()); 
+    const TArrayRef<const ui64> vector1 = TKnnBitVectorSerializer::GetArray64(args[0].AsStringRef()); 
+    const TArrayRef<const ui64> vector2 = TKnnBitVectorSerializer::GetArray64(args[1].AsStringRef()); 
 
     if (vector1.size() != vector2.size() || vector1.empty() || vector1.size() > UINT16_MAX)
         return {};    
@@ -103,8 +97,8 @@ SIMPLE_STRICT_UDF(TManhattenDistance, TOptional<ui16>(TAutoMap<const char*>, TAu
 SIMPLE_STRICT_UDF(TBitIndexes, TOptional<TListType<ui64>>(TAutoMap<const char*>, TAutoMap<const char*>, ui16, ui16, ui64)) {
     Y_UNUSED(valueBuilder);
 
-    const TArrayRef<const ui64> targetVector = TBitVectorSerializer::GetArray64(args[0].AsStringRef()); 
-    const TArrayRef<const ui64> storedVector = TBitVectorSerializer::GetArray64(args[1].AsStringRef()); 
+    const TArrayRef<const ui64> targetVector = TKnnBitVectorSerializer::GetArray64(args[0].AsStringRef()); 
+    const TArrayRef<const ui64> storedVector = TKnnBitVectorSerializer::GetArray64(args[1].AsStringRef()); 
     const ui16 topK = args[2].Get<ui16>();
     const ui16 distanceThreshold = args[3].Get<ui16>();
     const ui64 seed = args[4].Get<ui64>();

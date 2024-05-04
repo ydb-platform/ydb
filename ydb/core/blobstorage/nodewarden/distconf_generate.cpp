@@ -19,7 +19,7 @@ namespace NKikimr::NStorage {
                     }
 
                     AllocateStaticGroup(config, 0 /*groupId*/, 1 /*groupGeneration*/, TBlobStorageGroupType(species),
-                        settings.GetGeometry(), settings.GetPDiskFilter(), {}, {}, 0, nullptr, false);
+                        settings.GetGeometry(), settings.GetPDiskFilter(), {}, {}, 0, nullptr, false, true, false);
                     changes = true;
                     STLOG(PRI_DEBUG, BS_NODE, NWDC33, "Allocated static group", (Group, bsConfig.GetServiceSet().GetGroups(0)));
                 } catch (const TExConfigError& ex) {
@@ -53,7 +53,8 @@ namespace NKikimr::NStorage {
             const NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TPDiskFilter>& pdiskFilters,
             THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks,
             const NBsController::TGroupMapper::TForbiddenPDisks& forbid, i64 requiredSpace,
-            NKikimrBlobStorage::TBaseConfig *baseConfig, bool convertToDonor) {
+            NKikimrBlobStorage::TBaseConfig *baseConfig, bool convertToDonor, bool ignoreVSlotQuotaCheck,
+            bool isSelfHealReasonDecommit) {
         using TPDiskId = NBsController::TPDiskId;
 
         NKikimrConfig::TBlobStorageConfig *bsConfig = config->MutableBlobStorageConfig();
@@ -69,6 +70,9 @@ namespace NKikimr::NStorage {
             NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk Record;
             ui32 UsedSlots = 0;
             bool Usable = true;
+            TString WhyUnusable;
+            i64 SpaceAvailable = 0;
+            bool AdjustSpaceAvailable = false;
         };
 
         THashMap<TPDiskId, TPDiskInfo> pdisks;
@@ -106,7 +110,25 @@ namespace NKikimr::NStorage {
             return false;
         };
 
+        ui32 defaultMaxSlots = 16;
+
         if (baseConfig) {
+            std::optional<NKikimrBlobStorage::TPDiskSpaceColor::E> pdiskSpaceColorBorder;
+            ui32 pdiskSpaceMarginPromille = 150;
+
+            if (baseConfig->HasSettings()) {
+                const auto& settings = baseConfig->GetSettings();
+                if (settings.DefaultMaxSlotsSize()) {
+                    defaultMaxSlots = settings.GetDefaultMaxSlots(0);
+                }
+                if (settings.PDiskSpaceColorBorderSize()) {
+                    pdiskSpaceColorBorder.emplace(settings.GetPDiskSpaceColorBorder(0));
+                }
+                if (settings.PDiskSpaceMarginPromilleSize()) {
+                    pdiskSpaceMarginPromille = settings.GetPDiskSpaceMarginPromille(0);
+                }
+            }
+
             for (const auto& pdisk : baseConfig->GetPDisk()) {
                 if (!checkMatch(pdisk.GetType(), pdisk.GetSharedWithOs(), pdisk.GetReadCentric(), pdisk.GetKind())) {
                     continue;
@@ -114,7 +136,8 @@ namespace NKikimr::NStorage {
 
                 const TPDiskId pdiskId(pdisk.GetNodeId(), pdisk.GetPDiskId());
                 if (const auto [it, inserted] = pdisks.try_emplace(pdiskId); inserted) {
-                    auto& r = it->second.Record;
+                    TPDiskInfo& pdiskInfo = it->second;
+                    auto& r = pdiskInfo.Record;
                     r.SetNodeID(pdiskId.NodeId);
                     r.SetPDiskID(pdiskId.PDiskId);
                     r.SetPath(pdisk.GetPath());
@@ -124,8 +147,41 @@ namespace NKikimr::NStorage {
                     if (pdisk.HasPDiskConfig()) {
                         r.MutablePDiskConfig()->CopyFrom(pdisk.GetPDiskConfig());
                     }
+
+                    // this 'usable' logic repeats the one in BS_CONTROLLER
+                    if (pdisk.GetDriveStatus() != NKikimrBlobStorage::EDriveStatus::ACTIVE) {
+                        pdiskInfo.Usable = false;
+                        pdiskInfo.WhyUnusable += 'S';
+                    }
+                    const bool usableInTermsOfDecommission = 
+                        pdisk.GetDecommitStatus() == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE ||
+                        pdisk.GetDecommitStatus() == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_REJECTED && !isSelfHealReasonDecommit;
+                    if (!usableInTermsOfDecommission) {
+                        pdiskInfo.Usable = false;
+                        pdiskInfo.WhyUnusable += 'D';
+                    }
+
+                    if (!ignoreVSlotQuotaCheck && pdiskInfo.Usable && pdisk.HasPDiskMetrics() && baseConfig->HasSettings()) {
+                        const auto& m = pdisk.GetPDiskMetrics();
+                        if (m.HasEnforcedDynamicSlotSize() && pdiskSpaceColorBorder >= NKikimrBlobStorage::TPDiskSpaceColor::YELLOW) {
+                            pdiskInfo.SpaceAvailable = m.GetEnforcedDynamicSlotSize() * (1000 - pdiskSpaceMarginPromille) / 1000;
+                        } else {
+                            pdiskInfo.SpaceAvailable = m.GetAvailableSize() - m.GetTotalSize() * pdiskSpaceMarginPromille / 1000;
+                            pdiskInfo.AdjustSpaceAvailable = true;
+                        }
+                    }
                 } else {
                     Y_ABORT("duplicate PDisk record in TBaseConfig");
+                }
+            }
+
+            THashMap<ui32, ui64> maxGroupSlotSize;
+            for (const auto& vslot : baseConfig->GetVSlot()) {
+                if (vslot.HasVDiskMetrics()) {
+                    if (const auto& m = vslot.GetVDiskMetrics(); m.HasAllocatedSize()) {
+                        ui64& size = maxGroupSlotSize[vslot.GetGroupId()];
+                        size = Max(size, m.GetAllocatedSize());
+                    }
                 }
             }
 
@@ -133,7 +189,13 @@ namespace NKikimr::NStorage {
                 const auto& vslotId = vslot.GetVSlotId();
                 const TPDiskId pdiskId(vslotId.GetNodeId(), vslotId.GetPDiskId());
                 if (const auto it = pdisks.find(pdiskId); it != pdisks.end()) {
-                    ++it->second.UsedSlots;
+                    TPDiskInfo& pdiskInfo = it->second;
+                    ++pdiskInfo.UsedSlots;
+                    if (pdiskInfo.AdjustSpaceAvailable && vslot.GetStatus() != "READY" && vslot.HasVDiskMetrics()) {
+                        if (const auto& m = vslot.GetVDiskMetrics(); m.HasAllocatedSize()) {
+                            pdiskInfo.SpaceAvailable += m.GetAllocatedSize() - maxGroupSlotSize[vslot.GetGroupId()];
+                        }
+                    }
                 }
             }
         }
@@ -294,7 +356,7 @@ namespace NKikimr::NStorage {
                 throw TExConfigError() << "no location for node";
             }
 
-            ui32 maxSlots = 16;
+            ui32 maxSlots = defaultMaxSlots;
             if (item.Record.HasPDiskConfig()) {
                 const auto& pdiskConfig = item.Record.GetPDiskConfig();
                 if (pdiskConfig.HasExpectedSlotCount()) {
@@ -309,10 +371,10 @@ namespace NKikimr::NStorage {
                 .NumSlots = item.UsedSlots,
                 .MaxSlots = maxSlots,
                 .Groups{},
-                .SpaceAvailable = 0,
+                .SpaceAvailable = item.SpaceAvailable,
                 .Operational = true,
                 .Decommitted = false,
-                .WhyUnusable{},
+                .WhyUnusable = item.WhyUnusable,
             });
         }
 

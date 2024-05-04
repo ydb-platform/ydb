@@ -370,7 +370,8 @@ namespace NKikimr::NStorage {
                         Self->AllocateStaticGroup(&config, vdiskId.GroupID, vdiskId.GroupGeneration + 1,
                             TBlobStorageGroupType((TBlobStorageGroupType::EErasureSpecies)group.GetErasureSpecies()),
                             settings.GetGeometry(), settings.GetPDiskFilter(), replacedDisks, forbid, maxSlotSize,
-                            &BaseConfig.value(), cmd.GetConvertToDonor());
+                            &BaseConfig.value(), cmd.GetConvertToDonor(), cmd.GetIgnoreVSlotQuotaCheck(),
+                            cmd.GetIsSelfHealReasonDecommit());
                     } catch (const TExConfigError& ex) {
                         STLOG(PRI_NOTICE, BS_NODE, NW49, "ReassignGroupDisk failed to allocate group", (SelfId, SelfId()),
                             (Config, config),

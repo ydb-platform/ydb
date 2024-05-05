@@ -11,6 +11,7 @@
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_join.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/dq/opt/dq_opt_build.h>
 #include <ydb/library/yql/dq/opt/dq_opt_peephole.h>
 #include <ydb/library/yql/core/services/yql_transform_pipeline.h>
 #include <ydb/library/yql/providers/common/transform/yql_optimize.h>
@@ -203,7 +204,11 @@ struct TKqpPeepholePipelineFinalConfigurator : IPipelineConfigurator {
         pipeline->Add(new TKqpPeepholeFinalTransformer(*pipeline->GetTypeAnnotationContext(), Config), "KqpPeepholeFinal");
     }
 
-    void AfterOptimize(TTransformationPipeline*) const override {}
+    void AfterOptimize(TTransformationPipeline* pipeline) const override {
+        //pipeline->Add(NDq::CreateDqBuildWideBlockChannelsTransformer(
+        //    *pipeline->GetTypeAnnotationContext(), NDq::EChannelMode::CHANNEL_WIDE_FORCE_BLOCK), "DqBuildWideBlockChannels");
+        Y_UNUSED(pipeline);
+    }
 private:
     const TKikimrConfiguration::TPtr Config;
 };
@@ -220,12 +225,16 @@ TStatus PeepHoleOptimize(const TExprBase& program, TExprNode::TPtr& newProgram, 
     peepholeSettings.WithFinalStageRules = withFinalStageRules;
     peepholeSettings.WithNonDeterministicRules = false;
 
+    Cerr << "BEFORE PEEPHOLE:" << KqpExprToPrettyString(*program.Ptr(), ctx) << Endl;
+
     bool hasNonDeterministicFunctions;
     auto status = PeepHoleOptimizeNode(program.Ptr(), newProgram, ctx, typesCtx, &typeAnnTransformer,
         hasNonDeterministicFunctions, peepholeSettings);
     if (status == TStatus::Error) {
         return status;
     }
+
+    Cerr << "AFTER PEEPHOLE:" << KqpExprToPrettyString(*newProgram, ctx) << Endl;
 
     if (!allowNonDeterministicFunctions && hasNonDeterministicFunctions) {
         ctx.AddError(TIssue(ctx.GetPosition(program.Pos()), "Unexpected non-deterministic functions in KQP program"));
@@ -288,6 +297,20 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
             .Settings(stage.Settings())
             .Outputs(stage.Outputs())
             .Done();
+
+        auto blockTransformer = NDq::CreateDqBuildWideBlockChannelsTransformer(typesCtx, NDq::EChannelMode::CHANNEL_WIDE_FORCE_BLOCK);
+        blockTransformer->Rewind();
+        while (true) {
+            TExprNode::TPtr ptr = newStage.Ptr();
+            auto status = InstantTransform(*blockTransformer, ptr, ctx);
+            newStage = TExprBase(ptr).Cast<TDqPhyStage>();
+            if (status == TStatus::Error) {
+                return {};
+            }
+            if (status == TStatus::Ok) {
+                break;
+            }
+        }
 
         stages.emplace_back(newStage);
         stagesMap.emplace(stage.Raw(), newStage.Ptr());
@@ -358,6 +381,10 @@ private:
     bool WithFinalStageRules = true;
 };
 
+class TKqpTxPeepholeBlocksTransformer : public TSyncTransformerBase  {
+
+};
+
 class TKqpTxsPeepholeTransformer : public TSyncTransformerBase {
 public:
     TKqpTxsPeepholeTransformer(TAutoPtr<NYql::IGraphTransformer> typeAnnTransformer,
@@ -370,6 +397,7 @@ public:
             .Add(*TypeAnnTransformer, "TypeAnnotation")
             .AddPostTypeAnnotation(/* forSubgraph */ true)
             .Add(CreateKqpTxPeepholeTransformer(TypeAnnTransformer.Get(), typesCtx, config), "Peephole")
+            //.Add(NDq::CreateDqBuildWideBlockChannelsTransformer(typesCtx, NDq::EChannelMode::CHANNEL_WIDE_FORCE_BLOCK), "BuildWideBlockChannels")
             .Build(false);
     }
 

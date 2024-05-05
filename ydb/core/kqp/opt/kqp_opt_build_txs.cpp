@@ -11,6 +11,7 @@
 #include <ydb/library/yql/core/services/yql_transform_pipeline.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
+#include <ydb/core/protos/table_service_config.pb.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -22,8 +23,31 @@ using TStatus = IGraphTransformer::TStatus;
 
 namespace {
 
-TAutoPtr<NYql::IGraphTransformer> CreateKqpBuildPhyStagesTransformer(bool allowDependantConsumers, TTypeAnnotationContext& typesCtx) {
-    EChannelMode mode = EChannelMode::CHANNEL_SCALAR;
+EChannelMode GetChannelMode(NKikimrConfig::TTableServiceConfig_EBlockChannelsMode blockChannelsMode) {
+    switch (blockChannelsMode) {
+        case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_SCALAR:
+            return EChannelMode::CHANNEL_SCALAR;
+        case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO:
+            return EChannelMode::CHANNEL_WIDE_AUTO_BLOCK;
+        case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_FORCE:
+            return EChannelMode::CHANNEL_WIDE_FORCE_BLOCK;
+        default:
+            YQL_ENSURE(false);
+    }
+}
+
+//TAutoPtr<NYql::IGraphTransformer> CreateKqpBuildWideBlockChannelsTransformer(
+//        TTypeAnnotationContext& typesCtx,
+//        NKikimrConfig::TTableServiceConfig_EBlockChannelsMode blockChannelsMode) {
+//    const EChannelMode mode = GetChannelMode(blockChannelsMode);
+//    return NDq::CreateDqBuildWideBlockChannelsTransformer(typesCtx, mode);
+//}
+
+TAutoPtr<NYql::IGraphTransformer> CreateKqpBuildPhyStagesTransformer(
+        bool allowDependantConsumers,
+        TTypeAnnotationContext& typesCtx,
+        NKikimrConfig::TTableServiceConfig_EBlockChannelsMode blockChannelsMode) {
+    const EChannelMode mode = GetChannelMode(blockChannelsMode);
     return NDq::CreateDqBuildPhyStagesTransformer(allowDependantConsumers, typesCtx, mode);
 }
 
@@ -474,9 +498,11 @@ public:
             .Add(TExprLogTransformer::Sync("TxOpt", NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE), "TxOpt")
             .Add(*TypeAnnTransformer, "TypeAnnotation")
             .AddPostTypeAnnotation(/* forSubgraph */ true)
-            .Add(CreateKqpBuildPhyStagesTransformer(/* allowDependantConsumers */ false, typesCtx), "BuildPhysicalStages")
+            .Add(CreateKqpBuildPhyStagesTransformer(/* allowDependantConsumers */ false, typesCtx, config->BlockChannelsMode), "BuildPhysicalStages")
+            //.Add(CreateKqpBuildWideBlockChannelsTransformer(typesCtx, config->BlockChannelsMode), "BuildWideBlockChannels")
             .Add(*BuildTxTransformer, "BuildPhysicalTx")
             .Add(CreateKqpTxPeepholeTransformer(TypeAnnTransformer.Get(), typesCtx, config, /* withFinalStageRules */ false), "Peephole")
+            //.Add(CreateKqpBuildWideBlockChannelsTransformer(typesCtx, config->BlockChannelsMode), "BuildWideBlockChannels")
             .Build(false);
 
         ScanTxTransformer = TTransformationPipeline(&typesCtx)
@@ -484,7 +510,8 @@ public:
             .Add(TExprLogTransformer::Sync("TxOpt", NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE), "TxOpt")
             .Add(*TypeAnnTransformer, "TypeAnnotation")
             .AddPostTypeAnnotation(/* forSubgraph */ true)
-            .Add(CreateKqpBuildPhyStagesTransformer(config->SpillingEnabled(), typesCtx), "BuildPhysicalStages")
+            .Add(CreateKqpBuildPhyStagesTransformer(config->SpillingEnabled(), typesCtx, config->BlockChannelsMode), "BuildPhysicalStages")
+            //.Add(CreateKqpBuildWideBlockChannelsTransformer(typesCtx, config->BlockChannelsMode), "BuildWideBlockChannels")
             .Add(*BuildTxTransformer, "BuildPhysicalTx")
             .Add(CreateKqpTxPeepholeTransformer(TypeAnnTransformer.Get(), typesCtx, config, /* withFinalStageRules */ false), "Peephole")
             .Build(false);

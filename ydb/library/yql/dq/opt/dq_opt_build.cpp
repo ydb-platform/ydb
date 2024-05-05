@@ -955,6 +955,7 @@ TAutoPtr<IGraphTransformer> CreateDqBuildWideBlockChannelsTransformer(TTypeAnnot
         transformers.push_back(TTransformStage(CreateFunctorTransformer(
             [mode, &typesCtx](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                 const bool forceBlocks = mode == CHANNEL_WIDE_FORCE_BLOCK;
+                Cerr << "DO BLOCKS" << forceBlocks << Endl;
                 return DqEnableWideBlockChannels(forceBlocks, input, output, ctx, typesCtx);
             }),
             "EnableBlockChannels",

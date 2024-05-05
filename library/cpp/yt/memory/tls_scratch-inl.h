@@ -6,6 +6,8 @@
 
 #include <library/cpp/yt/misc/tls.h>
 
+#include <util/generic/bitops.h>
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -13,13 +15,14 @@ namespace NYT {
 template <class T>
 YT_PREVENT_TLS_CACHING TMutableRange<T> GetTlsScratchBuffer(size_t size)
 {
-    // This is a workround for std::vector<bool>.
-    using TBoxed = std::array<T, 1>;
-    thread_local std::vector<TBoxed> tlsVector;
-    tlsVector.reserve(size);
-    auto range = TMutableRange(reinterpret_cast<T*>(tlsVector.data()), size);
-    std::fill(range.begin(), range.end(), T());
-    return range;
+    thread_local std::unique_ptr<T[]> scratchBuffer;
+    thread_local size_t scratchBufferSize;
+    if (scratchBufferSize < size) {
+        scratchBufferSize = FastClp2(size);
+        scratchBuffer = std::unique_ptr<T[]>(new T[scratchBufferSize]);
+    }
+    std::fill(scratchBuffer.get(), scratchBuffer.get() + size, T());
+    return TMutableRange(scratchBuffer.get(), size);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

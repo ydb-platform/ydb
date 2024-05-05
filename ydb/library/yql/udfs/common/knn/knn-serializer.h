@@ -81,7 +81,6 @@ public:
 // So 1024 float vector is serialized in 1024/8=128 bytes.
 // Place all bits in ui64. So, only vector sizes divisible by 64 are supported.
 // Max vector lenght is 32767.
-// Header format is not written.
 class TKnnBitVectorSerializer {
 public:
     static TUnboxedValue Serialize(const IValueBuilder* valueBuilder, const TUnboxedValue x) {
@@ -111,11 +110,14 @@ public:
             if (Y_UNLIKELY(lenght > UINT16_MAX))
                 return false;
 
+            const EFormat format = EFormat::BitVector;
+            outStream.Write(&format, HeaderLen);
+
             return true;
         };
 
         if (x.HasFastListLength()) {
-            auto str = valueBuilder->NewStringNotFilled(x.GetListLength() / 8);
+            auto str = valueBuilder->NewStringNotFilled(HeaderLen + x.GetListLength() / 8);
             auto strRef = str.AsStringRef();
             TMemoryOutput memoryOutput(strRef.Data(), strRef.Size());
 
@@ -136,7 +138,7 @@ public:
 
     static const TArrayRef<const ui64> GetArray64(const TStringRef& str) {
         const char* buf = str.Data();
-        const size_t len = str.Size() / sizeof(ui64);
+        const size_t len = (str.Size() - HeaderLen) / sizeof(ui64);
 
         return MakeArrayRef(reinterpret_cast<const ui64*>(buf), len);
     }

@@ -2,6 +2,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/random/shuffle.h>
+
 #include <unordered_map>
 #include <unordered_set>
 
@@ -278,6 +280,56 @@ Y_UNIT_TEST_SUITE(TMiniKQLRobinHoodHashTest) {
             }
 
             UNIT_ASSERT_VALUES_EQUAL(i + 1, rh.GetSize());
+        }
+
+        i32 maxDistance = 0;
+        for (auto it = rh.Begin(); it != rh.End(); rh.Advance(it)) {
+            if (!rh.IsValid(it)) {
+                continue;
+            }
+
+            auto distance = rh.GetPSL(it).Distance;
+            maxDistance = Max(maxDistance, distance);
+        }
+
+        Cerr << "maxDistance: " << maxDistance << "\n";
+        UNIT_ASSERT(maxDistance < 10);
+    }
+
+    Y_UNIT_TEST(LowDistributionCollisions) {
+        TRobinHoodHashSet<ui64> rh;
+        TVector<ui64> values;
+        const ui64 N = 15000000;
+        values.reserve(N);
+        for (ui64 i = 1; i <= N; ++i) {
+            auto k = 64 * (i >> 4) + ((i & 8) ? 32 : 0) + (i & 7);
+            values.push_back(k);
+        }
+        Cerr << "values.size() = " << values.size() << "\n";
+        /*
+        for (ui64 i = 0; i < 32; ++i) {
+            Cerr << values[i] << "\n";
+        }
+
+        for (ui64 i = 0; i < 32; ++i) {
+            Cerr << values[values.size() - 32 + i] << "\n";
+        }*/
+
+        for (ui64 i = 0; i < values.size(); ++i) {
+            auto k = values[i];
+            bool isNew;
+            auto iter = rh.Insert(k, isNew);
+            if (rh.GetKey(iter) != k) { // a speedup of UNITTEST macro
+                UNIT_ASSERT_VALUES_EQUAL(rh.GetKey(iter), k);
+            }
+            
+            if (isNew) {
+                rh.CheckGrow();
+            }
+
+            if (i + 1 != rh.GetSize()) { // a speedup of UNITTEST macro
+                UNIT_ASSERT_VALUES_EQUAL(i + 1, rh.GetSize());
+            }
         }
 
         i32 maxDistance = 0;

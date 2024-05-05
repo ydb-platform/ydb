@@ -1,0 +1,102 @@
+#pragma once
+#include "status_channel.h"
+
+#include <ydb/core/tx/columnshard/common/tablet_id.h>
+#include <ydb/services/bg_tasks/abstract/interface.h>
+
+#include <ydb/library/accessor/accessor.h>
+#include <ydb/library/actors/core/actorid.h>
+#include <ydb/library/conclusion/status.h>
+#include <ydb/library/conclusion/result.h>
+
+namespace NKikimr::NOlap::NBackground {
+
+class TStartContext {
+private:
+    YDB_READONLY_DEF(NActors::TActorId, TabletActorId);
+    YDB_READONLY_DEF(TStatusChannelContainer, Channel);
+public:
+    TStartContext(const NActors::TActorId& tabletActorId, const TStatusChannelContainer channel)
+        : TabletActorId(tabletActorId)
+        , Channel(channel)
+    {
+
+    }
+};
+
+class ISessionLogic {
+private:
+    mutable bool ActorConstructed = false;
+    virtual TConclusionStatus DoDeserializeProgressFromString(const TString& data) = 0;
+    virtual TConclusionStatus DoDeserializeStateFromString(const TString& data) = 0;
+    virtual TConclusionStatus DoDeserializeFromString(const TString& data) = 0;
+    virtual TString DoSerializeProgressToString() const = 0;
+    virtual TString DoSerializeStateToString() const = 0;
+    virtual TString DoSerializeToString() const = 0;
+    virtual TConclusion<std::unique_ptr<NActors::IActor>> DoCreateActor(const TStartContext& context) const = 0;
+public:
+    using TFactory = NObjectFactory::TObjectFactory<ISessionLogic, TString>;
+
+    virtual ~ISessionLogic() = default;
+
+    virtual TString GetClassName() const = 0;
+
+    void CheckStatusCorrect() const {
+    }
+
+    TConclusionStatus DeserializeProgressFromString(const TString& data) {
+        return DoDeserializeProgressFromString(data);
+    }
+    TString SerializeProgressToString() const {
+        CheckStatusCorrect();
+        return DoSerializeProgressToString();
+    }
+    TConclusionStatus DeserializeFromString(const TString& data) {
+        return DoDeserializeFromString(data);
+    }
+    TString SerializeToString() const {
+        CheckStatusCorrect();
+        return DoSerializeToString();
+    }
+    TConclusionStatus DeserializeStateFromString(const TString& data) {
+        return DoDeserializeStateFromString(data);
+    }
+    TString SerializeStateToString() const {
+        CheckStatusCorrect();
+        return DoSerializeStateToString();
+    }
+
+    std::unique_ptr<NActors::IActor> CreateActor(const TStartContext& context) const {
+        AFL_VERIFY(IsReadyForStart());
+        AFL_VERIFY(!IsFinished());
+        AFL_VERIFY(!ActorConstructed);
+        ActorConstructed = true;
+        std::unique_ptr<NActors::IActor> result = DoCreateActor(context).DetachResult();
+        AFL_VERIFY(!!result);
+        return result;
+    }
+
+    virtual bool IsReadyForStart() const = 0;
+    virtual bool IsFinished() const = 0;
+    virtual bool IsReadyForRemove() const = 0;
+};
+
+class TSessionLogicContainer: public NBackgroundTasks::TInterfaceStringContainer<ISessionLogic> {
+private:
+    using TBase = NBackgroundTasks::TInterfaceStringContainer<ISessionLogic>;
+public:
+    using TBase::TBase;
+};
+
+class TSessionRecord {
+private:
+    YDB_ACCESSOR_DEF(TString, Identifier);
+    YDB_ACCESSOR_DEF(TString, ClassName);
+    YDB_ACCESSOR_DEF(TString, LogicDescription);
+    YDB_ACCESSOR_DEF(TString, StatusChannel);
+    YDB_ACCESSOR_DEF(TString, Progress);
+    YDB_ACCESSOR_DEF(TString, State);
+public:
+};
+
+}

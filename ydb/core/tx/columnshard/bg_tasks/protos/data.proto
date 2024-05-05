@@ -1,0 +1,20 @@
+package NKikimrTxBackgroundProto;
+
+import "ydb/services/bg_tasks/protos/container.proto";
+
+message TSessionControlContainer {
+    optional string SessionClassName = 1;
+    optional string SessionIdentifier = 2;
+    optional string StatusChannelContainer = 3;
+    optional string LogicControlContainer = 4;
+}
+
+message TTaskContainer {
+    optional string Identifier= 1;
+    optional string StatusChannelContainer = 2;
+    optional string TaskDescriptionContainer = 3;
+}
+
+message TEvSessionControl {
+    optional string ControlInterfaceContainer = 1;
+}

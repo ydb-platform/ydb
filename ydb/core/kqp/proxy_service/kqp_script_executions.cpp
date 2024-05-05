@@ -950,7 +950,7 @@ public:
             return;
         }
 
-        if (TInstant::Now() + TDuration::Seconds(1) + GetAverageTime() >= Deadline) {
+        if (TInstant::Now() + 2 * GetAverageTime() >= Deadline) {
             Finish(Ydb::StatusIds::TIMEOUT, ForgetOperationTimeoutIssues());
             return;
         }

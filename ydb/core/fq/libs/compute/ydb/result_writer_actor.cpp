@@ -1,5 +1,6 @@
 #include "base_compute_actor.h"
 
+#include <ydb/core/fq/libs/common/rows_proto_splitter.h>
 #include <ydb/core/fq/libs/common/util.h>
 #include <ydb/core/fq/libs/compute/common/metrics.h>
 #include <ydb/core/fq/libs/compute/common/retry_actor.h>
@@ -21,6 +22,8 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <library/cpp/protobuf/interop/cast.h>
+
+#include <queue>
 
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] QueryId: " << Params.QueryId << " OperationId: " << ProtoToString(OperationId) << " " << stream)
 #define LOG_W(stream) LOG_WARN_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] QueryId: " << Params.QueryId << " OperationId: " << ProtoToString(OperationId) << " " << stream)
@@ -92,7 +95,7 @@ public:
     )
 
     void Handle(const TEvYdbCompute::TEvFetchScriptResultResponse::TPtr& ev) {
-        const auto& response = *ev.Get()->Get();
+        auto& response = *ev.Get()->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
             LOG_E("ResultSetId: " << ResultSetId << " Can't fetch script result: " << ev->Get()->Issues.ToOneLineString());
             Send(Parent, new TEvYdbCompute::TEvResultSetWriterResponse(ResultSetId, ev->Get()->Issues, NYdb::EStatus::INTERNAL_ERROR));
@@ -100,20 +103,31 @@ public:
             return;
         }
 
-        auto startTime = TInstant::Now();
+        LOG_I("ResultSetId: " << ResultSetId << " FetchToken: " << FetchToken << " Successfully fetched " << response.ResultSet->RowsCount() << " rows");
         Truncated |= response.ResultSet->Truncated();
         FetchToken = response.NextFetchToken;
         auto emptyResultSet = response.ResultSet->RowsCount() == 0;
-        const auto resultSetProto = NYdb::TProtoAccessor::GetProto(*response.ResultSet);
+        auto resultSetProto = NYdb::TProtoAccessor::GetProto(std::move(*response.ResultSet));
 
         if (!emptyResultSet) {
-            auto chunk = CreateProtoRequestWithoutResultSet(Offset);
-            WriterInflight[Cookie] = {Offset, startTime};
-            Offset += response.ResultSet->RowsCount();
-            *chunk.mutable_result_set() = resultSetProto;
-            auto writeResultCounters = Counters.GetCounters(ERequestType::RT_WRITE_RESULT_SET);
-            writeResultCounters->InFly->Inc();
-            Send(NFq::MakeInternalServiceActorId(), new NFq::TEvInternalService::TEvWriteResultRequest(std::move(chunk)), 0, Cookie++);
+            NFq::TRowsProtoSplitter rowsSplitter(std::move(resultSetProto), ProtoMessageLimit, BaseProtoByteSize, MaxRowsCountPerChunk);
+            auto splittedResultSets = rowsSplitter.Split();
+
+            if (!splittedResultSets.Success) {
+                LOG_E("ResultSetId: " << ResultSetId << " Can't split script result: " << splittedResultSets.Issues.ToOneLineString());
+                Send(Parent, new TEvYdbCompute::TEvResultSetWriterResponse(ResultSetId, splittedResultSets.Issues, NYdb::EStatus::BAD_REQUEST));
+                FailedAndPassAway();
+                return;
+            }
+
+            for (auto& resultSet : splittedResultSets.ResultSets) {
+                auto protoReq = CreateProtoRequestWithoutResultSet(Offset);
+                Offset += resultSet.rows().size();
+                protoReq.mutable_result_set()->Swap(&resultSet);
+                ResultChunks.emplace(std::move(protoReq));
+            }
+
+            TryStartResultWriters();
         }
 
         if (WriterInflight.empty()) {
@@ -149,14 +163,28 @@ public:
             return;
         }
 
+        TryStartResultWriters();
+
         writeResultCounters->Ok->Inc();
         LOG_I("ResultSetId: " << ResultSetId << " Cookie: " << cookie << " Result successfully written for offset " << meta.Offset);
         if (FetchToken) {
-            if (FetchToken != LastProcessedToken) {
+            if (FetchToken != LastProcessedToken && WriterInflight.size() < MAX_WRITER_INFLIGHT) {
                 SendFetchScriptResultRequest();
             }
         } else if (WriterInflight.empty()) {
             SendReplyAndPassAway();
+        }
+    }
+
+    void TryStartResultWriters() {
+        auto writeResultCounters = Counters.GetCounters(ERequestType::RT_WRITE_RESULT_SET);
+        while (!ResultChunks.empty() && WriterInflight.size() < MAX_WRITER_INFLIGHT) {
+            auto chunk = std::move(ResultChunks.front());
+            ResultChunks.pop();
+
+            WriterInflight[Cookie] = {static_cast<int64_t>(chunk.offset()), TInstant::Now()};
+            writeResultCounters->InFly->Inc();
+            Send(NFq::MakeInternalServiceActorId(), new NFq::TEvInternalService::TEvWriteResultRequest(std::move(chunk)), 0, Cookie++);
         }
     }
 
@@ -194,6 +222,10 @@ private:
     bool Truncated = false;
     TString FetchToken;
     TString LastProcessedToken;
+    const size_t ProtoMessageLimit = 10_MB;
+    const size_t MaxRowsCountPerChunk = 100'000;
+    const size_t BaseProtoByteSize = CreateProtoRequestWithoutResultSet(0).ByteSizeLong();
+    std::queue<Fq::Private::WriteTaskResultRequest> ResultChunks;
 };
 
 class TResultWriterActor : public TBaseComputeActor<TResultWriterActor> {

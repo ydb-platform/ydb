@@ -163,6 +163,8 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     if (Loaded) {
         ApplyStorageConfig();
     }
+
+    PushStaticGroupsToSelfHeal();
 }
 
 void TBlobStorageController::Handle(TEvents::TEvUndelivered::TPtr ev) {
@@ -269,6 +271,7 @@ void TBlobStorageController::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev) {
     HostRecords = std::make_shared<THostRecordMap::element_type>(ev->Get());
     if (initial) {
         SelfHealId = Register(CreateSelfHealActor());
+        PushStaticGroupsToSelfHeal();
         if (StorageConfigObtained) {
             Execute(CreateTxInitScheme());
         }

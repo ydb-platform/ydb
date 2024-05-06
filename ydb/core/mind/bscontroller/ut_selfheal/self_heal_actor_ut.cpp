@@ -51,7 +51,8 @@ TIntrusivePtr<TBlobStorageGroupInfo> CreateGroup() {
     for (ui32 i = 0; i < 8; ++i) {
         actorIds.push_back(MakeBlobStorageVDiskID(1, 1000 + i, 1000));
     }
-    return MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::Erasure4Plus2Block, 1u, 0u, 1u, &actorIds);
+    return MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::Erasure4Plus2Block, 1u, 0u, 1u, &actorIds,
+        TBlobStorageGroupInfo::EEM_NONE, TBlobStorageGroupInfo::ELCP_INITIAL, TCypherKey(), 0x82000000);
 }
 
 TEvControllerUpdateSelfHealInfo::TGroupContent Convert(const TIntrusivePtr<TBlobStorageGroupInfo>& info,
@@ -101,7 +102,7 @@ Y_UNIT_TEST_SUITE(SelfHealActorTest) {
             auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
             ev->GroupsToUpdate[info->GroupID] = Convert(info, {0}, {E::ERROR});
             runtime.Send(new IEventHandle(selfHealId, parentId, ev.release()), 1);
-            ValidateCmd(parentId, runtime, 0, 1, 0, 0, 0);
+            ValidateCmd(parentId, runtime, 0x82000000, 1, 0, 0, 0);
         });
     }
 

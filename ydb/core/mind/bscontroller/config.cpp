@@ -522,6 +522,9 @@ namespace NKikimr::NBsController {
                             sh->GroupsToUpdate[slot->GroupId].emplace();
                         }
                     }
+                    if (StaticPDisks.contains(overlay->first)) {
+                        state.PushStaticGroupsToSelfHeal = true;
+                    }
                 }
             }
 
@@ -633,6 +636,9 @@ namespace NKikimr::NBsController {
 
             for (auto& fn : Callbacks) {
                 fn();
+            }
+            if (PushStaticGroupsToSelfHeal) {
+                Self.PushStaticGroupsToSelfHeal();
             }
             return Self.NextConfigTxSeqNo++;
         }

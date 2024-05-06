@@ -1,5 +1,5 @@
 items:
-- name: Overview
+- name: Обзор
   href: index.md
-- name: Logging
+- name: Логирование
   href: logging.md

@@ -3009,7 +3009,7 @@ public:
     }
 
     TPtr DoClone() const final {
-        return {};
+        return new TSqlLambda(Pos, TVector<TString>(Args), CloneContainer(ExprSeq));
     }
 
     void DoUpdateState() const override {

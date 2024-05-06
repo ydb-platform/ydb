@@ -114,7 +114,7 @@ private:
         ui32 msgBusPort = PortManager_.GetPort();
 
         NKikimr::Tests::TServerSettings serverSettings(msgBusPort);
-        serverSettings.SetNodeCount(1);
+        serverSettings.SetNodeCount(Settings_.NodeCount);
 
         serverSettings.SetDomainName(Settings_.DomainName);
         serverSettings.SetAppConfig(Settings_.AppConfig);

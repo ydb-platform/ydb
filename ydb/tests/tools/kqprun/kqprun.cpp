@@ -43,44 +43,44 @@ struct TExecutionOptions {
 void RunScript(const TExecutionOptions& executionOptions, const NKqpRun::TRunnerOptions& runnerOptions) {
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
 
-    Cout << colors.Yellow() << "Initialization of kqp runner..." << colors.Default() << Endl;
+    Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Initialization of kqp runner..." << colors.Default() << Endl;
     NKqpRun::TKqpRunner runner(runnerOptions);
 
     if (executionOptions.SchemeQuery) {
-        Cout << colors.Yellow() << "Executing scheme query..." << colors.Default() << Endl;
+        Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Executing scheme query..." << colors.Default() << Endl;
         if (!runner.ExecuteSchemeQuery(executionOptions.SchemeQuery, executionOptions.TraceId)) {
-            ythrow yexception() << "Scheme query execution failed";
+            ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Scheme query execution failed";
         }
     }
 
     if (executionOptions.ScriptQuery) {
-        Cout << colors.Yellow() << "Executing script..." << colors.Default() << Endl;
+        Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Executing script..." << colors.Default() << Endl;
         switch (executionOptions.ClearExecution) {
         case TExecutionOptions::EClearExecutionCase::Disabled:
             if (!runner.ExecuteScript(executionOptions.ScriptQuery, executionOptions.ScriptQueryAction, executionOptions.TraceId)) {
-                ythrow yexception() << "Script execution failed";
+                ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Script execution failed";
             }
-            Cout << colors.Yellow() << "Fetching script results..." << colors.Default() << Endl;
+            Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Fetching script results..." << colors.Default() << Endl;
             if (!runner.FetchScriptResults()) {
-                ythrow yexception() << "Fetch script results failed";
+                ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Fetch script results failed";
             }
             if (executionOptions.ForgetExecution) {
-                Cout << colors.Yellow() << "Forgetting script execution operation..." << colors.Default() << Endl;
+                Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Forgetting script execution operation..." << colors.Default() << Endl;
                 if (!runner.ForgetExecutionOperation()) {
-                    ythrow yexception() << "Forget script execution operation failed";
+                    ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Forget script execution operation failed";
                 }
             }
             break;
 
         case TExecutionOptions::EClearExecutionCase::GenericQuery:
             if (!runner.ExecuteQuery(executionOptions.ScriptQuery, executionOptions.ScriptQueryAction, executionOptions.TraceId)) {
-                ythrow yexception() << "Query execution failed";
+                ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Query execution failed";
             }
             break;
 
         case TExecutionOptions::EClearExecutionCase::YqlScript:
             if (!runner.ExecuteYqlScript(executionOptions.ScriptQuery, executionOptions.ScriptQueryAction, executionOptions.TraceId)) {
-                ythrow yexception() << "Yql script execution failed";
+                ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Yql script execution failed";
             }
             break;
         }
@@ -90,7 +90,7 @@ void RunScript(const TExecutionOptions& executionOptions, const NKqpRun::TRunner
         runner.PrintScriptResults();
     }
 
-    Cout << colors.Yellow() << "Finalization of kqp runner..." << colors.Default() << Endl;
+    Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Finalization of kqp runner..." << colors.Default() << Endl;
 }
 
 
@@ -118,7 +118,7 @@ void ReplaceTemplate(const TString& variableName, const TString& variableValue, 
 TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> CreateFunctionRegistry(const TString& udfsDirectory, TVector<TString> udfsPaths, bool excludeLinkedUdfs) {
     if (!udfsDirectory.empty() || !udfsPaths.empty()) {
         NColorizer::TColors colors = NColorizer::AutoColors(Cout);
-        Cout << colors.Yellow() << "Fetching udfs..." << colors.Default() << Endl;
+        Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Fetching udfs..." << colors.Default() << Endl;
     }
 
     NKikimr::NMiniKQL::FindUdfsInDir(udfsDirectory, &udfsPaths);
@@ -245,6 +245,11 @@ void RunMain(int argc, const char* argv[]) {
         .NoArgument()
         .DefaultValue(emulateYt)
         .SetFlag(&emulateYt);
+    options.AddLongOption('N', "node-count", "Number of nodes to create")
+        .Optional()
+        .RequiredArgument("INT")
+        .DefaultValue(runnerOptions.YdbSettings.NodeCount)
+        .StoreResult(&runnerOptions.YdbSettings.NodeCount);
 
     options.AddLongOption('u', "udf", "Load shared library with UDF by given path")
         .Optional()
@@ -318,6 +323,10 @@ void RunMain(int argc, const char* argv[]) {
 
     // Ydb settings
 
+    if (runnerOptions.YdbSettings.NodeCount < 1) {
+        ythrow yexception() << "Number nodes less than one";
+    }
+
     if (logFile != "-") {
         runnerOptions.YdbSettings.LogOutputFile = logFile;
         std::remove(logFile.c_str());
@@ -360,6 +369,7 @@ void RunMain(int argc, const char* argv[]) {
     RunScript(executionOptions, runnerOptions);
 }
 
+
 void KqprunTerminateHandler() {
     NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
 
@@ -369,6 +379,7 @@ void KqprunTerminateHandler() {
 
     abort();
 }
+
 
 int main(int argc, const char* argv[]) {
     std::set_terminate(KqprunTerminateHandler);

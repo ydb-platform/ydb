@@ -285,6 +285,7 @@ void TGraceJoinPacker::Pack()  {
             auto str = TuplePtrs[i]->AsStringRef();
             TupleStrings[offset] = str.Data();
             TupleStrSizes[offset] = str.Size();
+            break;
         }
         case NUdf::EDataSlot::TzDate:
         {
@@ -403,6 +404,7 @@ void TGraceJoinPacker::UnPack()  {
         case NUdf::EDataSlot::Uuid:
         {
             value = MakeString(NUdf::TStringRef(TupleStrings[offset], TupleStrSizes[offset]));
+            break;
         }
         case NUdf::EDataSlot::TzDate:
         {

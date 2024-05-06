@@ -119,7 +119,7 @@ val prepareProto = tasks.register<Copy>("prepareProto") {
 {%- endfor %}
 {# Mining proto-deps sources directories #}
 {%- for library in target.consumer if library.prebuilt -%}
-{%-     if library.type == "library" %}      
+{%-     if library.type == "library" %}
 {%-         set proto_rep = library.classpath|replace('project(":','') %}
 {%-         set proto_rep = proto_rep|replace('")','') %}
 {%-         set proto_rep = proto_rep|replace(':','/') %}
@@ -134,5 +134,13 @@ val prepareProto = tasks.register<Copy>("prepareProto") {
 afterEvaluate {
     tasks.getByName("extractProto").dependsOn(prepareProto)
 }
+{# To avoid problems when build project with proto #}
+tasks.named("sourcesJar").configure {
+    dependsOn("generateProto")
+}
+{# To disable redundant javadoc (it may fail the build) #}
+tasks.withType<Javadoc>().configureEach {
+    isEnabled = false
+}
 
-{{ dump }}
+{%- include "[generator]/debug.jinja" ignore missing -%}

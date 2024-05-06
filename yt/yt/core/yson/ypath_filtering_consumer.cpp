@@ -181,7 +181,7 @@ public:
     TYPathFilteringConsumer(
         NYson::IYsonConsumer* underlying,
         std::vector<NYPath::TYPath> paths,
-        EPathFilteringMode mode)
+        EYPathFilteringMode mode)
         : Underlying_(underlying)
         , Paths_(std::move(paths))
         , Mode_(mode)
@@ -218,7 +218,7 @@ private:
 
     NYson::IYsonConsumer* Underlying_;
     const std::vector<NYPath::TYPath> Paths_;
-    const EPathFilteringMode Mode_;
+    const EYPathFilteringMode Mode_;
     bool SubtreeFiltering_ = false;
     int FilteringDepth_ = -1;
     std::vector<TPathFilteringState> PerPathFilteringStates_;
@@ -378,17 +378,17 @@ private:
 
     bool IsBlacklistMode() const
     {
-        return Mode_ == EPathFilteringMode::Blacklist;
+        return Mode_ == EYPathFilteringMode::Blacklist;
     }
 
     bool IsWhitelistMode() const
     {
-        return Mode_ == EPathFilteringMode::Whitelist || Mode_ == EPathFilteringMode::WhitelistWithForcedEntities;
+        return Mode_ == EYPathFilteringMode::Whitelist || Mode_ == EYPathFilteringMode::WhitelistWithForcedEntities;
     }
 
     bool IsForcedEntitiesMode() const
     {
-        return Mode_ == EPathFilteringMode::ForcedEntities || Mode_ == EPathFilteringMode::WhitelistWithForcedEntities;
+        return Mode_ == EYPathFilteringMode::ForcedEntities || Mode_ == EYPathFilteringMode::WhitelistWithForcedEntities;
     }
 
     template <typename TTokenType>
@@ -436,7 +436,7 @@ private:
 std::unique_ptr<NYson::IYsonConsumer> CreateYPathFilteringConsumer(
     NYson::IYsonConsumer* underlying,
     std::vector<NYPath::TYPath> paths,
-    EPathFilteringMode mode)
+    EYPathFilteringMode mode)
 {
     return std::make_unique<TYPathFilteringConsumer>(underlying, std::move(paths), mode);
 }

@@ -43,6 +43,7 @@ STFUNC(TController::StateInit) {
 STFUNC(TController::StateWork) {
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvController::TEvCreateReplication, Handle);
+        HFunc(TEvController::TEvAlterReplication, Handle);
         HFunc(TEvController::TEvDropReplication, Handle);
         HFunc(TEvPrivate::TEvDropReplication, Handle);
         HFunc(TEvPrivate::TEvDiscoveryTargetsResult, Handle);
@@ -73,6 +74,10 @@ void TController::Cleanup(const TActorContext& ctx) {
         Send(actorId, new TEvents::TEvPoison());
     }
 
+    for (const auto& [nodeId, _] : Sessions) {
+        CloseSession(nodeId, ctx);
+    }
+
     NodesManager.Shutdown(ctx);
 }
 
@@ -100,6 +105,11 @@ void TController::Reset() {
 void TController::Handle(TEvController::TEvCreateReplication::TPtr& ev, const TActorContext& ctx) {
     CLOG_T(ctx, "Handle " << ev->Get()->ToString());
     RunTxCreateReplication(ev, ctx);
+}
+
+void TController::Handle(TEvController::TEvAlterReplication::TPtr& ev, const TActorContext& ctx) {
+    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    RunTxAlterReplication(ev, ctx);
 }
 
 void TController::Handle(TEvController::TEvDropReplication::TPtr& ev, const TActorContext& ctx) {
@@ -248,11 +258,17 @@ void TController::DeleteSession(ui32 nodeId, const TActorContext& ctx) {
     }
 
     Sessions.erase(nodeId);
+    CloseSession(nodeId, ctx);
+    ScheduleRunWorkers();
+}
+
+void TController::CloseSession(ui32 nodeId, const TActorContext& ctx) {
+    CLOG_T(ctx, "Close session"
+        << ": nodeId# " << nodeId);
+
     if (SelfId().NodeId() != nodeId) {
         Send(ctx.InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe());
     }
-
-    ScheduleRunWorkers();
 }
 
 void TController::Handle(TEvService::TEvStatus::TPtr& ev, const TActorContext& ctx) {

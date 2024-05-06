@@ -14,6 +14,7 @@ from collections import abc, defaultdict
 from functools import lru_cache
 from random import shuffle
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     ClassVar,
@@ -28,7 +29,7 @@ from typing import (
 )
 
 from hypothesis._settings import HealthCheck, Phase, Verbosity, settings
-from hypothesis.control import _current_build_context, assume
+from hypothesis.control import _current_build_context
 from hypothesis.errors import (
     HypothesisException,
     HypothesisWarning,
@@ -51,7 +52,16 @@ from hypothesis.internal.reflection import (
 from hypothesis.strategies._internal.utils import defines_strategy
 from hypothesis.utils.conventions import UniqueIdentifier
 
-Ex = TypeVar("Ex", covariant=True)
+# TODO: Use `(3, 13)` once Python 3.13 is released.
+if sys.version_info >= (3, 13, 0, "final"):
+    Ex = TypeVar("Ex", covariant=True, default=Any)
+elif TYPE_CHECKING:
+    from typing_extensions import TypeVar  # type: ignore[assignment]
+
+    Ex = TypeVar("Ex", covariant=True, default=Any)  # type: ignore[call-arg,misc]
+else:
+    Ex = TypeVar("Ex", covariant=True)
+
 Ex_Inv = TypeVar("Ex_Inv")
 T = TypeVar("T")
 T3 = TypeVar("T3")
@@ -1002,7 +1012,6 @@ class FilteredStrategy(SearchStrategy[Ex]):
 
     def do_filtered_draw(self, data):
         for i in range(3):
-            start_index = data.index
             data.start_example(FILTERED_SEARCH_STRATEGY_DO_DRAW_LABEL)
             value = data.draw(self.filtered_strategy)
             if self.condition(value):
@@ -1012,10 +1021,6 @@ class FilteredStrategy(SearchStrategy[Ex]):
                 data.stop_example(discard=True)
                 if i == 0:
                     data.events[f"Retried draw from {self!r} to satisfy filter"] = ""
-                # This is to guard against the case where we consume no data.
-                # As long as we consume data, we'll eventually pass or raise.
-                # But if we don't this could be an infinite loop.
-                assume(data.index > start_index)
 
         return filter_not_satisfied
 

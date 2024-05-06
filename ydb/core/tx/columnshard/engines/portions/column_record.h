@@ -2,7 +2,7 @@
 
 #include "common.h"
 
-#include <ydb/core/protos/tx_columnshard.pb.h>
+#include <ydb/core/tx/columnshard/engines/protos/portion_info.pb.h>
 
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
@@ -31,7 +31,7 @@ struct TChunkMeta: public TSimpleChunkMeta {
 private:
     using TBase = TSimpleChunkMeta;
     TChunkMeta() = default;
-    TConclusionStatus DeserializeFromProto(const TChunkAddress& address, const NKikimrTxColumnShard::TIndexColumnMeta& proto, const TSimpleColumnInfo& columnInfo);
+    [[nodiscard]] TConclusionStatus DeserializeFromProto(const TChunkAddress& address, const NKikimrTxColumnShard::TIndexColumnMeta& proto, const TSimpleColumnInfo& columnInfo);
     friend class TColumnRecord;
 public:
     TChunkMeta(TSimpleChunkMeta&& baseMeta)
@@ -40,7 +40,7 @@ public:
 
     }
 
-    static TConclusion<TChunkMeta> BuildFromProto(const TChunkAddress& address, const NKikimrTxColumnShard::TIndexColumnMeta& proto, const TSimpleColumnInfo& columnInfo) {
+    [[nodiscard]] static TConclusion<TChunkMeta> BuildFromProto(const TChunkAddress& address, const NKikimrTxColumnShard::TIndexColumnMeta& proto, const TSimpleColumnInfo& columnInfo) {
         TChunkMeta result;
         auto parse = result.DeserializeFromProto(address, proto, columnInfo);
         if (!parse) {
@@ -82,12 +82,16 @@ public:
     ui16 Chunk = 0;
     TBlobRangeLink16 BlobRange;
 
+    ui32 GetEntityId() const {
+        return ColumnId;
+    }
+
     void ResetBlobRange() {
         BlobRange = TBlobRangeLink16();
     }
 
     void RegisterBlobIdx(const ui16 blobIdx) {
-//        AFL_VERIFY(!BlobRange.BlobId.GetTabletId())("original", BlobRange.BlobId.ToStringNew())("new", blobId.ToStringNew());
+        AFL_VERIFY(!BlobRange.BlobIdx)("original", BlobRange.BlobIdx)("new", blobIdx);
         BlobRange.BlobIdx = blobIdx;
     }
 
@@ -139,7 +143,7 @@ public:
     }
 
     TSimpleSerializationStat GetSerializationStat() const {
-        return TSimpleSerializationStat(BlobRange.Size, Meta.GetNumRowsVerified(), Meta.GetRawBytesVerified());
+        return TSimpleSerializationStat(BlobRange.Size, Meta.GetNumRows(), Meta.GetRawBytes());
     }
 
     const TChunkMeta& GetMeta() const {
@@ -161,7 +165,7 @@ public:
     TString DebugString() const {
         return TStringBuilder()
             << "column_id:" << ColumnId << ";"
-            << "blob_range:" << BlobRange << ";"
+            << "blob_range:" << BlobRange.ToString() << ";"
             ;
     }
 
@@ -202,7 +206,7 @@ protected:
         return Data;
     }
     virtual ui32 DoGetRecordsCountImpl() const override {
-        return ColumnRecord.GetMeta().GetNumRowsVerified();
+        return ColumnRecord.GetMeta().GetNumRows();
     }
     virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplitImpl(const TColumnSaver& /*saver*/, const std::shared_ptr<NColumnShard::TSplitterCounters>& /*counters*/,
                                                                                 const std::vector<ui64>& /*splitSizes*/) const override {

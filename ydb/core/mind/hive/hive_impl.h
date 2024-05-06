@@ -566,9 +566,11 @@ protected:
     void Handle(TEvPrivate::TEvProcessStorageBalancer::TPtr& ev);
     void Handle(TEvPrivate::TEvProcessIncomingEvent::TPtr& ev);
     void Handle(TEvHive::TEvUpdateDomain::TPtr& ev);
+    void Handle(TEvPrivate::TEvDeleteNode::TPtr& ev);
 
 protected:
     void RestartPipeTx(ui64 tabletId);
+    bool TryToDeleteNode(TNodeInfo* node);
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

@@ -10,11 +10,16 @@ TConclusionStatus TUpsertOptionsOperation::DoDeserialize(NYql::TObjectSettingsIm
         TConclusionStatus::Fail("Incorrect value for SCHEME_NEED_ACTUALIZATION: cannot parse as boolean");
     }
     SchemeNeedActualization = *value;
+    ExternalGuaranteeExclusivePK = features.Extract<bool>("EXTERNAL_GUARANTEE_EXCLUSIVE_PK");
     return TConclusionStatus::Success();
 }
 
 void TUpsertOptionsOperation::DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTableSchema& schemaData) const {
     schemaData.MutableOptions()->SetSchemeNeedActualization(SchemeNeedActualization);
+    if (ExternalGuaranteeExclusivePK) {
+        schemaData.MutableOptions()->SetExternalGuaranteeExclusivePK(*ExternalGuaranteeExclusivePK);
+    }
+    
 }
 
 }

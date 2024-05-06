@@ -1,10 +1,10 @@
 Registering pre-existing tables
-	onek
-	onek2
-	emp
 	student
+	emp
+	onek2
 	stud_emp
 	int8_tbl
+	onek
 <sql-statement>
 --
 -- SELECT

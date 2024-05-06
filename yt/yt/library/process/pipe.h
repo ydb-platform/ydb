@@ -20,6 +20,7 @@ public:
 
     NNet::IConnectionReaderPtr CreateAsyncReader();
     NNet::IConnectionWriterPtr CreateAsyncWriter();
+    NNet::IConnectionWriterPtr CreateDeliveryFencedAsyncWriter();
 
     TString GetPath() const;
 

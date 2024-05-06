@@ -22,6 +22,10 @@ void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const
             IncCounter(COUNTER_WRITE_OVERLOAD);
             CSCounters.OnOverloadInsertTable(writeData.GetSize());
             break;
+        case EOverloadStatus::OverloadMetadata:
+            IncCounter(COUNTER_WRITE_OVERLOAD);
+            CSCounters.OnOverloadMetadata(writeData.GetSize());
+            break;
         case EOverloadStatus::ShardTxInFly:
             IncCounter(COUNTER_WRITE_OVERLOAD);
             CSCounters.OnOverloadShardTx(writeData.GetSize());
@@ -52,6 +56,11 @@ TColumnShard::EOverloadStatus TColumnShard::CheckOverloaded(const ui64 tableId) 
 
     if (InsertTable && InsertTable->IsOverloadedByCommitted(tableId)) {
         return EOverloadStatus::InsertTable;
+    }
+
+    CSCounters.OnIndexMetadataLimit(NOlap::IColumnEngine::GetMetadataLimit());
+    if (TablesManager.GetPrimaryIndex() && TablesManager.GetPrimaryIndex()->IsOverloadedByMetadata(NOlap::IColumnEngine::GetMetadataLimit())) {
+        return EOverloadStatus::OverloadMetadata;
     }
 
     ui64 txLimit = Settings.OverloadTxInFlight;
@@ -189,7 +198,8 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
         return returnFail(COUNTER_WRITE_FAIL);
     }
 
-    NEvWrite::TWriteData writeData(writeMeta, arrowData, snapshotSchema->GetIndexInfo().GetReplaceKey(), StoragesManager->GetInsertOperator()->StartWritingAction("WRITING"));
+    NEvWrite::TWriteData writeData(writeMeta, arrowData, snapshotSchema->GetIndexInfo().GetReplaceKey(),
+        StoragesManager->GetInsertOperator()->StartWritingAction(NOlap::NBlobOperations::EConsumer::WRITING));
     auto overloadStatus = CheckOverloaded(tableId);
     if (overloadStatus != EOverloadStatus::None) {
         std::unique_ptr<NActors::IEventBase> result = std::make_unique<TEvColumnShard::TEvWriteResult>(TabletID(), writeData.GetWriteMeta(), NKikimrTxColumnShard::EResultStatus::OVERLOADED);

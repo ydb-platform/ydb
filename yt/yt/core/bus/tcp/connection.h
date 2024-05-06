@@ -359,7 +359,7 @@ private:
     void IncrementPendingOut(i64 packetSize);
     void DecrementPendingOut(i64 packetSize);
 
-    void FlushStatistics();
+    void FlushStatistics(bool guarded = false);
 
     template <class T, class U>
     i64 UpdateBusCounter(T TBusNetworkBandCounters::* field, U delta);

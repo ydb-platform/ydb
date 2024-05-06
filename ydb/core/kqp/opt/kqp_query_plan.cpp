@@ -2,7 +2,7 @@
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
-#include <ydb/core/protos/ssa.pb.h>
+#include <ydb/core/formats/arrow/protos/ssa.pb.h>
 #include <ydb/public/lib/value/value.h>
 
 #include <ydb/library/yql/ast/yql_ast_escaping.h>
@@ -299,6 +299,7 @@ private:
         TVector<TOperator> Operators;
         THashSet<ui32> Plans;
         const NKqpProto::TKqpPhyStage* StageProto;
+        TMap<TString, TString> OptEstimates;
     };
 
     void WritePlanNodeToJson(const TQueryPlanNode& planNode, NJsonWriter::TBuf& writer) const {
@@ -307,6 +308,10 @@ private:
         writer.WriteKey("PlanNodeId").WriteInt(planNode.NodeId);
         writer.WriteKey("Node Type").WriteString(planNode.TypeName);
         writer.WriteKey("StageGuid").WriteString(planNode.Guid);
+
+        for (auto [k, v] : planNode.OptEstimates) {
+            writer.WriteKey(k).WriteString(v);
+        }
 
         if (auto type = GetPlanNodeType(planNode)) {
             writer.WriteKey("PlanNodeType").WriteString(type);
@@ -513,6 +518,20 @@ private:
             for (const auto keyColumn : lookupKeyColumnsStruct->GetItems()) {
                 lookupKeyColumns.AppendValue(keyColumn->GetName());
                 readInfo.LookupBy.push_back(TString(keyColumn->GetName()));
+            }
+
+            if (SerializerCtx.Config->CostBasedOptimizationLevel.Get().GetOrElse(TDqSettings::TDefault::CostBasedOptimizationLevel)!=0) {
+
+                if (auto stats = SerializerCtx.TypeCtx.GetStats(tableLookup.Raw())) {
+                    planNode.OptEstimates["E-Rows"] = TStringBuilder() << stats->Nrows;
+                    planNode.OptEstimates["E-Cost"] = TStringBuilder() << stats->Cost;
+                    planNode.OptEstimates["E-Size"] = TStringBuilder() << stats->ByteSize;
+                }
+                else {
+                    planNode.OptEstimates["E-Rows"] = "No estimate";
+                    planNode.OptEstimates["E-Cost"] = "No estimate";
+                    planNode.OptEstimates["E-Size"] = "No estimate";
+                }
             }
 
             SerializerCtx.Tables[table].Reads.push_back(std::move(readInfo));
@@ -1427,9 +1446,9 @@ private:
         }
 
         if (auto stats = SerializerCtx.TypeCtx.GetStats(expr.Raw())) {
-            op.Properties["E-Rows"] = stats->Nrows;
-            op.Properties["E-Cost"] = stats->Cost;
-            op.Properties["E-Size"] = stats->ByteSize;
+            op.Properties["E-Rows"] = TStringBuilder() << stats->Nrows;
+            op.Properties["E-Cost"] = TStringBuilder() << stats->Cost;
+            op.Properties["E-Size"] = TStringBuilder() << stats->ByteSize;
         }
         else {
             op.Properties["E-Rows"] = "No estimate";
@@ -1969,6 +1988,16 @@ NJson::TJsonValue ReconstructQueryPlanRec(const NJson::TJsonValue& plan,
             op["LookupKeyColumns"] = plan.GetMapSafe().at("LookupKeyColumns");
             op["Table"] = plan.GetMapSafe().at("Table");
 
+            if (plan.GetMapSafe().contains("E-Cost")) {
+                op["E-Cost"] = plan.GetMapSafe().at("E-Cost");
+            } 
+            if (plan.GetMapSafe().contains("E-Rows")) {
+                op["E-Rows"] = plan.GetMapSafe().at("E-Rows");
+            }
+            if (plan.GetMapSafe().contains("E-Size")) {
+                op["E-Size"] = plan.GetMapSafe().at("E-Size");
+            }
+
             newOps.AppendValue(op);
 
             result["Operators"] = newOps;
@@ -2028,7 +2057,7 @@ NJson::TJsonValue ReconstructQueryPlanRec(const NJson::TJsonValue& plan,
         }
 
         // Sometimes we have multiple inputs for these operators, break after the first one
-        if (opName == "Filter" || opName == "TopSort") {
+        if (opName == "Filter" || opName == "TopSort" || opName == "Aggregate") {
             break;
         }
     }
@@ -2090,8 +2119,6 @@ double ComputeCpuTimes(NJson::TJsonValue& plan) {
     }
 
     if (plan.GetMapSafe().contains("Stats") && plan.GetMapSafe().contains("Operators")) {
-        YQL_CLOG(TRACE, CoreDq) << "Found Operators";
-
         auto& ops = plan.GetMapSafe().at("Operators").GetArraySafe();
 
         const auto& stats = plan.GetMapSafe().at("Stats").GetMapSafe();
@@ -2113,6 +2140,45 @@ double ComputeCpuTimes(NJson::TJsonValue& plan) {
     }
 
     return currCpuTime;
+}
+
+void ComputeTotalRows(NJson::TJsonValue& plan) {
+    
+    if (plan.GetMapSafe().contains("Plans")) {
+        for (auto& p : plan.GetMapSafe().at("Plans").GetArraySafe()) {
+            ComputeTotalRows(p);
+        }
+    }
+
+    if (plan.GetMapSafe().contains("Stats") && plan.GetMapSafe().contains("Operators")) {
+        auto& ops = plan.GetMapSafe().at("Operators").GetArraySafe();
+
+        const auto& stats = plan.GetMapSafe().at("Stats").GetMapSafe();
+
+        if (stats.contains("OutputRows")) {
+            auto outputRows = stats.at("OutputRows");
+            double nRows;
+            if (outputRows.IsMap()) {
+                nRows = outputRows.GetMapSafe().at("Sum").GetDouble();
+            } else {
+                nRows = outputRows.GetDouble();
+            }
+            ops[0]["A-Rows"] = nRows;
+        }
+    }
+}
+
+void RemoveStats(NJson::TJsonValue& plan) {
+
+    if (plan.GetMapSafe().contains("Plans")) {
+        for (auto& p : plan.GetMapSafe().at("Plans").GetArraySafe()) {
+            RemoveStats(p);
+        }
+    }
+
+    if (plan.GetMapSafe().contains("Stats")) {
+        plan.GetMapSafe().erase("Stats");
+    }
 }
 
 NJson::TJsonValue SimplifyQueryPlan(NJson::TJsonValue& plan) {
@@ -2141,6 +2207,8 @@ NJson::TJsonValue SimplifyQueryPlan(NJson::TJsonValue& plan) {
     plan = ReconstructQueryPlanRec(plan, 0, planIndex, precomputes, nodeCounter);
     RemoveRedundantNodes(plan, redundantNodes);
     ComputeCpuTimes(plan);
+    ComputeTotalRows(plan);
+    RemoveStats(plan);
 
     return plan;
 }
@@ -2158,11 +2226,6 @@ TString AddSimplifiedPlan(const TString& planText, bool analyzeMode) {
 
     planJson["SimplifiedPlan"] = SimplifyQueryPlan(planCopy.GetMapSafe().at("Plan"));
 
-    // Don't print the OLAP plan yet, there are some non UTF-8 symbols there that need to be fixed
-    //TTempBufOutput stringStream;
-    //NYdb::NConsoleClient::TQueryPlanPrinter printer(NYdb::NConsoleClient::EOutputFormat::PrettyTable, analyzeMode, stringStream);
-    //printer.Print(planJson.GetStringRobust());
-    //planJson["OLAPText"] = stringStream.Data();
     return planJson.GetStringRobust();
 }
 

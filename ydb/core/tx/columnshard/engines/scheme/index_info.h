@@ -24,10 +24,6 @@ namespace arrow {
     class Schema;
 }
 
-namespace NKikimr::NArrow {
-    struct TSortDescription;
-}
-
 namespace NKikimr::NOlap {
 
 class TPortionInfoWithBlobs;
@@ -43,15 +39,20 @@ private:
     THashMap<ui32, TColumnFeatures> ColumnFeatures;
     THashMap<ui32, std::shared_ptr<arrow::Field>> ArrowColumnByColumnIdCache;
     THashMap<ui32, NIndexes::TIndexMetaContainer> Indexes;
-    std::map<NStatistics::TIdentifier, NStatistics::TOperatorContainer> Statistics;
+    std::map<TString, NStatistics::TOperatorContainer> StatisticsByName;
     TIndexInfo(const TString& name);
     bool SchemeNeedActualization = false;
+    bool ExternalGuaranteeExclusivePK = false;
     bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<IStoragesManager>& operators);
     TColumnFeatures& GetOrCreateColumnFeatures(const ui32 columnId) const;
     void BuildSchemaWithSpecials();
     void BuildArrowSchema();
     void InitializeCaches(const std::shared_ptr<IStoragesManager>& operators);
 public:
+    bool GetExternalGuaranteeExclusivePK() const {
+        return ExternalGuaranteeExclusivePK;
+    }
+
     const TColumnFeatures& GetColumnFeaturesVerified(const ui32 columnId) const {
         auto it = ColumnFeatures.find(columnId);
         AFL_VERIFY(it != ColumnFeatures.end());
@@ -78,14 +79,15 @@ public:
 
     std::vector<std::shared_ptr<IPortionDataChunk>> MakeEmptyChunks(const ui32 columnId, const std::vector<ui32>& pages, const TSimpleColumnInfo& columnInfo) const;
 
-    const std::map<NStatistics::TIdentifier, NStatistics::TOperatorContainer>& GetStatistics() const {
-        return Statistics;
+    const std::map<TString, NStatistics::TOperatorContainer>& GetStatisticsByName() const {
+        return StatisticsByName;
     }
 
     NStatistics::TOperatorContainer GetStatistics(const NStatistics::TIdentifier& id) const {
-        auto it = Statistics.find(id);
-        if (it != Statistics.end()) {
-            return it->second;
+        for (auto&& i : StatisticsByName) {
+            if (i.second->GetIdentifier() == id) {
+                return i.second;
+            }
         }
         return NStatistics::TOperatorContainer();
     }
@@ -137,6 +139,7 @@ public:
 
     /// Makes schema as set of the special columns.
     static std::shared_ptr<arrow::Schema> ArrowSchemaSnapshot();
+    static ui64 GetSpecialColumnsRecordSize();
 
     /// Matches name of the filed with names of the special columns.
     static bool IsSpecialColumn(const arrow::Field& field);
@@ -301,9 +304,6 @@ public:
     /// Returns whether the sorting keys defined.
     bool IsSorted() const { return true; }
     bool IsSortedColumn(const ui32 columnId) const { return GetPKFirstColumnId() == columnId; }
-
-    std::shared_ptr<NArrow::TSortDescription> SortDescription() const;
-    std::shared_ptr<NArrow::TSortDescription> SortReplaceDescription() const;
 
     static const std::set<ui32>& GetSpecialColumnIdsSet() {
         static const std::set<ui32> result(GetSpecialColumnIds().begin(), GetSpecialColumnIds().end());

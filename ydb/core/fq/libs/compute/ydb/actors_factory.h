@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/fq/libs/compute/common/run_actor_params.h>
+#include <ydb/core/fq/libs/metrics/status_code_counters.h>
 
 #include <ydb/library/yql/providers/common/metrics/service_counters.h>
 
@@ -44,6 +45,6 @@ struct IActorFactory : public TThrRefBase {
                                                            const NYdb::TOperation::TOperationId& operationId) const = 0;
 };
 
-IActorFactory::TPtr CreateActorFactory(const TRunActorParams& params, const ::NYql::NCommon::TServiceCounters& counters);
+IActorFactory::TPtr CreateActorFactory(const TRunActorParams& params, const ::NYql::NCommon::TServiceCounters& serviceCounters, const NFq::TStatusCodeByScopeCounters::TPtr& failedStatusCodeCounters);
 
 }

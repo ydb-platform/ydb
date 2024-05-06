@@ -40,7 +40,7 @@ private:
         }
     };
 
-    std::optional<TPortionInfoWithBlobs> UpdateEvictedPortion(TPortionForEviction& info, NBlobOperations::NRead::TCompositeReadBlobs& srcBlobs,
+    std::optional<TWritePortionInfoWithBlobs> UpdateEvictedPortion(TPortionForEviction& info, NBlobOperations::NRead::TCompositeReadBlobs& srcBlobs,
         TConstructionContext& context) const;
 
     std::vector<TPortionForEviction> PortionsToEvict;
@@ -72,10 +72,10 @@ public:
         ui64 MaxRawMemory = 0;
     public:
         virtual ui64 AddPortion(const TPortionInfo& portionInfo) override {
-            if (MaxRawMemory < portionInfo.GetRawBytes()) {
-                MaxRawMemory = portionInfo.GetRawBytes();
+            if (MaxRawMemory < portionInfo.GetTotalRawBytes()) {
+                MaxRawMemory = portionInfo.GetTotalRawBytes();
             }
-            SumBlobsMemory += portionInfo.GetBlobBytes();
+            SumBlobsMemory += portionInfo.GetTotalBlobBytes();
             return SumBlobsMemory + MaxRawMemory;
         }
     };
@@ -94,7 +94,6 @@ public:
     ui32 GetPortionsToEvictCount() const {
         return PortionsToEvict.size();
     }
-
     void AddPortionToEvict(const TPortionInfo& info, TPortionEvictionFeatures&& features) {
         Y_ABORT_UNLESS(!info.Empty());
         Y_ABORT_UNLESS(!info.HasRemoveSnapshot());
@@ -110,7 +109,7 @@ public:
     }
 
     TTTLColumnEngineChanges(const NActualizer::TRWAddress& address, const TSaverContext& saverContext)
-        : TBase(saverContext, StaticTypeName())
+        : TBase(saverContext, NBlobOperations::EConsumer::TTL)
         , RWAddress(address)
     {
 

@@ -29,9 +29,9 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
 
         if (movePortion) {
             if ((*itPortion)->GetMeta().GetProduced() == NPortion::EProduced::COMPACTED || (*itPortion)->GetMeta().GetProduced() == NPortion::EProduced::SPLIT_COMPACTED) {
-                compactedPortionsBytes += (*itPortion)->BlobsBytes();
+                compactedPortionsBytes += (*itPortion)->GetTotalBlobBytes();
             } else {
-                insertedPortionsBytes += (*itPortion)->BlobsBytes();
+                insertedPortionsBytes += (*itPortion)->GetTotalBlobBytes();
             }
             sources.emplace_back(std::make_shared<TPortionDataSource>(sourceIdx++, *itPortion, SpecialReadContext, (*itPortion)->IndexKeyStart(), (*itPortion)->IndexKeyEnd()));
             ++itPortion;
@@ -69,12 +69,12 @@ std::vector<TPartialReadResult> TPlainReadData::DoExtractReadyResults(const int6
     return result;
 }
 
-bool TPlainReadData::DoReadNextInterval() {
+TConclusion<bool> TPlainReadData::DoReadNextInterval() {
     return Scanner->BuildNextInterval();
 }
 
 void TPlainReadData::OnIntervalResult(const std::shared_ptr<TPartialReadResult>& result) {
-    result->GetResourcesGuardOnly()->Update(result->GetMemorySize());
+//    result->GetResourcesGuardOnly()->Update(result->GetMemorySize());
     ReadyResultsCount += result->GetRecordsCount();
     PartialResults.emplace_back(std::move(*result));
 }

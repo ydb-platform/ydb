@@ -5,7 +5,6 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
-#include <ydb/core/formats/arrow/sort_cursor.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/formats/arrow/transformer/dictionary.h>
 #include <ydb/core/sys_view/common/schema.h>
@@ -46,6 +45,10 @@ std::shared_ptr<arrow::RecordBatch> TIndexInfo::AddSpecialColumns(const std::sha
     Y_ABORT_UNLESS(res.ok());
     Y_ABORT_UNLESS((*res)->num_columns() == numColumns + 2);
     return *res;
+}
+
+ui64 TIndexInfo::GetSpecialColumnsRecordSize() {
+    return sizeof(ui64) + sizeof(ui64);
 }
 
 std::shared_ptr<arrow::Schema> TIndexInfo::ArrowSchemaSnapshot() {
@@ -260,32 +263,6 @@ void TIndexInfo::SetAllKeys(const std::shared_ptr<IStoragesManager>& operators) 
     }
 }
 
-std::shared_ptr<NArrow::TSortDescription> TIndexInfo::SortDescription() const {
-    if (GetPrimaryKey()) {
-        auto key = ExtendedKey; // Sort with extended key, greater snapshot first
-        Y_ABORT_UNLESS(key && key->num_fields() > 2);
-        auto description = std::make_shared<NArrow::TSortDescription>(key);
-        description->Directions[key->num_fields() - 1] = -1;
-        description->Directions[key->num_fields() - 2] = -1;
-        description->NotNull = true; // TODO
-        return description;
-    }
-    return {};
-}
-
-std::shared_ptr<NArrow::TSortDescription> TIndexInfo::SortReplaceDescription() const {
-    if (GetPrimaryKey()) {
-        auto key = ExtendedKey; // Sort with extended key, greater snapshot first
-        Y_ABORT_UNLESS(key && key->num_fields() > 2);
-        auto description = std::make_shared<NArrow::TSortDescription>(key, GetPrimaryKey());
-        description->Directions[key->num_fields() - 1] = -1;
-        description->Directions[key->num_fields() - 2] = -1;
-        description->NotNull = true; // TODO
-        return description;
-    }
-    return {};
-}
-
 TColumnSaver TIndexInfo::GetColumnSaver(const ui32 columnId) const {
     auto it = ColumnFeatures.find(columnId);
     AFL_VERIFY(it != ColumnFeatures.end());
@@ -343,6 +320,7 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
 
     {
         SchemeNeedActualization = schema.GetOptions().GetSchemeNeedActualization();
+        ExternalGuaranteeExclusivePK = schema.GetOptions().GetExternalGuaranteeExclusivePK();
     }
 
     if (schema.HasDefaultCompression()) {
@@ -355,12 +333,14 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
     }
 
     {
-        NStatistics::TPortionStorageCursor cursor;
         for (const auto& stat : schema.GetStatistics()) {
             NStatistics::TOperatorContainer container;
             AFL_VERIFY(container.DeserializeFromProto(stat));
+            AFL_VERIFY(StatisticsByName.emplace(container.GetName(), std::move(container)).second);
+        }
+        NStatistics::TPortionStorageCursor cursor;
+        for (auto&& [_, container] : StatisticsByName) {
             container.SetCursor(cursor);
-            Statistics.emplace(container->GetIdentifier(), container);
             container->ShiftCursor(cursor);
         }
     }
@@ -418,7 +398,9 @@ std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSche
 
         const auto& column = it->second;
         std::string colName(column.Name.data(), column.Name.size());
-        fields.emplace_back(std::make_shared<arrow::Field>(colName, NArrow::GetArrowType(column.PType), !column.NotNull));
+        auto arrowType = NArrow::GetArrowType(column.PType);
+        AFL_VERIFY(arrowType.ok());
+        fields.emplace_back(std::make_shared<arrow::Field>(colName, arrowType.ValueUnsafe(), !column.NotNull));
     }
 
     return std::make_shared<arrow::Schema>(std::move(fields));

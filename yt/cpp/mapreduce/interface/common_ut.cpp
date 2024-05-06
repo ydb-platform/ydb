@@ -228,6 +228,16 @@ Y_UNIT_TEST_SUITE(Common)
             UNIT_ASSERT_VALUES_EQUAL(column.Type(), VT_DATE);
         }
         {
+            auto column = TColumnSchema().Type(NTi::Interval64());
+            UNIT_ASSERT_VALUES_EQUAL(column.Required(), true);
+            UNIT_ASSERT_VALUES_EQUAL(column.Type(), VT_INTERVAL64);
+        }
+        {
+            auto column = TColumnSchema().Type(NTi::Optional(NTi::Date32()));
+            UNIT_ASSERT_VALUES_EQUAL(column.Required(), false);
+            UNIT_ASSERT_VALUES_EQUAL(column.Type(), VT_DATE32);
+        }
+        {
             auto column = TColumnSchema().Type(NTi::Null());
             UNIT_ASSERT_VALUES_EQUAL(column.Required(), false);
             UNIT_ASSERT_VALUES_EQUAL(column.Type(), VT_NULL);

@@ -1,28 +1,15 @@
 #pragma once
 
-#include "topic_impl.h"
-
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/common.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/callback_context.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/callback_context.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/common.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/topic_impl.h>
 
 #include <util/generic/buffer.h>
 
 
 namespace NYdb::NTopic {
 
-inline const TString& GetCodecId(const ECodec codec) {
-    static THashMap<ECodec, TString> idByCodec{
-        {ECodec::RAW, TString(1, '\0')},
-        {ECodec::GZIP, "\1"},
-        {ECodec::LZOP, "\2"},
-        {ECodec::ZSTD, "\3"}
-    };
-    Y_ABORT_UNLESS(idByCodec.contains(codec));
-    return idByCodec[codec];
-}
-
-class TWriteSessionEventsQueue: public NPersQueue::TBaseSessionEventsQueue<TWriteSessionSettings, TWriteSessionEvent::TEvent, TSessionClosedEvent, IExecutor> {
+class TWriteSessionEventsQueue: public TBaseSessionEventsQueue<TWriteSessionSettings, TWriteSessionEvent::TEvent, TSessionClosedEvent, IExecutor> {
     using TParent = TBaseSessionEventsQueue<TWriteSessionSettings, TWriteSessionEvent::TEvent, TSessionClosedEvent, IExecutor>;
 
 public:
@@ -35,7 +22,7 @@ public:
             return;
         }
 
-        NPersQueue::TWaiter waiter;
+        TWaiter waiter;
         with_lock (Mutex) {
             Events.emplace(std::move(eventInfo));
             waiter = PopWaiterImpl();
@@ -87,11 +74,11 @@ public:
     }
 
     void Close(const TSessionClosedEvent& event) {
-        NPersQueue::TWaiter waiter;
+        TWaiter waiter;
         with_lock (Mutex) {
             CloseEvent = event;
             Closed = true;
-            waiter = NPersQueue::TWaiter(Waiter.ExtractPromise(), this);
+            waiter = TWaiter(Waiter.ExtractPromise(), this);
         }
 
         TEventInfo info(event);
@@ -152,7 +139,7 @@ struct TMemoryUsageChange {
 // TWriteSessionImpl
 
 class TWriteSessionImpl : public TContinuationTokenIssuer,
-                          public NPersQueue::TEnableSelfContext<TWriteSessionImpl> {
+                          public TEnableSelfContext<TWriteSessionImpl> {
 private:
     friend class TWriteSession;
     friend class TSimpleBlockingWriteSession;
@@ -417,6 +404,8 @@ private:
 
     TMaybe<TEndpointKey> GetPreferredEndpointImpl(ui32 partitionId, ui64 partitionNodeId);
 
+    bool TxIsChanged(const Ydb::Topic::StreamWriteMessage_WriteRequest* writeRequest) const;
+
 private:
     TWriteSessionSettings Settings;
     std::shared_ptr<TTopicClient::TImpl> Client;
@@ -485,4 +474,4 @@ protected:
     ui64 MessagesAcquired = 0;
 };
 
-}; // namespace NYdb::NTopic
+}  // namespace NYdb::NTopic

@@ -164,6 +164,8 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
         .SetAuthToken(settings.AuthToken);
     Driver.Reset(MakeHolder<NYdb::TDriver>(DriverConfig));
 
+    CountersRoot = settings.CountersRoot;
+
     Initialize(settings);
 }
 
@@ -1304,6 +1306,18 @@ TVector<ui64> GetTableShards(Tests::TServer* server,
     auto lsResult = DescribeTable(server, sender, path);
     for (auto &part : lsResult.GetPathDescription().GetTablePartitions())
         shards.push_back(part.GetDatashardId());
+
+    return shards;
+}
+
+TVector<ui64> GetColumnTableShards(Tests::TServer* server,
+                                   TActorId sender,
+                                   const TString &path)
+{
+    TVector<ui64> shards;
+    auto lsResult = DescribeTable(server, sender, path);
+    for (auto &part : lsResult.GetPathDescription().GetColumnTableDescription().GetSharding().GetColumnShards())
+        shards.push_back(part);
 
     return shards;
 }

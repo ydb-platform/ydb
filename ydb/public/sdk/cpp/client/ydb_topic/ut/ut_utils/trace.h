@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ydb/public/sdk/cpp/client/ydb_topic/impl/trace_lazy.h"
+#include "ydb/public/sdk/cpp/client/ydb_topic/common/trace_lazy.h"
 
 #include "library/cpp/logger/backend.h"
 #include "library/cpp/logger/record.h"

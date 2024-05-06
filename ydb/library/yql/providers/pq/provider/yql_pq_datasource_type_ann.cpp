@@ -99,15 +99,6 @@ public:
             return TStatus::Error;
         }
 
-        auto format = read.Format().Ref().Content();
-        if (!NCommon::ValidateFormatForInput(format, ctx)) {
-            return TStatus::Error;
-        }
-
-        if (!NCommon::ValidateCompressionForInput(format, read.Compression().Ref().Content(), ctx)) {
-            return TStatus::Error;
-        }
-
         TPqTopic topic = read.Topic();
         if (!EnsureCallable(topic.Ref(), ctx)) {
             return TStatus::Error;
@@ -116,6 +107,19 @@ public:
         TVector<TString> columnOrder;
         auto schema = GetReadTopicSchema(topic, read.Columns().Maybe<TCoAtomList>(), ctx, columnOrder);
         if (!schema) {
+            return TStatus::Error;
+        }
+
+        auto format = read.Format().Ref().Content();
+        if (!State_->IsRtmrMode() && !NCommon::ValidateFormatForInput(      // Rtmr has 3 field (key/subkey/value).
+            format,
+            schema->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>(),
+            [](TStringBuf fieldName) {return FindPqMetaFieldDescriptorBySysColumn(TString(fieldName)); },
+            ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!NCommon::ValidateCompressionForInput(format, read.Compression().Ref().Content(), ctx)) {
             return TStatus::Error;
         }
 

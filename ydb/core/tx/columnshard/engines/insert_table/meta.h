@@ -20,6 +20,10 @@ private:
 
     const std::optional<NArrow::TFirstLastSpecialKeys>& GetSpecialKeys() const;
 public:
+    ui64 GetTxVolume() const {
+        return 2 * sizeof(ui64) + sizeof(ui32) + sizeof(OriginalProto) + (SpecialKeysParsed ? SpecialKeysParsed->GetMemoryBytes() : 0);
+    }
+
     TInsertedDataMeta(const NKikimrTxColumnShard::TLogicalMetadata& proto)
         : OriginalProto(proto)
     {

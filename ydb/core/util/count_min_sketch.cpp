@@ -15,6 +15,14 @@ TCountMinSketch* TCountMinSketch::Create(ui64 width, ui64 depth) {
     return sketch;
 }
 
+TCountMinSketch* TCountMinSketch::FromString(const char* data, size_t size) {
+    auto* from = reinterpret_cast<const TCountMinSketch*>(data);
+    Y_ABORT_UNLESS(StaticSize(from->Width, from->Depth) == size);
+    auto* dataDst = ::malloc(size);
+    std::memcpy(dataDst, data, size);
+    return reinterpret_cast<TCountMinSketch*>(dataDst);
+}
+
 void TCountMinSketch::operator delete(void* data) noexcept {
     ::free(data);
 }

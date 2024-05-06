@@ -29,7 +29,36 @@ public:
 
     void SetLimit(i64 /*size*/) override
     { }
+
+    i64 GetLimit()  const override
+    {
+        return std::numeric_limits<i64>::max();
+    }
+
+    i64 GetUsed() const override
+    {
+        return 0;
+    }
+
+    i64 GetFree() const override
+    {
+        return std::numeric_limits<i64>::max();
+    }
+
+    bool IsExceeded() const override
+    {
+        return false;
+    }
+
+    TSharedRef Track(
+        TSharedRef reference,
+        bool /*keepExistingTracking*/) override
+    {
+        return reference;
+    }
 };
+
+////////////////////////////////////////////////////////////////////////////////
 
 IMemoryUsageTrackerPtr GetNullMemoryUsageTracker()
 {
@@ -316,6 +345,34 @@ void TMemoryTrackedBlob::Clear()
 {
     Blob_.Clear();
     Guard_.SetSize(Blob_.Capacity());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TSharedRef TrackMemory(
+    const IMemoryUsageTrackerPtr& tracker,
+    TSharedRef reference,
+    bool keepExistingTracking)
+{
+    if (!tracker || !reference) {
+        return reference;
+    }
+    return tracker->Track(reference, keepExistingTracking);
+}
+
+TSharedRefArray TrackMemory(
+    const IMemoryUsageTrackerPtr& tracker,
+    TSharedRefArray array,
+    bool keepExistingTracking)
+{
+    if (!tracker || !array) {
+        return array;
+    }
+    TSharedRefArrayBuilder builder(array.Size());
+    for (const auto& part : array) {
+        builder.Add(tracker->Track(part, keepExistingTracking));
+    }
+    return builder.Finish();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

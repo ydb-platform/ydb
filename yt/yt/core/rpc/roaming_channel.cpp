@@ -27,7 +27,9 @@ public:
         , StartTime_(TInstant::Now())
     {
         if (Options_.Timeout) {
-            asyncChannel = asyncChannel.WithTimeout(*Options_.Timeout);
+            asyncChannel = asyncChannel.WithTimeout(*Options_.Timeout, TFutureTimeoutOptions{
+                .Error = TError("Error getting channel")
+            });
         }
 
         asyncChannel.Subscribe(BIND(&TRoamingRequestControl::OnGotChannel, MakeStrong(this)));

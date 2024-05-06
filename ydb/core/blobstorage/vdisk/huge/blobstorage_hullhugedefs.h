@@ -296,6 +296,10 @@ namespace NKikimr {
                 return str.Str();
             }
 
+            const NMatrix::TVectorType& GetParts() const {
+                return Parts;
+            }
+
             const TVector<TDiskPart> &SavedData() const {
                 return DiskPtrs;
             }

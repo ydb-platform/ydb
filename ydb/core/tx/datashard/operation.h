@@ -417,6 +417,9 @@ public:
     bool IsProposeResultSentEarly() const { return ProposeResultSentEarly_; }
     void SetProposeResultSentEarly(bool value = true) { ProposeResultSentEarly_ = value; }
 
+    bool GetPerformedUserReads() const { return PerformedUserReads_; }
+    void SetPerformedUserReads(bool value = true) { PerformedUserReads_ = value; }
+
     ///////////////////////////////////
     //     DEBUG AND MONITORING      //
     ///////////////////////////////////
@@ -443,6 +446,7 @@ private:
     // Runtime flags
     ui8 MvccSnapshotRepeatable_ : 1 = 0;
     ui8 ProposeResultSentEarly_ : 1 = 0;
+    ui8 PerformedUserReads_ : 1 = 0;
 };
 
 struct TRSData {
@@ -868,6 +872,16 @@ public:
      * pipeline as a candidate for execution.
      */
     virtual bool OnStopping(TDataShard& self, const TActorContext& ctx);
+
+    /**
+     * Called when operation is aborted on cleanup
+     *
+     * Distributed transaction is cleaned up when deadline is reached, and
+     * it hasn't been planned yet. Additionally volatile transactions are
+     * cleaned when shard is waiting for transaction queue to drain, and
+     * the given operation wasn't planned yet.
+     */
+    virtual void OnCleanup(TDataShard& self, std::vector<std::unique_ptr<IEventHandle>>& replies);
 
 protected:
     TOperation()

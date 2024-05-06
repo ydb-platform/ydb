@@ -241,11 +241,18 @@ private:
     } Data;
 };
 
+enum class ESyntaxType {
+    YQLv0,
+    YQLv1,
+    Pg,
+};
+
 struct TAstParseResult {
     std::unique_ptr<TMemoryPool> Pool;
     TAstNode* Root = nullptr;
     TIssues Issues;
     TMaybe<THashMap<TString, Ydb::TypedValue>> PgAutoParamValues = Nothing();
+    ESyntaxType ActualSyntaxType = ESyntaxType::YQLv1;
 
     inline bool IsOk() const {
         return !!Root;
@@ -260,6 +267,11 @@ struct TAstParseResult {
     TAstParseResult& operator=(TAstParseResult&&);
 
     void Destroy();
+};
+
+struct TStmtParseInfo {
+    bool KeepInCache = true;
+    TMaybe<TString> CommandTagName = {};
 };
 
 struct TAstPrintFlags {

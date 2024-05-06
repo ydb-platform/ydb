@@ -24,7 +24,7 @@ bool TryFromStringImpl<::NKikimrConfig::TBootstrap_ETabletType, char>(const char
 }
 
 template <>
-bool TryFromStringImpl<::NKikimrBlobStorage::EPDiskType, char>(const char* value, unsigned long size, NKikimrBlobStorage::EPDiskType& res) {
+bool TryFromStringImpl<::NKikimrBlobStorage::EPDiskType, char>(const char* value, size_t size, NKikimrBlobStorage::EPDiskType& res) {
     const google::protobuf::EnumDescriptor *descriptor = ::NKikimrBlobStorage::EPDiskType_descriptor();
     const auto* valueDescriptor = descriptor->FindValueByName(TString(value, size));
     if (valueDescriptor) {

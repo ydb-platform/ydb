@@ -189,7 +189,7 @@ void TOperation::AddRepeatableReadConflict(const TOperation::TPtr &op) {
     Y_DEBUG_ABORT_UNLESS(!op->IsImmediate());
 
     if (IsMvccSnapshotRepeatable()) {
-        AddDependency(this);
+        AddDependency(op);
         return;
     }
 
@@ -328,6 +328,11 @@ bool TOperation::OnStopping(TDataShard&, const TActorContext&)
     // By default operations don't do anything when stopping
     // However they may become ready so add to candidates
     return true;
+}
+
+void TOperation::OnCleanup(TDataShard&, std::vector<std::unique_ptr<IEventHandle>>&)
+{
+    // By default operation does nothing
 }
 
 } // namespace NDataShard

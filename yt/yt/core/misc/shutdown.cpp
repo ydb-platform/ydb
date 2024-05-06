@@ -290,7 +290,7 @@ static const void* ShutdownGuardInitializer = [] {
         }
     };
 
-    static YT_THREAD_LOCAL(TShutdownGuard) Guard;
+    static thread_local TShutdownGuard Guard;
     return nullptr;
 }();
 

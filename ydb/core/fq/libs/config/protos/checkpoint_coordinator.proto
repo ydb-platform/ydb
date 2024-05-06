@@ -11,6 +11,7 @@ import "ydb/core/fq/libs/config/protos/storage.proto";
 message TStateStorageLimitsConfig {
     uint64 MaxGraphCheckpointsSizeBytes = 1;
     uint64 MaxTaskStateSizeBytes = 2;
+    uint64 MaxRowSizeBytes = 3;
 }
 
 message TCheckpointGcConfig {
@@ -24,4 +25,5 @@ message TCheckpointCoordinatorConfig {
     TStateStorageLimitsConfig StateStorageLimits = 4;
     uint64 CheckpointingPeriodMillis = 5;
     uint64 MaxInflight = 6;
+    uint64 CheckpointingSnapshotRotationPeriod = 7;               // 0 - All checkpoints are snapshots, 1 - 1 increment/ 1 snapshot, 20 - 20 incrrement / 1 snapshot.
 }

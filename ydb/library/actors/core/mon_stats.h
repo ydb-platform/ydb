@@ -74,9 +74,9 @@ namespace NActors {
         double SpinThresholdUs = 0;
         i16 WrongWakenedThreadCount = 0;
         double CurrentThreadCount = 0;
-        i16 PotentialMaxThreadCount = 0;
-        i16 DefaultThreadCount = 0;
-        i16 MaxThreadCount = 0;
+        double PotentialMaxThreadCount = 0;
+        double DefaultThreadCount = 0;
+        double MaxThreadCount = 0;
         bool IsNeedy = false;
         bool IsStarved = false;
         bool IsHoggish = false;

@@ -22,6 +22,8 @@
 #include <yt/yt_proto/yt/client/table_chunk_format/proto/chunk_meta.pb.h>
 #include <yt/yt_proto/yt/client/table_chunk_format/proto/wire_protocol.pb.h>
 
+#include <yt/yt_proto/yt/client/tablet_client/proto/lock_mask.pb.h>
+
 namespace NYT::NTableClient {
 
 using namespace NChunkClient;
@@ -110,6 +112,37 @@ TLockMask MaxMask(TLockMask lhs, TLockMask rhs)
     }
 
     return lhs;
+}
+
+void ToProto(NTabletClient::NProto::TLockMask* protoLockMask, const TLockMask& lockMask)
+{
+    auto size = lockMask.GetSize();
+    YT_VERIFY(size <= TLockMask::MaxSize);
+
+    protoLockMask->set_size(size);
+
+    const auto& bitmap = lockMask.GetBitmap();
+    auto wordCount = DivCeil(size, TLockMask::LocksPerWord);
+    YT_VERIFY(std::ssize(bitmap) >= wordCount);
+
+    protoLockMask->clear_bitmap();
+    for (int index = 0; index < wordCount; ++index) {
+        protoLockMask->add_bitmap(bitmap[index]);
+    }
+}
+
+void FromProto(TLockMask* lockMask, const NTabletClient::NProto::TLockMask& protoLockMask)
+{
+    auto size = protoLockMask.size();
+    auto wordCount = DivCeil<int>(size, TLockMask::LocksPerWord);
+
+    TLockBitmap bitmap;
+    bitmap.reserve(wordCount);
+    for (int index = 0; index < wordCount; ++index) {
+        bitmap.push_back(protoLockMask.bitmap(index));
+    }
+
+    *lockMask = TLockMask(bitmap, size);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -689,6 +722,11 @@ bool TTableSchema::HasTimestampColumn() const
     return FindColumn(TimestampColumnName);
 }
 
+bool TTableSchema::HasTtlColumn() const
+{
+    return FindColumn(TtlColumnName);
+}
+
 bool TTableSchema::IsSorted() const
 {
     return KeyColumnCount_ > 0;
@@ -709,6 +747,23 @@ bool TTableSchema::HasRenamedColumns() const
 bool TTableSchema::IsEmpty() const
 {
     return Columns().empty();
+}
+
+bool TTableSchema::IsCGCompatarorApplicable() const
+{
+    auto keyTypes = GetKeyColumnTypes();
+    return std::none_of(keyTypes.begin(), keyTypes.end(), [] (auto type) {
+        return type == EValueType::Any;
+    });
+}
+
+std::optional<int> TTableSchema::GetTtlColumnIndex() const
+{
+    auto* column = FindColumn(TtlColumnName);
+    if (!column) {
+        return std::nullopt;
+    }
+    return GetColumnIndex(*column);
 }
 
 TKeyColumns TTableSchema::GetKeyColumnNames() const
@@ -981,6 +1036,11 @@ TTableSchemaPtr TTableSchema::ToDelete() const
     return ToLookup();
 }
 
+TTableSchemaPtr TTableSchema::ToLock() const
+{
+    return ToLookup();
+}
+
 TTableSchemaPtr TTableSchema::ToKeys() const
 {
     if (!ColumnInfo_) {
@@ -1245,18 +1305,19 @@ TTableSchemaPtr TTableSchema::ToModifiedSchema(ETableSchemaModification schemaMo
     }
 }
 
-TComparator TTableSchema::ToComparator() const
+TComparator TTableSchema::ToComparator(TCallback<TUUComparerSignature> cgComparator) const
 {
-    if (!ColumnInfo_) {
-        return TComparator(std::vector<ESortOrder>());
+    std::vector<ESortOrder> sortOrders;
+    if (ColumnInfo_) {
+        const auto& info = *ColumnInfo_;
+        sortOrders.resize(KeyColumnCount_);
+        for (int index = 0; index < KeyColumnCount_; ++index) {
+            YT_VERIFY(info.Columns[index].SortOrder());
+            sortOrders[index] = *info.Columns[index].SortOrder();
+        }
     }
-    const auto& info = *ColumnInfo_;
-    std::vector<ESortOrder> sortOrders(KeyColumnCount_);
-    for (int index = 0; index < KeyColumnCount_; ++index) {
-        YT_VERIFY(info.Columns[index].SortOrder());
-        sortOrders[index] = *info.Columns[index].SortOrder();
-    }
-    return TComparator(std::move(sortOrders));
+
+    return TComparator(std::move(sortOrders), std::move(cgComparator));
 }
 
 void TTableSchema::Save(TStreamSaveContext& context) const
@@ -1498,6 +1559,7 @@ void ValidateSystemColumnSchema(
 {
     static const auto allowedSortedTablesSystemColumns = THashMap<TString, ESimpleLogicalValueType>{
         {EmptyValueColumnName, ESimpleLogicalValueType::Int64},
+        {TtlColumnName, ESimpleLogicalValueType::Uint64},
     };
 
     static const auto allowedOrderedTablesSystemColumns = THashMap<TString, ESimpleLogicalValueType>{
@@ -1833,6 +1895,37 @@ void ValidateTimestampColumn(const TTableSchema& schema)
     }
 }
 
+//! Validates |$ttl| column, if any.
+/*!
+ *  Validate that:
+ *  - |$ttl| column cannot be a part of key.
+ *  - |$ttl| column can only be present in sorted tables.
+ *  - |$ttl| column has type |uint64|.
+ */
+void ValidateTtlColumn(const TTableSchema& schema)
+{
+    auto* column = schema.FindColumn(TtlColumnName);
+    if (!column) {
+        return;
+    }
+
+    if (column->SortOrder()) {
+        THROW_ERROR_EXCEPTION("Column %Qv cannot be a part of key",
+            TtlColumnName);
+    }
+
+    if (!column->IsOfV1Type(ESimpleLogicalValueType::Uint64)) {
+        THROW_ERROR_EXCEPTION("Column %Qv must have %Qlv type",
+            TtlColumnName,
+            EValueType::Uint64);
+    }
+
+    if (!schema.IsSorted()) {
+        THROW_ERROR_EXCEPTION("Column %Qv cannot appear in an ordered table",
+            TtlColumnName);
+    }
+}
+
 //! Validates |$cumulative_data_weight| column, if any.
 /*!
  *  Validate that:
@@ -1897,6 +1990,7 @@ void ValidateTableSchema(const TTableSchema& schema, bool isTableDynamic, bool a
     ValidateLocks(schema);
     ValidateKeyColumnsFormPrefix(schema);
     ValidateTimestampColumn(schema);
+    ValidateTtlColumn(schema);
     ValidateCumulativeDataWeightColumn(schema);
     ValidateSchemaAttributes(schema);
     if (isTableDynamic) {

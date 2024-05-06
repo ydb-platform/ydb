@@ -1,4 +1,5 @@
 #pragma once
+#include "counters.h"
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/common/address.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
@@ -7,6 +8,7 @@ namespace NKikimr::NOlap::NActualizer {
 
 class TSchemeActualizer: public IActualizer {
 private:
+    const TSchemeCounters Counters;
     THashMap<TRWAddress, THashSet<ui64>> PortionsToActualizeScheme;
     std::shared_ptr<ISnapshotSchema> TargetSchema;
     const ui64 PathId;

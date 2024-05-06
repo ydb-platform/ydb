@@ -46,9 +46,9 @@ namespace NKikimr {
             }
         }
 
-        ui32 GetInplacedSize() const {
+        ui32 GetInplacedSize(bool addHeader) const {
             Y_DEBUG_ABORT_UNLESS(HugeBlobMerger.Empty() || DiskBlobMerger.Empty());
-            return HugeBlobMerger.Empty() ? DiskBlobMerger.GetDiskBlob().GetSize() : 0;
+            return HugeBlobMerger.Empty() ? DiskBlobMerger.GetDiskBlob().GetBlobSize(addHeader) : 0;
         }
 
         void AddHugeBlob(const TDiskPart *begin, const TDiskPart *end, const NMatrix::TVectorType &parts,
@@ -80,9 +80,9 @@ namespace NKikimr {
             return !DiskBlobMerger.Empty();
         }
 
-        ui32 GetDiskBlobRawSize() const {
+        ui32 GetDiskBlobRawSize(bool addHeader) const {
             Y_DEBUG_ABORT_UNLESS(!DiskBlobMerger.Empty());
-            return DiskBlobMerger.GetDiskBlob().GetSize();
+            return DiskBlobMerger.GetDiskBlob().GetBlobSize(addHeader);
         }
 
         const TDiskBlobMerger &GetDiskBlobMerger() const {

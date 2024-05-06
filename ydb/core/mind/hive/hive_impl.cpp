@@ -94,6 +94,18 @@ void THive::RestartPipeTx(ui64 tabletId) {
     }
 }
 
+bool THive::TryToDeleteNode(TNodeInfo* node) {
+    if (node->CanBeDeleted()) {
+        DeleteNode(node->Id);
+        return true;
+    }
+    if (!node->DeletionScheduled) {
+        Schedule(GetNodeDeletePeriod(), new TEvPrivate::TEvDeleteNode(node->Id));
+        node->DeletionScheduled = true;
+    }
+    return false;
+}
+
 void THive::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev) {
     if (ev->Get()->TabletId == TabletID()) {
         BLOG_TRACE("Handle TEvTabletPipe::TEvServerConnected(" << ev->Get()->ClientId << ") " << ev->Get()->ServerId);
@@ -108,9 +120,9 @@ void THive::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev) {
         TNodeInfo* node = FindNode(ev->Get()->ClientId.NodeId());
         if (node != nullptr) {
             Erase(node->PipeServers, ev->Get()->ServerId);
-            if (node->PipeServers.empty() && node->IsUnknown() && node->CanBeDeleted()) {
+            if (node->PipeServers.empty() && node->IsUnknown()) {
                 ObjectDistributions.RemoveNode(*node);
-                DeleteNode(node->Id);
+                TryToDeleteNode(node);
             }
         }
     }
@@ -1973,6 +1985,9 @@ void THive::Handle(TEvHive::TEvRequestHiveNodeStats::TPtr& ev) {
         if (!node.ServicedDomains.empty()) {
             nodeStats.MutableNodeDomain()->CopyFrom(node.ServicedDomains.front());
         }
+        if (!node.Name.empty()) {
+            nodeStats.SetNodeName(node.Name);
+        }
         if (request.GetReturnExtendedTabletInfo()) {
             if (request.HasFilterTabletsByPathId()) {
                 auto itTabletsOfObject = node.TabletsOfObject.find({request.GetFilterTabletsBySchemeShardId(), request.GetFilterTabletsByPathId()});
@@ -2111,10 +2126,20 @@ void THive::Handle(TEvHive::TEvCutTabletHistory::TPtr& ev) {
 }
 
 void THive::Handle(TEvHive::TEvDrainNode::TPtr& ev) {
+    NKikimrHive::EDrainDownPolicy policy;
+    if (!ev->Get()->Record.HasDownPolicy() && ev->Get()->Record.HasKeepDown()) {
+        if (ev->Get()->Record.GetKeepDown()) {
+            policy = NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_KEEP_DOWN;
+        } else {
+            policy = NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_NO_DOWN;
+        }
+    } else {
+        policy = ev->Get()->Record.GetDownPolicy();
+    }
     Execute(CreateSwitchDrainOn(ev->Get()->Record.GetNodeID(),
     {
         .Persist = ev->Get()->Record.GetPersist(),
-        .KeepDown = ev->Get()->Record.GetKeepDown(),
+        .DownPolicy = policy,
         .DrainInFlight = ev->Get()->Record.GetDrainInFlight(),
     }, ev->Sender));
 }
@@ -2348,7 +2373,7 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
             case EResourceToBalance::Network:
                 balancerType = EBalancerType::ScatterNetwork;
                 break;
-            case EResourceToBalance::Dominant:
+            case EResourceToBalance::ComputeResources:
                 balancerType = EBalancerType::Scatter;
                 break;
         }
@@ -2924,6 +2949,7 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvPrivate::TEvStartStorageBalancer, Handle);
         hFunc(TEvPrivate::TEvProcessStorageBalancer, Handle);
         hFunc(TEvHive::TEvUpdateDomain, Handle);
+        hFunc(TEvPrivate::TEvDeleteNode, Handle);
     }
 }
 
@@ -3024,6 +3050,7 @@ STFUNC(THive::StateWork) {
         fFunc(TEvPrivate::TEvStartStorageBalancer::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvUpdateDomain::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvProcessStorageBalancer::EventType, EnqueueIncomingEvent);
+        fFunc(TEvPrivate::TEvDeleteNode::EventType, EnqueueIncomingEvent);
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
@@ -3284,6 +3311,17 @@ void THive::Handle(TEvPrivate::TEvLogTabletMoves::TPtr&) {
     }
     TabletMoveSamplesForLog.clear();
     TabletMovesByTypeForLog.clear();
+}
+
+void THive::Handle(TEvPrivate::TEvDeleteNode::TPtr& ev) {
+    auto node = FindNode(ev->Get()->NodeId);
+    if (node == nullptr) {
+        return;
+    }
+    node->DeletionScheduled = false;
+    if (!node->IsAlive()) {
+        TryToDeleteNode(node);
+    }
 }
 
 TVector<TNodeId> THive::GetNodesForWhiteboardBroadcast(size_t maxNodesToReturn) {

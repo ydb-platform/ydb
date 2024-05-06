@@ -164,6 +164,15 @@ constexpr TFutureCallbackCookie NullFutureCallbackCookie = -1;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TFutureTimeoutOptions
+{
+    //! If set to a non-trivial error, timeout or cancelation errors
+    //! are enveloped into this error.
+    TError Error;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 //! A base class for both TFuture<T> and its specialization TFuture<void>.
 /*!
  *  The resulting value can be accessed by either subscribing (#Subscribe)
@@ -275,13 +284,22 @@ public:
     //! Returns a future that is either set to an actual value (if the original one is set in timely manner)
     //! or to |EErrorCode::Timeout| (in case the deadline is reached).
     //! The timeout event is handled in #invoker (DelayedExecutor is null).
-    TFuture<T> WithDeadline(TInstant deadline, IInvokerPtr invoker = nullptr) const;
+    TFuture<T> WithDeadline(
+        TInstant deadline,
+        TFutureTimeoutOptions options = {},
+        IInvokerPtr invoker = nullptr) const;
 
     //! Returns a future that is either set to an actual value (if the original one is set in timely manner)
     //! or to |EErrorCode::Timeout| (in case of timeout).
     //! The timeout event is handled in #invoker (DelayedExecutor is null).
-    TFuture<T> WithTimeout(TDuration timeout, IInvokerPtr invoker = nullptr) const;
-    TFuture<T> WithTimeout(std::optional<TDuration> timeout, IInvokerPtr invoker = nullptr) const;
+    TFuture<T> WithTimeout(
+        TDuration timeout,
+        TFutureTimeoutOptions options = {},
+        IInvokerPtr invoker = nullptr) const;
+    TFuture<T> WithTimeout(
+        std::optional<TDuration> timeout,
+        TFutureTimeoutOptions options = {},
+        IInvokerPtr invoker = nullptr) const;
 
     //! Chains the asynchronous computation with another one.
     template <class R>

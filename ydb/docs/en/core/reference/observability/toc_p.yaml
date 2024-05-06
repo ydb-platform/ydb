@@ -1,0 +1,5 @@
+items:
+- name: Metrics
+  include:
+    mode: link
+    path: metrics/toc_p.yaml

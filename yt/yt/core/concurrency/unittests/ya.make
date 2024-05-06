@@ -26,6 +26,7 @@ SRCS(
     invoker_pool_ut.cpp
     nonblocking_batcher_ut.cpp
     nonblocking_queue_ut.cpp
+    parallel_runner_ut.cpp
     periodic_ut.cpp
     profiled_fair_share_invoker_pool_ut.cpp
     propagating_storage_ut.cpp

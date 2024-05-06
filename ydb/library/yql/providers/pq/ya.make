@@ -4,7 +4,6 @@ RECURSE(
     common
     expr_nodes
     gateway
-    proto
     provider
     task_meta
 )

@@ -756,61 +756,61 @@ using TCombineTypeFunc = std::function<TLogicalTypePtr(const TLogicalTypePtr&)>;
 std::vector<std::pair<TString, TCombineTypeFunc>> CombineFunctions = {
     {
         "optional",
-        [](const TLogicalTypePtr& type) {
+        [] (const TLogicalTypePtr& type) {
             return OptionalLogicalType(type);
         },
     },
     {
         "list",
-        [](const TLogicalTypePtr& type) {
+        [] (const TLogicalTypePtr& type) {
             return ListLogicalType(type);
         },
     },
     {
         "struct",
-        [](const TLogicalTypePtr& type) {
+        [] (const TLogicalTypePtr& type) {
             return StructLogicalType({{"field", type}});
         },
     },
     {
         "tuple",
-        [](const TLogicalTypePtr& type) {
+        [] (const TLogicalTypePtr& type) {
             return TupleLogicalType({type});
         },
     },
     {
         "variant_struct",
-        [](const TLogicalTypePtr& type) {
+        [] (const TLogicalTypePtr& type) {
             return VariantStructLogicalType({{"field", type}});
         },
     },
     {
         "variant_tuple",
-        [](const TLogicalTypePtr& type) {
+        [] (const TLogicalTypePtr& type) {
             return VariantTupleLogicalType({type});
         },
     },
     {
         "dict",
-        [](const TLogicalTypePtr& type) {
+        [] (const TLogicalTypePtr& type) {
             return DictLogicalType(SimpleLogicalType(ESimpleLogicalValueType::String), type);
         },
     },
     {
         "dict-key",
-        [](const TLogicalTypePtr& type) {
+        [] (const TLogicalTypePtr& type) {
             return DictLogicalType(type, SimpleLogicalType(ESimpleLogicalValueType::String));
         },
     },
     {
         "dict-value",
-        [](const TLogicalTypePtr& type) {
+        [] (const TLogicalTypePtr& type) {
             return DictLogicalType(SimpleLogicalType(ESimpleLogicalValueType::String), type);
         }
     },
     {
         "tagged",
-        [](const TLogicalTypePtr& type) {
+        [] (const TLogicalTypePtr& type) {
             return TaggedLogicalType("foo", type);
         }
     }

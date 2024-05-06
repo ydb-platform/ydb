@@ -246,7 +246,9 @@ public:
         TMaybe<TOwnedCellVec> lastProcessedKey, ui64& newReadId) final {
 
         auto it = PendingKeysByReadId.find(prevReadId);
-        YQL_ENSURE(it != PendingKeysByReadId.end());
+        if (it == PendingKeysByReadId.end()) {
+            return {};
+        }
 
         std::vector<TOwnedTableRange> unprocessedRanges;
         std::vector<TOwnedTableRange> unprocessedPoints;
@@ -407,7 +409,9 @@ public:
 
     void ResetRowsProcessing(ui64 readId, ui32 firstUnprocessedQuery, TMaybe<TOwnedCellVec> lastProcessedKey) final {
         auto it = PendingKeysByReadId.find(readId);
-        YQL_ENSURE(it != PendingKeysByReadId.end());
+        if (it == PendingKeysByReadId.end()) {
+            return;
+        }
 
         if (lastProcessedKey) {
             YQL_ENSURE(firstUnprocessedQuery < it->second.size());
@@ -503,7 +507,9 @@ public:
         TMaybe<TOwnedCellVec> lastProcessedKey, ui64& newReadId) final {
 
         auto readIt = PendingKeysByReadId.find(prevReadId);
-        YQL_ENSURE(readIt != PendingKeysByReadId.end());
+        if (readIt == PendingKeysByReadId.end()) {
+            return {};
+        }
 
         std::vector<TOwnedTableRange> unprocessedRanges;
         std::vector<TOwnedTableRange> unprocessedPoints;
@@ -680,7 +686,10 @@ public:
 
     void ResetRowsProcessing(ui64 readId, ui32 firstUnprocessedQuery, TMaybe<TOwnedCellVec> lastProcessedKey) final {
         auto readIt = PendingKeysByReadId.find(readId);
-        YQL_ENSURE(readIt != PendingKeysByReadId.end());
+        if (readIt == PendingKeysByReadId.end()) {
+            return;
+        }
+
         auto& ranges = readIt->second;
 
         if (lastProcessedKey) {

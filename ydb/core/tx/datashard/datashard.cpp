@@ -30,7 +30,7 @@ using namespace NSchemeShard;
 using namespace NTabletFlatExecutor;
 
 // NOTE: We really want to batch log records by default in datashards!
-// But in unittests we want to test both scenarios
+// But in unit tests we want to test both scenarios
 bool gAllowLogBatchingDefaultValue = true;
 
 TDuration gDbStatsReportInterval = TDuration::Seconds(10);
@@ -154,9 +154,11 @@ TDataShard::TDataShard(const TActorId &tablet, TTabletStorageInfo *info)
     , MaxLockedWritesPerKey(1000, 0, 1000000)
     , EnableLeaderLeases(1, 0, 1)
     , MinLeaderLeaseDurationUs(250000, 1000, 5000000)
+    , ChangeRecordDebugPrint(0, 0, 1)
     , DataShardSysTables(InitDataShardSysTables(this))
     , ChangeSenderActivator(info->TabletID)
     , ChangeExchangeSplitter(this)
+    , ChangeRecordDebugSerializer(CreateChangeRecordDebugSerializer())
 {
     TabletCountersPtr.Reset(new TProtobufTabletCounters<
         ESimpleCounters_descriptor,
@@ -301,6 +303,8 @@ void TDataShard::IcbRegister() {
 
         appData->Icb->RegisterSharedControl(EnableLeaderLeases, "DataShardControls.EnableLeaderLeases");
         appData->Icb->RegisterSharedControl(MinLeaderLeaseDurationUs, "DataShardControls.MinLeaderLeaseDurationUs");
+
+        appData->Icb->RegisterSharedControl(ChangeRecordDebugPrint, "DataShardControls.ChangeRecordDebugPrint");
 
         IcbRegistered = true;
     }
@@ -760,7 +764,7 @@ ui64 TDataShard::GetNextChangeRecordLockOffset(ui64 lockId) {
 
 void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& record) {
     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "PersistChangeRecord"
-        << ": record: " << record
+        << ": record: " << (GetChangeRecordDebugPrint() ? ChangeRecordDebugSerializer->DebugString(record) : ToString(record))
         << ", at tablet: " << TabletID());
 
     ui64 lockId = record.GetLockId();
@@ -966,6 +970,13 @@ void TDataShard::RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order) {
         }
     }
 
+    if (auto rIt = ChangeQueueReservations.find(record.ReservationCookie); rIt != ChangeQueueReservations.end()) {
+        --ChangeQueueReservedCapacity;
+        if (!--rIt->second) {
+            ChangeQueueReservations.erase(rIt);
+        }
+    }
+
     UpdateChangeExchangeLag(AppData()->TimeProvider->Now());
     ChangesQueue.erase(it);
 
@@ -975,7 +986,7 @@ void TDataShard::RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order) {
     CheckChangesQueueNoOverflow();
 }
 
-void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange>&& records) {
+void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange>&& records, ui64 cookie) {
     if (!records) {
         return;
     }
@@ -1000,7 +1011,7 @@ void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange
         auto res = ChangesQueue.emplace(
             std::piecewise_construct,
             std::forward_as_tuple(record.Order),
-            std::forward_as_tuple(record, now)
+            std::forward_as_tuple(record, now, cookie)
         );
         if (res.second) {
             ChangesList.PushBack(&res.first->second);
@@ -1021,6 +1032,38 @@ void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange
 
     Y_ABORT_UNLESS(OutChangeSender);
     Send(OutChangeSender, new NChangeExchange::TEvChangeExchange::TEvEnqueueRecords(std::move(forward)));
+}
+
+ui32 TDataShard::GetFreeChangeQueueCapacity(ui64 cookie) {
+    const ui64 sizeLimit = AppData()->DataShardConfig.GetChangesQueueItemsLimit();
+    if (sizeLimit < ChangesQueue.size()) {
+        return 0;
+    }
+
+    const ui64 free = Min<ui64>(sizeLimit - ChangesQueue.size(), Max<ui64>(sizeLimit / 2, 1));
+
+    ui32 reserved = ChangeQueueReservedCapacity;
+    if (auto it = ChangeQueueReservations.find(cookie); it != ChangeQueueReservations.end()) {
+        reserved -= it->second;
+    }
+
+    if (free < reserved) {
+        return 0;
+    }
+
+    return free - reserved;
+}
+
+ui64 TDataShard::ReserveChangeQueueCapacity(ui32 capacity) {
+    const ui64 sizeLimit = AppData()->DataShardConfig.GetChangesQueueItemsLimit();
+    if (Max<ui64>(sizeLimit / 2, 1) < ChangeQueueReservedCapacity) {
+        return 0;
+    }
+
+    const auto cookie = NextChangeQueueReservationCookie++;
+    ChangeQueueReservations.emplace(cookie, capacity);
+    ChangeQueueReservedCapacity += capacity;
+    return cookie;
 }
 
 void TDataShard::UpdateChangeExchangeLag(TInstant now) {
@@ -2385,6 +2428,31 @@ void TDataShard::SendAfterMediatorStepActivate(ui64 mediatorStep, const TActorCo
     EmitHeartbeats();
 }
 
+class TDataShard::TTxMediatorStateRestored : public TTransactionBase<TDataShard> {
+public:
+    TTxMediatorStateRestored(TDataShard* self, ui64 readStep, ui64 observedStep)
+        : TTransactionBase(self)
+        , ReadStep(readStep)
+        , ObservedStep(observedStep)
+    {}
+
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        Y_ABORT_UNLESS(Self->MediatorStateRestoreTxPending);
+        Self->MediatorStateRestoreTxPending = false;
+
+        Self->FinishMediatorStateRestore(txc, ReadStep, ObservedStep);
+        return true;
+    }
+
+    void Complete(const TActorContext&) override {
+        // nothing
+    }
+
+private:
+    const ui64 ReadStep;
+    const ui64 ObservedStep;
+};
+
 void TDataShard::CheckMediatorStateRestored() {
     if (!MediatorStateWaiting ||
         !RegistrationSended ||
@@ -2392,16 +2460,11 @@ void TDataShard::CheckMediatorStateRestored() {
         CoordinatorSubscriptionsPending > 0 && CoordinatorPrevReadStepMax == Max<ui64>())
     {
         // We are not waiting or not ready to make a decision
-        if (MediatorStateWaiting &&
-            MediatorTimeCastEntry &&
-            CoordinatorPrevReadStepMax == Max<ui64>() &&
-            !MediatorStateBackupInitiated)
-        {
-            // It is possible we don't have coordinators with new protocol support
-            // Use a backup plan of acquiring a read snapshot for restoring the read step
-            Schedule(TDuration::MilliSeconds(50), new TEvPrivate::TEvMediatorRestoreBackup);
-            MediatorStateBackupInitiated = true;
-        }
+        return;
+    }
+
+    if (MediatorStateRestoreTxPending) {
+        // We already made a decision and are waiting for transaction to execute
         return;
     }
 
@@ -2439,6 +2502,13 @@ void TDataShard::CheckMediatorStateRestored() {
         return;
     }
 
+    MediatorStateRestoreTxPending = true;
+    Execute(new TTxMediatorStateRestored(this, readStep, observedStep));
+}
+
+void TDataShard::FinishMediatorStateRestore(TTransactionContext& txc, ui64 readStep, ui64 observedStep) {
+    Y_ABORT_UNLESS(MediatorStateWaiting);
+
     // Using the inferred last read step we restore the pessimistic unprotected
     // read edge. Note we only need to do so if there have actually been any
     // unprotected reads in this datashard history. We also need to make sure
@@ -2453,6 +2523,8 @@ void TDataShard::CheckMediatorStateRestored() {
         const TRowVersion edge = Max(lastReadEdge, preImmediateWriteEdge);
         LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "CheckMediatorStateRestored at " << TabletID()
             << " promoting UnprotectedReadEdge to " << edge);
+        Pipeline.MarkPlannedLogicallyCompleteUpTo(edge, txc);
+        Pipeline.MarkPlannedLogicallyIncompleteUpTo(edge, txc);
         SnapshotManager.PromoteUnprotectedReadEdge(edge);
     }
 
@@ -2643,10 +2715,7 @@ bool TDataShard::CheckDataTxReject(const TString& opDescr,
         }
     }
 
-    size_t totalInFly =
-        ReadIteratorsInFly() + TxInFly() + ImmediateInFly() + MediatorStateWaitingMsgs.size()
-            + ProposeQueue.Size() + TxWaiting();
-    if (totalInFly > GetMaxTxInFly()) {
+    if (!Pipeline.CheckInflightLimit()) {
         reject = true;
         rejectReasons |= ERejectReasons::OverloadByTxInFly;
         rejectDescriptions.push_back("MaxTxInFly was exceeded");
@@ -2802,6 +2871,8 @@ void TDataShard::Handle(TEvDataShard::TEvProposeTransaction::TPtr &ev, const TAc
         if (Pipeline.AddWaitingTxOp(ev, ctx)) {
             UpdateProposeQueueSize();
             return;
+        } else {
+            Y_ABORT("Unexpected failure to add a waiting unrejected tx");
         }
     }
 
@@ -3369,10 +3440,7 @@ void TDataShard::Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const 
 }
 
 void TDataShard::Handle(TEvPrivate::TEvMediatorRestoreBackup::TPtr&, const TActorContext&) {
-    if (MediatorStateWaiting && CoordinatorPrevReadStepMax == Max<ui64>()) {
-        // We are still waiting for new protol coordinator state
-        // TODO: send an old snapshot request to coordinators
-    }
+    Y_ABORT("This code path was always no-op and no longer used");
 }
 
 bool TDataShard::WaitPlanStep(ui64 step) {
@@ -3425,6 +3493,20 @@ bool TDataShard::CheckTxNeedWait() const {
     return false;
 }
 
+bool TDataShard::CheckTxNeedWait(const TRowVersion& mvccSnapshot) const {
+    TRowVersion unreadableEdge = Pipeline.GetUnreadableEdge();
+    if (mvccSnapshot >= unreadableEdge) {
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+            "New transaction uses snapshot "
+            << mvccSnapshot
+            << " which is not before unreadable edge "
+            << unreadableEdge);
+        return true;
+    }
+
+    return false;
+}
+
 bool TDataShard::CheckTxNeedWait(const TEvDataShard::TEvProposeTransaction::TPtr& ev) const {
     if (CheckTxNeedWait()) {
         return true;
@@ -3433,11 +3515,9 @@ bool TDataShard::CheckTxNeedWait(const TEvDataShard::TEvProposeTransaction::TPtr
     auto* msg = ev->Get();
     auto& rec = msg->Record;
     if (rec.HasMvccSnapshot()) {
-        TRowVersion rowVersion(rec.GetMvccSnapshot().GetStep(), rec.GetMvccSnapshot().GetTxId());
-        TRowVersion unreadableEdge = Pipeline.GetUnreadableEdge();
-        if (rowVersion >= unreadableEdge) {
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "New transaction reads from " << rowVersion << " which is not before unreadable edge " << unreadableEdge);
-            LWTRACK(ProposeTransactionWaitSnapshot, msg->Orbit, rowVersion.Step, rowVersion.TxId);
+        TRowVersion mvccSnapshot(rec.GetMvccSnapshot().GetStep(), rec.GetMvccSnapshot().GetTxId());
+        if (CheckTxNeedWait(mvccSnapshot)) {
+            LWTRACK(ProposeTransactionWaitSnapshot, msg->Orbit, mvccSnapshot.Step, mvccSnapshot.TxId);
             return true;
         }
     }
@@ -3445,19 +3525,49 @@ bool TDataShard::CheckTxNeedWait(const TEvDataShard::TEvProposeTransaction::TPtr
     return false;
 }
 
-bool TDataShard::CheckChangesQueueOverflow() const {
+bool TDataShard::CheckTxNeedWait(const NEvents::TDataEvents::TEvWrite::TPtr& ev) const {
+    if (CheckTxNeedWait()) {
+        return true;
+    }
+
+    auto* msg = ev->Get();
+    auto& rec = msg->Record;
+    if (rec.HasMvccSnapshot()) {
+        TRowVersion mvccSnapshot(rec.GetMvccSnapshot().GetStep(), rec.GetMvccSnapshot().GetTxId());
+        if (CheckTxNeedWait(mvccSnapshot)) {
+            LWTRACK(ProposeTransactionWaitSnapshot, msg->GetOrbit(), mvccSnapshot.Step, mvccSnapshot.TxId);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool TDataShard::CheckChangesQueueOverflow(ui64 cookie) const {
     const auto* appData = AppData();
     const auto sizeLimit = appData->DataShardConfig.GetChangesQueueItemsLimit();
     const auto bytesLimit = appData->DataShardConfig.GetChangesQueueBytesLimit();
-    return ChangesQueue.size() >= sizeLimit || ChangesQueueBytes >= bytesLimit;
+
+    ui32 reserved = ChangeQueueReservedCapacity;
+    if (auto it = ChangeQueueReservations.find(cookie); it != ChangeQueueReservations.end()) {
+        reserved -= it->second;
+    }
+
+    return (ChangesQueue.size() + reserved) >= sizeLimit || ChangesQueueBytes >= bytesLimit;
 }
 
-void TDataShard::CheckChangesQueueNoOverflow() {
+void TDataShard::CheckChangesQueueNoOverflow(ui64 cookie) {
     if (OverloadSubscribersByReason[RejectReasonIndex(ERejectReason::ChangesQueueOverflow)]) {
         const auto* appData = AppData();
         const auto sizeLimit = appData->DataShardConfig.GetChangesQueueItemsLimit();
         const auto bytesLimit = appData->DataShardConfig.GetChangesQueueBytesLimit();
-        if (ChangesQueue.size() < sizeLimit && ChangesQueueBytes < bytesLimit) {
+
+        ui32 reserved = ChangeQueueReservedCapacity;
+        if (auto it = ChangeQueueReservations.find(cookie); it != ChangeQueueReservations.end()) {
+            reserved -= it->second;
+        }
+
+        if ((ChangesQueue.size() + reserved) < sizeLimit && ChangesQueueBytes < bytesLimit) {
             NotifyOverloadSubscribers(ERejectReason::ChangesQueueOverflow);
         }
     }

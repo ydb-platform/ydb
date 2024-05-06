@@ -24,6 +24,15 @@ struct TFastVDiskSetup : public TDefaultVDiskSetup {
     }
 };
 
+struct TFastVDiskSetupMinHugeBlob : public TFastVDiskSetup {
+    TFastVDiskSetupMinHugeBlob(ui32 minHugeBlobInBytes) {
+        auto modifier = [=] (NKikimr::TVDiskConfig *cfg) {
+            cfg->MinHugeBlobInBytes = minHugeBlobInBytes;
+        };
+        AddConfigModifier(modifier);
+    }
+};
+
 struct TFastVDiskSetupSmallVDiskQueues : public TFastVDiskSetup {
     TFastVDiskSetupSmallVDiskQueues() {
         auto modifier = [] (NKikimr::TVDiskConfig *cfg) {

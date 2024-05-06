@@ -1,0 +1,19 @@
+{
+    "properties": {
+        "important": {
+            "$ref": "#/definitions/BoolOrDefaultValue"
+        },
+        "limitsMode": {
+            "description": "userDefined can be set to 'wait' or 'notify'",
+            "$ref": "#/definitions/StringOrDefaultValue"
+        },
+        "abcService": {
+            "$ref": "#/definitions/StringOrDefaultValue"
+        },
+        "responsible": {
+            "$ref": "#/definitions/StringArrayOrDefaultValue"
+        }
+    },
+    "title": "ConsumerProperties",
+    "type": "object"
+}

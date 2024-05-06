@@ -43,7 +43,7 @@ void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::T
     if (self) {
         self->IncCounter(NColumnShard::COUNTER_PORTIONS_ERASED, PortionsToDrop.size());
         for (auto&& p : PortionsToDrop) {
-            self->IncCounter(NColumnShard::COUNTER_RAW_BYTES_ERASED, p.RawBytesSum());
+            self->IncCounter(NColumnShard::COUNTER_RAW_BYTES_ERASED, p.GetTotalRawBytes());
         }
     }
 }

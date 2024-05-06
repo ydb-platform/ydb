@@ -11,7 +11,7 @@ namespace NKikimr::NOlap::NActualizer {
 std::optional<NKikimr::NOlap::NActualizer::TSchemeActualizer::TFullActualizationInfo> TSchemeActualizer::BuildActualizationInfo(const TPortionInfo& portion) const {
     AFL_VERIFY(TargetSchema);
     const TString& currentTierName = portion.GetTierNameDef(IStoragesManager::DefaultStorageId);
-    auto portionSchema = VersionedIndex.GetSchema(portion.GetMinSnapshot());
+    auto portionSchema = portion.GetSchema(VersionedIndex);
     if (portionSchema->GetVersion() < TargetSchema->GetVersion()) {
         auto storagesWrite = TargetSchema->GetIndexInfo().GetUsedStorageIds(currentTierName);
         auto storagesRead = portionSchema->GetIndexInfo().GetUsedStorageIds(currentTierName);
@@ -64,9 +64,14 @@ void TSchemeActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, con
         }
         for (auto&& portionId : portions) {
             auto portion = externalContext.GetPortionVerified(portionId);
+            if (!address.WriteIs(NBlobOperations::TGlobal::DefaultStorageId) && !address.WriteIs(NTiering::NCommon::DeleteTierName)) {
+                if (!portion->HasRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized)) {
+                    continue;
+                }
+            }
             auto info = BuildActualizationInfo(*portion);
             AFL_VERIFY(info);
-            auto portionScheme = VersionedIndex.GetSchema(portion->GetMinSnapshot());
+            auto portionScheme = portion->GetSchema(VersionedIndex);
             TPortionEvictionFeatures features(portionScheme, info->GetTargetScheme(), portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
             features.SetTargetTierName(portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
 
@@ -80,6 +85,19 @@ void TSchemeActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, con
     for (auto&& i : portionsToRemove) {
         RemovePortion(i);
     }
+
+    ui64 waitQueueExternal = 0;
+    ui64 waitQueueInternal = 0;
+    for (auto&& i : PortionsToActualizeScheme) {
+        if (i.first.WriteIs(IStoragesManager::DefaultStorageId)) {
+            waitQueueInternal += i.second.size();
+        } else {
+            waitQueueExternal += i.second.size();
+        }
+    }
+    Counters.QueueSizeInternalWrite->SetValue(waitQueueInternal);
+    Counters.QueueSizeExternalWrite->SetValue(waitQueueExternal);
+
 }
 
 void TSchemeActualizer::Refresh(const TAddExternalContext& externalContext) {

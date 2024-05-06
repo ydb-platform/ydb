@@ -87,9 +87,8 @@ public:
         Discoverer = {};
 
         auto issue = MakeIssue(ErrorToIssueCode(ev->Get()->Status), ev->Get()->Error);
-        google::protobuf::RepeatedPtrField<TYdbIssueMessageType> issueMessages;
-        NYql::IssueToMessage(issue, issueMessages.Add());
-        Reply(ErrorToStatusCode(ev->Get()->Status), issueMessages);
+        Request->RaiseIssue(issue);
+        Reply(ErrorToStatusCode(ev->Get()->Status));
     }
 
     static NKikimrIssues::TIssuesIds::EIssueCode ErrorToIssueCode(TEvDiscovery::TEvError::EStatus status) {
@@ -159,9 +158,8 @@ public:
         PassAway();
     }
 
-    template <typename... Args>
-    void Reply(Args&&... args) {
-        Request->SendResult(std::forward<Args>(args)...);
+    void Reply(Ydb::StatusIds::StatusCode status) {
+        Request->ReplyWithYdbStatus(status);
         PassAway();
     }
 };

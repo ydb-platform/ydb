@@ -4,6 +4,7 @@
 #include <ydb/library/conclusion/status.h>
 #include <ydb/services/metadata/abstract/request_features.h>
 #include <ydb/services/bg_tasks/abstract/interface.h>
+#include <ydb/core/formats/arrow/common/validation.h>
 
 #include <ydb/library/conclusion/result.h>
 
@@ -54,11 +55,28 @@ public:
     }
 
     TString SerializeFull(const std::shared_ptr<arrow::RecordBatch>& batch) const {
+        if (!batch) {
+            return "";
+        }
         return DoSerializeFull(batch);
     }
 
     TString SerializePayload(const std::shared_ptr<arrow::RecordBatch>& batch) const {
+        if (!batch) {
+            return "";
+        }
         return DoSerializePayload(batch);
+    }
+
+    std::shared_ptr<arrow::RecordBatch> Repack(const std::shared_ptr<arrow::RecordBatch>& batch) {
+        if (!batch) {
+            return batch;
+        }
+        return TStatusValidator::GetValid(Deserialize(SerializeFull(batch)));
+    }
+
+    TString Repack(const TString& batchString) {
+        return SerializeFull(TStatusValidator::GetValid(Deserialize(batchString)));
     }
 
     arrow::Result<std::shared_ptr<arrow::RecordBatch>> Deserialize(const TString& data) const {

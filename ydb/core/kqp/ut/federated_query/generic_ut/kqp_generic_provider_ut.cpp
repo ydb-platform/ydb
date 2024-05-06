@@ -144,7 +144,7 @@ namespace NKikimr::NKqp {
 
             // run test
             auto appConfig = CreateDefaultAppConfig();
-            auto kikimr = MakeKikimrRunner(nullptr, clientMock, databaseAsyncResolverMock, appConfig);
+            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig);
 
             CreateExternalDataSource(providerType, kikimr);
 
@@ -236,7 +236,7 @@ namespace NKikimr::NKqp {
 
             // run test
             auto appConfig = CreateDefaultAppConfig();
-            auto kikimr = MakeKikimrRunner(nullptr, clientMock, databaseAsyncResolverMock, appConfig);
+            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig);
 
             CreateExternalDataSource(providerType, kikimr);
 
@@ -327,7 +327,7 @@ namespace NKikimr::NKqp {
 
             // run test
             auto appConfig = CreateDefaultAppConfig();
-            auto kikimr = MakeKikimrRunner(nullptr, clientMock, databaseAsyncResolverMock, appConfig);
+            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig);
 
             CreateExternalDataSource(providerType, kikimr);
 
@@ -420,7 +420,7 @@ namespace NKikimr::NKqp {
                     .Done()
                 .Result()
                     .AddResponse(MakeRecordBatch(
-                        MakeArray<arrow::StringBuilder>("data_column", colData, arrow::utf8()),
+                        MakeArray<arrow::BinaryBuilder>("data_column", colData, arrow::binary()),
                         MakeArray<arrow::Int32Builder>("filtered_column", filterColumnData, arrow::int32())),
                         NewSuccess());
             // clang-format on
@@ -430,7 +430,7 @@ namespace NKikimr::NKqp {
 
             // run test
             auto appConfig = CreateDefaultAppConfig();
-            auto kikimr = MakeKikimrRunner(nullptr, clientMock, databaseAsyncResolverMock, appConfig);
+            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig);
 
             CreateExternalDataSource(providerType, kikimr);
 

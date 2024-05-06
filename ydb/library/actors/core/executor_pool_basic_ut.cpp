@@ -606,7 +606,7 @@ Y_UNIT_TEST_SUITE(ChangingThreadsCountInBasicExecutorPool) {
         const size_t threadsCounts[N] = { 1, 3, 2, 3, 1, 4 };
         for (ui32 idx = 0; idx < 4 * N; ++idx) {
             size_t currentThreadCount = threadsCounts[idx % N];
-            ctx.ExecutorPool->SetThreadCount(currentThreadCount);
+            ctx.ExecutorPool->SetFullThreadCount(currentThreadCount);
             AtomicSet(ctx.State.ExpectedMaximum, currentThreadCount);
 
             for (size_t testIdx = 0; testIdx < testCount; ++testIdx) {
@@ -638,7 +638,7 @@ Y_UNIT_TEST_SUITE(ChangingThreadsCountInBasicExecutorPool) {
         TTestSenderActor* changerActor = new TTestSenderActor([&]{
             ctx.State.ActorStartProcessing();
             AtomicSet(ctx.State.ExpectedMaximum, 0);
-            ctx.ExecutorPool->SetThreadCount(threadsCouns[counter]);
+            ctx.ExecutorPool->SetFullThreadCount(threadsCouns[counter]);
             NanoSleep(10'000'000);
             AtomicSet(ctx.State.ExpectedMaximum, threadsCouns[counter]);
             counter++;

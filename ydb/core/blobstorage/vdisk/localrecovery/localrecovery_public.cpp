@@ -417,12 +417,12 @@ namespace NKikimr {
                             LocRecCtx->VCtx,
                             LocRecCtx->PDiskCtx->Dsk->ChunkSize,
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
+                            LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                             Config->MinHugeBlobInBytes,
                             Config->MilestoneHugeBlobInBytes,
                             Config->MaxLogoBlobDataSize,
                             Config->HugeBlobOverhead,
                             Config->HugeBlobsFreeChunkReservation,
-                            Config->HugeBlobOldMapCompatible,
                             logFunc);
             } else {
                 // read existing one
@@ -439,17 +439,17 @@ namespace NKikimr {
                             LocRecCtx->VCtx,
                             LocRecCtx->PDiskCtx->Dsk->ChunkSize,
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
+                            LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                             Config->MinHugeBlobInBytes,
                             Config->MilestoneHugeBlobInBytes,
                             Config->MaxLogoBlobDataSize,
                             Config->HugeBlobOverhead,
                             Config->HugeBlobsFreeChunkReservation,
-                            Config->HugeBlobOldMapCompatible,
                             lsn, entryPoint, logFunc);
             }
             HugeBlobCtx = std::make_shared<THugeBlobCtx>(
-                    LocRecCtx->RepairedHuge->GetMinREALHugeBlobInBytes(),
-                    LocRecCtx->RepairedHuge->Heap->BuildHugeSlotsMap());
+                    LocRecCtx->RepairedHuge->Heap->BuildHugeSlotsMap(),
+                    Config->AddHeader);
             HugeKeeperInitialized = true;
             return true;
         }
@@ -499,7 +499,8 @@ namespace NKikimr {
                         Config->HullCompMaxInFlightReads,
                         Config->HullCompReadBatchEfficiencyThreshold,
                         Config->HullCompStorageRatioCalcPeriod,
-                        Config->HullCompStorageRatioMaxCalcDuration);
+                        Config->HullCompStorageRatioMaxCalcDuration,
+                        Config->AddHeader);
 
                 // create THullDbRecovery, which creates THullDs
                 LocRecCtx->HullDbRecovery = std::make_shared<THullDbRecovery>(hullCtx);

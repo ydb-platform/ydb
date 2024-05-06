@@ -39,10 +39,11 @@ class SimpleColorizedStreamHandler(logging.StreamHandler):
 
     RE_KW = functools.partial(lambda p, r, m: p.sub(r, m), re.compile(r"(Perform HTTP \S+ request|Response received)"), r"{}\1{}".format(KW, C_END))
     RE_HTTP = functools.partial(lambda p, r, m: p.sub(r, m), re.compile(r"(https?://\S+)"), r"{}\1{}".format(URL, C_END))
-    RE_JSON = functools.partial(lambda p, r, m: p.sub(r, m), re.compile(r"([\w'-]+): "), r"{}\1{}: ".format(PARAM, C_END))
+    RE_JSON = functools.partial(lambda p, r, m: p.sub(r, m), re.compile(r"(['\"][\w-]+['\"]): ?"), r"{}\1{}: ".format(PARAM, C_END))
     RE_YSON = functools.partial(lambda p, r, m: p.sub(r, m), re.compile(r"\"([^\";]+?)\"="), "\"{}\\1{}\"=".format(YSON_PARAM, C_END))
 
-    ENABLED = os.environ.get("YT_LOG_LEVEL") == "Debug"
+    # to disable color output
+    DISABLE_COLOR = os.environ.get("YT_LOG_LEVEL") == "Debug"
 
     terminator = '\n'  # py2 compat
 
@@ -57,7 +58,7 @@ class SimpleColorizedStreamHandler(logging.StreamHandler):
         try:
             msg = self.format(record)
             stream = self.stream
-            if stream.isatty() and record.levelno == logging.DEBUG and self.ENABLED:
+            if stream.isatty() and record.levelno == logging.DEBUG and not self.DISABLE_COLOR:
                 msg = self._colorize(msg)
             stream.write(msg + self.terminator)
             self.flush()
@@ -111,6 +112,16 @@ def error(msg, *args, **kwargs):
 
 def exception(msg, *args, **kwargs):
     LOGGER.exception(msg, *args, **kwargs)
+
+
+if hasattr(functools, 'lru_cache') and not os.environ.get("YT_LOG_NO_TIP"):
+    @functools.lru_cache(maxsize=128)
+    def tip(msg):
+        LOGGER.debug("[TIP] " + msg)
+else:
+    # py2
+    def tip(msg):
+        pass
 
 
 def log(level, msg, *args, **kwargs):

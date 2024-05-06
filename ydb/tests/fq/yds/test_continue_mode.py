@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import logging
+import os
+import pytest
 import time
 
 import ydb.public.api.protos.draft.fq_pb2 as fq
@@ -20,6 +22,7 @@ def assert_issues_contain(text, issues):
 
 class TestContinueMode(TestYdsBase):
     @yq_v1
+    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
     def test_continue_from_offsets(self, kikimr, client):
         client.create_yds_connection(name="yds", database_id="FakeDatabaseId")
 
@@ -158,6 +161,7 @@ class TestContinueMode(TestYdsBase):
         assert_has_saved_checkpoints()
 
     @yq_v1
+    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
     def test_deny_disposition_from_checkpoint_in_create_query(self, client):
         client.create_yds_connection(name="yds_create", database_id="FakeDatabaseId")
 
@@ -180,6 +184,7 @@ class TestContinueMode(TestYdsBase):
                               response.issues)
 
     @yq_v1
+    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
     def test_deny_state_load_mode_from_checkpoint_in_modify_query(self, kikimr, client):
         client.create_yds_connection(name="yds_modify", database_id="FakeDatabaseId")
 

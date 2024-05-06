@@ -29,72 +29,134 @@ struct TMul : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TMul<TLeft,
 
 template<typename TLeft, typename TRight, typename TOutput>
 struct TNumMulInterval {
-    static_assert(std::is_same<TOutput, i64>::value, "expected i64");
-    static_assert(std::is_integral<TLeft>::value, "left must be integral");
-    static_assert(std::is_integral<TRight>::value, "right must be integral");
+    static_assert(TOutput::Features & NYql::NUdf::TimeIntervalType, "Output must be interval type");
+    static_assert(std::is_integral_v<typename TLeft::TLayout>, "Left must be integral");
+    static_assert(std::is_integral_v<typename TRight::TLayout>, "Right must be integral");
 
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right)
     {
-        const auto lv = static_cast<TOutput>(left.template Get<TLeft>());
-        const auto rv = static_cast<TOutput>(right.template Get<TRight>());
+        const auto lv = static_cast<typename TOutput::TLayout>(left.template Get<typename TLeft::TLayout>());
+        const auto rv = static_cast<typename TOutput::TLayout>(right.template Get<typename TRight::TLayout>());
         const auto ret = lv * rv;
-        return IsBadInterval(ret) ? NUdf::TUnboxedValuePod() : NUdf::TUnboxedValuePod(ret);
+        if (ret == 0) {
+            return NUdf::TUnboxedValuePod(ret);
+        }
+        if constexpr (std::is_same_v<ui64, typename TLeft::TLayout>) {
+            if (left.Get<ui64>() > static_cast<ui64>(std::numeric_limits<i64>::max())) {
+                return NUdf::TUnboxedValuePod();
+            }
+        }
+        if constexpr (std::is_same_v<ui64, typename TRight::TLayout>) {
+            if (right.Get<ui64>() > static_cast<ui64>(std::numeric_limits<i64>::max())) {
+                return NUdf::TUnboxedValuePod();
+            }
+        }
+        i64 lvAbs = (lv > 0) ? lv : -lv;
+        i64 rvAbs = (rv > 0) ? rv : -rv;
+        if (rvAbs != 0 && (std::numeric_limits<i64>::max() / rvAbs < lvAbs)) {
+            return NUdf::TUnboxedValuePod();
+        }
+        return IsBadInterval<TOutput>(ret) ? NUdf::TUnboxedValuePod() : NUdf::TUnboxedValuePod(ret);
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
         auto& context = ctx.Codegen.GetContext();
-        const auto lhs = StaticCast<TLeft, i64>(GetterFor<TLeft>(left, context, block), context, block);
-        const auto rhs = StaticCast<TRight, i64>(GetterFor<TRight>(right, context, block), context, block);
+        const auto bbMain = BasicBlock::Create(context, "bbMain", ctx.Func);
+        const auto bbDone = BasicBlock::Create(context, "bbDone", ctx.Func);
+        const auto resultType = Type::getInt128Ty(context);
+        const auto result = PHINode::Create(resultType, 3, "result", bbDone);
+
+        const auto lv = GetterFor<typename TLeft::TLayout>(left, context, block);
+        const auto lhs = StaticCast<typename TLeft::TLayout, i64>(lv, context, block);
+        const auto rv = GetterFor<typename TRight::TLayout>(right, context, block);
+        const auto rhs = StaticCast<typename TRight::TLayout, i64>(rv, context, block);
         const auto mul = BinaryOperator::CreateMul(lhs, rhs, "mul", block);
-        const auto full = SetterFor<TOutput>(mul, context, block);
-        const auto bad = GenIsBadInterval(mul, context, block);
-        const auto zero = ConstantInt::get(Type::getInt128Ty(context), 0);
-        const auto sel = SelectInst::Create(bad, zero, full, "sel", block);
-        return sel;
+        const auto zero = ConstantInt::get(Type::getInt64Ty(context), 0);
+        const auto mulZero = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, mul, zero, "mulZero", block);
+        const auto res = SetterFor<typename TOutput::TLayout>(mul, context, block);
+
+        BranchInst::Create(bbDone, bbMain, mulZero, block);
+        result->addIncoming(res, block);
+
+        block = bbMain;
+
+        const auto lhsAbs = SelectInst::Create(
+                CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, lhs, zero, "lhsPos", block),
+                lhs,
+                BinaryOperator::CreateNeg(lhs, "lhsNeg", block),
+                "lhsAbs", block);
+        const auto rhsAbs = SelectInst::Create(
+                CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, rhs, zero, "rhsPos", block),
+                rhs,
+                BinaryOperator::CreateNeg(rhs, "rhsNeg", block),
+                "rhsAbs", block);
+        const auto i64Max = ConstantInt::get(Type::getInt64Ty(context), std::numeric_limits<i64>::max());
+        const auto div = BinaryOperator::CreateSDiv(i64Max, rhsAbs, "div", block);
+        const auto mulOverflow = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, lhsAbs, div, "mulOverflow", block);
+        const auto i64Overflow = BinaryOperator::CreateOr(
+                GenIsInt64Overflow<typename TLeft::TLayout>(lv, context, block),
+                GenIsInt64Overflow<typename TRight::TLayout>(rv, context, block),
+                "i64Overflow", block);
+        const auto bad = BinaryOperator::CreateOr(
+                BinaryOperator::CreateOr(i64Overflow, mulOverflow, "overflow", block),
+                GenIsBadInterval<TOutput>(mul, context, block),
+                "bad", block);
+        const auto null = ConstantInt::get(resultType, 0);
+        const auto sel = SelectInst::Create(bad, null, res, "sel", block);
+
+        result->addIncoming(sel, block);
+        BranchInst::Create(bbDone, block);
+        block = bbDone;
+        return result;
     }
 #endif
 };
 
 }
 
+template <typename TInterval>
+void RegisterIntervalMul(IBuiltinFunctionRegistry& registry) {
+    RegisterFunctionBinPolyOpt<NUdf::TDataType<ui8>, TInterval,
+        TInterval, TNumMulInterval, TBinaryArgsOptWithNullableResult>(registry, "Mul");
+    RegisterFunctionBinPolyOpt<NUdf::TDataType<i8>, TInterval,
+        TInterval, TNumMulInterval, TBinaryArgsOptWithNullableResult>(registry, "Mul");
+    RegisterFunctionBinPolyOpt<NUdf::TDataType<ui16>, TInterval,
+        TInterval, TNumMulInterval, TBinaryArgsOptWithNullableResult>(registry, "Mul");
+    RegisterFunctionBinPolyOpt<NUdf::TDataType<i16>, TInterval,
+        TInterval, TNumMulInterval, TBinaryArgsOptWithNullableResult>(registry, "Mul");
+    RegisterFunctionBinPolyOpt<NUdf::TDataType<ui32>, TInterval,
+        TInterval, TNumMulInterval, TBinaryArgsOptWithNullableResult>(registry, "Mul");
+    RegisterFunctionBinPolyOpt<NUdf::TDataType<i32>, TInterval,
+        TInterval, TNumMulInterval, TBinaryArgsOptWithNullableResult>(registry, "Mul");
+    RegisterFunctionBinPolyOpt<NUdf::TDataType<ui64>, TInterval,
+        TInterval, TNumMulInterval, TBinaryArgsOptWithNullableResult>(registry, "Mul");
+    RegisterFunctionBinPolyOpt<NUdf::TDataType<i64>, TInterval,
+        TInterval, TNumMulInterval, TBinaryArgsOptWithNullableResult>(registry, "Mul");
+
+    RegisterFunctionBinPolyOpt<TInterval, NUdf::TDataType<ui8>,
+        TInterval, TNumMulInterval, TBinaryArgsOptWithNullableResult>(registry, "Mul");
+    RegisterFunctionBinPolyOpt<TInterval, NUdf::TDataType<i8>,
+        TInterval, TNumMulInterval, TBinaryArgsOptWithNullableResult>(registry, "Mul");
+    RegisterFunctionBinPolyOpt<TInterval, NUdf::TDataType<ui16>,
+        TInterval, TNumMulInterval, TBinaryArgsOptWithNullableResult>(registry, "Mul");
+    RegisterFunctionBinPolyOpt<TInterval, NUdf::TDataType<i16>,
+        TInterval, TNumMulInterval, TBinaryArgsOptWithNullableResult>(registry, "Mul");
+    RegisterFunctionBinPolyOpt<TInterval, NUdf::TDataType<ui32>,
+        TInterval, TNumMulInterval, TBinaryArgsOptWithNullableResult>(registry, "Mul");
+    RegisterFunctionBinPolyOpt<TInterval, NUdf::TDataType<i32>,
+        TInterval, TNumMulInterval, TBinaryArgsOptWithNullableResult>(registry, "Mul");
+    RegisterFunctionBinPolyOpt<TInterval, NUdf::TDataType<ui64>,
+        TInterval, TNumMulInterval, TBinaryArgsOptWithNullableResult>(registry, "Mul");
+    RegisterFunctionBinPolyOpt<TInterval, NUdf::TDataType<i64>,
+        TInterval, TNumMulInterval, TBinaryArgsOptWithNullableResult>(registry, "Mul");
+}
+
 void RegisterMul(IBuiltinFunctionRegistry& registry) {
     RegisterBinaryNumericFunctionOpt<TMul, TBinaryArgsOpt>(registry, "Mul");
-
-    RegisterFunctionBinOpt<NUdf::TDataType<ui8>, NUdf::TDataType<NUdf::TInterval>,
-        NUdf::TDataType<NUdf::TInterval>, TNumMulInterval, TBinaryArgsOptWithNullableResult>(registry, "Mul");
-    RegisterFunctionBinOpt<NUdf::TDataType<i8>, NUdf::TDataType<NUdf::TInterval>,
-        NUdf::TDataType<NUdf::TInterval>, TNumMulInterval, TBinaryArgsOptWithNullableResult>(registry, "Mul");
-    RegisterFunctionBinOpt<NUdf::TDataType<ui16>, NUdf::TDataType<NUdf::TInterval>,
-        NUdf::TDataType<NUdf::TInterval>, TNumMulInterval, TBinaryArgsOptWithNullableResult>(registry, "Mul");
-    RegisterFunctionBinOpt<NUdf::TDataType<i16>, NUdf::TDataType<NUdf::TInterval>,
-        NUdf::TDataType<NUdf::TInterval>, TNumMulInterval, TBinaryArgsOptWithNullableResult>(registry, "Mul");
-    RegisterFunctionBinOpt<NUdf::TDataType<ui32>, NUdf::TDataType<NUdf::TInterval>,
-        NUdf::TDataType<NUdf::TInterval>, TNumMulInterval, TBinaryArgsOptWithNullableResult>(registry, "Mul");
-    RegisterFunctionBinOpt<NUdf::TDataType<i32>, NUdf::TDataType<NUdf::TInterval>,
-        NUdf::TDataType<NUdf::TInterval>, TNumMulInterval, TBinaryArgsOptWithNullableResult>(registry, "Mul");
-    RegisterFunctionBinOpt<NUdf::TDataType<ui64>, NUdf::TDataType<NUdf::TInterval>,
-        NUdf::TDataType<NUdf::TInterval>, TNumMulInterval, TBinaryArgsOptWithNullableResult>(registry, "Mul");
-    RegisterFunctionBinOpt<NUdf::TDataType<i64>, NUdf::TDataType<NUdf::TInterval>,
-        NUdf::TDataType<NUdf::TInterval>, TNumMulInterval, TBinaryArgsOptWithNullableResult>(registry, "Mul");
-
-    RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<ui8>,
-        NUdf::TDataType<NUdf::TInterval>, TNumMulInterval, TBinaryArgsOptWithNullableResult>(registry, "Mul");
-    RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<i8>,
-        NUdf::TDataType<NUdf::TInterval>, TNumMulInterval, TBinaryArgsOptWithNullableResult>(registry, "Mul");
-    RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<ui16>,
-        NUdf::TDataType<NUdf::TInterval>, TNumMulInterval, TBinaryArgsOptWithNullableResult>(registry, "Mul");
-    RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<i16>,
-        NUdf::TDataType<NUdf::TInterval>, TNumMulInterval, TBinaryArgsOptWithNullableResult>(registry, "Mul");
-    RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<ui32>,
-        NUdf::TDataType<NUdf::TInterval>, TNumMulInterval, TBinaryArgsOptWithNullableResult>(registry, "Mul");
-    RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<i32>,
-        NUdf::TDataType<NUdf::TInterval>, TNumMulInterval, TBinaryArgsOptWithNullableResult>(registry, "Mul");
-    RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<ui64>,
-        NUdf::TDataType<NUdf::TInterval>, TNumMulInterval, TBinaryArgsOptWithNullableResult>(registry, "Mul");
-    RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<i64>,
-        NUdf::TDataType<NUdf::TInterval>, TNumMulInterval, TBinaryArgsOptWithNullableResult>(registry, "Mul");
+    RegisterIntervalMul<NUdf::TDataType<NUdf::TInterval>>(registry);
+    RegisterIntervalMul<NUdf::TDataType<NUdf::TInterval64>>(registry);
 }
 
 void RegisterMul(TKernelFamilyMap& kernelFamilyMap) {

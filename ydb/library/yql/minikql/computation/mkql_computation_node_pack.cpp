@@ -342,12 +342,14 @@ NUdf::TUnboxedValue UnpackFromChunkedBuffer(const TType* type, TChunkedInputBuff
             return UnpackString(buf, 16);
         }
         case NUdf::EDataSlot::Decimal: {
-            const auto des = NYql::NDecimal::Deserialize(buf.data(), buf.size());
-            MKQL_ENSURE(!NYql::NDecimal::IsError(des.first), "Bad packed data: invalid decimal.");
-            buf.Skip(des.second);
-            return NUdf::TUnboxedValuePod(des.first);
+            return NUdf::TUnboxedValuePod(UnpackDecimal(buf));
         }
-        default:
+        case NUdf::EDataSlot::String:
+        case NUdf::EDataSlot::Utf8:
+        case NUdf::EDataSlot::Yson:
+        case NUdf::EDataSlot::Json:
+        case NUdf::EDataSlot::JsonDocument:
+        case NUdf::EDataSlot::DyNumber: {
             ui32 size = 0;
             if constexpr (Fast) {
                 size = NDetails::GetRawData<ui32>(buf);
@@ -359,6 +361,7 @@ NUdf::TUnboxedValue UnpackFromChunkedBuffer(const TType* type, TChunkedInputBuff
                 }
             }
             return UnpackString(buf, size);
+        }
         }
         break;
     }
@@ -669,11 +672,15 @@ void PackImpl(const TType* type, TBuf& buffer, const NUdf::TUnboxedValuePod& val
             break;
         }
         case NUdf::EDataSlot::Decimal: {
-            char buff[0x10U];
-            PackBlob(buff, NYql::NDecimal::Serialize(value.GetInt128(), buff), buffer);
+            PackDecimal(value.GetInt128(), buffer);
             break;
         }
-        default: {
+        case NUdf::EDataSlot::String:
+        case NUdf::EDataSlot::Utf8:
+        case NUdf::EDataSlot::Yson:
+        case NUdf::EDataSlot::Json:
+        case NUdf::EDataSlot::JsonDocument:
+        case NUdf::EDataSlot::DyNumber: {
             auto stringRef = value.AsStringRef();
             if constexpr (Fast) {
                 static_assert(std::is_same_v<decltype(stringRef.Size()), ui32>);

@@ -256,15 +256,17 @@ struct TStopOneNodeTest {
 struct TRandomTest {
     TTestEnv Env;
     ui32 NumIters;
+    ui32 MaxBlobSize;
 
     void RunTest() {
+        srand(123);
         TVector<TString> data(Reserve(NumIters));
 
         TVector<ui32> successfulSteps;
 
         for (ui32 step = 0; step < NumIters; ++step) {
             Cerr << "Step = " << step << Endl;
-            data.push_back(GenData(16 + random() % 4096));
+            data.push_back(GenData(16 + random() % MaxBlobSize));
 
             if (Env.SendPut(step, data.back()) == NKikimrProto::OK) {
                 successfulSteps.push_back(step);
@@ -343,6 +345,85 @@ struct TRandomTest {
 };
 
 
+struct TTwoPartsOnOneNodeTest {
+    TTestEnv Env;
+    TString data;
+
+    void RunTest() {
+        ui32 step = 0;
+
+        auto printActualBlobLocations = [&](const TLogoBlobID& blobId) {
+            auto actualLocations = Env.GetActualPartsLocations(blobId);
+            for (const auto& [pos, parts]: Enumerate(actualLocations)) {
+                Cerr << "Node " << pos << ": ";
+                for (ui32 part: parts) {
+                    Cerr << part << " ";
+                }
+                Cerr << Endl;
+            }
+        };
+
+
+        auto blobId = MakeLogoBlobId(++step, data.size());
+        auto expectedLocations = Env.GetExpectedPartsLocations(blobId);
+        TVector<ui32> partIdxToNodeId(6);
+        TVector<ui32> handoffNodeIds;
+        for (ui32 nodeId = 0; nodeId < expectedLocations.size(); ++nodeId) {
+            if (expectedLocations[nodeId].empty()) {
+                handoffNodeIds.push_back(nodeId);
+            }
+
+            for (ui32 partId: expectedLocations[nodeId]) {
+                partIdxToNodeId[partId - 1] = nodeId;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(handoffNodeIds.size(), 2);
+
+        // stop one main node and one handoff node, and send put, so that we have 1 part on handoff
+        Env.StopNode(partIdxToNodeId[0]);
+        Env.StopNode(handoffNodeIds[1]);
+        Env.SendPut(step, data, NKikimrProto::OK);
+        printActualBlobLocations(blobId);
+
+        // start main node we stopped before, and stop another main node
+        // so after get with restore we should have 2 parts on handoff
+        Env.StartNode(partIdxToNodeId[0]);
+        Env.StopNode(partIdxToNodeId[1]);
+        Env->Sim(TDuration::Seconds(10));
+        auto res = Env.SendGet(step, data.size(), true);
+        printActualBlobLocations(blobId);
+
+        UNIT_ASSERT_VALUES_EQUAL(Env.SendGet(step, data.size())->Get()->Responses[0].Buffer.ConvertToString(), data);
+        auto actualLocations = Env.GetActualPartsLocations(blobId);
+        // check that we really have 2 parts on handoff
+        UNIT_ASSERT_VALUES_EQUAL(actualLocations[handoffNodeIds[0]].size(), 2);
+
+        // start all stopped nodes
+        Env.StartNode(partIdxToNodeId[1]);
+        Env.StartNode(handoffNodeIds[1]);
+        Env->Sim(TDuration::Seconds(10));
+
+        // run compactions
+        Cerr << "Start compaction 1" << Endl;
+        for (ui32 pos = 0; pos < Env->Settings.NodeCount; ++pos) {
+            Env->CompactVDisk(Env.GroupInfo->GetActorId(pos));
+        }
+        Env->Sim(TDuration::Seconds(10));
+        Cerr << "Finish compaction 1" << Endl;
+
+        Cerr << "Start compaction 2" << Endl;
+        for (ui32 pos = 0; pos < Env->Settings.NodeCount; ++pos) {
+            Env->CompactVDisk(Env.GroupInfo->GetActorId(pos));
+        }
+        Env->Sim(TDuration::Seconds(10));
+        Cerr << "Finish compaction 2" << Endl;
+
+        Env.CheckPartsLocations(MakeLogoBlobId(step, data.size()));
+        UNIT_ASSERT_VALUES_EQUAL(Env.SendGet(step, data.size())->Get()->Responses[0].Buffer.ConvertToString(), data);
+    }
+};
+
+
 
 Y_UNIT_TEST_SUITE(VDiskBalancing) {
 
@@ -360,10 +441,17 @@ Y_UNIT_TEST_SUITE(VDiskBalancing) {
     }
 
     Y_UNIT_TEST(TestRandom_Block42) {
-        TRandomTest{TTestEnv(8, TBlobStorageGroupType::Erasure4Plus2Block), 1000}.RunTest();
+        TRandomTest{TTestEnv(8, TBlobStorageGroupType::Erasure4Plus2Block), 1000, 521_KB * 6}.RunTest();
     }
     Y_UNIT_TEST(TestRandom_Mirror3dc) {
-        TRandomTest{TTestEnv(9, TBlobStorageGroupType::ErasureMirror3dc), 1000}.RunTest();
+        TRandomTest{TTestEnv(9, TBlobStorageGroupType::ErasureMirror3dc), 1000, 521_KB}.RunTest();
+    }
+
+    Y_UNIT_TEST(TwoPartsOnOneNodeTest_Block42) {
+        TTwoPartsOnOneNodeTest{TTestEnv(8, TBlobStorageGroupType::Erasure4Plus2Block), GenData(100)}.RunTest();
+    }
+    Y_UNIT_TEST(TwoPartsOnOneNodeTest_Block42_HugeBlob) {
+        TTwoPartsOnOneNodeTest{TTestEnv(8, TBlobStorageGroupType::Erasure4Plus2Block), GenData(521_KB * 6)}.RunTest();
     }
 
 }

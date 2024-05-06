@@ -471,6 +471,20 @@ Y_UNIT_TEST_SUITE(TBsLocalRecovery) {
         WriteRestartRead(settings, TIMEOUT);
     }
 
+    Y_UNIT_TEST(WriteRestartReadHugeIncreased) {
+        auto vdiskWriteSetup = std::make_shared<TFastVDiskSetupMinHugeBlob>(8u << 10u);
+        auto vdiskReadSetup = std::make_shared<TFastVDiskSetupMinHugeBlob>(60u << 10u);
+        auto settings = TWriteRestartReadSettings(1000, 20u << 10u, HUGEB, vdiskWriteSetup, vdiskReadSetup);
+        WriteRestartRead(settings, TIMEOUT);
+    }
+
+    Y_UNIT_TEST(WriteRestartReadHugeDecreased) {
+        auto vdiskWriteSetup = std::make_shared<TFastVDiskSetupMinHugeBlob>(60 << 10u);
+        auto vdiskReadSetup = std::make_shared<TFastVDiskSetupMinHugeBlob>(8u << 10u);
+        auto settings = TWriteRestartReadSettings(1000, 20u << 10u, HUGEB, vdiskWriteSetup, vdiskReadSetup);
+        WriteRestartRead(settings, TIMEOUT);
+    }
+
     Y_UNIT_TEST(MultiPutWriteRestartRead) {
         auto vdiskSetup = std::make_shared<TFastVDiskSetup>();
         auto settings = TMultiPutWriteRestartReadSettings::OneSetup(1000, 10, 10, UNK, vdiskSetup);
@@ -542,6 +556,30 @@ Y_UNIT_TEST_SUITE(TBsLocalRecovery) {
         auto vdiskSetup = std::make_shared<TFastVDiskSetup>();
         TChaoticWriteRestartWriteSettings settings(
             TWriteRestartReadSettings::OneSetup(300, 65u << 10u, HUGEB, vdiskSetup),
+            500,
+            TDuration::Seconds(10),
+            TDuration::Seconds(0));
+        ChaoticWriteRestartWrite(settings, TIMEOUT);
+    }
+
+    Y_UNIT_TEST(ChaoticWriteRestartHugeIncreased) {
+        auto vdiskSetup = std::make_shared<TFastVDiskSetupMinHugeBlob>(8u << 10u);
+        auto vdiskSecondSetup = std::make_shared<TFastVDiskSetupMinHugeBlob>(60u << 10u);
+        TChaoticWriteRestartWriteSettings settings(
+            TWriteRestartReadSettings::OneSetup(300, 20u << 10u, HUGEB, vdiskSetup),
+            vdiskSecondSetup,
+            500,
+            TDuration::Seconds(10),
+            TDuration::Seconds(0));
+        ChaoticWriteRestartWrite(settings, TIMEOUT);
+    }
+
+    Y_UNIT_TEST(ChaoticWriteRestartHugeDecreased) {
+        auto vdiskSetup = std::make_shared<TFastVDiskSetupMinHugeBlob>(60u << 10u);
+        auto vdiskSecondSetup = std::make_shared<TFastVDiskSetupMinHugeBlob>(8u << 10u);
+        TChaoticWriteRestartWriteSettings settings(
+            TWriteRestartReadSettings::OneSetup(300, 20u << 10u, HUGEB, vdiskSetup),
+            vdiskSecondSetup,
             500,
             TDuration::Seconds(10),
             TDuration::Seconds(0));

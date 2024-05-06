@@ -14,8 +14,8 @@ namespace NTable {
 
 using namespace NTest;
 
-using TCheckIt = TChecker<TWrapIter, TSubset>;
-using TCheckReverseIt = TChecker<TWrapReverseIter, TSubset>;
+using TCheckIter = TChecker<TWrapIter, TSubset>;
+using TCheckReverseIter = TChecker<TWrapReverseIter, TSubset>;
 
 namespace {
     NPage::TConf PageConf(size_t groups) noexcept
@@ -92,54 +92,54 @@ Y_UNIT_TEST_SUITE(TVersions) {
 
     Y_UNIT_TEST(WreckHead)
     {
-        TWreck<TCheckIt, TSubset>(Mass2(), 666).Do(EWreck::Cached, Subset());
-        TWreck<TCheckIt, TSubset>(Mass2(), 666).Do(EWreck::Evicted, Subset());
-        TWreck<TCheckIt, TSubset>(Mass2(), 666).Do(EWreck::Forward, Subset());
+        TWreck<TCheckIter, TSubset>(Mass2(), 666).Do(EWreck::Cached, Subset());
+        TWreck<TCheckIter, TSubset>(Mass2(), 666).Do(EWreck::Evicted, Subset());
+        TWreck<TCheckIter, TSubset>(Mass2(), 666).Do(EWreck::Forward, Subset());
     }
 
     Y_UNIT_TEST(WreckHeadReverse)
     {
-        TWreck<TCheckReverseIt, TSubset, EDirection::Reverse>(Mass2(), 666).Do(EWreck::Cached, Subset());
-        TWreck<TCheckReverseIt, TSubset, EDirection::Reverse>(Mass2(), 666).Do(EWreck::Evicted, Subset());
+        TWreck<TCheckReverseIter, TSubset, EDirection::Reverse>(Mass2(), 666).Do(EWreck::Cached, Subset());
+        TWreck<TCheckReverseIter, TSubset, EDirection::Reverse>(Mass2(), 666).Do(EWreck::Evicted, Subset());
     }
 
     Y_UNIT_TEST(Wreck2)
     {
-        TWreck<TCheckIt, TSubset>(Mass2(), 666).Do(EWreck::Cached, Subset(), TRowVersion(5, 50));
-        TWreck<TCheckIt, TSubset>(Mass2(), 666).Do(EWreck::Evicted, Subset(), TRowVersion(5, 50));
-        TWreck<TCheckIt, TSubset>(Mass2(), 666).Do(EWreck::Forward, Subset(), TRowVersion(5, 50));
+        TWreck<TCheckIter, TSubset>(Mass2(), 666).Do(EWreck::Cached, Subset(), TRowVersion(5, 50));
+        TWreck<TCheckIter, TSubset>(Mass2(), 666).Do(EWreck::Evicted, Subset(), TRowVersion(5, 50));
+        TWreck<TCheckIter, TSubset>(Mass2(), 666).Do(EWreck::Forward, Subset(), TRowVersion(5, 50));
     }
 
     Y_UNIT_TEST(Wreck2Reverse)
     {
-        TWreck<TCheckReverseIt, TSubset, EDirection::Reverse>(Mass2(), 666).Do(EWreck::Cached, Subset(), TRowVersion(5, 50));
-        TWreck<TCheckReverseIt, TSubset, EDirection::Reverse>(Mass2(), 666).Do(EWreck::Evicted, Subset(), TRowVersion(5, 50));
+        TWreck<TCheckReverseIter, TSubset, EDirection::Reverse>(Mass2(), 666).Do(EWreck::Cached, Subset(), TRowVersion(5, 50));
+        TWreck<TCheckReverseIter, TSubset, EDirection::Reverse>(Mass2(), 666).Do(EWreck::Evicted, Subset(), TRowVersion(5, 50));
     }
 
     Y_UNIT_TEST(Wreck1)
     {
-        TWreck<TCheckIt, TSubset>(Mass1(), 666).Do(EWreck::Cached, Subset(), TRowVersion(3, 30));
-        TWreck<TCheckIt, TSubset>(Mass1(), 666).Do(EWreck::Evicted, Subset(), TRowVersion(3, 30));
-        TWreck<TCheckIt, TSubset>(Mass1(), 666).Do(EWreck::Forward, Subset(), TRowVersion(3, 30));
+        TWreck<TCheckIter, TSubset>(Mass1(), 666).Do(EWreck::Cached, Subset(), TRowVersion(3, 30));
+        TWreck<TCheckIter, TSubset>(Mass1(), 666).Do(EWreck::Evicted, Subset(), TRowVersion(3, 30));
+        TWreck<TCheckIter, TSubset>(Mass1(), 666).Do(EWreck::Forward, Subset(), TRowVersion(3, 30));
     }
 
     Y_UNIT_TEST(Wreck1Reverse)
     {
-        TWreck<TCheckReverseIt, TSubset, EDirection::Reverse>(Mass1(), 666).Do(EWreck::Cached, Subset(), TRowVersion(3, 30));
-        TWreck<TCheckReverseIt, TSubset, EDirection::Reverse>(Mass1(), 666).Do(EWreck::Evicted, Subset(), TRowVersion(3, 30));
+        TWreck<TCheckReverseIter, TSubset, EDirection::Reverse>(Mass1(), 666).Do(EWreck::Cached, Subset(), TRowVersion(3, 30));
+        TWreck<TCheckReverseIter, TSubset, EDirection::Reverse>(Mass1(), 666).Do(EWreck::Evicted, Subset(), TRowVersion(3, 30));
     }
 
     Y_UNIT_TEST(Wreck0)
     {
-        TWreck<TCheckIt, TSubset>(Mass0(), 666).Do(EWreck::Cached, Subset(), TRowVersion(1, 10));
-        TWreck<TCheckIt, TSubset>(Mass0(), 666).Do(EWreck::Evicted, Subset(), TRowVersion(1, 10));
-        TWreck<TCheckIt, TSubset>(Mass0(), 666).Do(EWreck::Forward, Subset(), TRowVersion(1, 10));
+        TWreck<TCheckIter, TSubset>(Mass0(), 666).Do(EWreck::Cached, Subset(), TRowVersion(1, 10));
+        TWreck<TCheckIter, TSubset>(Mass0(), 666).Do(EWreck::Evicted, Subset(), TRowVersion(1, 10));
+        TWreck<TCheckIter, TSubset>(Mass0(), 666).Do(EWreck::Forward, Subset(), TRowVersion(1, 10));
     }
 
     Y_UNIT_TEST(Wreck0Reverse)
     {
-        TWreck<TCheckReverseIt, TSubset, EDirection::Reverse>(Mass0(), 666).Do(EWreck::Cached, Subset(), TRowVersion(1, 10));
-        TWreck<TCheckReverseIt, TSubset, EDirection::Reverse>(Mass0(), 666).Do(EWreck::Evicted, Subset(), TRowVersion(1, 10));
+        TWreck<TCheckReverseIter, TSubset, EDirection::Reverse>(Mass0(), 666).Do(EWreck::Cached, Subset(), TRowVersion(1, 10));
+        TWreck<TCheckReverseIter, TSubset, EDirection::Reverse>(Mass0(), 666).Do(EWreck::Evicted, Subset(), TRowVersion(1, 10));
     }
 
 }

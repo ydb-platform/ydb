@@ -849,6 +849,61 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         UNIT_ASSERT_VALUES_EQUAL(Format(Canonize(s.CollectedKeys, SortOrder::Ascending)), ",1,2,3,4");
     }
 
+    Y_UNIT_TEST(StreamLookupRetryAttemptForFinishedRead) {
+        TTestSetup s(ETestActorType::StreamLookup, "/Root/TestIndex");
+
+        auto settings = MakeIntrusive<TIteratorReadBackoffSettings>();
+        settings->StartRetryDelay = TDuration::MilliSeconds(250);
+        settings->MaxShardAttempts = 4;
+        // set small read response timeout (for frequent retries)
+        settings->ReadResponseTimeout = TDuration::MilliSeconds(1);
+        SetReadIteratorBackoffSettings(settings);
+
+        ExecSQL(*s.Runtime, s.Sender, R"(
+            CREATE TABLE `/Root/TestIndex` (
+                Key Uint64,
+                Fk Uint64,
+                Value String,
+                PRIMARY KEY (Key),
+                INDEX Index GLOBAL ON (Fk)
+            );
+        )", false);
+
+        ExecSQL(*s.Runtime, s.Sender, R"(
+            REPLACE INTO `/Root/TestIndex` (Key, Fk, Value) VALUES
+                (1u, 10u, "Value1"),
+                (2u, 10u, "Value2"),
+                (3u, 10u, "Value3"),
+                (4u, 11u, "Value4"),
+                (5u, 12u, "Value5");
+        )", true);
+
+        auto shards = s.Shards();
+        auto* shim = new TReadActorPipeCacheStub();
+
+        InterceptStreamLookupActorPipeCache(s.Runtime->Register(shim));
+        // capture first evread, retry attempt for this read was scheduled
+        shim->SetupCapture(0, 1);
+
+        s.SendScanQuery(
+            "SELECT Key, Value FROM `/Root/TestIndex` VIEW Index where Fk in (10, 11) ORDER BY Key"
+        );
+
+        shim->ReadsReceived.WaitI();
+        
+        UNIT_ASSERT_EQUAL(shards.size(), 1);
+        auto undelivery = MakeHolder<TEvPipeCache::TEvDeliveryProblem>(shards[0], true);
+
+        UNIT_ASSERT_EQUAL(shim->Captured.size(), 1);
+        // send delivery problem, read should be restarted (it will be second retry attempt for this read)
+        s.Runtime->Send(shim->Captured[0]->Sender, s.Sender, undelivery.Release());
+
+        shim->SkipAll();
+
+        s.AssertSuccess();
+        UNIT_ASSERT_VALUES_EQUAL(Format(Canonize(s.CollectedKeys, SortOrder::Ascending)), ",1,2,3,4");
+    }
+
     Y_UNIT_TEST(StreamLookupDeliveryProblem) {
         TTestSetup s(ETestActorType::StreamLookup, "/Root/TestIndex");
 

@@ -232,7 +232,7 @@ public:
         const NKikimrBlobStorage::EPutHandleClass handleClass = record.GetHandleClass();
         const ui64 size = record.HasBuffer() ? record.GetBuffer().size() : ev.GetPayload(0).GetSize();
 
-        NPriPut::EHandleType handleType = NPriPut::HandleType(HugeBlobSize, handleClass, size);
+        NPriPut::EHandleType handleType = NPriPut::HandleType(HugeBlobSize, handleClass, size, true);
         if (handleType == NPriPut::Log) {
             return WriteCost(size);
         } else {
@@ -247,7 +247,7 @@ public:
 
         for (ui64 idx = 0; idx < record.ItemsSize(); ++idx) {
             const ui64 size = ev.GetBufferBytes(idx);
-            NPriPut::EHandleType handleType = NPriPut::HandleType(HugeBlobSize, handleClass, size);
+            NPriPut::EHandleType handleType = NPriPut::HandleType(HugeBlobSize, handleClass, size, true);
             if (handleType == NPriPut::Log) {
                 cost += WriteCost(size);
             } else {

@@ -15,11 +15,11 @@
 namespace NKikimr {
 namespace NTable {
 
-    class TMemIt {
+    class TMemIter {
     public:
         using TCells = TArrayRef<const TCell>;
 
-        TMemIt(const TMemTable* memTable,
+        TMemIter(const TMemTable* memTable,
                 TIntrusiveConstPtr<TKeyCellDefaults> keyDefaults,
                 const TRemap* remap,
                 IPages *env,
@@ -36,7 +36,7 @@ namespace NTable {
             Y_ABORT_UNLESS(Remap, "Remap cannot be NULL");
         }
 
-        static TAutoPtr<TMemIt> Make(
+        static TAutoPtr<TMemIter> Make(
                 const TMemTable& memTable,
                 const NMem::TTreeSnapshot& snapshot,
                 TCells key,
@@ -46,7 +46,7 @@ namespace NTable {
                 IPages *env,
                 EDirection direction = EDirection::Forward) noexcept
         {
-            auto *iter = new TMemIt(&memTable, std::move(keyDefaults), remap, env, snapshot.Iterator());
+            auto *iter = new TMemIter(&memTable, std::move(keyDefaults), remap, env, snapshot.Iterator());
 
             switch (direction) {
                 case EDirection::Forward:

@@ -14,21 +14,18 @@
 Пример:
 
 ```sql
-$TargetEmbedding = [1.2f, 2.3f, 3.4f, 4.5f]
+$TargetEmbedding = Knn::ToBinaryString([1.2f, 2.3f, 3.4f, 4.5f]);
 
 SELECT id, fact, embedding FROM Facts
 WHERE user="Williams"
-ORDER BY Knn::CosineDistance(
-    Knn::FromBinaryString(embedding),
-    $TargetEmbedding
-)
+ORDER BY Knn::CosineDistance(embedding, $TargetEmbedding)
 LIMIT 10
 ```
 
 ## Типы данных
 
 В математике для хранения точек используется вектор вещественных чисел.
-В {{ ydb-short-name }} операции будут происходить над типом данных `List<Float>`, а храниться данные будут в строковом типе данных `String`.
+В {{ ydb-short-name }} операции будут происходить над строковым типом данных `String`, который является бинарным сериализованным представлением `List<Float>`.
 
 ## Функции
 
@@ -49,16 +46,14 @@ LIMIT 10
 * косинусное сходство `CosineSimilarity` (скалярное произведение / длины векторов)
 
 Фукнции расстояния:
-* евклидово расстояние `EuclideanDistance` (корень от суммы квадратов разниц координат)
 * косинусное расстояние `CosineDistance` ( 1 - косинусное сходство)
 
 #### Сигнатуры функций
 
 ```sql
-Knn::InnerProductSimilarity(List<Float>{Flags:AutoMap}, List<Float>{Flags:AutoMap})->Float?
-Knn::CosineSimilarity(List<Float>{Flags:AutoMap}, List<Float>{Flags:AutoMap})->Float?
-Knn::EuclideanDistance(List<Float>{Flags:AutoMap}, List<Float>{Flags:AutoMap})->Float?
-Knn::CosineDistance(List<Float>{Flags:AutoMap}, List<Float>{Flags:AutoMap})->Float?
+Knn::InnerProductSimilarity(String{Flags:AutoMap}, String{Flags:AutoMap})->Float?
+Knn::CosineSimilarity(String{Flags:AutoMap}, String{Flags:AutoMap})->Float?
+Knn::CosineDistance(String{Flags:AutoMap}, String{Flags:AutoMap})->Float?
 ```
 
 В случае ошибки вычисления, фукнции возвращают `NULL`.
@@ -82,8 +77,8 @@ Knn::FromBinaryString(String{Flags:AutoMap})->List<Float>?
 ```sql
 CREATE TABLE Facts (
     id Uint64,        // Id of fact
-    user String,      // User name
-    fact String,      // Human-readable description of a user fact
+    user Utf8,        // User name
+    fact Utf8,        // Human-readable description of a user fact
     embedding String, // Binary representation of embedding vector (result of Knn::ToBinaryString)
     PRIMARY KEY (id)
 )
@@ -99,13 +94,10 @@ VALUES (123, "Williams", "Full name is John Williams", Knn::ToBinaryString([1.0f
 ### Точный поиск ближайших векторов
 
 ```sql
-$TargetEmbedding = [1.2f, 2.3f, 3.4f, 4.5f]
+$TargetEmbedding = Knn::ToBinaryString([1.2f, 2.3f, 3.4f, 4.5f]);
 
 SELECT * FROM Facts
 WHERE user="Williams"
-ORDER BY Knn::CosineDistance(
-    Knn::FromBinaryString(embedding),
-    $TargetEmbedding
-)
+ORDER BY Knn::CosineDistance(embedding, $TargetEmbedding)
 LIMIT 10
 ```

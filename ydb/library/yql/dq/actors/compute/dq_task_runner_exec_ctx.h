@@ -12,7 +12,7 @@ public:
     TDqTaskRunnerExecutionContext(TTxId txId, IDqChannelStorage::TWakeUpCallback&& wakeUp);
 
     IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling) const override;
-    IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling, NActors::TActorSystem* actorSystem, bool isConcurrent) const override;
+    IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling, NActors::TActorSystem* actorSystem) const override;
 
     std::function<void()> GetWakeupCallback() const override;
 

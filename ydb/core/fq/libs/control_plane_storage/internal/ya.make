@@ -22,6 +22,7 @@ PEERDIR(
     ydb/core/fq/libs/config
     ydb/core/fq/libs/control_plane_storage/proto
     ydb/core/fq/libs/exceptions
+    ydb/core/fq/libs/metrics
     ydb/core/fq/libs/quota_manager
     ydb/core/fq/libs/quota_manager/events
     ydb/core/fq/libs/rate_limiter/events

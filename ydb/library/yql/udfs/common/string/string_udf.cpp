@@ -207,7 +207,9 @@ namespace {
 
 
 #define STRING_STREAM_PAD_FORMATTER_UDF(function)                                                    \
-    SIMPLE_UDF_WITH_OPTIONAL_ARGS(T##function, char*(TAutoMap<char*>, ui64, TOptional<char*>), 1) {  \
+    BEGIN_SIMPLE_ARROW_UDF_WITH_OPTIONAL_ARGS(T##function,                                           \
+                                              char*(TAutoMap<char*>, ui64, TOptional<char*>), 1)     \
+    {                                                                                                \
         TStringStream result;                                                                        \
         const TStringBuf input(args[0].AsStringRef());                                               \
         char paddingSymbol = ' ';                                                                    \
@@ -223,7 +225,33 @@ namespace {
         }                                                                                            \
         result << function(input, padLen, paddingSymbol);                                            \
         return valueBuilder->NewString(TStringRef(result.Data(), result.Size()));                    \
-    }
+    }                                                                                                \
+                                                                                                     \
+    struct T##function##KernelExec                                                                   \
+        : public TGenericKernelExec<T##function##KernelExec, 3>                                      \
+    {                                                                                                \
+        template <typename TSink>                                                                    \
+        static void Process(TBlockItem args, const TSink& sink) {                                    \
+            TStringStream result;                                                                    \
+            const TStringBuf input(args.GetElement(0).AsStringRef());                                \
+            char paddingSymbol = ' ';                                                                \
+            if (args.GetElement(2)) {                                                                \
+                if (args.GetElement(2).AsStringRef().Size() != 1) {                                  \
+                    ythrow yexception() << "Not 1 symbol in paddingSymbol";                          \
+                }                                                                                    \
+                paddingSymbol = TString(args.GetElement(2).AsStringRef())[0];                        \
+            }                                                                                        \
+            const ui64 padLen = args.GetElement(1).Get<ui64>();                                      \
+            if (padLen > padLim) {                                                                   \
+                ythrow yexception() << "Padding length (" << padLen                                  \
+                                    << ") exceeds maximum: " << padLim;                              \
+            }                                                                                        \
+            result << function(input, padLen, paddingSymbol);                                        \
+            sink(TBlockItem(TStringRef(result.Data(), result.Size())));                              \
+        }                                                                                            \
+    };                                                                                               \
+                                                                                                     \
+    END_SIMPLE_ARROW_UDF(T##function, T##function##KernelExec::Do)
 
 #define STRING_STREAM_NUM_FORMATTER_UDF(function, argType)                        \
     BEGIN_SIMPLE_STRICT_ARROW_UDF(T##function, char*(TAutoMap<argType>)) {        \

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "flat_fwd_conf.h"
 #include "flat_fwd_sieve.h"
+#include "flat_mem_snapshot.h"
 #include "flat_mem_warm.h"
 #include "flat_part_screen.h"
 #include "flat_part_iface.h"

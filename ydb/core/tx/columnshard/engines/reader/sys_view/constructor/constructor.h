@@ -1,7 +1,8 @@
 #pragma once
 #include <ydb/core/tx/columnshard/engines/reader/abstract/constructor.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
-#include <ydb/core/tx/columnshard/engines/reader/sys_view/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/engines/reader/sys_view/abstract/iterator.h>
+#include <ydb/core/tx/columnshard/engines/reader/sys_view/abstract/policy.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 
@@ -32,41 +33,15 @@ private:
         out->ReadColumnIds.assign(readColumnIds.begin(), readColumnIds.end());
         out->ResultColumnIds = read.ColumnIds;
 
-        const TColumnEngineForLogs* logsIndex = dynamic_cast<const TColumnEngineForLogs*>(self->GetIndexOptional());
-        if (!logsIndex) {
-            return dynamic_pointer_cast<TReadMetadataBase>(out);
+        auto policy = NAbstract::ISysViewPolicy::BuildByPath(read.TableName);
+        if (!policy) {
+            return TConclusionStatus::Fail("undefined table name: " + TFsPath(read.TableName).GetName());
         }
-        THashMap<ui64, THashSet<ui64>> portionsInUse;
-        const auto predStatSchema = [](const std::shared_ptr<TPortionInfo>& l, const std::shared_ptr<TPortionInfo>& r) {
-            return std::tuple(l->GetPathId(), l->GetPortionId()) < std::tuple(r->GetPathId(), r->GetPortionId());
-        };
-        for (auto&& filter : read.PKRangesFilter) {
-            const ui64 fromPathId = *filter.GetPredicateFrom().Get<arrow::UInt64Array>(0, 0, 1);
-            const ui64 toPathId = *filter.GetPredicateTo().Get<arrow::UInt64Array>(0, 0, Max<ui64>());
-            if (read.TableName.EndsWith(IIndexInfo::TABLE_INDEX_STATS_TABLE) || read.TableName.EndsWith(IIndexInfo::TABLE_INDEX_PORTION_STATS_TABLE)) {
-                if (fromPathId <= read.PathId && toPathId >= read.PathId) {
-                    auto pathInfo = logsIndex->GetGranuleOptional(read.PathId);
-                    if (!pathInfo) {
-                        continue;
-                    }
-                    for (auto&& p : pathInfo->GetPortions()) {
-                        if (portionsInUse[read.PathId].emplace(p.first).second) {
-                            out->IndexPortions.emplace_back(p.second);
-                        }
-                    }
-                }
-                std::sort(out->IndexPortions.begin(), out->IndexPortions.end(), predStatSchema);
-            } else if (read.TableName.EndsWith(IIndexInfo::STORE_INDEX_STATS_TABLE) || read.TableName.EndsWith(IIndexInfo::STORE_INDEX_PORTION_STATS_TABLE)) {
-                auto pathInfos = logsIndex->GetTables(fromPathId, toPathId);
-                for (auto&& pathInfo : pathInfos) {
-                    for (auto&& p : pathInfo->GetPortions()) {
-                        if (portionsInUse[p.second->GetPathId()].emplace(p.first).second) {
-                            out->IndexPortions.emplace_back(p.second);
-                        }
-                    }
-                }
-                std::sort(out->IndexPortions.begin(), out->IndexPortions.end(), predStatSchema);
-            }
+        auto filler = policy->CreateMetadataFiller();
+
+        auto fillConclusion = filler->FillMetadata(self, out, read);
+        if (fillConclusion.IsFail()) {
+            return fillConclusion;
         }
 
         return dynamic_pointer_cast<TReadMetadataBase>(out);

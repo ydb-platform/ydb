@@ -405,7 +405,7 @@ void TQueryPlanPrinter::PrintPrettyTable(const NJson::TJsonValue& plan) {
     }
 }
 
-TString replaceAll(TString str, const TString& from, const TString& to) {
+TString ReplaceAll(TString str, const TString& from, const TString& to) {
     if (!from) {
         return str;
     }
@@ -419,8 +419,16 @@ TString replaceAll(TString str, const TString& from, const TString& to) {
     return str;
 }
 
-TString formatPrettyTableDouble(double value) {
+TString FormatPrettyTableDouble(TString stringValue) {
     std::strstream stream;
+
+    double value = 0.0;
+
+    try {
+        value = std::stod(stringValue);
+    } catch (const std::invalid_argument& ia) {
+        return stringValue;
+    }
 
     if (1e-3 < value && value < 1e8 || value == 0) {
         stream << static_cast<int64_t>(std::round(value)) << '\0';
@@ -436,26 +444,6 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
     const auto& node = plan.GetMapSafe();
 
     auto& newRow = table.AddRow();
-    if (AnalyzeMode) {
-        TString cpuTime;
-        TString nRows;
-
-        if (node.contains("Stats")) {
-            const auto& stats = node.at("Stats").GetMapSafe();
-
-            if (stats.contains("OutputRows")) {
-                auto outputRows = stats.at("OutputRows");
-                if (outputRows.IsMap()) {
-                    nRows = JsonToString(outputRows.GetMapSafe().at("Sum"));
-                } else {
-                    nRows = JsonToString(outputRows);
-                }
-            }
-        }
-
-        newRow.Column(1, std::move(cpuTime));
-        newRow.Column(2, std::move(nRows));
-    }
 
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
     TStringBuf color;
@@ -478,26 +466,32 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
         for (const auto& op : node.at("Operators").GetArraySafe()) {
             TVector<TString> info;
             TString aCpu;
+            TString aRows;
             TString eCost;
             TString eRows;
             TString eSize;
 
             for (const auto& [key, value] : op.GetMapSafe()) {
                 if (key == "A-Cpu") {
-                    aCpu = formatPrettyTableDouble(value.GetDouble());
+                    aCpu = FormatPrettyTableDouble(std::to_string(value.GetDouble()));
+                } else if (key == "A-Rows") {
+                    aRows = FormatPrettyTableDouble(std::to_string(value.GetDouble()));
                 } else if (key == "E-Cost") {
-                    eCost = formatPrettyTableDouble(value.GetDouble());
+                    eCost = FormatPrettyTableDouble(value.GetString());
                 } else if (key == "E-Rows") {
-                    eRows = formatPrettyTableDouble(value.GetDouble());
+                    eRows = FormatPrettyTableDouble(value.GetString());
                 } else if (key == "E-Size") {
-                    eSize = formatPrettyTableDouble(value.GetDouble());
+                    eSize = FormatPrettyTableDouble(value.GetString());
                 } else if (key != "Name") {
-                    if (key == "Predicate" || key == "Condition" || key == "SortBy") {
-                        info.emplace_back(TStringBuilder() << replaceAll(replaceAll(JsonToString(value), "item.", ""), "state.", ""));
+                    if (key == "SsaProgram") {
+                        // skip this attribute
+                    }
+                    else if (key == "Predicate" || key == "Condition" || key == "SortBy") {
+                        info.emplace_back(TStringBuilder() << ReplaceAll(ReplaceAll(JsonToString(value), "item.", ""), "state.", ""));
                     } else if (key == "Table") {
-                        info.insert(info.begin(), TStringBuilder() << colors.LightYellow() << key << colors.Default() << ":" << colors.LightGreen() << " " << replaceAll(replaceAll(JsonToString(value), "item.", ""), "state.", "") << colors.Default());
+                        info.insert(info.begin(), TStringBuilder() << colors.LightYellow() << key << colors.Default() << ":" << colors.LightGreen() << " " << ReplaceAll(ReplaceAll(JsonToString(value), "item.", ""), "state.", "") << colors.Default());
                     } else {
-                        info.emplace_back(TStringBuilder() << colors.LightYellow() << key << colors.Default() << ": " << replaceAll(replaceAll(JsonToString(value), "item.", ""), "state.", ""));
+                        info.emplace_back(TStringBuilder() << colors.LightYellow() << key << colors.Default() << ": " << ReplaceAll(ReplaceAll(JsonToString(value), "item.", ""), "state.", ""));
                     }
                 }
             }
@@ -513,6 +507,7 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
             newRow.Column(0, std::move(operation));
             if (AnalyzeMode) {
                 newRow.Column(1, std::move(aCpu));
+                newRow.Column(2, std::move(aRows));
                 newRow.Column(3, std::move(eCost));
                 newRow.Column(4, std::move(eRows));
                 newRow.Column(5, std::move(eSize));

@@ -11,17 +11,17 @@ namespace NKikimr::NOlap::NBackground {
 
 class TSessionActor: public NActors::TActorBootstrapped<TSessionActor> {
 private:
-    const TTabletId TabletId;
-    const NActors::TActorId TabletActorId;
     ui64 TxCounter = 0;
     std::optional<ui64> SaveSessionProgressTx;
     std::optional<ui64> SaveSessionStateTx;
-    std::shared_ptr<ITabletAdapter> Adapter;
     virtual void OnTxCompleted(const ui64 txInternalId) = 0;
     virtual void OnSessionProgressSaved() = 0;
     virtual void OnSessionStateSaved() = 0;
     virtual void OnBootstrap(const TActorContext& ctx) = 0;
 protected:
+    const TTabletId TabletId;
+    const NActors::TActorId TabletActorId;
+    std::shared_ptr<ITabletAdapter> Adapter;
     std::shared_ptr<TSession> Session;
     ui64 GetNextTxId() {
         return ++TxCounter;
@@ -35,8 +35,9 @@ protected:
 
     void SaveSessionState();
 public:
-    TSessionActor(const TTabletId tabletId, const std::shared_ptr<TSession>& session, const std::shared_ptr<ITabletAdapter>& adapter)
+    TSessionActor(const TTabletId tabletId, const NActors::TActorId tabletActorId, const std::shared_ptr<TSession>& session, const std::shared_ptr<ITabletAdapter>& adapter)
         : TabletId(tabletId)
+        , TabletActorId(tabletActorId)
         , Adapter(adapter)
         , Session(session)
     {

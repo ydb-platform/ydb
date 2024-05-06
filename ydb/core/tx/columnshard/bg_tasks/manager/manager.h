@@ -5,8 +5,12 @@
 #include <ydb/core/tx/columnshard/bg_tasks/abstract/session.h>
 #include <ydb/core/tx/columnshard/bg_tasks/session/session.h>
 #include <ydb/core/tx/columnshard/bg_tasks/session/storage.h>
-#include <ydb/core/tx/columnshard/bg_tasks/protos/data.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
+
+namespace NKikimrTxBackgroundProto {
+class TTaskContainer;
+class TSessionControlContainer;
+}
 
 namespace NKikimr::NOlap::NBackground {
 

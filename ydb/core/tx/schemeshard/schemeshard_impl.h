@@ -49,6 +49,7 @@
 #include <ydb/core/tx/replication/controller/public_events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/sequenceshard/public/events.h>
+#include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/util/pb.h>
 #include <ydb/core/util/token_bucket.h>
@@ -249,6 +250,7 @@ public:
     TTempTablesState TempTablesState;
 
     TTablesStorage ColumnTables;
+    std::shared_ptr<NKikimr::NOlap::NBackground::TSessionsManager> BackgroundSessionsManager;
 
     // it is only because we need to manage undo of upgrade subdomain, finally remove it
     THashMap<TPathId, TVector<TTabletId>> RevertedMigrations;

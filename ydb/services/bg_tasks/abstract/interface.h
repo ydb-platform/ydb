@@ -3,6 +3,7 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/conclusion/status.h>
 
 #include <library/cpp/json/writer/json_value.h>
 #include <library/cpp/json/json_reader.h>
@@ -137,16 +138,12 @@ public:
 
     template <class T>
     const T& GetAsSafe() const {
-        auto result = std::dynamic_pointer_cast<T>(Object);
-        Y_ABORT_UNLESS(!!result);
-        return *result;
+        return *GetObjectPtrVerifiedAs<T>();
     }
 
     template <class T>
     T& GetAsSafe() {
-        auto result = std::dynamic_pointer_cast<T>(Object);
-        Y_ABORT_UNLESS(!!result);
-        return *result;
+        return *GetObjectPtrVerifiedAs<T>();
     }
 
     std::shared_ptr<IInterface> GetObjectPtr() const {
@@ -156,6 +153,13 @@ public:
     std::shared_ptr<IInterface> GetObjectPtrVerified() const {
         AFL_VERIFY(Object);
         return Object;
+    }
+
+    template <class T>
+    std::shared_ptr<T> GetObjectPtrVerifiedAs() const {
+        auto result = std::dynamic_pointer_cast<T>(Object);
+        Y_ABORT_UNLESS(!!result);
+        return result;
     }
 
     const IInterface& GetObjectVerified() const {

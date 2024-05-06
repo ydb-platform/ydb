@@ -276,6 +276,7 @@ PEERDIR(
     ydb/library/yql/minikql
     ydb/library/yql/providers/common/proto
     ydb/services/bg_tasks
+    ydb/core/tx/columnshard/bg_tasks/manager
 )
 
 YQL_LAST_ABI_VERSION()

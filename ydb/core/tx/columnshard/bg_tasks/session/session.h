@@ -23,6 +23,11 @@ public:
         return result;
     }
 
+    template <class T>
+    std::shared_ptr<T> GetLogicAsVerifiedPtr() const {
+        return LogicContainer.GetObjectPtrVerifiedAs<T>();
+    }
+
     [[nodiscard]] TConclusionStatus DeserializeFromLocalDatabase(TSessionRecord&& record) {
         Identifier = record.GetIdentifier();
         ChannelContainer.DeserializeFromString(record.GetStatusChannel());

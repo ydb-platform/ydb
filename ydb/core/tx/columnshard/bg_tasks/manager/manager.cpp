@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/bg_tasks/transactions/tx_save_state.h>
 #include <ydb/core/tx/columnshard/bg_tasks/transactions/tx_add.h>
 #include <ydb/core/tx/columnshard/bg_tasks/transactions/tx_remove.h>
+#include <ydb/core/tx/columnshard/bg_tasks/protos/data.pb.h>
 
 namespace NKikimr::NOlap::NBackground {
 

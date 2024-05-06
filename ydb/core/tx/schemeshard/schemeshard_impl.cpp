@@ -1,6 +1,7 @@
 #include "schemeshard.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_svp_migration.h"
+#include "olap/bg_tasks/adapter/adapter.h"
 
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
@@ -407,6 +408,7 @@ void TSchemeShard::Clear() {
     Views.clear();
 
     ColumnTables = { };
+    BackgroundSessionsManager = std::make_shared<NKikimr::NOlap::NBackground::TSessionsManager>(std::make_shared<NSchemeShard::NBackground::TAdapter>());
 
     RevertedMigrations.clear();
 
@@ -4231,6 +4233,7 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
     TabletCounters = TabletCountersPtr.Get();
 
     SelfPinger = new TSelfPinger(SelfTabletId(), TabletCounters);
+    BackgroundSessionsManager = std::make_shared<NKikimr::NOlap::NBackground::TSessionsManager>(std::make_shared<NBackground::TAdapter>());
 }
 
 const TDomainsInfo::TDomain& TSchemeShard::GetDomainDescription(const TActorContext &ctx) const {
@@ -4320,16 +4323,6 @@ void TSchemeShard::OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActor
     Die(ctx);
 }
 
-static TVector<ui64> CollectTxAllocators(const TAppData *appData) {
-    TVector<ui64> allocators;
-    if (const auto& domain = appData->DomainsInfo->Domain) {
-        for (auto tabletId: domain->TxAllocators) {
-            allocators.push_back(tabletId);
-        }
-    }
-    return allocators;
-}
-
 void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     const TTabletId selfTabletId = SelfTabletId();
 
@@ -4377,7 +4370,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     AllowServerlessStorageBilling = appData->FeatureFlags.GetAllowServerlessStorageBillingForSchemeShard();
     appData->Icb->RegisterSharedControl(AllowServerlessStorageBilling, "SchemeShard_AllowServerlessStorageBilling");
 
-    TxAllocatorClient = RegisterWithSameMailbox(CreateTxAllocatorClient(CollectTxAllocators(appData)));
+    TxAllocatorClient = RegisterWithSameMailbox(CreateTxAllocatorClient(appData));
 
     SysPartitionStatsCollector = Register(NSysView::CreatePartitionStatsCollector().Release());
 

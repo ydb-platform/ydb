@@ -1,0 +1,33 @@
+package NKikimrSchemeShardTxBackgroundProto;
+
+import "ydb/core/protos/flat_scheme_op.proto";
+
+message TTxModification {
+    optional NKikimrSchemeOp.TModifyScheme Transaction = 1;
+}
+
+message TTxChainCommonData {
+    optional string TablePath = 1;
+    repeated TTxModification Modification = 2;
+}
+
+message TTxChainTask {
+    optional TTxChainCommonData CommonData = 1;
+}
+
+message TTxChainSessionLogic {
+    optional TTxChainCommonData CommonData = 1;
+}
+
+message TTxChainSessionProgress {
+    optional uint32 StepForExecute = 1;
+}
+
+message TTxChainSessionState {
+}
+
+message TStatusChannel {
+    optional uint64 SSTabletId = 1;
+    optional string TaskClassName = 2;
+    optional string TaskIdentifier = 3;
+}

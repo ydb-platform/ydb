@@ -11,14 +11,24 @@
 
 namespace NKikimr::NOlap::NBackground {
 
+class TSession;
+class ITabletAdapter;
+
 class TStartContext {
 private:
+    YDB_READONLY_DEF(TTabletId, TabletId);
     YDB_READONLY_DEF(NActors::TActorId, TabletActorId);
     YDB_READONLY_DEF(TStatusChannelContainer, Channel);
+    YDB_READONLY_DEF(std::shared_ptr<TSession>, SessionSelfPtr);
+    YDB_READONLY_DEF(std::shared_ptr<ITabletAdapter>, Adapter);
 public:
-    TStartContext(const NActors::TActorId& tabletActorId, const TStatusChannelContainer channel)
-        : TabletActorId(tabletActorId)
+    TStartContext(const TTabletId tabletId, const NActors::TActorId& tabletActorId, const TStatusChannelContainer channel, const std::shared_ptr<TSession>& sessionSelfPtr,
+        const std::shared_ptr<ITabletAdapter>& adapter)
+        : TabletId(tabletId)
+        , TabletActorId(tabletActorId)
         , Channel(channel)
+        , SessionSelfPtr(sessionSelfPtr)
+        , Adapter(adapter)
     {
 
     }
@@ -82,7 +92,7 @@ public:
 };
 
 template <class TProtoLogicExt, class TProtoProgressExt, class TProtoStateExt>
-class TSessionProtoAdapter: public TInterfaceProtoAdapter<TProtoLogicExt, ISessionLogic> {
+class TSessionProtoAdapter: public NBackgroundTasks::TInterfaceProtoAdapter<TProtoLogicExt, ISessionLogic> {
 protected:
     using TProtoProgress = TProtoProgressExt;
     using TProtoState = TProtoStateExt;
@@ -101,7 +111,7 @@ protected:
         return DoDeserializeProgressFromProto(proto);
     }
     virtual TString DoSerializeProgressToString() const override final {
-        TProtoProgress proto = DoSerializeToProto();
+        TProtoProgress proto = DoSerializeProgressToProto();
         return proto.SerializeAsString();
     }
     virtual TConclusionStatus DoDeserializeStateFromString(const TString& data) override final {

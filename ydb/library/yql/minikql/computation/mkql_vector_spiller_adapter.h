@@ -10,7 +10,7 @@ namespace NKikimr::NMiniKQL {
 ///Stores long vectors of any type (excepting pointers). Tested on int and chars.
 ///The adapter places moved vectors into buffer and flushes buffer on disk when sizeLimit is reached.
 ///Returns vectors in FIFO order.
-template<class T>
+template<class T, class Alloc>
 class TVectorSpillerAdapter {
 public:
     enum class EState {
@@ -25,6 +25,10 @@ public:
         : Spiller(spiller)
         , SizeLimit(sizeLimit)
     {
+    }
+
+    bool HasRunningAsyncIoOperatrion() const {
+        return State == EState::SpillingData || State == EState::RestoringData;
     }
 
     ///Returns current stete of the adapter
@@ -50,7 +54,7 @@ public:
 
     ///Adds new vector to storage. Will not launch real disk operation if case of small vectors
     ///(if inner buffer is not full).
-    void AddData(std::vector<T>&& vec) {
+    void AddData(std::vector<T, Alloc>&& vec) {
         MKQL_ENSURE(CurrentVector.empty(), "Internal logic error");
         MKQL_ENSURE(State == EState::AcceptingData, "Internal logic error");
 
@@ -96,7 +100,7 @@ public:
     }
 
     ///Get requested vector.
-    std::vector<T>&& ExtractVector() {
+    std::vector<T, Alloc>&& ExtractVector() {
         StoredChunksElementsCount.pop();
         State = EState::AcceptingDataRequests;
         return std::move(CurrentVector);
@@ -131,7 +135,7 @@ public:
 
 private:
 
-    void CopyRopeToTheEndOfVector(std::vector<T>& vec, TRope& rope) {
+    void CopyRopeToTheEndOfVector(std::vector<T, Alloc>& vec, TRope& rope) {
         for (auto it = rope.begin(); it != rope.end(); ++it) {
             const T* data = reinterpret_cast<const T*>(it.ContiguousData());
             vec.insert(vec.end(), data, data + it.ContiguousSize() / sizeof(T)); // size is always multiple of sizeof(T)
@@ -150,7 +154,7 @@ private:
             State = EState::DataReady;
         } else {
             CopyRopeToTheEndOfVector(CurrentVector, Buffer);
-            ReadOperation = Spiller->Extract(StoredChunks.front());
+            ReadOperation = Spiller->Get(StoredChunks.front());
         }
     }
 
@@ -192,7 +196,7 @@ private:
     TRope Buffer;
 
     // Used to store vector while spilling and also used while restoring the data
-    std::vector<T> CurrentVector;
+    std::vector<T, Alloc> CurrentVector;
     size_t NextVectorPositionToSave = 0;
 
     std::queue<ISpiller::TKey> StoredChunks; 

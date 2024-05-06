@@ -18,7 +18,7 @@ public:
     {
     }
 
-    NKikimr::NMiniKQL::ISpiller::TPtr CreateSpiller() override {
+    NKikimr::NMiniKQL::ISpiller::TPtr CreateSpiller() const override {
         return std::make_shared<TDqComputeStorage>(TxId_, WakeUpCallback_, ActorSystem_);
     }
 

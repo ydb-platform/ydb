@@ -7,7 +7,7 @@ namespace NKikimr::NMiniKQL {
 class ISpillerFactory : private TNonCopyable
 {
 public:
-    virtual ISpiller::TPtr CreateSpiller() = 0;
+    virtual ISpiller::TPtr CreateSpiller() const = 0;
 
     virtual ~ISpillerFactory(){}
 };

@@ -1208,7 +1208,7 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
             }
 
             if (node.HasBlock4()) {
-                auto tmp = TableHintsImpl(node.GetBlock4().GetRule_table_hints1(), service);
+                auto tmp = TableHintsImpl(node.GetBlock4().GetRule_table_hints1(), service, keyFunc.GetOrElse(""));
                 if (!tmp) {
                     return false;
                 }
@@ -3049,14 +3049,8 @@ TNodePtr TSqlTranslation::StructLiteral(const TRule_struct_literal& node) {
     return BuildStructure(pos, values, labels);
 }
 
-bool isMrObjectOrS3Key(const TString& provider, const TString& keyFunc) {
-    if (provider == S3ProviderName) {
-        return true;
-    }
-    if (provider == YtProviderName && TCiString(keyFunc) == "object") {
-        return true;
-    }
-    return false;
+bool isNonSturctSchemaHintAllowed(const TString& provider, const TString& keyFunc) {
+    return provider != YtProviderName || TCiString(keyFunc) == "object";
 }
 
 bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& hints, const TString& provider, const TString& keyFunc) {
@@ -3111,7 +3105,7 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
         TVector<TNodePtr> labels;
         TVector<TNodePtr> structTypeItems;
         if (alt.HasBlock4()) {
-            if (!isMrObjectOrS3Key(provider, keyFunc)) {
+            if (!isNonSturctSchemaHintAllowed(provider, keyFunc)) {
                 Error() << "Expected Struct type after SCHEMA hint";
                 return false;
             }

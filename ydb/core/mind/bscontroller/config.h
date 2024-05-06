@@ -121,6 +121,8 @@ namespace NKikimr {
             THashSet<TGroupId> GroupContentChanged;
             THashSet<TGroupId> GroupFailureModelChanged;
 
+            bool PushStaticGroupsToSelfHeal = false;
+
         public:
             TConfigState(TBlobStorageController &controller, const THostRecordMap &hostRecords, TInstant timestamp)
                 : Self(controller)

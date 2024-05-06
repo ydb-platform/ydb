@@ -569,6 +569,11 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
         auto& slot = it->second;
         slot.ReadySince = TMonotonic::Max();
         slot.VDiskStatus = NKikimrBlobStorage::EVDiskStatus::ERROR;
+        updates.push_back({
+            .VDiskId = slot.VDiskId,
+            .ReadySince = slot.ReadySince,
+            .VDiskStatus = slot.VDiskStatus,
+        });
     }
     if (!updates.empty()) {
         Send(SelfHealId, new TEvControllerUpdateSelfHealInfo(std::move(updates)));

@@ -280,6 +280,10 @@ struct TTableBucketSpiller {
         return std::move(CurrentBucket);
     }
 
+    bool HasAnythingToProcess() const {
+        return NextVectorToProcess != ENextVectorToProcess::None;
+    }
+
     enum class EState {
         Spilling,
         Restoring,
@@ -415,9 +419,9 @@ class TTable {
 
     ui64 TuplesFound_ = 0; // Total number of matching keys found during join
 
-    std::shared_ptr<ISpillerFactory> SpillerFactory;
-
     ui64 NextBucketToJoin = 0;
+
+    i64 NextBucketToSpill = NumberOfBuckets - 1;
 
 public:
 
@@ -445,6 +449,7 @@ public:
         return NextBucketToJoin > NumberOfBuckets;
     }
 
+    // After this call either all buckets are spilled/loaded or need Yield.
     bool UpdateAndCheckIfBusy() {
         for (ui64 i = 0; i < NumberOfBuckets; ++i) {
             TableBucketsSpiller[i].Update();
@@ -455,6 +460,12 @@ public:
         }
 
         return false;
+    }
+
+    void EnsureAllSpilledBucketsAreReady() {
+        for (i64 bucket = NumberOfBuckets - 1; bucket > NextBucketToSpill; --bucket) {
+            MKQL_ENSURE(!TableBucketsSpiller[bucket].HasAnythingToProcess(), "MISHA ERROR");
+        }
     }
 
     bool IsBucketInMemory(ui64 bucket) {
@@ -476,6 +487,36 @@ public:
         }
     }
 
+    void InitializeBucketSpillers(std::shared_ptr<ISpillerFactory> spillerFactory) {
+        for (size_t i = 0; i < NumberOfBuckets; ++i) {
+            TableBucketsSpiller.emplace_back(spillerFactory->CreateSpiller(), 1_MB);
+        }
+    }
+
+    bool TryToReduceMemory() {
+        EnsureAllSpilledBucketsAreReady();
+        for (i64 bucket = NumberOfBuckets - 1; bucket > NextBucketToSpill; --bucket) {
+            if (TableBuckets[bucket].GetSize()) {
+                std::cerr << std::format("[MISHA] Spilling again bucket {} of size {}\n", bucket, TableBuckets[bucket].GetSize());
+                TableBucketsSpiller[bucket].SpillBucket(std::move(TableBuckets[bucket]));
+
+                if (TableBucketsSpiller[bucket].HasRunningAsyncIoOperation()) return true;
+            }
+        }
+
+        while (NextBucketToSpill >= 0) {
+            i64 nowSpilling = NextBucketToSpill;
+            --NextBucketToSpill;
+            std::cerr << std::format("[MISHA] Spilling bucket {} of size {}\n", nowSpilling, TableBuckets[nowSpilling].GetSize());
+
+            TableBucketsSpiller[nowSpilling].SpillBucket(std::move(TableBuckets[nowSpilling]));
+
+            if (TableBucketsSpiller[nowSpilling].HasRunningAsyncIoOperation()) return true;
+        }
+
+        return false;
+    }
+
     // Clears table content
     void Clear();
 
@@ -483,8 +524,7 @@ public:
     TTable(ui64 numberOfKeyIntColumns = 0, ui64 numberOfKeyStringColumns = 0,
             ui64 numberOfDataIntColumns = 0, ui64 numberOfDataStringColumns = 0,
             ui64 numberOfKeyIColumns = 0, ui64 numberOfDataIColumns = 0, 
-            ui64 nullsBitmapSize = 1, TColTypeInterface * colInterfaces = nullptr, bool isAny = false,
-            std::shared_ptr<ISpillerFactory> spillerFactory = nullptr);
+            ui64 nullsBitmapSize = 1, TColTypeInterface * colInterfaces = nullptr, bool isAny = false);
     
     ~TTable();
 

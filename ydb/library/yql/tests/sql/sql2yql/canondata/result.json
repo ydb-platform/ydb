@@ -33998,6 +33998,13 @@
             "uri": "https://{canondata_backend}/1942415/27d093fb4903da4b5af596ea6d8fed1bfad00643/resource.tar.gz#test_sql_negative.test_aggregate-having_without_aggregation-default.txt_/err_file.out"
         }
     ],
+    "test_sql_negative.test[aggregate-should_use_clone_for_bind_params-default.txt]": [
+        {
+            "checksum": "ac46ef88a4ec8cabedd78549d2be83e7",
+            "size": 165,
+            "uri": "https://{canondata_backend}/1689644/981b8cc449cb09222c7585d66080157e5f171923/resource.tar.gz#test_sql_negative.test_aggregate-should_use_clone_for_bind_params-default.txt_/err_file.out"
+        }
+    ],
     "test_sql_negative.test[aggregate-table_funcs_spec_aggregation-default.txt]": [
         {
             "checksum": "5e297eff28613127818d3ae9c1b0e2d7",

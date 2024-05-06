@@ -1,8 +1,7 @@
-grammar SQLv1;
+grammar SQLv4;
 
 options {
     language = Cpp;
-    memoize = true;
 }
 
 // Input is a list of statements.
@@ -16,7 +15,9 @@ lambda_stmt:
   | import_stmt
 ;
 
-sql_stmt: (EXPLAIN (Q U E R Y PLAN)?)? sql_stmt_core;
+QUERY: Q U E R Y;
+
+sql_stmt: (EXPLAIN (QUERY PLAN)?)? sql_stmt_core;
 
 sql_stmt_core:
     pragma_stmt
@@ -63,9 +64,6 @@ sql_stmt_core:
   | create_view_stmt
   | drop_view_stmt
   | alter_replication_stmt
-  | create_resource_pool_stmt
-  | alter_resource_pool_stmt
-  | drop_resource_pool_stmt
 ;
 
 expr:
@@ -99,7 +97,7 @@ double_question: QUESTION QUESTION;
 
 neq_subexpr: bit_subexpr ((SHIFT_LEFT | shift_right | ROT_LEFT | rot_right | AMPERSAND | PIPE | CARET) bit_subexpr)*
   // trailing QUESTIONs are used in optional simple types (String?) and optional lambda args: ($x, $y?) -> ($x)
-  ((double_question neq_subexpr) => double_question neq_subexpr | QUESTION+)?;
+  ((double_question neq_subexpr) | QUESTION+)?;
 
 bit_subexpr: add_subexpr ((PLUS | MINUS) add_subexpr)*;
 
@@ -420,11 +418,11 @@ row_pattern_common_syntax:
 ;
 
 row_pattern_skip_to:
-      SKIP TO NEXT ROW
-    | SKIP PAST LAST ROW
-    | SKIP TO FIRST row_pattern_skip_to_variable_name
-    | SKIP TO LAST row_pattern_skip_to_variable_name
-    | SKIP TO row_pattern_skip_to_variable_name
+      SKIP_RULE TO NEXT ROW
+    | SKIP_RULE PAST LAST ROW
+    | SKIP_RULE TO FIRST row_pattern_skip_to_variable_name
+    | SKIP_RULE TO LAST row_pattern_skip_to_variable_name
+    | SKIP_RULE TO row_pattern_skip_to_variable_name
 ;
 
 row_pattern_skip_to_variable_name: row_pattern_variable_name;
@@ -668,7 +666,6 @@ alter_table_action:
   | alter_table_alter_changefeed
   | alter_table_drop_changefeed
   | alter_table_rename_index_to
-  | alter_table_alter_index
 ;
 
 alter_external_table_stmt: ALTER EXTERNAL TABLE simple_table_ref alter_external_table_action (COMMA alter_external_table_action)*;
@@ -702,7 +699,6 @@ alter_table_rename_index_to: RENAME INDEX an_id TO an_id;
 alter_table_add_changefeed: ADD changefeed;
 alter_table_alter_changefeed: ALTER CHANGEFEED an_id changefeed_alter_settings;
 alter_table_drop_changefeed: DROP CHANGEFEED an_id;
-alter_table_alter_index: ALTER INDEX an_id alter_table_alter_index_action;
 
 column_schema: an_id_schema type_name_or_bind family_relation? opt_column_constraints;
 family_relation: FAMILY an_id;
@@ -760,12 +756,6 @@ split_boundaries:
 
 literal_value_list: LPAREN literal_value (COMMA literal_value)* RPAREN;
 
-alter_table_alter_index_action:
-    alter_table_set_table_setting_uncompat
-  | alter_table_set_table_setting_compat
-  | alter_table_reset_table_setting
-;
-
 drop_table_stmt: DROP (TABLE | TABLESTORE | EXTERNAL TABLE) (IF EXISTS)? simple_table_ref;
 
 create_user_stmt: CREATE USER role_name create_user_option?;
@@ -800,21 +790,6 @@ permission_id:
 permission_name: permission_id | STRING_VALUE;
 
 permission_name_target: permission_name (COMMA permission_name)* COMMA? | ALL PRIVILEGES?;
-
-create_resource_pool_stmt: CREATE RESOURCE POOL object_ref
-  with_table_settings
-;
-
-alter_resource_pool_stmt: ALTER RESOURCE POOL object_ref
-  alter_resource_pool_action (COMMA alter_resource_pool_action)*
-;
-alter_resource_pool_action:
-    alter_table_set_table_setting_uncompat
-  | alter_table_set_table_setting_compat
-  | alter_table_reset_table_setting
-;
-
-drop_resource_pool_stmt: DROP RESOURCE POOL object_ref;
 
 create_replication_stmt: CREATE ASYNC REPLICATION object_ref
     FOR replication_target (COMMA replication_target)*
@@ -1179,108 +1154,18 @@ keyword_hint_uncompat:
 ;
 
 keyword_as_compat:
-    ABORT
-  | ACTION
-  | ADD
-  | AFTER
-  | ALTER
-  | ANALYZE
-  | AND
-  | ANSI
-  | ARRAY
-  | ASC
-  | ASYNC
-  | ATTACH
-  | ATTRIBUTES
-  | AUTOINCREMENT
-  | BEFORE
-  | BEGIN
-  | BERNOULLI
-  | BY
-  | CASCADE
-  | CHANGEFEED
-  | CHECK
-  // | COLLATE
-  | COMMIT
-  | CONDITIONAL
-  | CONFLICT
+    ATTRIBUTES
   | CONNECT
-  | CONSTRAINT
   | CONSUMER
-  | COVER
-  | CREATE
-  // | CROSS
-  | CURRENT
   | DATA
-  | DATABASE
-  | DECIMAL
-  | DECLARE
-  | DEFAULT
-  | DEFERRABLE
-  | DEFERRED
-  // | DEFINE
-  | DELETE
-  | DESC
   | DESCRIBE
-  | DETACH
   | DIRECTORY
-  | DISABLE
-  | DISCARD
-  // | DO
-  | DROP
-  | EACH
-  | ELSE
-  | EMPTY
-  | ENCRYPTED
-  | END
-  | ERROR
-  | ESCAPE
-  | EVALUATE
-  | EXCLUDE
-  // | EXCLUSION
-  | EXCLUSIVE
-  | EXPLAIN
-  | EXPORT
-  | EXTERNAL
-  | FAIL
-  | FAMILY
-  | FILTER
   | FIRST
-  | FLATTEN
-  | FOLLOWING
-  | FOR
-  | FOREIGN
-  | FUNCTION
-  | GLOB
   | GRANT
-  | GROUP
-  | GROUPING
-  | HASH
-  | IF
-  | IGNORE
-  | ILIKE
-  | IMMEDIATE
-  | IMPORT
-  | IN
-  | INDEX
-  | INDEXED
-  | INHERITS
   | INITIAL
-  | INITIALLY
-  // | INNER
-  | INSERT
-  | INSTEAD
-  | INTO
-  | IS
-  // | ISNULL
-  // | JOIN
-  // | KEY
   | LAST
-  // | LEFT
   | LEGACY
-  | LIKE
   | MANAGE
-  | MATCH
   | MATCHES
   | MATCH_RECOGNIZE
   | MEASURES
@@ -1288,105 +1173,33 @@ keyword_as_compat:
   | MILLISECONDS
   | MODIFY
   | NANOSECONDS
-  // | NATURAL
   | NEXT
-  | NO
-  // | NOTNULL
-  | NULLS
-  | OBJECT
-  | OF
-  | OFFSET
   | OMIT
-  // | ON
   | ONE
-  | ONLY
   | OPTION
-  | OR
-  | ORDER
-  | OTHERS
-  // | OUTER
-  // | OVER
   | PARALLEL
-  | PARTITION
-  | PASSING
-  | PASSWORD
   | PAST
   | PATTERN
   | PER
   | PERMUTE
-  | PLAN
-  | POOL
-  | PRAGMA
-  | PRECEDING
-  // | PRESORT
-  | PRIMARY
   | PRIVILEGES
-//  | QUERY
   | QUEUE
-  | RAISE
 //  | READ
-  | REFERENCES
-  | REGEXP
-  | REINDEX
-  | RELEASE
   | REMOVE
-  | RENAME
-  | REPLACE
   | REPLICATION
-  | RESET
-  | RESPECT
-  | RESTRICT
-  // | RESULT
-  | REVERT
   | REVOKE
-  // | RIGHT
-  | RLIKE
-  | ROLLBACK
-  | ROW
-  // | SAMPLE
-  | SAVEPOINT
   | SECONDS
   | SEEK
-  // | SEMI
-  | SETS
   | SHOW
-  | SKIP
+  | SKIP_RULE
   | SOURCE
-  | SUBQUERY
   | SUBSET
-  | SYMBOLS
-  | SYNC
-  | SYSTEM
-  | TABLE
   | TABLES
-  | TABLESAMPLE
-  | TABLESTORE
-  | TEMP
-  | TEMPORARY
-  | THEN
-  | TIES
-  | TO
   | TOPIC
-  | TRANSACTION
-  | TRIGGER
   | TYPE
-  | UNCONDITIONAL
-  | UNIQUE
-  | UNKNOWN
   | UNMATCHED
-  | UPDATE
-  | UPSERT
-  | USE
-  | USER
-//  | USING
-  | VACUUM
-  | VALUES
-//  | VIEW
-  | VIRTUAL
-//  | WITH
-  | WRAPPER
 //  | WRITE
-  | XOR
+
 ;
 
 // insert new keyword into keyword_as_compat also
@@ -1527,7 +1340,6 @@ keyword_compat: (
   | PER
   | PERMUTE
   | PLAN
-  | POOL
   | PRAGMA
   | PRECEDING
   | PRESORT
@@ -1562,7 +1374,7 @@ keyword_compat: (
   | SEMI
   | SETS
   | SHOW
-  | SKIP
+  | SKIP_RULE
   | SOURCE
   | SUBQUERY
   | SUBSET
@@ -1876,7 +1688,6 @@ PATTERN: P A T T E R N;
 PER: P E R;
 PERMUTE: P E R M U T E;
 PLAN: P L A N;
-POOL: P O O L;
 PRAGMA: P R A G M A;
 PRECEDING: P R E C E D I N G;
 PRESORT: P R E S O R T;
@@ -1923,7 +1734,7 @@ SEMI: S E M I;
 SET: S E T;
 SETS: S E T S;
 SHOW: S H O W;
-SKIP: S K I P;
+SKIP_RULE: S K I P;
 SOURCE: S O U R C E;
 STREAM: S T R E A M;
 STRUCT: S T R U C T;
@@ -1982,12 +1793,12 @@ XOR: X O R;
 // GRAMMAR_STRING_CORE_SINGLE = ~QUOTE_SINGLE | (QUOTE_SINGLE QUOTE_SINGLE)
 // GRAMMAR_STRING_CORE_DOUBLE = ~QUOTE_DOUBLE | (QUOTE_DOUBLE QUOTE_DOUBLE)
 
-fragment STRING_CORE_SINGLE: @GRAMMAR_STRING_CORE_SINGLE@;
-fragment STRING_CORE_DOUBLE: @GRAMMAR_STRING_CORE_DOUBLE@;
+fragment STRING_CORE_SINGLE: ~(['\\]) | (BACKSLASH .);
+fragment STRING_CORE_DOUBLE: ~(["\\]) | (BACKSLASH .);
 
 fragment STRING_SINGLE: (QUOTE_SINGLE STRING_CORE_SINGLE* QUOTE_SINGLE);
 fragment STRING_DOUBLE: (QUOTE_DOUBLE STRING_CORE_DOUBLE* QUOTE_DOUBLE);
-fragment STRING_MULTILINE: (DOUBLE_AT .* DOUBLE_AT)+ AT?;
+fragment STRING_MULTILINE: (DOUBLE_AT .*? DOUBLE_AT)+ AT?;
 
 STRING_VALUE: ((STRING_SINGLE | STRING_DOUBLE | STRING_MULTILINE) (S | U | Y | J | P (T | B | V)?)?);
 
@@ -2023,7 +1834,7 @@ BLOB: X QUOTE_SINGLE HEXDIGIT+ QUOTE_SINGLE;
 // ANSI Lexer:
 // GRAMMAR_MULTILINE_COMMENT_CORE = MULTILINE_COMMENT | .
 
-fragment MULTILINE_COMMENT: '/*' ( options {greedy=false;} : @GRAMMAR_MULTILINE_COMMENT_CORE@ )* '*/';
+fragment MULTILINE_COMMENT: '/*' ( @GRAMMAR_MULTILINE_COMMENT_CORE@ )*? '*/';
 fragment LINE_COMMENT: '--' ~('\n'|'\r')* ('\r' '\n'? | '\n' | EOF);
-WS: (' '|'\r'|'\t'|'\u000C'|'\n') {$channel=HIDDEN;};
-COMMENT: (MULTILINE_COMMENT|LINE_COMMENT) {$channel=HIDDEN;};
+WS: (' '|'\r'|'\t'|'\u000C'|'\n') -> channel(HIDDEN);
+COMMENT: (MULTILINE_COMMENT|LINE_COMMENT) -> channel(HIDDEN);

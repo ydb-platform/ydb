@@ -8,7 +8,6 @@ namespace NKikimr::NOlap::NBackground {
 
 class ITaskDescription {
 private:
-    YDB_READONLY_DEF(TString, Identifier);
     virtual TConclusionStatus DoDeserializeFromString(const TString& data) = 0;
     virtual TString DoSerializeToString() const = 0;
     virtual std::shared_ptr<ISessionLogic> DoBuildSession() const = 0;

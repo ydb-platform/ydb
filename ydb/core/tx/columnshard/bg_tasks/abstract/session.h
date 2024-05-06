@@ -81,6 +81,42 @@ public:
     virtual bool IsReadyForRemove() const = 0;
 };
 
+template <class TProtoLogicExt, class TProtoProgressExt, class TProtoStateExt>
+class TSessionProtoAdapter: public TInterfaceProtoAdapter<TProtoLogicExt, ISessionLogic> {
+protected:
+    using TProtoProgress = TProtoProgressExt;
+    using TProtoState = TProtoStateExt;
+    using TProtoLogic = TProtoLogicExt;
+private:
+    virtual TConclusionStatus DoDeserializeProgressFromProto(const TProtoProgress& proto) = 0;
+    virtual TProtoProgress DoSerializeProgressToProto() const = 0;
+    virtual TConclusionStatus DoDeserializeStateFromProto(const TProtoState& proto) = 0;
+    virtual TProtoState DoSerializeStateToProto() const = 0;
+protected:
+    virtual TConclusionStatus DoDeserializeProgressFromString(const TString& data) override final {
+        TProtoProgress proto;
+        if (!proto.ParseFromArray(data.data(), data.size())) {
+            return TConclusionStatus::Fail("cannot parse proto string as " + TypeName<TProtoProgress>());
+        }
+        return DoDeserializeProgressFromProto(proto);
+    }
+    virtual TString DoSerializeProgressToString() const override final {
+        TProtoProgress proto = DoSerializeToProto();
+        return proto.SerializeAsString();
+    }
+    virtual TConclusionStatus DoDeserializeStateFromString(const TString& data) override final {
+        TProtoState proto;
+        if (!proto.ParseFromArray(data.data(), data.size())) {
+            return TConclusionStatus::Fail("cannot parse proto string as " + TypeName<TProtoState>());
+        }
+        return DoDeserializeStateFromProto(proto);
+    }
+    virtual TString DoSerializeStateToString() const override final {
+        TProtoState proto = DoSerializeStateToProto();
+        return proto.SerializeAsString();
+    }
+};
+
 class TSessionLogicContainer: public NBackgroundTasks::TInterfaceStringContainer<ISessionLogic> {
 private:
     using TBase = NBackgroundTasks::TInterfaceStringContainer<ISessionLogic>;

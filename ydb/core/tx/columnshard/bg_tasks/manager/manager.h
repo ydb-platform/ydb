@@ -16,12 +16,16 @@ private:
     std::shared_ptr<TSessionsStorage> Storage;
     std::shared_ptr<ITabletAdapter> Adapter;
 public:
+    TSessionsManager(const std::shared_ptr<ITabletAdapter>& adapter)
+        : Adapter(adapter)
+    {
+        Storage = std::make_shared<TSessionsStorage>();
+    }
+
     bool LoadIdempotency(NTabletFlatExecutor::TTransactionContext& txc);
 
     [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> AddTaskFromProto(const NKikimrTxBackgroundProto::TTaskContainer& taskProto);
-
     [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> Remove(const TString& className, const TString& identifier);
-
     [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> ApplyControlFromProto(const NKikimrTxBackgroundProto::TSessionControlContainer& controlProto);
 
     void Start(const TStartContext& context) {

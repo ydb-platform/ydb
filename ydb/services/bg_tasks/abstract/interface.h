@@ -239,6 +239,27 @@ public:
     }
 };
 
+template <class TProto, class IBaseInterface>
+class TInterfaceProtoAdapter: public IBaseInterface {
+private:
+    virtual TConclusionStatus DoDeserializeFromProto(const TProto& proto) = 0;
+    virtual TProto DoSerializeToProto() const = 0;
+protected:
+    using TProtoStorage = TProto;
+    virtual TConclusionStatus DoDeserializeFromString(const TString& data) override final {
+        TProto proto;
+        if (!proto.ParseFromArray(data.data(), data.size())) {
+            return TConclusionStatus::Fail("cannot parse proto string as " + TypeName<TProto>());
+        }
+        return DoDeserializeFromProto(proto);
+    }
+    virtual TString DoSerializeToString() const override final {
+        TProto proto = DoSerializeToProto();
+        return proto.SerializeAsString();
+    }
+};
+
+
 class TDefaultJsonContainerPolicy {
 public:
     static TString GetClassName(const NJson::TJsonValue& jsonInfo) {

@@ -2494,7 +2494,7 @@ TExprNode::TPtr OptimizeReorder(const TExprNode::TPtr& node, TExprContext& ctx) 
         return ctx.ChangeChild(*node, 0U, node->Head().HeadPtr());
     }
 
-    if (const auto& lambda = node->Tail(); lambda.Tail().GetDependencyScope()->second != &lambda) {
+    if (const auto& lambda = node->Tail(); lambda.Tail().GetDependencyScope()->second != &lambda && IsStrict(lambda.TailPtr())) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " by constant";
         return IsTop ?
             ctx.Builder(node->Pos())

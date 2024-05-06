@@ -586,10 +586,11 @@ public:
     EFetchResult ProcessSpilledData(TComputationContext& ctx, NUdf::TUnboxedValue*const* output);
 
     bool IsSwitchToSpillingModeCondition() const {
-        return true;
+        return false;
     }
 
     void SwitchMode(EOperatingMode mode, TComputationContext& ctx) {
+        std::cerr << std::format("[MISHA] switching mode from {} to {}\n", (int)Mode, (int)mode);
         switch(mode) {
             case EOperatingMode::InMemory:
                 MKQL_ENSURE(false, "Internal logic error");

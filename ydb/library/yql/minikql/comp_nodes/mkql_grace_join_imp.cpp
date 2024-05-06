@@ -577,10 +577,12 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
     stringsOffsets2.reserve(JoinTable2->NumberOfStringColumns + JoinTable2->NumberOfIColumns + 1);
     std::vector<JoinTuplesIds, TMKQLAllocator<JoinTuplesIds, EMemorySubPool::Temporary>> joinResults;
 
-
-    ui64 bucket = NextBucketToJoin++;
-    tuplesFound += JoinTwoBuckets(&JoinTable1->TableBuckets[bucket], &JoinTable2->TableBuckets[bucket], bucket, joinResults, joinSlots, spillSlots, slotToIdx);
-
+    while (NextBucketToJoin < NumberOfBuckets) {
+        ui64 bucket = NextBucketToJoin;
+        if (JoinTable1->TableBucketsSpiller.size() && (!JoinTable1->IsBucketInMemory(bucket) || !JoinTable2->IsBucketInMemory(bucket))) return;
+        tuplesFound += JoinTwoBuckets(&JoinTable1->TableBuckets[bucket], &JoinTable2->TableBuckets[bucket], bucket, joinResults, joinSlots, spillSlots, slotToIdx);
+        NextBucketToJoin++;
+    }
     HasMoreLeftTuples_ = hasMoreLeftTuples;
     HasMoreRightTuples_ = hasMoreRightTuples;
 

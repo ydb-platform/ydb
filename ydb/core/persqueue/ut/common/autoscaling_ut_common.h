@@ -59,7 +59,7 @@ struct TTestReadSession {
 
     static constexpr size_t SemCount = 1;
 
-    TTestReadSession(const TString& name, TTopicClient& client, size_t expectedMessagesCount = Max<size_t>(), bool autoCommit = true, std::optional<ui32> partition = std::nullopt);
+    TTestReadSession(const TString& name, TTopicClient& client, size_t expectedMessagesCount = Max<size_t>(), bool autoCommit = true, std::set<ui32> partitions = {});
 
     void WaitAllMessages();
     NThreading::TFuture<std::set<size_t>> Wait(std::set<size_t> partitions, const TString& message);
@@ -71,6 +71,8 @@ struct TTestReadSession {
     void Commit();
 
     void Close();
+
+    std::set<size_t> GetPartitions();
 
 private:
     void Acquire();

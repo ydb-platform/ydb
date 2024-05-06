@@ -6683,4 +6683,11 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
     }
+    
+    Y_UNIT_TEST(DisallowNonStructSchema) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+            SELECT * FROM plato.Input WITH schema(a String);
+        )");
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "Expected Struct type after SCHEMA hint");
+    }
 }

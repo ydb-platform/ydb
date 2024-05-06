@@ -1063,6 +1063,9 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
     TPosition pos(Context().Pos());
     TTableHints hints = GetContextHints(Ctx);
     TTableHints tableHints;
+
+    TMaybe<TString> keyFunc;
+
     auto& block = node.GetBlock3();
     switch (block.Alt_case()) {
         case TRule_table_ref::TBlock3::kAlt1: {
@@ -1096,7 +1099,7 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
             }
 
             auto& alt = block.GetAlt2();
-            const TString func(Id(alt.GetRule_an_id_expr1(), *this));
+            keyFunc = Id(alt.GetRule_an_id_expr1(), *this);
             TVector<TTableArg> args;
             if (alt.HasBlock3()) {
                 auto& argsBlock = alt.GetBlock3();
@@ -1115,8 +1118,8 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
                     args.push_back(std::move(*arg));
                 }
             }
-            tableHints = GetTableFuncHints(func);
-            tr.Keys = BuildTableKeys(pos, service, cluster, func, args);
+            tableHints = GetTableFuncHints(*keyFunc);
+            tr.Keys = BuildTableKeys(pos, service, cluster, *keyFunc, args);
             break;
         }
         case TRule_table_ref::TBlock3::kAlt3: {
@@ -1229,7 +1232,7 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
     MergeHints(hints, tableHints);
 
     if (node.HasBlock4()) {
-        auto tmp = TableHintsImpl(node.GetBlock4().GetRule_table_hints1());
+        auto tmp = TableHintsImpl(node.GetBlock4().GetRule_table_hints1(), keyFunc.GetOrElse(""));
         if (!tmp) {
             Ctx.Error() << "Failed to parse table hints";
             return false;
@@ -3046,7 +3049,7 @@ TNodePtr TSqlTranslation::StructLiteral(const TRule_struct_literal& node) {
     return BuildStructure(pos, values, labels);
 }
 
-bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& hints) {
+bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& hints, const TString& keyFunc) {
     // table_hint:
     //      an_id_hint (EQUALS (type_name_tag | LPAREN type_name_tag (COMMA type_name_tag)* COMMA? RPAREN))?
     //    | (SCHEMA | COLUMNS) EQUALS? type_name_or_bind
@@ -3098,6 +3101,11 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
         TVector<TNodePtr> labels;
         TVector<TNodePtr> structTypeItems;
         if (alt.HasBlock4()) {
+            if (TCiString(keyFunc) != "object") {
+                Error() << "Expected Struct type after SCHEMA hint";
+                return false;
+            }
+
             bool warn = false;
             auto processItem = [&](const TRule_struct_arg_positional& arg) {
                 // struct_arg_positional:
@@ -3165,19 +3173,19 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
     return true;
 }
 
-TMaybe<TTableHints> TSqlTranslation::TableHintsImpl(const TRule_table_hints& node) {
+TMaybe<TTableHints> TSqlTranslation::TableHintsImpl(const TRule_table_hints& node, const TString& keyFunc) {
     TTableHints hints;
     auto& block = node.GetBlock2();
     bool hasErrors = false;
     switch (block.Alt_case()) {
     case TRule_table_hints::TBlock2::kAlt1: {
-        hasErrors = !TableHintImpl(block.GetAlt1().GetRule_table_hint1(), hints);
+        hasErrors = !TableHintImpl(block.GetAlt1().GetRule_table_hint1(), hints, keyFunc);
         break;
     }
     case TRule_table_hints::TBlock2::kAlt2: {
-        hasErrors = !TableHintImpl(block.GetAlt2().GetRule_table_hint2(), hints);
+        hasErrors = !TableHintImpl(block.GetAlt2().GetRule_table_hint2(), hints, keyFunc);
         for (const auto& x : block.GetAlt2().GetBlock3()) {
-            hasErrors = hasErrors || !TableHintImpl(x.GetRule_table_hint2(), hints);
+            hasErrors = hasErrors || !TableHintImpl(x.GetRule_table_hint2(), hints, keyFunc);
         }
 
         break;

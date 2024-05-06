@@ -73,7 +73,7 @@ struct TTableBucket {
     ui64 KeyIntValsTotalSize = 0;
 
     size_t GetSize() const {
-        return KeyIntVals.size() * sizeof(ui64) + DataIntVals.size() * sizeof(ui64) + StringsValues.size() + StringsOffsets.size() * sizeof(ui32) + InterfaceValues.size() + InterfaceOffsets.size() + sizeof(ui32);
+        return KeyIntVals.size() * sizeof(ui64) + DataIntVals.size() * sizeof(ui64) + StringsValues.size() + StringsOffsets.size() * sizeof(ui32) + InterfaceValues.size() + InterfaceOffsets.size() * sizeof(ui32);
     }
  };
 
@@ -459,12 +459,12 @@ public:
     // After this call either all buckets are spilled/loaded or need Yield.
     bool UpdateAndCheckIfBusy() {
         while (HasAnythingToProcess()) {
-            for (ui64 i = 0; i < NumberOfBuckets; ++i) {
-                TableBucketsSpiller[i].Update();
+            for (i64 bucket = NumberOfBuckets - 1; bucket > NextBucketToSpill; --bucket) {
+                TableBucketsSpiller[bucket].Update();
             }
 
-            for (ui64 i = 0; i < NumberOfBuckets; ++i) {
-                if (TableBucketsSpiller[i].HasRunningAsyncIoOperation()) return true;
+            for (i64 bucket = NumberOfBuckets - 1; bucket > NextBucketToSpill; --bucket) {
+                if (TableBucketsSpiller[bucket].HasRunningAsyncIoOperation()) return true;
             }
         }
 
@@ -498,7 +498,7 @@ public:
 
     void InitializeBucketSpillers(std::shared_ptr<ISpillerFactory> spillerFactory) {
         for (size_t i = 0; i < NumberOfBuckets; ++i) {
-            TableBucketsSpiller.emplace_back(spillerFactory->CreateSpiller(), 1_MB);
+            TableBucketsSpiller.emplace_back(spillerFactory->CreateSpiller(), 3_MB);
         }
     }
 
@@ -510,10 +510,18 @@ public:
         return sum;
     }
 
+    ui64 GetTuplesNum() const {
+        ui64 sum = 0;
+        for (ui64 i = 0; i < NumberOfBuckets; ++i) {
+            sum += TableBuckets[i].TuplesNum;
+        }
+        return sum;
+    }
+
     bool TryToReduceMemory() {
         EnsureAllSpilledBucketsAreReady();
         for (i64 bucket = NumberOfBuckets - 1; bucket > NextBucketToSpill; --bucket) {
-            if (TableBuckets[bucket].GetSize() > 4) {
+            if (TableBuckets[bucket].GetSize()) {
                 std::cerr << std::format("[MISHA] Spilling again bucket {} of size {}\n", bucket, TableBuckets[bucket].GetSize());
                 TableBucketsSpiller[bucket].SpillBucket(std::move(TableBuckets[bucket]));
 

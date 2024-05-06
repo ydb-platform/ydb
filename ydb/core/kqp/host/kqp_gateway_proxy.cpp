@@ -1947,7 +1947,11 @@ public:
 
             NKikimrSchemeOp::TModifyScheme tx;
             tx.SetWorkingDir(pathPair.first);
-            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropReplication); // TODO(ilnaz): CASCADE
+            if (settings.Cascade) {
+                tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropReplicationCascade);
+            } else {
+                tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropReplication);
+            }
 
             auto& op = *tx.MutableDrop();
             op.SetName(pathPair.second);

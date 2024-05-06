@@ -110,7 +110,7 @@ struct TTxState {
         item(TxDropSequence, 64) \
         item(TxCreateReplication, 65) \
         item(TxAlterReplication, 66) \
-        item(TxDropReplication, 67) \
+        item(TxDropReplicationCascade, 67) \
         item(TxCreateBlobDepot, 68) \
         item(TxAlterBlobDepot, 69) \
         item(TxDropBlobDepot, 70) \
@@ -130,6 +130,7 @@ struct TTxState {
         item(TxAlterView, 84) \
         item(TxDropView, 85) \
         item(TxCopySequence, 86) \
+        item(TxDropReplication, 87) \
 
     // TX_STATE_TYPE_ENUM
 
@@ -374,6 +375,7 @@ struct TTxState {
         case TxDropCdcStreamAtTableDropSnapshot:
         case TxDropSequence:
         case TxDropReplication:
+        case TxDropReplicationCascade:
         case TxDropBlobDepot:
         case TxUpdateMainTableOnIndexMove:
         case TxDropExternalTable:
@@ -438,6 +440,7 @@ struct TTxState {
         case TxDropCdcStream:
         case TxDropSequence:
         case TxDropReplication:
+        case TxDropReplicationCascade:
         case TxDropBlobDepot:
         case TxDropExternalTable:
         case TxDropExternalDataSource:
@@ -536,6 +539,7 @@ struct TTxState {
         case TxDropCdcStream:
         case TxDropSequence:
         case TxDropReplication:
+        case TxDropReplicationCascade:
         case TxDropBlobDepot:
             return true;
         case TxDropTableIndex:
@@ -696,6 +700,7 @@ struct TTxState {
             case NKikimrSchemeOp::ESchemeOpCreateReplication: return TxCreateReplication;
             case NKikimrSchemeOp::ESchemeOpAlterReplication: return TxAlterReplication;
             case NKikimrSchemeOp::ESchemeOpDropReplication: return TxDropReplication;
+            case NKikimrSchemeOp::ESchemeOpDropReplicationCascade: return TxDropReplicationCascade;
             case NKikimrSchemeOp::ESchemeOpCreateBlobDepot: return TxCreateBlobDepot;
             case NKikimrSchemeOp::ESchemeOpAlterBlobDepot: return TxAlterBlobDepot;
             case NKikimrSchemeOp::ESchemeOpDropBlobDepot: return TxDropBlobDepot;

@@ -221,6 +221,8 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(AlterReplication);
     GENERIC_HELPERS(DropReplication);
     DROP_BY_PATH_ID_HELPERS(DropReplication);
+    GENERIC_HELPERS(DropReplicationCascade);
+    DROP_BY_PATH_ID_HELPERS(DropReplicationCascade);
 
     // pq
     GENERIC_HELPERS(CreatePQGroup);

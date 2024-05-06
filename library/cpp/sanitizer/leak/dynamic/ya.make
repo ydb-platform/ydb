@@ -1,6 +1,6 @@
 DYNAMIC_LIBRARY()
 
-OWNER(g:devtools-contrib)
+SUBSCRIBER(g:devtools-contrib)
 
 NO_UTIL()
 

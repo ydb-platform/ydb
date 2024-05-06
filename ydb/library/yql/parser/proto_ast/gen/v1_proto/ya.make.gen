@@ -3,7 +3,7 @@ PROTO_LIBRARY()
 IF (GEN_PROTO)
     SET(antlr_output ${ARCADIA_BUILD_ROOT}/${MODDIR})
     SET(antlr_templates ${antlr_output}/org/antlr/v4/tool/templates/codegen)
-    SET(sql_grammar ${antlr_output}/SQLv1.g)
+    SET(sql_grammar ${antlr_output}/SQLv4.g)
 
     SET(ANTLR_PACKAGE_NAME NSQLv1Generated)
 
@@ -16,14 +16,14 @@ IF (GEN_PROTO)
     IF(EXPORT_CMAKE)
         MANUAL_GENERATION(${sql_grammar})
     ELSE()
-        CONFIGURE_FILE(${ARCADIA_ROOT}/ydb/library/yql/sql/v1/SQLv1.g.in ${sql_grammar})
+        CONFIGURE_FILE(${ARCADIA_ROOT}/ydb/library/yql/sql/v1/SQLv4.g.in ${sql_grammar})
     ENDIF()
 
     RUN_ANTLR4(
         ${sql_grammar}
         -lib .
         -o ${antlr_output}
-        -Dlanguage=protobuf
+        -Dlanguage=Java
         IN ${sql_grammar} ${antlr_templates}/Java/Java.stg
         OUT_NOAUTO SQLv1Parser.proto
         CWD ${antlr_output}

@@ -61,7 +61,7 @@ void FormatProgressWithProjection(
     builder->AppendChar(']');
 }
 
-DEFINE_BIT_ENUM_WITH_UNDERLYING_TYPE(EReplicationCardOptionsBits, uint8_t,
+DEFINE_BIT_ENUM_WITH_UNDERLYING_TYPE(EReplicationCardOptionsBits, ui8,
     ((None)(0))
     ((IncludeCoordinators)(1 << 0))
     ((IncludeProgress)(1 << 1))

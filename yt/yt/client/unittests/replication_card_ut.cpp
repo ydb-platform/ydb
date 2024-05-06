@@ -39,13 +39,13 @@ INSTANTIATE_TEST_SUITE_P(
                 .IncludeCoordinators = true,
                 .IncludeProgress = true,
                 .IncludeHistory = true,
-                .IncludeReplicatedTableOptions = true
+                .IncludeReplicatedTableOptions = true,
             },
             TReplicationCardFetchOptions {
                 .IncludeCoordinators = false,
                 .IncludeProgress = false,
                 .IncludeHistory = false,
-                .IncludeReplicatedTableOptions = false
+                .IncludeReplicatedTableOptions = false,
             },
             true),
         std::tuple(
@@ -53,13 +53,13 @@ INSTANTIATE_TEST_SUITE_P(
                 .IncludeCoordinators = true,
                 .IncludeProgress = true,
                 .IncludeHistory = true,
-                .IncludeReplicatedTableOptions = true
+                .IncludeReplicatedTableOptions = true,
             },
             TReplicationCardFetchOptions {
                 .IncludeCoordinators = true,
                 .IncludeProgress = true,
                 .IncludeHistory = true,
-                .IncludeReplicatedTableOptions = true
+                .IncludeReplicatedTableOptions = true,
             },
             true),
         std::tuple(
@@ -67,13 +67,13 @@ INSTANTIATE_TEST_SUITE_P(
                 .IncludeCoordinators = true,
                 .IncludeProgress = true,
                 .IncludeHistory = true,
-                .IncludeReplicatedTableOptions = true
+                .IncludeReplicatedTableOptions = true,
             },
             TReplicationCardFetchOptions {
                 .IncludeCoordinators = true,
                 .IncludeProgress = false,
                 .IncludeHistory = true,
-                .IncludeReplicatedTableOptions = false
+                .IncludeReplicatedTableOptions = false,
             },
             true),
         std::tuple(
@@ -81,13 +81,13 @@ INSTANTIATE_TEST_SUITE_P(
                 .IncludeCoordinators = true,
                 .IncludeProgress = false,
                 .IncludeHistory = true,
-                .IncludeReplicatedTableOptions = false
+                .IncludeReplicatedTableOptions = false,
             },
             TReplicationCardFetchOptions {
                 .IncludeCoordinators = false,
                 .IncludeProgress = true,
                 .IncludeHistory = true,
-                .IncludeReplicatedTableOptions = false
+                .IncludeReplicatedTableOptions = false,
             },
             false)
 ));

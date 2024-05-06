@@ -324,7 +324,7 @@ void RunMain(int argc, const char* argv[]) {
     // Ydb settings
 
     if (runnerOptions.YdbSettings.NodeCount < 1) {
-        ythrow yexception() << "Number nodes less than one";
+        ythrow yexception() << "Number of nodes less than one";
     }
 
     if (logFile != "-") {

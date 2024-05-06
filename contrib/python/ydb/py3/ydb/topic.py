@@ -15,6 +15,7 @@ __all__ = [
     "TopicReaderMessage",
     "TopicReaderSelector",
     "TopicReaderSettings",
+    "TopicReaderUnexpectedCodecError",
     "TopicReaderPartitionExpiredError",
     "TopicStatWindow",
     "TopicWriteResult",
@@ -49,6 +50,7 @@ from ._topic_reader.topic_reader_sync import TopicReaderSync as TopicReader
 from ._topic_reader.topic_reader_asyncio import (
     PublicAsyncIOReader as TopicReaderAsyncIO,
     PublicTopicReaderPartitionExpiredError as TopicReaderPartitionExpiredError,
+    PublicTopicReaderUnexpectedCodecError as TopicReaderUnexpectedCodecError,
 )
 
 from ._topic_writer.topic_writer import (  # noqa: F401

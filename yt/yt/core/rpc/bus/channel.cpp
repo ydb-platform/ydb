@@ -389,7 +389,7 @@ private:
             return requestControl;
         }
 
-        void Cancel(const TClientRequestControlPtr& requestControl)
+        YT_PREVENT_TLS_CACHING void Cancel(const TClientRequestControlPtr& requestControl)
         {
             VERIFY_THREAD_AFFINITY_ANY();
 
@@ -419,7 +419,7 @@ private:
             }
 
             // YT-1639: Avoid long chain of recursive calls.
-            YT_THREAD_LOCAL(int) Depth = 0;
+            thread_local int Depth = 0;
             constexpr int MaxDepth = 10;
             if (Depth < MaxDepth) {
                 ++Depth;

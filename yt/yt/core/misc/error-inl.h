@@ -196,28 +196,31 @@ TErrorOr<T>& TErrorOr<T>::operator = (TErrorOr<T>&& other) noexcept
 }
 
 template <class T>
-T&& TErrorOr<T>::ValueOrThrow() &&
+template <class... TArgs>
+T&& TErrorOr<T>::ValueOrThrow(TArgs&&... args) &&
 {
     if (!IsOK()) {
-        THROW_ERROR std::move(*this);
+        THROW_ERROR std::move(*this).Wrap(std::forward<TArgs>(args)...);
     }
     return std::move(*Value_);
 }
 
 template <class T>
-T& TErrorOr<T>::ValueOrThrow() &
+template <class... TArgs>
+T& TErrorOr<T>::ValueOrThrow(TArgs&&... args) &
 {
     if (!IsOK()) {
-        THROW_ERROR *this;
+        THROW_ERROR Wrap(std::forward<TArgs>(args)...);
     }
     return *Value_;
 }
 
 template <class T>
-const T& TErrorOr<T>::ValueOrThrow() const &
+template <class... TArgs>
+const T& TErrorOr<T>::ValueOrThrow(TArgs&&... args) const &
 {
     if (!IsOK()) {
-        THROW_ERROR *this;
+        THROW_ERROR Wrap(std::forward<TArgs>(args)...);
     }
     return *Value_;
 }

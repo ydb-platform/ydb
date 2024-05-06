@@ -31,7 +31,7 @@ using namespace NYTProf;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constinit YT_THREAD_LOCAL(TCpuProfilerTagGuard) FairShareInvokerPoolProfilerTagGuard;
+YT_DEFINE_THREAD_LOCAL(TCpuProfilerTagGuard, FairShareInvokerPoolProfilerTagGuard);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -290,12 +290,12 @@ private:
             counters->WaitTimer.Record(waitTime);
         }
 
-        GetTlsRef(FairShareInvokerPoolProfilerTagGuard) = TCpuProfilerTagGuard(BucketProfilerTags_[index]);
+        FairShareInvokerPoolProfilerTagGuard() = TCpuProfilerTagGuard(BucketProfilerTags_[index]);
     }
 
     void ProfileExecutionFinish(int index, TDuration execTime, TDuration totalTime)
     {
-        GetTlsRef(FairShareInvokerPoolProfilerTagGuard) = TCpuProfilerTagGuard{};
+        FairShareInvokerPoolProfilerTagGuard() = TCpuProfilerTagGuard{};
 
         auto& counters = Counters_[index];
         if (counters) {

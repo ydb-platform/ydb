@@ -165,6 +165,36 @@ TEST(TProcTest, DiskStat)
     }
 }
 
+TEST(TProcTest, BlockDeviceStat)
+{
+    {
+        auto stat = ParseBlockDeviceStat("509883438 87421933 206345875260 1643399993 1892382802 4495364138 837307482336 2391271400 0 2964131914 3304110410 0 0 0 0 81921472 3564406312");
+        EXPECT_EQ(stat.ReadsCompleted, 509883438ll);
+        EXPECT_EQ(stat.ReadsMerged, 87421933ll);
+        EXPECT_EQ(stat.SectorsRead, 206345875260ll);
+        EXPECT_EQ(stat.TimeSpentReading, TDuration::MilliSeconds(1643399993ul));
+        EXPECT_EQ(stat.WritesCompleted, 1892382802ll);
+        EXPECT_EQ(stat.WritesMerged, 4495364138ll);
+        EXPECT_EQ(stat.SectorsWritten, 837307482336ll);
+        EXPECT_EQ(stat.TimeSpentWriting, TDuration::MilliSeconds(2391271400ul));
+        EXPECT_EQ(stat.IOCurrentlyInProgress, 0ll);
+        EXPECT_EQ(stat.TimeSpentDoingIO, TDuration::MilliSeconds(2964131914ul));
+        EXPECT_EQ(stat.WeightedTimeSpentDoingIO, TDuration::MilliSeconds(3304110410ul));
+        EXPECT_EQ(stat.DiscardsCompleted, 0ll);
+        EXPECT_EQ(stat.DiscardsMerged, 0ll);
+        EXPECT_EQ(stat.SectorsDiscarded, 0ll);
+        EXPECT_EQ(stat.TimeSpentDiscarding, TDuration::MilliSeconds(0ul));
+        EXPECT_EQ(stat.FlushesCompleted, 81921472ll);
+        EXPECT_EQ(stat.TimeSpentFlushing, TDuration::MilliSeconds(3564406312ul));
+    }
+    {
+        for (const TString& disk : ListDisks()) {
+            auto stat = GetBlockDeviceStat(disk);
+            EXPECT_TRUE(stat);
+        }
+    }
+}
+
 TEST(TProcTest, FileDescriptorCount)
 {
     auto initialCount = GetFileDescriptorCount();

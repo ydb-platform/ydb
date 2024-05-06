@@ -5,6 +5,7 @@
 #include "group_layout_checker.h"
 #include "layout_helpers.h"
 
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/debug_tools/operation_log.h>
 
 namespace NKikimr::NBsController {
@@ -42,6 +43,7 @@ namespace NKikimr::NBsController {
         std::shared_ptr<TBlobStorageGroupInfo::TTopology> Topology;
         TBlobStorageGroupInfo::TGroupVDisks FailedGroupDisks;
         const bool IsSelfHealReasonDecommit;
+        const bool DonorMode;
         THashSet<TVDiskID> PendingVDisks;
         THashMap<TActorId, TVDiskID> ActorToDiskMap;
         THashMap<TNodeId, TVector<TVDiskID>> NodeToDiskMap;
@@ -49,7 +51,7 @@ namespace NKikimr::NBsController {
     public:
         TReassignerActor(TActorId controllerId, TGroupId groupId, TEvControllerUpdateSelfHealInfo::TGroupContent group,
                 std::optional<TVDiskID> vdiskToReplace, std::shared_ptr<TBlobStorageGroupInfo::TTopology> topology,
-                bool isSelfHealReasonDecommit, bool /*donorMode*/)
+                bool isSelfHealReasonDecommit, bool donorMode)
             : ControllerId(controllerId)
             , GroupId(groupId)
             , Group(std::move(group))
@@ -57,6 +59,7 @@ namespace NKikimr::NBsController {
             , Topology(std::move(topology))
             , FailedGroupDisks(Topology.get())
             , IsSelfHealReasonDecommit(isSelfHealReasonDecommit)
+            , DonorMode(donorMode)
         {}
 
         void Bootstrap(const TActorId& parent) {
@@ -145,6 +148,18 @@ namespace NKikimr::NBsController {
                 return Finish(false, 0, "Cannot sanitize group with non-operational disks");
             }
 
+            if (VDiskToReplace && TGroupID(VDiskToReplace->GroupID).ConfigurationType() == EGroupConfigurationType::Static) {
+                // special treat for static groups
+                auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+                auto& record = ev->Record;
+                auto *cmd = record.MutableReassignGroupDisk();
+                VDiskIDFromVDiskID(*VDiskToReplace, cmd->MutableVDiskId());
+                cmd->SetConvertToDonor(DonorMode);
+                cmd->SetIsSelfHealReasonDecommit(IsSelfHealReasonDecommit);
+                Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), ev.release());
+                return;
+            }
+
             auto ev = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
             auto& record = ev->Record;
             auto *request = record.MutableRequest();
@@ -188,6 +203,11 @@ namespace NKikimr::NBsController {
             }
         }
 
+        void Handle(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr ev) {
+            const auto& record = ev->Get()->Record;
+            Finish(record.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, 0, record.GetErrorReason());
+        }
+
         void Finish(bool success, ui64 configTxSeqNo, TString errorReason = "") {
             STLOG(PRI_DEBUG, BS_SELFHEAL, BSSH08, "Reassigner finished", (GroupId, GroupId), (Success, success));
             auto operation = VDiskToReplace ? EGroupRepairOperation::SelfHeal : EGroupRepairOperation::GroupLayoutSanitizer;
@@ -215,6 +235,7 @@ namespace NKikimr::NBsController {
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);
             hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
+            hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, Handle);
             cFunc(TEvents::TSystem::Poison, PassAway);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
         })
@@ -898,6 +919,55 @@ namespace NKikimr::NBsController {
         }
     }
 
+    void TBlobStorageController::PushStaticGroupsToSelfHeal() {
+        if (!SelfHealId || !StorageConfigObtained || !StorageConfig.HasBlobStorageConfig()) {
+            return;
+        }
+
+        auto sh = std::make_unique<TEvControllerUpdateSelfHealInfo>();
+
+        if (const auto& bsConfig = StorageConfig.GetBlobStorageConfig(); bsConfig.HasAutoconfigSettings() && bsConfig.HasServiceSet()) {
+            const auto& settings = bsConfig.GetAutoconfigSettings();
+            const auto& ss = bsConfig.GetServiceSet();
+            for (const auto& group : ss.GetGroups()) {
+                auto& content = sh->GroupsToUpdate[group.GetGroupID()];
+                content = TEvControllerUpdateSelfHealInfo::TGroupContent{
+                    .Generation = group.GetGroupGeneration(),
+                    .Type = static_cast<TBlobStorageGroupType::EErasureSpecies>(group.GetErasureSpecies()),
+                    .Geometry = std::make_shared<TGroupGeometryInfo>(content->Type, settings.GetGeometry()),
+                };
+
+                const TVDiskID vdiskId(group.GetGroupID(), group.GetGroupGeneration(), 0, 0, 0);
+                for (auto it = StaticVDiskMap.lower_bound(vdiskId); it != StaticVDiskMap.end() &&
+                        it->first.GroupID == group.GetGroupID() &&
+                        it->first.GroupGeneration == group.GetGroupGeneration(); ++it) {
+                    const TVSlotId vslotId = it->second;
+                    auto& vdiskInfo = content->VDisks[it->first];
+                    const TStaticVSlotInfo& info = StaticVSlots.at(vslotId);
+
+                    TPDiskInfo *pdiskInfo = nullptr;
+                    if (const auto it = PDisks.find(vslotId.ComprisingPDiskId()); it != PDisks.end()) {
+                        pdiskInfo = it->second.Get();
+                    }
+
+                    vdiskInfo = {
+                        vslotId,
+                        pdiskInfo ? pdiskInfo->ShouldBeSettledBySelfHeal() : false,
+                        pdiskInfo ? pdiskInfo->BadInTermsOfSelfHeal() : false,
+                        pdiskInfo ? pdiskInfo->Decommitted() : false,
+                        pdiskInfo ? pdiskInfo->IsSelfHealReasonDecommit() : false,
+                        false, /* OnlyPhantomsRemain */
+                        true, /* IsReady; decision is based on ReadySince */
+                        info.ReadySince,
+                        info.VDiskStatus,
+                    };
+                }
+            }
+        }
+
+        Send(SelfHealId, sh.release());
+    }
+
     void TBlobStorageController::ProcessVDiskStatus(
             const google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TVDiskStatus>& s) {
         THashSet<TGroupInfo*> groups;
@@ -955,6 +1025,11 @@ namespace NKikimr::NBsController {
                 } else {
                     vslot.ReadySince = TMonotonic::Max();
                 }
+                updates.push_back({
+                    .VDiskId = vslot.VDiskId,
+                    .ReadySince = vslot.ReadySince,
+                    .VDiskStatus = vslot.VDiskStatus,
+                });
             }
         }
 

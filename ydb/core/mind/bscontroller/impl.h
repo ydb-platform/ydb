@@ -1581,6 +1581,7 @@ private:
 
     void InitializeSelfHealState();
     void FillInSelfHealGroups(TEvControllerUpdateSelfHealInfo& msg, TConfigState *state);
+    void PushStaticGroupsToSelfHeal();
     void ProcessVDiskStatus(const google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TVDiskStatus>& s);
 
     void UpdateSelfHealCounters();

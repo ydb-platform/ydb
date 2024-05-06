@@ -1,6 +1,7 @@
 #include <util/generic/ptr.h>
 #include <util/system/cpu_id.h>
 #include <util/system/types.h>
+#include <new>
 
 #include <ydb/library/yql/utils/simd/simd.h>
 
@@ -43,7 +44,7 @@ struct TPerfomancer {
             const size_t size = (32LL << 21);
             const size_t arrSize = size / 8;
 
-            i64* buf __attribute__((aligned(32))) = new i64[arrSize];
+            i64* buf = new (std::align_val_t(TTraits::Size)) i64[arrSize];
 
             for (size_t i = 0; i < arrSize; i += 1) {
                 buf[i] = 0;
@@ -94,6 +95,7 @@ struct TPerfomancer {
                         << " MB/sec" << Endl;
                 Cerr << Endl;
             }
+            operator delete[](buf, std::align_val_t(TTraits::Size));
             return is_ok;
         }
 

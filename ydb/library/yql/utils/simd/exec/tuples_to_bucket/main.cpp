@@ -2,6 +2,7 @@
 #include <util/generic/ptr.h>
 #include <util/system/cpu_id.h>
 #include <util/system/types.h>
+#include <new>
 
 #include <ydb/library/yql/utils/simd/simd.h>
 
@@ -34,8 +35,9 @@ struct TPerfomancer {
             const ui64 NTuples = 32 << 18;
             const ui64 TupleSize = 4 * sizeof(ui64);
 
-            ui64* arrHash __attribute__((aligned(32))) = new ui64[NTuples];
-            ui64* arrData __attribute__((aligned(32))) = new ui64[4 * NTuples];
+
+            ui64* arrHash = new (std::align_val_t(TTraits::Size)) ui64[NTuples];
+            ui64* arrData = new (std::align_val_t(TTraits::Size)) ui64[4* NTuples];
 
 
             for (ui32 i = 0; i < NTuples; i++) {
@@ -50,7 +52,7 @@ struct TPerfomancer {
             const ui64 BufSize = 64;
             const ui64 BucketSize = 1024 * 1024;
 
-            ui64* arrBuckets __attribute__((aligned(32))) = new ui64[BucketSize * NBuckets / sizeof(ui64)];
+            ui64* arrBuckets = new (std::align_val_t(TTraits::Size)) ui64[BucketSize * NBuckets / sizeof(ui64)];
 
             for (ui32 i = 0; i < (BucketSize * NBuckets) / sizeof(ui64); i ++) {
                 arrBuckets[i] = i;
@@ -58,7 +60,7 @@ struct TPerfomancer {
 
             ui32 offsets[NBuckets];
             ui32 bigOffsets[NBuckets];
-            ui64* accum __attribute__((aligned(32))) = new ui64[NBuckets * (BufSize / sizeof(ui64))];
+            ui64* accum = new (std::align_val_t(TTraits::Size)) ui64[NBuckets * (BufSize / sizeof(ui64))];
 
             for (ui32 i = 0; i < NBuckets; i++ ) {
                 offsets[i] = 0;
@@ -118,10 +120,10 @@ struct TPerfomancer {
             }
 
 
-            delete[] arrHash;
-            delete[] arrData;
-            delete[] arrBuckets;
-            delete[] accum;
+            operator delete[](arrHash, std::align_val_t(TTraits::Size));
+            operator delete[](arrData, std::align_val_t(TTraits::Size));
+            operator delete[](arrBuckets, std::align_val_t(TTraits::Size));
+            operator delete[](accum, std::align_val_t(TTraits::Size));
 
             return 1;
         }

@@ -65,6 +65,7 @@ struct TDqStageSettings {
 
     TDqStageSettings& SetPartitionMode(EPartitionMode mode) { PartitionMode = mode; return *this; }
     TDqStageSettings& SetWideChannels(const TStructExprType& narrowType) { WideChannels = true; OutputNarrowType = &narrowType; return *this; }
+    TDqStageSettings& SetScalarChanels() { WideChannels = false; OutputNarrowType = nullptr; BlockStatus = EBlockStatus::None; return *this; }
     TDqStageSettings& SetBlockStatus(EBlockStatus status) { BlockStatus = status; return *this; }
 
     static TDqStageSettings New(const NNodes::TDqStageBase& node);

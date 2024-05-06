@@ -2532,7 +2532,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT(prepareResult.IsSuccess());;
         }
 
-        /*{ 
+        {
             NYdb::NQuery::TExecuteQuerySettings scanSettings;
             scanSettings.ExecMode(NYdb::NQuery::EExecMode::Explain);
             auto it = client.StreamExecuteQuery(R"(
@@ -2545,8 +2545,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), scanSettings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
             auto plan = CollectStreamResult(it);
-            Cerr << "-------------------------------------------AST:\n" << plan.QueryStats->Getquery_ast() << Endl;
-        }*/
+            Cerr << "AST:\n" << plan.QueryStats->Getquery_ast() << Endl;
+        }
 
         { 
             auto it = client.StreamExecuteQuery(R"(

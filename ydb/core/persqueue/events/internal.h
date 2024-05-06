@@ -188,6 +188,7 @@ struct TEvPQ {
         EvWakeupReleasePartition,
         EvPartitionScaleStatusChanged,
         EvPartitionScaleRequestDone,
+        EvBalanceConsumer,
         EvEnd
     };
 
@@ -1122,6 +1123,14 @@ struct TEvPQ {
             Record.SetPartitionId(partitionId);
             Record.SetScaleStatus(scaleStatus);
         }
+    };
+
+    struct TEvBalanceConsumer : TEventLocal<TEvBalanceConsumer, EvBalanceConsumer> {
+        TEvBalanceConsumer(const TString& consumerName)
+            : ConsumerName(consumerName)
+        {}
+
+        TString ConsumerName;
     };
 };
 

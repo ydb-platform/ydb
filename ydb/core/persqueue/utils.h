@@ -43,6 +43,8 @@ public:
         std::vector<Node*> Children;
         // All parents include parents of parents and so on
         std::set<Node*> HierarhicalParents;
+
+        bool IsRoot() const;
     };
 
     TPartitionGraph();

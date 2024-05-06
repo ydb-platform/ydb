@@ -93,7 +93,6 @@ struct TPersQueueReadBalancer::TTxWrite : public ITransaction {
         }
         Self->WaitingResponse.clear();
 
-        Self->NoGroupsInBase = false;
         if (!Self->Inited) {
             Self->Inited = true;
             Self->InitDone(ctx);

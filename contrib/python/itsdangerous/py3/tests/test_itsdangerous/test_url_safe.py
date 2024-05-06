@@ -1,11 +1,11 @@
 from functools import partial
 
 import pytest
-from __tests__.test_serializer import TestSerializer
-from __tests__.test_timed import TestTimedSerializer
 
-from itsdangerous import URLSafeSerializer
-from itsdangerous import URLSafeTimedSerializer
+from itsdangerous.url_safe import URLSafeSerializer
+from itsdangerous.url_safe import URLSafeTimedSerializer
+from .test_serializer import TestSerializer
+from .test_timed import TestTimedSerializer
 
 
 class TestURLSafeSerializer(TestSerializer):

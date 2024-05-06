@@ -11,8 +11,8 @@ from itsdangerous.exc import SignatureExpired
 from itsdangerous.signer import Signer
 from itsdangerous.timed import TimedSerializer
 from itsdangerous.timed import TimestampSigner
-from __tests__.test_serializer import TestSerializer
-from __tests__.test_signer import TestSigner
+from .test_serializer import TestSerializer
+from .test_signer import TestSigner
 
 
 class FreezeMixin:

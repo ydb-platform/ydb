@@ -4,8 +4,8 @@ from functools import partial
 
 import pytest
 from freezegun import freeze_time
-from __tests__.test_serializer import TestSerializer
-from __tests__.test_signer import TestSigner
+from .test_serializer import TestSerializer
+from .test_signer import TestSigner
 
 from itsdangerous import Signer
 from itsdangerous.exc import BadTimeSignature

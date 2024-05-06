@@ -409,14 +409,18 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     if (op.HasReplicationConfig()) {
         const auto& cfg = op.GetReplicationConfig();
 
-        if (source) {
-            errStr = "Cannot alter replication config";
-            return nullptr;
-        }
-
         switch (cfg.GetMode()) {
         case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE:
+            if (cfg.HasConsistency() && cfg.GetConsistency() != NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_UNKNOWN) {
+                errStr = "Cannot set replication consistency";
+                return nullptr;
+            }
+            break;
         case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY:
+            if (source) {
+                errStr = "Cannot set replication mode";
+                return nullptr;
+            }
             break;
         default:
             errStr = "Unknown replication mode";

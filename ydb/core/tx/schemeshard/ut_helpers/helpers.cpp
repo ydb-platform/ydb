@@ -2194,6 +2194,14 @@ namespace NSchemeShardUT_Private {
         }
     }
 
+    TEvTx* InternalTransaction(TEvTx* tx) {
+        for (auto& x : *tx->Record.MutableTransaction()) {
+            x.SetInternal(true);
+        }
+
+        return tx;
+    }
+
     TTestActorRuntimeBase::TEventObserver SetSuppressObserver(TTestActorRuntime &runtime, TVector<THolder<IEventHandle> > &suppressed, ui32 type) {
         return runtime.SetObserverFunc([&suppressed, type](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == type) {

@@ -87,10 +87,16 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             return copy;
         };
 
+        auto clearConfig = [](const TTestTableDescription& desc) {
+            auto copy = desc;
+            copy.ReplicationConfig.Clear();
+            return copy;
+        };
+
         TEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
 
-        env.CreateTable("/Root", *MakeTableDescription(changeName(desc, "Src")));
+        env.CreateTable("/Root", *MakeTableDescription(clearConfig(changeName(desc, "Src"))));
         env.CreateTable("/Root", *MakeTableDescription(mod(changeName(desc, "Dst"))));
 
         env.GetRuntime().Register(CreateDstCreator(
@@ -223,13 +229,14 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     }
 
     Y_UNIT_TEST(UnsupportedReplicationMode) {
-        auto clearMode = [](const TTestTableDescription& desc) {
+        auto changeMode = [](const TTestTableDescription& desc) {
             auto copy = desc;
             copy.ReplicationConfig->Mode = TTestTableDescription::TReplicationConfig::MODE_NONE;
+            copy.ReplicationConfig->Consistency = TTestTableDescription::TReplicationConfig::CONSISTENCY_UNKNOWN;
             return copy;
         };
 
-        ExistingDst(NKikimrScheme::StatusSchemeError, "Unsupported replication mode", clearMode, TTestTableDescription{
+        ExistingDst(NKikimrScheme::StatusSchemeError, "Unsupported replication mode", changeMode, TTestTableDescription{
             .Name = "Table",
             .KeyColumns = {"key"},
             .Columns = {

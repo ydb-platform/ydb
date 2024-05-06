@@ -210,8 +210,8 @@ protected:
     TNodePtr ListLiteral(const TRule_list_literal& node);
     TNodePtr DictLiteral(const TRule_dict_literal& node);
     TNodePtr StructLiteral(const TRule_struct_literal& node);
-    TMaybe<TTableHints> TableHintsImpl(const TRule_table_hints& node, const TString& keyFunc = "");
-    bool TableHintImpl(const TRule_table_hint& rule, TTableHints& hints, const TString& keyFunc = "");
+    TMaybe<TTableHints> TableHintsImpl(const TRule_table_hints& node, const TString& provider, const TString& keyFunc = "");
+    bool TableHintImpl(const TRule_table_hint& rule, TTableHints& hints, const TString& provider, const TString& keyFunc = "");
     bool SimpleTableRefImpl(const TRule_simple_table_ref& node, TTableRef& result);
     bool TopicRefImpl(const TRule_topic_ref& node, TTopicRef& result);
     TWindowSpecificationPtr WindowSpecification(const TRule_window_specification_details& rule);

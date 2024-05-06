@@ -94,7 +94,7 @@ const TString TReadSessionEvent::TDataReceivedEvent::IMessage::GetExplicitHash()
 TString TReadSessionEvent::TDataReceivedEvent::IMessage::DebugString(bool printData) const {
     TStringBuilder ret;
     DebugString(ret, printData);
-    return std::move(ret);
+    return ret;
 }
 
 TReadSessionEvent::TDataReceivedEvent::IMessage::IMessage(const TString& data,

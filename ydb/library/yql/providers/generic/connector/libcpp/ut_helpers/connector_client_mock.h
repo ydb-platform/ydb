@@ -788,7 +788,7 @@ namespace NYql::NConnector::NTest {
             if (status.InternalError) {
                 s << " (internal error)";
             }
-            return std::move(s);
+            return s;
         }
     };
 } // namespace NYql::NConnector::NTest

@@ -114,7 +114,7 @@ namespace NActors {
             }
 
             if (profiler) {
-                return std::move(profiler);
+                return profiler;
             }
 
 #if defined(EXEC_PROFILER_ENABLED)

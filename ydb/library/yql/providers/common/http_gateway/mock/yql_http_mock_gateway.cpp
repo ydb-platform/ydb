@@ -51,7 +51,7 @@ public:
             ret << " \"" << field << "\"";
         }
         ret << " ] Data: \"" << std::get<2>(key) << "\" }";
-        return std::move(ret);
+        return ret;
     }
 
     void Upload(TString, THeaders, TString, TOnResult, bool, TRetryPolicy::TPtr) final {}

@@ -423,7 +423,7 @@ NUdf::TUnboxedValue UnpackFromChunkedBuffer(const TType* type, TChunkedInputBuff
             items[i] = std::move(tmp[i]);
         }
 
-        return std::move(list);
+        return list;
     }
 
     case TType::EKind::Struct: {
@@ -434,7 +434,7 @@ NUdf::TUnboxedValue UnpackFromChunkedBuffer(const TType* type, TChunkedInputBuff
             auto memberType = structType->GetMemberType(index);
             itemsPtr[index] = UnpackFromChunkedBuffer<Fast>(memberType, buf, topLength, holderFactory, s);
         }
-        return std::move(res);
+        return res;
     }
 
     case TType::EKind::Tuple: {
@@ -445,7 +445,7 @@ NUdf::TUnboxedValue UnpackFromChunkedBuffer(const TType* type, TChunkedInputBuff
             auto elementType = tupleType->GetElementType(index);
             itemsPtr[index] = UnpackFromChunkedBuffer<Fast>(elementType, buf, topLength, holderFactory, s);
         }
-        return std::move(res);
+        return res;
     }
 
     case TType::EKind::Dict: {

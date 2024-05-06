@@ -1144,7 +1144,7 @@ std::unique_ptr<TEvChunkLockResult> TPDisk::ChunkLockFromQuota(TOwner owner, ui3
     }
 
     guard.Release();
-    return std::move(result);
+    return result;
 }
 
 std::unique_ptr<TEvChunkLockResult> TPDisk::ChunkLockFromQuota(TOwner owner, NKikimrBlobStorage::TPDiskSpaceColor::E color) {
@@ -1157,7 +1157,7 @@ std::unique_ptr<TEvChunkLockResult> TPDisk::ChunkLockFromQuota(TOwner owner, NKi
         return std::unique_ptr<TEvChunkLockResult>(new NPDisk::TEvChunkLockResult(NKikimrProto::ERROR,
             {}, Keeper.GetFreeChunkCount(), "Space color flag is already raised"));
     } else {
-        return std::move(ChunkLockFromQuota(owner, number - used));
+        return ChunkLockFromQuota(owner, number - used);
     }
 }
 

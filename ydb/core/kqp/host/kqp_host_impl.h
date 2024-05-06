@@ -50,7 +50,7 @@ public:
             result.AddIssues(ExprCtx.IssueManager.GetIssues());
         }
         FillResult(result);
-        return std::move(result);
+        return result;
     }
 
     NThreading::TFuture<bool> Continue() override {
@@ -196,7 +196,7 @@ public:
 
         execResult.AddIssues(Issues);
 
-        return std::move(execResult);
+        return execResult;
     }
 
     NThreading::TFuture<bool> Continue() override {

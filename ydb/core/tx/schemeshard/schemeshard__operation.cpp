@@ -108,7 +108,7 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
             " Actually that shouldn't have happened."
             " Note that tx body equality isn't granted."
             " StatusAccepted is just returned on retries.");
-        return std::move(response);
+        return response;
     }
 
     TOperation::TPtr operation = new TOperation(txId);
@@ -120,7 +120,7 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
             response.Reset(new TProposeResponse(quotaResult.Status, ui64(txId), ui64(selfId)));
             response->SetError(quotaResult.Status, quotaResult.Reason);
             Operations.erase(txId);
-            return std::move(response);
+            return response;
         }
     }
 
@@ -140,7 +140,7 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
             response.Reset(new TProposeResponse(splitResult.Status, ui64(txId), ui64(selfId)));
             response->SetError(splitResult.Status, splitResult.Reason);
             Operations.erase(txId);
-            return std::move(response);
+            return response;
         }
 
         std::move(splitResult.Transactions.begin(), splitResult.Transactions.end(), std::back_inserter(transactions));
@@ -217,12 +217,12 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
                 context.OnComplete.ApplyOnExecute(context.SS, context.GetTxc(), context.Ctx);
                 Operations.erase(txId);
 
-                return std::move(response);
+                return response;
             }
         }
     }
 
-    return std::move(response);
+    return response;
 }
 
 struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {

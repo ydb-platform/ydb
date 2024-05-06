@@ -377,7 +377,7 @@ protected:
     TWaiter PopWaiterImpl() { // Assumes that we're under lock.
         TWaiter waiter(Waiter.ExtractPromise(), this);
         WaiterWillBeSignaled = true;
-        return std::move(waiter);
+        return waiter;
     }
 
     void WaitEventsImpl() { // Assumes that we're under lock. Posteffect: HasEventsImpl() is true.

@@ -6681,7 +6681,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         alterSettings.BeginAddConsumer("debug");
         auto alterRes = topicClient.AlterTopic(TString("/Root/PQ/") + topicName, alterSettings).GetValueSync();
         UNIT_ASSERT(alterRes.IsSuccess());
-        return std::move(driver);
+        return driver;
     }
 
     Y_UNIT_TEST(MessageMetadata) {
@@ -7155,7 +7155,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             TPQDataWriter writer("source", server);
             TString s{writeKbCount/4, 'c'}; // writes 4 times
             writer.Write(SHORT_TOPIC_NAME, {s});
-            return std::move(server);
+            return server;
         };
 
         auto serverWithNoInflightLimit = createServerAndWrite80kb(100);

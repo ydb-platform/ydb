@@ -204,7 +204,7 @@ TString ISource::MakeLocalName(const TString& name) {
     TStringBuilder str;
     str << name << iter->second;
     ++iter->second;
-    return std::move(str);
+    return str;
 }
 
 bool ISource::AddAggregation(TContext& ctx, TAggregationPtr aggr) {

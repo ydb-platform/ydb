@@ -498,7 +498,7 @@ TString GetTagString() {
         }
     }
 
-    return std::move(tag);
+    return tag;
 }
 
 bool TCompatibilityInfo::CompleteFromTag(NKikimrConfig::TCurrentCompatibilityInfo& current) {

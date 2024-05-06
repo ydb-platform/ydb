@@ -660,7 +660,7 @@ public:
                     }
                 }
 
-                return std::move(structObj);
+                return structObj;
             }
         }
 

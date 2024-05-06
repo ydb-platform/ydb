@@ -231,7 +231,7 @@ TResult TExecutor::MemberAccess(const TJsonPathItem& item) {
         }
     }
 
-    return std::move(result);
+    return result;
 }
 
 TResult TExecutor::WildcardMemberAccess(const TJsonPathItem& item) {
@@ -257,7 +257,7 @@ TResult TExecutor::WildcardMemberAccess(const TJsonPathItem& item) {
         }
     }
 
-    return std::move(result);
+    return result;
 }
 
 TMaybe<TIssue> TExecutor::EnsureSingleSubscript(TPosition pos, const TJsonNodes& index, i64& result) {
@@ -371,7 +371,7 @@ TResult TExecutor::ArrayAccess(const TJsonPathItem& item) {
             }
         }
     }
-    return std::move(result);
+    return result;
 }
 
 TResult TExecutor::WildcardArrayAccess(const TJsonPathItem& item) {
@@ -391,7 +391,7 @@ TResult TExecutor::WildcardArrayAccess(const TJsonPathItem& item) {
             result.push_back(value);
         }
     }
-    return std::move(result);
+    return result;
 }
 
 TResult TExecutor::UnaryArithmeticOp(const TJsonPathItem& item) {
@@ -421,7 +421,7 @@ TResult TExecutor::UnaryArithmeticOp(const TJsonPathItem& item) {
         result.push_back(TValue(MakeDouble(-value)));
     }
 
-    return std::move(result);
+    return result;
 }
 
 TMaybe<TIssue> TExecutor::EnsureBinaryArithmeticOpArgument(TPosition pos, const TJsonNodes& nodes, double& result) {
@@ -784,7 +784,7 @@ TResult TExecutor::FilterPredicate(const TJsonPathItem& item) {
             continue;
         }
     }
-    return std::move(result);
+    return result;
 }
 
 TResult TExecutor::NumericMethod(const TJsonPathItem& item) {
@@ -814,7 +814,7 @@ TResult TExecutor::NumericMethod(const TJsonPathItem& item) {
         }
         result.push_back(TValue(MakeDouble(applied)));
     }
-    return std::move(result);
+    return result;
 }
 
 TResult TExecutor::DoubleMethod(const TJsonPathItem& item) {
@@ -839,7 +839,7 @@ TResult TExecutor::DoubleMethod(const TJsonPathItem& item) {
 
         result.push_back(TValue(MakeDouble(parsed)));
     }
-    return std::move(result);
+    return result;
 }
 
 TResult TExecutor::TypeMethod(const TJsonPathItem& item) {
@@ -872,7 +872,7 @@ TResult TExecutor::TypeMethod(const TJsonPathItem& item) {
         }
         result.push_back(TValue(MakeString(type, ValueBuilder)));
     }
-    return std::move(result);
+    return result;
 }
 
 TResult TExecutor::SizeMethod(const TJsonPathItem& item) {
@@ -888,7 +888,7 @@ TResult TExecutor::SizeMethod(const TJsonPathItem& item) {
         }
         result.push_back(TValue(MakeDouble(static_cast<double>(size))));
     }
-    return std::move(result);
+    return result;
 }
 
 TResult TExecutor::KeyValueMethod(const TJsonPathItem& item) {
@@ -918,7 +918,7 @@ TResult TExecutor::KeyValueMethod(const TJsonPathItem& item) {
             result.push_back(TValue(MakeDict(row, 2)));
         }
     }
-    return std::move(result);
+    return result;
 }
 
 TResult TExecutor::StartsWithPredicate(const TJsonPathItem& item) {

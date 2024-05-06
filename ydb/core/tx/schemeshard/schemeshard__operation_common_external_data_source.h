@@ -23,7 +23,7 @@ inline TPath::TChecker IsParentPathValid(const TPath& parentPath) {
         .IsCommonSensePath()
         .IsLikeDirectory();
 
-    return std::move(checks);
+    return checks;
 }
 
 inline bool IsParentPathValid(const THolder<TProposeResponse>& result,

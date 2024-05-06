@@ -87,7 +87,7 @@ PKeyPtr GenerateKeys() {
 
   rsa.release(); // mem is grabbed by pkkey
 
-  return std::move(pkey);
+  return pkey;
 }
 
 int FillNameFromProps(X509_NAME* name, const TProps& props) {
@@ -204,7 +204,7 @@ X509Ptr GenerateSelfSignedCertificate(PKeyPtr& pkey, const TProps& props) {
     errNo = X509_sign(x509.get(), pkey.get(), EVP_sha1());
     CHECK(errNo, "Error signing certificate.");
 
-    return std::move(x509);
+    return x509;
 }
 
 std::string WriteAsPEM(PKeyPtr& pkey) {
@@ -240,7 +240,7 @@ X509Ptr ReadCertAsPEM(const std::string& cert) {
     auto x509 = X509Ptr(PEM_read_bio_X509(bio.get(), NULL, NULL, NULL));
     CHECK(x509, "failed to load certificate");
 
-    return std::move(x509);
+    return x509;
 }
 
 PKeyPtr ReadPrivateKeyAsPEM(const std::string& key) {
@@ -250,7 +250,7 @@ PKeyPtr ReadPrivateKeyAsPEM(const std::string& key) {
     auto pkey = PKeyPtr(PEM_read_bio_PrivateKey(bio.get(), NULL, NULL, NULL));
     CHECK(pkey, "failed to private key certificate");
 
-    return std::move(pkey);
+    return pkey;
 }
 
 void add_ext(X509V3_CTX* ctx, STACK_OF(X509_EXTENSION)* exts, int nid, const char *value) {
@@ -339,7 +339,7 @@ X509REQPtr GenerateRequest(PKeyPtr& pkey, const TProps& props) {
     errNo = X509_REQ_sign(request.get(), pkey.get(), EVP_md5());
     CHECK(errNo, "Error MD5 signing X509_REQ structure.");
 
-    return std::move(request);
+    return request;
 }
 
 X509Ptr SingRequest(X509REQPtr& request, X509Ptr& rootCert, PKeyPtr& rootKey, const TProps& props) {
@@ -398,7 +398,7 @@ X509Ptr SingRequest(X509REQPtr& request, X509Ptr& rootCert, PKeyPtr& rootKey, co
 
     pktmp = nullptr;
 
-    return std::move(x509);
+    return x509;
 }
 
 }

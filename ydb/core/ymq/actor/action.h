@@ -188,7 +188,7 @@ protected:
             ret << " QueueAttributes: " << *QueueAttributes_;
         }
         ret << "Response: " << Response_;
-        return std::move(ret);
+        return ret;
     }
 
     virtual bool HandleWakeup(TEvWakeup::TPtr& ev) {

@@ -520,7 +520,7 @@ std::unique_ptr<arrow::ArrayBuilder> MakeBuilder(const std::shared_ptr<arrow::Da
     AFL_VERIFY(type);
     std::unique_ptr<arrow::ArrayBuilder> builder;
     TStatusValidator::Validate(arrow::MakeBuilder(arrow::default_memory_pool(), type, &builder));
-    return std::move(builder);
+    return builder;
 }
 
 std::vector<std::shared_ptr<arrow::Array>> Finish(std::vector<std::unique_ptr<arrow::ArrayBuilder>>&& builders) {

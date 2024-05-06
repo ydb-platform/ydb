@@ -95,7 +95,7 @@ NUdf::TUnboxedValue TDefaultValueBuilder::NewList(NUdf::TUnboxedValue* items, ui
         auto array = HolderFactory_.CreateDirectArrayHolder(count, inplace);
         for (ui64 i = 0; i < count; ++i)
             *inplace++ = std::move(*items++);
-        return std::move(array);
+        return array;
     }
 
     TDefaultListRepresentation list;

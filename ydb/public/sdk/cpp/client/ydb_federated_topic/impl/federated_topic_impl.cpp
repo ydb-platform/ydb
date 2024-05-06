@@ -13,7 +13,7 @@ TFederatedTopicClient::TImpl::CreateReadSession(const TFederatedReadSessionSetti
     InitObserver();
     auto session = std::make_shared<TFederatedReadSession>(settings, Connections, ClientSettings, GetObserver(), ProvidedCodecs);
     session->Start();
-    return std::move(session);
+    return session;
 }
 
 // std::shared_ptr<NTopic::ISimpleBlockingWriteSession>
@@ -21,7 +21,7 @@ TFederatedTopicClient::TImpl::CreateReadSession(const TFederatedReadSessionSetti
 //     InitObserver();
 //     auto session = std::make_shared<TSimpleBlockingFederatedWriteSession>(settings, Connections, ClientSettings, GetObserver());
 //     session->Start();
-//     return std::move(session);
+//     return session;
 
 // }
 
@@ -40,7 +40,7 @@ TFederatedTopicClient::TImpl::CreateWriteSession(const TFederatedWriteSessionSet
     }
     auto session = std::make_shared<TFederatedWriteSession>(splitSettings, Connections, ClientSettings, GetObserver(), ProvidedCodecs);
     session->Start();
-    return std::move(session);
+    return session;
 }
 
 void TFederatedTopicClient::TImpl::InitObserver() {

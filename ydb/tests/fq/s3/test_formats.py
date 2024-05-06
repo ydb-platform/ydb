@@ -492,3 +492,30 @@ Pear,15,33'''
         assert len(result_set.rows) == 1
         assert result_set.rows[0].items[0].bytes_value == b"Pear"
         assert result_set.rows[0].items[1].int32_value == 15
+
+    @yq_all
+    @pytest.mark.parametrize("kikimr_settings", [{"stats_mode": YQ_STATS_FULL}], indirect=True)
+    def test_invalid_parquet_file(self, kikimr, s3, client, yq_version, unique_prefix):
+        type_format = "parquet"
+
+        filename = "test.csv"
+        self.create_bucket_and_upload_file(filename, s3, kikimr)
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f'''
+            SELECT *
+            FROM `{storage_connection_name}`.`{filename}`
+            WITH (format=`{type_format}`, SCHEMA (
+                Fruit String NOT NULL,
+                Price Int NOT NULL,
+                Weight Int NOT NULL
+            ));
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+        describe_result = client.describe_query(query_id).result
+        logging.debug("Describe result: {}".format(describe_result))
+        describe_string = "{}".format(describe_result)
+        assert "Query failed with code BAD_REQUEST" in describe_string

@@ -160,12 +160,12 @@ struct TEvS3FileQueue {
 
         EvEnd
     };
-    static_assert(EvEnd < EventSpaceEnd(NKikimr::TKikimrEvents::ES_S3_FILE_QUEUE), 
+    static_assert(EvEnd < EventSpaceEnd(NKikimr::TKikimrEvents::ES_S3_FILE_QUEUE),
                   "expect EvEnd < EventSpaceEnd(TEvents::ES_S3_FILE_QUEUE)");
-    
+
     struct TEvUpdateConsumersCount :
         public TEventPB<TEvUpdateConsumersCount, NS3::FileQueue::TEvUpdateConsumersCount, EvUpdateConsumersCount> {
-        
+
         explicit TEvUpdateConsumersCount(ui64 consumersCountDelta = 0) {
             Record.SetConsumersCountDelta(consumersCountDelta);
         }
@@ -173,7 +173,7 @@ struct TEvS3FileQueue {
 
     struct TEvAck :
         public TEventPB<TEvAck, NS3::FileQueue::TEvAck, EvAck> {
-        
+
         TEvAck() = default;
 
         explicit TEvAck(const TMessageTransportMeta& transportMeta) {
@@ -595,7 +595,7 @@ public:
         Send(ev->Sender, new TEvS3FileQueue::TEvObjectPathReadError(*MaybeIssues, ev->Get()->Record.GetTransportMeta()));
         TryFinish(ev->Sender, ev->Get()->Record.GetTransportMeta().GetSeqNo());
     }
-    
+
     void HandleUpdateConsumersCount(TEvS3FileQueue::TEvUpdateConsumersCount::TPtr& ev) {
         if (!UpdatedConsumers.contains(ev->Sender)) {
             LOG_D(
@@ -649,7 +649,7 @@ private:
 
         LOG_T("TS3FileQueueActor", "SendObjects Sending " << result.size() << " objects to consumer with id " << consumer);
         Send(consumer, new TEvS3FileQueue::TEvObjectPathBatch(std::move(result), HasNoMoreItems(), transportMeta));
-        
+
         if (HasNoMoreItems()) {
             TryFinish(consumer, transportMeta.GetSeqNo());
         }
@@ -671,7 +671,7 @@ private:
     }
 
     bool CanSendToConsumer(const TActorId& consumer) {
-        return !UseRuntimeListing || RoundRobinStageFinished || 
+        return !UseRuntimeListing || RoundRobinStageFinished ||
                (StartedConsumers.size() < ConsumersCount && !StartedConsumers.contains(consumer));
     }
 
@@ -749,7 +749,7 @@ private:
                     }
                 });
     }
-    
+
     void ScheduleRequest(const TActorId& consumer, const TMessageTransportMeta& transportMeta) {
         PendingRequests[consumer].push_back(transportMeta);
         HasPendingRequests = true;
@@ -786,7 +786,7 @@ private:
             }
         }
     }
-    
+
     void TryFinish(const TActorId& consumer, ui64 seqNo) {
         LOG_T("TS3FileQueueActor", "TryFinish from consumer " << consumer << ", " << FinishedConsumers.size() << " consumers already finished, seqNo=" << seqNo);
         if (FinishingConsumerToLastSeqNo.contains(consumer)) {
@@ -834,7 +834,7 @@ private:
     const TString Pattern;
     const ES3PatternVariant PatternVariant;
     const ES3PatternType PatternType;
-    
+
     static constexpr TDuration PoisonTimeout = TDuration::Hours(3);
     static constexpr TDuration RoundRobinStageTimeout = TDuration::Seconds(3);
 };
@@ -1093,7 +1093,7 @@ private:
     void HandleAck(TEvS3FileQueue::TEvAck::TPtr& ev) {
         FileQueueEvents.OnEventReceived(ev);
     }
-    
+
     static void OnDownloadFinished(TActorSystem* actorSystem, TActorId selfId, const TString& requestId, IHTTPGateway::TResult&& result, size_t pathInd, const TString path) {
         if (!result.Issues) {
             actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvReadResult(std::move(result.Content), requestId, pathInd, path)));
@@ -1205,7 +1205,7 @@ private:
         auto issues = NS3Util::AddParentIssue(TStringBuilder{} << "Error while reading file " << path << " with request id [" << requestId << "]", TIssues{result->Get()->Error});
         Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
     }
-    
+
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr&) {
         FileQueueEvents.Retry();
     }
@@ -1223,7 +1223,7 @@ private:
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         LOG_T("TS3ReadActor", "Handle undelivered FileQueue ");
         if (!FileQueueEvents.HandleUndelivered(ev)) {
-            TIssues issues{TIssue{TStringBuilder() << "FileQueue was lost"}};
+            TIssues issues{TIssue{"FileQueue was lost"}};
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::UNAVAILABLE));
         }
     }
@@ -1941,7 +1941,9 @@ public:
 
         // init the 1st reader, get meta/rg count
         readers.resize(1);
-        THROW_ARROW_NOT_OK(builder.Open(std::make_shared<THttpRandomAccessFile>(this, RetryStuff->SizeLimit)));
+        if (arrow::Status msg = builder.Open(std::make_shared<THttpRandomAccessFile>(this, RetryStuff->SizeLimit)); !msg.ok()) {
+            throw parquet::ParquetException(msg.ToString());
+        }
         THROW_ARROW_NOT_OK(builder.Build(&readers[0]));
         auto fileMetadata = readers[0]->parquet_reader()->metadata();
         ui64 numGroups = readers[0]->num_row_groups();
@@ -2084,7 +2086,7 @@ public:
                 if (isCancelled) {
                     LOG_CORO_D("RunCoroBlockArrowParserOverHttp - STOPPED ON SATURATION, downloaded " <<
                                QueueBufferCounter->DownloadedBytes << " bytes");
-                    break;        
+                    break;
                 }
             }
         }
@@ -2107,7 +2109,9 @@ public:
         properties.set_cache_options(arrow::io::CacheOptions::LazyDefaults());
         properties.set_pre_buffer(true);
         builder.properties(properties);
-        THROW_ARROW_NOT_OK(builder.Open(arrowFile));
+        if (arrow::Status msg = builder.Open(arrowFile); !msg.ok()) {
+            throw parquet::ParquetException(msg.ToString());
+        }
         THROW_ARROW_NOT_OK(builder.Build(&fileReader));
 
         std::shared_ptr<arrow::Schema> schema;
@@ -2780,7 +2784,7 @@ private:
     void CommitState(const NDqProto::TCheckpoint&) final {}
 
     ui64 GetInputIndex() const final {
-        return InputIndex; 
+        return InputIndex;
     }
 
     const TDqAsyncStats& GetIngressStats() const final {
@@ -3034,7 +3038,7 @@ private:
             }
         }
     }
-    
+
     void Handle(TEvS3FileQueue::TEvAck::TPtr& ev) {
         FileQueueEvents.OnEventReceived(ev);
     }
@@ -3390,7 +3394,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     if (params.GetRowsLimitHint() != 0) {
         rowsLimitHint = params.GetRowsLimitHint();
     }
-    
+
     TActorId fileQueueActor;
     if (auto it = settings.find("fileQueueActor"); it != settings.cend()) {
         NActorsProto::TActorId protoId;
@@ -3398,7 +3402,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
         ParseFromTextFormat(inputStream, protoId);
         fileQueueActor = ActorIdFromProto(protoId);
     }
-    
+
     ui64 fileQueueBatchSizeLimit = 0;
     if (auto it = settings.find("fileQueueBatchSizeLimit"); it != settings.cend()) {
         fileQueueBatchSizeLimit = FromString<ui64>(it->second);
@@ -3408,7 +3412,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     if (auto it = settings.find("fileQueueBatchObjectCountLimit"); it != settings.cend()) {
         fileQueueBatchObjectCountLimit = FromString<ui64>(it->second);
     }
-    
+
     ui64 fileQueueConsumersCountDelta = 0;
     if (readRanges.size() > 1) {
         fileQueueConsumersCountDelta = readRanges.size() - 1;

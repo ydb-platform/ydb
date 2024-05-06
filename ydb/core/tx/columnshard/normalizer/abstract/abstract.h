@@ -49,6 +49,11 @@ namespace NKikimr::NOlap {
     class TNormalizationContext {
         YDB_ACCESSOR_DEF(TActorId, ResourceSubscribeActor);
         YDB_ACCESSOR_DEF(TActorId, ColumnshardActor);
+        std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
+    public:
+        void SetResourcesGuard(std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> rg) {
+            ResourcesGuard = rg;
+        }
     };
 
     class TNormalizationController;

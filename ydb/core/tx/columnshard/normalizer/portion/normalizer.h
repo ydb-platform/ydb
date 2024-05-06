@@ -18,14 +18,14 @@ class TReadPortionsTask: public NOlap::NBlobOperations::NRead::ITask {
 private:
     using TBase = NOlap::NBlobOperations::NRead::ITask;
     typename TConveyorTask::TDataContainer Data;
-    THashMap<ui64, ISnapshotSchema::TPtr> Schemas;
+    std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> Schemas;
     TNormalizationContext NormContext;
 
 public:
-    TReadPortionsTask(const TNormalizationContext& nCtx, const std::vector<std::shared_ptr<IBlobsReadingAction>>& actions, typename TConveyorTask::TDataContainer&& data, THashMap<ui64, ISnapshotSchema::TPtr>&& schemas)
+    TReadPortionsTask(const TNormalizationContext& nCtx, const std::vector<std::shared_ptr<IBlobsReadingAction>>& actions, typename TConveyorTask::TDataContainer&& data, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas)
         : TBase(actions, "CS::NORMALIZER")
         , Data(std::move(data))
-        , Schemas(std::move(schemas))
+        , Schemas(schemas)
         , NormContext(nCtx)
     {
     }
@@ -33,7 +33,8 @@ public:
 protected:
     virtual void DoOnDataReady(const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>& resourcesGuard) override {
         Y_UNUSED(resourcesGuard);
-        std::shared_ptr<NConveyor::ITask> task = std::make_shared<TConveyorTask>(std::move(ExtractBlobsData()), NormContext, std::move(Data), std::move(Schemas));
+	NormContext.SetResourcesGuard(resourcesGuard);
+        std::shared_ptr<NConveyor::ITask> task = std::make_shared<TConveyorTask>(std::move(ExtractBlobsData()), NormContext, std::move(Data), Schemas);
         NConveyor::TCompServiceOperator::SendTaskToExecute(task);
     }
 
@@ -49,13 +50,13 @@ public:
 template <class TConveyorTask>
 class TPortionsNormalizerTask : public INormalizerTask {
     typename TConveyorTask::TDataContainer Package;
-    THashMap<ui64, ISnapshotSchema::TPtr> Schemas;
+    std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> Schemas;
 public:
     TPortionsNormalizerTask(typename TConveyorTask::TDataContainer&& package)
         : Package(std::move(package))
     {}
 
-    TPortionsNormalizerTask(typename TConveyorTask::TDataContainer&& package, const THashMap<ui64, ISnapshotSchema::TPtr>& schemas)
+    TPortionsNormalizerTask(typename TConveyorTask::TDataContainer&& package, const std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas)
         : Package(std::move(package))
         , Schemas(schemas)
     {}
@@ -71,7 +72,7 @@ public:
         std::vector<std::shared_ptr<IBlobsReadingAction>> actions = {readingAction};
         NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
             nCtx.GetResourceSubscribeActor(),std::make_shared<NOlap::NBlobOperations::NRead::ITask::TReadSubscriber>(
-                    std::make_shared<TReadPortionsTask<TConveyorTask>>( nCtx, actions, std::move(Package), std::move(Schemas) ), 1, memSize, "CS::NORMALIZER", controller.GetTaskSubscription()));
+                    std::make_shared<TReadPortionsTask<TConveyorTask>>( nCtx, actions, std::move(Package), Schemas ), 1, memSize, "CS::NORMALIZER", controller.GetTaskSubscription()));
     }
 };
 }

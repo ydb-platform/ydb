@@ -1659,6 +1659,13 @@
             "uri": "https://{canondata_backend}/1937424/9bc2b8c2d88f8e65c3b04f141709ba87ca3b124c/resource.tar.gz#test.test_match_recognize-test_type-streaming-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[optimizers-sort_by_nonstrict_const--Debug]": [],
+    "test.test[optimizers-sort_by_nonstrict_const--Plan]": [],
+    "test.test[optimizers-sort_by_nonstrict_const--Results]": [
+        {
+            "uri": "file://test.test_optimizers-sort_by_nonstrict_const--Results_/extracted"
+        }
+    ],
     "test.test[optimizers-unused_columns_window--Debug]": [
         {
             "checksum": "0af759c11927638d3faf5a6b40d932d5",

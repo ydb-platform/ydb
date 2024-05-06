@@ -196,7 +196,7 @@ void TTcpConnection::Close()
 
     EncodedFragments_.clear();
 
-    FlushStatistics();
+    FlushStatistics(/*guarded*/ false);
 }
 
 void TTcpConnection::Start()
@@ -257,7 +257,7 @@ void TTcpConnection::RunPeriodicCheck()
         return;
     }
 
-    FlushStatistics();
+    FlushStatistics(/*guarded*/ false);
 
     auto now = NProfiling::GetCpuInstant();
 
@@ -423,7 +423,7 @@ void TTcpConnection::Open(TGuard<NThreading::TSpinLock>& guard)
     }
 
     UpdateConnectionCount(+1);
-    FlushStatistics();
+    FlushStatistics(/*guarded*/ true);
 
     // Go online and start event processing.
     auto previousPendingControl = static_cast<EPollControl>(PendingControl_.fetch_and(~static_cast<ui64>(EPollControl::Offline)));
@@ -1787,10 +1787,20 @@ void TTcpConnection::InitSocketTosLevel(TTosLevel tosLevel)
     }
 }
 
-void TTcpConnection::FlushStatistics()
+void TTcpConnection::FlushStatistics(bool guarded)
 {
-    UpdateTcpStatistics();
-    FlushBusStatistics();
+    auto doFlush = [&] {
+        UpdateTcpStatistics();
+        FlushBusStatistics();
+    };
+
+    if (guarded) {
+        doFlush();
+        return;
+    }
+
+    auto guard = Guard(Lock_);
+    doFlush();
 }
 
 template <class T, class U>

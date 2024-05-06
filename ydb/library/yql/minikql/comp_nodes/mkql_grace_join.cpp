@@ -571,6 +571,8 @@ class TGraceJoinState : public TComputationValue<TGraceJoinState> {
 using TBase = TComputationValue<TGraceJoinState>;
 public:
 
+    bool MemoryPrinted = false;
+
     enum class EOperatingMode {
         InMemory,
         Spilling,
@@ -585,8 +587,14 @@ public:
     void DoCalculateWithSpilling(TComputationContext& ctx);
     EFetchResult ProcessSpilledData(TComputationContext& ctx, NUdf::TUnboxedValue*const* output);
 
+    bool HasMemoryForProcessing() const {
+        return !TlsAllocState->IsMemoryYellowZoneEnabled();
+    }
+
     bool IsSwitchToSpillingModeCondition() const {
-        return false;
+        // return false;
+        // TODO: YQL-18033
+        return !HasMemoryForProcessing();
     }
 
     void SwitchMode(EOperatingMode mode, TComputationContext& ctx) {
@@ -666,10 +674,6 @@ private:
 
     EOperatingMode GetMode() const {
         return Mode;
-    }
-
-    bool HasMemoryForProcessing() const {
-        return !TlsAllocState->IsMemoryYellowZoneEnabled();
     }
 
     bool TryToReduceMemory() {
@@ -821,6 +825,7 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
 
 EFetchResult TGraceJoinState::DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
         while (true) {
+            std::cerr << std::format("[MISHA] MEM USAGE: {}/{}, LEFT: {}, RIGHT: {}\n", TlsAllocState->GetUsed(), TlsAllocState->GetLimit(), LeftPacker->TablePtr->GetAllBucketsSize(), RightPacker->TablePtr->GetAllBucketsSize());
             switch(GetMode()) {
                 case EOperatingMode::InMemory: {
                     auto r = DoCalculateInMemory(ctx, output);
@@ -929,6 +934,7 @@ EFetchResult TGraceJoinState::DoCalculateInMemory(TComputationContext& ctx, NUdf
                     LeftPacker->Pack();
                     LeftPacker->TablePtr->AddTuple(LeftPacker->TupleIntVals.data(), LeftPacker->TupleStrings.data(), LeftPacker->TupleStrSizes.data(), LeftPacker->IColumnsHolder.data());
                 }
+
 
                 if (resultRight == EFetchResult::One) {
                     if (RightPacker->TuplesPacked == 0) {

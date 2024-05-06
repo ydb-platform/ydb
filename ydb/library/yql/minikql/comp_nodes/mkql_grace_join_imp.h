@@ -493,10 +493,18 @@ public:
         }
     }
 
+    ui64 GetAllBucketsSize() const {
+        ui64 sum = 0;
+        for (ui64 i = 0; i < NumberOfBuckets; ++i) {
+            sum += TableBuckets[i].GetSize();
+        }
+        return sum;
+    }
+
     bool TryToReduceMemory() {
         EnsureAllSpilledBucketsAreReady();
         for (i64 bucket = NumberOfBuckets - 1; bucket > NextBucketToSpill; --bucket) {
-            if (TableBuckets[bucket].GetSize()) {
+            if (TableBuckets[bucket].GetSize() > 4) {
                 std::cerr << std::format("[MISHA] Spilling again bucket {} of size {}\n", bucket, TableBuckets[bucket].GetSize());
                 TableBucketsSpiller[bucket].SpillBucket(std::move(TableBuckets[bucket]));
 

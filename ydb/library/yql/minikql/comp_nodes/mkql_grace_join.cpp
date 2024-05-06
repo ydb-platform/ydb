@@ -280,13 +280,6 @@ void TGraceJoinPacker::Pack()  {
         case NUdf::EDataSlot::Interval64:
             WriteUnaligned<i64>(buffPtr, value.Get<i64>()); break;
 
-        case NUdf::EDataSlot::Uuid:
-        {
-            auto str = TuplePtrs[i]->AsStringRef();
-            TupleStrings[offset] = str.Data();
-            TupleStrSizes[offset] = str.Size();
-            break;
-        }
         case NUdf::EDataSlot::TzDate:
         {
             WriteUnaligned<ui16>(buffPtr, value.Get<ui16>());
@@ -401,11 +394,6 @@ void TGraceJoinPacker::UnPack()  {
             value = NUdf::TUnboxedValuePod(ReadUnaligned<i64>(buffPtr)); break;
         case NUdf::EDataSlot::Interval64:
             value = NUdf::TUnboxedValuePod(ReadUnaligned<i64>(buffPtr)); break;
-        case NUdf::EDataSlot::Uuid:
-        {
-            value = MakeString(NUdf::TStringRef(TupleStrings[offset], TupleStrSizes[offset]));
-            break;
-        }
         case NUdf::EDataSlot::TzDate:
         {
             value = NUdf::TUnboxedValuePod(ReadUnaligned<ui16>(buffPtr));

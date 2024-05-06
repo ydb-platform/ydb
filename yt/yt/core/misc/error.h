@@ -403,9 +403,14 @@ public:
     T& Value() &;
     T&& Value() &&;
 
-    const T& ValueOrThrow() const &;
-    T& ValueOrThrow() &;
-    T&& ValueOrThrow() &&;
+    template <class... TArgs>
+    const T& ValueOrThrow(TArgs&&... args) const &;
+
+    template <class... TArgs>
+    T& ValueOrThrow(TArgs&&... args) &;
+
+    template <class... TArgs>
+    T&& ValueOrThrow(TArgs&&... args) &&;
 
     const T& ValueOrDefault(const T& defaultValue) const &;
     T& ValueOrDefault(T& defaultValue) &;

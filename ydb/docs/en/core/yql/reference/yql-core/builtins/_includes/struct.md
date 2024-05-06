@@ -320,12 +320,12 @@ SELECT
 
 ## StructUnion, StructIntersection, StructDifference, StructSymmetricDifference
 
-Combine two structures using one of the four methods (using the provided lambda to merge fields with same name):
+Combine two structures using one of the four methods (using the provided lambda to merge fields with the same name):
 
-* `StructUnion` adds all fields of both of the structures to the result;
-* `StructIntersection` — only the fields which are present in the both of the structures;
-* `StructDifference` — only the fields of `left`, which are absent in `right`;
-* `StructSymmetricDifference` — all fields which are present in exactly one of the structures.
+* `StructUnion` adds all fields of both of the structures to the result.
+* `StructIntersection` adds only the fields which are present in both of the structures.
+* `StructDifference` adds only the fields of `left`, which are absent in `right`.
+* `StructSymmetricDifference` adds all fields that are present in exactly one of the structures.
 
 **Signatures**
 ```
@@ -337,9 +337,9 @@ StructSymmetricDifference(left:Struct<...>, right:Struct<...>)->Struct<...>
 
 Arguments:
 
-1. `left` - first structure;
-2. `right` - second structure;
-3. `mergeLambda` - _(optional)_ function to merge fields with same name (arguments: field name, Optional field value of the first struct, Optional field value of the second struct); by default, the first structure's field value is used, if present, and the second one's in other cases
+1. `left` - first structure.
+2. `right` - second structure.
+3. `mergeLambda` - _(optional)_ function to merge fields with the same name (arguments: field name, Optional field value of the first struct, Optional field value of the second struct). By default, if present, the first structure's field value is used, and the second one's in other cases.
 
 **Examples**
 ``` yql

@@ -7,6 +7,7 @@
  *
  * Do not rely on macros in this file existing in later versions.
  */
+#include <features.h>
 
 #ifndef EVENT2_EVENT_CONFIG_H_INCLUDED_
 #define EVENT2_EVENT_CONFIG_H_INCLUDED_
@@ -29,14 +30,16 @@
 /* Define to 1 if you have the <afunix.h> header file. */
 /* #undef EVENT__HAVE_AFUNIX_H */
 
+#if defined(__GLIBC__) && (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 36))
 /* Define to 1 if you have the `arc4random' function. */
-/* #undef EVENT__HAVE_ARC4RANDOM */
+#define EVENT__HAVE_ARC4RANDOM 1
 
 /* Define to 1 if you have the `arc4random_addrandom' function. */
-/* #undef EVENT__HAVE_ARC4RANDOM_ADDRANDOM */
+#define EVENT__HAVE_ARC4RANDOM_ADDRANDOM 1
 
 /* Define to 1 if you have the `arc4random_buf' function. */
-/* #undef EVENT__HAVE_ARC4RANDOM_BUF */
+#define EVENT__HAVE_ARC4RANDOM_BUF 1
+#endif
 
 /* Define to 1 if you have the <arpa/inet.h> header file. */
 #define EVENT__HAVE_ARPA_INET_H 1

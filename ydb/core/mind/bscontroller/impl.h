@@ -471,8 +471,8 @@ public:
                 || Status == NKikimrBlobStorage::EDriveStatus::INACTIVE;
         }
 
-        std::tuple<bool, bool> GetSelfHealStatusTuple() const {
-            return {ShouldBeSettledBySelfHeal(), BadInTermsOfSelfHeal()};
+        auto GetSelfHealStatusTuple() const {
+            return std::make_tuple(ShouldBeSettledBySelfHeal(), BadInTermsOfSelfHeal(), Decommitted(), IsSelfHealReasonDecommit());
         }
 
         bool AcceptsNewSlots() const {
@@ -2222,12 +2222,15 @@ public:
         const TMonotonic now = TActivationContext::Monotonic();
         THashSet<TGroupInfo*> groups;
 
-        auto sh = std::make_unique<TEvControllerUpdateSelfHealInfo>();
+        std::vector<TEvControllerUpdateSelfHealInfo::TVDiskStatusUpdate> updates;
         for (auto it = VSlotReadyTimestampQ.begin(); it != VSlotReadyTimestampQ.end() && it->first <= now;
                 it = VSlotReadyTimestampQ.erase(it)) {
             Y_DEBUG_ABORT_UNLESS(!it->second->IsReady);
             
-            sh->VDiskIsReadyUpdate.emplace_back(it->second->GetVDiskId(), true);
+            updates.push_back({
+                .VDiskId = it->second->GetVDiskId(),
+                .IsReady = true,
+            });
             it->second->IsReady = true;
             it->second->ResetVSlotReadyTimestampIter();
             if (const TGroupInfo *group = it->second->Group) {
@@ -2245,8 +2248,8 @@ public:
         if (!timingQ.empty()) {
             Execute(CreateTxUpdateLastSeenReady(std::move(timingQ)));
         }
-        if (sh->VDiskIsReadyUpdate) {
-            Send(SelfHealId, sh.release());
+        if (!updates.empty()) {
+            Send(SelfHealId, new TEvControllerUpdateSelfHealInfo(std::move(updates)));
         }
     }
 

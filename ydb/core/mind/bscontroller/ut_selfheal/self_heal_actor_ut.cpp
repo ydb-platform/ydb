@@ -63,7 +63,12 @@ TEvControllerUpdateSelfHealInfo::TGroupContent Convert(const TIntrusivePtr<TBlob
     for (ui32 i = 0; i < info->GetTotalVDisksNum(); ++i) {
         auto& x = res.VDisks[info->GetVDiskId(i)];
         x.Location = {1, 1000 + i, 1000};
-        x.Faulty = faultyIndexes.count(i);
+        x.Faulty = x.Bad = faultyIndexes.count(i);
+        x.Decommitted = false;
+        x.IsSelfHealReasonDecommit = false;
+        x.OnlyPhantomsRemain = false;
+        x.IsReady = !x.Faulty;
+        x.ReadySince = TMonotonic::Zero();
         x.VDiskStatus = i < status.size() ? status[i] : E::READY;
     }
     return res;

@@ -549,25 +549,29 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
         SysViewChangedPDisks.insert(it->first);
     }
     const TVSlotId startingId(nodeId, Min<Schema::VSlot::PDiskID::Type>(), Min<Schema::VSlot::VSlotID::Type>());
-    auto sh = MakeHolder<TEvControllerUpdateSelfHealInfo>();
+    std::vector<TEvControllerUpdateSelfHealInfo::TVDiskStatusUpdate> updates;
     for (auto it = VSlots.lower_bound(startingId); it != VSlots.end() && it->first.NodeId == nodeId; ++it) {
         if (const TGroupInfo *group = it->second->Group) {
             if (it->second->IsReady) {
                 NotReadyVSlotIds.insert(it->second->VSlotId);
-                sh->VDiskIsReadyUpdate.emplace_back(it->second->GetVDiskId(), false);
             }
             it->second->SetStatus(NKikimrBlobStorage::EVDiskStatus::ERROR, mono, now, false);
             timingQ.emplace_back(*it->second);
-            sh->VDiskStatusUpdate.emplace_back(it->second->GetVDiskId(), it->second->Status, false);
+            updates.push_back({
+                .VDiskId = it->second->GetVDiskId(),
+                .IsReady = it->second->IsReady,
+                .VDiskStatus = it->second->Status,
+            });
             ScrubState.UpdateVDiskState(&*it->second);
         }
     }
     for (auto it = StaticVSlots.lower_bound(startingId); it != StaticVSlots.end() && it->first.NodeId == nodeId; ++it) {
-        it->second.VDiskStatus = NKikimrBlobStorage::EVDiskStatus::ERROR;
-        it->second.ReadySince = TMonotonic::Max();
+        auto& slot = it->second;
+        slot.ReadySince = TMonotonic::Max();
+        slot.VDiskStatus = NKikimrBlobStorage::EVDiskStatus::ERROR;
     }
-    if (sh->VDiskStatusUpdate) {
-        Send(SelfHealId, sh.Release());
+    if (!updates.empty()) {
+        Send(SelfHealId, new TEvControllerUpdateSelfHealInfo(std::move(updates)));
     }
     ScrubState.OnNodeDisconnected(nodeId);
     EraseKnownDrivesOnDisconnected(&node);

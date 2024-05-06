@@ -22,6 +22,139 @@ namespace NGRpcService {
 
 using TEvObjectStorageListingRequest = TGrpcRequestOperationCall<Ydb::ObjectStorage::ListingRequest, Ydb::ObjectStorage::ListingResponse>;
 
+#define CHECK_OR_RETURN_ERROR(cond, descr) \
+    if (!(cond)) { \
+        errStr = descr; \
+        return false; \
+    }
+
+bool CellFromTuple(NScheme::TTypeInfo type,
+                   const Ydb::Value& tupleValue,
+                   ui32 position,
+                   bool allowCastFromString,
+                   TVector<TCell>& cells,
+                   TString& errStr,
+                   TVector<TString>& memoryOwner) {
+    auto value_case = tupleValue.value_case();
+
+    CHECK_OR_RETURN_ERROR(value_case != Ydb::Value::VALUE_NOT_SET,
+                            Sprintf("Data must be present at position %" PRIu32, position));
+
+    CHECK_OR_RETURN_ERROR(tupleValue.itemsSize() == 0 &&
+                            tupleValue.pairsSize() == 0,
+                            Sprintf("Simple type is expected in tuple at position %" PRIu32, position));
+
+    TCell c;
+    auto typeId = type.GetTypeId();
+    switch (typeId) {
+
+#define CASE_SIMPLE_TYPE(name, type, protoField) \
+    case NScheme::NTypeIds::name: \
+    { \
+        bool valuePresent = tupleValue.Has##protoField##_value(); \
+        if (valuePresent) { \
+            type val = tupleValue.Get##protoField##_value(); \
+            c = TCell((const char*)&val, sizeof(val)); \
+        } else if (allowCastFromString && tupleValue.Hastext_value()) { \
+            const auto slot = NUdf::GetDataSlot(typeId); \
+            const auto out = NMiniKQL::ValueFromString(slot, tupleValue.Gettext_value()); \
+            CHECK_OR_RETURN_ERROR(out, Sprintf("Cannot parse value of type " #name " from text '%s' in tuple at position %" PRIu32, tupleValue.Gettext_value().data(), position)); \
+            const auto val = out.Get<type>(); \
+            c = TCell((const char*)&val, sizeof(val)); \
+        } else { \
+            CHECK_OR_RETURN_ERROR(false, Sprintf("Value of type " #name " expected in tuple at position %" PRIu32, position)); \
+        } \
+        Y_ABORT_UNLESS(c.IsInline()); \
+        break; \
+    }
+
+    CASE_SIMPLE_TYPE(Bool,   bool,  bool);
+    CASE_SIMPLE_TYPE(Int8,   i8,    int32);
+    CASE_SIMPLE_TYPE(Uint8,  ui8,   uint32);
+    CASE_SIMPLE_TYPE(Int16,  i16,   int32);
+    CASE_SIMPLE_TYPE(Uint16, ui16,  uint32);
+    CASE_SIMPLE_TYPE(Int32,  i32,   int32);
+    CASE_SIMPLE_TYPE(Uint32, ui32,  uint32);
+    CASE_SIMPLE_TYPE(Int64,  i64,   int64);
+    CASE_SIMPLE_TYPE(Uint64, ui64,  uint64);
+    CASE_SIMPLE_TYPE(Float,  float, float);
+    CASE_SIMPLE_TYPE(Double, double, double);
+    CASE_SIMPLE_TYPE(Date,   ui16,  uint32);
+    CASE_SIMPLE_TYPE(Datetime, ui32, uint32);
+    CASE_SIMPLE_TYPE(Timestamp, ui64, uint64);
+    CASE_SIMPLE_TYPE(Interval, i64, int64);
+
+
+#undef CASE_SIMPLE_TYPE
+
+    case NScheme::NTypeIds::Yson:
+    case NScheme::NTypeIds::Json:
+    case NScheme::NTypeIds::Utf8:
+    {
+        c = TCell(tupleValue.Gettext_value().data(), tupleValue.Gettext_value().size());
+        break;
+    }
+    case NScheme::NTypeIds::JsonDocument:
+    case NScheme::NTypeIds::DyNumber:
+    {
+        c = TCell(tupleValue.Getbytes_value().data(), tupleValue.Getbytes_value().size());
+        break;
+    }
+    case NScheme::NTypeIds::String:
+    {
+        if (tupleValue.Hasbytes_value()) {
+            c = TCell(tupleValue.Getbytes_value().data(), tupleValue.Getbytes_value().size());
+        } else if (allowCastFromString && tupleValue.Hastext_value()) {
+            c = TCell(tupleValue.Gettext_value().data(), tupleValue.Gettext_value().size());
+        } else {
+            CHECK_OR_RETURN_ERROR(false, Sprintf("Cannot parse value of type String in tuple at position %" PRIu32, position));
+        }
+        break;
+    }
+    case NScheme::NTypeIds::Pg:
+    {
+        if (tupleValue.Hasbytes_value()) {
+            c = TCell(tupleValue.Getbytes_value().data(), tupleValue.Getbytes_value().size());
+        } else if (tupleValue.Hastext_value()) {
+            auto typeDesc = type.GetTypeDesc();
+            auto convert = NPg::PgNativeBinaryFromNativeText(tupleValue.Gettext_value(), NPg::PgTypeIdFromTypeDesc(typeDesc));
+            if (convert.Error) {
+                CHECK_OR_RETURN_ERROR(false, Sprintf("Cannot parse value of type Pg: %s in tuple at position %" PRIu32, convert.Error->data(), position));
+            } else {
+                auto &data = memoryOwner.emplace_back(convert.Str);
+                c = TCell(data);
+            }
+        } else {
+            CHECK_OR_RETURN_ERROR(false, Sprintf("Cannot parse value of type Pg in tuple at position %" PRIu32, position));
+        }
+        break;
+    }
+    case NScheme::NTypeIds::Uuid:
+    {
+        if (tupleValue.Haslow_128()) {
+            auto &data = memoryOwner.emplace_back();
+            data.resize(NUuid::UUID_LEN);
+            NUuid::UuidHalfsToBytes(data.Detach(), data.size(), tupleValue.Gethigh_128(), tupleValue.Getlow_128());
+            c = TCell(data);
+        } else if (tupleValue.Hasbytes_value()) {
+            Y_ABORT_UNLESS(tupleValue.Getbytes_value().size() == NUuid::UUID_LEN);
+            c = TCell(tupleValue.Getbytes_value().data(), tupleValue.Getbytes_value().size());
+        } else {
+            CHECK_OR_RETURN_ERROR(false, Sprintf("Cannot parse value of type Uuid in tuple at position %" PRIu32, position));
+        }
+        break;
+    }
+    default:
+        CHECK_OR_RETURN_ERROR(false, Sprintf("Unsupported typeId %" PRIu16 " at index %" PRIu32, typeId, position));
+        break;
+    }
+
+    CHECK_OR_RETURN_ERROR(!c.IsNull(), Sprintf("Invalid non-NULL value at index %" PRIu32, position));
+    cells.push_back(c);
+
+    return true;
+}
+
 // NOTE: TCell's can reference memory from tupleValue
 bool CellsFromTuple(const Ydb::Type* tupleType,
                     const Ydb::Value& tupleValue,
@@ -29,15 +162,7 @@ bool CellsFromTuple(const Ydb::Type* tupleType,
                     bool allowCastFromString,
                     TVector<TCell>& key,
                     TString& errStr,
-                    TVector<TString>& memoryOwner)
-{
-
-#define CHECK_OR_RETURN_ERROR(cond, descr) \
-    if (!(cond)) { \
-        errStr = descr; \
-        return false; \
-    }
-
+                    TVector<TString>& memoryOwner) {
     if (tupleType) {
         Ydb::Type::TypeCase typeCase = tupleType->type_case();
         CHECK_OR_RETURN_ERROR(typeCase == Ydb::Type::kTupleType ||
@@ -64,128 +189,16 @@ bool CellsFromTuple(const Ydb::Type* tupleType,
     for (ui32 i = 0; i < tupleValue.itemsSize(); ++i) {
         auto& v = tupleValue.Getitems(i);
 
-        auto value_case = v.value_case();
+        bool parsed = CellFromTuple(types[i], v, i, allowCastFromString, key, errStr, memoryOwner);
 
-        CHECK_OR_RETURN_ERROR(value_case != Ydb::Value::VALUE_NOT_SET,
-                              Sprintf("Data must be present at position %" PRIu32, i));
-
-        CHECK_OR_RETURN_ERROR(v.itemsSize() == 0 &&
-                              v.pairsSize() == 0,
-                              Sprintf("Simple type is expected in tuple at position %" PRIu32, i));
-
-        TCell c;
-        auto typeId = types[i].GetTypeId();
-        switch (typeId) {
-
-#define CASE_SIMPLE_TYPE(name, type, protoField) \
-        case NScheme::NTypeIds::name: \
-        { \
-            bool valuePresent = v.Has##protoField##_value(); \
-            if (valuePresent) { \
-                type val = v.Get##protoField##_value(); \
-                c = TCell((const char*)&val, sizeof(val)); \
-            } else if (allowCastFromString && v.Hastext_value()) { \
-                const auto slot = NUdf::GetDataSlot(typeId); \
-                const auto out = NMiniKQL::ValueFromString(slot, v.Gettext_value()); \
-                CHECK_OR_RETURN_ERROR(out, Sprintf("Cannot parse value of type " #name " from text '%s' in tuple at position %" PRIu32, v.Gettext_value().data(), i)); \
-                const auto val = out.Get<type>(); \
-                c = TCell((const char*)&val, sizeof(val)); \
-            } else { \
-                CHECK_OR_RETURN_ERROR(false, Sprintf("Value of type " #name " expected in tuple at position %" PRIu32, i)); \
-            } \
-            Y_ABORT_UNLESS(c.IsInline()); \
-            break; \
+        if (!parsed) {
+            return false;
         }
-
-        CASE_SIMPLE_TYPE(Bool,   bool,  bool);
-        CASE_SIMPLE_TYPE(Int8,   i8,    int32);
-        CASE_SIMPLE_TYPE(Uint8,  ui8,   uint32);
-        CASE_SIMPLE_TYPE(Int16,  i16,   int32);
-        CASE_SIMPLE_TYPE(Uint16, ui16,  uint32);
-        CASE_SIMPLE_TYPE(Int32,  i32,   int32);
-        CASE_SIMPLE_TYPE(Uint32, ui32,  uint32);
-        CASE_SIMPLE_TYPE(Int64,  i64,   int64);
-        CASE_SIMPLE_TYPE(Uint64, ui64,  uint64);
-        CASE_SIMPLE_TYPE(Float,  float, float);
-        CASE_SIMPLE_TYPE(Double, double, double);
-        CASE_SIMPLE_TYPE(Date,   ui16,  uint32);
-        CASE_SIMPLE_TYPE(Datetime, ui32, uint32);
-        CASE_SIMPLE_TYPE(Timestamp, ui64, uint64);
-        CASE_SIMPLE_TYPE(Interval, i64, int64);
-
-
-#undef CASE_SIMPLE_TYPE
-
-        case NScheme::NTypeIds::Yson:
-        case NScheme::NTypeIds::Json:
-        case NScheme::NTypeIds::Utf8:
-        {
-            c = TCell(v.Gettext_value().data(), v.Gettext_value().size());
-            break;
-        }
-        case NScheme::NTypeIds::JsonDocument:
-        case NScheme::NTypeIds::DyNumber:
-        {
-            c = TCell(v.Getbytes_value().data(), v.Getbytes_value().size());
-            break;
-        }
-        case NScheme::NTypeIds::String:
-        {
-            if (v.Hasbytes_value()) {
-                c = TCell(v.Getbytes_value().data(), v.Getbytes_value().size());
-            } else if (allowCastFromString && v.Hastext_value()) {
-                c = TCell(v.Gettext_value().data(), v.Gettext_value().size());
-            } else {
-                CHECK_OR_RETURN_ERROR(false, Sprintf("Cannot parse value of type String in tuple at position %" PRIu32, i));
-            }
-            break;
-        }
-        case NScheme::NTypeIds::Pg:
-        {
-            if (v.Hasbytes_value()) {
-                c = TCell(v.Getbytes_value().data(), v.Getbytes_value().size());
-            } else if (v.Hastext_value()) {
-                auto typeDesc = types[i].GetTypeDesc();
-                auto convert = NPg::PgNativeBinaryFromNativeText(v.Gettext_value(), NPg::PgTypeIdFromTypeDesc(typeDesc));
-                if (convert.Error) {
-                    CHECK_OR_RETURN_ERROR(false, Sprintf("Cannot parse value of type Pg: %s in tuple at position %" PRIu32, convert.Error->data(), i));
-                } else {
-                    auto &data = memoryOwner.emplace_back(convert.Str);
-                    c = TCell(data);
-                }
-            } else {
-                CHECK_OR_RETURN_ERROR(false, Sprintf("Cannot parse value of type Pg in tuple at position %" PRIu32, i));
-            }
-            break;
-        }
-        case NScheme::NTypeIds::Uuid:
-        {
-            if (v.Haslow_128()) {
-                auto &data = memoryOwner.emplace_back();
-                data.resize(NUuid::UUID_LEN);
-                NUuid::UuidHalfsToBytes(data.Detach(), data.size(), v.Gethigh_128(), v.Getlow_128());
-                c = TCell(data);
-            } else if (v.Hasbytes_value()) {
-                Y_ABORT_UNLESS(v.Getbytes_value().size() == NUuid::UUID_LEN);
-                c = TCell(v.Getbytes_value().data(), v.Getbytes_value().size());
-            } else {
-                CHECK_OR_RETURN_ERROR(false, Sprintf("Cannot parse value of type Uuid in tuple at position %" PRIu32, i));
-            }
-            break;
-        }
-        default:
-            CHECK_OR_RETURN_ERROR(false, Sprintf("Unsupported typeId %" PRIu16 " at index %" PRIu32, typeId, i));
-            break;
-        }
-
-        CHECK_OR_RETURN_ERROR(!c.IsNull(), Sprintf("Invalid non-NULL value at index %" PRIu32, i));
-        key.push_back(c);
     }
-
-#undef CHECK_OR_RETURN_ERROR
 
     return true;
 }
+#undef CHECK_OR_RETURN_ERROR
 
 struct TFilter {
     TVector<ui32> ColumnIds;
@@ -390,10 +403,10 @@ private:
         TVector<TCell> prefixCells;
         TVector<TString> prefixMemoryOwner;
         TConstArrayRef<NScheme::TTypeInfo> prefixTypes(KeyColumnTypes.data(), KeyColumnTypes.size() - 1); // -1 for path column
-        CellsFromTuple(&Request->Getkey_prefix().Gettype(), Request->Getkey_prefix().Getvalue(),
+        bool prefixParsedOk = CellsFromTuple(&Request->Getkey_prefix().Gettype(), Request->Getkey_prefix().Getvalue(),
                 prefixTypes, true, prefixCells, errStr, prefixMemoryOwner);
 
-        if (!errStr.empty()) {
+        if (!prefixParsedOk) {
             ReplyWithError(Ydb::StatusIds::BAD_REQUEST, "Invalid KeyPrefix: " + errStr, ctx);
             return false;
         }
@@ -416,9 +429,9 @@ private:
         TVector<TCell> suffixCells;
         TVector<TString> suffixMemoryOwner;
         TConstArrayRef<NScheme::TTypeInfo> suffixTypes(KeyColumnTypes.data() + pathColPos, KeyColumnTypes.size() - pathColPos); // starts at path column
-        CellsFromTuple(&Request->Getstart_after_key_suffix().Gettype(), Request->Getstart_after_key_suffix().Getvalue(),
+        bool suffixParsedOk = CellsFromTuple(&Request->Getstart_after_key_suffix().Gettype(), Request->Getstart_after_key_suffix().Getvalue(),
                                  suffixTypes, true, suffixCells, errStr, suffixMemoryOwner);
-        if (!errStr.empty()) {
+        if (!suffixParsedOk) {
             ReplyWithError(Ydb::StatusIds::BAD_REQUEST,
                            "Invalid StartAfterKeySuffix: " + errStr, ctx);
             return false;
@@ -495,9 +508,9 @@ private:
 
             const auto& values = filter.values();
 
-            CellsFromTuple(&values.Gettype(), values.Getvalue(), typesRef, true, cells, err, owner);
+            bool filterParsedOk = CellsFromTuple(&values.Gettype(), values.Getvalue(), typesRef, true, cells, err, owner);
             
-            if (!err.empty()) {
+            if (!filterParsedOk) {
                 ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Sprintf("Invalid filter: '%s'", err.data()), ctx);
                 return false;
             }
@@ -556,12 +569,6 @@ private:
                     case Ydb::ObjectStorage::ListingRequest_EMatchType::ListingRequest_EMatchType_NOT_EQUAL:
                         dsMatchType = NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType::TObjectStorageListingFilter_EMatchType_NOT_EQUAL;
                         break;
-                    case Ydb::ObjectStorage::ListingRequest_EMatchType::ListingRequest_EMatchType_CONTAINS:
-                        dsMatchType = NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType::TObjectStorageListingFilter_EMatchType_CONTAINS;
-                        break;
-                    case Ydb::ObjectStorage::ListingRequest_EMatchType::ListingRequest_EMatchType_NOT_CONTAINS:
-                        dsMatchType = NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType::TObjectStorageListingFilter_EMatchType_NOT_CONTAINS;
-                        break;
                     default:
                         ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Sprintf("Wrong matching_filter match type %" PRIu32, matchType), ctx);
                         return false;
@@ -577,9 +584,9 @@ private:
 
             TString err;
 
-            CellsFromTuple(&filterType, columnValues, typesRef, true, cells, err, owner);
+            bool filterParsedOk = CellsFromTuple(&filterType, columnValues, typesRef, true, cells, err, owner);
             
-            if (!err.empty()) {
+            if (!filterParsedOk) {
                 ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Sprintf("Invalid filter: '%s'", err.data()), ctx);
                 return false;
             }
@@ -765,7 +772,7 @@ private:
             filter->set_values(Filter.FilterValues.GetBuffer());
 
             for (const auto& matchType : Filter.MatchTypes) {
-                filter->add_matchtype(matchType);
+                filter->add_matchtypes(matchType);
             }
         }
 

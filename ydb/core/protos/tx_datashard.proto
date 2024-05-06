@@ -814,12 +814,10 @@ message TObjectStorageListingFilter {
     enum EMatchType {
         EQUAL = 0;
         NOT_EQUAL = 1;
-        CONTAINS = 2;
-        NOT_CONTAINS = 3;
     }
     optional bytes Values = 1;
     repeated uint32 Columns = 2;
-    repeated EMatchType MatchType = 3; 
+    repeated EMatchType MatchTypes = 3; 
 }
 
 message TEvObjectStorageListingRequest {

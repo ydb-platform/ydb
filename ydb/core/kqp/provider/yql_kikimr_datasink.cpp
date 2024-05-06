@@ -806,6 +806,8 @@ public:
                     dropHint = "DROP EXTERNAL TABLE";
                 }
                 ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Cannot drop external entity by using DROP TABLE" << (dropHint ?  ". Please use " : "") << dropHint));
+            } else if (mode == "delete") {
+                ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Cannot delete from external data source. Please specify table or use DROP EXTERNAL DATA SOURCE to drop external entity."));
             } else {
                 ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Write mode '" << static_cast<TStringBuf>(mode) << "' is not supported for external entities"));
             }

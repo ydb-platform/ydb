@@ -6,7 +6,7 @@ namespace NDataShard {
 
 using namespace NTabletFlatExecutor;
 
-class TDataShard::TTxS3Listing : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxObjectStorageListing : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
     TEvDataShard::TEvObjectStorageListingRequest::TPtr Ev;
     TAutoPtr<TEvDataShard::TEvObjectStorageListingResponse> Result;
@@ -19,7 +19,7 @@ private:
     ui32 RestartCount;
 
 public:
-    TTxS3Listing(TDataShard* ds, TEvDataShard::TEvObjectStorageListingRequest::TPtr ev)
+    TTxObjectStorageListing(TDataShard* ds, TEvDataShard::TEvObjectStorageListingRequest::TPtr ev)
         : TBase(ds)
         , Ev(ev)
         , RestartCount(0)
@@ -414,7 +414,7 @@ private:
 };
 
 void TDataShard::Handle(TEvDataShard::TEvObjectStorageListingRequest::TPtr& ev, const TActorContext& ctx) {
-    Executor()->Execute(new TTxS3Listing(this, ev), ctx);
+    Executor()->Execute(new TTxObjectStorageListing(this, ev), ctx);
 }
 
 } // namespace NDataShard

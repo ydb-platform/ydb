@@ -551,7 +551,7 @@ inline TUnboxedValue TUnboxedValuePod::GetVariantItem() const {
     if (Raw.GetIndex()) {
         TUnboxedValuePod item(*this);
         item.Raw.Simple.Meta &= 0x3;
-        return std::move(item);
+        return item;
     }
     UDF_VERIFY(IsBoxed(), "Value is not a variant");
     return TBoxedValueAccessor::GetVariantItem(*Raw.Boxed.Value);

@@ -152,7 +152,7 @@ THolder<TProposeRequest> MergeRequest(
         merge.AddSourceTabletId(ui64(tabletId));
     }
 
-    return std::move(request);
+    return request;
 }
 
 template <typename T>

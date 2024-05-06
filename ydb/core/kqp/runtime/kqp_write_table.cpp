@@ -545,7 +545,7 @@ public:
                 Memory -= batch->GetMemory();
             }
         }
-        return std::move(newBatches);
+        return newBatches;
     }
 
     IBatchPtr FlushBatch(ui64 shardId) override {

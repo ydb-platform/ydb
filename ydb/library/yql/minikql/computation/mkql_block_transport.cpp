@@ -692,7 +692,7 @@ std::unique_ptr<IBlockSerializer> MakeBlockSerializer(const NYql::NUdf::ITypeInf
 std::unique_ptr<IBlockDeserializer> MakeBlockDeserializer(const NYql::NUdf::ITypeInfoHelper& typeInfoHelper, const NYql::NUdf::TType* type) {
     std::unique_ptr<TBlockDeserializerBase> result =  NYql::NUdf::MakeBlockReaderImpl<TDeserializerTraits>(typeInfoHelper, type, nullptr);
     result->SetArrowType(NYql::NUdf::GetArrowType(typeInfoHelper, type));
-    return std::move(result);
+    return result;
 }
 
 

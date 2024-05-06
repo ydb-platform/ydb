@@ -59,7 +59,7 @@ namespace NActors::NQueueBench {
                     }
                 );
                 RunThreads(std::make_unique<TTestThread<decltype(worker), TStatsCollector>>(worker, &collector));
-                return std::move(collector);
+                return collector;
             }
 
             TThreadCounts GetThreads(ui64) override {
@@ -89,7 +89,7 @@ namespace NActors::NQueueBench {
                     threads.emplace_back(new TTestThread<decltype(worker), TStatsCollector>(worker, &collector));
                 }
                 RunThreads(threads);
-                return std::move(collector);
+                return collector;
             }
 
             TThreadCounts GetThreads(ui64) override {
@@ -112,7 +112,7 @@ namespace NActors::NQueueBench {
                     threads.emplace_back(new TTestThread<decltype(worker), TStatsCollector>(worker, &collector));
                 }
                 RunThreads(threads);
-                return std::move(collector);
+                return collector;
             }
 
             TThreadCounts GetThreads(ui64) override {
@@ -135,7 +135,7 @@ namespace NActors::NQueueBench {
                     threads.emplace_back(new TTestThread<decltype(worker), TStatsCollector>(worker, &collector));
                 }
                 RunThreads(threads);
-                return std::move(collector);
+                return collector;
             }
 
             TThreadCounts GetThreads(ui64) override {
@@ -165,7 +165,7 @@ namespace NActors::NQueueBench {
                     threads.emplace_back(new TTestThread<decltype(worker), TStatsCollector>(worker, &collector));
                 }
                 RunThreads(threads);
-                return std::move(collector);
+                return collector;
             }
 
             TThreadCounts GetThreads(ui64) override {
@@ -209,7 +209,7 @@ namespace NActors::NQueueBench {
                     threads.emplace_back(new TTestThread<decltype(worker), TStatsCollector>(worker, &collector));
                 }
                 RunThreads(threads);
-                return std::move(collector);
+                return collector;
             }
 
             std::variant<TThreadCounts, ui64> GetThreads(ui64 globalThreads) override {
@@ -259,7 +259,7 @@ namespace NActors::NQueueBench {
                     threads.emplace_back(new TTestThread<decltype(worker), TStatsCollector>(worker, &collector));
                 }
                 RunThreads(threads);
-                return std::move(collector);
+                return collector;
             }
 
             TString Validate(ui64 globalThreads) override {
@@ -318,7 +318,7 @@ namespace NActors::NQueueBench {
                     threads.emplace_back(new TTestThread<decltype(worker), TStatsCollector>(worker, &collector));
                 }
                 RunThreads(threads);
-                return std::move(collector);
+                return collector;
             }
 
             TString Validate(ui64 globalThreads) override {
@@ -375,7 +375,7 @@ namespace NActors::NQueueBench {
                     threads.emplace_back(new TTestThread<decltype(worker), TStatsCollector>(worker, &collector));
                 }
                 RunThreads(threads);
-                return std::move(collector);
+                return collector;
             }
 
             TString Validate(ui64 globalThreads) override {

@@ -28,7 +28,7 @@ inline TPath::TChecker IsParentPathValid(const TPath& parentPath, const TTxTrans
     }
     Y_UNUSED(tx);
 
-    return std::move(checks);
+    return checks;
 }
 
 inline bool IsParentPathValid(const THolder<TProposeResponse>& result,

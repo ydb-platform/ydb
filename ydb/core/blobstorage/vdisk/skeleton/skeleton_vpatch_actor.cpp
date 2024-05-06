@@ -419,7 +419,7 @@ namespace NKikimr::NPrivate {
                 bool isAligned = (GType.ErasureFamily() != TErasureType::ErasureMirror);
                 diffs.emplace_back(buffer, diff.GetOffset(), isXor, isAligned);
             }
-            return std::move(diffs);
+            return diffs;
         }
 
         bool CheckDiff(const TVector<TDiff> &diffs, const TString &diffName) {

@@ -37,7 +37,7 @@ NUdf::TUnboxedValue CreateRow(const TVector<TCell>& inRow,
         rowItems[i] = GetCellValue(inRow[i], inType[i]);
     }
 
-    return std::move(row);
+    return row;
 }
 
 } // namespace

@@ -44,7 +44,7 @@ TString TUrlBuilder::Build() const {
         }
         separator = "&"sv;
     }
-    return std::move(res);
+    return res;
 }
 
 } // NYql

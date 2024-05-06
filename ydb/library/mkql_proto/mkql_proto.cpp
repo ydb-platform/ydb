@@ -1839,7 +1839,7 @@ NUdf::TUnboxedValue TProtoImporter::ImportValueFromProto(const TType* type, cons
                 *items++ = ImportValueFromProto(itemType, x, factory);
             }
 
-            return std::move(array);
+            return array;
         }
 
         case TType::EKind::Struct: {
@@ -1853,7 +1853,7 @@ NUdf::TUnboxedValue TProtoImporter::ImportValueFromProto(const TType* type, cons
                 itemsPtr[index] = ImportValueFromProto(memberType, value.GetStruct(remapped), factory);
             }
 
-            return std::move(res);
+            return res;
         }
 
         case TType::EKind::Tuple: {
@@ -1865,7 +1865,7 @@ NUdf::TUnboxedValue TProtoImporter::ImportValueFromProto(const TType* type, cons
                 itemsPtr[index] = ImportValueFromProto(elementType, value.GetTuple(index), factory);
             }
 
-            return std::move(res);
+            return res;
         }
 
         case TType::EKind::Dict: {

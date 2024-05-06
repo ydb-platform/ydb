@@ -59,7 +59,7 @@ std::optional<TWritePortionInfoWithBlobsResult> TTTLColumnEngineChanges::UpdateE
     std::optional<TWritePortionInfoWithBlobsResult> result =
         TReadPortionInfoWithBlobs::SyncPortion(std::move(portionWithBlobs), blobSchema, evictFeatures.GetTargetScheme(),
             evictFeatures.GetTargetTierName(), SaverContext.GetStoragesManager(), context.Counters.SplitterCounters);
-    return std::move(result);
+    return result;
 }
 
 NKikimr::TConclusionStatus TTTLColumnEngineChanges::DoConstructBlobs(TConstructionContext& context) noexcept {

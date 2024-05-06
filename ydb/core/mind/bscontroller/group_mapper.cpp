@@ -211,7 +211,7 @@ namespace NKikimr::NBsController {
                     pdisk->NumDomainMatchingDisks = numMatchingDisksInDomain[position.Domain.Index()];
                 }
 
-                return std::move(res);
+                return res;
             }
 
             struct TUndoLog {

@@ -71,7 +71,7 @@ std::unique_ptr<TEvStatistics::TEvAggregateStatistics> CreateStatisticsRequest(c
         }
     }
 
-    return std::move(ev);
+    return ev;
 }
 
 std::unique_ptr<TEvStatistics::TEvAggregateStatisticsResponse> CreateAggregateStatisticsResponse(const TAggregateStatisticsResponse& data) {
@@ -102,7 +102,7 @@ std::unique_ptr<TEvStatistics::TEvAggregateStatisticsResponse> CreateAggregateSt
         statistics->SetData(buf.data(), buf.size());
     }
 
-    return std::move(ev);
+    return ev;
 }
 
 std::unique_ptr<TEvStatistics::TEvStatisticsResponse> CreateStatisticsResponse(const TStatisticsResponse& data) {
@@ -127,7 +127,7 @@ std::unique_ptr<TEvStatistics::TEvStatisticsResponse> CreateStatisticsResponse(c
         statistics->SetData(buf.data(), buf.size());
     }
 
-    return std::move(ev);
+    return ev;
 }
 
 TStatServiceSettings GetDefaultSettings() {

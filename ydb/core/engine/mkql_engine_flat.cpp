@@ -147,7 +147,7 @@ private:
             resultItems[1] = pair.second;
         }
 
-        return std::move(results);
+        return results;
     }
 
 private:

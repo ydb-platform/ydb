@@ -425,7 +425,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             request->ResultSet.emplace_back(entry);
         }
 
-        return std::move(request);
+        return request;
     }
 
     void ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status,
@@ -853,7 +853,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             request->ResultSet.emplace_back(std::move(entry));
         }
 
-        return std::move(request);
+        return request;
     }
 
     ui64 GetShardToRequest(NSchemeCache::TSchemeCacheNavigate::TEntry& resolveResult, const TPathToResolve& resolveTask) {

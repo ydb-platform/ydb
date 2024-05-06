@@ -856,7 +856,7 @@ static TString FormatNames(const TMap<int, TMessageAttribute>& messageAttributes
         }
         names << "\"" << item.second.GetName() << "\"";
     }
-    return std::move(names);
+    return names;
 }
 
 void THttpRequest::SetupSendMessage(TSendMessageRequest* const req) {

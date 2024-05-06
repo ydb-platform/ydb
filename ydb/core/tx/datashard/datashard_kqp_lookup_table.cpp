@@ -119,7 +119,7 @@ public:
                     TaskTableStats += stats;
 
                     if (fetched) {
-                        return std::move(result);
+                        return result;
                     }
 
                     if (ComputeCtx.IsTabletNotReady() || ComputeCtx.HadInconsistentReads()) {

@@ -627,7 +627,7 @@ TString TReadSessionEvent::TDataReceivedEvent::DebugString(bool printData) const
         message.DebugString(ret, printData);
     }
     ret << " }";
-    return std::move(ret);
+    return ret;
 }
 
 TString TReadSessionEvent::TCommitAcknowledgementEvent::DebugString() const {

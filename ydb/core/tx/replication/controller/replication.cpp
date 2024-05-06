@@ -101,7 +101,9 @@ public:
                 ydbProxy.Reset(CreateYdbProxy(params.GetEndpoint(), params.GetDatabase(), params.GetOAuthToken()));
                 break;
             default:
-                ErrorState(TStringBuilder() << "Unexpected credentials: " << params.GetCredentialsCase());
+                if (!(State == EState::Removing && !Targets)) {
+                    ErrorState(TStringBuilder() << "Unexpected credentials: " << params.GetCredentialsCase());
+                }
                 break;
             }
 

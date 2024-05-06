@@ -352,4 +352,30 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         UNIT_ASSERT(!table.HasReplicationConfig());
     }
 
+    Y_UNIT_TEST(DropReplicationWithInvalidCredentials) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+
+        TestCreateReplication(runtime, ++txId, "/MyRoot", R"(
+            Name: "Replication"
+            Config {
+              Specific {
+                Targets {
+                  SrcPath: "/MyRoot1/Table"
+                  DstPath: "/MyRoot2/Table"
+                }
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication"), {NLs::PathExist});
+
+        TestDropReplication(runtime, ++txId, "/MyRoot", "Replication");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication"), {NLs::PathNotExist});
+    }
+
 } // TReplicationTests

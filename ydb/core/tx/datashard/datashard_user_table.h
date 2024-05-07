@@ -401,7 +401,7 @@ struct TUserTable : public TThrRefBase {
     mutable TStats Stats;
     mutable bool StatsUpdateInProgress = false;
     mutable bool StatsNeedUpdate = true;
-    mutable NTable::TDatabase::TChg LastTableChange{ 0, NTable::TEpoch::Zero() };
+    mutable NTable::TDatabase::TChangeCounter LastTableChange;
     mutable TMonotonic LastTableChangeTimestamp;
 
     ui32 SpecialColTablet = Max<ui32>();

@@ -1301,7 +1301,7 @@ bool TSqlQuery::DeclareStatement(const TRule_declare_stmt& stmt) {
         Ctx.Warning(varPos, TIssuesIds::YQL_DUPLICATE_DECLARE) << "Duplicate declaration of '" << varName << "' will be ignored";
     } else {
         PushNamedAtom(varPos, varName);
-        Ctx.DeclareVariable(varName, typeNode);
+        Ctx.DeclareVariable(varName, varPos, typeNode);
     }
     return true;
 }
@@ -2713,7 +2713,7 @@ TNodePtr TSqlQuery::Build(const TSQLv1ParserAST& ast) {
             PushNamedAtom(Ctx.Pos(), varName);
             // no duplicates are possible at this stage
             bool isWeak = true;
-            Ctx.DeclareVariable(varName, typeNode, isWeak);
+            Ctx.DeclareVariable(varName, {}, typeNode, isWeak);
             // avoid 'Symbol is not used' warning for externally declared expression
             YQL_ENSURE(GetNamedNode(varName));
         }
@@ -2790,7 +2790,7 @@ TNodePtr TSqlQuery::Build(const std::vector<::NSQLv1Generated::TRule_sql_stmt_co
             PushNamedAtom(Ctx.Pos(), varName);
             // no duplicates are possible at this stage
             bool isWeak = true;
-            Ctx.DeclareVariable(varName, typeNode, isWeak);
+            Ctx.DeclareVariable(varName, {}, typeNode, isWeak);
             // avoid 'Symbol is not used' warning for externally declared expression
             YQL_ENSURE(GetNamedNode(varName));
         }

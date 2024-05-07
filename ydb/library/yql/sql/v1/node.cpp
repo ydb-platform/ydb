@@ -2827,7 +2827,11 @@ TSourcePtr TryMakeSourceFromExpression(TContext& ctx, const TString& currService
         return nullptr;
     }
 
-    auto wrappedNode = node->Y("EvaluateAtom", node);
+    auto wrappedNode = new TAstListNodeImpl(ctx.Pos(), { 
+        new TAstAtomNodeImpl(ctx.Pos(), "EvaluateAtom", TNodeFlags::Default),
+        node
+    });
+
     TNodePtr tableKey = BuildTableKey(node->GetPos(), currService, currCluster, TDeferredAtom(wrappedNode, ctx), {view});
     TTableRef table(ctx.MakeName("table"), currService, currCluster, tableKey);
     table.Options = BuildInputOptions(node->GetPos(), GetContextHints(ctx));
@@ -2852,7 +2856,11 @@ void MakeTableFromExpression(TContext& ctx, TNodePtr node, TDeferredAtom& table,
         node = node->Y("Concat", node->Y("String", node->Q(prefix)), node);
     }
 
-    auto wrappedNode = node->Y("EvaluateAtom", node);
+    auto wrappedNode = new TAstListNodeImpl(ctx.Pos(), { 
+        new TAstAtomNodeImpl(ctx.Pos(), "EvaluateAtom", TNodeFlags::Default),
+        node
+    });
+
     table = TDeferredAtom(wrappedNode, ctx);
 }
 
@@ -2865,7 +2873,11 @@ TDeferredAtom MakeAtomFromExpression(TContext& ctx, TNodePtr node, const TString
         node = node->Y("Concat", node->Y("String", node->Q(prefix)), node);
     }
 
-    auto wrappedNode = node->Y("EvaluateAtom", node);
+    auto wrappedNode = new TAstListNodeImpl(ctx.Pos(), { 
+        new TAstAtomNodeImpl(ctx.Pos(), "EvaluateAtom", TNodeFlags::Default),
+        node
+    });
+
     return TDeferredAtom(wrappedNode, ctx);
 }
 

@@ -2637,11 +2637,14 @@ public:
         bool hasError = false;
         if (TopLevel) {
             for (auto& var: ctx.Variables) {
-                if (!var.second->Init(ctx, src)) {
+                if (!var.second.second->Init(ctx, src)) {
                     hasError = true;
                     continue;
                 }
-                Add(Y("declare", var.first, var.second));
+                Add(Y(
+                    "declare", 
+                    new TAstAtomNodeImpl(var.second.first, var.first, TNodeFlags::ArbitraryContent), 
+                    var.second.second));
             }
 
             for (const auto& overrideLibrary: ctx.OverrideLibraries) {

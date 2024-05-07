@@ -325,14 +325,14 @@ bool TContext::IsAlreadyDeclared(const TString& varName) const {
     return Variables.find(varName) != Variables.end() && !WeakVariables.contains(varName);
 }
 
-void TContext::DeclareVariable(const TString& varName, const TNodePtr& typeNode, bool isWeak) {
+void TContext::DeclareVariable(const TString& varName, const TPosition& pos, const TNodePtr& typeNode, bool isWeak) {
     if (isWeak) {
-        auto inserted = Variables.emplace(varName, typeNode);
+        auto inserted = Variables.emplace(varName, std::make_pair(pos, typeNode));
         YQL_ENSURE(inserted.second);
         WeakVariables.insert(varName);
     } else {
         WeakVariables.erase(WeakVariables.find(varName));
-        Variables[varName] = typeNode;
+        Variables[varName] = std::make_pair(pos, typeNode);
     }
 }
 

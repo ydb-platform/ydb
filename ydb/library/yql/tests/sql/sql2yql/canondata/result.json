@@ -118,6 +118,20 @@
             "uri": "https://{canondata_backend}/1784117/d56ae82ad9d30397a41490647be1bd2124718f98/resource.tar.gz#test_sql2yql.test_action-eval_astagged_/sql.yql"
         }
     ],
+    "test_sql2yql.test[action-eval_atom_wrong_type_expr]": [
+        {
+            "checksum": "b4b21da25a4134e889b70fedca46a59e",
+            "size": 1162,
+            "uri": "https://{canondata_backend}/1923547/2c6b73e812b6d7bc36fe15c35684a8f836c610fe/resource.tar.gz#test_sql2yql.test_action-eval_atom_wrong_type_expr_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[action-eval_atom_wrong_type_param]": [
+        {
+            "checksum": "ffe23957a7bfdb262b4cad9a50c876cb",
+            "size": 1195,
+            "uri": "https://{canondata_backend}/1923547/2c6b73e812b6d7bc36fe15c35684a8f836c610fe/resource.tar.gz#test_sql2yql.test_action-eval_atom_wrong_type_param_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[action-eval_capture]": [
         {
             "checksum": "d3fa86b48aff09d6bf644ad95e6494aa",
@@ -18575,6 +18589,20 @@
             "checksum": "eb0f1c14a250cefa1296bf49bd0b1e15",
             "size": 117,
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_action-eval_astagged_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[action-eval_atom_wrong_type_expr]": [
+        {
+            "checksum": "5561ce9a193250739d88cdcdf7a6c919",
+            "size": 65,
+            "uri": "https://{canondata_backend}/1923547/2c6b73e812b6d7bc36fe15c35684a8f836c610fe/resource.tar.gz#test_sql_format.test_action-eval_atom_wrong_type_expr_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[action-eval_atom_wrong_type_param]": [
+        {
+            "checksum": "6bb9503b769369384ef6660c8f217a9a",
+            "size": 80,
+            "uri": "https://{canondata_backend}/1923547/2c6b73e812b6d7bc36fe15c35684a8f836c610fe/resource.tar.gz#test_sql_format.test_action-eval_atom_wrong_type_param_/formatted.sql"
         }
     ],
     "test_sql_format.test[action-eval_capture]": [

@@ -2339,7 +2339,6 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReadingFinis
     auto& topic = it->second;
     NTabletPipe::SendData(ctx, topic.PipeClient, new TEvPersQueue::TEvReadingPartitionFinishedRequest(ClientId, msg->PartitionId, newSDK, msg->FirstMessage));
 
-
     if constexpr (!UseMigrationProtocol) {
         TPartitionActorInfo* partitionInfo = nullptr;
         for (auto& [_, p] : Partitions) {
@@ -2354,13 +2353,25 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReadingFinis
                 << "Inconsistent state #04", ctx);
         }
 
+        auto pit = topic.Partitions.find(msg->PartitionId);
+        if (pit == topic.Partitions.end()) {
+            return CloseSession(PersQueue::ErrorCode::ERROR, TStringBuilder()
+                << "Inconsistent state #05", ctx);
+        }
+
+        auto& partition = pit->second;
+
         TServerMessage result;
         result.set_status(Ydb::StatusIds::SUCCESS);
         auto* r = result.mutable_end_partition_session();
         r->set_partition_session_id(partitionInfo->Partition.AssignId);
 
-        r->add_adjacent_partition_ids(1);
-        r->add_child_partition_ids(1);
+        for (auto p : partition.adjacentPartitionIds) {
+            r->add_adjacent_partition_ids(p);
+        }
+        for (auto p : partition.childPartitionIds) {
+            r->add_child_partition_ids(p);
+        }
 
         LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " sending to client end partition stream event");
         SendControlMessage(partitionInfo->Partition, std::move(result), ctx);

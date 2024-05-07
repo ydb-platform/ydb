@@ -1058,6 +1058,8 @@ private:
             operatorId = Visit(maybeDelete.Cast(), planNode);
         } else if (auto maybeArg = TMaybeNode<TCoArgument>(node)) {
             return {CurrentArgContext.AddArg(node.Get())};
+        } else if (auto maybeCrossJoin = TMaybeNode<TDqPhyCrossJoin>(node)) {
+            operatorId = Visit(maybeCrossJoin.Cast(), planNode);
         }
 
         TVector<std::variant<ui32, TArgContext>> inputIds;
@@ -1372,6 +1374,15 @@ private:
         Visit(flatMap, planNode);
 
         return operatorId;
+    }
+
+    std::variant<ui32, TArgContext> Visit(const TDqPhyCrossJoin&, TQueryPlanNode& planNode) {
+        const auto name = "CrossJoin";
+
+        TOperator op;
+        op.Properties["Name"] = name;
+        
+        return AddOperator(planNode, name, std::move(op));
     }
 
     std::variant<ui32, TArgContext> Visit(const TCoMapJoinCore& join, TQueryPlanNode& planNode) {
@@ -2057,9 +2068,9 @@ NJson::TJsonValue ReconstructQueryPlanRec(const NJson::TJsonValue& plan,
         }
 
         // Sometimes we have multiple inputs for these operators, break after the first one
-        if (opName == "Filter" || opName == "TopSort" || opName == "Aggregate") {
-            break;
-        }
+        // if (opName == "Filter" || opName == "TopSort" || opName == "Aggregate") {
+        //     break;
+        // }
     }
 
     if (op.GetMapSafe().contains("Inputs")) {
@@ -2183,18 +2194,18 @@ void RemoveStats(NJson::TJsonValue& plan) {
 
 NJson::TJsonValue SimplifyQueryPlan(NJson::TJsonValue& plan) {
      static const THashSet<TString> redundantNodes = {
-       "UnionAll",
-        "Broadcast",
-        "Map",
-        "HashShuffle",
-        "Merge",
-        "Collect",
-        "Stage",
-        "Iterator",
-        "PartitionByKey",
-        "ToFlow",
-        "Member",
-        "AssumeSorted"
+    //    "UnionAll",
+    //     "Broadcast",
+    //     "Map",
+    //     "HashShuffle",
+    //     "Merge",
+    //     "Collect",
+    //     "Stage",
+    //     "Iterator",
+    //     "PartitionByKey",
+    //     "ToFlow",
+    //     "Member",
+    //     "AssumeSorted"
     };    
 
     THashMap<int, NJson::TJsonValue> planIndex;

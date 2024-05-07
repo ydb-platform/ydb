@@ -14,6 +14,7 @@ SRCS(
     fetch_request_actor.cpp
     header.cpp
     heartbeat.cpp
+    key.cpp
     metering_sink.cpp
     mirrorer.cpp
     mirrorer.h

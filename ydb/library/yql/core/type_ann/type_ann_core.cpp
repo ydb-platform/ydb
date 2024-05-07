@@ -6074,6 +6074,142 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus StructMergeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        auto maxArgc = (input->Content() == "StructDifference" || input->Content() == "StructSymmetricDifference") ? 2 : 3;
+        if (!EnsureMinMaxArgsCount(*input, 2, maxArgc, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto left = input->Child(0);
+        auto right = input->Child(1);
+
+        if (HasError(left->GetTypeAnn(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (HasError(right->GetTypeAnn(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureStructType(*left, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        auto leftType = left->GetTypeAnn()->Cast<TStructExprType>();
+
+        if (!EnsureStructType(*right, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        auto rightType = right->GetTypeAnn()->Cast<TStructExprType>();
+
+        TExprNode::TPtr mergeLambda = nullptr;
+        if (input->ChildrenSize() == 3) {
+            mergeLambda = input->ChildPtr(2);
+            auto status = ConvertToLambda(mergeLambda, ctx.Expr, 3);
+            if (status.Level != IGraphTransformer::TStatus::Ok) {
+                return status;
+            }
+        } else {
+            mergeLambda = ctx.Expr.Builder(input->Pos())
+                .Lambda()
+                    .Param("name")
+                    .Param("left")
+                    .Param("right")
+                    .Callable("Unwrap")
+                        .Callable(0, "Coalesce")
+                            .Arg(0, "left")
+                            .Arg(1, "right")
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Build();
+        }
+
+        auto buildJustMember = [&ctx, &input](const TExprNode::TPtr &st, const TStringBuf& name) -> TExprNode::TPtr {
+            return ctx.Expr.Builder(input->Pos())
+                .Callable("Just")
+                    .Callable(0, "Member")
+                        .Add(0, st)
+                        .Atom(1, name)
+                    .Seal()
+                .Seal()
+            .Build();
+        };
+
+        auto mergeMembers = [&ctx, &buildJustMember, &input, &left, &right, &mergeLambda](const TStringBuf& name, bool hasLeft, bool hasRight) -> TExprNode::TPtr {
+            auto leftMaybe = hasLeft ? 
+                buildJustMember(left, name) :
+                ctx.Expr.NewCallable(input->Pos(), "Nothing", {
+                    ExpandType(input->Pos(), *ctx.Expr.MakeType<TOptionalExprType>(right->GetTypeAnn()->Cast<TStructExprType>()->FindItemType(name)), ctx.Expr)
+                });
+            
+            auto rightMaybe = hasRight ? 
+                buildJustMember(right, name) :
+                ctx.Expr.NewCallable(input->Pos(), "Nothing", {
+                    ExpandType(input->Pos(), *ctx.Expr.MakeType<TOptionalExprType>(left->GetTypeAnn()->Cast<TStructExprType>()->FindItemType(name)), ctx.Expr)
+                });
+            
+            return ctx.Expr.Builder(input->Pos())
+                .List()
+                    .Atom(0, name)
+                    .Apply(1, mergeLambda)
+                        .With(0)
+                            .Callable("String")
+                                .Atom(0, name)
+                            .Seal()
+                        .Done()
+                        .With(1, leftMaybe)
+                        .With(2, rightMaybe)
+                    .Seal()
+                .Seal()
+            .Build();
+        };
+
+        TExprNode::TListType children;
+
+        bool isUnion = input->Content() == "StructUnion";
+        bool isIntersection = input->Content() == "StructIntersection";
+        bool isDifference = input->Content() == "StructDifference";
+        bool isSymmDifference = input->Content() == "StructSymmetricDifference";
+
+        for (const auto* leftItem : leftType->GetItems()) {
+            const auto& name = leftItem->GetName();
+            if (isUnion) {
+                if (rightType->FindItem(name)) {
+                    children.push_back(mergeMembers(name, true, true));
+                } else {
+                    children.push_back(mergeMembers(name, true, false));
+                }
+            }
+            if (isIntersection) {
+                if (rightType->FindItem(name)) {
+                    children.push_back(mergeMembers(name, true, true));
+                }
+            }
+            if (isDifference || isSymmDifference) {
+                if (!rightType->FindItem(name)) {
+                    children.push_back(mergeMembers(name, true, false));
+                }
+            }
+        }
+
+        for (const auto* rightItem : rightType->GetItems()) {
+            const auto& name = rightItem->GetName();
+            if (isUnion) {
+                if (!leftType->FindItem(name)) {
+                    children.push_back(mergeMembers(name, false, true));
+                }
+            }
+            if (isSymmDifference) {
+                if (!leftType->FindItem(name)) {
+                    children.push_back(mergeMembers(name, false, true));
+                }
+            }
+        }
+
+        output = ctx.Expr.NewCallable(input->Pos(), "AsStruct", std::move(children));
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
     IGraphTransformer::TStatus StaticMapWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -12238,6 +12374,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["PgGrouping"] = &PgGroupingWrapper;
         Functions["PgGroupingSet"] = &PgGroupingSetWrapper;
         Functions["PgToRecord"] = &PgToRecordWrapper;
+        Functions["StructUnion"] = &StructMergeWrapper;
+        Functions["StructIntersection"] = &StructMergeWrapper;
+        Functions["StructDifference"] = &StructMergeWrapper;
+        Functions["StructSymmetricDifference"] = &StructMergeWrapper;
 
         Functions["AutoDemux"] = &AutoDemuxWrapper;
         Functions["AggrCountInit"] = &AggrCountInitWrapper;

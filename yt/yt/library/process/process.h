@@ -93,6 +93,11 @@ public:
         const TString& path,
         bool copyEnv = true,
         TDuration pollPeriod = TDuration::MilliSeconds(100));
+    // We move dtor in .cpp file to avoid
+    // instantiation of ~std::unique_ptr of a forward
+    // declared class.
+    ~TSimpleProcess();
+
     void Kill(int signal) override;
     NNet::IConnectionWriterPtr GetStdInWriter() override;
     NNet::IConnectionReaderPtr GetStdOutReader() override;
@@ -105,20 +110,22 @@ private:
     std::array<NPipes::TPipe, 3> StdPipes_;
 
     NConcurrency::TPeriodicExecutorPtr AsyncWaitExecutor_;
-    struct TSpawnAction
-    {
-        std::function<bool()> Callback;
-        TString ErrorMessage;
-    };
 
-    std::vector<TSpawnAction> SpawnActions_;
+    class TProcessSpawnState;
+    std::unique_ptr<TProcessSpawnState> SpawnState_;
 
     void AddDup2FileAction(int oldFD, int newFD);
+
+    void PrepareErrorPipe();
+    void CloseErrorPipe();
+
+    void PrepareSpawnActions(sigset_t* oldSignals);
+
     void DoSpawn() override;
     void SpawnChild();
-    void ValidateSpawnResult();
     void AsyncPeriodicTryWait();
-    void Child();
+
+    void ValidateSpawnResult();
 };
 
 ////////////////////////////////////////////////////////////////////////////////

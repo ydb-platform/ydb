@@ -246,7 +246,9 @@ void TReadSession::UpdateOffsets(const NTable::TTransaction& tx)
 bool TReadSession::Close(TDuration timeout) {
     LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Closing read session. Close timeout: " << timeout);
     // Log final counters.
-    CountersLogger->Stop();
+    if (CountersLogger) {
+        CountersLogger->Stop();
+    }
     with_lock (Lock) {
         if (DumpCountersContext) {
             DumpCountersContext->Cancel();
@@ -352,7 +354,9 @@ void TReadSession::AbortImpl(TDeferredActions<false>&) {
         if (DumpCountersContext) {
             DumpCountersContext->Cancel();
         }
-        CbContext->TryGet()->Abort();
+        if (CbContext) {
+            CbContext->TryGet()->Abort();
+        }
     }
 }
 

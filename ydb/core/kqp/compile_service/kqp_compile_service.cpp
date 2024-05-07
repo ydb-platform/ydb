@@ -501,6 +501,7 @@ private:
         bool enableOlapSink = TableServiceConfig.GetEnableOlapSink();
         bool enableOltpSink = TableServiceConfig.GetEnableOltpSink();
         bool enableCreateTableAs = TableServiceConfig.GetEnableCreateTableAs();
+        auto blockChannelsMode = TableServiceConfig.GetBlockChannelsMode();
 
         auto mkqlHeavyLimit = TableServiceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit();
 
@@ -525,6 +526,7 @@ private:
             TableServiceConfig.GetEnableOlapSink() != enableOlapSink ||
             TableServiceConfig.GetEnableOltpSink() != enableOltpSink ||
             TableServiceConfig.GetEnableCreateTableAs() != enableCreateTableAs ||
+            TableServiceConfig.GetBlockChannelsMode() != blockChannelsMode ||
             TableServiceConfig.GetOldLookupJoinBehaviour() != oldLookupJoinBehaviour ||
             TableServiceConfig.GetExtractPredicateRangesLimit() != rangesLimit ||
             TableServiceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit() != mkqlHeavyLimit ||

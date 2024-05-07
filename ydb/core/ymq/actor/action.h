@@ -252,6 +252,8 @@ protected:
         auto* detailedCounters = UserCounters_ ? UserCounters_->GetDetailedCounters() : nullptr;
         const size_t errors = ErrorsCount(Response_, detailedCounters ? &detailedCounters->APIStatuses : nullptr);
 
+        FinishTs_ = TActivationContext::Now();
+
         const TDuration duration = GetRequestDuration();
         const TDuration workingDuration = GetRequestWorkingDuration();
         if (QueueLeader_ && (IsActionForQueue(Action_) || IsActionForQueueYMQ(Action_))) {
@@ -287,7 +289,6 @@ protected:
             }
         }
 
-        FinishTs_ = TActivationContext::Now();
         if (IsRequestSlow()) {
             PrintSlowRequestWarning();
         }
@@ -649,6 +650,8 @@ private:
             }
         }
 
+        Y_ABORT_UNLESS(SchemeCache_);
+
         bool isACLProtectedAccount = Cfg().GetForceAccessControl();
         if (!IsCloud() && (SecurityToken_ || (Cfg().GetForceAccessControl() && (isACLProtectedAccount = IsACLProtectedAccount(UserName_))))) {
             this->Become(&TActionActor::WaitAuthCheckMessages);
@@ -665,8 +668,6 @@ private:
                 SendReplyAndDie();
                 return;
             }
-
-            Y_ABORT_UNLESS(SchemeCache_);
 
             RequestSchemeCache(GetActionACLSourcePath()); // this also checks that requested queue (if any) does exist
             RequestTicketParser();

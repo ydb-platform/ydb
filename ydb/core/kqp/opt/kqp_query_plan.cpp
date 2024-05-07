@@ -2194,18 +2194,18 @@ void RemoveStats(NJson::TJsonValue& plan) {
 
 NJson::TJsonValue SimplifyQueryPlan(NJson::TJsonValue& plan) {
      static const THashSet<TString> redundantNodes = {
-    //    "UnionAll",
-    //     "Broadcast",
-    //     "Map",
-    //     "HashShuffle",
-    //     "Merge",
-    //     "Collect",
-    //     "Stage",
-    //     "Iterator",
-    //     "PartitionByKey",
-    //     "ToFlow",
-    //     "Member",
-    //     "AssumeSorted"
+       "UnionAll",
+        "Broadcast",
+        "Map",
+        "HashShuffle",
+        "Merge",
+        "Collect",
+        "Stage",
+        "Iterator",
+        "PartitionByKey",
+        "ToFlow",
+        "Member",
+        "AssumeSorted"
     };    
 
     THashMap<int, NJson::TJsonValue> planIndex;

@@ -64,16 +64,10 @@ IConnectionReaderPtr TNamedPipe::CreateAsyncReader()
     return CreateInputConnectionFromPath(Path_, TIODispatcher::Get()->GetPoller(), MakeStrong(this));
 }
 
-IConnectionWriterPtr TNamedPipe::CreateAsyncWriter()
+IConnectionWriterPtr TNamedPipe::CreateAsyncWriter(bool useDeliveryFence)
 {
     YT_VERIFY(!Path_.empty());
-    return CreateOutputConnectionFromPath(Path_, TIODispatcher::Get()->GetPoller(), MakeStrong(this), Capacity_);
-}
-
-IConnectionWriterPtr TNamedPipe::CreateDeliveryFencedAsyncWriter()
-{
-    YT_VERIFY(!Path_.empty());
-    return CreateDeliveryFencedOutputConnectionFromPath(Path_, TIODispatcher::Get()->GetPoller(), MakeStrong(this), Capacity_);
+    return CreateOutputConnectionFromPath(Path_, TIODispatcher::Get()->GetPoller(), MakeStrong(this), Capacity_, useDeliveryFence);
 }
 
 TString TNamedPipe::GetPath() const

@@ -1850,7 +1850,7 @@ public:
                 params.SetDatabase(*database);
             }
             if (const auto& token = settings.Settings.OAuthToken) {
-                params.SetOAuthToken(*token);
+                params.MutableOAuthToken()->SetToken(*token);
             }
             if (const auto& creds = settings.Settings.StaticCredentials) {
                 params.MutableStaticCredentials()->SetUser(creds->UserName);

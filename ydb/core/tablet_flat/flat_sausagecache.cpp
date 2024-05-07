@@ -365,17 +365,21 @@ TSharedPageRef TPrivatePageCache::LookupShared(ui32 pageId, TInfo *info) {
     return { };
 }
 
-void TPrivatePageCache::CountNewTouches(TPinned &pinned, ui32 &pages, ui64 &memory) {
+void TPrivatePageCache::CountTouches(TPinned *pinned, ui32 &newPages, ui64 &newMemory, ui64 &pinnedMemory) {
     for (auto &page : Touches) {
-        auto &pinnedCollection = pinned[page.Info->Id];
-        
-        // would insert only if first seen
-        if (!pinnedCollection.contains(page.Id)) {
-            pages++;
-            // Note: it seems useless to count sticky pages in tx usage
-            // also we want to read index from Env
-            if (!page.Sticky) {
-                memory += page.Size;
+        bool isPinned = pinned && pinned->at(page.Info->Id).contains(page.Id);
+
+        if (!isPinned) {
+            newPages++;
+        }
+
+        // Note: it seems useless to count sticky pages in tx usage
+        // also we want to read index from Env
+        if (!page.Sticky) {
+            if (isPinned) {
+                pinnedMemory += page.Size;
+            } else {
+                newMemory += page.Size;
             }
         }
     }

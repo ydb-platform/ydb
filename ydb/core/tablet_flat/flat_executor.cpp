@@ -1977,10 +1977,17 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
 
     // Note: count all new touched pages (were obtained from cache), even not on the first attempt
     ui32 newTouchedPages = 0;
-    ui64 newTouchedBytes = 0;
-    PrivatePageCache->CountNewTouches(seat->Pinned, newTouchedPages, newTouchedBytes);
+    ui64 newTouchedBytes = 0, pinnedTouchedBytes = 0;
+    PrivatePageCache->CountTouches(seat->Retries > 1 ? &seat->Pinned : nullptr,
+        newTouchedPages, newTouchedBytes, pinnedTouchedBytes);
     Counters->Cumulative()[TExecutorCounters::TX_CACHE_HITS].Increment(newTouchedPages);
     Counters->Cumulative()[TExecutorCounters::TX_BYTES_CACHED].Increment(newTouchedBytes);
+    if (seat->MemoryTouched >= pinnedTouchedBytes) {
+        // memory that was pinned (for instance by Precharge) but wasn't used during the last successful execution
+        Counters->Cumulative()[TExecutorCounters::TX_BYTES_WASTED].Increment(seat->MemoryTouched - pinnedTouchedBytes);
+    } else {
+        Y_DEBUG_ABORT("Cache counters are out of sync");
+    }
 
     UnpinTransactionPages(*seat);
 

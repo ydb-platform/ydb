@@ -85,7 +85,7 @@ namespace {
                 Closed = true;
             }
 
-            void MakeNextBatches(ui64 maxDataSize, ui64 maxCount = kMaxBatchesPerMessage) {
+            void MakeNextBatches(ui64 maxDataSize, ui64 maxCount) {
                 YQL_ENSURE(BatchesInFlight == 0);
                 ui64 dataSize = 0;
                 while (BatchesInFlight < maxCount
@@ -641,7 +641,11 @@ private:
                 shard.PushBatch(std::move(batch));
             }
             if (shard.GetBatchesInFlight() == 0) {
-                shard.MakeNextBatches(kMemoryLimitPerMessage, kMaxBatchesPerMessage);
+                shard.MakeNextBatches(
+                    kMemoryLimitPerMessage,
+                    SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable
+                        ? 1
+                        : kMaxBatchesPerMessage);
             }
         }
     }

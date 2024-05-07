@@ -2102,12 +2102,12 @@ private:
             );
             if (dstAttrs.AsMap().contains("tablet_cell_bundle") && dstAttrs["tablet_cell_bundle"] != "default") {
                 forceMerge = true;
-                dstAttrs.AsMap().erase("tablet_cell_bundle");
             }
+            dstAttrs.AsMap().erase("tablet_cell_bundle");
             if (dstAttrs.AsMap().contains("enable_dynamic_store_read")) {
                 forceMerge = true;
-                dstAttrs.AsMap().erase("enable_dynamic_store_read");
             }
+            dstAttrs.AsMap().erase("enable_dynamic_store_read");
             NYT::MergeNodes(yqlAttrs, dstAttrs);
         }
         NYT::TNode& rowSpecNode = yqlAttrs[YqlRowSpecAttribute];

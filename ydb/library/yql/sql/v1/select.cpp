@@ -76,7 +76,7 @@ public:
     }
 
     TPtr DoClone() const final {
-        return {};
+        return new TSubqueryNode(Source->CloneSource(), Alias, InSubquery, EnsureTupleSize, Scoped);
     }
 
 protected:

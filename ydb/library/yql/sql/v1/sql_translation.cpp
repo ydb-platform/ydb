@@ -4556,11 +4556,6 @@ public:
     {
     }
 
-    TReturningListColumns(TPosition pos, TNodePtr)
-        :INode(pos)
-    {
-    }
-
     void SetStar() {
         ColumnNames.clear();
         Star = true;
@@ -4584,7 +4579,7 @@ public:
     }
 
     TNodePtr DoClone() const override {
-        return new TReturningListColumns(Pos, Node->Clone());
+        return new TReturningListColumns(GetPos());
     }
 
     TAstNode* Translate(TContext& ctx) const override {

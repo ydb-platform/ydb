@@ -678,13 +678,13 @@ private:
 
     bool TryToReduceMemory() {
         bool isWaitingLeftForReduce = LeftPacker->TablePtr->TryToReduceMemory();
-        bool isWaitingRightForReduce = false;
-        if (RightPacker->TablePtr->GetAllBucketsSize()) {
-            isWaitingRightForReduce = RightPacker->TablePtr->TryToReduceMemory();
-        }
+        bool isWaitingRightForReduce = RightPacker->TablePtr->TryToReduceMemory();
 
         return isWaitingLeftForReduce || isWaitingRightForReduce;
     }
+
+    EFetchResult InputFetchResultLeft = EFetchResult::One;
+    EFetchResult InputFetchResultRight = EFetchResult::One;
 };
 
 class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWrapper> {
@@ -825,9 +825,7 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
 
 EFetchResult TGraceJoinState::DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
         while (true) {
-            ui64 used = TlsAllocState->GetUsed();
-            ui64 limit = TlsAllocState->GetLimit();
-            std::cerr << std::format("[MISHA] MEM USAGE: {}/{} ({}%), LEFT: {}, RIGHT: {}\n", used, limit, used * 100 / limit, LeftPacker->TablePtr->GetAllBucketsSize(), RightPacker->TablePtr->GetAllBucketsSize());
+            std::cerr << std::format("[MISHA] MEM USAGE: {}/{}, LEFT: {}, RIGHT: {}\n", TlsAllocState->GetUsed(), TlsAllocState->GetLimit(), LeftPacker->TablePtr->GetAllBucketsSize(), RightPacker->TablePtr->GetAllBucketsSize());
             switch(GetMode()) {
                 case EOperatingMode::InMemory: {
                     auto r = DoCalculateInMemory(ctx, output);
@@ -853,11 +851,7 @@ EFetchResult TGraceJoinState::DoCalculate(TComputationContext& ctx, NUdf::TUnbox
 }
 
 EFetchResult TGraceJoinState::DoCalculateInMemory(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
-            // TODO: remove
-            /*if (ctx.SpillerFactory) {
-                SwitchMode(EOperatingMode::Spilling, ctx);
-                return EFetchResult::Yield;
-            }*/
+
             // Collecting data for join and perform join (batch or full)
             while (!*JoinCompleted ) {
 
@@ -953,10 +947,10 @@ EFetchResult TGraceJoinState::DoCalculateInMemory(TComputationContext& ctx, NUdf
                     }
                 }
 
-                /*if (ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
+                if (ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
                     SwitchMode(EOperatingMode::Spilling, ctx);
                     return EFetchResult::Yield;
-                }*/
+                }
 
                 if (resultLeft == EFetchResult::Finish ) {
                     *HaveMoreLeftRows = false;
@@ -973,9 +967,7 @@ EFetchResult TGraceJoinState::DoCalculateInMemory(TComputationContext& ctx, NUdf
                     return EFetchResult::Yield;
                 }
 
-                /*if (!*HaveMoreRightRows && !*PartialJoinCompleted && LeftPacker->TuplesBatchPacked >= LeftPacker->BatchSize ) {
-                    std::cerr << std::format("[MISHA] LEFT TOTAL TUPLES: {}\n", LeftPacker->TablePtr->GetTuplesNum());
-                    std::cerr << std::format("[MISHA] RIGHT TOTAL TUPLES: {}\n", RightPacker->TablePtr->GetTuplesNum());
+                if (!*HaveMoreRightRows && !*PartialJoinCompleted && LeftPacker->TuplesBatchPacked >= LeftPacker->BatchSize ) {
                     *PartialJoinCompleted = true;
                     JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
                     JoinedTablePtr->ResetIterator();
@@ -984,8 +976,6 @@ EFetchResult TGraceJoinState::DoCalculateInMemory(TComputationContext& ctx, NUdf
 
 
                 if (!*HaveMoreLeftRows && !*PartialJoinCompleted && RightPacker->TuplesBatchPacked >= RightPacker->BatchSize ) {
-                    std::cerr << std::format("[MISHA] LEFT TOTAL TUPLES: {}\n", LeftPacker->TablePtr->GetTuplesNum());
-                    std::cerr << std::format("[MISHA] RIGHT TOTAL TUPLES: {}\n", RightPacker->TablePtr->GetTuplesNum());
                     *PartialJoinCompleted = true;
                     JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
                     JoinedTablePtr->ResetIterator();
@@ -993,8 +983,6 @@ EFetchResult TGraceJoinState::DoCalculateInMemory(TComputationContext& ctx, NUdf
                 }
 
                 if (!*HaveMoreRightRows && !*HaveMoreLeftRows && !*PartialJoinCompleted) {
-                    std::cerr << std::format("[MISHA] LEFT TOTAL TUPLES: {}\n", LeftPacker->TablePtr->GetTuplesNum());
-                    std::cerr << std::format("[MISHA] RIGHT TOTAL TUPLES: {}\n", RightPacker->TablePtr->GetTuplesNum());
                     *PartialJoinCompleted = true;
                     LeftPacker->StartTime = std::chrono::system_clock::now();
                     RightPacker->StartTime = std::chrono::system_clock::now();
@@ -1007,7 +995,7 @@ EFetchResult TGraceJoinState::DoCalculateInMemory(TComputationContext& ctx, NUdf
                     LeftPacker->EndTime = std::chrono::system_clock::now();
                     RightPacker->EndTime = std::chrono::system_clock::now();
 
-                }*/
+                }
 
             }
 
@@ -1015,7 +1003,7 @@ EFetchResult TGraceJoinState::DoCalculateInMemory(TComputationContext& ctx, NUdf
 }
 
 void TGraceJoinState::DoCalculateWithSpilling(TComputationContext& ctx) {
-    /*bool leftBusy = LeftPacker->TablePtr->UpdateAndCheckIfBusy();
+    bool leftBusy = LeftPacker->TablePtr->UpdateAndCheckIfBusy();
     bool rightBusy = RightPacker->TablePtr->UpdateAndCheckIfBusy();
     
     if (rightBusy || leftBusy) {
@@ -1024,42 +1012,31 @@ void TGraceJoinState::DoCalculateWithSpilling(TComputationContext& ctx) {
 
     // TODO remove this check. Used for debug.
     LeftPacker->TablePtr->EnsureAllSpilledBucketsAreReady();
-    RightPacker->TablePtr->EnsureAllSpilledBucketsAreReady();*/
+    RightPacker->TablePtr->EnsureAllSpilledBucketsAreReady();
 
-    if (!*HaveMoreRightRows && !*HaveMoreLeftRows) {
+    if (InputFetchResultLeft == EFetchResult::Finish && InputFetchResultRight == EFetchResult::Finish) {
         SwitchMode(EOperatingMode::ProcessSpilled, ctx);
         return;
     }
 
-    /*if (!HasMemoryForProcessing()) {
+    if (!HasMemoryForProcessing()) {
         bool isWaitingForReduce = TryToReduceMemory();
-        ui64 used = TlsAllocState->GetUsed();
-        ui64 limit = TlsAllocState->GetLimit();
-        std::cerr << std::format("[MISHA] MEM USAGE (AFTER REDUCE): {}/{} ({}%), LEFT: {}, RIGHT: {}\n", used, limit, used * 100 / limit, LeftPacker->TablePtr->GetAllBucketsSize(), RightPacker->TablePtr->GetAllBucketsSize());
         if (isWaitingForReduce) return;
-    }*/
+    }
 
-    while (*HaveMoreRightRows || *HaveMoreLeftRows) {
-        const NKikimr::NMiniKQL::EFetchResult resultLeft = FlowLeft->FetchValues(ctx, LeftPacker->TuplePtrs.data());
-        NKikimr::NMiniKQL::EFetchResult resultRight;
-        /* if (resultLeft == EFetchResult::Finish) {
-            std::cerr << std::format("[MISHA] LEFT FINISHED\n");
-        }*/ 
+    while (InputFetchResultLeft != EFetchResult::Finish || InputFetchResultRight != EFetchResult::Finish) {
+        InputFetchResultLeft = FlowLeft->FetchValues(ctx, LeftPacker->TuplePtrs.data());
 
         if (IsSelfJoin_) {
-            resultRight = resultLeft;
+            InputFetchResultRight = InputFetchResultLeft;
             if (!SelfJoinSameKeys_) {
                 std::copy_n(LeftPacker->TupleHolder.begin(), LeftPacker->TotalColumnsNum, RightPacker->TupleHolder.begin());
             }
         } else {
-            resultRight = FlowRight->FetchValues(ctx, RightPacker->TuplePtrs.data());
-            // std::cerr << std::format("[MISHA] RIGHT VALUE: {}\n", (int)resultRight);
-            if (resultRight == EFetchResult::Finish) {
-                std::cerr << std::format("[MISHA] RIGHT FINISHED\n");
-            }
+            InputFetchResultRight = FlowRight->FetchValues(ctx, RightPacker->TuplePtrs.data());
         }
 
-        if (resultLeft == EFetchResult::One) {
+        if (InputFetchResultLeft == EFetchResult::One) {
             if (LeftPacker->TuplesPacked == 0) {
                 LeftPacker->StartTime = std::chrono::system_clock::now();
             }
@@ -1067,7 +1044,7 @@ void TGraceJoinState::DoCalculateWithSpilling(TComputationContext& ctx) {
             LeftPacker->TablePtr->AddTuple(LeftPacker->TupleIntVals.data(), LeftPacker->TupleStrings.data(), LeftPacker->TupleStrSizes.data(), LeftPacker->IColumnsHolder.data());
         }
 
-        if (resultRight == EFetchResult::One) {
+        if (InputFetchResultRight == EFetchResult::One) {
             if (RightPacker->TuplesPacked == 0) {
                 RightPacker->StartTime = std::chrono::system_clock::now();
             }
@@ -1078,23 +1055,13 @@ void TGraceJoinState::DoCalculateWithSpilling(TComputationContext& ctx) {
             }
         }
 
-        if (resultLeft == EFetchResult::Finish ) {
-            *HaveMoreLeftRows = false;
-        }
-
-
-        if (resultRight == EFetchResult::Finish ) {
-            *HaveMoreRightRows = false;
-        }
-
-        if ((resultLeft == EFetchResult::Yield && (!*HaveMoreRightRows || resultRight == EFetchResult::Yield)) ||
-            (resultRight == EFetchResult::Yield && !*HaveMoreLeftRows))
+        if ((InputFetchResultLeft == EFetchResult::Yield && (InputFetchResultLeft == EFetchResult::Finish || InputFetchResultRight == EFetchResult::Yield)) ||
+            (InputFetchResultRight == EFetchResult::Yield && InputFetchResultLeft == EFetchResult::Finish))
         {
             return;
         }
     }
 
-    std::cerr << std::format("[MISHA] FINALIZING\n");
     LeftPacker->TablePtr->FinalizeSpilling();
     RightPacker->TablePtr->FinalizeSpilling();
 }

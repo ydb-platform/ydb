@@ -304,7 +304,7 @@ bool IsDqRead(const TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& 
                         ctx))) {
                     return true;
                 }
-                if (hasErrors) {
+                if (!node.Ref().IsCallable(ConfigureName) && hasErrors) {
                     *hasErrors = true;
                 }
             }

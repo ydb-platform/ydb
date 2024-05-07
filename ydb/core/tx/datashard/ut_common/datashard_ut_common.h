@@ -770,7 +770,19 @@ TTestActorRuntimeBase::TEventObserverHolderPair ReplaceEvProposeTransactionWithE
 
 void UploadRows(TTestActorRuntime& runtime, const TString& tablePath, const TVector<std::pair<TString, Ydb::Type_PrimitiveTypeId>>& types, const TVector<TCell>& keys, const TVector<TCell>& values);
 
-void SendProposeToCoordinator(Tests::TServer::TPtr server, const std::vector<ui64>& affectedTabletIds, ui64 minStep, ui64 maxStep, ui64 txId);
+struct TSendProposeToCoordinatorOptions {
+    const ui64 TxId;
+    const ui64 Coordinator;
+    ui64 MinStep = 0;
+    ui64 MaxStep = Max<ui64>();
+    bool Volatile = false;
+};
+
+void SendProposeToCoordinator(
+    TTestActorRuntime& runtime,
+    const TActorId& sender,
+    const std::vector<ui64>& shards,
+    const TSendProposeToCoordinatorOptions& options);
 
 struct IsTxResultComplete {
     bool operator()(IEventHandle& ev)

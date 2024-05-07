@@ -434,9 +434,14 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
 
         Cout << "========= Send propose to coordinator =========\n";
-        {
-            SendProposeToCoordinator(server, shards, minStep, maxStep, txId);
-        }
+        SendProposeToCoordinator(
+            runtime, sender, shards, {
+                .TxId = txId,
+                .Coordinator = coordinator,
+                .MinStep = minStep,
+                .MaxStep = maxStep,
+                .Volatile = Volatile,
+            });
 
         Cout << "========= Wait for completed transaction =========\n";
         {
@@ -513,6 +518,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         ui64 txId = 100;
         ui64 minStep1, maxStep1;
         ui64 minStep2, maxStep2;
+        ui64 coordinator;
 
         Cerr << "===== Write prepared to table 1" << Endl;
         {
@@ -521,6 +527,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
             minStep1 = writeResult.GetMinStep();
             maxStep1 = writeResult.GetMaxStep();
+            coordinator = writeResult.GetDomainCoordinators(0);
         }
 
         Cerr << "===== Write prepared to table 2" << Endl;
@@ -532,9 +539,14 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
 
         Cerr << "========= Send propose to coordinator" << Endl;
-        {
-            SendProposeToCoordinator(server, {tabletId1, tabletId2}, Max(minStep1, minStep2), Min(maxStep1, maxStep2), txId);
-        }
+        SendProposeToCoordinator(
+            runtime, sender, {tabletId1, tabletId2}, {
+                .TxId = txId,
+                .Coordinator = coordinator,
+                .MinStep = Max(minStep1, minStep2),
+                .MaxStep = Min(maxStep1, maxStep2),
+                .Volatile = Volatile,
+            });
 
         Cerr << "========= Wait for completed transactions" << Endl;
         for (ui8 i = 0; i < 1; ++i)
@@ -574,6 +586,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         ui64 txId = 100;
         ui64 minStep, maxStep;
+        ui64 coordinator;
 
         Cout << "========= Send prepare =========\n";
         {
@@ -582,12 +595,18 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
             minStep = writeResult.GetMinStep();
             maxStep = writeResult.GetMaxStep();
+            coordinator = writeResult.GetDomainCoordinators(0);
         }
 
         Cout << "========= Send propose to coordinator =========\n";
-        {
-            SendProposeToCoordinator(server, shards, minStep, maxStep, txId);
-        }
+        SendProposeToCoordinator(
+            runtime, sender, shards, {
+                .TxId = txId,
+                .Coordinator = coordinator,
+                .MinStep = minStep,
+                .MaxStep = maxStep,
+                .Volatile = Volatile,
+            });
 
         Cout << "========= Wait for completed transaction =========\n";
         {
@@ -642,9 +661,14 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
 
         Cout << "========= Send propose to coordinator =========\n";
-        {
-            SendProposeToCoordinator(server, shards, minStep, maxStep, txId);
-        }
+        SendProposeToCoordinator(
+            runtime, sender, shards, {
+                .TxId = txId,
+                .Coordinator = coordinator,
+                .MinStep = minStep,
+                .MaxStep = maxStep,
+                .Volatile = Volatile,
+            });
 
         Cout << "========= Wait for completed transaction =========\n";
         {
@@ -778,30 +802,6 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
     }
 
-    void SendProposeToCoordinator(
-            TTestActorRuntime& runtime,
-            const TActorId& sender,
-            ui64 txId,
-            ui64 coordinator,
-            ui64 minStep,
-            ui64 maxStep,
-            const std::vector<ui64>& shards)
-    {
-        Cerr << "========= Sending propose to coordinator " << coordinator << " =========" << Endl;
-
-        auto req = std::make_unique<TEvTxProxy::TEvProposeTransaction>(coordinator, txId, 0, minStep, maxStep);
-
-        auto* affectedSet = req->Record.MutableTransaction()->MutableAffectedSet();
-        affectedSet->Reserve(shards.size());
-        for (ui64 shardId : shards) {
-            auto* x = affectedSet->Add();
-            x->SetTabletId(shardId);
-            x->SetFlags(TEvTxProxy::TEvProposeTransaction::AffectedWrite);
-        }
-
-        SendViaPipeCache(runtime, coordinator, sender, std::move(req));
-    }
-
     void RunUpsertWithArbiter(
             TTestActorRuntime& runtime,
             const TTableId& tableId,
@@ -864,7 +864,15 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                 ++observedReadSets;
             });
 
-        SendProposeToCoordinator(runtime, sender, txId, coordinator, minStep, maxStep, shards);
+        Cerr << "========= Sending propose to coordinator " << coordinator << " =========" << Endl;
+        SendProposeToCoordinator(
+            runtime, sender, shards, {
+                .TxId = txId,
+                .Coordinator = coordinator,
+                .MinStep = minStep,
+                .MaxStep = maxStep,
+                .Volatile = true,
+            });
 
         Cerr << "========= Waiting for write results =========" << Endl;
         for (size_t i = 0; i < expectedResults; ++i) {
@@ -1052,7 +1060,15 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                 blockedReadSets.push_back(std::move(ev));
             });
 
-        SendProposeToCoordinator(runtime, sender, txId, coordinator, minStep, maxStep, shards);
+        Cerr << "========= Sending propose to coordinator " << coordinator << " =========" << Endl;
+        SendProposeToCoordinator(
+            runtime, sender, shards, {
+                .TxId = txId,
+                .Coordinator = coordinator,
+                .MinStep = minStep,
+                .MaxStep = maxStep,
+                .Volatile = true,
+            });
 
         // arbiter will send 3 expectations
         // shards will send 1 commit decision + 1 expectation
@@ -1135,7 +1151,15 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                 blockedReadSets.push_back(std::move(ev));
             });
 
-        SendProposeToCoordinator(runtime, sender, txId, coordinator, minStep, maxStep, shards);
+        Cerr << "========= Sending propose to coordinator " << coordinator << " =========" << Endl;
+        SendProposeToCoordinator(
+            runtime, sender, shards, {
+                .TxId = txId,
+                .Coordinator = coordinator,
+                .MinStep = minStep,
+                .MaxStep = maxStep,
+                .Volatile = true,
+            });
 
         // arbiter will send 3 expectations
         // shards will send 1 commit decision + 1 expectation

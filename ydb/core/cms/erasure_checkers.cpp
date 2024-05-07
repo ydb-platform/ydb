@@ -10,8 +10,8 @@ bool TErasureCounterBase::IsDown(const TVDiskInfo &vdisk, TClusterInfoPtr info, 
     // Check we received info for PDisk.
     if (!pdisk.NodeId) {
         error.Code = TStatus::DISALLOW_TEMP;
-        error.Reason = TStringBuilder() << vdisk.PrettyItemName() << " has missing info for " << pdisk.PrettyItemName();
-        Down.emplace(vdisk.VDiskId, error.Reason);
+        error.Reason = TReason(TStringBuilder() << vdisk.PrettyItemName() << " has missing info for " << pdisk.PrettyItemName());
+        Down.emplace(vdisk.VDiskId, error.Reason.GetMessage());
         return false;
     }
 
@@ -29,8 +29,8 @@ bool TErasureCounterBase::IsLocked(const TVDiskInfo &vdisk, TClusterInfoPtr info
     // Check we received info for VDisk.
     if (!vdisk.NodeId || !vdisk.PDiskId) {
         error.Code = TStatus::DISALLOW_TEMP;
-        error.Reason = TStringBuilder() << vdisk.PrettyItemName() << " has missing info";
-        Down.emplace(vdisk.VDiskId, error.Reason);
+        error.Reason = TReason(TStringBuilder() << vdisk.PrettyItemName() << " has missing info");
+        Down.emplace(vdisk.VDiskId, error.Reason.GetMessage());
         return false;
     }
 
@@ -71,17 +71,18 @@ bool TErasureCounterBase::CheckForMaxAvailability(TClusterInfoPtr info, TErrorIn
     if (Locked.size() + Down.size() > 1) {
         if (HasAlreadyLockedDisks && !allowPartial) {
             error.Code = TStatus::DISALLOW;
-            error.Reason = "The request is incorrect: too many disks from the one group. "
-                           "Fix the request or set PartialPermissionAllowed to true";
+            error.Reason = TReason("The request is incorrect: too many disks from the one group. "
+                                   "Fix the request or set PartialPermissionAllowed to true");
             return false;
         }
 
         error.Code = TStatus::DISALLOW_TEMP;
-        error.Reason = TStringBuilder() << "Issue in affected group with id '" << GroupId << "'"
+        TString message = TStringBuilder()
+            << "Issue in affected group with id '" << GroupId << "'"
             << ": too many unavailable vdisks"
             << ". Locked: " << DumpVDisksInfo(Locked, info)
             << ". Down: " << DumpVDisksInfo(Down, info);
-        error.ReasonType = TStatus::TOO_MANY_UNAVAILABLE_VDISKS;
+        error.Reason = TReason(message, TReason::EType::TOO_MANY_UNAVAILABLE_VDISKS);
         error.Deadline = defaultDeadline;
         return false;
     }
@@ -97,20 +98,20 @@ bool TErasureCounterBase::CountVDisk(const TVDiskInfo &vdisk, TClusterInfoPtr in
     // Check locks.
     TErrorInfo err;
     if (IsLocked(vdisk, info, retryTime, duration, err)) {
-        Locked.emplace(vdisk.VDiskId, err.Reason);
+        Locked.emplace(vdisk.VDiskId, err.Reason.GetMessage());
         error.Code = err.Code;
-        error.Reason = TStringBuilder() << "Issue in affected group with id '" << GroupId << "'"
-            << ": " << err.Reason;
+        error.Reason = TReason(TStringBuilder() << "Issue in affected group with id '" << GroupId << "'"
+            << ": " << err.Reason.GetMessage());
         error.Deadline = Max(error.Deadline, err.Deadline);
         return true;
     }
 
     // Check if disk is down.
     if (IsDown(vdisk, info, retryTime, err)) {
-        Down.emplace(vdisk.VDiskId, err.Reason);
+        Down.emplace(vdisk.VDiskId, err.Reason.GetMessage());
         error.Code = err.Code;
-        error.Reason = TStringBuilder() << "Issue in affected group with id '" << GroupId << "'"
-            << ": " << err.Reason;
+        error.Reason = TReason(TStringBuilder() << "Issue in affected group with id '" << GroupId << "'"
+            << ": " << err.Reason.GetMessage());
         error.Deadline = Max(error.Deadline, err.Deadline);
         return true;
     }
@@ -136,8 +137,8 @@ bool TDefaultErasureCounter::CheckForKeepAvailability(TClusterInfoPtr info, TErr
 {
     if (HasAlreadyLockedDisks && allowPartial) {
         error.Code = TStatus::DISALLOW_TEMP;
-        error.Reason = "You cannot get two or more disks from the same group at the same time"
-                        " without specifying the PartialPermissionAllowed parameter";
+        error.Reason = TReason("You cannot get two or more disks from the same group at the same time"
+                               " without specifying the PartialPermissionAllowed parameter");
         error.Deadline = defaultDeadline;
         return false;
     }
@@ -145,17 +146,17 @@ bool TDefaultErasureCounter::CheckForKeepAvailability(TClusterInfoPtr info, TErr
     if (Down.size() + Locked.size() > info->BSGroup(GroupId).Erasure.ParityParts()) {
         if (HasAlreadyLockedDisks && !allowPartial) {
             error.Code = TStatus::DISALLOW;
-            error.Reason = "The request is incorrect: too many disks from the one group. "
-                           "Fix the request or set PartialPermissionAllowed to true";
+            error.Reason = TReason("The request is incorrect: too many disks from the one group. "
+                                   "Fix the request or set PartialPermissionAllowed to true");
             return false;
         }
 
         error.Code = TStatus::DISALLOW_TEMP;
-        error.Reason = TStringBuilder() << "Issue in affected group with id '" << GroupId << "'"
+        TString message = TStringBuilder() << "Issue in affected group with id '" << GroupId << "'"
             << ": too many unavailable vdisks"
             << ". Locked: " << DumpVDisksInfo(Locked, info)
             << ". Down: " << DumpVDisksInfo(Down, info);
-        error.ReasonType = TStatus::TOO_MANY_UNAVAILABLE_VDISKS;
+        error.Reason = TReason(message, TReason::EType::TOO_MANY_UNAVAILABLE_VDISKS);
         error.Deadline = defaultDeadline;
         return false;
     }
@@ -168,8 +169,8 @@ bool TMirror3dcCounter::CheckForKeepAvailability(TClusterInfoPtr info, TErrorInf
 {
     if (HasAlreadyLockedDisks && allowPartial) {
         error.Code = TStatus::DISALLOW_TEMP;
-        error.Reason = "You cannot get two or more disks from the same group at the same time"
-                        " without specifying the PartialPermissionAllowed parameter";
+        error.Reason = TReason("You cannot get two or more disks from the same group at the same time"
+                               " without specifying the PartialPermissionAllowed parameter");
         error.Deadline = defaultDeadline;
         return false;
     }
@@ -186,29 +187,29 @@ bool TMirror3dcCounter::CheckForKeepAvailability(TClusterInfoPtr info, TErrorInf
 
     if (HasAlreadyLockedDisks && !allowPartial) {
         error.Code = TStatus::DISALLOW;
-        error.Reason = "The request is incorrect: too many disks from the one group. "
-                       "Fix the request or set PartialPermissionAllowed to true";
+        error.Reason = TReason("The request is incorrect: too many disks from the one group. "
+                               "Fix the request or set PartialPermissionAllowed to true");
         return false;
     }
 
     if (DataCenterDisabledNodes.size() > 2) {
         error.Code = TStatus::DISALLOW_TEMP;
-        error.Reason = TStringBuilder() << "Issue in affected group with id '" << GroupId << "'"
+        TString message = TStringBuilder() << "Issue in affected group with id '" << GroupId << "'"
             << ": too many unavailable vdisks"
             << ". Number of data centers with unavailable vdisks: " << DataCenterDisabledNodes.size()
             << ". Locked: " << DumpVDisksInfo(Locked, info)
             << ". Down: " << DumpVDisksInfo(Down, info);
-        error.ReasonType = TStatus::TOO_MANY_UNAVAILABLE_VDISKS;
+        error.Reason = TReason(message, TReason::EType::TOO_MANY_UNAVAILABLE_VDISKS);
         error.Deadline = defaultDeadline;
         return false;
     }
 
     error.Code = TStatus::DISALLOW_TEMP;
-    error.Reason = TStringBuilder() << "Issue in affected group with id '" << GroupId << "'"
+    TString message = TStringBuilder() << "Issue in affected group with id '" << GroupId << "'"
         << ": too many unavailable vdisks"
         << ". Locked: " << DumpVDisksInfo(Locked, info)
         << ". Down: " << DumpVDisksInfo(Down, info);
-    error.ReasonType = TStatus::TOO_MANY_UNAVAILABLE_VDISKS;
+    error.Reason = TReason(message, TReason::EType::TOO_MANY_UNAVAILABLE_VDISKS);
     error.Deadline = defaultDeadline;
 
     return false;

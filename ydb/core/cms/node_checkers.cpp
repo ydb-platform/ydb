@@ -108,8 +108,8 @@ INodesChecker::TTryToLockResult TNodesLimitsCounterBase::TryToLockNode(ui32 node
         case NODE_STATE_UNSPECIFIED:
         case NODE_STATE_LOCKED:
         case NODE_STATE_RESTART: {
-            TString reason = TStringBuilder() << ReasonPrefix(nodeId)
-                << ": node state: '" << nodeState << "'";
+            TReason reason = TReason(TStringBuilder() << ReasonPrefix(nodeId)
+                << ": node state: '" << nodeState << "'");
             return TTryToLockResult::Fail(reason);
         }
         case NODE_STATE_DOWN:
@@ -129,22 +129,24 @@ INodesChecker::TTryToLockResult TNodesLimitsCounterBase::TryToLockNode(ui32 node
     const auto disabledNodes = LockedNodesCount + DownNodesCount + 1;
 
     if (DisabledNodesLimit > 0 && disabledNodes > DisabledNodesLimit) {
-        TString reason = TStringBuilder() << ReasonPrefix(nodeId)
+        TString message = TStringBuilder() << ReasonPrefix(nodeId)
             << ": too many unavailable nodes."
             << " Locked: " << LockedNodesCount
             << ", down: " << DownNodesCount
             << ", limit: " << DisabledNodesLimit;
-        return TTryToLockResult::Fail(reason, DisabledNodesLimitReachedReasonType());
+        TReason reason = TReason(message, DisabledNodesLimitReachedReasonType());
+        return TTryToLockResult::Fail(reason);
     }
 
     if (DisabledNodesRatioLimit > 0 && (disabledNodes * 100 > NodeToState.size() * DisabledNodesRatioLimit)) {
-        TString reason = TStringBuilder() << ReasonPrefix(nodeId)
+        TString message = TStringBuilder() << ReasonPrefix(nodeId)
             << ": too many unavailable nodes."
             << " Locked: " << LockedNodesCount
             << ", down: " << DownNodesCount
             << ", total: " << NodeToState.size()
             << ", limit: " << DisabledNodesRatioLimit << "%";
-        return TTryToLockResult::Fail(reason, DisabledNodesLimitReachedReasonType());
+        TReason reason = TReason(message, DisabledNodesLimitReachedReasonType());
+        return TTryToLockResult::Fail(reason);
     }
 
     return TTryToLockResult::Success();
@@ -166,8 +168,8 @@ INodesChecker::TTryToLockResult TSysTabletsNodesCounter::TryToLockNode(ui32 node
         case NODE_STATE_UNSPECIFIED:
         case NODE_STATE_LOCKED:
         case NODE_STATE_RESTART: {
-            TString reason = TStringBuilder() << "Cannot lock node '" << nodeId << "'"
-                << ": node state: '" << nodeState << "'";
+            TReason reason = TReason(TStringBuilder() << "Cannot lock node '" << nodeId << "'"
+                << ": node state: '" << nodeState << "'");
             return TTryToLockResult::Fail(reason);
         }      
         case NODE_STATE_DOWN:
@@ -202,34 +204,14 @@ INodesChecker::TTryToLockResult TSysTabletsNodesCounter::TryToLockNode(ui32 node
             Y_ABORT("Unknown availability mode");
     }
 
-    TString reason = TStringBuilder() << "Cannot lock node '" << nodeId << "'"
+    TString message = TStringBuilder() << "Cannot lock node '" << nodeId << "'"
         << ": tablet '" << NKikimrConfig::TBootstrap_ETabletType_Name(TabletType) << "'"
         << " has too many unavailable nodes."
         << " Locked: " << LockedNodesCount
         << ", down: " << DownNodesCount
         << ", limit: " << limit;
-    return TTryToLockResult::Fail(reason, TStatus::SYS_TABLETS_NODE_LIMIT_REACHED);
+    TReason reason = TReason(message, TReason::EType::SYS_TABLETS_NODE_LIMIT_REACHED);
+    return TTryToLockResult::Fail(reason);
 }
-
-INodesChecker::TTryToLockResult INodesChecker::TTryToLockResult::Success() {
-    return TTryToLockResult(true);
-}
-
-INodesChecker::TTryToLockResult INodesChecker::TTryToLockResult::Fail(const TString& reason,
-                                                                      TStatus::EReasonType reasonType) {
-    return TTryToLockResult(false, reason, reasonType);
-}
-
-INodesChecker::TTryToLockResult INodesChecker::TTryToLockResult::Fail(const TString& reason) {
-    return TTryToLockResult(false, reason, TStatus::EReasonType::TStatus_EReasonType_REASON_TYPE_UNSPECIFIED);
-}
-
-INodesChecker::TTryToLockResult::TTryToLockResult(bool isSuccess, const TString& reason, TStatus::EReasonType reasonType) 
-    : isSuccess(isSuccess)
-    , Reason(reason)
-    , ReasonType(reasonType) {};
-
-INodesChecker::TTryToLockResult::TTryToLockResult(bool isSuccess) 
-    : isSuccess(isSuccess) {}
 
 } // namespace NKikimr::NCms

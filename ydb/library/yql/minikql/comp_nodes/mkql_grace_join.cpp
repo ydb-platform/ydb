@@ -1105,13 +1105,16 @@ EFetchResult TGraceJoinState::ProcessSpilledData(TComputationContext&, NUdf::TUn
 
         if (!LeftPacker->TablePtr->IsBucketInMemory(NextBucketsToJoin)) {
             LeftPacker->TablePtr->StartLoadingBucket(NextBucketsToJoin);
+            std::cerr << std::format("[MISHA] LEFT started loading bucket {}\n", NextBucketsToJoin);
         }
 
         if (!RightPacker->TablePtr->IsBucketInMemory(NextBucketsToJoin)) {
             RightPacker->TablePtr->StartLoadingBucket(NextBucketsToJoin);
+            std::cerr << std::format("[MISHA] RIGHT started loading bucket {}\n", NextBucketsToJoin);
         }
 
         if (LeftPacker->TablePtr->IsBucketInMemory(NextBucketsToJoin) && RightPacker->TablePtr->IsBucketInMemory(NextBucketsToJoin)) {
+            std::cerr << std::format("[MISHA] buckets {} in memory\n", NextBucketsToJoin);
             while (JoinedTablePtr->NextJoinedData(LeftPacker->JoinTupleData, RightPacker->JoinTupleData)) {
                 LeftPacker->UnPack();
                 RightPacker->UnPack();

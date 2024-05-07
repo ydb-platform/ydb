@@ -284,7 +284,7 @@ struct TTableBucketSpiller {
     }
 
     bool HasAnythingToProcess() const {
-        return NextVectorToProcess != ENextVectorToProcess::None;
+        return NextVectorToProcess != ENextVectorToProcess::None || HasRunningAsyncIoOperation();
     }
 
     enum class EState {
@@ -461,6 +461,9 @@ public:
 
     // After this call either all buckets are spilled/loaded or need Yield.
     bool UpdateAndCheckIfBusy() {
+        for (ui64 i = 0; i < NumberOfBuckets; ++i) {
+            TableBucketsSpiller[i].Update();
+        }
         while (HasAnythingToProcess()) {
             for (ui64 i = 0; i < NumberOfBuckets; ++i) {
                 TableBucketsSpiller[i].Update();

@@ -23,7 +23,7 @@ left semi join
 on
     c.c_custkey = o.o_custkey
 where
-    CAST(o_orderdate AS Timestamp) < Date('1995-03-08')
+    o_orderdate < Date('1995-03-08')
 );
 
 $join2 = (
@@ -40,7 +40,7 @@ join
 on
     l.l_orderkey = o.o_orderkey
 where
-    CAST(l_shipdate AS Timestamp) > Date('1995-03-08')
+    l_shipdate > Date('1995-03-08')
 );
 
 select

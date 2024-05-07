@@ -6691,10 +6691,24 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
         UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
     }
     
-    Y_UNIT_TEST(DisallowNonStructSchema) {
+    Y_UNIT_TEST(YtAlternativeSchemaSyntax) {
         NYql::TAstParseResult res = SqlToYql(R"(
-            SELECT * FROM plato.Input WITH schema(a String);
+            SELECT * FROM plato.Input WITH schema(Int32 as y, String as x);
         )");
-        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "Expected Struct type after SCHEMA hint");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "userschema") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
+                    line.find(R"__('('('"userschema" (StructType '('"y" (DataType 'Int32)) '('"x" (DataType 'String))))))__"));
+            }
+        };
+
+        TWordCountHive elementStat = {{TString("userschema"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["userschema"]);
+
+        // UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "Expected Struct type after SCHEMA hint");
     }
 }

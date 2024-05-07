@@ -1,6 +1,6 @@
 import "ydb/core/tx/columnshard/common/protos/blob_range.proto";
 import "ydb/core/tx/columnshard/common/protos/snapshot.proto";
-import "ydb/core/protos/tx_columnshard.proto";
+import "ydb/core/tx/columnshard/engines/protos/portion_info.proto";
 
 package NKikimrColumnShardDataSharingProto;
 

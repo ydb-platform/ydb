@@ -296,6 +296,22 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
     }
 
+    Y_UNIT_TEST(AlterSequenceStmt) {
+        auto res = PgSqlToYql("ALTER SEQUENCE IF EXISTS seq AS integer START WITH 10 INCREMENT BY 2 NO MINVALUE NO MAXVALUE CACHE 3;");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+        TString program = R"(
+            (
+                (let world (Configure! world (DataSource 'config) 'OrderedColumns))
+                (let world (Write! world (DataSink '"kikimr" '"")
+                 (Key '('pgObject (String '"seq") (String 'pgSequence)))
+                 (Void) '('('mode 'alter_if_exists) '('"as" '"int4") '('"start" '10) '('"increment" '2) '('"cache" '3))))
+                 (let world (CommitAll! world)) (return world)
+            )
+        )";
+        const auto expectedAst = NYql::ParseAst(program);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
+
     Y_UNIT_TEST(VariableShowStmt) {
         auto res = PgSqlToYql("Show server_version_num");
         UNIT_ASSERT(res.Root);

@@ -298,7 +298,7 @@ namespace {
         return true;
     }
 
-    bool ParseConstraintNode(TExprContext& ctx, TKikimrColumnMetadata& columnMeta, const TExprList& columnTuple, TCoNameValueTuple constraint,  TKikimrConfiguration& config, bool isAlter = false) {
+    bool ParseConstraintNode(TExprContext& ctx, TKikimrColumnMetadata& columnMeta, const TExprList& columnTuple, TCoNameValueTuple constraint,  TKikimrConfiguration& config, bool& needEval, bool isAlter = false) {
         auto nameNode = columnTuple.Item(0).Cast<TCoAtom>();
         auto typeNode = columnTuple.Item(1);
 
@@ -345,9 +345,23 @@ namespace {
             }
 
             if (!skipAnnotationValidation && !IsSameAnnotation(*defaultType, *actualType)) {
-                ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "Default expr " << columnName
-                    << " type mismatch, expected: " << (*actualType) << ", actual: " << *(defaultType)));
+                auto constrPtr = constraint.Value().Cast().Ptr();
+                auto status = TryConvertTo(constrPtr, *type, ctx);
+                if (status == IGraphTransformer::TStatus::Error) {
+                    ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "Default expr " << columnName
+                        << " type mismatch, expected: " << (*actualType) << ", actual: " << *(defaultType)));
                     return false;
+                } else if (status == IGraphTransformer::TStatus::Repeat) {
+                    auto evaluatedExpr = ctx.Builder(constrPtr->Pos())
+                        .Callable("EvaluateExpr")
+                        .Add(0, constrPtr)
+                        .Seal()
+                        .Build();
+
+                    constraint.Ptr()->ChildRef(TCoNameValueTuple::idx_Value) = evaluatedExpr;
+                    needEval = true;
+                    return true;
+                }
             }
 
             if (columnMeta.IsDefaultKindDefined()) {
@@ -867,8 +881,14 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             if (columnTuple.Size() > 2) {
                 const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
                 for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
-                    if (!ParseConstraintNode(ctx, columnMeta, columnTuple, constraint, SessionCtx->Config())) {
+                    bool needEval = false;
+                    if (!ParseConstraintNode(ctx, columnMeta, columnTuple, constraint, SessionCtx->Config(), needEval)) {
                         return TStatus::Error;
+                    }
+
+                    if (needEval) {
+                        ctx.Step.Repeat(TExprStep::ExprEval);
+                        return TStatus(TStatus::Repeat, true);
                     }
                 }
             }
@@ -1282,8 +1302,14 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                     if (columnTuple.Size() > 2) {
                         const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
                         for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
-                            if (!ParseConstraintNode(ctx, columnMeta, columnTuple, constraint, SessionCtx->Config(), true)) {
+                            bool needEval = false;
+                            if (!ParseConstraintNode(ctx, columnMeta, columnTuple, constraint, SessionCtx->Config(), needEval, true)) {
                                 return TStatus::Error;
+                            }
+
+                            if (needEval) {
+                                ctx.Step.Repeat(TExprStep::ExprEval);
+                                return TStatus(TStatus::Repeat, true);
                             }
                         }
                     }
@@ -1459,7 +1485,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
         return true;
     }
 
-    static bool CheckCreateSequenceSettings(const TCoNameValueTupleList& settings, TExprContext& ctx) {
+    static bool CheckSequenceSettings(const TCoNameValueTupleList& settings, TExprContext& ctx) {
         const static std::unordered_set<TString> sequenceSettingNames =
             {"start", "increment", "cache", "minvalue", "maxvalue", "cycle"};
         for (const auto& setting : settings) {
@@ -1488,7 +1514,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleCreateSequence(TKiCreateSequence node, TExprContext& ctx) override {
-        if(!CheckCreateSequenceSettings(node.SequenceSettings(), ctx)) {
+        if(!CheckSequenceSettings(node.SequenceSettings(), ctx)) {
             return TStatus::Error;
         }
 
@@ -1520,6 +1546,21 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             auto name = setting.Name().Value();
             ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                 TStringBuilder() << "Unknown drop sequence setting: " << name));
+            return TStatus::Error;
+        }
+
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    virtual TStatus HandleAlterSequence(TKiAlterSequence node, TExprContext& ctx) override {
+        if(!CheckSequenceSettings(node.SequenceSettings(), ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!node.Settings().Empty()) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+                << "Unsupported sequence settings"));
             return TStatus::Error;
         }
 

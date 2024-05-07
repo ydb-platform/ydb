@@ -29,6 +29,8 @@ public:
     TString GetHumanReadablePath() const;
     std::optional<TString> TryGetStringifiedLastPathToken() const;
 
+    void Reset();
+
 private:
     std::vector<size_t> PreviousPathLengths_;
     TString Path_;

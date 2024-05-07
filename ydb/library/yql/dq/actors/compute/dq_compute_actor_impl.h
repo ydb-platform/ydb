@@ -164,7 +164,8 @@ protected:
         bool ownMemoryQuota = true, bool passExceptions = false,
         const ::NMonitoring::TDynamicCounterPtr& taskCounters = nullptr,
         NWilson::TTraceId traceId = {},
-        TIntrusivePtr<NActors::TProtoArenaHolder> arena = nullptr)
+        TIntrusivePtr<NActors::TProtoArenaHolder> arena = nullptr,
+        const TGUCSettings::TPtr& GUCSettings = nullptr)
         : ExecuterId(executerId)
         , TxId(txId)
         , Task(task, std::move(arena))
@@ -187,6 +188,7 @@ protected:
                     true,
                     false
         );
+        Alloc->SetGUCSettings(GUCSettings);
         InitMonCounters(taskCounters);
         if (ownMemoryQuota) {
             MemoryQuota = InitMemoryQuota();

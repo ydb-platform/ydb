@@ -1189,12 +1189,13 @@ void TQueueLeader::WaitAddMessagesToInflyOrTryAnotherShard(TReceiveMessageBatchR
 void TQueueLeader::Reply(TReceiveMessageBatchRequestProcessing& reqInfo) {
     const ui64 shard = reqInfo.GetCurrentShard();
     if (!reqInfo.Answer->Failed && !reqInfo.Answer->OverLimit) {
-        int receiveCount = 0;
         int messageCount = 0;
         ui64 bytesRead = 0;
 
         for (auto& message : reqInfo.Answer->Messages) {
-            receiveCount += message.ReceiveCount;
+            COLLECT_HISTOGRAM_COUNTER(Counters_, MessageReceiveAttempts, message.ReceiveCount);
+            COLLECT_HISTOGRAM_COUNTER(Counters_, receive_attempts_count_rate, message.ReceiveCount);
+
             messageCount++;
             bytesRead += message.Data.size();
 
@@ -1204,8 +1205,6 @@ void TQueueLeader::Reply(TReceiveMessageBatchRequestProcessing& reqInfo) {
         }
 
         if (messageCount > 0) {
-            COLLECT_HISTOGRAM_COUNTER(Counters_, MessageReceiveAttempts, receiveCount);
-            COLLECT_HISTOGRAM_COUNTER(Counters_, receive_attempts_count_rate, receiveCount);
             ADD_COUNTER_COUPLE(Counters_, ReceiveMessage_Count, received_count_per_second, messageCount);
             ADD_COUNTER_COUPLE(Counters_, ReceiveMessage_BytesRead, received_bytes_per_second, bytesRead);
         }

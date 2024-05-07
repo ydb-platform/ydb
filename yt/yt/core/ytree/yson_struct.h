@@ -11,6 +11,7 @@
 #include <yt/yt/library/syncmap/map.h>
 
 #include <library/cpp/yt/misc/enum.h>
+#include <library/cpp/yt/misc/tls.h>
 
 #include <util/generic/algorithm.h>
 
@@ -179,6 +180,9 @@ protected:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+YT_DECLARE_THREAD_LOCAL(IYsonStructMeta*, CurrentlyInitializingYsonMeta);
+YT_DECLARE_THREAD_LOCAL(i64, YsonMetaRegistryDepth);
+
 class TYsonStructRegistry
 {
 public:
@@ -194,9 +198,6 @@ public:
     void OnFinalCtorCalled();
 
 private:
-    static inline YT_THREAD_LOCAL(IYsonStructMeta*) CurrentlyInitializingMeta_ = nullptr;
-    static inline YT_THREAD_LOCAL(i64) RegistryDepth_ = 0;
-
     template <class TStruct>
     friend class TYsonStructRegistrar;
 

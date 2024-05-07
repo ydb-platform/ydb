@@ -2,6 +2,7 @@
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/ssa_runtime_version.h>
+#include <ydb/core/formats/arrow/protos/ssa.pb.h>
 
 #include <ydb/library/yql/core/arrow_kernels/request/request.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
@@ -483,43 +484,6 @@ ui64 GetOrCreateColumnId(const TExprBase& node, TKqpOlapCompileContext& ctx) {
     YQL_ENSURE(false, "Unknown node in OLAP comparison compiler: " << node.Ref().Content());
 }
 
-ui64 CompileSimpleArrowComparison(const TKqpOlapFilterBinaryOp& comparison, TKqpOlapCompileContext& ctx)
-{
-    // Columns should be created before comparison, otherwise comparison fail to find columns
-    const auto leftColumnId = GetOrCreateColumnId(comparison.Left(), ctx);
-    const auto rightColumnId = GetOrCreateColumnId(comparison.Right(), ctx);
-
-    auto *const command = ctx.CreateAssignCmd();
-    auto *const cmpFunc = command->MutableFunction();
-
-    ui32 function = TProgram::TAssignment::FUNC_UNSPECIFIED;
-    if (comparison.Operator() == "eq") {
-        function = TProgram::TAssignment::FUNC_CMP_EQUAL;
-    } else if (comparison.Operator() == "neq") {
-        function = TProgram::TAssignment::FUNC_CMP_NOT_EQUAL;
-    } else if (comparison.Operator() == "lt") {
-        function = TProgram::TAssignment::FUNC_CMP_LESS;
-    } else if (comparison.Operator() == "lte") {
-        function = TProgram::TAssignment::FUNC_CMP_LESS_EQUAL;
-    } else if (comparison.Operator() == "gt") {
-        function = TProgram::TAssignment::FUNC_CMP_GREATER;
-    } else if (comparison.Operator() == "gte") {
-        function = TProgram::TAssignment::FUNC_CMP_GREATER_EQUAL;
-    } else if (comparison.Operator() == "string_contains") {
-        function = TProgram::TAssignment::FUNC_STR_MATCH;
-    } else if (comparison.Operator() == "starts_with") {
-        function = TProgram::TAssignment::FUNC_STR_STARTS_WITH;
-    } else if (comparison.Operator() == "ends_with") {
-        function = TProgram::TAssignment::FUNC_STR_ENDS_WITH;
-    }
-
-    cmpFunc->SetId(function);
-    cmpFunc->AddArguments()->SetId(leftColumnId);
-    cmpFunc->AddArguments()->SetId(rightColumnId);
-
-    return command->GetColumn().GetId();
-}
-
 ui64 CompileYqlKernelComparison(const TKqpOlapFilterBinaryOp& comparison, TKqpOlapCompileContext& ctx)
 {
     // Columns should be created before comparison, otherwise comparison fail to find columns
@@ -579,7 +543,47 @@ ui64 CompileYqlKernelComparison(const TKqpOlapFilterBinaryOp& comparison, TKqpOl
     return command->GetColumn().GetId();
 }
 
+ui64 CompileSimpleArrowComparison(const TKqpOlapFilterBinaryOp& comparison, TKqpOlapCompileContext& ctx)
+{
+    if (comparison.Operator().Ref().IsAtom({"starts_with", "string_contains", "ends_with"})
+        && (comparison.Left().Maybe<TCoString>() || comparison.Right().Maybe<TCoString>())) {
+        return CompileYqlKernelComparison(comparison, ctx);
+    }
 
+    // Columns should be created before comparison, otherwise comparison fail to find columns
+    const auto leftColumnId = GetOrCreateColumnId(comparison.Left(), ctx);
+    const auto rightColumnId = GetOrCreateColumnId(comparison.Right(), ctx);
+
+    auto *const command = ctx.CreateAssignCmd();
+    auto *const cmpFunc = command->MutableFunction();
+
+    ui32 function = TProgram::TAssignment::FUNC_UNSPECIFIED;
+    if (comparison.Operator() == "eq") {
+        function = TProgram::TAssignment::FUNC_CMP_EQUAL;
+    } else if (comparison.Operator() == "neq") {
+        function = TProgram::TAssignment::FUNC_CMP_NOT_EQUAL;
+    } else if (comparison.Operator() == "lt") {
+        function = TProgram::TAssignment::FUNC_CMP_LESS;
+    } else if (comparison.Operator() == "lte") {
+        function = TProgram::TAssignment::FUNC_CMP_LESS_EQUAL;
+    } else if (comparison.Operator() == "gt") {
+        function = TProgram::TAssignment::FUNC_CMP_GREATER;
+    } else if (comparison.Operator() == "gte") {
+        function = TProgram::TAssignment::FUNC_CMP_GREATER_EQUAL;
+    } else if (comparison.Operator() == "string_contains") {
+        function = TProgram::TAssignment::FUNC_STR_MATCH;
+    } else if (comparison.Operator() == "starts_with") {
+        function = TProgram::TAssignment::FUNC_STR_STARTS_WITH;
+    } else if (comparison.Operator() == "ends_with") {
+        function = TProgram::TAssignment::FUNC_STR_ENDS_WITH;
+    }
+
+    cmpFunc->SetId(function);
+    cmpFunc->AddArguments()->SetId(leftColumnId);
+    cmpFunc->AddArguments()->SetId(rightColumnId);
+
+    return command->GetColumn().GetId();
+}
 
 const TProgram::TAssignment* InvertResult(TProgram::TAssignment* command, TKqpOlapCompileContext& ctx)
 {

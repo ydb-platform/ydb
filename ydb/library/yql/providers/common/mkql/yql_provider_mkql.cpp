@@ -2737,6 +2737,14 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.BlockNth(tupleObj, index);
     });
 
+    AddCallable("BlockAsStruct", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        std::vector<std::pair<std::string_view, TRuntimeNode>> members;
+        for (const auto& x : node.Children()) {
+            members.emplace_back(x->Head().Content(), MkqlBuildExpr(x->Tail(), ctx));
+        }
+        return ctx.ProgramBuilder.BlockAsStruct(members);
+    });
+
     AddCallable("BlockAsTuple", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         TVector<TRuntimeNode> args;
         for (const auto& x : node.Children()) {

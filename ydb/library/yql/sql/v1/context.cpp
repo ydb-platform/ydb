@@ -568,7 +568,7 @@ TNodePtr TTranslation::GetNamedNode(const TString& name) {
     if (!res) {
         Ctx.Error() << "Unknown name: " << name;
     }
-    return res;
+    return SafeClone(res);
 }
 
 TString TTranslation::PushNamedNode(TPosition namePos, const TString& name, const TNodeBuilderByName& builder) {

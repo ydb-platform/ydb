@@ -535,11 +535,12 @@ class TestYqStreaming(TestYdsBase):
             $parsed = SELECT JSON_VALUE(Cast(Data as Json), "$.event_class") as event_class, JSON_VALUE(Cast(Data as Json), "$.time") as time FROM myyds.`{input_topic}`;
 
             $tojson = ($data) -> (ToBytes(Unwrap(Yson2::SerializeJson(Yson::From($data)))));
-            
+
             INSERT INTO bindings.my_binding
             (SELECT $tojson(`result`) AS data FROM
                 (SELECT TableRow() AS `result` FROM (
-            SELECT "bank" AS _service, "finish" AS action_state, "success" AS action_status, "present" AS action_type, "MK8SCreateNamespace" AS event_class, "normalized" AS event_type, "host" AS object_type, "vmhost" AS reporter_type, "mk8s" AS source, "user" AS subject_type
+            SELECT "bank" AS _service, "finish" AS action_state, "success" AS action_status, "present" AS action_type,
+                "MK8SCreateNamespace" AS event_class, "normalized" AS event_type, "host" AS object_type, "vmhost" AS reporter_type, "mk8s" AS source, "user" AS subject_type
             FROM (
                 SELECT * FROM ((
                 SELECT * FROM $parsed MATCH_RECOGNIZE(
@@ -549,23 +550,22 @@ class TestYqStreaming(TestYdsBase):
                         (MK8SCNMK8SCN24h0m0s)
                     )
                     DEFINE
-                        MK8SCNMK8SCN24h0m0s as ((MK8SCNMK8SCN24h0m0s.event_class IS NOT DISTINCT FROM "ManagedKubernetesEvent")) 
+                        MK8SCNMK8SCN24h0m0s as ((MK8SCNMK8SCN24h0m0s.event_class IS NOT DISTINCT FROM "ManagedKubernetesEvent"))
                 )))) AS MATCHED
             ))
             )
             ''' \
             .format(
-            input_topic=self.input_topic,
-            output_topic=self.output_topic,
+            input_topic=self.input_topic
         )
 
         connection_response = client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
         keyColumn = ydb_value.Column(name="Data", type=ydb_value.Type(type_id=ydb_value.Type.PrimitiveTypeId.STRING))
         client.create_yds_binding(name="my_binding",
-                                                stream=self.output_topic,
-                                                format="raw",
-                                                connection_id=connection_response.result.connection_id,
-                                                columns=[keyColumn])
+                                  stream=self.output_topic,
+                                  format="raw",
+                                  connection_id=connection_response.result.connection_id,
+                                  columns=[keyColumn])
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
         kikimr.compute_plane.wait_zero_checkpoint(query_id)

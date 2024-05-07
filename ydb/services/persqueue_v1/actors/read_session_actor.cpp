@@ -1732,6 +1732,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(NGRpcService::TGRpcRequestP
             serverMessage.set_status(Ydb::StatusIds::UNAVAILABLE);
             Request->GetStreamCtx()->WriteAndFinish(std::move(serverMessage), grpc::Status::OK);
         } else {
+            Request->RaiseIssues(ev->Get()->Issues);
             Request->ReplyUnauthenticated("refreshed token is invalid");
         }
         Die(ctx);
@@ -2337,12 +2338,11 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReadingFinis
 }
 
 
-//explicit instantation
+// explicit instantation
 template struct TFormedReadResponse<PersQueue::V1::MigrationStreamingReadServerMessage>;
 template struct TFormedReadResponse<Topic::StreamReadMessage::FromServer>;
 
-
-//explicit instantation
+// explicit instantation
 template class TReadSessionActor<true>;
 template class TReadSessionActor<false>;
 

@@ -645,9 +645,7 @@ private:
             {
                 Settings.GetTable().GetOwnerId(),
                 Settings.GetTable().GetTableId(),
-                SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable
-                    ? Settings.GetTable().GetVersion() + 1 // TODO: SchemeShard returns wrong version for columnshard.
-                    : Settings.GetTable().GetVersion()
+                Settings.GetTable().GetVersion()
             },
             Serializer->GetWriteColumnIds(),
             payloadIndex,

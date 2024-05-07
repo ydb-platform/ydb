@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/include/client.h>
 
 #include <ydb/public/api/protos/ydb_federation_discovery.pb.h>
 

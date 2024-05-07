@@ -1007,12 +1007,17 @@ bool DiskIsFull(TEvKeyValue::TEvResponse::TPtr& ev) {
     return !diskIsOk;
 }
 
-static std::pair<TKeyPrefix, TKeyPrefix> MakeKeyPrefixRange(TKeyPrefix::EType type, const TPartitionId& partition)
+void AddCmdDeleteRange(TEvKeyValue::TEvRequest& request, TKeyPrefix::EType c, const TPartitionId& partitionId)
 {
-    TKeyPrefix from(type, partition);
-    TKeyPrefix to(type, TPartitionId(partition.OriginalPartitionId, partition.WriteId, partition.InternalPartitionId + 1));
+    auto keyPrefixes = MakeKeyPrefixRange(c, partitionId);
+    const TKeyPrefix& from = keyPrefixes.first;
+    const TKeyPrefix& to = keyPrefixes.second;
 
-    return {std::move(from), std::move(to)};
+    auto del = request.Record.AddCmdDeleteRange();
+    auto range = del->MutableRange();
+
+    range->SetFrom(from.Data(), from.Size());
+    range->SetTo(to.Data(), to.Size());
 }
 
 static void RequestRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition,
@@ -1039,15 +1044,7 @@ static void RequestRange(const TActorContext& ctx, const TActorId& dst, const TP
         read->SetIncludeData(true);
 
     if (dropTmp) {
-        keyPrefixes = MakeKeyPrefixRange(TKeyPrefix::TypeTmpData, partition);
-        const TKeyPrefix& from = keyPrefixes.first;
-        const TKeyPrefix& to = keyPrefixes.second;
-
-        auto del = request->Record.AddCmdDeleteRange();
-        auto range = del->MutableRange();
-
-        range->SetFrom(from.Data(), from.Size());
-        range->SetTo(to.Data(), to.Size());
+        AddCmdDeleteRange(*request, TKeyPrefix::TypeTmpData, partition);
     }
 
     ctx.Send(dst, request.Release());

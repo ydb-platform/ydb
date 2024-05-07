@@ -67,7 +67,6 @@ target_sources(cli_utils PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_debug.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_disk.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_genconfig.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_get.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_node.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_root.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_server.cpp
@@ -78,7 +77,6 @@ target_sources(cli_utils PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_persqueue.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_persqueue_cluster_discovery.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_persqueue_stress.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_load.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_minikql_compile_and_exec.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_scheme_cache_append.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_scheme_initroot.cpp

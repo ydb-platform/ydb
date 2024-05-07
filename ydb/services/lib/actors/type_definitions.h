@@ -26,7 +26,6 @@ struct TTopicInitInfo {
     bool IsServerless = false;
     TString FolderId;
     NKikimrPQ::TPQTabletConfig::EMeteringMode MeteringMode;
-    THashMap<ui32, ui64> PartitionIdToTabletId; // TODO remove it
     THashMap<ui32, TPartitionInfo> Partitions;
 };
 
@@ -47,7 +46,6 @@ struct TTopicHolder {
     TMaybe<TString> CdcStreamPath;
 
     TVector<ui32> Groups;
-    THashMap<ui32, ui64> PartitionIdToTabletId; // TODO remove it
     THashMap<ui32, TPartitionInfo> Partitions;
 
 
@@ -62,7 +60,6 @@ struct TTopicHolder {
             .FolderId = info.FolderId,
             .MeteringMode = info.MeteringMode,
             .FullConverter = info.TopicNameConverter,
-            .PartitionIdToTabletId = info.PartitionIdToTabletId,
             .Partitions = info.Partitions,
         };
     }

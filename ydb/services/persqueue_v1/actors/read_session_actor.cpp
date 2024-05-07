@@ -1102,8 +1102,8 @@ void TReadSessionActor<UseMigrationProtocol>::InitSession(const TActorContext& c
 
 template <bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::SendLockPartitionToSelf(ui32 group, TString topicName, TTopicHolder topic, const TActorContext& ctx) {
-    auto partitionToTabletIt = topic.PartitionIdToTabletId.find(group);
-    if (partitionToTabletIt == topic.PartitionIdToTabletId.end()) {
+    auto partitionToTabletIt = topic.Partitions.find(group);
+    if (partitionToTabletIt == topic.Partitions.end()) {
         return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder() << "no group " << group << " in topic " << topicName, ctx);
     }
     THolder<TEvPersQueue::TEvLockPartition> res{new TEvPersQueue::TEvLockPartition};
@@ -1114,7 +1114,7 @@ void TReadSessionActor<UseMigrationProtocol>::SendLockPartitionToSelf(ui32 group
     res->Record.SetGeneration(1);
     res->Record.SetStep(1);
     res->Record.SetClientId(ClientId);
-    res->Record.SetTabletId(partitionToTabletIt->second);
+    res->Record.SetTabletId(partitionToTabletIt->second.TabletId);
     ctx.Send(ctx.SelfID, res.Release());
 }
 

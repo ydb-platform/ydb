@@ -40,13 +40,11 @@ static const THashSet<TStringBuf> POOL_TREES_WHITELIST = {"physical",  "cloud", 
 using namespace NNodes;
 
 namespace {
-    void AddInfo(TExprContext& ctx, const TString& msg) {
-        TIssue info("Can't use block reader: " + msg);
-        info.Severity = TSeverityIds::S_INFO;
-        ctx.IssueManager.RaiseIssue(info);
+    void BlockReaderAddInfo(const TPosition& pos, const TString& msg) {
+        Y_UNUSED(YqlIssue(pos, EYqlIssueCode::TIssuesIds_EIssueCode_INFO, "Can't use block reader: " + msg));
     }
 
-    bool CheckSupportedTypes(const TSet<TString>& list, const TSet<NUdf::EDataSlot>& dataTypesSupported, const TStructExprType* types, TExprContext& ctx) {
+    bool CheckBlockReaderSupportedTypes(const TSet<TString>& list, const TSet<NUdf::EDataSlot>& dataTypesSupported, const TStructExprType* types, const TPosition& pos) {
         TSet<ETypeAnnotationKind> supported;
         for (const auto &e: list) {
             if (e == "pg") {
@@ -63,7 +61,7 @@ namespace {
                 supported.emplace(ETypeAnnotationKind::Variant);
             } else {
                 // Unknown type
-                AddInfo(ctx, TStringBuilder() << "unknown type: " << e);
+                BlockReaderAddInfo(pos, TStringBuilder() << "unknown type: " << e);
                 return false;
             }
         }
@@ -73,20 +71,20 @@ namespace {
         auto checkType = [&] (const TTypeAnnotationNode* type) {
              if (type->GetKind() == ETypeAnnotationKind::Data) {
                 if (!supported.contains(ETypeAnnotationKind::Data)) {
-                    AddInfo(ctx, TStringBuilder() << "unsupported data types");
+                    BlockReaderAddInfo(pos, TStringBuilder() << "unsupported data types");
                     return false;
                 }
                 if (!dataTypesSupported.contains(type->Cast<TDataExprType>()->GetSlot())) {
-                    AddInfo(ctx, TStringBuilder() << "unsupported data type: " << type->Cast<TDataExprType>()->GetSlot());
+                    BlockReaderAddInfo(pos, TStringBuilder() << "unsupported data type: " << type->Cast<TDataExprType>()->GetSlot());
                     return false;
                 }
             } else if (type->GetKind() == ETypeAnnotationKind::Pg) {
                 if (!supported.contains(ETypeAnnotationKind::Pg)) {
-                    AddInfo(ctx, TStringBuilder() << "unsupported pg");
+                    BlockReaderAddInfo(pos, TStringBuilder() << "unsupported pg");
                     return false;
                 }
             } else {
-                AddInfo(ctx, TStringBuilder() << "unsupported annotation kind: " << type->GetKind());
+                BlockReaderAddInfo(pos, TStringBuilder() << "unsupported annotation kind: " << type->GetKind());
                 return false;
             }
             return true;
@@ -106,7 +104,7 @@ namespace {
                 continue;
             }
             if (!supported.contains(el->GetKind())) {
-                AddInfo(ctx, TStringBuilder() << "unsupported " << el->GetKind());
+                BlockReaderAddInfo(pos, TStringBuilder() << "unsupported " << el->GetKind());
                 return false;
             }
             if (el->GetKind() == ETypeAnnotationKind::Tuple) {
@@ -478,7 +476,7 @@ public:
         auto supportedTypes = State_->Configuration->BlockReaderSupportedTypes.Get(maybeRead.Cast().DataSource().Cluster().StringValue()).GetOrElse(DEFAULT_BLOCK_READER_SUPPORTED_TYPES);
         auto supportedDataTypes = State_->Configuration->BlockReaderSupportedDataTypes.Get(maybeRead.Cast().DataSource().Cluster().StringValue()).GetOrElse(DEFAULT_BLOCK_READER_SUPPORTED_DATA_TYPES);
         const auto structType = GetSeqItemType(maybeRead.Raw()->GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back())->Cast<TStructExprType>();
-        if (!CheckSupportedTypes(supportedTypes, supportedDataTypes, structType, ctx)) {
+        if (!CheckBlockReaderSupportedTypes(supportedTypes, supportedDataTypes, structType, ctx.GetPosition(node.Pos()))) {
             return false;
         }
         TVector<const TTypeAnnotationNode*> subTypeAnn(Reserve(structType->GetItems().size()));
@@ -487,10 +485,12 @@ public:
         }
 
         if (!State_->Types->ArrowResolver) {
+            BlockReaderAddInfo(ctx.GetPosition(node.Pos()), "no arrow resolver provided");
             return false;
         }
 
         if (State_->Types->ArrowResolver->AreTypesSupported(ctx.GetPosition(node.Pos()), subTypeAnn, ctx) != IArrowResolver::EStatus::OK) {
+            BlockReaderAddInfo(ctx.GetPosition(node.Pos()), "arrow resolver don't support these types");
             return false;
         }
 
@@ -498,6 +498,7 @@ public:
         for (size_t i = 0; i < sectionList.Size(); ++i) {
             auto section = sectionList.Item(i);
             if (!NYql::GetSettingAsColumnList(section.Settings().Ref(), EYtSettingType::SysColumns).empty()) {
+                BlockReaderAddInfo(ctx.GetPosition(node.Pos()), "system column");
                 return false;
             }
         }

@@ -14,17 +14,16 @@ import pytest
 from itsdangerous.exc import BadPayload
 from itsdangerous.exc import BadSignature
 from itsdangerous.serializer import Serializer
+from itsdangerous.signer import _lazy_sha1
 from itsdangerous.signer import Signer
 
 
 @overload
-def coerce_str(ref: str, s: str) -> str:
-    ...
+def coerce_str(ref: str, s: str) -> str: ...
 
 
 @overload
-def coerce_str(ref: bytes, s: str) -> bytes:
-    ...
+def coerce_str(ref: bytes, s: str) -> bytes: ...
 
 
 def coerce_str(ref: Union[str, bytes], s: str) -> Union[str, bytes]:
@@ -179,7 +178,7 @@ class TestSerializer:
         )
 
         unsigners = serializer.iter_unsigners()
-        assert next(unsigners).digest_method == hashlib.sha1
+        assert next(unsigners).digest_method == _lazy_sha1
 
         for signer in unsigners:
             assert signer.digest_method == hashlib.sha256

@@ -119,7 +119,7 @@ private:
 class TFiberRegistry
 {
     template <class Tag>
-    using TFiberStack = TIntrusiveMPSCStack<TFiber, Tag>;
+    using TFiberStack = TIntrusiveMpscStack<TFiber, Tag>;
 
 public:
     //! Do not rename, change the signature, or drop Y_NO_INLINE.

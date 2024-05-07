@@ -203,6 +203,8 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "ALTER REPLICATION";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropReplication:
         return "DROP REPLICATION";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropReplicationCascade:
+        return "DROP REPLICATION CASCADE";
     // blob depot
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlobDepot:
         return "CREATE BLOB DEPOT";
@@ -476,6 +478,7 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterReplication:
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropReplication:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropReplicationCascade:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlobDepot:

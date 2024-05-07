@@ -859,6 +859,8 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(AlterReplication, NKikimrSchemeOp::EOperationType::ESchemeOpAlterReplication, &NKikimrSchemeOp::TModifyScheme::MutableAlterReplication)
     GENERIC_HELPERS(DropReplication, NKikimrSchemeOp::EOperationType::ESchemeOpDropReplication, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
     DROP_BY_PATH_ID_HELPERS(DropReplication, NKikimrSchemeOp::EOperationType::ESchemeOpDropReplication)
+    GENERIC_HELPERS(DropReplicationCascade, NKikimrSchemeOp::EOperationType::ESchemeOpDropReplicationCascade, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
+    DROP_BY_PATH_ID_HELPERS(DropReplicationCascade, NKikimrSchemeOp::EOperationType::ESchemeOpDropReplicationCascade)
 
     // pq
     GENERIC_HELPERS(CreatePQGroup, NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup, &NKikimrSchemeOp::TModifyScheme::MutableCreatePersQueueGroup)

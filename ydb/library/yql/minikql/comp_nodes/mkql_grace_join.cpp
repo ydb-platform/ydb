@@ -826,7 +826,9 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
 
 EFetchResult TGraceJoinState::DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
         while (true) {
-            std::cerr << std::format("[MISHA] MEM USAGE: {}/{}, LEFT: {}, RIGHT: {}\n", TlsAllocState->GetUsed(), TlsAllocState->GetLimit(), LeftPacker->TablePtr->GetAllBucketsSize(), RightPacker->TablePtr->GetAllBucketsSize());
+            ui64 used = TlsAllocState->GetUsed();
+            ui64 limit = TlsAllocState->GetLimit();
+            std::cerr << std::format("[MISHA] MEM USAGE: {}/{}({}%), LEFT: {}, RIGHT: {}\n", used, limit, used * 100 / limit, LeftPacker->TablePtr->GetAllBucketsSize(), RightPacker->TablePtr->GetAllBucketsSize());
             switch(GetMode()) {
                 case EOperatingMode::InMemory: {
                     auto r = DoCalculateInMemory(ctx, output);
@@ -1105,16 +1107,15 @@ EFetchResult TGraceJoinState::ProcessSpilledData(TComputationContext&, NUdf::TUn
 
         if (!LeftPacker->TablePtr->IsBucketInMemory(NextBucketsToJoin)) {
             LeftPacker->TablePtr->StartLoadingBucket(NextBucketsToJoin);
-            std::cerr << std::format("[MISHA] LEFT started loading bucket {}\n", NextBucketsToJoin);
+            // std::cerr << std::format("[MISHA] LEFT started loading bucket {}\n", NextBucketsToJoin);
         }
 
         if (!RightPacker->TablePtr->IsBucketInMemory(NextBucketsToJoin)) {
             RightPacker->TablePtr->StartLoadingBucket(NextBucketsToJoin);
-            std::cerr << std::format("[MISHA] RIGHT started loading bucket {}\n", NextBucketsToJoin);
-        }
+            // std::cerr << std::format("[MISHA] RIGHT started loading bucket {}\n", NextBucketsToJoin);
+        } 
 
         if (LeftPacker->TablePtr->IsBucketInMemory(NextBucketsToJoin) && RightPacker->TablePtr->IsBucketInMemory(NextBucketsToJoin)) {
-            std::cerr << std::format("[MISHA] buckets {} in memory\n", NextBucketsToJoin);
             if (*PartialJoinCompleted) {
                 while (JoinedTablePtr->NextJoinedData(LeftPacker->JoinTupleData, RightPacker->JoinTupleData)) {
                     LeftPacker->UnPack();
@@ -1154,6 +1155,7 @@ EFetchResult TGraceJoinState::ProcessSpilledData(TComputationContext&, NUdf::TUn
                 
                 JoinedTablePtr->Clear();
                 JoinedTablePtr->ResetIterator();
+                *PartialJoinCompleted = false;
 
                 NextBucketsToJoin++;
             } else {

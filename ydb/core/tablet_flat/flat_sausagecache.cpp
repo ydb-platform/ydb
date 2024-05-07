@@ -315,6 +315,7 @@ const TSharedData* TPrivatePageCache::Lookup(ui32 pageId, TInfo *info) {
         if (page->Empty()) {
             Touches.PushBack(page);
             Stats.CurrentCacheHits++;
+            Stats.CurrentCacheHitSize += page->Size;
         }
         return &page->PinnedBody;
     }
@@ -366,8 +367,14 @@ TSharedPageRef TPrivatePageCache::LookupShared(ui32 pageId, TInfo *info) {
 }
 
 void TPrivatePageCache::CountTouches(TPinned *pinned, ui32 &newPages, ui64 &newMemory, ui64 &pinnedMemory) {
+    if (!pinned) {
+        newPages += Stats.CurrentCacheHits;
+        newMemory += Stats.CurrentCacheHitSize;
+        return;
+    }
+
     for (auto &page : Touches) {
-        bool isPinned = pinned && pinned->at(page.Info->Id).contains(page.Id);
+        bool isPinned = pinned->at(page.Info->Id).contains(page.Id);
 
         if (!isPinned) {
             newPages++;
@@ -476,6 +483,7 @@ void TPrivatePageCache::ResetTouchesAndToLoad(bool verifyEmpty) {
     if (verifyEmpty) {
         Y_ABORT_UNLESS(!Touches);
         Y_ABORT_UNLESS(!Stats.CurrentCacheHits);
+        Y_ABORT_UNLESS(!Stats.CurrentCacheHitSize);
         Y_ABORT_UNLESS(!ToLoad);
         Y_ABORT_UNLESS(!Stats.CurrentCacheMisses);
     }
@@ -485,6 +493,7 @@ void TPrivatePageCache::ResetTouchesAndToLoad(bool verifyEmpty) {
         TryUnload(page);
     }
     Stats.CurrentCacheHits = 0;
+    Stats.CurrentCacheHitSize = 0;
 
     while (ToLoad) {
         TPage *page = ToLoad.PopBack();

@@ -366,15 +366,15 @@ TSharedPageRef TPrivatePageCache::LookupShared(ui32 pageId, TInfo *info) {
     return { };
 }
 
-void TPrivatePageCache::CountTouches(TPinned *pinned, ui32 &newPages, ui64 &newMemory, ui64 &pinnedMemory) {
-    if (!pinned) {
+void TPrivatePageCache::CountTouches(TPinned &pinned, ui32 &newPages, ui64 &newMemory, ui64 &pinnedMemory) {
+    if (pinned.empty()) {
         newPages += Stats.CurrentCacheHits;
         newMemory += Stats.CurrentCacheHitSize;
         return;
     }
 
     for (auto &page : Touches) {
-        bool isPinned = pinned->at(page.Info->Id).contains(page.Id);
+        bool isPinned = pinned[page.Info->Id].contains(page.Id);
 
         if (!isPinned) {
             newPages++;

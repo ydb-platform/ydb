@@ -155,7 +155,7 @@ public:
     const TSharedData* Lookup(ui32 page, TInfo *collection);
     TSharedPageRef LookupShared(ui32 page, TInfo *collection);
 
-    void CountTouches(TPinned *pinned, ui32 &newPages, ui64 &newMemory, ui64 &pinnedMemory);
+    void CountTouches(TPinned &pinned, ui32 &newPages, ui64 &newMemory, ui64 &pinnedMemory);
     void PinTouches(TPinned &pinned, ui32 &touchedPages, ui32 &pinnedPages, ui64 &pinnedMemory);
     void PinToLoad(TPinned &pinned, ui32 &pinnedPages, ui64 &pinnedMemory);
     void RepinPages(TPinned &newPinned, TPinned &oldPinned, size_t &pinnedPages);

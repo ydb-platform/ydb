@@ -314,7 +314,7 @@ private:
     TDuration EpochDuration;
     TVector<std::pair<ui32, ui32>> BannedIds;
     ui64 ConfigSubscriptionId;
-    TString NodeNameTemplate;
+    TString NodeNamePrefix;
 
     // Events collected during initialization phase.
     TMultiMap<ui64, TEvNodeBroker::TEvListNodes::TPtr> DelayedListNodesRequests;
@@ -329,7 +329,7 @@ public:
         , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
         , EpochDuration(TDuration::Hours(1))
         , ConfigSubscriptionId(0)
-        , NodeNameTemplate("slot-%s")
+        , NodeNamePrefix("slot-")
         , TxProcessor(new TTxProcessor(*this, "root", NKikimrServices::NODE_BROKER))
     {
     }

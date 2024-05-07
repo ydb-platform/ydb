@@ -107,7 +107,7 @@ bool TNodeBroker::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
                 << "  MaxStaticNodeId: " << AppData(ctx)->DynamicNameserviceConfig->MaxStaticNodeId << Endl
                 << "  MaxDynamicNodeId: " << AppData(ctx)->DynamicNameserviceConfig->MaxDynamicNodeId << Endl
                 << "  EpochDuration: " << EpochDuration << Endl
-                << "  NodeNameTemplate: " << NodeNameTemplate << Endl
+                << "  NodeNamePrefix: " << NodeNamePrefix << Endl
                 << "  BannedIds:";
             for (auto &pr : BannedIds)
                 str << " [" << pr.first << ", " << pr.second << "]";
@@ -347,7 +347,7 @@ void TNodeBroker::FillNodeName(const std::optional<ui32> &slotIndex,
                                NKikimrNodeBroker::TNodeInfo &info) const
 {
     if (EnableDynamicNodeNameGeneration && slotIndex.has_value()) {
-        const TString name = Sprintf(NodeNameTemplate.data(), slotIndex.value());
+        const TString name = TStringBuilder() << NodeNamePrefix << slotIndex.value();
         info.SetName(name);
     }
 }
@@ -488,7 +488,7 @@ void TNodeBroker::LoadConfigFromProto(const NKikimrNodeBroker::TConfig &config)
         EpochDuration = MIN_LEASE_DURATION;
     }
 
-    NodeNameTemplate = config.GetNodeNameTemplate();
+    NodeNamePrefix = config.GetNodeNamePrefix();
 
     BannedIds.clear();
     for (auto &banned : config.GetBannedNodeIds())

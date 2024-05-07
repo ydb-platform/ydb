@@ -578,6 +578,7 @@ public:
         Spilling,
         ProcessSpilled
     };
+    bool WasFinalizing = false;
 
     EFetchResult FetchValues(TComputationContext& ctx, NUdf::TUnboxedValue*const* output);
 
@@ -852,6 +853,11 @@ EFetchResult TGraceJoinState::DoCalculate(TComputationContext& ctx, NUdf::TUnbox
 
 EFetchResult TGraceJoinState::DoCalculateInMemory(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
 
+            /* if (ctx.SpillerFactory) {
+                    SwitchMode(EOperatingMode::Spilling, ctx);
+                    return EFetchResult::Yield;
+            }*/ 
+
             // Collecting data for join and perform join (batch or full)
             while (!*JoinCompleted ) {
 
@@ -1015,6 +1021,19 @@ void TGraceJoinState::DoCalculateWithSpilling(TComputationContext& ctx) {
     RightPacker->TablePtr->EnsureAllSpilledBucketsAreReady();
 
     if (InputFetchResultLeft == EFetchResult::Finish && InputFetchResultRight == EFetchResult::Finish) {
+        if (!WasFinalizing) {
+            std::cerr << std::format("[MISHA] finalizing\n");
+            LeftPacker->TablePtr->FinalizeSpilling();
+            RightPacker->TablePtr->FinalizeSpilling();
+            WasFinalizing = true;
+
+            bool leftBusy = LeftPacker->TablePtr->UpdateAndCheckIfBusy();
+            bool rightBusy = RightPacker->TablePtr->UpdateAndCheckIfBusy();
+    
+            if (rightBusy || leftBusy) {
+                return;
+            }
+        }
         SwitchMode(EOperatingMode::ProcessSpilled, ctx);
         return;
     }
@@ -1024,7 +1043,15 @@ void TGraceJoinState::DoCalculateWithSpilling(TComputationContext& ctx) {
         if (isWaitingForReduce) return;
     }
 
+    ui64 repeats = 0;
+
     while (InputFetchResultLeft != EFetchResult::Finish || InputFetchResultRight != EFetchResult::Finish) {
+        if (repeats > 10000000) {
+            InputFetchResultLeft = EFetchResult::Finish;
+            InputFetchResultRight = EFetchResult::Finish;
+            break;
+        }
+        ++repeats;
         InputFetchResultLeft = FlowLeft->FetchValues(ctx, LeftPacker->TuplePtrs.data());
 
         if (IsSelfJoin_) {
@@ -1061,9 +1088,6 @@ void TGraceJoinState::DoCalculateWithSpilling(TComputationContext& ctx) {
             return;
         }
     }
-
-    LeftPacker->TablePtr->FinalizeSpilling();
-    RightPacker->TablePtr->FinalizeSpilling();
 }
 
 EFetchResult TGraceJoinState::ProcessSpilledData(TComputationContext&, NUdf::TUnboxedValue*const* output) {

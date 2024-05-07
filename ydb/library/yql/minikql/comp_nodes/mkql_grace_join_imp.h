@@ -72,9 +72,9 @@ struct TTableBucket {
     ui64 StringValuesTotalSize = 0;
     ui64 KeyIntValsTotalSize = 0;
 
-    size_t GetSize() const {
+    /*size_t GetSize() const {
         return KeyIntVals.size() * sizeof(ui64) + DataIntVals.size() * sizeof(ui64) + StringsValues.size() + StringsOffsets.size() * sizeof(ui32) + InterfaceValues.size() + InterfaceOffsets.size() + sizeof(ui32);
-    }
+    }*/
  };
 
 struct TTableBucketSpiller {
@@ -180,11 +180,14 @@ struct TTableBucketSpiller {
             }
         }
         if (!HasRunningAsyncIoOperation() && IsFinalizing) {
-            State = EState::Restoring;
 
             StateUi64Adapter.Finalize();
             StateUi32Adapter.Finalize();
             StateCharAdapter.Finalize();
+
+            if (StateCharAdapter.IsAcceptingDataRequests() && StateUi32Adapter.IsAcceptingDataRequests() && StateUi64Adapter.IsAcceptingDataRequests()) {
+                State = EState::Restoring;
+            }
         }
     }
 
@@ -490,9 +493,11 @@ public:
     }
 
     void FinalizeSpilling() {
-        for (ui64 i = 0; i < NumberOfBuckets; ++i) {
-            // TODO add current bucket
-            TableBucketsSpiller[i].Finalize();
+        EnsureAllSpilledBucketsAreReady();
+        for (i64 bucket = NumberOfBuckets - 1; bucket > NextBucketToSpill; --bucket) {
+            TableBucketsSpiller[bucket].Finalize();
+            std::cerr << std::format("[MISHA] Finalizing bucket {} of size {}\n", bucket, GetSizeOfBucket(bucket));
+            TableBucketsSpiller[bucket].SpillBucket(std::move(TableBuckets[bucket]));
         }
     }
 
@@ -502,10 +507,19 @@ public:
         }
     }
 
+    ui64 GetSizeOfBucket(ui64 bucket) const {
+        return TableBuckets[bucket].KeyIntVals.size() * sizeof(ui64)
+        + TableBuckets[bucket].DataIntVals.size() * sizeof(ui64)
+        + TableBuckets[bucket].StringsValues.size()
+        + TableBuckets[bucket].StringsOffsets.size() * sizeof(ui32)
+        + TableBuckets[bucket].InterfaceValues.size()
+        + TableBuckets[bucket].InterfaceOffsets.size() * sizeof(ui32);
+    }
+
     ui64 GetAllBucketsSize() const {
         ui64 sum = 0;
         for (ui64 i = 0; i < NumberOfBuckets; ++i) {
-            sum += TableBuckets[i].GetSize();
+            sum += GetSizeOfBucket(i);
         }
         return sum;
     }
@@ -513,8 +527,8 @@ public:
     bool TryToReduceMemory() {
         EnsureAllSpilledBucketsAreReady();
         for (i64 bucket = NumberOfBuckets - 1; bucket > NextBucketToSpill; --bucket) {
-            if (TableBuckets[bucket].GetSize() > 4) {
-                std::cerr << std::format("[MISHA] Spilling again bucket {} of size {}\n", bucket, TableBuckets[bucket].GetSize());
+            if (GetSizeOfBucket(bucket)) {
+                std::cerr << std::format("[MISHA] Spilling again bucket {} of size {}\n", bucket, GetSizeOfBucket(bucket));
                 TableBucketsSpiller[bucket].SpillBucket(std::move(TableBuckets[bucket]));
 
                 if (TableBucketsSpiller[bucket].HasRunningAsyncIoOperation()) return true;
@@ -524,7 +538,7 @@ public:
         while (NextBucketToSpill >= 0) {
             i64 nowSpilling = NextBucketToSpill;
             --NextBucketToSpill;
-            std::cerr << std::format("[MISHA] Spilling bucket {} of size {}\n", nowSpilling, TableBuckets[nowSpilling].GetSize());
+            std::cerr << std::format("[MISHA] Spilling bucket {} of size {}\n", nowSpilling, GetSizeOfBucket(nowSpilling));
 
             TableBucketsSpiller[nowSpilling].SpillBucket(std::move(TableBuckets[nowSpilling]));
 

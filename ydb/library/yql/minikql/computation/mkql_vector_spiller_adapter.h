@@ -50,10 +50,10 @@ public:
         return State == EState::DataReady;
     }
 
-    /*///Adapter is ready to accept requests for vectors.
+    ///Adapter is ready to accept requests for vectors.
     bool IsAcceptingDataRequests() {
         return State == EState::AcceptingDataRequests;
-    }*/
+    }
 
     ///Adds new vector to storage. Will not launch real disk operation if case of small vectors
     ///(if inner buffer is not full).

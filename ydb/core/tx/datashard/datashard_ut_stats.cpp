@@ -385,7 +385,6 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         const auto tableId1 = ResolveTableId(server, sender, "/Root/table-1");
 
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3)");
-        runtime.SimulateSleep(TDuration::Seconds(1));
         {
             Cerr << "... waiting for stats" << Endl;
             auto stats = WaitTableStats(runtime, shard1);
@@ -395,12 +394,20 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         }
 
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 5), (6, 6), (7, 7), (8, 8)");
+        {
+            Cerr << "... waiting for stats" << Endl;
+            auto stats = WaitTableStats(runtime, shard1, 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 7);
+        }
+
         runtime.SimulateSleep(TDuration::Seconds(1));
+        // a compaction should have happened
         {
             Cerr << "... waiting for stats" << Endl;
             auto stats = WaitTableStats(runtime, shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
-            // TODO: table should have 2 parts
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 7);
         }

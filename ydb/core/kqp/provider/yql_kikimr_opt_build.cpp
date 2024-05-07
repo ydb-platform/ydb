@@ -296,21 +296,16 @@ bool IsDqRead(const TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& 
         auto dataSourceProviderIt = types.DataSourceMap.find(dataSourceCategory);
         if (dataSourceProviderIt != types.DataSourceMap.end()) {
             if (auto* dqIntegration = dataSourceProviderIt->second->GetDqIntegration()) {
-                try {
-                    if (dqIntegration->CanRead(*node.Ptr(), ctx) &&
-                        (!estimateReadSize || dqIntegration->EstimateReadSize(
-                            TDqSettings::TDefault::DataSizePerJob,
-                            TDqSettings::TDefault::MaxTasksPerStage,
-                            {node.Raw()},
-                            ctx))) {
-                        return true;
-                    }
-                } catch (const TFallbackError& error) {
-                    TString message = TStringBuilder() << "Cannot execute read through DQ integration. Cause: " << error.what();
-                    ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), message));
-                    if (hasErrors) {
-                        *hasErrors = true;
-                    }
+                if (dqIntegration->CanRead(*node.Ptr(), ctx) &&
+                    (!estimateReadSize || dqIntegration->EstimateReadSize(
+                        TDqSettings::TDefault::DataSizePerJob,
+                        TDqSettings::TDefault::MaxTasksPerStage,
+                        {node.Raw()},
+                        ctx))) {
+                    return true;
+                }
+                if (hasErrors) {
+                    *hasErrors = true;
                 }
             }
         }

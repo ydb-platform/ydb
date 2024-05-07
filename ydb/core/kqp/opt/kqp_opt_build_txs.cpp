@@ -354,7 +354,9 @@ private:
 
         
         auto finalChannelSettings = TDqStageSettings::Parse(stage);
-        finalChannelSettings.SetScalarChanels();
+        finalChannelSettings.WideChannels = false;
+        finalChannelSettings.OutputNarrowType = nullptr;
+        finalChannelSettings.BlockStatus = NYql::NDq::TDqStageSettings::EBlockStatus::None;
 
         auto output = Build<TDqPhyStage>(ctx, stage.Pos())
             .InitFrom(stage)

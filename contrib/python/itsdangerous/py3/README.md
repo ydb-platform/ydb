@@ -1,22 +1,3 @@
-Metadata-Version: 2.1
-Name: itsdangerous
-Version: 2.2.0
-Summary: Safely pass data to untrusted environments and back.
-Maintainer-email: Pallets <contact@palletsprojects.com>
-Requires-Python: >=3.8
-Description-Content-Type: text/markdown
-Classifier: Development Status :: 5 - Production/Stable
-Classifier: Intended Audience :: Developers
-Classifier: License :: OSI Approved :: BSD License
-Classifier: Operating System :: OS Independent
-Classifier: Programming Language :: Python
-Classifier: Typing :: Typed
-Project-URL: Changes, https://itsdangerous.palletsprojects.com/changes/
-Project-URL: Chat, https://discord.gg/pallets
-Project-URL: Documentation, https://itsdangerous.palletsprojects.com/
-Project-URL: Donate, https://palletsprojects.com/donate
-Project-URL: Source, https://github.com/pallets/itsdangerous/
-
 # ItsDangerous
 
 ... so better sign this
@@ -57,4 +38,3 @@ users, and allow the maintainers to devote more time to the projects,
 [please donate today][].
 
 [please donate today]: https://palletsprojects.com/donate
-

@@ -9,12 +9,12 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T, class Tag = TIntrusiveListDefaultTag>
-class TIntrusiveMPSCStack
+class TIntrusiveMpscStack
 {
     using TNode = TIntrusiveListItem<T, Tag>;
 
 public:
-    TIntrusiveMPSCStack() noexcept;
+    TIntrusiveMpscStack() noexcept;
 
     void Push(TNode* item) noexcept;
 

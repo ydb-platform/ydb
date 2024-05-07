@@ -1642,6 +1642,7 @@ void ValidateColumnSchema(
         "xdelta",
         "_yt_stored_replica_set",
         "_yt_last_seen_replica_set",
+        "dict_sum",
     };
 
     try {

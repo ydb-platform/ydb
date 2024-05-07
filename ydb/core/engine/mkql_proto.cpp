@@ -13,7 +13,7 @@
 namespace NKikimr::NMiniKQL {
 
 // NOTE: TCell's can reference memomry from tupleValue
-// TODO: Place notNull flag in to NScheme::TTypeInfo?
+// TODO: Place notNull flag in to the NScheme::TTypeInfo?
 bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
                     const NKikimrMiniKQL::TValue& tupleValue,
                     const TConstArrayRef<NScheme::TTypeInfo>& types,
@@ -33,6 +33,7 @@ bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
     CHECK_OR_RETURN_ERROR(types.size() >= tupleValue.TupleSize(),
         "The size fo type array less then value tuple size");
 
+    // Please note we modify notNullTypes during tuplyType verification to allow cast nullable to non nullable value 
     if (notNullTypes) {
         CHECK_OR_RETURN_ERROR(notNullTypes.size() == types.size(),
             "The size of type array and given not null markers must be equial");
@@ -52,7 +53,11 @@ bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
 
         for (size_t i = 0; i < tupleType->GetTuple().ElementSize(); ++i) {
             const auto& ti = tupleType->GetTuple().GetElement(i);
-            if (!notNullTypes[i]) {
+            if (notNullTypes[i]) {
+                // For not null column type we allow to build cell from nullable mkql type for compatibility reason. 
+                notNullTypes[i] = ti.GetKind() != NKikimrMiniKQL::Optional;
+            } else {
+                // But we do not allow to build cell for nullable column from not nullable type
                 CHECK_OR_RETURN_ERROR(ti.GetKind() == NKikimrMiniKQL::Optional, "Element at index " + ToString(i) + " in not an Optional");
             }
             const auto& item = notNullTypes[i] ? ti : ti.GetOptional().GetItem();

@@ -1058,7 +1058,9 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxAlterReplication:
         return CreateAlterReplication(NextPartId(), txState);
     case TTxState::ETxType::TxDropReplication:
-        return CreateDropReplication(NextPartId(), txState);
+        return CreateDropReplication(NextPartId(), txState, false);
+    case TTxState::ETxType::TxDropReplicationCascade:
+        return CreateDropReplication(NextPartId(), txState, true);
 
     // BlobDepot
     case TTxState::ETxType::TxCreateBlobDepot:
@@ -1280,7 +1282,9 @@ ISubOperation::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationType op
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterReplication:
         return CreateAlterReplication(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropReplication:
-        return CreateDropReplication(NextPartId(), tx);
+        return CreateDropReplication(NextPartId(), tx, false);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropReplicationCascade:
+        return CreateDropReplication(NextPartId(), tx, true);
 
     // BlobDepot
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlobDepot:

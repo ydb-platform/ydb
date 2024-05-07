@@ -379,7 +379,7 @@ void TController::Handle(TEvPrivate::TEvRunWorkers::TPtr&, const TActorContext& 
         }
 
         const auto& tenant = replication->GetTenant();
-        if (!tenant || !NodesManager.HasTenant(tenant)) {
+        if (!tenant || !NodesManager.HasTenant(tenant) || !NodesManager.HasNodes(tenant)) {
             ++iter;
             continue;
         }

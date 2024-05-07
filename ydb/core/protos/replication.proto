@@ -114,6 +114,7 @@ message TEvAlterReplicationResult {
 message TEvDropReplication {
     optional NKikimrProto.TPathID PathId = 1;
     optional TOperationId OperationId = 2;
+    optional bool Cascade = 3 [default = true];
 }
 
 message TEvDropReplicationResult {

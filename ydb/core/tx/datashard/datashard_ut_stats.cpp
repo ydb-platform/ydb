@@ -71,12 +71,12 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 3);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetDataSize(), 65);
-            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetIndexSize(), bTreeIndex ? 0u : 54);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetIndexSize(), bTreeIndex ? 0 : 54);
 
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetChannel(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetDataSize(), 65);
-            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetIndexSize(), bTreeIndex ? 0u : 54);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetIndexSize(), bTreeIndex ? 0 : 54);
         }
 
         Upsert(runtime, sender, shard1, tableId1, TShardedTableOptions().Columns_, 1, 100, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
@@ -135,12 +135,12 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 3);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetDataSize(), 115);
-            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetIndexSize(), bTreeIndex ? 0u : 82);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetIndexSize(), bTreeIndex ? 0 : 82);
 
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels().size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetChannel(), 1); // ssd
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetDataSize(), 65);
-            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetIndexSize(), bTreeIndex ? 0u : 82);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetIndexSize(), bTreeIndex ? 0 : 82);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[1].GetChannel(), 2); // hdd
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[1].GetDataSize(), 50);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[1].GetIndexSize(), 0);
@@ -281,12 +281,12 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 5);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetDataSize(), 3555);
-            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetIndexSize(), bTreeIndex ? 0u : 82);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetIndexSize(), bTreeIndex ? 0 : 82);
 
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels().size(), 3);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetChannel(), 1); // ssd
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetDataSize(), 440); // two small values
-            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetIndexSize(), bTreeIndex ? 0u : 82);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetIndexSize(), bTreeIndex ? 0 : 82);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[2].GetChannel(), 3); // hdd
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[2].GetDataSize(), 99);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[2].GetIndexSize(), 0);

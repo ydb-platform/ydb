@@ -5978,6 +5978,79 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `timestamp` != Timestamp64('1970-01-01T00:00:00Z')",
             "[[[3000001];-7000000];[[-1000002];-3000000];[[-2000003];4000000];[[5000004];9000000]]");
     }
+
+    Y_UNIT_TEST(UseDatetime64AsPrimaryKey) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("datetime").SetType(NScheme::NTypeIds::Datetime64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("interval").SetType(NScheme::NTypeIds::Interval64)
+        };
+
+        Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
+        TTestHelper::TColumnTable testTable;
+
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"datetime"}).SetSharding({"datetime"}).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(-7).Add(3000001);
+            tableInserter.AddRow().Add(-3).Add(-1000002);
+            tableInserter.AddRow().Add(0).AddNull();
+            tableInserter.AddRow().Add(4).Add(-2000003);
+            tableInserter.AddRow().Add(9).Add(5000004);
+            testHelper.BulkUpsert(testTable, tableInserter);
+        }
+
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `datetime` = Datetime64('1970-01-01T00:00:00Z')", "[[0;#]]");
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `datetime` < Datetime64('1970-01-01T00:00:00Z')",
+            "[[-7;[3000001]];[-3;[-1000002]]]");
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `datetime` > Datetime64('1970-01-01T00:00:00Z')",
+            "[[4;[-2000003]];[9;[5000004]]]");
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `datetime` <= Datetime64('1970-01-01T00:00:00Z')",
+            "[[-7;[3000001]];[-3;[-1000002]];[0;#]]");
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `datetime` >= Datetime64('1970-01-01T00:00:00Z')",
+            "[[0;#];[4;[-2000003]];[9;[5000004]]]");
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `datetime` != Datetime64('1970-01-01T00:00:00Z')",
+            "[[-7;[3000001]];[-3;[-1000002]];[4;[-2000003]];[9;[5000004]]]");
+    }
+
+    Y_UNIT_TEST(UseDate32AsPrimaryKey) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("date").SetType(NScheme::NTypeIds::Date32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("interval").SetType(NScheme::NTypeIds::Interval64)
+        };
+
+        Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
+        TTestHelper::TColumnTable testTable;
+
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"date"}).SetSharding({"date"}).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(-7).Add(3000001);
+            tableInserter.AddRow().Add(-3).Add(-1000002);
+            tableInserter.AddRow().Add(0).AddNull();
+            tableInserter.AddRow().Add(4).Add(-2000003);
+            tableInserter.AddRow().Add(9).Add(5000004);
+            testHelper.BulkUpsert(testTable, tableInserter);
+        }
+
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `date` = Date32('1969-12-29')", "[[-3;[-1000002]]]");
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `date` < Date32('1970-01-03')", "[[-7;[3000001]];[-3;[-1000002]];[0;#]]");
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `date` > Date32('1969-12-30')", "[[0;#];[4;[-2000003]];[9;[5000004]]]");
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `date` <= Date32('1970-01-05')", "[[-7;[3000001]];[-3;[-1000002]];[0;#];[4;[-2000003]]]");
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `date` >= Date32('1969-12-29')", "[[-3;[-1000002]];[0;#];[4;[-2000003]];[9;[5000004]]]");
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE `date` != Date32('1970-01-01')", "[[-7;[3000001]];[-3;[-1000002]];[4;[-2000003]];[9;[5000004]]]");
+    }
 /*
     Y_UNIT_TEST(AddColumnOnSchemeChange) {
         TKikimrSettings runnerSettings;

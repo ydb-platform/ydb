@@ -38,6 +38,9 @@ void KqpPrepareInReadsets(TInputOpData::TInReadSets& inReadSets,
 bool KqpValidateLocks(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLocks);
 bool KqpValidateVolatileTx(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLocks);
 
+bool KqpLocksHasArbiter(const NKikimrDataEvents::TKqpLocks* kqpLocks);
+bool KqpLocksIsArbiter(ui64 tabletId, const NKikimrDataEvents::TKqpLocks* kqpLocks);
+
 void KqpEraseLocks(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLocks);
 void KqpCommitLocks(ui64 origin, TActiveTransaction* tx, const TRowVersion& writeVersion, TDataShard& dataShard);
 

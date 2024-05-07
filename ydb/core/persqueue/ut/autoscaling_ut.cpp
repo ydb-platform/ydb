@@ -26,7 +26,7 @@ using namespace NYdb::NTopic;
 using namespace NYdb::NTopic::NTests;
 using namespace NSchemeShardUT_Private;
 
-Y_UNIT_TEST_SUITE(TopicSplitMerge) {
+Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     Y_UNIT_TEST(Simple) {
         TTopicSdkTestSetup setup = CreateSetup();
@@ -280,28 +280,20 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
         ui64 txId = 1023;
         SplitPartition(setup, ++txId, 0, "a");
 
-        TTestReadSession readSession1("Session-0", client, Max<size_t>(), false);
+        TTestReadSession readSession1("Session-0", client, Max<size_t>(), false, {0, 1, 2});
         readSession1.Offsets[0] = 1;
         readSession1.WaitAndAssertPartitions({0, 1, 2}, "Must read all exists partitions because read the partition 0 from offset 1");
         readSession1.Offsets[0] = 0;
 
-        TTestReadSession readSession2("Session-1", client, Max<size_t>(), false, 0);
+        TTestReadSession readSession2("Session-1", client, Max<size_t>(), false, {0});
         readSession2.Offsets[0] = 0;
 
-        auto p1 = readSession1.Wait({}, "Must release all partitions becase readSession2 read not from EndOffset");
-        auto p2 = readSession2.Wait({0}, "Must read partition 0 because it defined in the readSession");
-
-        p1.Wait(TDuration::Seconds(5));
-        readSession1.Assert({}, p1, "");
-        readSession1.Run();
-
-        p2.Wait(TDuration::Seconds(5));
-        readSession2.Assert({0}, p2, "");
-
-        readSession2.WaitAndAssertPartitions({}, "Partition must be released because reding finished");
+        readSession2.WaitAndAssertPartitions({0}, "Must read partition 0 because it defined in the readSession");
         readSession2.Run();
 
-        readSession1.WaitAndAssertPartitions({}, "Partitions must be read only from Session-1");
+        readSession1.WaitAndAssertPartitions({}, "Must release all partitions becase readSession2 read not from EndOffset");
+        readSession1.Run();
+
         readSession1.WaitAndAssertPartitions({0}, "Partition 0 must rebalance to other sessions (Session-0)");
 
         readSession1.Close();

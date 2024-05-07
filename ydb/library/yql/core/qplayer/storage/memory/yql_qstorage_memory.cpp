@@ -13,6 +13,8 @@ struct TOperationMap {
     using TMapPtr = std::shared_ptr<TMap>;
     TMapPtr ReadMap, WriteMap;
     bool Committed = false;
+    bool Overflow = false;
+    ui64 TotalBytes = 0;
 };
 
 using TOperationMapPtr = std::shared_ptr<TOperationMap>;
@@ -46,20 +48,38 @@ private:
 
 class TWriter : public IQWriter {
 public:
-    TWriter(const TOperationMapPtr& operation)
+    TWriter(const TOperationMapPtr& operation, const TQWriterSettings& settings)
         : Operation_(operation)
+        , Settings_(settings)
     {}
 
     NThreading::TFuture<void> Put(const TQItemKey& key, const TString& value) final {
         with_lock(Operation_->Mutex) {
             Y_ENSURE(!Operation_->Committed);
-            (*Operation_->WriteMap)[key] = value;
+            if (!Operation_->Overflow) {
+                if (Operation_->WriteMap->emplace(key, value).second) {
+                    Operation_->TotalBytes += key.Component.size() + key.Label.size() + value.size();
+                }
+
+                if (Settings_.ItemsLimit && Operation_->WriteMap->size() > *Settings_.ItemsLimit) {
+                    Operation_->Overflow = true;
+                }
+
+                if (Settings_.BytesLimit && Operation_->TotalBytes > *Settings_.BytesLimit) {
+                    Operation_->Overflow = true;
+                }
+            }
+
             return NThreading::MakeFuture();
         }
     }
 
     NThreading::TFuture<void> Commit() final {
         with_lock(Operation_->Mutex) {
+            if (Operation_->Overflow) {
+                throw yexception() << "Overflow of qwriter";
+            }
+
             Y_ENSURE(!Operation_->Committed);
             Operation_->ReadMap = Operation_->WriteMap;
             Operation_->Committed = true;
@@ -69,6 +89,7 @@ public:
 
 private:
     const TOperationMapPtr Operation_;
+    const TQWriterSettings Settings_;
 };
 
 class TIterator : public IQIterator {
@@ -84,7 +105,7 @@ public:
             return NThreading::MakeFuture(TMaybe<TQItem>());
         }
 
-        auto res =TMaybe<TQItem>({It_->first, Settings_.DoNotLoadValue ? TString() : It_->second});
+        auto res =TMaybe<TQItem>({It_->first, It_->second});
         ++It_;
         return NThreading::MakeFuture(res);
     }
@@ -102,18 +123,17 @@ public:
     {
     }
 
-    IQReaderPtr MakeReader(const TString& operationId, const TQReaderSettings& settings) const final {
-        Y_UNUSED(settings);
+    IQReaderPtr MakeReader(const TString& operationId, const TQReaderSettings& readerSettings) const final {
+        Y_UNUSED(readerSettings);
         return std::make_shared<TReader>(GetOperation(operationId, false)->ReadMap);
     }
 
-    IQWriterPtr MakeWriter(const TString& operationId, const TQWriterSettings& settings) const final {
-        Y_UNUSED(settings);
-        return std::make_shared<TWriter>(GetOperation(operationId, true));
+    IQWriterPtr MakeWriter(const TString& operationId, const TQWriterSettings& writerSettings) const final {
+        return std::make_shared<TWriter>(GetOperation(operationId, true), writerSettings);
     }
 
-    IQIteratorPtr MakeIterator(const TString& operationId, const TQIteratorSettings& settings) const final {
-        return std::make_shared<TIterator>(settings, GetOperation(operationId, false)->ReadMap);
+    IQIteratorPtr MakeIterator(const TString& operationId, const TQIteratorSettings& iteratorSettings) const final {
+        return std::make_shared<TIterator>(iteratorSettings, GetOperation(operationId, false)->ReadMap);
     }
 
 private:

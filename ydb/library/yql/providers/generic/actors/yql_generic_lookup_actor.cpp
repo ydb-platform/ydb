@@ -89,6 +89,12 @@ namespace NYql::NDq {
         {
         }
 
+        ~TGenericLookupActor() {
+            auto guard = Guard(*Alloc);
+            KeyTypeHelper = TKeyTypeHelper{};
+            RequestedKeys = TRequestedKeys(0, KeyTypeHelper.GetValueHash(), KeyTypeHelper.GetValueEqual());
+        }
+
         void Bootstrap() {
             auto dsi = LookupSource.data_source_instance();
             YQL_CLOG(INFO, ProviderGeneric) << "New generic proivider lookup source actor(ActorId=" << SelfId() << ") for"
@@ -357,7 +363,8 @@ namespace NYql::NDq {
         const std::vector<std::pair<EColumnDestination, size_t>> ColumnDestinations;
         const size_t MaxKeysInRequest;
         std::atomic_bool InProgress;
-        NKikimr::NMiniKQL::TKeyTypeContanerHelper<true, true, false> KeyTypeHelper;
+        using TKeyTypeHelper = NKikimr::NMiniKQL::TKeyTypeContanerHelper<true, true, false>;
+        TKeyTypeHelper KeyTypeHelper;
         using TRequestedKeys = std::unordered_set<
             NUdf::TUnboxedValue,
             NKikimr::NMiniKQL::TValueHasher,

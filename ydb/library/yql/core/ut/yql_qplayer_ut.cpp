@@ -5,6 +5,11 @@
 #include <ydb/library/yql/core/facade/yql_facade.h>
 #include <ydb/library/yql/core/qplayer/storage/memory/yql_qstorage_memory.h>
 #include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/core/file_storage/file_storage.h>
+#include <ydb/library/yql/core/services/mounts/yql_mounts.h>
+
+#include <library/cpp/yson/node/node_io.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -46,6 +51,20 @@ void WithTables(const F&& f) {
 struct TRunSettings {
     bool IsSql = true;
     THashMap<TString, TString> Tables;
+    TMaybe<TString> ParametersYson;
+    THashMap<TString, TString> StaticFiles, DynamicFiles;
+};
+
+TUserDataTable MakeUserTables(const THashMap<TString, TString>& map) {
+    TUserDataTable userDataTable;
+    for (const auto& f : map) {
+        TUserDataBlock block;
+        block.Type = EUserDataType::RAW_INLINE_DATA;
+        block.Data = f.second;
+        userDataTable[TUserDataKey::File(GetDefaultFilePrefix() + f.first)] = block;
+    }
+
+    return userDataTable;
 };
 
 bool RunProgram(bool replay, const TString& query, const TQContext& qContext, const TRunSettings& runSettings) {
@@ -61,13 +80,47 @@ bool RunProgram(bool replay, const TString& query, const TQContext& qContext, co
 
     TVector<TDataProviderInitializer> dataProvidersInit;
     dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytGateway));
+
+    TExprContext modulesCtx;
+    IModuleResolver::TPtr moduleResolver;
+    if (!GetYqlDefaultModuleResolver(modulesCtx, moduleResolver)) {
+        Cerr << "Errors loading default YQL libraries:" << Endl;
+        modulesCtx.IssueManager.GetIssues().PrintTo(Cerr);
+        return false;
+    }
+    TExprContext::TFreezeGuard freezeGuard(modulesCtx);
+
     TProgramFactory factory(true, functionRegistry.Get(), 0ULL, dataProvidersInit, "ut");
     factory.SetUdfResolver(NCommon::CreateSimpleUdfResolver(functionRegistry.Get()));
+    factory.SetModules(moduleResolver);
 
-    TProgramPtr program = factory.Create("-stdin-", query);
-    program->SetQContext(qContext);
+    if (!replay && (!runSettings.StaticFiles.empty() || !runSettings.DynamicFiles.empty())) {
+        TFileStorageConfig fsConfig;
+        LoadFsConfigFromResource("fs.conf", fsConfig);
+        auto storage = WithAsync(CreateFileStorage(fsConfig));
+        factory.SetFileStorage(storage);
+    }
+
+    if (!replay && !runSettings.StaticFiles.empty()) {
+        factory.AddUserDataTable(MakeUserTables(runSettings.StaticFiles));
+    }
+
+    TProgramPtr program = factory.Create("-stdin-", query, "", EHiddenMode::Disable, qContext);
+    if (!replay && runSettings.ParametersYson) {
+        program->SetParametersYson(*runSettings.ParametersYson);
+    }
+
+    if (!replay && !runSettings.DynamicFiles.empty()) {
+        program->AddUserDataTable(MakeUserTables(runSettings.DynamicFiles));
+    }
+
     if (runSettings.IsSql) {
-        if (!program->ParseSql()) {
+        NSQLTranslation::TTranslationSettings settings;
+        if (!replay) {
+            settings.ClusterMapping["plato"] = TString(YtProviderName);
+        }
+
+        if (!program->ParseSql(settings)) {
             program->PrintErrorsTo(Cerr);
             return false;
         } 
@@ -164,6 +217,55 @@ Y_UNIT_TEST_SUITE(QPlayerTests) {
 
     Y_UNIT_TEST(YtGetTableInfo) {
         auto s = "select * from plato.Input";
+        WithTables([&](const auto& tables) {
+            TRunSettings runSettings;
+            runSettings.Tables = tables;
+            CheckProgram(s, runSettings);
+        });
+    }
+
+    Y_UNIT_TEST(Parameters) {
+        auto s = "declare $x as String; select $x";
+        TRunSettings runSettings;
+        runSettings.ParametersYson = NYT::NodeToYsonString(NYT::TNode()
+            ("$x", NYT::TNode()("Data", "value")));
+        CheckProgram(s, runSettings);
+    }
+
+    Y_UNIT_TEST(Files) {
+        auto s = "select FileContent('a'), FileContent('b')";
+        TRunSettings runSettings;
+        runSettings.StaticFiles["a"] = "1";
+        runSettings.DynamicFiles["b"] = "2";
+        CheckProgram(s, runSettings);
+    }
+
+    Y_UNIT_TEST(Libraries) {
+        auto s = "pragma library('a.sql'); import a symbols $f; select $f(1)";
+        TRunSettings runSettings;
+        runSettings.StaticFiles["a.sql"] = "$f = ($x)->($x+1); export $f";
+        CheckProgram(s, runSettings);
+    }
+
+    Y_UNIT_TEST(Evaluation) {
+        auto s = "$c = select count(*) from plato.Input; select EvaluateExpr($c)";
+        WithTables([&](const auto& tables) {
+            TRunSettings runSettings;
+            runSettings.Tables = tables;
+            CheckProgram(s, runSettings);
+        });
+    }
+
+    Y_UNIT_TEST(WalkFolders) {
+        auto s = R"(
+$postHandler = ($nodes, $state, $level) -> {
+    $tables = ListFilter($nodes, ($x)->($x.Type = "table"));
+    return ListExtend($state, ListExtract($tables, "Path"));
+};
+
+SELECT State FROM plato.WalkFolders(``, $postHandler AS PostHandler);
+    )";
+
         WithTables([&](const auto& tables) {
             TRunSettings runSettings;
             runSettings.Tables = tables;

@@ -1867,9 +1867,21 @@ public:
                 return SyncError();
             }
 
+            if (!settings.Settings.ConnectionString && !settings.Settings.Endpoint) {
+                ctx.AddError(TIssue(ctx.GetPosition(createReplication.Pos()),
+                    TStringBuilder() << "Neither Connection string nor Endpoint/Database are provided"));
+                return SyncError();
+            }
+
             if (settings.Settings.OAuthToken && settings.Settings.StaticCredentials) {
                 ctx.AddError(TIssue(ctx.GetPosition(createReplication.Pos()),
                     TStringBuilder() << "Token and User/Password are mutually exclusive"));
+                return SyncError();
+            }
+
+            if (!settings.Settings.OAuthToken && !settings.Settings.StaticCredentials) {
+                ctx.AddError(TIssue(ctx.GetPosition(createReplication.Pos()),
+                    TStringBuilder() << "Neither Token nor User/Password are provided"));
                 return SyncError();
             }
 

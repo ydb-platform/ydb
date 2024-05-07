@@ -12,6 +12,7 @@ from datetime import date, datetime, tzinfo
 from pytz.exceptions import UnknownTimeZoneError
 
 from clickhouse_connect import common
+from clickhouse_connect.driver import tzutil
 from clickhouse_connect.driver.common import dict_copy, empty_gen, StreamContext
 from clickhouse_connect.driver.external import ExternalData
 from clickhouse_connect.driver.types import Matrix, Closable
@@ -170,7 +171,7 @@ class QueryContext(BaseQueryContext):
         elif self.apply_server_tz:
             active_tz = self.server_tz
         else:
-            active_tz = self.local_tz
+            active_tz = tzutil.local_tz
         if active_tz == pytz.UTC:
             return None
         return active_tz
@@ -440,8 +441,7 @@ def format_bind_value(value: Any, server_tz: tzinfo = pytz.UTC, top_level: bool 
             return escape_str(value)
         return format_str(value)
     if isinstance(value, datetime):
-        if value.tzinfo is None:
-            value = value.replace(tzinfo=server_tz)
+        value = value.astimezone(server_tz)
         val = value.strftime('%Y-%m-%d %H:%M:%S')
         if top_level:
             return val

@@ -20,7 +20,7 @@ static const auto& Logger = ConcurrencyLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constinit YT_THREAD_LOCAL(TCpuProfilerTagGuard) CpuProfilerTagGuard;
+YT_DEFINE_THREAD_LOCAL(TCpuProfilerTagGuard, CpuProfilerTagGuard);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -490,9 +490,9 @@ bool TInvokerQueue<TQueueImpl>::BeginExecute(TEnqueuedAction* action, typename T
     }
 
     if (const auto& profilerTag = action->ProfilerTag) {
-        GetTlsRef(CpuProfilerTagGuard) = TCpuProfilerTagGuard(profilerTag);
+        CpuProfilerTagGuard() = TCpuProfilerTagGuard(profilerTag);
     } else {
-        GetTlsRef(CpuProfilerTagGuard) = {};
+        CpuProfilerTagGuard() = {};
     }
 
     SetCurrentInvoker(GetProfilingTagSettingInvoker(action->ProfilingTag));
@@ -503,7 +503,7 @@ bool TInvokerQueue<TQueueImpl>::BeginExecute(TEnqueuedAction* action, typename T
 template <class TQueueImpl>
 void TInvokerQueue<TQueueImpl>::EndExecute(TEnqueuedAction* action)
 {
-    GetTlsRef(CpuProfilerTagGuard) = TCpuProfilerTagGuard{};
+    CpuProfilerTagGuard() = TCpuProfilerTagGuard{};
     SetCurrentInvoker(nullptr);
 
     YT_ASSERT(action);

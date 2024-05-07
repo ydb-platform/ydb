@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: zope.interface
-Version: 6.2
+Version: 6.3
 Summary: Interfaces for Python
 Home-page: https://github.com/zopefoundation/zope.interface
 Author: Zope Foundation and Contributors
@@ -74,6 +74,12 @@ For detailed documentation, please see https://zopeinterface.readthedocs.io/en/l
 =========
  Changes
 =========
+
+6.3 (2024-04-12)
+================
+
+- Add preliminary support for Python 3.13 as of 3.13a6.
+
 
 6.2 (2024-02-16)
 ================

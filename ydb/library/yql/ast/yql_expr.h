@@ -2816,6 +2816,7 @@ struct TConvertToAstSettings {
     std::function<bool(const TExprNode&)> NoInlineFunc;
     bool PrintArguments = false;
     bool AllowFreeArgs = false;
+    bool NormalizeAtomFlags = false;
 };
 
 TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& ctx, const TConvertToAstSettings& settings);

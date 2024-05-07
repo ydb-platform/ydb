@@ -1040,6 +1040,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("abc", ""), 3);
         UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("apple", "apple"), 0);
         UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("apple", "aple"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("UPPER", "upper"), 0);
         UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("horse", "ros"), 3);
         UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("intention", "execution"), 5);
         UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("/slice/db", "/slice"), 3);
@@ -1048,64 +1049,48 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("/slice/db", "/slice/db26000"), 5);
     }
 
-    Y_UNIT_TEST(FuzzySearcher)
+    TVector<TString> SimilarWordsDictionary = { "/slice", "/slice/db", "/slice/db26000" };
+    TVector<TString> DifferentWordsDictionary = { "/orders", "/peoples", "/OrdinaryScheduleTables" };
+
+    void FuzzySearcherTest(TVector<TString>& dictionary, TString search, ui32 limit, TVector<TString> expectations) {
+        auto fuzzy = FuzzySearcher<TString>(dictionary);
+        auto result = fuzzy.Search(search, limit);
+
+        UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());
+        for (ui32 i = 0; i < expectations.size(); i++) {
+            UNIT_ASSERT_VALUES_EQUAL(expectations[i], result[i]);
+        }
+    }
+
+    Y_UNIT_TEST(FuzzySearcherLimit1OutOf4)
     {
-        TVector<TString> dictionary = { "/slice", "/slice/db", "/slice/db26000" };
+        FuzzySearcherTest(SimilarWordsDictionary, "/slice/db", 1, { "/slice/db" });
+    }
 
-        {
-            TVector<TString> expectations = { "/slice/db" };
-            auto fuzzy = FuzzySearcher<TString>(dictionary);
-            auto result = fuzzy.Search("/slice/db", 1);
+    Y_UNIT_TEST(FuzzySearcherLimit2OutOf4)
+    {
+        FuzzySearcherTest(SimilarWordsDictionary, "/slice/db", 2, { "/slice/db", "/slice/db26000" });
+    }
 
-            UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());
-            for (ui32 i = 0; i < expectations.size(); i++) {
-                UNIT_ASSERT_VALUES_EQUAL(expectations[i], result[i]);
-            }
-        }
+    Y_UNIT_TEST(FuzzySearcherLimit3OutOf4)
+    {
+        FuzzySearcherTest(SimilarWordsDictionary, "/slice/db", 3, { "/slice/db", "/slice/db26000", "/slice"});
+    }
 
-        {
-            TVector<TString> expectations = { "/slice/db", "/slice" };
-            auto fuzzy = FuzzySearcher<TString>(dictionary);
-            auto result = fuzzy.Search("/slice/db", 2);
+    Y_UNIT_TEST(FuzzySearcherLimit4OutOf4)
+    {
+        FuzzySearcherTest(SimilarWordsDictionary, "/slice/db", 4, { "/slice/db", "/slice/db26000", "/slice"});
+    }
 
-            UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());
-            for (ui32 i = 0; i < expectations.size(); i++) {
-                UNIT_ASSERT_VALUES_EQUAL(expectations[i], result[i]);
-            }
-        }
+    Y_UNIT_TEST(FuzzySearcherLongWord)
+    {
+        FuzzySearcherTest(SimilarWordsDictionary, "/slice/db26001", 10, { "/slice/db26000", "/slice/db", "/slice"});
+    }
 
-        {
-            TVector<TString> expectations = { "/slice/db", "/slice", "/slice/db26000"};
-            auto fuzzy = FuzzySearcher<TString>(dictionary);
-            auto result = fuzzy.Search("/slice/db", 3);
-
-            UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());
-            for (ui32 i = 0; i < expectations.size(); i++) {
-                UNIT_ASSERT_VALUES_EQUAL(expectations[i], result[i]);
-            }
-        }
-
-        {
-            TVector<TString> expectations = { "/slice/db", "/slice", "/slice/db26000" };
-            auto fuzzy = FuzzySearcher<TString>(dictionary);
-            auto result = fuzzy.Search("/slice/db", 4);
-
-            UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());
-            for (ui32 i = 0; i < expectations.size(); i++) {
-                UNIT_ASSERT_VALUES_EQUAL(expectations[i], result[i]);
-            }
-        }
-
-        {
-            TVector<TString> expectations = { "/slice/db26000", "/slice/db", "/slice" };
-            auto fuzzy = FuzzySearcher<TString>(dictionary);
-            auto result = fuzzy.Search("/slice/db26001");
-
-            UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());
-            for (ui32 i = 0; i < expectations.size(); i++) {
-                UNIT_ASSERT_VALUES_EQUAL(expectations[i], result[i]);
-            }
-        }
+    Y_UNIT_TEST(FuzzySearcherPriority)
+    {
+        FuzzySearcherTest(DifferentWordsDictionary, "/ord", 10, { "/orders", "/OrdinaryScheduleTables", "/peoples"});
+        FuzzySearcherTest(DifferentWordsDictionary, "Tables", 10, { "/OrdinaryScheduleTables", "/orders", "/peoples"});
     }
 
     void JsonAutocompleteTest(HTTP_METHOD method, NJson::TJsonValue& value, TString prefix = "", TString database = "", TVector<TString> tables = {}, ui32 limit = 10, bool lowerCaseContentType = false) {
@@ -1136,6 +1121,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
             if (prefix) {
                 httpReq.CgiParameters.emplace("prefix", prefix);
             }
+            httpReq.CgiParameters.emplace("limit", ToString(limit));
         } else if (method == HTTP_METHOD_POST) {
             NJson::TJsonArray tableArray;
             for (const TString& table : tables) {
@@ -1145,13 +1131,13 @@ Y_UNIT_TEST_SUITE(Viewer) {
             NJson::TJsonValue root = NJson::TJsonMap{
                 {"database", database},
                 {"table", tableArray},
-                {"prefix", prefix}
+                {"prefix", prefix},
+                {"limit", limit}
             };
             httpReq.PostContent = NJson::WriteJson(root);
-            auto contType = lowerCaseContentType ? "content-type" : "Content-Type";
-            httpReq.HttpHeaders.AddHeader(contType, "application/json");
+            auto contentType = lowerCaseContentType ? "content-type" : "Content-Type";
+            httpReq.HttpHeaders.AddHeader(contentType, "application/json");
         }
-        httpReq.CgiParameters.emplace("limit", ToString(limit));
         httpReq.CgiParameters.emplace("direct", "1");
         auto page = MakeHolder<TMonPage>("viewer", "title");
         TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/autocomplete", nullptr);
@@ -1236,7 +1222,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         });
     }
 
-    Y_UNIT_TEST(JsonAutocompleteDatabase) {
+    Y_UNIT_TEST(JsonAutocompleteStartOfDatabaseName) {
         NJson::TJsonValue value;
         JsonAutocompleteTest(HTTP_METHOD_GET, value, "/Root");
         VerifyJsonAutocompleteSuccess(value, {
@@ -1246,16 +1232,22 @@ Y_UNIT_TEST_SUITE(Viewer) {
             "/Root/MyDatabase",
             "/Root/TestDatabase"
         });
+    }
 
+    Y_UNIT_TEST(JsonAutocompleteEndOfDatabaseName) {
+        NJson::TJsonValue value;
         JsonAutocompleteTest(HTTP_METHOD_GET, value, "Database");
         VerifyJsonAutocompleteSuccess(value, {
-            "/Root/test",
             "/Root/MyDatabase",
-            "/Root/slice",
             "/Root/TestDatabase",
+            "/Root/test",
+            "/Root/slice",
             "/Root/qwerty"
         });
+    }
 
+    Y_UNIT_TEST(JsonAutocompleteSimilarDatabaseName) {
+        NJson::TJsonValue value;
         JsonAutocompleteTest(HTTP_METHOD_GET, value, "/Root/Database");
         VerifyJsonAutocompleteSuccess(value, {
             "/Root/MyDatabase",
@@ -1264,19 +1256,28 @@ Y_UNIT_TEST_SUITE(Viewer) {
             "/Root/slice",
             "/Root/qwerty"
         });
+    }
 
+    Y_UNIT_TEST(JsonAutocompleteSimilarDatabaseNameWithLimit) {
+        NJson::TJsonValue value;
         JsonAutocompleteTest(HTTP_METHOD_GET, value, "/Root/Database", "", {}, 2);
         VerifyJsonAutocompleteSuccess(value, {
             "/Root/MyDatabase",
             "/Root/TestDatabase"
         });
+    }
 
+    Y_UNIT_TEST(JsonAutocompleteSimilarDatabaseNamePOST) {
+        NJson::TJsonValue value;
         JsonAutocompleteTest(HTTP_METHOD_POST, value, "/Root/Database", "", {}, 2);
         VerifyJsonAutocompleteSuccess(value, {
             "/Root/MyDatabase",
             "/Root/TestDatabase"
         });
+    }
 
+    Y_UNIT_TEST(JsonAutocompleteSimilarDatabaseNameLowerCase) {
+        NJson::TJsonValue value;
         JsonAutocompleteTest(HTTP_METHOD_POST, value, "/Root/Database", "", {}, 2, true);
         VerifyJsonAutocompleteSuccess(value, {
             "/Root/MyDatabase",
@@ -1293,7 +1294,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
             "orders",
             "products"
         });
+    }
 
+    Y_UNIT_TEST(JsonAutocompleteSchemePOST) {
+        NJson::TJsonValue value;
         JsonAutocompleteTest(HTTP_METHOD_POST, value, "clien", "/Root/Database");
         VerifyJsonAutocompleteSuccess(value, {
             "clients",
@@ -1302,7 +1306,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         });
     }
 
-    Y_UNIT_TEST(JsonAutocompleteColumns) {
+    Y_UNIT_TEST(JsonAutocompleteEmptyColumns) {
         NJson::TJsonValue value;
         JsonAutocompleteTest(HTTP_METHOD_GET, value, "", "/Root/Database", {"orders"});
         VerifyJsonAutocompleteSuccess(value, {
@@ -1310,19 +1314,215 @@ Y_UNIT_TEST_SUITE(Viewer) {
             "name",
             "description"
         });
+    }
 
+    Y_UNIT_TEST(JsonAutocompleteColumns) {
+        NJson::TJsonValue value;
         JsonAutocompleteTest(HTTP_METHOD_GET, value, "nam", "/Root/Database", {"orders", "products"});
         VerifyJsonAutocompleteSuccess(value, {
             "name",
             "id",
             "description",
         });
+    }
 
+    Y_UNIT_TEST(JsonAutocompleteColumnsPOST) {
+        NJson::TJsonValue value;
         JsonAutocompleteTest(HTTP_METHOD_POST, value, "nam", "/Root/Database", {"orders", "products"});
         VerifyJsonAutocompleteSuccess(value, {
             "name",
             "id",
             "description",
         });
+    }
+
+    void ChangeBSGroupStateResponse(TEvWhiteboard::TEvBSGroupStateResponse::TPtr* ev) {
+        ui64 nodeId = (*ev)->Cookie;
+        auto& pbRecord = (*ev)->Get()->Record;
+
+        pbRecord.clear_bsgroupstateinfo();
+
+        for (ui64 groupId = 1; groupId <= 9; groupId++) {
+            if (groupId % 9 == nodeId % 9) {
+                continue;
+            }
+            auto state = pbRecord.add_bsgroupstateinfo();
+            state->set_groupid(groupId);
+            state->set_storagepoolname("/Root:test");
+            state->set_nodeid(nodeId);
+            for (int k = 1; k <= 8; k++) {
+                auto vdisk = groupId * 8 + k;
+                auto vdiskId = state->add_vdiskids();
+                vdiskId->set_groupid(groupId);
+                vdiskId->set_groupgeneration(1);
+                vdiskId->set_vdisk(vdisk);
+            }
+        }
+    }
+
+    void ChangePDiskStateResponse(TEvWhiteboard::TEvPDiskStateResponse::TPtr* ev) {
+        auto& pbRecord = (*ev)->Get()->Record;
+        pbRecord.clear_pdiskstateinfo();
+        for (int k = 0; k < 2; k++) {
+            auto state = pbRecord.add_pdiskstateinfo();
+            state->set_pdiskid(k);
+        }
+    }
+
+    void ChangeVDiskStateOn9NodeResponse(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateResponse::TPtr* ev) {
+        ui64 nodeId = (*ev)->Cookie;
+        auto& pbRecord = (*ev)->Get()->Record;
+
+        pbRecord.clear_vdiskstateinfo();
+
+        for (int k = 0; k < 8; k++) {
+            auto groupId = (nodeId + k) % 9 + 1;
+            auto vdisk = groupId * 8 + k + 1;
+            ui32 pdisk = k / 4;
+            ui32 slotid = k % 4;
+            auto state = pbRecord.add_vdiskstateinfo();
+            state->set_pdiskid(pdisk);
+            state->set_vdiskslotid(slotid);
+            state->mutable_vdiskid()->set_groupid(groupId);
+            state->mutable_vdiskid()->set_groupgeneration(1);
+            state->mutable_vdiskid()->set_vdisk(vdisk++);
+            state->set_vdiskstate(NKikimrWhiteboard::EVDiskState::OK);
+            state->set_nodeid(nodeId);
+        }
+    }
+
+    void AddGroupsInControllerSelectGroupsResult(TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr* ev,  int groupCount) {
+        auto& pbRecord = (*ev)->Get()->Record;
+        auto pbMatchGroups = pbRecord.mutable_matchinggroups(0);
+
+        auto sample = pbMatchGroups->groups(0);
+        pbMatchGroups->ClearGroups();
+
+        for (int groupId = 1; groupId <= groupCount; groupId++) {
+            auto group = pbMatchGroups->add_groups();
+            group->CopyFrom(sample);
+            group->set_groupid(groupId++);
+            group->set_storagepoolname("/Root:test");
+        }
+    };
+
+    void JsonStorage9Nodes9GroupsListingTest(TString version, bool groupFilter, bool nodeFilter, bool pdiskFilter, ui32 expectedFoundGroups, ui32 expectedTotalGroups) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(9)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        THttpRequest httpReq(HTTP_METHOD_GET);
+        httpReq.CgiParameters.emplace("with", "all");
+        httpReq.CgiParameters.emplace("version", version);
+        if (groupFilter) {
+            httpReq.CgiParameters.emplace("group_id", "1");
+        }
+        if (nodeFilter) {
+            httpReq.CgiParameters.emplace("node_id", ToString(runtime.GetFirstNodeId()));
+        }
+        if (pdiskFilter) {
+            httpReq.CgiParameters.emplace("pdisk_id", "0");
+        }
+        auto page = MakeHolder<TMonPage>("viewer", "title");
+        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/storage", nullptr);
+        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+            Y_UNUSED(ev);
+            switch (ev->GetTypeRewrite()) {
+                case NConsole::TEvConsole::EvListTenantsResponse: {
+                    auto *x = reinterpret_cast<NConsole::TEvConsole::TEvListTenantsResponse::TPtr*>(&ev);
+                    Ydb::Cms::ListDatabasesResult listTenantsResult;
+                    (*x)->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
+                    listTenantsResult.Addpaths("/Root");
+                    (*x)->Get()->Record.MutableResponse()->mutable_operation()->mutable_result()->PackFrom(listTenantsResult);
+                    break;
+                }
+                case TEvWhiteboard::EvBSGroupStateResponse: {
+                    auto *x = reinterpret_cast<TEvWhiteboard::TEvBSGroupStateResponse::TPtr*>(&ev);
+                    ChangeBSGroupStateResponse(x);
+                    break;
+                }
+                case TEvWhiteboard::EvVDiskStateResponse: {
+                    auto *x = reinterpret_cast<TEvWhiteboard::TEvVDiskStateResponse::TPtr*>(&ev);
+                    ChangeVDiskStateOn9NodeResponse(x);
+                    break;
+                }
+                case TEvWhiteboard::EvPDiskStateResponse: {
+                    auto *x = reinterpret_cast<TEvWhiteboard::TEvPDiskStateResponse::TPtr*>(&ev);
+                    ChangePDiskStateResponse(x);
+                    break;
+                }
+                case TEvBlobStorage::EvControllerSelectGroupsResult: {
+                    auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr*>(&ev);
+                    AddGroupsInControllerSelectGroupsResult(x, 9);
+                    break;
+                }
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
+        NMon::TEvHttpInfoRes* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+
+        size_t pos = result->Answer.find('{');
+        TString jsonResult = result->Answer.substr(pos);
+        NJson::TJsonValue json;
+        try {
+            NJson::ReadJsonTree(jsonResult, &json, true);
+        }
+        catch (yexception ex) {
+            Ctest << ex.what() << Endl;
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("FoundGroups"), ToString(expectedFoundGroups));
+        UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("TotalGroups"), ToString(expectedTotalGroups));
+    }
+
+    Y_UNIT_TEST(JsonStorageListingV1) {
+        JsonStorage9Nodes9GroupsListingTest("v1", false, false, false, 9, 9);
+    }
+
+    Y_UNIT_TEST(JsonStorageListingV2) {
+        JsonStorage9Nodes9GroupsListingTest("v2", false, false, false, 9, 9);
+    }
+
+    Y_UNIT_TEST(JsonStorageListingV1GroupIdFilter) {
+        JsonStorage9Nodes9GroupsListingTest("v1", true, false, false, 1, 9);
+    }
+
+    Y_UNIT_TEST(JsonStorageListingV2GroupIdFilter) {
+        JsonStorage9Nodes9GroupsListingTest("v2", true, false, false, 1, 9);
+    }
+
+    Y_UNIT_TEST(JsonStorageListingV1NodeIdFilter) {
+        JsonStorage9Nodes9GroupsListingTest("v1", false, true, false, 8, 8);
+    }
+
+    Y_UNIT_TEST(JsonStorageListingV2NodeIdFilter) {
+        JsonStorage9Nodes9GroupsListingTest("v2", false, true, false, 8, 8);
+    }
+
+    Y_UNIT_TEST(JsonStorageListingV1PDiskIdFilter) {
+        JsonStorage9Nodes9GroupsListingTest("v1", false, true, true, 4, 8);
+        JsonStorage9Nodes9GroupsListingTest("v1", false, true, true, 4, 8);
+    }
+
+    Y_UNIT_TEST(JsonStorageListingV2PDiskIdFilter) {
+        JsonStorage9Nodes9GroupsListingTest("v2", false, true, true, 4, 8);
     }
 }

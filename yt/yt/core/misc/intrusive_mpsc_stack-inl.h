@@ -13,17 +13,19 @@ namespace NYT {
 template <class T, class Tag>
 TIntrusiveMPSCStack<T, Tag>::TIntrusiveMPSCStack() noexcept
 {
-    static_assert(std::derived_from<T, TIntrusiveNode<T, Tag>>, "Class must inherit from CRTP-base TIntrusiveNode");
+    static_assert(std::derived_from<T, TIntrusiveListItem<T, Tag>>, "Class must inherit from CRTP-base TIntrusiveListItem");
 }
 
 template <class T, class Tag>
 void TIntrusiveMPSCStack<T, Tag>::Push(TNode* item) noexcept
 {
+    // Past this line item is not a valid instance of TInstrusiveListItem.
+
     // NB: This saves up extra CAS in case of non-empty stack.
-    item->Next = Head_.load(std::memory_order::relaxed);
+    item->MutableNext() = Head_.load(std::memory_order::relaxed);
 
     while (!Head_.compare_exchange_weak(
-        item->Next,
+        item->MutableNext(),
         item,
         std::memory_order::release,
         std::memory_order::relaxed))
@@ -31,16 +33,18 @@ void TIntrusiveMPSCStack<T, Tag>::Push(TNode* item) noexcept
 }
 
 template <class T, class Tag>
-TSimpleIntrusiveList<T, Tag> TIntrusiveMPSCStack<T, Tag>::PopAll() noexcept
+TIntrusiveList<T, Tag> TIntrusiveMPSCStack<T, Tag>::PopAll() noexcept
 {
     TNode* head = Head_.exchange(nullptr, std::memory_order::acquire);
 
-    TSimpleIntrusiveList<T, Tag> list;
+    TIntrusiveList<T, Tag> list;
 
     while (head) {
         auto tmp = head;
-        head = head->Next;
-        tmp->Next = nullptr;
+        head = head->Next();
+
+        // From this line tmp is a valid instance of TIntrusiveListItem.
+        tmp->ResetItem();
         list.PushFront(tmp);
     }
 

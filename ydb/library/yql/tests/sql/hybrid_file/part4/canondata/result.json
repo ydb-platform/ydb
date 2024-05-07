@@ -253,9 +253,9 @@
     ],
     "test.test[aggr_factory-mode-default.txt-Debug]": [
         {
-            "checksum": "819ff2caa18dfa45195e7c53d09ebdec",
-            "size": 10022,
-            "uri": "https://{canondata_backend}/1880306/b7c0983a1c6c9c608654f7a228532df5441ad227/resource.tar.gz#test.test_aggr_factory-mode-default.txt-Debug_/opt.yql_patched"
+            "checksum": "4319aa96cd86c3cbf9ac952898211ed4",
+            "size": 10007,
+            "uri": "https://{canondata_backend}/1809005/598dad0f68894de6de54be0cbb32ec9d0122f411/resource.tar.gz#test.test_aggr_factory-mode-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[aggr_factory-mode-default.txt-Plan]": [
@@ -519,9 +519,9 @@
     ],
     "test.test[blocks-sort_two_mix--Debug]": [
         {
-            "checksum": "a6ec487acf7c2529a0783a3f12986cff",
-            "size": 3447,
-            "uri": "https://{canondata_backend}/212715/3045678bab9ba65eca350a0c5b4618902a97028e/resource.tar.gz#test.test_blocks-sort_two_mix--Debug_/opt.yql_patched"
+            "checksum": "805a6cb5c5f695e40a653565c88529da",
+            "size": 3489,
+            "uri": "https://{canondata_backend}/1936947/275d0def4dd33738996f4ff6899dbc5ecf6f2d8f/resource.tar.gz#test.test_blocks-sort_two_mix--Debug_/opt.yql_patched"
         }
     ],
     "test.test[blocks-sort_two_mix--Plan]": [
@@ -533,9 +533,9 @@
     ],
     "test.test[blocks-top_sort_two_asc--Debug]": [
         {
-            "checksum": "fe22f7db1b4be48ebba37c2f4e479c6c",
-            "size": 3522,
-            "uri": "https://{canondata_backend}/212715/3045678bab9ba65eca350a0c5b4618902a97028e/resource.tar.gz#test.test_blocks-top_sort_two_asc--Debug_/opt.yql_patched"
+            "checksum": "216dbacacd463a93019e38b9fb36db79",
+            "size": 3550,
+            "uri": "https://{canondata_backend}/1936947/275d0def4dd33738996f4ff6899dbc5ecf6f2d8f/resource.tar.gz#test.test_blocks-top_sort_two_asc--Debug_/opt.yql_patched"
         }
     ],
     "test.test[blocks-top_sort_two_asc--Plan]": [
@@ -547,9 +547,9 @@
     ],
     "test.test[blocks-top_sort_two_mix--Debug]": [
         {
-            "checksum": "e8818272b55b9ba1a90741a86bedf703",
-            "size": 3518,
-            "uri": "https://{canondata_backend}/212715/3045678bab9ba65eca350a0c5b4618902a97028e/resource.tar.gz#test.test_blocks-top_sort_two_mix--Debug_/opt.yql_patched"
+            "checksum": "b2ba15d71f9b80b598c0acc0b8e70319",
+            "size": 3560,
+            "uri": "https://{canondata_backend}/1936947/275d0def4dd33738996f4ff6899dbc5ecf6f2d8f/resource.tar.gz#test.test_blocks-top_sort_two_mix--Debug_/opt.yql_patched"
         }
     ],
     "test.test[blocks-top_sort_two_mix--Plan]": [
@@ -799,9 +799,9 @@
     ],
     "test.test[expr-common_type_for_resource_and_data--Debug]": [
         {
-            "checksum": "745e96dd764a7a228243c315c0ba7e43",
-            "size": 3492,
-            "uri": "https://{canondata_backend}/1880306/b7c0983a1c6c9c608654f7a228532df5441ad227/resource.tar.gz#test.test_expr-common_type_for_resource_and_data--Debug_/opt.yql_patched"
+            "checksum": "0d33cc2cb1690eb76e4208ae8e76c67e",
+            "size": 3491,
+            "uri": "https://{canondata_backend}/1880306/db875f28b03398c9661cb0ec816d8867491e05bb/resource.tar.gz#test.test_expr-common_type_for_resource_and_data--Debug_/opt.yql_patched"
         }
     ],
     "test.test[expr-common_type_for_resource_and_data--Plan]": [
@@ -3053,9 +3053,9 @@
     ],
     "test.test[window-win_by_all_aggregate--Debug]": [
         {
-            "checksum": "fa45176f4496bbfa2b347e3cef825bf7",
-            "size": 19222,
-            "uri": "https://{canondata_backend}/1936273/6e54ce804e8cd2c402491df96af4023e63f193e5/resource.tar.gz#test.test_window-win_by_all_aggregate--Debug_/opt.yql_patched"
+            "checksum": "2c4c5ff9dad34caf6978fb4ccb350351",
+            "size": 19198,
+            "uri": "https://{canondata_backend}/1809005/161342601473b76623944595105e92912ad1b3f6/resource.tar.gz#test.test_window-win_by_all_aggregate--Debug_/opt.yql_patched"
         }
     ],
     "test.test[window-win_by_all_aggregate--Plan]": [

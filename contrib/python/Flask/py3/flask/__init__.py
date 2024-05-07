@@ -23,7 +23,6 @@ from .helpers import flash as flash
 from .helpers import get_flashed_messages as get_flashed_messages
 from .helpers import get_template_attribute as get_template_attribute
 from .helpers import make_response as make_response
-from .helpers import safe_join as safe_join
 from .helpers import send_file as send_file
 from .helpers import send_from_directory as send_from_directory
 from .helpers import stream_with_context as stream_with_context
@@ -43,4 +42,4 @@ from .signals import template_rendered as template_rendered
 from .templating import render_template as render_template
 from .templating import render_template_string as render_template_string
 
-__version__ = "2.0.3"
+__version__ = "2.1.3"

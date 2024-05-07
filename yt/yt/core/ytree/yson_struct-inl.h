@@ -80,7 +80,7 @@ TSerializer TExternalizedYsonStruct::CreateReadOnly(const TStruct& readOnly)
 //! We need some writable instance of TStruct to refer to in order
 //! to have a default constructor required by TYsonStructRegistry::InitializeStruct.
 template <std::default_initializable TStruct>
-TStruct* TExternalizedYsonStruct::GetDefault() noexcept
+YT_PREVENT_TLS_CACHING TStruct* TExternalizedYsonStruct::GetDefault() noexcept
 {
     thread_local TStruct defaultThat = {};
     //! NB: We reset default after every invocation
@@ -101,11 +101,11 @@ void TYsonStructRegistry::InitializeStruct(TStruct* target)
     TForbidCachedDynamicCastGuard guard(target);
 
     // It takes place only inside special constructor call inside lambda below.
-    if (CurrentlyInitializingMeta_) {
+    if (CurrentlyInitializingYsonMeta()) {
         // TODO(renadeen): assert target is from the same type hierarchy.
         // Call initialization method that is provided by user.
-        if (RegistryDepth_ <= 1) {
-            TStruct::Register(TYsonStructRegistrar<TStruct>(CurrentlyInitializingMeta_));
+        if (YsonMetaRegistryDepth() <= 1) {
+            TStruct::Register(TYsonStructRegistrar<TStruct>(CurrentlyInitializingYsonMeta()));
         }
         return;
     }
@@ -122,14 +122,14 @@ void TYsonStructRegistry::InitializeStruct(TStruct* target)
         // where registration of yson parameters takes place.
         // This way all parameters of the whole type hierarchy will fill `CurrentlyInitializingMeta_`.
         // We prevent context switch cause we don't want another fiber to use `CurrentlyInitializingMeta_` before we finish initialization.
-        YT_VERIFY(!CurrentlyInitializingMeta_);
-        CurrentlyInitializingMeta_ = result;
+        YT_VERIFY(!CurrentlyInitializingYsonMeta());
+        CurrentlyInitializingYsonMeta() = result;
         {
             NConcurrency::TForbidContextSwitchGuard contextSwitchGuard;
             const std::type_info& typeInfo = CallCtor<TStruct>();
             result->FinishInitialization(typeInfo);
         }
-        CurrentlyInitializingMeta_ = nullptr;
+        CurrentlyInitializingYsonMeta() = nullptr;
 
         return result;
     };

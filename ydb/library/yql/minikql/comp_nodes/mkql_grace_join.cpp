@@ -1115,45 +1115,63 @@ EFetchResult TGraceJoinState::ProcessSpilledData(TComputationContext&, NUdf::TUn
 
         if (LeftPacker->TablePtr->IsBucketInMemory(NextBucketsToJoin) && RightPacker->TablePtr->IsBucketInMemory(NextBucketsToJoin)) {
             std::cerr << std::format("[MISHA] buckets {} in memory\n", NextBucketsToJoin);
-            while (JoinedTablePtr->NextJoinedData(LeftPacker->JoinTupleData, RightPacker->JoinTupleData)) {
-                LeftPacker->UnPack();
-                RightPacker->UnPack();
+            if (*PartialJoinCompleted) {
+                while (JoinedTablePtr->NextJoinedData(LeftPacker->JoinTupleData, RightPacker->JoinTupleData)) {
+                    LeftPacker->UnPack();
+                    RightPacker->UnPack();
 
-                auto &valsLeft = LeftPacker->TupleHolder;
-                auto &valsRight = RightPacker->TupleHolder;
+                    auto &valsLeft = LeftPacker->TupleHolder;
+                    auto &valsRight = RightPacker->TupleHolder;
 
 
-                for (size_t i = 0; i < LeftRenames.size() / 2; i++)
-                {
-                    auto & valPtr = output[LeftRenames[2 * i + 1]];
-                    if ( valPtr ) {
-                        *valPtr = valsLeft[LeftRenames[2 * i]];
+                    for (size_t i = 0; i < LeftRenames.size() / 2; i++)
+                    {
+                        auto & valPtr = output[LeftRenames[2 * i + 1]];
+                        if ( valPtr ) {
+                            *valPtr = valsLeft[LeftRenames[2 * i]];
+                        }
                     }
+
+                    for (size_t i = 0; i < RightRenames.size() / 2; i++)
+                    {
+                        auto & valPtr = output[RightRenames[2 * i + 1]];
+                        if ( valPtr ) {
+                            *valPtr = valsRight[RightRenames[2 * i]];
+                        }
+                    }
+
+                    std::cerr << std::format("[MISHA] RETURN ONE\n");
+                    return EFetchResult::One;
+
                 }
 
-                for (size_t i = 0; i < RightRenames.size() / 2; i++)
-                {
-                    auto & valPtr = output[RightRenames[2 * i + 1]];
-                    if ( valPtr ) {
-                        *valPtr = valsRight[RightRenames[2 * i]];
-                    }
+                std::cerr << std::format("[MISHA] JOIN FINISHED\n");
+                LeftPacker->TuplesBatchPacked = 0;
+                LeftPacker->TablePtr->Clear(); // Clear table content, ready to collect data for next batch
+
+                RightPacker->TuplesBatchPacked = 0;
+                RightPacker->TablePtr->Clear(); // Clear table content, ready to collect data for next batch
+                
+                JoinedTablePtr->Clear();
+                JoinedTablePtr->ResetIterator();
+
+                NextBucketsToJoin++;
+            } else {
+                LeftPacker->TablePtr->ExtractBucket(NextBucketsToJoin);
+                RightPacker->TablePtr->ExtractBucket(NextBucketsToJoin);
+                *PartialJoinCompleted = true;
+                LeftPacker->StartTime = std::chrono::system_clock::now();
+                RightPacker->StartTime = std::chrono::system_clock::now();
+                if ( SelfJoinSameKeys_ ) {
+                    JoinedTablePtr->Join(*LeftPacker->TablePtr, *LeftPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
+                } else {
+                    JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
                 }
-
-                std::cerr << std::format("[MISHA] RETURN ONE\n");
-                return EFetchResult::One;
-
+                JoinedTablePtr->ResetIterator();
+                LeftPacker->EndTime = std::chrono::system_clock::now();
+                RightPacker->EndTime = std::chrono::system_clock::now();
             }
-            std::cerr << std::format("[MISHA] JOIN FINISHED\n");
-            LeftPacker->TuplesBatchPacked = 0;
-            LeftPacker->TablePtr->Clear(); // Clear table content, ready to collect data for next batch
 
-            RightPacker->TuplesBatchPacked = 0;
-            RightPacker->TablePtr->Clear(); // Clear table content, ready to collect data for next batch
-            
-            JoinedTablePtr->Clear();
-            JoinedTablePtr->ResetIterator();
-
-            NextBucketsToJoin++;
         }
     }
     return EFetchResult::Finish;

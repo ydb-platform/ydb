@@ -92,77 +92,45 @@ namespace {
             return true;
         };
 
+        TVector<const TTypeAnnotationNode*> stack;
+
         for (auto sub: types->GetItems()) {
             auto subT = sub->GetItemType();
-            while (subT->GetKind() == ETypeAnnotationKind::Optional) {
-                subT = subT->Cast<TOptionalExprType>()->GetItemType();
+            stack.push_back(subT);
+        }
+        while (!stack.empty()) {
+            auto el = stack.back();
+            stack.pop_back();
+            if (el->GetKind() == ETypeAnnotationKind::Optional) {
+                stack.push_back(el->Cast<TOptionalExprType>()->GetItemType());
+                continue;
             }
-            if (subT->GetKind() == ETypeAnnotationKind::Tuple || subT->GetKind() == ETypeAnnotationKind::Struct 
-                || subT->GetKind() == ETypeAnnotationKind::Dict || subT->GetKind() == ETypeAnnotationKind::Variant
-                || subT->GetKind() == ETypeAnnotationKind::List) {
-                if (!supported.contains(subT->GetKind())) {
-                    AddInfo(ctx, TStringBuilder() << "unsupported " << subT->GetKind());
-                    return false;
+            if (!supported.contains(el->GetKind())) {
+                AddInfo(ctx, TStringBuilder() << "unsupported " << el->GetKind());
+                return false;
+            }
+            if (el->GetKind() == ETypeAnnotationKind::Tuple) {
+                for (auto e: el->Cast<TTupleExprType>()->GetItems()) {
+                    stack.push_back(e);
                 }
-                TVector<const TTypeAnnotationNode*> stack;
-                stack.push_back(subT);
-                while (!stack.empty()) {
-                    auto el = stack.back();
-                    stack.pop_back();
-                    if (!supported.contains(el->GetKind())) {
-                        AddInfo(ctx, TStringBuilder() << "unsupported " << el->GetKind());
-                        return false;
-                    }
-                    if (el->GetKind() == ETypeAnnotationKind::Tuple) {
-                        for (auto e: el->Cast<TTupleExprType>()->GetItems()) {
-                            while (e->GetKind() == ETypeAnnotationKind::Optional) {
-                                e = e->Cast<TOptionalExprType>()->GetItemType();
-                            }
-                            stack.push_back(e);
-                        }
-                        continue;
-                    } else if (el->GetKind() == ETypeAnnotationKind::Struct) {
-                        for (auto e: el->Cast<TStructExprType>()->GetItems()) {
-                            const TTypeAnnotationNode* c = e->GetItemType();
-                            while (c->GetKind() == ETypeAnnotationKind::Optional) {
-                                c = c->Cast<TOptionalExprType>()->GetItemType();
-                            }
-                            stack.push_back(c);
-                        }
-                        continue;
-
-                    } else if (el->GetKind() == ETypeAnnotationKind::List) {
-                        const TTypeAnnotationNode* c = el->Cast<TListExprType>()->GetItemType();
-                        while (c->GetKind() == ETypeAnnotationKind::Optional) {
-                            c = c->Cast<TOptionalExprType>()->GetItemType();
-                        }
-                        stack.push_back(c);
-                        continue;
-                    } else if (el->GetKind() == ETypeAnnotationKind::Dict) {
-                        const TTypeAnnotationNode* c = el->Cast<TDictExprType>()->GetKeyType();
-                        while (c->GetKind() == ETypeAnnotationKind::Optional) {
-                            c = c->Cast<TOptionalExprType>()->GetItemType();
-                        }
-                        stack.push_back(c);
-                        c = el->Cast<TDictExprType>()->GetPayloadType();
-                        while (c->GetKind() == ETypeAnnotationKind::Optional) {
-                            c = c->Cast<TOptionalExprType>()->GetItemType();
-                        }
-                        stack.push_back(c);
-                        continue;
-                    } else if (el->GetKind() == ETypeAnnotationKind::Variant) {
-                        const TTypeAnnotationNode* c = el->Cast<TVariantExprType>()->GetUnderlyingType();
-                        while (c->GetKind() == ETypeAnnotationKind::Optional) {
-                            c = c->Cast<TOptionalExprType>()->GetItemType();
-                        }
-                        stack.push_back(c);
-                        continue;
-                    }
-                    if (!checkType(el)) {
-                        return false;
-                    }
+                continue;
+            } else if (el->GetKind() == ETypeAnnotationKind::Struct) {
+                for (auto e: el->Cast<TStructExprType>()->GetItems()) {
+                    stack.push_back(e->GetItemType());
                 }
-            } else if (!checkType(subT)) {
+                continue;
+            } else if (el->GetKind() == ETypeAnnotationKind::List) {
+                stack.push_back(el->Cast<TListExprType>()->GetItemType());
+                continue;
+            } else if (el->GetKind() == ETypeAnnotationKind::Dict) {
+                stack.push_back(el->Cast<TDictExprType>()->GetKeyType());
+                stack.push_back(el->Cast<TDictExprType>()->GetPayloadType());
+                continue;
+            } else if (el->GetKind() == ETypeAnnotationKind::Variant) {
+                stack.push_back(el->Cast<TVariantExprType>()->GetUnderlyingType());
+                continue;
+            }
+            if (!checkType(el)) {
                 return false;
             }
         }

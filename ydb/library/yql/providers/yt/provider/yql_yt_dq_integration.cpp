@@ -46,9 +46,8 @@ namespace {
         ctx.IssueManager.RaiseIssue(info);
     }
 
-    bool CheckSupportedTypes(const TSet<TString>& list, const TSet<TString>& dataTList, const TStructExprType* types, TExprContext& ctx) {
+    bool CheckSupportedTypes(const TSet<TString>& list, const TSet<NUdf::EDataSlot>& dataTypesSupported, const TStructExprType* types, TExprContext& ctx) {
         TSet<ETypeAnnotationKind> supported;
-        TSet<NUdf::EDataSlot> dataTypesSupported;
         for (const auto &e: list) {
             if (e == "pg") {
                 supported.insert(ETypeAnnotationKind::Pg);
@@ -68,11 +67,8 @@ namespace {
                 return false;
             }
         }
-        if (dataTList.size()) {
+        if (dataTypesSupported.size()) {
             supported.emplace(ETypeAnnotationKind::Data);
-        }
-        for (const auto &e: dataTList) {
-            dataTypesSupported.emplace(NUdf::GetDataSlot(e));
         }
         auto checkType = [&] (const TTypeAnnotationNode* type) {
              if (type->GetKind() == ETypeAnnotationKind::Data) {

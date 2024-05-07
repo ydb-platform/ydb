@@ -197,7 +197,7 @@ struct TYtSettings {
     NCommon::TConfSetting<size_t, true> DQRPCReaderInflight;
     NCommon::TConfSetting<TDuration, true> DQRPCReaderTimeout;
     NCommon::TConfSetting<TSet<TString>, true> BlockReaderSupportedTypes;
-    NCommon::TConfSetting<TSet<TString>, true> BlockReaderSupportedDataTypes;
+    NCommon::TConfSetting<TSet<NUdf::EDataSlot>, true> BlockReaderSupportedDataTypes;
 
     // Optimizers
     NCommon::TConfSetting<bool, true> _EnableDq;

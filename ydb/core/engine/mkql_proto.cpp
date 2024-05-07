@@ -13,9 +13,11 @@
 namespace NKikimr::NMiniKQL {
 
 // NOTE: TCell's can reference memomry from tupleValue
+// TODO: Place notNull flag in to NScheme::TTypeInfo?
 bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
                     const NKikimrMiniKQL::TValue& tupleValue,
                     const TConstArrayRef<NScheme::TTypeInfo>& types,
+                    TVector<bool> notNullTypes,
                     bool allowCastFromString,
                     TVector<TCell>& key,
                     TString& errStr,
@@ -28,6 +30,20 @@ bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
         return false; \
     }
 
+    CHECK_OR_RETURN_ERROR(types.size() >= tupleValue.TupleSize(),
+        "The size fo type array less then value tuple size");
+
+    if (notNullTypes) {
+        CHECK_OR_RETURN_ERROR(notNullTypes.size() == types.size(),
+            "The size of type array and given not null markers must be equial");
+        if (tupleType) {
+            CHECK_OR_RETURN_ERROR(notNullTypes.size() >= tupleType->GetTuple().ElementSize(),
+                "The size of tuple type and given not null markers must be equal");
+        }
+    } else {
+        notNullTypes.resize(types.size());
+    }
+
     if (tupleType) {
         CHECK_OR_RETURN_ERROR(tupleType->GetKind() == NKikimrMiniKQL::Tuple ||
                               (tupleType->GetKind() == NKikimrMiniKQL::Unknown && tupleType->GetTuple().ElementSize() == 0), "Must be a tuple");
@@ -36,8 +52,10 @@ bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
 
         for (size_t i = 0; i < tupleType->GetTuple().ElementSize(); ++i) {
             const auto& ti = tupleType->GetTuple().GetElement(i);
-            CHECK_OR_RETURN_ERROR(ti.GetKind() == NKikimrMiniKQL::Optional, "Element at index " + ToString(i) + " in not an Optional");
-            const auto& item = ti.GetOptional().GetItem();
+            if (!notNullTypes[i]) {
+                CHECK_OR_RETURN_ERROR(ti.GetKind() == NKikimrMiniKQL::Optional, "Element at index " + ToString(i) + " in not an Optional");
+            }
+            const auto& item = notNullTypes[i] ? ti : ti.GetOptional().GetItem();
             CHECK_OR_RETURN_ERROR(item.GetKind() == NKikimrMiniKQL::Data, "Element at index " + ToString(i) + " Item kind is not Data");
             const auto& typeId = item.GetData().GetScheme();
             CHECK_OR_RETURN_ERROR(typeId == types[i].GetTypeId() ||
@@ -53,26 +71,36 @@ bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
     }
 
     for (ui32 i = 0; i < tupleValue.TupleSize(); ++i) {
+
         auto& o = tupleValue.GetTuple(i);
 
-        auto element_case = o.value_value_case();
+        if (notNullTypes[i]) {
+            CHECK_OR_RETURN_ERROR(o.ListSize() == 0 &&
+                                  o.StructSize() == 0 &&
+                                  o.TupleSize() == 0 &&
+                                  o.DictSize() == 0 &&
+                                  !o.HasOptional(),
+                                  Sprintf("Primitive type is expected in tuple at position %" PRIu32, i));
+        } else {
+            auto element_case = o.value_value_case();
 
-        CHECK_OR_RETURN_ERROR(element_case == NKikimrMiniKQL::TValue::kOptional ||
-                              element_case == NKikimrMiniKQL::TValue::VALUE_VALUE_NOT_SET,
-                              Sprintf("Optional type is expected in tuple at position %" PRIu32, i));
+            CHECK_OR_RETURN_ERROR(element_case == NKikimrMiniKQL::TValue::kOptional ||
+                                  element_case == NKikimrMiniKQL::TValue::VALUE_VALUE_NOT_SET,
+                                  Sprintf("Optional type is expected in tuple at position %" PRIu32, i));
 
-        CHECK_OR_RETURN_ERROR(o.ListSize() == 0 &&
-                              o.StructSize() == 0 &&
-                              o.TupleSize() == 0 &&
-                              o.DictSize() == 0,
-                              Sprintf("Optional type is expected in tuple at position %" PRIu32, i));
+            CHECK_OR_RETURN_ERROR(o.ListSize() == 0 &&
+                                  o.StructSize() == 0 &&
+                                  o.TupleSize() == 0 &&
+                                  o.DictSize() == 0,
+                                  Sprintf("Optional type is expected in tuple at position %" PRIu32, i));
 
-        if (!o.HasOptional()) {
-            key.push_back(TCell());
-            continue;
+            if (!o.HasOptional()) {
+                key.push_back(TCell());
+                continue;
+            }
         }
 
-        auto& v = o.GetOptional();
+        auto& v = notNullTypes[i] ? o : o.GetOptional();
 
         auto value_case = v.value_value_case();
 

@@ -2420,9 +2420,9 @@ private:
 
     // For follower only
     struct TFollowerState {
-        ui64 LastSysUpdate = 0;
-        ui64 LastSchemeUpdate = 0;
-        ui64 LastSnapshotsUpdate = 0;
+        NTable::TDatabase::TChangeCounter LastSysUpdate;
+        NTable::TDatabase::TChangeCounter LastSchemeUpdate;
+        NTable::TDatabase::TChangeCounter LastSnapshotsUpdate;
     };
 
     //

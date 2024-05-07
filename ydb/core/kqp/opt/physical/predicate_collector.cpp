@@ -2,6 +2,7 @@
 
 #include <ydb/core/formats/arrow/ssa_runtime_version.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/core/yql_expr_optimize.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -85,6 +86,46 @@ bool IsGoodTypeForArithmeticPushdown(const TTypeAnnotationNode& type) {
     return NUdf::EDataTypeFeatures::NumericType & NUdf::GetDataTypeInfo(RemoveOptionality(type).Cast<TDataExprType>()->GetSlot()).Features;
 }
 
+[[maybe_unused]]
+bool AbstractTreeCanBePushed(const TExprBase& expr, const TExprNode* ) {
+    if (!expr.Ref().IsCallable({"Apply", "NamedApply", "IfPresent", "Visit"})) {
+        return false;
+    }
+
+    if (FindNode(expr.Ptr(), [] (const TExprNode::TPtr& node) { return node->IsCallable({"Ensure", "Unwrap"}); })) {
+        return false;
+    }
+
+    const auto applies = FindNodes(expr.Ptr(), [] (const TExprNode::TPtr& node) {
+        return node->IsCallable({"Apply", "NamedApply"}) && (node->Head().IsCallable("Udf") || (node->Head().IsCallable("AssumeStrict") && node->Head().Head().IsCallable("Udf") ));
+    });
+
+    if (applies.empty()) {
+        return false;
+    }
+
+    for (const auto& apply : applies) {
+        const auto& udf = SkipCallables(apply->Head(), {"AssumeStrict"});
+        const auto& udfName = udf.Head();
+        if (!(udfName.Content().starts_with("Json2.") || udfName.Content().starts_with("Re2."))) {
+            return false;
+        }
+
+        if (udfName.IsAtom("Json2.CompilePath") && !apply->Tail().IsCallable("Utf8")) {
+            return false;
+        }
+
+        // Pushdonw only SQL LIKE or ILIKE.
+        constexpr auto like = "Re2.PatternFromLike"sv;
+        if (udfName.Content().starts_with("Re2.") && !udfName.IsAtom({like, "Re2.Options"}) &&
+            !FindNode(udf.ChildPtr(1U), [like] (const TExprNode::TPtr& node) { return node->IsCallable("Udf") && node->Head().IsAtom(like); })) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprNode* lambdaArg) {
     if constexpr (NKikimr::NSsa::RuntimeVersion >= 5U) {
         if (node.Maybe<TCoIf>() || node.Maybe<TCoJust>() || node.Maybe<TCoCoalesce>()) {
@@ -113,6 +154,11 @@ bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprNode* lamb
                 && IsGoodTypeForArithmeticPushdown(*op.Cast().Ref().GetTypeAnn()) && !op.Cast().Maybe<TCoAggrAdd>();
         }
     }
+
+    if constexpr (NKikimr::NSsa::RuntimeVersion >= 5U) {
+        return AbstractTreeCanBePushed(node, lambdaArg);
+    }
+
     return false;
 }
 
@@ -310,7 +356,11 @@ void CollectPredicates(const TExprBase& predicate, TOLAPPredicateNode& predicate
     } else if (const auto maybeJsonExists = predicate.Maybe<TCoJsonExists>()) {
         predicateTree.CanBePushed = JsonExistsCanBePushed(maybeJsonExists.Cast(), lambdaArg);
     } else {
-        predicateTree.CanBePushed = false;
+        if constexpr (NKikimr::NSsa::RuntimeVersion >= 5U) {
+            predicateTree.CanBePushed = AbstractTreeCanBePushed(predicate, lambdaArg);
+        } else {
+            predicateTree.CanBePushed = false;
+        }
     }
 }
 

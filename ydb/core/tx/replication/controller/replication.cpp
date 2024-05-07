@@ -98,7 +98,7 @@ public:
                 ydbProxy.Reset(CreateYdbProxy(params.GetEndpoint(), params.GetDatabase(), params.GetStaticCredentials()));
                 break;
             case NKikimrReplication::TConnectionParams::kOAuthToken:
-                ydbProxy.Reset(CreateYdbProxy(params.GetEndpoint(), params.GetDatabase(), params.GetOAuthToken()));
+                ydbProxy.Reset(CreateYdbProxy(params.GetEndpoint(), params.GetDatabase(), params.GetOAuthToken().GetToken()));
                 break;
             default:
                 if (!(State == EState::Removing && !Targets)) {

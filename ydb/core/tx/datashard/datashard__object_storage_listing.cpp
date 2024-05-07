@@ -257,7 +257,13 @@ public:
 
                             Y_VERIFY(columnId < value.Cells().size());
 
-                            const auto& matchType = matchTypes[i];
+                            NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType matchType;
+
+                            if (matchTypes.size() == filterColumnIds.size()) {
+                                matchType = matchTypes[i];
+                            } else {
+                                matchType = NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType_EQUAL;
+                            }
 
                             switch (matchType) {
                                 case NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType_EQUAL:
@@ -301,7 +307,13 @@ public:
 
                         Y_VERIFY(columnId < value.Cells().size());
 
-                        const auto& matchType = matchTypes[i];
+                        NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType matchType;
+                        
+                        if (matchTypes.size() == filterColumnIds.size()) {
+                            matchType = matchTypes[i];
+                        } else {
+                            matchType = NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType_EQUAL;
+                        }
 
                         switch (matchType) {
                             case NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType_EQUAL:

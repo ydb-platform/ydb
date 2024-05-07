@@ -306,7 +306,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
     TString DoS3Listing(ui16 grpcPort, ui64 bucket, const TString& pathPrefix, const TString& pathDelimiter, const TString& startAfter,
                     TString continuationToken,
                     const TVector<TString>& columnsToReturn, ui32 maxKeys,
-                    TVector<TString>& commonPrefixes, TVector<TString>& contents, std::optional<Ydb::ObjectStorage::ListingRequest_EMatchType> filter = {})
+                    TVector<TString>& commonPrefixes, TVector<TString>& contents, std::optional<Ydb::ObjectStorage::ListingRequest_EMatchType> filter = {}, bool useOldFilter = false)
     {
         std::shared_ptr<grpc::Channel> channel;
         TStringBuilder endpoint;
@@ -366,57 +366,81 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         request->set_max_keys(maxKeys);
 
         if (filter) {
-            auto* filterMsg = request->mutable_matching_filter();
+            if (useOldFilter) {
+                auto* filterMsg = request->mutable_filter();
 
-            ui32 eq = (ui32) filter.value();
-
-            TString filter = R"(
-                type {
-                    tuple_type {
-                        elements {
-                            list_type {
-                                item {
-                                    type_id: STRING
-                                }
-                            }
-                        }
-                        elements {
-                            list_type {
-                                item {
-                                    type_id: UINT32
-                                }
-                            }
-                        }
-                        elements {
-                            tuple_type {
-                                elements {
-                                    type_id: BOOL
-                                }
+                TString filter = R"(
+                    type {
+                        tuple_type {
+                            elements {
+                                type_id: BOOL
                             }
                         }
                     }
-                }
-                value {
-                    items {
-                        items {
-                            text_value: "SomeBool"
-                        }
-                    }
-                    items {
-                        items {
-                            uint32_value: )" + ToString(eq) + R"(
-                        }
-                    }
-                    items {
+                    value {
                         items {
                             bool_value: )" + ToString(true) + R"(
                         }
                     }
-                }
-            )";
+                )";
 
-            bool parseOk = ::google::protobuf::TextFormat::ParseFromString(filter, filterMsg);
-            UNIT_ASSERT(parseOk);
+                bool parseOk = ::google::protobuf::TextFormat::ParseFromString(filter, filterMsg->mutable_values());
+                UNIT_ASSERT(parseOk);
+
+                filterMsg->add_columns("SomeBool");
+            } else {
+                auto* filterMsg = request->mutable_matching_filter();
+
+                ui32 eq = (ui32) filter.value();
+
+                TString filter = R"(
+                    type {
+                        tuple_type {
+                            elements {
+                                list_type {
+                                    item {
+                                        type_id: STRING
+                                    }
+                                }
+                            }
+                            elements {
+                                list_type {
+                                    item {
+                                        type_id: UINT32
+                                    }
+                                }
+                            }
+                            elements {
+                                tuple_type {
+                                    elements {
+                                        type_id: BOOL
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    value {
+                        items {
+                            items {
+                                text_value: "SomeBool"
+                            }
+                        }
+                        items {
+                            items {
+                                uint32_value: )" + ToString(eq) + R"(
+                            }
+                        }
+                        items {
+                            items {
+                                bool_value: )" + ToString(true) + R"(
+                            }
+                        }
+                    }
+                )";
+
+                bool parseOk = ::google::protobuf::TextFormat::ParseFromString(filter, filterMsg);
+                UNIT_ASSERT(parseOk);
+            }
         }
 
         bool parseOk = ::google::protobuf::TextFormat::ParseFromString(keyPrefix, request->mutable_key_prefix());
@@ -949,6 +973,18 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/inner/inner2/c.jpg", 1, 10, "", "Table", false);
         S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/xyz.io", 1, 10, "", "Table", false);
         S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/yyyyy.txt", 1, 10, "", "Table", false);
+        
+        {
+            TVector<TString> folders;
+            TVector<TString> files;
+            DoS3Listing(GRPC_PORT, 100, "/Photos/", "/", nullptr, nullptr, {}, 1000, folders, files, Ydb::ObjectStorage::ListingRequest_EMatchType_EQUAL, true);
+
+            TVector<TString> expectedFolders = {"/Photos/games/", "/Photos/inner/", "/Photos/test/", "/Photos/test3/", "/Photos/test5/", "/Photos/test6/"};
+            TVector<TString> expectedFiles = {"/Photos/a.jpg", "/Photos/c.jpg"};
+
+            UNIT_ASSERT_VALUES_EQUAL(expectedFolders, folders);
+            UNIT_ASSERT_VALUES_EQUAL(expectedFiles, files);
+        }
 
         {
             TVector<TString> folders;

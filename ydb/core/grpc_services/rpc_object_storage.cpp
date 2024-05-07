@@ -485,7 +485,15 @@ private:
             TVector<NScheme::TTypeInfo> types;
 
             for (const auto& colName : filter.columns()) {
-                const auto& columnInfo = entry.Columns[columnByName[colName]];
+                const auto colIdIt = columnByName.find(colName);
+
+                if (colIdIt == columnByName.end()) {
+                    ReplyWithError(Ydb::StatusIds::BAD_REQUEST,
+                            Sprintf("Unknown filter column '%s'", colName.data()), ctx);
+                    return false;
+                }
+
+                const auto& columnInfo = entry.Columns[colIdIt->second];
                 const auto& type = columnInfo.PType;
 
                 types.push_back(type);

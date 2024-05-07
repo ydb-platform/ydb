@@ -192,8 +192,7 @@ private:
     void RegisterSystemViews() {
         RegisterSystemView<Schema::PartitionStats>(PartitionStatsName);
 
-        // 'nodes' table is currently switched off
-        // RegisterSystemView<Schema::Nodes>(NodesName);
+        RegisterSystemView<Schema::Nodes>(NodesName);
 
         RegisterSystemView<Schema::QueryStats>(TopQueriesByDuration1MinuteName);
         RegisterSystemView<Schema::QueryStats>(TopQueriesByDuration1HourName);

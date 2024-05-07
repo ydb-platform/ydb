@@ -2098,23 +2098,29 @@ void UploadRows(TTestActorRuntime& runtime, const TString& tablePath, const TVec
     UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, Ydb::StatusIds::SUCCESS, "Status: " << ev->Get()->Status << " Issues: " << ev->Get()->Issues);
 }
 
-void SendProposeToCoordinator(Tests::TServer::TPtr server, const std::vector<ui64>& affectedTabletIds, ui64 minStep, ui64 maxStep, ui64 txId)
+void SendProposeToCoordinator(
+        TTestActorRuntime& runtime,
+        const TActorId& sender,
+        const std::vector<ui64>& shards,
+        const TSendProposeToCoordinatorOptions& options)
 {
-    auto& runtime = *server->GetRuntime();
-    auto sender = runtime.AllocateEdgeActor();
+    auto req = std::make_unique<TEvTxProxy::TEvProposeTransaction>(
+        options.Coordinator, options.TxId, 0, options.MinStep, options.MaxStep);
+    auto* tx = req->Record.MutableTransaction();
 
-    ui64 coordinator = ChangeStateStorage(Coordinator, server->GetSettings().Domain);
-    auto event = std::make_unique<TEvTxProxy::TEvProposeTransaction>(coordinator, txId, 0, minStep, maxStep);
-
-    auto* affectedSet = event->Record.MutableTransaction()->MutableAffectedSet();
-    affectedSet->Reserve(affectedTabletIds.size());
-    for (auto affectedTabletId : affectedTabletIds) {
+    auto* affectedSet = tx->MutableAffectedSet();
+    affectedSet->Reserve(shards.size());
+    for (ui64 shardId : shards) {
         auto* x = affectedSet->Add();
-        x->SetTabletId(affectedTabletId);
+        x->SetTabletId(shardId);
         x->SetFlags(TEvTxProxy::TEvProposeTransaction::AffectedWrite);
     }
 
-    runtime.SendToPipe(coordinator, sender, event.release());
+    if (options.Volatile) {
+        tx->SetFlags(TEvTxProxy::TEvProposeTransaction::FlagVolatile);
+    }
+
+    SendViaPipeCache(runtime, options.Coordinator, sender, std::move(req));
 }
 
 void WaitTabletBecomesOffline(TServer::TPtr server, ui64 tabletId)

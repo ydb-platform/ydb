@@ -21,6 +21,7 @@ struct TEvPrivate {
         EvResolveTenantResult,
         EvUpdateTenantNodes,
         EvRunWorkers,
+        EvResolveSecretResult,
 
         EvEnd,
     };
@@ -127,6 +128,19 @@ struct TEvPrivate {
     };
 
     struct TEvRunWorkers: public TEventLocal<TEvRunWorkers, EvRunWorkers> {
+    };
+
+    struct TEvResolveSecretResult: public TEventLocal<TEvResolveSecretResult, EvResolveSecretResult> {
+        const ui64 ReplicationId;
+        const TString SecretValue;
+        const bool Success;
+        const TString Error;
+
+        explicit TEvResolveSecretResult(ui64 rid, const TString& secretValue);
+        explicit TEvResolveSecretResult(ui64 rid, bool success, const TString& error);
+        TString ToString() const override;
+
+        bool IsSuccess() const;
     };
 
 }; // TEvPrivate

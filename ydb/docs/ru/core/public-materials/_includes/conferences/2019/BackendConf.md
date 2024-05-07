@@ -6,6 +6,6 @@
 
 @[YouTube](https://youtu.be/V95bBGB-89Y?t=15514)
 
-Доклад будет интересен тем, кто хочет лучше узнать о работе модели транзакций в {{ ydb-short-name }}.
+Доклад будет интересен тем, кто хочет узнать подробности о работе модели транзакций в {{ ydb-short-name }}.
 
 [Слайды](https://presentations.ydb.tech/2019/ru/backend_conf/presentation.pdf)

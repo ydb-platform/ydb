@@ -37,14 +37,6 @@ using TClusterInfoPtr = TIntrusivePtr<TClusterInfo>;
 struct TCmsState;
 using TCmsStatePtr = TIntrusivePtr<TCmsState>;
 
-struct TErrorInfo {
-    NKikimrCms::TStatus::ECode Code = NKikimrCms::TStatus::ALLOW;
-    TString Reason;
-    NKikimrCms::TStatus::EReasonType ReasonType = NKikimrCms::TStatus::REASON_TYPE_UNSPECIFIED;
-    TInstant Deadline;
-    ui64 RollbackPoint = 0;
-};
-
 /**
  * Structure to hold info about issued permission. A set of
  * all issued permissions is a part of CMS persistent state.
@@ -667,7 +659,7 @@ public:
     friend TOperationLogManager;
 
     TenantNodesCheckers TenantNodesChecker;
-    TSimpleSharedPtr<TNodesLimitsCounterBase> ClusterNodes = MakeSimpleShared<TNodesLimitsCounterBase>(0u, 0u);
+    TSimpleSharedPtr<TClusterLimitsCounter> ClusterNodes = MakeSimpleShared<TClusterLimitsCounter>(0u, 0u);
 
     TOperationLogManager LogManager;
     TOperationLogManager ScheduledLogManager;

@@ -129,6 +129,10 @@ class TestYdbOverFq(TestYdsBase):
     def test_list_directory_v2(self, kikimr, s3, client):
         self.list_directory_test_body(kikimr, s3, client)
 
+    @yq_v1
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder_v1"}], indirect=True)
+    def test_list_directory_v1(self, kikimr, s3, client):
+        self.list_directory_test_body(kikimr, s3, client)
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "list_without_streams"}], indirect=True)
@@ -154,12 +158,6 @@ class TestYdbOverFq(TestYdsBase):
         assert ls_res.is_directory()
         # as long as ANALYTICS requests can't process streams, don't list them in ydb_over_fq
         assert len(ls_res.children) == 0
-
-
-    @yq_v1
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder_v1"}], indirect=True)
-    def test_list_directory_v1(self, kikimr, s3, client):
-        self.list_directory_test_body(kikimr, s3, client)
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)

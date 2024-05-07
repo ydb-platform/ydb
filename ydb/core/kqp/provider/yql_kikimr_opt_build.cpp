@@ -296,16 +296,18 @@ bool IsDqRead(const TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& 
         auto dataSourceProviderIt = types.DataSourceMap.find(dataSourceCategory);
         if (dataSourceProviderIt != types.DataSourceMap.end()) {
             if (auto* dqIntegration = dataSourceProviderIt->second->GetDqIntegration()) {
-                if (dqIntegration->CanRead(*node.Ptr(), ctx) &&
-                    (!estimateReadSize || dqIntegration->EstimateReadSize(
+                if (!dqIntegration->CanRead(*node.Ptr(), ctx)) {
+                    if (!node.Ref().IsCallable(ConfigureName) && hasErrors) {
+                        *hasErrors = true;
+                    }
+                    return false;
+                }
+                if (!estimateReadSize || dqIntegration->EstimateReadSize(
                         TDqSettings::TDefault::DataSizePerJob,
                         TDqSettings::TDefault::MaxTasksPerStage,
                         {node.Raw()},
-                        ctx))) {
+                        ctx)) {
                     return true;
-                }
-                if (!node.Ref().IsCallable(ConfigureName) && hasErrors) {
-                    *hasErrors = true;
                 }
             }
         }

@@ -28,13 +28,13 @@ using namespace NTabletFlatExecutor;
 
 namespace NBalancing {
 class TBalancer;
-}
-
 
 struct TPartitionInfo {
     ui64 TabletId;
     NSchemeShard::TTopicTabletInfo::TKeyRange KeyRange;
 };
+
+}
 
 
 class TMetricsTimeKeeper {
@@ -177,7 +177,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     std::vector<TEvPersQueue::TEvCheckACL::TPtr> WaitingACLRequests;
     std::vector<TEvPersQueue::TEvDescribe::TPtr> WaitingDescribeRequests;
 
-    std::unordered_map<ui32, TPartitionInfo> PartitionsInfo;
+    std::unordered_map<ui32, NBalancing::TPartitionInfo> PartitionsInfo;
 
     struct TTabletInfo {
         ui64 Owner;

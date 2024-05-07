@@ -884,7 +884,12 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
             // TODO: move to run actor priority selection
             TSet<TString> disabledConnections;
             for (const auto& connection: GetEntities<FederatedQuery::Connection>(resultSets[resultSets.size() - 3], CONNECTION_COLUMN_NAME, Config->Proto.GetIgnorePrivateSources(), commonCounters)) {
-                if (!Config->AvailableConnections.contains(connection.content().setting().connection_case())) {
+                auto connectionCase = connection.content().setting().connection_case();
+                if (!Config->AvailableConnections.contains(connectionCase)) {
+                    disabledConnections.insert(connection.meta().id());
+                    continue;
+                }
+                if ((query.content().type() == FederatedQuery::QueryContent::STREAMING) && !Config->AvailableStreamingConnections.contains(connectionCase)) {
                     disabledConnections.insert(connection.meta().id());
                     continue;
                 }

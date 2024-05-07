@@ -63,6 +63,7 @@ public:
 
             with_lock(*SharedLockCounterMutex) {
                 auto it = SharedLockCounter->find(std::this_thread::get_id());
+                Y_ABORT_UNLESS(it != SharedLockCounter->end());
                 auto& counter = it->second;
                 --counter;
                 if (counter == 0) {

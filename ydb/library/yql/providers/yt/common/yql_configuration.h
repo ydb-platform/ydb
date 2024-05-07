@@ -56,7 +56,8 @@ constexpr bool DEFAULT_JOIN_COMMON_USE_MULTI_OUT = false;
 constexpr bool DEFAULT_USE_RPC_READER_IN_DQ = false;
 constexpr size_t DEFAULT_RPC_READER_INFLIGHT = 1;
 constexpr TDuration DEFAULT_RPC_READER_TIMEOUT = TDuration::Seconds(120);
-const TSet<TString> DEFAULT_BLOCK_READER_SUPPORTED_TYPES = {"pg","int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64", "string", "yson", "json", "bool", "double", "tuple"};
+const TSet<TString> DEFAULT_BLOCK_READER_SUPPORTED_TYPES = {"pg", "tuple"};
+const TSet<TString> DEFAULT_BLOCK_READER_SUPPORTED_DATA_TYPES = {"Int8", "Uint8", "Int16", "Uint16", "Int32", "Uint32", "Int64", "Uint64", "String", "Yson", "Json", "Bool", "Double"};
 
 constexpr auto DEFAULT_SWITCH_MEMORY_LIMIT = 128_MB;
 

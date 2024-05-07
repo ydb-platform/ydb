@@ -34,7 +34,7 @@ public:
         ui64 PinnedSetSize = 0; // number of bytes pinned by transactions (even those not currently loaded)
         ui64 PinnedLoadSize = 0; // number of bytes pinned by transactions (which are currently being loaded)
         size_t CurrentCacheHits = 0; // = Touches.Size()
-        ui64 CurrentCacheHitSize = 0; // = Touches.Sum(t => t.Size)
+        ui64 CurrentCacheHitSize = 0; // = Touches.Where(t => !t.Sticky).Sum(t => t.Size)
         size_t CurrentCacheMisses = 0; // = ToLoad.Size()
     };
 

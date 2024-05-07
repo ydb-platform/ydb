@@ -315,7 +315,9 @@ const TSharedData* TPrivatePageCache::Lookup(ui32 pageId, TInfo *info) {
         if (page->Empty()) {
             Touches.PushBack(page);
             Stats.CurrentCacheHits++;
-            Stats.CurrentCacheHitSize += page->Size;
+            if (!page->Sticky) {
+                Stats.CurrentCacheHitSize += page->Size;
+            }
         }
         return &page->PinnedBody;
     }

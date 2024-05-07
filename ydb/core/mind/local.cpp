@@ -109,6 +109,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     ui64 UserPoolUsage = 0; // (usage uS x threads) / sec
     ui64 MemUsage = 0;
     ui64 MemLimit = 0;
+    ui64 CPULimit = 0;
     double NodeUsage = 0;
 
     bool SentDrainNode = false;
@@ -118,6 +119,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     TIntrusivePtr<TDrainProgress> LastDrainRequest;
 
     NKikimrTabletBase::TMetrics ResourceLimit;
+    bool UseActorSystemForResourceLimit = false;
     TResourceProfilesPtr ResourceProfiles;
     TSharedQuotaPtr TxCacheQuota;
     ::NMonitoring::TDynamicCounterPtr Counters;
@@ -272,19 +274,27 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         HandlePipeDestroyed(ctx);
     }
 
+    ui64 GetCPULimit(const TActorContext& ctx) {
+        TExecutorPoolStats poolStats;
+        TVector<TExecutorThreadStats> statsCopy;
+        TVector<TExecutorThreadStats> sharedStatsCopy;
+        ctx.ExecutorThread.ActorSystem->GetPoolStats(AppData()->UserPoolId, poolStats, statsCopy, sharedStatsCopy);
+        return poolStats.PotentialMaxThreadCount * 1'000'000;
+    }
+
+
     void SendStatusOk(const TActorContext &ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar SendStatusOk");
         TAutoPtr<TEvLocal::TEvStatus> eventStatus = new TEvLocal::TEvStatus(TEvLocal::TEvStatus::StatusOk);
         auto& record = eventStatus->Record;
         record.SetStartTime(StartTime.GetValue());
         record.MutableResourceMaximum()->CopyFrom(ResourceLimit);
-        if (!record.GetResourceMaximum().HasCPU()) {
-            TExecutorPoolStats poolStats;
-            TVector<TExecutorThreadStats> statsCopy;
-            TVector<TExecutorThreadStats> sharedStatsCopy;
-            ctx.ExecutorThread.ActorSystem->GetPoolStats(AppData()->UserPoolId, poolStats, statsCopy, sharedStatsCopy);
-            if (!statsCopy.empty()) {
-                record.MutableResourceMaximum()->SetCPU(poolStats.MaxThreadCount * 1'000'000);
+        UseActorSystemForResourceLimit = !record.GetResourceMaximum().HasCPU();
+        if (UseActorSystemForResourceLimit) {
+            if (CPULimit != 0) {
+                record.MutableResourceMaximum()->SetCPU(CPULimit);
+            } else {
+                record.MutableResourceMaximum()->SetCPU(GetCPULimit(ctx));
             }
         }
         if (!record.GetResourceMaximum().HasMemory()) {
@@ -645,6 +655,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
 
     void Handle(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse::TPtr& ev, const TActorContext& ctx) {
         const NKikimrWhiteboard::TEvSystemStateResponse& record = ev->Get()->Record;
+        bool maximumChanged = false;
         if (!record.GetSystemStateInfo().empty()) {
             const NKikimrWhiteboard::TSystemStateInfo& info = record.GetSystemStateInfo(0);
             if (static_cast<ui32>(info.PoolStatsSize()) > AppData()->UserPoolId) {
@@ -663,9 +674,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                 if (MemLimit != info.GetMemoryLimit()) {
                     MemLimit = info.GetMemoryLimit();
                     LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar MemoryLimit changed");
-                    if (Connected) {
-                        SendStatusOk(ctx);
-                    }
+                    maximumChanged = true;
                 }
                 usage = static_cast<double>(MemUsage) / MemLimit;
             }
@@ -681,6 +690,19 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             NodeUsage = usage;
 
             ScheduleSendTabletMetrics(ctx);
+        }
+
+        if (UseActorSystemForResourceLimit) {
+            auto oldLimit = CPULimit;
+            CPULimit = GetCPULimit(ctx);
+            if (CPULimit != oldLimit) {
+                maximumChanged = true;
+                LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar CPULimit changed");
+            }
+        }
+
+        if (maximumChanged && Connected) {
+            SendStatusOk(ctx);
         }
     }
 

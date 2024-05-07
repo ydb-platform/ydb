@@ -350,7 +350,7 @@ private:
                 NYql::NDqProto::StatusIds::INTERNAL_ERROR);
         }
 
-        if (Finished || GetFreeSpace() <= 0 || SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
+        if (Finished || GetFreeSpace() <= 0) {
             TResumeNotificationManager resumeNotificator(*this);
             for (auto& [shardId, batches] : Serializer->FlushBatchesForce()) {
                 for (auto& batch : batches) {

@@ -8,6 +8,8 @@
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/core/engine/mkql_keys.h>
 #include <util/generic/size_literals.h>
+#include <ydb/core/tx/schemeshard/olap/schema/schema.h>
+#include <ydb/core/tx/sharding/sharding.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -177,6 +179,20 @@ public:
         if (!BatchBuilder.Start(BuildBatchBuilderColumns(schemeEntry), 0, 0, err)) {
             yexception() << "Failed to start batch builder: " + err;
         }
+
+        // TODO: Checks from ydb/core/tx/data_events/columnshard_splitter.cpp
+        const auto& description = schemeEntry.ColumnTableInfo->Description;
+        const auto& scheme = description.GetSchema();
+        const auto& sharding = description.GetSharding();
+
+        NSchemeShard::TOlapSchema olapSchema;
+        olapSchema.ParseFromLocalDB(scheme);
+        auto shardingConclusion = NSharding::TShardingBase::BuildFromProto(olapSchema, sharding);
+        if (shardingConclusion.IsFail()) {
+            ythrow yexception() << "Ydb::StatusIds::SCHEME_ERROR : " <<  shardingConclusion.GetErrorMessage();
+        }
+        YQL_ENSURE(shardingConclusion.GetResult() != nullptr);
+        Sharding = shardingConclusion.DetachResult();
     }
 
     void AddData(NMiniKQL::TUnboxedValueBatch&& data, bool close) override {
@@ -214,7 +230,6 @@ public:
                 for (auto&& shardInfo : infos) {
                     auto& batch = Batches[shard].emplace_back(
                         MakeIntrusive<TBatch>(shardInfo->GetData())); // TODO: get rid of copy
-                    //batch = shardInfo->GetData();
                     Memory += batch->GetMemory();
                     YQL_ENSURE(batch->GetMemory() != 0);
                 }
@@ -296,6 +311,7 @@ private:
             }
 
             TString GetSerializedData() const override {
+                YQL_ENSURE(false);
                 return NArrow::SerializeBatchNoCompression(Batch);
             }
         };
@@ -305,6 +321,7 @@ private:
 
     const NMiniKQL::TTypeEnvironment& TypeEnv;
     const NSchemeCache::TSchemeCacheNavigate::TEntry& SchemeEntry;
+    std::shared_ptr<NSharding::TShardingBase> Sharding;
 
     const TVector<TSysTables::TTableColumnInfo> Columns;
     const std::vector<ui32> WriteIndex;

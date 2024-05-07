@@ -241,21 +241,30 @@ NKikimrSchemeOp::TColumnTableSharding IShardingBase::SerializeToProto() const {
     return result;
 }
 
-NKikimr::TConclusion<THashMap<ui64, std::vector<NKikimr::NArrow::TSerializedBatch>>> IShardingBase::SplitByShards(const std::shared_ptr<arrow::RecordBatch>& batch, const ui64 chunkBytesLimit) {
-    THashMap<ui64, std::vector<ui32>> sharding = MakeSharding(batch);
-    THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> chunks;
-    if (sharding.size() == 1) {
-        AFL_VERIFY(chunks.emplace(sharding.begin()->first, batch).second);
+THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> IShardingBase::SplitByShardsToArrowBatches(const std::shared_ptr<arrow::RecordBatch>& batch) {
+    auto sharding = MakeSharding(batch);
+    std::vector<std::shared_ptr<arrow::RecordBatch>> chunks;
+    if (Shards.size() == 1) {
+        chunks = {batch};
     } else {
         chunks = NArrow::ShardingSplit(batch, sharding);
     }
-    AFL_VERIFY(chunks.size() == sharding.size());
-    NArrow::TBatchSplitttingContext context(chunkBytesLimit);
-    THashMap<ui64, std::vector<NArrow::TSerializedBatch>> result;
+    AFL_VERIFY(chunks.size() == Shards.size());
+    THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> result;
     for (auto&& [tabletId, chunk]: chunks) {
         if (!chunk) {
             continue;
         }
+        result.emplace(tabletId, std::move(chunk));
+    }
+    return result;
+}
+
+TConclusion<THashMap<ui64, std::vector<NArrow::TSerializedBatch>>> IShardingBase::SplitByShards(const std::shared_ptr<arrow::RecordBatch>& batch, const ui64 chunkBytesLimit) {
+    auto splitted = SplitByShardsToArrowBatches(batch);
+    NArrow::TBatchSplitttingContext context(chunkBytesLimit);
+    THashMap<ui64, std::vector<NArrow::TSerializedBatch>> result;
+    for (auto [tabletId, chunk] : splitted) {
         auto blobsSplittedConclusion = NArrow::SplitByBlobSize(chunk, context);
         if (blobsSplittedConclusion.IsFail()) {
             return TConclusionStatus::Fail("cannot split batch in according to limits: " + blobsSplittedConclusion.GetErrorMessage());

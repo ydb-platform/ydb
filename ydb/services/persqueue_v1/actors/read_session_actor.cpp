@@ -2359,8 +2359,8 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReadingFinis
         auto* r = result.mutable_end_partition_session();
         r->set_partition_session_id(partitionInfo->Partition.AssignId);
 
-
         r->add_adjacent_partition_ids(1);
+        r->add_child_partition_ids(1);
 
         LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " sending to client end partition stream event");
         SendControlMessage(partitionInfo->Partition, std::move(result), ctx);

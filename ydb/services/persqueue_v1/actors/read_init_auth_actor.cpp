@@ -90,7 +90,8 @@ void TReadInitAndAuthActor::SendCacheNavigateRequest(const TActorContext& ctx, c
 
 
 bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
-        const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, THashMap<TString, TTopicHolder>::iterator topicsIter,
+        const NSchemeCache::TSchemeCacheNavigate::TEntry& entry,
+        THashMap<TString, TTopicHolder>::iterator topicsIter,
         const TActorContext& ctx
 ) {
     Y_ABORT_UNLESS(entry.PQGroupInfo); // checked at ProcessMetaCacheTopicResponse()
@@ -106,6 +107,31 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
     for (const auto& partitionDescription : pqDescr.GetPartitions()) {
         topicsIter->second.PartitionIdToTabletId[partitionDescription.GetPartitionId()] =
             partitionDescription.GetTabletId();
+    }
+
+    NPQ::TPartitionGraph graph = NPQ::MakePartitionGraph(pqDescr);
+
+    for (const auto& partitionDescription : pqDescr.GetPartitions()) {
+        auto partitionId = partitionDescription.GetPartitionId();
+
+        std::vector<ui32> adjacentPartitionIds;
+        auto* node = graph.GetPartition(partitionId);
+        if (node->Children.size() == 1) {
+            auto* child = node->Children.front();
+            for (auto* p : child->Parents) {
+                if (p->Id != partitionId) {
+                    adjacentPartitionIds.push_back(p->Id);
+                }
+            }
+        }
+
+        std::vector<ui32> childPartitionIds;
+        childPartitionIds.insert(childPartitionIds.end(), partitionDescription.GetChildPartitionIds().begin(),  partitionDescription.GetChildPartitionIds().end());
+
+        topicsIter->second.Partitions[partitionId] =
+            TPartitionInfo{ partitionDescription.GetTabletId(),
+              std::move(adjacentPartitionIds),
+              std::move(childPartitionIds) };
     }
 
     if (!topicsIter->second.DiscoveryConverter->IsValid()) {
@@ -268,7 +294,7 @@ void TReadInitAndAuthActor::FinishInitialization(const TActorContext& ctx) {
     TTopicInitInfoMap res;
     for (auto& [name, holder] : Topics) {
         res.insert(std::make_pair(name, TTopicInitInfo{
-            holder.FullConverter, holder.TabletID, holder.CloudId, holder.DbId, holder.DbPath, holder.IsServerless, holder.FolderId, holder.MeteringMode, holder.PartitionIdToTabletId
+            holder.FullConverter, holder.TabletID, holder.CloudId, holder.DbId, holder.DbPath, holder.IsServerless, holder.FolderId, holder.MeteringMode, holder.PartitionIdToTabletId, holder.Partitions
         }));
     }
     ctx.Send(ParentId, new TEvPQProxy::TEvAuthResultOk(std::move(res)));

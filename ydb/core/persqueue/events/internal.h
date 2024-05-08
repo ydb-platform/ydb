@@ -195,8 +195,12 @@ struct TEvPQ {
     };
 
     struct TEvHandleWriteResponse : TEventLocal<TEvHandleWriteResponse, EvHandleWriteResponse> {
-        TEvHandleWriteResponse()
-        {}
+        explicit TEvHandleWriteResponse(ui64 cookie) :
+            Cookie(cookie)
+        {
+        }
+
+        ui64 Cookie = 0;
     };
 
     struct TEvWrite : public TEventLocal<TEvWrite, EvWrite> {
@@ -1141,7 +1145,7 @@ struct TEvPQ {
         {
         }
 
-        ui64 Cookie;
+        ui64 Cookie = 0;
     };
 
     struct TEvDeletePartitionDone : TEventLocal<TEvDeletePartitionDone, EvDeletePartitionDone> {
@@ -1150,7 +1154,7 @@ struct TEvPQ {
         {
         }
 
-        ui64 Cookie;
+        ui64 Cookie = 0;
     };
 };
 

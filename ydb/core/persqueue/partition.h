@@ -91,6 +91,10 @@ private:
     static const ui32 MAX_ERRORS_COUNT_TO_STORE = 10;
     static const ui32 SCALE_REQUEST_REPEAT_MIN_SECONDS = 60;
 
+    enum ECookie : ui64 {
+        DELETE_PARTITION_COOKIE = 6,
+    };
+
 private:
     struct THasDataReq;
     struct THasDataDeadline;
@@ -803,6 +807,7 @@ private:
 
     ui64 DeletePartitionCookie = 0;
 
+    void ScheduleDeletePartitionDone(ui64 cookie);
     void ScheduleNegativeReplies();
     void AddCmdDeleteRangeForAllKeys(TEvKeyValue::TEvRequest& request);
 
@@ -810,6 +815,8 @@ private:
     void ScheduleNegativeReply(const TEvPersQueue::TEvProposeTransaction& event);
     void ScheduleNegativeReply(const TTransaction& tx);
     void ScheduleNegativeReply(const TMessage& msg);
+
+    void OnHandleWriteResponse(ui64 cookie, const TActorContext& ctx);
 };
 
 } // namespace NKikimr::NPQ

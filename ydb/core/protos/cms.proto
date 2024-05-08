@@ -22,8 +22,8 @@ message TStatus {
         NO_SUCH_SERVICE = 12;
     }
 
-    optional ECode       Code = 1;
-    optional string      Reason = 2;
+    optional ECode   Code = 1;
+    optional string  Reason = 2;
 }
 
 enum EState {

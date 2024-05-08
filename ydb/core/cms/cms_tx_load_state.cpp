@@ -165,6 +165,11 @@ public:
             ParseFromStringSafe(actionStr, &permission.Action);
             permission.Deadline = TInstant::MicroSeconds(deadline);
 
+            google::protobuf::TextFormat::Parser parser;
+            parser.AllowUnknownField(true);
+            parser.ParseFromString(actionStr, &permission.Action);
+        
+
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Loaded permission %s owned by %s valid until %s: %s",
                       id.data(), owner.data(), TInstant::MicroSeconds(deadline).ToStringLocalUpToSeconds().data(), actionStr.data());
 

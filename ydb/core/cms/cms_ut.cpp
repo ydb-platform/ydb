@@ -633,7 +633,61 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
     Y_UNIT_TEST(ActionStatus)
     {
-        TCmsTestEnv env(8, 4);
+        TCmsTestEnv env(16);
+
+        // Acquire lock on one node
+        auto rec = env.CheckPermissionRequest
+            ("user", false, false, true, true, TStatus::ALLOW,
+             MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000));
+        UNIT_ASSERT_VALUES_EQUAL(rec.PermissionsSize(), 1);
+        UNIT_ASSERT(!rec.GetPermissions(0).GetAction().HasStatus());
+
+        auto pid = rec.GetPermissions(0).GetId();
+
+        // Schedule request
+        rec = env.CheckPermissionRequest
+            ("user", false, false, true, true, TStatus::DISALLOW_TEMP,
+             MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(9), 60000000),
+             MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000));
+        UNIT_ASSERT_VALUES_EQUAL(rec.PermissionsSize(), 0);
+    
+        auto rid = rec.GetRequestId();
+
+        // Get scheduled request
+        auto scheduledRec = env.CheckGetRequest("user", rid);
+        UNIT_ASSERT_VALUES_EQUAL(scheduledRec.RequestsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(scheduledRec.GetRequests(0).ActionsSize(), 2);
+        auto action1 = scheduledRec.GetRequests(0).GetActions(0);
+        UNIT_ASSERT_VALUES_EQUAL(action1.GetStatus(), TAction::OK);
+        auto action2 = scheduledRec.GetRequests(0).GetActions(1);
+        UNIT_ASSERT_VALUES_EQUAL(action2.GetStatus(), TAction::TOO_MANY_UNAVAILABLE_VDISKS);
+        
+        // Try to check request
+        env.CheckRequest("user", rid, false, TStatus::DISALLOW_TEMP);
+
+        // Get scheduled request
+        scheduledRec = env.CheckGetRequest("user", rid);
+        UNIT_ASSERT_VALUES_EQUAL(scheduledRec.RequestsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(scheduledRec.GetRequests(0).ActionsSize(), 2);
+        action1 = scheduledRec.GetRequests(0).GetActions(0);
+        UNIT_ASSERT_VALUES_EQUAL(action1.GetStatus(), TAction::OK);
+        action2 = scheduledRec.GetRequests(0).GetActions(1);
+        UNIT_ASSERT_VALUES_EQUAL(action2.GetStatus(), TAction::TOO_MANY_UNAVAILABLE_VDISKS);
+
+        // Done with permission
+        env.CheckDonePermission("user", pid);
+
+        // Try to check request
+        rec = env.CheckRequest("user", rid, false, TStatus::ALLOW, 2);
+        UNIT_ASSERT(!rec.GetPermissions(0).GetAction().HasStatus());
+        UNIT_ASSERT(!rec.GetPermissions(1).GetAction().HasStatus());
+
+        env.CheckGetRequest("user", rid, false, TStatus::WRONG_REQUEST);
+    }
+
+    Y_UNIT_TEST(ActionStatusPartialPermissions)
+    {
+        TCmsTestEnv env(8);
 
         // Schedule request
         auto rec = env.CheckPermissionRequest
@@ -641,7 +695,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
              MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000),
              MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000));
         UNIT_ASSERT_VALUES_EQUAL(rec.PermissionsSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(rec.GetPermissions(0).GetAction().GetStatus(), TAction::OK);
+        UNIT_ASSERT(!rec.GetPermissions(0).GetAction().HasStatus());
 
         auto pid = rec.GetPermissions(0).GetId();
         auto rid = rec.GetRequestId();
@@ -668,7 +722,9 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         // Try to check request
         rec = env.CheckRequest("user", rid, false, TStatus::ALLOW, 1);
-        UNIT_ASSERT_VALUES_EQUAL(rec.GetPermissions(0).GetAction().GetStatus(), TAction::OK);
+        UNIT_ASSERT(!rec.GetPermissions(0).GetAction().HasStatus());
+
+        env.CheckGetRequest("user", rid, false, TStatus::WRONG_REQUEST);
     }
 
     Y_UNIT_TEST(WalleTasks)

@@ -34,7 +34,8 @@ bool BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, u
     ui64 prevRows = 0;
     ui64 prevSize = 0;
     while (true) {
-        yieldHandler();
+        // yieldHandler();
+        Y_UNUSED(yieldHandler);
         
         auto ready = statsIterator.Next(iteratorStats);
         if (ready == EReady::Page) {

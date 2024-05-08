@@ -80,6 +80,29 @@ void TPrintable<TStopPartitionSessionEvent>::DebugString(TStringBuilder& ret, bo
         << " }";
 }
 
+void JoinIds(TStringBuilder& ret, const std::vector<ui32> ids) {
+    ret << "[";
+    for (size_t i = 0; i < ids.size(); ++i) {
+        if (i) {
+            ret << ", ";
+        }
+        ret << ids[i];
+    }
+    ret << "]";
+}
+
+template<>
+void TPrintable<TEndPartitionSessionEvent>::DebugString(TStringBuilder& ret, bool) const {
+    const auto* self = static_cast<const TEndPartitionSessionEvent*>(this);
+    ret << "EndPartitionSession {";
+    self->GetFederatedPartitionSession()->DebugString(ret);
+    ret << " AdjacentPartitionIds: ";
+    JoinIds(ret, self->GetAdjacentPartitionIds());
+    ret << " ChildPartitionIds: ";
+    JoinIds(ret, self->GetChildPartitionIds());
+    ret << " }";
+}
+
 template<>
 void TPrintable<TPartitionSessionStatusEvent>::DebugString(TStringBuilder& ret, bool) const {
     const auto* self = static_cast<const TPartitionSessionStatusEvent*>(this);

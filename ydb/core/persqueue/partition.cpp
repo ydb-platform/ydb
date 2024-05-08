@@ -1658,6 +1658,13 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
 
     THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
 
+    if (DeletePartitionCookie) {
+        ScheduleNegativeReplies();
+        AddCmdDeleteRangeForAllKeys(*request);
+        ctx.Send(Tablet, request.Release());
+        return;
+    }
+
     HaveWriteMsg = false;
 
     if (UserActionAndTransactionEvents.empty()) {
@@ -3011,6 +3018,68 @@ void TPartition::Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const T
     }
 
     Send(ev->Sender, response.Release());
+}
+
+void TPartition::HandleOnInit(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorContext&)
+{
+    PendingEvents.emplace_back(ev->ReleaseBase().Release());
+}
+
+void TPartition::Handle(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorContext& ctx)
+{
+    Y_ABORT_UNLESS(IsSupportive());
+    Y_ABORT_UNLESS(Partition.InternalPartitionId == ev->Get()->Cookie);
+    Y_ABORT_UNLESS(DeletePartitionCookie == 0);
+
+    DeletePartitionCookie = ev->Get()->Cookie;
+    ProcessTxsAndUserActs(ctx);
+}
+
+void TPartition::ScheduleNegativeReplies()
+{
+    for (auto& event : UserActionAndTransactionEvents) {
+        auto visitor = [this](auto& event) {
+            using T = std::decay_t<decltype(event)>;
+            if constexpr (TIsSimpleSharedPtr<T>::value) {
+                return this->ScheduleNegativeReply(*event);
+            } else {
+                return this->ScheduleNegativeReply(event);
+            }
+        };
+
+        std::visit(visitor, event);
+    }
+
+    UserActionAndTransactionEvents.clear();
+}
+
+void TPartition::AddCmdDeleteRangeForAllKeys(TEvKeyValue::TEvRequest& request)
+{
+    NPQ::AddCmdDeleteRange(request, TKeyPrefix::TypeInfo, Partition);
+    NPQ::AddCmdDeleteRange(request, TKeyPrefix::TypeData, Partition);
+    NPQ::AddCmdDeleteRange(request, TKeyPrefix::TypeTmpData, Partition);
+    NPQ::AddCmdDeleteRange(request, TKeyPrefix::TypeMeta, Partition);
+    NPQ::AddCmdDeleteRange(request, TKeyPrefix::TypeTxMeta, Partition);
+}
+
+void TPartition::ScheduleNegativeReply(const TEvPQ::TEvSetClientInfo&)
+{
+    Y_ABORT_UNLESS(false, "The supportive partition does not accept read operations");
+}
+
+void TPartition::ScheduleNegativeReply(const TEvPersQueue::TEvProposeTransaction&)
+{
+    Y_ABORT_UNLESS(false, "The supportive partition does not accept immediate transactions");
+}
+
+void TPartition::ScheduleNegativeReply(const TTransaction&)
+{
+    Y_ABORT_UNLESS(false, "The supportive partition does not accept distribute transactions");
+}
+
+void TPartition::ScheduleNegativeReply(const TMessage& msg)
+{
+    ScheduleReplyError(msg.GetCookie(), NPersQueue::NErrorCode::ERROR, "The transaction is completed");
 }
 
 const NKikimrPQ::TPQTabletConfig::TPartition* TPartition::GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config)

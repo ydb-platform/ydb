@@ -189,6 +189,8 @@ struct TEvPQ {
         EvPartitionScaleStatusChanged,
         EvPartitionScaleRequestDone,
         EvBalanceConsumer,
+        EvDeletePartition,
+        EvDeletePartitionDone,
         EvEnd
     };
 
@@ -1131,6 +1133,24 @@ struct TEvPQ {
         {}
 
         TString ConsumerName;
+    };
+
+    struct TEvDeletePartition : TEventLocal<TEvDeletePartition, EvDeletePartition> {
+        explicit TEvDeletePartition(ui64 cookie) :
+            Cookie(cookie)
+        {
+        }
+
+        ui64 Cookie;
+    };
+
+    struct TEvDeletePartitionDone : TEventLocal<TEvDeletePartitionDone, EvDeletePartitionDone> {
+        explicit TEvDeletePartitionDone(ui64 cookie) :
+            Cookie(cookie)
+        {
+        }
+
+        ui64 Cookie;
     };
 };
 

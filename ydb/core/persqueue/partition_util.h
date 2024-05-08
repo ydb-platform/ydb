@@ -132,5 +132,8 @@ void AddCheckDiskRequest(TEvKeyValue::TEvRequest *request, ui32 numChannels);
 NKikimrClient::TKeyValueRequest::EStorageChannel GetChannel(ui32 i);
 bool IsQuotingEnabled(const NKikimrPQ::TPQConfig& pqConfig,
                       bool isLocalDC);
+void AddCmdDeleteRange(TEvKeyValue::TEvRequest& request,
+                       TKeyPrefix::EType c,
+                       const TPartitionId& partitionId);
 
 } // namespace NKikimr::NPQ

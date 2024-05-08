@@ -388,7 +388,9 @@ TRequestResult TYdbSetup::GetScriptExecutionOperationRequest(const TString& oper
         meta.ExecutionStatus = static_cast<NYdb::NQuery::EExecStatus>(deserializedMeta.exec_status());
         meta.ResultSetsCount = deserializedMeta.result_sets_meta_size();
         meta.Ast = deserializedMeta.exec_stats().query_ast();
-        meta.Plan = deserializedMeta.exec_stats().query_plan();
+        if (deserializedMeta.exec_stats().query_plan()) {
+            meta.Plan = deserializedMeta.exec_stats().query_plan();
+        }
     }
 
     return TRequestResult(scriptExecutionOperation->Get()->Status, scriptExecutionOperation->Get()->Issues);

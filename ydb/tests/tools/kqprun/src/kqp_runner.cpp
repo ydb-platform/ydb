@@ -130,6 +130,7 @@ public:
 
 private:
     bool WaitScriptExecutionOperation() {
+        ExecutionMeta_ = TExecutionMeta();
         TRequestResult status;
         while (true) {
             status = YdbSetup_.GetScriptExecutionOperationRequest(ExecutionOperation_, ExecutionMeta_);

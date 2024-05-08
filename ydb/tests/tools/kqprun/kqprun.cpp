@@ -108,10 +108,11 @@ THolder<TFileOutput> SetupDefaultFileOutput(const TString& filePath, IOutputStre
 
 template <typename EnumType>
 EnumType GetCaseVariant(const TString& optionName, const TString& caseName, const std::map<TString, EnumType>& casesMap) {
-    if (!casesMap.contains(caseName)) {
+    auto it = casesMap.find(caseName);
+    if (it == casesMap.end()) {
         ythrow yexception() << "Option '" << optionName << "' has no case '" << caseName << "'";
     }
-    return casesMap.at(caseName);
+    return it->second;
 }
 
 

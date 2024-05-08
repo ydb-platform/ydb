@@ -470,4 +470,43 @@ Y_UNIT_TEST_SUITE(TSequence) {
         )", {NKikimrScheme::StatusInvalidParameter});
     }
 
+    Y_UNIT_TEST(AlterSequenceWithOwnedBy) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Table"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+            }
+        )");
+
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "seq"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "seq"
+            Increment: 2
+            MaxValue: 100
+            MinValue: 2
+            Cache: 1
+            StartValue: 2
+            Cycle: true
+            ColumnPath: {
+                TablePath: "/MyRoot/Table"
+                ColumnName: "value"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+    }
 } // Y_UNIT_TEST_SUITE(TSequence)

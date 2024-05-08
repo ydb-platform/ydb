@@ -42,7 +42,8 @@ bool IsSuperUser(const NACLib::TUserToken* userToken) {
 
 TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table, const NKikimrSchemeOp::TTableDescription& alter,
                                       const bool shadowDataAllowed,
-                                      TString& errStr, NKikimrScheme::EStatus& status, TOperationContext& context) {
+                                      TString& errStr, NKikimrScheme::EStatus& status, TOperationContext& context,
+                                      const THashSet<TString>& localSequences) {
     const TAppData* appData = AppData(context.Ctx);
 
     if (!path.IsCommonSensePath()) {
@@ -128,7 +129,9 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
 
     const TSubDomainInfo& subDomain = *path.DomainInfo();
     const TSchemeLimits& limits = subDomain.GetSchemeLimits();
-    TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(table, copyAlter, *appData->TypeRegistry, limits, subDomain, context.SS->EnableTablePgTypes, errStr);
+
+
+    TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(table, copyAlter, *appData->TypeRegistry, limits, subDomain, context.SS->EnableTablePgTypes, errStr, localSequences);
     if (!alterData) {
         status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;
@@ -406,6 +409,7 @@ public:
 
 class TAlterTable: public TSubOperation {
     bool AllowShadowData = false;
+    THashSet<TString> LocalSequences;
 
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
@@ -454,6 +458,10 @@ public:
 
     bool IsShadowDataAllowed() const {
         return AllowShadowData || AppData()->AllowShadowDataInSchemeShardForTests;
+    }
+
+    void SetLocalSequences(const THashSet<TString>& localSequences) {
+        LocalSequences = localSequences;
     }
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
@@ -553,7 +561,7 @@ public:
         }
 
         NKikimrScheme::EStatus status;
-        TTableInfo::TAlterDataPtr alterData = ParseParams(path, table, alter, IsShadowDataAllowed(), errStr, status, context);
+        TTableInfo::TAlterDataPtr alterData = ParseParams(path, table, alter, IsShadowDataAllowed(), errStr, status, context, LocalSequences);
         if (!alterData) {
             result->SetError(status, errStr);
             return result;
@@ -614,8 +622,10 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperation::TPtr CreateAlterTable(TOperationId id, const TTxTransaction& tx) {
-    return MakeSubOperation<TAlterTable>(id, tx);
+ISubOperation::TPtr CreateAlterTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences) {
+    auto obj = MakeSubOperation<TAlterTable>(id, tx);
+    static_cast<TAlterTable*>(obj.Get())->SetLocalSequences(localSequences);
+    return obj;
 }
 
 ISubOperation::TPtr CreateAlterTable(TOperationId id, TTxState::ETxState state) {

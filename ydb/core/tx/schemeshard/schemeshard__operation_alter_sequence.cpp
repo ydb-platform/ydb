@@ -482,4 +482,86 @@ ISubOperation::TPtr CreateAlterSequence(TOperationId id, TTxState::ETxState stat
     return MakeSubOperation<TAlterSequence>(id, state);
 }
 
+TVector<ISubOperation::TPtr> CreateConsistentAlterSequence(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
+    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpAlterSequence);
+
+    auto sequence = tx.GetSequence();
+
+    TPath workingDir = TPath::Resolve(tx.GetWorkingDir(), context.SS);
+
+    if (workingDir.IsEmpty()) {
+        TString msg = "parent path hasn't been resolved";
+        return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPathDoesNotExist, msg)};
+    }
+
+    const auto sequencePath = workingDir.Child(sequence.GetName());
+    {
+        const auto checks = sequencePath.Check();
+        checks
+            .NotEmpty()
+            .NotUnderDomainUpgrade()
+            .IsAtLocalSchemeShard()
+            .IsResolved()
+            .NotDeleted()
+            .IsSequence()
+            .NotUnderDeleting()
+            .NotUnderOperation();
+
+        if (!checks) {
+            return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
+        }
+    }
+
+    TVector<ISubOperation::TPtr> result;
+
+    if (!sequence.HasColumnPath()) {
+        auto sequenceAltering =
+        TransactionTemplate(workingDir.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterSequence);
+        auto alterSequence = sequenceAltering.MutableSequence();
+        *alterSequence = sequence;
+        result.push_back(CreateAlterSequence(NextPartId(nextId, result), sequenceAltering));
+
+        return result;
+    }
+
+    auto columnPath = sequence.GetColumnPath();
+
+    TPath tablePath = TPath::Resolve(columnPath.GetTablePath(), context.SS);
+    {
+        const auto checks = tablePath.Check();
+        checks
+            .NotEmpty()
+            .NotUnderDomainUpgrade()
+            .IsAtLocalSchemeShard()
+            .IsResolved()
+            .NotDeleted()
+            .IsTable()
+            .NotAsyncReplicaTable()
+            .NotUnderOperation();
+
+        if (!checks) {
+            return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
+        }
+    }
+
+    auto tableAltering =
+        TransactionTemplate(tablePath.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
+    auto alterTable = tableAltering.MutableAlterTable();
+    alterTable->SetName(tablePath.LeafName());
+    NKikimrSchemeOp::TColumnDescription columnDescription;
+    columnDescription.SetName(columnPath.GetColumnName());
+    columnDescription.SetDefaultFromSequence(sequencePath.PathString());
+    alterTable->MutableColumns()->Add()->CopyFrom(columnDescription);
+
+    result.push_back(CreateAlterTable(NextPartId(nextId, result), tableAltering, { sequencePath.PathString() }));
+
+    auto sequenceAltering =
+        TransactionTemplate(workingDir.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterSequence);
+    auto alterSequence = sequenceAltering.MutableSequence();
+    *alterSequence = sequence;
+    result.push_back(CreateAlterSequence(NextPartId(nextId, result), sequenceAltering));
+
+    return result;
+}
+
 }

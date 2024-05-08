@@ -2354,23 +2354,15 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReadingFinis
                     << "Inconsistent state #04", ctx);
             }
 
-            auto pit = topic.Partitions.find(msg->PartitionId);
-            if (pit == topic.Partitions.end()) {
-                return CloseSession(PersQueue::ErrorCode::ERROR, TStringBuilder()
-                    << "Inconsistent state #05", ctx);
-            }
-
-            auto& partition = pit->second;
-
             TServerMessage result;
             result.set_status(Ydb::StatusIds::SUCCESS);
             auto* r = result.mutable_end_partition_session();
             r->set_partition_session_id(partitionInfo->Partition.AssignId);
 
-            for (auto p : partition.AdjacentPartitionIds) {
+            for (auto p : msg->AdjacentPartitionIds) {
                 r->add_adjacent_partition_ids(p);
             }
-            for (auto p : partition.ChildPartitionIds) {
+            for (auto p : msg->ChildPartitionIds) {
                 r->add_child_partition_ids(p);
             }
 

@@ -841,6 +841,8 @@ message THasDataInfoResponse { //signal
     optional uint64 SizeLag = 3;
     optional uint64 WriteTimestampEstimateMS = 4;
     optional bool ReadingFinished = 5;
+    repeated uint32 AdjacentPartitionIds = 6;
+    repeated uint32 ChildPartitionIds = 7;
 }
 
 message TBatchHeader {

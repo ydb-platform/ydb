@@ -80,16 +80,7 @@ void TPrintable<TStopPartitionSessionEvent>::DebugString(TStringBuilder& ret, bo
         << " }";
 }
 
-void JoinIds(TStringBuilder& ret, const std::vector<ui32> ids) {
-    ret << "[";
-    for (size_t i = 0; i < ids.size(); ++i) {
-        if (i) {
-            ret << ", ";
-        }
-        ret << ids[i];
-    }
-    ret << "]";
-}
+void JoinIds(TStringBuilder& ret, const std::vector<ui32> ids);
 
 template<>
 void TPrintable<TEndPartitionSessionEvent>::DebugString(TStringBuilder& ret, bool) const {

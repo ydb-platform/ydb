@@ -4,7 +4,6 @@
 #include <vector>
 #include <util/generic/yexception.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
-#include <ydb/core/tx/data_events/shards_splitter.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/core/engine/mkql_keys.h>
 #include <util/generic/size_literals.h>
@@ -17,6 +16,7 @@ namespace NKqp {
 namespace {
 
 constexpr ui64 MaxBatchBytes = 8_MB;
+constexpr ui64 MaxPreshardedBatchBytes = 8_MB;
 
 TVector<TSysTables::TTableColumnInfo> BuildColumns(const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns) {
     TVector<TSysTables::TTableColumnInfo> result;
@@ -197,6 +197,9 @@ public:
 
     void AddData(NMiniKQL::TUnboxedValueBatch&& data) override {
         YQL_ENSURE(!Closed);
+        if (data.empty()) {
+            return;
+        }
 
         TVector<TCell> cells(Columns.size());
         data.ForEachRow([&](const auto& row) {
@@ -210,20 +213,24 @@ public:
             BatchBuilder.AddRow(TConstArrayRef<TCell>{cells.begin(), cells.end()});
         });
 
-        // TODO: add min limit for flushing
-        const auto batch = BatchBuilder.FlushBatch(true);
-        if (batch) {
+        FlushPresharded(false);
+    }
+
+    void ReturnBatch(IPayloadSerializer::IBatchPtr&& batch) override {
+        Y_UNUSED(batch);
+    }
+
+    void FlushPresharded(bool force) {
+        if ((BatchBuilder.Bytes() > 0 && force) || BatchBuilder.Bytes() >= MaxPreshardedBatchBytes) {
+            const auto batch = BatchBuilder.FlushBatch(true);
+            YQL_ENSURE(batch);
             for (auto [shardId, shardBatch] : Sharding->SplitByShardsToArrowBatches(batch)) {
                 auto& batch = Batches[shardId].emplace_back(MakeIntrusive<TBatch>(NArrow::SerializeBatchNoCompression(shardBatch)));
                 Memory += batch->GetMemory();
                 YQL_ENSURE(batch->GetMemory() != 0);
                 ShardIds.insert(shardId);
             }
-        }
-    }
-
-    void ReturnBatch(IPayloadSerializer::IBatchPtr&& batch) override {
-        Y_UNUSED(batch);
+        }  
     }
 
     NKikimrDataEvents::EDataFormat GetDataFormat() override {
@@ -241,6 +248,7 @@ public:
     void Close() override {
         YQL_ENSURE(!Closed);
         Closed = true;
+        FlushPresharded(true);
     }
 
     bool IsClosed() override {
@@ -256,6 +264,8 @@ public:
     }
 
     TBatches FlushBatchesForce() override {
+        FlushPresharded(true);
+
         TBatches newBatches;
         std::swap(Batches, newBatches);
         Memory = 0;
@@ -281,27 +291,6 @@ public:
     }
 
 private:
-    NKikimr::NEvWrite::IShardsSplitter::IEvWriteDataAccessor::TPtr GetDataAccessor(
-            const TRecordBatchPtr& batch) const {
-        struct TDataAccessor : public NKikimr::NEvWrite::IShardsSplitter::IEvWriteDataAccessor {
-            TRecordBatchPtr Batch;
-
-            TDataAccessor(const TRecordBatchPtr& batch)
-                : Batch(batch) {
-            }
-
-            TRecordBatchPtr GetDeserializedBatch() const override {
-                return Batch;
-            }
-
-            TString GetSerializedData() const override {
-                YQL_ENSURE(false);
-                return NArrow::SerializeBatchNoCompression(Batch);
-            }
-        };
-
-        return std::make_shared<TDataAccessor>(batch);
-    }
 
     const NMiniKQL::TTypeEnvironment& TypeEnv;
     const NSchemeCache::TSchemeCacheNavigate::TEntry& SchemeEntry;

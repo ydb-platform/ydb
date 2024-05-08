@@ -542,6 +542,7 @@ private:
                 << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                 << " Sink=" << this->SelfId() << "."
                 << " Ignored this error.");
+            // TODO: more retries
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED: {

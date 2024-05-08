@@ -15,6 +15,10 @@ message ListingFilter {
 }
 
 message ListingRequest {
+    enum EMatchType {
+        EQUAL = 0;
+        NOT_EQUAL = 1;
+    }
     string table_name = 1;
     TypedValue key_prefix = 2; // A tuple representing all key columns that preceed path column
     string path_column_prefix = 3;
@@ -24,6 +28,7 @@ message ListingRequest {
     int32 max_keys = 7;
     repeated string columns_to_return = 8;
     ListingFilter filter = 9;
+    TypedValue matching_filter = 10;
 }
 
 message ListingResponse {

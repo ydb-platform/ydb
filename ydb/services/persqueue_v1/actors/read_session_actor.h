@@ -451,6 +451,7 @@ private:
     NPersQueue::TTopicsToConverter TopicsList;
 
     bool DirectRead;
+    bool AutoscalingSupport;
 };
 
 }

@@ -59,6 +59,7 @@ TReadSessionActor<UseMigrationProtocol>::TReadSessionActor(
     , ReadsInfly(0)
     , TopicsHandler(topicsHandler)
     , DirectRead(false)
+    , AutoscalingSupport(false)
 {
     Y_ASSERT(Request);
 }
@@ -757,6 +758,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr&
         if (init.reader_name()) {
             PeerName = init.reader_name();
         }
+        AutoscalingSupport = init.autoscaling_support();
     }
 
     if (MaxTimeLagMs < 0) {
@@ -2327,8 +2329,6 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReadingStart
 
 template <bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReadingFinished::TPtr& ev, const TActorContext& ctx) {
-    bool newSDK = false; // TODO
-
     auto* msg = ev->Get();
 
     auto it = Topics.find(msg->Topic);
@@ -2337,10 +2337,10 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReadingFinis
     }
 
     auto& topic = it->second;
-    NTabletPipe::SendData(ctx, topic.PipeClient, new TEvPersQueue::TEvReadingPartitionFinishedRequest(ClientId, msg->PartitionId, newSDK, msg->FirstMessage));
+    NTabletPipe::SendData(ctx, topic.PipeClient, new TEvPersQueue::TEvReadingPartitionFinishedRequest(ClientId, msg->PartitionId, AutoscalingSupport, msg->FirstMessage));
 
     if constexpr (!UseMigrationProtocol) {
-        if (newSDK) {
+        if (AutoscalingSupport) {
             TPartitionActorInfo* partitionInfo = nullptr;
             for (auto& [_, p] : Partitions) {
                 if (p.Partition.Partition == msg->PartitionId) {

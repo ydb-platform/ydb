@@ -134,6 +134,7 @@ struct TReadSessionEvent {
     using TCommitOffsetAcknowledgementEvent = TFederated<NTopic::TReadSessionEvent::TCommitOffsetAcknowledgementEvent>;
     using TStartPartitionSessionEvent = TFederated<NTopic::TReadSessionEvent::TStartPartitionSessionEvent>;
     using TStopPartitionSessionEvent = TFederated<NTopic::TReadSessionEvent::TStopPartitionSessionEvent>;
+    using TEndPartitionSessionEvent = TFederated<NTopic::TReadSessionEvent::TEndPartitionSessionEvent>;
     using TPartitionSessionStatusEvent = TFederated<NTopic::TReadSessionEvent::TPartitionSessionStatusEvent>;
     using TPartitionSessionClosedEvent = TFederated<NTopic::TReadSessionEvent::TPartitionSessionClosedEvent>;
 
@@ -350,6 +351,13 @@ struct TFederatedReadSessionSettings: public NTopic::TReadSessionSettings {
         //! Default value is empty function (not set).
         FLUENT_SETTING(std::function<void(TReadSessionEvent::TStopPartitionSessionEvent&)>,
                        StopPartitionSessionHandler);
+
+        //! Function to handle end partition session events.
+        //! If this handler is set, end partition session events will be handled by handler,
+        //! otherwise sent to TReadSession::GetEvent().
+        //! Default value is empty function (not set).
+        FLUENT_SETTING(std::function<void(TReadSessionEvent::TEndPartitionSessionEvent&)>,
+                       EndPartitionSessionHandler);
 
         //! Function to handle partition session status events.
         //! If this handler is set, partition session status events will be handled by handler,

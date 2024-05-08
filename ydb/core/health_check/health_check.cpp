@@ -1487,12 +1487,16 @@ public:
     void FillVDiskStatus(const TString& vSlotId, Ydb::Monitoring::StorageVDiskStatus& storageVDiskStatus, TSelfCheckContext context) {
         auto itVSlot = BSConfigVSlots.find(vSlotId);
         const TEvInterconnect::TNodeInfo* nodeInfo = nullptr;
+
+        context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_id()->Clear();
+        context.Location.mutable_storage()->mutable_pool()->mutable_group()->clear_id(); // you can see VDisks Group Id in vSlotId field
         if (itVSlot != BSConfigVSlots.end()) {
             TNodeId nodeId = itVSlot->second->vslotid().nodeid();
             auto itNodeInfo = MergedNodeInfo.find(nodeId);
             if (itNodeInfo != MergedNodeInfo.end()) {
                 nodeInfo = itNodeInfo->second;
             }
+            context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->add_id(GetVDiskId(*itVSlot->second));
             context.Location.mutable_storage()->mutable_node()->set_id(nodeId);
         } else {
             context.Location.mutable_storage()->mutable_node()->clear_id();
@@ -1504,10 +1508,6 @@ public:
             context.Location.mutable_storage()->mutable_node()->clear_host();
             context.Location.mutable_storage()->mutable_node()->clear_port();
         }
-
-        context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_id()->Clear();
-        context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->add_id(GetVDiskId(*itVSlot->second));
-        context.Location.mutable_storage()->mutable_pool()->mutable_group()->clear_id(); // you can see VDisks Group Id in vSlotId field
 
         storageVDiskStatus.set_id(vSlotId);
 

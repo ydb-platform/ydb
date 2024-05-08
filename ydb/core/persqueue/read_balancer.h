@@ -31,12 +31,6 @@ class TBalancer;
 }
 
 
-struct TPartitionInfo {
-    ui64 TabletId;
-    NSchemeShard::TTopicTabletInfo::TKeyRange KeyRange;
-};
-
-
 class TMetricsTimeKeeper {
 public:
     TMetricsTimeKeeper(NMetrics::TResourceMetrics* metrics, const TActorContext& ctx)
@@ -177,6 +171,13 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     std::vector<TEvPersQueue::TEvCheckACL::TPtr> WaitingACLRequests;
     std::vector<TEvPersQueue::TEvDescribe::TPtr> WaitingDescribeRequests;
 
+public:
+    struct TPartitionInfo {
+        ui64 TabletId;
+        NSchemeShard::TTopicTabletInfo::TKeyRange KeyRange;
+    };
+
+private:
     std::unordered_map<ui32, TPartitionInfo> PartitionsInfo;
 
     struct TTabletInfo {

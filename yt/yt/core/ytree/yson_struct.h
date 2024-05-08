@@ -1,13 +1,14 @@
 #pragma once
 
 #include "node.h"
-#include "yson_struct_enum.h"
+#include "yson_struct_public.h"
 
 #include <yt/yt/core/misc/error.h>
 #include <yt/yt/core/misc/mpl.h>
 #include <yt/yt/core/misc/property.h>
 
 #include <yt/yt/core/yson/public.h>
+
 #include <yt/yt/library/syncmap/map.h>
 
 #include <library/cpp/yt/misc/enum.h>
@@ -62,7 +63,7 @@ public:
     virtual ~TYsonStructBase() = default;
 
     void Load(
-        NYTree::INodePtr node,
+        INodePtr node,
         bool postprocess = true,
         bool setDefaults = true,
         const NYPath::TYPath& path = {});
@@ -293,21 +294,6 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-concept CExternalizedYsonStructTraits = requires {
-    typename T::TExternalSerializer;
-};
-
-template <class T>
-concept CExternallySerializable = requires (T t) {
-    { GetExternalizedYsonStructTraits(t) } -> CExternalizedYsonStructTraits;
-};
-
-template <CExternallySerializable T>
-using TGetExternalizedYsonStructTraits = decltype(GetExternalizedYsonStructTraits(std::declval<T>()));
-
-////////////////////////////////////////////////////////////////////////////////
-
-template <class T>
 TIntrusivePtr<T> CloneYsonStruct(const TIntrusivePtr<const T>& obj);
 template <class T>
 TIntrusivePtr<T> CloneYsonStruct(const TIntrusivePtr<T>& obj);
@@ -320,15 +306,10 @@ void Serialize(const TYsonStructBase& value, NYson::IYsonConsumer* consumer);
 void Deserialize(TYsonStructBase& value, INodePtr node);
 void Deserialize(TYsonStructBase& value, NYson::TYsonPullParserCursor* cursor);
 
-template <class T>
-    requires CExternallySerializable<T>
+template <CExternallySerializable T>
 void Serialize(const T& value, NYson::IYsonConsumer* consumer);
-template <class T>
-    requires CExternallySerializable<T>
-void Deserialize(T& value, INodePtr node);
-template <class T>
-    requires CExternallySerializable<T>
-void Deserialize(T& value, NYson::TYsonPullParserCursor* cursor);
+template <CExternallySerializable T, CYsonStructSource TSource>
+void Deserialize(T& value, TSource source, bool postprocess = true, bool setDefaults = true);
 
 template <class T>
 TIntrusivePtr<T> UpdateYsonStruct(

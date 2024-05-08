@@ -203,6 +203,7 @@ struct TReadSessionEvent {
                                 TCommitOffsetAcknowledgementEvent,
                                 TStartPartitionSessionEvent,
                                 TStopPartitionSessionEvent,
+                                TEndPartitionSessionEvent,
                                 TPartitionSessionStatusEvent,
                                 TPartitionSessionClosedEvent,
                                 TSessionClosedEvent>;
@@ -540,6 +541,8 @@ template<>
 void TPrintable<NFederatedTopic::TReadSessionEvent::TFederated<NFederatedTopic::TReadSessionEvent::TStartPartitionSessionEvent>>::DebugString(TStringBuilder& res, bool) const;
 template<>
 void TPrintable<NFederatedTopic::TReadSessionEvent::TFederated<NFederatedTopic::TReadSessionEvent::TStopPartitionSessionEvent>>::DebugString(TStringBuilder& res, bool) const;
+template<>
+void TPrintable<NFederatedTopic::TReadSessionEvent::TFederated<NFederatedTopic::TReadSessionEvent::TEndPartitionSessionEvent>>::DebugString(TStringBuilder& res, bool) const;
 template<>
 void TPrintable<NFederatedTopic::TReadSessionEvent::TFederated<NFederatedTopic::TReadSessionEvent::TPartitionSessionStatusEvent>>::DebugString(TStringBuilder& res, bool) const;
 template<>

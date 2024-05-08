@@ -419,6 +419,8 @@ void TPrintable<TReadSessionEvent::TStartPartitionSessionEvent>::DebugString(TSt
 template<>
 void TPrintable<TReadSessionEvent::TStopPartitionSessionEvent>::DebugString(TStringBuilder& ret, bool printData) const;
 template<>
+void TPrintable<TReadSessionEvent::TEndPartitionSessionEvent>::DebugString(TStringBuilder& ret, bool printData) const;
+template<>
 void TPrintable<TReadSessionEvent::TPartitionSessionStatusEvent>::DebugString(TStringBuilder& ret, bool printData) const;
 template<>
 void TPrintable<TReadSessionEvent::TPartitionSessionClosedEvent>::DebugString(TStringBuilder& ret, bool printData) const;

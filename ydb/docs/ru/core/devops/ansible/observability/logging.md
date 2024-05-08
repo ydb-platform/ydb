@@ -4,7 +4,7 @@
 
 ## Просмотр логов с помощью Ansible playbook
 
-Репозиторий [ydb-ansible-examples](https://github.com/ydb-platform/ydb-ansible-examples) содержит playbook под названием `logs.yaml`, который можно использовать для сбора логов со всех узлов {{ ydb-short-name }} кластера.
+Репозиторий [ydb-ansible-examples](https://github.com/ydb-platform/ydb-ansible-examples) содержит playbook под названием `logs.yaml`, который можно использовать для просмотра логов со всех узлов {{ ydb-short-name }} кластера. Этот playbook собирает логи с узлов и выводит в `stdout`, что позволяет при необходимости дальше их обработать, например, с помощью команд `grep` или `awk`.
 
 ### Все логи всех узлов
 

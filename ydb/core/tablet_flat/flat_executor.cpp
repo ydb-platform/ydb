@@ -1367,6 +1367,10 @@ THashSet<NTable::TTag> TExecutor::GetStickyColumns(ui32 tableId) {
     auto *tableInfo = Scheme().GetTableInfo(tableId);
 
     THashSet<NTable::TTag> stickyColumns;
+    if (!tableInfo) {
+        return stickyColumns;
+    }
+
     for (const auto &column : tableInfo->Columns) {
         const auto* family = tableInfo->Families.FindPtr(column.second.Family);
         if (family && family->Cache == NTable::NPage::ECache::Ever) {

@@ -4,7 +4,7 @@ During [initial deployment](../initial-deployment.md), the Ansible playbook sets
 
 ## View logs via Ansible playbook
 
-[ydb-ansible-examples](https://github.com/ydb-platform/ydb-ansible-examples) repository contains a playbook called `logs.yaml` that can be used to collect logs of all {{ ydb-short-name }} logs in a cluster.
+[ydb-ansible-examples](https://github.com/ydb-platform/ydb-ansible-examples) repository contains a playbook called `logs.yaml` that can be used to gather logs of all {{ ydb-short-name }} nodes in a cluster.
 
 ### All logs of all nodes
 

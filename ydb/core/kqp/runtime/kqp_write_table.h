@@ -15,6 +15,7 @@ public:
     class IBatch : public TThrRefBase {
     public:
         virtual TString SerializeToString() const = 0;
+        virtual i64 GetSerializedMemory() const = 0;
         virtual i64 GetMemory() const = 0;
         bool IsEmpty() const;
     };

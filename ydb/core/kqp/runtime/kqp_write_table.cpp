@@ -16,7 +16,7 @@ namespace NKqp {
 namespace {
 
 constexpr ui64 MaxBatchBytes = 8_MB;
-constexpr ui64 MaxPreshardedBatchBytes = 8_MB;
+constexpr ui64 MaxUnshardedBatchBytes = 8_MB;
 
 TVector<TSysTables::TTableColumnInfo> BuildColumns(const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns) {
     TVector<TSysTables::TTableColumnInfo> result;
@@ -151,17 +151,28 @@ class TColumnShardPayloadSerializer : public IPayloadSerializer {
     class TBatch : public IPayloadSerializer::IBatch {
     public:
         TString SerializeToString() const override {
-            return Data;
+            return NArrow::SerializeBatchNoCompression(Data);
+        }
+
+        i64 GetSerializedMemory() const override {
+            // For columnshard there are no hard 8MB operation limit,
+            // so we can use approx estimate.
+            return NArrow::GetBatchDataSize(Data);
         }
 
         i64 GetMemory() const override {
-            return Data.size();
+            return NArrow::GetBatchDataSize(Data);
         }
 
-        TBatch(TString&& data) : Data(std::move(data)) {}
-        TBatch(const TString& data) : Data(data) {}
+        TBatch(const TRecordBatchPtr& data) : Data(data) {}
 
-        TString Data;
+    private:
+        TRecordBatchPtr Data;
+    };
+
+    struct TUnpreparedBatch {
+        ui64 TotalDataSize = 0;
+        std::deque<TRecordBatchPtr> Batches; 
     };
 
 public:
@@ -213,24 +224,81 @@ public:
             BatchBuilder.AddRow(TConstArrayRef<TCell>{cells.begin(), cells.end()});
         });
 
-        FlushPresharded(false);
+        FlushUnsharded(false);
     }
 
     void ReturnBatch(IPayloadSerializer::IBatchPtr&& batch) override {
         Y_UNUSED(batch);
     }
 
-    void FlushPresharded(bool force) {
-        if ((BatchBuilder.Bytes() > 0 && force) || BatchBuilder.Bytes() >= MaxPreshardedBatchBytes) {
-            const auto batch = BatchBuilder.FlushBatch(true);
-            YQL_ENSURE(batch);
-            for (auto [shardId, shardBatch] : Sharding->SplitByShardsToArrowBatches(batch)) {
-                auto& batch = Batches[shardId].emplace_back(MakeIntrusive<TBatch>(NArrow::SerializeBatchNoCompression(shardBatch)));
-                Memory += batch->GetMemory();
-                YQL_ENSURE(batch->GetMemory() != 0);
+    void FlushUnsharded(bool force) {
+        if ((BatchBuilder.Bytes() > 0 && force) || BatchBuilder.Bytes() >= MaxUnshardedBatchBytes) {
+            const auto unshardedBatch = BatchBuilder.FlushBatch(true);
+            YQL_ENSURE(unshardedBatch);
+            for (auto [shardId, shardBatch] : Sharding->SplitByShardsToArrowBatches(unshardedBatch)) {
+                const i64 shardBatchMemory = NArrow::GetBatchDataSize(shardBatch);
+                YQL_ENSURE(shardBatchMemory != 0);
+
+                auto& unpreparedBatch = UnpreparedBatches[shardId];
+                unpreparedBatch.TotalDataSize += shardBatchMemory;
+                unpreparedBatch.Batches.emplace_back(shardBatch);
+                Memory += shardBatchMemory;
+
+                FlushUnpreparedBatch(shardId, unpreparedBatch, false);
+
                 ShardIds.insert(shardId);
             }
-        }  
+        }
+    }
+
+    void FlushUnpreparedBatch(const ui64 shardId, TUnpreparedBatch& unpreparedBatch, bool force = true) {
+        while (!unpreparedBatch.Batches.empty() && (unpreparedBatch.TotalDataSize >= MaxBatchBytes || force)) {
+            std::vector<TRecordBatchPtr> toPrepare;
+            i64 toPrepareSize = 0;
+            while (!unpreparedBatch.Batches.empty()) {
+                auto batch = unpreparedBatch.Batches.front();
+                unpreparedBatch.Batches.pop_front();
+
+                NArrow::TRowSizeCalculator rowCalculator(8);
+                if (!rowCalculator.InitBatch(batch)) {
+                    ythrow yexception() << "unexpected column type on batch initialization for row size calculator";
+                }
+
+                i64 nextRowSize = 0;
+                for (i64 index = 0; index < batch->num_rows(); ++index) {
+                    nextRowSize = rowCalculator.GetRowBytesSize(index);
+
+                    if (toPrepareSize + nextRowSize >= (i64)MaxBatchBytes) {
+                        toPrepare.push_back(batch->Slice(0, index));
+                        unpreparedBatch.Batches.push_front(batch->Slice(index, batch->num_rows() - index));
+
+                        Memory -= NArrow::GetBatchDataSize(batch);
+                        Memory += NArrow::GetBatchDataSize(unpreparedBatch.Batches.front());
+                        break;
+                    } else {
+                        toPrepareSize += nextRowSize;
+                    }
+                }
+
+                if (toPrepareSize + nextRowSize >= (i64)MaxBatchBytes) {
+                    break;
+                }
+
+                Memory -= NArrow::GetBatchDataSize(batch);
+                toPrepare.push_back(batch);
+            }
+
+            auto& batch = Batches[shardId].emplace_back(
+                MakeIntrusive<TBatch>(NArrow::CombineBatches(toPrepare)));
+            Memory += batch->GetMemory();
+            YQL_ENSURE(batch->GetMemory() != 0);   
+        }
+    }
+
+    void FlushUnpreparedForce() {
+        for (auto& [shardId, unpreparedBatch] : UnpreparedBatches) {
+            FlushUnpreparedBatch(shardId, unpreparedBatch, true);
+        }
     }
 
     NKikimrDataEvents::EDataFormat GetDataFormat() override {
@@ -242,13 +310,13 @@ public:
     }
 
     i64 GetMemory() override {
-        return Memory;
+        return Memory + BatchBuilder.Bytes();
     }
 
     void Close() override {
         YQL_ENSURE(!Closed);
         Closed = true;
-        FlushPresharded(true);
+        FlushUnsharded(true);
     }
 
     bool IsClosed() override {
@@ -264,11 +332,16 @@ public:
     }
 
     TBatches FlushBatchesForce() override {
-        FlushPresharded(true);
+        FlushUnsharded(true);
+        FlushUnpreparedForce();
 
         TBatches newBatches;
         std::swap(Batches, newBatches);
-        Memory = 0;
+        for (const auto& [_, batches] : newBatches) {
+            for (const auto& batch : batches) {
+                Memory -= batch->GetMemory();
+            }
+        }
         return std::move(newBatches);
     }
 
@@ -283,6 +356,7 @@ public:
 
         const auto batch = std::move(batches.front());
         batches.pop_front();
+        Memory -= batch->GetMemory();
         return batch;
     }
 
@@ -301,7 +375,7 @@ private:
     const std::vector<ui32> WriteColumnIds;
 
     NArrow::TArrowBatchBuilder BatchBuilder;
-
+    THashMap<ui64, TUnpreparedBatch> UnpreparedBatches;
     TBatches Batches;
     THashSet<ui64> ShardIds;
 
@@ -335,6 +409,10 @@ class TDataShardPayloadSerializer : public IPayloadSerializer {
     public:
         TString SerializeToString() const override {
             return Data;
+        }
+
+        i64 GetSerializedMemory() const override {
+            return Data.size();
         }
 
         i64 GetMemory() const override {

@@ -452,7 +452,7 @@ IGraphTransformer::TStatus TWalkFoldersImpl::HandleAfterResolveFuture(TExprConte
         return IGraphTransformer::TStatus::Repeat;
     }
 
-    auto res = BatchResolveFuture_->ExtractValue();
+    auto res = BatchResolveFuture_->GetValueSync();
     BatchResolveFuture_ = Nothing();
     YQL_CLOG(INFO, ProviderYt) << "Added items to handle after batch resolve future completion";
 

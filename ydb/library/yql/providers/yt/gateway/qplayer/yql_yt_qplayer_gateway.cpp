@@ -22,6 +22,7 @@ const TString YtGateway_CanonizePaths = "YtGateway_CanonizePaths";
 const TString YtGateway_GetTableInfo = "YtGateway_GetTableInfo";
 const TString YtGateway_GetFolder = "YtGateway_GetFolder";
 const TString YtGateway_GetFolders = "YtGateway_GetFolders";
+const TString YtGateway_ResolveLinks = "YtGateway_ResolveLinks";
 
 TString MakeHash(const TString& str) {
     SHA256_CTX sha;
@@ -313,6 +314,29 @@ public:
         return MakeHash(NYT::NodeToCanonicalYsonString(keyNode, NYT::NYson::EYsonFormat::Binary));
     }
 
+    static TString MakeResolveLinksKey(const TResolveOptions& options) {
+        auto itemsNode = NYT::TNode::CreateList();
+        for (const auto& item : options.Items()) {
+            auto attrNode = NYT::TNode::CreateList();
+            for (const auto& attr : item.AttrKeys) {
+                attrNode.Add(NYT::TNode(attr));
+            }
+
+            itemsNode.Add(NYT::TNode()
+                ("AttrKeys", attrNode)
+                ("FolderItem", NYT::TNode()
+                    ("Path", item.Item.Path)
+                    ("Type", item.Item.Type)
+                    ("Attributes", item.Item.Attributes)));
+        }
+
+        auto keyNode = NYT::TNode()
+            ("Cluster", options.Cluster())
+            ("Items", itemsNode);
+
+        return MakeHash(NYT::NodeToCanonicalYsonString(keyNode, NYT::NYson::EYsonFormat::Binary));
+    }
+
     static TString MakeGetFoldersKey(const TBatchFolderOptions& options) {
         auto itemsNode = NYT::TNode();
         TMap<TString, size_t> order;
@@ -420,10 +444,45 @@ public:
 
     NThreading::TFuture<TBatchFolderResult> ResolveLinks(TResolveOptions&& options) final {
         if (QContext_.CanRead()) {
-            throw yexception() << "Can't replay ResolveLinks";
+            TBatchFolderResult res;
+            res.SetSuccess();
+            const auto& key = MakeResolveLinksKey(options);
+            auto item = QContext_.GetReader()->Get({YtGateway_ResolveLinks, key}).GetValueSync();
+            if (!item) {
+                throw yexception() << "Missing replay data";
+            }
+
+            auto valueNode = NYT::NodeFromYsonString(TStringBuf(item->Value));
+            for (const auto& child : valueNode.AsList()) {
+                TBatchFolderResult::TFolderItem folderItem;
+                DeserializeFolderItem(folderItem, child);
+                res.Items.push_back(folderItem);
+            }
+
+            return NThreading::MakeFuture<TBatchFolderResult>(res);
         }
 
-        return Inner_->ResolveLinks(std::move(options));
+        auto optionsDup = options;
+        return Inner_->ResolveLinks(std::move(options))
+            .Subscribe([optionsDup, qContext = QContext_](const NThreading::TFuture<TBatchFolderResult>& future) {
+                if (!qContext.CanWrite() || future.HasException()) {
+                    return;
+                }
+
+                const auto& res = future.GetValueSync();
+                if (!res.Success()) {
+                    return;
+                }
+
+                const auto& key = MakeResolveLinksKey(optionsDup);
+                NYT::TNode valueNode = NYT::TNode::CreateList();
+                for (const auto& item : res.Items) {
+                    valueNode.Add(SerializeFolderItem(item));
+                }
+
+                auto value = NYT::NodeToYsonString(valueNode, NYT::NYson::EYsonFormat::Binary);
+                qContext.GetWriter()->Put({YtGateway_ResolveLinks, key}, value).GetValueSync();
+            });
     }
 
     NThreading::TFuture<TBatchFolderResult> GetFolders(TBatchFolderOptions&& options) final {

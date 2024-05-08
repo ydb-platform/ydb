@@ -2066,11 +2066,6 @@ NJson::TJsonValue ReconstructQueryPlanRec(const NJson::TJsonValue& plan,
             auto inputPlanId = opInput.GetMapSafe().at("InternalOperatorId").GetIntegerSafe();
             planInputs.push_back( ReconstructQueryPlanRec(plan, inputPlanId, planIndex, precomputes, nodeCounter));
         }
-
-        // Sometimes we have multiple inputs for these operators, break after the first one
-        // if (opName == "Filter" || opName == "TopSort" || opName == "Aggregate") {
-        //     break;
-        // }
     }
 
     if (op.GetMapSafe().contains("Inputs")) {
@@ -2096,12 +2091,9 @@ NJson::TJsonValue ReconstructQueryPlanRec(const NJson::TJsonValue& plan,
             maybePrecompute = op.GetMapSafe().at("Iterator").GetStringSafe();
         }
 
-        if (precomputes.contains(maybePrecompute)) {
-            //YQL_CLOG(TRACE, CoreDq) << "Following precompute: " << maybePrecompute ; 
+        if (precomputes.contains(maybePrecompute) && planInputs.empty()) {
             planInputs.push_back(ReconstructQueryPlanRec(precomputes.at(maybePrecompute), 0, planIndex, precomputes, nodeCounter));
-        } //else {
-        //    YQL_CLOG(TRACE, CoreDq) << "Didn't find precompute: " << maybePrecompute ; 
-        //}
+        }
     }
 
     result["Node Type"] = opName;

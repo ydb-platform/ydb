@@ -163,8 +163,8 @@ public:
     void Unused2() override;
     void Unused3() override;
 
-    NUdf::IFunctionTypeInfoBuilder15& SupportsBlocks() override;
-    NUdf::IFunctionTypeInfoBuilder15& IsStrict() override;
+    NUdf::IFunctionTypeInfoBuilder15& SupportsBlocksImpl() override;
+    NUdf::IFunctionTypeInfoBuilder15& IsStrictImpl() override;
     const NUdf::IBlockTypeHelper& IBlockTypeHelper() const override;
 
     bool GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef& value) const override;

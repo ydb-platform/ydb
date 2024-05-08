@@ -40,18 +40,34 @@ copy=[
     "cmake/global_flags.cmake",
 ]
 
-# DEPRECATED - remove after yexport release
-[common]
-template={ path="common_cmake_lists.jinja", dest="CMakeLists.txt" }
-
-# DEPRECATED - remove after yexport release
-[dir]
-template={ path="dir_cmake_lists.jinja", dest="CMakeLists{PLATFORM}.txt" }
-
-# WORKAROUND - used for all targets in hardcoded-cmake
 [targets.EMPTY]
 template={ path="dir_cmake_lists.jinja", dest="CMakeLists{PLATFORM}.txt" }
 merge_platform_template={ path="common_cmake_lists.jinja", dest="CMakeLists.txt" }
+
+[targets.add_executable]
+template={ path="dir_cmake_lists.jinja", dest="CMakeLists{PLATFORM}.txt" }
+merge_platform_template={ path="common_cmake_lists.jinja", dest="CMakeLists.txt" }
+
+[targets.add_global_library_for]
+is_extra_target = true
+
+[targets.add_library]
+template={ path="dir_cmake_lists.jinja", dest="CMakeLists{PLATFORM}.txt" }
+merge_platform_template={ path="common_cmake_lists.jinja", dest="CMakeLists.txt" }
+
+[targets.add_shared_library]
+template={ path="dir_cmake_lists.jinja", dest="CMakeLists{PLATFORM}.txt" }
+merge_platform_template={ path="common_cmake_lists.jinja", dest="CMakeLists.txt" }
+
+[targets.add_fat_object]
+template={ path="dir_cmake_lists.jinja", dest="CMakeLists{PLATFORM}.txt" }
+merge_platform_template={ path="common_cmake_lists.jinja", dest="CMakeLists.txt" }
+
+[targets.add_recursive_library]
+is_extra_target = true
+
+[targets.add_swig_jni_library]
+is_extra_target = true
 
 [attrs.root]
 project_name="str"

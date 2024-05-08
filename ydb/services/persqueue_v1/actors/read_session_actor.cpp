@@ -2367,10 +2367,10 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReadingFinis
             auto* r = result.mutable_end_partition_session();
             r->set_partition_session_id(partitionInfo->Partition.AssignId);
 
-            for (auto p : partition.adjacentPartitionIds) {
+            for (auto p : partition.AdjacentPartitionIds) {
                 r->add_adjacent_partition_ids(p);
             }
-            for (auto p : partition.childPartitionIds) {
+            for (auto p : partition.ChildPartitionIds) {
                 r->add_child_partition_ids(p);
             }
 

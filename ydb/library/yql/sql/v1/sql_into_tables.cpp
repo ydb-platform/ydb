@@ -141,7 +141,7 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
     bool withTruncate = false;
     TTableHints tableHints;
     if (tableRef.HasBlock2()) {
-        auto hints = TableHintsImpl(tableRef.GetBlock2().GetRule_table_hints1());
+        auto hints = TableHintsImpl(tableRef.GetBlock2().GetRule_table_hints1(), service);
         if (!hints) {
             Ctx.Error() << "Failed to parse table hints";
             return nullptr;

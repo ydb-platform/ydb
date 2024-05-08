@@ -851,7 +851,7 @@ public:
         Y_UNUSED(initSrc);
         auto source = Node->GetSource();
         if (!source) {
-            NewSource = TryMakeSourceFromExpression(ctx, Service, Cluster, Node);
+            NewSource = TryMakeSourceFromExpression(Pos, ctx, Service, Cluster, Node);
             source = NewSource.Get();
         }
 

@@ -1971,6 +1971,11 @@ public:
         return Make(Position_, (EType)Type_, TListType(Children_), Content(), Flags_, newUniqueId);
     }
 
+    TPtr CloneWithPosition(ui64 newUniqueId, TPositionHandle pos) const {
+        ENSURE_NOT_DELETED
+        return Make(pos, (EType)Type_, TListType(Children_), Content(), Flags_, newUniqueId);
+    }
+
     static TPtr NewNode(TPositionHandle position, EType type, TListType&& children, const TStringBuf& content, ui32 flags, ui64 uniqueId) {
         return Make(position, type, std::move(children), content, flags, uniqueId);
     }
@@ -2545,6 +2550,8 @@ struct TExprContext : private TNonCopyable {
     TExprNode::TPtr RenameNode(const TExprNode& node, const TStringBuf& name);
     [[nodiscard]]
     TExprNode::TPtr ShallowCopy(const TExprNode& node);
+    [[nodiscard]]
+    TExprNode::TPtr ShallowCopyWithPosition(const TExprNode& node, TPositionHandle pos);
     [[nodiscard]]
     TExprNode::TPtr ChangeChildren(const TExprNode& node, TExprNode::TListType&& children);
     [[nodiscard]]

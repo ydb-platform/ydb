@@ -798,4 +798,17 @@ void WaitFor(TTestActorRuntime& runtime, TCondition&& condition, const TString& 
     UNIT_ASSERT_C(condition(), "... failed to wait for " << description);
 }
 
+struct TSendViaPipeCacheOptions {
+    ui32 Flags = 0;
+    ui64 Cookie = 0;
+    bool Follower = false;
+    bool Subscribe = false;
+};
+
+void SendViaPipeCache(
+    TTestActorRuntime& runtime,
+    ui64 tabletId, const TActorId& sender,
+    std::unique_ptr<IEventBase> msg,
+    const TSendViaPipeCacheOptions& options = {});
+
 }

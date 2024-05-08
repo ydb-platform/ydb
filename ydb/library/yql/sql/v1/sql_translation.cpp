@@ -3101,11 +3101,6 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
         TVector<TNodePtr> labels;
         TVector<TNodePtr> structTypeItems;
         if (alt.HasBlock4()) {
-            // if (!isNonSturctSchemaHintAllowed(provider, keyFunc)) {
-            //     Error() << "Expected Struct type after SCHEMA hint";
-            //     return false;
-            // }
-
             bool warn = false;
             auto processItem = [&](const TRule_struct_arg_positional& arg) {
                 // struct_arg_positional:

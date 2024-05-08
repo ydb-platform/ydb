@@ -2,9 +2,10 @@
 
 {% include notitle [use_cases_tag](../../tags.md#use_cases) %}
 
-Их доклада вы узнаете об успешном использовании {{ ydb-name }} в качестве бэкэнда для распределенной трассировки Jaeger от представителей [Auto.ru](https://auto.ru) и [Яндекс.Недвижимости](https://realty.yandex.ru/), а также об архитектуре распределенного сетевого хранилища в {{ ydb-name }}.
+Из доклада вы узнаете об успешном использовании {{ ydb-name }} в качестве бэкэнда для распределенной трассировки Jaeger от представителей [Auto.ru](https://auto.ru) и [Яндекс.Недвижимости](https://realty.yandex.ru/), а также об архитектуре распределенного сетевого хранилища в {{ ydb-name }}.
 
 @[YouTube](https://www.youtube.com/watch?v=hXH_tRBxFnA&t=11318s)
+
 
 [Слайды](https://storage.yandexcloud.net/ydb-public-talks/yatalks-ydb.pptx)
 

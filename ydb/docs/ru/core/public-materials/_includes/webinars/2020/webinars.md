@@ -13,11 +13,11 @@
 @[YouTube](https://youtu.be/6LMH4Q4uGBU)
 
 Ссылки на материалы:
-* [Jaeger Plugin к YDB доступен на GitHub](github.com/yandex-cloud/jaeger-ydb-store)
+* [Jaeger Plugin к YDB доступен на https://github](https://github.com/yandex-cloud/jaeger-ydb-store)
 * [Yandex Database Public Preview](cloud.yandex.ru/services/ydb)
-* [Python SDK](github.com/yandex-cloud/ydb-python-sdk)
-* [Go SDK](github.com/yandex-cloud/ydb-go-sdk)
-* [Java SDK](github.com/yandex-cloud/ydb-java-sdk)
-* [Node.js SDK](github.com/yandex-cloud/ydb-nodejs-sdk)
+* [Python SDK](https://github.com/yandex-cloud/ydb-python-sdk)
+* [Go SDK](https://github.com/yandex-cloud/ydb-go-sdk)
+* [Java SDK](https://github.com/yandex-cloud/ydb-java-sdk)
+* [Node.js SDK](https://github.com/yandex-cloud/ydb-nodejs-sdk)
 
 [Презентация](https://presentations.ydb.tech/2020/ru/webinar_ydb/presentation.pdf)

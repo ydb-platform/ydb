@@ -1,6 +1,6 @@
 # Videos
 
-Video recordings of {{ ydb-short-name}} team speakers' presentations from conferences and webinars. The materials are divided by categories and tagged:
+Video recordings from conferences and webinars. The materials are divided by categories and tagged:
 
 {% include [tags_list](./_includes/tags_list.md) %}
 

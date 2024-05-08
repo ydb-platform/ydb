@@ -1,6 +1,6 @@
 # Articles
 
-Articles about {{ ydb-short-name }} in the media. The materials are divided by categories and tagged:
+The materials are divided by categories and tagged:
 
 {% include [tags_list](./_includes/tags_list.md) %}
 

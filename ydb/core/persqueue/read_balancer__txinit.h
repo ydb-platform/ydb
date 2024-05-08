@@ -64,7 +64,7 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
                     return false;
             }
 
-            std::map<ui32, TPartitionInfo> partitionsInfo;
+            std::map<ui32, TPersQueueReadBalancer::TPartitionInfo> partitionsInfo;
             while (!partsRowset.EndOfSet()) { //found out tablets for partitions
                 ++Self->NumActiveParts;
                 ui32 part = partsRowset.GetValue<Schema::Partitions::Partition>();

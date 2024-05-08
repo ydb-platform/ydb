@@ -9,13 +9,17 @@ message TStaticCredentials {
     optional string Password = 2 [(Ydb.sensitive) = true];
 }
 
+message TOAuthToken {
+    optional string Token = 1 [(Ydb.sensitive) = true];
+}
+
 message TConnectionParams {
     optional string Endpoint = 1;
     optional string Database = 2;
     // credentials
     oneof Credentials {
         TStaticCredentials StaticCredentials = 3;
-        string OAuthToken = 4 [(Ydb.sensitive) = true];
+        TOAuthToken OAuthToken = 4;
     }
 }
 
@@ -114,6 +118,7 @@ message TEvAlterReplicationResult {
 message TEvDropReplication {
     optional NKikimrProto.TPathID PathId = 1;
     optional TOperationId OperationId = 2;
+    optional bool Cascade = 3 [default = true];
 }
 
 message TEvDropReplicationResult {

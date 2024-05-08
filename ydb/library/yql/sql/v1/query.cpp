@@ -739,7 +739,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TIntoTableOptions(GetPos(), Columns, Hints);
+        return new TIntoTableOptions(GetPos(), Columns, CloneContainer(Hints));
     }
 
 private:
@@ -3064,7 +3064,7 @@ public:
     }
 
     TPtr DoClone() const final {
-        return {};
+        return new TWorldIf(GetPos(), SafeClone(Predicate), SafeClone(ThenNode), SafeClone(ElseNode), IsEvaluate);
     }
 
 private:
@@ -3116,7 +3116,7 @@ public:
     }
 
     TPtr DoClone() const final {
-        return{};
+        return new TWorldFor(GetPos(), SafeClone(List), SafeClone(BodyNode), SafeClone(ElseNode), IsEvaluate, IsParallel);
     }
 
 private:

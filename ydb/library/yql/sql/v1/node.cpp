@@ -358,6 +358,14 @@ void MergeHints(TTableHints& base, const TTableHints& overrides) {
     }
 }
 
+TTableHints CloneContainer(const TTableHints& hints) {
+    TTableHints result;
+    for (auto& [name, nodes] : hints) {
+        result.emplace(std::make_pair(name, CloneContainer(nodes)));
+    }
+    return result;
+}
+
 TAstAtomNode::TAstAtomNode(TPosition pos, const TString& content, ui32 flags, bool isOptionalArg)
     : INode(pos)
     , Content(content)
@@ -797,7 +805,12 @@ bool TExternalFunctionConfig::DoInit(TContext& ctx, ISource* src) {
 }
 
 INode::TPtr TExternalFunctionConfig::DoClone() const {
-    return {};
+    TFunctionConfig cloned;
+    for (auto& [name, node] : Config) {
+        cloned[name] = SafeClone(node);
+    }
+
+    return new TExternalFunctionConfig(GetPos(), cloned);
 }
 
 bool TWinRank::DoInit(TContext& ctx, ISource* src) {
@@ -1585,7 +1598,7 @@ public:
     }
 
     TPtr DoClone() const override {
-        return {};
+        return new TInvalidLiteralNode(GetPos());
     }
 };
 
@@ -1979,7 +1992,7 @@ TAstNode* TListOfNamedNodes::Translate(TContext& ctx) const {
 }
 
 TNodePtr TListOfNamedNodes::DoClone() const {
-    return {};
+    return new TListOfNamedNodes(GetPos(), CloneContainer(Exprs));
 }
 
 void TListOfNamedNodes::DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const {
@@ -2014,7 +2027,7 @@ TString TArgPlaceholderNode::GetName() const {
 }
 
 TNodePtr TArgPlaceholderNode::DoClone() const {
-    return {};
+    return new TArgPlaceholderNode(GetPos(), Name);
 }
 
 TNodePtr BuildArgPlaceholder(TPosition pos, const TString& name) {
@@ -2360,9 +2373,15 @@ public:
     {
         Add("bind", AstNode(module), BuildQuotedAtom(pos, alias));
     }
+private:
+    TBindNode(const TBindNode& other)
+        : TAstListNode(other.GetPos())
+    {
+        Nodes = CloneContainer(other.Nodes);
+    }
 
     TPtr DoClone() const final {
-        return {};
+        return new TBindNode(*this);
     }
 };
 
@@ -2390,9 +2409,15 @@ public:
         }
     }
 
-protected:
+private:
+    TLambdaNode(const TLambdaNode& other)
+        : TAstListNode(other.GetPos())
+    {
+        Nodes = CloneContainer(other.Nodes);
+    }
+
     TPtr DoClone() const final {
-        return {};
+        return new TLambdaNode(*this);
     }
 
     void DoUpdateState() const final {
@@ -2893,7 +2918,7 @@ public:
     }
 
     TPtr DoClone() const final {
-        return {};
+        return new TTupleResultNode(Node->Clone(), EnsureTupleSize);
     }
 
     void DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const final {

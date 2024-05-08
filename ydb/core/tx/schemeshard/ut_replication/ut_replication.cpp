@@ -323,6 +323,28 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
 
         TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "by_value", {"value"},
             Ydb::StatusIds::BAD_REQUEST);
+
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, InternalTransaction(AlterTableRequest(++txId, "/MyRoot", R"(
+            Name: "Table"
+            ReplicationConfig {
+              Mode: REPLICATION_MODE_NONE
+              Consistency: CONSISTENCY_WEAK
+            }
+        )")));
+        TestModificationResults(runtime, txId, {NKikimrScheme::StatusInvalidParameter});
+
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, InternalTransaction(AlterTableRequest(++txId, "/MyRoot", R"(
+            Name: "Table"
+            ReplicationConfig {
+              Mode: REPLICATION_MODE_NONE
+            }
+        )")));
+        TestModificationResults(runtime, txId, {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::ReplicationMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE),
+        });
     }
 
     Y_UNIT_TEST(CopyReplicatedTable) {

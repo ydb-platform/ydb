@@ -22,7 +22,7 @@ select
  and s_state in
              ( select s_state
                from  (select store.s_state as s_state,
- 			    rank() over ( partition by s_state order by sum(ss_net_profit) desc) as ranking
+ 			    rank() over ( partition by store.s_state order by sum(ss_net_profit) desc) as ranking
                       from   {{store_sales}} as store_sales
                       cross join {{store}} as store
                       cross join {{date_dim}} as date_dim

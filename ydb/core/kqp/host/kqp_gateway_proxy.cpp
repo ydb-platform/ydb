@@ -1850,7 +1850,7 @@ public:
                 params.SetDatabase(*database);
             }
             if (const auto& token = settings.Settings.OAuthToken) {
-                params.SetOAuthToken(*token);
+                params.MutableOAuthToken()->SetToken(*token);
             }
             if (const auto& creds = settings.Settings.StaticCredentials) {
                 params.MutableStaticCredentials()->SetUser(creds->UserName);
@@ -1947,7 +1947,11 @@ public:
 
             NKikimrSchemeOp::TModifyScheme tx;
             tx.SetWorkingDir(pathPair.first);
-            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropReplication); // TODO(ilnaz): CASCADE
+            if (settings.Cascade) {
+                tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropReplicationCascade);
+            } else {
+                tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropReplication);
+            }
 
             auto& op = *tx.MutableDrop();
             op.SetName(pathPair.second);

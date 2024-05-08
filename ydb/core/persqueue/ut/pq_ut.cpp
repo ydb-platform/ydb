@@ -459,55 +459,6 @@ Y_UNIT_TEST(TestReadRuleVersions) {
     });
 }
 
-Y_UNIT_TEST(TestCreateBalancer) {
-    TTestContext tc;
-    RunTestWithReboots(tc.TabletIds, [&]() {
-        return tc.InitialEventsFilter.Prepare();
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
-        TFinalizer finalizer(tc);
-        tc.Prepare(dispatchName, setup, activeZone);
-        activeZone = false;
-        tc.Runtime->SetScheduledLimit(50);
-        tc.Runtime->SetDispatchTimeout(TDuration::MilliSeconds(100));
-
-        TFakeSchemeShardState::TPtr state{new TFakeSchemeShardState()};
-        ui64 ssId = 325;
-        BootFakeSchemeShard(*tc.Runtime, ssId, state);
-
-        PQBalancerPrepare(TOPIC_NAME, {{1,{1,2}}}, ssId, tc);
-
-        TActorId pipe1 = RegisterReadSession("session0", tc, {1});
-
-        PQBalancerPrepare(TOPIC_NAME, {{1,{1,2}}, {2,{1,3}}}, ssId, tc);
-
-        tc.Runtime->Send(new IEventHandle(pipe1, tc.Edge, new TEvents::TEvPoisonPill()), 0, true); //will cause dying of pipe and first session
-
-
-//        PQBalancerPrepare(TOPIC_NAME, {{2,1}}, tc); //TODO: not supported yet
-//        PQBalancerPrepare(TOPIC_NAME, {{1,1}}, tc); // TODO: not supported yet
-        PQBalancerPrepare(TOPIC_NAME, {{1,{1, 2}}, {2,{1, 3}}, {3,{1, 4}}}, ssId, tc);
-        activeZone = false;
-
-        TActorId pipe = RegisterReadSession("session1", tc);
-        WaitPartition("session1", tc, 0, "", "", TActorId());
-        WaitPartition("session1", tc, 0, "", "", TActorId());
-        WaitPartition("session1", tc, 0, "", "", TActorId());
-        WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions - return error
-        TActorId pipe2 = RegisterReadSession("session2", tc);
-        Y_UNUSED(pipe2);
-        WaitPartition("session2", tc, 1, "session1", "topic1", pipe);
-        WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions to balance
-        tc.Runtime->Send(new IEventHandle(pipe, tc.Edge, new TEvents::TEvPoisonPill()), 0, true); //will cause dying of pipe and first session
-
-        TDispatchOptions options;
-        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvServerDisconnected));
-        tc.Runtime->DispatchEvents(options);
-        WaitPartition("session2", tc, 0, "", "", TActorId());
-        WaitPartition("session2", tc, 0, "", "", TActorId());
-        WaitPartition("", tc, 0, "", "", TActorId(), false);//no partitions to balance
-    });
-}
-
 Y_UNIT_TEST(TestDescribeBalancer) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {

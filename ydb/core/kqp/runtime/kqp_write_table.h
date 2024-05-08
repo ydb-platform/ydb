@@ -56,5 +56,39 @@ IPayloadSerializerPtr CreateDataShardPayloadSerializer(
     const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
     const NMiniKQL::TTypeEnvironment& typeEnv);
 
+
+class IShardedEvWriteController : public TThrRefBase {
+public:
+    virtual void OnPartitioningChanged(const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry) = 0;
+    virtual void OnPartitioningChanged(
+        const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
+        const NSchemeCache::TSchemeCacheRequest::TEntry& partitionsEntry) = 0;
+
+    virtual void AddData(NMiniKQL::TUnboxedValueBatch&& data) = 0;
+    virtual void Close() = 0;
+
+    virtual ui64 GetNextNewShardId() = 0;
+
+    struct TMessageMetadata {
+        ui64 SendAttempts = 0;
+        ui64 Cookie = 0;
+        bool IsFinal = false;
+    };
+    virtual std::optional<TMessageMetadata> GetMessageMetadata(ui64 shardId) = 0;
+
+    virtual bool SerializeMessage(ui64 shardId, NKikimr::NEvents::TDataEvents::TEvWrite& evWrite) = 0;
+
+    virtual bool OnMessageSent(ui64 shardId, ui64 cookie) = 0;
+    virtual bool OnMessageAcknowledged(ui64 shardId, ui64 cookie) = 0;
+
+    virtual i64 GetMemory() = 0;
+
+    virtual bool IsClosed() = 0;
+    virtual bool IsEmpty() = 0;
+    virtual bool IsFinished() = 0;
+};
+
+using IShardedEvWriteControllerPtr = TIntrusivePtr<IShardedEvWriteController>;
+
 }
 }

@@ -85,28 +85,36 @@ namespace {
                 Closed = true;
             }
 
-            void MakeNextBatches(ui64 maxDataSize, ui64 maxCount) {
+            void MakeNextBatches(i64 maxDataSize, ui64 maxCount) {
                 YQL_ENSURE(BatchesInFlight == 0);
-                ui64 dataSize = 0;
+                i64 dataSize = 0;
                 while (BatchesInFlight < maxCount
                         && BatchesInFlight < Batches.size()
-                        && dataSize + GetBatch(BatchesInFlight).Data.size() <= maxDataSize) {
-                    dataSize += GetBatch(BatchesInFlight).Data.size();
+                        && dataSize + GetBatch(BatchesInFlight).Batch->GetMemory() <= maxDataSize) {
+                    dataSize += GetBatch(BatchesInFlight).Batch->GetMemory();
                     ++BatchesInFlight;
                 }
-                YQL_ENSURE(BatchesInFlight == Batches.size() || GetBatch(BatchesInFlight).Data.size() <= maxDataSize); 
+                YQL_ENSURE(BatchesInFlight == Batches.size() || GetBatch(BatchesInFlight).Batch->GetMemory() <= maxDataSize); 
             }
 
             const TInFlightBatch& GetBatch(size_t index) const {
                 return Batches.at(index);
             }
 
-            std::optional<TInFlightBatch> PopBatch(const ui64 Cookie) {
-                if (!IsEmpty() && Cookie == CurrentBatch().Cookie) {
-                    auto batch = std::move(Batches.front());
-                    Batches.pop_front();
-                    Memory -= batch.Batch->GetMemory();
-                    return std::move(batch);
+            std::optional<ui64> PopBatches(const ui64 cookie) {
+                if (BatchesInFlight != 0 && Cookie == cookie) {
+                    ui64 dataSize = 0;
+                    for (size_t index = 0; index < BatchesInFlight; ++index) {
+                        dataSize += Batches.front().Batch->GetMemory();
+                        Batches.pop_front();
+                    }
+
+                    ++Cookie;
+                    SendAttempts = 0;
+                    BatchesInFlight = 0;
+
+                    Memory -= dataSize;
+                    return dataSize;
                 }
                 return std::nullopt;
             }
@@ -602,8 +610,8 @@ private:
     void PopShardBatch(ui64 shardId, ui64 cookie) {
         TResumeNotificationManager resumeNotificator(*this);
         auto& shardInfo = ShardsInfo.GetShard(shardId);
-        if (const auto batch = shardInfo.PopBatch(cookie); batch) {
-            EgressStats.Bytes += batch->Batch->GetMemory();
+        if (const auto removedDataSize = shardInfo.PopBatches(cookie); removedDataSize) {
+            EgressStats.Bytes += *removedDataSize;
             EgressStats.Chunks++;
             EgressStats.Splits++;
             EgressStats.Resume();

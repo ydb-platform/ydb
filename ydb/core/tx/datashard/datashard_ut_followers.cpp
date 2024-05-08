@@ -2,6 +2,8 @@
 #include "datashard_ut_common_kqp.h"
 #include "datashard_ut_read_table.h"
 
+#include <ydb/library/actors/core/mon.h>
+
 namespace NKikimr {
 
 using namespace NKikimr::NDataShard;
@@ -160,6 +162,100 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
                                "{ items { uint32_value: 3 } items { uint32_value: 6 } }";
             UNIT_ASSERT_VALUES_EQUAL(result, expected);
         }
+    }
+
+    Y_UNIT_TEST(FollowerRebootAfterSysCompaction) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableForceFollowers(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
+        CreateShardedTable(server, sender, "/Root", "table-1",
+            TShardedTableOptions()
+                .Shards(2)
+                .Followers(1));
+
+        const auto shards = GetTableShards(server, sender, "/Root/table-1");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33);");
+
+        // Wait for leader to promote the follower read edge (and stop writing to the Sys table)
+        Cerr << "... sleeping" << Endl;
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleStaleRoExec(runtime,
+                "SELECT key, value FROM `/Root/table-1` WHERE key >= 1 AND key <= 3",
+                "/Root"),
+            "{ items { uint32_value: 1 } items { uint32_value: 11 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 22 } }, "
+            "{ items { uint32_value: 3 } items { uint32_value: 33 } }");
+
+        // Now we ask the leader to compact the Sys table
+        {
+            NActorsProto::TRemoteHttpInfo pb;
+            pb.SetMethod(HTTP_METHOD_GET);
+            pb.SetPath("/executorInternals");
+            auto* p1 = pb.AddQueryParams();
+            p1->SetKey("force_compaction");
+            p1->SetValue("1");
+            SendViaPipeCache(runtime, shards.at(0), sender,
+                std::make_unique<NMon::TEvRemoteHttpInfo>(std::move(pb)));
+            auto ev = runtime.GrabEdgeEventRethrow<NMon::TEvRemoteHttpInfoRes>(sender);
+            UNIT_ASSERT_C(
+                ev->Get()->Html.Contains("Table will be compacted in the near future"),
+                ev->Get()->Html);
+        }
+
+        // Allow table to finish compaction
+        Cerr << "... sleeping" << Endl;
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // Reboot follower
+        Cerr << "... killing follower" << Endl;
+        SendViaPipeCache(runtime, shards.at(0), sender,
+            std::make_unique<TEvents::TEvPoison>(),
+            { .Follower = true });
+
+        // Allow it to boot properly
+        Cerr << "... sleeping" << Endl;
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // Read from follower must succeed
+        Cerr << "... checking" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleStaleRoExec(runtime,
+                "SELECT key, value FROM `/Root/table-1` WHERE key >= 1 AND key <= 3",
+                "/Root"),
+            "{ items { uint32_value: 1 } items { uint32_value: 11 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 22 } }, "
+            "{ items { uint32_value: 3 } items { uint32_value: 33 } }");
+
+        // Update row values and sleep
+        Cerr << "... updating rows" << Endl;
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 44), (2, 55), (3, 66);");
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // Read from follower must see updated values
+        Cerr << "... checking" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleStaleRoExec(runtime,
+                "SELECT key, value FROM `/Root/table-1` WHERE key >= 1 AND key <= 3",
+                "/Root"),
+            "{ items { uint32_value: 1 } items { uint32_value: 44 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 55 } }, "
+            "{ items { uint32_value: 3 } items { uint32_value: 66 } }");
     }
 
 } // Y_UNIT_TEST_SUITE(DataShardFollowers)

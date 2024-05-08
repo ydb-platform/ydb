@@ -6,6 +6,8 @@ namespace NKikimr::NPQ::NBalancing {
 
 using namespace NTabletFlatExecutor;
 
+using TPartitionInfo = TPersQueueReadBalancer::TPartitionInfo;
+
 struct TSession;
 struct TConsumer;
 class TBalancer;

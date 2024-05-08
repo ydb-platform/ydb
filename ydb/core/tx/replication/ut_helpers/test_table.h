@@ -28,6 +28,7 @@ struct TTestTableDescription {
         };
 
         enum EConsistency {
+            CONSISTENCY_UNKNOWN = 0,
             CONSISTENCY_STRONG = 1,
             CONSISTENCY_WEAK = 2,
         };

@@ -11,13 +11,13 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T, class Tag>
-TIntrusiveMPSCStack<T, Tag>::TIntrusiveMPSCStack() noexcept
+TIntrusiveMpscStack<T, Tag>::TIntrusiveMpscStack() noexcept
 {
     static_assert(std::derived_from<T, TIntrusiveListItem<T, Tag>>, "Class must inherit from CRTP-base TIntrusiveListItem");
 }
 
 template <class T, class Tag>
-void TIntrusiveMPSCStack<T, Tag>::Push(TNode* item) noexcept
+void TIntrusiveMpscStack<T, Tag>::Push(TNode* item) noexcept
 {
     // Past this line item is not a valid instance of TInstrusiveListItem.
 
@@ -33,7 +33,7 @@ void TIntrusiveMPSCStack<T, Tag>::Push(TNode* item) noexcept
 }
 
 template <class T, class Tag>
-TIntrusiveList<T, Tag> TIntrusiveMPSCStack<T, Tag>::PopAll() noexcept
+TIntrusiveList<T, Tag> TIntrusiveMpscStack<T, Tag>::PopAll() noexcept
 {
     TNode* head = Head_.exchange(nullptr, std::memory_order::acquire);
 

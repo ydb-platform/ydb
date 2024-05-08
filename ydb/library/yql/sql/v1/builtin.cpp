@@ -112,7 +112,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TGroupingNode(Pos, Args);
+        return new TGroupingNode(Pos, CloneContainer(Args));
     }
 
 private:
@@ -316,7 +316,7 @@ public:
     }
 
     TPtr DoClone() const final {
-        return {};
+        return new TLiteralStringAtom(GetPos(), SafeClone(Node), Info, Prefix);
     }
 
     void DoUpdateState() const override {
@@ -564,7 +564,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlParseType(Pos, Args);
+        return new TYqlParseType(Pos, CloneContainer(Args));
     }
 
     void DoUpdateState() const final {
@@ -799,7 +799,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlSubqueryFor<Name>(Pos, Args);
+        return new TYqlSubqueryFor<Name>(Pos, CloneContainer(Args));
     }
 };
 
@@ -821,7 +821,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlSubqueryOrderBy<Name>(Pos, Args);
+        return new TYqlSubqueryOrderBy<Name>(Pos, CloneContainer(Args));
     }
 };
 
@@ -855,7 +855,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlTypeAssert<Strict>(Pos, Args);
+        return new TYqlTypeAssert<Strict>(Pos, CloneContainer(Args));
     }
 };
 
@@ -879,7 +879,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TFromBytes(Pos, Args);
+        return new TFromBytes(Pos, CloneContainer(Args));
     }
 };
 
@@ -910,7 +910,7 @@ public:
     {}
 
     TNodePtr DoClone() const final {
-        return new TYqlAsTagged(Pos, Args);
+        return new TYqlAsTagged(Pos, CloneContainer(Args));
     }
 };
 
@@ -921,7 +921,7 @@ public:
     {}
 
     TNodePtr DoClone() const final {
-        return new TYqlUntag(Pos, Args);
+        return new TYqlUntag(Pos, CloneContainer(Args));
     }
 };
 
@@ -945,7 +945,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlVariant(Pos, Args);
+        return new TYqlVariant(Pos, CloneContainer(Args));
     }
 };
 
@@ -969,7 +969,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlEnum(Pos, Args);
+        return new TYqlEnum(Pos, CloneContainer(Args));
     }
 };
 
@@ -993,7 +993,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlAsVariant(Pos, Args);
+        return new TYqlAsVariant(Pos, CloneContainer(Args));
     }
 };
 
@@ -1017,7 +1017,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlAsEnum(Pos, Args);
+        return new TYqlAsEnum(Pos, CloneContainer(Args));
     }
 };
 
@@ -1040,7 +1040,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TDerived(Pos, OpName, Args);
+        return new TDerived(Pos, OpName, CloneContainer(Args));
     }
 
     bool IsLiteral() const override {
@@ -1089,7 +1089,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TTryMember(Pos, OpName, Args);
+        return new TTryMember(Pos, OpName, CloneContainer(Args));
     }
 };
 
@@ -1141,7 +1141,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TAddMember(Pos, OpName, Args);
+        return new TAddMember(Pos, OpName, CloneContainer(Args));
     }
 };
 
@@ -1166,7 +1166,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TRemoveMember(Pos, OpName, Args);
+        return new TRemoveMember(Pos, OpName, CloneContainer(Args));
     }
 };
 
@@ -1188,7 +1188,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TCombineMembers(Pos, OpName, Args);
+        return new TCombineMembers(Pos, OpName, CloneContainer(Args));
     }
 };
 
@@ -1222,7 +1222,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TFlattenMembers(Pos, OpName, Args);
+        return new TFlattenMembers(Pos, OpName, CloneContainer(Args));
     }
 };
 
@@ -1304,7 +1304,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlParseFileOp(Pos, Args);
+        return new TYqlParseFileOp(Pos, CloneContainer(Args));
     }
 };
 
@@ -1333,7 +1333,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlDataType(Pos, Args);
+        return new TYqlDataType(Pos, CloneContainer(Args));
     }
 
 private:
@@ -1360,7 +1360,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlResourceType(Pos, Args);
+        return new TYqlResourceType(Pos, CloneContainer(Args));
     }
 };
 
@@ -1384,7 +1384,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlTaggedType(Pos, Args);
+        return new TYqlTaggedType(Pos, CloneContainer(Args));
     }
 };
 
@@ -1423,7 +1423,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlCallableType(Pos, Args);
+        return new TYqlCallableType(Pos, CloneContainer(Args));
     }
 };
 
@@ -1447,7 +1447,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlTupleElementType(Pos, Args);
+        return new TYqlTupleElementType(Pos, CloneContainer(Args));
     }
 };
 
@@ -1471,7 +1471,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlStructMemberType(Pos, Args);
+        return new TYqlStructMemberType(Pos, CloneContainer(Args));
     }
 };
 
@@ -1497,7 +1497,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlCallableArgumentType(Pos, Args);
+        return new TYqlCallableArgumentType(Pos, CloneContainer(Args));
     }
 };
 
@@ -1820,7 +1820,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TWeakFieldOp(Pos, Args);
+        return new TWeakFieldOp(Pos, CloneContainer(Args));
     }
 };
 
@@ -2421,7 +2421,7 @@ public:
     }
 
     TNodePtr DoClone() const override {
-        return new TCallableNode(Pos, Module, Name, Args, ForReduce);
+        return new TCallableNode(Pos, Module, Name, CloneContainer(Args), ForReduce);
     }
 
     void DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const final {
@@ -2629,7 +2629,7 @@ public:
     }
 
     TPtr DoClone() const override {
-        return {};
+        return new TInvalidBuiltin(GetPos(), Info);
     }
 private:
     TString Info;
@@ -3070,6 +3070,10 @@ struct TBuiltinFuncData {
             {"flattenmembers", BuildNamedBuiltinFactoryCallback<TFlattenMembers>("FlattenMembers")},
             {"staticmap", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StaticMap", 2, 2) },
             {"staticzip", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StaticZip", 1, -1) },
+            {"structunion", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StructUnion", 2, 3)},
+            {"structintersection", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StructIntersection", 2, 3)},
+            {"structdifference", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StructDifference", 2, 2)},
+            {"structsymmetricdifference", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StructSymmetricDifference", 2, 2)},
             {"staticfold", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StaticFold", 3, 3)},
             {"staticfold1", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StaticFold1", 3, 3)},
 

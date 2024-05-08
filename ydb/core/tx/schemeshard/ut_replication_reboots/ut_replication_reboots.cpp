@@ -173,4 +173,41 @@ Y_UNIT_TEST_SUITE(TReplicationWithRebootsTests) {
         });
     }
 
+    Y_UNIT_TEST(AlterReplicationConfig) {
+        TTestWithReboots t(false);
+        t.GetTestEnvOptions().InitYdbDriver(true);
+
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                SetupLogging(runtime);
+
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table"
+                    Columns { Name: "key" Type: "Uint64" }
+                    Columns { Name: "value" Type: "Uint64" }
+                    KeyColumnNames: ["key"]
+                    ReplicationConfig {
+                      Mode: REPLICATION_MODE_READ_ONLY
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            AsyncSend(runtime, TTestTxConfig::SchemeShard, InternalTransaction(AlterTableRequest(++t.TxId, "/MyRoot", R"(
+                Name: "Table"
+                ReplicationConfig {
+                  Mode: REPLICATION_MODE_NONE
+                }
+            )")));
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestLs(runtime, "/MyRoot/Table", false,
+                    NLs::ReplicationMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE));
+            }
+        });
+    }
+
 } // TReplicationWithRebootsTests

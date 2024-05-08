@@ -125,6 +125,11 @@ message TPDiskStateInfo {
     // overall state - to be filled
     optional EFlag Overall = 17;
     optional string SerialNumber = 18;
+    optional uint64 SystemSize = 19;
+    optional uint64 LogUsedSize = 20;
+    optional uint64 LogTotalSize = 21;
+    optional uint32 ExpectedSlotCount = 22;
+    optional uint64 EnforcedDynamicSlotSize = 23;
 }
 
 message TEvPDiskStateRequest {

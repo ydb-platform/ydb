@@ -164,8 +164,6 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
             return NDriverClient::PersQueueStress(cmdConf, argc, argv);
         case EDM_PERSQUEUE_DISCOVER_CLUSTERS:
             return NDriverClient::PersQueueDiscoverClustersRequest(cmdConf, argc, argv);
-        case EDM_LOAD_REQUEST:
-            return NDriverClient::LoadRequest(cmdConf, argc, argv);
         case EDM_ACTORSYS_PERFTEST:
             return NDriverClient::ActorsysPerfTest(cmdConf, argc, argv);
         default:

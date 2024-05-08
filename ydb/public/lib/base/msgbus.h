@@ -49,8 +49,6 @@ enum {
     MTYPE_CLIENT_OLD_FLAT_DESCRIBE_REQUEST = 10435, // deprecated
     MTYPE_CLIENT_OLD_FLAT_DESCRIBE_RESPONSE = 10436, // deprecated
     MTYPE_CLIENT_CREATE_TABLET = 10437,
-    MTYPE_CLIENT_LOAD_REQUEST = 10438,
-    MTYPE_CLIENT_LOAD_RESPONSE = 10439,
     MTYPE_CLIENT_DIRECT_REQUEST_JOB_EXECUTION_STATUS = 10440, // deprecated
     MTYPE_CLIENT_PERSQUEUE = 10441,
     MTYPE_CLIENT_DB_SCHEMA = 10443,
@@ -62,8 +60,6 @@ enum {
     MTYPE_CLIENT_DB_BATCH = 10449,
     MTYPE_CLIENT_FLAT_DESCRIBE_REQUEST = 10450,
     MTYPE_CLIENT_LOCAL_SCHEME_TX = 10453,
-    MTYPE_CLIENT_GET_REQUEST = 10454,
-    MTYPE_CLIENT_GET_RESPONSE = 10455,
     MTYPE_CLIENT_DB_QUERY = 10456,
     MTYPE_CLIENT_TABLET_COUNTERS_REQUEST = 10457,
     MTYPE_CLIENT_CANCEL_BACKUP = 10458,
@@ -124,10 +120,6 @@ struct TBusSchemeOperationStatus : TBusMessage<TBusSchemeOperationStatus, NKikim
 struct TBusSchemeDescribe : TBusMessage<TBusSchemeDescribe, NKikimrClient::TSchemeDescribe, MTYPE_CLIENT_FLAT_DESCRIBE_REQUEST> {};
 struct TBusOldFlatDescribeRequest : TBusMessage<TBusOldFlatDescribeRequest, NKikimrClient::TSchemeDescribe, MTYPE_CLIENT_OLD_FLAT_DESCRIBE_REQUEST> {};
 struct TBusOldFlatDescribeResponse : TBusMessage<TBusOldFlatDescribeResponse, NKikimrClient::TFlatDescribeResponse, MTYPE_CLIENT_OLD_FLAT_DESCRIBE_RESPONSE> {};
-struct TBusBsTestLoadRequest : TBusMessage<TBusBsTestLoadRequest, NKikimrClient::TBsTestLoadRequest, MTYPE_CLIENT_LOAD_REQUEST> {};
-struct TBusBsTestLoadResponse : TBusMessage<TBusBsTestLoadResponse, NKikimrClient::TBsTestLoadResponse, MTYPE_CLIENT_LOAD_RESPONSE> {};
-struct TBusBsGetRequest : TBusMessage<TBusBsGetRequest, NKikimrClient::TBsGetRequest, MTYPE_CLIENT_GET_REQUEST> {};
-struct TBusBsGetResponse : TBusMessage<TBusBsGetResponse, NKikimrClient::TBsGetResponse, MTYPE_CLIENT_GET_RESPONSE> {};
 struct TBusDbSchema : TBusMessage<TBusDbSchema, NKikimrClient::TJSON, MTYPE_CLIENT_DB_SCHEMA> {};
 struct TBusDbOperation : TBusMessage<TBusDbOperation, NKikimrClient::TJSON, MTYPE_CLIENT_DB_OPERATION> {};
 struct TBusDbResponse : TBusMessage<TBusDbResponse, NKikimrClient::TJSON, MTYPE_CLIENT_DB_RESPONSE> {};
@@ -217,10 +209,6 @@ public:
         RegisterType(new TBusSchemeDescribe);
         RegisterType(new TBusOldFlatDescribeRequest);
         RegisterType(new TBusOldFlatDescribeResponse);
-        RegisterType(new TBusBsTestLoadRequest);
-        RegisterType(new TBusBsTestLoadResponse);
-        RegisterType(new TBusBsGetRequest);
-        RegisterType(new TBusBsGetResponse);
         RegisterType(new TBusDbSchema);
         RegisterType(new TBusDbOperation);
         RegisterType(new TBusDbResponse);

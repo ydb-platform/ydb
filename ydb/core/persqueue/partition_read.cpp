@@ -108,7 +108,7 @@ TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> TPartition::MakeHasDataInfoRespon
 
             for (auto* p : child->Parents) {
                 if (p->Id != partitionId) {
-                    res->Record.AddAdjacentPartitionIds(child->Id);
+                    res->Record.AddAdjacentPartitionIds(p->Id);
                 }
             }
         }

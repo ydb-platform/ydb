@@ -21,7 +21,7 @@ public:
 
     using IBatchPtr = TIntrusivePtr<IBatch>;
 
-    virtual void AddData(NMiniKQL::TUnboxedValueBatch&& data, bool close) = 0;
+    virtual void AddData(NMiniKQL::TUnboxedValueBatch&& data) = 0;
     virtual void ReturnBatch(IBatchPtr&& batch) = 0;
 
     virtual void Close() = 0;

@@ -172,16 +172,16 @@ public:
         : TypeEnv(typeEnv)
         , SchemeEntry(schemeEntry)
         , Columns(BuildColumns(inputColumns))
-        , WriteIndex(BuildWriteIndex(schemeEntry, inputColumns))
+        , WriteIndex(BuildWriteIndex(SchemeEntry, inputColumns))
         , WriteColumnIds(BuildWriteColumnIds(inputColumns, WriteIndex))
         , BatchBuilder(arrow::Compression::UNCOMPRESSED, BuildNotNullColumns(inputColumns)) {
         TString err;
-        if (!BatchBuilder.Start(BuildBatchBuilderColumns(schemeEntry), 0, 0, err)) {
+        if (!BatchBuilder.Start(BuildBatchBuilderColumns(SchemeEntry), 0, 0, err)) {
             yexception() << "Failed to start batch builder: " + err;
         }
 
         // TODO: Checks from ydb/core/tx/data_events/columnshard_splitter.cpp
-        const auto& description = schemeEntry.ColumnTableInfo->Description;
+        const auto& description = SchemeEntry.ColumnTableInfo->Description;
         const auto& scheme = description.GetSchema();
         const auto& sharding = description.GetSharding();
 
@@ -195,9 +195,8 @@ public:
         Sharding = shardingConclusion.DetachResult();
     }
 
-    void AddData(NMiniKQL::TUnboxedValueBatch&& data, bool close) override {
+    void AddData(NMiniKQL::TUnboxedValueBatch&& data) override {
         YQL_ENSURE(!Closed);
-        Closed = close;
 
         TVector<TCell> cells(Columns.size());
         data.ForEachRow([&](const auto& row) {
@@ -211,29 +210,14 @@ public:
             BatchBuilder.AddRow(TConstArrayRef<TCell>{cells.begin(), cells.end()});
         });
 
+        // TODO: add min limit for flushing
         const auto batch = BatchBuilder.FlushBatch(true);
         if (batch) {
-            const auto dataAccessor = GetDataAccessor(batch);
-
-            auto shardsSplitter = NKikimr::NEvWrite::IShardsSplitter::BuildSplitter(SchemeEntry);
-            if (!shardsSplitter) {
-                ythrow yexception() << "Failed to build splitter";
-            }
-            auto initStatus = shardsSplitter->SplitData(SchemeEntry, *dataAccessor);
-            if (!initStatus.Ok()) {
-                ythrow yexception() << "Failed to split batch: " << initStatus.GetErrorMessage();
-            }
-
-            const auto& splittedData = shardsSplitter->GetSplitData();
-
-            for (auto& [shard, infos] : splittedData.GetShardsInfo()) {
-                for (auto&& shardInfo : infos) {
-                    auto& batch = Batches[shard].emplace_back(
-                        MakeIntrusive<TBatch>(shardInfo->GetData())); // TODO: get rid of copy
-                    Memory += batch->GetMemory();
-                    YQL_ENSURE(batch->GetMemory() != 0);
-                }
-                ShardIds.insert(shard);
+            for (auto [shardId, shardBatch] : Sharding->SplitByShardsToArrowBatches(batch)) {
+                auto& batch = Batches[shardId].emplace_back(MakeIntrusive<TBatch>(NArrow::SerializeBatchNoCompression(shardBatch)));
+                Memory += batch->GetMemory();
+                YQL_ENSURE(batch->GetMemory() != 0);
+                ShardIds.insert(shardId);
             }
         }
     }
@@ -388,9 +372,8 @@ public:
         , KeyColumnTypes(BuildKeyColumnTypes(SchemeEntry)) {
     }
 
-    void AddData(NMiniKQL::TUnboxedValueBatch&& data, bool close) override {
+    void AddData(NMiniKQL::TUnboxedValueBatch&& data) override {
         YQL_ENSURE(!Closed);
-        Closed = close;
 
         TVector<TCell> cells(Columns.size());
         data.ForEachRow([&](const auto& row) {

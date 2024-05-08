@@ -351,14 +351,17 @@ private:
 
         YQL_ENSURE(Serializer);
         try {
-            Serializer->AddData(std::move(data), Finished);
+            Serializer->AddData(std::move(data));
+            if (Finished) {
+                Serializer->Close();
+            }
         } catch (...) {
             RuntimeError(
                 CurrentExceptionMessage(),
                 NYql::NDqProto::StatusIds::INTERNAL_ERROR);
         }
 
-        if (Finished || GetFreeSpace() <= 0) {
+        if (Finished || GetFreeSpace() <= 0 || SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
             TResumeNotificationManager resumeNotificator(*this);
             for (auto& [shardId, batches] : Serializer->FlushBatchesForce()) {
                 for (auto& batch : batches) {
@@ -635,9 +638,10 @@ private:
             auto& shard = ShardsInfo.GetShard(shardId);
             while (true) {
                 auto batch = Serializer->FlushBatch(shardId);
-                if (batch && !batch->IsEmpty()) {
-                    shard.PushBatch(std::move(batch));
+                if (!batch || batch->IsEmpty()) {
+                    break;
                 }
+                shard.PushBatch(std::move(batch));
             }
             if (shard.GetBatchesInFlight() == 0) {
                 shard.MakeNextBatches(

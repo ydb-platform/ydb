@@ -1,8 +1,6 @@
 LIBRARY()
 
 OWNER(
-    aakulaga
-    g:kikimr
     g:yql
     g:yql_ydb_core
 )

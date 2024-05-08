@@ -26,7 +26,7 @@ namespace NPackedTuple {
         return MakeHolder<TTupleLayoutFallback<NSimd::TSimdFallbackTraits>>(columns);
 
     }
- 
+
     template <typename TTraits>
     TTupleLayoutFallback<TTraits>::TTupleLayoutFallback(const std::vector<TColumnDesc>& columns) : TTupleLayout(columns) {
 
@@ -67,14 +67,16 @@ namespace NPackedTuple {
         std::sort(KeyColumns.begin(), KeyColumns.end(), ColumnDescLess);
         std::sort(PayloadColumns.begin(), PayloadColumns.end(), ColumnDescLess);
 
+        KeyColumnsFixedEnd = 0;
+
         ui32 currOffset = 4; // crc32 hash in the beginning
         KeyColumnsOffset = currOffset;
         KeyColumnsFixedNum = KeyColumnsNum;
-        KeyColumnsFixedEnd = 0;
+
         for (ui32 i = 0; i < KeyColumnsNum; ++i) {
             auto &col = KeyColumns[i];
 
-            if (col.SizeType == EColumnSizeType::Variable) {
+            if (col.SizeType == EColumnSizeType::Variable && KeyColumnsFixedEnd == 0) {
                 KeyColumnsFixedEnd = currOffset;
                 KeyColumnsFixedNum = i;
             }
@@ -86,7 +88,8 @@ namespace NPackedTuple {
         }
 
         KeyColumnsEnd = currOffset;
-        if (KeyColumnsFixedEnd == 0)
+
+        if (KeyColumnsFixedEnd == 0) // >= 4 if was ever assigned
             KeyColumnsFixedEnd = KeyColumnsEnd;
 
         KeyColumnsSize = KeyColumnsEnd - KeyColumnsOffset;
@@ -98,6 +101,7 @@ namespace NPackedTuple {
         BitmaskEnd = currOffset;
 
         PayloadOffset = currOffset;
+
         for (ui32 i = 0; i < PayloadColumns.size(); ++i) {
             auto &col = PayloadColumns[i];
             col.ColumnIndex = KeyColumnsNum + i;
@@ -114,7 +118,7 @@ namespace NPackedTuple {
         for (auto &col: Columns) {
             if (col.SizeType == EColumnSizeType::Variable) {
                 VariableColumns_.push_back(col);
-            } else if (IsPowerOf2(col.DataSize) && col.DataSize <= 16) {
+            } else if (IsPowerOf2(col.DataSize) && col.DataSize < (1u<<FixedPOTColumns_.size())) {
                 FixedPOTColumns_[CountTrailingZeroBits(col.DataSize)].push_back(col);
             } else {
                 FixedNPOTColumns_.push_back(col);
@@ -153,9 +157,9 @@ namespace NPackedTuple {
             bool anyOverflow = false;
 
             for (ui32 i = KeyColumnsFixedNum; i < KeyColumns.size(); ++i) {
-                auto& col =  KeyColumns[i];
-                auto dataOffset = ReadUnaligned<ui32>(columns[col.OriginalIndex] + sizeof(ui32)*start);
-                auto nextOffset = ReadUnaligned<ui32>(columns[col.OriginalIndex] + sizeof(ui32)*(start + 1));
+                auto& col = KeyColumns[i];
+                ui32 dataOffset = ReadUnaligned<ui32>(columns[col.OriginalIndex] + sizeof(ui32)*start);
+                ui32 nextOffset = ReadUnaligned<ui32>(columns[col.OriginalIndex] + sizeof(ui32)*(start + 1));
                 auto size = nextOffset - dataOffset;
 
                 if (size >= col.DataSize) {
@@ -163,34 +167,41 @@ namespace NPackedTuple {
                     break;
                 }
             }
+
             std::memset(res + BitmaskOffset, 0, BitmaskSize);
+
             for (ui32 i = 0; i < Columns.size(); ++i) {
-                auto& col =  Columns[i];
+                auto& col = Columns[i];
 
                 res[BitmaskOffset + (i / 8)] |= ((isValidBitmask[col.OriginalIndex][bitmaskIdx] >> bitmaskShift) & 1u) << (i % 8);
             }
+
             for (auto &col: FixedNPOTColumns_) {
                 std::memcpy(res + col.Offset, columns[col.OriginalIndex] + start*col.DataSize, col.DataSize);
             }
+
 #define PackPOTColumn(POT) \
             for (auto &col: FixedPOTColumns_[POT]) { \
                 std::memcpy(res + col.Offset, columns[col.OriginalIndex] + start*(1u<<POT), 1u<<POT); \
             }
+
             PackPOTColumn(0);
             PackPOTColumn(1);
             PackPOTColumn(2);
             PackPOTColumn(3);
             PackPOTColumn(4);
 #undef PackPOTColumn
+
             for (auto &col: VariableColumns_) {
                     auto dataOffset = ReadUnaligned<ui32>(columns[col.OriginalIndex] + sizeof(ui32)*start);
                     auto nextOffset = ReadUnaligned<ui32>(columns[col.OriginalIndex] + sizeof(ui32)*(start + 1));
                     auto size = nextOffset - dataOffset;
                     auto data = columns[col.OriginalIndex + 1] + dataOffset;
+
                     if (size >= col.DataSize) {
                         res[col.Offset] = 255;
 
-                        auto prefixSize = (col.DataSize - 1 - 2*sizeof(ui32));
+                        ui32 prefixSize = (col.DataSize - 1 - 2*sizeof(ui32));
                         auto overflowSize = size - prefixSize;
                         auto overflowOffset = overflow.size();
 
@@ -206,6 +217,7 @@ namespace NPackedTuple {
                         std::memcpy(res + col.Offset + 1, data, size);
                         std::memset(res + col.Offset + 1 + size, 0, col.DataSize - (size + 1));
                     }
+
                     if (anyOverflow && col.Role == EColumnRole::Key) {
                         hash = CalculateCRC32<TTraits, sizeof(ui32)>((ui8 *)&size, hash);
                         hash = CalculateCRC32<TTraits>(data, size, hash);

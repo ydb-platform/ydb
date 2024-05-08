@@ -11,7 +11,10 @@ ENDIF()
 
 REQUIREMENTS(ram:32)
 
-OWNER(g:yql)
+OWNER(
+    g:yql
+    g:yql_ydb_core
+)
 
 SRCS(
     packed_tuple_ut.cpp

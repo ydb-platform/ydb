@@ -119,18 +119,18 @@ inline ui32 CalculateCRC32(const ui8 * data, ui32 size, ui32 hash = 0 ) {
         case 7:
             hash = TSimdI8::CRC32u32(hash, ReadUnaligned<ui32>(data));
             data += 4;
-            // fallthrough
+            [[fallthrough]];
         case 3:
             hash = TSimdI8::CRC32u16(hash, ReadUnaligned<ui16>(data));
             data += 2;
-            // fallthrough
+            [[fallthrough]];
         case 1:
             hash = TSimdI8::CRC32u8(hash, ReadUnaligned<ui8>(data));
             break;
         case 6:
             hash = TSimdI8::CRC32u32(hash, ReadUnaligned<ui32>(data));
             data += 4;
-            // fallthrough
+            [[fallthrough]];
         case 2:
             hash = TSimdI8::CRC32u16(hash, ReadUnaligned<ui16>(data));
             break;
@@ -145,7 +145,7 @@ inline ui32 CalculateCRC32(const ui8 * data, ui32 size, ui32 hash = 0 ) {
         case 0:
             break;
     }
-    return hash;    
+    return hash;
 
 }
 }

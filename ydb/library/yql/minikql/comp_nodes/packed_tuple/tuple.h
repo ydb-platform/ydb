@@ -45,7 +45,7 @@ struct TTupleLayout {
     ui32 KeyColumnsEnd;                 // First byte after key columns. Start of bitmask for row-based columns
     ui32 BitmaskSize;                   // Size of bitmask for null values flag in columns
     ui32 BitmaskOffset;                 // Offset of nulls bitmask. = KeyColumnsEnd
-    ui32 BitmaskEnd;                    // First byte after bitmask. = PayloadOffset 
+    ui32 BitmaskEnd;                    // First byte after bitmask. = PayloadOffset
     ui32 PayloadSize;                   // Total size in bytes of the payload columns
     ui32 PayloadOffset;                 // Offset of payload values. = BitmaskEnd.
     ui32 PayloadEnd;                    // First byte after payload
@@ -58,7 +58,7 @@ struct TTupleLayout {
     virtual ~TTupleLayout() {}
 
     // Takes array of pointer to columns, array of validity bitmaps,
-    // outputs packed rows 
+    // outputs packed rows
     virtual void Pack( const ui8** columns, const ui8** isValidBitmask, ui8 * res, std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start, ui32 count) const = 0;
 };
 

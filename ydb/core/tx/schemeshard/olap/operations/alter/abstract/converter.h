@@ -103,10 +103,6 @@ public:
             return TConclusionStatus::Fail("Changing table schema is not supported");
         }
 
-        if (result.HasRESERVED_AlterTtlSettingsPresetName()) {
-            return TConclusionStatus::Fail("TTL presets are not supported");
-        }
-
         return result;
     }
 };

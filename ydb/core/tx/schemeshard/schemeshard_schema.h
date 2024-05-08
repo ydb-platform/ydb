@@ -1549,10 +1549,11 @@ struct Schema : NIceDb::Schema {
         struct Description : Column<3, NScheme::NTypeIds::String> {}; // TColumnTableDescription
         struct Sharding : Column<4, NScheme::NTypeIds::String> {}; // TColumnTableSharding
         struct AlterBody : Column<5, NScheme::NTypeIds::String> {}; // TAlterColumnTable
-        struct StandaloneSharding : Column<6, NScheme::NTypeIds::String> {}; // TColumnStoreSharding
+        struct StandaloneSharding: Column<6, NScheme::NTypeIds::String> {}; // TColumnStoreSharding
+        struct Evolutions: Column<7, NScheme::NTypeIds::String> {}; // TColumnStoreSharding
 
         using TKey = TableKey<PathId>;
-        using TColumns = TableColumns<PathId, AlterVersion, Description, Sharding, AlterBody, StandaloneSharding>;
+        using TColumns = TableColumns<PathId, AlterVersion, Description, Sharding, AlterBody, StandaloneSharding, Evolutions>;
     };
 
     struct LoginKeys : Table<92> {

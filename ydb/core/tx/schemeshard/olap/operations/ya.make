@@ -3,7 +3,6 @@ LIBRARY()
 SRCS(
     create_table.cpp
     drop_table.cpp
-    alter_table.cpp
     create_store.cpp
     drop_store.cpp
     alter_store.cpp

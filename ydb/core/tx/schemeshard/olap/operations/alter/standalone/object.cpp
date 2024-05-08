@@ -1,11 +1,11 @@
 #include "object.h"
-#include "update.h"
+#include "schema/update.h"
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
-NKikimr::TConclusion<std::shared_ptr<NKikimr::NSchemeShard::NOlap::NAlter::ISSEntityUpdate>> TStandaloneTable::DoCreateUpdate(const TUpdateInitializationContext& context, const std::shared_ptr<ISSEntity>& selfPtr) const {
-    auto result = std::make_shared<TStandaloneSchemaUpdate>(selfPtr);
+NKikimr::TConclusion<std::shared_ptr<ISSEntityUpdate>> TStandaloneTable::DoCreateUpdate(const TUpdateInitializationContext& context, const std::shared_ptr<ISSEntity>& selfPtr) const {
+    auto result = std::make_shared<TStandaloneSchemaUpdate>(selfPtr, *context.GetModification());
     auto conclusion = result->Initialize(context);
     if (conclusion.IsFail()) {
         return conclusion;
@@ -14,12 +14,14 @@ NKikimr::TConclusion<std::shared_ptr<NKikimr::NSchemeShard::NOlap::NAlter::ISSEn
 }
 
 NKikimr::TConclusionStatus TStandaloneTable::DoInitialize(const TEntityInitializationContext& context) {
-    return InitializeFromTableInfo(context.GetSSOperationContext()->SS->ColumnTables.GetVerifiedPtr(GetPathId()));
+    auto resultBase = TBase::DoInitialize(context);
+    if (resultBase.IsFail()) {
+        return resultBase;
+    }
+    return InitializeFromTableInfo();
 }
 
-NKikimr::TConclusionStatus TStandaloneTable::InitializeFromTableInfo(const TColumnTableInfo::TPtr& tableInfo) {
-    AFL_VERIFY(!!tableInfo);
-    TableInfo = tableInfo;
+NKikimr::TConclusionStatus TStandaloneTable::InitializeFromTableInfo() {
     if (!TableInfo->Description.HasSchema()) {
         return TConclusionStatus::Fail("path id object has no schema owned for " + GetPathId().ToString());
     }

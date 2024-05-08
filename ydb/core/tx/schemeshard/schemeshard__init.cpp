@@ -1,3 +1,4 @@
+#include "olap/operations/alter/abstract/object.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -4573,8 +4574,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     Y_ABORT_UNLESS(alterBody.ConstructInPlace().ParseFromString(rowset.GetValue<Schema::OlapStoresAlters::AlterBody>()));
                 }
 
-                Y_VERIFY_S(Self->OlapStores.contains(pathId),
-                    "Cannot load alter for olap store " << pathId);
+                Y_VERIFY_S(Self->OlapStores.contains(pathId), "Cannot load alter for olap store " << pathId);
 
                 TOlapStoreInfo::TPtr storeInfo = std::make_shared<TOlapStoreInfo>(alterVersion, std::move(sharding), std::move(alterBody));
                 storeInfo->ParseFromLocalDB(description);
@@ -4635,26 +4635,29 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             while (!rowset.EndOfSet()) {
                 TPathId pathId = Self->MakeLocalId(rowset.GetValue<Schema::ColumnTablesAlters::PathId>());
                 ui64 alterVersion = rowset.GetValue<Schema::ColumnTablesAlters::AlterVersion>();
+                Y_UNUSED(alterVersion);
                 NKikimrSchemeOp::TColumnTableDescription description;
                 Y_ABORT_UNLESS(description.ParseFromString(rowset.GetValue<Schema::ColumnTablesAlters::Description>()));
                 Y_ABORT_UNLESS(description.MutableSharding()->ParseFromString(rowset.GetValue<Schema::ColumnTablesAlters::Sharding>()));
-                TMaybe<NKikimrSchemeOp::TAlterColumnTable> alterBody;
-                if (rowset.HaveValue<Schema::ColumnTablesAlters::AlterBody>()) {
-                    Y_ABORT_UNLESS(alterBody.ConstructInPlace().ParseFromString(rowset.GetValue<Schema::ColumnTablesAlters::AlterBody>()));
-                }
                 TMaybe<NKikimrSchemeOp::TColumnStoreSharding> storeSharding;
                 if (rowset.HaveValue<Schema::ColumnTablesAlters::StandaloneSharding>()) {
                     Y_ABORT_UNLESS(storeSharding.ConstructInPlace().ParseFromString(
                         rowset.GetValue<Schema::ColumnTablesAlters::StandaloneSharding>()));
                 }
-
-                Y_VERIFY_S(Self->ColumnTables.contains(pathId),
-                    "Cannot load alter for olap table " << pathId);
-
-                TColumnTableInfo::TPtr alterData = std::make_shared<TColumnTableInfo>(alterVersion,
-                    std::move(description), std::move(storeSharding), std::move(alterBody));
                 auto ctInfo = Self->ColumnTables.TakeVerified(pathId);
-                ctInfo->AlterData = alterData;
+                {
+                    if (rowset.HaveValue<Schema::ColumnTablesAlters::AlterBody>()) {
+                        NKikimrSchemeOp::TModifyScheme tx;
+                        Y_ABORT_UNLESS(tx.MutableAlterColumnTable()->ParseFromString(rowset.GetValue<Schema::ColumnTablesAlters::AlterBody>()));
+                        AFL_VERIFY(false);
+                    } else if (rowset.HaveValue<Schema::ColumnTablesAlters::Evolutions>()) {
+                        NOlap::NAlter::TEvolutions evolutions;
+                        evolutions.DeserializeFromProto(rowset.GetValue<Schema::ColumnTablesAlters::Evolutions>()).Validate("evolutions parsing");
+                        ctInfo->SetEvolutions(std::move(evolutions));
+                    } else {
+                        AFL_VERIFY(false);
+                    }
+                }
 
                 if (!rowset.Next()) {
                     return false;

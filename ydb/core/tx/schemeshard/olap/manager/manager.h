@@ -87,23 +87,17 @@ public:
     };
 
     class TTableExtractedGuard: public TTableCreatedGuard {
-    private:
-        void UseAlterDataVerified();
     public:
-        TTableExtractedGuard(TTablesStorage& owner, const TPathId& id, TColumnTableInfo::TPtr object, const bool extractAlter)
+        TTableExtractedGuard(TTablesStorage& owner, const TPathId& id, TColumnTableInfo::TPtr object)
             : TTableCreatedGuard(owner, id, object)
         {
             Owner.OnRemoveObject(PathId, object);
-            if (extractAlter) {
-                UseAlterDataVerified();
-            }
         }
     };
 
     TTableCreatedGuard BuildNew(const TPathId& id);
     TTableCreatedGuard BuildNew(const TPathId& id, TColumnTableInfo::TPtr object);
     TTableExtractedGuard TakeVerified(const TPathId& id);
-    TTableExtractedGuard TakeAlterVerified(const TPathId& id);
 
     bool contains(const TPathId& id) const {
         return Tables.contains(id);

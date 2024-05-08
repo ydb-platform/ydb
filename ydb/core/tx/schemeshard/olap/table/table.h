@@ -2,6 +2,7 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard_identificators.h>
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/core/tx/schemeshard/olap/operations/alter/abstract/object.h>
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 class ISSEntity;
@@ -13,11 +14,40 @@ class TEvolutionInitializationContext;
 namespace NKikimr::NSchemeShard {
 
 struct TColumnTableInfo {
+private:
+    std::optional<NOlap::NAlter::TEvolutions> Evolutions;
 public:
     using TPtr = std::shared_ptr<TColumnTableInfo>;
 
     ui64 AlterVersion = 0;
-    TPtr AlterData;
+
+    bool IsInModification() const {
+        return !!Evolutions;
+    }
+
+    std::set<ui64> GetShardIdsSet() const {
+        return std::set<ui64>(Description.GetSharding().GetColumnShards().begin(), Description.GetSharding().GetColumnShards().end());
+    }
+
+    void CleanEvolutions() {
+        AFL_VERIFY(!!Evolutions);
+        AFL_VERIFY(!Evolutions->HasEvolutions());
+        Evolutions.reset();
+    }
+
+    void SetEvolutions(std::optional<NOlap::NAlter::TEvolutions>&& evolutions) {
+        AFL_VERIFY(!!Evolutions);
+        Evolutions = std::move(evolutions);
+    }
+
+    ui32 GetShardsCount() const {
+        return Description.GetSharding().GetColumnShards().size();
+    }
+
+    ui64 GetTabletId(const ui32 idx) const {
+        AFL_VERIFY(idx < GetShardsCount());
+        return Description.GetSharding().GetColumnShards()[idx];
+    }
 
     TPathId GetOlapStorePathIdVerified() const {
         AFL_VERIFY(!IsStandalone());
@@ -40,16 +70,38 @@ public:
         }
     }
 
+    const NKikimrSchemeOp::TAlterColumnTable& GetAlterBodyVerified() const {
+        AFL_VERIFY(!!Evolutions);
+        AFL_VERIFY(Evolutions->GetAlterProtoOriginal().HasAlterColumnTable());
+        return Evolutions->GetAlterProtoOriginal().GetAlterColumnTable();
+    }
+
+    const NOlap::NAlter::TEvolutions& GetEvolutionsVerified() const {
+        AFL_VERIFY(!!Evolutions);
+        return *Evolutions;
+    }
+
+    NOlap::NAlter::TEvolutions& GetEvolutionsVerified() {
+        AFL_VERIFY(!!Evolutions);
+        return *Evolutions;
+    }
+
+    std::shared_ptr<NOlap::NAlter::ISSEntityEvolution> GetCurrentEvolution() const {
+        return GetEvolutionsVerified().GetCurrentEvolution();
+    }
+
+    std::shared_ptr<NOlap::NAlter::ISSEntityEvolution> ExtractCurrentEvolution() {
+        return GetEvolutionsVerified().ExtractCurrentEvolution();
+    }
+
     NKikimrSchemeOp::TColumnTableDescription Description;
     TMaybe<NKikimrSchemeOp::TColumnStoreSharding> StandaloneSharding;
-    TMaybe<NKikimrSchemeOp::TAlterColumnTable> AlterBody;
 
     TAggregatedStats Stats;
 
     TColumnTableInfo() = default;
     TColumnTableInfo(ui64 alterVersion, NKikimrSchemeOp::TColumnTableDescription&& description,
-        TMaybe<NKikimrSchemeOp::TColumnStoreSharding>&& standaloneSharding,
-        TMaybe<NKikimrSchemeOp::TAlterColumnTable>&& alterBody = Nothing());
+        TMaybe<NKikimrSchemeOp::TColumnStoreSharding>&& standaloneSharding);
 
     const NKikimrSchemeOp::TColumnStoreSharding& GetStandaloneShardingVerified() const {
         AFL_VERIFY(!!StandaloneSharding);
@@ -74,8 +126,6 @@ public:
         Description.MutableColumnStorePathId()->SetLocalId(pathId.LocalPathId);
     }
 
-    static TColumnTableInfo::TPtr BuildTableWithAlter(const TColumnTableInfo& initialTable, const NKikimrSchemeOp::TAlterColumnTable& alterBody);
-
     bool IsStandalone() const {
         return !!StandaloneSharding;
     }
@@ -95,8 +145,6 @@ public:
     }
 
     TConclusion<std::shared_ptr<NOlap::NAlter::ISSEntity>> BuildEntity(const TPathId& pathId, const NOlap::NAlter::TEntityInitializationContext& iContext) const;
-
-    TConclusion<std::shared_ptr<NOlap::NAlter::ISSEntityEvolution>> BuildEvolution(const TPathId& pathId, const NOlap::NAlter::TEvolutionInitializationContext& iContext) const;
 };
 
 }

@@ -749,9 +749,9 @@ public:
     void PersistOlapStoreAlterRemove(NIceDb::TNiceDb& db, TPathId pathId);
 
     // ColumnTable
-    void PersistColumnTable(NIceDb::TNiceDb& db, TPathId pathId, const TColumnTableInfo& tableInfo, bool isAlter = false);
+    void PersistColumnTable(NIceDb::TNiceDb& db, TPathId pathId, const TColumnTableInfo& tableInfo) noexcept;
     void PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId);
-    void PersistColumnTableAlter(NIceDb::TNiceDb& db, TPathId pathId, const TColumnTableInfo& tableInfo);
+    void PersistColumnTableAlter(NIceDb::TNiceDb& db, TPathId pathId, const TColumnTableInfo& tableInfo) noexcept;
     void PersistColumnTableAlterRemove(NIceDb::TNiceDb& db, TPathId pathId);
 
     // Sequence

@@ -2,36 +2,43 @@
 #include "evolution.h"
 #include <ydb/core/tx/schemeshard/olap/operations/alter/abstract/converter.h>
 #include <ydb/core/tx/schemeshard/olap/common/common.h>
+#include <ydb/core/tx/schemeshard/olap/operations/alter/operations/start.h>
+#include <ydb/core/tx/schemeshard/olap/operations/alter/operations/continue.h>
+#include <ydb/core/tx/schemeshard/olap/operations/alter/operations/publish.h>
+#include <ydb/core/tx/schemeshard/olap/operations/alter/operations/finish.h>
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
-NKikimr::TConclusion<std::shared_ptr<NKikimr::NSchemeShard::NOlap::NAlter::ISSEntityEvolution>> TStandaloneSchemaUpdate::DoBuildEvolution(const std::shared_ptr<ISSEntityUpdate>& updateSelfPtr) const {
+TConclusion<TEvolutions> TStandaloneSchemaUpdate::DoBuildEvolutions() const {
     auto originalInfo = dynamic_pointer_cast<TStandaloneTable>(GetOriginalEntity());
     if (!originalInfo) {
         return TConclusionStatus::Fail("incorrect incoming type for patch: " + GetOriginalEntity()->GetClassName() + " in STANDALONE_UPDATE");
     }
 
-    auto updateSelfCast = dynamic_pointer_cast<TStandaloneSchemaUpdate>(updateSelfPtr);
-    AFL_VERIFY(!!updateSelfCast);
-    return std::make_shared<TStandaloneSchemaEvolution>(OriginalStandalone, TargetStandalone, updateSelfCast);
+    TEvolutions result(GetRequest(), {std::make_shared<TStandaloneSchemaEvolution>(AlterToShard, ShardIds)});
+    return result;
 }
 
-NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitialize(const TUpdateInitializationContext& context) {
-    auto alter = TConverterModifyToAlter().Convert(*context.GetModification());
+NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitialize(const TUpdateInitializationContext& /*context*/) {
+    auto alter = TConverterModifyToAlter().Convert(GetRequest());
     if (alter.IsFail()) {
         return alter;
     }
     auto alterCS = alter.DetachResult();
+    std::optional<TOlapSchemaUpdate> alterSchema;
+    std::optional<TOlapTTLUpdate> alterTTL;
     if (alterCS.HasAlterSchema()) {
         TSimpleErrorCollector collector;
         TOlapSchemaUpdate schemaUpdate;
         if (!schemaUpdate.Parse(alterCS.GetAlterSchema(), collector)) {
             return TConclusionStatus::Fail("update parse error: " + collector->GetErrorMessage() + ". in alter constructor STANDALONE_UPDATE");
         }
-        AlterSchema = std::move(schemaUpdate);
+        alterSchema = std::move(schemaUpdate);
     }
-    AlterTTL = alterCS.GetAlterTtlSettings();
-    if (!AlterSchema && !AlterTTL) {
+    if (alterCS.HasAlterTtlSettings()) {
+        alterTTL = alterCS.GetAlterTtlSettings();
+    }
+    if (!alterSchema && !alterTTL) {
         return TConclusionStatus::Fail("no data for update");
     }
 
@@ -40,17 +47,17 @@ NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitialize(const TUpdateIn
 
     TSimpleErrorCollector collector;
     TOlapSchema targetSchema = originalSchema;
-    if (AlterSchema) {
-        if (!targetSchema.Update(*AlterSchema, collector)) {
+    if (alterSchema) {
+        if (!targetSchema.Update(*alterSchema, collector)) {
             return TConclusionStatus::Fail("schema update error: " + collector->GetErrorMessage() + ". in alter constructor STANDALONE_UPDATE");
         }
     }
     auto description = OriginalStandalone->GetTableInfoVerified().Description;
     targetSchema.Serialize(*description.MutableSchema());
     std::optional<TOlapTTL> ttl;
-    if (AlterTTL) {
+    if (alterTTL) {
         ttl = OriginalStandalone->GetTableTTLOptional() ? *OriginalStandalone->GetTableTTLOptional() : TOlapTTL();
-        auto patch = ttl->Update(*AlterTTL);
+        auto patch = ttl->Update(*alterTTL);
         if (patch.IsFail()) {
             return patch;
         }
@@ -61,10 +68,25 @@ NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitialize(const TUpdateIn
     }
     auto saSharding = OriginalStandalone->GetTableInfoVerified().GetStandaloneShardingVerified();
 
-    auto targetInfo = std::make_shared<TColumnTableInfo>(OriginalStandalone->GetTableInfoVerified().AlterVersion + 1, std::move(description), std::move(saSharding), alterCS);
-    TargetStandalone = std::make_shared<TStandaloneTable>(GetOriginalEntity()->GetPathId(), targetInfo);
+    if (alterSchema) {
+        *AlterToShard.MutableSchema() = description.GetSchema();
+    }
+    if (alterTTL) {
+        *AlterToShard.MutableTtlSettings() = description.GetTtlSettings();
+    }
+
+    ShardIds = OriginalStandalone->GetTableInfoVerified().GetShardIdsSet();
 
     return TConclusionStatus::Success();
+}
+
+TVector<NKikimr::NSchemeShard::ISubOperation::TPtr> TStandaloneSchemaUpdate::DoBuildOperations(const TOperationId& id, const NKikimrSchemeOp::TModifyScheme& request) const {
+    TVector<NKikimr::NSchemeShard::ISubOperation::TPtr> result;
+    result.emplace_back(new TStartAlterColumnTable(id, request));
+    result.emplace_back(new TEvoluteAlterColumnTable(id, request));
+    result.emplace_back(new TPublishAlterColumnTable(id, request));
+    result.emplace_back(new TFinishAlterColumnTable(id, request));
+    return result;
 }
 
 }

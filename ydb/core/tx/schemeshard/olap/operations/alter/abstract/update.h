@@ -13,14 +13,19 @@ class ISSEntityEvolution;
 class ISSEntityUpdate {
 private:
     YDB_READONLY_DEF(std::shared_ptr<ISSEntity>, OriginalEntity);
+    YDB_READONLY_DEF(NKikimrSchemeOp::TModifyScheme, Request);
     bool Initialized = false;
 protected:
     virtual TConclusionStatus DoInitialize(const TUpdateInitializationContext& context) = 0;
-    virtual TConclusion<std::shared_ptr<ISSEntityEvolution>> DoBuildEvolution(const std::shared_ptr<ISSEntityUpdate>& selfPtr) const = 0;
+    virtual TConclusion<TEvolutions> DoBuildEvolutions() const = 0;
+    virtual TVector<ISubOperation::TPtr> DoBuildOperations(const TOperationId& id, const NKikimrSchemeOp::TModifyScheme& request) const = 0;
 public:
     virtual ~ISSEntityUpdate() = default;
-    ISSEntityUpdate(const std::shared_ptr<ISSEntity>& originalEntity)
-        : OriginalEntity(originalEntity) {
+
+    ISSEntityUpdate(const std::shared_ptr<ISSEntity>& originalEntity, const NKikimrSchemeOp::TModifyScheme& request)
+        : OriginalEntity(originalEntity)
+        , Request(request)
+    {
         AFL_VERIFY(OriginalEntity);
     }
 
@@ -30,10 +35,16 @@ public:
         return DoInitialize(context);
     }
 
-    TConclusion<std::shared_ptr<ISSEntityEvolution>> BuildEvolution(const std::shared_ptr<ISSEntityUpdate>& selfPtr) const {
-        AFL_VERIFY(!!selfPtr);
-        return DoBuildEvolution(selfPtr);
+    TConclusion<TEvolutions> BuildEvolutions() const {
+        AFL_VERIFY(Initialized);
+        return DoBuildEvolutions();
     }
+
+    TVector<ISubOperation::TPtr> BuildOperations(const TOperationId& id, const NKikimrSchemeOp::TModifyScheme& request) const {
+        AFL_VERIFY(Initialized);
+        return DoBuildOperations(id, request);
+    }
+
 };
 
 }

@@ -1,6 +1,8 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
+#include "olap/operations/alter/abstract/context.h"
+#include "olap/operations/alter/abstract/object.h"
 
 #include <ydb/core/base/subdomain.h>
 
@@ -667,7 +669,9 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
 
     if (!path->IsTable()) {
         if (path->IsColumnTable()) {
-            return {CreateAlterColumnTable(id, tx)};
+            std::shared_ptr<NOlap::NAlter::ISSEntity> entity = NOlap::NAlter::ISSEntity::GetPathEntityVerified(context, path);
+            NOlap::NAlter::TUpdateInitializationContext uContext(&context, &tx);
+            return entity->BuildOperations(uContext, entity, id);
         }
         return {CreateAlterTable(id, tx)};
     }
@@ -703,6 +707,24 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
 
 
     return result;
+}
+
+TVector<ISubOperation::TPtr> CreateConsistentAlterColumnTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
+    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable);
+
+    auto alter = tx.GetAlterColumnTable();
+
+    const TString& parentPathStr = tx.GetWorkingDir();
+    const TString& name = alter.GetName();
+
+    TPath path = TPath::Resolve(parentPathStr, context.SS).Dive(name);
+
+    Y_ABORT_UNLESS(path.IsResolved());
+
+    Y_ABORT_UNLESS(path->IsColumnTable());
+    std::shared_ptr<NOlap::NAlter::ISSEntity> entity = NOlap::NAlter::ISSEntity::GetPathEntityVerified(context, path);
+    NOlap::NAlter::TUpdateInitializationContext uContext(&context, &tx);
+    return entity->BuildOperations(uContext, entity, id);
 }
 
 }

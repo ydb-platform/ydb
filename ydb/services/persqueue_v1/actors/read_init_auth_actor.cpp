@@ -107,26 +107,8 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
     NPQ::TPartitionGraph graph = NPQ::MakePartitionGraph(pqDescr);
 
     for (const auto& partitionDescription : pqDescr.GetPartitions()) {
-        auto partitionId = partitionDescription.GetPartitionId();
-
-        std::vector<ui32> adjacentPartitionIds;
-        auto* node = graph.GetPartition(partitionId);
-        if (node->Children.size() > 1) {
-            auto* child = node->Children.front();
-            for (auto* p : child->Parents) {
-                if (p->Id != partitionId) {
-                    adjacentPartitionIds.push_back(p->Id);
-                }
-            }
-        }
-
-        std::vector<ui32> childPartitionIds;
-        childPartitionIds.insert(childPartitionIds.end(), partitionDescription.GetChildPartitionIds().begin(),  partitionDescription.GetChildPartitionIds().end());
-
-        topicsIter->second.Partitions[partitionId] =
-            TPartitionInfo{ partitionDescription.GetTabletId(),
-              std::move(adjacentPartitionIds),
-              std::move(childPartitionIds) };
+        topicsIter->second.Partitions[partitionDescription.GetPartitionId()] =
+            TPartitionInfo{ partitionDescription.GetTabletId() };
     }
 
     if (!topicsIter->second.DiscoveryConverter->IsValid()) {

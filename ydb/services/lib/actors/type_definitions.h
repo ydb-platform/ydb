@@ -13,8 +13,6 @@ namespace NKikimr::NGRpcProxy {
 
 struct TPartitionInfo {
     ui64 TabletId;
-    std::vector<ui32> AdjacentPartitionIds;
-    std::vector<ui32> ChildPartitionIds;
 };
 
 struct TTopicInitInfo {

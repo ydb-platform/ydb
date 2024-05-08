@@ -91,7 +91,10 @@ public:
             request.Owner = owner;
             request.Order = order;
             request.Priority = priority;
-            google::protobuf::TextFormat::ParseFromString(requestStr, &request.Request);
+
+            google::protobuf::TextFormat::Parser parser;
+            parser.AllowUnknownField(true);
+            parser.ParseFromString(requestStr, &request.Request);
 
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Loaded request %s owned by %s: %s",
                       id.data(), owner.data(), requestStr.data());
@@ -149,8 +152,12 @@ public:
             permission.PermissionId = id;
             permission.RequestId = requestId;
             permission.Owner = owner;
-            google::protobuf::TextFormat::ParseFromString(actionStr, &permission.Action);
             permission.Deadline = TInstant::MicroSeconds(deadline);
+
+            google::protobuf::TextFormat::Parser parser;
+            parser.AllowUnknownField(true);
+            parser.ParseFromString(actionStr, &permission.Action);
+        
 
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Loaded permission %s owned by %s valid until %s: %s",
                       id.data(), owner.data(), TInstant::MicroSeconds(deadline).ToStringLocalUpToSeconds().data(), actionStr.data());

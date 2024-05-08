@@ -352,6 +352,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
 
             auto *permission = response.AddPermissions();
             permission->MutableAction()->CopyFrom(checkedAction);
+            permission->MutableAction()->ClearStatus();
             permission->SetDeadline(error.Deadline.GetValue());
             AddPermissionExtensions(action, *permission);
 
@@ -401,14 +402,13 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
                 break;
         }
     }
-    
+
     return response.GetStatus().GetCode() == TStatus::ALLOW
         || response.GetStatus().GetCode() == TStatus::ALLOW_PARTIAL;
 }
 
 void TCms::RemoveOkActions(std::vector<TAction>& actions) {
-    auto it = std::remove_if(actions.begin(),
-                             actions.end(),
+    auto it = std::remove_if(actions.begin(), actions.end(),
                              [](const TAction& a) {
                                 return a.GetStatus() == TAction::OK;
                              });

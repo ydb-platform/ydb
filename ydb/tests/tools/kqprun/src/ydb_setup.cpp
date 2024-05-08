@@ -350,8 +350,8 @@ TRequestResult TYdbSetup::QueryRequest(const TString& query, NKikimrKqp::EQueryA
     const auto& responseRecord = queryOperationResponse.GetResponse();
 
     meta.Ast = responseRecord.GetQueryAst();
-    if (responseRecord.GetQueryPlan()) {
-        meta.Plan = responseRecord.GetQueryPlan();
+    if (const auto& plan = responseRecord.GetQueryPlan()) {
+        meta.Plan = plan;
     }
 
     return TRequestResult(queryOperationResponse.GetYdbStatus(), responseRecord.GetQueryIssues());
@@ -388,8 +388,8 @@ TRequestResult TYdbSetup::GetScriptExecutionOperationRequest(const TString& oper
         meta.ExecutionStatus = static_cast<NYdb::NQuery::EExecStatus>(deserializedMeta.exec_status());
         meta.ResultSetsCount = deserializedMeta.result_sets_meta_size();
         meta.Ast = deserializedMeta.exec_stats().query_ast();
-        if (deserializedMeta.exec_stats().query_plan()) {
-            meta.Plan = deserializedMeta.exec_stats().query_plan();
+        if (const auto& plan = deserializedMeta.exec_stats().query_plan()) {
+            meta.Plan = plan;
         }
     }
 

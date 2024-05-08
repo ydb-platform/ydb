@@ -186,14 +186,18 @@ public:
         return RunKqpProxyRequest<NKikimr::NKqp::TEvKqp::TEvScriptRequest, NKikimr::NKqp::TEvKqp::TEvScriptResponse>(std::move(event));
     }
 
-    NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr QueryRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, std::vector<Ydb::ResultSet>& resultSets) const {
+    NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr QueryRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, std::vector<Ydb::ResultSet>& resultSets, TString& queryPlan) const {
         auto event = MakeHolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest>();
         FillQueryRequest(query, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, action, traceId, event->Record);
+
+        if (auto progressStatsPeriodMs = Settings_.AppConfig.GetQueryServiceConfig().GetProgressStatsPeriodMs()) {
+            event->SetProgressStatsPeriod(TDuration::MilliSeconds(Settings_.AppConfig.GetQueryServiceConfig().GetProgressStatsPeriodMs()));
+        }
 
         auto promise = NThreading::NewPromise<NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr>();
         auto rowsLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultRowsLimit();
         auto sizeLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultSizeLimit();
-        GetRuntime()->Register(CreateRunScriptActorMock(std::move(event), promise, rowsLimit, sizeLimit, resultSets));
+        GetRuntime()->Register(CreateRunScriptActorMock(std::move(event), promise, rowsLimit, sizeLimit, resultSets, queryPlan));
 
         return promise.GetFuture().GetValueSync();
     }
@@ -342,11 +346,13 @@ TRequestResult TYdbSetup::ScriptRequest(const TString& script, NKikimrKqp::EQuer
 TRequestResult TYdbSetup::QueryRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets) const {
     resultSets.clear();
 
-    auto queryOperationResponse = Impl_->QueryRequest(query, action, traceId, resultSets)->Get()->Record.GetRef();
+    auto queryOperationResponse = Impl_->QueryRequest(query, action, traceId, resultSets, meta.Plan)->Get()->Record.GetRef();
     const auto& responseRecord = queryOperationResponse.GetResponse();
 
     meta.Ast = responseRecord.GetQueryAst();
-    meta.Plan = responseRecord.GetQueryPlan();
+    if (responseRecord.GetQueryPlan()) {
+        meta.Plan = responseRecord.GetQueryPlan();
+    }
 
     return TRequestResult(queryOperationResponse.GetYdbStatus(), responseRecord.GetQueryIssues());
 }

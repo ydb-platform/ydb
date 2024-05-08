@@ -74,6 +74,8 @@ public:
 
         PrintScriptAst(meta.Ast);
 
+        PrintScriptPlan(meta.Plan);
+
         if (!status.IsSuccess()) {
             Cerr << CerrColors_.Red() << "Failed to execute query, reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
             return false;
@@ -82,8 +84,6 @@ public:
         if (!status.Issues.Empty()) {
             Cerr << CerrColors_.Red() << "Request finished with issues:" << CerrColors_.Default() << Endl << status.Issues.ToString() << Endl;
         }
-
-        PrintScriptPlan(meta.Plan);
 
         return true;
     }
@@ -148,6 +148,8 @@ private:
 
         PrintScriptAst(ExecutionMeta_.Ast);
 
+        PrintScriptPlan(ExecutionMeta_.Plan);
+
         if (!status.IsSuccess() || ExecutionMeta_.ExecutionStatus != NYdb::NQuery::EExecStatus::Completed) {
             Cerr << CerrColors_.Red() << "Failed to execute script, invalid final status, reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
             return false;
@@ -156,8 +158,6 @@ private:
         if (!status.Issues.Empty()) {
             Cerr << CerrColors_.Red() << "Request finished with issues:" << CerrColors_.Default() << Endl << status.Issues.ToString() << Endl;
         }
-
-        PrintScriptPlan(ExecutionMeta_.Plan);
 
         return true;
     }
@@ -189,7 +189,7 @@ private:
     }
 
     void PrintScriptPlan(const TString& plan) const {
-        if (Options_.ScriptQueryPlanOutput) {
+        if (Options_.ScriptQueryPlanOutput && plan) {
             Cout << CoutColors_.Cyan() << "Writing script query plan" << CoutColors_.Default() << Endl;
 
             NYdb::NConsoleClient::TQueryPlanPrinter printer(Options_.PlanOutputFormat, true, *Options_.ScriptQueryPlanOutput);

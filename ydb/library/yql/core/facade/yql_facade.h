@@ -334,11 +334,6 @@ public:
         AbortHidden_ = std::move(func);
     }
 
-    TMaybe<TSet<TString>> GetUsedClusters() {
-        CollectUsedClusters();
-        return UsedClusters_;
-    }
-
 private:
     TProgram(
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
@@ -368,7 +363,6 @@ private:
     TTypeAnnotationContextPtr BuildTypeAnnotationContext(const TString& username);
     TTypeAnnotationContextPtr GetAnnotationContext() const;
     TTypeAnnotationContextPtr ProvideAnnotationContext(const TString& username);
-    bool CollectUsedClusters();
 
     NThreading::TFuture<void> OpenSession(const TString& username);
 
@@ -437,11 +431,6 @@ private:
     NUdf::EValidateMode ValidateMode_ = NUdf::EValidateMode::None;
     bool DisableNativeUdfSupport_ = false;
     bool UseTableMetaFromGraph_ = false;
-    TMaybe<TSet<TString>> UsedClusters_;
-    TMaybe<TSet<TString>> UsedProviders_;
-    TMaybe<TString> ExternalQueryAst_;
-    TMaybe<TString> ExternalQueryPlan_;
-    TMaybe<TString> ExternalDiagnostics_;
 
     IOutputStream* ExprStream_ = nullptr;
     IOutputStream* PlanStream_ = nullptr;

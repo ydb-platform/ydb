@@ -3049,10 +3049,6 @@ TNodePtr TSqlTranslation::StructLiteral(const TRule_struct_literal& node) {
     return BuildStructure(pos, values, labels);
 }
 
-bool isNonSturctSchemaHintAllowed(const TString& provider, const TString& keyFunc) {
-    return provider != YtProviderName || TCiString(keyFunc) == "object";
-}
-
 bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& hints, const TString& provider, const TString& keyFunc) {
     // table_hint:
     //      an_id_hint (EQUALS (type_name_tag | LPAREN type_name_tag (COMMA type_name_tag)* COMMA? RPAREN))?
@@ -3105,10 +3101,10 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
         TVector<TNodePtr> labels;
         TVector<TNodePtr> structTypeItems;
         if (alt.HasBlock4()) {
-            if (!isNonSturctSchemaHintAllowed(provider, keyFunc)) {
-                Error() << "Expected Struct type after SCHEMA hint";
-                return false;
-            }
+            // if (!isNonSturctSchemaHintAllowed(provider, keyFunc)) {
+            //     Error() << "Expected Struct type after SCHEMA hint";
+            //     return false;
+            // }
 
             bool warn = false;
             auto processItem = [&](const TRule_struct_arg_positional& arg) {
@@ -3163,11 +3159,16 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
         }
 
         TPosition pos = Ctx.TokenPosition(alt.GetToken1());
-        auto labelsTuple = BuildTuple(pos, labels);
         TNodePtr structType = new TCallNodeImpl(pos, "StructType", structTypeItems);
-
-        hints["user_" + to_lower(alt.GetToken1().GetValue())] = { structType, labelsTuple };
-        break;
+        bool shouldEmitLabel = provider != YtProviderName || TCiString(keyFunc) == "object";
+        if (shouldEmitLabel) {
+            auto labelsTuple = BuildTuple(pos, labels);
+            hints["user_" + to_lower(alt.GetToken1().GetValue())] = { structType, labelsTuple };
+            break;
+        } else {
+            hints["user_" + to_lower(alt.GetToken1().GetValue())] = { structType };
+            break;
+        }
     }
 
     case TRule_table_hint::ALT_NOT_SET:

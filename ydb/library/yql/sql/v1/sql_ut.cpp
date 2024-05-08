@@ -6708,7 +6708,5 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["userschema"]);
-
-        // UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "Expected Struct type after SCHEMA hint");
     }
 }

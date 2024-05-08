@@ -2,6 +2,7 @@
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/context.h>
 #include <ydb/library/yql/parser/pg_wrapper/memory_context.h>
+#include <ydb/library/yql/parser/pg_wrapper/pg_catalog_consts.h>
 
 #define SortBy PG_SortBy
 #define TypeName PG_TypeName
@@ -523,7 +524,7 @@ struct TSysCache {
             switch (oid) {
             case 1: name = "template1"; break;
             case 2: name = "template0"; break;
-            case 3: name = "postgres"; break;
+            case PG_POSTGRES_DATABASE_ID: name = "postgres"; break;
             }
             Y_ENSURE(name);
             FillDatum(Natts_pg_database, values, nulls, Anum_pg_database_datname, (Datum)MakeFixedString(name, NAMEDATALEN));
@@ -536,7 +537,7 @@ struct TSysCache {
 
         //add specific lookup for 4 to cacheItem. save heaptuple to MainContext_.
         auto threadContextLookup = [&] (const THeapTupleKey& key) -> std::optional<HeapTuple> {
-            if (std::get<0>(key) == 4 && NKikimr::NMiniKQL::TlsAllocState) {
+            if (std::get<0>(key) == PG_CURRENT_DATABASE_ID && NKikimr::NMiniKQL::TlsAllocState) {
                 auto ctx = (TMainContext*)NKikimr::NMiniKQL::TlsAllocState->MainContext;
                 if (ctx && ctx->CurrentDatabaseName) {
                     return ctx->CurrentDatabaseName;
@@ -612,7 +613,7 @@ struct TSysCache {
         lookupMap.emplace(key, MakePgRolesHeapTuple(1, "postgres"));
 
         auto threadContextLookup = [&] (const THeapTupleKey& key) -> std::optional<HeapTuple> {
-            if (std::get<0>(key) == 2 && NKikimr::NMiniKQL::TlsAllocState) {
+            if (std::get<0>(key) == PG_CURRENT_USER_ID && NKikimr::NMiniKQL::TlsAllocState) {
                 auto ctx = (TMainContext*)NKikimr::NMiniKQL::TlsAllocState->MainContext;
                 if (ctx && ctx->CurrentUserName) {
                     return ctx->CurrentUserName;
@@ -696,10 +697,10 @@ void PgCreateSysCacheEntries(void* ctx) {
     auto main = (TMainContext*)ctx;
     if (main->GUCSettings) {
         if (main->GUCSettings->Get("ydb_database")) {
-            main->CurrentDatabaseName = NYql::TSysCache::MakePgDatabaseHeapTuple(4, main->GUCSettings->Get("ydb_database")->c_str());
+            main->CurrentDatabaseName = NYql::TSysCache::MakePgDatabaseHeapTuple(NYql::PG_CURRENT_DATABASE_ID, main->GUCSettings->Get("ydb_database")->c_str());
         }
         if (main->GUCSettings->Get("ydb_user")) {
-            main->CurrentUserName = NYql::TSysCache::MakePgRolesHeapTuple(2, main->GUCSettings->Get("ydb_user")->c_str());
+            main->CurrentUserName = NYql::TSysCache::MakePgRolesHeapTuple(NYql::PG_CURRENT_USER_ID, main->GUCSettings->Get("ydb_user")->c_str());
         }
     }
 }

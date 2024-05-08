@@ -24620,9 +24620,9 @@
     ],
     "test_sql_format.test[expr-try_member]": [
         {
-            "checksum": "f0df1b7028c58da2b655d59db8cf36cb",
+            "checksum": "3bedd6cf1a866afb6bb2f7acaafe5505",
             "size": 1414,
-            "uri": "https://{canondata_backend}/1946324/d9bbf763189fff6203bd54ad96c51e1ebd23dffc/resource.tar.gz#test_sql_format.test_expr-try_member_/formatted.sql"
+            "uri": "https://{canondata_backend}/995452/62dcdc716d63823bd4c68a1e5002cc6c38164d34/resource.tar.gz#test_sql_format.test_expr-try_member_/formatted.sql"
         }
     ],
     "test_sql_format.test[expr-type_as_key]": [

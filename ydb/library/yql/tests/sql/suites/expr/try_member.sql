@@ -33,7 +33,7 @@ select
 
 -- TypeOf TryMember is type of third argument
 -- field type should either match third type exactly, or (if the third type is optional) 
--- Optional(filed) should be equal to third type
+-- Optional(field) should be equal to third type
 select
   TryMember($s, "a", 999),
   TryMember($s, "a", Just(999)),

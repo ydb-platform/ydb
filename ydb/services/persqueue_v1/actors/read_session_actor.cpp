@@ -1103,14 +1103,14 @@ void TReadSessionActor<UseMigrationProtocol>::InitSession(const TActorContext& c
 }
 
 template <bool UseMigrationProtocol>
-void TReadSessionActor<UseMigrationProtocol>::SendLockPartitionToSelf(ui32 group, TString topicName, TTopicHolder topic, const TActorContext& ctx) {
-    auto partitionToTabletIt = topic.Partitions.find(group);
+void TReadSessionActor<UseMigrationProtocol>::SendLockPartitionToSelf(ui32 partitionId, TString topicName, TTopicHolder topic, const TActorContext& ctx) {
+    auto partitionToTabletIt = topic.Partitions.find(partitionId);
     if (partitionToTabletIt == topic.Partitions.end()) {
-        return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder() << "no group " << group << " in topic " << topicName, ctx);
+        return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder() << "no partition " << partitionId << " in topic " << topicName, ctx);
     }
     THolder<TEvPersQueue::TEvLockPartition> res{new TEvPersQueue::TEvLockPartition};
     res->Record.SetSession(Session);
-    res->Record.SetPartition(group);
+    res->Record.SetPartition(partitionId);
     res->Record.SetTopic(topicName);
     res->Record.SetPath(topic.FullConverter->GetPrimaryPath());
     res->Record.SetGeneration(1);
@@ -1181,6 +1181,8 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartit
                 SetupTopicCounters(converter);
             }
         }
+
+        topic.Partitions.emplace(record.GetPartition(), NGRpcProxy::TPartitionInfo{record.GetTabletId()});
     }
 
     // TODO: counters

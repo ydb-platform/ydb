@@ -5554,7 +5554,7 @@ Y_UNIT_TEST_SUITE(ExternalDeclares) {
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "declare") {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"__((declare $foo (DataType 'String)))__"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"__((declare "$foo" (DataType 'String)))__"));
             }
         };
 
@@ -5573,7 +5573,7 @@ Y_UNIT_TEST_SUITE(ExternalDeclares) {
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "declare") {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"__((declare $foo (DataType 'Int32)))__"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"__((declare "$foo" (DataType 'Int32)))__"));
             }
         };
 
@@ -5592,7 +5592,7 @@ Y_UNIT_TEST_SUITE(ExternalDeclares) {
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "declare") {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"__((declare $foo (DataType 'String)))__"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"__((declare "$foo" (DataType 'String)))__"));
             }
         };
 

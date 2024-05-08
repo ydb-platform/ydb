@@ -230,7 +230,7 @@ public:
     }
 
     void ExtractTableName(TContext&ctx, TTableArg& arg) {
-        MakeTableFromExpression(ctx, arg.Expr, arg.Id);
+        MakeTableFromExpression(Pos, ctx, arg.Expr, arg.Id);
     }
 
     TNodePtr BuildKeys(TContext& ctx, ITableKeys::EBuildKeysMode mode) override {

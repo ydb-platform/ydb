@@ -295,7 +295,7 @@ public:
             return false;
         }
 
-        Atom = MakeAtomFromExpression(ctx, Node, Prefix).Build();
+        Atom = MakeAtomFromExpression(Pos, ctx, Node, Prefix).Build();
         return true;
     }
 
@@ -655,7 +655,7 @@ public:
         if (Args[0]->IsLiteral()) {
             Args[0] = BuildQuotedAtom(Args[0]->GetPos(), Args[0]->GetLiteralValue());
         } else {
-            auto value = MakeAtomFromExpression(ctx, Args[0]).Build();
+            auto value = MakeAtomFromExpression(Pos, ctx, Args[0]).Build();
             Args[0] = value;
         }
 
@@ -847,7 +847,7 @@ public:
                 return false;
             }
 
-            auto message = MakeAtomFromExpression(ctx, Args[2]).Build();
+            auto message = MakeAtomFromExpression(Pos, ctx, Args[2]).Build();
             Args[2] = message;
         }
 
@@ -873,7 +873,7 @@ public:
         if (!Args[1]->Init(ctx, src)) {
             return false;
         }
-        Args[1] = MakeAtomFromExpression(ctx, Y("FormatType", Args[1])).Build();
+        Args[1] = MakeAtomFromExpression(Pos, ctx, Y("FormatType", Args[1])).Build();
 
         return TCallNode::DoInit(ctx, src);
     }
@@ -898,7 +898,7 @@ public:
             return false;
         }
 
-        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
+        Args[1] = MakeAtomFromExpression(Pos, ctx, Args[1]).Build();
         return TCallNode::DoInit(ctx, src);
     }
 };
@@ -940,7 +940,7 @@ public:
             return false;
         }
 
-        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
+        Args[1] = MakeAtomFromExpression(Pos, ctx, Args[1]).Build();
         return TCallNode::DoInit(ctx, src);
     }
 
@@ -964,7 +964,7 @@ public:
             return false;
         }
 
-        Args[0] = MakeAtomFromExpression(ctx, Args[0]).Build();
+        Args[0] = MakeAtomFromExpression(Pos, ctx, Args[0]).Build();
         return TCallNode::DoInit(ctx, src);
     }
 
@@ -988,7 +988,7 @@ public:
             return false;
         }
 
-        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
+        Args[1] = MakeAtomFromExpression(Pos, ctx, Args[1]).Build();
         return TCallNode::DoInit(ctx, src);
     }
 
@@ -1012,7 +1012,7 @@ public:
             return false;
         }
 
-        Args[0] = MakeAtomFromExpression(ctx, Args[0]).Build();
+        Args[0] = MakeAtomFromExpression(Pos, ctx, Args[0]).Build();
         return TCallNode::DoInit(ctx, src);
     }
 
@@ -1034,7 +1034,7 @@ public:
 
     bool DoInit(TContext& ctx, ISource* src) override {
         if (!Args.empty()) {
-            Args[0] = BuildFileNameArgument(ctx.Pos(), Args[0], IsFile ? ctx.Settings.FileAliasPrefix : TString());
+            Args[0] = BuildFileNameArgument(Pos, Args[0], IsFile ? ctx.Settings.FileAliasPrefix : TString());
         }
         return TCallNode::DoInit(ctx, src);
     }
@@ -1084,7 +1084,7 @@ public:
                 return false;
             }
         }
-        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
+        Args[1] = MakeAtomFromExpression(Pos, ctx, Args[1]).Build();
         return TCallNode::DoInit(ctx, src);
     }
 
@@ -1136,7 +1136,7 @@ public:
                 return false;
             }
         }
-        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
+        Args[1] = MakeAtomFromExpression(Pos, ctx, Args[1]).Build();
         return TCallNode::DoInit(ctx, src);
     }
 
@@ -1161,7 +1161,7 @@ public:
                 return false;
             }
         }
-        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
+        Args[1] = MakeAtomFromExpression(Pos, ctx, Args[1]).Build();
         return TCallNode::DoInit(ctx, src);
     }
 
@@ -1210,7 +1210,7 @@ public:
             if (Args[i]->GetTupleSize() == 2) {
                 // flatten with prefix
                 Args[i] = Q(Y(
-                    MakeAtomFromExpression(ctx, Args[i]->GetTupleElement(0)).Build(),
+                    MakeAtomFromExpression(Pos, ctx, Args[i]->GetTupleElement(0)).Build(),
                     Args[i]->GetTupleElement(1)
                 ));
             } else {
@@ -1326,7 +1326,7 @@ public:
                return false;
             }
 
-            Args[i] = MakeAtomFromExpression(ctx, Args[i]).Build();
+            Args[i] = MakeAtomFromExpression(Pos, ctx, Args[i]).Build();
         }
 
         return TCallNode::DoInit(ctx, src);
@@ -1355,7 +1355,7 @@ public:
             return false;
         }
 
-        Args[0] = MakeAtomFromExpression(ctx, Args[0]).Build();
+        Args[0] = MakeAtomFromExpression(Pos, ctx, Args[0]).Build();
         return TCallNode::DoInit(ctx, src);
     }
 
@@ -1379,7 +1379,7 @@ public:
             return false;
         }
 
-        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
+        Args[1] = MakeAtomFromExpression(Pos, ctx, Args[1]).Build();
         return TCallNode::DoInit(ctx, src);
     }
 
@@ -1442,7 +1442,7 @@ public:
             return false;
         }
 
-        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
+        Args[1] = MakeAtomFromExpression(Pos, ctx, Args[1]).Build();
         return TCallNode::DoInit(ctx, src);
     }
 
@@ -1466,7 +1466,7 @@ public:
             return false;
         }
 
-        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
+        Args[1] = MakeAtomFromExpression(Pos, ctx, Args[1]).Build();
         return TCallNode::DoInit(ctx, src);
     }
 
@@ -1733,7 +1733,7 @@ private:
             return false;
         }
 
-        Args[3] = MakeAtomFromExpression(ctx, Args[3]).Build();
+        Args[3] = MakeAtomFromExpression(Pos, ctx, Args[3]).Build();
         return TYqlUdfBase::DoInit(ctx, src);
     }
 
@@ -3529,7 +3529,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
                     if (auto literal = arg->GetLiteral("Int32")) {
                         dataTypeArgs.push_back(BuildQuotedAtom(pos, *literal, TNodeFlags::Default));
                     } else {
-                        dataTypeArgs.push_back(MakeAtomFromExpression(ctx, arg).Build());
+                        dataTypeArgs.push_back(MakeAtomFromExpression(ctx.Pos(), ctx, arg).Build());
                     }
                 }
                 return new TCallNodeImpl(pos, "DataType", dataTypeArgs);

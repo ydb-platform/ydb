@@ -1780,7 +1780,7 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
             }
 
             TDeferredAtom atom;
-            MakeTableFromExpression(Ctx, namedNode, atom, prefix);
+            MakeTableFromExpression(Ctx.Pos(), Ctx, namedNode, atom, prefix);
             values.push_back(atom);
         } else {
             Error() << "Expected string" << (withConfigure ? ", named parameter" : "") << " or 'default' keyword as pragma value for pragma: " << pragma;

@@ -19,7 +19,6 @@ namespace NSQLTranslationV1 {
 namespace {
 
 TNodePtr AddTablePathPrefix(TContext& ctx, TStringBuf prefixPath, const TDeferredAtom& path) {
-    Y_UNUSED(ctx);
     if (prefixPath.empty()) {
         return path.Build();
     }
@@ -35,7 +34,7 @@ TNodePtr AddTablePathPrefix(TContext& ctx, TStringBuf prefixPath, const TDeferre
     TNodePtr buildPathNode = new TCallNodeImpl(pathNode->GetPos(), "BuildTablePath", { prefixNode, pathNode });
 
     TDeferredAtom result;
-    MakeTableFromExpression(ctx, buildPathNode, result);
+    MakeTableFromExpression(ctx.Pos(), ctx, buildPathNode, result);
     return result.Build();
 }
 

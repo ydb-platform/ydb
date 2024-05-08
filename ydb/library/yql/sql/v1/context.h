@@ -172,7 +172,7 @@ namespace NSQLTranslationV1 {
         }
 
         bool IsAlreadyDeclared(const TString& varName) const;
-        void DeclareVariable(const TString& varName, const TNodePtr& typeNode, bool isWeak = false);
+        void DeclareVariable(const TString& varName, const TPosition& pos, const TNodePtr& typeNode, bool isWeak = false);
 
         bool AddExport(TPosition symbolPos, const TString& symbolName);
         TString AddImport(const TVector<TString>& modulePath);
@@ -229,7 +229,7 @@ namespace NSQLTranslationV1 {
         TVector<TBlocks*> CurrentBlocks;
 
     public:
-        THashMap<TString, TNodePtr> Variables;
+        THashMap<TString, std::pair<TPosition, TNodePtr>> Variables;
         THashSet<TString> WeakVariables;
         NSQLTranslation::TTranslationSettings Settings;
         std::unique_ptr<TMemoryPool> Pool;

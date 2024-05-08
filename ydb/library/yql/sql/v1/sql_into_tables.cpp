@@ -130,7 +130,7 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
             }
 
             TDeferredAtom table;
-            MakeTableFromExpression(Ctx, named, table);
+            MakeTableFromExpression(Ctx.Pos(), Ctx, named, table);
             nameOrAt = std::make_pair(at, table);
             break;
         }

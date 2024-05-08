@@ -1147,7 +1147,7 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
                     return false;
                 }
 
-                auto source = TryMakeSourceFromExpression(Ctx, service, cluster, namedNode, "@");
+                auto source = TryMakeSourceFromExpression(Ctx.Pos(), Ctx, service, cluster, namedNode, "@");
                 if (!source) {
                     Ctx.Error() << "Cannot infer cluster and table name";
                     return false;
@@ -2435,7 +2435,7 @@ TNodePtr TSqlTranslation::IntegerOrBind(const TRule_integer_or_bind& node) {
             if (!namedNode) {
                 return {};
             }
-            auto atom = MakeAtomFromExpression(Ctx, namedNode);
+            auto atom = MakeAtomFromExpression(Ctx.Pos(), Ctx, namedNode);
             return atom.Build();
         }
         case TRule_integer_or_bind::ALT_NOT_SET:
@@ -2469,7 +2469,7 @@ TNodePtr TSqlTranslation::TypeNameTag(const TRule_type_name_tag& node) {
                 return {};
             }
             TDeferredAtom atom;
-            MakeTableFromExpression(Ctx, namedNode, atom);
+            MakeTableFromExpression(Ctx.Pos(), Ctx, namedNode, atom);
             return atom.Build();
         }
         case TRule_type_name_tag::ALT_NOT_SET:
@@ -3008,7 +3008,7 @@ bool TSqlTranslation::StructLiteralItem(TVector<TNodePtr>& labels, const TRule_e
         }
 
         TDeferredAtom atom;
-        MakeTableFromExpression(Ctx, labels.back(), atom);
+        MakeTableFromExpression(Ctx.Pos(), Ctx, labels.back(), atom);
         labels.back() = atom.Build();
         if (!labels.back()) {
             return false;
@@ -3262,7 +3262,7 @@ bool TSqlTranslation::SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& 
         }
 
         TDeferredAtom table;
-        MakeTableFromExpression(Context(), named, table);
+        MakeTableFromExpression(Context().Pos(), Context(), named, table);
         result = TTableRef(Context().MakeName("table"), service, cluster, nullptr);
         result.Keys = BuildTableKey(Context().Pos(), result.Service, result.Cluster, table, {at ? "@" : ""});
         break;
@@ -3491,7 +3491,7 @@ bool TSqlTranslation::RoleParameters(const TRule_create_user_option& node, TRole
 
     result.IsPasswordEncrypted = node.HasBlock1();
     if (!password->IsNull()) {
-        result.Password = MakeAtomFromExpression(Ctx, password);
+        result.Password = MakeAtomFromExpression(Ctx.Pos(), Ctx, password);
     }
 
     return true;
@@ -4290,7 +4290,7 @@ bool TSqlTranslation::BindParameterClause(const TRule_bind_parameter& node, TDef
         return false;
     }
 
-    result = MakeAtomFromExpression(Ctx, named);
+    result = MakeAtomFromExpression(Ctx.Pos(), Ctx, named);
     return true;
 }
 

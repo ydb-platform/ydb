@@ -27,7 +27,7 @@ DEFINE_REFCOUNTED_TYPE(IPacketConnection)
 
 IPacketConnectionPtr CreatePacketConnection(
     const TNetworkAddress& at,
-    const NConcurrency::IPollerPtr& poller);
+    NConcurrency::IPollerPtr poller);
 
 ////////////////////////////////////////////////////////////////////////////////
 

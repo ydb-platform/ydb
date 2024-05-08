@@ -1,6 +1,6 @@
 #pragma once
 
-#include "yson_struct_public.h"
+#include "yson_struct_enum.h"
 
 #include <yt/yt/core/yson/public.h>
 #include <yt/yt/core/ypath/public.h>
@@ -9,38 +9,6 @@
 #include <library/cpp/yt/misc/optional.h>
 
 namespace NYT::NYTree {
-
-////////////////////////////////////////////////////////////////////////////////
-
-namespace NPrivate {
-
-// Least common denominator between INodePtr
-// and TYsonPullParserCursor.
-// Maybe something else in the future.
-template <class T>
-struct TYsonSourceTraits
-{
-    static constexpr bool IsValid = false;
-
-    static INodePtr AsNode(T& source)
-        requires false;
-
-    static bool IsEmpty(T& source)
-        requires false;
-
-    static void Advance(T& source)
-        requires false;
-
-    template <CStdVector TVector, class TFiller>
-    static void FillVector(T& source, TVector& vector, TFiller filler)
-        requires false;
-
-    template <CAnyMap TMap, class TFiller>
-    static void FillMap(T& source, TMap& map, TFiller filler)
-        requires false;
-};
-
-} // namespace NPrivate
 
 ////////////////////////////////////////////////////////////////////////////////
 

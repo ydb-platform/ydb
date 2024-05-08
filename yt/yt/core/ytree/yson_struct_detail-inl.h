@@ -35,6 +35,131 @@ concept SupportsDontSerializeDefault =
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Primitive type
+template <class T>
+void LoadFromNode(
+    T& parameter,
+    NYTree::INodePtr node,
+    const NYPath::TYPath& path,
+    std::optional<EUnrecognizedStrategy> /*recursiveUnrecognizedStrategy*/)
+{
+    try {
+        Deserialize(parameter, node);
+    } catch (const std::exception& ex) {
+        THROW_ERROR_EXCEPTION("Error reading parameter %v", path)
+            << ex;
+    }
+}
+
+// INodePtr
+template <>
+inline void LoadFromNode(
+    NYTree::INodePtr& parameter,
+    NYTree::INodePtr node,
+    const NYPath::TYPath& /*path*/,
+    std::optional<EUnrecognizedStrategy> /*recursiveUnrecognizedStrategy*/)
+{
+    if (!parameter) {
+        parameter = node;
+    } else {
+        parameter = PatchNode(parameter, node);
+    }
+}
+
+// TYsonStruct
+template <CYsonStructDerived T>
+void LoadFromNode(
+    TIntrusivePtr<T>& parameterValue,
+    NYTree::INodePtr node,
+    const NYPath::TYPath& path,
+    std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy)
+{
+    if (!parameterValue) {
+        parameterValue = New<T>();
+    }
+
+    if (recursiveUnrecognizedStrategy) {
+        parameterValue->SetUnrecognizedStrategy(*recursiveUnrecognizedStrategy);
+    }
+
+    parameterValue->Load(node, /*postprocess*/ false, /*setDefaults*/ false, path);
+}
+
+// YsonStructLite
+template <std::derived_from<TYsonStructLite> T>
+void LoadFromNode(
+    T& parameter,
+    NYTree::INodePtr node,
+    const NYPath::TYPath& path,
+    std::optional<EUnrecognizedStrategy> /*recursiveUnrecognizedStrategy*/)
+{
+    try {
+        parameter.Load(node, /*postprocess*/ false, /*setDefaults*/ false);
+    } catch (const std::exception& ex) {
+        THROW_ERROR_EXCEPTION("Error reading parameter %v", path)
+            << ex;
+    }
+}
+
+// ExternalizedYsonStruct
+template <CExternallySerializable T>
+void LoadFromNode(
+    T& parameter,
+    NYTree::INodePtr node,
+    const NYPath::TYPath& path,
+    std::optional<EUnrecognizedStrategy> /*recursiveUnrecognizedStrategy*/)
+{
+    try {
+        DeserializeExternalized(parameter, node, /*postprocess*/ false, /*setDefaults*/ false);
+    } catch (const std::exception& ex) {
+        THROW_ERROR_EXCEPTION("Error reading parameter %v", path)
+            << ex;
+    }
+}
+
+// std::optional
+template <class T>
+void LoadFromNode(
+    std::optional<T>& parameter,
+    NYTree::INodePtr node,
+    const NYPath::TYPath& path,
+    std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy)
+{
+    if (node->GetType() == NYTree::ENodeType::Entity) {
+        parameter = std::nullopt;
+        return;
+    }
+
+    if (parameter.has_value()) {
+        LoadFromNode(*parameter, node, path, recursiveUnrecognizedStrategy);
+    } else {
+        T value;
+        LoadFromNode(value, node, path, recursiveUnrecognizedStrategy);
+        parameter = std::move(value);
+    }
+}
+
+// std::vector
+template <class... T>
+void LoadFromNode(
+    std::vector<T...>& parameter,
+    NYTree::INodePtr node,
+    const NYPath::TYPath& path,
+    std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy)
+{
+    auto listNode = node->AsList();
+    auto size = listNode->GetChildCount();
+    parameter.clear();
+    parameter.reserve(size);
+    for (int i = 0; i < size; ++i) {
+        LoadFromNode(
+            parameter.emplace_back(),
+            listNode->GetChildOrThrow(i),
+            path + "/" + NYPath::ToYPathLiteral(i),
+            recursiveUnrecognizedStrategy);
+    }
+}
+
 template <class T>
 T DeserializeMapKey(TStringBuf value)
 {
@@ -49,131 +174,84 @@ T DeserializeMapKey(TStringBuf value)
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
-template <class T>
-concept CNodePtr = requires (T node) {
-    [] (INodePtr) { } (node);
-};
-
-template <CNodePtr TNodePtr>
-struct TYsonSourceTraits<TNodePtr>
-{
-    static constexpr bool IsValid = true;
-
-    static INodePtr AsNode(TNodePtr& source)
-    {
-        // NRVO.
-        return source;
-    }
-
-    static bool IsEmpty(TNodePtr& source)
-    {
-        return source->GetType() == ENodeType::Entity;
-    }
-
-    static void Advance(TNodePtr& /*source*/)
-    { }
-
-    template <class... TArgs, class TFiller>
-    static void FillVector(TNodePtr& source, std::vector<TArgs...>& vector, TFiller filler)
-    {
-        auto listNode = source->AsList();
-        auto size = listNode->GetChildCount();
-        vector.reserve(size);
-        for (int i = 0; i < size; ++i) {
-            filler(vector, std::move(listNode->GetChildOrThrow(i)));
-        }
-    }
-
-    template <CAnyMap TMap, class TFiller>
-    static void FillMap(TNodePtr& source, TMap& map, TFiller filler)
-    {
-        auto mapNode = source->AsMap();
-
-        // NB: We iterate over temporary object anyway.
-        // Might as well move key/child into the filler
-        for (auto [key, child] : mapNode->GetChildren()) {
-            filler(map, std::move(key), std::move(child));
-        }
-    }
-};
-
-template <>
-struct TYsonSourceTraits<NYson::TYsonPullParserCursor*>
-{
-    static constexpr bool IsValid = true;
-
-    static INodePtr AsNode(NYson::TYsonPullParserCursor*& source)
-    {
-        return NYson::ExtractTo<NYTree::INodePtr>(source);
-    }
-
-    static bool IsEmpty(NYson::TYsonPullParserCursor*& source)
-    {
-        return (*source)->GetType() == NYson::EYsonItemType::EntityValue;
-    }
-
-    static void Advance(NYson::TYsonPullParserCursor*& source)
-    {
-        source->Next();
-    }
-
-    template <class... TArgs, class TFiller>
-    static void FillVector(NYson::TYsonPullParserCursor*& source, std::vector<TArgs...>& vector, TFiller filler)
-    {
-        source->ParseList([&](NYson::TYsonPullParserCursor* cursor) {
-            filler(vector, cursor);
-        });
-    }
-
-    template <CAnyMap TMap, class TFiller>
-    static void FillMap(NYson::TYsonPullParserCursor*& source, TMap& map, TFiller filler)
-    {
-        source->ParseMap([&] (NYson::TYsonPullParserCursor* cursor) {
-            auto key = ExtractTo<TString>(cursor);
-            filler(map, std::move(key), source);
-        });
-    }
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-// Primitive type
-template <class T, CYsonStructSource TSource>
-void LoadFromSource(
-    T& parameter,
-    TSource source,
+// For any map.
+template <template <typename...> class Map, class... T, class M = typename Map<T...>::mapped_type>
+void LoadFromNode(
+    Map<T...>& parameter,
+    NYTree::INodePtr node,
     const NYPath::TYPath& path,
-    std::optional<EUnrecognizedStrategy> /*ignored*/)
+    std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy)
 {
-    using TTraits = TYsonSourceTraits<TSource>;
-
-    try {
-        Deserialize(parameter, TTraits::AsNode(source));
-    } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION("Error reading parameter %v", path)
-            << ex;
+    auto mapNode = node->AsMap();
+    for (const auto& [key, child] : mapNode->GetChildren()) {
+        M value;
+        LoadFromNode(
+            value,
+            child,
+            path + "/" + NYPath::ToYPathLiteral(key),
+            recursiveUnrecognizedStrategy);
+        parameter[DeserializeMapKey<typename Map<T...>::key_type>(key)] = std::move(value);
     }
 }
 
-// INodePtr
-template <CYsonStructSource TSource>
-void LoadFromSource(
-    INodePtr& parameter,
-    TSource source,
-    const NYPath::TYPath& path,
-    std::optional<EUnrecognizedStrategy> /*ignored*/)
-{
-    using TTraits = TYsonSourceTraits<TSource>;
+////////////////////////////////////////////////////////////////////////////////
 
+// Primitive type or YsonStructLite
+// See LoadFromNode for further specialization.
+template <class T>
+void LoadFromCursor(
+    T& parameter,
+    NYson::TYsonPullParserCursor* cursor,
+    const NYPath::TYPath& path,
+    std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy)
+{
+    LoadFromNode(parameter, NYson::ExtractTo<NYTree::INodePtr>(cursor), path, recursiveUnrecognizedStrategy);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <CYsonStructDerived T>
+void LoadFromCursor(
+    TIntrusivePtr<T>& parameterValue,
+    NYson::TYsonPullParserCursor* cursor,
+    const NYPath::TYPath& path,
+    std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy);
+
+template <class... T>
+void LoadFromCursor(
+    std::vector<T...>& parameter,
+    NYson::TYsonPullParserCursor* cursor,
+    const NYPath::TYPath& path,
+    std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy);
+
+// std::optional
+template <class T>
+void LoadFromCursor(
+    std::optional<T>& parameter,
+    NYson::TYsonPullParserCursor* cursor,
+    const NYPath::TYPath& path,
+    std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy);
+
+template <template <typename...> class Map, class... T, class M = typename Map<T...>::mapped_type>
+void LoadFromCursor(
+    Map<T...>& parameter,
+    NYson::TYsonPullParserCursor* cursor,
+    const NYPath::TYPath& path,
+    std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy);
+
+////////////////////////////////////////////////////////////////////////////////
+
+// INodePtr
+template <>
+inline void LoadFromCursor(
+    NYTree::INodePtr& parameter,
+    NYson::TYsonPullParserCursor* cursor,
+    const NYPath::TYPath& path,
+    std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy)
+{
     try {
-        auto node = TTraits::AsNode(source);
-        if (!parameter) {
-            parameter = std::move(node);
-        } else {
-            parameter = PatchNode(parameter, node);
-        }
+        auto node = NYson::ExtractTo<INodePtr>(cursor);
+        LoadFromNode(parameter, std::move(node), path, recursiveUnrecognizedStrategy);
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error loading parameter %v", path)
             << ex;
@@ -181,82 +259,45 @@ void LoadFromSource(
 }
 
 // TYsonStruct
-template <CYsonStructDerived T, CYsonStructSource TSource>
-void LoadFromSource(
-    TIntrusivePtr<T>& parameter,
-    TSource source,
+template <CYsonStructDerived T>
+void LoadFromCursor(
+    TIntrusivePtr<T>& parameterValue,
+    NYson::TYsonPullParserCursor* cursor,
     const NYPath::TYPath& path,
     std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy)
 {
-    if (!parameter) {
-        parameter = New<T>();
+    if (!parameterValue) {
+        parameterValue = New<T>();
     }
 
     if (recursiveUnrecognizedStrategy) {
-        parameter->SetUnrecognizedStrategy(*recursiveUnrecognizedStrategy);
+        parameterValue->SetUnrecognizedStrategy(*recursiveUnrecognizedStrategy);
     }
 
-    parameter->Load(std::move(source), /*postprocess*/ false, /*setDefaults*/ false, path);
-}
-
-// YsonStructLite
-template <std::derived_from<TYsonStructLite> T, CYsonStructSource TSource>
-void LoadFromSource(
-    T& parameter,
-    TSource source,
-    const NYPath::TYPath& path,
-    std::optional<EUnrecognizedStrategy> /*ignored*/)
-{
-    try {
-        parameter.Load(std::move(source), /*postprocess*/ false, /*setDefaults*/ false, path);
-    } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION("Error reading parameter %v", path)
-            << ex;
-    }
-}
-
-// ExternalizedYsonStruct
-template <CExternallySerializable T, CYsonStructSource TSource>
-void LoadFromSource(
-    T& parameter,
-    TSource source,
-    const NYPath::TYPath& path,
-    std::optional<EUnrecognizedStrategy> /*ignored*/)
-{
-    try {
-        Deserialize(parameter, std::move(source), /*postprocess*/ false, /*setDefaults*/ false);
-    } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION("Error reading parameter %v", path)
-            << ex;
-    }
+    parameterValue->Load(cursor, /*postprocess*/ false, /*setDefaults*/ false, path);
 }
 
 // std::optional
-template <class T, CYsonStructSource TSource>
-void LoadFromSource(
+template <class T>
+void LoadFromCursor(
     std::optional<T>& parameter,
-    TSource source,
+    NYson::TYsonPullParserCursor* cursor,
     const NYPath::TYPath& path,
     std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy)
 {
-    using TTraits = TYsonSourceTraits<TSource>;
-
     try {
-        if (TTraits::IsEmpty(source)) {
+        if ((*cursor)->GetType() == NYson::EYsonItemType::EntityValue) {
             parameter = std::nullopt;
-            TTraits::Advance(source);
-            return;
+            cursor->Next();
+        } else {
+            if (parameter.has_value()) {
+                LoadFromCursor(*parameter, cursor, path, recursiveUnrecognizedStrategy);
+            } else {
+                T value;
+                LoadFromCursor(value, cursor, path, recursiveUnrecognizedStrategy);
+                parameter = std::move(value);
+            }
         }
-
-        if (parameter.has_value()) {
-            LoadFromSource(*parameter, std::move(source), path, recursiveUnrecognizedStrategy);
-            return;
-        }
-
-        T value;
-        LoadFromSource(value, std::move(source), path, recursiveUnrecognizedStrategy);
-        parameter = std::move(value);
-
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error loading parameter %v", path)
             << ex;
@@ -264,23 +305,20 @@ void LoadFromSource(
 }
 
 // std::vector
-template <CStdVector TVector, CYsonStructSource TSource>
-void LoadFromSource(
-    TVector& parameter,
-    TSource source,
+template <class... T>
+void LoadFromCursor(
+    std::vector<T...>& parameter,
+    NYson::TYsonPullParserCursor* cursor,
     const NYPath::TYPath& path,
     std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy)
 {
-    using TTraits = TYsonSourceTraits<TSource>;
-
     try {
         parameter.clear();
         int index = 0;
-
-        TTraits::FillVector(source, parameter, [&] (auto& vector, auto elementSource) {
-            LoadFromSource(
-                vector.emplace_back(),
-                elementSource,
+        cursor->ParseList([&] (NYson::TYsonPullParserCursor* cursor) {
+            LoadFromCursor(
+                parameter.emplace_back(),
+                cursor,
                 path + "/" + NYPath::ToYPathLiteral(index),
                 recursiveUnrecognizedStrategy);
             ++index;
@@ -291,28 +329,24 @@ void LoadFromSource(
     }
 }
 
-// any map.
-template <CAnyMap TMap, CYsonStructSource TSource>
-void LoadFromSource(
-    TMap& parameter,
-    TSource source,
+// For any map.
+template <template <typename...> class Map, class... T, class M>
+void LoadFromCursor(
+    Map<T...>& parameter,
+    NYson::TYsonPullParserCursor* cursor,
     const NYPath::TYPath& path,
     std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy)
 {
-    using TTraits = TYsonSourceTraits<TSource>;
-    // TODO(arkady-e1ppa): Remove "typename" when clang-14 is abolished.
-    using TKey = typename TMap::key_type;
-    using TValue = typename TMap::mapped_type;
-
     try {
-        TTraits::FillMap(source, parameter, [&] (TMap& map, const TString& key, auto childSource) {
-            TValue value;
-            LoadFromSource(
+        cursor->ParseMap([&] (NYson::TYsonPullParserCursor* cursor) {
+            auto key = ExtractTo<TString>(cursor);
+            M value;
+            LoadFromCursor(
                 value,
-                childSource,
+                cursor,
                 path + "/" + NYPath::ToYPathLiteral(key),
                 recursiveUnrecognizedStrategy);
-            map[DeserializeMapKey<TKey>(key)] = std::move(value);
+            parameter[DeserializeMapKey<typename Map<T...>::key_type>(key)] = std::move(value);
         });
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error loading parameter %v", path)
@@ -406,9 +440,9 @@ inline void PostprocessRecursive(
 }
 
 // std::vector
-template <CStdVector TVector>
+template <class T>
 inline void PostprocessRecursive(
-    TVector& parameter,
+    std::vector<T>& parameter,
     const NYPath::TYPath& path)
 {
     for (size_t i = 0; i < parameter.size(); ++i) {
@@ -419,9 +453,9 @@ inline void PostprocessRecursive(
 }
 
 // any map
-template <CAnyMap TMap>
+template <template <typename...> class Map, class... T, class M = typename Map<T...>::mapped_type>
 inline void PostprocessRecursive(
-    TMap& parameter,
+    Map<T...>& parameter,
     const NYPath::TYPath& path)
 {
     for (auto& [key, value] : parameter) {
@@ -469,15 +503,15 @@ inline void ResetOnLoad(std::optional<T>& parameter)
 }
 
 // std::vector
-template <CStdVector TVector>
-inline void ResetOnLoad(TVector& parameter)
+template <class T>
+inline void ResetOnLoad(std::vector<T>& parameter)
 {
     parameter.clear();
 }
 
 // any map
-template <CAnyMap TMap>
-inline void ResetOnLoad(TMap& parameter)
+template <template <typename...> class Map, class... T, class M = typename Map<T...>::mapped_type>
+inline void ResetOnLoad(Map<T...>& parameter)
 {
     parameter.clear();
 }
@@ -530,7 +564,7 @@ void TYsonStructParameter<TValue>::Load(
         if (ResetOnLoad_) {
             NPrivate::ResetOnLoad(FieldAccessor_->GetValue(self));
         }
-        NPrivate::LoadFromSource(
+        NPrivate::LoadFromNode(
             FieldAccessor_->GetValue(self),
             std::move(node),
             options.Path,
@@ -551,7 +585,7 @@ void TYsonStructParameter<TValue>::Load(
         if (ResetOnLoad_) {
             NPrivate::ResetOnLoad(FieldAccessor_->GetValue(self));
         }
-        NPrivate::LoadFromSource(
+        NPrivate::LoadFromCursor(
             FieldAccessor_->GetValue(self),
             cursor,
             options.Path,
@@ -573,7 +607,7 @@ void TYsonStructParameter<TValue>::SafeLoad(
         TValue oldValue = FieldAccessor_->GetValue(self);
         try {
             FieldAccessor_->GetValue(self) = TValue();
-            NPrivate::LoadFromSource(
+            NPrivate::LoadFromNode(
                 FieldAccessor_->GetValue(self),
                 node,
                 options.Path,

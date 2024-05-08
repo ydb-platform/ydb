@@ -1658,7 +1658,7 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
 
     if (DeletePartitionCookie) {
         ScheduleNegativeReplies();
-        ScheduleDeletePartitionDone(DeletePartitionCookie);
+        ScheduleDeletePartitionDone();
 
         request->Record.SetCookie(DELETE_PARTITION_COOKIE);
         AddCmdDeleteRangeForAllKeys(*request);
@@ -2639,10 +2639,10 @@ void TPartition::SchedulePartitionConfigChanged()
                          MakeHolder<TEvPQ::TEvPartitionConfigChanged>(Partition).Release());
 }
 
-void TPartition::ScheduleDeletePartitionDone(ui64 cookie)
+void TPartition::ScheduleDeletePartitionDone()
 {
     Replies.emplace_back(Tablet,
-                         MakeHolder<TEvPQ::TEvDeletePartitionDone>(cookie).Release());
+                         MakeHolder<TEvPQ::TEvDeletePartitionDone>(Partition, DeletePartitionCookie).Release());
 }
 
 void TPartition::AddCmdDeleteRange(NKikimrClient::TKeyValueRequest& request,
@@ -3037,7 +3037,6 @@ void TPartition::HandleOnInit(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorC
 void TPartition::Handle(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorContext& ctx)
 {
     Y_ABORT_UNLESS(IsSupportive());
-    Y_ABORT_UNLESS(Partition.InternalPartitionId == ev->Get()->Cookie);
     Y_ABORT_UNLESS(DeletePartitionCookie == 0);
 
     DeletePartitionCookie = ev->Get()->Cookie;

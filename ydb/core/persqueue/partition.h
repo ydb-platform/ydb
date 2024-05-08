@@ -807,7 +807,7 @@ private:
 
     ui64 DeletePartitionCookie = 0;
 
-    void ScheduleDeletePartitionDone(ui64 cookie);
+    void ScheduleDeletePartitionDone();
     void ScheduleNegativeReplies();
     void AddCmdDeleteRangeForAllKeys(TEvKeyValue::TEvRequest& request);
 

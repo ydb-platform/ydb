@@ -3366,6 +3366,13 @@ void TPersQueue::SubscribeWriteId(ui64 writeId,
              new NLongTxService::TEvLongTxService::TEvSubscribeLock(writeId, ctx.SelfID.NodeId()));
 }
 
+void TPersQueue::UnsubscribeWriteId(ui64 writeId,
+                                    const TActorContext& ctx)
+{
+    ctx.Send(NLongTxService::MakeLongTxServiceID(ctx.SelfID.NodeId()),
+             new NLongTxService::TEvLongTxService::TEvUnsubscribeLock(writeId, ctx.SelfID.NodeId()));
+}
+
 void TPersQueue::CreateSupportivePartitionActors(const TActorContext& ctx)
 {
     for (auto& partitionId : PendingSupportivePartitions) {
@@ -4424,6 +4431,30 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const T
     }
 }
 
+void TPersQueue::Handle(TEvPQ::TEvDeletePartitionDone::TPtr& ev, const TActorContext& ctx)
+{
+    auto* event = ev->Get();
+    const ui64 writeId = event->Cookie;
+    Y_ABORT_UNLESS(TxWrites.contains(writeId));
+    TTxWriteInfo& writeInfo = TxWrites.at(writeId);
+    Y_ABORT_UNLESS(writeInfo.Partitions.contains(event->PartitionId.OriginalPartitionId));
+    const TPartitionId partitionId = writeInfo.Partitions.at(event->PartitionId.OriginalPartitionId);
+    Y_ABORT_UNLESS(partitionId == event->PartitionId);
+    Y_ABORT_UNLESS(partitionId.IsSupportivePartition());
+    Y_ABORT_UNLESS(Partitions.contains(partitionId));
+    const TPartitionInfo& partition = Partitions.at(partitionId);
+
+    Send(partition.Actor, new TEvents::TEvPoisonPill());
+    Partitions.erase(partitionId);
+
+    writeInfo.Partitions.erase(partitionId.OriginalPartitionId);
+    if (writeInfo.Partitions.empty()) {
+        UnsubscribeWriteId(writeId, ctx);
+        TxWrites.erase(writeId);
+    }
+    TryWriteTxs(ctx);
+}
+
 TString TPersQueue::LogPrefix() const {
     return TStringBuilder() << SelfId() << " ";
 }
@@ -4480,6 +4511,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvPQ::TEvPartitionScaleStatusChanged, Handle);
         HFuncTraced(NLongTxService::TEvLongTxService::TEvLockStatus, Handle);
         HFuncTraced(TEvPQ::TEvReadingPartitionStatusRequest, Handle);
+        HFuncTraced(TEvPQ::TEvDeletePartitionDone, Handle);
         default:
             return false;
     }

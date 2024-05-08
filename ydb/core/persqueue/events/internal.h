@@ -191,6 +191,7 @@ struct TEvPQ {
         EvBalanceConsumer,
         EvDeletePartition,
         EvDeletePartitionDone,
+        EvTransactionCompleted,
         EvEnd
     };
 
@@ -1145,16 +1146,27 @@ struct TEvPQ {
         {
         }
 
-        ui64 Cookie = 0;
+        ui64 Cookie;
     };
 
     struct TEvDeletePartitionDone : TEventLocal<TEvDeletePartitionDone, EvDeletePartitionDone> {
-        explicit TEvDeletePartitionDone(ui64 cookie) :
+        TEvDeletePartitionDone(const NPQ::TPartitionId& partitionId, ui64 cookie) :
+            PartitionId(partitionId),
             Cookie(cookie)
         {
         }
 
-        ui64 Cookie = 0;
+        NPQ::TPartitionId PartitionId;
+        ui64 Cookie;
+    };
+
+    struct TEvTransactionCompleted : TEventLocal<TEvTransactionCompleted, EvTransactionCompleted> {
+        explicit TEvTransactionCompleted(ui64 writeId) :
+            WriteId(writeId)
+        {
+        }
+
+        ui64 WriteId = 0;
     };
 };
 

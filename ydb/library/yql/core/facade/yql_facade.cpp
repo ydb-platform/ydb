@@ -668,65 +668,6 @@ bool TProgram::Compile(const TString& username, bool skipLibraries) {
     return true;
 }
 
-bool TProgram::CollectUsedClusters() {
-    using namespace NNodes;
-
-    if (!UsedClusters_) {
-        UsedClusters_.ConstructInPlace();
-        UsedProviders_.ConstructInPlace();
-
-        auto& typesCtx = *GetAnnotationContext();
-        auto& ctx = *ExprCtx_;
-        auto& usedClusters = *UsedClusters_;
-        auto& usedProviders = *UsedProviders_;
-        bool hasErrors = false;
-
-        VisitExpr(ExprRoot_, [&typesCtx, &ctx, &usedClusters, &usedProviders, &hasErrors](const TExprNode::TPtr& node) {
-            if (auto dsNode = TMaybeNode<TCoDataSource>(node)) {
-                auto datasource = typesCtx.DataSourceMap.FindPtr(dsNode.Cast().Category());
-                YQL_ENSURE(datasource, "Unknown DataSource: " << dsNode.Cast().Category().Value());
-
-                TMaybe<TString> cluster;
-                if (!(*datasource)->ValidateParameters(*node, ctx, cluster)) {
-                    hasErrors = true;
-                    return false;
-                }
-
-                usedProviders.insert(TString(dsNode.Cast().Category().Value()));
-                if (cluster && *cluster != NCommon::ALL_CLUSTERS) {
-                    usedClusters.insert(*cluster);
-                }
-            }
-
-            if (auto dsNode = TMaybeNode<TCoDataSink>(node)) {
-                auto datasink = typesCtx.DataSinkMap.FindPtr(dsNode.Cast().Category());
-                YQL_ENSURE(datasink, "Unknown DataSink: " << dsNode.Cast().Category().Value());
-
-                TMaybe<TString> cluster;
-                if (!(*datasink)->ValidateParameters(*node, ctx, cluster)) {
-                    hasErrors = true;
-                    return false;
-                }
-
-                usedProviders.insert(TString(dsNode.Cast().Category().Value()));
-                if (cluster) {
-                    usedClusters.insert(*cluster);
-                }
-            }
-
-            return true;
-        });
-
-        if (hasErrors) {
-            UsedClusters_ = Nothing();
-            UsedProviders_ = Nothing();
-            return false;
-        }
-    }
-
-    return true;
-}
-
 TProgram::TStatus TProgram::Discover(const TString& username) {
     YQL_PROFILE_FUNC(TRACE);
     auto m = &TProgram::DiscoverAsync;
@@ -734,7 +675,7 @@ TProgram::TStatus TProgram::Discover(const TString& username) {
 }
 
 TProgram::TFutureStatus TProgram::DiscoverAsync(const TString& username) {
-    if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
+    if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_)) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
     TypeCtx_->DiscoveryMode = true;
@@ -774,7 +715,7 @@ TProgram::TStatus TProgram::Lineage(const TString& username, IOutputStream* trac
 }
 
 TProgram::TFutureStatus TProgram::LineageAsync(const TString& username, IOutputStream* traceOut, IOutputStream* exprOut, bool withTypes) {
-    if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
+    if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_)) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
     TypeCtx_->IsReadOnly = true;
@@ -821,7 +762,7 @@ TProgram::TStatus TProgram::Validate(const TString& username, IOutputStream* exp
 }
 
 TProgram::TFutureStatus TProgram::ValidateAsync(const TString& username, IOutputStream* exprOut, bool withTypes) {
-    if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
+    if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_)) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
     TypeCtx_->IsReadOnly = true;
@@ -829,16 +770,6 @@ TProgram::TFutureStatus TProgram::ValidateAsync(const TString& username, IOutput
     TVector<TDataProviderInfo> dataProviders;
     with_lock (DataProvidersLock_) {
         dataProviders = DataProviders_;
-    }
-
-    for (const auto& dp : dataProviders) {
-        if (!dp.RemoteClusterProvider || !dp.RemoteValidate) {
-            continue;
-        }
-
-        if (auto cluster = dp.RemoteClusterProvider(UsedClusters_, UsedProviders_, SourceSyntax_)) {
-            return dp.RemoteValidate(*cluster, SourceSyntax_, SourceCode_, *ExprCtx_);
-        }
     }
 
     Y_ENSURE(ExprRoot_, "Program not compiled yet");
@@ -893,7 +824,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsync(
         IOutputStream* exprOut,
         bool withTypes)
 {
-    if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
+    if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_)) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
     TypeCtx_->IsReadOnly = true;
@@ -901,18 +832,6 @@ TProgram::TFutureStatus TProgram::OptimizeAsync(
     TVector<TDataProviderInfo> dataProviders;
     with_lock (DataProvidersLock_) {
         dataProviders = DataProviders_;
-    }
-
-    for (const auto& dp : dataProviders) {
-        if (!dp.RemoteClusterProvider || !dp.RemoteOptimize) {
-            continue;
-        }
-
-        if (auto cluster = dp.RemoteClusterProvider(UsedClusters_, UsedProviders_, SourceSyntax_)) {
-            return dp.RemoteOptimize(*cluster,
-                SourceSyntax_, SourceCode_, nullptr,
-                TypeCtx_, ExprRoot_, *ExprCtx_, ExternalQueryAst_, ExternalQueryPlan_);
-        }
     }
 
     Y_ENSURE(ExprRoot_, "Program not compiled yet");
@@ -962,7 +881,7 @@ TProgram::TStatus TProgram::OptimizeWithConfig(
 TProgram::TFutureStatus TProgram::OptimizeAsyncWithConfig(
         const TString& username, const IPipelineConfigurator& pipelineConf)
 {
-    if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
+    if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_)) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
     TypeCtx_->IsReadOnly = true;
@@ -970,18 +889,6 @@ TProgram::TFutureStatus TProgram::OptimizeAsyncWithConfig(
     TVector<TDataProviderInfo> dataProviders;
     with_lock (DataProvidersLock_) {
         dataProviders = DataProviders_;
-    }
-
-    for (const auto& dp : DataProviders_) {
-        if (!dp.RemoteClusterProvider || !dp.RemoteOptimize) {
-            continue;
-        }
-
-        if (auto cluster = dp.RemoteClusterProvider(UsedClusters_, UsedProviders_, SourceSyntax_)) {
-            return dp.RemoteOptimize(*cluster,
-                SourceSyntax_, SourceCode_, &pipelineConf,
-                TypeCtx_, ExprRoot_, *ExprCtx_, ExternalQueryAst_, ExternalQueryPlan_);
-        }
     }
 
     Y_ENSURE(ExprRoot_, "Program not compiled yet");
@@ -1038,7 +945,7 @@ TProgram::TStatus TProgram::LineageWithConfig(
 TProgram::TFutureStatus TProgram::LineageAsyncWithConfig(
         const TString& username, const IPipelineConfigurator& pipelineConf)
 {
-    if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
+    if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_)) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
     TypeCtx_->IsReadOnly = true;
@@ -1098,7 +1005,7 @@ TProgram::TFutureStatus TProgram::RunAsync(
         IOutputStream* exprOut,
         bool withTypes)
 {
-    if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
+    if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_)) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
     TypeCtx_->IsReadOnly = (HiddenMode_ != EHiddenMode::Disable);
@@ -1106,19 +1013,6 @@ TProgram::TFutureStatus TProgram::RunAsync(
     TVector<TDataProviderInfo> dataProviders;
     with_lock (DataProvidersLock_) {
         dataProviders = DataProviders_;
-    }
-
-    for (const auto& dp : DataProviders_) {
-        if (!dp.RemoteClusterProvider || !dp.RemoteRun) {
-            continue;
-        }
-
-        if (auto cluster = dp.RemoteClusterProvider(UsedClusters_, UsedProviders_, SourceSyntax_)) {
-            return dp.RemoteRun(*cluster, SourceSyntax_, SourceCode_,
-                OutputFormat_, ResultFormat_, nullptr,
-                TypeCtx_, ExprRoot_, *ExprCtx_, ExternalQueryAst_, ExternalQueryPlan_, ExternalDiagnostics_,
-                ResultProviderConfig_);
-        }
     }
 
     Y_ENSURE(ExprRoot_, "Program not compiled yet");
@@ -1177,7 +1071,7 @@ TProgram::TStatus TProgram::RunWithConfig(
 TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
         const TString& username, const IPipelineConfigurator& pipelineConf)
 {
-    if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
+    if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_)) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
     TypeCtx_->IsReadOnly = (HiddenMode_ != EHiddenMode::Disable);
@@ -1185,19 +1079,6 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
     TVector<TDataProviderInfo> dataProviders;
     with_lock (DataProvidersLock_) {
         dataProviders = DataProviders_;
-    }
-
-    for (const auto& dp : DataProviders_) {
-        if (!dp.RemoteClusterProvider || !dp.RemoteRun) {
-            continue;
-        }
-
-        if (auto cluster = dp.RemoteClusterProvider(UsedClusters_, UsedProviders_, SourceSyntax_)) {
-            return dp.RemoteRun(*cluster, SourceSyntax_, SourceCode_,
-                OutputFormat_, ResultFormat_, &pipelineConf,
-                TypeCtx_, ExprRoot_, *ExprCtx_, ExternalQueryAst_, ExternalQueryPlan_, ExternalDiagnostics_,
-                ResultProviderConfig_);
-        }
     }
 
     Y_ENSURE(ExprRoot_, "Program not compiled yet");
@@ -1368,10 +1249,6 @@ TFuture<IGraphTransformer::TStatus> TProgram::AsyncTransformWithFallback(bool ap
 }
 
 TMaybe<TString> TProgram::GetQueryAst() {
-    if (ExternalQueryAst_) {
-        return ExternalQueryAst_;
-    }
-
     TStringStream astStream;
     astStream.Reserve(DEFAULT_AST_BUF_SIZE);
 
@@ -1388,10 +1265,6 @@ TMaybe<TString> TProgram::GetQueryAst() {
 }
 
 TMaybe<TString> TProgram::GetQueryPlan(const TPlanSettings& settings) {
-    if (ExternalQueryPlan_) {
-        return ExternalQueryPlan_;
-    }
-
     if (ExprRoot_) {
         TStringStream planStream;
         planStream.Reserve(DEFAULT_PLAN_BUF_SIZE);
@@ -1406,10 +1279,6 @@ TMaybe<TString> TProgram::GetQueryPlan(const TPlanSettings& settings) {
 }
 
 TMaybe<TString> TProgram::GetDiagnostics() {
-    if (ExternalDiagnostics_) {
-        return ExternalDiagnostics_;
-    }
-
     if (!TypeCtx_ || !TypeCtx_->Diagnostics) {
         return Nothing();
     }

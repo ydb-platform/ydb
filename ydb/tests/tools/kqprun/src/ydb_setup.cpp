@@ -174,7 +174,7 @@ public:
 
     NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr SchemeQueryRequest(const TString& query, const TString& traceId) const {
         auto event = MakeHolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest>();
-        FillSchemeRequest(query, traceId, event->Record);
+        FillQueryRequest(query, NKikimrKqp::QUERY_TYPE_SQL_DDL, NKikimrKqp::QUERY_ACTION_EXECUTE, traceId, event->Record);
 
         return RunKqpProxyRequest<NKikimr::NKqp::TEvKqp::TEvQueryRequest, NKikimr::NKqp::TEvKqp::TEvQueryResponse>(std::move(event));
     }
@@ -188,7 +188,7 @@ public:
 
     NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr QueryRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, std::vector<Ydb::ResultSet>& resultSets) const {
         auto event = MakeHolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest>();
-        FillScriptRequest(query, action, traceId, event->Record);
+        FillQueryRequest(query, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, action, traceId, event->Record);
 
         auto promise = NThreading::NewPromise<NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr>();
         auto rowsLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultRowsLimit();
@@ -200,7 +200,7 @@ public:
 
     NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr YqlScriptRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId) const {
         auto event = MakeHolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest>();
-        FillYqlScriptRequest(query, action, traceId, event->Record);
+        FillQueryRequest(query, NKikimrKqp::QUERY_TYPE_SQL_SCRIPT, action, traceId, event->Record);
 
         return RunKqpProxyRequest<NKikimr::NKqp::TEvKqp::TEvQueryRequest, NKikimr::NKqp::TEvKqp::TEvQueryResponse>(std::move(event));
     }
@@ -271,10 +271,6 @@ private:
         request->SetDatabase(Settings_.DomainName);
     }
 
-    void FillSchemeRequest(const TString& query, const TString& traceId, NKikimrKqp::TEvQueryRequest& event) const {
-        FillQueryRequest(query, NKikimrKqp::QUERY_TYPE_SQL_DDL, NKikimrKqp::QUERY_ACTION_EXECUTE, traceId, event);
-    }
-
     void FillScriptRequest(const TString& script, NKikimrKqp::EQueryAction action, const TString& traceId, NKikimrKqp::TEvQueryRequest& event) const {
         FillQueryRequest(script, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT, action, traceId, event);
 
@@ -283,10 +279,6 @@ private:
             request->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
             request->MutableTxControl()->set_commit_tx(true);
         }
-    }
-
-    void FillYqlScriptRequest(const TString& script, NKikimrKqp::EQueryAction action, const TString& traceId, NKikimrKqp::TEvQueryRequest& event) const {
-        FillQueryRequest(script, NKikimrKqp::QUERY_TYPE_SQL_SCRIPT, action, traceId, event);
     }
 
 private:

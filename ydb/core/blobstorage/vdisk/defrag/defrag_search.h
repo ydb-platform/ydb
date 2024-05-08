@@ -69,7 +69,6 @@ namespace NKikimr {
         TDataMerger Merger;
         TKeyLogoBlob Key;
         TMemRecLogoBlob MemRec;
-        ui32 NumMemRecsMerged;
 
     public:
         TDefragScanner(THullDsSnap&& fullSnap)
@@ -99,13 +98,11 @@ namespace NKikimr {
         void AddFromFresh(const TMemRecLogoBlob& memRec, const TRope* /*data*/, const TKeyLogoBlob& key, ui64 lsn) {
             Update(memRec, nullptr, lsn);
             MemRec.Merge(memRec, key);
-            ++NumMemRecsMerged;
         }
 
         void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& key, ui64 circaLsn) {
             Update(memRec, outbound, circaLsn);
             MemRec.Merge(memRec, key);
-            ++NumMemRecsMerged;
         }
 
         static constexpr bool HaveToMergeData() { return false; }
@@ -114,13 +111,12 @@ namespace NKikimr {
         void Start(const TKeyLogoBlob& key) {
             Key = key;
             MemRec = {};
-            NumMemRecsMerged = 0;
         }
 
         void Finish() {
             if (!Merger.Empty()) {
                 Y_ABORT_UNLESS(!Merger.HasSmallBlobs());
-                NGc::TKeepStatus status = Barriers->Keep(Key, MemRec, NumMemRecsMerged, AllowKeepFlags, true /*allowGarbageCollection*/);
+                NGc::TKeepStatus status = Barriers->Keep(Key, MemRec, {}, AllowKeepFlags, true /*allowGarbageCollection*/);
                 const auto& hugeMerger = Merger.GetHugeBlobMerger();
                 const auto& local = MemRec.GetIngress().LocalParts(GType);
                 ui8 partIdx = local.FirstPosition();

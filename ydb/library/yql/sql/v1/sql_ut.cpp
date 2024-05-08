@@ -6693,14 +6693,14 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
     
     Y_UNIT_TEST(YtAlternativeSchemaSyntax) {
         NYql::TAstParseResult res = SqlToYql(R"(
-            SELECT * FROM plato.Input WITH schema(y Int32, x String);
+            SELECT * FROM plato.Input WITH schema(y Int32, x String not null);
         )");
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "userschema") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
-                    line.find(R"__('('('"userschema" (StructType '('"y" (AsOptionalType (DataType 'Int32))) '('"x" (AsOptionalType (DataType 'String)))))))__"));
+                    line.find(R"__('('('"userschema" (StructType '('"y" (AsOptionalType (DataType 'Int32))) '('"x" (DataType 'String))))))__"));
             }
         };
 

@@ -111,7 +111,7 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
 
         std::vector<ui32> adjacentPartitionIds;
         auto* node = graph.GetPartition(partitionId);
-        if (node->Children.size() == 1) {
+        if (node->Children.size() > 1) {
             auto* child = node->Children.front();
             for (auto* p : child->Parents) {
                 if (p->Id != partitionId) {

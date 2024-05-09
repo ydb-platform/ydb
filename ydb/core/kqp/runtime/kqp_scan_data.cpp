@@ -644,8 +644,8 @@ std::shared_ptr<arrow::Array> AdoptArrowTypeToYQL(const std::shared_ptr<arrow::A
         auto ui64Array = std::make_shared<arrow::UInt64Array>(ui64Data);
         auto timestampType = std::static_pointer_cast<arrow::TimestampType>(original->type());
 
-        arrow::Datum const1M(std::make_shared<arrow::UInt64Scalar>(1000000));
-        arrow::Datum const1K(std::make_shared<arrow::UInt64Scalar>(1000));
+        static arrow::Datum const1M(std::make_shared<arrow::UInt64Scalar>(1000000));
+        static arrow::Datum const1K(std::make_shared<arrow::UInt64Scalar>(1000));
 
         switch (timestampType->unit()) {
         case arrow::TimeUnit::SECOND:

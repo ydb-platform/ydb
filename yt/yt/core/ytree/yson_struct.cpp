@@ -51,16 +51,16 @@ void TYsonStructBase::Load(
     INodePtr node,
     bool postprocess,
     bool setDefaults,
-    const TYPath& path)
+    const NYPath::TYPath& path)
 {
-    Meta_->LoadStruct(this, node, postprocess, setDefaults, path);
+    Meta_->LoadStruct(this, std::move(node), postprocess, setDefaults, path);
 }
 
 void TYsonStructBase::Load(
     TYsonPullParserCursor* cursor,
     bool postprocess,
     bool setDefaults,
-    const TYPath& path)
+    const NYPath::TYPath& path)
 {
     Meta_->LoadStruct(this, cursor, postprocess, setDefaults, path);
 }

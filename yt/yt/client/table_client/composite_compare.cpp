@@ -213,7 +213,7 @@ i64 GetMinResultingSize(const TYsonItem& item, bool isInsideList)
 
 } // namespace
 
-int CompareCompositeValues(TYsonStringBuf lhs, TYsonStringBuf rhs)
+int CompareYsonValues(TYsonStringBuf lhs, TYsonStringBuf rhs)
 {
     YT_ASSERT(lhs.GetType() == EYsonType::Node);
     YT_ASSERT(rhs.GetType() == EYsonType::Node);

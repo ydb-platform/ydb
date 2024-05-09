@@ -89,6 +89,7 @@ private:
     TString FolderId;
     TString ServiceAccountId;
     TString DatabaseId;
+    TString ContainerId;
     TString Coordinator;
     TString ResourcePath;
     TString CloudId;

@@ -73,6 +73,7 @@ private:
 
     TAtomic LastCookie = 0;
 
+    // cookie -> TReadSessionActor id
     THashMap<ui64, TActorId> Sessions;
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
@@ -117,6 +118,7 @@ void TPQReadService::HandleStreamPQReadRequest(typename ReadRequest::TPtr& ev, c
             FillReadResponse<UseMigrationProtocol>("proxy overloaded", PersQueue::ErrorCode::OVERLOAD), grpc::Status::OK); //CANCELLED
         return;
     }
+
     if (HaveClusters && (Clusters.empty() || LocalCluster.empty())) {
         LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, "new grpc connection failed - cluster is not known yet");
 
@@ -125,23 +127,22 @@ void TPQReadService::HandleStreamPQReadRequest(typename ReadRequest::TPtr& ev, c
             FillReadResponse<UseMigrationProtocol>("cluster initializing", PersQueue::ErrorCode::INITIALIZING), grpc::Status::OK); //CANCELLED
         // TODO: Inc SLI Errors
         return;
-    } else {
-
-        Y_ABORT_UNLESS(TopicsHandler != nullptr);
-        const ui64 cookie = NextCookie();
-
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "new session created cookie " << cookie);
-
-        auto ip = ev->Get()->GetStreamCtx()->GetPeerName();
-
-        TActorId worker = ctx.Register(new TReadSessionActor<UseMigrationProtocol>(
-                ev->Release().Release(), cookie, SchemeCache, NewSchemeCache, Counters,
-                DatacenterClassifier ? DatacenterClassifier->ClassifyAddress(NAddressClassifier::ExtractAddress(ip)) : "unknown",
-                *TopicsHandler
-        ));
-
-        Sessions[cookie] = worker;
     }
+
+    Y_ABORT_UNLESS(TopicsHandler != nullptr);
+    const ui64 cookie = NextCookie();
+
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "new session created cookie " << cookie);
+
+    auto ip = ev->Get()->GetStreamCtx()->GetPeerName();
+
+    TActorId worker = ctx.Register(new TReadSessionActor<UseMigrationProtocol>(
+            ev->Release().Release(), cookie, SchemeCache, NewSchemeCache, Counters,
+            DatacenterClassifier ? DatacenterClassifier->ClassifyAddress(NAddressClassifier::ExtractAddress(ip)) : "unknown",
+            *TopicsHandler
+    ));
+
+    Sessions[cookie] = worker;
 }
 
 

@@ -887,8 +887,8 @@ void TTopicsListController::UpdateClusters(const TVector<TString>& clusters) {
 }
 
 TTopicsToConverter TTopicsListController::GetReadTopicsList(
-        const THashSet<TString>& clientTopics, bool onlyLocal, const TString& database) const
-{
+    const THashSet<TString>& clientTopics, bool onlyLocal, const TString& database
+) const {
     TTopicsToConverter result;
     auto PutTopic = [&] (const TString& topic, const TString& dc) {
         auto converter = ConverterFactory->MakeDiscoveryConverter(topic, {}, dc, database);
@@ -905,7 +905,7 @@ TTopicsToConverter TTopicsListController::GetReadTopicsList(
     for (const auto& t : clientTopics) {
         if (onlyLocal) {
             PutTopic(t, ConverterFactory->GetLocalCluster());
-        } else if (!ConverterFactory->GetNoDCMode()){
+        } else if (!ConverterFactory->GetNoDCMode()) {
             for(const auto& c : Clusters) {
                 PutTopic(t, c);
             }

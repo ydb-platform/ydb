@@ -1063,7 +1063,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         setup.SendReadSessionAssign(assign1);
         setup.SendReadSessionAssign(assign2);
 
-        // Read from both parts so thatLastReadId goes forward;
+        // Read from both parts so that LastReadId goes forward;
         for (auto i = 0u; i != 2; ++i) {
             Cerr << "Wait for direct read" << Endl;
             Ydb::Topic::StreamDirectReadMessage::FromServer resp;

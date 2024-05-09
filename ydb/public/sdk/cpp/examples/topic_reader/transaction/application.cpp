@@ -61,27 +61,25 @@ void TApplication::Run()
             BeginTransaction();
         }
 
-        NYdb::NTopic::TReadSessionGetEventSettings settings;
-        settings.Block(false);
-        settings.Tx(*Transaction);
+        using namespace NYdb::NTopic;
 
-        auto events = ReadSession->GetEvents(settings);
+        auto events = ReadSession->GetEvents(TReadSessionGetEventSettings().Block(true).Tx(*Transaction));
 
         if (events.empty()) {
             break;
         }
 
         for (auto& event : events) {
-            if (auto* e = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&event)) {
+            if (auto* e = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&event)) {
                 auto& messages = e->GetMessages();
                 for (const auto& message : messages) {
                     AppendTableRow(message);
                 }
-            } else if (auto* e = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&event)) {
+            } else if (auto* e = std::get_if<TReadSessionEvent::TStartPartitionSessionEvent>(&event)) {
                 e->Confirm();
-            } else if (auto* e = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&event)) {
+            } else if (auto* e = std::get_if<TReadSessionEvent::TStopPartitionSessionEvent>(&event)) {
                 PendingStopEvents.push_back(std::move(*e));
-            } else if (auto* e = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&event)) {
+            } else if (auto* e = std::get_if<TSessionClosedEvent>(&event)) {
                 Y_UNUSED(e);
                 stop = true;
             }

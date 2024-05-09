@@ -107,13 +107,13 @@ void TDeferredCommit::TImpl::Add(const TReadSessionEvent::TDataReceivedEvent& da
     auto& offsetSet = Offsets[partitionStream];
     auto [startOffset, endOffset] = GetMessageOffsetRange(dataReceivedEvent, 0);
     for (size_t i = 1; i < dataReceivedEvent.GetMessagesCount(); ++i) {
-        auto msgOffsetRange = GetMessageOffsetRange(dataReceivedEvent, i);
-        if (msgOffsetRange.first == endOffset) {
-            endOffset= msgOffsetRange.second;
+        auto [start, end] = GetMessageOffsetRange(dataReceivedEvent, i);
+        if (endOffset == start) {
+            endOffset = end;
         } else {
             Add(partitionStream, offsetSet, startOffset, endOffset);
-            startOffset = msgOffsetRange.first;
-            endOffset = msgOffsetRange.second;
+            startOffset = start;
+            endOffset = end;
         }
     }
     Add(partitionStream, offsetSet, startOffset, endOffset);

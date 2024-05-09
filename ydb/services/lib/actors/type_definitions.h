@@ -13,7 +13,7 @@ namespace NKikimr::NGRpcProxy {
 
 struct TTopicInitInfo {
     NPersQueue::TTopicConverterPtr TopicNameConverter;
-    ui64 TabletID;
+    ui64 TabletID;  // PQRB tablet ID
     TString CloudId;
     TString DbId;
     TString DbPath;
@@ -26,8 +26,8 @@ struct TTopicInitInfo {
 using TTopicInitInfoMap = THashMap<TString, TTopicInitInfo>;
 
 struct TTopicHolder {
-    ui64 TabletID = 0;
-    TActorId PipeClient;
+    ui64 TabletID = 0;  // PQRB tablet ID
+    TActorId PipeClient;  // Pipe to the topic's PQRB
     bool ACLRequestInfly = false;
     TString CloudId;
     TString DbId;

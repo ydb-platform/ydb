@@ -54,21 +54,20 @@ struct TReadSessionSettings: public TRequestSettings<TReadSessionSettings> {
     struct TEventHandlers {
         using TSelf = TEventHandlers;
 
-        //! Set simple handler with data processing and also
-        //! set other handlers with default behaviour.
-        //! They automatically commit data after processing
-        //! and confirm partition session events.
+        //! Set simple handler with data processing and also set other handlers with default behaviour.
+        //! They automatically commit data after processing and confirm partition session events.
         //!
         //! Sets the following handlers:
-        //! DataReceivedHandler: sets DataReceivedHandler to handler that calls dataHandler and (if
-        //! commitDataAfterProcessing is set) then calls Commit(). CommitAcknowledgementHandler to handler that does
-        //! nothing. StartPartitionSessionHandler to handler that confirms event. StopPartitionSessionHandler to
-        //! handler that confirms event. PartitionSessionStatusHandler to handler that does nothing.
-        //! PartitionSessionClosedHandler to handler that does nothing.
+        //! - DataReceivedHandler: call dataHandler and if commitDataAfterProcessing call Commit().
+        //! - CommitAcknowledgementHandler: do nothing.
+        //! - StartPartitionSessionHandler: confirm event.
+        //! - StopPartitionSessionHandler: confirm event.
+        //! - PartitionSessionStatusHandler: do nothing.
+        //! - PartitionSessionClosedHandler: do nothing.
         //!
         //! dataHandler: handler of data event.
         //! commitDataAfterProcessing: automatically commit data after calling of dataHandler.
-        //! gracefulReleaseAfterCommit: wait for commit acknowledgements for all inflight data before confirming
+        //! gracefulStopAfterCommit: wait for commit acknowledgements for all inflight data before confirming
         //! partition session stop.
         TSelf& SimpleDataHandlers(std::function<void(TReadSessionEvent::TDataReceivedEvent&)> dataHandler,
                                   bool commitDataAfterProcessing = false, bool gracefulStopAfterCommit = true);

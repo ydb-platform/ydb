@@ -66,8 +66,7 @@ TReadSessionActor<UseMigrationProtocol>::TReadSessionActor(
 template <bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::Bootstrap(const TActorContext& ctx) {
     if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
-        ++(*GetServiceCounters(Counters, "pqproxy|readSession")
-           ->GetNamedCounter("sensor", "SessionsCreatedTotal", true));
+        GetServiceCounters(Counters, "pqproxy|readSession")->GetNamedCounter("sensor", "SessionsCreatedTotal", true)->Inc();
     }
 
     Request->GetStreamCtx()->Attach(ctx.SelfID);
@@ -223,15 +222,15 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename IContext::TEvReadF
             case TClientMessage::kStartPartitionSessionResponse: {
                 const auto& req = request.start_partition_session_response();
 
-                const ui64 readOffset = req.read_offset();
-                const ui64 commitOffset = req.commit_offset();
                 if (ReadWithoutConsumer && req.has_commit_offset()) {
                     return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "can't commit when reading without a consumer", ctx);
                 }
 
                 ctx.Send(ctx.SelfID, new TEvPQProxy::TEvStartRead(
-                        getAssignId(req), readOffset, req.has_commit_offset() ? commitOffset : TMaybe<ui64>{},
-                        req.has_read_offset()
+                    getAssignId(req),
+                    req.read_offset(),
+                    req.has_commit_offset() ? req.commit_offset() : TMaybe<ui64>{},
+                    req.has_read_offset()
                 ));
                 return (void)ReadFromStreamOrDie(ctx);
             }
@@ -969,77 +968,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvAuthResultOk
     LastACLCheckTimestamp = ctx.Now();
     AuthInitActor = TActorId();
 
-    if (!InitDone) {
-        const ui32 initBorder = AppData(ctx)->PQConfig.GetReadInitLatencyBigMs();
-        const ui32 readBorder = AppData(ctx)->PQConfig.GetReadLatencyBigMs();
-        const ui32 readBorderFromDisk = AppData(ctx)->PQConfig.GetReadLatencyFromDiskBigMs();
-
-        auto subGroup = GetServiceCounters(Counters, "pqproxy|SLI");
-        if (!ReadWithoutConsumer) {
-            InitLatency = NKikimr::NPQ::CreateSLIDurationCounter(subGroup, Aggr, "ReadInit", initBorder, {100, 200, 500, 1000, 1500, 2000, 5000, 10000, 30000, 99999999});
-            CommitLatency = NKikimr::NPQ::CreateSLIDurationCounter(subGroup, Aggr, "Commit", AppData(ctx)->PQConfig.GetCommitLatencyBigMs(), {100, 200, 500, 1000, 1500, 2000, 5000, 10000, 30000, 99999999});
-            SLIBigLatency = NKikimr::NPQ::TMultiCounter(subGroup, Aggr, {}, {"RequestsBigLatency"}, true, "sensor", false);
-            ReadLatency = NKikimr::NPQ::CreateSLIDurationCounter(subGroup, Aggr, "Read", readBorder, {100, 200, 500, 1000, 1500, 2000, 5000, 10000, 30000, 99999999});
-            ReadLatencyFromDisk = NKikimr::NPQ::CreateSLIDurationCounter(subGroup, Aggr, "ReadFromDisk", readBorderFromDisk, {100, 200, 500, 1000, 1500, 2000, 5000, 10000, 30000, 99999999});
-            SLIBigReadLatency = NKikimr::NPQ::TMultiCounter(subGroup, Aggr, {}, {"ReadBigLatency"}, true, "sensor", false);
-            ReadsTotal = NKikimr::NPQ::TMultiCounter(subGroup, Aggr, {}, {"ReadsTotal"}, true, "sensor", false);
-        }
-
-        const ui32 initDurationMs = (ctx.Now() - StartTime).MilliSeconds();
-        if (InitLatency) {
-            InitLatency.IncFor(initDurationMs, 1);
-        }
-
-        if (SLIBigLatency) {
-            if (initDurationMs >= initBorder) {
-                SLIBigLatency.Inc();
-            }
-        }
-        for (const auto& [name, t] : ev->Get()->TopicAndTablets) { // TODO: return something from Init and Auth Actor (Full Path - ?)
-            auto internalName = t.TopicNameConverter->GetInternalName();
-            {
-                auto it = TopicGroups.find(name);
-                if (it != TopicGroups.end()) {
-                    auto value = std::move(it->second);
-                    TopicGroups.erase(it);
-                    TopicGroups[internalName] = std::move(value);
-                }
-            }
-            {
-                auto it = ReadFromTimestamp.find(name);
-                if (it != ReadFromTimestamp.end()) {
-                    auto value = std::move(it->second);
-                    ReadFromTimestamp.erase(it);
-                    ReadFromTimestamp[internalName] = std::move(value);
-                }
-            }
-            {
-                auto it = MaxLagByTopic.find(name);
-                if (it != MaxLagByTopic.end()) {
-                    auto value = std::move(it->second);
-                    MaxLagByTopic.erase(it);
-                    MaxLagByTopic[internalName] = std::move(value);
-                }
-            }
-
-            Topics[internalName] = TTopicHolder::FromTopicInfo(t);
-            FullPathToConverter[t.TopicNameConverter->GetPrimaryPath()] = t.TopicNameConverter;
-            FullPathToConverter[t.TopicNameConverter->GetSecondaryPath()] = t.TopicNameConverter;
-
-            if (!GetMeteringMode()) {
-                SetMeteringMode(t.MeteringMode);
-            } else if (*GetMeteringMode() != t.MeteringMode) {
-                return CloseSession(PersQueue::ErrorCode::BAD_REQUEST,
-                    "cannot read from topics with different metering modes", ctx);
-            }
-        }
-
-        if (IsQuotaRequired()) {
-            Y_ABORT_UNLESS(MaybeRequestQuota(1, EWakeupTag::RlInit, ctx));
-        } else {
-            InitSession(ctx);
-        }
-    } else {
+    if (InitDone) {
         for (const auto& [name, t] : ev->Get()->TopicAndTablets) {
             auto it = Topics.find(t.TopicNameConverter->GetInternalName());
             if (it == Topics.end()) {
@@ -1051,6 +980,72 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvAuthResultOk
                     << "metering mode of topic: " << name << " has been changed", ctx);
             }
         }
+        return;
+    }
+
+    const ui32 initBorder = AppData(ctx)->PQConfig.GetReadInitLatencyBigMs();
+    const ui32 readBorder = AppData(ctx)->PQConfig.GetReadLatencyBigMs();
+    const ui32 readBorderFromDisk = AppData(ctx)->PQConfig.GetReadLatencyFromDiskBigMs();
+
+    auto subGroup = GetServiceCounters(Counters, "pqproxy|SLI");
+    if (!ReadWithoutConsumer) {
+        InitLatency = NKikimr::NPQ::CreateSLIDurationCounter(subGroup, Aggr, "ReadInit", initBorder, {100, 200, 500, 1000, 1500, 2000, 5000, 10000, 30000, 99999999});
+        CommitLatency = NKikimr::NPQ::CreateSLIDurationCounter(subGroup, Aggr, "Commit", AppData(ctx)->PQConfig.GetCommitLatencyBigMs(), {100, 200, 500, 1000, 1500, 2000, 5000, 10000, 30000, 99999999});
+        SLIBigLatency = NKikimr::NPQ::TMultiCounter(subGroup, Aggr, {}, {"RequestsBigLatency"}, true, "sensor", false);
+        ReadLatency = NKikimr::NPQ::CreateSLIDurationCounter(subGroup, Aggr, "Read", readBorder, {100, 200, 500, 1000, 1500, 2000, 5000, 10000, 30000, 99999999});
+        ReadLatencyFromDisk = NKikimr::NPQ::CreateSLIDurationCounter(subGroup, Aggr, "ReadFromDisk", readBorderFromDisk, {100, 200, 500, 1000, 1500, 2000, 5000, 10000, 30000, 99999999});
+        SLIBigReadLatency = NKikimr::NPQ::TMultiCounter(subGroup, Aggr, {}, {"ReadBigLatency"}, true, "sensor", false);
+        ReadsTotal = NKikimr::NPQ::TMultiCounter(subGroup, Aggr, {}, {"ReadsTotal"}, true, "sensor", false);
+    }
+
+    const ui32 initDurationMs = (ctx.Now() - StartTime).MilliSeconds();
+    if (InitLatency) {
+        InitLatency.IncFor(initDurationMs, 1);
+    }
+
+    if (SLIBigLatency) {
+        if (initDurationMs >= initBorder) {
+            SLIBigLatency.Inc();
+        }
+    }
+
+    for (const auto& [name, t] : ev->Get()->TopicAndTablets) { // TODO: return something from Init and Auth Actor (Full Path - ?)
+        auto internalName = t.TopicNameConverter->GetInternalName();
+
+        if (auto it = TopicGroups.find(name); it != TopicGroups.end()) {
+            auto value = std::move(it->second);
+            TopicGroups.erase(it);
+            TopicGroups[internalName] = std::move(value);
+        }
+
+        if (auto it = ReadFromTimestamp.find(name); it != ReadFromTimestamp.end()) {
+            auto value = std::move(it->second);
+            ReadFromTimestamp.erase(it);
+            ReadFromTimestamp[internalName] = std::move(value);
+        }
+
+        if (auto it = MaxLagByTopic.find(name); it != MaxLagByTopic.end()) {
+            auto value = std::move(it->second);
+            MaxLagByTopic.erase(it);
+            MaxLagByTopic[internalName] = std::move(value);
+        }
+
+        Topics[internalName] = TTopicHolder::FromTopicInfo(t);
+        FullPathToConverter[t.TopicNameConverter->GetPrimaryPath()] = t.TopicNameConverter;
+        FullPathToConverter[t.TopicNameConverter->GetSecondaryPath()] = t.TopicNameConverter;
+
+        if (!GetMeteringMode()) {
+            SetMeteringMode(t.MeteringMode);
+        } else if (*GetMeteringMode() != t.MeteringMode) {
+            return CloseSession(PersQueue::ErrorCode::BAD_REQUEST,
+                "cannot read from topics with different metering modes", ctx);
+        }
+    }
+
+    if (IsQuotaRequired()) {
+        Y_ABORT_UNLESS(MaybeRequestQuota(1, EWakeupTag::RlInit, ctx));
+    } else {
+        InitSession(ctx);
     }
 }
 
@@ -1179,8 +1174,9 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartit
     }
 
     // TODO: counters
-    auto it = TopicCounters.find(name);
-    Y_ABORT_UNLESS(it != TopicCounters.end());
+    auto countersIt = TopicCounters.find(name);
+    Y_ABORT_UNLESS(countersIt != TopicCounters.end());
+    auto& counters = countersIt->second;
 
     Y_ABORT_UNLESS(record.GetGeneration() > 0);
     const ui64 assignId = NextAssignId++;
@@ -1191,25 +1187,25 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartit
 
     const TActorId actorId = ctx.Register(new TPartitionActor(
         ctx.SelfID, ClientId, ClientPath, Cookie, Session, partitionId, record.GetGeneration(),
-        record.GetStep(), record.GetTabletId(), it->second, CommitsDisabled, ClientDC, RangesMode,
+        record.GetStep(), record.GetTabletId(), counters, CommitsDisabled, ClientDC, RangesMode,
         converterIter->second, DirectRead, UseMigrationProtocol));
 
     if (SessionsActive) {
         PartsPerSession.DecFor(Partitions.size(), 1);
     }
 
-    bool res = Partitions.emplace(assignId, TPartitionActorInfo(actorId, partitionId, converterIter->second, ctx.Now())).second;
-    Y_ABORT_UNLESS(res);
+    bool inserted = Partitions.emplace(assignId, TPartitionActorInfo(actorId, partitionId, converterIter->second, ctx.Now())).second;
+    Y_ABORT_UNLESS(inserted);
 
     if (SessionsActive) {
         PartsPerSession.IncFor(Partitions.size(), 1);
     }
 
-    res = ActualPartitionActors.insert(actorId).second;
-    Y_ABORT_UNLESS(res);
+    inserted = ActualPartitionActors.insert(actorId).second;
+    Y_ABORT_UNLESS(inserted);
 
-    it->second.PartitionsLocked.Inc();
-    it->second.PartitionsInfly.Inc();
+    counters.PartitionsLocked.Inc();
+    counters.PartitionsInfly.Inc();
 
     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " assign"
         << ": record# " << record);
@@ -2319,6 +2315,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReadingStart
     }
 
     auto& topic = it->second;
+    // topic.PipeClient - PQRB
     NTabletPipe::SendData(ctx, topic.PipeClient, new TEvPersQueue::TEvReadingPartitionStartedRequest(ClientId, msg->PartitionId));
 }
 

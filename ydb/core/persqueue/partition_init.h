@@ -20,7 +20,7 @@ class TPartition;
 
 
 /**
- * This class execute independent steps of parttition actor initialization.
+ * This class execute independent steps of partition actor initialization.
  * Each initialization step makes its own decision whether to perform it or not.
  */
 class TInitializer {

@@ -563,62 +563,62 @@ namespace NKikimr::NGRpcProxy::V1 {
         auto config = pqDescr->MutablePQTabletConfig();
         auto partConfig = config->MutablePartitionConfig();
 
-        for (auto& pair : attributes) {
-            if (pair.first == "_partitions_per_tablet") {
+        for (auto const& [key, value] : attributes) {
+            if (key == "_partitions_per_tablet") {
                 try {
                     if (!alter)
-                        pqDescr->SetPartitionPerTablet(FromString<ui32>(pair.second));
+                        pqDescr->SetPartitionPerTablet(FromString<ui32>(value));
                     if (pqDescr->GetPartitionPerTablet() > 20) {
-                        error = TStringBuilder() << "Attribute partitions_per_tablet is " << pair.second << ", which is greater than 20";
+                        error = TStringBuilder() << "Attribute partitions_per_tablet is " << value << ", which is greater than 20";
                         return Ydb::StatusIds::BAD_REQUEST;
                     }
                 } catch(...) {
-                    error = TStringBuilder() << "Attribute partitions_per_tablet is " << pair.second << ", which is not ui32";
+                    error = TStringBuilder() << "Attribute partitions_per_tablet is " << value << ", which is not ui32";
                     return Ydb::StatusIds::BAD_REQUEST;
                 }
-            } else if (pair.first == "_allow_unauthenticated_read") {
-                if (pair.second.empty()) {
+            } else if (key == "_allow_unauthenticated_read") {
+                if (value.empty()) {
                     config->SetRequireAuthRead(true);
                 } else  {
                     try {
-                        config->SetRequireAuthRead(!FromString<bool>(pair.second));
+                        config->SetRequireAuthRead(!FromString<bool>(value));
                     } catch(...) {
-                        error = TStringBuilder() << "Attribute allow_unauthenticated_read is " << pair.second << ", which is not bool";
+                        error = TStringBuilder() << "Attribute allow_unauthenticated_read is " << value << ", which is not bool";
                         return Ydb::StatusIds::BAD_REQUEST;
                     }
                 }
-            } else if (pair.first == "_allow_unauthenticated_write") {
-                if (pair.second.empty()) {
+            } else if (key == "_allow_unauthenticated_write") {
+                if (value.empty()) {
                     config->SetRequireAuthWrite(true);
                 } else  {
                     try {
-                        config->SetRequireAuthWrite(!FromString<bool>(pair.second));
+                        config->SetRequireAuthWrite(!FromString<bool>(value));
                     } catch(...) {
-                        error = TStringBuilder() << "Attribute allow_unauthenticated_write is " << pair.second << ", which is not bool";
+                        error = TStringBuilder() << "Attribute allow_unauthenticated_write is " << value << ", which is not bool";
                         return Ydb::StatusIds::BAD_REQUEST;
                     }
                 }
-            } else if (pair.first == "_abc_slug") {
-                config->SetAbcSlug(pair.second);
-            }  else if (pair.first == "_federation_account") {
-                config->SetFederationAccount(pair.second);
-            } else if (pair.first == "_abc_id") {
-                if (pair.second.empty()) {
+            } else if (key == "_abc_slug") {
+                config->SetAbcSlug(value);
+            }  else if (key == "_federation_account") {
+                config->SetFederationAccount(value);
+            } else if (key == "_abc_id") {
+                if (value.empty()) {
                     config->SetAbcId(0);
                 } else {
                     try {
-                        config->SetAbcId(FromString<ui32>(pair.second));
+                        config->SetAbcId(FromString<ui32>(value));
                     } catch(...) {
-                        error = TStringBuilder() << "Attribute abc_id is " << pair.second << ", which is not integer";
+                        error = TStringBuilder() << "Attribute abc_id is " << value << ", which is not integer";
                         return Ydb::StatusIds::BAD_REQUEST;
                     }
                 }
-            } else if (pair.first == "_max_partition_storage_size") {
-                if (pair.second.empty()) {
+            } else if (key == "_max_partition_storage_size") {
+                if (value.empty()) {
                     partConfig->SetMaxSizeInPartition(Max<i64>());
                 } else {
                     try {
-                        i64 size = FromString<i64>(pair.second);
+                        i64 size = FromString<i64>(value);
                         if (size < 0) {
                             error = TStringBuilder() << "_max_partiton_strorage_size can't be negative, provided " << size;
                             return Ydb::StatusIds::BAD_REQUEST;
@@ -627,15 +627,15 @@ namespace NKikimr::NGRpcProxy::V1 {
                         partConfig->SetMaxSizeInPartition(size ? size : Max<i64>());
 
                     } catch(...) {
-                        error = TStringBuilder() << "Attribute _max_partition_storage_size is " << pair.second << ", which is not ui64";
+                        error = TStringBuilder() << "Attribute _max_partition_storage_size is " << value << ", which is not ui64";
                         return Ydb::StatusIds::BAD_REQUEST;
                     }
                 }
-            }  else if (pair.first == "_message_group_seqno_retention_period_ms") {
+            }  else if (key == "_message_group_seqno_retention_period_ms") {
                 partConfig->SetSourceIdLifetimeSeconds(NKikimrPQ::TPartitionConfig().GetSourceIdLifetimeSeconds());
-                if (!pair.second.empty()) {
+                if (!value.empty()) {
                     try {
-                        i64 ms = FromString<i64>(pair.second);
+                        i64 ms = FromString<i64>(value);
                         if (ms < 0) {
                             error = TStringBuilder() << "_message_group_seqno_retention_period_ms can't be negative, provided " << ms;
                             return Ydb::StatusIds::BAD_REQUEST;
@@ -652,30 +652,30 @@ namespace NKikimr::NGRpcProxy::V1 {
                             partConfig->SetSourceIdLifetimeSeconds(ms > 999 ? ms / 1000 : 1);
                         }
                     } catch(...) {
-                        error = TStringBuilder() << "Attribute " << pair.first << " is " << pair.second << ", which is not ui64";
+                        error = TStringBuilder() << "Attribute " << key << " is " << value << ", which is not ui64";
                         return Ydb::StatusIds::BAD_REQUEST;
                     }
                 }
 
-            } else if (pair.first == "_max_partition_message_groups_seqno_stored") {
+            } else if (key == "_max_partition_message_groups_seqno_stored") {
                 partConfig->SetSourceIdMaxCounts(NKikimrPQ::TPartitionConfig().GetSourceIdMaxCounts());
-                if (!pair.second.empty()) {
+                if (!value.empty()) {
                     try {
-                        i64 count = FromString<i64>(pair.second);
+                        i64 count = FromString<i64>(value);
                         if (count < 0) {
-                            error = TStringBuilder() << pair.first << "can't be negative, provided " << count;
+                            error = TStringBuilder() << key << "can't be negative, provided " << count;
                             return Ydb::StatusIds::BAD_REQUEST;
                         }
                         if (count > 0) {
                             partConfig->SetSourceIdMaxCounts(count);
                         }
                     } catch(...) {
-                        error = TStringBuilder() << "Attribute " << pair.first << " is " << pair.second << ", which is not ui64";
+                        error = TStringBuilder() << "Attribute " << key << " is " << value << ", which is not ui64";
                         return Ydb::StatusIds::BAD_REQUEST;
                     }
                 }
             } else {
-                error = TStringBuilder() << "Attribute " << pair.first << " is not supported";
+                error = TStringBuilder() << "Attribute " << key << " is not supported";
                 return Ydb::StatusIds::BAD_REQUEST;
             }
         }
@@ -1024,7 +1024,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                 maxParts = settings.partition_count_limit();
 
                 if (maxParts < parts) {
-                    error = TStringBuilder() << "Partitions count limit must be greater than or equal to partitions count, provided " 
+                    error = TStringBuilder() << "Partitions count limit must be greater than or equal to partitions count, provided "
                                              << settings.partition_count_limit() << " and " << settings.min_active_partitions();
                     return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
                 }

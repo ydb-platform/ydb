@@ -1874,43 +1874,60 @@ void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, const TAc
     if (!cmd.HasClientId()){
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
             TStringBuilder() << "no clientId in CreateSession request: " << ToString(req).data());
-    } else if (!cmd.HasSessionId()) {
-        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
-            TStringBuilder() << "not sessionId in CreateSession request: " << ToString(req).data());
-    } else if (!cmd.HasGeneration()) {
-        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
-            TStringBuilder() << "not geneartion in CreateSession request: " << ToString(req).data());
-    } else if (!cmd.HasStep()) {
-        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
-            TStringBuilder() << "not step in CreateSession request: " << ToString(req).data());
-    } else {
-        bool isDirectRead = cmd.GetPartitionSessionId() > 0;
-        InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_CREATE_SESSION);
-        THolder<TEvPQ::TEvSetClientInfo> event = MakeHolder<TEvPQ::TEvSetClientInfo>(
-                responseCookie, cmd.GetClientId(), 0, cmd.GetSessionId(), cmd.GetPartitionSessionId(), cmd.GetGeneration(), cmd.GetStep(),
-                pipeClient, TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION, 0, false
-        );
-        if (isDirectRead) {
-            auto pipeIter = PipesInfo.find(pipeClient);
-            if (pipeIter.IsEnd()) {
-                ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::ERROR,
-                        TStringBuilder() << "Internal error - server pipe " << pipeClient.ToString() << " not found");
-                return;
-            }
-            pipeIter->second.ClientId = cmd.GetClientId();
-            pipeIter->second.SessionId = cmd.GetSessionId();
-            pipeIter->second.PartitionSessionId = cmd.GetPartitionSessionId();
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Created session " << cmd.GetSessionId() << " on pipe: " << pipeIter->first.ToString());
-            ctx.Send(MakePQDReadCacheServiceActorId(),
-                new TEvPQ::TEvRegisterDirectReadSession(
-                    TReadSessionKey{cmd.GetSessionId(), cmd.GetPartitionSessionId()},
-                    GetGeneration()
-                )
-            );
-
-        }
-        ctx.Send(partActor, event.Release());
+        return;
     }
+    if (!cmd.HasSessionId()) {
+        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
+            TStringBuilder() << "no sessionId in CreateSession request: " << ToString(req).data());
+        return;
+    }
+    if (!cmd.HasGeneration()) {
+        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
+            TStringBuilder() << "no generation in CreateSession request: " << ToString(req).data());
+        return;
+    }
+    if (!cmd.HasStep()) {
+        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
+            TStringBuilder() << "no step in CreateSession request: " << ToString(req).data());
+        return;
+    }
+
+    InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_CREATE_SESSION);
+
+    bool isDirectRead = cmd.GetPartitionSessionId() > 0;
+    if (isDirectRead) {
+        auto pipeIter = PipesInfo.find(pipeClient);
+        if (pipeIter.IsEnd()) {
+            ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::ERROR,
+                    TStringBuilder() << "Internal error - server pipe " << pipeClient.ToString() << " not found");
+            return;
+        }
+        pipeIter->second.ClientId = cmd.GetClientId();
+        pipeIter->second.SessionId = cmd.GetSessionId();
+        pipeIter->second.PartitionSessionId = cmd.GetPartitionSessionId();
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Created session " << cmd.GetSessionId() << " on pipe: " << pipeIter->first.ToString());
+        ctx.Send(MakePQDReadCacheServiceActorId(),
+            new TEvPQ::TEvRegisterDirectReadSession(
+                TReadSessionKey{cmd.GetSessionId(), cmd.GetPartitionSessionId()},
+                GetGeneration()
+            )
+        );
+    }
+
+    auto event = MakeHolder<TEvPQ::TEvSetClientInfo>(
+        responseCookie,
+        cmd.GetClientId(),
+        /* offset = */ 0,
+        cmd.GetSessionId(),
+        cmd.GetPartitionSessionId(),
+        cmd.GetGeneration(),
+        cmd.GetStep(),
+        pipeClient,
+        TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION,
+        /* readRuleGeneration = */ 0,
+        /* strict = */ false
+    );
+    ctx.Send(partActor, event.Release());
 }
 
 void TPersQueue::HandleSetClientOffsetRequest(const ui64 responseCookie, const TActorId& partActor,
@@ -2726,7 +2743,6 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "no partition request");
         return;
     }
-
 
     if (!req.HasPartition()) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "no partition number");

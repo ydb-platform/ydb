@@ -267,9 +267,17 @@ bool TReadInitAndAuthActor::CheckACLPermissionsForNavigate(
 void TReadInitAndAuthActor::FinishInitialization(const TActorContext& ctx) {
     TTopicInitInfoMap res;
     for (auto& [name, holder] : Topics) {
-        res.insert(std::make_pair(name, TTopicInitInfo{
-            holder.FullConverter, holder.TabletID, holder.CloudId, holder.DbId, holder.DbPath, holder.IsServerless, holder.FolderId, holder.MeteringMode, holder.PartitionIdToTabletId
-        }));
+        res.emplace(name, TTopicInitInfo{
+            holder.FullConverter,
+            holder.TabletID,
+            holder.CloudId,
+            holder.DbId,
+            holder.DbPath,
+            holder.IsServerless,
+            holder.FolderId,
+            holder.MeteringMode,
+            holder.PartitionIdToTabletId
+        });
     }
     ctx.Send(ParentId, new TEvPQProxy::TEvAuthResultOk(std::move(res)));
     Die(ctx);

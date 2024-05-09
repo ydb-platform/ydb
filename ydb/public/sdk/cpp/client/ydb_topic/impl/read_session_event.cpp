@@ -22,13 +22,11 @@ using TPartitionSessionClosedEvent = TReadSessionEvent::TPartitionSessionClosedE
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Helpers
 
-std::pair<ui64, ui64> GetMessageOffsetRange(const TDataReceivedEvent& dataReceivedEvent, ui64 index) {
-    if (dataReceivedEvent.HasCompressedMessages()) {
-        const auto& msg = dataReceivedEvent.GetCompressedMessages()[index];
-        return {msg.GetOffset(), msg.GetOffset() + 1};
-    }
-    const auto& msg = dataReceivedEvent.GetMessages()[index];
-    return {msg.GetOffset(), msg.GetOffset() + 1};
+std::pair<ui64, ui64> GetMessageOffsetRange(const TDataReceivedEvent& event, ui64 index) {
+    auto offset = event.HasCompressedMessages()
+                ? event.GetCompressedMessages()[index].GetOffset()
+                : event.GetMessages()[index].GetOffset();
+    return {offset, offset + 1};
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

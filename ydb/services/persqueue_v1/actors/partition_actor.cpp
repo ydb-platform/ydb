@@ -939,54 +939,57 @@ void TPartitionActor::InitLockPartition(const TActorContext& ctx) {
         ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession("double partition locking", PersQueue::ErrorCode::BAD_REQUEST));
         return;
     }
+
     if (!LockCounted) {
         Counters.PartitionsToBeLocked.Inc();
         LockCounted = true;
     }
-    if (StartReading)
+    if (StartReading) {
         AllPrepareInited = true;
+    }
 
-    if (FirstInit) {
-        Y_ABORT_UNLESS(!PipeClient);
-        FirstInit = false;
-        NTabletPipe::TClientConfig clientConfig;
-        clientConfig.RetryPolicy = {
-            .RetryLimitCount = 6,
-            .MinRetryTime = TDuration::MilliSeconds(10),
-            .MaxRetryTime = TDuration::MilliSeconds(100),
-            .BackoffMultiplier = 2,
-            .DoFirstRetryInstantly = true
-        };
-        PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, TabletID, clientConfig));
-        NKikimrClient::TPersQueueRequest request;
-
-        request.MutablePartitionRequest()->SetTopic(Topic->GetPrimaryPath());
-        request.MutablePartitionRequest()->SetPartition(Partition.Partition);
-        request.MutablePartitionRequest()->SetCookie(INIT_COOKIE);
-
-        ActorIdToProto(PipeClient, request.MutablePartitionRequest()->MutablePipeClient());
-
-        auto cmd = request.MutablePartitionRequest()->MutableCmdCreateSession();
-        cmd->SetClientId(ClientId);
-        cmd->SetSessionId(Session);
-        cmd->SetGeneration(Generation);
-        cmd->SetStep(Step);
-        cmd->SetPartitionSessionId(Partition.AssignId);
-
-        LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " INITING " << Partition);
-
-        TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
-        Y_ABORT_UNLESS(!RequestInfly);
-        CurrentRequest = request;
-        RequestInfly = true;
-        req->Record.Swap(&request);
-
-        NTabletPipe::SendData(ctx, PipeClient, req.Release());
-    } else {
+    if (!FirstInit) {
         Y_ABORT_UNLESS(StartReading); //otherwise it is double locking from actor, not client - client makes lock always with StartReading == true
         Y_ABORT_UNLESS(InitDone);
         InitStartReading(ctx);
+        return;
     }
+
+    Y_ABORT_UNLESS(!PipeClient);
+    FirstInit = false;
+    NTabletPipe::TClientConfig clientConfig;
+    clientConfig.RetryPolicy = {
+        .RetryLimitCount = 6,
+        .MinRetryTime = TDuration::MilliSeconds(10),
+        .MaxRetryTime = TDuration::MilliSeconds(100),
+        .BackoffMultiplier = 2,
+        .DoFirstRetryInstantly = true
+    };
+    PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, TabletID, clientConfig));
+    NKikimrClient::TPersQueueRequest request;
+
+    request.MutablePartitionRequest()->SetTopic(Topic->GetPrimaryPath());
+    request.MutablePartitionRequest()->SetPartition(Partition.Partition);
+    request.MutablePartitionRequest()->SetCookie(INIT_COOKIE);
+
+    ActorIdToProto(PipeClient, request.MutablePartitionRequest()->MutablePipeClient());
+
+    auto cmd = request.MutablePartitionRequest()->MutableCmdCreateSession();
+    cmd->SetClientId(ClientId);
+    cmd->SetSessionId(Session);
+    cmd->SetGeneration(Generation);
+    cmd->SetStep(Step);
+    cmd->SetPartitionSessionId(Partition.AssignId);
+
+    LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " INITING " << Partition);
+
+    TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
+    Y_ABORT_UNLESS(!RequestInfly);
+    CurrentRequest = request;
+    RequestInfly = true;
+    req->Record.Swap(&request);
+
+    NTabletPipe::SendData(ctx, PipeClient, req.Release());
 }
 
 

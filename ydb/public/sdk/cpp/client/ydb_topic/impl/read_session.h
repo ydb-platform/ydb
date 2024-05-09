@@ -63,6 +63,7 @@ private:
     void AbortImpl(EStatus statusCode, const TString& message, TDeferredActions<false>& deferred);
 
 private:
+    //                              topic        partition         offset ranges
     using TOffsetRanges = THashMap<TString, THashMap<ui64, TDisjointIntervalTree<ui64>>>;
 
     void CollectOffsets(NTable::TTransaction& tx,

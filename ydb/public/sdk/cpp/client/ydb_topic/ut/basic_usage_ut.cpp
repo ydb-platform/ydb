@@ -239,8 +239,9 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto& startPartitionSession = std::get<TReadSessionEvent::TStartPartitionSessionEvent>(*event);
         startPartitionSession.Confirm();
 
-        UNIT_CHECK_GENERATED_EXCEPTION(readSession->GetEvent(true, 0), TContractViolation);
-        UNIT_CHECK_GENERATED_EXCEPTION(readSession->GetEvents(true, Nothing(), 0), TContractViolation);
+        auto s = TReadSessionGetEventSettings().Block(true).MaxByteSize(0);
+        UNIT_CHECK_GENERATED_EXCEPTION(readSession->GetEvent(s), TContractViolation);
+        UNIT_CHECK_GENERATED_EXCEPTION(readSession->GetEvents(s), TContractViolation);
 
         event = readSession->GetEvent(true, 1);
         UNIT_ASSERT(event.Defined());

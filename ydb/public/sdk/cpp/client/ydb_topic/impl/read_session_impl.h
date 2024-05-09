@@ -240,14 +240,12 @@ public:
     TMaybe<std::pair<size_t, size_t>> GetReadyThreshold() const {
         size_t readyCount = 0;
         std::pair<size_t, size_t> ret;
-        for (auto i = ReadyThresholds.begin(), end = ReadyThresholds.end(); i != end; ++i) {
-            if (i->Ready) {
-                ret.first = i->Batch;
-                ret.second = i->Message;
-                ++readyCount;
-            } else {
+        for (auto const& t : ReadyThresholds) {
+            if (!t->Ready) {
                 break;
             }
+            ret = {t->Batch, t->Message};
+            ++readyCount;
         }
         if (!readyCount) {
             return Nothing();
@@ -478,11 +476,7 @@ struct TRawPartitionStreamEvent {
     }
 
     bool IsReady() const {
-        if (!IsDataEvent()) {
-            return true;
-        }
-
-        return std::get<TDataDecompressionEvent<UseMigrationProtocol>>(Event).IsReady();
+        return !IsDataEvent() || GetDataEvent().IsReady();
     }
 };
 
@@ -697,13 +691,16 @@ public:
     bool HasCommitsInflight() const {
         if (ClientCommits.Empty())
             return false;
+
         auto range = *ClientCommits.begin();
         if (range.first > MaxCommittedOffset)
             return false;
+
         // Here we got first range that can be committed by server.
         // If offset to commit is from same position - then nothing is inflight.
         if (!Commits.Empty() && Commits.begin()->first == range.first)
             return false;
+
         return true;
     }
 
@@ -1185,12 +1182,14 @@ private:
 
         bool AddMapping(const typename TCookie::TPtr& cookie);
 
+        using TCookiePtr = TCookie::TPtr;
+
         // Removes (partition stream, offset) from mapping.
         // Returns cookie ptr if this was the last message, otherwise nullptr.
-        typename TSingleClusterReadSessionImpl<UseMigrationProtocol>::TPartitionCookieMapping::TCookie::TPtr CommitOffset(ui64 partitionStreamId, ui64 offset);
+        TCookiePtr CommitOffset(ui64 partitionStreamId, ui64 offset);
 
         // Gets and then removes committed cookie from mapping.
-        typename TSingleClusterReadSessionImpl<UseMigrationProtocol>::TPartitionCookieMapping::TCookie::TPtr RetrieveCommittedCookie(const Ydb::PersQueue::V1::CommitCookie& cookieProto);
+        TCookiePtr RetrieveCommittedCookie(const Ydb::PersQueue::V1::CommitCookie& cookieProto);
 
         // Removes mapping on partition stream.
         void RemoveMapping(ui64 partitionStreamId);
@@ -1201,9 +1200,9 @@ private:
         bool HasUnacknowledgedCookies() const;
 
     private:
-        THashMap<typename TCookie::TKey, typename TCookie::TPtr, typename TCookie::TKey::THash> Cookies;
-        THashMap<std::pair<ui64, ui64>, typename TCookie::TPtr> UncommittedOffsetToCookie; // (Partition stream id, Offset) -> Cookie.
-        THashMultiMap<ui64, typename TCookie::TPtr> PartitionStreamIdToCookie;
+        THashMap<typename TCookie::TKey, TCookiePtr, typename TCookie::TKey::THash> Cookies;
+        THashMap<std::pair<ui64, ui64>, TCookiePtr> UncommittedOffsetToCookie; // (Partition stream id, Offset) -> Cookie.
+        THashMultiMap<ui64, TCookiePtr> PartitionStreamIdToCookie;
         size_t CommitInflight = 0; // Commit inflight to server.
     };
 

@@ -66,11 +66,8 @@ void TReadSession::Start() {
 void TReadSession::CreateClusterSessionsImpl(TDeferredActions<false>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
-    // Create cluster sessions.
-    LOG_LAZY(Log,
-        TLOG_DEBUG,
-        GetLogPrefix() << "Starting single session"
-    );
+    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Starting single session");
+
     auto context = Client->CreateContext();
     if (!context) {
         AbortImpl(EStatus::ABORTED, DRIVER_IS_STOPPING_DESCRIPTION, deferred);
@@ -81,13 +78,13 @@ void TReadSession::CreateClusterSessionsImpl(TDeferredActions<false>& deferred) 
         Settings,
         DbDriverState->Database,
         SessionId,
-        "",
+        "",  // clusterName
         Log,
         Client->CreateReadSessionConnectionProcessorFactory(),
         EventsQueue,
         context,
-        1,
-        1
+        1,  // partitionStreamIdStart
+        1   // partitionStreamIdStep
     );
 
     deferred.DeferStartSession(CbContext);
@@ -197,33 +194,25 @@ void TReadSession::UpdateOffsets(const NTable::TTransaction& tx)
     const TString& sessionId = tx.GetSession().GetId();
     const TString& txId = tx.GetId();
 
-    auto p = OffsetRanges.find(std::make_pair(sessionId, txId));
-    if (p == OffsetRanges.end()) {
+    auto it = OffsetRanges.find(std::make_pair(sessionId, txId));
+    if (it == OffsetRanges.end()) {
         return;
     }
 
+    // TODO(qyryq) Why do we need to build TVector<TTopicOffsets> here?
+    //             Can we pass it->second (TOffsetRanges) by reference to UpdateOffsetsInTransaction?
     TVector<TTopicOffsets> topics;
-    for (auto& [path, partitions] : p->second) {
-        TTopicOffsets topic;
+    topics.reserve(it->second.size());
+    for (auto const& [path, partitions] : it->second) {
+        auto& topic = topics.emplace_back();
         topic.Path = path;
-
-        topics.push_back(std::move(topic));
-
-        for (auto& [id, ranges] : partitions) {
-            TPartitionOffsets partition;
+        topic.Partitions.reserve(partitions.size());
+        for (auto const& [id, ranges] : partitions) {
+            auto& partition = topic.Partitions.emplace_back();
             partition.PartitionId = id;
-
-            TTopicOffsets& t = topics.back();
-            t.Partitions.push_back(std::move(partition));
-
-            for (auto& range : ranges) {
-                TPartitionOffsets& p = t.Partitions.back();
-
-                TOffsetsRange r;
-                r.Start = range.first;
-                r.End = range.second;
-
-                p.Offsets.push_back(r);
+            partition.Offsets.reserve(ranges.GetNumIntervals());
+            for (auto const& [start, end] : ranges) {
+                partition.Offsets.emplace_back(start, end);
             }
         }
     }
@@ -240,7 +229,7 @@ void TReadSession::UpdateOffsets(const NTable::TTransaction& tx)
         ythrow yexception() << "error on update offsets: " << result;
     }
 
-    OffsetRanges.erase(std::make_pair(sessionId, txId));
+    OffsetRanges.erase(it);
 }
 
 bool TReadSession::Close(TDuration timeout) {
@@ -275,6 +264,7 @@ bool TReadSession::Close(TDuration timeout) {
     }
     session->Close(callback);
 
+    // TODO(qyryq) Delete the next line? The only session we have must be non-empty at this point. Remnants of ydb_persqueue.
     callback(); // For the case when there are no subsessions yet.
 
     auto timeoutCallback = [=](bool) mutable {

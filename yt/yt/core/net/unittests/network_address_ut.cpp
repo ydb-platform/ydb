@@ -207,6 +207,23 @@ TEST(TIP6AddressTest, CanonicalText)
     }
 }
 
+TEST(TIP6AddressTest, Constructors)
+{
+    {
+        auto address = TIP6Address::FromString("0:0:0:0:0:0:0:3");
+        auto mask = TIP6Address::FromString("ffff:ffff:ffff:ffff:ffff:ffff:ffff:0000");
+        TIP6Network network(address, mask);
+        EXPECT_EQ(network.GetAddress(), address);
+        EXPECT_EQ(network.GetMask(), mask);
+    }
+
+    {
+        auto address = TIP6Address::FromString("0:0:0:0:0:0:0:3");
+        auto mask = TIP6Address::FromString("ffff:ffff:ffff:ffff:ffff:ffff:0000:ffff");
+        EXPECT_THROW(TIP6Network(address, mask), TErrorException);
+    }
+}
+
 TEST(TIP6AddressTest, NetworkMask)
 {
     using TTestCase = std::tuple<const char*, std::array<ui16, 8>, int>;
@@ -222,6 +239,12 @@ TEST(TIP6AddressTest, NetworkMask)
         EXPECT_EQ(AddressToWords(network.GetMask()), std::get<1>(testCase));
         EXPECT_EQ(network.GetMaskSize(), std::get<2>(testCase));
         EXPECT_EQ(ToString(network), std::get<0>(testCase));
+
+        auto networkAsString = ToString(network);
+        auto networkFromSerializedString = TIP6Network::FromString(networkAsString);
+        EXPECT_EQ(AddressToWords(networkFromSerializedString.GetMask()), std::get<1>(testCase));
+        EXPECT_EQ(networkFromSerializedString.GetMaskSize(), std::get<2>(testCase));
+        EXPECT_EQ(ToString(networkFromSerializedString), std::get<0>(testCase));
     }
 
     EXPECT_THROW(TIP6Network::FromString("::/129"), TErrorException);
@@ -249,7 +272,13 @@ TEST(TIP6AddressTest, ProjectId)
         auto testAddress = TIP6Address::FromString(std::get<1>(testCase));
         EXPECT_EQ(AddressToWords(network.GetAddress()), std::get<2>(testCase));
         EXPECT_EQ(AddressToWords(network.GetMask()), std::get<3>(testCase));
-        EXPECT_TRUE(network.Contains(testAddress) );
+        EXPECT_TRUE(network.Contains(testAddress));
+
+        auto networkAsString = ToString(network);
+        auto networkFromSerializedString = TIP6Network::FromString(networkAsString);
+        EXPECT_EQ(AddressToWords(networkFromSerializedString.GetAddress()), std::get<2>(testCase));
+        EXPECT_EQ(AddressToWords(networkFromSerializedString.GetMask()), std::get<3>(testCase));
+        EXPECT_TRUE(networkFromSerializedString.Contains(testAddress));
     }
 
     EXPECT_THROW(TIP6Network::FromString("@1::1"), TErrorException);

@@ -3548,17 +3548,18 @@ void TExecutor::UpdateUsedTabletMemory() {
     UsedTabletMemory = 0;
     // Estimate memory usage for internal executor structures.
     UsedTabletMemory += 50 << 10; // 50kb
-    // Count the number of bytes exclusive to private cache.
-    if (PrivatePageCache) {
-        UsedTabletMemory += PrivatePageCache->GetStats().TotalExclusive;
-    }
+
     // Estimate memory used by database structures.
     auto &counters = Database->Counters();
     UsedTabletMemory += counters.MemTableWaste;
     UsedTabletMemory += counters.MemTableBytes;
-    UsedTabletMemory += counters.Parts.IndexBytes;
-    UsedTabletMemory += counters.Parts.OtherBytes;
-    UsedTabletMemory += counters.Parts.ByKeyBytes;
+
+    if (PrivatePageCache) {
+        UsedTabletMemory += PrivatePageCache->GetStats().TotalExclusive;
+        UsedTabletMemory += PrivatePageCache->GetStats().TotalSharedBody;
+        UsedTabletMemory += PrivatePageCache->GetStats().PinnedLoadSize;
+    }
+    
     UsedTabletMemory += Stats->PacksMetaBytes;
 
     // Add tablet memory usage.
@@ -3664,11 +3665,8 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
 
                 ResourceMetrics->StorageSystem.Set(storageSize);
 
-                auto limit = Memory->Profile->GetStaticTabletTxMemoryLimit();
-                auto memorySize = limit ? (UsedTabletMemory + limit) : (UsedTabletMemory + memory.Static);
-                ResourceMetrics->Memory.Set(memorySize);
+                ResourceMetrics->Memory.Set(UsedTabletMemory);
                 Counters->Simple()[TExecutorCounters::CONSUMED_STORAGE].Set(storageSize);
-                Counters->Simple()[TExecutorCounters::CONSUMED_MEMORY].Set(memorySize);
             }
         }
 

@@ -6709,4 +6709,15 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["userschema"]);
     }
+
+    Y_UNIT_TEST(UseViewAndFullColumnId) {
+        NYql::TAstParseResult res = SqlToYql("USE plato; SELECT Input.x FROM Input VIEW uitzicht;");
+        UNIT_ASSERT(res.Root);
+
+        TWordCountHive elementStat = {{TString("SqlAccess"), 0}, {"SqlProjectItem", 0}, {"Read!", 0}};
+        VerifyProgram(res, elementStat);
+        UNIT_ASSERT_VALUES_EQUAL(0, elementStat["SqlAccess"]);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["SqlProjectItem"]);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Read!"]);
+    }
 }

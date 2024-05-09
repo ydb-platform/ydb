@@ -11,10 +11,8 @@
 
 namespace NYql::NDq {
 
-struct TS3ReadActorFactoryConfig;
-
 NActors::IActor* CreateS3FileQueueActor(
-        TTxId txId,
+        TTxId  txId,
         NS3Details::TPathList paths,
         size_t prefetchSize,
         ui64 fileSizeLimit,
@@ -29,24 +27,5 @@ NActors::IActor* CreateS3FileQueueActor(
         TString pattern,
         NYql::NS3Lister::ES3PatternVariant patternVariant,
         NS3Lister::ES3PatternType patternType);
-
-std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateS3ReadActor(
-    const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
-    const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    IHTTPGateway::TPtr gateway,
-    NS3::TSource&& params,
-    ui64 inputIndex,
-    TCollectStatsLevel statsLevel,
-    const TTxId& txId,
-    const THashMap<TString, TString>& secureParams,
-    const THashMap<TString, TString>& taskParams,
-    const TVector<TString>& readRanges,
-    const NActors::TActorId& computeActorId,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-    const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
-    const TS3ReadActorFactoryConfig& cfg,
-    ::NMonitoring::TDynamicCounterPtr counters,
-    ::NMonitoring::TDynamicCounterPtr taskCounters,
-    IMemoryQuotaManager::TPtr memoryQuotaManager);
 
 } // namespace NYql::NDq

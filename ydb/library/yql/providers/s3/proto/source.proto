@@ -15,11 +15,13 @@ message TSource {
     optional string RowType = 4;
     optional string Format = 5;
     map<string, string> Settings = 6;
-    reserved 7;
+    bool Arrow = 7;
     reserved 8;
     uint64 ParallelRowGroupCount = 9;
     bool RowGroupReordering = 10;
     uint64 ParallelDownloadCount = 11;
     uint64 RowsLimitHint = 12;
     bool UseRuntimeListing = 13;
+    bool AsyncDecoding = 14;
+    bool SourceCoroActor = 15;
 }

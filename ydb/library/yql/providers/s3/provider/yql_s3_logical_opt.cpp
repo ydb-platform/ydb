@@ -518,7 +518,8 @@ public:
         }
 
         auto formatName = parseSettings.Format().StringValue();
-        if (outputRowDataItems.size() == 0 && readRowDataItems.size() != 0 && formatName != "parquet") {
+        if (outputRowDataItems.size() == 0 && readRowDataItems.size() != 0 && formatName != "parquet"
+            && (formatName != "json_each_row" || !FromString<bool>(parseSettings.Arrow().StringValue())) ) {
             const TStructExprType* readRowDataType = ctx.MakeType<TStructExprType>(readRowDataItems);
             auto item = GetLightColumn(*readRowDataType);
             YQL_ENSURE(item);

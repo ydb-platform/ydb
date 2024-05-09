@@ -276,7 +276,15 @@ public:
             }
 
             auto format = s3ReadObject.Object().Format().Ref().Content();
-            if (const auto useCoro = State_->Configuration->SourceCoroActor.Get(); (!useCoro || *useCoro) && format != "raw" && format != "json_list") {
+            if (format != "raw" && format != "json_list") {
+
+                auto arrow = false;
+                if (format == "parquet") {
+                    arrow = true;
+                } else if (format == "json_each_row") {
+                    arrow = State_->Configuration->UseBlocksSource.Get().GetOrElse(false);
+                }
+
                 return Build<TDqSourceWrap>(ctx, read->Pos())
                     .Input<TS3ParseSettings>()
                         .Paths(s3ReadObject.Object().Paths())
@@ -285,6 +293,7 @@ public:
                         .Build()
                         .RowsLimitHint(ctx.NewAtom(read->Pos(), ""))
                         .Format(s3ReadObject.Object().Format())
+                        .Arrow(ctx.NewAtom(read->Pos(), ToString(arrow)))
                         .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
                         .Settings(s3ReadObject.Object().Settings())
                         .Build()
@@ -369,6 +378,7 @@ public:
             if (const auto mayParseSettings = settings.Maybe<TS3ParseSettings>()) {
                 const auto parseSettings = mayParseSettings.Cast();
                 srcDesc.SetFormat(parseSettings.Format().StringValue().c_str());
+                srcDesc.SetArrow(FromString<bool>(parseSettings.Arrow().StringValue()));
                 srcDesc.SetParallelRowGroupCount(State_->Configuration->ArrowParallelRowGroupCount.Get().GetOrElse(0));
                 srcDesc.SetRowGroupReordering(State_->Configuration->ArrowRowGroupReordering.Get().GetOrElse(true));
                 srcDesc.SetParallelDownloadCount(State_->Configuration->ParallelDownloadCount.Get().GetOrElse(0));
@@ -417,6 +427,9 @@ public:
             if (extraColumnsType->GetSize()) {
                 srcDesc.MutableSettings()->insert({"addPathIndex", "true"});
             }
+
+            srcDesc.SetAsyncDecoding(State_->Configuration->AsyncDecoding.Get().GetOrElse(false));
+            srcDesc.SetSourceCoroActor(State_->Configuration->SourceCoroActor.Get().GetOrElse(true));
 
 #if defined(_linux_) || defined(_darwin_)
 

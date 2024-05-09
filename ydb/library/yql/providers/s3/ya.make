@@ -3,7 +3,9 @@ RECURSE(
     common
     compressors
     credentials
+    events
     expr_nodes
+    json
     object_listers
     path_generator
     provider

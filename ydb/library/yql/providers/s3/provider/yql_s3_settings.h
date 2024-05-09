@@ -20,7 +20,7 @@ struct TS3Settings {
     NCommon::TConfSetting<ui64, false> ArrowParallelRowGroupCount; // Number of parquet row groups to read in parallel, min == 1
     NCommon::TConfSetting<bool, false> ArrowRowGroupReordering;    // Allow to push rows from file in any order, default false, but usually it is OK
     NCommon::TConfSetting<ui64, false> ParallelDownloadCount;      // Number of files to read in parallel, min == 1
-    NCommon::TConfSetting<bool, false> UseBlocksSource;            // Deprecated and has to be removed after config cleanup
+    NCommon::TConfSetting<bool, false> UseBlocksSource;            // Define read mode for json_each_row format
     NCommon::TConfSetting<bool, false> AtomicUploadCommit;         // Commit each file independently, w/o transaction semantic over all files
     NCommon::TConfSetting<bool, false> UseConcurrentDirectoryLister;
     NCommon::TConfSetting<ui64, false> MaxDiscoveryFilesPerDirectory;
@@ -28,6 +28,7 @@ struct TS3Settings {
     NCommon::TConfSetting<ui64, false> FileQueueBatchSizeLimit; // Limits total size of files in one PathBatch from FileQueue
     NCommon::TConfSetting<ui64, false> FileQueueBatchObjectCountLimit; // Limits count of files in one PathBatch from FileQueue
     NCommon::TConfSetting<ui64, false> FileQueuePrefetchSize;
+    NCommon::TConfSetting<bool, false> AsyncDecoding;  // Parse and decode input data at separate mailbox/thread of TaskRunner
 };
 
 struct TS3ClusterSettings {

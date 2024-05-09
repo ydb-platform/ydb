@@ -9,6 +9,10 @@ ADDINCL(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    parquet_cache.cpp
+    raw_read_actor.cpp
+    read_json_each_row.cpp
+    read_parquet.cpp
     yql_s3_actors_util.cpp
     yql_s3_applicator_actor.cpp
     yql_s3_sink_factory.cpp
@@ -18,6 +22,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/fmt
+    contrib/libs/apache/arrow
     contrib/libs/poco/Util
     ydb/library/actors/http
     library/cpp/protobuf/util
@@ -36,6 +41,8 @@ PEERDIR(
     ydb/library/yql/providers/s3/common
     ydb/library/yql/providers/s3/compressors
     ydb/library/yql/providers/s3/credentials
+    ydb/library/yql/providers/s3/events
+    ydb/library/yql/providers/s3/json
     ydb/library/yql/providers/s3/object_listers
     ydb/library/yql/providers/s3/proto
     ydb/library/yql/providers/s3/range_helpers
@@ -47,6 +54,7 @@ PEERDIR(
 IF (CLANG AND NOT WITH_VALGRIND)
 
     SRCS(
+        source_queue.cpp
         yql_arrow_column_converters.cpp
         yql_s3_read_actor.cpp
     )

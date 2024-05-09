@@ -65,8 +65,9 @@
             "Match": {"Type": "Callable", "Name": "S3ParseSettings"},
             "Children": [
                 {"Index": 3, "Name": "Format", "Type": "TCoAtom"},
-                {"Index": 4, "Name": "RowType", "Type": "TExprBase"},
-                {"Index": 5, "Name": "Settings", "Type": "TExprBase", "Optional": true}
+                {"Index": 4, "Name": "Arrow", "Type": "TCoAtom"},
+                {"Index": 5, "Name": "RowType", "Type": "TExprBase"},
+                {"Index": 6, "Name": "Settings", "Type": "TExprBase", "Optional": true}
             ]
         },
         {

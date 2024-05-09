@@ -48,6 +48,7 @@ PEERDIR(
 IF (CLANG AND NOT WITH_VALGRIND)
 
     SRCS(
+        source_queue.cpp
         yql_arrow_column_converters.cpp
         yql_s3_read_actor.cpp
     )

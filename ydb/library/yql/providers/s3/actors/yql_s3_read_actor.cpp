@@ -36,6 +36,8 @@
 
 #endif
 
+#include "source_queue.h"
+
 #include "yql_arrow_column_converters.h"
 #include "yql_s3_actors_util.h"
 #include "yql_s3_read_actor.h"
@@ -147,502 +149,7 @@ struct TS3ReadError : public yexception {
     using yexception::yexception;
 };
 
-using NS3::FileQueue::TObjectPath;
-using NDqProto::TMessageTransportMeta;
-
 using namespace NKikimr::NMiniKQL;
-
-class TS3FileQueueActor : public TActorBootstrapped<TS3FileQueueActor> {
-public:
-    static constexpr char ActorName[] = "YQ_S3_FILE_QUEUE_ACTOR";
-
-    struct TEvPrivatePrivate {
-        enum {
-            EvBegin = TEvRetryQueuePrivate::EvEnd,  // Leave space for RetryQueue events
-
-            EvNextListingChunkReceived = EvBegin,
-            EvRoundRobinStageTimeout,
-            EvTransitToErrorState,
-
-            EvEnd
-        };
-        static_assert(
-            EvEnd <= EventSpaceEnd(TEvents::ES_PRIVATE),
-            "expected EvEnd <= EventSpaceEnd(TEvents::ES_PRIVATE)");
-
-        struct TEvNextListingChunkReceived : public TEventLocal<TEvNextListingChunkReceived, EvNextListingChunkReceived> {
-            NS3Lister::TListResult ListingResult;
-            TEvNextListingChunkReceived(NS3Lister::TListResult listingResult)
-                : ListingResult(std::move(listingResult)){};
-        };
-
-        struct TEvRoundRobinStageTimeout : public TEventLocal<TEvRoundRobinStageTimeout, EvRoundRobinStageTimeout> {
-        };
-
-        struct TEvTransitToErrorState : public TEventLocal<TEvTransitToErrorState, EvTransitToErrorState> {
-            explicit TEvTransitToErrorState(TIssues&& issues)
-                : Issues(issues) {
-            }
-            TIssues Issues;
-        };
-    };
-    using TBase = TActorBootstrapped<TS3FileQueueActor>;
-
-    TS3FileQueueActor(
-        TTxId  txId,
-        TPathList paths,
-        size_t prefetchSize,
-        ui64 fileSizeLimit,
-        bool useRuntimeListing,
-        ui64 consumersCount,
-        ui64 batchSizeLimit,
-        ui64 batchObjectCountLimit,
-        IHTTPGateway::TPtr gateway,
-        TString url,
-        TS3Credentials::TAuthInfo authInfo,
-        TString pattern,
-        ES3PatternVariant patternVariant,
-        ES3PatternType patternType)
-        : TxId(std::move(txId))
-        , PrefetchSize(prefetchSize)
-        , FileSizeLimit(fileSizeLimit)
-        , MaybeIssues(Nothing())
-        , UseRuntimeListing(useRuntimeListing)
-        , ConsumersCount(consumersCount)
-        , BatchSizeLimit(batchSizeLimit)
-        , BatchObjectCountLimit(batchObjectCountLimit)
-        , Gateway(std::move(gateway))
-        , Url(std::move(url))
-        , AuthInfo(std::move(authInfo))
-        , Pattern(std::move(pattern))
-        , PatternVariant(patternVariant)
-        , PatternType(patternType) {
-        for (size_t i = 0; i < paths.size(); ++i) {
-            TObjectPath object;
-            object.SetPath(paths[i].Path);
-            object.SetPathIndex(paths[i].PathIndex);
-            if (paths[i].IsDirectory) {
-                object.SetSize(0);
-                Directories.emplace_back(std::move(object));
-            } else {
-                object.SetSize(paths[i].Size);
-                Objects.emplace_back(std::move(object));
-            }
-        }
-    }
-
-    void Bootstrap() {
-        if (UseRuntimeListing) {
-            Schedule(PoisonTimeout, new TEvents::TEvPoison());
-        }
-        if (Directories.empty()) {
-            LOG_I("TS3FileQueueActor", "Bootstrap there is no directories to list, consumersCount=" << ConsumersCount);
-            Become(&TS3FileQueueActor::NoMoreDirectoriesState);
-        } else {
-            LOG_I("TS3FileQueueActor", "Bootstrap there are directories to list, consumersCount=" << ConsumersCount);
-            TryPreFetch();
-            Become(&TS3FileQueueActor::ThereAreDirectoriesToListState);
-        }
-    }
-
-    STATEFN(ThereAreDirectoriesToListState) {
-        try {
-            switch (const auto etype = ev->GetTypeRewrite()) {
-                hFunc(TEvS3Provider::TEvUpdateConsumersCount, HandleUpdateConsumersCount);
-                hFunc(TEvS3Provider::TEvGetNextBatch, HandleGetNextBatch);
-                hFunc(TEvPrivatePrivate::TEvNextListingChunkReceived, HandleNextListingChunkReceived);
-                cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleRoundRobinStageTimeout);
-                hFunc(TEvPrivatePrivate::TEvTransitToErrorState, HandleTransitToErrorState);
-                cFunc(TEvents::TSystem::Poison, HandlePoison);
-                default:
-                    MaybeIssues = TIssues{TIssue{TStringBuilder() << "An event with unknown type has been received: '" << etype << "'"}};
-                    TransitToErrorState();
-                    break;
-            }
-        } catch (const std::exception& e) {
-            MaybeIssues = TIssues{TIssue{TStringBuilder() << "An unknown exception has occurred: '" << e.what() << "'"}};
-            TransitToErrorState();
-        }
-    }
-
-    void HandleGetNextBatch(TEvS3Provider::TEvGetNextBatch::TPtr& ev) {
-        if (HasEnoughToSend()) {
-            LOG_D("TS3FileQueueActor", "HandleGetNextBatch sending right away");
-            TrySendObjects(ev->Sender, ev->Get()->Record.GetTransportMeta());
-            TryPreFetch();
-        } else {
-            LOG_D("TS3FileQueueActor", "HandleGetNextBatch have not enough objects cached. Start fetching");
-            ScheduleRequest(ev->Sender, ev->Get()->Record.GetTransportMeta());
-            TryFetch();
-        }
-    }
-
-    void HandleNextListingChunkReceived(TEvPrivatePrivate::TEvNextListingChunkReceived::TPtr& ev) {
-        Y_ENSURE(FetchingInProgress());
-        ListingFuture = Nothing();
-        LOG_D("TS3FileQueueActor", "HandleNextListingChunkReceived");
-        if (SaveRetrievedResults(ev->Get()->ListingResult)) {
-            AnswerPendingRequests(true);
-            if (!HasPendingRequests) {
-                LOG_D("TS3FileQueueActor", "HandleNextListingChunkReceived no pending requests. Trying to prefetch");
-                TryPreFetch();
-            } else {
-                LOG_D("TS3FileQueueActor", "HandleNextListingChunkReceived there are pending requests. Fetching more objects");
-                TryFetch();
-            }
-        } else {
-            TransitToErrorState();
-        }
-    }
-
-    void HandleTransitToErrorState(TEvPrivatePrivate::TEvTransitToErrorState::TPtr& ev) {
-        MaybeIssues = ev->Get()->Issues;
-        TransitToErrorState();
-    }
-
-    bool SaveRetrievedResults(const NS3Lister::TListResult& listingResult) {
-        LOG_T("TS3FileQueueActor", "SaveRetrievedResults");
-        if (std::holds_alternative<NS3Lister::TListError>(listingResult)) {
-            MaybeIssues = std::get<NS3Lister::TListError>(listingResult).Issues;
-            return false;
-        }
-
-        auto listingChunk = std::get<NS3Lister::TListEntries>(listingResult);
-        LOG_D("TS3FileQueueActor", "SaveRetrievedResults saving: " << listingChunk.Objects.size() << " entries");
-        Y_ENSURE(listingChunk.Directories.empty());
-        for (auto& object: listingChunk.Objects) {
-            if (object.Path.EndsWith('/')) {
-                // skip 'directories'
-                continue;
-            }
-            if (object.Size > FileSizeLimit) {
-                auto errorMessage = TStringBuilder()
-                                    << "Size of object " << object.Path << " = "
-                                    << object.Size
-                                    << " and exceeds limit = " << FileSizeLimit;
-                LOG_E("TS3FileQueueActor", errorMessage);
-                MaybeIssues = TIssues{TIssue{errorMessage}};
-                return false;
-            }
-            LOG_T("TS3FileQueueActor", "SaveRetrievedResults adding path: " << object.Path);
-            TObjectPath objectPath;
-            objectPath.SetPath(object.Path);
-            objectPath.SetSize(object.Size);
-            objectPath.SetPathIndex(CurrentDirectoryPathIndex);
-            Objects.emplace_back(std::move(objectPath));
-            ObjectsTotalSize += object.Size;
-        }
-        return true;
-    }
-
-    bool FetchingInProgress() const { return ListingFuture.Defined(); }
-
-    void TransitToNoMoreDirectoriesToListState() {
-        LOG_I("TS3FileQueueActor", "TransitToNoMoreDirectoriesToListState no more directories to list");
-        AnswerPendingRequests();
-        Become(&TS3FileQueueActor::NoMoreDirectoriesState);
-    }
-
-    void TransitToErrorState() {
-        Y_ENSURE(MaybeIssues.Defined());
-        LOG_I("TS3FileQueueActor", "TransitToErrorState an error occurred sending ");
-        AnswerPendingRequests();
-        Objects.clear();
-        Directories.clear();
-        Become(&TS3FileQueueActor::AnErrorOccurredState);
-    }
-
-    STATEFN(NoMoreDirectoriesState) {
-        try {
-            switch (const auto etype = ev->GetTypeRewrite()) {
-                hFunc(TEvS3Provider::TEvUpdateConsumersCount, HandleUpdateConsumersCount);
-                hFunc(TEvS3Provider::TEvGetNextBatch, HandleGetNextBatchForEmptyState);
-                cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleRoundRobinStageTimeout);
-                cFunc(TEvents::TSystem::Poison, HandlePoison);
-                default:
-                    MaybeIssues = TIssues{TIssue{TStringBuilder() << "An event with unknown type has been received: '" << etype << "'"}};
-                    TransitToErrorState();
-                    break;
-            }
-        } catch (const std::exception& e) {
-            MaybeIssues = TIssues{TIssue{TStringBuilder() << "An unknown exception has occurred: '" << e.what() << "'"}};
-            TransitToErrorState();
-        }
-    }
-
-    void HandleGetNextBatchForEmptyState(TEvS3Provider::TEvGetNextBatch::TPtr& ev) {
-        LOG_T(
-            "TS3FileQueueActor",
-            "HandleGetNextBatchForEmptyState Giving away rest of Objects");
-        TrySendObjects(ev->Sender, ev->Get()->Record.GetTransportMeta());
-    }
-
-    STATEFN(AnErrorOccurredState) {
-        try {
-            switch (const auto etype = ev->GetTypeRewrite()) {
-                hFunc(TEvS3Provider::TEvUpdateConsumersCount, HandleUpdateConsumersCount);
-                hFunc(TEvS3Provider::TEvGetNextBatch, HandleGetNextBatchForErrorState);
-                cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleRoundRobinStageTimeout);
-                cFunc(TEvents::TSystem::Poison, HandlePoison);
-                default:
-                    MaybeIssues = TIssues{TIssue{TStringBuilder() << "An event with unknown type has been received: '" << etype << "'"}};
-                    break;
-            }
-        } catch (const std::exception& e) {
-            MaybeIssues = TIssues{TIssue{TStringBuilder() << "An unknown exception has occurred: '" << e.what() << "'"}};
-        }
-    }
-
-    void HandleGetNextBatchForErrorState(TEvS3Provider::TEvGetNextBatch::TPtr& ev) {
-        LOG_D(
-            "TS3FileQueueActor",
-            "HandleGetNextBatchForErrorState Giving away rest of Objects");
-        Send(ev->Sender, new TEvS3Provider::TEvObjectPathReadError(*MaybeIssues, ev->Get()->Record.GetTransportMeta()));
-        TryFinish(ev->Sender, ev->Get()->Record.GetTransportMeta().GetSeqNo());
-    }
-    
-    void HandleUpdateConsumersCount(TEvS3Provider::TEvUpdateConsumersCount::TPtr& ev) {
-        if (!UpdatedConsumers.contains(ev->Sender)) {
-            LOG_D(
-                "TS3FileQueueActor",
-                "HandleUpdateConsumersCount Reducing ConsumersCount by " << ev->Get()->Record.GetConsumersCountDelta() << ", recieved from " << ev->Sender);
-            UpdatedConsumers.insert(ev->Sender);
-            ConsumersCount -= ev->Get()->Record.GetConsumersCountDelta();
-        }
-        Send(ev->Sender, new TEvS3Provider::TEvAck(ev->Get()->Record.GetTransportMeta()));
-    }
-
-    void HandleRoundRobinStageTimeout() {
-        LOG_T("TS3FileQueueActor","Handle start stage timeout");
-        if (!RoundRobinStageFinished) {
-            RoundRobinStageFinished = true;
-            AnswerPendingRequests();
-        }
-    }
-
-    void HandlePoison() {
-        AnswerPendingRequests();
-        PassAway();
-    }
-
-    void PassAway() override {
-        LOG_D("TS3FileQueueActor", "PassAway");
-        TBase::PassAway();
-    }
-
-private:
-    void TrySendObjects(const TActorId& consumer, const NDqProto::TMessageTransportMeta& transportMeta) {
-        if (CanSendToConsumer(consumer)) {
-            SendObjects(consumer, transportMeta);
-        } else {
-            ScheduleRequest(consumer, transportMeta);
-        }
-    }
-
-    void SendObjects(const TActorId& consumer, const NDqProto::TMessageTransportMeta& transportMeta) {
-        Y_ENSURE(!MaybeIssues.Defined());
-        std::vector<TObjectPath> result;
-        if (Objects.size() > 0) {
-            size_t totalSize = 0;
-            do {
-                result.push_back(Objects.back());
-                Objects.pop_back();
-                totalSize += result.back().GetSize();
-            } while (Objects.size() > 0 && result.size() < BatchObjectCountLimit && totalSize < BatchSizeLimit);
-            ObjectsTotalSize -= totalSize;
-        }
-
-        LOG_T("TS3FileQueueActor", "SendObjects Sending " << result.size() << " objects to consumer with id " << consumer);
-        Send(consumer, new TEvS3Provider::TEvObjectPathBatch(std::move(result), HasNoMoreItems(), transportMeta));
-        
-        if (HasNoMoreItems()) {
-            TryFinish(consumer, transportMeta.GetSeqNo());
-        }
-
-        if (!RoundRobinStageFinished) {
-            if (StartedConsumers.empty()) {
-                Schedule(RoundRobinStageTimeout, new TEvPrivatePrivate::TEvRoundRobinStageTimeout());
-            }
-            StartedConsumers.insert(consumer);
-            if ((StartedConsumers.size() == ConsumersCount || HasNoMoreItems()) && !IsRoundRobinFinishScheduled) {
-                IsRoundRobinFinishScheduled = true;
-                Send(SelfId(), new TEvPrivatePrivate::TEvRoundRobinStageTimeout());
-            }
-        }
-    }
-
-    bool HasEnoughToSend() {
-        return Objects.size() >= BatchObjectCountLimit || ObjectsTotalSize >= BatchSizeLimit;
-    }
-
-    bool CanSendToConsumer(const TActorId& consumer) {
-        return !UseRuntimeListing || RoundRobinStageFinished || 
-               (StartedConsumers.size() < ConsumersCount && !StartedConsumers.contains(consumer));
-    }
-
-    bool HasNoMoreItems() const {
-        return !(MaybeLister.Defined() && (*MaybeLister)->HasNext()) &&
-               Directories.empty() && Objects.empty();
-    }
-
-    bool TryPreFetch() {
-        if (Objects.size() < PrefetchSize) {
-            return TryFetch();
-        }
-        return false;
-    }
-
-    bool TryFetch() {
-        if (FetchingInProgress()) {
-            LOG_D("TS3FileQueueActor", "TryFetch fetching already in progress");
-            return true;
-        }
-
-        if (MaybeLister.Defined() && (*MaybeLister)->HasNext()) {
-            LOG_D("TS3FileQueueActor", "TryFetch fetching from current lister");
-            Fetch();
-            return true;
-        }
-
-        if (!Directories.empty()) {
-            LOG_D("TS3FileQueueActor", "TryFetch fetching from new lister");
-
-            auto object = Directories.back();
-            Directories.pop_back();
-            CurrentDirectoryPathIndex = object.GetPathIndex();
-            MaybeLister = NS3Lister::MakeS3Lister(
-                Gateway,
-                NS3Lister::TListingRequest{
-                    Url,
-                    AuthInfo,
-                    PatternVariant == ES3PatternVariant::PathPattern
-                        ? Pattern
-                        : TStringBuilder{} << object.GetPath() << Pattern,
-                    PatternType,
-                    object.GetPath()},
-                Nothing(),
-                false);
-            Fetch();
-            return true;
-        }
-
-        LOG_D("TS3FileQueueActor", "TryFetch couldn't start fetching");
-        MaybeLister = Nothing();
-        TransitToNoMoreDirectoriesToListState();
-        return false;
-    }
-
-    void Fetch() {
-        Y_ENSURE(!ListingFuture.Defined());
-        Y_ENSURE(MaybeLister.Defined());
-        NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
-        ListingFuture =
-            (*MaybeLister)
-                ->Next()
-                .Subscribe([actorSystem, selfId = SelfId()](
-                               const NThreading::TFuture<NS3Lister::TListResult>& future) {
-                    try {
-                        actorSystem->Send(
-                            selfId,
-                            new TEvPrivatePrivate::TEvNextListingChunkReceived(
-                                future.GetValue()));
-                    } catch (const std::exception& e) {
-                        actorSystem->Send(
-                            selfId,
-                            new TEvPrivatePrivate::TEvTransitToErrorState(
-                                TIssues{TIssue{TStringBuilder() << "An unknown exception has occurred: '" << e.what() << "'"}}));
-                    }
-                });
-    }
-    
-    void ScheduleRequest(const TActorId& consumer, const TMessageTransportMeta& transportMeta) {
-        PendingRequests[consumer].push_back(transportMeta);
-        HasPendingRequests = true;
-    }
-
-    void AnswerPendingRequests(bool earlyStop = false) {
-        bool handledRequest = true;
-        while (HasPendingRequests && handledRequest) {
-            bool isEmpty = true;
-            handledRequest = false;
-            for (auto& [consumer, requests] : PendingRequests) {
-                if (!CanSendToConsumer(consumer) || (earlyStop && !HasEnoughToSend())) {
-                    if (!requests.empty()) {
-                        isEmpty = false;
-                    }
-                    continue;
-                }
-                if (!requests.empty()) {
-                    if (!MaybeIssues.Defined()) {
-                        SendObjects(consumer, requests.front());
-                    } else {
-                        Send(consumer, new TEvS3Provider::TEvObjectPathReadError(*MaybeIssues, requests.front()));
-                        TryFinish(consumer, requests.front().GetSeqNo());
-                    }
-                    requests.pop_front();
-                    handledRequest = true;
-                }
-                if (!requests.empty()) {
-                    isEmpty = false;
-                }
-            }
-            if (isEmpty) {
-                HasPendingRequests = false;
-            }
-        }
-    }
-    
-    void TryFinish(const TActorId& consumer, ui64 seqNo) {
-        LOG_T("TS3FileQueueActor", "TryFinish from consumer " << consumer << ", " << FinishedConsumers.size() << " consumers already finished, seqNo=" << seqNo);
-        if (FinishingConsumerToLastSeqNo.contains(consumer)) {
-            LOG_T("TS3FileQueueActor", "TryFinish FinishingConsumerToLastSeqNo=" << FinishingConsumerToLastSeqNo[consumer]);
-            if (FinishingConsumerToLastSeqNo[consumer] < seqNo || SelfId().NodeId() == consumer.NodeId()) {
-                FinishedConsumers.insert(consumer);
-                if (FinishedConsumers.size() == ConsumersCount) {
-                    PassAway();
-                }
-            }
-        } else {
-            FinishingConsumerToLastSeqNo[consumer] = seqNo;
-        }
-    }
-
-private:
-    const TTxId TxId;
-
-    std::vector<TObjectPath> Objects;
-    std::vector<TObjectPath> Directories;
-
-    size_t PrefetchSize;
-    ui64 FileSizeLimit;
-    TMaybe<NS3Lister::IS3Lister::TPtr> MaybeLister = Nothing();
-    TMaybe<NThreading::TFuture<NS3Lister::TListResult>> ListingFuture;
-    size_t CurrentDirectoryPathIndex = 0;
-    THashMap<TActorId, TDeque<TMessageTransportMeta>> PendingRequests;
-    TMaybe<TIssues> MaybeIssues;
-    bool UseRuntimeListing;
-    ui64 ConsumersCount;
-    ui64 BatchSizeLimit;
-    ui64 BatchObjectCountLimit;
-    ui64 ObjectsTotalSize = 0;
-    THashMap<TActorId, ui64> FinishingConsumerToLastSeqNo;
-    THashSet<TActorId> FinishedConsumers;
-    bool RoundRobinStageFinished = false;
-    bool IsRoundRobinFinishScheduled = false;
-    bool HasPendingRequests = false;
-    THashSet<TActorId> StartedConsumers;
-    THashSet<TActorId> UpdatedConsumers;
-
-    const IHTTPGateway::TPtr Gateway;
-    const TString Url;
-    const TS3Credentials::TAuthInfo AuthInfo;
-    const TString Pattern;
-    const ES3PatternVariant PatternVariant;
-    const ES3PatternType PatternType;
-    
-    static constexpr TDuration PoisonTimeout = TDuration::Hours(3);
-    static constexpr TDuration RoundRobinStageTimeout = TDuration::Seconds(3);
-};
 
 ui64 SubtractSaturating(ui64 lhs, ui64 rhs) {
     return (lhs > rhs) ? lhs - rhs : 0;
@@ -714,7 +221,7 @@ public:
 
     void Bootstrap() {
         if (!UseRuntimeListing) {
-            FileQueueActor = RegisterWithSameMailbox(new TS3FileQueueActor{
+            FileQueueActor = RegisterWithSameMailbox(CreateS3FileQueueActor(
                 TxId,
                 std::move(Paths),
                 ReadActorFactoryCfg.MaxInflight * 2,
@@ -728,7 +235,7 @@ public:
                 AuthInfo,
                 Pattern,
                 PatternVariant,
-                ES3PatternType::Wildcard});
+                ES3PatternType::Wildcard));
         }
 
         LOG_D("TS3ReadActor", "Bootstrap" << ", InputIndex: " << InputIndex << ", FileQueue: " << FileQueueActor << (UseRuntimeListing ? " (remote)" : " (local"));
@@ -787,7 +294,7 @@ public:
             RetryPolicy);
     }
 
-    TObjectPath ReadPathFromCache() {
+    NS3::FileQueue::TObjectPath ReadPathFromCache() {
         Y_ENSURE(!PathBatchQueue.empty());
         auto& currentBatch = PathBatchQueue.front();
         Y_ENSURE(!currentBatch.empty());
@@ -1105,7 +612,7 @@ private:
     bool IsWaitingFileQueueResponse = false;
     bool IsConfirmedFileQueueFinish = false;
     TRetryEventsQueue FileQueueEvents;
-    TDeque<TVector<TObjectPath>> PathBatchQueue;
+    TDeque<TVector<NS3::FileQueue::TObjectPath>> PathBatchQueue;
 };
 
 struct TReadSpec {
@@ -2280,7 +1787,7 @@ public:
             DecodedChunkSizeHist);
 
         if (!UseRuntimeListing) {
-            FileQueueActor = RegisterWithSameMailbox(new TS3FileQueueActor{
+            FileQueueActor = RegisterWithSameMailbox(CreateS3FileQueueActor(
                 TxId,
                 std::move(Paths),
                 ReadActorFactoryCfg.MaxInflight * 2,
@@ -2294,7 +1801,7 @@ public:
                 AuthInfo,
                 Pattern,
                 PatternVariant,
-                ES3PatternType::Wildcard});
+                ES3PatternType::Wildcard));
         }
         FileQueueEvents.Init(TxId, SelfId(), SelfId());
         FileQueueEvents.OnNewRecipientId(FileQueueActor);
@@ -2388,7 +1895,7 @@ public:
         RetryStuffForFile.emplace(coroActorId, stuff);
     }
 
-    TObjectPath ReadPathFromCache() {
+    NS3::FileQueue::TObjectPath ReadPathFromCache() {
         Y_ENSURE(!PathBatchQueue.empty());
         auto& currentBatch = PathBatchQueue.front();
         Y_ENSURE(!currentBatch.empty());
@@ -2810,7 +2317,7 @@ private:
     bool IsWaitingFileQueueResponse = false;
     bool IsConfirmedFileQueueFinish = false;
     TRetryEventsQueue FileQueueEvents;
-    TDeque<TVector<TObjectPath>> PathBatchQueue;
+    TDeque<TVector<NS3::FileQueue::TObjectPath>> PathBatchQueue;
 };
 
 using namespace NKikimr::NMiniKQL;
@@ -2950,41 +2457,6 @@ NDB::FormatSettings::TimestampFormat ToTimestampFormat(const TString& formatName
 
 
 } // namespace
-
-using namespace NKikimr::NMiniKQL;
-
-IActor* CreateS3FileQueueActor(
-        TTxId  txId,
-        TPathList paths,
-        size_t prefetchSize,
-        ui64 fileSizeLimit,
-        bool useRuntimeListing,
-        ui64 consumersCount,
-        ui64 batchSizeLimit,
-        ui64 batchObjectCountLimit,
-        IHTTPGateway::TPtr gateway,
-        TString url,
-        TS3Credentials::TAuthInfo authInfo,
-        TString pattern,
-        ES3PatternVariant patternVariant,
-        ES3PatternType patternType) {
-    return new TS3FileQueueActor(
-        txId,
-        paths,
-        prefetchSize,
-        fileSizeLimit,
-        useRuntimeListing,
-        consumersCount,
-        batchSizeLimit,
-        batchObjectCountLimit,
-        gateway,
-        url,
-        authInfo,
-        pattern,
-        patternVariant,
-        patternType
-    );
-}
 
 std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     const TTypeEnvironment& typeEnv,

@@ -1,34 +1,24 @@
 name: Run tests (ya make)
-description: Run tests using ya make
+description: Run test targets listed in repository root ya.make (to be created previously)
 inputs:
   build_target:
-    required: false
-    description: "build target"
-
+    required: true
   build_preset:
     required: true
     default: "relwithdebinfo"
     description: "relwithdebinfo, release-asan, release-tsan"
-  
   test_size:
     required: false
     default: "small,medium,large"
     description: "small or small-medium or all"
-  
-  test_type:
-    required: false
-    default: "unittest,py3test,py2test,pytest"
-    description: "run "
-  
   test_threads:
     required: false
-    default: "28"
+    default: "56"
     description: "Test threads count"
   link_threads:
     required: false
-    default: "8"
+    default: "12"
     description: "link threads count"
-
   testman_token:
     required: false
     description: "test manager auth token"
@@ -38,15 +28,6 @@ inputs:
   testman_project_id:
     required: false
     description: "test manager project id"
-  bazel_remote_uri:
-    required: false
-    description: "bazel-remote endpoint"
-  bazel_remote_username:
-    required: false
-    description: "bazel-remote username"
-  bazel_remote_password:
-    required: false
-    description: "bazel-remote password"
 runs:
   using: "composite"
   steps:
@@ -54,7 +35,6 @@ runs:
       id: init
       shell: bash
       run: |
-        echo "SHELLOPTS=xtrace" >> $GITHUB_ENV
         export TMP_DIR=$(pwd)/tmp
         echo "TMP_DIR=$TMP_DIR" >> $GITHUB_ENV
         echo "LOG_DIR=$TMP_DIR/logs" >> $GITHUB_ENV
@@ -73,6 +53,7 @@ runs:
     - name: prepare
       shell: bash
       run: |
+        set -x
         rm -rf $TMP_DIR $JUNIT_REPORT_XML $JUNIT_REPORT_PARTS $REPORTS_ARTIFACTS_DIR
         mkdir -p $TMP_DIR $OUT_DIR $ARTIFACTS_DIR $TEST_ARTIFACTS_DIR $LOG_DIR $JUNIT_REPORT_PARTS $REPORTS_ARTIFACTS_DIR
     
@@ -92,6 +73,7 @@ runs:
       env:
         PR_NUMBER: ${{ github.event.number }}
       run: |
+        set -x
         RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
         BRANCH_TAG="$GITHUB_REF_NAME"
         ARCH="${{ runner.arch == 'X64' && 'x86-64' || runner.arch == 'ARM64' && 'arm64' || 'unknown' }}"
@@ -160,14 +142,14 @@ runs:
     - name: ya test
       shell: bash
       run: |
+        set -x
         readarray -d ',' -t test_size < <(printf "%s" "${{ inputs.test_size }}")
-        readarray -d ',' -t test_type < <(printf "%s" "${{ inputs.test_type }}")
 
         params=(
-          -T -k -D'BUILD_LANGUAGES=CPP PY3 PY2 GO'
-          ${test_size[@]/#/--test-size=} ${test_type[@]/#/--test-type=}
+          -T -k
+          ${test_size[@]/#/--test-size=}
           --cache-size 512G --do-not-output-stderrs
-          --stat --canonization-backend=ydb-canondata.storage.yandexcloud.net
+          --stat
           --test-threads "${{ inputs.test_threads }}" --link-threads "${{ inputs.link_threads }}"
         )
         
@@ -203,36 +185,14 @@ runs:
             ;;
         esac
         
-        if [ ! -z "${{ inputs.build_target }}" ]; then
-          params+=(--target="${{ inputs.build_target }}")
-        fi
-
-        if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
-          params+=(--bazel-remote-store)
-          params+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
-        fi
-        
         echo "::debug::get version"
         ./ya --version
         
         echo "Tests are running..." | .github/scripts/tests/comment-pr.py
-        
-        if [ ! -z "${{ inputs.bazel_remote_username }}" ]; then
-          echo "::debug::start tests"
 
-          ./ya test "${params[@]}" \
-            --bazel-remote-put --bazel-remote-username "${{ inputs.bazel_remote_username }}" --bazel-remote-password "${{ inputs.bazel_remote_password }}" -DCONSISTENT_DEBUG \
-            --log-file "$LOG_DIR/ya_log_prewarm.txt" --evlog-file "$LOG_DIR/ya_evlog_prewarm.jsonl" \
-            --dist-cache-evict-bins --cache-tests --no-dir-outputs --test-node-output-limit 1000000 --drop-graph-result-before-tests || (
-              RC=$?
-              echo "::debug::ya test RC=$RC"
-            )
-        fi
-        
-        echo "::debug::save tests reports"
-        ./ya test "${params[@]}" \
+        ./ya test ${{ inputs.build_target }} "${params[@]}" \
           --stat --log-file "$LOG_DIR/ya_log.txt" --evlog-file "$LOG_DIR/ya_evlog.jsonl" -DCONSISTENT_DEBUG \
-          --cache-tests --dist-cache-evict-bins --no-dir-outputs --test-node-output-limit 1000000 --drop-graph-result-before-tests \
+          --no-dir-outputs \
           --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR" || (
             RC=$?
             if [ $RC -ne 0 ]; then
@@ -256,6 +216,7 @@ runs:
     - name: postprocess junit report
       shell: bash
       run: |
+        set -x
         .github/scripts/tests/transform-ya-junit.py -i \
           -m .github/config/muted_ya.txt \
           --ya-out "$OUT_DIR" \
@@ -276,6 +237,7 @@ runs:
       if: inputs.testman_token
       shell: bash
       run: |
+        set -x
         PROXY_ADDR=127.0.0.1:8888
 
         openssl req -x509 -newkey rsa:2048 \
@@ -307,6 +269,7 @@ runs:
       shell: bash
       if: always()
       run: |
+        set -x
         mkdir $ARTIFACTS_DIR/summary/
         
         cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))' >> $GITHUB_STEP_SUMMARY
@@ -322,6 +285,7 @@ runs:
       if: always()
       shell: bash
       run: |
+        set -x
         echo "::group::s3-sync"
         s3cmd sync -r --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$ARTIFACTS_DIR/" "$S3_BUCKET_PATH/"
         s3cmd sync -r --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$TEST_ARTIFACTS_DIR/" "$S3_TEST_ARTIFACTS_BUCKET_PATH/"
@@ -331,6 +295,7 @@ runs:
       if: always()
       shell: bash
       run: |
+        set -x
         echo "::group::s3-sync"
         s3cmd sync --follow-symlinks --acl-private --no-progress --stats --no-check-md5 "$LOG_DIR/" "$S3_BUCKET_PATH/test_logs/"
         echo "::endgroup::"

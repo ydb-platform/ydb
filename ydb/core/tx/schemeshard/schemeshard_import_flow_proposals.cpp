@@ -72,6 +72,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
                 if (fromSequence.has_cycle()) {
                     seqDesc->SetCycle(fromSequence.cycle());
                 }
+                if (fromSequence.has_set_val()) {
+                    auto* setVal = seqDesc->MutableSetVal();
+                    setVal->SetNextUsed(fromSequence.set_val().next_used());
+                    setVal->SetNextValue(fromSequence.set_val().next_value());
+                }
 
                 break;
             }

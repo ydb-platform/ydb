@@ -119,6 +119,7 @@ namespace NSchemeShardUT_Private {
     TEvTx* CombineSchemeTransactions(const TVector<TEvTx*>& transactions);
     void AsyncSend(TTestActorRuntime &runtime, ui64 targetTabletId,
         IEventBase *ev, ui32 nodeIndex = 0, TActorId sender = TActorId());
+    TEvTx* InternalTransaction(TEvTx* tx);
 
     ////////// generic
 
@@ -213,12 +214,16 @@ namespace NSchemeShardUT_Private {
     // sequence
     GENERIC_HELPERS(CreateSequence);
     GENERIC_HELPERS(DropSequence);
+    GENERIC_HELPERS(AlterSequence);
     DROP_BY_PATH_ID_HELPERS(DropSequence);
 
     // replication
     GENERIC_HELPERS(CreateReplication);
+    GENERIC_HELPERS(AlterReplication);
     GENERIC_HELPERS(DropReplication);
     DROP_BY_PATH_ID_HELPERS(DropReplication);
+    GENERIC_HELPERS(DropReplicationCascade);
+    DROP_BY_PATH_ID_HELPERS(DropReplicationCascade);
 
     // pq
     GENERIC_HELPERS(CreatePQGroup);
@@ -551,5 +556,13 @@ namespace NSchemeShardUT_Private {
     void UpdateRowPg(TTestActorRuntime& runtime, const TString& table, const ui32 key, ui32 value, ui64 tabletId = TTestTxConfig::FakeHiveTablets);
     void UploadRows(TTestActorRuntime& runtime, const TString& tablePath, int partitionIdx, const TVector<ui32>& keyTags, const TVector<ui32>& valueTags, const TVector<ui32>& recordIds);
     void WriteRow(TTestActorRuntime& runtime, const ui64 txId, const TString& tablePath, int partitionIdx, const ui32 key, const TString& value, bool successIsExpected = true);
+
+    void SendNextValRequest(TTestActorRuntime& runtime, const TActorId& sender, const TString& path);
+    i64 WaitNextValResult(
+        TTestActorRuntime& runtime, const TActorId& sender,
+        Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    i64 DoNextVal(
+        TTestActorRuntime& runtime, const TString& path,
+        Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
 
 } //NSchemeShardUT_Private

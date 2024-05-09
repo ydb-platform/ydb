@@ -1698,6 +1698,136 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
+    Y_UNIT_TEST(CopyTableSerialColumns) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false).SetEnableNotNullDataColumns(true));
+        auto client = kikimr.GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                CREATE TABLE PgSerial (
+                key serial PRIMARY KEY,
+                value int2
+                ))");
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                INSERT INTO PgSerial (value) values (1);
+            )");
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto result = session.CopyTable("/Root/PgSerial", "/Root/copy").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto desc = session.DescribeTable("/Root/copy").ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                SELECT * FROM copy;
+            )");
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "results are empty");
+            CompareYson(R"(
+                [["1";"1"]]
+            )", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                INSERT INTO copy (value) values (1);
+            )");
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                SELECT * FROM copy;
+            )");
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "results are empty");
+            CompareYson(R"(
+                [["1";"1"];["2";"1"]]
+            )", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                SELECT * FROM PgSerial;
+            )");
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "results are empty");
+            CompareYson(R"(
+                [["1";"1"]]
+            )", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                INSERT INTO PgSerial (value) values (1);
+            )");
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                SELECT * FROM copy;
+            )");
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "results are empty");
+            CompareYson(R"(
+                [["1";"1"];["2";"1"]]
+            )", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                SELECT * FROM PgSerial;
+            )");
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "results are empty");
+            CompareYson(R"(
+                [["1";"1"];["2";"1"]]
+            )", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
     Y_UNIT_TEST(CreateIndex) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);;
@@ -1778,6 +1908,64 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
             auto result = session.ExecuteQuery(query, txCtrl).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(SelectIndex) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);;
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(
+            serverSettings.SetWithSampleTables(false));
+
+        auto client = kikimr.GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                CREATE TABLE test(
+                    id int4,
+                    fk int4,
+                    value int4,
+                    primary key(id)
+                );
+                CREATE INDEX "test_fk_idx" ON test (fk);
+                CREATE INDEX "test_fk_idx_cover" ON test (fk) INCLUDE(value);
+                )");
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                INSERT INTO test (id, fk, value) VALUES (1, 2, 5), (2, 3, 6);
+                )");
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                SELECT id, fk, value FROM test where fk = 2;
+            )");
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), execSettings).GetValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+
+            CompareYson(R"([["1";"2";"5"]])", FormatResultSetYson(result.GetResultSet(0)));
+            AssertTableStats(result, "/Root/test/test_fk_idx_cover/indexImplTable", {
+                .ExpectedReads = 1,
+            });
         }
     }
 
@@ -2134,6 +2322,229 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             auto resultSelect = client.ExecuteQuery(
                 querySelect, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT(!resultSelect.IsSuccess());
+        }
+    }
+
+    Y_UNIT_TEST(CreateSequence) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);;
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(
+            serverSettings.SetWithSampleTables(false));
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
+        auto client = kikimr.GetQueryClient();
+        {
+            auto session = client.GetSession().GetValueSync().GetSession();
+            auto id = session.GetId();
+
+            const auto queryCreate = R"(
+                --!syntax_pg
+                CREATE SEQUENCE IF NOT EXISTS seq
+                    AS bigint
+                    START WITH 10
+                    INCREMENT BY 2
+                    MINVALUE 1
+                    NO MAXVALUE
+                    CACHE 3
+                    CYCLE;
+            )";
+
+            auto resultCreate = session.ExecuteQuery(queryCreate, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(resultCreate.IsSuccess(), resultCreate.GetIssues().ToString());
+        }
+
+        {
+            auto runtime = kikimr.GetTestServer().GetRuntime();
+            TActorId sender = runtime->AllocateEdgeActor();
+            auto describeResult = DescribeTable(&kikimr.GetTestServer(), sender, "/Root/seq");
+            UNIT_ASSERT_VALUES_EQUAL(describeResult.GetStatus(), NKikimrScheme::StatusSuccess);
+            auto& sequenceDescription = describeResult.GetPathDescription().GetSequenceDescription();
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetName(), "seq");
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetMinValue(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetMaxValue(), Max<i64>());
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetStartValue(), 10);
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetCache(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetIncrement(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetCycle(), true);
+        }
+    }
+
+    Y_UNIT_TEST(DropSequence) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);;
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(
+            serverSettings.SetWithSampleTables(false));
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
+        auto client = kikimr.GetQueryClient();
+        {
+            auto session = client.GetSession().GetValueSync().GetSession();
+            auto id = session.GetId();
+
+            const auto queryCreate = R"(
+                --!syntax_pg
+                CREATE SEQUENCE IF NOT EXISTS seq
+                    AS bigint
+                    START WITH 10
+                    INCREMENT BY 2
+                    MINVALUE 1
+                    NO MAXVALUE
+                    CACHE 3
+                    CYCLE;
+            )";
+
+            auto resultCreate = session.ExecuteQuery(queryCreate, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(resultCreate.IsSuccess(), resultCreate.GetIssues().ToString());
+        }
+
+        {
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            TDescribeTableResult describe = session.DescribeTable("/Root/seq").GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto session = client.GetSession().GetValueSync().GetSession();
+            auto id = session.GetId();
+
+            const auto queryDrop = R"(
+                --!syntax_pg
+                DROP SEQUENCE seq;
+            )";
+
+            auto resultDrop = session.ExecuteQuery(queryDrop, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(resultDrop.IsSuccess(), resultDrop.GetIssues().ToString());
+        }
+
+        {
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            TDescribeTableResult describe = session.DescribeTable("/Root/seq").GetValueSync();
+            UNIT_ASSERT(!describe.IsSuccess());
+        }
+
+        {
+            auto session = client.GetSession().GetValueSync().GetSession();
+            auto id = session.GetId();
+
+            const auto queryDrop = R"(
+                --!syntax_pg
+                DROP SEQUENCE seq;
+            )";
+
+            auto resultDrop = session.ExecuteQuery(queryDrop, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT(!resultDrop.IsSuccess());
+        }
+
+        {
+            auto session = client.GetSession().GetValueSync().GetSession();
+            auto id = session.GetId();
+
+            const auto queryDrop = R"(
+                --!syntax_pg
+                DROP SEQUENCE IF EXISTS seq;
+            )";
+
+            auto resultDrop = session.ExecuteQuery(queryDrop, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(resultDrop.IsSuccess(), resultDrop.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(AlterSequence) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);;
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(
+            serverSettings.SetWithSampleTables(false));
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
+        auto client = kikimr.GetQueryClient();
+        {
+            auto session = client.GetSession().GetValueSync().GetSession();
+            auto id = session.GetId();
+
+            const auto queryCreate = R"(
+                --!syntax_pg
+                CREATE SEQUENCE IF NOT EXISTS seq
+                    START WITH 10
+                    INCREMENT BY 2
+                    MINVALUE 1
+                    CACHE 3
+                    CYCLE;
+            )";
+
+            auto resultCreate = session.ExecuteQuery(queryCreate, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(resultCreate.IsSuccess(), resultCreate.GetIssues().ToString());
+        }
+
+        {
+            auto runtime = kikimr.GetTestServer().GetRuntime();
+            TActorId sender = runtime->AllocateEdgeActor();
+            auto describeResult = DescribeTable(&kikimr.GetTestServer(), sender, "/Root/seq");
+            UNIT_ASSERT_VALUES_EQUAL(describeResult.GetStatus(), NKikimrScheme::StatusSuccess);
+            auto& sequenceDescription = describeResult.GetPathDescription().GetSequenceDescription();
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetName(), "seq");
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetMinValue(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetMaxValue(), Max<i64>());
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetStartValue(), 10);
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetCache(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetIncrement(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetCycle(), true);
+        }
+
+        {
+            auto session = client.GetSession().GetValueSync().GetSession();
+            auto id = session.GetId();
+
+            const auto queryAlter = R"(
+                --!syntax_pg
+                ALTER SEQUENCE IF EXISTS seq
+                    START WITH 20
+                    INCREMENT BY 5
+                    MAXVALUE 30
+                    NO CYCLE;
+            )";
+
+            auto resultAlter = session.ExecuteQuery(queryAlter, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(resultAlter.IsSuccess(), resultAlter.GetIssues().ToString());
+        }
+
+        {
+            auto runtime = kikimr.GetTestServer().GetRuntime();
+            TActorId sender = runtime->AllocateEdgeActor();
+            auto describeResult = DescribeTable(&kikimr.GetTestServer(), sender, "/Root/seq");
+            UNIT_ASSERT_VALUES_EQUAL(describeResult.GetStatus(), NKikimrScheme::StatusSuccess);
+            auto& sequenceDescription = describeResult.GetPathDescription().GetSequenceDescription();
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetName(), "seq");
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetMinValue(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetMaxValue(), 30);
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetStartValue(), 20);
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetCache(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetIncrement(), 5);
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetCycle(), false);
+        }
+
+        {
+            auto session = client.GetSession().GetValueSync().GetSession();
+            auto id = session.GetId();
+
+            const auto queryAlter = R"(
+                --!syntax_pg
+                ALTER SEQUENCE IF EXISTS seq
+                    START WITH 31;
+            )";
+
+            auto resultAlter = session.ExecuteQuery(queryAlter, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT(!resultAlter.IsSuccess());
         }
     }
 
@@ -3423,6 +3834,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                     d varchar(20) DEFAULT 'foo'::varchar(2),
                     e int DEFAULT NULL,
                     f bit varying(5) DEFAULT '1001',
+                    g bigint DEFAULT 0 NOT NULL,
                     PRIMARY KEY(a)
                 );
             )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
@@ -3442,7 +3854,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
             UNIT_ASSERT_C(!result.GetResultSets().empty(), "results are empty");
             CompareYson(R"(
-                [["1";"5";"7";"fo";#;"1001"]]
+                [["1";"5";"7";"fo";#;"1001";"0"]]
             )", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
@@ -3793,7 +4205,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                     SELECT (1, 2);
                 )");
                 auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::INTERNAL_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
                 UNIT_ASSERT(result.GetIssues().ToString().Contains("alternative is not implemented yet : 138"));
             }
         }
@@ -4066,9 +4478,9 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
         }
-   }
+    }
 
-      Y_UNIT_TEST(ExplainColumnsReorder) {
+    Y_UNIT_TEST(ExplainColumnsReorder) {
         TPortManager tp;
         ui16 mbusport = tp.GetPort(2134);
         auto settings = Tests::TServerSettings(mbusport)
@@ -4119,7 +4531,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         for (size_t i = 0; i < colNames.size(); i++) {
             UNIT_ASSERT_VALUES_EQUAL(ydbResults.begin()->Getcolumns().at(i).Getname(), colNames[i]);
         }
-   }
+    }
 }
 
 } // namespace NKqp

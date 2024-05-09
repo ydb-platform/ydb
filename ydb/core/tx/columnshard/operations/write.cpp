@@ -27,7 +27,8 @@ namespace NKikimr::NColumnShard {
 
         NEvWrite::TWriteMeta writeMeta((ui64)WriteId, tableId, source);
         std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildSlicesTask>(owner.TabletID(), ctx.SelfID, owner.BufferizationWriteActorId,
-            NEvWrite::TWriteData(writeMeta, data, owner.TablesManager.GetPrimaryIndex()->GetReplaceKey(), owner.StoragesManager->GetInsertOperator()->StartWritingAction("WRITING_OPERATOR")));
+            NEvWrite::TWriteData(writeMeta, data, owner.TablesManager.GetPrimaryIndex()->GetReplaceKey(),
+                owner.StoragesManager->GetInsertOperator()->StartWritingAction(NOlap::NBlobOperations::EConsumer::WRITING_OPERATOR)));
         NConveyor::TCompServiceOperator::SendTaskToExecute(task);
 
         Status = EOperationStatus::Started;
@@ -247,12 +248,12 @@ namespace NKikimr::NColumnShard {
     }
 
     EOperationBehaviour TOperationsManager::GetBehaviour(const NEvents::TDataEvents::TEvWrite& evWrite) {
-        if (evWrite.Record.HasLockTxId() && evWrite.Record.HasLockNodeId()) {
-            if (evWrite.Record.HasLocks() && evWrite.Record.GetLocks().GetOp() == NKikimrDataEvents::TKqpLocks::Commit) {
-                return EOperationBehaviour::CommitWriteLock;
-            }
+        if (evWrite.Record.HasTxId() && evWrite.Record.HasLocks() && evWrite.Record.GetLocks().GetOp() == NKikimrDataEvents::TKqpLocks::Commit) {
+            return EOperationBehaviour::CommitWriteLock;
+        }
 
-            if (evWrite.Record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_PREPARE) {
+        if (evWrite.Record.HasLockTxId() && evWrite.Record.HasLockNodeId()) {
+            if (evWrite.Record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE) {
                 return EOperationBehaviour::WriteWithLock;
             }
 

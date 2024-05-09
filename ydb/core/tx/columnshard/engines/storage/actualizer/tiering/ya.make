@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     tiering.cpp
+    counters.cpp
 )
 
 PEERDIR(

@@ -1800,7 +1800,10 @@ private:
         }
         auto op = TYtTransientOpBase(node);
         TExprNode::TListType limitNodeChildren;
-        for (auto readerSettings: limitIt->second) {
+        const TNodeSet& limitNodesSet = limitIt->second;
+        TVector<const TExprNode*> limitNodes(limitNodesSet.cbegin(), limitNodesSet.cend());
+        std::stable_sort(limitNodes.begin(), limitNodes.end(), [](const auto& p1, const auto& p2) { return p1->UniqueId() < p2->UniqueId(); });
+        for (const auto& readerSettings: limitNodes) {
             TExprNode::TListType readerNodeChildren;
             for (auto setting : readerSettings->Children()) {
                 if (setting->ChildrenSize() > 0) {
@@ -1810,7 +1813,6 @@ private:
                     }
                 }
             }
-
             auto readerNode = ctx.NewList(op.Pos(), std::move(readerNodeChildren));
             limitNodeChildren.push_back(readerNode);
         }

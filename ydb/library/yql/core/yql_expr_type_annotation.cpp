@@ -4215,6 +4215,10 @@ bool IsDataTypeTzDate(EDataSlot dataSlot) {
     return NUdf::GetDataTypeInfo(dataSlot).Features & NUdf::TzDateType;
 }
 
+bool IsDataTypeBigDate(EDataSlot dataSlot) {
+    return (NUdf::GetDataTypeInfo(dataSlot).Features & NUdf::BigDateType);
+}
+
 EDataSlot WithTzDate(EDataSlot dataSlot) {
     if (dataSlot == EDataSlot::Date) {
         return EDataSlot::TzDate;
@@ -6737,6 +6741,18 @@ void AdjustReturnType(ui32& returnType, const TVector<ui32>& procArgTypes, ui32 
             returnType = NPg::LookupType(*inputElementType).ArrayTypeId;
         } else if (inputArrayType) {
             returnType = *inputArrayType;
+        }
+    } else if (returnType == NPg::AnyElementOid) {
+        for (ui32 i = 0; i < argTypes.size(); ++i) {
+            if (!argTypes[i]) {
+                continue;
+            }
+
+            const auto& typeDesc = NPg::LookupType(argTypes[i]);
+            if (typeDesc.ArrayTypeId == typeDesc.TypeId) {
+                returnType = typeDesc.ElementTypeId;
+                return;
+            }
         }
     }
 }

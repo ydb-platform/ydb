@@ -172,6 +172,8 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
     void ProcessCheckPartitionStatusRequests(const TPartitionId& partitionId);
 
+    void Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx);
+
     TString LogPrefix() const;
 
     static constexpr const char * KeyConfig() { return "_config"; }
@@ -428,6 +430,9 @@ private:
     ui64 GetGeneration();
     void DestroySession(TPipeInfo& pipeInfo);
     bool UseMediatorTimeCast = true;
+
+    TVector<TEvPersQueue::TEvStatus::TPtr> StatusRequests;
+    void ProcessStatusRequests(const TActorContext &ctx);
 
     THashMap<ui32, TVector<TEvPQ::TEvCheckPartitionStatusRequest::TPtr>> CheckPartitionStatusRequests;
     TMaybe<ui64> TabletGeneration;

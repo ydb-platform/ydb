@@ -3,6 +3,7 @@
 
 #include <ydb/library/yql/public/udf/udf_helpers.h>
 
+#include <library/cpp/dot_product/dot_product.h>
 #include <util/generic/buffer.h>
 #include <util/stream/format.h>
 
@@ -23,85 +24,45 @@ SIMPLE_STRICT_UDF(TFromBinaryString, TOptional<TListType<float>>(TAutoMap<const 
     return TSerializerFacade::Deserialize(valueBuilder, str);
 }
 
-
-std::optional<float> InnerProductSimilarity(const TUnboxedValuePod vector1, const TUnboxedValuePod vector2) {
-    float ret = 0;
-
-    if (!EnumerateVectors(vector1, vector2, [&ret](float el1, float el2) { ret += el1 * el2;}))
-        return {};
-
-    return ret;
-}
-
-std::optional<float> CosineSimilarity(const TUnboxedValuePod vector1, const TUnboxedValuePod vector2) {
-    float len1 = 0;
-    float len2 = 0;
-    float innerProduct = 0;
-
-    if (!EnumerateVectors(vector1, vector2, [&](float el1, float el2) { 
-        innerProduct += el1 * el2;
-        len1 += el1 * el1;
-        len2 += el2 * el2;
-        }))
-        return {};
-
-    len1 = sqrt(len1);
-    len2 = sqrt(len2);
-
-    float cosine = innerProduct / len1 / len2;
-
-    return cosine;
-}
-
-std::optional<float> EuclideanDistance(const TUnboxedValuePod vector1, const TUnboxedValuePod vector2) {
-    float ret = 0;
-
-    if (!EnumerateVectors(vector1, vector2, [&ret](float el1, float el2) { ret += (el1 - el2) * (el1 - el2);}))
-        return {};
-
-    ret = sqrtf(ret);
-
-    return ret;
-}
-
-SIMPLE_STRICT_UDF(TInnerProductSimilarity, TOptional<float>(TAutoMap<TListType<float>>, TAutoMap<TListType<float>>)) {
+SIMPLE_STRICT_UDF(TInnerProductSimilarity, TOptional<float>(TAutoMap<const char*>, TAutoMap<const char*>)) {
     Y_UNUSED(valueBuilder);
 
-    auto innerProduct = InnerProductSimilarity(args[0], args[1]);
-    if (!innerProduct)
+    const TArrayRef<const float> vector1 = TSerializerFacade::GetArray(args[0].AsStringRef()); 
+    const TArrayRef<const float> vector2 = TSerializerFacade::GetArray(args[1].AsStringRef()); 
+
+    if (vector1.size() != vector2.size() || vector1.empty() || vector2.empty())
         return {};
 
-    return TUnboxedValuePod{innerProduct.value()};
+    const float dotProduct = DotProduct(vector1.data(), vector2.data(), vector1.size());
+    return TUnboxedValuePod{dotProduct};
 }
 
-SIMPLE_STRICT_UDF(TCosineSimilarity, TOptional<float>(TAutoMap<TListType<float>>, TAutoMap<TListType<float>>)) {
+SIMPLE_STRICT_UDF(TCosineSimilarity, TOptional<float>(TAutoMap<const char*>, TAutoMap<const char*>)) {
     Y_UNUSED(valueBuilder);
 
-    auto cosine = CosineSimilarity(args[0], args[1]);
-    if (!cosine)
-        return {};
+    const TArrayRef<const float> vector1 = TSerializerFacade::GetArray(args[0].AsStringRef()); 
+    const TArrayRef<const float> vector2 = TSerializerFacade::GetArray(args[1].AsStringRef()); 
 
-    return TUnboxedValuePod{cosine.value()};
+    if (vector1.size() != vector2.size() || vector1.empty() || vector2.empty())
+        return {};    
+
+    const auto [ll, lr, rr] = TriWayDotProduct(vector1.data(), vector2.data(), vector1.size());
+    const float cosine = lr / std::sqrt(ll * rr);
+    return TUnboxedValuePod{cosine};
 }
 
-SIMPLE_STRICT_UDF(TCosineDistance, TOptional<float>(TAutoMap<TListType<float>>, TAutoMap<TListType<float>>)) {
+SIMPLE_STRICT_UDF(TCosineDistance, TOptional<float>(TAutoMap<const char*>, TAutoMap<const char*>)) {
     Y_UNUSED(valueBuilder);
 
-    auto cosine = CosineSimilarity(args[0], args[1]);
-    if (!cosine)
-        return {};
+    const TArrayRef<const float> vector1 = TSerializerFacade::GetArray(args[0].AsStringRef()); 
+    const TArrayRef<const float> vector2 = TSerializerFacade::GetArray(args[1].AsStringRef()); 
 
-    return TUnboxedValuePod{1 - cosine.value()};
-}
+    if (vector1.size() != vector2.size() || vector1.empty() || vector2.empty())
+        return {};    
 
-SIMPLE_STRICT_UDF(TEuclideanDistance, TOptional<float>(TAutoMap<TListType<float>>, TAutoMap<TListType<float>>)) {
-    Y_UNUSED(valueBuilder);
-
-    auto distance = EuclideanDistance(args[0], args[1]);
-    if (!distance)
-        return {};
-
-    return TUnboxedValuePod{distance.value()};
+    const auto [ll, lr, rr] = TriWayDotProduct(vector1.data(), vector2.data(), vector1.size());
+    const float cosine = lr / std::sqrt(ll * rr);
+    return TUnboxedValuePod{1 - cosine};
 }
 
 SIMPLE_MODULE(TKnnModule,
@@ -109,8 +70,7 @@ SIMPLE_MODULE(TKnnModule,
     TToBinaryString,
     TInnerProductSimilarity,
     TCosineSimilarity,
-    TCosineDistance,
-    TEuclideanDistance
+    TCosineDistance
     )
 
 REGISTER_MODULES(TKnnModule)

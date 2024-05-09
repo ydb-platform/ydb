@@ -8,7 +8,7 @@ void IBlobsGCAction::OnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self,
     if (!AbortedFlag) {
         NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build()("tablet_id", self.TabletID());
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "OnCompleteTxAfterCleaning")("action_guid", GetActionGuid());
-        auto storage = self.GetStoragesManager()->GetOperator(GetStorageId());
+        auto storage = self.GetStoragesManager()->GetOperatorVerified(GetStorageId());
         storage->GetSharedBlobs()->OnTransactionCompleteAfterCleaning(BlobsToRemove);
         for (auto i = BlobsToRemove.GetIterator(); i.IsValid(); ++i) {
             Counters->OnReply(i.GetBlobId().BlobSize());
@@ -16,7 +16,7 @@ void IBlobsGCAction::OnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self,
         if (!DoOnCompleteTxAfterCleaning(self, taskAction)) {
             return;
         }
-        taskAction->OnFinished();
+        OnFinished();
         NYDBTest::TControllers::GetColumnShardController()->OnAfterGCAction(self, *taskAction);
     }
 }
@@ -24,7 +24,7 @@ void IBlobsGCAction::OnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self,
 void IBlobsGCAction::OnExecuteTxAfterCleaning(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs) {
     if (!AbortedFlag) {
         const NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build()("tablet_id", self.TabletID());
-        auto storage = self.GetStoragesManager()->GetOperator(GetStorageId());
+        auto storage = self.GetStoragesManager()->GetOperatorVerified(GetStorageId());
         storage->GetSharedBlobs()->OnTransactionExecuteAfterCleaning(BlobsToRemove, dbBlobs.GetDatabase());
         for (auto i = BlobsToRemove.GetIterator(); i.IsValid(); ++i) {
             RemoveBlobIdFromDB(i.GetTabletId(), i.GetBlobId(), dbBlobs);

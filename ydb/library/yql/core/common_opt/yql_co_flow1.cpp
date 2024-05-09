@@ -1464,6 +1464,30 @@ TExprNode::TPtr OptimizeFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, 
         }
     }
 
+    if (node->Head().IsCallable(Ordered ? "OrderedExtend" : "Extend") &&
+        // constraints below can not be derived for (Ordered)Extend
+        !node->GetConstraint<TSortedConstraintNode>() &&
+        !node->GetConstraint<TPartOfSortedConstraintNode>() &&
+        !node->GetConstraint<TUniqueConstraintNode>() &&
+        !node->GetConstraint<TPartOfUniqueConstraintNode>() &&
+        !node->GetConstraint<TDistinctConstraintNode>() &&
+        !node->GetConstraint<TPartOfDistinctConstraintNode>())
+    {
+        auto canPush = [&](const auto& child) {
+            // we push FlatMap over Extend only if it can later be fused with child
+            return child->IsCallable({Ordered ? "OrderedFlatMap" : "FlatMap", "GroupByKey", "CombineByKey", "PartitionByKey", "PartitionsByKeys",
+                                      "ListIf", "FlatListIf", "AsList", "ToList"}) && optCtx.IsSingleUsage(*child);
+        };
+        if (AllOf(node->Head().ChildrenList(), canPush)) {
+            TExprNodeList newChildren;
+            for (auto child : node->Head().ChildrenList()) {
+                newChildren.push_back(ctx.ChangeChild(*node, TCoFlatMapBase::idx_Input, std::move(child)));
+            }
+            YQL_CLOG(DEBUG, Core) << "Swap " << node->Content() << " with " << node->Head().Content();
+            return ctx.ChangeChildren(node->Head(), std::move(newChildren));
+        }
+    }
+
     return node;
 }
 

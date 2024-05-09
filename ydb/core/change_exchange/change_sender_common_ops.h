@@ -108,7 +108,7 @@ class TBaseChangeSender: public IChangeSender {
     void CreateMissingSenders(const TVector<ui64>& partitionIds);
     void RecreateSenders(const TVector<ui64>& partitionIds);
 
-    bool RequestRecords();
+    bool RequestRecords(bool forceAtLeastOne = false);
     void SendRecords();
 
     void SendPreparedRecords(ui64 partitionId);

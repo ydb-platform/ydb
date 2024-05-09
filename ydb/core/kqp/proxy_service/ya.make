@@ -4,6 +4,7 @@ SRCS(
     kqp_proxy_service.cpp
     kqp_proxy_peer_stats_calculator.cpp
     kqp_script_executions.cpp
+    kqp_session_info.cpp
 )
 
 PEERDIR(
@@ -39,10 +40,6 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
-
-RECURSE(
-    proto
-)
 
 RECURSE_FOR_TESTS(
     ut

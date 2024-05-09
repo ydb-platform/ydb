@@ -91,6 +91,8 @@ struct TReplicationCardFetchOptions
 
     operator size_t() const;
     bool operator == (const TReplicationCardFetchOptions& other) const = default;
+
+    bool Contains(const TReplicationCardFetchOptions& other) const;
 };
 
 void FormatValue(TStringBuilderBase* builder, const TReplicationCardFetchOptions& options, TStringBuf /*spec*/);
@@ -178,6 +180,19 @@ std::vector<TReplicationProgress> ScatterReplicationProgress(
     TReplicationProgress progress,
     const std::vector<NTableClient::TUnversionedRow>& pivotKeys,
     NTableClient::TUnversionedRow upperKey);
+
+bool IsReplicaLocationValid(
+    const TReplicaInfo* replica,
+    const NYPath::TYPath& tablePath,
+    const TString& clusterName);
+
+TReplicationProgress BuildMaxProgress(const TReplicationProgress& progress1, const TReplicationProgress& progress2);
+
+TDuration ComputeReplicationProgressLag(
+    const TReplicationProgress& maxProgress,
+    const TReplicationProgress& replicaProgress);
+
+THashMap<TReplicaId, TDuration> ComputeReplicasLag(const THashMap<TReplicaId, TReplicaInfo>& replicas);
 
 ////////////////////////////////////////////////////////////////////////////////
 

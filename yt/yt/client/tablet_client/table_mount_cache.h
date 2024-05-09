@@ -84,6 +84,8 @@ DEFINE_ENUM(ETableSchemaKind,
     (VersionedWrite)
     // Schema used for looking up rows.
     (Lookup)
+    // Schema used for locking rows.
+    (Lock)
     // For sorted schemas, coincides with primary.
     // For ordered, contains an additional tablet index columns.
     (PrimaryWithTabletIndex)
@@ -127,9 +129,6 @@ struct TTableMountInfo
     NHydra::TRevision SecondaryRevision;
 
     bool EnableDetailedProfiling = false;
-
-    // COMPAT(ponasenko-rs)
-    bool EnableSharedWriteLocks = false;
 
     bool IsSorted() const;
     bool IsOrdered() const;

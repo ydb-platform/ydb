@@ -215,7 +215,7 @@ select
  	,w_country
  	,ship_carriers
        ,year
- order by w_warehouse_name
+ order by w_warehouse_name nulls first
  limit 100;
 
 -- end query 1 in stream 0 using template ../query_templates/query66.tpl

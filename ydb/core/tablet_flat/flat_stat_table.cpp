@@ -6,26 +6,20 @@
 namespace NKikimr {
 namespace NTable {
 
-bool BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, IPages* env) {
+bool BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, IPages* env, TBuildStatsYieldHandler yieldHandler) {
     stats.Clear();
 
     TDataStats iteratorStats = { };
     TStatsIterator statsIterator(subset.Scheme->Keys);
 
-    TSet<TEpoch> epochs;
-    for (const auto& part : subset.Flatten) {
-        epochs.insert(part->Epoch);
-    }
-    // if rowCountResolution = 300, 3-leveled SST, let's move each iterator up to 25 rows 
-    ui64 iterRowCountResolution = rowCountResolution / Max<ui64>(1, epochs.size()) / 4;
-    ui64 iterDataSizeResolution = dataSizeResolution / Max<ui64>(1, epochs.size()) / 4;
+    // TODO: deal with resolution
 
     // Make index iterators for all parts
     bool started = true;
     for (const auto& part : subset.Flatten) {
         stats.IndexSize.Add(part->IndexesRawSize, part->Label.Channel());
         TAutoPtr<TStatsScreenedPartIterator> iter = new TStatsScreenedPartIterator(part, env, subset.Scheme->Keys, part->Small, part->Large, 
-            iterRowCountResolution, iterDataSizeResolution);
+            rowCountResolution, dataSizeResolution);
         auto ready = iter->Start();
         if (ready == EReady::Page) {
             started = false;
@@ -40,6 +34,8 @@ bool BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, u
     ui64 prevRows = 0;
     ui64 prevSize = 0;
     while (true) {
+        yieldHandler();
+        
         auto ready = statsIterator.Next(iteratorStats);
         if (ready == EReady::Page) {
             return false;

@@ -59,6 +59,11 @@ namespace NKikimr::NBsController {
     };
 
     void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerGroupMetricsExchange::TPtr& ev) {
+        if (auto& record = ev->Get()->Record; record.HasWhiteboardUpdate()) {
+            auto ev = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate>();
+            ev->Record.Swap(record.MutableWhiteboardUpdate());
+            Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()), ev.release());
+        }
         Execute(new TTxGroupMetricsExchange(this, ev));
     }
 

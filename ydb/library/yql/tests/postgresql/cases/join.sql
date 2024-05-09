@@ -46,6 +46,13 @@ SELECT *
   FROM J1_TBL AS t1 (a, b, c);
 SELECT *
   FROM J1_TBL t1 (a, b, c);
+SELECT *
+  FROM J1_TBL t1 (a, b, c) JOIN J2_TBL t2 (a, d) USING (a)
+  ORDER BY a, d;
+-- test join using aliases
+SELECT * FROM J1_TBL JOIN J2_TBL USING (i) WHERE J1_TBL.t = 'one';  -- ok
+SELECT *
+  FROM J1_TBL LEFT JOIN J2_TBL USING (i) WHERE (k = 1);
 --
 -- More complicated constructs
 --
@@ -87,6 +94,13 @@ select * from (x left join y on (x1 = y1)) left join x xx(xx1,xx2)
 on (x1 = xx1) where (y2 is not null);
 select * from (x left join y on (x1 = y1)) left join x xx(xx1,xx2)
 on (x1 = xx1) where (xx2 is not null);
+--
+-- regression test: check for bug with propagation of implied equality
+-- to outside an IN
+--
+select count(*) from tenk1 a where unique1 in
+  (select unique1 from tenk1 b join tenk1 c using (unique1)
+   where b.unique2 = 42);
 -- try that with GEQO too
 begin;
 rollback;
@@ -281,6 +295,18 @@ select * from
 where
   1 = (select 1 from int8_tbl t3 where ss.y is not null limit 1)
 order by 1,2;
+select t1.unique2, t1.stringu1, t2.unique1, t2.stringu2 from
+  tenk1 t1
+  inner join int4_tbl i1
+    left join (select v1.x2, v2.y1, 11 AS d1
+               from (values(1,0)) v1(x1,x2)
+               left join (values(3,1)) v2(y1,y2)
+               on v1.x1 = v2.y2) subq1
+    on (i1.f1 = subq1.x2)
+  on (t1.unique2 = subq1.d1)
+  left join tenk1 t2
+  on (subq1.y1 = t2.unique1)
+where t1.unique2 < 42 and t1.stringu1 > t2.stringu2;
 select count(*) from
   tenk1 a join tenk1 b on a.unique1 = b.unique2
   left join tenk1 c on a.unique2 = b.unique1 and c.thousand = a.thousand

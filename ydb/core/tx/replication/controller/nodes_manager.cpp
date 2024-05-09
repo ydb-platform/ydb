@@ -3,15 +3,28 @@
 
 #include <ydb/core/tx/replication/service/service.h>
 
+#include <util/generic/vector.h>
+#include <util/random/random.h>
+
 namespace NKikimr::NReplication::NController {
 
 bool TNodesManager::HasTenant(const TString& tenant) const {
     return TenantNodes.contains(tenant);
 }
 
+bool TNodesManager::HasNodes(const TString& tenant) const {
+    return !GetNodes(tenant).empty();
+}
+
 const THashSet<ui32>& TNodesManager::GetNodes(const TString& tenant) const {
     Y_ABORT_UNLESS(HasTenant(tenant));
     return TenantNodes.at(tenant);
+}
+
+ui32 TNodesManager::GetRandomNode(const TString& tenant) const {
+    const auto& nodes = GetNodes(tenant);
+    TVector<ui32> nodesVec(nodes.begin(), nodes.end());
+    return nodesVec[RandomNumber(nodesVec.size())];
 }
 
 void TNodesManager::DiscoverNodes(const TString& tenant, const TActorId& cache, const TActorContext& ctx) {

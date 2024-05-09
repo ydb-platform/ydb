@@ -1,8 +1,0 @@
-items:
-- name: Backup and recovery
-  href: ../maintenance/backup_and_recovery.md
-- name: Diagnostics
-  hidden: true
-  include: { mode: link, path: ../troubleshooting/toc_p.yaml }
-- name: DB system views
-  href: ../troubleshooting/system_views_db.md

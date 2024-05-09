@@ -108,6 +108,7 @@ from hypothesis.internal.reflection import (
     repr_call,
 )
 from hypothesis.internal.scrutineer import (
+    MONITORING_TOOL_ID,
     Trace,
     Tracer,
     explanatory_lines,
@@ -785,7 +786,6 @@ class StateForActualGivenExecution:
         self.explain_traces = defaultdict(set)
         self._start_timestamp = time.time()
         self._string_repr = ""
-        self._jsonable_arguments = {}
         self._timing_features = {}
 
     @property
@@ -912,7 +912,7 @@ class StateForActualGivenExecution:
                     ),
                 )
                 self._string_repr = printer.getvalue()
-                self._jsonable_arguments = {
+                data._observability_arguments = {
                     **dict(enumerate(map(to_jsonable, args))),
                     **{k: to_jsonable(v) for k, v in kwargs.items()},
                 }
@@ -937,9 +937,13 @@ class StateForActualGivenExecution:
         with local_settings(self.settings):
             with deterministic_PRNG():
                 with BuildContext(data, is_final=is_final) as context:
-                    # Run the test function once, via the executor hook.
-                    # In most cases this will delegate straight to `run(data)`.
-                    result = self.test_runner(data, run)
+                    # providers may throw in per_case_context_fn, and we'd like
+                    # `result` to still be set in these cases.
+                    result = None
+                    with data.provider.per_test_case_context_manager():
+                        # Run the test function once, via the executor hook.
+                        # In most cases this will delegate straight to `run(data)`.
+                        result = self.test_runner(data, run)
 
         # If a failure was expected, it should have been raised already, so
         # instead raise an appropriate diagnostic error.
@@ -983,8 +987,27 @@ class StateForActualGivenExecution:
         """
         trace: Trace = set()
         try:
+            # this is actually covered by our tests, but only on >= 3.12.
+            if (
+                sys.version_info[:2] >= (3, 12)
+                and sys.monitoring.get_tool(MONITORING_TOOL_ID) is not None
+            ):  # pragma: no cover
+                warnings.warn(
+                    "avoiding tracing test function because tool id "
+                    f"{MONITORING_TOOL_ID} is already taken by tool "
+                    f"{sys.monitoring.get_tool(MONITORING_TOOL_ID)}.",
+                    HypothesisWarning,
+                    # I'm not sure computing a correct stacklevel is reasonable
+                    # given the number of entry points here.
+                    stacklevel=1,
+                )
+
             _can_trace = (
-                sys.gettrace() is None or sys.version_info[:2] >= (3, 12)
+                (sys.version_info[:2] < (3, 12) and sys.gettrace() is None)
+                or (
+                    sys.version_info[:2] >= (3, 12)
+                    and sys.monitoring.get_tool(MONITORING_TOOL_ID) is None
+                )
             ) and not PYPY
             _trace_obs = TESTCASE_CALLBACKS and OBSERVABILITY_COLLECT_COVERAGE
             _trace_failure = (
@@ -1061,19 +1084,23 @@ class StateForActualGivenExecution:
             # Conditional here so we can save some time constructing the payload; in
             # other cases (without coverage) it's cheap enough to do that regardless.
             if TESTCASE_CALLBACKS:
-                if self.failed_normally or self.failed_due_to_deadline:
-                    phase = "shrink"
-                elif runner := getattr(self, "_runner", None):
+                if runner := getattr(self, "_runner", None):
                     phase = runner._current_phase
+                elif self.failed_normally or self.failed_due_to_deadline:
+                    phase = "shrink"
                 else:  # pragma: no cover  # in case of messing with internals
                     phase = "unknown"
+                backend_desc = f", using backend={self.settings.backend!r}" * (
+                    self.settings.backend != "hypothesis"
+                    and not getattr(runner, "_switch_to_hypothesis_provider", False)
+                )
                 tc = make_testcase(
                     start_timestamp=self._start_timestamp,
                     test_name_or_nodeid=self.test_identifier,
                     data=data,
-                    how_generated=f"generated during {phase} phase",
+                    how_generated=f"during {phase} phase{backend_desc}",
                     string_repr=self._string_repr,
-                    arguments={**self._jsonable_arguments, **data._observability_args},
+                    arguments=data._observability_args,
                     timing=self._timing_features,
                     coverage=tractable_coverage_report(trace) or None,
                     phase=phase,
@@ -1193,7 +1220,7 @@ class StateForActualGivenExecution:
                     "status": "passed" if sys.exc_info()[0] else "failed",
                     "status_reason": str(origin or "unexpected/flaky pass"),
                     "representation": self._string_repr,
-                    "arguments": self._jsonable_arguments,
+                    "arguments": ran_example._observability_args,
                     "how_generated": "minimal failing example",
                     "features": {
                         **{

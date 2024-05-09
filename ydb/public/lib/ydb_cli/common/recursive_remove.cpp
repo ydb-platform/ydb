@@ -72,18 +72,18 @@ template <typename TClient, typename TSettings>
 using TRemoveFunc = TStatus(*)(TClient&, const TString&, const TSettings&);
 
 template <typename TClient, typename TSettings>
-TStatus Remove(TRemoveFunc<TClient, TSettings> func, TSchemeClient& schemeClient, TClient* client, const TSchemeEntry& entry,
-        ERecursiveRemovePrompt prompt, const TRemoveDirectorySettings& settings)
+TStatus Remove(TRemoveFunc<TClient, TSettings> func, TSchemeClient& schemeClient, TClient* client, const ESchemeEntryType type,
+        const TString& path, ERecursiveRemovePrompt prompt, const TRemoveDirectorySettings& settings)
 {
     if (!client) {
         return TStatus(EStatus::GENERIC_ERROR, MakeIssues(TStringBuilder()
             << TypeName<TClient>() << " not specified"));
     }
 
-    if (Prompt(prompt, entry.Name, entry.Type, false)) {
-        auto status = func(*client, entry.Name, TSettings(settings));
-        if (status.GetStatus() == EStatus::SCHEME_ERROR && schemeClient.DescribePath(entry.Name).ExtractValueSync().GetStatus() == EStatus::SCHEME_ERROR) {
-            Cerr << "WARNING: Couldn't delete path: \'" << entry.Name << "\'. It was probably already deleted in another process" << Endl;
+    if (Prompt(prompt, path, type, false)) {
+        auto status = func(*client, path, TSettings(settings));
+        if (status.GetStatus() == EStatus::SCHEME_ERROR && schemeClient.DescribePath(path).ExtractValueSync().GetStatus() == EStatus::SCHEME_ERROR) {
+            Cerr << "WARNING: Couldn't delete path: \'" << path << "\'. It was probably already deleted in another process" << Endl;
             return TStatus(EStatus::SUCCESS, {});
         }
         return status;
@@ -93,26 +93,26 @@ TStatus Remove(TRemoveFunc<TClient, TSettings> func, TSchemeClient& schemeClient
 }
 
 TStatus Remove(
-    TSchemeClient& schemeClient, TTableClient* tableClient, TTopicClient* topicClient, const TSchemeEntry& entry,
-    ERecursiveRemovePrompt prompt, const TRemoveDirectorySettings& settings)
+    TSchemeClient& schemeClient, TTableClient* tableClient, TTopicClient* topicClient, const ESchemeEntryType type,
+    const TString& path, ERecursiveRemovePrompt prompt, const TRemoveDirectorySettings& settings)
 {
-    switch (entry.Type) {
+    switch (type) {
     case ESchemeEntryType::Directory:
-        return Remove(&RemoveDirectory, schemeClient, &schemeClient, entry, prompt, settings);
+        return Remove(&RemoveDirectory, schemeClient, &schemeClient, type, path, prompt, settings);
 
     case ESchemeEntryType::ColumnStore:
-        return Remove(&RemoveColumnStore, schemeClient, tableClient, entry, prompt, settings);
+        return Remove(&RemoveColumnStore, schemeClient, tableClient, type, path, prompt, settings);
 
     case ESchemeEntryType::ColumnTable:
     case ESchemeEntryType::Table:
-        return Remove(&RemoveTable, schemeClient, tableClient, entry, prompt, settings);
+        return Remove(&RemoveTable, schemeClient, tableClient, type, path, prompt, settings);
 
     case ESchemeEntryType::Topic:
-        return Remove(&RemoveTopic, schemeClient, topicClient, entry, prompt, settings);
+        return Remove(&RemoveTopic, schemeClient, topicClient, type, path, prompt, settings);
 
     default:
         return TStatus(EStatus::UNSUPPORTED, MakeIssues(TStringBuilder()
-            << "Unsupported entry type: " << entry.Type));
+            << "Unsupported entry type: " << type));
     }
 }
 
@@ -144,7 +144,7 @@ TStatus RemoveDirectoryRecursive(
     // output order is: Root, Recursive(children)...
     // we need to reverse it to delete recursively
     for (auto it = recursiveListResult.Entries.rbegin(); it != recursiveListResult.Entries.rend(); ++it) {
-        if (auto result = Remove(schemeClient, tableClient, topicClient, *it, prompt, settings); !result.IsSuccess()) {
+        if (auto result = Remove(schemeClient, tableClient, topicClient, it->Type, it->Name, prompt, settings); !result.IsSuccess()) {
             return result;
         }
         if (createProgressBar) {
@@ -182,6 +182,9 @@ TStatus RemoveDirectoryRecursive(
 NYdb::TStatus RemovePathRecursive(NScheme::TSchemeClient& schemeClient, NTable::TTableClient& tableClient, NTopic::TTopicClient& topicClient, const TString& path, ERecursiveRemovePrompt prompt, const NScheme::TRemoveDirectorySettings& settings /*= {}*/, bool createProgressBar /*= true*/) {
     auto entity = schemeClient.DescribePath(path).ExtractValueSync();
     if (!entity.IsSuccess()) {
+        if (settings.NotExistsIsOk_ && entity.GetStatus() == EStatus::SCHEME_ERROR && entity.GetIssues().ToString().find("Path not found") != TString::npos) {
+            return TStatus(EStatus::SUCCESS, {});
+        }
         return entity;
     }
     switch (entity.GetEntry().Type) {
@@ -189,7 +192,7 @@ NYdb::TStatus RemovePathRecursive(NScheme::TSchemeClient& schemeClient, NTable::
     case ESchemeEntryType::ColumnStore:
         return RemoveDirectoryRecursive(schemeClient, tableClient, topicClient, path, prompt, settings, true, createProgressBar);
     default:
-        return Remove(schemeClient, &tableClient, &topicClient, entity.GetEntry(), prompt, settings);
+        return Remove(schemeClient, &tableClient, &topicClient, entity.GetEntry().Type, path, prompt, settings);
     }
 }
 }

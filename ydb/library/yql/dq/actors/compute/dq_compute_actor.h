@@ -88,9 +88,10 @@ struct TEvDqCompute {
 
         TEvInjectCheckpoint() = default;
 
-        TEvInjectCheckpoint(ui64 id, ui64 generation) {
+        TEvInjectCheckpoint(ui64 id, ui64 generation, NDqProto::ECheckpointType type) {
             Record.MutableCheckpoint()->SetId(id);
             Record.MutableCheckpoint()->SetGeneration(generation);
+            Record.MutableCheckpoint()->SetType(type);
             Record.SetGeneration(generation);
         }
     };
@@ -360,6 +361,7 @@ struct TComputeMemoryLimits {
 
     ui64 MinMemAllocSize = 30_MB;
     ui64 MinMemFreeSize = 30_MB;
+    ui64 OutputChunkMaxSize = GetDqExecutionSettings().FlowControl.MaxOutputChunkSize;
 
     IMemoryQuotaManager::TPtr MemoryQuotaManager;
 };
@@ -375,7 +377,6 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TTaskRunnerStatsBase& 
 
 NActors::IActor* CreateDqComputeActor(const NActors::TActorId& executerId, const TTxId& txId, NDqProto::TDqTask* task,
     IDqAsyncIoFactory::TPtr asyncIoFactory,
-    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
     const TTaskRunnerFactory& taskRunnerFactory,
     ::NMonitoring::TDynamicCounterPtr taskCounters = nullptr);

@@ -36,6 +36,7 @@ namespace NKikimr {
 namespace NViewer {
 
 using namespace NNodeWhiteboard;
+using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
 void SetupPQVirtualHandlers(IViewer* viewer) {
     viewer->RegisterVirtualHandler(
@@ -819,7 +820,6 @@ NKikimrViewer::EFlag GetViewerFlag(NKikimrWhiteboard::EFlag flag) {
     }
     return static_cast<NKikimrViewer::EFlag>((int)flag);
 }
-
 
 } // NNodeTabletMonitor
 } // NKikimr

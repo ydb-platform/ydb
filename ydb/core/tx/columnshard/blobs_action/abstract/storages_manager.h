@@ -8,7 +8,7 @@ class TPortionInfo;
 
 class IStoragesManager {
 private:
-    TRWMutex RWMutex;
+    mutable TRWMutex RWMutex;
     bool Initialized = false;
     bool Finished = false;
 protected:
@@ -43,11 +43,11 @@ public:
 
     void Stop();
 
-    std::shared_ptr<IBlobsStorageOperator> GetDefaultOperator() {
-        return GetOperator(DefaultStorageId);
+    std::shared_ptr<IBlobsStorageOperator> GetDefaultOperator() const {
+        return GetOperatorVerified(DefaultStorageId);
     }
 
-    std::shared_ptr<IBlobsStorageOperator> GetInsertOperator() {
+    std::shared_ptr<IBlobsStorageOperator> GetInsertOperator() const {
         return GetDefaultOperator();
     }
 
@@ -60,8 +60,8 @@ public:
 
     std::shared_ptr<IBlobsStorageOperator> GetOperator(const TString& storageIdExt);
     std::shared_ptr<IBlobsStorageOperator> GetOperatorGuarantee(const TString& storageIdExt);
-    std::shared_ptr<IBlobsStorageOperator> GetOperatorVerified(const TString& storageIdExt);
-    std::shared_ptr<IBlobsStorageOperator> GetOperatorOptional(const TString& storageIdExt);
+    std::shared_ptr<IBlobsStorageOperator> GetOperatorVerified(const TString& storageIdExt) const;
+    std::shared_ptr<IBlobsStorageOperator> GetOperatorOptional(const TString& storageIdExt) const;
 };
 
 

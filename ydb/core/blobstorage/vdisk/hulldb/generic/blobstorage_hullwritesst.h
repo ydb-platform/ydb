@@ -823,13 +823,14 @@ namespace NKikimr {
     public:
         TWriter(TVDiskContextPtr vctx, EWriterDataType type, ui32 chunksToUse, ui8 owner, ui64 ownerRound,
                 ui32 chunkSize, ui32 appendBlockSize, ui32 writeBlockSize, ui64 sstId, bool createdByRepl,
-                TDeque<TChunkIdx>& rchunks, TRopeArena& arena)
+                TDeque<TChunkIdx>& rchunks, TRopeArena& arena, bool addHeader)
             : DataWriter(vctx, type, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize, MsgQueue, rchunks)
             , IndexBuilder(vctx, type, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize, sstId,
                     createdByRepl, MsgQueue, rchunks)
             , ChunksToUse(chunksToUse)
             , ChunkSize(chunkSize)
             , Arena(arena)
+            , AddHeader(addHeader)
         {}
 
         bool Empty() const {
@@ -890,7 +891,7 @@ namespace NKikimr {
             TRope data;
             const auto& diskBlobMerger = dataMerger->GetDiskBlobMerger();
             if (memRec.GetType() == TBlobType::DiskBlob && !diskBlobMerger.Empty()) {
-                data = diskBlobMerger.CreateDiskBlob(Arena);
+                data = diskBlobMerger.CreateDiskBlob(Arena, AddHeader);
                 Y_DEBUG_ABORT_UNLESS(!inplacedDataSize);
                 inplacedDataSize = data.GetSize();
             }
@@ -941,6 +942,7 @@ namespace NKikimr {
         const ui32 ChunksToUse;
         const ui32 ChunkSize;
         TRopeArena& Arena;
+        const bool AddHeader;
 
         // pending messages
         TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>> MsgQueue;

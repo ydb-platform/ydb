@@ -3,6 +3,11 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/scheme_types/scheme_type_registry.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
+
+extern "C" {
+#include <ydb/library/yql/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
+}
 
 namespace NKikimr::NSchemeShard {
 
@@ -42,20 +47,33 @@ namespace NKikimr::NSchemeShard {
             return false;
         }
 
-        auto typeName = NMiniKQL::AdaptLegacyYqlType(TypeName);
-        Y_ABORT_UNLESS(AppData()->TypeRegistry);
-        const NScheme::IType* type = AppData()->TypeRegistry->GetType(typeName);
-        if (!type) {
-            errors.AddError(TStringBuilder() << "Type '" << typeName << "' specified for column '" << Name << "' is not supported");
-            return false;
+        if (const auto& typeName = NMiniKQL::AdaptLegacyYqlType(TypeName); typeName.StartsWith("pg")) {
+            const auto typeDesc = NPg::TypeDescFromPgTypeName(typeName);
+            if (!(typeDesc && TOlapColumnAdd::IsAllowedPgType(NPg::PgTypeIdFromTypeDesc(typeDesc)))) {
+                errors.AddError(TStringBuilder() << "Type '" << typeName << "' specified for column '" << Name << "' is not supported");
+                return false;
+            }
+            Type = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
+        } else {
+            Y_ABORT_UNLESS(AppData()->TypeRegistry);
+            const NScheme::IType* type = AppData()->TypeRegistry->GetType(typeName);
+            if (!type) {
+                errors.AddError(TStringBuilder() << "Type '" << typeName << "' specified for column '" << Name << "' is not supported");
+                return false;
+            }
+            if (!NScheme::NTypeIds::IsYqlType(type->GetTypeId())) {
+                errors.AddError(TStringBuilder() << "Type '" << typeName << "' specified for column '" << Name << "' is not supported");
+                return false;;
+            }
+            Type = NScheme::TTypeInfo(type->GetTypeId());
+            if (!IsAllowedType(type->GetTypeId())){
+                errors.AddError(TStringBuilder() << "Type '" << typeName << "' specified for column '" << Name << "' is not supported");
+                return false;
+            }
         }
-        if (!NScheme::NTypeIds::IsYqlType(type->GetTypeId())) {
-            errors.AddError(TStringBuilder() << "Type '" << typeName << "' specified for column '" << Name << "' is not supported");
-            return false;;
-        }
-        Type = NScheme::TTypeInfo(type->GetTypeId());
-        if (!IsAllowedType(type->GetTypeId())){
-            errors.AddError(TStringBuilder() << "Type '" << typeName << "' specified for column '" << Name << "' is not supported");
+        const auto arrowTypeStatus = NArrow::GetArrowType(Type).status();
+        if (!arrowTypeStatus.ok()) {
+            errors.AddError(TStringBuilder() << "Column '" << Name << "': " << arrowTypeStatus.ToString());
             return false;
         }
         return true;
@@ -81,7 +99,7 @@ namespace NKikimr::NSchemeShard {
             Serializer = serializer;
         } else if (columnSchema.HasCompression()) {
             NArrow::NSerialization::TSerializerContainer serializer;
-            AFL_VERIFY(serializer.DeserializeFromProto(columnSchema.GetCompression()));
+            serializer.DeserializeFromProto(columnSchema.GetCompression()).Validate();
             Serializer = serializer;
         }
         if (columnSchema.HasDictionaryEncoding()) {
@@ -146,9 +164,26 @@ namespace NKikimr::NSchemeShard {
         return true;
     }
 
-    bool TOlapColumnAdd::IsAllowedFirstPkType(ui32 typeId) {
+    bool TOlapColumnAdd::IsAllowedPgType(ui32 pgTypeId) {
+        switch (pgTypeId) {
+            case INT2OID:
+            case INT4OID:
+            case INT8OID:
+            case FLOAT4OID:
+            case FLOAT8OID:
+                return true;
+            default:
+                break;
+        }
+        return false;
+    }
+
+    bool TOlapColumnAdd::IsAllowedPkType(ui32 typeId) {
         switch (typeId) {
+            case NYql::NProto::Int8:
             case NYql::NProto::Uint8: // Byte
+            case NYql::NProto::Int16:
+            case NYql::NProto::Uint16:
             case NYql::NProto::Int32:
             case NYql::NProto::Uint32:
             case NYql::NProto::Int64:
@@ -158,21 +193,14 @@ namespace NKikimr::NSchemeShard {
             case NYql::NProto::Date:
             case NYql::NProto::Datetime:
             case NYql::NProto::Timestamp:
+            case NYql::NProto::Date32:
+            case NYql::NProto::Datetime64:
+            case NYql::NProto::Timestamp64:
+            case NYql::NProto::Interval64:
                 return true;
-            case NYql::NProto::Interval:
-            case NYql::NProto::Decimal:
-            case NYql::NProto::DyNumber:
-            case NYql::NProto::Yson:
-            case NYql::NProto::Json:
-            case NYql::NProto::JsonDocument:
-            case NYql::NProto::Float:
-            case NYql::NProto::Double:
-            case NYql::NProto::Bool:
-                return false;
             default:
-                break;
+                return false;
         }
-        return false;
     }
 
     bool TOlapColumnsUpdate::Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors) {
@@ -239,11 +267,11 @@ namespace NKikimr::NSchemeShard {
             if (!column.ParseFromRequest(columnSchema, errors)) {
                 return false;
             }
-            if (column.GetKeyOrder() && *column.GetKeyOrder() == 0) {
-                if (!TOlapColumnAdd::IsAllowedFirstPkType(column.GetType().GetTypeId())) {
+            if (column.IsKeyColumn()) {
+                if (!TOlapColumnAdd::IsAllowedPkType(column.GetType().GetTypeId())) {
                     errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
-                        << "Type '" << column.GetType().GetTypeId() << "' specified for column '" << column.GetName()
-                        << "' is not supported in first PK position");
+                        << "Type '" << column.GetTypeName() << "' specified for column '" << column.GetName()
+                        << "' is not supported as primary key");
                     return false;
                 }
             }

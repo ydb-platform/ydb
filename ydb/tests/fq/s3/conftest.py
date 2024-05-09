@@ -16,13 +16,20 @@ from ydb.tests.tools.fq_runner.kikimr_utils import YQv2Extension
 from ydb.tests.tools.fq_runner.kikimr_utils import ComputeExtension
 from ydb.tests.tools.fq_runner.kikimr_utils import StatsModeExtension
 from ydb.tests.tools.fq_runner.kikimr_utils import BindingsModeExtension
+from ydb.tests.tools.fq_runner.kikimr_utils import YdbMvpExtension
 from ydb.tests.tools.fq_runner.kikimr_utils import start_kikimr
+from ydb.tests.tools.fq_runner.kikimr_utils import YQV1_VERSION_NAME, YQV2_VERSION_NAME
 from ydb.tests.fq.s3.s3_helpers import S3
 from library.recipes import common as recipes_common
 
 
 MOTO_SERVER_PATH = "contrib/python/moto/bin/moto_server"
 S3_PID_FILE = "s3.pid"
+
+
+@pytest.fixture(scope="module")
+def mvp_external_ydb_endpoint(request) -> str:
+    return request.param["endpoint"] if request is not None and hasattr(request, 'param') else None
 
 
 @pytest.fixture(scope="module")
@@ -62,33 +69,56 @@ def s3(request) -> S3:
         recipes_common.stop_daemon(pid)
 
 
-@pytest.fixture
-def stats_mode():
-    return ''
+@pytest.fixture(scope="module")
+def kikimr_settings(request: pytest.FixtureRequest):
+    return getattr(request, "param", dict())
 
 
-@pytest.fixture
-def bindings_mode():
-    return ''
+@pytest.fixture(scope="module")
+def kikimr_params(request: pytest.FixtureRequest):
+    return request
 
 
-@pytest.fixture
-def is_replace_if_exists():
-    return False
+def get_kikimr_extensions(s3: S3, yq_version: str, kikimr_settings, mvp_external_ydb_endpoint):
+    return [AddInflightExtension(),
+            AddDataInflightExtension(),
+            AddFormatSizeLimitExtension(),
+            DefaultConfigExtension(s3.s3_url),
+            YQv2Extension(yq_version, kikimr_settings.get("is_replace_if_exists", False)),
+            ComputeExtension(),
+            YdbMvpExtension(mvp_external_ydb_endpoint),
+            StatsModeExtension(kikimr_settings.get("stats_mode", "")),
+            BindingsModeExtension(kikimr_settings.get("bindings_mode", ""), yq_version)]
 
 
-@pytest.fixture
-def kikimr(request: pytest.FixtureRequest, s3: S3, yq_version: str, stats_mode: str, bindings_mode: str, is_replace_if_exists: bool):
-    kikimr_extensions = [AddInflightExtension(),
-                         AddDataInflightExtension(),
-                         AddFormatSizeLimitExtension(),
-                         DefaultConfigExtension(s3.s3_url),
-                         YQv2Extension(yq_version, is_replace_if_exists),
-                         ComputeExtension(),
-                         StatsModeExtension(stats_mode),
-                         BindingsModeExtension(bindings_mode, yq_version)]
-    with start_kikimr(request, kikimr_extensions) as kikimr:
+@pytest.fixture(scope="module")
+def kikimr_yqv1(kikimr_params: pytest.FixtureRequest, s3: S3, kikimr_settings, mvp_external_ydb_endpoint):
+    kikimr_extensions = get_kikimr_extensions(s3, YQV1_VERSION_NAME, kikimr_settings, mvp_external_ydb_endpoint)
+    with start_kikimr(kikimr_params, kikimr_extensions) as kikimr:
         yield kikimr
+
+
+@pytest.fixture(scope="module")
+def kikimr_yqv2(kikimr_params: pytest.FixtureRequest, s3: S3, kikimr_settings, mvp_external_ydb_endpoint):
+    kikimr_extensions = get_kikimr_extensions(s3, YQV2_VERSION_NAME, kikimr_settings, mvp_external_ydb_endpoint)
+    with start_kikimr(kikimr_params, kikimr_extensions) as kikimr:
+        yield kikimr
+
+
+@pytest.fixture
+def kikimr(yq_version: str, kikimr_yqv1, kikimr_yqv2):
+    kikimr = None
+    if yq_version == YQV1_VERSION_NAME:
+        kikimr = kikimr_yqv1
+    elif yq_version == YQV2_VERSION_NAME:
+        kikimr = kikimr_yqv2
+
+    if kikimr is not None:
+        kikimr.control_plane.drop_metering()
+        kikimr.control_plane.ensure_is_alive()
+        kikimr.compute_plane.ensure_is_alive()
+
+    return kikimr
 
 
 @pytest.fixture
@@ -97,4 +127,16 @@ def client(kikimr, request=None):
                                   if request is not None
                                   else "my_folder",
                                   streaming_over_kikimr=kikimr)
-    return client
+    yield client
+
+    kikimr.control_plane.ensure_is_alive()
+    kikimr.compute_plane.ensure_is_alive()
+
+
+@pytest.fixture
+def unique_prefix(request: pytest.FixtureRequest):
+    name_hash = hash(request.node.name)
+    if name_hash >= 0:
+        return f"p{name_hash}_"
+    else:
+        return f"n{-name_hash}_"

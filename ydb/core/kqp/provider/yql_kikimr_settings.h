@@ -8,6 +8,7 @@
 
 namespace NKikimrConfig {
     enum TTableServiceConfig_EIndexAutoChooseMode : int;
+    enum TTableServiceConfig_EBlockChannelsMode : int;
 }
 
 namespace NYql {
@@ -113,7 +114,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
         this->SetValidClusters(clusters);
 
         if (defaultCluster) {
-            this->Dispatch(NCommon::ALL_CLUSTERS, "_DefaultCluster", *defaultCluster, EStage::CONFIG);
+            this->Dispatch(NCommon::ALL_CLUSTERS, "_DefaultCluster", *defaultCluster, EStage::CONFIG, NCommon::TSettingDispatcher::GetDefaultErrorCallback());
         }
 
         // Init settings from config
@@ -130,7 +131,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     {
         this->SetValidClusters(TVector<TString>{cluster});
 
-        this->Dispatch(NCommon::ALL_CLUSTERS, "_DefaultCluster", cluster, EStage::CONFIG);
+        this->Dispatch(NCommon::ALL_CLUSTERS, "_DefaultCluster", cluster, EStage::CONFIG, NCommon::TSettingDispatcher::GetDefaultErrorCallback());
         this->Dispatch(defaultSettings);
         this->Dispatch(NCommon::ALL_CLUSTERS, settings);
 
@@ -163,6 +164,9 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableCreateTableAs = false;
     ui64 IdxLookupJoinsPrefixPointLimit = 1;
     bool OldLookupJoinBehaviour = true;
+    bool EnableOlapSink = false;
+    bool EnableOltpSink = false;
+    NKikimrConfig::TTableServiceConfig_EBlockChannelsMode BlockChannelsMode;
 };
 
 }

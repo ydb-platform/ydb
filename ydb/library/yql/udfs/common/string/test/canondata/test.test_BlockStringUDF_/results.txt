@@ -90,6 +90,13 @@
                                     "DataType";
                                     "String"
                                 ]
+                            ];
+                            [
+                                "clpst";
+                                [
+                                    "DataType";
+                                    "String"
+                                ]
                             ]
                         ]
                     ]
@@ -107,7 +114,8 @@
                         "+++!qwe+rty+++uiop+%5B+%5D$";
                         "   !qwe rty   uiop [ ]$";
                         " !qwe rty uiop [ ]$";
-                        "!qwe rty   uiop [ ]$"
+                        "!qwe rty   uiop [ ]$";
+                        "!qwe ..."
                     ];
                     [
                         "IBQXGIBAEAQCAIBAMRTGO2BANJVWYXDOHMTSKIBA";
@@ -121,7 +129,8 @@
                         "@as+++++++dfgh+jkl%5Cn;%27%25++";
                         "@as       dfgh jkl\\n;'%  ";
                         "@as dfgh jkl\\n;'% ";
-                        "@as       dfgh jkl\\n;'%"
+                        "@as       dfgh jkl\\n;'%";
+                        "@as ..."
                     ];
                     [
                         "EAQCAI32PBRQS5TCNYQASCQIEBWSYLRPH5PCAIBA";
@@ -135,7 +144,8 @@
                         "+++%23zxc%09vbn+%09%0A%08+m%2C./%3F%5E+++";
                         "   #zxc\tvbn \t\n\x08 m,./?^   ";
                         " #zxc vbn \x08 m,./?^ ";
-                        "#zxc\tvbn \t\n\x08 m,./?^"
+                        "#zxc\tvbn \t\n\x08 m,./?^";
+                        "#zxc ..."
                     ];
                     [
                         "GEQTEQBTEM2CINJFGZPDOJRYFI4SQMBJFVPT2KZMHQXD4===";
@@ -149,7 +159,8 @@
                         "1!2@3%234$5%256%5E7%268*9%280%29-_%3D%2B%2C%3C.%3E";
                         "1!2@3#4$5%6^7&8*9(0)-_= ,<.>";
                         "1!2@3#4$5%6^7&8*9(0)-_=+,<.>";
-                        "1!2@3#4$5%6^7&8*9(0)-_=+,<.>"
+                        "1!2@3#4$5%6^7&8*9(0)-_=+,<.>";
+                        "1!2@ ..."
                     ]
                 ]
             }

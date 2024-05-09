@@ -249,6 +249,7 @@ void TBalancingChannelConfig::Register(TRegistrar registrar)
         int endpointConfigCount = 0;
         if (config->Addresses) {
             ++endpointConfigCount;
+            SortUnique(*config->Addresses);
         }
         if (config->Endpoints) {
             ++endpointConfigCount;

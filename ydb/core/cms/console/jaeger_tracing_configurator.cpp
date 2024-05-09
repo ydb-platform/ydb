@@ -147,11 +147,11 @@ TSettings<double, TWithTag<TThrottlingSettings>> TJaegerTracingConfigurator::Get
             .Level = static_cast<ui8>(level),
             .Sampler = fraction,
             .Throttler = TWithTag<TThrottlingSettings> {
-                .value = TThrottlingSettings {
+                .Value = TThrottlingSettings {
                     .MaxTracesPerMinute = samplingRule.GetMaxTracesPerMinute(),
                     .MaxTracesBurst = samplingRule.GetMaxTracesBurst(),
                 },
-                .tag = tag++,
+                .Tag = tag++,
             },
         };
 
@@ -191,11 +191,11 @@ TSettings<double, TWithTag<TThrottlingSettings>> TJaegerTracingConfigurator::Get
         ui64 maxBurst = throttlingRule.GetMaxTracesBurst();
         TExternalThrottlingRule<TWithTag<TThrottlingSettings>> rule {
             .Throttler = TWithTag<TThrottlingSettings> {
-                .value = TThrottlingSettings {
+                .Value = TThrottlingSettings {
                     .MaxTracesPerMinute = maxRatePerMinute,
                     .MaxTracesBurst = maxBurst,
                 },
-                .tag = tag++,
+                .Tag = tag++,
             }
         };
 
@@ -208,21 +208,6 @@ TSettings<double, TWithTag<TThrottlingSettings>> TJaegerTracingConfigurator::Get
                 requestTypeRules.Global.push_back(rule);
             }
         }
-    }
-
-    // If external_throttling section is absent we want to allow all requests to be traced
-    if (cfg.GetExternalThrottling().empty()){
-        TExternalThrottlingRule<TWithTag<TThrottlingSettings>> rule {
-            .Throttler = TWithTag<TThrottlingSettings> {
-                .value = TThrottlingSettings {
-                    .MaxTracesPerMinute = Max<ui64>(),
-                    .MaxTracesBurst = 0,
-                },
-                .tag = tag++,
-            },
-        };
-
-        settings.ExternalThrottlingRules[static_cast<size_t>(ERequestType::UNSPECIFIED)].Global.push_back(rule);
     }
 
     return settings;

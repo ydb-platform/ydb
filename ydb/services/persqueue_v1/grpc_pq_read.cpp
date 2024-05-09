@@ -2,6 +2,7 @@
 
 #include "actors/read_info_actor.h"
 #include "actors/commit_offset_actor.h"
+#include "actors/schema_actors.h"
 
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/tx/scheme_board/cache.h>
@@ -117,12 +118,6 @@ void TPQReadService::Handle(TEvPQProxy::TEvSessionDead::TPtr& ev, const TActorCo
     Sessions.erase(ev->Get()->Cookie);
 }
 
-google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> FillInfoResponse(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode code) {
-    google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> res;
-    FillIssue(res.Add(), code, errorReason);
-    return res;
-}
-
 void TPQReadService::Handle(NGRpcService::TEvStreamTopicReadRequest::TPtr& ev, const TActorContext& ctx) {
     HandleStreamPQReadRequest<NGRpcService::TEvStreamTopicReadRequest>(ev, ctx);
 }
@@ -175,7 +170,8 @@ void TPQReadService::Handle(NGRpcService::TEvCommitOffsetRequest::TPtr& ev, cons
     if (HaveClusters && (Clusters.empty() || LocalCluster.empty())) {
         LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, "new commit offset request failed - cluster is not known yet");
 
-        ev->Get()->SendResult(ConvertPersQueueInternalCodeToStatus(PersQueue::ErrorCode::INITIALIZING), FillInfoResponse("cluster initializing", PersQueue::ErrorCode::INITIALIZING)); //CANCELLED
+        ev->Get()->RaiseIssue(FillIssue("cluster initializing", PersQueue::ErrorCode::INITIALIZING));
+        ev->Get()->ReplyWithYdbStatus(ConvertPersQueueInternalCodeToStatus(PersQueue::ErrorCode::INITIALIZING));
         return;
     } else {
         ctx.Register(new TCommitOffsetActor(ev->Release().Release(), *TopicsHandler, SchemeCache, NewSchemeCache, Counters));
@@ -189,7 +185,8 @@ void TPQReadService::Handle(NGRpcService::TEvPQReadInfoRequest::TPtr& ev, const 
     if (HaveClusters && (Clusters.empty() || LocalCluster.empty())) {
         LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, "new read info request failed - cluster is not known yet");
 
-        ev->Get()->SendResult(ConvertPersQueueInternalCodeToStatus(PersQueue::ErrorCode::INITIALIZING), FillInfoResponse("cluster initializing", PersQueue::ErrorCode::INITIALIZING)); //CANCELLED
+        ev->Get()->RaiseIssue(FillIssue("cluster initializing", PersQueue::ErrorCode::INITIALIZING));
+        ev->Get()->ReplyWithYdbStatus(ConvertPersQueueInternalCodeToStatus(PersQueue::ErrorCode::INITIALIZING));
         return;
     } else {
         //ctx.Register(new TReadInfoActor(ev->Release().Release(), Clusters, LocalCluster, SchemeCache, NewSchemeCache, Counters));

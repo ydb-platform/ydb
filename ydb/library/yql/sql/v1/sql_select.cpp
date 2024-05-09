@@ -40,7 +40,27 @@ bool TSqlSelect::JoinOp(ISource* join, const TRule_join_source::TBlock3& block, 
             TString joinOp("Inner");
             auto hints = Ctx.PullHintForToken(Ctx.TokenPosition(alt.GetToken3()));
             TJoinLinkSettings linkSettings;
-            linkSettings.ForceSortedMerge = AnyOf(hints, [](const NSQLTranslation::TSQLHint& hint) { return to_lower(hint.Name) == "merge"; });
+            for (const auto& hint: hints) {
+                const auto canonizedName = to_lower(hint.Name);
+                auto newStrategy =  TJoinLinkSettings::EStrategy::Default;
+                if (canonizedName == "merge") {
+                    newStrategy = TJoinLinkSettings::EStrategy::SortedMerge;
+                } else if (canonizedName == "streamlookup") {
+                    newStrategy = TJoinLinkSettings::EStrategy::StreamLookup;
+                } else {
+                    Ctx.Warning(hint.Pos, TIssuesIds::YQL_UNUSED_HINT) << "Unsupported join strategy: " << hint.Name;
+                }
+
+                if (TJoinLinkSettings::EStrategy::Default == linkSettings.Strategy) {
+                    linkSettings.Strategy = newStrategy;
+                } else if (newStrategy == linkSettings.Strategy) {
+                    Error() << "Duplicate join strategy hint";
+                    return false;
+                } else {
+                    Error() << "Conflicting join strategy hints";
+                    return false;
+                }
+            }
             switch (alt.GetBlock2().Alt_case()) {
                 case TRule_join_op::TAlt2::TBlock2::kAlt1:
                     if (alt.GetBlock2().GetAlt1().HasBlock1()) {
@@ -102,6 +122,10 @@ bool TSqlSelect::JoinOp(ISource* join, const TRule_join_source::TBlock3& block, 
             joinOp = NormalizeJoinOp(joinOp);
             Ctx.IncrementMonCounter("sql_features", "Join");
             Ctx.IncrementMonCounter("sql_join_operations", joinOp);
+            if (linkSettings.Strategy != TJoinLinkSettings::EStrategy::Default && joinOp == "Cross") {
+                Ctx.Warning(Ctx.Pos(), TIssuesIds::YQL_UNUSED_HINT) << "Non-default join strategy will not be used for CROSS JOIN";
+                linkSettings.Strategy = TJoinLinkSettings::EStrategy::Default;
+            }
 
             TNodePtr joinKeyExpr;
             if (block.HasBlock4()) {

@@ -368,9 +368,8 @@ void WaitPartition(const TString &session, TTestContext& tc, ui32 partition, con
                 UNIT_ASSERT_EQUAL(result->Record.GetSession(), sessionToRelease);
                 UNIT_ASSERT(ok);
 
-                THolder<TEvPersQueue::TEvPartitionReleased> request;
+                auto request = MakeHolder<TEvPersQueue::TEvPartitionReleased>();
 
-                request.Reset(new TEvPersQueue::TEvPartitionReleased);
                 auto& req = request->Record;
                 req.SetSession(sessionToRelease);
                 req.SetPartition(partition);
@@ -381,9 +380,9 @@ void WaitPartition(const TString &session, TTestContext& tc, ui32 partition, con
                 tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries(), pipe);
             }
         } catch (NActors::TSchedulingLimitReachedException) {
-            UNIT_ASSERT(i < 2 || !ok);
+            UNIT_ASSERT_C(i < 2 || !ok, "TSchedulingLimitReachedException i=" << i << " ok=" << ok);
         } catch (NActors::TEmptyEventQueueException) {
-            UNIT_ASSERT(i < 2 || !ok);
+            UNIT_ASSERT_C(i < 2 || !ok, "TEmptyEventQueueException i=" << i << " ok=" << ok);
         }
     }
 }
@@ -732,7 +731,7 @@ TActorId CmdCreateSession(const TPQCmdSettings& settings, TTestContext& tc) {
             auto req = request->Record.MutablePartitionRequest();
 
             ActorIdToProto(tabletPipe, req->MutablePipeClient());
-            Cerr << "Set pipe for create session: " << tabletPipe.ToString();
+            Cerr << "Set pipe for create session: " << tabletPipe.ToString() << Endl;
 
             req->SetPartition(settings.Partition);
             auto off = req->MutableCmdCreateSession();
@@ -742,7 +741,11 @@ TActorId CmdCreateSession(const TPQCmdSettings& settings, TTestContext& tc) {
             off->SetStep(settings.Step);
             off->SetPartitionSessionId(settings.PartitionSessionId);
 
-            tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+            if (settings.KeepPipe) {
+                tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries(), tabletPipe);
+            } else {
+                tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+            }
             result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
 
             UNIT_ASSERT(result);

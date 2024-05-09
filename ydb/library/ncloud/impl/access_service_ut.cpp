@@ -108,7 +108,7 @@ Y_UNIT_TEST_SUITE_F(TNebiusAccessServiceTest, TTestSetup) {
         auto& resp = AccessServiceMock.AuthorizeData["token-perm-path_id"];
         {
             auto& result = (*resp.Response.mutable_results())[0];
-            result.set_authorized(true);
+            result.set_resultcode(nebius::iam::v1::AuthorizeResult::OK);
             result.mutable_account()->mutable_user_account()->set_id("user_id");
         }
 

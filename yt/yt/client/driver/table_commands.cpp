@@ -110,7 +110,7 @@ void TReadTableCommand::DoExecute(ICommandContextPtr context)
         BuildYsonMapFragmentFluently(consumer)
             .Item("approximate_row_count").Value(reader->GetTotalRowCount())
             .Item("omitted_inaccessible_columns").Value(reader->GetOmittedInaccessibleColumns())
-            .DoIf(reader->GetTotalRowCount() > 0, [&](auto fluent) {
+            .DoIf(reader->GetTotalRowCount() > 0, [&] (auto fluent) {
                 fluent
                     .Item("start_row_index").Value(reader->GetStartRowIndex());
             });
@@ -130,7 +130,7 @@ void TReadTableCommand::DoExecute(ICommandContextPtr context)
         ControlAttributes,
         0);
 
-    auto finally = Finally([&] () {
+    auto finally = Finally([&] {
         auto dataStatistics = reader->GetDataStatistics();
         YT_LOG_DEBUG("Command statistics (RowCount: %v, WrittenSize: %v, "
             "ReadUncompressedDataSize: %v, ReadCompressedDataSize: %v, "
@@ -837,7 +837,7 @@ void TSelectRowsCommand::DoExecute(ICommandContextPtr context)
     auto output = context->Request().OutputStream;
     auto writer = CreateSchemafulWriterForFormat(format, rowset->GetSchema(), output);
 
-    writer->Write(rowset->GetRows());
+    Y_UNUSED(writer->Write(rowset->GetRows()));
 
     WaitFor(writer->Close())
         .ThrowOnError();
@@ -1104,7 +1104,7 @@ void TLookupRowsCommand::DoExecute(ICommandContextPtr context)
             .ValueOrThrow()
             .Rowset;
         auto writer = CreateVersionedWriterForFormat(format, rowset->GetSchema(), output);
-        writer->Write(rowset->GetRows());
+        Y_UNUSED(writer->Write(rowset->GetRows()));
         WaitFor(writer->Close())
             .ThrowOnError();
     } else {
@@ -1117,7 +1117,7 @@ void TLookupRowsCommand::DoExecute(ICommandContextPtr context)
             .ValueOrThrow()
             .Rowset;
         auto writer = CreateSchemafulWriterForFormat(format, rowset->GetSchema(), output);
-        writer->Write(rowset->GetRows());
+        Y_UNUSED(writer->Write(rowset->GetRows()));
         WaitFor(writer->Close())
             .ThrowOnError();
     }
@@ -1183,12 +1183,12 @@ void TPullRowsCommand::DoExecute(ICommandContextPtr context)
 
     if (pullResult.Versioned) {
         auto writer = CreateVersionedWriterForFormat(format, pullResult.Rowset->GetSchema(), output);
-        writer->Write(ReinterpretCastRange<TVersionedRow>(pullResult.Rowset->GetRows()));
+        Y_UNUSED(writer->Write(ReinterpretCastRange<TVersionedRow>(pullResult.Rowset->GetRows())));
         WaitFor(writer->Close())
             .ThrowOnError();
     } else {
         auto writer = CreateSchemafulWriterForFormat(format, pullResult.Rowset->GetSchema(), output);
-        writer->Write(ReinterpretCastRange<TUnversionedRow>(pullResult.Rowset->GetRows()));
+        Y_UNUSED(writer->Write(ReinterpretCastRange<TUnversionedRow>(pullResult.Rowset->GetRows())));
         WaitFor(writer->Close())
             .ThrowOnError();
     }

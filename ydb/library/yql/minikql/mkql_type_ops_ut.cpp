@@ -161,7 +161,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
 
     Y_UNIT_TEST(AllTimezones) {
         auto count = InitTimezones();
-        UNIT_ASSERT_VALUES_EQUAL(count, 597);
+        UNIT_ASSERT_VALUES_EQUAL(count, 600);
         for (ui32 i = 0; i < count; ++i) {
             if (const auto name = FindTimezoneIANAName(i)) {
                 UNIT_ASSERT(!name->empty());

@@ -98,10 +98,12 @@ public:
                 ydbProxy.Reset(CreateYdbProxy(params.GetEndpoint(), params.GetDatabase(), params.GetStaticCredentials()));
                 break;
             case NKikimrReplication::TConnectionParams::kOAuthToken:
-                ydbProxy.Reset(CreateYdbProxy(params.GetEndpoint(), params.GetDatabase(), params.GetOAuthToken()));
+                ydbProxy.Reset(CreateYdbProxy(params.GetEndpoint(), params.GetDatabase(), params.GetOAuthToken().GetToken()));
                 break;
             default:
-                ErrorState(TStringBuilder() << "Unexpected credentials: " << params.GetCredentialsCase());
+                if (!(State == EState::Removing && !Targets)) {
+                    ErrorState(TStringBuilder() << "Unexpected credentials: " << params.GetCredentialsCase());
+                }
                 break;
             }
 
@@ -233,6 +235,10 @@ const TActorId& TReplication::GetYdbProxy() const {
 
 ui64 TReplication::GetSchemeShardId() const {
     return GetPathId().OwnerId;
+}
+
+const NKikimrReplication::TReplicationConfig& TReplication::GetConfig() const {
+    return Impl->Config;
 }
 
 void TReplication::SetState(EState state, TString issue) {

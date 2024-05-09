@@ -13,6 +13,7 @@
 #include <ydb/core/kqp/rm_service/kqp_resource_estimation.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/runtime/kqp_read_actor.h>
+#include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 
 #include <ydb/library/wilson_ids/wilson.h>
@@ -61,6 +62,7 @@ NKqpNode::TState& GetStateBucketByTx(std::shared_ptr<TBucketArray> buckets, ui64
 void FinishKqpTask(ui64 txId, ui64 taskId, bool success, NKqpNode::TState& bucket, std::shared_ptr<NRm::IKqpResourceManager> ResourceManager) {
     auto ctx = bucket.RemoveTask(txId, taskId, success);
     if (ctx) {
+        ResourceManager->FreeExecutionUnits(1);
         if (ctx->ComputeActorsNumber == 0) {
             ResourceManager->FreeResources(txId);
         } else {
@@ -284,6 +286,7 @@ private:
 
         ui64 txId = msg.GetTxId();
         bool isScan = msg.HasSnapshot();
+        const ui64 outputChunkMaxSize = msg.GetOutputChunkMaxSize();
 
         YQL_ENSURE(msg.GetStartAllOrFail()); // todo: support partial start
 
@@ -307,6 +310,16 @@ private:
             memoryPool = NRm::EKqpMemoryPool::DataQuery;
         } else {
             memoryPool = NRm::EKqpMemoryPool::Unspecified;
+        }
+
+        size_t executionUnits = msg.GetTasks().size();
+        if (!ResourceManager()->AllocateExecutionUnits(executionUnits)) {
+            Counters->RmNotEnoughComputeActors->Inc();
+            TStringBuilder error;
+            error << "TxId: " << txId << ", NodeId: " << SelfId().NodeId() << ", not enough compute actors, requested " << msg.GetTasks().size();
+            LOG_N(error);
+            ReplyError(txId, request.Executer, msg, NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_EXECUTION_UNITS, error);
+            return;
         }
 
         ui32 requestChannels = 0;
@@ -347,7 +360,6 @@ private:
         allocatedTasks.reserve(msg.GetTasks().size());
         for (auto& task : request.InFlyTasks) {
             NRm::TKqpResourcesRequest resourcesRequest;
-            resourcesRequest.ExecutionUnits = 1;
             resourcesRequest.MemoryPool = memoryPool;
 
             // !!!!!!!!!!!!!!!!!!!!!
@@ -358,14 +370,6 @@ private:
             if (!ResourceManager()->AllocateResources(txId, task.first, resourcesRequest, &resourcesResponse)) {
                 NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason failReason = NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR;
                 TStringBuilder error;
-
-                if (resourcesResponse.ExecutionUnits()) {
-                    error << "TxId: " << txId << ", NodeId: " << SelfId().NodeId() << ", not enough compute actors, requested " << msg.GetTasks().size();
-                    LOG_N(error);
-
-                    failReason = NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_EXECUTION_UNITS;
-                }
-
                 if (resourcesResponse.ScanQueryMemory()) {
                     error << "TxId: " << txId << ", NodeId: " << SelfId().NodeId() << ", not enough memory, requested " << task.second.Memory;
                     LOG_N(error);
@@ -383,6 +387,8 @@ private:
                 for (ui64 taskId : allocatedTasks) {
                     ResourceManager()->FreeResources(txId, taskId);
                 }
+
+                ResourceManager()->FreeExecutionUnits(executionUnits);
 
                 ReplyError(txId, request.Executer, msg, failReason, error);
                 return;
@@ -436,6 +442,7 @@ private:
                     inputChannelsCount += i.ChannelsSize();
                 }
                 memoryLimits.ChannelBufferSize = std::max<ui32>(taskCtx.ChannelSize / std::max<ui32>(1, inputChannelsCount), Config.GetMinChannelBufferSize());
+                memoryLimits.OutputChunkMaxSize = outputChunkMaxSize;
                 AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "channel_info")
                     ("ch_size", taskCtx.ChannelSize)("ch_count", taskCtx.Channels)("ch_limit", memoryLimits.ChannelBufferSize)
                     ("inputs", dqTask.InputsSize())("input_channels_count", inputChannelsCount);
@@ -486,14 +493,18 @@ private:
             if (tableKind == ETableKind::Datashard || tableKind == ETableKind::Olap) {
                 auto& info = computesByStage.UpsertTaskWithScan(dqTask, meta, !AppData()->FeatureFlags.GetEnableSeparationComputeActorsFromRead());
                 computeActor = CreateKqpScanComputeActor(request.Executer, txId, &dqTask,
-                    AsyncIoFactory, AppData()->FunctionRegistry, runtimeSettings, memoryLimits,
+                    AsyncIoFactory, runtimeSettings, memoryLimits,
                     NWilson::TTraceId(ev->TraceId), ev->Get()->Arena);
                 taskCtx.ComputeActorId = Register(computeActor);
                 info.MutableActorIds().emplace_back(taskCtx.ComputeActorId);
             } else {
+                std::shared_ptr<TGUCSettings> GUCSettings;
+                if (ev->Get()->Record.HasSerializedGUCSettings()) {
+                    GUCSettings = std::make_shared<TGUCSettings>(ev->Get()->Record.GetSerializedGUCSettings());
+                }
                 if (Y_LIKELY(!CaFactory)) {
                     computeActor = CreateKqpComputeActor(request.Executer, txId, &dqTask, AsyncIoFactory,
-                        AppData()->FunctionRegistry, runtimeSettings, memoryLimits, NWilson::TTraceId(ev->TraceId), ev->Get()->Arena, FederatedQuerySetup);
+                        runtimeSettings, memoryLimits, NWilson::TTraceId(ev->TraceId), ev->Get()->Arena, FederatedQuerySetup, GUCSettings);
                     taskCtx.ComputeActorId = Register(computeActor);
                 } else {
                     computeActor = CaFactory->CreateKqpComputeActor(request.Executer, txId, &dqTask,
@@ -549,6 +560,7 @@ private:
             ResourceManager()->FreeResources(txId);
 
             for (const auto& tasksRequest: tasksToAbort) {
+                ResourceManager()->FreeExecutionUnits(tasksRequest.InFlyTasks.size());
                 for (const auto& [taskId, task] : tasksRequest.InFlyTasks) {
                     auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::UNSPECIFIED,
                         reason);

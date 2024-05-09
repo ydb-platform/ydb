@@ -1,3 +1,4 @@
+#include <ydb/core/tx/datashard/datashard_ut_common_kqp.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 using namespace NKikimr::NSchemeShard;
@@ -359,10 +360,114 @@ Y_UNIT_TEST_SUITE(TSequence) {
                 Name: "myseq"
             }
         )");
+
         env.TestWaitNotification(runtime, txId);
 
         TestCopyTable(runtime, ++txId, "/MyRoot", "copy", "/MyRoot/Table");
         env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/copy/myseq", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(AlterSequence) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
+
+        TestCreateSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "seq"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/seq", true),
+            {
+                NLs::SequenceIncrement(1),
+                NLs::SequenceMinValue(1),
+                NLs::SequenceCache(1),
+                NLs::SequenceStartValue(1),
+                NLs::SequenceCycle(false)
+            }
+        );
+
+        auto value = DoNextVal(runtime, "/MyRoot/seq");
+        UNIT_ASSERT_VALUES_EQUAL(value, 1);
+
+        value = DoNextVal(runtime, "/MyRoot/seq");
+        UNIT_ASSERT_VALUES_EQUAL(value, 2);
+
+        TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "seq"
+            Increment: 2
+            MaxValue: 5
+            MinValue: 2
+            Cache: 1
+            StartValue: 2
+            Cycle: true
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/seq", true),
+                {
+                    NLs::SequenceIncrement(2),
+                    NLs::SequenceMaxValue(5),
+                    NLs::SequenceMinValue(2),
+                    NLs::SequenceCache(1),
+                    NLs::SequenceStartValue(2),
+                    NLs::SequenceCycle(true)
+                }
+        );
+
+        value = DoNextVal(runtime, "/MyRoot/seq");
+        UNIT_ASSERT_VALUES_EQUAL(value, 3);
+
+        value = DoNextVal(runtime, "/MyRoot/seq");
+        UNIT_ASSERT_VALUES_EQUAL(value, 5);
+
+        value = DoNextVal(runtime, "/MyRoot/seq");
+        UNIT_ASSERT_VALUES_EQUAL(value, 2);
+
+        TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "seq"
+            Cycle: false
+            MaxValue: 4
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        value = DoNextVal(runtime, "/MyRoot/seq");
+        UNIT_ASSERT_VALUES_EQUAL(value, 4);
+
+        DoNextVal(runtime, "/MyRoot/seq", Ydb::StatusIds::SCHEME_ERROR);
+
+        TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "seq"
+            Cycle: false
+            MinValue: 7
+        )", {NKikimrScheme::StatusInvalidParameter});
+
+        TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "seq"
+            Cycle: false
+            MinValue: 3
+        )", {NKikimrScheme::StatusInvalidParameter});
+
+        TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "seq"
+            Cycle: false
+            MinValue: 3
+            StartValue: 3
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "seq"
+            Cycle: false
+            MinValue: 3
+            MaxValue: 2
+        )", {NKikimrScheme::StatusInvalidParameter});
     }
 
 } // Y_UNIT_TEST_SUITE(TSequence)

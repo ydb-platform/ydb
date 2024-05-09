@@ -7,13 +7,14 @@
 
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/path.h>
-#include <ydb/core/cms/console/config_item_info.h>
 #include <ydb/core/driver_lib/run/config.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/node_broker.pb.h>
 #include <ydb/core/protos/alloc.pb.h>
 #include <ydb/core/protos/resource_broker.pb.h>
 #include <ydb/core/protos/http_config.pb.h>
+#include <ydb/core/protos/local.pb.h>
+#include <ydb/core/protos/tablet.pb.h>
 #include <ydb/core/protos/tenant_pool.pb.h>
 #include <ydb/core/protos/compile_service_config.pb.h>
 #include <ydb/core/protos/cms.pb.h>
@@ -45,6 +46,7 @@ extern TAutoPtr<NKikimrConfig::TActorSystemConfig> DummyActorSystemConfig();
 extern TAutoPtr<NKikimrConfig::TAllocatorConfig> DummyAllocatorConfig();
 
 using namespace NYdb::NConsoleClient;
+using namespace NKikimrTabletBase;
 
 namespace NKikimr::NConfig {
 
@@ -72,6 +74,10 @@ struct TConfigRefs {
     IProtoConfigFileProvider& ProtoConfigFileProvider;
 };
 
+struct TFileConfigOptions {
+    TString Description;
+    TMaybe<TString> ParsedOption;
+};
 
 template <class TProto>
 using TAccessors = std::tuple<
@@ -320,6 +326,7 @@ struct TCommonAppOptions {
     bool SysLogEnabled = false;
     bool TcpEnabled = false;
     bool SuppressVersionCheck = false;
+    EWorkload Workload = EWorkload::Hybrid; 
 
     void RegisterCliOptions(NLastGetopt::TOpts& opts) {
         opts.AddLongOption("cluster-name", "which cluster this node belongs to")
@@ -410,6 +417,9 @@ struct TCommonAppOptions {
 
         opts.AddLongOption("tiny-mode", "Start in a tiny mode")
             .NoArgument().SetFlag(&TinyMode);
+
+        opts.AddLongOption("workload", Sprintf("Workload to be served by this node, allowed values are %s", GetEnumAllNames<EWorkload>().data()))
+            .RequiredArgument("NAME").StoreResult(&Workload);
     }
 
     void ApplyFields(NKikimrConfig::TAppConfig& appConfig, IEnv& env, IConfigUpdateTracer& ConfigUpdateTracer) const {
@@ -593,8 +603,23 @@ struct TCommonAppOptions {
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::TenantPoolConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
-        if (TenantName && InterconnectPort != DefaultInterconnectPort) {
-            appConfig.MutableMonitoringConfig()->SetHostLabelOverride(HostAndICPort(env));
+        if (TenantName) {
+            if (appConfig.GetDynamicNodeConfig().GetNodeInfo().HasName()) {
+                const TString& nodeName = appConfig.GetDynamicNodeConfig().GetNodeInfo().GetName();
+                appConfig.MutableMonitoringConfig()->SetHostLabelOverride(nodeName);
+                ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+            } else if (InterconnectPort != DefaultInterconnectPort) {
+                appConfig.MutableMonitoringConfig()->SetHostLabelOverride(HostAndICPort(env));
+                ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+            }
+        }
+
+        if (TenantName) {
+            if (InterconnectPort == DefaultInterconnectPort) {
+                appConfig.MutableMonitoringConfig()->SetProcessLocation(Host(env));
+            } else {
+                appConfig.MutableMonitoringConfig()->SetProcessLocation(HostAndICPort(env));
+            }
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
@@ -607,6 +632,80 @@ struct TCommonAppOptions {
                 ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::FederatedQueryConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
             }
         }
+
+        if (TenantName) {
+            switch (Workload) {
+                case EWorkload::Operational:
+                    ApplyTabletDenyList(*appConfig.MutableDynamicNodeConfig(), { TTabletTypes::ColumnShard }, ConfigUpdateTracer);
+                    break;
+                case EWorkload::Analyitical:
+                    ApplyTabletAllowList(*appConfig.MutableDynamicNodeConfig(), { TTabletTypes::ColumnShard }, ConfigUpdateTracer);
+                    ApplyDontStartGrpcProxy(*appConfig.MutableGRpcConfig(), ConfigUpdateTracer);
+                    break;
+                case EWorkload::Hybrid:
+                    // default, do nothing 
+                    break;
+            }
+        }
+    }
+
+    void ApplyTabletAvailability(NKikimrConfig::TDynamicNodeConfig& config,
+        const std::unordered_set<TTabletTypes::EType>& allowList,
+        const std::unordered_set<TTabletTypes::EType>& denyList,
+        IConfigUpdateTracer& configUpdateTracer) const
+    {
+        std::unordered_map<TTabletTypes::EType, NKikimrLocal::TTabletAvailability> tabletAvailabilities;
+        for (const auto& availability : config.GetTabletAvailability()) {
+            tabletAvailabilities.emplace(availability.GetType(), availability);
+        }
+
+        if (!allowList.empty()) {
+            Y_ABORT_UNLESS(denyList.empty());
+
+            for (int i = TTabletTypes::EType_MIN; i < TTabletTypes::EType_MAX; ++i) {
+                const auto type = static_cast<TTabletTypes::EType>(i);
+                tabletAvailabilities[type].SetType(type);
+                if (allowList.contains(type)) {
+                    tabletAvailabilities[type].ClearMaxCount(); // default is big enough
+                    tabletAvailabilities[type].SetPriority(std::numeric_limits<i32>::max());
+                } else {
+                    tabletAvailabilities[type].SetMaxCount(0);
+                }
+            }
+        } else if (!denyList.empty()) {
+            Y_ABORT_UNLESS(allowList.empty());
+
+            for (const auto type : denyList) {
+                tabletAvailabilities[type].SetType(type);
+                tabletAvailabilities[type].SetMaxCount(0);
+            }
+        }
+
+        config.MutableTabletAvailability()->Clear();
+        for (const auto& [_, tabletAvailability] : tabletAvailabilities) {
+            config.MutableTabletAvailability()->Add()->CopyFrom(tabletAvailability);
+        }
+
+        configUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::DynamicNodeConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+    }
+
+    void ApplyTabletAllowList(NKikimrConfig::TDynamicNodeConfig& config,
+        const std::unordered_set<TTabletTypes::EType>& allowList,
+        IConfigUpdateTracer& configUpdateTracer) const
+    {
+        ApplyTabletAvailability(config, allowList, {}, configUpdateTracer);
+    }
+
+    void ApplyTabletDenyList(NKikimrConfig::TDynamicNodeConfig& config,
+        const std::unordered_set<TTabletTypes::EType>& denyList,
+        IConfigUpdateTracer& configUpdateTracer) const
+    {
+        ApplyTabletAvailability(config, {}, denyList, configUpdateTracer);
+    }
+
+    void ApplyDontStartGrpcProxy(NKikimrConfig::TGRpcConfig& config, IConfigUpdateTracer& configUpdateTracer) const {
+        config.SetStartGRpcProxy(false);
+        configUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
     }
 
     ui32 DeduceNodeId(const NKikimrConfig::TAppConfig& appConfig, IEnv& env) const {
@@ -682,10 +781,17 @@ struct TCommonAppOptions {
     }
 
     TString HostAndICPort(IEnv& env) const {
+        auto hostname = Host(env);
+        if (!hostname) {
+            return "";
+        }
+        return TStringBuilder() << hostname << ":" << InterconnectPort;
+    }
+
+    TString Host(IEnv& env) const {
         try {
             auto hostname = to_lower(env.HostName());
-            hostname = hostname.substr(0, hostname.find('.'));
-            return TStringBuilder() << hostname << ":" << InterconnectPort;
+            return hostname.substr(0, hostname.find('.'));
         } catch (TSystemError& error) {
             return "";
         }
@@ -865,7 +971,7 @@ TString DeduceNodeDomain(const NConfig::TCommonAppOptions& cf, const NKikimrConf
 ui32 NextValidKind(ui32 kind);
 bool HasCorrespondingManagedKind(ui32 kind, const NKikimrConfig::TAppConfig& appConfig);
 NClient::TKikimr GetKikimr(const TGrpcSslSettings& cf, const TString& addr, const IEnv& env);
-NKikimrConfig::TAppConfig GetYamlConfigFromResult(const NKikimr::NClient::TConfigurationResult& result, const TMap<TString, TString>& labels);
+NKikimrConfig::TAppConfig GetYamlConfigFromResult(const IConfigurationResult& result, const TMap<TString, TString>& labels);
 NKikimrConfig::TAppConfig GetActualDynConfig(
     const NKikimrConfig::TAppConfig& yamlConfig,
     const NKikimrConfig::TAppConfig& regularConfig,
@@ -1176,7 +1282,7 @@ public:
             AppConfig.GetAuthConfig().GetStaffApiUserToken(),
         };
 
-        TMaybe<NKikimr::NClient::TConfigurationResult> result = DynConfigClient.GetConfig(CommonAppOptions.GrpcSslSettings, addrs, settings, Env, Logger);
+        auto result = DynConfigClient.GetConfig(CommonAppOptions.GrpcSslSettings, addrs, settings, Env, Logger);
 
         if (!result) {
             return;
@@ -1211,22 +1317,25 @@ public:
         TKikimrScopeId& scopeId,
         TString& tenantName,
         TBasicKikimrServicesMask& servicesMask,
-        TMap<TString, TString>& labels,
         TString& clusterName,
-        NKikimrConfig::TAppConfig& initialCmsConfig,
-        NKikimrConfig::TAppConfig& initialCmsYamlConfig,
-        THashMap<ui32, TConfigItemInfo>& configInitInfo) const override
+        TConfigsDispatcherInitInfo& configsDispatcherInitInfo) const override
     {
         appConfig = AppConfig;
         nodeId = NodeId;
         scopeId = ScopeId;
         tenantName = TenantName;
         servicesMask = ServicesMask;
-        labels = Labels;
         clusterName = ClusterName;
-        initialCmsConfig.CopyFrom(InitDebug.OldConfig);
-        initialCmsYamlConfig.CopyFrom(InitDebug.YamlConfig);
-        configInitInfo = InitDebug.ConfigTransformInfo;
+        configsDispatcherInitInfo.InitialConfig = appConfig;
+        configsDispatcherInitInfo.ItemsServeRules = std::monostate{},
+        configsDispatcherInitInfo.Labels = Labels;
+        configsDispatcherInitInfo.DebugInfo = TDebugInfo {
+            .InitInfo = InitDebug.ConfigTransformInfo,
+        };
+        auto& debugInfo = *configsDispatcherInitInfo.DebugInfo;
+        debugInfo.StaticConfig.CopyFrom(appConfig); // FIXME it's not static config
+        debugInfo.OldDynConfig.CopyFrom(InitDebug.OldConfig);
+        debugInfo.NewDynConfig.CopyFrom(InitDebug.YamlConfig);
     }
 };
 

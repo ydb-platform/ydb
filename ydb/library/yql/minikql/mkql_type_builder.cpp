@@ -56,46 +56,6 @@ public:
     }
 };
 
-class TCallablePayload : public NUdf::ICallablePayload {
-public:
-    TCallablePayload(NMiniKQL::TNode* node)
-    {
-        auto structObj = AS_VALUE(NMiniKQL::TStructLiteral, NMiniKQL::TRuntimeNode(node, true));
-        auto argsIndex = structObj->GetType()->GetMemberIndex("Args");
-        auto payloadIndex = structObj->GetType()->GetMemberIndex("Payload");
-        Payload_ = AS_VALUE(NMiniKQL::TDataLiteral, structObj->GetValue(payloadIndex))->AsValue().AsStringRef();
-        auto args = structObj->GetValue(argsIndex);
-        auto argsList = AS_VALUE(NMiniKQL::TListLiteral, args);
-        auto itemType = AS_TYPE(NMiniKQL::TStructType, AS_TYPE(NMiniKQL::TListType, args)->GetItemType());
-        auto nameIndex = itemType->GetMemberIndex("Name");
-        auto flagsIndex = itemType->GetMemberIndex("Flags");
-        ArgsNames_.reserve(argsList->GetItemsCount());
-        ArgsFlags_.reserve(argsList->GetItemsCount());
-        for (ui32 i = 0; i < argsList->GetItemsCount(); ++i) {
-            auto arg = AS_VALUE(NMiniKQL::TStructLiteral, argsList->GetItems()[i]);
-            ArgsNames_.push_back(AS_VALUE(NMiniKQL::TDataLiteral, arg->GetValue(nameIndex))->AsValue().AsStringRef());
-            ArgsFlags_.push_back(AS_VALUE(NMiniKQL::TDataLiteral, arg->GetValue(flagsIndex))->AsValue().Get<ui64>());
-        }
-    }
-
-    NUdf::TStringRef GetPayload() const override {
-        return Payload_;
-    }
-
-    NUdf::TStringRef GetArgumentName(ui32 index) const override {
-        return ArgsNames_[index];
-    }
-
-    ui64 GetArgumentFlags(ui32 index) const override {
-        return ArgsFlags_[index];
-    }
-
-private:
-    NUdf::TStringRef Payload_;
-    TVector<NUdf::TStringRef> ArgsNames_;
-    TVector<ui64> ArgsFlags_;
-};
-
 /////////////////////////////////////////////////////////////////////////////
 // TOptionalTypeBuilder
 //////////////////////////////////////////////////////////////////////////////
@@ -1472,8 +1432,8 @@ bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& ty
     case NUdf::EDataSlot::Int64:
     case NUdf::EDataSlot::Interval:
     case NUdf::EDataSlot::Interval64:
-    case NUdf::EDataSlot::Datetime64:
     case NUdf::EDataSlot::Timestamp64:
+    case NUdf::EDataSlot::Datetime64:
         type = arrow::int64();
         return true;
     case NUdf::EDataSlot::Uint64:
@@ -1536,6 +1496,23 @@ bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type) {
         return true;
     }
 
+    if (unpacked->IsStruct()) {
+        auto structType = AS_TYPE(TStructType, unpacked);
+        std::vector<std::shared_ptr<arrow::Field>> members;
+        for (ui32 i = 0; i < structType->GetMembersCount(); i++) {
+            std::shared_ptr<arrow::DataType> childType;
+            const TString memberName(structType->GetMemberName(i));
+            auto memberType = structType->GetMemberType(i);
+            if (!ConvertArrowType(memberType, childType)) {
+                return false;
+            }
+            members.emplace_back(std::make_shared<arrow::Field>(memberName, childType, memberType->IsOptional()));
+        }
+
+        type = std::make_shared<arrow::StructType>(members);
+        return true;
+    }
+
     if (unpacked->IsTuple()) {
         auto tupleType = AS_TYPE(TTupleType, unpacked);
         std::vector<std::shared_ptr<arrow::Field>> fields;
@@ -1562,6 +1539,11 @@ bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type) {
             type = arrow::binary();
         }
 
+        return true;
+    }
+
+    if (unpacked->IsResource()) {
+        type = arrow::fixed_size_binary(sizeof(NYql::NUdf::TUnboxedValuePod));
         return true;
     }
 
@@ -2366,6 +2348,15 @@ size_t CalcMaxBlockItemSize(const TType* type) {
         return CalcMaxBlockItemSize(AS_TYPE(TOptionalType, type)->GetItemType());
     }
 
+    if (type->IsStruct()) {
+        auto structType = AS_TYPE(TStructType, type);
+        size_t result = 0;
+        for (ui32 i = 0; i < structType->GetMembersCount(); i++) {
+            result = std::max(result, CalcMaxBlockItemSize(structType->GetMemberType(i)));
+        }
+        return result;
+    }
+
     if (type->IsTuple()) {
         auto tupleType = AS_TYPE(TTupleType, type);
         size_t result = 0;
@@ -2383,6 +2374,10 @@ size_t CalcMaxBlockItemSize(const TType* type) {
         } else {
             return sizeof(arrow::BinaryType::offset_type);
         }
+    }
+
+    if (type->IsResource()) {
+        return sizeof(NYql::NUdf::TUnboxedValue);
     }
 
     if (type->IsData()) {
@@ -2442,6 +2437,11 @@ struct TComparatorTraits {
         Y_UNUSED(pgBuilder);
         return std::unique_ptr<TResult>(MakePgItemComparator(desc.TypeId).Release());
     }
+
+    static std::unique_ptr<TResult> MakeResource(bool isOptional) {
+        Y_UNUSED(isOptional);
+        ythrow yexception() << "Comparator not implemented for block resources: ";
+    }
 };
 
 struct THasherTraits {
@@ -2457,6 +2457,11 @@ struct THasherTraits {
     static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
         Y_UNUSED(pgBuilder);
         return std::unique_ptr<TResult>(MakePgItemHasher(desc.TypeId).Release());
+    }
+
+    static std::unique_ptr<TResult> MakeResource(bool isOptional) {
+        Y_UNUSED(isOptional);
+        ythrow yexception() << "Hasher not implemented for block resources";
     }
 };
 

@@ -130,7 +130,7 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
             }
 
             TDeferredAtom table;
-            MakeTableFromExpression(Ctx, named, table);
+            MakeTableFromExpression(Ctx.Pos(), Ctx, named, table);
             nameOrAt = std::make_pair(at, table);
             break;
         }
@@ -141,7 +141,7 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
     bool withTruncate = false;
     TTableHints tableHints;
     if (tableRef.HasBlock2()) {
-        auto hints = TableHintsImpl(tableRef.GetBlock2().GetRule_table_hints1());
+        auto hints = TableHintsImpl(tableRef.GetBlock2().GetRule_table_hints1(), service);
         if (!hints) {
             Ctx.Error() << "Failed to parse table hints";
             return nullptr;
@@ -203,9 +203,15 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
     }
     Ctx.IncrementMonCounter("sql_features", SqlIntoModeStr);
 
+    auto options = BuildIntoTableOptions(pos, eraseColumns, tableHints);
+
+    if (node.HasBlock5()) {
+        options = options->L(options, ReturningList(node.GetBlock5().GetRule_returning_columns_list1()));
+    }
+
     return BuildWriteColumns(pos, Ctx.Scoped, table,
                              ToWriteColumnsMode(SqlIntoMode), std::move(values),
-                             BuildIntoTableOptions(pos, eraseColumns, tableHints));
+                             options);
 }
 
 bool TSqlIntoTable::ValidateServiceName(const TRule_into_table_stmt& node, const TTableRef& table,

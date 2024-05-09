@@ -41,15 +41,16 @@ On the selected YDB cluster, you need to run the following query:
 
 ```sql
 CREATE TABLE `fluent-bit/log` (
-	`timestamp`         Timestamp NOT NULL,
+    `timestamp`         Timestamp NOT NULL,
     `file`              Text NOT NULL,
     `pipe`              Text NOT NULL,
     `message`           Text NULL,
+    `datahash`          Uint64 NOT NULL,
     `message_parsed`    JSON NULL,
     `kubernetes`        JSON NULL,
 
     PRIMARY KEY (
-         `timestamp`, `input`
+         `timestamp`, `file`, `datahash`
     )
 )
 ```
@@ -64,6 +65,8 @@ Column purpose:
 
 * message – the log message
 
+* datahash – the CityHash64 hash code calculated over the log message (required to avoid overwriting messages from the same source and with the same timestamp)
+
 * message_parsed – a structured log message, if it could be parsed using the fluent-bit parsers
 
 * kubernetes – information about the pod, for example: name, namespace, logs and annotations
@@ -77,7 +80,7 @@ It is necessary to replace the repository and image version:
 ```yaml
 image:
   repository: ghcr.io/ydb-platform/fluent-bit-ydb
-  tag: v1.0.0
+  tag: latest
 ```
 
 In this image, a plugin library has been added that implements YDB support. Source code is available [here](https://github.com/ydb-platform/fluent-bit-ydb)
@@ -158,7 +161,7 @@ config:
         Name ydb
         Match kube.*
         TablePath fluent-bit/log
-        Columns {".timestamp":"timestamp",".input":"file","log":"message","log_parsed":"message_structured","stream":"pipe","kubernetes":"metadata"}
+        Columns {".timestamp":"timestamp",".input":"file",".hash":"datahash","log":"message","log_parsed":"message_structured","stream":"pipe","kubernetes":"metadata"}
         ConnectionURL ${OUTPUT_YDB_CONNECTION_URL}
         CredentialsToken ${OUTPUT_YDB_CREDENTIALS_TOKEN}
 ```

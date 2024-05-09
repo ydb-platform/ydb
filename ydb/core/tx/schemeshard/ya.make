@@ -90,6 +90,8 @@ SRCS(
     schemeshard__operation_alter_kesus.cpp
     schemeshard__operation_alter_login.cpp
     schemeshard__operation_alter_pq.cpp
+    schemeshard__operation_alter_replication.cpp
+    schemeshard__operation_alter_sequence.cpp
     schemeshard__operation_alter_solomon.cpp
     schemeshard__operation_alter_subdomain.cpp
     schemeshard__operation_alter_table.cpp
@@ -102,6 +104,7 @@ SRCS(
     schemeshard__operation_common_external_table.cpp
     schemeshard__operation_common_subdomain.h
     schemeshard__operation_consistent_copy_tables.cpp
+    schemeshard__operation_copy_sequence.cpp
     schemeshard__operation_copy_table.cpp
     schemeshard__operation_create_backup.cpp
     schemeshard__operation_create_bsv.cpp
@@ -172,6 +175,7 @@ SRCS(
     schemeshard_audit_log_fragment.cpp
     schemeshard_audit_log.cpp
     schemeshard_impl.cpp
+    schemeshard_backup.cpp
     schemeshard_impl.h
     schemeshard_billing_helpers.cpp
     schemeshard_cdc_stream_scan.cpp
@@ -191,7 +195,6 @@ SRCS(
     schemeshard_svp_migration.h
     schemeshard_svp_migration.cpp
     schemeshard_tx_infly.h
-    schemeshard_tables_storage.cpp
     schemeshard_types.cpp
     schemeshard_types.h
     schemeshard_user_attr_limits.h
@@ -269,7 +272,9 @@ PEERDIR(
     ydb/library/aclib/protos
     ydb/library/login
     ydb/library/login/protos
+    ydb/library/protobuf_printer
     ydb/library/yql/minikql
+    ydb/library/yql/providers/common/proto
     ydb/services/bg_tasks
 )
 

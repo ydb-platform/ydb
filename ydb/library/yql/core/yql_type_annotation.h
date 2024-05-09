@@ -10,6 +10,7 @@
 #include <ydb/library/yql/public/udf/udf_validate.h>
 #include <ydb/library/yql/core/credentials/yql_credentials.h>
 #include <ydb/library/yql/core/url_lister/interface/url_lister_manager.h>
+#include <ydb/library/yql/core/qplayer/storage/interface/yql_qstorage.h>
 #include <ydb/library/yql/ast/yql_expr.h>
 
 #include <library/cpp/yson/node/node.h>
@@ -84,6 +85,10 @@ public:
         Credentials = std::move(credentials);
     }
 
+    void SetQContext(const TQContext& qContext) {
+        QContext = qContext;
+    }
+
     void RegisterPackage(const TString& package) override;
     bool SetPackageDefaultVersion(const TString& package, ui32 version) override;
     const TExportTable* GetModule(const TString& module) const override;
@@ -111,6 +116,7 @@ private:
     IUrlLoader::TPtr UrlLoader;
     TMaybe<NYT::TNode> Parameters;
     TCredentials::TPtr Credentials;
+    TQContext QContext;
     TExprContext LibsContext;
     TSet<TString> KnownPackages;
     THashMap<TString, ui32> PackageVersions;
@@ -261,6 +267,8 @@ struct TTypeAnnotationContext: public TThrRefBase {
     EBlockEngineMode BlockEngineMode = EBlockEngineMode::Disable;
     TMaybe<bool> PgEmitAggApply;
     IArrowResolver::TPtr ArrowResolver;
+    TFileStoragePtr FileStorage;
+    TQContext QContext;
     ECostBasedOptimizerType CostBasedOptimizer = ECostBasedOptimizerType::Disable;
     bool MatchRecognize = false;
     EMatchRecognizeStreamingMode MatchRecognizeStreaming = EMatchRecognizeStreamingMode::Force;
@@ -271,6 +279,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool OrderedColumns = false;
     TColumnOrderStorage::TPtr ColumnOrderStorage = new TColumnOrderStorage;
     THashSet<TString> OptimizerFlags;
+    bool StreamLookupJoin = false;
 
     TMaybe<TColumnOrder> LookupColumnOrder(const TExprNode& node) const;
     IGraphTransformer::TStatus SetColumnOrder(const TExprNode& node, const TColumnOrder& columnOrder, TExprContext& ctx);

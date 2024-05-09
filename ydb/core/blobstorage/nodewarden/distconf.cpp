@@ -65,6 +65,12 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::HandleConfigConfirm(STATEFN_SIG) {
         if (ev->Cookie) {
+            STLOG(PRI_DEBUG, BS_NODE, NWDC46, "HandleConfigConfirm", (Cookie, ev->Cookie),
+                (ProposedStorageConfigCookie, ProposedStorageConfigCookie),
+                (ProposedStorageConfigCookieUsage, ProposedStorageConfigCookieUsage));
+            if (ev->Cookie == ProposedStorageConfigCookie && ProposedStorageConfigCookieUsage) {
+                --ProposedStorageConfigCookieUsage;
+            }
             FinishAsyncOperation(ev->Cookie);
         }
     }
@@ -239,11 +245,10 @@ template<>
 void Out<NKikimr::NStorage::TDistributedConfigKeeper::ERootState>(IOutputStream& s, NKikimr::NStorage::TDistributedConfigKeeper::ERootState state) {
     using E = decltype(state);
     switch (state) {
-        case E::INITIAL:                    s << "INITIAL";                    return;
-        case E::COLLECT_CONFIG:             s << "COLLECT_CONFIG";             return;
-        case E::PROPOSE_NEW_STORAGE_CONFIG: s << "PROPOSE_NEW_STORAGE_CONFIG"; return;
-        case E::ERROR_TIMEOUT:              s << "ERROR_TIMEOUT";              return;
-        case E::RELAX:                      s << "RELAX";                      return;
+        case E::INITIAL:       s << "INITIAL";       return;
+        case E::ERROR_TIMEOUT: s << "ERROR_TIMEOUT"; return;
+        case E::IN_PROGRESS:   s << "IN_PROGRESS";   return;
+        case E::RELAX:         s << "RELAX";         return;
     }
     Y_ABORT();
 }

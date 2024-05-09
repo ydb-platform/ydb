@@ -11,6 +11,7 @@ PEERDIR(
     ydb/core/blobstorage/pdisk
     ydb/core/control
     ydb/core/keyvalue
+    ydb/core/jaeger_tracing
     ydb/core/kqp/common
     ydb/core/kqp/rm_service
     ydb/core/tx/columnshard

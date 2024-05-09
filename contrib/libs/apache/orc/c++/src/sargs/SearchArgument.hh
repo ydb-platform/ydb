@@ -19,10 +19,10 @@
 #ifndef ORC_SRC_SEARCHARGUMENT_HH
 #define ORC_SRC_SEARCHARGUMENT_HH
 
-#include "wrap/orc-proto-wrapper.hh"
 #include "ExpressionTree.hh"
 #include "orc/sargs/SearchArgument.hh"
 #include "sargs/PredicateLeaf.hh"
+#include "wrap/orc-proto-wrapper.hh"
 
 #include <deque>
 #include <stdexcept>
@@ -40,7 +40,7 @@ namespace orc {
    * (<a href="http://en.wikipedia.org/wiki/Conjunctive_normal_form">CNF</a>).
    */
   class SearchArgumentImpl : public SearchArgument {
-  public:
+   public:
     SearchArgumentImpl(TreeNode root, const std::vector<PredicateLeaf>& leaves);
 
     /**
@@ -54,7 +54,7 @@ namespace orc {
      * Get the expression tree. This should only needed for file formats that
      * need to translate the expression to an internal form.
      */
-    const ExpressionTree * getExpression() const;
+    const ExpressionTree* getExpression() const;
 
     /**
      * Evaluate the entire predicate based on the values for the leaf predicates.
@@ -65,7 +65,7 @@ namespace orc {
 
     std::string toString() const override;
 
-  private:
+   private:
     std::shared_ptr<ExpressionTree> mExpressionTree;
     std::vector<PredicateLeaf> mLeaves;
   };
@@ -75,7 +75,7 @@ namespace orc {
    * must call startOr, startAnd, or startNot before adding any leaves.
    */
   class SearchArgumentBuilderImpl : public SearchArgumentBuilder {
-  public:
+   public:
     SearchArgumentBuilderImpl();
 
     /**
@@ -110,8 +110,7 @@ namespace orc {
      * @param literal the literal
      * @return this
      */
-    SearchArgumentBuilder& lessThan(const std::string& column,
-                                    PredicateDataType type,
+    SearchArgumentBuilder& lessThan(const std::string& column, PredicateDataType type,
                                     Literal literal) override;
 
     /**
@@ -121,8 +120,7 @@ namespace orc {
      * @param literal the literal
      * @return this
      */
-    SearchArgumentBuilder& lessThan(uint64_t columnId,
-                                    PredicateDataType type,
+    SearchArgumentBuilder& lessThan(uint64_t columnId, PredicateDataType type,
                                     Literal literal) override;
 
     /**
@@ -132,8 +130,7 @@ namespace orc {
      * @param literal the literal
      * @return this
      */
-    SearchArgumentBuilder& lessThanEquals(const std::string& column,
-                                          PredicateDataType type,
+    SearchArgumentBuilder& lessThanEquals(const std::string& column, PredicateDataType type,
                                           Literal literal) override;
 
     /**
@@ -143,8 +140,7 @@ namespace orc {
      * @param literal the literal
      * @return this
      */
-    SearchArgumentBuilder& lessThanEquals(uint64_t columnId,
-                                          PredicateDataType type,
+    SearchArgumentBuilder& lessThanEquals(uint64_t columnId, PredicateDataType type,
                                           Literal literal) override;
 
     /**
@@ -154,8 +150,7 @@ namespace orc {
      * @param literal the literal
      * @return this
      */
-    SearchArgumentBuilder& equals(const std::string& column,
-                                  PredicateDataType type,
+    SearchArgumentBuilder& equals(const std::string& column, PredicateDataType type,
                                   Literal literal) override;
 
     /**
@@ -165,8 +160,7 @@ namespace orc {
      * @param literal the literal
      * @return this
      */
-    SearchArgumentBuilder& equals(uint64_t columnId,
-                                  PredicateDataType type,
+    SearchArgumentBuilder& equals(uint64_t columnId, PredicateDataType type,
                                   Literal literal) override;
 
     /**
@@ -176,8 +170,7 @@ namespace orc {
      * @param literal the literal
      * @return this
      */
-    SearchArgumentBuilder& nullSafeEquals(const std::string& column,
-                                          PredicateDataType type,
+    SearchArgumentBuilder& nullSafeEquals(const std::string& column, PredicateDataType type,
                                           Literal literal) override;
 
     /**
@@ -187,8 +180,7 @@ namespace orc {
      * @param literal the literal
      * @return this
      */
-    SearchArgumentBuilder& nullSafeEquals(uint64_t columnId,
-                                          PredicateDataType type,
+    SearchArgumentBuilder& nullSafeEquals(uint64_t columnId, PredicateDataType type,
                                           Literal literal) override;
 
     /**
@@ -198,8 +190,7 @@ namespace orc {
      * @param literals the literals
      * @return this
      */
-    SearchArgumentBuilder& in(const std::string& column,
-                              PredicateDataType type,
+    SearchArgumentBuilder& in(const std::string& column, PredicateDataType type,
                               const std::initializer_list<Literal>& literals) override;
 
     /**
@@ -209,8 +200,7 @@ namespace orc {
      * @param literals the literals
      * @return this
      */
-    SearchArgumentBuilder& in(uint64_t columnId,
-                              PredicateDataType type,
+    SearchArgumentBuilder& in(uint64_t columnId, PredicateDataType type,
                               const std::initializer_list<Literal>& literals) override;
 
     /**
@@ -220,8 +210,7 @@ namespace orc {
      * @param literals the literals
      * @return this
      */
-    SearchArgumentBuilder& in(const std::string& column,
-                              PredicateDataType type,
+    SearchArgumentBuilder& in(const std::string& column, PredicateDataType type,
                               const std::vector<Literal>& literals) override;
 
     /**
@@ -231,8 +220,7 @@ namespace orc {
      * @param literals the literals
      * @return this
      */
-    SearchArgumentBuilder& in(uint64_t columnId,
-                              PredicateDataType type,
+    SearchArgumentBuilder& in(uint64_t columnId, PredicateDataType type,
                               const std::vector<Literal>& literals) override;
 
     /**
@@ -241,8 +229,7 @@ namespace orc {
      * @param type the type of the expression
      * @return this
      */
-    SearchArgumentBuilder& isNull(const std::string& column,
-                                  PredicateDataType type) override;
+    SearchArgumentBuilder& isNull(const std::string& column, PredicateDataType type) override;
 
     /**
      * Add an is null leaf to the current item on the stack.
@@ -250,8 +237,7 @@ namespace orc {
      * @param type the type of the expression
      * @return this
      */
-    SearchArgumentBuilder& isNull(uint64_t columnId,
-                                  PredicateDataType type) override;
+    SearchArgumentBuilder& isNull(uint64_t columnId, PredicateDataType type) override;
 
     /**
      * Add a between leaf to the current item on the stack.
@@ -261,9 +247,7 @@ namespace orc {
      * @param upper the literal
      * @return this
      */
-    SearchArgumentBuilder& between(const std::string& column,
-                                   PredicateDataType type,
-                                   Literal lower,
+    SearchArgumentBuilder& between(const std::string& column, PredicateDataType type, Literal lower,
                                    Literal upper) override;
 
     /**
@@ -274,9 +258,7 @@ namespace orc {
      * @param upper the literal
      * @return this
      */
-    SearchArgumentBuilder& between(uint64_t columnId,
-                                   PredicateDataType type,
-                                   Literal lower,
+    SearchArgumentBuilder& between(uint64_t columnId, PredicateDataType type, Literal lower,
                                    Literal upper) override;
 
     /**
@@ -293,49 +275,40 @@ namespace orc {
      */
     std::unique_ptr<SearchArgument> build() override;
 
-  private:
+   private:
     SearchArgumentBuilder& start(ExpressionTree::Operator op);
     size_t addLeaf(PredicateLeaf leaf);
 
     static bool isInvalidColumn(const std::string& column);
     static bool isInvalidColumn(uint64_t columnId);
 
-    template<typename T>
-    SearchArgumentBuilder& compareOperator(PredicateLeaf::Operator op,
-                                           T column,
-                                           PredicateDataType type,
-                                           Literal literal);
+    template <typename T>
+    SearchArgumentBuilder& compareOperator(PredicateLeaf::Operator op, T column,
+                                           PredicateDataType type, Literal literal);
 
-    template<typename T, typename CONTAINER>
-    SearchArgumentBuilder& addChildForIn(T column,
-                                         PredicateDataType type,
+    template <typename T, typename CONTAINER>
+    SearchArgumentBuilder& addChildForIn(T column, PredicateDataType type,
                                          const CONTAINER& literals);
 
-    template<typename T>
-    SearchArgumentBuilder& addChildForIsNull(T column,
-                                             PredicateDataType type);
+    template <typename T>
+    SearchArgumentBuilder& addChildForIsNull(T column, PredicateDataType type);
 
-    template<typename T>
-    SearchArgumentBuilder& addChildForBetween(T column,
-                                              PredicateDataType type,
-                                              Literal lower,
+    template <typename T>
+    SearchArgumentBuilder& addChildForBetween(T column, PredicateDataType type, Literal lower,
                                               Literal upper);
 
-  public:
+   public:
     static TreeNode pushDownNot(TreeNode root);
     static TreeNode foldMaybe(TreeNode expr);
     static TreeNode flatten(TreeNode root);
     static TreeNode convertToCNF(TreeNode root);
 
-  private:
+   private:
     std::deque<TreeNode> mCurrTree;
-    std::unordered_map<PredicateLeaf,
-                       size_t,
-                       PredicateLeafHash,
-                       PredicateLeafComparator> mLeaves;
+    std::unordered_map<PredicateLeaf, size_t, PredicateLeafHash, PredicateLeafComparator> mLeaves;
     std::shared_ptr<ExpressionTree> mRoot;
   };
 
-} // namespace orc
+}  // namespace orc
 
-#endif //ORC_SRC_SEARCHARGUMENT_HH
+#endif  // ORC_SRC_SEARCHARGUMENT_HH

@@ -110,7 +110,7 @@ public:
         IGraphTransformer& transformer,
         TExprContext& ctx,
         TKqlTransformContext& transformCtx)
-        : TKqpAsyncResultBase(queryRoot, ctx, transformer)
+        : TKqpAsyncResultBase(queryRoot, ctx, transformer, nullptr)
         , TransformCtx(transformCtx)
     {
     }
@@ -198,7 +198,17 @@ public:
         YQL_ENSURE(IsIn({EKikimrQueryType::Query, EKikimrQueryType::Script}, TransformCtx->QueryCtx->Type));
         YQL_ENSURE(TMaybeNode<TKiDataQueryBlocks>(query));
 
-        TypesCtx.BlockEngineMode = NYql::EBlockEngineMode::Auto;
+        switch (TransformCtx->Config->BlockChannelsMode) {
+            case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_SCALAR:
+            case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO:
+                TypesCtx.BlockEngineMode = NYql::EBlockEngineMode::Auto;
+                break;
+            case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_FORCE:
+                TypesCtx.BlockEngineMode = NYql::EBlockEngineMode::Force;
+                break;
+            default:
+                YQL_ENSURE(false);
+        }
 
         return PrepareQueryInternal(cluster, TKiDataQueryBlocks(query), ctx, settings);
     }

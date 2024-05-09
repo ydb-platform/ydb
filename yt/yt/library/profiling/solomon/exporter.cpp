@@ -118,6 +118,10 @@ void TSolomonExporterConfig::Register(TRegistrar registrar)
     registrar.Parameter("update_sensor_service_tree_period", &TThis::UpdateSensorServiceTreePeriod)
         .Default(TDuration::Seconds(30));
 
+    registrar.Parameter("producer_collection_batch_size", &TThis::ProducerCollectionBatchSize)
+        .Default(DefaultProducerCollectionBatchSize)
+        .GreaterThan(0);
+
     registrar.Postprocessor([] (TThis* config) {
         if (config->LingerTimeout.GetValue() % config->GridStep.GetValue() != 0) {
             THROW_ERROR_EXCEPTION("\"linger_timeout\" must be multiple of \"grid_step\"");
@@ -208,6 +212,7 @@ TSolomonExporter::TSolomonExporter(
     }
 
     Registry_->SetWindowSize(Config_->WindowSize);
+    Registry_->SetProducerCollectionBatchSize(Config_->ProducerCollectionBatchSize);
     Registry_->SetGridFactor([config = Config_] (const TString& name) -> int {
         auto shard = config->MatchShard(name);
         if (!shard) {
@@ -611,6 +616,8 @@ void TSolomonExporter::DoHandleShard(
     const IResponseWriterPtr& rsp)
 {
     TPromise<TSharedRef> responsePromise = NewPromise<TSharedRef>();
+
+    auto Logger = NProfiling::Logger.WithTag("Shard: %v", name);
 
     try {
         auto format = NMonitoring::EFormat::JSON;
@@ -1026,7 +1033,7 @@ TSharedRef TSolomonExporter::DumpSensors()
     Registry_->ProcessRegistrations();
     Registry_->Collect(OffloadThreadPool_->GetInvoker());
 
-    return SerializeProtoToRef(Registry_->DumpSensors());
+    return SerializeProtoToRef(Registry_->DumpSensors(Config_->Host, Config_->InstanceTags));
 }
 
 void TSolomonExporter::AttachRemoteProcess(TCallback<TFuture<TSharedRef>()> dumpSensors)

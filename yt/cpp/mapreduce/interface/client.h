@@ -185,7 +185,7 @@ public:
     ///
     /// @brief Try to lock given path.
     ///
-    /// Lock will be held until transaction is commited/aborted or @ref NYT::ITransaction::Unlock method is called.
+    /// Lock will be held until transaction is committed/aborted or @ref NYT::ITransaction::Unlock method is called.
     /// Lock modes:
     ///   - `LM_EXCLUSIVE`: if exclusive lock is taken no other transaction can take exclusive or shared lock.
     ///   - `LM_SHARED`: if shared lock is taken other transactions can take shared lock but not exclusive.

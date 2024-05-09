@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: fonttools
-Version: 4.49.0
+Version: 4.51.0
 Summary: Tools to manipulate font files
 Home-page: http://github.com/fonttools/fonttools
 Author: Just van Rossum
@@ -374,6 +374,19 @@ Have fun!
 
 Changelog
 ~~~~~~~~~
+
+4.51.0 (released 2024-04-05)
+----------------------------
+
+- [ttLib] Optimization on loading aux fields (#3464).
+- [ttFont] Add reorderGlyphs (#3468).
+
+4.50.0 (released 2024-03-15)
+----------------------------
+
+- [pens] Added decomposing filter pens that draw components as regular contours (#3460).
+- [instancer] Drop explicit no-op axes from TupleVariations (#3457).
+- [cu2qu/ufo] Return set of modified glyph names from fonts_to_quadratic (#3456).
 
 4.49.0 (released 2024-02-15)
 ----------------------------

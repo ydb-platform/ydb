@@ -425,9 +425,7 @@ class TMemoryTrackedWriterOptions
     : public NYTree::TYsonStruct
 {
 public:
-    IMemoryUsageTrackerPtr MemoryTracker;
-
-    IMemoryReferenceTrackerPtr MemoryReferenceTracker;
+    IMemoryUsageTrackerPtr MemoryUsageTracker;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -486,6 +484,9 @@ public:
 
     //! Upper bound on count of simultaneously requested fragments within a reading session.
     i64 MaxInflightFragmentCount;
+
+    // If |true| will request full blocks and store them in a cache for further access.
+    bool PrefetchWholeBlocks;
 
     REGISTER_YSON_STRUCT(TChunkFragmentReaderConfig);
 

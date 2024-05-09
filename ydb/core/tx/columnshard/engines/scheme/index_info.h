@@ -24,10 +24,6 @@ namespace arrow {
     class Schema;
 }
 
-namespace NKikimr::NArrow {
-    struct TSortDescription;
-}
-
 namespace NKikimr::NOlap {
 
 class TPortionInfoWithBlobs;
@@ -43,28 +39,27 @@ private:
     THashMap<ui32, TColumnFeatures> ColumnFeatures;
     THashMap<ui32, std::shared_ptr<arrow::Field>> ArrowColumnByColumnIdCache;
     THashMap<ui32, NIndexes::TIndexMetaContainer> Indexes;
-    std::map<NStatistics::TIdentifier, NStatistics::TOperatorContainer> Statistics;
+    std::map<TString, NStatistics::TOperatorContainer> StatisticsByName;
     TIndexInfo(const TString& name);
     bool SchemeNeedActualization = false;
+    bool ExternalGuaranteeExclusivePK = false;
     bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<IStoragesManager>& operators);
     TColumnFeatures& GetOrCreateColumnFeatures(const ui32 columnId) const;
     void BuildSchemaWithSpecials();
     void BuildArrowSchema();
     void InitializeCaches(const std::shared_ptr<IStoragesManager>& operators);
 public:
+    bool GetExternalGuaranteeExclusivePK() const {
+        return ExternalGuaranteeExclusivePK;
+    }
+
     const TColumnFeatures& GetColumnFeaturesVerified(const ui32 columnId) const {
         auto it = ColumnFeatures.find(columnId);
         AFL_VERIFY(it != ColumnFeatures.end());
         return it->second;
     }
 
-    TEntityGroups GetEntityGroupsByStorageId(const TString& specialTier) const {
-        TEntityGroups groups(IStoragesManager::DefaultStorageId);
-        for (auto&& i : GetEntityIds()) {
-            groups.Add(i, GetEntityStorageId(i, specialTier));
-        }
-        return groups;
-    }
+    NSplitter::TEntityGroups GetEntityGroupsByStorageId(const TString& specialTier, const IStoragesManager& storages) const;
 
     bool GetSchemeNeedActualization() const {
         return SchemeNeedActualization;
@@ -84,14 +79,15 @@ public:
 
     std::vector<std::shared_ptr<IPortionDataChunk>> MakeEmptyChunks(const ui32 columnId, const std::vector<ui32>& pages, const TSimpleColumnInfo& columnInfo) const;
 
-    const std::map<NStatistics::TIdentifier, NStatistics::TOperatorContainer>& GetStatistics() const {
-        return Statistics;
+    const std::map<TString, NStatistics::TOperatorContainer>& GetStatisticsByName() const {
+        return StatisticsByName;
     }
 
     NStatistics::TOperatorContainer GetStatistics(const NStatistics::TIdentifier& id) const {
-        auto it = Statistics.find(id);
-        if (it != Statistics.end()) {
-            return it->second;
+        for (auto&& i : StatisticsByName) {
+            if (i.second->GetIdentifier() == id) {
+                return i.second;
+            }
         }
         return NStatistics::TOperatorContainer();
     }
@@ -124,11 +120,6 @@ public:
         return GetColumnStorageId(entityId, specialTier);
     }
 
-    enum class ESpecialColumn : ui32 {
-        PLAN_STEP = NOlap::NPortion::TSpecialColumns::SPEC_COL_PLAN_STEP_INDEX,
-        TX_ID = NOlap::NPortion::TSpecialColumns::SPEC_COL_TX_ID_INDEX
-    };
-
     TString DebugString() const {
         TStringBuilder sb;
         sb << "("
@@ -148,6 +139,7 @@ public:
 
     /// Makes schema as set of the special columns.
     static std::shared_ptr<arrow::Schema> ArrowSchemaSnapshot();
+    static ui64 GetSpecialColumnsRecordSize();
 
     /// Matches name of the filed with names of the special columns.
     static bool IsSpecialColumn(const arrow::Field& field);
@@ -312,19 +304,6 @@ public:
     /// Returns whether the sorting keys defined.
     bool IsSorted() const { return true; }
     bool IsSortedColumn(const ui32 columnId) const { return GetPKFirstColumnId() == columnId; }
-
-    std::shared_ptr<NArrow::TSortDescription> SortDescription() const;
-    std::shared_ptr<NArrow::TSortDescription> SortReplaceDescription() const;
-
-    static const std::vector<std::string>& GetSpecialColumnNames() {
-        static const std::vector<std::string> result = { std::string(SPEC_COL_PLAN_STEP), std::string(SPEC_COL_TX_ID) };
-        return result;
-    }
-
-    static const std::vector<ui32>& GetSpecialColumnIds() {
-        static const std::vector<ui32> result = {(ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID};
-        return result;
-    }
 
     static const std::set<ui32>& GetSpecialColumnIdsSet() {
         static const std::set<ui32> result(GetSpecialColumnIds().begin(), GetSpecialColumnIds().end());

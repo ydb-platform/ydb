@@ -112,6 +112,18 @@ class PnpmLockfile(BaseLockfile):
 
         return (not invalid_keys, invalid_keys)
 
+    def get_requires_build_packages(self):
+        packages = self.data.get("packages", {})
+        requires_build_packages = []
+
+        for key, meta in iteritems(packages):
+            if meta.get("requiresBuild"):
+                # /expect-webdriverio@4.1.3(typescript@5.1.6)
+                pkg = key[1:].split("(")[0]
+                requires_build_packages.append(pkg)
+
+        return requires_build_packages
+
 
 def _parse_package_meta(key, meta, allow_file_protocol=False):
     """

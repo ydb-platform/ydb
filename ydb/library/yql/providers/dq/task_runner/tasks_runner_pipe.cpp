@@ -11,6 +11,7 @@
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/utils/rope_over_buffer.h>
+#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
 
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 
@@ -128,7 +129,9 @@ public:
     virtual ~TChildProcess() {
         try {
             NFs::RemoveRecursive(WorkDir);
-        } catch (...) { }
+        } catch (...) {
+            YQL_CLOG(DEBUG, ProviderDq) << "Error on WorkDir cleanup: " << CurrentExceptionMessage();
+        }
     }
 
     virtual TString ExternalWorkDir() {
@@ -395,7 +398,7 @@ public:
             ContainerName = portoSettings.ContainerNamePrefix + "/" + ContainerName;
         }
 
-        YQL_CLOG(DEBUG, ProviderDq) << "HardLink " << ExeName << "'" << WorkDir << "/" << name << "'";
+        YQL_CLOG(DEBUG, ProviderDq) << "HardLink " << ExeName << " -> '" << WorkDir << "/" << name << "'";
         if (NFs::HardLink(ExeName, WorkDir + "/" + name)) {
             ExeName = WorkDir + "/" + name;
         } else {
@@ -410,7 +413,9 @@ public:
     ~TPortoProcess() {
         try {
             NFs::RemoveRecursive(TmpDir);
-        } catch (...) { }
+        } catch (...) {
+            YQL_CLOG(DEBUG, ProviderDq) << "Error on TmpDir cleanup: " << CurrentExceptionMessage();
+        }
     }
 
 private:
@@ -556,7 +561,7 @@ public:
 
 class TInputChannel : public IInputChannel {
 public:
-    TInputChannel(const ITaskRunner::TPtr& taskRunner, ui64 taskId, ui64 channelId, IInputStream& input, IOutputStream& output, i64 channelBufferSize)
+    TInputChannel(ITaskRunner* taskRunner, ui64 taskId, ui64 channelId, IInputStream& input, IOutputStream& output, i64 channelBufferSize)
         : TaskId(taskId)
         , ChannelId(channelId)
         , Input(input)
@@ -630,7 +635,7 @@ private:
     IInputStream& Input;
     IOutputStream& Output;
 
-    ITaskRunner::TPtr TaskRunner;
+    ITaskRunner* TaskRunner; // this channel is owned by TaskRunner
 
     i64 FreeSpace;
 };
@@ -1366,6 +1371,20 @@ public:
 
         NYql::NDqProto::TPrepareResponse ret;
         ret.Load(&Input);
+
+        auto state = TFailureInjector::GetCurrentState();
+        for (auto& [k, v]: state) {
+            NDqProto::TCommandHeader header;
+            header.SetVersion(1);
+            header.SetCommand(NDqProto::TCommandHeader::CONFIGURE_FAILURE_INJECTOR);
+            header.Save(&Output);
+            NYql::NDqProto::TConfigureFailureInjectorRequest request;
+            request.SetName(k);
+            request.SetSkip(v.Skip);
+            request.SetFail(v.CountOfFails);
+            request.Save(&Output);
+        }
+
         return ret;
     }
 
@@ -1638,6 +1657,9 @@ public:
         return Task.GetId();
     }
 
+    void SetSpillerFactory(std::shared_ptr<ISpillerFactory>) override {
+    }
+
     void Prepare(const TDqTaskSettings& task, const TDqTaskRunnerMemoryLimits& memoryLimits,
         const IDqTaskRunnerExecutionContext& execCtx) override
     {
@@ -1708,7 +1730,7 @@ public:
         return sink;
     }
 
-    std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr> GetInputTransform(ui64 /*inputIndex*/) override {
+    std::optional<std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr>> GetInputTransform(ui64 /*inputIndex*/) override {
         return {};
     }
 

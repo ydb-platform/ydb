@@ -105,11 +105,6 @@ namespace NKikimr {
                 Counter++;
             }
 
-            if (bool(Db->Handoff->GetMonActorID())) {
-                ctx.Send(Db->Handoff->GetMonActorID(), new NMon::TEvHttpInfo(Ev->Get()->Request, TDbMon::HandoffMonId));
-                Counter++;
-            }
-
             if (bool(TActorId(Db->DskSpaceTrackerID))) {
                 ctx.Send(Db->DskSpaceTrackerID, new NMon::TEvHttpInfo(Ev->Get()->Request, TDbMon::DskSpaceTrackerId));
                 Counter++;

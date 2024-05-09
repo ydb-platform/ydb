@@ -200,6 +200,7 @@ public:
         std::vector<std::unique_ptr<IEventHandle>>& replies);
     bool CleanupVolatile(ui64 txId, const TActorContext& ctx,
         std::vector<std::unique_ptr<IEventHandle>>& replies);
+    size_t CleanupWaitingVolatile(const TActorContext& ctx, std::vector<std::unique_ptr<IEventHandle>>& replies);
     ui64 PlannedTxInFly() const;
     const TSet<TStepOrder> &GetPlan() const;
     bool HasProposeDelayers() const;
@@ -354,7 +355,7 @@ public:
     ui64 WaitingTxs() const { return WaitingDataTxOps.size(); } // note that without iterators
     bool CheckInflightLimit() const;
     bool AddWaitingTxOp(TEvDataShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx);
-    bool AddWaitingTxOp(NEvents::TDataEvents::TEvWrite::TPtr& ev);
+    bool AddWaitingTxOp(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx);
     void ActivateWaitingTxOps(TRowVersion edge, const TActorContext& ctx);
     void ActivateWaitingTxOps(const TActorContext& ctx);
 

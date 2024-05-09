@@ -1,6 +1,7 @@
 #include "cache.h"
 #include "double_indexed.h"
 #include "events.h"
+#include "events_internal.h"
 #include "helpers.h"
 #include "monitorable_actor.h"
 #include "subscriber.h"
@@ -189,8 +190,8 @@ namespace {
             return entry.KeyDescription->SecurityObject;
         }
 
-        static ui32 GetAccess(const TNavigate::TEntry&) {
-            return NACLib::EAccessRights::DescribeSchema;
+        static ui32 GetAccess(const TNavigate::TEntry& entry) {
+            return entry.Access;
         }
 
         static ui32 GetAccess(const TResolve::TEntry& entry) {
@@ -693,7 +694,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             return TResponseProps(ev->Cookie, false, false);
         }
 
-        static TResponseProps FromEvent(TSchemeBoardEvents::TEvSyncResponse::TPtr& ev) {
+        static TResponseProps FromEvent(NInternalEvents::TEvSyncResponse::TPtr& ev) {
             return TResponseProps(ev->Cookie, true, ev->Get()->Partial);
         }
 
@@ -850,6 +851,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 }
             }
 
+            SchemaVersion = schemaDesc.GetVersion();
             KeyColumnTypes.resize(schemaDesc.KeyColumnNamesSize());
             for (ui32 i : xrange(schemaDesc.KeyColumnNamesSize())) {
                 auto* pcolid = nameToId.FindPtr(schemaDesc.GetKeyColumnNames(i));
@@ -987,7 +989,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
         void SendSyncRequest() const {
             Y_ABORT_UNLESS(Subscriber, "it hangs if no subscriber");
-            Owner->Send(Subscriber.Subscriber, new TSchemeBoardEvents::TEvSyncRequest(), 0, ++Subscriber.SyncCookie);
+            Owner->Send(Subscriber.Subscriber, new NInternalEvents::TEvSyncRequest(), 0, ++Subscriber.SyncCookie);
         }
 
         void ResendSyncRequests(THashMap<TVariantContextPtr, TVector<TRequest>>& inFlight) const {
@@ -1526,7 +1528,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 FillInfo(Kind, ViewInfo, std::move(*pathDesc.MutableViewDescription()));
                 break;
             case NKikimrSchemeOp::EPathTypeInvalid:
-                Y_DEBUG_ABORT_UNLESS(false, "Invalid path type");
+                Y_DEBUG_ABORT("Invalid path type");
                 break;
             }
 
@@ -1597,7 +1599,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                         break;
                     case NKikimrSchemeOp::EPathTypeTableIndex:
                     case NKikimrSchemeOp::EPathTypeInvalid:
-                        Y_DEBUG_ABORT_UNLESS(false, "Invalid path type");
+                        Y_DEBUG_ABORT("Invalid path type");
                         break;
                     }
                 }
@@ -1618,7 +1620,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             }
         }
 
-        void Fill(TSchemeBoardEvents::TEvSyncResponse&) {
+        void Fill(NInternalEvents::TEvSyncResponse&) {
         }
 
         bool IsFilled() const {
@@ -1777,7 +1779,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             entry.CreateStep = CreateStep;
 
             if (entry.RequestType == TNavigate::TEntry::ERequestType::ByPath) {
-                if (Kind == TNavigate::KindTable) {
+                if (Kind == TNavigate::KindTable || Kind == TNavigate::KindColumnTable) {
                     entry.TableId = TTableId(PathId.OwnerId, PathId.LocalPathId, SchemaVersion);
                 } else {
                     entry.TableId = TTableId(PathId.OwnerId, PathId.LocalPathId);
@@ -2408,7 +2410,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         return ResolveCacheItem(notify);
     }
 
-    TCacheItem* ResolveCacheItemForNotify(const TSchemeBoardEvents::TEvSyncResponse& notify) {
+    TCacheItem* ResolveCacheItemForNotify(const NInternalEvents::TEvSyncResponse& notify) {
         return ResolveCacheItem(notify);
     }
 
@@ -2730,7 +2732,7 @@ public:
 
             hFunc(TSchemeBoardEvents::TEvNotifyUpdate, HandleNotify);
             hFunc(TSchemeBoardEvents::TEvNotifyDelete, HandleNotify);
-            hFunc(TSchemeBoardEvents::TEvSyncResponse, HandleNotify);
+            hFunc(NInternalEvents::TEvSyncResponse, HandleNotify);
 
             hFunc(TSchemeBoardMonEvents::TEvInfoRequest, Handle);
             hFunc(TSchemeBoardMonEvents::TEvDescribeRequest, Handle);

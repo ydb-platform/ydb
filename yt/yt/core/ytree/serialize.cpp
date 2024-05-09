@@ -1,8 +1,9 @@
 #include "serialize.h"
 
-#include <yt/yt/core/ytree/tree_visitor.h>
+#include "tree_visitor.h"
 
 #include <yt/yt/core/misc/blob.h>
+#include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <library/cpp/yt/misc/cast.h>
 
@@ -24,10 +25,14 @@ using namespace google::protobuf::io;
 // log2(timeEpoch("2100-01-01") * 10**3) < 42.
 // log2(timeEpoch("1970-03-01") * 10**6) > 42.
 // log2(timeEpoch("2100-01-01") * 10**6) < 52.
+// log2(timeEpoch("1970-03-01") * 10**9) > 52.
+// log2(timeEpoch("2100-01-01") * 10**9) < 62.
 static constexpr ui64 MicrosecondLowerWidthBoundary = 42;
 static constexpr ui64 MicrosecondUpperWidthBoundary = 52;
+static constexpr ui64 NanosecondUpperWidthBoundary = 62;
 static constexpr ui64 UnixTimeMicrosecondLowerBoundary = 1ull << MicrosecondLowerWidthBoundary;
 static constexpr ui64 UnixTimeMicrosecondUpperBoundary = 1ull << MicrosecondUpperWidthBoundary;
+static constexpr ui64 UnixTimeNanosecondUpperBoundary = 1ull << NanosecondUpperWidthBoundary;
 
 TInstant ConvertRawValueToUnixTime(ui64 value)
 {
@@ -35,6 +40,8 @@ TInstant ConvertRawValueToUnixTime(ui64 value)
         return TInstant::MilliSeconds(value);
     } else if (value < UnixTimeMicrosecondUpperBoundary) {
         return TInstant::MicroSeconds(value);
+    } else if (value < UnixTimeNanosecondUpperBoundary) {
+        return TInstant::MicroSeconds(value / 1'000);
     } else {
         THROW_ERROR_EXCEPTION("Value %Qv does not represent valid UNIX time",
             value);
@@ -280,7 +287,7 @@ void Deserialize(TDuration& value, INodePtr node)
             if (ms < 0) {
                 THROW_ERROR_EXCEPTION("Duration cannot be negative");
             }
-            value = TDuration::MicroSeconds(static_cast<ui64>(ms * 1000.0));
+            value = TDuration::MicroSeconds(static_cast<ui64>(ms * 1'000.0));
             break;
         }
 
@@ -315,7 +322,7 @@ void Deserialize(TInstant& value, INodePtr node)
             if (ms < 0) {
                 THROW_ERROR_EXCEPTION("Instant cannot be negative");
             }
-            value = TInstant::MicroSeconds(static_cast<ui64>(ms * 1000.0));
+            value = ConvertRawValueToUnixTime(ms);
             break;
         }
 
@@ -342,7 +349,7 @@ void DeserializeProtobufMessage(
     const INodePtr& node,
     const NYson::TProtobufWriterOptions& options)
 {
-    TString wireBytes;
+    TProtobufString wireBytes;
     StringOutputStream outputStream(&wireBytes);
     auto protobufWriter = CreateProtobufWriter(&outputStream, type, options);
     VisitTree(node, protobufWriter.get(), true);

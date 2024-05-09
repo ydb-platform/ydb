@@ -403,6 +403,15 @@ enum EValueType : int
     VT_FLOAT,
     /// Json, sequence of bytes that is valid json.
     VT_JSON,
+
+    // Date32, number of days shifted from Unix epoch, which is 0 (signed)
+    VT_DATE32,
+    // Datetime64, number of seconds shifted from Unix epoch, which is 0 (signed)
+    VT_DATETIME64,
+    // Timestamp64, number of milliseconds shifted from Unix epoch, which is 0 (signed)
+    VT_TIMESTAMP64,
+    // Interval64, difference between two timestamps64 (signed)
+    VT_INTERVAL64,
 };
 
 ///
@@ -712,6 +721,7 @@ public:
     ///
     /// Strict schemas are not allowed to have columns not described in schema.
     /// Nonstrict schemas are allowed to have such columns, all such missing columns are assumed to have
+    /// type any (or optional<yson> in type_v3 terminology).
     FLUENT_FIELD_DEFAULT_ENCAPSULATED(bool, Strict, true);
 
     ///

@@ -545,11 +545,11 @@ bool ParseIP6Address(TStringBuf* str, TIP6Address* address)
     auto words = address->GetRawWords();
     std::fill_n(address->GetRawBytes(), TIP6Address::ByteSize, 0);
 
-    auto isEnd = [&] () {
+    auto isEnd = [&] {
         return str->empty() || (*str)[0] == '/';
     };
 
-    auto tokenizeAbbrev = [&] () {
+    auto tokenizeAbbrev = [&] {
         if (str->size() >= 2 && (*str)[0] == ':' && (*str)[1] == ':') {
             str->Skip(2);
             return true;
@@ -709,7 +709,7 @@ void FormatValue(TStringBuilderBase* builder, const TIP6Address& address, TStrin
     std::pair<int, int> maxRun = {-1, -1};
     int start = -1;
     int end = -1;
-    auto endRun = [&] () {
+    auto endRun = [&] {
         if ((end - start) >= (maxRun.second - maxRun.first) && (end - start) > 1) {
             maxRun = {start, end};
         }
@@ -928,7 +928,6 @@ public:
             /*logger*/ {},
             DnsProfiler.WithPrefix("/resolve_cache"))
     {
-        SetDnsResolver(CreateAresDnsResolver(config));
         Configure(std::move(config));
     }
 
@@ -983,6 +982,9 @@ public:
     void Configure(TAddressResolverConfigPtr config)
     {
         Config_ = std::move(config);
+
+        SetDnsResolver(CreateAresDnsResolver(Config_));
+        TAsyncExpiringCache::Reconfigure(Config_);
 
         if (Config_->LocalHostNameOverride) {
             WriteLocalHostName(*Config_->LocalHostNameOverride);

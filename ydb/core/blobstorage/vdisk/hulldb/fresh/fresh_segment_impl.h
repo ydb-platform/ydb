@@ -204,7 +204,8 @@ namespace NKikimr {
         buffer = TRope::CopySpaceOptimized(std::move(buffer), 128, *Arena);
         const ui64 fullDataSize = key.LogoBlobID().BlobSize();
         const size_t delta = buffer.size();
-        TRope blob = TDiskBlob::Create(fullDataSize, partId, HullCtx->VCtx->Top->GType.TotalPartCount(), std::move(buffer), *Arena);
+        TRope blob = TDiskBlob::Create(fullDataSize, partId, HullCtx->VCtx->Top->GType.TotalPartCount(), std::move(buffer), *Arena,
+            HullCtx->AddHeader);
         FreshDataMemConsumer.Add(delta);
         const ui32 blobSize = blob.GetSize();
 
@@ -688,7 +689,7 @@ namespace NKikimr {
                 std::vector<std::pair<TKey, TMemRec>>& Recs;
 
                 void AddFromSegment(const TMemRec&, const TDiskPart*, const TKey&, ui64) {
-                    Y_DEBUG_ABORT_UNLESS(false, "should not be called");
+                    Y_DEBUG_ABORT("should not be called");
                 }
 
                 void AddFromFresh(const TMemRec& memRec, const TRope* /*data*/, const TKey& key, ui64 /*lsn*/) {

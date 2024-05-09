@@ -358,16 +358,22 @@ TType* TProgramBuilder::BuildArithmeticCommonType(TType* type1, TType* type2) {
     bool isOptional1, isOptional2;
     const auto data1 = UnpackOptionalData(type1, isOptional1);
     const auto data2 = UnpackOptionalData(type2, isOptional2);
+    const auto features1 = NUdf::GetDataTypeInfo(*data1->GetDataSlot()).Features;
+    const auto features2 = NUdf::GetDataTypeInfo(*data2->GetDataSlot()).Features;
     const bool isOptional = isOptional1 || isOptional2;
-    if (data1->GetSchemeType() == NUdf::TDataType<NUdf::TInterval>::Id) {
-        return NewOptionalType(NUdf::GetDataTypeInfo(*data2->GetDataSlot()).Features & NUdf::EDataTypeFeatures::IntegralType ? data1 : data2);
-    } else if (data2->GetSchemeType() == NUdf::TDataType<NUdf::TInterval>::Id) {
-        return NewOptionalType(NUdf::GetDataTypeInfo(*data1->GetDataSlot()).Features & NUdf::EDataTypeFeatures::IntegralType ? data2 : data1);
+    if (features1 & features2 & NUdf::EDataTypeFeatures::TimeIntervalType) {
+        return NewOptionalType(features1 & NUdf::EDataTypeFeatures::BigDateType ? data1 : data2);
+    } else if (features1 & NUdf::EDataTypeFeatures::TimeIntervalType) {
+        return NewOptionalType(features2 & NUdf::EDataTypeFeatures::IntegralType ? data1 : data2);
+    } else if (features2 & NUdf::EDataTypeFeatures::TimeIntervalType) {
+        return NewOptionalType(features1 & NUdf::EDataTypeFeatures::IntegralType ? data2 : data1);
     } else if (
-        NUdf::GetDataTypeInfo(*data1->GetDataSlot()).Features & (NUdf::EDataTypeFeatures::DateType | NUdf::EDataTypeFeatures::TzDateType) &&
-        NUdf::GetDataTypeInfo(*data2->GetDataSlot()).Features & (NUdf::EDataTypeFeatures::DateType | NUdf::EDataTypeFeatures::TzDateType)
+        features1 & (NUdf::EDataTypeFeatures::DateType | NUdf::EDataTypeFeatures::TzDateType) &&
+        features2 & (NUdf::EDataTypeFeatures::DateType | NUdf::EDataTypeFeatures::TzDateType)
     ) {
-        const auto used = NewDataType(NUdf::EDataSlot::Interval);
+        const auto used = ((features1 | features2) & NUdf::EDataTypeFeatures::BigDateType)
+            ? NewDataType(NUdf::EDataSlot::Interval64)
+            : NewDataType(NUdf::EDataSlot::Interval);
         return isOptional ? NewOptionalType(used) : used;
     } else if (data1->GetSchemeType() == NUdf::TDataType<NUdf::TDecimal>::Id) {
         MKQL_ENSURE(data1->IsSameType(*data2), "Must be same type.");
@@ -1605,6 +1611,33 @@ TRuntimeNode TProgramBuilder::BlockCoalesce(TRuntimeNode first, TRuntimeNode sec
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
+TRuntimeNode TProgramBuilder::BlockExists(TRuntimeNode data) {
+    auto dataType = AS_TYPE(TBlockType, data.GetStaticType());
+    auto outputType = NewBlockType(NewDataType(NUdf::TDataType<bool>::Id), dataType->GetShape());
+
+    TCallableBuilder callableBuilder(Env, __func__, outputType);
+    callableBuilder.Add(data);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::BlockMember(TRuntimeNode structObj, const std::string_view& memberName) {
+    auto blockType = AS_TYPE(TBlockType, structObj.GetStaticType());
+    bool isOptional;
+    const auto type = AS_TYPE(TStructType, UnpackOptional(blockType->GetItemType(), isOptional));
+
+    const auto memberIndex = type->GetMemberIndex(memberName);
+    auto memberType = type->GetMemberType(memberIndex);
+    if (isOptional && !memberType->IsOptional() && !memberType->IsNull() && !memberType->IsPg()) {
+        memberType = NewOptionalType(memberType);
+    }
+
+    auto returnType = NewBlockType(memberType, blockType->GetShape());
+    TCallableBuilder callableBuilder(Env, __func__, returnType);
+    callableBuilder.Add(structObj);
+    callableBuilder.Add(NewDataLiteral<ui32>(memberIndex));
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TProgramBuilder::BlockNth(TRuntimeNode tuple, ui32 index) {
     auto blockType = AS_TYPE(TBlockType, tuple.GetStaticType());
     bool isOptional;
@@ -1621,6 +1654,28 @@ TRuntimeNode TProgramBuilder::BlockNth(TRuntimeNode tuple, ui32 index) {
     TCallableBuilder callableBuilder(Env, __func__, returnType);
     callableBuilder.Add(tuple);
     callableBuilder.Add(NewDataLiteral<ui32>(index));
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::BlockAsStruct(const TArrayRef<std::pair<std::string_view, TRuntimeNode>>& args) {
+    MKQL_ENSURE(!args.empty(), "Expected at least one argument");
+
+    TBlockType::EShape resultShape = TBlockType::EShape::Scalar;
+    TVector<std::pair<std::string_view, TType*>> members;
+    for (const auto& x : args) {
+        auto blockType = AS_TYPE(TBlockType, x.second.GetStaticType());
+        members.emplace_back(x.first, blockType->GetItemType());
+        if (blockType->GetShape() == TBlockType::EShape::Many) {
+            resultShape = TBlockType::EShape::Many;
+        }
+    }
+
+    auto returnType = NewBlockType(NewStructType(members), resultShape);
+    TCallableBuilder callableBuilder(Env, __func__, returnType);
+    for (const auto& x : args) {
+        callableBuilder.Add(x.second);
+    }
+
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 

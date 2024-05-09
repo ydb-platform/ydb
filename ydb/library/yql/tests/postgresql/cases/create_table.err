@@ -2531,17 +2531,6 @@ COMMENT ON COLUMN parted_col_comment.a IS 'Partition key';
 <sql-statement>
 SELECT obj_description('parted_col_comment'::regclass);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
-    	SELECT obj_description('parted_col_comment'::regclass);
-	^
-        -stdin-:<main>:1:8: Error: At function: PgCall
-        	SELECT obj_description('parted_col_comment'::regclass);
-	       ^
-            -stdin-:<main>:1:8: Error: No such proc: obj_description
-            	SELECT obj_description('parted_col_comment'::regclass);
-	       ^
 <sql-statement>
 \d+ parted_col_comment
 </sql-statement>

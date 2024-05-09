@@ -158,6 +158,8 @@ message TStaticNameserviceConfig {
     repeated string AcceptUUID = 3;
     optional bool SuppressVersionCheck = 4;
     optional ENameserviceType Type = 5;
+    optional bool KeepSocket = 6 [default = true];
+    optional bool ForceTcp = 7 [default = false];
 }
 
 message TDynamicNameserviceConfig {
@@ -296,7 +298,17 @@ message TBlobStorageConfig {
         repeated TCostMetricsConfig VDiskTypes = 1;
     };
 
+    message TVDiskPerformanceConfig {
+        optional NKikimrBlobStorage.EPDiskType PDiskType = 1;
+        optional uint32 MinHugeBlobSizeInBytes = 4;
+    }
+
+    message TVDiskPerformanceSettings {
+        repeated TVDiskPerformanceConfig VDiskTypes = 1;
+    };
+
     optional TCostMetricsSettings CostMetricsSettings = 7;
+    optional TVDiskPerformanceSettings VDiskPerformanceSettings = 8;
  }
 
 message TBlobStorageFormatConfig {
@@ -422,6 +434,10 @@ message TInterconnectConfig {
     optional NKikimrConfigUnits.TDuration ForceConfirmPeriodDuration = 27;
     optional NKikimrConfigUnits.TDuration LostConnectionDuration = 28;
     optional NKikimrConfigUnits.TDuration BatchPeriodDuration = 29;
+
+    optional NKikimrConfigUnits.TDuration FirstErrorSleep = 46;
+    optional NKikimrConfigUnits.TDuration MaxErrorSleep = 47;
+    optional double ErrorSleepRetryMultiplier = 48;
 
     optional uint32 OutgoingHandshakeInflightLimit = 43;
 }
@@ -983,6 +999,8 @@ message TQueryServiceConfig {
     optional uint64 ScriptResultSizeLimit = 4 [default = 0]; // 0 = infinity
     optional uint64 ScriptResultRowsLimit = 5 [default = 0]; // 0 = infinity
     repeated string HostnamePatterns = 13; // List of hostname regexps for external data sources; disabled if empty
+    optional string QueryArtifactsCompressionMethod = 17;
+    optional uint64 QueryArtifactsCompressionMinSize = 18 [default = 10485760]; // default = 10 MiB
 
     optional NYql.TS3GatewayConfig S3 = 6;
     optional NYql.TYtGatewayConfig Yt = 15;
@@ -1115,6 +1133,12 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1000000,
             DefaultValue: 1000 }];
+
+        optional uint64 ChangeRecordDebugPrint = 16 [(ControlOptions) = {
+            Description: "Enables debug printing of change records",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
     }
 
     message TTxLimitControls {
@@ -1376,6 +1400,10 @@ message THiveConfig {
     optional bool EnableDestroyOperations = 74 [default = false];
 }
 
+message TBlobCacheConfig {
+    optional uint64 MaxSizeBytes = 1 [default = 1073741824];
+}
+
 message TColumnShardConfig {
     message TTablesStorageLayoutPolicy {
         message TMinimalTablesCountPolicy {
@@ -1388,11 +1416,9 @@ message TColumnShardConfig {
             TMinimalTablesCountPolicy MinimalTables = 1;
             TIdentityGroupsPolicy IdentityGroups = 2;
         }
-
     }
     optional TTablesStorageLayoutPolicy TablesStorageLayoutPolicy = 1;
     optional bool DisabledOnSchemeShard = 2 [default = true];
-    optional bool SkipOldGranules = 3 [default = true];
     optional bool IndexationEnabled = 4 [default = true];
     optional bool CompactionEnabled = 5 [default = true];
     optional bool TTLEnabled = 6 [default = true];
@@ -1401,6 +1427,16 @@ message TColumnShardConfig {
     optional bool UseChunkedMergeOnCompaction = 9 [default = true];
     optional uint64 CompactionMemoryLimit = 10 [default = 536870912];
     optional uint64 TieringsMemoryLimit = 11 [default = 536870912];
+    message TIndexMetadataMemoryLimit {
+        oneof Value {
+            double TotalRatio = 1 [default = 0.3];
+            uint64 AbsoluteValue = 2;
+        }
+    }
+
+    optional TIndexMetadataMemoryLimit IndexMetadataMemoryLimit = 12;
+    optional bool CleanupEnabled = 13 [default = true];
+    optional uint32 RemovedPortionLivetimeSeconds = 14 [default = 600];
 }
 
 message TSchemeShardConfig {
@@ -1655,6 +1691,7 @@ message TLocalPgWireConfig {
     optional int32 ListeningPort = 1 [default = 5432];
     optional string SslCertificate = 5;
     optional string Address = 6 [default = "::"];
+    optional bool TcpNotDelay = 7 [default = true];
 }
 
 message TKafkaProxyConfig {
@@ -1762,6 +1799,7 @@ message TAppConfig {
     optional bool AllowEditYamlInUi = 75;
     optional TS3ProxyResolverConfig S3ProxyResolverConfig = 76;
     optional TBackgroundCleaningConfig BackgroundCleaningConfig = 77;
+    optional TBlobCacheConfig BlobCacheConfig = 78;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

@@ -78,7 +78,6 @@ struct TDataEvents {
         }
 
         ui64 GetTxId() const {
-            Y_ABORT_UNLESS(Record.HasTxId());
             return Record.GetTxId();
         }
 
@@ -109,6 +108,15 @@ struct TDataEvents {
             result->Record.SetOrigin(origin);
             result->Record.SetTxId(txId);
             result->Record.SetStatus(NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            return result;
+        }
+
+        static std::unique_ptr<TEvWriteResult> BuildCompleted(const ui64 origin, const ui64 txId, const NKikimrDataEvents::TLock& lock) {
+            auto result = std::make_unique<TEvWriteResult>();
+            result->Record.SetOrigin(origin);
+            result->Record.SetTxId(txId);
+            result->Record.SetStatus(NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            *result->Record.AddTxLocks() = lock;
             return result;
         }
 

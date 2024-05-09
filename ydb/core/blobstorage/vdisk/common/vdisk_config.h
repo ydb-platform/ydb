@@ -118,7 +118,6 @@ namespace NKikimr {
         ui32 MinHugeBlobInBytes;
         ui32 MilestoneHugeBlobInBytes;
         ui32 HugeBlobOverhead;
-        bool HugeBlobOldMapCompatible;
         ui32 HullCompLevel0MaxSstsAtOnce;
         ui32 HullCompSortedPartsNum;
         double HullCompLevelRateThreshold;
@@ -128,6 +127,7 @@ namespace NKikimr {
         ui32 HullCompMaxInFlightReads;
         double HullCompReadBatchEfficiencyThreshold;
         ui64 AnubisOsirisMaxInFly;
+        bool AddHeader;
 
         //////////////// LOG CUTTER SETTINGS ////////////////
         TDuration RecoveryLogCutterFirstDuration;
@@ -170,7 +170,6 @@ namespace NKikimr {
         ui32 HandoffMaxInFlightByteSize;
         TDuration HandoffTimeout;
         bool RunRepl;
-        bool RunHandoff;
         bool ReplPausedAtStart = false;
         TDuration ReplMaxTimeToMakeProgress;
 
@@ -221,7 +220,7 @@ namespace NKikimr {
         TVDiskConfig(const TBaseInfo &baseInfo);
         void Merge(const NKikimrBlobStorage::TVDiskConfig &update);
     private:
-        // setup borders for huge blobs depending on device type
+        // setup default borders for huge blobs depending on device type
         void SetupHugeBytes();
     };
 

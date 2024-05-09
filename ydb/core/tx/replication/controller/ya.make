@@ -6,9 +6,11 @@ PEERDIR(
     ydb/core/engine/minikql
     ydb/core/protos
     ydb/core/tablet_flat
+    ydb/core/tx/replication/common
     ydb/core/tx/replication/ydb_proxy
     ydb/core/util
     ydb/core/ydb_convert
+    library/cpp/json
 )
 
 SRCS(
@@ -19,6 +21,7 @@ SRCS(
     nodes_manager.cpp
     private_events.cpp
     replication.cpp
+    session_info.cpp
     stream_creator.cpp
     stream_remover.cpp
     sys_params.cpp
@@ -27,6 +30,7 @@ SRCS(
     target_table.cpp
     target_with_stream.cpp
     tenant_resolver.cpp
+    tx_alter_replication.cpp
     tx_assign_stream_name.cpp
     tx_create_dst_result.cpp
     tx_create_replication.cpp

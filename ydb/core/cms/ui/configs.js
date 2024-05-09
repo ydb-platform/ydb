@@ -309,8 +309,12 @@ function loadConfigItems() {
 }
 
 function onYamlConfigEnabledFetched(data) {
-    if (data && data['enabled']) {
-        $('#yaml-configs-enabled-warning').show();
+    if (data) {
+        if (data['enabled']) {
+            $('#yaml-configs-enabled-warning').show();
+        } else if ($('#yaml-config').hasClass('active')) {
+            $('#cms-nav a[href="#configs"]').tab('show');
+        }
     }
 }
 

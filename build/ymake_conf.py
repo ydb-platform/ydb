@@ -18,6 +18,8 @@ import tempfile
 
 import six
 
+from functools import total_ordering
+
 logger = logging.getLogger(__name__ if __name__ != '__main__' else 'ymake_conf.py')
 
 
@@ -59,6 +61,17 @@ def find_conf(conf_file):
     return None
 
 
+# All paths in build graph shall be in posix format.
+# This ensures that UIDs of cross and native builds won't diverge
+# due to paths difference. This function is to be used to fix paths produced
+# by os.path.join on Windows.
+#
+# FIXME: upon complete switch to Python3 os.path.join may be replaced by posixpath.join
+#        and this function will become unnecessary
+def win_path_fix(path):
+    return path if sys.platform != 'win32' else path.replace('\\', '/')
+
+
 class DebugString(object):
     def __init__(self, get_string_func):
         self.get_string_func = get_string_func
@@ -71,6 +84,7 @@ class ConfigureError(Exception):
     pass
 
 
+@total_ordering
 class Platform(object):
     def __init__(self, name, os, arch):
         """
@@ -262,8 +276,8 @@ class Platform(object):
     def __eq__(self, other):
         return (self.name, self.os, self.arch) == (other.name, other.os, other.arch)
 
-    def __cmp__(self, other):
-        return cmp((self.name, self.os, self.arch), (other.name, other.os, other.arch))
+    def __lt__(self, other):
+        return (self.name, self.os, self.arch) < (other.name, other.os, other.arch)
 
     def __hash__(self):
         return hash((self.name, self.os, self.arch))
@@ -301,7 +315,7 @@ def which(prog):
         for ext in pathext:
             p = os.path.join(dir_, prog + ext)
             if os.path.exists(p) and os.path.isfile(p) and os.access(p, os.X_OK):
-                return p
+                return win_path_fix(p)
 
     return None
 
@@ -1335,7 +1349,7 @@ class GnuToolchain(Toolchain):
 
     def setup_apple_arcadia_sdk(self, target):
         if target.is_ios:
-            self.setup_xcode_sdk(project='build/platform/ios_sdk', var='${IOS_SDK_ROOT_RESOURCE_GLOBAL}')
+            self.setup_xcode_sdk(project='build/internal/platform/ios_sdk', var='${IOS_SDK_ROOT_RESOURCE_GLOBAL}')
             self.platform_projects.append('build/internal/platform/macos_system_stl')
         if target.is_macos:
             self.setup_xcode_sdk(project='build/internal/platform/macos_sdk', var='${MACOS_SDK_RESOURCE_GLOBAL}')
@@ -1718,9 +1732,9 @@ class LD(Linker):
 
         self.ld_sdk = select(default=None, selectors=[
             # -platform_version <platform> <min_version> <sdk_version>
-            (target.is_macos, '-Wl,-platform_version,macos,11.0,11.0'),
-            (not target.is_iossim and target.is_ios, '-Wl,-platform_version,ios,11.0,13.1'),
-            (target.is_iossim, '-Wl,-platform_version,ios-simulator,14.0,14.5'),
+            (target.is_macos, '-Wl,-platform_version,macos,{MACOS_VERSION_MIN},11.0'.format(MACOS_VERSION_MIN=MACOS_VERSION_MIN)),
+            (not target.is_iossim and target.is_ios, '-Wl,-platform_version,ios,{IOS_VERSION_MIN},13.1'.format(IOS_VERSION_MIN=IOS_VERSION_MIN)),
+            (target.is_iossim, '-Wl,-platform_version,ios-simulator,{IOS_VERSION_MIN},14.5'.format(IOS_VERSION_MIN=IOS_VERSION_MIN)),
         ])
 
         if self.build.profiler_type == Profiler.GProf:
@@ -1782,6 +1796,7 @@ class MSVCToolchainOptions(ToolchainOptions):
 
         self.under_wine_compiler = self.params.get('wine', False)
         self.under_wine_tools = not build.host.is_windows
+        self.under_wine_lib = self.under_wine_tools
         self.system_msvc = self.params.get('system_msvc', False)
         self.ide_msvs = self.params.get('ide_msvs', False)
         self.use_clang = self.params.get('use_clang', False)
@@ -1802,8 +1817,8 @@ class MSVCToolchainOptions(ToolchainOptions):
 
             sdk_dir = '$(WindowsSdkDir)'
             self.sdk_version = '$(WindowsTargetPlatformVersion)'
-            self.kit_includes = os.path.join(sdk_dir, 'Include', self.sdk_version)
-            self.kit_libs = os.path.join(sdk_dir, 'Lib', self.sdk_version)
+            self.kit_includes = win_path_fix(os.path.join(sdk_dir, 'Include', self.sdk_version))
+            self.kit_libs = win_path_fix(os.path.join(sdk_dir, 'Lib', self.sdk_version))
 
         elif detector:
             self.use_clang = is_positive('USE_CLANG_CL')
@@ -1820,8 +1835,8 @@ class MSVCToolchainOptions(ToolchainOptions):
                 raise ConfigureError('No %WindowsSdkDir%, %WindowsSDKVersion% or %VCINSTALLDIR% present. Please, run vcvars64.bat to setup preferred environment.')
 
             self.vc_root = os.path.normpath(vc_install_dir)
-            self.kit_includes = os.path.normpath(os.path.join(sdk_dir, 'Include', self.sdk_version))
-            self.kit_libs = os.path.normpath(os.path.join(sdk_dir, 'Lib', self.sdk_version))
+            self.kit_includes = win_path_fix(os.path.normpath(os.path.join(sdk_dir, 'Include', self.sdk_version)))
+            self.kit_libs = win_path_fix(os.path.normpath(os.path.join(sdk_dir, 'Lib', self.sdk_version)))
 
             # TODO(somov): Определять автоматически self.version в этом случае
 
@@ -1835,10 +1850,10 @@ class MSVCToolchainOptions(ToolchainOptions):
             sdk_dir = '$WINDOWS_KITS_RESOURCE_GLOBAL'
 
             self.vc_root = self.name_marker if not self.use_clang else '$MSVC_FOR_CLANG_RESOURCE_GLOBAL'
-            self.kit_includes = os.path.join(sdk_dir, 'Include', self.sdk_version)
-            self.kit_libs = os.path.join(sdk_dir, 'Lib', self.sdk_version)
+            self.kit_includes = win_path_fix(os.path.join(sdk_dir, 'Include', self.sdk_version))
+            self.kit_libs = win_path_fix(os.path.join(sdk_dir, 'Lib', self.sdk_version))
 
-            bindir = os.path.join(self.vc_root, 'bin', 'Hostx64')
+            bindir = win_path_fix(os.path.join(self.vc_root, 'bin', 'Hostx64'))
 
             tools_name = select(selectors=[
                 (build.target.is_x86, 'x86'),
@@ -1852,9 +1867,17 @@ class MSVCToolchainOptions(ToolchainOptions):
                 (build.target.is_armv7, 'armasm.exe'),
             ])
 
-            self.masm_compiler = os.path.join(bindir, tools_name, asm_name)
-            self.link = os.path.join(bindir, tools_name, 'link.exe')
-            self.lib = os.path.join(bindir, tools_name, 'lib.exe')
+            self.masm_compiler = win_path_fix(os.path.join(bindir, tools_name, asm_name))
+            self.link = win_path_fix(os.path.join(bindir, tools_name, 'link.exe'))
+
+            if self.use_clang:
+                self.lib = self.host.exe(self.name_marker, "bin", "llvm-lib")
+                self.under_wine_lib = False
+            else:
+                self.lib = win_path_fix(os.path.join(bindir, tools_name, 'lib.exe'))
+                self.under_wine_lib = self.under_wine_tools
+
+            logger.debug("link {}; lib {}".format(self.link, self.lib))
 
 
 class MSVC(object):
@@ -1894,6 +1917,8 @@ class MSVCToolchain(MSVC, Toolchain):
 
         if self.tc.under_wine_tools:
             emit('_UNDER_WINE_TOOLS', 'yes')
+        if self.tc.under_wine_lib:
+            emit('_UNDER_WINE_LIB', 'yes')
         if self.tc.under_wine_compiler:
             emit('_UNDER_WINE_COMPILER', 'yes')
         if self.tc.use_clang:
@@ -2071,14 +2096,14 @@ class MSVCCompiler(MSVC, Compiler):
         else:
             defines += ['/D_MBCS']
 
-        vc_include = os.path.join(self.tc.vc_root, 'include') if not self.tc.ide_msvs else "$(VC_VC_IncludePath.Split(';')[0].Replace('\\','/'))"
+        vc_include = win_path_fix(os.path.join(self.tc.vc_root, 'include')) if not self.tc.ide_msvs else "$(VC_VC_IncludePath.Split(';')[0].Replace('\\','/'))"
 
         if not self.tc.ide_msvs:
             def include_flag(path):
                 return '{flag}"{path}"'.format(path=path, flag='/I ' if not self.tc.use_clang else '-imsvc')
 
             for name in ('shared', 'ucrt', 'um', 'winrt'):
-                flags.append(include_flag(os.path.join(self.tc.kit_includes, name)))
+                flags.append(include_flag(win_path_fix(os.path.join(self.tc.kit_includes, name))))
             flags.append(include_flag(vc_include))
 
         if self.tc.use_clang:
@@ -2107,7 +2132,7 @@ class MSVCCompiler(MSVC, Compiler):
 
         emit('_MSVC_FLAGS', flags)
 
-        ucrt_include = os.path.join(self.tc.kit_includes, 'ucrt') if not self.tc.ide_msvs else "$(UniversalCRT_IncludePath.Split(';')[0].Replace('\\','/'))"
+        ucrt_include = win_path_fix(os.path.join(self.tc.kit_includes, 'ucrt')) if not self.tc.ide_msvs else "$(UniversalCRT_IncludePath.Split(';')[0].Replace('\\','/'))"
 
         # clang-cl has '#include_next', and MSVC hasn't. It needs separately specified CRT and VC include directories for libc++ to include second in order standard C and C++ headers.
         if not self.tc.use_clang:
@@ -2384,12 +2409,12 @@ class Cuda(object):
             return False
 
         if host != target:
-            if not(host.is_linux_x86_64 and target.is_linux_armv8):
+            if not (host.is_linux_x86_64 and target.is_linux_armv8):
                 return False
             if not self.cuda_version.from_user:
                 return False
 
-        if self.cuda_version.value in ('11.4', '11.8', '12.1'):
+        if self.cuda_version.value in ('11.4', '11.8', '12.1', '12.2'):
             return True
         else:
             raise ConfigureError('CUDA version {} is not supported in Arcadia'.format(self.cuda_version.value))

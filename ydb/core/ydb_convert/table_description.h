@@ -128,6 +128,11 @@ bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
     const Ydb::Table::CreateTableRequest& in, const TTableProfiles& profiles,
     Ydb::StatusIds::StatusCode& status, TString& error, bool indexedTable = false);
 
+
+// out
+void FillSequenceDescription(Ydb::Table::CreateTableRequest& out,
+    const NKikimrSchemeOp::TTableDescription& in);
+
 // out
 void FillSequenceDescription(Ydb::Table::CreateTableRequest& out,
     const NKikimrSchemeOp::TTableDescription& in);

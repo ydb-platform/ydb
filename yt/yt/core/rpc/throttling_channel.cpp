@@ -41,9 +41,8 @@ public:
             .WithTimeout(timeout)
             .Subscribe(BIND([=, this, this_ = MakeStrong(this)] (const TError& error) {
                 if (!error.IsOK()) {
-                    auto wrappedError = TError("Error throttling RPC request")
-                        << error;
-                    responseHandler->HandleError(wrappedError);
+                    responseHandler->HandleError(TError("Error throttling RPC request")
+                        << error);
                     return;
                 }
 

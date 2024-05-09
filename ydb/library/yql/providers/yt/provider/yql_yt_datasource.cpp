@@ -99,7 +99,10 @@ public:
         const TString& token = properties.Value("token", "");
 
         State_->Configuration->AddValidCluster(name);
-        State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForTokenAuthWithSecret(properties.Value("tokenReference", ""), token);
+        if (token) {
+            // Empty token is forbidden for yt reader
+            State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForTokenAuthWithSecret(properties.Value("tokenReference", ""), token);
+        }
 
         TYtClusterConfig cluster;
         cluster.SetName(name);
@@ -645,10 +648,9 @@ private:
                 || withQB;
 
             path = Build<TYtPath>(ctx, path.Pos())
+                .InitFrom(path)
                 .Table(table)
                 .Columns(needRewrite ? Build<TCoVoid>(ctx, path.Columns().Pos()).Done() : origColumnList)
-                .Ranges(path.Ranges())
-                .Stat(path.Stat())
                 .Done();
 
             bool tableSysColumns = useSysColumns && !tableDesc.View && (view.empty() || view == "raw");

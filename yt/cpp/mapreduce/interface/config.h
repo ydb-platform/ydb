@@ -155,6 +155,9 @@ struct TConfig
     /// NB: Each mode affects only users with the same mode enabled.
     EUploadDeduplicationMode CacheUploadDeduplicationMode;
 
+    // @brief Minimum byte size for files to undergo deduplication at upload
+    i64 CacheUploadDeduplicationThreshold;
+
     bool MountSandboxInTmpfs;
 
     /// @brief Set upload options (e.g.) for files created by library.

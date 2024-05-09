@@ -1,20 +1,32 @@
-YQL_UDF_YDB(histogram_udf)
+IF (YQL_PACKAGED)
+    PACKAGE()
 
-YQL_ABI_VERSION(
-    2
-    28
-    0
-)
+    FROM_SANDBOX(
+        FILE {FILE_RESOURCE_ID} OUT_NOAUTO
+            libhistogram_udf.so
+    )
 
-SRCS(
-    histogram_udf.cpp
-)
+    END()
+ELSE()
+    YQL_UDF_YDB(histogram_udf)
 
-PEERDIR(
-    library/cpp/histogram/adaptive
-)
+    YQL_ABI_VERSION(
+        2
+        28
+        0
+    )
 
-END()
+    SRCS(
+        histogram_udf.cpp
+    )
+
+    PEERDIR(
+        library/cpp/histogram/adaptive
+    )
+
+    END()
+
+ENDIF()
 
 RECURSE_FOR_TESTS(
     test

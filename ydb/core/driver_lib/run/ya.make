@@ -45,6 +45,7 @@ PEERDIR(
     ydb/core/actorlib_impl
     ydb/core/audit
     ydb/core/base
+    ydb/core/backup/controller
     ydb/core/blob_depot
     ydb/core/blobstorage
     ydb/core/blobstorage/backpressure
@@ -140,6 +141,7 @@ PEERDIR(
     ydb/public/lib/base
     ydb/public/lib/deprecated/client
     ydb/services/auth
+    ydb/services/backup
     ydb/services/cms
     ydb/services/dynamic_config
     ydb/services/datastreams

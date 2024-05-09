@@ -354,7 +354,7 @@ private:
             switch (cookie) {
                 case EServerCallCookie::Normal:
                 {
-                    const auto stage = [&] () {
+                    const auto stage = [&] {
                         auto guard = Guard(SpinLock_);
                         return Stage_;
                     }();

@@ -251,7 +251,6 @@ Y_UNIT_TEST_SUITE(DBase) {
         UNIT_ASSERT(me->Counters().MemTableOps == 2);
         UNIT_ASSERT(me->Counters().MemTableBytes > 0);
         UNIT_ASSERT(me->Counters().Parts.PlainBytes > 0);
-        UNIT_ASSERT(me->Counters().Parts.IndexBytes > 0);
 
         me.To(16).Compact(1, false).Iter(1).Has(ro4); /* NOOP compaction */
 

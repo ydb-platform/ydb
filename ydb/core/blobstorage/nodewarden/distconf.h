@@ -149,7 +149,7 @@ namespace NKikimr::NStorage {
             const TActorId ActorId;
 
             THashSet<ui32> PendingNodes;
-            bool AsyncOperationsPending = false;
+            ui32 AsyncOperationsPending = 0;
             TEvScatter Request;
             TEvGather Response;
             std::vector<TEvGather> CollectedResponses; // from bound nodes
@@ -179,9 +179,10 @@ namespace NKikimr::NStorage {
         NKikimrBlobStorage::TStorageConfig InitialConfig;
         std::vector<TString> DrivesToRead;
 
-        // proposed storage configuration being persisted right now
-        std::optional<NKikimrBlobStorage::TStorageConfig> ProposedStorageConfig;
-        std::optional<ui64> ProposedStorageConfigCookie;
+        // proposed storage configuration of the cluster
+        std::optional<NKikimrBlobStorage::TStorageConfig> ProposedStorageConfig; // proposed one
+        ui64 ProposedStorageConfigCookie; // if set, then this configuration is being written right now
+        ui32 ProposedStorageConfigCookieUsage = 0;
 
         // most relevant proposed config
         using TPersistCallback = std::function<void(TEvPrivate::TEvStorageConfigStored&)>;
@@ -224,14 +225,13 @@ namespace NKikimr::NStorage {
         // root node operation
         enum class ERootState {
             INITIAL,
-            COLLECT_CONFIG,
-            PROPOSE_NEW_STORAGE_CONFIG,
             ERROR_TIMEOUT,
+            IN_PROGRESS,
             RELAX,
         };
         static constexpr TDuration ErrorTimeout = TDuration::Seconds(3);
         ERootState RootState = ERootState::INITIAL;
-        NKikimrBlobStorage::TStorageConfig CurrentProposedStorageConfig;
+        std::optional<NKikimrBlobStorage::TStorageConfig> CurrentProposedStorageConfig;
         std::shared_ptr<TScepter> Scepter;
         TString ErrorReason;
 
@@ -311,12 +311,22 @@ namespace NKikimr::NStorage {
         void ProcessGather(TEvGather *res);
         bool HasQuorum() const;
         void ProcessCollectConfigs(TEvGather::TCollectConfigs *res);
-        void ProcessProposeStorageConfig(TEvGather::TProposeStorageConfig *res);
+        std::optional<TString> ProcessProposeStorageConfig(TEvGather::TProposeStorageConfig *res);
 
         struct TExConfigError : yexception {};
 
         bool GenerateFirstConfig(NKikimrBlobStorage::TStorageConfig *config);
-        void AllocateStaticGroup(NKikimrBlobStorage::TStorageConfig *config);
+
+        void AllocateStaticGroup(NKikimrBlobStorage::TStorageConfig *config, ui32 groupId, ui32 groupGeneration,
+            TBlobStorageGroupType gtype, const NKikimrBlobStorage::TGroupGeometry& geometry,
+            const NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TPDiskFilter>& pdiskFilters,
+            THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks,
+            const NBsController::TGroupMapper::TForbiddenPDisks& forbid,
+            i64 requiredSpace, NKikimrBlobStorage::TBaseConfig *baseConfig,
+            bool convertToDonor, bool ignoreVSlotQuotaCheck, bool isSelfHealReasonDecommit);
+
+        void GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss,
+            const NKikimrBlobStorage::TStorageConfig& baseConfig);
         bool UpdateConfig(NKikimrBlobStorage::TStorageConfig *config);
 
         void PrepareScatterTask(ui64 cookie, TScatterTask& task);
@@ -505,7 +515,7 @@ namespace NKikimr::NStorage {
             const TNodeWardenConfig& nwConfig, bool allowUnformatted) {
         auto makeError = [&](TString error) -> bool {
             STLOG(PRI_CRIT, BS_NODE, NWDC41, "configuration incorrect", (Error, error));
-            Y_DEBUG_ABORT_UNLESS(false, "%s", error.c_str());
+            Y_DEBUG_ABORT("%s", error.c_str());
             return false;
         };
         if (!config.HasBlobStorageConfig()) { // no storage config at all -- however, this is quite strange
@@ -561,6 +571,12 @@ namespace NKikimr::NStorage {
             if (!vdisk.HasVDiskID() || !vdisk.HasVDiskLocation()) {
                 return makeError("incorrect TVDisk record");
             }
+            if (vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
+                continue;
+            }
+            if (vdisk.HasDonorMode()) {
+                continue;
+            }
             const auto vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
             const auto it = groups.find(vdiskId.GroupID);
             if (it == groups.end()) {
@@ -612,6 +628,11 @@ namespace NKikimr::NStorage {
             HasDiskQuorum(config.GetPrevConfig(), generateSuccessful) &&
             HasStorageQuorum(config.GetPrevConfig(), generateSuccessful, nwConfig, false)));
     }
+
+    std::optional<TString> ValidateConfigUpdate(const NKikimrBlobStorage::TStorageConfig& current,
+            const NKikimrBlobStorage::TStorageConfig& proposed);
+
+    std::optional<TString> ValidateConfig(const NKikimrBlobStorage::TStorageConfig& config);
 
 } // NKikimr::NStorage
 

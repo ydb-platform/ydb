@@ -6,12 +6,14 @@ PEERDIR(
     ydb/library/actors/core
     ydb/core/tx/columnshard/blobs_action/bs
     ydb/core/tx/columnshard/blobs_action/tier
+    ydb/core/tx/columnshard
     ydb/core/wrappers
 )
 
 SRCS(
     helper.cpp
     controllers.cpp
+    columnshard_ut_common.cpp
 )
 
 YQL_LAST_ABI_VERSION()

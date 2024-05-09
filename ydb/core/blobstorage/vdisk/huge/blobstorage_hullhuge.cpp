@@ -256,7 +256,11 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             , WriteId(wId)
             , DiskAddr()
             , Span(TWilson::VDiskInternals, std::move(traceId), "VDisk.HugeBlobKeeper.Write")
-        {}
+        {
+            if (Span) {
+                Span.Attribute("blob_id", Item->LogoBlobId.ToString());
+            }
+        }
     };
 
     void *THullHugeBlobWriter::Cookie = (void *)"HugeBlobWriter";

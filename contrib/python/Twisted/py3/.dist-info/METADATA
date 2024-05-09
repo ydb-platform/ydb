@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: Twisted
-Version: 23.10.0
+Version: 24.3.0
 Summary: An asynchronous networking framework written in Python
 Project-URL: Changelog, https://github.com/twisted/twisted/blob/HEAD/NEWS.rst
 Project-URL: Documentation, https://docs.twistedmatrix.com/
@@ -71,8 +71,8 @@ Requires-Dist: pyobjc-framework-cfnetwork; extra == 'macos_platform'
 Requires-Dist: pyobjc-framework-cocoa; extra == 'macos_platform'
 Requires-Dist: twisted[all-non-platform]; extra == 'macos_platform'
 Provides-Extra: mypy
-Requires-Dist: mypy-zope~=1.0.1; extra == 'mypy'
-Requires-Dist: mypy~=1.5.1; extra == 'mypy'
+Requires-Dist: mypy-zope~=1.0.3; extra == 'mypy'
+Requires-Dist: mypy~=1.8; extra == 'mypy'
 Requires-Dist: twisted[all-non-platform,dev]; extra == 'mypy'
 Requires-Dist: types-pyopenssl; extra == 'mypy'
 Requires-Dist: types-setuptools; extra == 'mypy'
@@ -82,7 +82,7 @@ Provides-Extra: osx_platform
 Requires-Dist: twisted[macos-platform]; extra == 'osx_platform'
 Provides-Extra: serial
 Requires-Dist: pyserial>=3.0; extra == 'serial'
-Requires-Dist: pywin32!=226; platform_system == 'Windows' and extra == 'serial'
+Requires-Dist: pywin32!=226; (platform_system == 'Windows') and extra == 'serial'
 Provides-Extra: test
 Requires-Dist: cython-test-exception-raiser<2,>=1.0.2; extra == 'test'
 Requires-Dist: hypothesis>=6.56; extra == 'test'
@@ -189,7 +189,7 @@ Or, for speed, use pre-commit directly::
 Copyright
 ---------
 
-All of the code in this distribution is Copyright (c) 2001-2023 Twisted Matrix Laboratories.
+All of the code in this distribution is Copyright (c) 2001-2024 Twisted Matrix Laboratories.
 
 Twisted is made available under the MIT license.
 The included `LICENSE <https://github.com/twisted/twisted/blob/trunk/LICENSE>`_ file describes this in detail.

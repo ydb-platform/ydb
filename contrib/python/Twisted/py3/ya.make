@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(23.10.0)
+VERSION(24.3.0)
 
 LICENSE(MIT)
 
@@ -467,7 +467,6 @@ RESOURCE_FILES(
     .dist-info/METADATA
     .dist-info/entry_points.txt
     .dist-info/top_level.txt
-    twisted/11715.misc
     twisted/application/newsfragments/10146.misc
     twisted/application/newsfragments/9746.misc
     twisted/conch/newsfragments/.gitignore

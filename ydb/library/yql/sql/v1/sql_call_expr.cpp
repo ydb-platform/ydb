@@ -177,7 +177,7 @@ bool TSqlCallExpr::ExtractCallParam(const TRule_external_call_param& node) {
     auto value = expression.Build(node.GetRule_expr3());
     if (value && optimizeForParam) {
         TDeferredAtom atom;
-        MakeTableFromExpression(Ctx, value, atom);
+        MakeTableFromExpression(Ctx.Pos(), Ctx, value, atom);
         value = new TCallNodeImpl(Ctx.Pos(), "String", { atom.Build() });
     }
 

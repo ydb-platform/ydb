@@ -3,6 +3,7 @@
 #include "flat_table_part.h"
 #include "flat_part_iface.h"
 #include "flat_part_charge_iface.h"
+#include "flat_page_data.h"
 
 namespace NKikimr::NTable {
 
@@ -71,7 +72,7 @@ public:
 
         bool ready = true, overshot = true, hasValidRowsRange = Groups || IncludeHistory;
         const TRowId sliceBeginRowId = beginRowId, sliceEndRowId = endRowId;
-        const auto& meta = Part->IndexPages.BTreeGroups[0];
+        const auto& meta = Part->IndexPages.GetBTree({});
         Y_ABORT_UNLESS(beginRowId < endRowId);
         Y_ABORT_UNLESS(endRowId <= meta.RowCount);
 
@@ -221,7 +222,7 @@ public:
         
         bool ready = true, overshot = true, hasValidRowsRange = Groups || IncludeHistory;
         const TRowId sliceBeginRowId = beginRowId, sliceEndRowId = endRowId;
-        const auto& meta = Part->IndexPages.BTreeGroups[0];
+        const auto& meta = Part->IndexPages.GetBTree({});
         Y_ABORT_UNLESS(beginRowId < endRowId);
         Y_ABORT_UNLESS(endRowId <= meta.RowCount);
 
@@ -444,7 +445,7 @@ private:
 private:
     bool DoGroup(TGroupId groupId, TRowId beginRowId, TRowId endRowId, TRowId firstChildBeginRowId, ui64 bytesLimit) const noexcept {
         bool ready = true;
-        const auto& meta = groupId.IsHistoric() ? Part->IndexPages.BTreeHistoric[groupId.Index] : Part->IndexPages.BTreeGroups[groupId.Index];
+        const auto& meta = Part->IndexPages.GetBTree(groupId);
 
         TVector<TNodeState> level, nextLevel(::Reserve(3));
         ui64 firstChildPrevBytes = bytesLimit ? GetPrevBytes(meta, firstChildBeginRowId) : 0;
@@ -500,7 +501,7 @@ private:
 
     bool DoGroupReverse(TGroupId groupId, TRowId beginRowId, TRowId endRowId, TRowId lastChildEndRowId, ui64 bytesLimit) const noexcept {
         bool ready = true;
-        const auto& meta = groupId.IsHistoric() ? Part->IndexPages.BTreeHistoric[groupId.Index] : Part->IndexPages.BTreeGroups[groupId.Index];
+        const auto& meta = Part->IndexPages.GetBTree(groupId);
 
         // level's nodes is in reverse order
         TVector<TNodeState> level, nextLevel(::Reserve(3));
@@ -584,7 +585,7 @@ private:
         const TKeyCellDefaults* keyDefaults = Part->Scheme->HistoryKeys.Get();
 
         const TGroupId groupId(0, true);
-        const auto& meta = Part->IndexPages.BTreeHistoric[0];
+        const auto& meta = Part->IndexPages.GetBTree(TGroupId{0, true});
         TRowId beginRowId = 0, endRowId = meta.RowCount;
         
         TVector<TNodeState> level, nextLevel(::Reserve(3));
@@ -707,7 +708,7 @@ private:
         ui64 result = 0;
 
         for (ui32 height = 0; height < meta.LevelCount; height++) {
-            auto page = Env->TryGetPage(Part, pageId);
+            auto page = Env->TryGetPage(Part, pageId, {});
             if (!page) {
                 return result;
             }
@@ -727,7 +728,7 @@ private:
         ui64 result = meta.DataSize;
 
         for (ui32 height = 0; height < meta.LevelCount; height++) {
-            auto page = Env->TryGetPage(Part, pageId);
+            auto page = Env->TryGetPage(Part, pageId, {});
             if (!page) {
                 return result;
             }
@@ -750,7 +751,7 @@ private:
     }
 
     bool TryLoadNode(const TChildState& child, TVector<TNodeState>& level) const noexcept {
-        auto page = Env->TryGetPage(Part, child.PageId);
+        auto page = Env->TryGetPage(Part, child.PageId, {});
         if (!page) {
             return false;
         }

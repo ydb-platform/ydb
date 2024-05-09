@@ -114,7 +114,7 @@ private:
         ui32 msgBusPort = PortManager_.GetPort();
 
         NKikimr::Tests::TServerSettings serverSettings(msgBusPort);
-        serverSettings.SetNodeCount(1);
+        serverSettings.SetNodeCount(Settings_.NodeCount);
 
         serverSettings.SetDomainName(Settings_.DomainName);
         serverSettings.SetAppConfig(Settings_.AppConfig);
@@ -198,6 +198,13 @@ public:
         return promise.GetFuture().GetValueSync();
     }
 
+    NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr YqlScriptRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId) const {
+        auto event = MakeHolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest>();
+        FillYqlScriptRequest(query, action, traceId, event->Record);
+
+        return RunKqpProxyRequest<NKikimr::NKqp::TEvKqp::TEvQueryRequest, NKikimr::NKqp::TEvKqp::TEvQueryResponse>(std::move(event));
+    }
+
     NKikimr::NKqp::TEvGetScriptExecutionOperationResponse::TPtr GetScriptExecutionOperationRequest(const TString& operation) const {
         NKikimr::NOperationId::TOperationId operationId(operation);
         auto event = MakeHolder<NKikimr::NKqp::TEvGetScriptExecutionOperation>(Settings_.DomainName, operationId);
@@ -215,6 +222,13 @@ public:
         GetRuntime()->Register(fetchActor);
 
         return GetRuntime()->GrabEdgeEvent<NKikimr::NKqp::TEvKqp::TEvFetchScriptResultsResponse>(edgeActor);
+    }
+
+    NKikimr::NKqp::TEvForgetScriptExecutionOperationResponse::TPtr ForgetScriptExecutionOperationRequest(const TString& operation) const {
+        NKikimr::NOperationId::TOperationId operationId(operation);
+        auto event = MakeHolder<NKikimr::NKqp::TEvForgetScriptExecutionOperation>(Settings_.DomainName, operationId, TInstant::Max());
+
+        return RunKqpProxyRequest<NKikimr::NKqp::TEvForgetScriptExecutionOperation, NKikimr::NKqp::TEvForgetScriptExecutionOperationResponse>(std::move(event));
     }
 
     void StartTraceOpt() const {
@@ -271,6 +285,10 @@ private:
         }
     }
 
+    void FillYqlScriptRequest(const TString& script, NKikimrKqp::EQueryAction action, const TString& traceId, NKikimrKqp::TEvQueryRequest& event) const {
+        FillQueryRequest(script, NKikimrKqp::QUERY_TYPE_SQL_SCRIPT, action, traceId, event);
+    }
+
 private:
     TYdbSetupSettings Settings_;
 
@@ -291,6 +309,12 @@ TRequestResult::TRequestResult(Ydb::StatusIds::StatusCode status, const NYql::TI
     , Issues(issues)
 {}
 
+TRequestResult::TRequestResult(Ydb::StatusIds::StatusCode status, const google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>& issues)
+    : Status(status)
+{
+    NYql::IssuesFromMessage(issues, Issues);
+}
+
 bool TRequestResult::IsSuccess() const {
     return Status == Ydb::StatusIds::SUCCESS;
 }
@@ -308,13 +332,11 @@ TYdbSetup::TYdbSetup(const TYdbSetupSettings& settings)
 
 TRequestResult TYdbSetup::SchemeQueryRequest(const TString& query, const TString& traceId, TSchemeMeta& meta) const {
     auto schemeQueryOperationResponse = Impl_->SchemeQueryRequest(query, traceId)->Get()->Record.GetRef();
+    const auto& responseRecord = schemeQueryOperationResponse.GetResponse();
 
-    meta.Ast = schemeQueryOperationResponse.GetResponse().GetQueryAst();
+    meta.Ast = responseRecord.GetQueryAst();
 
-    NYql::TIssues issues;
-    NYql::IssuesFromMessage(schemeQueryOperationResponse.GetResponse().GetQueryIssues(), issues);
-
-    return TRequestResult(schemeQueryOperationResponse.GetYdbStatus(), issues);
+    return TRequestResult(schemeQueryOperationResponse.GetYdbStatus(), responseRecord.GetQueryIssues());
 }
 
 TRequestResult TYdbSetup::ScriptRequest(const TString& script, NKikimrKqp::EQueryAction action, const TString& traceId, TString& operation) const {
@@ -326,15 +348,33 @@ TRequestResult TYdbSetup::ScriptRequest(const TString& script, NKikimrKqp::EQuer
 }
 
 TRequestResult TYdbSetup::QueryRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets) const {
+    resultSets.clear();
+
     auto queryOperationResponse = Impl_->QueryRequest(query, action, traceId, resultSets)->Get()->Record.GetRef();
+    const auto& responseRecord = queryOperationResponse.GetResponse();
 
-    meta.Ast = queryOperationResponse.GetResponse().GetQueryAst();
-    meta.Plan = queryOperationResponse.GetResponse().GetQueryPlan();
+    meta.Ast = responseRecord.GetQueryAst();
+    meta.Plan = responseRecord.GetQueryPlan();
 
-    NYql::TIssues issues;
-    NYql::IssuesFromMessage(queryOperationResponse.GetResponse().GetQueryIssues(), issues);
+    return TRequestResult(queryOperationResponse.GetYdbStatus(), responseRecord.GetQueryIssues());
+}
 
-    return TRequestResult(queryOperationResponse.GetYdbStatus(), issues);
+TRequestResult TYdbSetup::YqlScriptRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets) const {
+    resultSets.clear();
+
+    auto yqlQueryOperationResponse = Impl_->YqlScriptRequest(query, action, traceId)->Get()->Record.GetRef();
+    const auto& responseRecord = yqlQueryOperationResponse.GetResponse();
+
+    meta.Ast = responseRecord.GetQueryAst();
+    meta.Plan = responseRecord.GetQueryPlan();
+
+    resultSets.reserve(responseRecord.results_size());
+    for (const auto& result : responseRecord.results()) {
+        resultSets.emplace_back();
+        NKikimr::NKqp::ConvertKqpQueryResultToDbResult(result, &resultSets.back());
+    }
+
+    return TRequestResult(yqlQueryOperationResponse.GetYdbStatus(), responseRecord.GetQueryIssues());
 }
 
 TRequestResult TYdbSetup::GetScriptExecutionOperationRequest(const TString& operation, TExecutionMeta& meta) const {
@@ -361,10 +401,13 @@ TRequestResult TYdbSetup::FetchScriptExecutionResultsRequest(const TString& oper
 
     resultSet = scriptExecutionResults.GetResultSet();
 
-    NYql::TIssues issues;
-    NYql::IssuesFromMessage(scriptExecutionResults.GetIssues(), issues);
+    return TRequestResult(scriptExecutionResults.GetStatus(), scriptExecutionResults.GetIssues());
+}
 
-    return TRequestResult(scriptExecutionResults.GetStatus(), issues);
+TRequestResult TYdbSetup::ForgetScriptExecutionOperationRequest(const TString& operation) const {
+    auto forgetScriptExecutionOperationResponse = Impl_->ForgetScriptExecutionOperationRequest(operation);
+
+    return TRequestResult(forgetScriptExecutionOperationResponse->Get()->Status, forgetScriptExecutionOperationResponse->Get()->Issues);
 }
 
 void TYdbSetup::StartTraceOpt() const {

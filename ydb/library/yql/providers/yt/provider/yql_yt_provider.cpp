@@ -7,6 +7,7 @@
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/common/activation/yql_activation.h>
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
+#include <ydb/library/yql/providers/yt/gateway/qplayer/yql_yt_qplayer_gateway.h>
 
 #include <util/generic/singleton.h>
 
@@ -373,7 +374,7 @@ std::pair<TIntrusivePtr<TYtState>, TStatWriter> CreateYtNativeState(IYtGateway::
 }
 
 TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gateway) {
-    return [gateway] (
+    return [originalGateway = gateway] (
         const TString& userName,
         const TString& sessionId,
         const TGatewaysConfig* gatewaysConfig,
@@ -382,12 +383,20 @@ TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gat
         TIntrusivePtr<TTypeAnnotationContext> typeCtx,
         const TOperationProgressWriter& progressWriter,
         const TYqlOperationOptions& operationOptions,
-        THiddenQueryAborter
+        THiddenQueryAborter hiddenAborter,
+        const TQContext& qContext
     ) {
         Y_UNUSED(functionRegistry);
         Y_UNUSED(randomProvider);
         Y_UNUSED(progressWriter);
         Y_UNUSED(operationOptions);
+        Y_UNUSED(hiddenAborter);
+        auto gateway = originalGateway;
+        if (qContext) {
+            gateway = WrapYtGatewayWithQContext(originalGateway, qContext,
+                typeCtx->RandomProvider, typeCtx->FileStorage);
+        }
+
         TDataProviderInfo info;
         info.SupportsHidden = true;
 
@@ -525,9 +534,12 @@ bool TYtState::IsHybridEnabled() const {
 }
 
 bool TYtState::IsHybridEnabledForCluster(const std::string_view& cluster) const {
-    return !OnlyNativeExecution && Configuration->_EnableDq.Get(TString(cluster)).GetOrElse(true)
-        && TimeSpentInHybrid + (HybridInFlightOprations.empty() ? TDuration::Zero() : NMonotonic::TMonotonic::Now() - HybridStartTime)
-            < Configuration->HybridDqTimeSpentLimit.Get().GetOrElse(TDuration::Minutes(20));
+    return !OnlyNativeExecution && Configuration->_EnableDq.Get(TString(cluster)).GetOrElse(true);
+}
+
+bool TYtState::HybridTakesTooLong() const {
+    return TimeSpentInHybrid + (HybridInFlightOprations.empty() ? TDuration::Zero() : NMonotonic::TMonotonic::Now() - HybridStartTime)
+            > Configuration->HybridDqTimeSpentLimit.Get().GetOrElse(TDuration::Minutes(20));
 }
 
 }

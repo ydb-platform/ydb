@@ -160,12 +160,12 @@ public:
 protected:
     TDqComputeActorBase(const NActors::TActorId& executerId, const TTxId& txId, NDqProto::TDqTask* task,
         IDqAsyncIoFactory::TPtr asyncIoFactory,
-        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
         bool ownMemoryQuota = true, bool passExceptions = false,
         const ::NMonitoring::TDynamicCounterPtr& taskCounters = nullptr,
         NWilson::TTraceId traceId = {},
-        TIntrusivePtr<NActors::TProtoArenaHolder> arena = nullptr)
+        TIntrusivePtr<NActors::TProtoArenaHolder> arena = nullptr,
+        const TGUCSettings::TPtr& GUCSettings = nullptr)
         : ExecuterId(executerId)
         , TxId(txId)
         , Task(task, std::move(arena))
@@ -173,7 +173,6 @@ protected:
         , MemoryLimits(memoryLimits)
         , CanAllocateExtraMemory(RuntimeSettings.ExtraMemoryAllocationPool != 0)
         , AsyncIoFactory(std::move(asyncIoFactory))
-        , FunctionRegistry(functionRegistry)
         , CheckpointingMode(GetTaskCheckpointingMode(Task))
         , State(Task.GetCreateSuspended() ? NDqProto::COMPUTE_STATE_UNKNOWN : NDqProto::COMPUTE_STATE_EXECUTING)
         , WatermarksTracker(this->SelfId(), TxId, Task.GetId())
@@ -189,12 +188,11 @@ protected:
                     true,
                     false
         );
+        Alloc->SetGUCSettings(GUCSettings);
         InitMonCounters(taskCounters);
-        InitializeTask();
         if (ownMemoryQuota) {
             MemoryQuota = InitMemoryQuota();
         }
-        InitializeWatermarks();
     }
 
     void InitMonCounters(const ::NMonitoring::TDynamicCounterPtr& taskCounters) {
@@ -525,10 +523,19 @@ protected:
                 }
             }
         }
-        for (auto& [index, input] : InputTransformsMap) {
-            if (input.AsyncInput) {
-                if (auto data = input.AsyncInput->ExtraData()) {
+        for (auto& [index, transform] : InputTransformsMap) {
+            if (transform.AsyncInput) {
+                if (auto data = transform.AsyncInput->ExtraData()) {
                     auto* entry = extraData->AddInputTransformsData();
+                    entry->SetIndex(index);
+                    entry->MutableData()->CopyFrom(*data);
+                }
+            }
+        }
+        for (auto& [index, output] : SinksMap) {
+            if (output.AsyncOutput) {
+                if (auto data = output.AsyncOutput->ExtraData()) {
+                    auto* entry = extraData->AddSinksExtraData();
                     entry->SetIndex(index);
                     entry->MutableData()->CopyFrom(*data);
                 }
@@ -714,6 +721,7 @@ protected:
             }
         } catch (const std::exception& e) {
             error = e.what();
+            CA_LOG_E("Exception: " << error);
         }
         TString& blob = *state.MutableMiniKqlProgram()->MutableData()->MutableStateData()->MutableBlob();
         if (blob && !error.Defined()) {
@@ -799,10 +807,11 @@ protected:
         }
     };
 
-    struct TAsyncInputTransformHelper : TAsyncInputHelper {
-        NUdf::TUnboxedValue InputBuffer;
-
-        using TAsyncInputHelper::TAsyncInputHelper;
+    //Design note:
+    //Inherited TComputeActorAsyncInputHelperSync represents output part of an input transform. A transform's output is an input for TaskRunner
+    struct TAsyncInputTransformHelper: TComputeActorAsyncInputHelperSync {
+        using TComputeActorAsyncInputHelperSync::TComputeActorAsyncInputHelperSync;
+        NUdf::TUnboxedValue Input; //Expect a flow, that is the input for the transform
     };
 
     struct TOutputChannelInfo {
@@ -811,6 +820,7 @@ protected:
         IDqOutputChannel::TPtr Channel;
         bool HasPeer = false;
         bool Finished = false; // != Channel->IsFinished() // If channel is in finished state, it sends only checkpoints.
+        bool EarlyFinish = false;
         bool PopStarted = false;
         bool IsTransformOutput = false; // Is this channel output of a transform.
         NDqProto::EWatermarksMode WatermarksMode = NDqProto::EWatermarksMode::WATERMARKS_MODE_DISABLED;
@@ -1078,11 +1088,6 @@ protected:
     }
 
     void HandleExecuteBase(TEvDqCompute::TEvNewCheckpointCoordinator::TPtr& ev) {
-        if (!InputTransformsMap.empty()) {
-            InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TIssuesIds::UNEXPECTED, "Input transforms don't support checkpoints yet");
-            return;
-        }
-
         if (!Checkpoints) {
             Checkpoints = new TDqComputeActorCheckpoints(this->SelfId(), TxId, Task, this);
             Checkpoints->Init(this->SelfId(), this->RegisterWithSameMailbox(Checkpoints));
@@ -1291,7 +1296,7 @@ protected:
                         .StatsLevel = collectStatsLevel,
                         .TxId = TxId,
                         .TaskId = Task.GetId(),
-                        .TransformInput = transform.InputBuffer,
+                        .TransformInput = transform.Input,
                         .SecureParams = secureParams,
                         .TaskParams = taskParams,
                         .ComputeActorId = this->SelfId(),
@@ -1460,7 +1465,7 @@ protected:
             : MemoryLimits.MkqlLightProgramMemoryLimit;
     }
 
-private:
+protected:
     void InitializeTask() {
         for (ui32 i = 0; i < Task.InputsSize(); ++i) {
             const auto& inputDesc = Task.GetInputs(i);
@@ -1469,7 +1474,7 @@ private:
             if (inputDesc.HasTransform()) {
                 auto result = InputTransformsMap.emplace(
                     i,
-                    static_cast<TDerived*>(this)->template CreateInputHelper<TAsyncInputTransformHelper>(LogPrefix, i, NDqProto::WATERMARKS_MODE_DISABLED)
+                    TAsyncInputTransformHelper(LogPrefix, i, NDqProto::WATERMARKS_MODE_DISABLED)
                 );
                 YQL_ENSURE(result.second);
             }
@@ -1478,7 +1483,7 @@ private:
                 const auto watermarksMode = inputDesc.GetSource().GetWatermarksMode();
                 auto result = SourcesMap.emplace(
                     i, 
-                    static_cast<TDerived*>(this)->template CreateInputHelper<TAsyncInputHelper>(LogPrefix, i, watermarksMode)
+                    static_cast<TDerived*>(this)->CreateInputHelper(LogPrefix, i, watermarksMode)
                 );
                 YQL_ENSURE(result.second);
             } else {
@@ -1531,8 +1536,11 @@ private:
         }
 
         RequestContext = MakeIntrusive<NYql::NDq::TRequestContext>(Task.GetRequestContext());
+
+        InitializeWatermarks();
     }
 
+private:
     void InitializeWatermarks() {
         for (const auto& [id, source] : SourcesMap) {
             if (source.WatermarksMode == NDqProto::EWatermarksMode::WATERMARKS_MODE_DEFAULT) {
@@ -1844,7 +1852,6 @@ protected:
     TComputeMemoryLimits MemoryLimits;
     const bool CanAllocateExtraMemory = false;
     const IDqAsyncIoFactory::TPtr AsyncIoFactory;
-    const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     const NDqProto::ECheckpointingMode CheckpointingMode;
     TDqComputeActorChannels* Channels = nullptr;
     TDqComputeActorCheckpoints* Checkpoints = nullptr;

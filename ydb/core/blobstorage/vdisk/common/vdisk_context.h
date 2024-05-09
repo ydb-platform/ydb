@@ -70,6 +70,10 @@ namespace NKikimr {
         std::unique_ptr<TCostModel> CostModel;
         std::shared_ptr<TBsCostTracker> CostTracker;
 
+        // oos logging
+        std::atomic<ui32> CurrentOOSStatusFlag = NKikimrBlobStorage::StatusIsValid;
+        std::shared_ptr<NMonGroup::TOutOfSpaceGroup> OOSMonGroup;
+
     private:
         // Managing disk space
         TOutOfSpaceState OutOfSpaceState;

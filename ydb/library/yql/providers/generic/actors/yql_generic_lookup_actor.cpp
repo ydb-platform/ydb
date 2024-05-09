@@ -8,13 +8,14 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/dq/runtime/dq_arrow_helpers.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
-#include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
+#include <ydb/library/yql/providers/generic/proto/source.pb.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/utils.h>
 #include <ydb/library/yql/providers/generic/proto/range.pb.h>
@@ -27,19 +28,6 @@ namespace NYql::NDq {
     using namespace NActors;
 
     namespace {
-
-        Ydb::Type ConvertType(const NKikimr::NMiniKQL::TType* type, bool enableOptional) {
-            Ydb::Type result;
-            if (type->IsData()) {
-                auto data = static_cast<const NKikimr::NMiniKQL::TDataType*>(type);
-                result.Settype_id(static_cast<Ydb::Type_PrimitiveTypeId>(data->GetSchemeType())); //???
-                return result;
-            } else if (enableOptional && type->IsOptional()) {
-                auto optional = static_cast<const NKikimr::NMiniKQL::TOptionalType*>(type);
-                return ConvertType(optional->GetItemType(), false);
-            }
-            Y_ABORT();
-        }
 
         const NKikimr::NMiniKQL::TStructType* MergeStructTypes(const NKikimr::NMiniKQL::TTypeEnvironment& env, const NKikimr::NMiniKQL::TStructType* t1, const NKikimr::NMiniKQL::TStructType* t2) {
             Y_ABORT_UNLESS(t1);
@@ -66,7 +54,9 @@ namespace NYql::NDq {
 
     } // namespace
 
-    class TGenericLookupActor: public TGenericBaseActor<TGenericLookupActor> {
+    class TGenericLookupActor
+        : public NYql::NDq::IDqAsyncLookupSource,
+          public TGenericBaseActor<TGenericLookupActor> {
         using TBase = TGenericBaseActor<TGenericLookupActor>;
 
     public:
@@ -75,8 +65,7 @@ namespace NYql::NDq {
             TGenericTokenProvider::TPtr tokenProvider,
             NActors::TActorId&& parentId,
             std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
-            NYql::NConnector::NApi::TDataSourceInstance&& dataSource,
-            TString&& table,
+            NYql::Generic::TLookupSource&& lookupSource,
             const NKikimr::NMiniKQL::TStructType* keyType,
             const NKikimr::NMiniKQL::TStructType* payloadType,
             const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
@@ -86,43 +75,57 @@ namespace NYql::NDq {
             , TokenProvider(std::move(tokenProvider))
             , ParentId(std::move(parentId))
             , Alloc(alloc)
-            , DataSource(std::move(dataSource))
-            , Table(std::move(table))
+            , LookupSource(std::move(lookupSource))
             , KeyType(keyType)
             , PayloadType(payloadType)
             , SelectResultType(MergeStructTypes(typeEnv, keyType, payloadType))
             , HolderFactory(holderFactory)
             , ColumnDestinations(CreateColumnDestination())
             , MaxKeysInRequest(maxKeysInRequest)
+            , KeyTypeHelper(keyType)
+            , RequestedKeys(1000,
+                            KeyTypeHelper.GetValueHash(),
+                            KeyTypeHelper.GetValueEqual())
         {
         }
 
+        ~TGenericLookupActor() {
+            auto guard = Guard(*Alloc);
+            KeyTypeHelper = TKeyTypeHelper{};
+            RequestedKeys = TRequestedKeys(0, KeyTypeHelper.GetValueHash(), KeyTypeHelper.GetValueEqual());
+        }
+
         void Bootstrap() {
+            auto dsi = LookupSource.data_source_instance();
             YQL_CLOG(INFO, ProviderGeneric) << "New generic proivider lookup source actor(ActorId=" << SelfId() << ") for"
-                                            << " kind=" << NYql::NConnector::NApi::EDataSourceKind_Name(DataSource.kind())
-                                            << ", endpoint=" << DataSource.endpoint().ShortDebugString()
-                                            << ", database=" << DataSource.database()
-                                            << ", use_tls=" << ToString(DataSource.use_tls())
-                                            << ", protocol=" << NYql::NConnector::NApi::EProtocol_Name(DataSource.protocol())
-                                            << ", table=" << Table;
+                                            << " kind=" << NYql::NConnector::NApi::EDataSourceKind_Name(dsi.kind())
+                                            << ", endpoint=" << dsi.endpoint().ShortDebugString()
+                                            << ", database=" << dsi.database()
+                                            << ", use_tls=" << ToString(dsi.use_tls())
+                                            << ", protocol=" << NYql::NConnector::NApi::EProtocol_Name(dsi.protocol())
+                                            << ", table=" << LookupSource.table();
             Become(&TGenericLookupActor::StateFunc);
         }
 
         static constexpr char ActorName[] = "GENERIC_PROVIDER_LOOKUP_ACTOR";
 
+    private: //IDqAsyncLookupSource
+        size_t GetMaxSupportedKeysInRequest() const override {
+            return MaxKeysInRequest;
+        }
+        void AsyncLookup(const NKikimr::NMiniKQL::TUnboxedValueVector& keys) override {
+            CreateRequest(keys);
+        }
+
     private: //events
         STRICT_STFUNC(StateFunc,
-                      hFunc(NGenericProviderLookupActorEvents::TEvLookupRequest, Handle);
                       hFunc(TEvListSplitsIterator, Handle);
                       hFunc(TEvListSplitsPart, Handle);
                       hFunc(TEvReadSplitsIterator, Handle);
                       hFunc(TEvReadSplitsPart, Handle);
                       hFunc(TEvReadSplitsFinished, Handle);
-                      hFunc(TEvError, Handle);)
-
-        void Handle(NGenericProviderLookupActorEvents::TEvLookupRequest::TPtr& ev) {
-            CreateRequest(ev->Get()->Keys);
-        }
+                      hFunc(TEvError, Handle);
+                      hFunc(NActors::TEvents::TEvPoison, Handle);)
 
         void Handle(TEvListSplitsIterator::TPtr ev) {
             auto& iterator = ev->Get()->Iterator;
@@ -145,7 +148,7 @@ namespace NYql::NDq {
             Y_ABORT_UNLESS(response.splits_size() == 1);
             auto& split = response.splits(0);
             NConnector::NApi::TReadSplitsRequest readRequest;
-            *readRequest.mutable_data_source_instance() = DataSource;
+            *readRequest.mutable_data_source_instance() = LookupSource.data_source_instance();
             *readRequest.add_splits() = split;
             readRequest.Setmode(NConnector::NApi::TReadSplitsRequest_EMode::TReadSplitsRequest_EMode_ORDERED);
             readRequest.Setformat(NConnector::NApi::TReadSplitsRequest_EFormat::TReadSplitsRequest_EFormat_ARROW_IPC_STREAMING);
@@ -179,6 +182,10 @@ namespace NYql::NDq {
             FinalizeRequest();
         }
 
+        void Handle(NActors::TEvents::TEvPoison::TPtr) {
+            PassAway();
+        }
+
     private:
         void CreateRequest(const NKikimr::NMiniKQL::TUnboxedValueVector& keys) {
             YQL_CLOG(INFO, ProviderGeneric) << "ActorId=" << SelfId() << " Got LookupRequest for " << keys.size() << " keys";
@@ -187,6 +194,8 @@ namespace NYql::NDq {
             NConnector::NApi::TListSplitsRequest splitRequest;
             *splitRequest.add_selects() = CreateSelect(keys);
             splitRequest.Setmax_split_count(1);
+            Y_ABORT_UNLESS(RequestedKeys.empty());
+            RequestedKeys.insert(keys.begin(), keys.end());
             Connector->ListSplits(splitRequest).Subscribe([actorSystem = TActivationContext::ActorSystem(), selfId = SelfId()](const NConnector::TListSplitsStreamIteratorAsyncResult& asyncResult) {
                 auto result = ExtractFromConstFuture(asyncResult);
                 if (result.Status.Ok()) {
@@ -225,10 +234,6 @@ namespace NYql::NDq {
         }
 
         void ProcessReceivedData(const NConnector::NApi::TReadSplitsResponse& resp) {
-            if (resp.Haserror()) {
-                std::cerr << "ERRRRR: " << resp.error().message() << "\n";
-                Y_ABORT();
-            }
             Y_ABORT_UNLESS(resp.payload_case() == NConnector::NApi::TReadSplitsResponse::PayloadCase::kArrowIpcStreaming);
             auto guard = Guard(*Alloc);
             NKikimr::NArrow::NSerialization::TSerializerContainer deser = NKikimr::NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer(); //todo move to class' member
@@ -245,22 +250,28 @@ namespace NYql::NDq {
             auto height = columns[0].size();
             for (size_t i = 0; i != height; ++i) {
                 NUdf::TUnboxedValue* keyItems;
-                auto key = HolderFactory.CreateDirectArrayHolder(KeyType->GetMembersCount(), keyItems);
+                NUdf::TUnboxedValue key = HolderFactory.CreateDirectArrayHolder(KeyType->GetMembersCount(), keyItems);
                 NUdf::TUnboxedValue* outputItems;
-                auto output = HolderFactory.CreateDirectArrayHolder(PayloadType->GetMembersCount(), outputItems);
+                NUdf::TUnboxedValue output = HolderFactory.CreateDirectArrayHolder(PayloadType->GetMembersCount(), outputItems);
                 for (size_t j = 0; j != columns.size(); ++j) {
                     (ColumnDestinations[j].first == EColumnDestination::Key ? keyItems : outputItems)[ColumnDestinations[j].second] = columns[j][i];
                 }
-                LookupResult.emplace_back(std::move(key), std::move(output));
+                if (auto it = RequestedKeys.find(key); it != RequestedKeys.end()) { //remove duplicatas in lookup results
+                    LookupResult.emplace_back(std::move(key), std::move(output));
+                    RequestedKeys.erase(it);
+                }
             }
         }
 
         void FinalizeRequest() {
-            if (!LookupResult.empty()) {
-                YQL_CLOG(INFO, ProviderGeneric) << "Sending lookup results with " << LookupResult.size() << " rows";
-                auto ev = new NGenericProviderLookupActorEvents::TEvLookupResult(Alloc, std::move(LookupResult));
-                TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(ParentId, SelfId(), ev));
+            YQL_CLOG(INFO, ProviderGeneric) << "Sending lookup results with " << LookupResult.size() << " filled rows, " << RequestedKeys.size() << " empty rows";
+            auto guard = Guard(*Alloc);
+            for (auto&& k : RequestedKeys) {
+                LookupResult.emplace_back(std::move(k), NUdf::TUnboxedValue{});
             }
+            RequestedKeys.clear();
+            auto ev = new IDqAsyncLookupSource::TEvLookupResult(Alloc, std::move(LookupResult));
+            TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(ParentId, SelfId(), ev));
             LookupResult = {};
             ReadSplitsIterator = {};
             InProgress = false;
@@ -308,25 +319,34 @@ namespace NYql::NDq {
 
         NConnector::NApi::TSelect CreateSelect(const NKikimr::NMiniKQL::TUnboxedValueVector& keys) {
             NConnector::NApi::TSelect select;
-            *select.mutable_data_source_instance() = DataSource; //std::move
+            *select.mutable_data_source_instance() = LookupSource.data_source_instance();
+            //Note: returned token may be stale and we have no way to check or recover here
+            //Consider to redesign ICredentialsProvider
+            TokenProvider->MaybeFillToken(*select.mutable_data_source_instance());
 
             for (ui32 i = 0; i != SelectResultType->GetMembersCount(); ++i) {
                 auto c = select.mutable_what()->add_items()->mutable_column();
                 c->Setname((TString(SelectResultType->GetMemberName(i))));
-                *c->mutable_type() = ConvertType(SelectResultType->GetMemberType(i), true);
+                ExportTypeToProto(SelectResultType->GetMemberType(i), *c->mutable_type());
             }
 
-            select.mutable_from()->Settable(Table);
+            select.mutable_from()->Settable(LookupSource.table());
 
-            //TODO use predicate after YQ-2710
-            Y_UNUSED(keys);
-            // NConnector::NApi::TPredicate_TComparison eq;
-            // eq.Setoperation(NConnector::NApi::TPredicate_TComparison_EOperation::TPredicate_TComparison_EOperation_EQ);
-            // eq.mutable_left_value()->Setcolumn("id");
-            // eq.mutable_right_value()->mutable_typed_value()->mutable_type()->Settype_id(Ydb::Type::UINT64);
-            // eq.mutable_right_value()->mutable_typed_value()->mutable_value()->set_uint64_value(1);
-            // *select.mutable_where()->mutable_filter_typed()->mutable_comparison() = eq;
-
+            NConnector::NApi::TPredicate_TDisjunction disjunction;
+            for (const auto& k : keys) {
+                NConnector::NApi::TPredicate_TConjunction conjunction;
+                for (ui32 c = 0; c != KeyType->GetMembersCount(); ++c) {
+                    NConnector::NApi::TPredicate_TComparison eq;
+                    eq.Setoperation(NConnector::NApi::TPredicate_TComparison_EOperation::TPredicate_TComparison_EOperation_EQ);
+                    eq.mutable_left_value()->Setcolumn(TString(KeyType->GetMemberName(c)));
+                    auto rightTypedValue = eq.mutable_right_value()->mutable_typed_value();
+                    ExportTypeToProto(KeyType->GetMemberType(c), *rightTypedValue->mutable_type());
+                    ExportValueToProto(KeyType->GetMemberType(c), k.GetElement(c), *rightTypedValue->mutable_value());
+                    *conjunction.mutable_operands()->Add()->mutable_comparison() = eq;
+                }
+                *disjunction.mutable_operands()->Add()->mutable_conjunction() = conjunction;
+            }
+            *select.mutable_where()->mutable_filter_typed()->mutable_disjunction() = disjunction;
             return select;
         }
 
@@ -335,8 +355,7 @@ namespace NYql::NDq {
         TGenericTokenProvider::TPtr TokenProvider;
         const NActors::TActorId ParentId;
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
-        const NYql::NConnector::NApi::TDataSourceInstance DataSource;
-        const TString Table;
+        const NYql::Generic::TLookupSource LookupSource;
         const NKikimr::NMiniKQL::TStructType* const KeyType;
         const NKikimr::NMiniKQL::TStructType* const PayloadType;
         const NKikimr::NMiniKQL::TStructType* const SelectResultType; //columns from KeyType + PayloadType
@@ -344,41 +363,44 @@ namespace NYql::NDq {
         const std::vector<std::pair<EColumnDestination, size_t>> ColumnDestinations;
         const size_t MaxKeysInRequest;
         std::atomic_bool InProgress;
+        using TKeyTypeHelper = NKikimr::NMiniKQL::TKeyTypeContanerHelper<true, true, false>;
+        TKeyTypeHelper KeyTypeHelper;
+        using TRequestedKeys = std::unordered_set<
+            NUdf::TUnboxedValue,
+            NKikimr::NMiniKQL::TValueHasher,
+            NKikimr::NMiniKQL::TValueEqual,
+            NKikimr::NMiniKQL::TMKQLAllocator<NUdf::TUnboxedValue>>;
+        TRequestedKeys RequestedKeys;
         NConnector::IReadSplitsStreamIterator::TPtr ReadSplitsIterator; //TODO move me to TEvReadSplitsPart
         NKikimr::NMiniKQL::TKeyPayloadPairVector LookupResult;
     };
 
-    IActor* CreateGenericLookupActor(
+    std::pair<NYql::NDq::IDqAsyncLookupSource*, NActors::IActor*> CreateGenericLookupActor(
         NConnector::IClient::TPtr connectorClient,
-        const TString& serviceAccountId,
-        const TString& serviceAccountSignature,
         ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
         NActors::TActorId&& parentId,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
-        NYql::NConnector::NApi::TDataSourceInstance&& dataSource,
-        TString&& table,
+        NYql::Generic::TLookupSource&& lookupSource,
         const NKikimr::NMiniKQL::TStructType* keyType,
         const NKikimr::NMiniKQL::TStructType* payloadType,
         const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
         const size_t maxKeysInRequest)
     {
-        auto creds = dataSource.Getcredentials();
-
-        auto tokenProvider = NYql::NDq::CreateGenericTokenProvider(creds.Gettoken().Getvalue(), serviceAccountId, serviceAccountSignature, credentialsFactory);
+        auto tokenProvider = NYql::NDq::CreateGenericTokenProvider(lookupSource.GetToken(), lookupSource.GetServiceAccountId(), lookupSource.GetServiceAccountIdSignature(), credentialsFactory);
+        auto guard = Guard(*alloc);
         const auto actor = new TGenericLookupActor(
             connectorClient,
             std::move(tokenProvider),
             std::move(parentId),
             alloc,
-            std::move(dataSource),
-            std::move(table),
+            std::move(lookupSource),
             keyType,
             payloadType,
             typeEnv,
             holderFactory,
             maxKeysInRequest);
-        return actor;
+        return {actor, actor};
     }
 
 } // namespace NYql::NDq

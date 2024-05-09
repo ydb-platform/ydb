@@ -4,6 +4,29 @@
 
 namespace NKikimr {
 
+TCountMinSketch* TCountMinSketch::Create(ui64 width, ui64 depth) {
+    auto size = StaticSize(width, depth);
+    auto* data = ::malloc(size);
+    auto* sketch = reinterpret_cast<TCountMinSketch*>(data);
+    std::memset(sketch, 0, size);
+    sketch->Width = width;
+    sketch->Depth = depth;
+    sketch->ElementCount = 0;
+    return sketch;
+}
+
+TCountMinSketch* TCountMinSketch::FromString(const char* data, size_t size) {
+    auto* from = reinterpret_cast<const TCountMinSketch*>(data);
+    Y_ABORT_UNLESS(StaticSize(from->Width, from->Depth) == size);
+    auto* dataDst = ::malloc(size);
+    std::memcpy(dataDst, data, size);
+    return reinterpret_cast<TCountMinSketch*>(dataDst);
+}
+
+void TCountMinSketch::operator delete(void* data) noexcept {
+    ::free(data);
+}
+
 ui64 TCountMinSketch::Hash(const char* data, size_t size, size_t hashIndex) {
     // fnv1a
     ui64 hash = 14695981039346656037ULL + 31 * hashIndex;

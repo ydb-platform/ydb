@@ -73,8 +73,9 @@ bool IsVersionedType(EObjectType type)
         type == EObjectType::ChunkListMap ||
         type == EObjectType::ChunkViewMap ||
         type == EObjectType::MediumMap ||
-        type == EObjectType::TransactionMap ||
+        type == EObjectType::ForeignTransactionMap ||
         type == EObjectType::TopmostTransactionMap ||
+        type == EObjectType::TransactionMap ||
         type == EObjectType::ClusterNodeNode ||
         type == EObjectType::ClusterNodeMap ||
         type == EObjectType::DataNodeMap ||
@@ -96,6 +97,7 @@ bool IsVersionedType(EObjectType type)
         type == EObjectType::TabletCellNode ||
         type == EObjectType::TabletCellBundleMap ||
         type == EObjectType::TabletActionMap ||
+        type == EObjectType::CellOrchidNode ||
         type == EObjectType::AreaMap ||
         type == EObjectType::ChaosCellMap ||
         type == EObjectType::VirtualChaosCellMap ||
@@ -121,7 +123,9 @@ bool IsVersionedType(EObjectType type)
         type == EObjectType::ScionMap ||
         type == EObjectType::ClusterProxyNode ||
         type == EObjectType::SequoiaMapNode ||
-        type == EObjectType::Pipeline;
+        type == EObjectType::Pipeline ||
+        type == EObjectType::QueueConsumer ||
+        type == EObjectType::QueueProducer;
 }
 
 bool IsUserType(EObjectType type)
@@ -155,7 +159,8 @@ bool IsUserType(EObjectType type)
         type == EObjectType::SchedulerPool ||
         type == EObjectType::SchedulerPoolTree ||
         type == EObjectType::ChaosReplicatedTable ||
-        type == EObjectType::HunkStorage;
+        type == EObjectType::HunkStorage ||
+        type == EObjectType::SecondaryIndex;
 }
 
 bool IsSchemafulType(EObjectType type)

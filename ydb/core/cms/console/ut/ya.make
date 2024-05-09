@@ -25,6 +25,7 @@ SRCS(
     log_settings_configurator_ut.cpp
     modifications_validator_ut.cpp
     net_classifier_updater_ut.cpp
+    jaeger_tracing_configurator_ut.cpp
 )
 
 END()

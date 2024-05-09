@@ -8,10 +8,11 @@
 
 #include <ydb/core/blobstorage/vdisk/common/vdisk_context.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_costmodel.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_hugeblobctx.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_mongroups.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdisk_error.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
-#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/vdisk/skeleton/skeleton_events.h>
 #include <ydb/core/blobstorage/vdisk/scrub/scrub_actor.h>
 #include <ydb/core/blobstorage/vdisk/repl/blobstorage_repl.h>
@@ -40,12 +41,12 @@ namespace NKikimr {
     TEvFrontRecoveryStatus::TEvFrontRecoveryStatus(EPhase phase,
             NKikimrProto::EReplyStatus status,
             const TIntrusivePtr<TPDiskParams> &dsk,
-            std::shared_ptr<THugeBlobCtx> hugeBlobCtx,
+            ui32 minREALHugeBlobInBytes,
             TVDiskIncarnationGuid vdiskIncarnationGuid)
         : Phase(phase)
         , Status(status)
         , Dsk(dsk)
-        , HugeBlobCtx(std::move(hugeBlobCtx))
+        , MinREALHugeBlobInBytes(minREALHugeBlobInBytes)
         , VDiskIncarnationGuid(vdiskIncarnationGuid)
     {}
 
@@ -205,13 +206,20 @@ namespace NKikimr {
                 , MaxInFlightCost(maxInFlightCost)
                 , IntQueueId(intQueueId)
                 , Name(name)
-                , SkeletonFrontInFlightCount(skeletonFrontGroup->GetCounter("SkeletonFront/" + Name + "/InFlightCount", false))
-                , SkeletonFrontInFlightCost(skeletonFrontGroup->GetCounter("SkeletonFront/" + Name + "/InFlightCost", false))
-                , SkeletonFrontInFlightBytes(skeletonFrontGroup->GetCounter("SkeletonFront/" + Name + "/InFlightBytes", false))
-                , SkeletonFrontDelayedCount(skeletonFrontGroup->GetCounter("SkeletonFront/" + Name + "/DelayedCount", false))
-                , SkeletonFrontDelayedBytes(skeletonFrontGroup->GetCounter("SkeletonFront/" + Name + "/DelayedBytes", false))
-                , SkeletonFrontCostProcessed(skeletonFrontGroup->GetCounter("SkeletonFront/" + Name + "/CostProcessed", true))
+                , SkeletonFrontInFlightCount(MakeCounter(skeletonFrontGroup, "InFlightCount", false, false))
+                , SkeletonFrontInFlightCost(MakeCounter(skeletonFrontGroup, "InFlightCost", false, true))
+                , SkeletonFrontInFlightBytes(MakeCounter(skeletonFrontGroup, "InFlightBytes", false, true))
+                , SkeletonFrontDelayedCount(MakeCounter(skeletonFrontGroup, "DelayedCount", false, true))
+                , SkeletonFrontDelayedBytes(MakeCounter(skeletonFrontGroup, "DelayedBytes", false, true))
+                , SkeletonFrontCostProcessed(MakeCounter(skeletonFrontGroup, "CostProcessed", true, true))
             {}
+
+            ::NMonitoring::TDynamicCounters::TCounterPtr MakeCounter(TIntrusivePtr<::NMonitoring::TDynamicCounters> skeletonFrontGroup, const TString& sensorType, bool derivative, bool reportOnlyIfExtendedSensors) {
+                if (reportOnlyIfExtendedSensors && !NMonGroup::IsExtendedVDiskCounters()) {
+                    return skeletonFrontGroup->GetCounter("SkeletonFront/" + Name + "/" + sensorType, derivative, NMonitoring::TCountableBase::EVisibility::Private);
+                }
+                return skeletonFrontGroup->GetCounter("SkeletonFront/" + Name + "/" + sensorType, derivative);
+            }
 
             ui64 GetSize() const {
                 return Queue->GetSize();
@@ -811,7 +819,7 @@ namespace NKikimr {
                         TBlobStorageGroupType type = (GInfo ? GInfo->Type : TErasureType::ErasureNone);
                         VCtx->UpdateCostModel(std::make_unique<TCostModel>(msg->Dsk->SeekTimeUs, msg->Dsk->ReadSpeedBps,
                             msg->Dsk->WriteSpeedBps, msg->Dsk->ReadBlockSize, msg->Dsk->WriteBlockSize,
-                            msg->HugeBlobCtx->MinREALHugeBlobInBytes, type));
+                            msg->MinREALHugeBlobInBytes, type));
                         break;
                     }
                     case TEvFrontRecoveryStatus::SyncGuidRecoveryDone:
@@ -821,6 +829,12 @@ namespace NKikimr {
                     default: Y_ABORT("Unexpected case");
                 }
             }
+        }
+
+        void Handle(TEvMinHugeBlobSizeUpdate::TPtr &ev) {
+            VCtx->UpdateCostModel(std::make_unique<TCostModel>(VCtx->CostModel->SeekTimeUs, VCtx->CostModel->ReadSpeedBps,
+                VCtx->CostModel->WriteSpeedBps, VCtx->CostModel->ReadBlockSize, VCtx->CostModel->WriteBlockSize,
+                ev->Get()->MinREALHugeBlobInBytes, VCtx->CostModel->GType));
         }
 
         static NKikimrWhiteboard::EFlag ToLightSignal(NKikimrWhiteboard::EVDiskState st) {
@@ -1441,7 +1455,7 @@ namespace NKikimr {
                         LOG_CRIT_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
                             << "VDiskId mismatch expected# " << SelfVDiskId << " provided# " << vdiskId
                             << " Marker# BSVSF05");
-                        Y_DEBUG_ABORT_UNLESS(false, "VDiskId mismatch");
+                        Y_DEBUG_ABORT("VDiskId mismatch");
                         return Reply(ev, ctx, NKikimrProto::ERROR, "VDiskId mismatch", TAppData::TimeProvider->Now());
                     }
                     if (vdiskId != SelfVDiskId) {
@@ -1508,7 +1522,7 @@ namespace NKikimr {
                 TInstant now) {
             using namespace NErrBuilder;
             auto res = ErroneousResult(VCtx, status, errorReason, ev, now, nullptr, SelfVDiskId, VDiskIncarnationGuid, GInfo);
-            SendVDiskResponse(ctx, ev->Sender, res.release(), ev->Cookie);
+            SendVDiskResponse(ctx, ev->Sender, res.release(), ev->Cookie, VCtx);
         }
 
         void Reply(TEvBlobStorage::TEvVCheckReadiness::TPtr &ev, const TActorContext &ctx,
@@ -1974,7 +1988,7 @@ namespace NKikimr {
                     LOG_CRIT_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
                         << "VDiskId mismatch expected# " << SelfVDiskId << " provided# " << vdiskId
                         << " Type# " << TypeName<TEventType>() << " Marker# BSVSF06");
-                    Y_DEBUG_ABORT_UNLESS(false, "VDiskId mismatch");
+                    Y_DEBUG_ABORT("VDiskId mismatch");
                     return Reply(ev, ctx, NKikimrProto::ERROR, "VDiskId mismatch", TAppData::TimeProvider->Now());
                 } else if (!vdiskId.SameDisk(SelfVDiskId)) {
                     return Reply(ev, ctx, NKikimrProto::RACE, "group generation mismatch", TAppData::TimeProvider->Now());
@@ -2055,6 +2069,7 @@ namespace NKikimr {
             HFunc(TEvReportScrubStatus, Handle)
             HFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate, Handle)
             fFunc(TEvBlobStorage::EvForwardToSkeleton, HandleForwardToSkeleton)
+            hFunc(TEvMinHugeBlobSizeUpdate, Handle)
         )
 
 #define HFuncStatus(TEvType, status, errorReason, now, wstatus) \
@@ -2081,7 +2096,7 @@ namespace NKikimr {
                 HFuncStatus(TEvBlobStorage::TEvVGetBlock, status, errorReason, now, wstatus);
                 HFuncStatus(TEvBlobStorage::TEvVCollectGarbage, status, errorReason, now, wstatus);
                 HFuncStatus(TEvBlobStorage::TEvVGetBarrier, status, errorReason, now, wstatus);
-                default: Y_DEBUG_ABORT_UNLESS(false, "Unsupported message %d", ev->GetTypeRewrite());
+                default: Y_DEBUG_ABORT("Unsupported message %d", ev->GetTypeRewrite());
             }
         }
 

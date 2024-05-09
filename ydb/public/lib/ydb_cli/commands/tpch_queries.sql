@@ -14,7 +14,7 @@ select
     avg(l_discount) as avg_disc,
     count(*) as count_order
 from
-    `{path}lineitem`
+    `{path}/lineitem`
 where
     CAST(l_shipdate AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval("P100D"))
 group by
@@ -28,22 +28,22 @@ order by
 -- using 1680793381 as a seed to the RNG
 
 $r = (select r_regionkey from
-    `{path}region`
+    `{path}/region`
 where r_name='AMERICA');
 
 $j1 = (select n_name,n_nationkey
-    from `{path}nation` as n
+    from `{path}/nation` as n
     join $r as r on
     n.n_regionkey = r.r_regionkey);
 
 $j2 = (select s_acctbal,s_name,s_address,s_phone,s_comment,n_name,s_suppkey
-    from `{path}supplier` as s
+    from `{path}/supplier` as s
     join $j1 as j on
     s.s_nationkey = j.n_nationkey
 );
 
 $j3 = (select ps_partkey,ps_supplycost,s_acctbal,s_name,s_address,s_phone,s_comment,n_name
-    from `{path}partsupp` as ps
+    from `{path}/partsupp` as ps
     join $j2 as j on
     ps.ps_suppkey = j.s_suppkey
 );
@@ -54,7 +54,7 @@ $min_ps_supplycost = (select min(ps_supplycost) as min_ps_supplycost,ps_partkey
 );
 
 $p = (select p_partkey,p_mfgr
-    from `{path}part`
+    from `{path}/part`
     where
     p_size = 10
     and p_type like '%COPPER'
@@ -103,9 +103,9 @@ select
     o.o_shippriority as o_shippriority,
     o.o_orderkey as o_orderkey
 from
-    `{path}customer` as c
+    `{path}/customer` as c
 join
-    `{path}orders` as o
+    `{path}/orders` as o
 on
     c.c_custkey = o.o_custkey
 );
@@ -122,7 +122,7 @@ select
 from
     $join1 as j1
 join
-    `{path}lineitem` as l
+    `{path}/lineitem` as l
 on
     l.l_orderkey = j1.o_orderkey
 );
@@ -159,8 +159,8 @@ $join = (select
         l.l_commitdate as l_commitdate,
         l.l_receiptdate as l_receiptdate
     from
-        `{path}orders` as o
-        join any `{path}lineitem` as l
+        `{path}/orders` as o
+        join any `{path}/lineitem` as l
         on o.o_orderkey = l.l_orderkey);
 
 select
@@ -186,9 +186,9 @@ select
     o.o_orderdate as o_orderdate,
     c.c_nationkey as c_nationkey
 from
-    `{path}customer` as c
+    `{path}/customer` as c
 join
-    `{path}orders` as o
+    `{path}/orders` as o
 on
     c.c_custkey = o.o_custkey
 );
@@ -204,7 +204,7 @@ select
 from
     $join1 as j
 join
-    `{path}lineitem` as l
+    `{path}/lineitem` as l
 on
     l.l_orderkey = j.o_orderkey
 );
@@ -221,7 +221,7 @@ select
 from
     $join2 as j
 join
-    `{path}supplier` as s
+    `{path}/supplier` as s
 on
     j.l_suppkey = s.s_suppkey
 );
@@ -239,7 +239,7 @@ select
 from
     $join3 as j
 join
-    `{path}nation` as n
+    `{path}/nation` as n
 on
     j.s_nationkey = n.n_nationkey
     and j.c_nationkey = n.n_nationkey
@@ -259,7 +259,7 @@ select
 from
     $join4 as j
 join
-    `{path}region` as r
+    `{path}/region` as r
 on
     j.n_regionkey = r.r_regionkey
 );
@@ -287,7 +287,7 @@ $border = Date("1995-01-01");
 select
     sum(l_extendedprice * l_discount) as revenue
 from
-    `{path}lineitem`
+    `{path}/lineitem`
 where
     CAST(l_shipdate AS Timestamp) >= $border
     and cast(l_shipdate as Timestamp) < ($border + Interval("P365D"))
@@ -305,9 +305,9 @@ select
     l.l_orderkey as l_orderkey,
     s.s_nationkey as s_nationkey
 from
-    `{path}supplier` as s
+    `{path}/supplier` as s
 join
-    `{path}lineitem` as l
+    `{path}/lineitem` as l
 on
     s.s_suppkey = l.l_suppkey
 where cast(cast(l.l_shipdate as Timestamp) as Date) between
@@ -324,7 +324,7 @@ select
 from
     $join1 as j
 join
-    `{path}orders` as o
+    `{path}/orders` as o
 on
     o.o_orderkey = j.l_orderkey
 );
@@ -338,7 +338,7 @@ select
 from
     $join2 as j
 join
-    `{path}customer` as c
+    `{path}/customer` as c
 on
     c.c_custkey = j.o_custkey
 );
@@ -353,7 +353,7 @@ select
 from
     $join3 as j
 join
-    `{path}nation` as n
+    `{path}/nation` as n
 on
     j.s_nationkey = n.n_nationkey
 );
@@ -366,7 +366,7 @@ select
 from
     $join4 as j
 join
-    `{path}nation` as n
+    `{path}/nation` as n
 on
     j.c_nationkey = n.n_nationkey
 where (
@@ -401,9 +401,9 @@ select
     l.l_suppkey as l_suppkey,
     l.l_orderkey as l_orderkey
 from
-    `{path}part` as p
+    `{path}/part` as p
 join
-    `{path}lineitem` as l
+    `{path}/lineitem` as l
 on
     p.p_partkey = l.l_partkey
 where
@@ -417,7 +417,7 @@ select
 from
     $join1 as j
 join
-    `{path}supplier` as s
+    `{path}/supplier` as s
 on
     s.s_suppkey = j.l_suppkey
 );
@@ -429,7 +429,7 @@ select
 from
     $join2 as j
 join
-    `{path}nation` as n
+    `{path}/nation` as n
 on
     n.n_nationkey = j.s_nationkey
 );
@@ -442,7 +442,7 @@ select
 from
     $join3 as j
 join
-    `{path}orders` as o
+    `{path}/orders` as o
 on
     o.o_orderkey = j.l_orderkey
 where cast(cast(o_orderdate as Timestamp) as Date) between Date('1995-01-01') and Date('1996-12-31')
@@ -456,7 +456,7 @@ select
 from
     $join4 as j
 join
-    `{path}customer` as c
+    `{path}/customer` as c
 on
     c.c_custkey = j.o_custkey
 );
@@ -469,7 +469,7 @@ select
 from
     $join5 as j
 join
-    `{path}nation` as n
+    `{path}/nation` as n
 on
     n.n_nationkey = j.c_nationkey
 );
@@ -481,7 +481,7 @@ select
 from
     $join6 as j
 join
-    `{path}region` as r
+    `{path}/region` as r
 on
     r.r_regionkey = j.n_regionkey
 where
@@ -507,36 +507,36 @@ order by
 
 $p = (select p_partkey, p_name
 from
-    `{path}part`
+    `{path}/part`
 where FIND(p_name, 'rose') IS NOT NULL);
 
 $j1 = (select ps_partkey, ps_suppkey, ps_supplycost
 from
-    `{path}partsupp` as ps
+    `{path}/partsupp` as ps
 join $p as p
 on ps.ps_partkey = p.p_partkey);
 
 $j2 = (select l_suppkey, l_partkey, l_orderkey, l_extendedprice, l_discount, ps_supplycost, l_quantity
 from
-    `{path}lineitem` as l
+    `{path}/lineitem` as l
 join $j1 as j
 on l.l_suppkey = j.ps_suppkey AND l.l_partkey = j.ps_partkey);
 
 $j3 = (select l_orderkey, s_nationkey, l_extendedprice, l_discount, ps_supplycost, l_quantity
 from
-    `{path}supplier` as s
+    `{path}/supplier` as s
 join $j2 as j
 on j.l_suppkey = s.s_suppkey);
 
 $j4 = (select o_orderdate, l_extendedprice, l_discount, ps_supplycost, l_quantity, s_nationkey
 from
-    `{path}orders` as o
+    `{path}/orders` as o
 join $j3 as j
 on o.o_orderkey = j.l_orderkey);
 
 $j5 = (select n_name, o_orderdate, l_extendedprice, l_discount, ps_supplycost, l_quantity
 from
-    `{path}nation` as n
+    `{path}/nation` as n
 join $j4 as j
 on j.s_nationkey = n.n_nationkey
 );
@@ -576,9 +576,9 @@ select
     c.c_nationkey as c_nationkey,
     o.o_orderkey as o_orderkey
 from
-    `{path}customer` as c
+    `{path}/customer` as c
 join
-    `{path}orders` as o
+    `{path}/orders` as o
 on
     c.c_custkey = o.o_custkey
 where
@@ -599,7 +599,7 @@ select
 from
     $join1 as j
 join
-    `{path}lineitem` as l
+    `{path}/lineitem` as l
 on
     l.l_orderkey = j.o_orderkey
 where
@@ -620,7 +620,7 @@ select
 from
     $join2 as j
 join
-    `{path}nation` as n
+    `{path}/nation` as n
 on
     n.n_nationkey = j.c_nationkey
 );
@@ -658,9 +658,9 @@ select
     ps.ps_availqty as ps_availqty,
     s.s_nationkey as s_nationkey
 from
-    `{path}partsupp` as ps
+    `{path}/partsupp` as ps
 join
-    `{path}supplier` as s
+    `{path}/supplier` as s
 on
     ps.ps_suppkey = s.s_suppkey
 );
@@ -673,7 +673,7 @@ select
 from
     $join1 as j
 join
-    `{path}nation` as n
+    `{path}/nation` as n
 on
     n.n_nationkey = j.s_nationkey
 where
@@ -719,8 +719,8 @@ $join = (
         l.l_shipdate as l_shipdate,
         l.l_receiptdate as l_receiptdate
     from
-        `{path}orders` as o
-        join `{path}lineitem` as l
+        `{path}/orders` as o
+        join `{path}/lineitem` as l
         on o.o_orderkey == l.l_orderkey
 );
 
@@ -761,7 +761,7 @@ $orders = (
         o_orderkey,
         o_custkey
     from
-        `{path}orders`
+        `{path}/orders`
     where
         o_comment NOT LIKE "%unusual%requests%"
 );
@@ -774,7 +774,7 @@ from
             c.c_custkey as c_custkey,
             count(o.o_orderkey) as c_count
         from
-            `{path}customer` as c left outer join $orders as o on
+            `{path}/customer` as c left outer join $orders as o on
                 c.c_custkey = o.o_custkey
         group by
             c.c_custkey
@@ -797,9 +797,9 @@ select
         else 0
     end) / sum(l.l_extendedprice * (1 - l.l_discount)) as promo_revenue
 from
-    `{path}lineitem` as l
+    `{path}/lineitem` as l
 join
-    `{path}part` as p
+    `{path}/part` as p
 on
     l.l_partkey = p.p_partkey
 where
@@ -817,7 +817,7 @@ $revenue0 = (
         sum(l_extendedprice * (1 - l_discount)) as total_revenue,
         cast(sum(l_extendedprice * (1 - l_discount)) as Uint64) as total_revenue_approx
     from
-        `{path}lineitem`
+        `{path}/lineitem`
     where
         cast(l_shipdate as timestamp) >= $border
         and cast(l_shipdate as timestamp) < ($border + Interval("P92D"))
@@ -839,7 +839,7 @@ select
     r.total_revenue as total_revenue,
     r.total_revenue_approx as total_revenue_approx
 from
-    `{path}supplier` as s
+    `{path}/supplier` as s
 join
     $revenue0 as r
 on
@@ -871,9 +871,9 @@ select
     ps.ps_suppkey as ps_suppkey,
     ps.ps_partkey as ps_partkey
 from
-    `{path}partsupp` as ps
+    `{path}/partsupp` as ps
 left join
-    `{path}supplier` as w
+    `{path}/supplier` as w
 on
     w.s_suppkey = ps.ps_suppkey
 where not (s_comment like "%Customer%Complaints%")
@@ -887,7 +887,7 @@ select
 from
     $join as j
 join
-    `{path}part` as p
+    `{path}/part` as p
 on
     p.p_partkey = j.ps_partkey
 where
@@ -915,9 +915,9 @@ select
     0.2 * avg(l_quantity) as threshold,
     l.l_partkey as l_partkey
 from
-    `{path}lineitem` as l
+    `{path}/lineitem` as l
 join
-    `{path}part` as p
+    `{path}/part` as p
 on
     p.p_partkey = l.l_partkey
 where
@@ -930,7 +930,7 @@ group by
 select
     sum(l.l_extendedprice) / 7.0 as avg_yearly
 from
-    `{path}lineitem` as l
+    `{path}/lineitem` as l
 join
     $threshold as t
 on
@@ -947,7 +947,7 @@ select
     l_orderkey,
     sum(l_quantity) as sum_l_quantity
 from
-    `{path}lineitem`
+    `{path}/lineitem`
 group by
     l_orderkey having
         sum(l_quantity) > 315
@@ -961,9 +961,9 @@ select
     o.o_orderdate as o_orderdate,
     o.o_totalprice as o_totalprice
 from
-    `{path}customer` as c
+    `{path}/customer` as c
 join
-    `{path}orders` as o
+    `{path}/orders` as o
 on
     c.c_custkey = o.o_custkey
 );
@@ -998,9 +998,9 @@ limit 100;
 select
     sum(l.l_extendedprice* (1 - l.l_discount)) as revenue
 from
-    `{path}lineitem` as l
+    `{path}/lineitem` as l
 join
-    `{path}part` as p
+    `{path}/part` as p
 on
     p.p_partkey = l.l_partkey
 where
@@ -1042,7 +1042,7 @@ select
     l_partkey as l_partkey,
     l_suppkey as l_suppkey
 from
-    `{path}lineitem`
+    `{path}/lineitem`
 where
     cast(l_shipdate as timestamp) >= $border
     and cast(l_shipdate as timestamp) < ($border + Interval("P365D"))
@@ -1054,7 +1054,7 @@ $parts = (
 select
     p_partkey
 from
-    `{path}part`
+    `{path}/part`
 where
     StartsWith(p_name, 'maroon')
 );
@@ -1065,7 +1065,7 @@ select
     ps.ps_availqty as ps_availqty,
     ps.ps_partkey as ps_partkey
 from
-    `{path}partsupp` as ps
+    `{path}/partsupp` as ps
 join any
     $parts as p
 on
@@ -1094,7 +1094,7 @@ select
 from
     $join2 as j
 join any
-    `{path}supplier` as s
+    `{path}/supplier` as s
 on
     j.ps_suppkey = s.s_suppkey
 );
@@ -1105,7 +1105,7 @@ select
 from
     $join3 as j
 join
-    `{path}nation` as n
+    `{path}/nation` as n
 on
     j.s_nationkey = n.n_nationkey
 where
@@ -1118,14 +1118,14 @@ order by
 -- TPC TPC-H Parameter Substitution (Version 2.17.2 build 0)
 -- using 1680793381 as a seed to the RNG
 
-$n = select n_nationkey from `{path}nation`
+$n = select n_nationkey from `{path}/nation`
 where n_name = 'EGYPT';
 
-$s = select s_name, s_suppkey from `{path}supplier` as supplier
+$s = select s_name, s_suppkey from `{path}/supplier` as supplier
 join $n as nation
 on supplier.s_nationkey = nation.n_nationkey;
 
-$l = select l_suppkey, l_orderkey from `{path}lineitem`
+$l = select l_suppkey, l_orderkey from `{path}/lineitem`
 where l_receiptdate > l_commitdate;
 
 $j1 = select s_name, l_suppkey, l_orderkey from $l as l1
@@ -1134,7 +1134,7 @@ on l1.l_suppkey = supplier.s_suppkey;
 
 -- exists
 $j2 = select l1.l_orderkey as l_orderkey, l1.l_suppkey as l_suppkey, l1.s_name as s_name, l2.l_receiptdate as l_receiptdate, l2.l_commitdate as l_commitdate from $j1 as l1
-join `{path}lineitem` as l2
+join `{path}/lineitem` as l2
 on l1.l_orderkey = l2.l_orderkey
 where l2.l_suppkey <> l1.l_suppkey;
 
@@ -1150,7 +1150,7 @@ left only join $j2_2 as l3
 on l1.l_orderkey = l3.l_orderkey;
 
 $j4 = select s_name from $j3 as l1
-join `{path}orders` as orders
+join `{path}/orders` as orders
 on orders.o_orderkey = l1.l_orderkey
 where o_orderstatus = 'F';
 
@@ -1173,7 +1173,7 @@ select
     c_custkey,
     Substring(c_phone, 0u, 2u) as cntrycode
 from
-    `{path}customer`
+    `{path}/customer`
 where (Substring(c_phone, 0u, 2u) = '31' or Substring(c_phone, 0u, 2u) = '29' or Substring(c_phone, 0u, 2u) = '30' or Substring(c_phone, 0u, 2u) = '26' or Substring(c_phone, 0u, 2u) = '28' or Substring(c_phone, 0u, 2u) = '25' or Substring(c_phone, 0u, 2u) = '15')
 );
 $avg = (
@@ -1204,7 +1204,7 @@ select
 from
     $join1 as j
 left only join
-    `{path}orders` as o
+    `{path}/orders` as o
 on
     o.o_custkey = j.c_custkey
 );

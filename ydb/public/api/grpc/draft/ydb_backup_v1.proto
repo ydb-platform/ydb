@@ -1,0 +1,33 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Ydb.Backup.V1;
+
+option java_package = "com.yandex.ydb.backup.v1";
+
+import "ydb/public/api/protos/draft/ydb_backup.proto";
+
+service BackupService {
+    // Fetches data from remote storage to cluster instance
+    // After successful completion of this call BackupCollection objects are created inside cluster
+    // And remote data can be accessed through them
+    rpc FetchBackupCollections(FetchBackupCollectionsRequest) returns (FetchBackupCollectionsResponse) {}
+
+    // Shows BackupCollection's present in cluster (probably with some filters or accessible by current user)
+    // Exact storage scheme of this collections will be defined later (probably at the beginning it will be some flat scheme by UUID with indices for filtering)
+    rpc ListBackupCollections(ListBackupCollectionsRequest) returns (ListBackupCollectionsResponse) {}
+
+    // Creates backup collection with specified settings
+    // In case of remote backup collection (e.g. stored in s3) also checks connection to s3 and all corresponding rights
+    rpc CreateBackupCollection(CreateBackupCollectionRequest) returns (CreateBackupCollectionResponse) {}
+
+    // Returns specified BackupCollection data
+    rpc ReadBackupCollection(ReadBackupCollectionRequest) returns (ReadBackupCollectionResponse) {}
+
+    // Somehow updates BackupCollection state. Maybe all subobjects will be modified through this call, maybe they will have separate calls
+    rpc UpdateBackupCollection(UpdateBackupCollectionRequest) returns (UpdateBackupCollectionResponse) {}
+
+    // Deletes BackupCollection. In case of remote backup collection data WILL be preserved if other is not specified explicitly
+    // In case of read-only BackupCollection's additionally to this explicit flag user should set force flag.
+    rpc DeleteBackupCollection(DeleteBackupCollectionRequest) returns (DeleteBackupCollectionResponse) {}
+}

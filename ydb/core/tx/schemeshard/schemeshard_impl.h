@@ -5,6 +5,7 @@
 #include "schemeshard.h"
 #include "schemeshard_export.h"
 #include "schemeshard_import.h"
+#include "schemeshard_backup.h"
 #include "schemeshard_build_index.h"
 #include "schemeshard_private.h"
 #include "schemeshard_types.h"
@@ -12,12 +13,13 @@
 #include "schemeshard_path.h"
 #include "schemeshard_domain_links.h"
 #include "schemeshard_info_types.h"
-#include "schemeshard_tables_storage.h"
 #include "schemeshard_tx_infly.h"
 #include "schemeshard_utils.h"
 #include "schemeshard_schema.h"
 #include "schemeshard__operation.h"
 #include "schemeshard__stats.h"
+
+#include "olap/manager/manager.h"
 
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/storage_pools.h>
@@ -42,7 +44,7 @@
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/message_seqno.h>
-#include <ydb/core/tx/scheme_board/events.h>
+#include <ydb/core/tx/scheme_board/events_schemeshard.h>
 #include <ydb/core/tx/tx_allocator_client/actor_client.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -596,7 +598,7 @@ public:
 
     void DoShardsDeletion(const THashSet<TShardIdx>& shardIdx, const TActorContext& ctx);
 
-    void SetPartitioning(TPathId pathId, const TVector<TShardIdx>& partitioning);
+    void SetPartitioning(TPathId pathId, const std::vector<TShardIdx>& partitioning);
     void SetPartitioning(TPathId pathId, TOlapStoreInfo::TPtr storeInfo);
     void SetPartitioning(TPathId pathId, TColumnTableInfo::TPtr tableInfo);
     void SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, TVector<TTableShardInfo>&& newPartitioning);
@@ -853,7 +855,7 @@ public:
 
     void EnqueueBackgroundCompaction(const TShardIdx& shardIdx, const TPartitionStats& stats);
     void UpdateBackgroundCompaction(const TShardIdx& shardIdx, const TPartitionStats& stats);
-    void RemoveBackgroundCompaction(const TShardIdx& shardIdx);
+    bool RemoveBackgroundCompaction(const TShardIdx& shardIdx);
 
     void EnqueueBorrowedCompaction(const TShardIdx& shardIdx);
     void RemoveBorrowedCompaction(const TShardIdx& shardIdx);
@@ -931,7 +933,7 @@ public:
     struct TTxPublishToSchemeBoard;
     NTabletFlatExecutor::ITransaction* CreateTxPublishToSchemeBoard(THashMap<TTxId, TDeque<TPathId>>&& paths);
     struct TTxAckPublishToSchemeBoard;
-    NTabletFlatExecutor::ITransaction* CreateTxAckPublishToSchemeBoard(TSchemeBoardEvents::TEvUpdateAck::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxAckPublishToSchemeBoard(NSchemeBoard::NSchemeshardEvents::TEvUpdateAck::TPtr& ev);
 
     struct TTxOperationPropose;
     NTabletFlatExecutor::ITransaction* CreateTxOperationPropose(TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev);
@@ -992,8 +994,10 @@ public:
     void DescribeTableIndex(const TPathId& pathId, const TString& name, TTableIndexInfo::TPtr indexInfo, NKikimrSchemeOp::TIndexDescription& entry);
     void DescribeCdcStream(const TPathId& pathId, const TString& name, NKikimrSchemeOp::TCdcStreamDescription& desc);
     void DescribeCdcStream(const TPathId& pathId, const TString& name, TCdcStreamInfo::TPtr info, NKikimrSchemeOp::TCdcStreamDescription& desc);
-    void DescribeSequence(const TPathId& pathId, const TString& name, NKikimrSchemeOp::TSequenceDescription& desc);
-    void DescribeSequence(const TPathId& pathId, const TString& name, TSequenceInfo::TPtr info, NKikimrSchemeOp::TSequenceDescription& desc);
+    void DescribeSequence(const TPathId& pathId, const TString& name,
+        NKikimrSchemeOp::TSequenceDescription& desc, bool fillSetVal = false);
+    void DescribeSequence(const TPathId& pathId, const TString& name, TSequenceInfo::TPtr info,
+        NKikimrSchemeOp::TSequenceDescription& desc, bool fillSetVal = false);
     void DescribeReplication(const TPathId& pathId, const TString& name, NKikimrSchemeOp::TReplicationDescription& desc);
     void DescribeReplication(const TPathId& pathId, const TString& name, TReplicationInfo::TPtr info, NKikimrSchemeOp::TReplicationDescription& desc);
     void DescribeBlobDepot(const TPathId& pathId, const TString& name, NKikimrSchemeOp::TBlobDepotDescription& desc);
@@ -1034,7 +1038,9 @@ public:
     void Handle(NSequenceShard::TEvSequenceShard::TEvFreezeSequenceResult::TPtr &ev, const TActorContext &ctx);
     void Handle(NSequenceShard::TEvSequenceShard::TEvRestoreSequenceResult::TPtr &ev, const TActorContext &ctx);
     void Handle(NSequenceShard::TEvSequenceShard::TEvRedirectSequenceResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(NSequenceShard::TEvSequenceShard::TEvGetSequenceResult::TPtr &ev, const TActorContext &ctx);
     void Handle(NReplication::TEvController::TEvCreateReplicationResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(NReplication::TEvController::TEvAlterReplicationResult::TPtr &ev, const TActorContext &ctx);
     void Handle(NReplication::TEvController::TEvDropReplicationResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvSchemaChanged::TPtr &ev, const TActorContext &ctx);
@@ -1062,7 +1068,7 @@ public:
     void Handle(TEvSchemeShard::TEvSyncTenantSchemeShard::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvUpdateTenantSchemeShard::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TSchemeBoardEvents::TEvUpdateAck::TPtr& ev, const TActorContext& ctx);
+    void Handle(NSchemeBoard::NSchemeshardEvents::TEvUpdateAck::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvTxProcessing::TEvPlanStep::TPtr &ev, const TActorContext &ctx);
 
@@ -1216,6 +1222,15 @@ public:
 
     void ResumeImports(const TVector<ui64>& ids, const TActorContext& ctx);
     // } // NImport
+
+    // namespace NBackup {
+    void Handle(TEvBackup::TEvFetchBackupCollectionsRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvBackup::TEvListBackupCollectionsRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvBackup::TEvCreateBackupCollectionRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvBackup::TEvReadBackupCollectionRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvBackup::TEvUpdateBackupCollectionRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvBackup::TEvDeleteBackupCollectionRequest::TPtr& ev, const TActorContext& ctx);
+    // } // NBackup
 
     void FillTableSchemaVersion(ui64 schemaVersion, NKikimrSchemeOp::TTableDescription *tableDescr) const;
 

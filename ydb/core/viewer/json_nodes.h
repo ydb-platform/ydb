@@ -37,6 +37,7 @@ class TJsonNodes : public TViewerPipeClient<TJsonNodes> {
     std::unique_ptr<TEvBlobStorage::TEvControllerConfigResponse> BaseConfig;
     std::unordered_map<ui32, const NKikimrBlobStorage::TBaseConfig::TGroup*> BaseConfigGroupIndex;
     std::unordered_map<TNodeId, ui64> DisconnectTime;
+    std::unordered_map<TNodeId, TString> NodeName;
     TJsonSettings JsonSettings;
     ui32 Timeout = 0;
     TString FilterTenant;
@@ -481,6 +482,9 @@ public:
             BLOG_TRACE("HiveNodeStats filter node by " << nodeId);
             FilterNodeIds.insert(nodeId);
             DisconnectTime[nodeId] = nodeStats.GetLastAliveTimestamp();
+            if (nodeStats.HasNodeName()) {
+                NodeName[nodeId] = nodeStats.GetNodeName();
+            }
         }
         if (--RequestsBeforeNodeList == 0) {
             ProcessNodeIds();
@@ -751,6 +755,10 @@ public:
                 auto itDisconnectTime = DisconnectTime.find(nodeId);
                 if (itDisconnectTime != DisconnectTime.end()) {
                     nodeInfo.MutableSystemState()->SetDisconnectTime(itDisconnectTime->second);
+                }
+                auto itNodeName = NodeName.find(nodeId);
+                if (itNodeName != NodeName.end()) {
+                    nodeInfo.MutableSystemState()->SetNodeName(itNodeName->second);
                 }
             }
             if (Storage) {

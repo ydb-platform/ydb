@@ -188,6 +188,8 @@ private:
                 return TStatus::Ok;
             case TKikimrKey::Type::PGObject:
                 return TStatus::Ok;
+            case TKikimrKey::Type::Replication:
+                return TStatus::Ok;
         }
 
         return TStatus::Error;
@@ -244,6 +246,7 @@ public:
                             .WithTableStats(table.GetNeedsStats())
                             .WithPrivateTables(IsInternalCall)
                             .WithExternalDatasources(SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources())
+                            .WithAuthInfo(table.GetNeedAuthInfo())
             );
 
             futures.push_back(future.Apply([result, queryType]
@@ -419,9 +422,11 @@ protected:
     {
         YQL_ENSURE(SessionCtx->Query().Type != EKikimrQueryType::Unspecified);
 
-        bool applied = Dispatcher->Dispatch(cluster, name, value, NCommon::TSettingDispatcher::EStage::STATIC);
+        if (!Dispatcher->Dispatch(cluster, name, value, NCommon::TSettingDispatcher::EStage::STATIC, NCommon::TSettingDispatcher::GetErrorCallback(pos, ctx))) {
+            return false;
+        }
 
-        if (!applied) {
+        if (Dispatcher->IsRuntime(name)) {
             bool pragmaAllowed = false;
 
             switch (SessionCtx->Query().Type) {

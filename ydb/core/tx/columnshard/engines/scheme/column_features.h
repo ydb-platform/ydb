@@ -22,7 +22,7 @@ private:
 public:
     TSaverContext(const std::shared_ptr<IStoragesManager>& storagesManager)
         : StoragesManager(storagesManager) {
-
+        AFL_VERIFY(StoragesManager);
     }
 };
 

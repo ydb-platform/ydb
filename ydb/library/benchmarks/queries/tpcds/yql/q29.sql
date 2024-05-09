@@ -7,9 +7,9 @@ select
     ,item.i_item_desc
     ,store.s_store_id
     ,store.s_store_name
-    ,stddev_samp(ss_quantity)        as store_sales_quantity
-    ,stddev_samp(sr_return_quantity) as store_returns_quantity
-    ,stddev_samp(cs_quantity)        as catalog_sales_quantity
+    ,sum(ss_quantity)        as store_sales_quantity
+    ,sum(sr_return_quantity) as store_returns_quantity
+    ,sum(cs_quantity)        as catalog_sales_quantity
  from
     {{store_sales}} as store_sales
    cross join {{store_returns}} as store_returns

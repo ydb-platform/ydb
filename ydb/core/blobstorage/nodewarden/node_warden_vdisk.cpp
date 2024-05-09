@@ -68,7 +68,7 @@ namespace NKikimr::NStorage {
             return;
         }
 
-        if (PDiskRestartInFlight.contains(vdisk.Config.GetVDiskLocation().GetPDiskID())) {
+        if (PDiskRestartInFlight.contains(vslotId.PDiskId)) {
             return;
         }
 

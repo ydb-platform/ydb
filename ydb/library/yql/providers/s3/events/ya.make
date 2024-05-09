@@ -8,14 +8,16 @@ ADDINCL(
 )
 
 SRCS(
-    source_context.cpp
-    util.cpp
+    events.cpp
 )
 
 PEERDIR(
-    ydb/library/yql/providers/s3/events
+    ydb/core/base
+    ydb/library/yql/dq/actors/protos
+    ydb/library/yql/providers/s3/proto
+    ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/public/issue
-    ydb/library/yql/public/issue/protos
+    ydb/library/yql/udfs/common/clickhouse/client
 )
 
 END()

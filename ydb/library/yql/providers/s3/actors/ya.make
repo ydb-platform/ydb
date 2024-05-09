@@ -36,6 +36,7 @@ PEERDIR(
     ydb/library/yql/providers/s3/common
     ydb/library/yql/providers/s3/compressors
     ydb/library/yql/providers/s3/credentials
+    ydb/library/yql/providers/s3/events
     ydb/library/yql/providers/s3/object_listers
     ydb/library/yql/providers/s3/proto
     ydb/library/yql/providers/s3/range_helpers

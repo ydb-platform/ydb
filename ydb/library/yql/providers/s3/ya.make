@@ -4,6 +4,7 @@ RECURSE(
     compressors
     credentials
     expr_nodes
+    events
     object_listers
     path_generator
     provider

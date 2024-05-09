@@ -64,8 +64,10 @@
 #include <ydb/library/yql/parser/pg_wrapper/interface/arrow.h>
 
 #include <ydb/library/yql/providers/s3/common/util.h>
+#include <ydb/library/yql/providers/s3/common/source_context.h>
 #include <ydb/library/yql/providers/s3/compressors/factory.h>
 #include <ydb/library/yql/providers/s3/credentials/credentials.h>
+#include <ydb/library/yql/providers/s3/events/events.h>
 #include <ydb/library/yql/providers/s3/object_listers/yql_s3_list.h>
 #include <ydb/library/yql/providers/s3/proto/range.pb.h>
 #include <ydb/library/yql/providers/s3/proto/file_queue.pb.h>
@@ -147,203 +149,6 @@ struct TS3ReadError : public yexception {
 
 using NS3::FileQueue::TObjectPath;
 using NDqProto::TMessageTransportMeta;
-
-struct TEvS3FileQueue {
-    enum EEv : ui32 {
-        EvBegin = EventSpaceBegin(NKikimr::TKikimrEvents::ES_S3_FILE_QUEUE),
-
-        EvUpdateConsumersCount = EvBegin,
-        EvAck,
-        EvGetNextBatch,
-        EvObjectPathBatch,
-        EvObjectPathReadError,
-
-        EvEnd
-    };
-    static_assert(EvEnd < EventSpaceEnd(NKikimr::TKikimrEvents::ES_S3_FILE_QUEUE), 
-                  "expect EvEnd < EventSpaceEnd(TEvents::ES_S3_FILE_QUEUE)");
-    
-    struct TEvUpdateConsumersCount :
-        public TEventPB<TEvUpdateConsumersCount, NS3::FileQueue::TEvUpdateConsumersCount, EvUpdateConsumersCount> {
-        
-        explicit TEvUpdateConsumersCount(ui64 consumersCountDelta = 0) {
-            Record.SetConsumersCountDelta(consumersCountDelta);
-        }
-    };
-
-    struct TEvAck :
-        public TEventPB<TEvAck, NS3::FileQueue::TEvAck, EvAck> {
-        
-        TEvAck() = default;
-
-        explicit TEvAck(const TMessageTransportMeta& transportMeta) {
-            Record.MutableTransportMeta()->CopyFrom(transportMeta);
-        }
-    };
-
-    struct TEvGetNextBatch :
-        public TEventPB<TEvGetNextBatch, NS3::FileQueue::TEvGetNextBatch, EvGetNextBatch> {
-    };
-
-    struct TEvObjectPathBatch :
-        public NActors::TEventPB<TEvObjectPathBatch, NS3::FileQueue::TEvObjectPathBatch, EvObjectPathBatch> {
-
-        TEvObjectPathBatch() {
-            Record.SetNoMoreFiles(false);
-        }
-
-        TEvObjectPathBatch(std::vector<TObjectPath> objectPaths, bool noMoreFiles, const TMessageTransportMeta& transportMeta) {
-            Record.MutableObjectPaths()->Assign(
-                std::make_move_iterator(objectPaths.begin()),
-                std::make_move_iterator(objectPaths.end()));
-            Record.SetNoMoreFiles(noMoreFiles);
-            Record.MutableTransportMeta()->CopyFrom(transportMeta);
-        }
-    };
-
-    struct TEvObjectPathReadError :
-        public NActors::TEventPB<TEvObjectPathReadError, NS3::FileQueue::TEvObjectPathReadError, EvObjectPathReadError> {
-
-        TEvObjectPathReadError() = default;
-
-        TEvObjectPathReadError(TIssues issues, const TMessageTransportMeta& transportMeta) {
-            IssuesToMessage(issues, Record.MutableIssues());
-            Record.MutableTransportMeta()->CopyFrom(transportMeta);
-        }
-    };
-};
-
-struct TEvPrivate {
-    // Event ids
-    enum EEv : ui32 {
-        EvBegin = TEvRetryQueuePrivate::EvEnd,  // Leave space for RetryQueue events
-
-        EvReadResult = EvBegin,
-        EvDataPart,
-        EvReadStarted,
-        EvReadFinished,
-        EvReadError,
-        EvRetry,
-        EvNextBlock,
-        EvNextRecordBatch,
-        EvFileFinished,
-        EvContinue,
-        EvReadResult2,
-
-        EvEnd
-    };
-
-    static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
-
-    // Events
-    struct TEvReadResult : public TEventLocal<TEvReadResult, EvReadResult> {
-        TEvReadResult(
-            IHTTPGateway::TContent&& result,
-            const TString& requestId,
-            size_t pathInd,
-            TString path)
-            : Result(std::move(result))
-            , RequestId(requestId)
-            , PathIndex(pathInd)
-            , Path(std::move(path)) { }
-
-        IHTTPGateway::TContent Result;
-        const TString RequestId;
-        const size_t PathIndex;
-        const TString Path;
-    };
-
-    struct TEvDataPart : public TEventLocal<TEvDataPart, EvDataPart> {
-        TEvDataPart(IHTTPGateway::TCountedContent&& data) : Result(std::move(data)) {}
-        IHTTPGateway::TCountedContent Result;
-    };
-
-    struct TEvReadStarted : public TEventLocal<TEvReadStarted, EvReadStarted> {
-        TEvReadStarted(CURLcode curlResponseCode, long httpResponseCode)
-            : CurlResponseCode(curlResponseCode), HttpResponseCode(httpResponseCode) {}
-        const CURLcode CurlResponseCode;
-        const long HttpResponseCode;
-    };
-
-    struct TEvReadFinished : public TEventLocal<TEvReadFinished, EvReadFinished> {
-        TEvReadFinished(size_t pathIndex, CURLcode curlResponseCode, TIssues&& issues)
-            : PathIndex(pathIndex), CurlResponseCode(curlResponseCode), Issues(std::move(issues)) {
-        }
-        const size_t PathIndex;
-        const CURLcode CurlResponseCode;
-        TIssues Issues;
-    };
-
-    struct TEvFileFinished : public TEventLocal<TEvFileFinished, EvFileFinished> {
-        TEvFileFinished(size_t pathIndex, ui64 ingressDelta, TDuration cpuTimeDelta)
-            : PathIndex(pathIndex), IngressDelta(ingressDelta), CpuTimeDelta(cpuTimeDelta) {
-        }
-        const size_t PathIndex;
-        const ui64 IngressDelta;
-        const TDuration CpuTimeDelta;
-    };
-
-    struct TEvReadError : public TEventLocal<TEvReadError, EvReadError> {
-        TEvReadError(
-            TIssues&& error,
-            const TString& requestId,
-            size_t pathInd,
-            TString path)
-            : Error(std::move(error))
-            , RequestId(requestId)
-            , PathIndex(pathInd)
-            , Path(std::move(path)) { }
-
-        const TIssues Error;
-        const TString RequestId;
-        const size_t PathIndex;
-        const TString Path;
-    };
-
-    struct TEvRetryEventFunc : public NActors::TEventLocal<TEvRetryEventFunc, EvRetry> {
-        explicit TEvRetryEventFunc(std::function<void()> functor) : Functor(std::move(functor)) {}
-        const std::function<void()> Functor;
-    };
-
-    struct TEvNextBlock : public NActors::TEventLocal<TEvNextBlock, EvNextBlock> {
-        TEvNextBlock(NDB::Block& block, size_t pathInd, ui64 ingressDelta, TDuration cpuTimeDelta)
-            : PathIndex(pathInd), IngressDelta(ingressDelta), CpuTimeDelta(cpuTimeDelta) {
-            Block.swap(block);
-        }
-        NDB::Block Block;
-        const size_t PathIndex;
-        const ui64 IngressDelta;
-        const TDuration CpuTimeDelta;
-    };
-
-    struct TEvNextRecordBatch : public NActors::TEventLocal<TEvNextRecordBatch, EvNextRecordBatch> {
-        TEvNextRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch, size_t pathInd, ui64 ingressDelta, TDuration cpuTimeDelta)
-            : Batch(batch), PathIndex(pathInd), IngressDelta(ingressDelta), CpuTimeDelta(cpuTimeDelta) {
-        }
-        std::shared_ptr<arrow::RecordBatch> Batch;
-        const size_t PathIndex;
-        const ui64 IngressDelta;
-        const TDuration CpuTimeDelta;
-    };
-
-    struct TEvContinue : public NActors::TEventLocal<TEvContinue, EvContinue> {
-    };
-
-    struct TReadRange {
-        int64_t Offset;
-        int64_t Length;
-    };
-
-    struct TEvReadResult2 : public TEventLocal<TEvReadResult2, EvReadResult2> {
-        TEvReadResult2(TReadRange readRange, IHTTPGateway::TContent&& result) : ReadRange(readRange), Failure(false), Result(std::move(result)) { }
-        TEvReadResult2(TReadRange readRange, TIssues&& issues) : ReadRange(readRange), Failure(true), Result(""), Issues(std::move(issues)) { }
-        const TReadRange ReadRange;
-        const bool Failure;
-        IHTTPGateway::TContent Result;
-        const TIssues Issues;
-    };
-
-};
 
 using namespace NKikimr::NMiniKQL;
 
@@ -443,8 +248,8 @@ public:
     STATEFN(ThereAreDirectoriesToListState) {
         try {
             switch (const auto etype = ev->GetTypeRewrite()) {
-                hFunc(TEvS3FileQueue::TEvUpdateConsumersCount, HandleUpdateConsumersCount);
-                hFunc(TEvS3FileQueue::TEvGetNextBatch, HandleGetNextBatch);
+                hFunc(TEvS3Provider::TEvUpdateConsumersCount, HandleUpdateConsumersCount);
+                hFunc(TEvS3Provider::TEvGetNextBatch, HandleGetNextBatch);
                 hFunc(TEvPrivatePrivate::TEvNextListingChunkReceived, HandleNextListingChunkReceived);
                 cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleRoundRobinStageTimeout);
                 hFunc(TEvPrivatePrivate::TEvTransitToErrorState, HandleTransitToErrorState);
@@ -460,7 +265,7 @@ public:
         }
     }
 
-    void HandleGetNextBatch(TEvS3FileQueue::TEvGetNextBatch::TPtr& ev) {
+    void HandleGetNextBatch(TEvS3Provider::TEvGetNextBatch::TPtr& ev) {
         if (HasEnoughToSend()) {
             LOG_D("TS3FileQueueActor", "HandleGetNextBatch sending right away");
             TrySendObjects(ev->Sender, ev->Get()->Record.GetTransportMeta());
@@ -550,8 +355,8 @@ public:
     STATEFN(NoMoreDirectoriesState) {
         try {
             switch (const auto etype = ev->GetTypeRewrite()) {
-                hFunc(TEvS3FileQueue::TEvUpdateConsumersCount, HandleUpdateConsumersCount);
-                hFunc(TEvS3FileQueue::TEvGetNextBatch, HandleGetNextBatchForEmptyState);
+                hFunc(TEvS3Provider::TEvUpdateConsumersCount, HandleUpdateConsumersCount);
+                hFunc(TEvS3Provider::TEvGetNextBatch, HandleGetNextBatchForEmptyState);
                 cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleRoundRobinStageTimeout);
                 cFunc(TEvents::TSystem::Poison, HandlePoison);
                 default:
@@ -565,7 +370,7 @@ public:
         }
     }
 
-    void HandleGetNextBatchForEmptyState(TEvS3FileQueue::TEvGetNextBatch::TPtr& ev) {
+    void HandleGetNextBatchForEmptyState(TEvS3Provider::TEvGetNextBatch::TPtr& ev) {
         LOG_T(
             "TS3FileQueueActor",
             "HandleGetNextBatchForEmptyState Giving away rest of Objects");
@@ -575,8 +380,8 @@ public:
     STATEFN(AnErrorOccurredState) {
         try {
             switch (const auto etype = ev->GetTypeRewrite()) {
-                hFunc(TEvS3FileQueue::TEvUpdateConsumersCount, HandleUpdateConsumersCount);
-                hFunc(TEvS3FileQueue::TEvGetNextBatch, HandleGetNextBatchForErrorState);
+                hFunc(TEvS3Provider::TEvUpdateConsumersCount, HandleUpdateConsumersCount);
+                hFunc(TEvS3Provider::TEvGetNextBatch, HandleGetNextBatchForErrorState);
                 cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleRoundRobinStageTimeout);
                 cFunc(TEvents::TSystem::Poison, HandlePoison);
                 default:
@@ -588,15 +393,15 @@ public:
         }
     }
 
-    void HandleGetNextBatchForErrorState(TEvS3FileQueue::TEvGetNextBatch::TPtr& ev) {
+    void HandleGetNextBatchForErrorState(TEvS3Provider::TEvGetNextBatch::TPtr& ev) {
         LOG_D(
             "TS3FileQueueActor",
             "HandleGetNextBatchForErrorState Giving away rest of Objects");
-        Send(ev->Sender, new TEvS3FileQueue::TEvObjectPathReadError(*MaybeIssues, ev->Get()->Record.GetTransportMeta()));
+        Send(ev->Sender, new TEvS3Provider::TEvObjectPathReadError(*MaybeIssues, ev->Get()->Record.GetTransportMeta()));
         TryFinish(ev->Sender, ev->Get()->Record.GetTransportMeta().GetSeqNo());
     }
     
-    void HandleUpdateConsumersCount(TEvS3FileQueue::TEvUpdateConsumersCount::TPtr& ev) {
+    void HandleUpdateConsumersCount(TEvS3Provider::TEvUpdateConsumersCount::TPtr& ev) {
         if (!UpdatedConsumers.contains(ev->Sender)) {
             LOG_D(
                 "TS3FileQueueActor",
@@ -604,7 +409,7 @@ public:
             UpdatedConsumers.insert(ev->Sender);
             ConsumersCount -= ev->Get()->Record.GetConsumersCountDelta();
         }
-        Send(ev->Sender, new TEvS3FileQueue::TEvAck(ev->Get()->Record.GetTransportMeta()));
+        Send(ev->Sender, new TEvS3Provider::TEvAck(ev->Get()->Record.GetTransportMeta()));
     }
 
     void HandleRoundRobinStageTimeout() {
@@ -648,7 +453,7 @@ private:
         }
 
         LOG_T("TS3FileQueueActor", "SendObjects Sending " << result.size() << " objects to consumer with id " << consumer);
-        Send(consumer, new TEvS3FileQueue::TEvObjectPathBatch(std::move(result), HasNoMoreItems(), transportMeta));
+        Send(consumer, new TEvS3Provider::TEvObjectPathBatch(std::move(result), HasNoMoreItems(), transportMeta));
         
         if (HasNoMoreItems()) {
             TryFinish(consumer, transportMeta.GetSeqNo());
@@ -771,7 +576,7 @@ private:
                     if (!MaybeIssues.Defined()) {
                         SendObjects(consumer, requests.front());
                     } else {
-                        Send(consumer, new TEvS3FileQueue::TEvObjectPathReadError(*MaybeIssues, requests.front()));
+                        Send(consumer, new TEvS3Provider::TEvObjectPathReadError(*MaybeIssues, requests.front()));
                         TryFinish(consumer, requests.front().GetSeqNo());
                     }
                     requests.pop_front();
@@ -931,7 +736,7 @@ public:
         FileQueueEvents.Init(TxId, SelfId(), SelfId());
         FileQueueEvents.OnNewRecipientId(FileQueueActor);
         if (UseRuntimeListing && FileQueueConsumersCountDelta > 0) {
-            FileQueueEvents.Send(new TEvS3FileQueue::TEvUpdateConsumersCount(FileQueueConsumersCountDelta));
+            FileQueueEvents.Send(new TEvS3Provider::TEvUpdateConsumersCount(FileQueueConsumersCountDelta));
         }
         SendPathBatchRequest();
 
@@ -1001,7 +806,7 @@ public:
         }
     }
     void SendPathBatchRequest() {
-        FileQueueEvents.Send(new TEvS3FileQueue::TEvGetNextBatch());
+        FileQueueEvents.Send(new TEvS3Provider::TEvGetNextBatch());
         IsWaitingFileQueueResponse = true;
     }
 
@@ -1029,11 +834,11 @@ private:
     }
 
     STRICT_STFUNC_EXC(StateFunc,
-        hFunc(TEvPrivate::TEvReadResult, Handle);
-        hFunc(TEvPrivate::TEvReadError, Handle);
-        hFunc(TEvS3FileQueue::TEvObjectPathBatch, HandleObjectPathBatch);
-        hFunc(TEvS3FileQueue::TEvObjectPathReadError, HandleObjectPathReadError);
-        hFunc(TEvS3FileQueue::TEvAck, HandleAck);
+        hFunc(TEvS3Provider::TEvReadResult, Handle);
+        hFunc(TEvS3Provider::TEvReadError, Handle);
+        hFunc(TEvS3Provider::TEvObjectPathBatch, HandleObjectPathBatch);
+        hFunc(TEvS3Provider::TEvObjectPathReadError, HandleObjectPathReadError);
+        hFunc(TEvS3Provider::TEvAck, HandleAck);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
         hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
         hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle);
@@ -1044,7 +849,7 @@ private:
         }
     )
 
-    void HandleObjectPathBatch(TEvS3FileQueue::TEvObjectPathBatch::TPtr& objectPathBatch) {
+    void HandleObjectPathBatch(TEvS3Provider::TEvObjectPathBatch::TPtr& objectPathBatch) {
         if (!FileQueueEvents.OnEventReceived(objectPathBatch)) {
             LOG_W("TS3ReadActor", "Duplicated TEvObjectPathBatch (likely resent) from " << FileQueueActor);
             return;
@@ -1071,7 +876,7 @@ private:
             Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
         }
     }
-    void HandleObjectPathReadError(TEvS3FileQueue::TEvObjectPathReadError::TPtr& result) {
+    void HandleObjectPathReadError(TEvS3Provider::TEvObjectPathReadError::TPtr& result) {
         if (!FileQueueEvents.OnEventReceived(result)) {
             LOG_W("TS3ReadActor", "Duplicated TEvObjectPathReadError (likely resent) from " << FileQueueActor);
             return;
@@ -1090,15 +895,15 @@ private:
         Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
     }
 
-    void HandleAck(TEvS3FileQueue::TEvAck::TPtr& ev) {
+    void HandleAck(TEvS3Provider::TEvAck::TPtr& ev) {
         FileQueueEvents.OnEventReceived(ev);
     }
     
     static void OnDownloadFinished(TActorSystem* actorSystem, TActorId selfId, const TString& requestId, IHTTPGateway::TResult&& result, size_t pathInd, const TString path) {
         if (!result.Issues) {
-            actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvReadResult(std::move(result.Content), requestId, pathInd, path)));
+            actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvS3Provider::TEvReadResult(std::move(result.Content), requestId, pathInd, path)));
         } else {
-            actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvReadError(std::move(result.Issues), requestId, pathInd, path)));
+            actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvS3Provider::TEvReadError(std::move(result.Issues), requestId, pathInd, path)));
         }
     }
 
@@ -1149,7 +954,7 @@ private:
         return Blocks.empty() && (ListedFiles == CompletedFiles) && IsFileQueueEmpty;
     }
 
-    void Handle(TEvPrivate::TEvReadResult::TPtr& result) {
+    void Handle(TEvS3Provider::TEvReadResult::TPtr& result) {
         ++CompletedFiles;
         const auto id = result->Get()->PathIndex;
         const auto path = result->Get()->Path;
@@ -1196,7 +1001,7 @@ private:
         }
     }
 
-    void Handle(TEvPrivate::TEvReadError::TPtr& result) {
+    void Handle(TEvS3Provider::TEvReadError::TPtr& result) {
         ++CompletedFiles;
         auto id = result->Get()->PathIndex;
         const auto requestId = result->Get()->RequestId;
@@ -1375,15 +1180,15 @@ struct TRetryStuff {
 };
 
 void OnDownloadStart(TActorSystem* actorSystem, const TActorId& self, const TActorId& parent, CURLcode curlResponseCode, long httpResponseCode) {
-    actorSystem->Send(new IEventHandle(self, parent, new TEvPrivate::TEvReadStarted(curlResponseCode, httpResponseCode)));
+    actorSystem->Send(new IEventHandle(self, parent, new TEvS3Provider::TEvReadStarted(curlResponseCode, httpResponseCode)));
 }
 
 void OnNewData(TActorSystem* actorSystem, const TActorId& self, const TActorId& parent, IHTTPGateway::TCountedContent&& data) {
-    actorSystem->Send(new IEventHandle(self, parent, new TEvPrivate::TEvDataPart(std::move(data))));
+    actorSystem->Send(new IEventHandle(self, parent, new TEvS3Provider::TEvDataPart(std::move(data))));
 }
 
 void OnDownloadFinished(TActorSystem* actorSystem, const TActorId& self, const TActorId& parent, size_t pathIndex, CURLcode curlResponseCode, TIssues issues) {
-    actorSystem->Send(new IEventHandle(self, parent, new TEvPrivate::TEvReadFinished(pathIndex, curlResponseCode, std::move(issues))));
+    actorSystem->Send(new IEventHandle(self, parent, new TEvS3Provider::TEvReadFinished(pathIndex, curlResponseCode, std::move(issues))));
 }
 
 void DownloadStart(const TRetryStuff::TPtr& retryStuff, TActorSystem* actorSystem, const TActorId& self, const TActorId& parent, size_t pathIndex, const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter) {
@@ -1408,145 +1213,6 @@ std::shared_ptr<arrow::RecordBatch> ConvertArrowColumns(std::shared_ptr<arrow::R
     }
     return arrow::RecordBatch::Make(batch->schema(), batch->num_rows(), columns);
 }
-
-struct TReadBufferCounter {
-    using TPtr = std::shared_ptr<TReadBufferCounter>;
-
-    TReadBufferCounter(ui64 limit,
-        TActorSystem* actorSystem,
-        NMonitoring::TDynamicCounters::TCounterPtr queueDataSize,
-        NMonitoring::TDynamicCounters::TCounterPtr taskQueueDataSize,
-        NMonitoring::TDynamicCounters::TCounterPtr downloadPaused,
-        NMonitoring::TDynamicCounters::TCounterPtr taskDownloadPaused,
-        NMonitoring::TDynamicCounters::TCounterPtr taskChunkDownloadCount,
-        NMonitoring::THistogramPtr decodedChunkSizeHist)
-        : Limit(limit)
-        , ActorSystem(actorSystem)
-        , QueueDataSize(queueDataSize)
-        , TaskQueueDataSize(taskQueueDataSize)
-        , DownloadPaused(downloadPaused)
-        , TaskDownloadPaused(taskDownloadPaused)
-        , TaskChunkDownloadCount(taskChunkDownloadCount)
-        , DecodedChunkSizeHist(decodedChunkSizeHist)
-    {
-    }
-
-    ~TReadBufferCounter() {
-        Notify();
-        if (Value) {
-            if (QueueDataSize) {
-                QueueDataSize->Sub(Value);
-            }
-            if (TaskQueueDataSize) {
-                TaskQueueDataSize->Sub(Value);
-            }
-            Value = 0;
-        }
-    }
-
-    bool IsFull() const {
-        return Value >= Limit;
-    }
-
-    double Ratio() const {
-        return DownloadedBytes ? static_cast<double>(DecodedBytes) / DownloadedBytes : 1.0;
-    }
-
-    ui64 FairShare() {
-        return CoroCount ? Limit / CoroCount : Limit;
-    }
-
-    void IncChunk() {
-        ChunkCount++;
-        if (TaskChunkDownloadCount) {
-            TaskChunkDownloadCount->Inc();
-        }
-    }
-
-    void DecChunk() {
-        ChunkCount--;
-        if (TaskChunkDownloadCount) {
-            TaskChunkDownloadCount->Dec();
-        }
-    }
-
-    bool Add(ui64 delta, NActors::TActorId producer, bool paused = false) {
-        if (DecodedChunkSizeHist) {
-            DecodedChunkSizeHist->Collect(delta);
-        }
-        Value += delta;
-        if (QueueDataSize) {
-            QueueDataSize->Add(delta);
-        }
-        if (TaskQueueDataSize) {
-            TaskQueueDataSize->Add(delta);
-        }
-        if ((Value + delta / 2) >= Limit) {
-            if (!paused) {
-                if (DownloadPaused) {
-                    DownloadPaused->Inc();
-                }
-                if (TaskDownloadPaused) {
-                    TaskDownloadPaused->Inc();
-                }
-                Producers.push_back(producer);
-                paused = true;
-            }
-        }
-        return paused;
-    }
-
-    void Sub(ui64 delta) {
-        Y_ASSERT(Value >= delta);
-        Value -= delta;
-        if (QueueDataSize) {
-            QueueDataSize->Sub(delta);
-        }
-        if (TaskQueueDataSize) {
-            TaskQueueDataSize->Sub(delta);
-        }
-        if (Value * 4 < Limit * 3) { // l.eq.t 75%
-            Notify();
-        }
-    }
-
-    void Notify() {
-        if (!Producers.empty()) {
-            if (DownloadPaused) {
-                DownloadPaused->Sub(Producers.size());
-            }
-            if (TaskDownloadPaused) {
-                TaskDownloadPaused->Sub(Producers.size());
-            }
-            for (auto producer : Producers) {
-                ActorSystem->Send(new IEventHandle(producer, TActorId{}, new TEvPrivate::TEvContinue()));
-            }
-            Producers.clear();
-        }
-    }
-
-    void UpdateProgress(ui64 deltaDownloadedBytes, ui64 deltaDecodedBytes, ui64 deltaDecodedRows) {
-        DownloadedBytes += deltaDownloadedBytes;
-        DecodedBytes += deltaDecodedBytes;
-        DecodedRows += deltaDecodedRows;
-    }
-
-    ui64 Value = 0;
-    const ui64 Limit;
-    ui64 CoroCount = 0;
-    ui64 ChunkCount = 0;
-    ui64 DownloadedBytes = 0;
-    ui64 DecodedBytes = 0;
-    ui64 DecodedRows = 0;
-    std::vector<NActors::TActorId> Producers;
-    TActorSystem* ActorSystem = nullptr;
-    NMonitoring::TDynamicCounters::TCounterPtr QueueDataSize;
-    NMonitoring::TDynamicCounters::TCounterPtr TaskQueueDataSize;
-    NMonitoring::TDynamicCounters::TCounterPtr DownloadPaused;
-    NMonitoring::TDynamicCounters::TCounterPtr TaskDownloadPaused;
-    NMonitoring::TDynamicCounters::TCounterPtr TaskChunkDownloadCount;
-    NMonitoring::THistogramPtr DecodedChunkSizeHist;
-};
 
 struct TParquetFileInfo {
     ui64 RowCount = 0;
@@ -1687,10 +1353,10 @@ public:
         while (NDB::Block batch = stream->read()) {
             Paused = QueueBufferCounter->Add(batch.bytes(), SelfActorId);
             const bool isStopped = StopIfConsumedEnough(batch.rows());
-            Send(ParentActorId, new TEvPrivate::TEvNextBlock(batch, PathIndex, TakeIngressDelta(), TakeCpuTimeDelta()));
+            Send(ParentActorId, new TEvS3Provider::TEvNextBlock(batch, PathIndex, TakeIngressDelta(), TakeCpuTimeDelta()));
             if (Paused) {
                 CpuTime += GetCpuTimeDelta();
-                auto ev = WaitForSpecificEvent<TEvPrivate::TEvContinue>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
+                auto ev = WaitForSpecificEvent<TEvS3Provider::TEvContinue>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
                 HandleEvent(*ev);
                 StartCycleCount = GetCycleCountFast();
             }
@@ -1728,10 +1394,10 @@ public:
         while (NDB::Block batch = stream->read()) {
             Paused = QueueBufferCounter->Add(batch.bytes(), SelfActorId);
             const bool isCancelled = StopIfConsumedEnough(batch.rows());
-            Send(ParentActorId, new TEvPrivate::TEvNextBlock(batch, PathIndex, TakeIngressDelta(), TakeCpuTimeDelta()));
+            Send(ParentActorId, new TEvS3Provider::TEvNextBlock(batch, PathIndex, TakeIngressDelta(), TakeCpuTimeDelta()));
             if (Paused) {
                 CpuTime += GetCpuTimeDelta();
-                auto ev = WaitForSpecificEvent<TEvPrivate::TEvContinue>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
+                auto ev = WaitForSpecificEvent<TEvS3Provider::TEvContinue>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
                 HandleEvent(*ev);
                 StartCycleCount = GetCycleCountFast();
             }
@@ -1790,25 +1456,25 @@ public:
 
     struct TReadRangeCompare
     {
-        bool operator() (const TEvPrivate::TReadRange& lhs, const TEvPrivate::TReadRange& rhs) const
+        bool operator() (const TEvS3Provider::TReadRange& lhs, const TEvS3Provider::TReadRange& rhs) const
         {
             return (lhs.Offset < rhs.Offset) || (lhs.Offset == rhs.Offset && lhs.Length < rhs.Length);
         }
     };
 
     ui64 RangeCookie = 0;
-    std::map<TEvPrivate::TReadRange, TReadCache, TReadRangeCompare> RangeCache;
+    std::map<TEvS3Provider::TReadRange, TReadCache, TReadRangeCompare> RangeCache;
     std::map<ui64, ui64> ReadInflightSize;
     std::optional<ui64> CurrentRowGroupIndex;
     std::map<ui64, ui64> RowGroupRangeInflight;
     std::priority_queue<ui64, std::vector<ui64>, std::greater<ui64>> ReadyRowGroups;
     std::map<ui64, ui64> RowGroupReaderIndex;
 
-    static void OnResult(TActorSystem* actorSystem, TActorId selfId, TEvPrivate::TReadRange range, ui64 cookie, IHTTPGateway::TResult&& result) {
+    static void OnResult(TActorSystem* actorSystem, TActorId selfId, TEvS3Provider::TReadRange range, ui64 cookie, IHTTPGateway::TResult&& result) {
         if (!result.Issues) {
-            actorSystem->Send(new IEventHandle(selfId, TActorId{}, new TEvPrivate::TEvReadResult2(range, std::move(result.Content)), 0, cookie));
+            actorSystem->Send(new IEventHandle(selfId, TActorId{}, new TEvS3Provider::TEvReadResult2(range, std::move(result.Content)), 0, cookie));
         } else {
-            actorSystem->Send(new IEventHandle(selfId, TActorId{}, new TEvPrivate::TEvReadResult2(range, std::move(result.Issues)), 0, cookie));
+            actorSystem->Send(new IEventHandle(selfId, TActorId{}, new TEvS3Provider::TEvReadResult2(range, std::move(result.Issues)), 0, cookie));
         }
     }
 
@@ -1824,7 +1490,7 @@ public:
     }
 
 
-    TReadCache& GetOrCreate(TEvPrivate::TReadRange range) {
+    TReadCache& GetOrCreate(TEvS3Provider::TReadRange range) {
         auto it = RangeCache.find(range);
         if (it != RangeCache.end()) {
             return it->second;
@@ -1859,13 +1525,13 @@ public:
             }
         } else {
             for (auto& range : readRanges) {
-                GetOrCreate(TEvPrivate::TReadRange{ .Offset = range.offset, .Length = range.length });
+                GetOrCreate(TEvS3Provider::TReadRange{ .Offset = range.offset, .Length = range.length });
             }
         }
         return {};
     }
 
-    void HandleEvent(TEvPrivate::TEvReadResult2::THandle& event) {
+    void HandleEvent(TEvS3Provider::TEvReadResult2::THandle& event) {
 
         if (event.Get()->Failure) {
             throw yexception() << event.Get()->Issues.ToOneLineString();
@@ -1904,13 +1570,13 @@ public:
     arrow::Result<std::shared_ptr<arrow::Buffer>> ReadAt(int64_t position, int64_t nbytes) {
 
         LOG_CORO_D("ReadAt STARTED [" << position << "-" << nbytes << "]");
-        TEvPrivate::TReadRange range { .Offset = position, .Length = nbytes };
+        TEvS3Provider::TReadRange range { .Offset = position, .Length = nbytes };
         auto& cache = GetOrCreate(range);
 
         CpuTime += GetCpuTimeDelta();
 
         while (!cache.Ready) {
-            auto ev = WaitForSpecificEvent<TEvPrivate::TEvReadResult2>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
+            auto ev = WaitForSpecificEvent<TEvS3Provider::TEvReadResult2>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
             HandleEvent(*ev);
         }
 
@@ -2008,7 +1674,7 @@ public:
             while (readyGroupCount < numGroups) {
                 if (Paused) {
                     CpuTime += GetCpuTimeDelta();
-                    auto ev = WaitForSpecificEvent<TEvPrivate::TEvContinue>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
+                    auto ev = WaitForSpecificEvent<TEvS3Provider::TEvContinue>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
                     HandleEvent(*ev);
                     StartCycleCount = GetCycleCountFast();
                 }
@@ -2055,7 +1721,7 @@ public:
                     auto size = NUdf::GetSizeOfArrowBatchInBytes(*convertedBatch);
                     decodedBytes += size;
                     Paused = QueueBufferCounter->Add(size, SelfActorId, Paused);
-                    Send(ParentActorId, new TEvPrivate::TEvNextRecordBatch(
+                    Send(ParentActorId, new TEvS3Provider::TEvNextRecordBatch(
                         convertedBatch, PathIndex, TakeIngressDelta(), TakeCpuTimeDelta()
                     ));
                     if (StopIfConsumedEnough(convertedBatch->num_rows())) {
@@ -2122,7 +1788,7 @@ public:
             if (Paused) {
                 CpuTime += GetCpuTimeDelta();
                 LOG_CORO_D("RunCoroBlockArrowParserOverFile - PAUSED " << QueueBufferCounter->Value);
-                auto ev = WaitForSpecificEvent<TEvPrivate::TEvContinue>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
+                auto ev = WaitForSpecificEvent<TEvS3Provider::TEvContinue>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
                 HandleEvent(*ev);
                 LOG_CORO_D("RunCoroBlockArrowParserOverFile - CONTINUE " << QueueBufferCounter->Value);
                 StartCycleCount = GetCycleCountFast();
@@ -2143,7 +1809,7 @@ public:
                 auto size = NUdf::GetSizeOfArrowBatchInBytes(*convertedBatch);
                 decodedBytes += size;
                 Paused = QueueBufferCounter->Add(size, SelfActorId, Paused);
-                Send(ParentActorId, new TEvPrivate::TEvNextRecordBatch(
+                Send(ParentActorId, new TEvS3Provider::TEvNextRecordBatch(
                     convertedBatch, PathIndex, TakeIngressDelta(), TakeCpuTimeDelta()
                 ));
                 if (StopIfConsumedEnough(batch->num_rows())) {
@@ -2165,11 +1831,11 @@ public:
     }
 
     STRICT_STFUNC(StateFunc,
-        hFunc(TEvPrivate::TEvReadStarted, Handle);
-        hFunc(TEvPrivate::TEvDataPart, Handle);
-        hFunc(TEvPrivate::TEvReadFinished, Handle);
-        hFunc(TEvPrivate::TEvContinue, Handle);
-        hFunc(TEvPrivate::TEvReadResult2, Handle);
+        hFunc(TEvS3Provider::TEvReadStarted, Handle);
+        hFunc(TEvS3Provider::TEvDataPart, Handle);
+        hFunc(TEvS3Provider::TEvReadFinished, Handle);
+        hFunc(TEvS3Provider::TEvContinue, Handle);
+        hFunc(TEvS3Provider::TEvReadResult2, Handle);
         hFunc(NActors::TEvents::TEvPoison, Handle);
     )
 
@@ -2186,7 +1852,7 @@ public:
         StateFunc(ev);
     }
 
-    void ExtractDataPart(TEvPrivate::TEvDataPart& event, bool deferred = false) {
+    void ExtractDataPart(TEvS3Provider::TEvDataPart& event, bool deferred = false) {
         InputBuffer = event.Result.Extract();
         IngressBytes += InputBuffer.size();
         RetryStuff->Offset += InputBuffer.size();
@@ -2197,13 +1863,13 @@ public:
         Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived(InputIndex));
     }
 
-    void Handle(TEvPrivate::TEvReadStarted::TPtr& ev) {
+    void Handle(TEvS3Provider::TEvReadStarted::TPtr& ev) {
         HttpResponseCode = ev->Get()->HttpResponseCode;
         CurlResponseCode = ev->Get()->CurlResponseCode;
         LOG_CORO_D("TEvReadStarted, Http code: " << HttpResponseCode);
     }
 
-    void Handle(TEvPrivate::TEvDataPart::TPtr& ev) {
+    void Handle(TEvS3Provider::TEvDataPart::TPtr& ev) {
         if (HttpDataRps) {
             HttpDataRps->Inc();
         }
@@ -2226,7 +1892,7 @@ public:
         }
     }
 
-    void Handle(TEvPrivate::TEvReadFinished::TPtr& ev) {
+    void Handle(TEvS3Provider::TEvReadFinished::TPtr& ev) {
 
         if (CurlResponseCode == CURLE_OK) {
             CurlResponseCode = ev->Get()->CurlResponseCode;
@@ -2267,13 +1933,13 @@ public:
         }
 
         if (!RetryStuff->IsCancelled() && RetryStuff->NextRetryDelay && RetryStuff->SizeLimit > 0ULL) {
-            GetActorSystem()->Schedule(*RetryStuff->NextRetryDelay, new IEventHandle(ParentActorId, SelfActorId, new TEvPrivate::TEvRetryEventFunc(std::bind(&DownloadStart, RetryStuff, GetActorSystem(), SelfActorId, ParentActorId, PathIndex, HttpInflightSize))));
+            GetActorSystem()->Schedule(*RetryStuff->NextRetryDelay, new IEventHandle(ParentActorId, SelfActorId, new TEvS3Provider::TEvRetryEventFunc(std::bind(&DownloadStart, RetryStuff, GetActorSystem(), SelfActorId, ParentActorId, PathIndex, HttpInflightSize))));
             InputBuffer.clear();
             if (DeferredDataParts.size()) {
                 if (DeferredQueueSize) {
                     DeferredQueueSize->Sub(DeferredDataParts.size());
                 }
-                std::queue<THolder<TEvPrivate::TEvDataPart>> tmp;
+                std::queue<THolder<TEvS3Provider::TEvDataPart>> tmp;
                 DeferredDataParts.swap(tmp);
             }
         } else {
@@ -2285,16 +1951,16 @@ public:
         }
     }
 
-    void HandleEvent(TEvPrivate::TEvContinue::THandle&) {
+    void HandleEvent(TEvS3Provider::TEvContinue::THandle&) {
         LOG_CORO_D("TEvContinue");
         Paused = false;
     }
 
-    void Handle(TEvPrivate::TEvContinue::TPtr& ev) {
+    void Handle(TEvS3Provider::TEvContinue::TPtr& ev) {
         HandleEvent(*ev);
     }
 
-    void Handle(TEvPrivate::TEvReadResult2::TPtr& ev) {
+    void Handle(TEvS3Provider::TEvReadResult2::TPtr& ev) {
         HandleEvent(*ev);
     }
 
@@ -2311,7 +1977,7 @@ public:
         const TRetryStuff::TPtr& retryStuff, const TReadSpec::TPtr& readSpec, size_t pathIndex,
         const TString& path, const TString& url, std::optional<ui64> maxRows,
         const TS3ReadActorFactoryConfig& readActorFactoryCfg,
-        TReadBufferCounter::TPtr queueBufferCounter,
+        TSourceContext::TPtr queueBufferCounter,
         const ::NMonitoring::TDynamicCounters::TCounterPtr& deferredQueueSize,
         const ::NMonitoring::TDynamicCounters::TCounterPtr& httpInflightSize,
         const ::NMonitoring::TDynamicCounters::TCounterPtr& httpDataRps,
@@ -2428,7 +2094,7 @@ private:
         if (issues)
             Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, std::move(issues), fatalCode));
         else
-            Send(ParentActorId, new TEvPrivate::TEvFileFinished(PathIndex, TakeIngressDelta(), TakeCpuTimeDelta()));
+            Send(ParentActorId, new TEvS3Provider::TEvFileFinished(PathIndex, TakeIngressDelta(), TakeCpuTimeDelta()));
     }
 
     void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> ev) {
@@ -2494,8 +2160,8 @@ private:
     TString InputBuffer;
     std::optional<ui64> RowsRemained;
     bool Paused = false;
-    std::queue<THolder<TEvPrivate::TEvDataPart>> DeferredDataParts;
-    TReadBufferCounter::TPtr QueueBufferCounter;
+    std::queue<THolder<TEvS3Provider::TEvDataPart>> DeferredDataParts;
+    TSourceContext::TPtr QueueBufferCounter;
     const ::NMonitoring::TDynamicCounters::TCounterPtr DeferredQueueSize;
     const ::NMonitoring::TDynamicCounters::TCounterPtr HttpInflightSize;
     const ::NMonitoring::TDynamicCounters::TCounterPtr HttpDataRps;
@@ -2602,7 +2268,8 @@ public:
             return;
         }
 
-        QueueBufferCounter = std::make_shared<TReadBufferCounter>(
+        QueueBufferCounter = std::make_shared<TSourceContext>(
+            SelfId(),
             ReadActorFactoryCfg.DataInflight,
             TActivationContext::ActorSystem(),
             QueueDataSize,
@@ -2632,7 +2299,7 @@ public:
         FileQueueEvents.Init(TxId, SelfId(), SelfId());
         FileQueueEvents.OnNewRecipientId(FileQueueActor);
         if (UseRuntimeListing && FileQueueConsumersCountDelta > 0) {
-            FileQueueEvents.Send(new TEvS3FileQueue::TEvUpdateConsumersCount(FileQueueConsumersCountDelta));
+            FileQueueEvents.Send(new TEvS3Provider::TEvUpdateConsumersCount(FileQueueConsumersCountDelta));
         }
         SendPathBatchRequest();
 
@@ -2740,7 +2407,7 @@ public:
         }
     }
     void SendPathBatchRequest() {
-        FileQueueEvents.Send(new TEvS3FileQueue::TEvGetNextBatch());
+        FileQueueEvents.Send(new TEvS3Provider::TEvGetNextBatch());
         IsWaitingFileQueueResponse = true;
     }
 
@@ -2768,8 +2435,8 @@ private:
 
     class TReadyBlock {
     public:
-        TReadyBlock(TEvPrivate::TEvNextBlock::TPtr& event) : PathInd(event->Get()->PathIndex) { Block.swap(event->Get()->Block); }
-        TReadyBlock(TEvPrivate::TEvNextRecordBatch::TPtr& event) : Batch(event->Get()->Batch), PathInd(event->Get()->PathIndex) {}
+        TReadyBlock(TEvS3Provider::TEvNextBlock::TPtr& event) : PathInd(event->Get()->PathIndex) { Block.swap(event->Get()->Block); }
+        TReadyBlock(TEvS3Provider::TEvNextRecordBatch::TPtr& event) : Batch(event->Get()->Batch), PathInd(event->Get()->PathIndex) {}
         NDB::Block Block;
         std::shared_ptr<arrow::RecordBatch> Batch;
         size_t PathInd;
@@ -2884,13 +2551,13 @@ private:
     }
 
     STRICT_STFUNC_EXC(StateFunc,
-        hFunc(TEvPrivate::TEvRetryEventFunc, HandleRetry);
-        hFunc(TEvPrivate::TEvNextBlock, HandleNextBlock);
-        hFunc(TEvPrivate::TEvNextRecordBatch, HandleNextRecordBatch);
-        hFunc(TEvPrivate::TEvFileFinished, HandleFileFinished);
-        hFunc(TEvS3FileQueue::TEvAck, Handle);
-        hFunc(TEvS3FileQueue::TEvObjectPathBatch, HandleObjectPathBatch);
-        hFunc(TEvS3FileQueue::TEvObjectPathReadError, HandleObjectPathReadError);
+        hFunc(TEvS3Provider::TEvRetryEventFunc, HandleRetry);
+        hFunc(TEvS3Provider::TEvNextBlock, HandleNextBlock);
+        hFunc(TEvS3Provider::TEvNextRecordBatch, HandleNextRecordBatch);
+        hFunc(TEvS3Provider::TEvFileFinished, HandleFileFinished);
+        hFunc(TEvS3Provider::TEvAck, Handle);
+        hFunc(TEvS3Provider::TEvObjectPathBatch, HandleObjectPathBatch);
+        hFunc(TEvS3Provider::TEvObjectPathReadError, HandleObjectPathReadError);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
         hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
         hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle);
@@ -2901,7 +2568,7 @@ private:
         }
     )
 
-    void HandleObjectPathBatch(TEvS3FileQueue::TEvObjectPathBatch::TPtr& objectPathBatch) {
+    void HandleObjectPathBatch(TEvS3Provider::TEvObjectPathBatch::TPtr& objectPathBatch) {
         if (!FileQueueEvents.OnEventReceived(objectPathBatch)) {
             return;
         }
@@ -2931,7 +2598,7 @@ private:
         }
     }
 
-    void HandleObjectPathReadError(TEvS3FileQueue::TEvObjectPathReadError::TPtr& result) {
+    void HandleObjectPathReadError(TEvS3Provider::TEvObjectPathReadError::TPtr& result) {
         if (!FileQueueEvents.OnEventReceived(result)) {
             return;
         }
@@ -2949,11 +2616,11 @@ private:
         Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
     }
 
-    void HandleRetry(TEvPrivate::TEvRetryEventFunc::TPtr& retry) {
+    void HandleRetry(TEvS3Provider::TEvRetryEventFunc::TPtr& retry) {
         return retry->Get()->Functor();
     }
 
-    void HandleNextBlock(TEvPrivate::TEvNextBlock::TPtr& next) {
+    void HandleNextBlock(TEvS3Provider::TEvNextBlock::TPtr& next) {
         YQL_ENSURE(!ReadSpec->Arrow);
         auto rows = next->Get()->Block.rows();
         IngressStats.Bytes += next->Get()->IngressDelta;
@@ -2969,7 +2636,7 @@ private:
         Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived(InputIndex));
     }
 
-    void HandleNextRecordBatch(TEvPrivate::TEvNextRecordBatch::TPtr& next) {
+    void HandleNextRecordBatch(TEvS3Provider::TEvNextRecordBatch::TPtr& next) {
         YQL_ENSURE(ReadSpec->Arrow);
         auto rows = next->Get()->Batch->num_rows();
         IngressStats.Bytes += next->Get()->IngressDelta;
@@ -2985,7 +2652,7 @@ private:
         Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived(InputIndex));
     }
 
-    void HandleFileFinished(TEvPrivate::TEvFileFinished::TPtr& ev) {
+    void HandleFileFinished(TEvS3Provider::TEvFileFinished::TPtr& ev) {
         CoroActors.erase(ev->Sender);
         if (IsCurrentBatchEmpty && CoroActors.size() == 0) {
             IsCurrentBatchEmpty = false;
@@ -3035,7 +2702,7 @@ private:
         }
     }
     
-    void Handle(TEvS3FileQueue::TEvAck::TPtr& ev) {
+    void Handle(TEvS3Provider::TEvAck::TPtr& ev) {
         FileQueueEvents.OnEventReceived(ev);
     }
 
@@ -3109,7 +2776,7 @@ private:
     std::deque<TReadyBlock> Blocks;
     TDuration CpuTime;
     mutable TInstant LastMemoryReport = TInstant::Now();
-    TReadBufferCounter::TPtr QueueBufferCounter;
+    TSourceContext::TPtr QueueBufferCounter;
     ::NMonitoring::TDynamicCounters::TCounterPtr QueueDataSize;
     ::NMonitoring::TDynamicCounters::TCounterPtr QueueDataLimit;
     ::NMonitoring::TDynamicCounters::TCounterPtr QueueBlockCount;

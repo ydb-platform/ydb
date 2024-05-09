@@ -34,6 +34,7 @@ public:
         ui64 PinnedSetSize = 0; // number of bytes pinned by transactions (even those not currently loaded)
         ui64 PinnedLoadSize = 0; // number of bytes pinned by transactions (which are currently being loaded)
         size_t CurrentCacheHits = 0; // = Touches.Size()
+        ui64 CurrentCacheHitSize = 0; // = Touches.Where(t => !t.Sticky).Sum(t => t.Size)
         size_t CurrentCacheMisses = 0; // = ToLoad.Size()
     };
 
@@ -154,6 +155,7 @@ public:
     const TSharedData* Lookup(ui32 page, TInfo *collection);
     TSharedPageRef LookupShared(ui32 page, TInfo *collection);
 
+    void CountTouches(TPinned &pinned, ui32 &newPages, ui64 &newMemory, ui64 &pinnedMemory);
     void PinTouches(TPinned &pinned, ui32 &touchedPages, ui32 &pinnedPages, ui64 &pinnedMemory);
     void PinToLoad(TPinned &pinned, ui32 &pinnedPages, ui64 &pinnedMemory);
     void RepinPages(TPinned &newPinned, TPinned &oldPinned, size_t &pinnedPages);

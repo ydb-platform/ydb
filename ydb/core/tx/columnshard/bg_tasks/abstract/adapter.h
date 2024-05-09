@@ -9,12 +9,20 @@ namespace NKikimr::NOlap::NBackground {
 
 class ITabletAdapter {
 private:
+    YDB_READONLY_DEF(NActors::TActorId, TabletActorId);
+    YDB_READONLY(TTabletId, TabletId, TTabletId(0));
     virtual bool DoLoadSessionsFromLocalDatabase(NTabletFlatExecutor::TTransactionContext& txc, std::deque<TSessionRecord>& records) = 0;
     virtual void DoSaveProgressToLocalDatabase(NTabletFlatExecutor::TTransactionContext& txc, const TSessionRecord& container) = 0;
     virtual void DoSaveStateToLocalDatabase(NTabletFlatExecutor::TTransactionContext& txc, const TSessionRecord& container) = 0;
     virtual void DoSaveSessionToLocalDatabase(NTabletFlatExecutor::TTransactionContext& txc, const TSessionRecord& container) = 0;
     virtual void DoRemoveSessionFromLocalDatabase(NTabletFlatExecutor::TTransactionContext& txc, const TString& className, const TString& identifier) = 0;
 public:
+    ITabletAdapter(const NActors::TActorId& tabletActorId, const TTabletId tabletId)
+        : TabletActorId(tabletActorId)
+        , TabletId(tabletId)
+    {
+
+    }
     virtual ~ITabletAdapter() = default;
 
     void RemoveSessionFromLocalDatabase(NTabletFlatExecutor::TTransactionContext& txc, const TString& className, const TString& identifier) {

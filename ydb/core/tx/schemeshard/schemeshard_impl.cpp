@@ -14,6 +14,7 @@
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/stat_service.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
 #include <ydb/core/tx/scheme_board/events_schemeshard.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
@@ -408,7 +409,7 @@ void TSchemeShard::Clear() {
     Views.clear();
 
     ColumnTables = { };
-    BackgroundSessionsManager = std::make_shared<NKikimr::NOlap::NBackground::TSessionsManager>(std::make_shared<NSchemeShard::NBackground::TAdapter>());
+    BackgroundSessionsManager = std::make_shared<NKikimr::NOlap::NBackground::TSessionsManager>(std::make_shared<NSchemeShard::NBackground::TAdapter>(SelfId(), NKikimr::NOlap::TTabletId(TabletID())));
 
     RevertedMigrations.clear();
 
@@ -4233,7 +4234,7 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
     TabletCounters = TabletCountersPtr.Get();
 
     SelfPinger = new TSelfPinger(SelfTabletId(), TabletCounters);
-    BackgroundSessionsManager = std::make_shared<NKikimr::NOlap::NBackground::TSessionsManager>(std::make_shared<NBackground::TAdapter>());
+    BackgroundSessionsManager = std::make_shared<NKikimr::NOlap::NBackground::TSessionsManager>(std::make_shared<NBackground::TAdapter>(tablet, NKikimr::NOlap::TTabletId(TabletID())));
 }
 
 const TDomainsInfo::TDomain& TSchemeShard::GetDomainDescription(const TActorContext &ctx) const {
@@ -4421,6 +4422,7 @@ void TSchemeShard::StateConfigure(STFUNC_SIG) {
     switch (ev->GetTypeRewrite()) {
         HFuncTraced(TEvents::TEvUndelivered, Handle);
 
+        HFuncTraced(NKikimr::NOlap::NBackground::TEvExecuteGeneralLocalTransaction, Handle);
         HFuncTraced(TEvSchemeShard::TEvInitRootShard, Handle);
         HFuncTraced(TEvSchemeShard::TEvInitTenantSchemeShard, Handle);
         HFuncTraced(TEvSchemeShard::TEvMigrateSchemeShard, Handle);
@@ -4463,6 +4465,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
     switch (ev->GetTypeRewrite()) {
         HFuncTraced(TEvents::TEvUndelivered, Handle);
         HFuncTraced(TEvSchemeShard::TEvInitRootShard, Handle);
+        HFuncTraced(NKikimr::NOlap::NBackground::TEvExecuteGeneralLocalTransaction, Handle);
 
         HFuncTraced(TEvSchemeShard::TEvMeasureSelfResponseTime, SelfPinger->Handle);
         HFuncTraced(TEvSchemeShard::TEvWakeupToMeasureSelfResponseTime, SelfPinger->Handle);
@@ -5151,8 +5154,12 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvNotifyTxCompletion::TPtr &ev, const
     Execute(CreateTxNotifyTxCompletion(ev), ctx);
 }
 
-void TSchemeShard::Handle(TEvSchemeShard::TEvInitRootShard::TPtr &ev, const TActorContext &ctx) {
+void TSchemeShard::Handle(TEvSchemeShard::TEvInitRootShard::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxInitRootCompatibility(ev), ctx);
+}
+
+void TSchemeShard::Handle(NKikimr::NOlap::NBackground::TEvExecuteGeneralLocalTransaction::TPtr& ev, const TActorContext& ctx) {
+    Execute(ev->Get()->ExtractTransaction().release(), ctx);
 }
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvInitTenantSchemeShard::TPtr &ev, const TActorContext &ctx) {

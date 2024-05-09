@@ -6,7 +6,7 @@ namespace NKikimr::NOlap::NBackground {
 void TTxGeneral::Complete(const TActorContext& ctx) {
     DoComplete(ctx);
     if (!!ProgressActorId) {
-        ctx.Send(*ProgressActorId, new TEvTransactionCompleted(TxInternalId));
+        ctx.Send(*ProgressActorId, new TEvLocalTransactionCompleted(TxInternalId));
     }
 }
 

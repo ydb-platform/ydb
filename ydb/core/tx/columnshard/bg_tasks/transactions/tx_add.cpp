@@ -4,7 +4,7 @@
 namespace NKikimr::NOlap::NBackground {
 
 bool TTxAddSession::Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) {
-    Adapter->SaveSessionToLocalDatabase(txc, Session->SerializeToLocalDatabaseRecord()).Validate("on AddSession");
+    Adapter->SaveSessionToLocalDatabase(txc, Session->SerializeToLocalDatabaseRecord());
     return true;
 }
 
@@ -12,7 +12,7 @@ void TTxAddSession::Complete(const TActorContext& ctx) {
     Sessions->AddSession(Session).Validate("on add background session");
     Session->GetChannelContainer()->OnAdded();
     if (Session->GetLogicContainer()->IsReadyForStart()) {
-        TStartContext context(ctx.SelfID, Session->GetChannelContainer());
+        TStartContext context(ctx.SelfID, Session->GetChannelContainer(), Session, Adapter);
         Session->StartActor(context);
     }
 }

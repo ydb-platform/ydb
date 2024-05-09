@@ -4,7 +4,7 @@
 namespace NKikimr::NOlap::NBackground {
 
 bool TTxRemoveSession::Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
-    Adapter->RemoveSessionFromLocalDatabase(txc, ClassName, Identifier).Validate();
+    Adapter->RemoveSessionFromLocalDatabase(txc, ClassName, Identifier);
     return true;
 }
 

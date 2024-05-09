@@ -9,7 +9,7 @@ void TSessionActor::SaveSessionProgress() {
     const ui64 txId = GetNextTxId();
     SaveSessionProgressTx.emplace(txId);
     auto tx = std::make_unique<TTxSaveSessionProgress>(Session, SelfId(), Adapter, txId);
-    AFL_VERIFY(Send<TEvExecuteGeneralTransaction>(TabletActorId, std::move(tx)));
+    AFL_VERIFY(Send<TEvExecuteGeneralLocalTransaction>(TabletActorId, std::move(tx)));
 }
 
 void TSessionActor::SaveSessionState() {
@@ -17,10 +17,10 @@ void TSessionActor::SaveSessionState() {
     const ui64 txId = GetNextTxId();
     SaveSessionStateTx.emplace(txId);
     auto tx = std::make_unique<TTxSaveSessionState>(Session, SelfId(), Adapter, txId);
-    AFL_VERIFY(Send<TEvExecuteGeneralTransaction>(TabletActorId, std::move(tx)));
+    AFL_VERIFY(Send<TEvExecuteGeneralLocalTransaction>(TabletActorId, std::move(tx)));
 }
 
-void TSessionActor::Handle(TEvTransactionCompleted::TPtr& ev) {
+void TSessionActor::Handle(TEvLocalTransactionCompleted::TPtr& ev) {
     if (SaveSessionProgressTx && *SaveSessionProgressTx == ev->Get()->GetInternalTxId()) {
         SaveSessionProgressTx.reset();
         OnSessionProgressSaved();

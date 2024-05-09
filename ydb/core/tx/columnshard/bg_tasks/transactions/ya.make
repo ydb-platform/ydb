@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    tx_general.cpp
     tx_save_progress.cpp
     tx_save_state.cpp
     tx_remove.cpp

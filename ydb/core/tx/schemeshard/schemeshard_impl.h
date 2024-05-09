@@ -64,6 +64,10 @@
 
 #include <util/generic/ptr.h>
 
+namespace NKikimr::NOlap::NBackground {
+class TEvExecuteGeneralLocalTransaction;
+}
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -1004,6 +1008,8 @@ public:
     void DescribeReplication(const TPathId& pathId, const TString& name, TReplicationInfo::TPtr info, NKikimrSchemeOp::TReplicationDescription& desc);
     void DescribeBlobDepot(const TPathId& pathId, const TString& name, NKikimrSchemeOp::TBlobDepotDescription& desc);
     static void FillTableBoundaries(const TTableInfo::TPtr tableInfo, google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TSplitBoundary>& boundaries);
+
+    void Handle(TAutoPtr<TEventHandle<NKikimr::NOlap::NBackground::TEvExecuteGeneralLocalTransaction>>& ev, const TActorContext& ctx);
 
     void Handle(TEvSchemeShard::TEvInitRootShard::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvSchemeShard::TEvInitTenantSchemeShard::TPtr &ev, const TActorContext &ctx);

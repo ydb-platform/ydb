@@ -8,7 +8,7 @@ namespace NKikimr::NSchemeShard::NOlap::NBackground {
 class TTxChainData {
 private:
     YDB_READONLY_DEF(TString, TablePath);
-    YDB_READONLY_DEF(std::vector<NKikimrSchemeOp::TModifyScheme>, Transactions);
+    YDB_ACCESSOR_DEF(std::vector<NKikimrSchemeOp::TModifyScheme>, Transactions);
 public:
     using TProtoStorage = NKikimrSchemeShardTxBackgroundProto::TTxChainCommonData;
     TConclusionStatus DeserializeFromProto(const TProtoStorage& proto);

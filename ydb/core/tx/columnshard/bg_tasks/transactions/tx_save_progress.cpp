@@ -4,7 +4,7 @@
 namespace NKikimr::NOlap::NBackground {
 
 bool TTxSaveSessionProgress::Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
-    Adapter->SaveProgressToLocalDatabase(txc, Session->SerializeToLocalDatabaseRecord()).Validate();
+    Adapter->SaveProgressToLocalDatabase(txc, Session->SerializeToLocalDatabaseRecord());
     return true;
 }
 

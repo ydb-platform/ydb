@@ -28,6 +28,7 @@ public:
 
     bool LoadIdempotency(NTabletFlatExecutor::TTransactionContext& txc);
 
+    [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> AddTask(const TTask& task);
     [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> AddTaskFromProto(const NKikimrTxBackgroundProto::TTaskContainer& taskProto);
     [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> Remove(const TString& className, const TString& identifier);
     [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> ApplyControlFromProto(const NKikimrTxBackgroundProto::TSessionControlContainer& controlProto);

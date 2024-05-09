@@ -28,7 +28,7 @@ protected:
     }
 protected:
     void ExecuteTransaction(std::unique_ptr<NTabletFlatExecutor::ITransaction>&& tx) {
-        AFL_VERIFY(Send<TEvExecuteGeneralTransaction>(TabletActorId, std::move(tx)));
+        AFL_VERIFY(Send<TEvExecuteGeneralLocalTransaction>(TabletActorId, std::move(tx)));
     }
 
     void SaveSessionProgress();
@@ -45,14 +45,14 @@ public:
         AFL_VERIFY(!!Adapter);
     }
 
-    void Handle(TEvTransactionCompleted::TPtr& ev);
+    void Handle(TEvLocalTransactionCompleted::TPtr& ev);
 
     void Handle(TEvSessionControl::TPtr& ev);
 
     STATEFN(StateInProgress) {
         const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_BACKGROUND)("SelfId", SelfId())("TabletId", TabletId);
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvTransactionCompleted, Handle);
+            hFunc(TEvLocalTransactionCompleted, Handle);
             hFunc(TEvSessionControl, Handle);
             cFunc(NActors::TEvents::TEvPoisonPill::EventType, PassAway);
         default:

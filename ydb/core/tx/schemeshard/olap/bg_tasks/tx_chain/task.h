@@ -29,6 +29,13 @@ private:
     virtual std::shared_ptr<NKikimr::NOlap::NBackground::ISessionLogic> DoBuildSession() const override;
     static const inline TFactory::TRegistrator<TTxChainTask> Registrator = TFactory::TRegistrator<TTxChainTask>(GetStaticClassName());
 public:
+    TTxChainTask() = default;
+
+    TTxChainTask(const TTxChainData& data)
+        : TxData(data)
+    {
+
+    }
     virtual TString GetClassName() const override {
         return GetStaticClassName();
     }

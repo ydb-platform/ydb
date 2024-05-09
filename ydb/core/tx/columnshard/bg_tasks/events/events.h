@@ -9,8 +9,8 @@ namespace NKikimr::NOlap::NBackground {
 class TEvents {
 public:
     enum EEv {
-        EvExecuteGeneralTransaction = EventSpaceBegin(TKikimrEvents::ES_TX_BACKGROUND),
-        EvTransactionComplete,
+        EvExecuteGeneralLocalTransaction = EventSpaceBegin(TKikimrEvents::ES_TX_BACKGROUND),
+        EvLocalTransactionComplete,
         EvSessionControl,
         EvRemoveSession,
 
@@ -20,11 +20,11 @@ public:
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_BACKGROUND), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_BACKGROUND)");
 };
 
-class TEvExecuteGeneralTransaction: public TEventLocal<TEvExecuteGeneralTransaction, TEvents::EvExecuteGeneralTransaction> {
+class TEvExecuteGeneralLocalTransaction: public TEventLocal<TEvExecuteGeneralLocalTransaction, TEvents::EvExecuteGeneralLocalTransaction> {
 private:
     std::unique_ptr<NTabletFlatExecutor::ITransaction> Transaction;
 public:
-    TEvExecuteGeneralTransaction(std::unique_ptr<NTabletFlatExecutor::ITransaction>&& transaction)
+    TEvExecuteGeneralLocalTransaction(std::unique_ptr<NTabletFlatExecutor::ITransaction>&& transaction)
         : Transaction(std::move(transaction))
     {
         AFL_VERIFY(!!Transaction);
@@ -36,11 +36,11 @@ public:
     }
 };
 
-class TEvTransactionCompleted: public TEventLocal<TEvTransactionCompleted, TEvents::EvTransactionComplete> {
+class TEvLocalTransactionCompleted: public TEventLocal<TEvLocalTransactionCompleted, TEvents::EvLocalTransactionComplete> {
 private:
     const ui64 InternalTxId;
 public:
-    TEvTransactionCompleted(const ui64 internalTxId)
+    TEvLocalTransactionCompleted(const ui64 internalTxId)
         : InternalTxId(internalTxId) {
     }
 

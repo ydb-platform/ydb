@@ -40,6 +40,10 @@ std::unique_ptr<NKikimr::NTabletFlatExecutor::ITransaction> TSessionsManager::Ad
         task.GetChannelContainer()->OnFail(conclusion.GetErrorMessage());
         return nullptr;
     }
+    return AddTask(task);
+}
+
+std::unique_ptr<NKikimr::NTabletFlatExecutor::ITransaction> TSessionsManager::AddTask(const TTask& task) {
     auto session = Storage->GetSession(task.GetDescriptionContainer().GetClassName(), task.GetIdentifier());
     if (!!session) {
         task.GetChannelContainer()->OnFail("session exists already");

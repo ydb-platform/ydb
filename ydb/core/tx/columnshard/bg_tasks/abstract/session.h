@@ -16,21 +16,23 @@ class ITabletAdapter;
 
 class TStartContext {
 private:
-    YDB_READONLY_DEF(TTabletId, TabletId);
     YDB_READONLY_DEF(NActors::TActorId, TabletActorId);
     YDB_READONLY_DEF(TStatusChannelContainer, Channel);
     YDB_READONLY_DEF(std::shared_ptr<TSession>, SessionSelfPtr);
     YDB_READONLY_DEF(std::shared_ptr<ITabletAdapter>, Adapter);
 public:
-    TStartContext(const TTabletId tabletId, const NActors::TActorId& tabletActorId, const TStatusChannelContainer channel, const std::shared_ptr<TSession>& sessionSelfPtr,
+    TTabletId GetTabletId() const;
+
+    TStartContext(const NActors::TActorId& tabletActorId, const TStatusChannelContainer channel, const std::shared_ptr<TSession>& sessionSelfPtr,
         const std::shared_ptr<ITabletAdapter>& adapter)
-        : TabletId(tabletId)
-        , TabletActorId(tabletActorId)
+        : TabletActorId(tabletActorId)
         , Channel(channel)
         , SessionSelfPtr(sessionSelfPtr)
         , Adapter(adapter)
     {
-
+        AFL_VERIFY(!!Channel);
+        AFL_VERIFY(!!SessionSelfPtr);
+        AFL_VERIFY(!!Adapter);
     }
 };
 

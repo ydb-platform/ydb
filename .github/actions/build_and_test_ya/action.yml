@@ -105,6 +105,30 @@ runs:
           echo "target=${{ inputs.build_target }}" >> $GITHUB_OUTPUT
         fi
 
+    - name: Notify about failed build
+      if: steps.build.outputs.success != 'true'
+      shell: bash
+      run: |
+        echo 'Build failed. See the [build log](${{ steps.build.outputs.log_url }}).' >> $GITHUB_STEP_SUMMARY
+  
+    - name: Add a PR comment
+      if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
+      shell: bash
+      run: |
+        if [ '${{ steps.build.outputs.success }}' != 'true' ]; then
+          if [ '${{ inputs.run_tests_if_build_fails }}' == 'true' ]; then
+            echo 'Tests will run shortly' | .github/scripts/tests/comment-pr.py
+          elif [ '${{ inputs.run_tests }}' == 'true' ]; then
+            echo 'Tests run skipped.' | .github/scripts/tests/comment-pr.py --fail
+          fi
+        else
+          if [ '${{ inputs.run_tests }}' == 'true' ]; then
+            echo 'Tests will run shortly' | .github/scripts/tests/comment-pr.py
+          else
+            echo 'Tests running is disabled' | .github/scripts/tests/comment-pr.py --ok
+          fi
+        fi
+
     - name: Run tests
       uses: ./.github/actions/test_ya
       if: ${{ inputs.run_tests == 'true' &&  (steps.build.outputs.success == 'true' || inputs.run_tests_if_build_fails == 'true') }}
@@ -119,16 +143,10 @@ runs:
         link_threads: ${{ inputs.link_threads }}
         test_threads: ${{ inputs.test_threads }}
         
-    - name: Notify about failed build
+    - name: Fail on failed build without future test run
       if: ${{ steps.build.outputs.success != 'true' && inputs.run_tests == 'true' && inputs.run_tests_if_build_fails == 'false' }}
       shell: bash
       run: |
-        echo 'Build failed. See the [build log](${{ steps.build.outputs.log_url }}).' >> $GITHUB_STEP_SUMMARY
-        
-        if [[ "$GITHUB_EVENT_NAME" =~ ^pull_request ]]; then
-          echo "Tests run skipped." | .github/scripts/tests/comment-pr.py --fail
-        fi
-        
         exit 1
     
     - name: comment-if-cancel

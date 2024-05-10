@@ -1,3 +1,5 @@
+#include "pg_compat.h"
+
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/context.h>
@@ -6,8 +8,6 @@
 
 #define SortBy PG_SortBy
 #define TypeName PG_TypeName
-
-#include "pg_compat.h"
 
 extern "C" {
 #include "utils/syscache.h"

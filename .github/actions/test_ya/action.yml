@@ -7,6 +7,11 @@ inputs:
     required: true
     default: "relwithdebinfo"
     description: "relwithdebinfo, release-asan, release-tsan"
+  test_type:
+    required: false
+    type: string
+    default: ""
+    description: "run only specific test types (or all by default)"
   test_size:
     required: false
     default: "small,medium,large"
@@ -144,10 +149,11 @@ runs:
       run: |
         set -x
         readarray -d ',' -t test_size < <(printf "%s" "${{ inputs.test_size }}")
+        readarray -d ',' -t test_type < <(printf "%s" "${{ inputs.test_type }}")
 
         params=(
           -T -k
-          ${test_size[@]/#/--test-size=}
+          ${test_size[@]/#/--test-size=} ${test_type[@]/#/--test-type=}
           --cache-size 512G --do-not-output-stderrs
           --stat
           --test-threads "${{ inputs.test_threads }}" --link-threads "${{ inputs.link_threads }}"

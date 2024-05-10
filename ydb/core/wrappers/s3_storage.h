@@ -67,9 +67,7 @@ private:
                 Y_DEFER {
                     std::unique_lock guard(RunningQueriesMutex);
                     --RunningQueriesCount;
-                    bool needNotify = (RunningQueriesCount == 0);
-                    guard.unlock();
-                    if (needNotify) {
+                    if (RunningQueriesCount == 0) {
                         RunningQueriesNotifier.notify_all();
                     }
                 };

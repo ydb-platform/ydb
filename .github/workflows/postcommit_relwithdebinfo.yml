@@ -27,7 +27,6 @@ jobs:
         increment: true
         run_tests: true
         test_size: "small,medium"
-        test_type: "unittest,py3test,py2test,pytest"
         test_threads: 52
         put_build_results_to_cache: true
         secs: ${{ format('{{"TESTMO_TOKEN":"{0}","AWS_KEY_ID":"{1}","AWS_KEY_VALUE":"{2}","REMOTE_CACHE_USERNAME":"{3}","REMOTE_CACHE_PASSWORD":"{4}"}}', 

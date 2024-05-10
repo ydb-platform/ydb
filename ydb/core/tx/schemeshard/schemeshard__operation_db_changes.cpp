@@ -85,6 +85,27 @@ void TStorageChanges::Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionC
 
     ss->PersistUpdateNextPathId(db);
     ss->PersistUpdateNextShardIdx(db);
+
+    for (const auto& [pathId, shardIdx, pqInfo] : PersQueue) {
+        ss->PersistPersQueue(db, pathId, shardIdx, pqInfo);
+    }
+
+    for (const auto& [pathId, pqGroup] : PersQueueGroup) {
+        ss->PersistPersQueueGroup(db, pathId, pqGroup);
+    }
+
+    for (const auto& [pathId, pqGroup] : AddPersQueueGroupAlter) {
+        ss->PersistAddPersQueueGroupAlter(db, pathId, pqGroup);
+    }
+
+    for (const auto& [shardIdx, tabletId, pathId, txId, type] : ShardMapping) {
+        ss->PersistShardMapping(db, shardIdx, tabletId, pathId, txId, type);
+    }
+
+    for (const auto& [shardId, bindedChannels] : ChannelsBinding) {
+        ss->PersistChannelsBinding(db, shardId, bindedChannels);
+    }
+
 }
 
 }

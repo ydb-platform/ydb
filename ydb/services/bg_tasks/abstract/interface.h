@@ -246,6 +246,7 @@ public:
 template <class TProto, class IBaseInterface>
 class TInterfaceProtoAdapter: public IBaseInterface {
 private:
+    using TBase = IBaseInterface;
     virtual TConclusionStatus DoDeserializeFromProto(const TProto& proto) = 0;
     virtual TProto DoSerializeToProto() const = 0;
 protected:
@@ -260,6 +261,15 @@ protected:
     virtual TString DoSerializeToString() const override final {
         TProto proto = DoSerializeToProto();
         return proto.SerializeAsString();
+    }
+public:
+    using TBase::TBase;
+
+    TConclusionStatus DeserializeFromProto(const TProto& proto) {
+        return DoDeserializeFromProto(proto);
+    }
+    TProto SerializeToProto() const {
+        return DoSerializeToProto();
     }
 };
 

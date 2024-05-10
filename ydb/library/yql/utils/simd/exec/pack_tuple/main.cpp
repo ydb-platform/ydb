@@ -18,8 +18,8 @@ struct TPerfomancer {
         using TSimd = typename TTraits::template TSimd8<T>;
         TWorker() = default;
 
-        ui8* ShuffleMask(ui32 v[8]) {
-            ui8* det = new ui8[32];
+        TSimd<ui8> ShuffleMask(ui32 v[8]) {
+            ui8 det[32];
             for (size_t i = 0; i < 32; i += 1) {
                 det[i] = v[i / 4] == ui32(-1) ? ui8(-1) : 4 * v[i / 4] + i % 4;
             }

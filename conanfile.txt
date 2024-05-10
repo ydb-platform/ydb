@@ -21,4 +21,3 @@ res, * -> ./bin/bison/res
 [generators]
 cmake_find_package
 cmake_paths
-

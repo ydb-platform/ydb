@@ -174,6 +174,7 @@ namespace NKikimr::NPublicHttp {
         return !ForwardedFor.empty() ? TString(ForwardedFor) : TString(Request->Host);
     }
 
+
     void THttpRequestContext::ResponseBadRequest(Ydb::StatusIds::StatusCode status, const TString& errorText) const {
         DoResponseBadRequest(status, errorText);
     }

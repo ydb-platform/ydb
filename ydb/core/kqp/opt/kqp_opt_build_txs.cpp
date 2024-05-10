@@ -486,7 +486,7 @@ public:
             .AddPostTypeAnnotation(/* forSubgraph */ true)
             .Add(CreateKqpBuildPhyStagesTransformer(config->SpillingEnabled(), typesCtx), "BuildPhysicalStages")
             .Add(*BuildTxTransformer, "BuildPhysicalTx")
-            .Add(CreateKqpTxPeepholeTransformer(TypeAnnTransformer.Get(), typesCtx, config, /* withFinalStageRules */ false, {"KqpPeephole"}), "Peephole")
+            .Add(CreateKqpTxPeepholeTransformer(TypeAnnTransformer.Get(), typesCtx, config, /* withFinalStageRules */ false, {"KqpPeephole-RewriteCrossJoin"}), "Peephole")
             .Build(false);
     }
 

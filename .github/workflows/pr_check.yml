@@ -214,7 +214,6 @@ jobs:
         increment: true
         run_tests: ${{ contains(fromJSON('["relwithdebinfo", "release-asan"]'), matrix.build_preset) }}
         test_size: "small,medium"
-        test_type: "unittest,py3test,py2test,pytest"
         test_threads: 52
         put_build_results_to_cache: true
         run_tests_if_build_fails: false

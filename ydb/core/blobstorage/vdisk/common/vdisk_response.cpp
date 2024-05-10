@@ -72,6 +72,9 @@ void LogOOSStatus(ui32 flags, const TLogoBlobID& blobId, const TString& vDiskLog
     if (!TlsActivationContext) {
         return;
     }
+    if (!(flags & NKikimrBlobStorage::StatusIsValid)) {
+        return;
+    }
 
     ui32 prevFlags = curFlags.exchange(flags, std::memory_order_relaxed);
     if (prevFlags == flags) {
@@ -85,6 +88,9 @@ void LogOOSStatus(ui32 flags, const TLogoBlobID& blobId, const TString& vDiskLog
 
 void UpdateMonOOSStatus(ui32 flags, const std::shared_ptr<NMonGroup::TOutOfSpaceGroup>& monGroup) {
     if (!monGroup) {
+        return;
+    }
+    if (!(flags & NKikimrBlobStorage::StatusIsValid)) {
         return;
     }
 

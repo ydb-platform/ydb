@@ -59,7 +59,7 @@ public:
     bool TryUpdate(TResourceMetricsValues& src, const TActorContext& ctx);
 
 protected:
-    static constexpr ui64 SignificantChangeCPU = 100000/* 100msec */;
+    static constexpr ui64 SignificantChangeCPU = 20000/* 20msec */;
     static constexpr ui64 SignificantChangeMemory = 1 << 20/* 1Mb */;
     static constexpr ui64 SignificantChangeNetwork = 1 << 20/* 1Mb */;
     static constexpr ui64 SignificantChangeThroughput = 1 << 20/* 1Mb */;

@@ -436,6 +436,15 @@ public:
         }
     }
 
+    void AdvanceTime(TInstant now) {
+        // Nothing changed, last value is stiil relevant
+        TType lastValue = {};
+        if (!TProto::GetValues().empty()) {
+            lastValue = *std::prev(TProto::MutableValues()->end());
+        }
+        SetValue(lastValue, now);
+    }
+
     TType GetValue() const {
         return MaximumValue;
     }

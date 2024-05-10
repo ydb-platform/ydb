@@ -5,29 +5,31 @@ namespace NKikimr::NOlap::NBackground {
 
 NKikimrTxBackgroundProto::TSessionControlContainer TSessionControlContainer::SerializeToProto() const {
     NKikimrTxBackgroundProto::TSessionControlContainer result;
-    result.SetSessionClassName(SessionClassName);
-    result.SetSessionIdentifier(SessionIdentifier);
-    result.SetStatusChannelContainer(ChannelContainer.SerializeToString());
-    result.SetLogicControlContainer(LogicControlContainer.SerializeToString());
+    *result.MutableStatusChannelContainer() = ChannelContainer.SerializeToString();
+    *result.MutableLogicControlContainer() = LogicControlContainer.SerializeToProto();
     return result;
 }
 
 NKikimr::TConclusionStatus TSessionControlContainer::DeserializeFromProto(const NKikimrTxBackgroundProto::TSessionControlContainer& proto) {
-    SessionClassName = proto.GetSessionClassName();
-    SessionIdentifier = proto.GetSessionIdentifier();
-    if (!SessionClassName) {
-        return TConclusionStatus::Fail("incorrect session class name for bg_task");
-    }
-    if (!SessionIdentifier) {
-        return TConclusionStatus::Fail("incorrect session id for bg_task");
-    }
     if (!ChannelContainer.DeserializeFromString(proto.GetStatusChannelContainer())) {
         return TConclusionStatus::Fail("cannot parse channel from proto");
     }
-    if (!LogicControlContainer.DeserializeFromString(proto.GetLogicControlContainer())) {
+    if (!LogicControlContainer.DeserializeFromProto(proto.GetLogicControlContainer())) {
         return TConclusionStatus::Fail("cannot parse logic from proto");
     }
     return TConclusionStatus::Success();
+}
+
+NKikimr::TConclusionStatus ISessionLogicControl::DeserializeFromProto(const TProto& data) {
+    SessionClassName = data.GetSessionClassName();
+    SessionIdentifier = data.GetSessionIdentifier();
+    return DeserializeFromString(data.GetSessionControlDescription());
+}
+
+void ISessionLogicControl::SerializeToProto(TProto& proto) const {
+    proto.SetSessionClassName(SessionClassName);
+    proto.SetSessionIdentifier(SessionIdentifier);
+    proto.SetSessionControlDescription(SerializeToString());
 }
 
 }

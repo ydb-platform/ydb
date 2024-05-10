@@ -8,11 +8,11 @@ bool TTxAddSession::Execute(TTransactionContext& txc, const TActorContext& /*ctx
     return true;
 }
 
-void TTxAddSession::Complete(const TActorContext& ctx) {
+void TTxAddSession::Complete(const TActorContext& /*ctx*/) {
     Sessions->AddSession(Session).Validate("on add background session");
     Session->GetChannelContainer()->OnAdded();
-    if (Session->GetLogicContainer()->IsReadyForStart()) {
-        TStartContext context(ctx.SelfID, Session->GetChannelContainer(), Session, Adapter);
+    if (Session->GetLogicContainer()->IsReadyForStart() && !Session->GetLogicContainer()->IsFinished()) {
+        TStartContext context(Session, Adapter);
         Session->StartActor(context);
     }
 }

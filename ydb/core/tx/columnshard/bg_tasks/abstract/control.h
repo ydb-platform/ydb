@@ -6,28 +6,41 @@
 
 namespace NKikimrTxBackgroundProto {
 class TSessionControlContainer;
+class TSessionLogicControlContainer;
 }
 
 namespace NKikimr::NOlap::NBackground {
 
 class ISessionLogicControl {
 private:
-    YDB_READONLY_DEF(TString, Identifier);
+    YDB_READONLY_DEF(TString, SessionClassName);
+    YDB_READONLY_DEF(TString, SessionIdentifier);
     virtual TConclusionStatus DoApply(const std::shared_ptr<ISessionLogic>& session) const = 0;
+
     virtual TConclusionStatus DoDeserializeFromString(const TString& data) = 0;
     virtual TString DoSerializeToString() const = 0;
-public:
-    using TFactory = NObjectFactory::TObjectFactory<ISessionLogicControl, TString>;
-
-    virtual ~ISessionLogicControl() = default;
-
+protected:
     TConclusionStatus DeserializeFromString(const TString& data) {
         return DoDeserializeFromString(data);
     }
-
     TString SerializeToString() const {
         return DoSerializeToString();
     }
+public:
+    using TProto = NKikimrTxBackgroundProto::TSessionLogicControlContainer;
+    using TFactory = NObjectFactory::TObjectFactory<ISessionLogicControl, TString>;
+
+    virtual ~ISessionLogicControl() = default;
+    ISessionLogicControl() = default;
+    ISessionLogicControl(const TString& sessionClassName, const TString& sessionIdentifier)
+        : SessionClassName(sessionClassName)
+        , SessionIdentifier(sessionIdentifier)
+    {
+
+    }
+
+    TConclusionStatus DeserializeFromProto(const TProto& data);
+    void SerializeToProto(TProto& proto) const;
 
     TConclusionStatus Apply(const std::shared_ptr<ISessionLogic>& session) const {
         session->CheckStatusCorrect();
@@ -39,17 +52,15 @@ public:
     virtual TString GetClassName() const = 0;
 };
 
-class TSessionLogicControlContainer: public NBackgroundTasks::TInterfaceStringContainer<ISessionLogicControl> {
+class TSessionLogicControlContainer: public NBackgroundTasks::TInterfaceProtoContainer<ISessionLogicControl> {
 private:
-    using TBase = NBackgroundTasks::TInterfaceStringContainer<ISessionLogicControl>;
+    using TBase = NBackgroundTasks::TInterfaceProtoContainer<ISessionLogicControl>;
 public:
     using TBase::TBase;
 };
 
 class TSessionControlContainer {
 private:
-    YDB_READONLY_DEF(TString, SessionClassName);
-    YDB_READONLY_DEF(TString, SessionIdentifier);
     YDB_READONLY_DEF(TStatusChannelContainer, ChannelContainer);
     YDB_READONLY_DEF(TSessionLogicControlContainer, LogicControlContainer);
 public:

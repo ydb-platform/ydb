@@ -12,7 +12,7 @@ void TTxSaveSessionState::DoComplete(const TActorContext& ctx) {
     if (Session->GetLogicContainer()->IsReadyForRemove()) {
         ctx.Send(Adapter->GetTabletActorId(), new TEvRemoveSession(Session->GetLogicClassName(), Session->GetIdentifier()));
     } else if (Session->GetLogicContainer()->IsReadyForStart()) {
-        TStartContext context(ctx.SelfID, Session->GetChannelContainer(), Session, Adapter);
+        TStartContext context(Session, Adapter);
         Session->StartActor(context);
     }
 }

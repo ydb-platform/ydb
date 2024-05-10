@@ -32,14 +32,15 @@ public:
     [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> AddTaskFromProto(const NKikimrTxBackgroundProto::TTaskContainer& taskProto);
     [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> Remove(const TString& className, const TString& identifier);
     [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> ApplyControlFromProto(const NKikimrTxBackgroundProto::TSessionControlContainer& controlProto);
+    [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> ApplyControl(const TSessionControlContainer& control);
 
-    void Start(const TStartContext& context) {
+    void Start() {
         AFL_VERIFY(!Started);
-        Storage->Start(context);
+        Storage->Start(Adapter);
         Started = true;
     }
 
-    void Finish() {
+    void Stop() {
         AFL_VERIFY(Started);
         Storage->Finish();
         Started = false;

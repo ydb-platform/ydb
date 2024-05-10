@@ -104,9 +104,6 @@ private:
     YDB_READONLY_DEF(std::vector<NKikimrSchemeOp::TModifyScheme>, Transactions);
     YDB_READONLY(ui32, StepForExecute, 0);
 protected:
-    virtual TConclusion<std::unique_ptr<NActors::IActor>> DoCreateActor(const TStartContext& context) const override {
-
-    }
     virtual TConclusionStatus DoDeserializeFromProto(const TProtoLogic& proto) override {
         TablePath = proto.GetTablePath();
         for (auto&& i : proto.GetModifications()) {

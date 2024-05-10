@@ -23,9 +23,12 @@ public:
         Sessions.erase(it);
         return true;
     }
-    void Start(const TStartContext& context) {
+    void Start(const std::shared_ptr<ITabletAdapter>& adapter) {
         for (auto&& [_, i] : Sessions) {
-            i->StartActor(context);
+            if (i->GetLogicContainer()->IsReadyForStart() && !i->GetLogicContainer()->IsFinished()) {
+                TStartContext context(i, adapter);
+                i->StartActor(context);
+            }
         }
     }
 
@@ -60,9 +63,9 @@ private:
         return *it->second;
     }
 public:
-    void Start(const TStartContext& context) {
+    void Start(const std::shared_ptr<ITabletAdapter>& adapter) {
         for (auto&& i : ContainersByClass) {
-            i.second->Start(context);
+            i.second->Start(adapter);
         }
     }
 

@@ -30,8 +30,8 @@ protected:
     void Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev);
     void Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& /*ev*/);
 public:
-    TTxChainActor(const NKikimr::NOlap::TTabletId tabletId, const NActors::TActorId tabletActorId, const std::shared_ptr<NKikimr::NOlap::NBackground::TSession>& session, const std::shared_ptr<NKikimr::NOlap::NBackground::ITabletAdapter>& adapter)
-        : TBase(tabletId, tabletActorId, session, adapter)
+    TTxChainActor(const std::shared_ptr<NKikimr::NOlap::NBackground::TSession>& session, const std::shared_ptr<NKikimr::NOlap::NBackground::ITabletAdapter>& adapter)
+        : TBase(session, adapter)
     {
         AFL_VERIFY(!!Session);
         AFL_VERIFY(!!Adapter);

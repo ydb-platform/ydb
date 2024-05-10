@@ -409,7 +409,8 @@ void TSchemeShard::Clear() {
     Views.clear();
 
     ColumnTables = { };
-    BackgroundSessionsManager = std::make_shared<NKikimr::NOlap::NBackground::TSessionsManager>(std::make_shared<NSchemeShard::NBackground::TAdapter>(SelfId(), NKikimr::NOlap::TTabletId(TabletID())));
+    BackgroundSessionsManager = std::make_shared<NKikimr::NOlap::NBackground::TSessionsManager>(
+        std::make_shared<NSchemeShard::NBackground::TAdapter>(SelfId(), NKikimr::NOlap::TTabletId(TabletID()), *this));
 
     RevertedMigrations.clear();
 
@@ -4234,7 +4235,7 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
     TabletCounters = TabletCountersPtr.Get();
 
     SelfPinger = new TSelfPinger(SelfTabletId(), TabletCounters);
-    BackgroundSessionsManager = std::make_shared<NKikimr::NOlap::NBackground::TSessionsManager>(std::make_shared<NBackground::TAdapter>(tablet, NKikimr::NOlap::TTabletId(TabletID())));
+    BackgroundSessionsManager = std::make_shared<NKikimr::NOlap::NBackground::TSessionsManager>(std::make_shared<NBackground::TAdapter>(tablet, NKikimr::NOlap::TTabletId(TabletID()), *this));
 }
 
 const TDomainsInfo::TDomain& TSchemeShard::GetDomainDescription(const TActorContext &ctx) const {

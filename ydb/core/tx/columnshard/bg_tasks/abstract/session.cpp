@@ -3,8 +3,4 @@
 
 namespace NKikimr::NOlap::NBackground {
 
-NKikimr::NOlap::TTabletId TStartContext::GetTabletId() const {
-    return Adapter->GetTabletId();
-}
-
 }

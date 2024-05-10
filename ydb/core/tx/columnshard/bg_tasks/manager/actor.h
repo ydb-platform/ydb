@@ -35,9 +35,9 @@ protected:
 
     void SaveSessionState();
 public:
-    TSessionActor(const TTabletId tabletId, const NActors::TActorId tabletActorId, const std::shared_ptr<TSession>& session, const std::shared_ptr<ITabletAdapter>& adapter)
-        : TabletId(tabletId)
-        , TabletActorId(tabletActorId)
+    TSessionActor(const std::shared_ptr<TSession>& session, const std::shared_ptr<ITabletAdapter>& adapter)
+        : TabletId(adapter->GetTabletId())
+        , TabletActorId(adapter->GetTabletActorId())
         , Adapter(adapter)
         , Session(session)
     {

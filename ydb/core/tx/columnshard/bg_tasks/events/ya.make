@@ -2,6 +2,9 @@ LIBRARY()
 
 SRCS(
     events.cpp
+    local.cpp
+    global.cpp
+    common.cpp
 )
 
 PEERDIR(

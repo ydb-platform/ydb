@@ -7,14 +7,8 @@
 
 namespace NKikimr::NOlap::NBackground {
 
-std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::ApplyControlFromProto(const NKikimrTxBackgroundProto::TSessionControlContainer& controlProto) {
-    TSessionControlContainer control;
-    auto conclusion = control.DeserializeFromProto(controlProto);
-    if (conclusion.IsFail()) {
-        control.GetChannelContainer()->OnFail(conclusion.GetErrorMessage());
-        return nullptr;
-    }
-    auto session = Storage->GetSession(control.GetSessionClassName(), control.GetSessionIdentifier());
+std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::ApplyControl(const TSessionControlContainer& control) {
+    auto session = Storage->GetSession(control.GetLogicControlContainer()->GetSessionClassName(), control.GetLogicControlContainer()->GetSessionIdentifier());
     if (!session) {
         control.GetChannelContainer()->OnFail("session not exists");
         return nullptr;
@@ -31,6 +25,16 @@ std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::ApplyContro
         NActors::TActivationContext::AsActorContext().Send(session->GetActorIdVerified(), new TEvSessionControl(control));
         return nullptr;
     }
+}
+
+std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::ApplyControlFromProto(const NKikimrTxBackgroundProto::TSessionControlContainer& controlProto) {
+    TSessionControlContainer control;
+    auto conclusion = control.DeserializeFromProto(controlProto);
+    if (conclusion.IsFail()) {
+        control.GetChannelContainer()->OnFail(conclusion.GetErrorMessage());
+        return nullptr;
+    }
+    return ApplyControl(control);
 }
 
 std::unique_ptr<NKikimr::NTabletFlatExecutor::ITransaction> TSessionsManager::AddTaskFromProto(const NKikimrTxBackgroundProto::TTaskContainer& taskProto) {
@@ -75,6 +79,7 @@ bool TSessionsManager::LoadIdempotency(NTabletFlatExecutor::TTransactionContext&
         storage->AddSession(session);
         records.pop_front();
     }
+    Storage = storage;
     return true;
 }
 

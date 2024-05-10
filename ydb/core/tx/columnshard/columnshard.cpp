@@ -4,7 +4,7 @@
 #include "resource_subscriber/actor.h"
 #include "engines/writer/buffer/actor.h"
 #include "engines/column_engine_logs.h"
-#include "export/manager/manager.h"
+#include "bg_tasks/manager/manager.h"
 
 #include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/protos/table_stats.pb.h>
@@ -24,7 +24,7 @@ void TColumnShard::CleanupActors(const TActorContext& ctx) {
     ctx.Send(BufferizationWriteActorId, new TEvents::TEvPoisonPill);
 
     StoragesManager->Stop();
-    ExportsManager->Stop();
+    BackgroundSessionsManager->Stop();
     DataLocksManager->Stop();
     if (Tiers) {
         Tiers->Stop(true);
@@ -54,6 +54,7 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
     }
     CSCounters.OnIndexMetadataLimit(NOlap::IColumnEngine::GetMetadataLimit());
     EnqueueBackgroundActivities();
+    BackgroundSessionsManager->Start();
     ctx.Send(SelfId(), new TEvPrivate::TEvPeriodicWakeup());
 }
 

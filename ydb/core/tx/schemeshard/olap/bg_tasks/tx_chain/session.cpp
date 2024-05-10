@@ -4,7 +4,7 @@
 namespace NKikimr::NSchemeShard::NOlap::NBackground {
 
 TConclusion<std::unique_ptr<NActors::IActor>> TTxChainSession::DoCreateActor(const NKikimr::NOlap::NBackground::TStartContext& context) const {
-    return std::make_unique<TTxChainActor>(context.GetTabletId(), context.GetTabletActorId(), context.GetSessionSelfPtr(), context.GetAdapter());
+    return std::make_unique<TTxChainActor>(context.GetSessionSelfPtr(), context.GetAdapter());
 }
 
 }

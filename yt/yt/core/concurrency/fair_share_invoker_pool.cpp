@@ -469,7 +469,7 @@ private:
         i64 DequeuedActionCount_ = 0;
         i64 ExecutedActionCount_ = 0;
 
-        NO_UNIQUE_ADDRESS THandle ProfilerHandle_;
+        YT_ATTRIBUTE_NO_UNIQUE_ADDRESS THandle ProfilerHandle_;
 
         TDuration GetTotalTimeEstimate(TInstant now) const
         {
@@ -496,7 +496,7 @@ private:
 
     IFairShareCallbackQueuePtr Queue_;
 
-    NO_UNIQUE_ADDRESS TPoolProfilerObject Profiler_;
+    YT_ATTRIBUTE_NO_UNIQUE_ADDRESS TPoolProfilerObject Profiler_;
 
     class TCpuTimeAccounter
     {

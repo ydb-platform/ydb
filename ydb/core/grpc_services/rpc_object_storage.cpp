@@ -467,65 +467,6 @@ private:
             ContentsColumns.push_back(entry.Columns[columnByName[name]]);
         }
 
-        if (Request->has_filter() && Request->has_matching_filter()) {
-            ReplyWithError(Ydb::StatusIds::BAD_REQUEST,
-                            "Either filter or matching_filter should be present", ctx);
-            return false;
-        }
-
-        if (Request->has_filter()) {
-            THashMap<TString, ui32> columnToRequestIndex;
-
-            for (size_t i = 0; i < ContentsColumns.size(); i++) {
-                columnToRequestIndex[ContentsColumns[i].Name] = i;
-            }
-
-            const auto filter = Request->filter();
-
-            TVector<NScheme::TTypeInfo> types;
-
-            for (const auto& colName : filter.columns()) {
-                const auto colIdIt = columnByName.find(colName);
-
-                if (colIdIt == columnByName.end()) {
-                    ReplyWithError(Ydb::StatusIds::BAD_REQUEST,
-                            Sprintf("Unknown filter column '%s'", colName.data()), ctx);
-                    return false;
-                }
-
-                const auto& columnInfo = entry.Columns[colIdIt->second];
-                const auto& type = columnInfo.PType;
-
-                types.push_back(type);
-
-                const auto [it, inserted] = columnToRequestIndex.try_emplace(colName, columnToRequestIndex.size());
-
-                if (inserted) {
-                    ContentsColumns.push_back(columnInfo);
-                }
-
-                Filter.ColumnIds.push_back(it->second);
-            }
-
-            TConstArrayRef<NScheme::TTypeInfo> typesRef(types.data(), types.size());
-
-            TVector<TCell> cells;
-            TVector<TString> owner;
-
-            TString err;
-
-            const auto& values = filter.values();
-
-            bool filterParsedOk = CellsFromTuple(&values.Gettype(), values.Getvalue(), typesRef, true, cells, err, owner);
-            
-            if (!filterParsedOk) {
-                ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Sprintf("Invalid filter: '%s'", err.data()), ctx);
-                return false;
-            }
-
-            Filter.FilterValues.Parse(TSerializedCellVec::Serialize(cells));
-        }
-
         if (Request->has_matching_filter()) {
             THashMap<TString, ui32> columnToRequestIndex;
 
@@ -547,13 +488,26 @@ private:
             const auto& matcherTypes = filterValue.get_idx_items(1);
             const auto& columnValues = filterValue.get_idx_items(2);
 
+            if ((columnNames.items_size() != matcherTypes.items_size()) || (columnNames.items_size() != columnValues.items_size())) {
+                ReplyWithError(Ydb::StatusIds::BAD_REQUEST, "Wrong matching_filter format", ctx);
+                return false;
+            }
+
             TVector<NScheme::TTypeInfo> types;
 
-            for (int i = 0; i < columnNames.get_arr_items().size(); i++) {
+            for (int i = 0; i < columnNames.items_size(); i++) {
                 const auto& colNameValue = columnNames.get_idx_items(i);
                 const auto& colName = colNameValue.text_value();
 
-                const auto& columnInfo = entry.Columns[columnByName[colName]];
+                const auto colIdIt = columnByName.find(colName);
+
+                if (colIdIt == columnByName.end()) {
+                    ReplyWithError(Ydb::StatusIds::BAD_REQUEST,
+                            Sprintf("Unknown filter column '%s'", colName.data()), ctx);
+                    return false;
+                }
+
+                const auto& columnInfo = entry.Columns[colIdIt->second];
                 const auto& type = columnInfo.PType;
 
                 types.push_back(type);

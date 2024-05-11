@@ -12,7 +12,7 @@ private:
 protected:
     virtual bool DoLoadSessionsFromLocalDatabase(NTabletFlatExecutor::TTransactionContext& txc, std::deque<NKikimr::NOlap::NBackground::TSessionRecord>& records) override {
         NIceDb::TNiceDb db(txc.DB);
-        using BackgroundSessions = Schema::BackgroundSessions;
+        using BackgroundSessions = typename Schema::BackgroundSessions;
         auto rowset = db.Table<BackgroundSessions>().Select();
         if (!rowset.IsReady()) {
             return false;
@@ -38,7 +38,7 @@ protected:
 
     virtual void DoSaveProgressToLocalDatabase(NTabletFlatExecutor::TTransactionContext& txc, const NKikimr::NOlap::NBackground::TSessionRecord& container) override {
         NIceDb::TNiceDb db(txc.DB);
-        using BackgroundSessions = Schema::BackgroundSessions;
+        using BackgroundSessions = typename Schema::BackgroundSessions;
         db.Table<BackgroundSessions>().Key(container.GetClassName(), container.GetIdentifier()).Update(
             NIceDb::TUpdate<typename BackgroundSessions::Progress>(container.GetProgress())
         );
@@ -46,7 +46,7 @@ protected:
 
     virtual void DoSaveStateToLocalDatabase(NTabletFlatExecutor::TTransactionContext& txc, const NKikimr::NOlap::NBackground::TSessionRecord& container) override {
         NIceDb::TNiceDb db(txc.DB);
-        using BackgroundSessions = Schema::BackgroundSessions;
+        using BackgroundSessions = typename Schema::BackgroundSessions;
         db.Table<BackgroundSessions>().Key(container.GetClassName(), container.GetIdentifier()).Update(
             NIceDb::TUpdate<typename BackgroundSessions::State>(container.GetState())
         );
@@ -54,7 +54,7 @@ protected:
 
     virtual void DoSaveSessionToLocalDatabase(NTabletFlatExecutor::TTransactionContext& txc, const NKikimr::NOlap::NBackground::TSessionRecord& container) override {
         NIceDb::TNiceDb db(txc.DB);
-        using BackgroundSessions = Schema::BackgroundSessions;
+        using BackgroundSessions = typename Schema::BackgroundSessions;
         db.Table<BackgroundSessions>().Key(container.GetClassName(), container.GetIdentifier()).Update(
             NIceDb::TUpdate<typename BackgroundSessions::LogicDescription>(container.GetLogicDescription()),
             NIceDb::TUpdate<typename BackgroundSessions::StatusChannel>(container.GetStatusChannel()),
@@ -65,7 +65,7 @@ protected:
 
     virtual void DoRemoveSessionFromLocalDatabase(NTabletFlatExecutor::TTransactionContext& txc, const TString& className, const TString& identifier) override {
         NIceDb::TNiceDb db(txc.DB);
-        using BackgroundSessions = Schema::BackgroundSessions;
+        using BackgroundSessions = typename Schema::BackgroundSessions;
         db.Table<BackgroundSessions>().Key(className, identifier).Delete();
     }
 

@@ -101,12 +101,12 @@ public:
                       ? session->GetFinished()
                       : ViablePeerRegistry_->GetPeersAvailable();
         YT_LOG_DEBUG_IF(!future.IsSet(), "Channel requested, waiting on peers to become available");
-        return future.Apply(BIND([this_ = MakeWeak(this), request, hedgingOptions] {
-            if (auto strongThis = this_.Lock()) {
-                auto channel = strongThis->PickViableChannel(request, hedgingOptions);
+        return future.Apply(BIND([this, weakThis = MakeWeak(this), request, hedgingOptions] {
+            if (auto this_ = weakThis.Lock()) {
+                auto channel = PickViableChannel(request, hedgingOptions);
                 if (!channel) {
                     // Not very likely but possible in theory.
-                    THROW_ERROR strongThis->MakeNoAlivePeersError();
+                    THROW_ERROR MakeNoAlivePeersError();
                 }
                 return channel;
             } else {
@@ -886,9 +886,9 @@ private:
             Config_->AcknowledgementTimeout,
             BIND(&TImpl::OnChannelFailed, MakeWeak(this), address),
             BIND(&IsChannelFailureError),
-            BIND([this_ = MakeWeak(this)] (TError error) {
-                if (auto strongThis = this_.Lock()) {
-                    return strongThis->TransformChannelError(std::move(error));
+            BIND([this, weakThis = MakeWeak(this)] (TError error) {
+                if (auto this_ = weakThis.Lock()) {
+                    return TransformChannelError(std::move(error));
                 } else {
                     return error;
                 }

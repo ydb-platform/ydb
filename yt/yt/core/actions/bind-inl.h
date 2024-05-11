@@ -265,12 +265,12 @@ public:
             std::is_void_v<TResult>,
             "Weak calls are only supported for methods with a void return type");
 
-        auto strongThis = weakThis.Lock();
-        if (!strongThis) {
+        auto this_ = weakThis.Lock();
+        if (!this_) {
             return;
         }
 
-        (strongThis.Get()->*Method_)(std::forward<XAs>(args)...);
+        (this_.Get()->*Method_)(std::forward<XAs>(args)...);
     }
 
     template <class D, class... XAs>
@@ -411,12 +411,12 @@ public:
     template <class D, class... XAs>
     auto operator()(const TWeakPtr<D>& weakThis, XAs&&... args) const
     {
-        auto strongThis = weakThis.Lock();
-        if (!strongThis) {
+        auto this_ = weakThis.Lock();
+        if (!this_) {
             THROW_ERROR_EXCEPTION(NYT::EErrorCode::Canceled, "Object destroyed");
         }
 
-        return (strongThis.Get()->*Method_)(std::forward<XAs>(args)...);
+        return (this_.Get()->*Method_)(std::forward<XAs>(args)...);
     }
 
 private:

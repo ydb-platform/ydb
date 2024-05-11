@@ -33,12 +33,7 @@ TConnectionPool::TConnectionPool(
     , ExpiredConnectionsCollector_(
         New<TPeriodicExecutor>(
             std::move(invoker),
-            BIND([weakThis = MakeWeak(this)] {
-                auto this_ = weakThis.Lock();
-                if (this_) {
-                    this_->DropExpiredConnections();
-                }
-            }),
+            BIND(&TConnectionPool::DropExpiredConnections, MakeWeak(this)),
             TPeriodicExecutorOptions::WithJitter(
                 Config_->ConnectionIdleTimeout)))
 {

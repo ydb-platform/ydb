@@ -17,6 +17,7 @@ namespace NKikimr::NOlap::NBackground {
 class TSessionsManager {
 private:
     bool Started = false;
+    bool Finished = false;
     std::shared_ptr<TSessionsStorage> Storage;
     std::shared_ptr<ITabletAdapter> Adapter;
 public:
@@ -35,15 +36,19 @@ public:
     [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> ApplyControl(const TSessionControlContainer& control);
 
     void Start() {
+        AFL_VERIFY(!Finished);
         AFL_VERIFY(!Started);
         Storage->Start(Adapter);
         Started = true;
     }
 
     void Stop() {
-        AFL_VERIFY(Started);
-        Storage->Finish();
-        Started = false;
+        if (Started) {
+            AFL_VERIFY(Started);
+            Storage->Finish();
+            Started = false;
+        }
+        Finished = true;
     }
 };
 

@@ -1024,10 +1024,11 @@ namespace NTypeAnnImpl {
             sourceNameNode = input->ChildPtr(2);
         }
 
-        if (!EnsureStructOrOptionalStructType(*rowNode, ctx.Expr)) {
+        bool isOptionalStruct = false;
+        const TStructExprType* structType = nullptr;
+        if (!EnsureStructOrOptionalStructType(*rowNode, isOptionalStruct, structType, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
-        const TStructExprType* structType = RemoveAllOptionals(rowNode->GetTypeAnn())->Cast<TStructExprType>();
 
         if (!EnsureAtom(*columnNameNode, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -1109,7 +1110,9 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureStructOrOptionalStructType(input->Head(), ctx.Expr)) {
+        bool isOptional = false;
+        const TStructExprType* structType = nullptr;
+        if (!EnsureStructOrOptionalStructType(input->Head(), isOptional, structType, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -1123,15 +1126,12 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        bool isOptional = input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional;
-        const TStructExprType& structType = *RemoveAllOptionals(input->Head().GetTypeAnn())->Cast<TStructExprType>();
-
-        auto pos = FindOrReportMissingMember(columnNameNode->Content(), input->Pos(), structType, ctx.Expr);
+        auto pos = FindOrReportMissingMember(columnNameNode->Content(), input->Pos(), *structType, ctx.Expr);
         if (!pos) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        const TTypeAnnotationNode* resultType = structType.GetItems()[*pos]->GetItemType();
+        const TTypeAnnotationNode* resultType = structType->GetItems()[*pos]->GetItemType();
         if (isOptional && resultType->GetKind() != ETypeAnnotationKind::Optional && resultType->GetKind() != ETypeAnnotationKind::Null) {
             resultType = ctx.Expr.MakeType<TOptionalExprType>(input->GetTypeAnn());
         }
@@ -1150,7 +1150,9 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        if (!EnsureStructOrOptionalStructType(input->Head(), ctx.Expr)) {
+        const TStructExprType* structType = nullptr;
+        bool isStructOptional = false;
+        if (!EnsureStructOrOptionalStructType(input->Head(), isStructOptional, structType, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -1160,15 +1162,6 @@ namespace NTypeAnnImpl {
 
         if (!EnsureComputable(*input->Child(2), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
-        }
-
-        const TStructExprType* structType = nullptr;
-        bool isStructOptional = false;
-        if (input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
-            isStructOptional = true;
-            structType = input->Head().GetTypeAnn()->Cast<TOptionalExprType>()->GetItemType()->Cast<TStructExprType>();
-        } else {
-            structType = input->Head().GetTypeAnn()->Cast<TStructExprType>();
         }
 
         auto otherType = input->Child(2)->GetTypeAnn();
@@ -1231,16 +1224,13 @@ namespace NTypeAnnImpl {
             }
 
             auto structObj = child->Child(1);
-            if (!EnsureStructOrOptionalStructType(*structObj, ctx.Expr)) {
+            bool optional = false;
+            const TStructExprType* structType = nullptr;
+            if (!EnsureStructOrOptionalStructType(*structObj, optional, structType, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
 
-            auto type = structObj->GetTypeAnn();
-            const bool optional = type->GetKind() == ETypeAnnotationKind::Optional;
-            if (optional) {
-                type = type->Cast<TOptionalExprType>()->GetItemType();
-            }
-            for (auto& field: type->Cast<TStructExprType>()->GetItems()) {
+            for (auto& field: structType->GetItems()) {
                 auto itemType = field->GetItemType();
                 if (optional && !itemType->IsOptionalOrNull()) {
                     itemType = ctx.Expr.MakeType<TOptionalExprType>(itemType);
@@ -1351,7 +1341,9 @@ namespace NTypeAnnImpl {
         }
 
         auto structObj = input->Child(0);
-        if (!EnsureStructOrOptionalStructType(*structObj, ctx.Expr)) {
+        bool optional = false;
+        const TStructExprType* structExprType = nullptr;
+        if (!EnsureStructOrOptionalStructType(*structObj, optional, structExprType, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -1360,13 +1352,7 @@ namespace NTypeAnnImpl {
             return status;
         }
 
-        auto type = structObj->GetTypeAnn();
-        const bool optional = type->GetKind() == ETypeAnnotationKind::Optional;
-        if (optional) {
-            type = type->Cast<TOptionalExprType>()->GetItemType();
-        }
         TVector<const TItemExprType*> allItems;
-        auto structExprType = type->Cast<TStructExprType>();
         for (auto& field: structExprType->GetItems()) {
             const auto& fieldName = field->GetName();
             auto prefixes = input->Child(1);
@@ -1397,7 +1383,9 @@ namespace NTypeAnnImpl {
         }
 
         auto structObj = input->Child(0);
-        if (!EnsureStructOrOptionalStructType(*structObj, ctx.Expr)) {
+        bool optional = false;
+        const TStructExprType* structExprType = nullptr;
+        if (!EnsureStructOrOptionalStructType(*structObj, optional, structExprType, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -1406,13 +1394,7 @@ namespace NTypeAnnImpl {
             return status;
         }
 
-        auto type = structObj->GetTypeAnn();
-        const bool optional = type->GetKind() == ETypeAnnotationKind::Optional;
-        if (optional) {
-            type = type->Cast<TOptionalExprType>()->GetItemType();
-        }
         TVector<const TItemExprType*> allItems;
-        auto structExprType = type->Cast<TStructExprType>();
         for (auto& field: structExprType->GetItems()) {
             const auto& fieldName = field->GetName();
             auto prefixes = input->Child(1);
@@ -1460,7 +1442,9 @@ namespace NTypeAnnImpl {
         }
 
         auto structObj = *iter;
-        if (!EnsureStructOrOptionalStructType(*structObj, ctx.Expr)) {
+        bool isOptionalStruct = false;
+        const TStructExprType* structExprType = nullptr;
+        if (!EnsureStructOrOptionalStructType(*structObj, isOptionalStruct, structExprType, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
         TSet<TString> aliases;
@@ -11877,16 +11861,13 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureStructOrOptionalStructType(input->Head(), ctx.Expr)) {
+        bool isOptional = false;
+        const TStructExprType* structType = nullptr;
+        if (!EnsureStructOrOptionalStructType(input->Head(), isOptional, structType, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        const TTypeAnnotationNode* itemType = input->Head().GetTypeAnn();
-        if (itemType->GetKind() == ETypeAnnotationKind::Optional) {
-            itemType = itemType->Cast<TOptionalExprType>()->GetItemType();
-        }
-
-        for (const auto& x : itemType->Cast<TStructExprType>()->GetItems()) {
+        for (const auto& x : structType->GetItems()) {
             if (!x->GetItemType()->IsOptionalOrNull()) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() << "Expected all columns to be optional. Non optional column: " << x->GetName()));
                 return IGraphTransformer::TStatus::Error;

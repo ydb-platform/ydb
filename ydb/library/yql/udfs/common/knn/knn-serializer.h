@@ -150,8 +150,8 @@ public:
         switch (format) {
             case EFormat::FloatVector:
                 return TKnnVectorSerializer<float, EFormat::FloatVector>::Serialize(valueBuilder, x);
-            case EFormat::FloatByteVector:
-                return TKnnVectorSerializer<ui8, EFormat::FloatByteVector>::Serialize(valueBuilder, x);
+            case EFormat::ByteVector:
+                return TKnnVectorSerializer<ui8, EFormat::ByteVector>::Serialize(valueBuilder, x);
             case EFormat::BitVector:
                 return TKnnBitVectorSerializer::Serialize(valueBuilder, x);
             default:
@@ -167,8 +167,8 @@ public:
         switch (format) {
             case EFormat::FloatVector:
                 return TKnnVectorSerializer<float, EFormat::FloatVector>::Deserialize(valueBuilder, str);
-            case EFormat::FloatByteVector:
-                return TKnnVectorSerializer<ui8, EFormat::FloatByteVector>::Deserialize(valueBuilder, str);
+            case EFormat::ByteVector:
+                return TKnnVectorSerializer<ui8, EFormat::ByteVector>::Deserialize(valueBuilder, str);
             case EFormat::BitVector:
                 return {};                
             default:
@@ -185,8 +185,8 @@ public:
         switch (format) {
             case EFormat::FloatVector:
                 return TKnnVectorSerializer<T, EFormat::FloatVector>::GetArray(str);
-            case EFormat::FloatByteVector:
-                return TKnnVectorSerializer<T, EFormat::FloatByteVector>::GetArray(str);
+            case EFormat::ByteVector:
+                return TKnnVectorSerializer<T, EFormat::ByteVector>::GetArray(str);
             case EFormat::BitVector:
                 return {};                
             default:

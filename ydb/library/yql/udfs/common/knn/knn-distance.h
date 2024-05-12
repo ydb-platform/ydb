@@ -57,7 +57,7 @@ static std::optional<float> KnnDotProduct(const TStringRef& str1, const TStringR
 
             return ::DotProduct(vector1.data(), vector2.data(), vector1.size());
         }
-        case EFormat::FloatByteVector: {
+        case EFormat::ByteVector: {
             const TArrayRef<const ui8> vector1 = TKnnSerializerFacade::GetArray<ui8>(str1); 
             const TArrayRef<const ui8> vector2 = TKnnSerializerFacade::GetArray<ui8>(str2); 
 
@@ -88,7 +88,7 @@ static std::optional<TTriWayDotProduct<float>> KnnTriWayDotProduct(const TString
 
             return ::TriWayDotProduct(vector1.data(), vector2.data(), vector1.size());
         }
-        case EFormat::FloatByteVector: {
+        case EFormat::ByteVector: {
             const TArrayRef<const ui8> vector1 = TKnnSerializerFacade::GetArray<ui8>(str1); 
             const TArrayRef<const ui8> vector2 = TKnnSerializerFacade::GetArray<ui8>(str2); 
 
@@ -105,5 +105,3 @@ static std::optional<TTriWayDotProduct<float>> KnnTriWayDotProduct(const TString
             return {};
     }
 }
-
-   

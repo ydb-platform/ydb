@@ -20,8 +20,8 @@ SIMPLE_STRICT_UDF_WITH_OPTIONAL_ARGS(TToBinaryString, char*(TAutoMap<TListType<f
         const TStringRef formatStr = args[1].AsStringRef();
         if (formatStr == "float")
             format = EFormat::FloatVector;
-        if (formatStr == "floatbyte")
-            format = EFormat::FloatByteVector;
+        if (formatStr == "byte")
+            format = EFormat::ByteVector;
         else if (formatStr == "bit")
             format = EFormat::BitVector;
         else

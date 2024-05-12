@@ -526,7 +526,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
             if (needToRequestQuota) {
                 ++processed;
-                PendingQuotaAmount += CalcRuConsumption(it->second.ByteSize()) + it->second.GetPartitionRequest().HasChargeExtraRuCount() ? it->second.GetPartitionRequest().GetChargeExtraRuCount() : 0;
+                PendingQuotaAmount += CalcRuConsumption(it->second.ByteSize()) + it->second.GetPartitionRequest().HasChargeExtraRUCount() ? it->second.GetPartitionRequest().GetChargeExtraRUCount() : 0;
                 PendingQuota.emplace_back(it->first);
             }
 

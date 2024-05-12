@@ -66,6 +66,41 @@ protected:
     static constexpr ui64 SignificantChangeStorage = 100 << 20/* 100Mb */;
     static constexpr ui64 SignificantChangeIops = 10 /* 10 iops? */;
 
+    struct TLastUpdates {
+        TInstant LastCPUUpdate;
+        TInstant LastMemoryUpdate;
+        TInstant LastNetworkUpdate;
+        TInstant LastStorageUpdate;
+        TInstant LastReadThroughputUpdate;
+        TInstant LastWriteThroughputUpdate;
+        TInstant LastReadIopsUpdate;
+        TInstant LastWriteIopsUpdate;
+
+        // Last time we updated any metric
+        TInstant LastAnyUpdate() const {
+            return std::max({LastCPUUpdate, LastMemoryUpdate, LastNetworkUpdate, LastStorageUpdate,
+                             LastReadThroughputUpdate, LastWriteThroughputUpdate, LastReadIopsUpdate,
+                             LastWriteIopsUpdate});
+        }
+
+        // Last time s. t. we updated all metrics since that time
+        TInstant LastAllUpdate() const {
+            // Ignoring ones that we never updated
+            auto cmp = [](const TInstant& lhs, const TInstant& rhs) {
+                if (lhs == TInstant{}) {
+                    return false;
+                }
+                if (rhs == TInstant{}) {
+                    return true;
+                }
+                return lhs < rhs;
+            };
+            return std::min({LastCPUUpdate, LastMemoryUpdate, LastNetworkUpdate, LastStorageUpdate,
+                             LastReadThroughputUpdate, LastWriteThroughputUpdate, LastReadIopsUpdate,
+                             LastWriteIopsUpdate}, cmp);
+        }
+    };
+
     const ui64 TabletId;
     const ui32 FollowerId;
     const TActorId Launcher;
@@ -78,7 +113,7 @@ protected:
     THashMap<std::pair<TChannel, TGroupId>, ui32> LevelWriteThroughput;
     THashMap<std::pair<TChannel, TGroupId>, ui32> LevelReadIops;
     THashMap<std::pair<TChannel, TGroupId>, ui32> LevelWriteIops;
-    TInstant LastUpdate;
+    TLastUpdates LastUpdates;
 };
 
 class TResourceMetrics : public TResourceMetricsValues, public TResourceMetricsSendState {

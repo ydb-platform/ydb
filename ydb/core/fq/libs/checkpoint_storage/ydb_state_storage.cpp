@@ -26,6 +26,7 @@ namespace {
 ////////////////////////////////////////////////////////////////////////////////
 
 const char* StatesTable = "states";
+const ui64 DeleteStateTimeoutMultiplier = 10;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -324,7 +325,7 @@ private:
     TFuture<TStatus> UpsertRow(
         const TContextPtr& context);
 
-    TExecDataQuerySettings DefaultExecDataQuerySettings();
+    TExecDataQuerySettings GetExecDataQuerySettings(ui64 multiplier = 1);
 
     TFuture<TStatus> SelectRowState(
         const TContextPtr& context);
@@ -337,6 +338,7 @@ private:
         std::list<TString>& outSerializedState);
     
     EStateType DeserializeState(
+        const TContextPtr& context,
         TContext::TaskInfo& taskInfo);
 
     TFuture<TStatus> SkipStatesInFuture(
@@ -412,7 +414,7 @@ TFuture<TIssues> TStateStorage::Init() {
     return MakeFuture(std::move(issues));
 }
 
-EStateType TStateStorage::DeserializeState(TContext::TaskInfo& taskInfo) {
+EStateType TStateStorage::DeserializeState(const TContextPtr& context, TContext::TaskInfo& taskInfo) {
     TString blob;
     for (auto it = taskInfo.Rows.begin(); it != taskInfo.Rows.end();) {
         blob += *it;
@@ -420,6 +422,9 @@ EStateType TStateStorage::DeserializeState(TContext::TaskInfo& taskInfo) {
     }
     taskInfo.States.push_front({});
     NYql::NDq::TComputeActorState& state = taskInfo.States.front();
+
+    LOG_STORAGE_DEBUG(context, "DeserializeState, task id " << taskInfo.TaskId <<  ", blob size " << blob.size());
+
     auto res = state.ParseFromString(blob);
     Y_ENSURE(res, "Parsing error");
     return TIncrementLogic::GetStateType(state);
@@ -476,7 +481,7 @@ TFuture<IStateStorage::TSaveStateResult> TStateStorage::SaveState(
         checkpointId,
         TMaybe<TSession>(), 
         serializedState,
-        type);
+        type);  
 
     auto promise = NewPromise<TSaveStateResult>();
     auto future = UpsertRow(context);
@@ -588,7 +593,7 @@ TFuture<IStateStorage::TCountStatesResult> TStateStorage::CountStates(
                 query,
                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
                 params,
-                thisPtr->DefaultExecDataQuerySettings());
+                thisPtr->GetExecDataQuerySettings());
 
             return future.Apply(
                 [context] (const TFuture<TDataQueryResult>& future) {
@@ -653,7 +658,7 @@ TFuture<TStatus> TStateStorage::ListStates(const TContextPtr& context) {
                 query,
                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
                 params,
-                thisPtr->DefaultExecDataQuerySettings());
+                thisPtr->GetExecDataQuerySettings());
 
             return future.Apply(
                 [context] (const TFuture<TDataQueryResult>& future) {
@@ -694,12 +699,12 @@ TFuture<TStatus> TStateStorage::ListStates(const TContextPtr& context) {
         });
 }
 
-TExecDataQuerySettings TStateStorage::DefaultExecDataQuerySettings() {
+TExecDataQuerySettings TStateStorage::GetExecDataQuerySettings(ui64 multiplier) {
     return TExecDataQuerySettings()
         .KeepInQueryCache(true)
-        .ClientTimeout(TDuration::Seconds(StorageConfig.GetClientTimeoutSec()))
-        .OperationTimeout(TDuration::Seconds(StorageConfig.GetOperationTimeoutSec()))
-        .CancelAfter(TDuration::Seconds(StorageConfig.GetCancelAfterSec()));
+        .ClientTimeout(TDuration::Seconds(StorageConfig.GetClientTimeoutSec() * multiplier))
+        .OperationTimeout(TDuration::Seconds(StorageConfig.GetOperationTimeoutSec() * multiplier))
+        .CancelAfter(TDuration::Seconds(StorageConfig.GetCancelAfterSec() * multiplier));
 }
 
 TFuture<TIssues> TStateStorage::DeleteGraph(const TString& graphId) {
@@ -727,7 +732,7 @@ TFuture<TIssues> TStateStorage::DeleteGraph(const TString& graphId) {
                 query,
                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
                 params,
-                thisPtr->DefaultExecDataQuerySettings());
+                thisPtr->GetExecDataQuerySettings(DeleteStateTimeoutMultiplier));
 
             return future.Apply(
                 [] (const TFuture<TDataQueryResult>& future) {
@@ -772,7 +777,7 @@ TFuture<TIssues> TStateStorage::DeleteCheckpoints(
                 query,
                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
                 params,
-                thisPtr->DefaultExecDataQuerySettings());
+                thisPtr->GetExecDataQuerySettings(DeleteStateTimeoutMultiplier));
 
             return future.Apply(
                 [] (const TFuture<TDataQueryResult>& future) {
@@ -840,7 +845,7 @@ TFuture<TDataQueryResult> TStateStorage::SelectState(const TContextPtr& context)
         query,
         TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
         params,
-        DefaultExecDataQuerySettings());
+        GetExecDataQuerySettings());
 }
 
 TFuture<TStatus> TStateStorage::UpsertRow(const TContextPtr& context) {
@@ -885,7 +890,7 @@ TFuture<TStatus> TStateStorage::UpsertRow(const TContextPtr& context) {
                 query,
                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
                 params,
-                thisPtr->DefaultExecDataQuerySettings());
+                thisPtr->GetExecDataQuerySettings());
 
             return future.Apply(
                 [] (const TFuture<TDataQueryResult>& future) {
@@ -896,8 +901,7 @@ TFuture<TStatus> TStateStorage::UpsertRow(const TContextPtr& context) {
 }
 
 TFuture<TStatus> TStateStorage::SkipStatesInFuture(const TContextPtr& context) {
-    LOG_STORAGE_DEBUG(context, "SkipStatesInFuture");
-
+    size_t eraseCount = 0;
     for (auto& taskInfo : context->Tasks) {
         auto it = taskInfo.ListOfStatesForReading.begin();
         while (it != taskInfo.ListOfStatesForReading.end())
@@ -910,11 +914,13 @@ TFuture<TStatus> TStateStorage::SkipStatesInFuture(const TContextPtr& context) {
                 return MakeFuture(TStatus{EStatus::INTERNAL_ERROR, NYql::TIssues{NYql::TIssue{"Checkpoint is not found"}}});
             }
             it = taskInfo.ListOfStatesForReading.erase(it);
+            ++eraseCount;
         }
         if (taskInfo.ListOfStatesForReading.empty()) {
             return MakeFuture(TStatus{EStatus::INTERNAL_ERROR, NYql::TIssues{NYql::TIssue{"Checkpoint is not found"}}});
         }
     }
+    LOG_STORAGE_DEBUG(context, "SkipStatesInFuture, skip " << eraseCount << " checkpoints");
     return MakeFuture(TStatus{EStatus::SUCCESS,  NYql::TIssues{}});
 }
 
@@ -934,7 +940,7 @@ TFuture<TStatus> TStateStorage::ReadRows(const TContextPtr& context) {
                 ++taskInfo.CurrentProcessingRow;
 
                 if (taskInfo.CurrentProcessingRow == taskInfo.ListOfStatesForReading.front().StateRowsCount) {
-                    auto type = thisPtr->DeserializeState(taskInfo);
+                    auto type = thisPtr->DeserializeState(context, taskInfo);
                     if (type != EStateType::Snapshot) {
                         taskInfo.ListOfStatesForReading.pop_front();
                         taskInfo.CurrentProcessingRow = 0;

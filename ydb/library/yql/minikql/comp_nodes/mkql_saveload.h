@@ -179,8 +179,9 @@ public:
     }
 
     NUdf::TUnboxedValue MakeState() {
-        auto strRef = NUdf::TStringRef(Buf.data(), Buf.size());
-        return NMiniKQL::MakeString(strRef);
+        NUdf::TStringValue str(Buf.size());
+        std::memcpy(str.Data(), Buf.Data(), Buf.Size());
+        return NUdf::TUnboxedValuePod(std::move(str));
     }
 protected:
     TString Buf;
@@ -235,7 +236,7 @@ public:
 
     Y_FORCE_INLINE NUdf::TUnboxedValue ReadUnboxedValue(const TValuePacker& packer, TComputationContext& ctx) {
         auto size = Read<ui32>();
-        MKQL_ENSURE(size <= Buf.size(), "Serialized state is corrupted");
+        MKQL_ENSURE_S(size <= Buf.size(), "Serialized state is corrupted, size " << size << ", Buf.size " << Buf.size());
         auto value = packer.Unpack(TStringBuf(Buf.data(), Buf.data() + size), ctx.HolderFactory);
         Buf.Skip(size);
         return value;

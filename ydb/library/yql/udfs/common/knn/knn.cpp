@@ -12,7 +12,7 @@ using namespace NYql;
 using namespace NYql::NUdf;
 
 
-SIMPLE_STRICT_UDF_WITH_OPTIONAL_ARGS(TToBinaryString, char*(TAutoMap<TListType<float>>, TOptional<const char*>), 1) {
+SIMPLE_STRICT_UDF_WITH_OPTIONAL_ARGS(TToBinaryString, TOptional<char*>(TAutoMap<TListType<float>>, TOptional<const char*>), 1) {
     const TUnboxedValuePod x = args[0];
 
     EFormat format = EFormat::FloatVector;
@@ -20,7 +20,7 @@ SIMPLE_STRICT_UDF_WITH_OPTIONAL_ARGS(TToBinaryString, char*(TAutoMap<TListType<f
         const TStringRef formatStr = args[1].AsStringRef();
         if (formatStr == "float")
             format = EFormat::FloatVector;
-        if (formatStr == "byte")
+        else if (formatStr == "byte")
             format = EFormat::ByteVector;
         else if (formatStr == "bit")
             format = EFormat::BitVector;

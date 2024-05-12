@@ -1,0 +1,17 @@
+[
+    {
+        "branch": "BitIndex",
+        "package_name": "ydb",
+        "package_path": "ydb/tools/ydbd_slice/image/pkg.json",
+        "package_version": "azevaykin-latest",
+        "revision": "6aecd9a9d6e9fab15f80e8340b1f0defc418750a",
+        "sandbox_task_id": 0,
+        "svn_revision": "-1",
+        "package_full_name": "ydb.azevaykin-latest",
+        "docker_image": "cr.yandex/crpbo4q9lbgkn85vr1rm/ydb:azevaykin-latest",
+        "name": "ydb",
+        "version": "azevaykin-latest",
+        "path": "/home-big/azevaykin/github/ydb.azevaykin-latest.tar.gz",
+        "debug_path": null
+    }
+]

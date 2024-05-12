@@ -10,8 +10,11 @@
                             [
                                 "column0";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -20,7 +23,9 @@
                 "Data" = [
                     [
                         [
-                            "AACAPwAAAEAAAEBAAACAQAAAoEAB"
+                            [
+                                "AACAPwAAAEAAAEBAAACAQAAAoEAB"
+                            ]
                         ]
                     ]
                 ]

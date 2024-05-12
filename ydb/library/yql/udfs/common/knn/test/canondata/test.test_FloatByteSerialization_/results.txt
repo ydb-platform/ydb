@@ -10,8 +10,11 @@
                             [
                                 "column0";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -19,7 +22,9 @@
                 ];
                 "Data" = [
                     [
-                        "\1\2\3\4\5\2"
+                        [
+                            "\1\2\3\4\5\2"
+                        ]
                     ]
                 ]
             }
@@ -36,8 +41,11 @@
                             [
                                 "column0";
                                 [
-                                    "DataType";
-                                    "Bool"
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Bool"
+                                    ]
                                 ]
                             ]
                         ]
@@ -45,7 +53,9 @@
                 ];
                 "Data" = [
                     [
-                        %true
+                        [
+                            %true
+                        ]
                     ]
                 ]
             }

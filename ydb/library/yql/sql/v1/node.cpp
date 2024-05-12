@@ -2598,7 +2598,7 @@ bool TUdfNode::DoInit(TContext& ctx, ISource* src) {
     if (TStructNode* named_args = dynamic_cast<TStructNode*>(Args[1].Get()); named_args) {
         for (const auto &arg: named_args->GetExprs()) {
             if (arg->GetLabel() == "TypeConfig") {
-                TypeConfig = MakeAtomFromExpression(ctx, arg);
+                TypeConfig = MakeAtomFromExpression(Pos, ctx, arg);
             } else if (arg->GetLabel() == "RunConfig") {
                 RunConfig = arg;
             }
@@ -2833,7 +2833,7 @@ TNodePtr GroundWithExpr(const TNodePtr& ground, const TNodePtr& expr) {
     return ground ? expr->Y("block", expr->Q(expr->L(ground, expr->Y("return", expr)))) : expr;
 }
 
-TSourcePtr TryMakeSourceFromExpression(TContext& ctx, const TString& currService, const TDeferredAtom& currCluster,
+TSourcePtr TryMakeSourceFromExpression(TPosition pos, TContext& ctx, const TString& currService, const TDeferredAtom& currCluster,
     TNodePtr node, const TString& view) {
     if (currCluster.Empty()) {
         ctx.Error() << "No cluster name given and no default cluster is selected";
@@ -2852,14 +2852,18 @@ TSourcePtr TryMakeSourceFromExpression(TContext& ctx, const TString& currService
         return nullptr;
     }
 
-    auto wrappedNode = node->Y("EvaluateAtom", node);
+    auto wrappedNode = new TAstListNodeImpl(pos, { 
+        new TAstAtomNodeImpl(pos, "EvaluateAtom", TNodeFlags::Default),
+        node
+    });
+
     TNodePtr tableKey = BuildTableKey(node->GetPos(), currService, currCluster, TDeferredAtom(wrappedNode, ctx), {view});
     TTableRef table(ctx.MakeName("table"), currService, currCluster, tableKey);
     table.Options = BuildInputOptions(node->GetPos(), GetContextHints(ctx));
     return BuildTableSource(node->GetPos(), table);
 }
 
-void MakeTableFromExpression(TContext& ctx, TNodePtr node, TDeferredAtom& table, const TString& prefix) {
+void MakeTableFromExpression(TPosition pos, TContext& ctx, TNodePtr node, TDeferredAtom& table, const TString& prefix) {
     if (auto literal = node->GetLiteral("String")) {
         table = TDeferredAtom(node->GetPos(), prefix + *literal);
         return;
@@ -2877,11 +2881,15 @@ void MakeTableFromExpression(TContext& ctx, TNodePtr node, TDeferredAtom& table,
         node = node->Y("Concat", node->Y("String", node->Q(prefix)), node);
     }
 
-    auto wrappedNode = node->Y("EvaluateAtom", node);
+    auto wrappedNode = new TAstListNodeImpl(pos, { 
+        new TAstAtomNodeImpl(pos, "EvaluateAtom", TNodeFlags::Default),
+        node
+    });
+
     table = TDeferredAtom(wrappedNode, ctx);
 }
 
-TDeferredAtom MakeAtomFromExpression(TContext& ctx, TNodePtr node, const TString& prefix) {
+TDeferredAtom MakeAtomFromExpression(TPosition pos, TContext& ctx, TNodePtr node, const TString& prefix) {
     if (auto literal = node->GetLiteral("String")) {
         return TDeferredAtom(node->GetPos(), prefix + *literal);
     }
@@ -2890,7 +2898,11 @@ TDeferredAtom MakeAtomFromExpression(TContext& ctx, TNodePtr node, const TString
         node = node->Y("Concat", node->Y("String", node->Q(prefix)), node);
     }
 
-    auto wrappedNode = node->Y("EvaluateAtom", node);
+    auto wrappedNode = new TAstListNodeImpl(pos, { 
+        new TAstAtomNodeImpl(pos, "EvaluateAtom", TNodeFlags::Default),
+        node
+    });
+
     return TDeferredAtom(wrappedNode, ctx);
 }
 

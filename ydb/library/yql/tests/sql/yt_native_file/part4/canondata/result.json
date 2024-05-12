@@ -1,4 +1,11 @@
 {
+    "test.test[action-eval_atom_wrong_type_param--Debug]": [],
+    "test.test[action-eval_atom_wrong_type_param--Plan]": [],
+    "test.test[action-eval_atom_wrong_type_param--Results]": [
+        {
+            "uri": "file://test.test_action-eval_atom_wrong_type_param--Results_/extracted"
+        }
+    ],
     "test.test[action-evaluate_match_type-default.txt-Debug]": [
         {
             "checksum": "8d0532d86e5a7f6cbc4b0db821320a6e",

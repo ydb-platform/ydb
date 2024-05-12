@@ -1,19 +1,3 @@
-Metadata-Version: 2.1
-Name: blinker
-Version: 1.8.0
-Summary: Fast, simple object-to-object and broadcast signaling
-Author: Jason Kirtland
-Maintainer-email: Pallets Ecosystem <contact@palletsprojects.com>
-Requires-Python: >=3.8
-Description-Content-Type: text/markdown
-Classifier: Development Status :: 5 - Production/Stable
-Classifier: License :: OSI Approved :: MIT License
-Classifier: Programming Language :: Python
-Classifier: Typing :: Typed
-Project-URL: Chat, https://discord.gg/pallets
-Project-URL: Documentation, https://blinker.readthedocs.io
-Project-URL: Source, https://github.com/pallets-eco/blinker/
-
 # Blinker
 
 Blinker provides a fast dispatching system that allows any number of
@@ -57,4 +41,3 @@ Round 2!
 This is round two.
 Round 3!
 ```
-

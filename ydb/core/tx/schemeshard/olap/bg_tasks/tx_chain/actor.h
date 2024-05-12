@@ -15,20 +15,21 @@ private:
     using TBase = NKikimr::NOlap::NBackground::TSessionActor;
     std::shared_ptr<TTxChainSession> SessionLogic;
     NActors::TActorId TxAllocatorClient;
+    bool WaitTx = false;
 protected:
     virtual void OnTxCompleted(const ui64 /*txInternalId*/) override {
 
     }
-    virtual void OnSessionProgressSaved() override {
+    virtual void OnSessionProgressSaved() override;
+    virtual void OnSessionStateSaved() override {
 
     }
-    virtual void OnSessionStateSaved() override;
     virtual void OnBootstrap(const TActorContext& /*ctx*/) override;
 
-    void SendTransactionForExecute(const ui64 txId, const NKikimrSchemeOp::TModifyScheme& modification) const;
-
     void Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev);
-    void Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& /*ev*/);
+    void Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev);
+    void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev);
+    void Handle(TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr& ev);
 public:
     TTxChainActor(const std::shared_ptr<NKikimr::NOlap::NBackground::TSession>& session, const std::shared_ptr<NKikimr::NOlap::NBackground::ITabletAdapter>& adapter)
         : TBase(session, adapter)
@@ -42,6 +43,8 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
             hFunc(TEvTxAllocatorClient::TEvAllocateResult, Handle);
+            hFunc(TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
+            hFunc(TEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle);
         default:
             TBase::StateInProgress(ev);
         }

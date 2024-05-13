@@ -193,7 +193,7 @@ public:
             TVector<TVector<ui64>> groupIdColumnarStats = EstimateColumnStats(ctx, cluster, {groupIdPathInfos}, sumAllTableSizes);
             ui64 parts = (sumAllTableSizes + dataSizePerJob - 1) / dataSizePerJob;
             if (canFallback && hasErasure && parts > maxTasks) {
-                std::string_view message = DqFallbackErrorMessageWrap("too big table with erasure codec");
+                auto message = DqFallbackErrorMessageWrap("too big table with erasure codec");
                 YQL_CLOG(INFO, ProviderDq) << message;
                 throw TFallbackError() << message;
             }

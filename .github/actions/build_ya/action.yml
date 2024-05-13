@@ -158,7 +158,7 @@ runs:
             echo "Ydbd exists"
             du -shL $ydbd_path
             rm -f $ydbd_stripped_path
-            ya tool strip $ydbd_path $ydbd_stripped_path
+            ya tool strip $ydbd_path -o $ydbd_stripped_path
             du -shL $ydbd_stripped_path
           else
             echo "No ydbd exists"

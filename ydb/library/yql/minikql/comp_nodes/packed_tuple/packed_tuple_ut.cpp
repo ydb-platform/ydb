@@ -26,14 +26,10 @@ using namespace std::chrono_literals;
 static volatile bool IsVerbose = false;
 #define CTEST (IsVerbose ? Cerr : Cnull)
 
-Y_UNIT_TEST_SUITE(TestHash) {
+namespace {
 
-Y_UNIT_TEST(TestCalculateCRC32) {
-    if (!NX86::HaveAVX2())
-        return;
-
-    using TTraits = NSimd::TSimdAVX2Traits;
-
+template <typename TTraits>
+void TestCalculateCRC32_Impl() {
     std::mt19937_64 rng; // fixed-seed (0) prng
     std::vector<ui64> v(1024);
     std::generate(v.begin(), v.end(), rng);
@@ -57,6 +53,28 @@ Y_UNIT_TEST(TestCalculateCRC32) {
     CTEST  << "Time for hash: " << ((nanoseconds + 999)/1000)  << "[microseconds]" << Endl;
     CTEST  << "Calculating speed: " << totalBytes / ((nanoseconds + 999)/1000) << "MB/sec" << Endl;
 }
+}
+
+Y_UNIT_TEST_SUITE(TestHash) {
+
+Y_UNIT_TEST(TestCalculateCRC32Fallback) {
+    TestCalculateCRC32_Impl<NSimd::TSimdFallbackTraits>();
+}
+
+Y_UNIT_TEST(TestCalculateCRC32SSE42) {
+    if (NX86::HaveSSE42())
+        TestCalculateCRC32_Impl<NSimd::TSimdSSE42Traits>();
+    else
+        CTEST << "Skipped SSE42 test\n";
+}
+
+Y_UNIT_TEST(TestCalculateCRC32AVX2) {
+    if (NX86::HaveAVX2())
+        TestCalculateCRC32_Impl<NSimd::TSimdAVX2Traits>();
+    else
+        CTEST << "Skipped AVX2 test\n";
+}
+
 }
 
 Y_UNIT_TEST_SUITE(TupleLayout) {

@@ -3074,17 +3074,17 @@ void TPartition::AddCmdDeleteRangeForAllKeys(TEvKeyValue::TEvRequest& request)
 
 void TPartition::ScheduleNegativeReply(const TEvPQ::TEvSetClientInfo&)
 {
-    Y_ABORT_UNLESS(false, "The supportive partition does not accept read operations");
+    Y_ABORT("The supportive partition does not accept read operations");
 }
 
 void TPartition::ScheduleNegativeReply(const TEvPersQueue::TEvProposeTransaction&)
 {
-    Y_ABORT_UNLESS(false, "The supportive partition does not accept immediate transactions");
+    Y_ABORT("The supportive partition does not accept immediate transactions");
 }
 
 void TPartition::ScheduleNegativeReply(const TTransaction&)
 {
-    Y_ABORT_UNLESS(false, "The supportive partition does not accept distribute transactions");
+    Y_ABORT("The supportive partition does not accept distribute transactions");
 }
 
 void TPartition::ScheduleNegativeReply(const TMessage& msg)

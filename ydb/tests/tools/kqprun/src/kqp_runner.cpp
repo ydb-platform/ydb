@@ -2,6 +2,7 @@
 #include "ydb_setup.h"
 
 #include <library/cpp/colorizer/colors.h>
+#include <library/cpp/json/json_reader.h>
 
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
@@ -190,12 +191,20 @@ private:
     }
 
     void PrintScriptPlan(const TString& plan) const {
-        if (Options_.ScriptQueryPlanOutput && plan) {
-            Cout << CoutColors_.Cyan() << "Writing script query plan" << CoutColors_.Default() << Endl;
-
-            NYdb::NConsoleClient::TQueryPlanPrinter printer(Options_.PlanOutputFormat, true, *Options_.ScriptQueryPlanOutput);
-            printer.Print(plan);
+        if (!Options_.ScriptQueryPlanOutput || !plan) {
+            return;
         }
+
+        NJson::TJsonValue planJson;
+        NJson::ReadJsonTree(plan, &planJson, true);
+        if (!planJson.GetMapSafe().contains("meta")) {
+            return;
+        }
+
+        Cout << CoutColors_.Cyan() << "Writing script query plan" << CoutColors_.Default() << Endl;
+
+        NYdb::NConsoleClient::TQueryPlanPrinter printer(Options_.PlanOutputFormat, true, *Options_.ScriptQueryPlanOutput);
+        printer.Print(plan);
     }
 
     void PrintScriptResult(const Ydb::ResultSet& resultSet) const {

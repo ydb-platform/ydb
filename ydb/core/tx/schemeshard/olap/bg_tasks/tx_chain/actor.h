@@ -15,14 +15,23 @@ private:
     using TBase = NKikimr::NOlap::NBackground::TSessionActor;
     std::shared_ptr<TTxChainSession> SessionLogic;
     NActors::TActorId TxAllocatorClient;
-    bool WaitTx = false;
+
+    void SendCurrentTxToSS() {
+        auto evModification = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(SessionLogic->GetCurrentTxIdVerified(), (ui64)TabletId);
+        *evModification->Record.AddTransaction() = SessionLogic->GetTxData().GetTransactions()[SessionLogic->GetStepForExecute()];
+        NActors::TActivationContext::AsActorContext().Send(TabletActorId, evModification.release());
+
+        auto evRegister = std::make_unique<TEvSchemeShard::TEvNotifyTxCompletion>(SessionLogic->GetCurrentTxIdVerified());
+        NActors::TActivationContext::AsActorContext().Send(TabletActorId, evRegister.release());
+    }
+
 protected:
     virtual void OnTxCompleted(const ui64 /*txInternalId*/) override {
 
     }
     virtual void OnSessionProgressSaved() override;
     virtual void OnSessionStateSaved() override {
-
+        SendCurrentTxToSS();
     }
     virtual void OnBootstrap(const TActorContext& /*ctx*/) override;
 

@@ -136,36 +136,36 @@ int TCommandSql::RunCommand(TConfig& config) {
         settings.ExecMode(NQuery::EExecMode::Execute);
         auto defaultStatsMode = ExplainAnalyzeMode ? NQuery::EStatsMode::Full : NQuery::EStatsMode::None;
         settings.StatsMode(ParseQueryStatsModeOrThrow(CollectStatsMode, defaultStatsMode));
-        if (!Parameters.empty() || !IsStdinInteractive()) {
-            // Execute query with parameters
-            THolder<TParamsBuilder> paramBuilder;
-            while (!IsInterrupted() && GetNextParams(paramBuilder)) {
-                auto asyncResult = client.StreamExecuteQuery(
-                        Query,
-                        NQuery::TTxControl::BeginTx().CommitTx(),
-                        paramBuilder->Build(),
-                        settings
-                    );
-
-                auto result = asyncResult.GetValueSync();
-                ThrowOnError(result);
-                if (!PrintResponse(result)) {
-                    return EXIT_FAILURE;
-                }
-            }
-        } else {
-            // Execute query without parameters
+    }
+    if (!Parameters.empty() || !IsStdinInteractive()) {
+        // Execute query with parameters
+        THolder<TParamsBuilder> paramBuilder;
+        while (!IsInterrupted() && GetNextParams(paramBuilder)) {
             auto asyncResult = client.StreamExecuteQuery(
-                Query,
-                NQuery::TTxControl::BeginTx().CommitTx(),
-                settings
-            );
+                    Query,
+                    NQuery::TTxControl::BeginTx().CommitTx(),
+                    paramBuilder->Build(),
+                    settings
+                );
 
             auto result = asyncResult.GetValueSync();
             ThrowOnError(result);
             if (!PrintResponse(result)) {
                 return EXIT_FAILURE;
             }
+        }
+    } else {
+        // Execute query without parameters
+        auto asyncResult = client.StreamExecuteQuery(
+            Query,
+            NQuery::TTxControl::BeginTx().CommitTx(),
+            settings
+        );
+
+        auto result = asyncResult.GetValueSync();
+        ThrowOnError(result);
+        if (!PrintResponse(result)) {
+            return EXIT_FAILURE;
         }
     }
     return EXIT_SUCCESS;

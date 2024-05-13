@@ -56,7 +56,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         BasicTest(new NHealthCheck::TEvNodeCheckRequest());
     }
 
-    const int GROUP_START_ID = 1200;
+    const int GROUP_START_ID = 0x80000000;
     const int VCARD_START_ID = 55;
 
     const TPathId SERVERLESS_DOMAIN_KEY = {7000000000, 2};
@@ -113,7 +113,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             group->CopyFrom(groupSample);
             group->set_groupid(groupId);
             group->set_erasurespecies(NHealthCheck::TSelfCheckRequest::BLOCK_4_2);
-            group->set_operatingstatus(NKikimrBlobStorage::TGroupStatus::DISINTEGRATED);
+            group->set_operatingstatus(NKikimrBlobStorage::TGroupStatus::DEGRADED);
 
             group->clear_vslotid();
             auto vslotId = VCARD_START_ID;
@@ -1421,6 +1421,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
         auto *request = new NHealthCheck::TEvSelfCheckRequest;
         request->Request.set_return_verbose_status(true);
+        request->Database = "/Root";
         runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
         const auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
 
@@ -1446,8 +1447,9 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         UNIT_ASSERT_VALUES_EQUAL(database_status.overall(), Ydb::Monitoring::StatusFlag::RED);
 
         UNIT_ASSERT_VALUES_EQUAL(database_status.compute().overall(), Ydb::Monitoring::StatusFlag::RED);
-        UNIT_ASSERT_VALUES_EQUAL(database_status.storage().overall(), Ydb::Monitoring::StatusFlag::GREEN);
-        UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools().size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(database_status.storage().overall(), Ydb::Monitoring::StatusFlag::RED);
+        UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].id(), "static");
     }
 }
 }

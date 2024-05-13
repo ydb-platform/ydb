@@ -369,6 +369,7 @@ namespace NKikimr::NStorage {
 
         std::map<TVSlotId, TVDiskRecord> LocalVDisks;
         std::map<TVSlotId, ui64> SlayInFlight;
+        std::set<ui32> PDiskRestartInFlight;
         TIntrusiveList<TVDiskRecord, TUnreportedMetricTag> VDisksWithUnreportedMetrics;
 
         void DestroyLocalVDisk(TVDiskRecord& vdisk);

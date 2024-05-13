@@ -21,11 +21,13 @@ IActor* CreateColumnShard(const TActorId& tablet, TTabletStorageInfo* info) {
 namespace NKikimr::NColumnShard {
 
 void TColumnShard::CleanupActors(const TActorContext& ctx) {
+    if (BackgroundSessionsManager) {
+        BackgroundSessionsManager->Stop();
+    }
     ctx.Send(ResourceSubscribeActor, new TEvents::TEvPoisonPill);
     ctx.Send(BufferizationWriteActorId, new TEvents::TEvPoisonPill);
 
     StoragesManager->Stop();
-    BackgroundSessionsManager->Stop();
     DataLocksManager->Stop();
     if (Tiers) {
         Tiers->Stop(true);

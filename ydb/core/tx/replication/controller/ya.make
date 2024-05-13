@@ -10,6 +10,7 @@ PEERDIR(
     ydb/core/tx/replication/ydb_proxy
     ydb/core/util
     ydb/core/ydb_convert
+    ydb/services/metadata
     library/cpp/json
 )
 
@@ -21,6 +22,7 @@ SRCS(
     nodes_manager.cpp
     private_events.cpp
     replication.cpp
+    secret_resolver.cpp
     session_info.cpp
     stream_creator.cpp
     stream_remover.cpp
@@ -41,6 +43,7 @@ SRCS(
     tx_drop_stream_result.cpp
     tx_init.cpp
     tx_init_schema.cpp
+    tx_resolve_secret_result.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(replication.h)

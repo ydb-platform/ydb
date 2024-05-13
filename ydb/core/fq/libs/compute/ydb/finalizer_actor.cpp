@@ -185,6 +185,9 @@ public:
 
     void SendFinalPing() {
         Fq::Private::PingTaskRequest pingTaskRequest;
+        if (ExecStatus != NYdb::NQuery::EExecStatus::Completed && Status != FederatedQuery::QueryMeta::COMPLETING) {
+            pingTaskRequest.mutable_result_id()->set_value("");
+        }
         pingTaskRequest.set_status(GetFinalStatus());
         *pingTaskRequest.mutable_finished_at() = google::protobuf::util::TimeUtil::MillisecondsToTimestamp(TInstant::Now().MilliSeconds());
         Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest, true));

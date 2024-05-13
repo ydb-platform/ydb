@@ -145,6 +145,22 @@ runs:
           echo "Build successful." | .github/scripts/tests/comment-pr.py --ok
         fi
 
+    - name: build_analytics
+      shell: bash
+      run: |
+        set -x
+        if [ "${{ steps.build.outputs.status }}" == "failed" ]; then
+          echo "Build failed, no analytics is send"
+        else
+          ydbd_path=ydb/apps/ydbd/ydbd
+          if [ -e  $ydbd_path ]; then
+            echo "Ydbd exists"
+            du -shL $ydbd_path
+          else
+            echo "No ydbd exists"
+          fi
+        fi
+
     - name: show free space
       if: always()
       shell: bash

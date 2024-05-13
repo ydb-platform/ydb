@@ -481,7 +481,7 @@ public:
 
         if (IsQuotaRequired()) {
             PendingQuotaAmount = CalcRuConsumption(GetPayloadSize(record)) + Settings.ChargeExtraRU ? 1 : 0;
-            Settings.ChargeExtraRU = 0;
+            Settings.ChargeExtraRU = false;
             RequestDataQuota(PendingQuotaAmount, ctx);
         } else {
             ProceedFetchRequest(ctx);

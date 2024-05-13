@@ -472,7 +472,7 @@ public:
         if (record.HasErrorReason())
             read->SetErrorReason(record.GetErrorReason());
 
-        ++FetchRequestReadsDone;
+        ++FetchRequestReadsDone;чч
 
         auto it = TopicInfo.find(CanonizePath(topic));
         Y_ABORT_UNLESS(it != TopicInfo.end());
@@ -480,7 +480,7 @@ public:
         SetMeteringMode(it->second.PQInfo->Description.GetPQTabletConfig().GetMeteringMode());
 
         if (IsQuotaRequired()) {
-            PendingQuotaAmount = CalcRuConsumption(GetPayloadSize(record)) + Settings.ChargeExtraRU ? 1 : 0;
+            PendingQuotaAmount = CalcRuConsumption(GetPayloadSize(record)) + (Settings.ChargeExtraRU ? 1 : 0);
             Settings.ChargeExtraRU = false;
             RequestDataQuota(PendingQuotaAmount, ctx);
         } else {

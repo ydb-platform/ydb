@@ -443,6 +443,10 @@ void TPartition::OnHandleWriteResponse(const TActorContext& ctx)
     OnProcessTxsAndUserActsWriteComplete(ctx);
     HandleWriteResponse(ctx);
     ProcessTxsAndUserActs(ctx);
+
+    if (DeletePartitionState == DELETION_IN_PROCESS) {
+        DestroyActor(ctx);
+    }
 }
 
 void TPartition::Handle(TEvPQ::TEvHandleWriteResponse::TPtr&, const TActorContext& ctx)

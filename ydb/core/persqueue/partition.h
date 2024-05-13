@@ -821,6 +821,8 @@ private:
     void OnHandleWriteResponse(const TActorContext& ctx);
 
     void ScheduleTransactionCompleted(const NKikimrPQ::TEvProposeTransaction& tx);
+
+    void DestroyActor(const TActorContext& ctx);
 };
 
 } // namespace NKikimr::NPQ

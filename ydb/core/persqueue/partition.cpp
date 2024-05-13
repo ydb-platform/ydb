@@ -492,7 +492,8 @@ void TPartition::Handle(TEvPQ::TEvMirrorerCounters::TPtr& ev, const TActorContex
     }
 }
 
-void TPartition::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
+void TPartition::DestroyActor(const TActorContext& ctx)
+{
     // Reply to all outstanding requests in order to destroy corresponding actors
 
     TStringBuilder ss;
@@ -523,10 +524,17 @@ void TPartition::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx)
         UsersInfoStorage->Clear(ctx);
     }
 
-    Send(ReadQuotaTrackerActor, new TEvents::TEvPoisonPill());
-    Send(WriteQuotaTrackerActor, new TEvents::TEvPoisonPill());
+    if (!IsSupportive()) {
+        Send(ReadQuotaTrackerActor, new TEvents::TEvPoisonPill());
+        Send(WriteQuotaTrackerActor, new TEvents::TEvPoisonPill());
+    }
 
     Die(ctx);
+}
+
+void TPartition::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx)
+{
+    DestroyActor(ctx);
 }
 
 bool CheckDiskStatus(const TStorageStatusFlags status) {

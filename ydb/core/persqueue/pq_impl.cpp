@@ -4443,9 +4443,7 @@ void TPersQueue::Handle(TEvPQ::TEvDeletePartitionDone::TPtr& ev, const TActorCon
     Y_ABORT_UNLESS(partitionId == event->PartitionId);
     Y_ABORT_UNLESS(partitionId.IsSupportivePartition());
     Y_ABORT_UNLESS(Partitions.contains(partitionId));
-    const TPartitionInfo& partition = Partitions.at(partitionId);
 
-    Send(partition.Actor, new TEvents::TEvPoisonPill());
     Partitions.erase(partitionId);
 
     writeInfo.Partitions.erase(partitionId.OriginalPartitionId);

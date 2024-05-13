@@ -4,14 +4,14 @@
 
 ## Просмотр логов с помощью Ansible playbook
 
-Репозиторий [ydb-ansible-examples](https://github.com/ydb-platform/ydb-ansible-examples) содержит playbook под названием `logs.yaml`, который можно использовать для просмотра логов со всех узлов {{ ydb-short-name }} кластера. Этот playbook собирает логи с узлов и выводит в `stdout`, что позволяет при необходимости дальше их обработать, например, с помощью команд `grep` или `awk`.
+Репозиторий [ydb-ansible-examples](https://github.com/ydb-platform/ydb-ansible-examples) содержит playbook под названием `ydb_platform.ydb.logs`, который можно использовать для просмотра логов со всех узлов {{ ydb-short-name }} кластера. Этот playbook собирает логи с узлов и выводит в `stdout`, что позволяет при необходимости дальше их обработать, например, с помощью команд `grep` или `awk`.
 
 ### Все логи всех узлов
 
-По умолчанию playbook `logs.yaml` извлекает логи всех узлов {{ ydb-short-name }}. Команда для этого:
+По умолчанию playbook `ydb_platform.ydb.logs` извлекает логи всех узлов {{ ydb-short-name }}. Команда для этого:
 
 ```bash
-ansible-playbook logs.yaml
+ansible-playbook ydb_platform.ydb.logs
 ```
 
 ### Фильтрация по типу узла
@@ -21,20 +21,20 @@ ansible-playbook logs.yaml
 * Storage (также известны как статические)
 * Database (также известны как динамические)
 
-Задачи в playbook'е `logs.yaml` размечены тегами по типам узлов, благодаря чему можно использовать функциональность тегов Ansible для фильтрации логов по типу узла.
+Задачи в playbook'е `ydb_platform.ydb.logs` размечены тегами по типам узлов, благодаря чему можно использовать функциональность тегов Ansible для фильтрации логов по типу узла.
 
 Следующие две команды эквивалентны и будут выводить логи статических узлов:
 
 ```bash
-ansible-playbook logs.yaml --tags storage
-ansible-playbook logs.yaml --tags static
+ansible-playbook ydb_platform.ydb.logs --tags storage
+ansible-playbook ydb_platform.ydb.logs --tags static
 ```
 
 Эти две команды также эквивалентны и будут выводить логи динамических узлов:
 
 ```bash
-ansible-playbook logs.yaml --tags database
-ansible-playbook logs.yaml --tags dynamic
+ansible-playbook ydb_platform.ydb.logs --tags database
+ansible-playbook ydb_platform.ydb.logs --tags dynamic
 ```
 
 ### Фильтрация по имени хоста
@@ -42,14 +42,14 @@ ansible-playbook logs.yaml --tags dynamic
 Чтобы отобразить логи определенного хоста или подмножества хостов, используйте аргумент `--limit`:
 
 ```bash
-ansible-playbook logs.yaml --limit='<hostname>'
-ansible-playbook logs.yaml --limit='<hostname-1,hosntname-2>'
+ansible-playbook ydb_platform.ydb.logs --limit='<hostname>'
+ansible-playbook ydb_platform.ydb.logs --limit='<hostname-1,hosntname-2>'
 ```
 
 Его также можно использовать вместе с тегами:
 
 ```bash
-ansible-playbook logs.yaml --tags database --limit='<hostname>'
+ansible-playbook ydb_platform.ydb.logs --tags database --limit='<hostname>'
 ```
 
 ## Просмотр логов по ssh

@@ -36,4 +36,4 @@ items:
 - name: Системные таблицы
   href: system-views.md
 - name: Обслуживание без потери доступности
-  href: ../../maintenance/manual/maintenance-without-downtime.md
+  href: maintenance-without-downtime.md

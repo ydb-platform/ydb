@@ -37,7 +37,7 @@ To work with the project on a local (intermediate or installation) machine, you 
   * Upgrade packages with `sudo apt upgrade`.
   * Install the `software-properties-common` package to manage your distribution's software sources – `sudo apt install software-properties-common`.
   * Add a new PPA to apt – `sudo add-apt-repository --yes --update ppa:ansible/ansible`.
-  * Install Ansible – `sudo apt install ansible-core`.
+  * Install Ansible – `sudo apt install ansible-core` (note that installing just `ansible` will lead to an unsuitable outdated version).
   * Check the Ansible core version – `ansible --version`
 
 - Installing Ansible in a Python virtual environment

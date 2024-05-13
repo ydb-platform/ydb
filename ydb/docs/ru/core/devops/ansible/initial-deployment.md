@@ -35,7 +35,7 @@
   * Обновите пакеты – `sudo apt upgrade`.
   * Установите пакет `software-properties-common` для управления источниками программного обеспечения вашего дистрибутива – `sudo apt install software-properties-common`.
   * Добавьте новый PPA в apt – `sudo add-apt-repository --yes --update ppa:ansible/ansible`.
-  * Установите Ansible – `sudo apt install ansible-core`.
+  * Установите Ansible – `sudo apt install ansible-core` (имейте ввиду, что установка просто `ansible` приведёт к неподходящей устаревшей версии).
   * Проверьте версию Ansible core – `ansible --version`
 
 - Установка Ansible в виртуальное окружение Python

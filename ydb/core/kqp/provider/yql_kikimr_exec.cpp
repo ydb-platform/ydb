@@ -1851,12 +1851,19 @@ public:
                 } else if (name == "database") {
                     settings.Settings.Database = setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
                 } else if (name == "token") {
-                    settings.Settings.OAuthToken = setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+                    settings.Settings.EnsureOAuthToken().Token =
+                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+                } else if (name == "token_secret_name") {
+                    settings.Settings.EnsureOAuthToken().TokenSecretName =
+                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
                 } else if (name == "user") {
                     settings.Settings.EnsureStaticCredentials().UserName =
                         setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
                 } else if (name == "password") {
                     settings.Settings.EnsureStaticCredentials().Password =
+                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+                } else if (name == "password_secret_name") {
+                    settings.Settings.EnsureStaticCredentials().PasswordSecretName =
                         setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
                 }
             }
@@ -1882,6 +1889,18 @@ public:
             if (!settings.Settings.OAuthToken && !settings.Settings.StaticCredentials) {
                 ctx.AddError(TIssue(ctx.GetPosition(createReplication.Pos()),
                     TStringBuilder() << "Neither Token nor User/Password are provided"));
+                return SyncError();
+            }
+
+            if (const auto& x = settings.Settings.OAuthToken; x && x->Token && x->TokenSecretName) {
+                ctx.AddError(TIssue(ctx.GetPosition(createReplication.Pos()),
+                    TStringBuilder() << "TOKEN and TOKEN_SECRET_NAME are mutually exclusive"));
+                return SyncError();
+            }
+
+            if (const auto& x = settings.Settings.StaticCredentials; x && x->Password && x->PasswordSecretName) {
+                ctx.AddError(TIssue(ctx.GetPosition(createReplication.Pos()),
+                    TStringBuilder() << "PASSWORD and PASSWORD_SECRET_NAME are mutually exclusive"));
                 return SyncError();
             }
 

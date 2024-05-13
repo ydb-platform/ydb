@@ -685,7 +685,7 @@ ISubOperation::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, TTxState:
 TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
 
-    auto alter = tx.GetAlterTable();
+    const auto& alter = tx.GetAlterTable();
 
     const TString& parentPathStr = tx.GetWorkingDir();
     const TString& name = alter.GetName();
@@ -721,13 +721,13 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
         return {CreateAlterTable(id, tx)};
     }
 
-    TVector<ISubOperation::TPtr> result;
-
     // only for super user use
     // until correct and safe altering index api is released
     if (!IsSuperUser(context.UserToken.Get())) {
         return {CreateAlterTable(id, tx)};
     }
+
+    TVector<ISubOperation::TPtr> result;
 
     {
         auto tableIndexAltering = TransactionTemplate(parent.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);

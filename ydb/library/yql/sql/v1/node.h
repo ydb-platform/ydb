@@ -1073,21 +1073,20 @@ namespace NSQLTranslationV1 {
         TTableSettings TableSettings;
         TVector<TIndexDescription> AddIndexes;
         TVector<TIdentifier> DropIndexes;
+        TMaybe<std::pair<TIdentifier, TIdentifier>> RenameIndexTo;
         TMaybe<TIdentifier> RenameTo;
         TVector<TChangefeedDescription> AddChangefeeds;
         TVector<TChangefeedDescription> AlterChangefeeds;
         TVector<TIdentifier> DropChangefeeds;
-        TMaybe<std::pair<TIdentifier, TIdentifier>> RenameIndexTo;
         ETableType TableType = ETableType::Table;
 
         bool IsEmpty() const {
             return AddColumns.empty() && DropColumns.empty() && AlterColumns.empty()
                 && AddColumnFamilies.empty() && AlterColumnFamilies.empty()
                 && !TableSettings.IsSet()
-                && AddIndexes.empty() && DropIndexes.empty()
+                && AddIndexes.empty() && DropIndexes.empty() && !RenameIndexTo.Defined()
                 && !RenameTo.Defined()
-                && AddChangefeeds.empty() && AlterChangefeeds.empty() && DropChangefeeds.empty()
-                && !RenameIndexTo.Defined();
+                && AddChangefeeds.empty() && AlterChangefeeds.empty() && DropChangefeeds.empty();
         }
     };
 

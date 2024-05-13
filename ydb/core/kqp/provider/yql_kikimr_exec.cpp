@@ -505,6 +505,96 @@ namespace {
             }
         }
     }
+
+    bool IsPartitioningSetting(TStringBuf name) {
+        return name == "autoPartitioningBySize"
+            || name == "partitionSizeMb"
+            || name == "autoPartitioningByLoad"
+            || name == "minPartitions"
+            || name == "maxPartitions";
+    }
+
+    [[nodiscard]] bool ParsePartitioningSettings(
+        Ydb::Table::PartitioningSettings& partitioningSettings,
+        const TCoNameValueTuple& setting,
+        TExprContext& ctx
+    ) {
+        auto name = setting.Name().Value();
+        if (name == "autoPartitioningBySize") {
+            auto val = to_lower(setting.Value().Cast<TCoAtom>().StringValue());
+            if (val == "enabled") {
+                partitioningSettings.set_partitioning_by_size(Ydb::FeatureFlag::ENABLED);
+            } else if (val == "disabled") {
+                partitioningSettings.set_partitioning_by_size(Ydb::FeatureFlag::DISABLED);
+            } else {
+                ctx.AddError(
+                    TIssue(ctx.GetPosition(setting.Value().Cast<TCoAtom>().Pos()),
+                           TStringBuilder() << "Unknown feature flag '" << val << "' for auto partitioning by size"
+                    )
+                );
+                return false;
+            }
+        } else if (name == "partitionSizeMb") {
+            ui64 value = FromString<ui64>(
+                setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+            );
+            if (value) {
+                partitioningSettings.set_partition_size_mb(value);
+            } else {
+                ctx.AddError(
+                    TIssue(ctx.GetPosition(setting.Name().Pos()),
+                           "Can't set preferred partition size to 0. "
+                           "To disable auto partitioning by size use 'SET AUTO_PARTITIONING_BY_SIZE DISABLED'"
+                    )
+                );
+                return false;
+            }
+        } else if (name == "autoPartitioningByLoad") {
+            auto val = to_lower(setting.Value().Cast<TCoAtom>().StringValue());
+            if (val == "enabled") {
+                partitioningSettings.set_partitioning_by_load(Ydb::FeatureFlag::ENABLED);
+            } else if (val == "disabled") {
+                partitioningSettings.set_partitioning_by_load(Ydb::FeatureFlag::DISABLED);
+            } else {
+                ctx.AddError(
+                    TIssue(ctx.GetPosition(setting.Value().Cast<TCoAtom>().Pos()),
+                           TStringBuilder() << "Unknown feature flag '" << val << "' for auto partitioning by load"
+                    )
+                );
+                return false;
+            }
+        } else if (name == "minPartitions") {
+            ui64 value = FromString<ui64>(
+                setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+            );
+            if (value) {
+                partitioningSettings.set_min_partitions_count(value);
+            } else {
+                ctx.AddError(
+                    TIssue(ctx.GetPosition(setting.Name().Pos()),
+                           "Can't set min partition count to 0"
+                    )
+                );
+                return false;
+            }
+        } else if (name == "maxPartitions") {
+            ui64 value = FromString<ui64>(
+                setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+            );
+            if (value) {
+                partitioningSettings.set_max_partitions_count(value);
+            } else {
+                ctx.AddError(
+                    TIssue(ctx.GetPosition(setting.Name().Pos()),
+                           "Can't set max partition count to 0"
+                    )
+                );
+                return false;
+            }
+        }
+
+        return true;
+    }
 }
 
 class TKiSinkPlanInfoTransformer : public TGraphTransformerBase {
@@ -1290,71 +1380,10 @@ public:
                             alterTableRequest.set_set_compaction_policy(TString(
                                 setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
                             ));
-                        } else if (name == "autoPartitioningBySize") {
-                            auto partitioningSettings = alterTableRequest.mutable_alter_partitioning_settings();
-                            auto val = to_lower(TString(setting.Value().Cast<TCoAtom>().Value()));
-                            if (val == "enabled") {
-                                partitioningSettings->set_partitioning_by_size(Ydb::FeatureFlag::ENABLED);
-                            } else if (val == "disabled") {
-                                partitioningSettings->set_partitioning_by_size(Ydb::FeatureFlag::DISABLED);
-                            } else {
-                                auto errText = TStringBuilder() << "Unknown feature flag '"
-                                    << val
-                                    << "' for auto partitioning by size";
-                                ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Cast<TCoAtom>().Pos()),
-                                    errText));
-                                return SyncError();
-                            }
-                        } else if (name == "partitionSizeMb") {
-                            ui64 value = FromString<ui64>(
-                                setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
-                                );
-                            if (value) {
-                                auto partitioningSettings = alterTableRequest.mutable_alter_partitioning_settings();
-                                partitioningSettings->set_partition_size_mb(value);
-                            } else {
-                                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                                    "Can't set preferred partition size to 0. "
-                                    "To disable auto partitioning by size use 'SET AUTO_PARTITIONING_BY_SIZE DISABLED'"));
-                                return SyncError();
-                            }
-                        } else if (name == "autoPartitioningByLoad") {
-                            auto partitioningSettings = alterTableRequest.mutable_alter_partitioning_settings();
-                            TString val = to_lower(TString(setting.Value().Cast<TCoAtom>().Value()));
-                            if (val == "enabled") {
-                                partitioningSettings->set_partitioning_by_load(Ydb::FeatureFlag::ENABLED);
-                            } else if (val == "disabled") {
-                                partitioningSettings->set_partitioning_by_load(Ydb::FeatureFlag::DISABLED);
-                            } else {
-                                auto errText = TStringBuilder() << "Unknown feature flag '"
-                                    << val
-                                    << "' for auto partitioning by load";
-                                ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Cast<TCoAtom>().Pos()),
-                                    errText));
-                                return SyncError();
-                            }
-                        } else if (name == "minPartitions") {
-                            ui64 value = FromString<ui64>(
-                                setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
-                                );
-                            if (value) {
-                                auto partitioningSettings = alterTableRequest.mutable_alter_partitioning_settings();
-                                partitioningSettings->set_min_partitions_count(value);
-                            } else {
-                                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                                    "Can't set min partition count to 0"));
-                                return SyncError();
-                            }
-                        } else if (name == "maxPartitions") {
-                            ui64 value = FromString<ui64>(
-                                setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
-                                );
-                            if (value) {
-                                auto partitioningSettings = alterTableRequest.mutable_alter_partitioning_settings();
-                                partitioningSettings->set_max_partitions_count(value);
-                            } else {
-                                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                                    "Can't set max partition count to 0"));
+                        } else if (IsPartitioningSetting(name)) {
+                            if (!ParsePartitioningSettings(
+                                *alterTableRequest.mutable_alter_partitioning_settings(), setting, ctx
+                            )) {
                                 return SyncError();
                             }
                         } else if (name == "keyBloomFilter") {

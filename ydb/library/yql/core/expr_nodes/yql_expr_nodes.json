@@ -31,6 +31,10 @@
             ]
         },
         {
+            "Name": "TCoNameValueTupleList",
+            "ListBase": "TCoNameValueTuple"
+        },
+        {
             "Name": "TCoIndex",
             "Base": "TExprBase",
             "Match": {"Type": "Tuple"},
@@ -44,10 +48,6 @@
         {
             "Name": "TCoIndexList",
             "ListBase": "TCoIndex"
-        },
-        {
-            "Name": "TCoNameValueTupleList",
-            "ListBase": "TCoNameValueTuple"
         },
         {
             "Name": "TCoChangefeed",

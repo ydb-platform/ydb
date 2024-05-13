@@ -38,6 +38,11 @@ namespace NKikimr {
     }
 }
 
+namespace NKikimrReplication {
+    class TOAuthToken;
+    class TStaticCredentials;
+}
+
 namespace NYql {
 
 using NUdf::EDataSlot;
@@ -701,17 +706,35 @@ struct TReplicationSettings {
         EFailoverMode FailoverMode;
     };
 
+    struct TOAuthToken {
+        TString Token;
+        TString TokenSecretName;
+
+        void Serialize(NKikimrReplication::TOAuthToken& proto) const;
+    };
+
     struct TStaticCredentials {
         TString UserName;
         TString Password;
+        TString PasswordSecretName;
+
+        void Serialize(NKikimrReplication::TStaticCredentials& proto) const;
     };
 
     TMaybe<TString> ConnectionString;
     TMaybe<TString> Endpoint;
     TMaybe<TString> Database;
-    TMaybe<TString> OAuthToken;
+    TMaybe<TOAuthToken> OAuthToken;
     TMaybe<TStaticCredentials> StaticCredentials;
     TMaybe<TStateDone> StateDone;
+
+    TOAuthToken& EnsureOAuthToken() {
+        if (!OAuthToken) {
+            OAuthToken = TOAuthToken();
+        }
+
+        return *OAuthToken;
+    }
 
     TStaticCredentials& EnsureStaticCredentials() {
         if (!StaticCredentials) {

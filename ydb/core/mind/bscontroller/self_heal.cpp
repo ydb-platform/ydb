@@ -931,10 +931,11 @@ namespace NKikimr::NBsController {
             const auto& ss = bsConfig.GetServiceSet();
             for (const auto& group : ss.GetGroups()) {
                 auto& content = sh->GroupsToUpdate[group.GetGroupID()];
+                const TBlobStorageGroupType gtype(static_cast<TBlobStorageGroupType::EErasureSpecies>(group.GetErasureSpecies()));
                 content = TEvControllerUpdateSelfHealInfo::TGroupContent{
                     .Generation = group.GetGroupGeneration(),
-                    .Type = static_cast<TBlobStorageGroupType::EErasureSpecies>(group.GetErasureSpecies()),
-                    .Geometry = std::make_shared<TGroupGeometryInfo>(content->Type, settings.GetGeometry()),
+                    .Type = gtype,
+                    .Geometry = std::make_shared<TGroupGeometryInfo>(gtype, settings.GetGeometry()),
                 };
 
                 const TVDiskID vdiskId(group.GetGroupID(), group.GetGroupGeneration(), 0, 0, 0);

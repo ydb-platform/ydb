@@ -1045,15 +1045,15 @@ void TGraceJoinState::DoCalculateWithSpilling(TComputationContext& ctx) {
         if (isWaitingForReduce) return;
     }
 
-    ui64 repeats = 0;
+    // ui64 repeats = 0;
 
     while (InputFetchResultLeft != EFetchResult::Finish || InputFetchResultRight != EFetchResult::Finish) {
-        if (repeats > 10000000) {
+        /* if (repeats > 10000000) {
             InputFetchResultLeft = EFetchResult::Finish;
             InputFetchResultRight = EFetchResult::Finish;
             break;
-        }
-        ++repeats;
+        } */
+        // ++repeats;
         InputFetchResultLeft = FlowLeft->FetchValues(ctx, LeftPacker->TuplePtrs.data());
 
         if (IsSelfJoin_) {
@@ -1107,12 +1107,12 @@ EFetchResult TGraceJoinState::ProcessSpilledData(TComputationContext&, NUdf::TUn
 
         if (!LeftPacker->TablePtr->IsBucketInMemory(NextBucketsToJoin)) {
             LeftPacker->TablePtr->StartLoadingBucket(NextBucketsToJoin);
-            // std::cerr << std::format("[MISHA] LEFT started loading bucket {}\n", NextBucketsToJoin);
+            std::cerr << std::format("[MISHA] LEFT started loading bucket {}\n", NextBucketsToJoin);
         }
 
         if (!RightPacker->TablePtr->IsBucketInMemory(NextBucketsToJoin)) {
             RightPacker->TablePtr->StartLoadingBucket(NextBucketsToJoin);
-            // std::cerr << std::format("[MISHA] RIGHT started loading bucket {}\n", NextBucketsToJoin);
+            std::cerr << std::format("[MISHA] RIGHT started loading bucket {}\n", NextBucketsToJoin);
         } 
 
         if (LeftPacker->TablePtr->IsBucketInMemory(NextBucketsToJoin) && RightPacker->TablePtr->IsBucketInMemory(NextBucketsToJoin)) {

@@ -698,6 +698,7 @@ private:
     }
 
     bool HasMemoryForProcessing() const {
+        std::clog << "Spilling wide_combine: " << TlsAllocState->IsMemoryYellowZoneEnabled() << ' ' << 100*TlsAllocState->GetUsed()/TlsAllocState->GetLimit() << '%' << ' ' <<TlsAllocState->GetUsed() << ' ' << TlsAllocState->GetLimit() << std::endl;
         return !TlsAllocState->IsMemoryYellowZoneEnabled();
     }
 

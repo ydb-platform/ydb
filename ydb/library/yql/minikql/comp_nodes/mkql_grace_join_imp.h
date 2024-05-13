@@ -493,6 +493,7 @@ public:
 
     void ExtractBucket(ui64 bucket) {
         TableBuckets[bucket] = std::move(TableBucketsSpiller[bucket].ExtractBucket());
+        TableBucketsSpiller[bucket].CurrentBucket = TTableBucket{};
     }
 
     void FinalizeSpilling() {
@@ -533,6 +534,7 @@ public:
             if (GetSizeOfBucket(bucket)) {
                 std::cerr << std::format("[MISHA] Spilling again bucket {} of size {}\n", bucket, GetSizeOfBucket(bucket));
                 TableBucketsSpiller[bucket].SpillBucket(std::move(TableBuckets[bucket]));
+                TableBuckets[bucket] = TTableBucket{};
 
                 if (TableBucketsSpiller[bucket].HasRunningAsyncIoOperation()) return true;
             }

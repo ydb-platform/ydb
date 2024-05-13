@@ -1638,8 +1638,10 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             "endpoint",
             "database",
             "token",
+            "token_secret_name",
             "user",
             "password",
+            "password_secret_name",
         };
 
         if (!CheckReplicationSettings(node.ReplicationSettings(), supportedSettings, ctx)) {

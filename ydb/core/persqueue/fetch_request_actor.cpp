@@ -472,7 +472,7 @@ public:
         if (record.HasErrorReason())
             read->SetErrorReason(record.GetErrorReason());
 
-        ++FetchRequestReadsDone;чч
+        ++FetchRequestReadsDone;
 
         auto it = TopicInfo.find(CanonizePath(topic));
         Y_ABORT_UNLESS(it != TopicInfo.end());

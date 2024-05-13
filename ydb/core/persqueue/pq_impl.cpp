@@ -2337,17 +2337,20 @@ bool ValidateDirectReadRequestBase(
     if (key.SessionId.Empty()) {
         error << "no session id in publish read request: ";
         return false;
-    } else if (key.PartitionSessionId == 0) {
+    }
+    if (key.PartitionSessionId == 0) {
         error << "No or zero partition session id in publish read request: ";
         return false;
-    } else if (key.ReadId == 0) {
+    }
+    if (key.ReadId == 0) {
         error << "No or zero ReadId in publish read request: ";
         return false;
     }
     if (pipeIter.IsEnd()) {
         error << "Read prepare request from unknown(old?) pipe";
         return false;
-    } else if (pipeIter->second.SessionId != key.SessionId) {
+    }
+    if (pipeIter->second.SessionId != key.SessionId) {
         error << "Read prepare request with unknown(old?) session id " << key.SessionId;
         return false;
     }

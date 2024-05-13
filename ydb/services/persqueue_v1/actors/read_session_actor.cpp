@@ -452,48 +452,48 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvAuth::TPtr& 
 
 template <bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvDirectReadAck::TPtr& ev, const TActorContext& ctx) {
-
     auto it = Partitions.find(ev->Get()->AssignId);
     if (it == Partitions.end()) {
         // do nothing - already released partition
         return;
     }
+    auto& partitionActorInfo = it->second;
+
+    auto directReadId = ev->Get()->DirectReadId;
 
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " got DirectReadAck from client"
         << ": partition# " << it->second.Partition
-        << ", directReadId# " << ev->Get()->DirectReadId
+        << ", directReadId# " << directReadId
         << ", bytesInflight# " << BytesInflight_);
 
-    auto drIt = it->second.DirectReads.find(ev->Get()->DirectReadId);
-
-    if (drIt == it->second.DirectReads.end()) {
+    auto drIt = partitionActorInfo.DirectReads.find(directReadId);
+    if (drIt == partitionActorInfo.DirectReads.end()) {
         return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder()
-            << "unknown direct read in in Ack: " << ev->Get()->DirectReadId, ctx);
+            << "unknown direct read in in Ack: " << directReadId, ctx);
+    }
+    auto& directReadInfo = drIt->second;
 
+    if (partitionActorInfo.MaxProcessedDirectReadId + 1 != directReadId) {
+        return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder()
+            << "direct reads must be confirmed in strict order - expecting " << (partitionActorInfo.MaxProcessedDirectReadId + 1)
+            << " but got " << directReadId, ctx);
     }
 
-    if (it->second.MaxProcessedDirectReadId + 1 != (ui64)ev->Get()->DirectReadId) {
-        return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder()
-            << "direct reads must be confirmed in strict order - expecting " << (it->second.MaxProcessedDirectReadId + 1)
-            << " but got " << ev->Get()->DirectReadId, ctx);
-    }
-
-    if (it->second.LastDirectReadId < (ui64)ev->Get()->DirectReadId) {
+    if (partitionActorInfo.LastDirectReadId < directReadId) {
         return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder() << "got direct read id that is not existing yet " <<
-             ev->Get()->DirectReadId, ctx);
+             directReadId, ctx);
     }
 
+    partitionActorInfo.MaxProcessedDirectReadId = directReadId;
 
-    it->second.MaxProcessedDirectReadId = ev->Get()->DirectReadId;
-
-    BytesInflight_ -= drIt->second.ByteSize;
+    BytesInflight_ -= directReadInfo.ByteSize;
     if (BytesInflight) {
-        (*BytesInflight) -= drIt->second.ByteSize;
+        (*BytesInflight) -= directReadInfo.ByteSize;
     }
-    it->second.DirectReads.erase(drIt);
+    partitionActorInfo.DirectReads.erase(drIt);
 
     ProcessReads(ctx);
-    ctx.Send(it->second.Actor, new TEvPQProxy::TEvDirectReadAck(ev->Get()->AssignId, ev->Get()->DirectReadId));
+    ctx.Send(partitionActorInfo.Actor, new TEvPQProxy::TEvDirectReadAck(ev->Get()->AssignId, directReadId));
 }
 
 
@@ -2104,24 +2104,24 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessReads(const TActorContext& 
             guid = CreateGuidAsString();
         }
 
-        typename TFormedReadResponse<TServerMessage>::TPtr formedResponse =
-            new TFormedReadResponse<TServerMessage>(guid, ctx.Now());
+        auto formedResponse = new TFormedReadResponse<TServerMessage>(guid, ctx.Now());
 
         while (!AvailablePartitions.empty()) {
-            auto part = *AvailablePartitions.begin();
+            auto partition = *AvailablePartitions.begin();
             AvailablePartitions.erase(AvailablePartitions.begin());
 
-            auto it = Partitions.find(part.AssignId);
+            auto it = Partitions.find(partition.AssignId);
             if (it == Partitions.end() || it->second.Releasing) { // this is already released partition
                 continue;
             }
+            auto& partitionActorInfo = it->second;
 
             ++partitionsAsked; // add this partition to reading
 
-            const ui32 ccount = Min<ui32>(part.MsgLag * LAG_GROW_MULTIPLIER, count);
+            const ui32 ccount = Min<ui32>(partition.MsgLag * LAG_GROW_MULTIPLIER, count);
             count -= ccount;
 
-            ui64 csize = (ui64)Min<double>(part.SizeLag * LAG_GROW_MULTIPLIER, size);
+            ui64 csize = (ui64)Min<double>(partition.SizeLag * LAG_GROW_MULTIPLIER, size);
             if constexpr (!UseMigrationProtocol) {
                 csize = Min<i64>(csize, ReadSizeBudget);
             }
@@ -2129,11 +2129,11 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessReads(const TActorContext& 
             size -= csize;
             Y_ABORT_UNLESS(csize < Max<i32>());
 
-            auto jt = ReadFromTimestamp.find(it->second.Topic->GetInternalName());
+            auto jt = ReadFromTimestamp.find(partitionActorInfo.Topic->GetInternalName());
             if (jt == ReadFromTimestamp.end()) {
                 LOG_ALERT_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " error searching for topic"
-                    << ": internalName# " << it->second.Topic->GetInternalName()
-                    << ", prettyName# " << it->second.Topic->GetPrintableString());
+                    << ": internalName# " << partitionActorInfo.Topic->GetInternalName()
+                    << ", prettyName# " << partitionActorInfo.Topic->GetPrintableString());
 
                 for (const auto& kv : ReadFromTimestamp) {
                     LOG_ALERT_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " have topic"
@@ -2145,7 +2145,7 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessReads(const TActorContext& 
 
             ui64 readTimestampMs = Max(ReadTimestampMs, jt->second);
 
-            auto lagsIt = MaxLagByTopic.find(it->second.Topic->GetInternalName());
+            auto lagsIt = MaxLagByTopic.find(partitionActorInfo.Topic->GetInternalName());
             Y_ABORT_UNLESS(lagsIt != MaxLagByTopic.end());
             const ui32 maxLag = lagsIt->second;
 
@@ -2153,31 +2153,31 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessReads(const TActorContext& 
 
             LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " performing read request"
                 << ": guid# " << ev->Guid
-                << ", from# " << it->second.Partition
+                << ", from# " << partitionActorInfo.Partition
                 << ", count# " << ccount
                 << ", size# " << csize
                 << ", partitionsAsked# " << partitionsAsked
                 << ", maxTimeLag# " << maxLag << "ms");
 
-            Y_ABORT_UNLESS(!it->second.Reading);
-            it->second.Reading = true;
+            Y_ABORT_UNLESS(!partitionActorInfo.Reading);
+            partitionActorInfo.Reading = true;
 
-            formedResponse->PartitionsTookPartInRead.insert(it->second.Actor);
-            auto id = it->second.Partition;
+            formedResponse->PartitionsTookPartInRead.insert(partitionActorInfo.Actor);
+            auto id = partitionActorInfo.Partition;
             id.AssignId = 0;
             PartitionToControlMessages[id].Infly++;
 
-            bool res = formedResponse->PartitionsTookPartInControlMessages.insert(id).second;
-            Y_ABORT_UNLESS(res);
+            bool inserted = formedResponse->PartitionsTookPartInControlMessages.insert(id).second;
+            Y_ABORT_UNLESS(inserted);
 
             RequestedBytes += csize;
             formedResponse->RequestedBytes += csize;
 
             ReadSizeBudget -= csize;
 
-            ctx.Send(it->second.Actor, ev.Release());
-            res = PartitionToReadResponse.emplace(it->second.Actor, formedResponse).second;
-            Y_ABORT_UNLESS(res);
+            ctx.Send(partitionActorInfo.Actor, ev.Release());
+            inserted = PartitionToReadResponse.emplace(partitionActorInfo.Actor, formedResponse).second;
+            Y_ABORT_UNLESS(inserted);
 
             // Do not aggregate messages from different partitions together.
             if constexpr (!UseMigrationProtocol) {

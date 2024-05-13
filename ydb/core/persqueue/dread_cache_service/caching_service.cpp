@@ -73,7 +73,7 @@ private:
             );
             return;
         }
-        
+
         sessionIter->second.Client = TCacheClientContext{ev->Sender, ev->Get()->StartingReadId};
         AssignByProxy[ev->Sender].insert(key.PartitionSessionId);
         while(SendNextReadToClient(sessionIter)) {
@@ -87,12 +87,12 @@ private:
             return;
         for (auto id : assignIter->second) {
             return DestroyClientSession(ServerSessions.find(
-                    TReadSessionKey{ev->Get()->Session, id}), false, 
+                    TReadSessionKey{ev->Get()->Session, id}), false,
                     Ydb::PersQueue::ErrorCode::ErrorCode::OK, "", ev->Sender
             );
         }
     }
-    
+
     void HandleRegister(TEvPQ::TEvRegisterDirectReadSession::TPtr& ev) {
         const auto& key = ev->Get()->Session;
         RegisterServerSession(key, ev->Get()->Generation);
@@ -101,7 +101,7 @@ private:
     void HandleDeregister(TEvPQ::TEvDeregisterDirectReadSession::TPtr& ev) {
         const auto& key = ev->Get()->Session;
         const auto& ctx = ActorContext();
-        
+
         auto destroyDone = DestroyServerSession(ServerSessions.find(key), ev->Get()->Generation);
         if (destroyDone) {
             LOG_DEBUG_S(
@@ -111,7 +111,7 @@ private:
         } else {
             LOG_WARN_S(
                     ctx, NKikimrServices::PQ_READ_PROXY,
-                    TStringBuilder() << "Direct read cache: attempted to deregister unknown server session: " << key.SessionId 
+                    TStringBuilder() << "Direct read cache: attempted to deregister unknown server session: " << key.SessionId
                                      << ":" << key.PartitionSessionId << " with generation " << ev->Get()->Generation << ", ignored"
             );
             return;
@@ -130,17 +130,21 @@ private:
             );
             return;
         }
-        if (sessionIter->second.Generation != ev->Get()->TabletGeneration) {
+
+        auto& cacheServiceData = sessionIter->second;
+
+        if (cacheServiceData.Generation != ev->Get()->TabletGeneration) {
             LOG_ALERT_S(
                 ctx, NKikimrServices::PQ_READ_PROXY,
                 TStringBuilder() << "Direct read cache: tried to stage direct read for session " << sessionKey.SessionId
                                  << " with generation " << ev->Get()->TabletGeneration << ", previously had this session with generation "
-                                 << sessionIter->second.Generation << ". Data ignored"
+                                 << cacheServiceData.Generation << ". Data ignored"
             );
             return;
         }
-        auto ins = sessionIter->second.StagedReads.insert(std::make_pair(ev->Get()->ReadKey.ReadId, ev->Get()->Response));
-        if (!ins.second) {
+
+        auto [stagedIter, inserted] = cacheServiceData.StagedReads.emplace(ev->Get()->ReadKey.ReadId, ev->Get()->Response);
+        if (!inserted) {
             LOG_WARN_S(
                 ctx, NKikimrServices::PQ_READ_PROXY,
                 TStringBuilder() << "Direct read cache: tried to stage duplicate direct read for session " << sessionKey.SessionId << " with id "
@@ -148,7 +152,7 @@ private:
             );
             return;
         }
-        ChangeCounterValue("StagedReadDataSize", ins.first->second->ByteSize(), false);
+        ChangeCounterValue("StagedReadDataSize", stagedIter->second->ByteSize(), false);
         ChangeCounterValue("StagedReadsCount", 1, false);
         LOG_DEBUG_S(
                 ctx, NKikimrServices::PQ_READ_PROXY,
@@ -166,33 +170,37 @@ private:
         if (iter.IsEnd()) {
             LOG_ERROR_S(
                     ctx, NKikimrServices::PQ_READ_PROXY,
-                    TStringBuilder() << "Direct read cache: attempt to publish read for unknow session " << key.SessionId << " ignored"
+                    TStringBuilder() << "Direct read cache: attempt to publish read for unknown session " << key.SessionId << " ignored"
             );
             return;
         }
-                
+
+        auto& cacheServiceData = iter->second;
+
         const auto& generation = ev->Get()->TabletGeneration;
-        if (iter->second.Generation != generation)
+        if (cacheServiceData.Generation != generation)
             return;
 
-        auto stagedIter = iter->second.StagedReads.find(readId);
-        if (stagedIter == iter->second.StagedReads.end()) {
+        auto stagedIter = cacheServiceData.StagedReads.find(readId);
+        if (stagedIter == cacheServiceData.StagedReads.end()) {
             LOG_ERROR_S(
                     ctx, NKikimrServices::PQ_READ_PROXY,
                     TStringBuilder() << "Direct read cache: attempt to publish unknown read id " << readId << " from session: "
                                      << key.SessionId << " ignored");
             return;
         }
-        auto inserted = iter->second.Reads.insert(std::make_pair(ev->Get()->ReadKey.ReadId, stagedIter->second)).second;
+
+        auto& stagedRead = stagedIter->second;
+        auto inserted = cacheServiceData.Reads.emplace(ev->Get()->ReadKey.ReadId, stagedRead).second;
         if (inserted) {
-            ChangeCounterValue("PublishedReadDataSize", stagedIter->second->ByteSize(), false);
+            ChangeCounterValue("PublishedReadDataSize", stagedRead->ByteSize(), false);
             ChangeCounterValue("PublishedReadsCount", 1, false);
         }
-        ChangeCounterValue("StagedReadDataSize", -stagedIter->second->ByteSize(), false);
+        ChangeCounterValue("StagedReadDataSize", -stagedRead->ByteSize(), false);
         ChangeCounterValue("StagedReadsCount", -1, false);
 
-        iter->second.StagedReads.erase(stagedIter);
-        
+        cacheServiceData.StagedReads.erase(stagedIter);
+
         SendNextReadToClient(iter);
     }
 
@@ -203,7 +211,7 @@ private:
         if (iter.IsEnd()) {
             LOG_DEBUG_S(
                     ctx, NKikimrServices::PQ_READ_PROXY,
-                    TStringBuilder() << "Direct read cache: attempt to forget read for unknown session: " 
+                    TStringBuilder() << "Direct read cache: attempt to forget read for unknown session: "
                                      << ev->Get()->ReadKey.SessionId << " ignored"
             );
             return;
@@ -269,34 +277,34 @@ private:
         if (sessionsIter.IsEnd()) {
             LOG_DEBUG_S(
                     ctx, NKikimrServices::PQ_READ_PROXY,
-                    TStringBuilder() << "Direct read cache: registered server session: " << key.SessionId 
-                                     << ":" << key.PartitionSessionId << " with generation " << generation 
+                    TStringBuilder() << "Direct read cache: registered server session: " << key.SessionId
+                                     << ":" << key.PartitionSessionId << " with generation " << generation
             );
             ServerSessions.insert(std::make_pair(key, TCacheServiceData{generation}));
         } else if (sessionsIter->second.Generation == generation) {
             LOG_WARN_S(
                     ctx, NKikimrServices::PQ_READ_PROXY,
-                    TStringBuilder() << "Direct read cache: attempted to register duplicate server session: " << key.SessionId 
+                    TStringBuilder() << "Direct read cache: attempted to register duplicate server session: " << key.SessionId
                                      << ":" << key.PartitionSessionId << " with same generation " << generation << ", ignored"
             );
         } else if (DestroyServerSession(sessionsIter, generation)) {
             LOG_DEBUG_S(
                     ctx, NKikimrServices::PQ_READ_PROXY,
-                    TStringBuilder() << "Direct read cache: registered server session: " << key.SessionId 
-                                     << ":" << key.PartitionSessionId << " with generation " << generation 
+                    TStringBuilder() << "Direct read cache: registered server session: " << key.SessionId
+                                     << ":" << key.PartitionSessionId << " with generation " << generation
                                      << ", killed existing session with older generation "
             );
             ServerSessions.insert(std::make_pair(key, TCacheServiceData{generation}));
         } else {
             LOG_INFO_S(
                         ctx, NKikimrServices::PQ_READ_PROXY,
-                        TStringBuilder() << "Direct read cache: attempted to register server session: " << key.SessionId 
+                        TStringBuilder() << "Direct read cache: attempted to register server session: " << key.SessionId
                                         << ":" << key.PartitionSessionId << " with stale generation " << generation << ", ignored"
             );
         }
         ChangeCounterValue("ActiveServerSessions", ServerSessions.size(), true);
     }
-    
+
     template<class TEv>
     const TReadSessionKey MakeSessionKey(TEv* ev) {
         return TReadSessionKey{ev->ReadKey.SessionId, ev->ReadKey.PartitionSessionId};
@@ -342,7 +350,7 @@ private:
             DestroyClientSession(sessionIter, false, Ydb::PersQueue::ErrorCode::OK, "");
             return false;
         }
-        client.NextReadId = nextData->first + 1; 
+        client.NextReadId = nextData->first + 1;
         return true;
     }
 
@@ -370,7 +378,7 @@ private:
         ctx.Send(proxyClient.ProxyId, new TEvPQProxy::TEvDirectReadSendClientData(std::move(message)));
         return true;
     }
-    
+
     void CloseSession(
             const TActorId& proxyId,
             Ydb::PersQueue::ErrorCode::ErrorCode code,
@@ -379,7 +387,7 @@ private:
         const auto& ctx = ActorContext();
         ctx.Send(proxyId, new TEvPQProxy::TEvDirectReadCloseSession(code, reason));
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, TStringBuilder() << " Direct read cache: close session for proxy " << proxyId.ToString());
-        
+
     }
 
     bool DestroyPartitionSession(
@@ -388,7 +396,7 @@ private:
         if (sessionIter.IsEnd() || !sessionIter->second.Client.Defined()) {
             return false;
         }
-        
+
         const auto& ctx = ActorContext();
         ctx.Send(
                 sessionIter->second.Client->ProxyId, new TEvPQProxy::TEvDirectReadDestroyPartitionSession(sessionIter->first, code, reason)
@@ -409,7 +417,7 @@ private:
             counter->Set(value);
         else if (value >= 0)
             counter->Add(value);
-        else 
+        else
             counter->Sub(-value);
     }
 
@@ -520,7 +528,7 @@ private:
             message->set_offset(r.GetOffset());
             message->set_data(proto.GetData());
             message->set_uncompressed_size(r.GetUncompressedSize());
-        
+
             *message->mutable_created_at() =
                 ::google::protobuf::util::TimeUtil::MillisecondsToTimestamp(r.GetCreateTimestampMS());
 

@@ -259,10 +259,10 @@ void TPartitionActor::RestartPipe(const TActorContext& ctx, const TString& reaso
 
 
 void TPartitionActor::Handle(TEvPQProxy::TEvDirectReadAck::TPtr& ev, const TActorContext& ctx) {
-    auto it = DirectReads.find(ev->Get()->DirectReadId);
-
-    if (it == DirectReads.end() || ev->Get()->DirectReadId == DirectReadId) {
-        ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession(TStringBuilder() << "got direct read ack for uknown direct read id " << ev->Get()->DirectReadId,
+    auto id = ev->Get()->DirectReadId;
+    auto it = DirectReads.find(id);
+    if (it == DirectReads.end() || id == DirectReadId) {
+        ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession(TStringBuilder() << "got direct read ack for unknown direct read id " << id,
                         PersQueue::ErrorCode::BAD_REQUEST));
         return;
 
@@ -271,7 +271,7 @@ void TPartitionActor::Handle(TEvPQProxy::TEvDirectReadAck::TPtr& ev, const TActo
 
     if (!PipeClient) return; //all direct reads will be cleared on pipe restart
 
-    SendForgetDirectRead(ev->Get()->DirectReadId, ctx);
+    SendForgetDirectRead(id, ctx);
 
 }
 

@@ -508,5 +508,29 @@ Y_UNIT_TEST_SUITE(TSequence) {
             }
         )");
         env.TestWaitNotification(runtime, txId);
+
+        auto table = DescribePath(runtime, "/MyRoot/Table")
+            .GetPathDescription()
+            .GetTable();
+
+        for (const auto& column: table.GetColumns()) {
+            if (column.GetName() == "value") {
+                UNIT_ASSERT(column.HasDefaultFromSequence());
+                UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromSequence(), "/MyRoot/seq");
+
+                TestDescribeResult(DescribePath(runtime, column.GetDefaultFromSequence()),
+                    {
+                        NLs::SequenceIncrement(2),
+                        NLs::SequenceMinValue(2),
+                        NLs::SequenceCache(1),
+                        NLs::SequenceStartValue(2),
+                        NLs::SequenceCycle(true),
+                        NLs::SequenceMaxValue(100),
+                        NLs::SequenceIncrement("seq"),
+                    }
+                );
+                break;
+            }
+        }
     }
 } // Y_UNIT_TEST_SUITE(TSequence)

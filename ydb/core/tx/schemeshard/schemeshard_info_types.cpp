@@ -290,7 +290,9 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
             const TTableInfo::TColumn& sourceColumn = source->Columns[colId];
             if (sourceColumn.PType.GetTypeId() == NScheme::NTypeIds::Int64) {
-                errStr = Sprintf("Sequence value type '%s' must be equal to the column type '%s'", sourceColumn.GetType().data());
+                errStr = Sprintf(
+                    "Sequence value type '%s' must be equal to the column type '%s'", "Int64",
+                    NScheme::TypeName(sourceColumn.PType, sourceColumn.PTypeMod).c_str());
                 return nullptr;
             }
 

@@ -820,7 +820,7 @@ TIP6Network::TIP6Network(const TIP6Address& network, const TIP6Address& mask)
     // We allow only masks that can be written by using prefix notation,
     // e.g. /64. In prefix notation no ones can go after zeros.
     bool seenOne = false;
-    auto bytes = mask.GetRawBytes();
+    const auto* bytes = mask.GetRawBytes();
     for (int i = 0; i < static_cast<int>(TIP6Address::ByteSize * 8); ++i) {
         auto val = *(bytes + i / 8) & (1 << (i % 8));
         if (val) {
@@ -887,7 +887,7 @@ bool TIP6Network::FromString(TStringBuf str, TIP6Network* network)
 
     // Set mask based on mask size.
     network->Mask_ = TIP6Address();
-    auto bytes = network->Mask_.GetRawBytes();
+    auto* bytes = network->Mask_.GetRawBytes();
     for (int i = 0; i < static_cast<int>(TIP6Address::ByteSize * 8); ++i) {
         if (i >= static_cast<int>(TIP6Address::ByteSize * 8) - maskSize) {
             *(bytes + i / 8) |= (1 << (i % 8));

@@ -1460,6 +1460,14 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
         AlterTableRenameIndexTo(renameTo, params);
         break;
     }
+    case TRule_alter_table_action::kAltAlterTableAction16: {
+        // ALTER INDEX
+        const auto& rule = node.GetAlt_alter_table_action16().GetRule_alter_table_alter_index1();
+        if (!AlterTableAlterIndex(rule, params)) {
+            return false;
+        }
+        break;
+    }
 
     case TRule_alter_table_action::ALT_NOT_SET:
         AltNotImplemented("alter_table_action", node);
@@ -1681,6 +1689,46 @@ void TSqlQuery::AlterTableRenameIndexTo(const TRule_alter_table_rename_index_to&
     auto dst = IdEx(node.GetRule_an_id5(), *this);
 
     params.RenameIndexTo = std::make_pair(src, dst);
+}
+
+bool TSqlQuery::AlterTableAlterIndex(const TRule_alter_table_alter_index& node, TAlterTableParameters& params) {
+    const auto indexName = IdEx(node.GetRule_an_id3(), *this);
+    params.AlterIndexes.emplace_back(indexName);
+    TTableSettings& indexTableSettings = params.AlterIndexes.back().TableSettings;
+
+    const auto& action = node.GetRule_alter_table_alter_index_action4();
+
+    switch (action.Alt_case()) {
+    case TRule_alter_table_alter_index_action::kAltAlterTableAlterIndexAction1: {
+        // SET setting value
+        const auto& rule = action.GetAlt_alter_table_alter_index_action1().GetRule_alter_table_set_table_setting_uncompat1();
+        if (!AlterTableSetTableSetting(rule, indexTableSettings, params.TableType)) {
+            return false;
+        }
+        break;
+    }
+    case TRule_alter_table_alter_index_action::kAltAlterTableAlterIndexAction2: {
+        // SET (setting1 = value1, ...)
+        const auto& rule = action.GetAlt_alter_table_alter_index_action2().GetRule_alter_table_set_table_setting_compat1();
+        if (!AlterTableSetTableSetting(rule, indexTableSettings, params.TableType)) {
+            return false;
+        }
+        break;
+    }
+    case TRule_alter_table_alter_index_action::kAltAlterTableAlterIndexAction3: {
+        // RESET (setting1, ...)
+        const auto& rule = action.GetAlt_alter_table_alter_index_action3().GetRule_alter_table_reset_table_setting1();
+        if (!AlterTableResetTableSetting(rule, indexTableSettings, params.TableType)) {
+            return false;
+        }
+        break;
+    }
+    case TRule_alter_table_alter_index_action::ALT_NOT_SET:
+        AltNotImplemented("alter_table_alter_index_action", action);
+        return false;
+    }
+
+    return true;
 }
 
 bool TSqlQuery::AlterTableAddChangefeed(const TRule_alter_table_add_changefeed& node, TAlterTableParameters& params) {

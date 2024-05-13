@@ -1022,6 +1022,7 @@ namespace NSQLTranslationV1 {
         EType Type;
         TVector<TIdentifier> IndexColumns;
         TVector<TIdentifier> DataColumns;
+        TTableSettings TableSettings;
     };
 
     struct TChangefeedSettings {
@@ -1072,6 +1073,7 @@ namespace NSQLTranslationV1 {
         TVector<TFamilyEntry> AlterColumnFamilies;
         TTableSettings TableSettings;
         TVector<TIndexDescription> AddIndexes;
+        TVector<TIndexDescription> AlterIndexes;
         TVector<TIdentifier> DropIndexes;
         TMaybe<std::pair<TIdentifier, TIdentifier>> RenameIndexTo;
         TMaybe<TIdentifier> RenameTo;
@@ -1084,7 +1086,7 @@ namespace NSQLTranslationV1 {
             return AddColumns.empty() && DropColumns.empty() && AlterColumns.empty()
                 && AddColumnFamilies.empty() && AlterColumnFamilies.empty()
                 && !TableSettings.IsSet()
-                && AddIndexes.empty() && DropIndexes.empty() && !RenameIndexTo.Defined()
+                && AddIndexes.empty() && AlterIndexes.empty() && DropIndexes.empty() && !RenameIndexTo.Defined()
                 && !RenameTo.Defined()
                 && AddChangefeeds.empty() && AlterChangefeeds.empty() && DropChangefeeds.empty();
         }

@@ -281,11 +281,28 @@ static INode::TPtr CreateIndexDesc(const TIndexDescription& index, ETableSetting
     }
     const auto& indexType = node.Y(node.Q("indexType"), CreateIndexType(index.Type, node));
     const auto& indexName = node.Y(node.Q("indexName"), BuildQuotedAtom(index.Name.Pos, index.Name.Name));
+    const auto& tableSettings = node.Y(
+        node.Q("tableSettings"),
+        node.Q(CreateTableSettings(index.TableSettings, parsingMode, node))
+    );
     return node.Y(
         node.Q(indexName),
         node.Q(indexType),
         node.Q(node.Y(node.Q("indexColumns"), node.Q(indexColumns))),
         node.Q(node.Y(node.Q("dataColumns"), node.Q(dataColumns))),
+        node.Q(tableSettings)
+    );
+}
+
+static INode::TPtr CreateAlterIndex(const TIndexDescription& index, const INode& node) {
+    const auto& indexName = node.Y(node.Q("indexName"), BuildQuotedAtom(index.Name.Pos, index.Name.Name));
+    const auto& tableSettings = node.Y(
+        node.Q("tableSettings"),
+        node.Q(CreateTableSettings(index.TableSettings, ETableSettingsParsingMode::Alter, node))
+    );
+    return node.Y(
+        node.Q(indexName),
+        node.Q(tableSettings)
     );
 }
 
@@ -1362,6 +1379,11 @@ public:
         for (const auto& index : Params.AddIndexes) {
             const auto& desc = CreateIndexDesc(index, ETableSettingsParsingMode::Alter, *this);
             actions = L(actions, Q(Y(Q("addIndex"), Q(desc))));
+        }
+
+        for (const auto& index : Params.AlterIndexes) {
+            const auto& desc = CreateAlterIndex(index, *this);
+            actions = L(actions, Q(Y(Q("alterIndex"), Q(desc))));
         }
 
         for (const auto& id : Params.DropIndexes) {

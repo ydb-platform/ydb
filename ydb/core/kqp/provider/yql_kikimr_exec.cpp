@@ -27,6 +27,7 @@
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
+#include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 
 namespace NYql {
 namespace {
@@ -1504,6 +1505,49 @@ public:
                             break;
                         default:
                             YQL_ENSURE(false, "Unknown index type: " << (ui32)add_index->type_case());
+                    }
+                } else if (name == "alterIndex") {
+                    if (maybeAlter.Cast().Actions().Size() > 1) {
+                        ctx.AddError(
+                            TIssue(ctx.GetPosition(action.Name().Pos()),
+                                   "ALTER INDEX action cannot be combined with any other ALTER TABLE action"
+                            )
+                        );
+                        return SyncError();
+                    }
+                    auto listNode = action.Value().Cast<TCoNameValueTupleList>();
+                    for (const auto& indexSetting : listNode) {
+                        auto settingName = indexSetting.Name().Value();
+                        if (settingName == "indexName") {
+                            auto indexName = indexSetting.Value().Cast<TCoAtom>().StringValue();
+                            auto indexTablePath = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(table.Metadata->Name, indexName);
+                            alterTableRequest.set_path(std::move(indexTablePath));
+                        } else if (settingName == "tableSettings") {
+                            auto tableSettings = indexSetting.Value().Cast<TCoNameValueTupleList>();
+                            for (const auto& tableSetting : tableSettings) {
+                                if (IsPartitioningSetting(tableSetting.Name().Value())) {
+                                    if (!ParsePartitioningSettings(
+                                        *alterTableRequest.mutable_alter_partitioning_settings(), tableSetting, ctx
+                                    )) {
+                                        return SyncError();
+                                    }
+                                } else {
+                                    ctx.AddError(
+                                        TIssue(ctx.GetPosition(tableSetting.Name().Pos()),
+                                               TStringBuilder() << "Unknown index table setting: " << name
+                                        )
+                                    );
+                                    return SyncError();
+                                }
+                            }
+                        } else {
+                            ctx.AddError(
+                                TIssue(ctx.GetPosition(indexSetting.Name().Pos()),
+                                       TStringBuilder() << "Unknown alter index setting: " << settingName
+                                )
+                            );
+                            return SyncError();
+                        }
                     }
                 } else if (name == "dropIndex") {
                     auto nameNode = action.Value().Cast<TCoAtom>();

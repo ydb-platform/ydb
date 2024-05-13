@@ -75,6 +75,7 @@ private:
     void Handle(TEvPrivate::TEvDropStreamResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCreateDstResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvDropDstResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvResolveSecretResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvUpdateTenantNodes::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRunWorkers::TPtr& ev, const TActorContext& ctx);
@@ -103,6 +104,7 @@ private:
     class TTxDropStreamResult;
     class TTxCreateDstResult;
     class TTxDropDstResult;
+    class TTxResolveSecretResult;
 
     // tx runners
     void RunTxInitSchema(const TActorContext& ctx);
@@ -117,6 +119,7 @@ private:
     void RunTxDropStreamResult(TEvPrivate::TEvDropStreamResult::TPtr& ev, const TActorContext& ctx);
     void RunTxCreateDstResult(TEvPrivate::TEvCreateDstResult::TPtr& ev, const TActorContext& ctx);
     void RunTxDropDstResult(TEvPrivate::TEvDropDstResult::TPtr& ev, const TActorContext& ctx);
+    void RunTxResolveSecretResult(TEvPrivate::TEvResolveSecretResult::TPtr& ev, const TActorContext& ctx);
 
     // other
     template <typename T>

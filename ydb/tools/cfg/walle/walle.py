@@ -37,7 +37,7 @@ class NopHostsInformationProvider(HostsInformationProvider):
         return hostname
 
     def get_datacenter(self, hostname):
-        # Keep DC name short, because of        
+        # Keep DC name short, because of
         # BAD_REQUEST (nameservice validator: node 1 has data center in Wall-E location longer than 4 symbols)
         return "FAKE"
 

@@ -1178,8 +1178,9 @@ namespace {
         if (typeExpr.size() != 1U)
             return false;
 
+        auto typePos = node.GetChild(2)->GetPosition();
         auto parameterExpr = ctx.ProcessNode(node,
-            ctx.Expr.NewCallable(node.GetPosition(), "Parameter", {
+            ctx.Expr.NewCallable(typePos, "Parameter", {
                 ctx.Expr.NewAtom(node.GetPosition(), nameStr),
                 std::move(typeExpr.front())
             }));
@@ -2779,6 +2780,13 @@ TExprNode::TPtr TExprContext::RenameNode(const TExprNode& node, const TStringBuf
 TExprNode::TPtr TExprContext::ShallowCopy(const TExprNode& node) {
     YQL_ENSURE(node.Type() != TExprNode::Lambda);
     const auto newNode = node.Clone(AllocateNextUniqueId());
+    ExprNodes.emplace_back(newNode.Get());
+    return newNode;
+}
+
+TExprNode::TPtr TExprContext::ShallowCopyWithPosition(const TExprNode& node, TPositionHandle pos) {
+    YQL_ENSURE(node.Type() != TExprNode::Lambda);
+    const auto newNode = node.CloneWithPosition(AllocateNextUniqueId(), pos);
     ExprNodes.emplace_back(newNode.Get());
     return newNode;
 }

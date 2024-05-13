@@ -953,6 +953,18 @@ message TEvProposeTransaction {
     optional NActorsProto.TActorId SupportivePartitionActor = 5;
 };
 
+message TError {
+    enum EKind {
+        OK = 0;
+        ERROR = 1;
+        INTERNAL = 2;
+        BAD_REQUEST = 3;
+    }
+
+    optional EKind Kind = 1;
+    optional string Reason = 2;
+};
+
 message TEvProposeTransactionResult {
     enum EStatus {
         PREPARED = 1;
@@ -973,6 +985,7 @@ message TEvProposeTransactionResult {
     optional string StatusMessage = 7;
     optional uint64 Step = 8;
     repeated fixed64 DomainCoordinators = 9;
+    repeated TError Errors = 10;
 };
 
 message TEvCancelTransactionProposal {

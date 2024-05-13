@@ -68,6 +68,10 @@ namespace NKikimr::NStorage {
             return;
         }
 
+        if (PDiskRestartInFlight.contains(vslotId.PDiskId)) {
+            return;
+        }
+
         // find underlying PDisk and determine its media type
         auto pdiskIt = LocalPDisks.find({vslotId.NodeId, vslotId.PDiskId});
         Y_VERIFY_S(pdiskIt != LocalPDisks.end(), "PDiskId# " << vslotId.NodeId << ":" << vslotId.PDiskId << " not found");

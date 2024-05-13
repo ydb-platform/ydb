@@ -1227,6 +1227,7 @@ void TestReadWithProgram(const TestTableDescription& table = {})
 {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
+    auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
 
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
@@ -1310,6 +1311,7 @@ void TestReadWithProgram(const TestTableDescription& table = {})
 void TestReadWithProgramLike(const TestTableDescription& table = {}) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
+    auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
 
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime,
@@ -1378,6 +1380,7 @@ void TestReadWithProgramLike(const TestTableDescription& table = {}) {
 void TestSomePrograms(const TestTableDescription& table) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
+    auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
 
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
@@ -1439,6 +1442,7 @@ void TestReadAggregate(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema,
                        const TReadAggregateResult& expectedFiltered = {1, {1}, {1}, {1}}) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
+    auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
 
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
@@ -1565,6 +1569,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
 
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
 
         const ui64 ownerId = 0;
         const ui64 tableId = 1;
@@ -1616,6 +1621,8 @@ Y_UNIT_TEST_SUITE(EvWrite) {
 
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+
 
         const ui64 ownerId = 0;
         const ui64 tableId = 1;
@@ -1664,6 +1671,8 @@ Y_UNIT_TEST_SUITE(EvWrite) {
 
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+
 
         const ui64 ownerId = 0;
         const ui64 tableId = 1;
@@ -1709,6 +1718,8 @@ Y_UNIT_TEST_SUITE(EvWrite) {
 
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+
 
         const ui64 ownerId = 0;
         const ui64 tableId = 1;

@@ -57,7 +57,7 @@ public:
 
 
 bool TCleanPortionsNormalizer::CheckPortion(const NColumnShard::TTablesManager& tablesManager, const TPortionInfo& portionInfo) const {
-    return tablesManager.HasTable(portionInfo.GetAddress().GetPathId());
+    return tablesManager.HasTable(portionInfo.GetAddress().GetPathId(), true);
 }
 
 INormalizerTask::TPtr TCleanPortionsNormalizer::BuildTask(std::vector<std::shared_ptr<TPortionInfo>>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas) const {

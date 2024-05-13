@@ -2,6 +2,7 @@
 #include "schemeshard_impl.h"
 #include "schemeshard_svp_migration.h"
 #include "olap/bg_tasks/adapter/adapter.h"
+#include "olap/bg_tasks/events/global.h"
 
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
@@ -4569,6 +4570,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvExport::TEvForgetExportRequest, Handle);
         HFuncTraced(TEvExport::TEvListExportsRequest, Handle);
         // } // NExport
+        HFuncTraced(NBackground::TEvListRequest, Handle);
 
         // namespace NImport {
         HFuncTraced(TEvImport::TEvCreateImportRequest, Handle);

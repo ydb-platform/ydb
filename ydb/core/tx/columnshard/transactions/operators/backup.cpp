@@ -31,7 +31,7 @@ bool TBackupTransactionOperator::Parse(TColumnShard& owner, const TString& data)
     NArrow::NSerialization::TSerializerContainer serializer(std::make_shared<NArrow::NSerialization::TNativeSerializer>());
     ExportTask = std::make_shared<NOlap::NExport::TExportTask>(id.DetachResult(), selector.DetachResult(), storeInitializer.DetachResult(), serializer);
     NOlap::NBackground::TTask task(::ToString(ExportTask->GetIdentifier().GetPathId()), std::make_shared<NOlap::NBackground::TFakeStatusChannel>(), ExportTask);
-    TxAddTask = owner.GetBackgroundSessionsManager()->AddTask(task);
+    TxAddTask = owner.GetBackgroundSessionsManager()->TxAddTask(task);
     if (!TxAddTask) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_add_task");
         return false;
@@ -55,7 +55,7 @@ bool TBackupTransactionOperator::ExecuteOnProgress(TColumnShard& owner, const NO
     AFL_VERIFY(ExportTask);
     if (!TxConfirm) {
         auto control = ExportTask->BuildConfirmControl();
-        TxConfirm = owner.GetBackgroundSessionsManager()->ApplyControl(control);
+        TxConfirm = owner.GetBackgroundSessionsManager()->TxApplyControl(control);
     }
     return TxConfirm->Execute(txc, NActors::TActivationContext::AsActorContext());
 }
@@ -75,7 +75,7 @@ bool TBackupTransactionOperator::CompleteOnProgress(TColumnShard& owner, const T
 bool TBackupTransactionOperator::ExecuteOnAbort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) {
     if (!TxAbort) {
         auto control = ExportTask->BuildAbortControl();
-        TxAbort = owner.GetBackgroundSessionsManager()->ApplyControl(control);
+        TxAbort = owner.GetBackgroundSessionsManager()->TxApplyControl(control);
     }
     return TxAbort->Execute(txc, NActors::TActivationContext::AsActorContext());
 }

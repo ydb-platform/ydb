@@ -27,13 +27,17 @@ public:
         Storage = std::make_shared<TSessionsStorage>();
     }
 
+    std::vector<TSessionInfoReport> GetSessionsInfoForReport() const {
+        return Storage->GetSessionsInfoForReport();
+    }
+
     bool LoadIdempotency(NTabletFlatExecutor::TTransactionContext& txc);
 
-    [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> AddTask(const TTask& task);
-    [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> AddTaskFromProto(const NKikimrTxBackgroundProto::TTaskContainer& taskProto);
-    [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> Remove(const TString& className, const TString& identifier);
-    [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> ApplyControlFromProto(const NKikimrTxBackgroundProto::TSessionControlContainer& controlProto);
-    [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> ApplyControl(const TSessionControlContainer& control);
+    [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> TxAddTask(const TTask& task);
+    [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> TxAddTaskFromProto(const NKikimrTxBackgroundProto::TTaskContainer& taskProto);
+    [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> TxRemove(const TString& className, const TString& identifier);
+    [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> TxApplyControlFromProto(const NKikimrTxBackgroundProto::TSessionControlContainer& controlProto);
+    [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> TxApplyControl(const TSessionControlContainer& control);
 
     void Start() {
         AFL_VERIFY(!Finished);

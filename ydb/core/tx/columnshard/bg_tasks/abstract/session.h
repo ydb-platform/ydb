@@ -9,6 +9,10 @@
 #include <ydb/library/conclusion/status.h>
 #include <ydb/library/conclusion/result.h>
 
+namespace Ydb::Operations {
+class Operation;
+}
+
 namespace NKikimr::NOlap::NBackground {
 
 class TSession;
@@ -138,6 +142,22 @@ private:
     YDB_ACCESSOR_DEF(TString, Progress);
     YDB_ACCESSOR_DEF(TString, State);
 public:
+};
+
+class TSessionInfoReport {
+private:
+    YDB_READONLY_DEF(TString, Identifier);
+    YDB_READONLY_DEF(TString, ClassName);
+    YDB_READONLY(bool, IsFinished, false);
+public:
+    Ydb::Operations::Operation SerializeToProto() const;
+
+    TSessionInfoReport(const TString& id, const TString& className, const bool isFinished)
+        : Identifier(id)
+        , ClassName(className)
+        , IsFinished(isFinished) {
+
+    }
 };
 
 }

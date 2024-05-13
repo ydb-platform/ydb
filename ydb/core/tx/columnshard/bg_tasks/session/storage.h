@@ -7,6 +7,14 @@ class TSessionsContainer {
 private:
     THashMap<TString, std::shared_ptr<TSession>> Sessions;
 public:
+    std::vector<TSessionInfoReport> GetSessionsInfoForReport() const {
+        std::vector<TSessionInfoReport> result;
+        for (auto&& i : Sessions) {
+            result.emplace_back(i.second->GetSessionInfoForReport());
+        }
+        return result;
+    }
+
     TConclusionStatus AddSession(const std::shared_ptr<TSession>& session) {
         AFL_VERIFY(!!session);
         if (!Sessions.emplace(session->GetIdentifier(), session).second) {
@@ -63,6 +71,15 @@ private:
         return *it->second;
     }
 public:
+    std::vector<TSessionInfoReport> GetSessionsInfoForReport() const {
+        std::vector<TSessionInfoReport> result;
+        for (auto&& [_, i] : ContainersByClass) {
+            std::vector<TSessionInfoReport> resultClass = i->GetSessionsInfoForReport();
+            result.insert(result.end(), resultClass.begin(), resultClass.end());
+        }
+        return result;
+    }
+
     void Start(const std::shared_ptr<ITabletAdapter>& adapter) {
         for (auto&& i : ContainersByClass) {
             i.second->Start(adapter);

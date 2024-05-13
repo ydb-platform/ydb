@@ -12,6 +12,10 @@ private:
     YDB_READONLY_DEF(TStatusChannelContainer, ChannelContainer);
     YDB_READONLY_DEF(TSessionLogicContainer, LogicContainer);
 public:
+    TSessionInfoReport GetSessionInfoForReport() const {
+        return TSessionInfoReport(Identifier, LogicContainer.GetClassName(), LogicContainer->IsFinished());
+    }
+
     TSessionRecord SerializeToLocalDatabaseRecord() const {
         TSessionRecord result;
         result.SetIdentifier(Identifier);

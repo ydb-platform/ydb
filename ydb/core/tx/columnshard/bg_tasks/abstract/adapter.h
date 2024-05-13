@@ -27,7 +27,8 @@ public:
         , TabletId(tabletId)
         , TabletExecutor(tabletExecutor)
     {
-
+        AFL_VERIFY(!!TabletActorId);
+        AFL_VERIFY(!!(ui64)TabletId);
     }
     virtual ~ITabletAdapter() = default;
 

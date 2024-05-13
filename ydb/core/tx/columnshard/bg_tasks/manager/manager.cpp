@@ -7,7 +7,7 @@
 
 namespace NKikimr::NOlap::NBackground {
 
-std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::ApplyControl(const TSessionControlContainer& control) {
+std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::TxApplyControl(const TSessionControlContainer& control) {
     auto session = Storage->GetSession(control.GetLogicControlContainer()->GetSessionClassName(), control.GetLogicControlContainer()->GetSessionIdentifier());
     if (!session) {
         control.GetChannelContainer()->OnFail("session not exists");
@@ -27,27 +27,27 @@ std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::ApplyContro
     }
 }
 
-std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::ApplyControlFromProto(const NKikimrTxBackgroundProto::TSessionControlContainer& controlProto) {
+std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::TxApplyControlFromProto(const NKikimrTxBackgroundProto::TSessionControlContainer& controlProto) {
     TSessionControlContainer control;
     auto conclusion = control.DeserializeFromProto(controlProto);
     if (conclusion.IsFail()) {
         control.GetChannelContainer()->OnFail(conclusion.GetErrorMessage());
         return nullptr;
     }
-    return ApplyControl(control);
+    return TxApplyControl(control);
 }
 
-std::unique_ptr<NKikimr::NTabletFlatExecutor::ITransaction> TSessionsManager::AddTaskFromProto(const NKikimrTxBackgroundProto::TTaskContainer& taskProto) {
+std::unique_ptr<NKikimr::NTabletFlatExecutor::ITransaction> TSessionsManager::TxAddTaskFromProto(const NKikimrTxBackgroundProto::TTaskContainer& taskProto) {
     TTask task;
     auto conclusion = task.DeserializeFromProto(taskProto);
     if (conclusion.IsFail()) {
         task.GetChannelContainer()->OnFail(conclusion.GetErrorMessage());
         return nullptr;
     }
-    return AddTask(task);
+    return TxAddTask(task);
 }
 
-std::unique_ptr<NKikimr::NTabletFlatExecutor::ITransaction> TSessionsManager::AddTask(const TTask& task) {
+std::unique_ptr<NKikimr::NTabletFlatExecutor::ITransaction> TSessionsManager::TxAddTask(const TTask& task) {
     auto session = Storage->GetSession(task.GetDescriptionContainer().GetClassName(), task.GetIdentifier());
     if (!!session) {
         task.GetChannelContainer()->OnFail("session exists already");
@@ -83,7 +83,7 @@ bool TSessionsManager::LoadIdempotency(NTabletFlatExecutor::TTransactionContext&
     return true;
 }
 
-std::unique_ptr<NKikimr::NTabletFlatExecutor::ITransaction> TSessionsManager::Remove(const TString& className, const TString& identifier) {
+std::unique_ptr<NKikimr::NTabletFlatExecutor::ITransaction> TSessionsManager::TxRemove(const TString& className, const TString& identifier) {
     return std::make_unique<TTxRemoveSession>(className, identifier, Adapter, Storage);
 }
 

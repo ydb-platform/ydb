@@ -32,7 +32,6 @@ void TTxChainActor::Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev
     SessionLogic->ResetCurrentTxId();
     SessionLogic->NextStep();
     SaveSessionProgress();
-    WaitTxId.reset();
 }
 
 void TTxChainActor::Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {

@@ -286,6 +286,8 @@ namespace NKikimr::NStorage {
             }
             CurrentProposedStorageConfig.reset();
         } else {
+            STLOG(PRI_DEBUG, BS_NODE, NWDC47, "no quorum for ProposedStorageConfig", (Record, *res),
+                (CurrentProposedStorageConfig, *CurrentProposedStorageConfig));
             CurrentProposedStorageConfig.reset();
             return "no quorum for ProposedStorageConfig";
         }

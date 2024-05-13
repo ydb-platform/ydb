@@ -414,8 +414,13 @@ void TPartitionFamily::Merge(TPartitionFamily* other) {
 TString TPartitionFamily::DebugStr() const {
     TStringBuilder sb;
     sb << "family=" << Id << " (Status=" << Status
-            << ", Partitions=[" << JoinRange(", ", Partitions.begin(), Partitions.end())
-            << "], SpecialSessions=" << SpecialSessions.size();
+            << ", Partitions=[" << JoinRange(", ", Partitions.begin(), Partitions.end()) << "]";
+    if (!WantedPartitions.empty()) {
+        sb << ", WantedPartitions=[" << JoinRange(", ", WantedPartitions.begin(), WantedPartitions.end()) << "]";
+    }
+    if (!SpecialSessions.empty()) {
+        sb << ", SpecialSessions=" << SpecialSessions.size();
+    }
     if (Session) {
         sb << ", Session=" << Session->DebugStr();
     }
@@ -823,7 +828,7 @@ void TConsumer::RegisterReadingSession(TSession* session, const TActorContext& c
 
     if (session->WithGroups()) {
         for (auto& [_, family] : Families) {
-            if (session->AllPartitionsReadable(family->Partitions)) {
+            if (session->AllPartitionsReadable(family->Partitions) && session->AllPartitionsReadable(family->WantedPartitions)) {
                 family->SpecialSessions[session->Pipe] = session;
                 FamiliesRequireBalancing[family->Id] = family.get();
             }
@@ -1189,6 +1194,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
             if (sit == sessions.end()) {
                 LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
                         GetPrefix() << "balancing of the " << family->DebugStr() << " failed because there are no suitable reading sessions.");
+
                 continue;
             }
 

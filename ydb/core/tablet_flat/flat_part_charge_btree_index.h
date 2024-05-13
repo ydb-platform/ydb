@@ -14,6 +14,7 @@ class TChargeBTreeIndex : public ICharge {
     using TGroupId = NPage::TGroupId;
     using TChild = TBtreeIndexNode::TChild;
     using TShortChild = TBtreeIndexNode::TShortChild;
+    using TCells = NPage::TCells;
 
     struct TChildState {
         TPageId PageId;

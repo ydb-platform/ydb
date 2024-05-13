@@ -6,7 +6,7 @@
 namespace NKikimr {
 namespace NTable {
 
-inline bool BuildStatsMixedIndex(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, IPages* env) {
+inline bool BuildStatsMixedIndex(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, IPages* env, TBuildStatsYieldHandler yieldHandler) {
     stats.Clear();
 
     TDataStats iteratorStats = { };
@@ -32,6 +32,8 @@ inline bool BuildStatsMixedIndex(const TSubset& subset, TStats& stats, ui64 rowC
     ui64 prevRows = 0;
     ui64 prevSize = 0;
     while (true) {
+        yieldHandler();
+
         auto ready = statsIterator.Next(iteratorStats);
         if (ready == EReady::Page) {
             return false;

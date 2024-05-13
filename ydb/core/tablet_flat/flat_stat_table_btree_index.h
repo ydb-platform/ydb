@@ -66,6 +66,60 @@ TChild GetChild(const TPart* part, TGroupId groupId, TRowId rowId, IPages* env, 
     return result;
 }
 
+TChild GetPrevHistoryChild(const TPart* part, TGroupId groupId, TRowId rowId, IPages* env, bool& ready) {
+    auto& meta = part->IndexPages.GetBTree(groupId);
+
+    TPageId pageId = meta.PageId;
+    TChild result{0, 0, 0, 0, 0};
+
+    for (ui32 height = 0; height < meta.LevelCount; height++) {
+        auto page = env->TryGetPage(part, pageId, {});
+        if (!page) {
+            ready = false;
+            return result;
+        }
+        auto node = TBtreeIndexNode(*page);
+        auto pos = node.Seek(rowId);
+        pageId = node.GetShortChild(pos).PageId;
+        if (pos) {
+            if (node.IsShortChildFormat()) {
+                auto& child = node.GetShortChild(pos - 1);
+                result = {child.PageId, child.RowCount, child.DataSize, 0, 0};
+            } else {
+                result = node.GetChild(pos - 1);
+            }
+        }
+    }
+
+    return result;
+}
+
+TChild GetHistoryChild(const TPart* part, TGroupId groupId, TRowId rowId, IPages* env, bool& ready) {
+    auto& meta = part->IndexPages.GetBTree(groupId);
+
+    TPageId pageId = meta.PageId;
+    TChild result = meta;
+
+    for (ui32 height = 0; height < meta.LevelCount; height++) {
+        auto page = env->TryGetPage(part, pageId, {});
+        if (!page) {
+            ready = false;
+            return result;
+        }
+        auto node = TBtreeIndexNode(*page);
+        auto pos = node.Seek(rowId);
+        pageId = node.GetShortChild(pos).PageId;
+        if (node.IsShortChildFormat()) {
+            auto& child = node.GetShortChild(pos);
+            result = {child.PageId, child.RowCount, child.DataSize, 0, 0};
+        } else {
+            result = node.GetChild(pos);
+        }
+    }
+
+    return result;
+}
+
 void AddBlobsSize(const TPart* part, TChanneledDataSize& stats, const TFrames* frames, ELargeObj lob, TRowId beginRowId, TRowId endRowId) noexcept {
     ui32 page = frames->Lower(beginRowId, 0, Max<ui32>());
 
@@ -95,7 +149,7 @@ void AddSliceDataSize(TStats& stats, ui8 channel, const TChild& prevChild, const
             stats.DataSize.Add(lastChild.DataSize - prevChild.DataSize, channel);
         } else {
             ui128 countedDataSize = lastChild.DataSize - prevChild.DataSize;
-            ui64 sliceDataSize = static_cast<ui64>(countedDataSize  * sliceRows / countedRows);
+            ui64 sliceDataSize = static_cast<ui64>(countedDataSize * sliceRows / countedRows);
             stats.DataSize.Add(sliceDataSize, channel);
         }
     }
@@ -145,12 +199,27 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env) {
         }
     }
 
+    if (part->HistoricGroupsCount && false) { // main history group
+        TGroupId groupId{0, true};
+        auto channel = part->GetGroupChannel(groupId);
+        for (const auto& slice : *part.Slices) {
+            auto prevChild = GetPrevHistoryChild(part.Part.Get(), groupId, slice.BeginRowId(), env, ready);
+            auto lastChild = GetHistoryChild(part.Part.Get(), groupId, slice.EndRowId() - 1, env, ready);
+            if (!ready) {
+                continue;
+            }
+
+            // TODO: don't count twice
+            AddSliceDataSize(stats, channel, prevChild, lastChild, prevChild.RowCount, lastChild.RowCount);
+        }
+    }
+
     return ready;
 }
 
 }
 
-inline bool BuildStatsBTreeIndex(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, IPages* env) {
+inline bool BuildStatsBTreeIndex(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, IPages* env, TBuildStatsYieldHandler) {
     stats.Clear();
 
     Y_UNUSED(rowCountResolution, dataSizeResolution);

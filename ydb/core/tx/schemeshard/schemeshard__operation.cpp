@@ -12,6 +12,8 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 
+#include <ydb/library/protobuf_printer/security_printer.h>
+
 #include <util/generic/algorithm.h>
 
 namespace NKikimr::NSchemeShard {
@@ -83,6 +85,14 @@ NKikimrScheme::TEvModifySchemeTransaction GetRecordForPrint(const NKikimrScheme:
         recordForPrint.SetUserToken("***hide token***");
     }
     return recordForPrint;
+}
+
+TString PrintSecurely(const NKikimrScheme::TEvModifySchemeTransaction& record) {
+    TSecurityTextFormatPrinter<NKikimrScheme::TEvModifySchemeTransaction> printer;
+    printer.SetSingleLineMode(true);
+    TString string;
+    printer.PrintToString(record, &string);
+    return string;
 }
 
 THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request, TOperationContext& context) {
@@ -183,7 +193,7 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
                                     << ", already accepted parts: " << operation->Parts.size()
                                     << ", propose result status: " << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
                                     << ", with reason: " << response->Record.GetReason()
-                                    << ", tx message: " << GetRecordForPrint(record).ShortDebugString());
+                                    << ", tx message: " << PrintSecurely(record));
                 }
 
                 Y_VERIFY_S(context.IsUndoChangesSafe(),
@@ -194,7 +204,7 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
                                << ", already accepted parts: " << operation->Parts.size()
                                << ", propose result status: " << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
                                << ", with reason: " << response->Record.GetReason()
-                               << ", tx message: " << GetRecordForPrint(record).ShortDebugString());
+                               << ", tx message: " << PrintSecurely(record));
 
                 context.OnComplete = {}; // recreate
                 context.DbChanges = {};
@@ -237,7 +247,7 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
 
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "TTxOperationPropose Execute"
-                        << ", message: " << GetRecordForPrint(Request->Get()->Record).ShortDebugString()
+                        << ", message: " << PrintSecurely(Request->Get()->Record)
                         << ", at schemeshard: " << selfId);
 
         txc.DB.NoMoreReadsForTx();
@@ -1030,7 +1040,7 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxCreateSequence:
         return CreateNewSequence(NextPartId(), txState);
     case TTxState::ETxType::TxAlterSequence:
-        Y_ABORT("TODO: implement");
+        return CreateAlterSequence(NextPartId(), txState);
     case TTxState::ETxType::TxDropSequence:
         return CreateDropSequence(NextPartId(), txState);
     case TTxState::ETxType::TxCopySequence:
@@ -1048,9 +1058,11 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxCreateReplication:
         return CreateNewReplication(NextPartId(), txState);
     case TTxState::ETxType::TxAlterReplication:
-        Y_ABORT("TODO: implement");
+        return CreateAlterReplication(NextPartId(), txState);
     case TTxState::ETxType::TxDropReplication:
-        return CreateDropReplication(NextPartId(), txState);
+        return CreateDropReplication(NextPartId(), txState, false);
+    case TTxState::ETxType::TxDropReplicationCascade:
+        return CreateDropReplication(NextPartId(), txState, true);
 
     // BlobDepot
     case TTxState::ETxType::TxCreateBlobDepot:
@@ -1213,7 +1225,7 @@ ISubOperation::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationType op
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence:
         return CreateNewSequence(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterSequence:
-        Y_ABORT("TODO: implement");
+        return CreateAlterSequence(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropSequence:
         return CreateDropSequence(NextPartId(), tx);
 
@@ -1270,9 +1282,11 @@ ISubOperation::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationType op
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateReplication:
         return CreateNewReplication(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterReplication:
-        Y_ABORT("TODO: implement");
+        return CreateAlterReplication(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropReplication:
-        return CreateDropReplication(NextPartId(), tx);
+        return CreateDropReplication(NextPartId(), tx, false);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropReplicationCascade:
+        return CreateDropReplication(NextPartId(), tx, true);
 
     // BlobDepot
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlobDepot:

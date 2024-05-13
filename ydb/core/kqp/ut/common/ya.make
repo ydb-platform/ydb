@@ -18,6 +18,7 @@ PEERDIR(
     ydb/library/yql/udfs/common/string
     ydb/library/yql/utils/backtrace
     ydb/public/lib/yson_value
+    ydb/core/tx/columnshard/test_helper
     ydb/public/sdk/cpp/client/draft
     ydb/public/sdk/cpp/client/ydb_query
     ydb/public/sdk/cpp/client/ydb_proto

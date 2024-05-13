@@ -1,5 +1,0 @@
-RECURSE(
-    gracefulswitch
-    nop
-    stub
-)

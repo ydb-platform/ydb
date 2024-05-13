@@ -4396,9 +4396,17 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
     Y_UNIT_TEST(DelayedWriteReplyAfterSplit) {
         TPortManager pm;
+        TServerSettings::TControls controls;
+        // This test needs to make sure mediator time does not advance while
+        // certain operations are running. Unfortunately, volatile planning
+        // may happen every 1ms, and it's too hard to guarantee time stays
+        // still for such a short time. We disable volatile planning to make
+        // coordinator ticks are 100ms apart.
+        controls.MutableCoordinatorControls()->SetVolatilePlanLeaseMs(0);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetNodeCount(2)
+            .SetControls(controls)
             .SetUseRealThreads(false)
             .SetDomainPlanResolution(100);
 
@@ -4407,6 +4415,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_COORDINATOR, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_MEDIATOR_TIMECAST, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_TRACE);
@@ -4538,13 +4548,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             // Try to be future proof, in case we implement waiting with dst shards
             Cerr << "... upsert did not finish before unblocking node 2" << Endl;
         }
-    }
-
-    void CompactBorrowed(TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId) {
-        auto msg = MakeHolder<TEvDataShard::TEvCompactBorrowed>(tableId.PathId);
-        auto sender = runtime.AllocateEdgeActor();
-        runtime.SendToPipe(shardId, sender, msg.Release(), 0, GetPipeConfigWithRetries());
-        runtime.GrabEdgeEventRethrow<TEvDataShard::TEvCompactBorrowedResult>(sender);
     }
 
     Y_UNIT_TEST(PostMergeNotCompactedTooEarly) {

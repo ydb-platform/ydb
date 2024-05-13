@@ -6,6 +6,7 @@ SRCS(
     owner.cpp
     private.cpp
     object_counter.cpp
+    histogram.cpp
 )
 
 PEERDIR(

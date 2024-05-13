@@ -380,6 +380,8 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
         TCases cases = {
             {"create async replication user for table1 AS table2 with (user='foo')",
              "CREATE ASYNC REPLICATION user FOR table1 AS table2 WITH (user = 'foo');\n"},
+            {"alter async replication user set (user='foo')",
+             "ALTER ASYNC REPLICATION user SET (user = 'foo');\n"},
             {"drop async replication user",
              "DROP ASYNC REPLICATION user;\n"},
             {"drop async replication user cascade",

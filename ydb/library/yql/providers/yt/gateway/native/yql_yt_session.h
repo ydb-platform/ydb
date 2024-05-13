@@ -53,6 +53,9 @@ struct TSession: public TThrRefBase {
 
     TTransactionCache TxCache_;
     TString SessionId_;
+
+private:
+    void StopQueueAndTracker();
 };
 
 } // NNative

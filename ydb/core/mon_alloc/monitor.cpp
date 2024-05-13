@@ -288,8 +288,8 @@ namespace NKikimr {
             struct TDumpLogConfig {
                 static constexpr double RssUsageHard = 0.9;
                 static constexpr double RssUsageSoft = 0.85;
-                static constexpr double RssUsageSoftLimit = 0.8;
-                static constexpr double RssUsageNotifySlowLimit = 0.7;
+                static constexpr double RssUsageSoftLimit = 0.75;
+                static constexpr double RssUsageNotifySlowLimit = 0.5;
                 static constexpr TDuration RepeatInterval = TDuration::Seconds(10);
                 static constexpr TDuration DumpInterval = TDuration::Minutes(10);
                 static constexpr TDuration NotifySlowInterval = TDuration::Seconds(10);

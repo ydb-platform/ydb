@@ -8,6 +8,7 @@ import "ydb/core/protos/blobstorage_pdisk_config.proto";
 import "ydb/core/protos/blobstorage_config.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
 import "ydb/core/protos/blobstorage_disk_color.proto";
+import "ydb/core/protos/node_whiteboard.proto";
 
 package NKikimrBlobStorage;
 option java_package = "ru.yandex.kikimr.proto";
@@ -1084,6 +1085,7 @@ message TEvControllerRegisterNode {
     repeated uint32 GroupGenerations = 5; // must be zero entries (for old nodes) and the same number as in Groups for new ones
     repeated TVDiskStatus VDiskStatus = 6; // actual status for currently operating VDisks
     repeated TDriveData DrivesData = 7;
+    optional bool DeclarativePDiskManagement = 8;
 }
 
 message TEvControllerUpdateNodeDrives {
@@ -1313,8 +1315,18 @@ message TEvControllerNodeReport {
         optional EVDiskPhase Phase = 3;
     }
 
+    enum EPDiskPhase {
+        PD_UNKNOWN = 0;
+        PD_RESTARTED = 1;
+    }
+    message TPDiskReport {
+        optional uint32 PDiskId = 1;
+        optional EPDiskPhase Phase = 2;
+    }
+
     optional uint32 NodeId = 1;
     repeated TVDiskReport VDiskReports = 2;
+    repeated TPDiskReport PDiskReports = 3;
 }
 
 message TEvControllerGroupDecommittedNotify {
@@ -1334,6 +1346,7 @@ message TGroupMetrics {
 message TEvControllerGroupMetricsExchange {
     repeated TGroupMetrics GroupMetrics = 1;
     repeated fixed32 GroupsToQuery = 2; // filled in by entities asking BSC to report some metrics in return
+    optional NKikimrWhiteboard.TBSGroupStateInfo WhiteboardUpdate = 3;
 }
 
 message TEvNodeWardenQueryGroupInfo {

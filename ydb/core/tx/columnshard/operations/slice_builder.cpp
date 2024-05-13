@@ -23,11 +23,11 @@ std::optional<std::vector<NKikimr::NArrow::TSerializedBatch>> TBuildSlicesTask::
     NArrow::TBatchSplitttingContext context(NColumnShard::TLimits::GetMaxBlobSize());
     context.SetFieldsForSpecialKeys(WriteData.GetPrimaryKeySchema());
     auto splitResult = NArrow::SplitByBlobSize(batch, context);
-    if (!splitResult) {
+    if (splitResult.IsFail()) {
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", TStringBuilder() << "cannot split batch in according to limits: " + splitResult.GetErrorMessage());
         return {};
     }
-    auto result = splitResult.ReleaseResult();
+    auto result = splitResult.DetachResult();
     if (result.size() > 1) {
         for (auto&& i : result) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "strange_blobs_splitting")("blob", i.DebugString())("original_size", WriteData.GetSize());

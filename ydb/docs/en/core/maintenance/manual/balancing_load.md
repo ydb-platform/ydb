@@ -7,11 +7,11 @@
 
 ## Distribute the load evenly across groups {#reassign-groups}
 
-At the bottom of the [Hive web-viewer](../embedded_monitoring/hive.md#reassign_groups) page, there is a button named "Reassign Groups".
+At the bottom of the [Hive web-viewer](../../reference/embedded-ui/hive.md#reassign_groups) page, there is a button named "Reassign Groups".
 
 ## Distribute VDisks evenly across block store volumes {#cluster-balance}
 
-As a result of some operations, such as [decommissioning](../../administration/decommissioning.md), VDisks can be distributed across block store volumes unevenly. You can distribute them more evenly in one of the following ways:
+As a result of some operations, such as [decommissioning](../../devops/manual/decommissioning.md), VDisks can be distributed across block store volumes unevenly. You can distribute them more evenly in one of the following ways:
 
 * [Move VDisks](moving_vdisks.md#moving_vdisk) one by one from overloaded block store volumes.
 * Use [{{ ydb-short-name }} DSTool](../../reference/ydb-dstool/index.md). The command below moves a VDisk from an overloaded block store volume to a less loaded one:

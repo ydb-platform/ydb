@@ -444,26 +444,6 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
     const auto& node = plan.GetMapSafe();
 
     auto& newRow = table.AddRow();
-    if (AnalyzeMode) {
-        TString cpuTime;
-        TString nRows;
-
-        if (node.contains("Stats")) {
-            const auto& stats = node.at("Stats").GetMapSafe();
-
-            if (stats.contains("OutputRows")) {
-                auto outputRows = stats.at("OutputRows");
-                if (outputRows.IsMap()) {
-                    nRows = FormatPrettyTableDouble(outputRows.GetMapSafe().at("Sum").GetString());
-                } else {
-                    nRows = FormatPrettyTableDouble(outputRows.GetString());
-                }
-            }
-        }
-
-        newRow.Column(1, std::move(cpuTime));
-        newRow.Column(2, std::move(nRows));
-    }
 
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
     TStringBuf color;
@@ -486,13 +466,16 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
         for (const auto& op : node.at("Operators").GetArraySafe()) {
             TVector<TString> info;
             TString aCpu;
+            TString aRows;
             TString eCost;
             TString eRows;
             TString eSize;
 
             for (const auto& [key, value] : op.GetMapSafe()) {
                 if (key == "A-Cpu") {
-                    aCpu = FormatPrettyTableDouble(value.GetString());
+                    aCpu = FormatPrettyTableDouble(std::to_string(value.GetDouble()));
+                } else if (key == "A-Rows") {
+                    aRows = FormatPrettyTableDouble(std::to_string(value.GetDouble()));
                 } else if (key == "E-Cost") {
                     eCost = FormatPrettyTableDouble(value.GetString());
                 } else if (key == "E-Rows") {
@@ -524,6 +507,7 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
             newRow.Column(0, std::move(operation));
             if (AnalyzeMode) {
                 newRow.Column(1, std::move(aCpu));
+                newRow.Column(2, std::move(aRows));
                 newRow.Column(3, std::move(eCost));
                 newRow.Column(4, std::move(eRows));
                 newRow.Column(5, std::move(eSize));

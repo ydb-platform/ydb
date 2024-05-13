@@ -2,6 +2,7 @@
 
 #include "common.h"
 
+#include <ydb/core/protos/kqp.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_query/query.h>
 
 
@@ -37,6 +38,8 @@ struct TRequestResult {
 
     TRequestResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues);
 
+    TRequestResult(Ydb::StatusIds::StatusCode status, const google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>& issues);
+
     bool IsSuccess() const;
 
     TString ToString() const;
@@ -53,9 +56,13 @@ public:
 
     TRequestResult QueryRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets) const;
 
+    TRequestResult YqlScriptRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets) const;
+
     TRequestResult GetScriptExecutionOperationRequest(const TString& operation, TExecutionMeta& meta) const;
 
     TRequestResult FetchScriptExecutionResultsRequest(const TString& operation, i32 resultSetId, Ydb::ResultSet& resultSet) const;
+
+    TRequestResult ForgetScriptExecutionOperationRequest(const TString& operation) const;
 
     void StartTraceOpt() const;
 

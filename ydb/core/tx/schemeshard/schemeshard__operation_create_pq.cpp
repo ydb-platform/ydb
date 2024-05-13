@@ -122,8 +122,8 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
                     TVector<TCell> cells;
                     TString error;
                     TVector<TString> memoryOwner;
-                    if (!NMiniKQL::CellsFromTuple(nullptr, op.GetPartitionBoundaries(i), pqGroupInfo->KeySchema, false,
-                                                  cells, error, memoryOwner)) {
+                    if (!NMiniKQL::CellsFromTuple(nullptr, op.GetPartitionBoundaries(i), pqGroupInfo->KeySchema, {},
+                                                  false, cells, error, memoryOwner)) {
                         status = NKikimrScheme::StatusSchemeError;
                         errStr = Sprintf("Invalid partition boundary at position: %u, error: %s", i, error.data());
                         return nullptr;
@@ -522,12 +522,11 @@ public:
 
         context.SS->PersistTxState(db, OperationId);
 
-        context.SS->PersistPath(db, dstPath.Base()->PathId);
 
         if (!acl.empty()) {
             dstPath.Base()->ApplyACL(acl);
-            context.SS->PersistACL(db, dstPath.Base());
         }
+        context.SS->PersistPath(db, dstPath.Base()->PathId);
 
         context.SS->PersistUpdateNextPathId(db);
         context.SS->PersistUpdateNextShardIdx(db);

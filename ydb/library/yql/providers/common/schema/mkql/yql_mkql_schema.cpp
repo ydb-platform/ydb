@@ -68,7 +68,7 @@ class TRuntimeTypeSaver: public TSaver<TRuntimeTypeSaver<TSaver>> {
 
 public:
     TRuntimeTypeSaver(typename TBase::TConsumer& consumer)
-        : TBase(consumer)
+        : TBase(consumer, false)
     {
     }
 

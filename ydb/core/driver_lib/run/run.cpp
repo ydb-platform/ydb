@@ -114,6 +114,7 @@
 #include <ydb/services/ydb/ydb_dummy.h>
 #include <ydb/services/ydb/ydb_export.h>
 #include <ydb/services/ydb/ydb_import.h>
+#include <ydb/services/backup/grpc_service.h>
 #include <ydb/services/ydb/ydb_logstore.h>
 #include <ydb/services/ydb/ydb_operation.h>
 #include <ydb/services/ydb/ydb_query.h>
@@ -750,6 +751,11 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
                 grpcRequestProxies[0], hasImport.IsRlAllowed()));
         }
 
+        if (hasImport && hasExport && appConfig.GetFeatureFlags().GetEnableBackupService()) {
+            server.AddService(new NGRpcService::TGRpcBackupService(ActorSystem.Get(), Counters,
+                grpcRequestProxies[0], hasExport.IsRlAllowed()));
+        }
+
         if (hasKesus) {
             server.AddService(new NKesus::TKesusGRpcService(ActorSystem.Get(), Counters,
                 grpcRequestProxies[0], hasKesus.IsRlAllowed()));
@@ -1081,6 +1087,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     }
 
     AppData->TenantName = runConfig.TenantName;
+
+    if (runConfig.AppConfig.GetDynamicNodeConfig().GetNodeInfo().HasName()) {
+        AppData->NodeName = runConfig.AppConfig.GetDynamicNodeConfig().GetNodeInfo().GetName();
+    }
 
     if (runConfig.AppConfig.HasBootstrapConfig()) {
         AppData->BootstrapConfig = runConfig.AppConfig.GetBootstrapConfig();

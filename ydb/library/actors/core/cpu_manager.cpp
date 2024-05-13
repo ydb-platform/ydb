@@ -1,4 +1,5 @@
 #include "cpu_manager.h"
+#include "executor_pool_jail.h"
 #include "probes.h"
 
 #include "executor_pool_basic.h"
@@ -18,9 +19,16 @@ namespace NActors {
         }
     }
 
+    TCpuManager::~TCpuManager() {
+    }
+
     void TCpuManager::Setup() {
         TAffinity available;
         available.Current();
+
+        if (Config.Jail) {
+            Jail = std::make_unique<TExecutorPoolJail>(ExecutorPoolCount, *Config.Jail);
+        }
 
         std::vector<i16> poolsWithSharedThreads;
         for (TBasicExecutorPoolConfig& cfg : Config.Basic) {
@@ -127,13 +135,13 @@ namespace NActors {
             if (cfg.PoolId == poolId) {
                 if (cfg.HasSharedThread) {
                     auto *sharedPool = static_cast<TSharedExecutorPool*>(Shared.get());
-                    auto *pool = new TBasicExecutorPool(cfg, Harmonizer.get());
+                    auto *pool = new TBasicExecutorPool(cfg, Harmonizer.get(), Jail.get());
                     if (pool) {
                         pool->AddSharedThread(sharedPool->GetSharedThread(poolId));
                     }
                     return pool;
                 } else {
-                    return new TBasicExecutorPool(cfg, Harmonizer.get());
+                    return new TBasicExecutorPool(cfg, Harmonizer.get(), Jail.get());
                 }
             }
         }

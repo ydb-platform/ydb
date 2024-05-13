@@ -1,5 +1,6 @@
 #include "merger.h"
 #include "result_builder.h"
+#include <ydb/library/services/services.pb.h>
 
 namespace NKikimr::NArrow::NMerger {
 
@@ -10,24 +11,6 @@ void TMergePartialStream::PutControlPoint(std::shared_ptr<TSortableBatchPosition
     Y_ABORT_UNLESS(++ControlPoints == 1);
 
     SortHeap.Push(TBatchIterator(*point));
-}
-
-void TMergePartialStream::AddSource(std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<NArrow::TColumnFilter> filter) {
-    if (!batch || !batch->num_rows()) {
-        return;
-    }
-    Y_DEBUG_ABORT_UNLESS(NArrow::IsSorted(batch, SortSchema));
-    AddNewToHeap(batch, filter);
-}
-
-void TMergePartialStream::AddNewToHeap(std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<NArrow::TColumnFilter> filter) {
-    if (!filter || filter->IsTotalAllowFilter()) {
-        SortHeap.Push(TBatchIterator(batch, nullptr, SortSchema->field_names(), DataSchema ? DataSchema->field_names() : std::vector<std::string>(), Reverse, VersionColumnNames));
-    } else if (filter->IsTotalDenyFilter()) {
-        return;
-    } else {
-        SortHeap.Push(TBatchIterator(batch, filter, SortSchema->field_names(), DataSchema ? DataSchema->field_names() : std::vector<std::string>(), Reverse, VersionColumnNames));
-    }
 }
 
 void TMergePartialStream::RemoveControlPoint() {
@@ -54,16 +37,17 @@ void TMergePartialStream::CheckSequenceInDebug(const TSortableBatchPosition& nex
 #endif
 }
 
-bool TMergePartialStream::DrainCurrentTo(TRecordBatchBuilder& builder, const TSortableBatchPosition& readTo, const bool includeFinish, std::optional<TSortableBatchPosition>* lastResultPosition) {
+bool TMergePartialStream::DrainToControlPoint(TRecordBatchBuilder& builder, const bool includeFinish, std::optional<TSortableBatchPosition>* lastResultPosition) {
+    AFL_VERIFY(ControlPoints == 1);
     Y_ABORT_UNLESS((ui32)DataSchema->num_fields() == builder.GetBuildersCount());
     builder.ValidateDataSchema(DataSchema);
-    PutControlPoint(std::make_shared<TSortableBatchPosition>(readTo));
     bool cpReachedFlag = false;
-    while (SortHeap.Size() && !cpReachedFlag) {
+    while (SortHeap.Size() && !cpReachedFlag && !builder.IsBufferExhausted()) {
         if (SortHeap.Current().IsControlPoint()) {
+            auto keyColumns = SortHeap.Current().GetKeyColumns();
             RemoveControlPoint();
             cpReachedFlag = true;
-            if (SortHeap.Empty() || !includeFinish || SortHeap.Current().GetKeyColumns().Compare(readTo) == std::partial_ordering::greater) {
+            if (SortHeap.Empty() || !includeFinish || SortHeap.Current().GetKeyColumns().Compare(keyColumns) == std::partial_ordering::greater) {
                 return true;
             }
         }
@@ -76,11 +60,16 @@ bool TMergePartialStream::DrainCurrentTo(TRecordBatchBuilder& builder, const TSo
             }
         }
     }
-    return false;
+    return cpReachedFlag;
 }
 
-std::shared_ptr<arrow::RecordBatch> TMergePartialStream::SingleSourceDrain(const TSortableBatchPosition& readTo, const bool includeFinish, std::optional<TSortableBatchPosition>* lastResultPosition) {
-    std::shared_ptr<arrow::RecordBatch> result;
+bool TMergePartialStream::DrainCurrentTo(TRecordBatchBuilder& builder, const TSortableBatchPosition& readTo, const bool includeFinish, std::optional<TSortableBatchPosition>* lastResultPosition) {
+    PutControlPoint(std::make_shared<TSortableBatchPosition>(readTo));
+    return DrainToControlPoint(builder, includeFinish, lastResultPosition);
+}
+
+std::shared_ptr<arrow::Table> TMergePartialStream::SingleSourceDrain(const TSortableBatchPosition& readTo, const bool includeFinish, std::optional<TSortableBatchPosition>* lastResultPosition) {
+    std::shared_ptr<arrow::Table> result;
     if (SortHeap.Empty()) {
         return result;
     }
@@ -145,14 +134,14 @@ std::shared_ptr<arrow::RecordBatch> TMergePartialStream::SingleSourceDrain(const
         SortHeap.UpdateTop();
     }
     if (SortHeap.Empty()) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("pos", readTo.DebugJson().GetStringRobust())("heap", "EMPTY");
+        AFL_DEBUG(NKikimrServices::ARROW_HELPER)("pos", readTo.DebugJson().GetStringRobust())("heap", "EMPTY");
     } else {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("pos", readTo.DebugJson().GetStringRobust())("heap", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust());
+        AFL_DEBUG(NKikimrServices::ARROW_HELPER)("pos", readTo.DebugJson().GetStringRobust())("heap", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust());
     }
     return result;
 }
 
-bool TMergePartialStream::DrainAll(TRecordBatchBuilder& builder) {
+void TMergePartialStream::DrainAll(TRecordBatchBuilder& builder) {
     Y_ABORT_UNLESS((ui32)DataSchema->num_fields() == builder.GetBuildersCount());
     while (SortHeap.Size()) {
         if (auto currentPosition = DrainCurrentPosition()) {
@@ -160,7 +149,6 @@ bool TMergePartialStream::DrainAll(TRecordBatchBuilder& builder) {
             builder.AddRecord(*currentPosition);
         }
     }
-    return false;
 }
 
 std::optional<TSortableBatchPosition> TMergePartialStream::DrainCurrentPosition() {
@@ -211,11 +199,33 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> TMergePartialStream::DrainAllPa
     return result;
 }
 
-NJson::TJsonValue TMergePartialStream::TBatchIterator::DebugJson() const {
-    NJson::TJsonValue result;
-    result["is_cp"] = IsControlPoint();
-    result["key"] = KeyColumns.DebugJson();
-    return result;
+void TMergePartialStream::SkipToLowerBound(const TSortableBatchPosition& pos, const bool include) {
+    if (SortHeap.Empty()) {
+        return;
+    }
+    AFL_DEBUG(NKikimrServices::ARROW_HELPER)("pos", pos.DebugJson().GetStringRobust())("heap", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust());
+    while (!SortHeap.Empty()) {
+        const auto cmpResult = SortHeap.Current().GetKeyColumns().Compare(pos);
+        if (cmpResult == std::partial_ordering::greater) {
+            break;
+        }
+        if (cmpResult == std::partial_ordering::equivalent && include) {
+            break;
+        }
+        const TSortableBatchPosition::TFoundPosition skipPos = SortHeap.MutableCurrent().SkipToLower(pos);
+        AFL_DEBUG(NKikimrServices::ARROW_HELPER)("pos", pos.DebugJson().GetStringRobust())("heap", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust());
+        if (skipPos.IsEqual()) {
+            if (!include && !SortHeap.MutableCurrent().Next()) {
+                SortHeap.RemoveTop();
+            } else {
+                SortHeap.UpdateTop();
+            }
+        } else if (skipPos.IsLess()) {
+            SortHeap.RemoveTop();
+        } else {
+            SortHeap.UpdateTop();
+        }
+    }
 }
 
 }

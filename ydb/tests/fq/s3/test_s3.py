@@ -3,6 +3,7 @@
 
 import boto3
 import logging
+import os
 import pytest
 import time
 import ydb.public.api.protos.draft.fq_pb2 as fq
@@ -36,7 +37,7 @@ class TestS3(TestYdsBase):
             aws_secret_access_key="secret_key"
         )
 
-        fruits = R'''Fruit,Price,Weight
+        fruits = '''Fruit,Price,Weight
 Banana,3,100
 Apple,2,22
 Pear,15,33'''
@@ -81,7 +82,7 @@ Pear,15,33'''
         assert result_set.rows[2].items[0].bytes_value == b"Pear"
         assert result_set.rows[2].items[1].int32_value == 15
         assert result_set.rows[2].items[2].int32_value == 33
-        assert sum(kikimr.control_plane.get_metering()) == 10
+        assert sum(kikimr.control_plane.get_metering(1)) == 10
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
@@ -104,7 +105,7 @@ Pear,15,33'''
             aws_secret_access_key="secret_key"
         )
 
-        fruits = R'''Time,Fruit,Price
+        fruits = '''Time,Fruit,Price
 0,Banana,3
 1,Apple,2
 2,Pear,15'''
@@ -195,7 +196,7 @@ Pear,15,33'''
         assert result_set.rows[0].items[0].bytes_value == b"text3"
         assert result_set.rows[1].items[0].bytes_value == b"text2"
         assert result_set.rows[2].items[0].bytes_value == b"text1"
-        assert sum(kikimr.control_plane.get_metering()) == 10
+        assert sum(kikimr.control_plane.get_metering(1)) == 10
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
@@ -296,6 +297,7 @@ Pear,15,33'''
 
     @yq_v1
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
     def test_checkpoints_on_join_s3_with_yds(self, kikimr, s3, client, unique_prefix):
         # Prepare S3
         resource = boto3.resource(
@@ -491,7 +493,7 @@ Pear,15,33'''
         assert result_set.columns[2].name == "Weight"
         assert result_set.columns[2].type.type_id == ydb.Type.INT64
         assert len(result_set.rows) == 9
-        assert sum(kikimr.control_plane.get_metering()) == 10
+        assert sum(kikimr.control_plane.get_metering(1)) == 10
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
@@ -553,7 +555,7 @@ Pear,15,33'''
         assert result_set.rows[0].items[0].uint64_value == 1
         assert result_set.rows[1].items[0].uint64_value == 1
         assert result_set.rows[2].items[0].uint64_value == 1
-        assert sum(kikimr.control_plane.get_metering()) == 10
+        assert sum(kikimr.control_plane.get_metering(1)) == 10
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
@@ -719,7 +721,7 @@ Pear,15,33'''
         assert result_set.columns[0].type.optional_type.item.type_id == ydb.Type.DOUBLE
         assert len(result_set.rows) == 1
         assert result_set.rows[0].items[0].double_value == 3
-        assert sum(kikimr.control_plane.get_metering()) == 10
+        assert sum(kikimr.control_plane.get_metering(1)) == 10
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
@@ -749,7 +751,7 @@ Pear,15,33'''
         i18n_directory = 'dataset/こんにちは/'
         i18n_name = i18n_directory + 'fruitand&+ %непечатное.csv'
 
-        fruits = R'''Data
+        fruits = '''Data
 101
 102
 103'''
@@ -788,7 +790,7 @@ Pear,15,33'''
         assert result_set.columns[0].type.type_id == ydb.Type.UINT64
         assert len(result_set.rows) == 1
         assert result_set.rows[0].items[0].uint64_value == 1 if raw else 3
-        assert sum(kikimr.control_plane.get_metering()) == 10
+        assert sum(kikimr.control_plane.get_metering(1)) == 10
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
@@ -817,7 +819,7 @@ Pear,15,33'''
 
         i18n_name = 'fruit and &{+}% непечатное.csv'
 
-        fruits = R'''Data
+        fruits = '''Data
     101
     102
     103'''
@@ -883,7 +885,7 @@ Pear,15,33'''
         assert result_set.columns[0].type.type_id == ydb.Type.UINT64
         assert len(result_set.rows) == 1
         assert result_set.rows[0].items[0].uint64_value == 2 if raw else 6
-        assert sum(kikimr.control_plane.get_metering()) == 10
+        assert sum(kikimr.control_plane.get_metering(1)) == 10
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
@@ -934,4 +936,4 @@ Pear,15,33'''
         assert len(result_set.rows) == 1
         assert result_set.rows[0].items[0].uint64_value == 1024 * 10
         # 1024 x 1024 x 10 = 10 MB of raw data + little overhead for header, eols etc
-        assert sum(kikimr.control_plane.get_metering()) == 21
+        assert sum(kikimr.control_plane.get_metering(1)) == 21

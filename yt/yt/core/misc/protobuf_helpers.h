@@ -64,10 +64,11 @@ template <class T>
 void FromProto(T* original, ui64 serialized);
 
 ////////////////////////////////////////////////////////////////////////////////
-template <class TSerialized, class TOriginalArray>
+template <class TSerialized, class TOriginalArray, class... TArgs>
 void ToProto(
     ::google::protobuf::RepeatedPtrField<TSerialized>* serializedArray,
-    const TOriginalArray& originalArray);
+    const TOriginalArray& originalArray,
+    TArgs&&... args);
 
 template <class TSerialized, class TOriginalArray>
 void ToProto(
@@ -377,8 +378,17 @@ google::protobuf::Timestamp GetProtoNow();
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! This macro may be used to extract std::optional<T> from protobuf message field of type T.
-#define YT_PROTO_OPTIONAL(message, field) (((message).has_##field()) ? std::make_optional((message).field()) : std::nullopt)
+//! This macro may be used to extract std::optional<T> from protobuf message
+//! field. Macro accepts desired target type as optional third parameter.
+//! Usage:
+//!     // Get as is.
+//!     int instantInt = YT_PROTO_OPTIONAL(message, instant);
+//!     // Get with conversion.
+//!     TInstant instant = YT_PROTO_OPTIONAL(message, instant, TInstant);
+#define YT_PROTO_OPTIONAL(message, field, ...) \
+    (((message).has_##field()) \
+        ? std::optional(YT_PROTO_OPTIONAL_CONVERT(__VA_ARGS__)((message).field())) \
+        : std::nullopt)
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -188,7 +188,12 @@ public:
 
     void ThrowOnError() const;
 
+    template <CInvocable<bool(const TError&)> TFilter>
+    std::optional<TError> FindMatching(const TFilter& filter) const;
+    template <CInvocable<bool(TErrorCode)> TFilter>
+    std::optional<TError> FindMatching(const TFilter& filter) const;
     std::optional<TError> FindMatching(TErrorCode code) const;
+    std::optional<TError> FindMatching(const THashSet<TErrorCode>& codes) const;
 
     template <class... TArgs>
         requires std::constructible_from<TError, TArgs...>
@@ -400,9 +405,14 @@ public:
     T& Value() &;
     T&& Value() &&;
 
-    const T& ValueOrThrow() const &;
-    T& ValueOrThrow() &;
-    T&& ValueOrThrow() &&;
+    template <class... TArgs>
+    const T& ValueOrThrow(TArgs&&... args) const &;
+
+    template <class... TArgs>
+    T& ValueOrThrow(TArgs&&... args) &;
+
+    template <class... TArgs>
+    T&& ValueOrThrow(TArgs&&... args) &&;
 
     const T& ValueOrDefault(const T& defaultValue) const &;
     T& ValueOrDefault(T& defaultValue) &;

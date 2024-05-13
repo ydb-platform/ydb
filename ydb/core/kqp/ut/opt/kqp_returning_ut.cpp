@@ -134,6 +134,35 @@ Y_UNIT_TEST(ReturningSerial) {
     }
 }
 
+Y_UNIT_TEST(ReturningTypes) {
+    auto kikimr = DefaultKikimrRunner();
+
+    auto client = kikimr.GetTableClient();
+    auto session = client.CreateSession().GetValueSync().GetSession();
+
+    {
+        const auto query = Q_(R"(
+            --!syntax_v1
+            DELETE FROM KeyValue WHERE Key >= 2u RETURNING Key, Value;
+        )");
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+        CompareYson(R"([[[2u];["Two"]]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    {
+        const auto query = Q_(R"(
+            --!syntax_v1
+            DELETE FROM KeyValue WHERE Key = 1u RETURNING Key, Value;
+        )");
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+        CompareYson(R"([[[1u];["One"]]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+}
+
 }
 
 } // namespace NKikimr::NKqp

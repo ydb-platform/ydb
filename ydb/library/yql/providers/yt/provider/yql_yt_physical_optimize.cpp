@@ -1808,7 +1808,7 @@ private:
         });
 
         TKeySelectorBuilder builder(node.Pos(), ctx, useNativeDescSort, inputItemType);
-        builder.ProcessKeySelector(keySelectorLambda.Ptr(), {});
+        builder.ProcessKeySelector(keySelectorLambda.Ptr(), {}, true);
 
         TVector<std::pair<TString, bool>> reduceByColumns = builder.ForeignSortColumns();
         TVector<std::pair<TString, bool>> sortByColumns;
@@ -6061,6 +6061,7 @@ private:
                                 TCopyOrTrivialMapOpts()
                                     .SetTryKeepSortness(!NYql::HasSetting(section.Settings().Ref(), EYtSettingType::Unordered))
                                     .SetSectionUniq(section.Ref().GetConstraint<TDistinctConstraintNode>())
+                                    .SetConstraints(section.Ref().GetConstraintSet())
                                     .SetCombineChunks(true)
                                 );
 

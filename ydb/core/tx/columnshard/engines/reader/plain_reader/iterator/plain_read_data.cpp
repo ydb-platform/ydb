@@ -74,7 +74,7 @@ TConclusion<bool> TPlainReadData::DoReadNextInterval() {
 }
 
 void TPlainReadData::OnIntervalResult(const std::shared_ptr<TPartialReadResult>& result) {
-    result->GetResourcesGuardOnly()->Update(result->GetMemorySize());
+//    result->GetResourcesGuardOnly()->Update(result->GetMemorySize());
     ReadyResultsCount += result->GetRecordsCount();
     PartialResults.emplace_back(std::move(*result));
 }

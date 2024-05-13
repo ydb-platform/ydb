@@ -49,8 +49,8 @@ def create_table_with_data(session, path):
 
 class BaseTestScriptingService(object):
     @classmethod
-    def execute_ydb_cli_command(cls, args, stdin=None):
-        execution = yatest_common.execute([ydb_bin()] + args, stdin=stdin)
+    def execute_ydb_cli_command(cls, args, stdin=None, env=None):
+        execution = yatest_common.execute([ydb_bin()] + args, stdin=stdin, env=env)
         result = execution.std_out
         logger.debug("std_out:\n" + result.decode('utf-8'))
         return result
@@ -81,13 +81,13 @@ class BaseTestScriptingServiceWithDatabase(BaseTestScriptingService):
         cls.cluster.stop()
 
     @classmethod
-    def execute_ydb_cli_command_with_db(cls, args, stdin=None):
+    def execute_ydb_cli_command_with_db(cls, args, stdin=None, env=None):
         return cls.execute_ydb_cli_command(
             [
                 "--endpoint", "grpc://localhost:%d" % cls.cluster.nodes[1].grpc_port,
                 "--database", cls.root_dir
             ] +
-            args, stdin
+            args, stdin, env=env
         )
 
 
@@ -849,3 +849,50 @@ class TestExecuteScriptWithParamsFromStdin(BaseTestScriptingServiceWithDatabase)
 
     def test_skip_rows_tsv(self, command):
         return self.skip_rows(self.get_command(command), "tsv")
+
+
+def create_wide_table_with_data(session, path):
+    session.create_table(
+        path,
+        ydb.TableDescription()
+           .with_column(ydb.Column("timestamp", ydb.PrimitiveType.Timestamp))
+           .with_column(ydb.Column("pod", ydb.PrimitiveType.Utf8))
+           .with_column(ydb.Column("seq", ydb.PrimitiveType.Uint64))
+           .with_column(ydb.Column("container_id", ydb.OptionalType(ydb.PrimitiveType.Utf8)))
+           .with_column(ydb.Column("host", ydb.OptionalType(ydb.PrimitiveType.Utf8)))
+           .with_column(ydb.Column("box", ydb.OptionalType(ydb.PrimitiveType.Utf8)))
+           .with_column(ydb.Column("workload", ydb.OptionalType(ydb.PrimitiveType.Utf8)))
+           .with_column(ydb.Column("logger_name", ydb.OptionalType(ydb.PrimitiveType.Utf8)))
+           .with_column(ydb.Column("user_id", ydb.OptionalType(ydb.PrimitiveType.Utf8)))
+           .with_column(ydb.Column("request_id", ydb.OptionalType(ydb.PrimitiveType.Utf8)))
+           .with_column(ydb.Column("message", ydb.OptionalType(ydb.PrimitiveType.Utf8)))
+           .with_column(ydb.Column("log_level", ydb.OptionalType(ydb.PrimitiveType.Utf8)))
+           .with_column(ydb.Column("log_level_int", ydb.OptionalType(ydb.PrimitiveType.Int64)))
+           .with_column(ydb.Column("stack_trace", ydb.OptionalType(ydb.PrimitiveType.Utf8)))
+           .with_column(ydb.Column("thread_name", ydb.OptionalType(ydb.PrimitiveType.Utf8)))
+           .with_column(ydb.Column("pod_transient_fqdn", ydb.OptionalType(ydb.PrimitiveType.Utf8)))
+           .with_column(ydb.Column("pod_persistent_fqdn", ydb.OptionalType(ydb.PrimitiveType.Utf8)))
+           .with_column(ydb.Column("node_fqdn", ydb.OptionalType(ydb.PrimitiveType.Utf8)))
+           .with_column(ydb.Column("context", ydb.OptionalType(ydb.PrimitiveType.JsonDocument)))
+           .with_column(ydb.Column("version", ydb.OptionalType(ydb.PrimitiveType.Int32)))
+           .with_column(ydb.Column("saved_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp)))
+           .with_primary_keys("timestamp", "pod", "seq")
+    )
+
+
+class TestExecuteScriptFromStdinWithWideOutput(BaseTestScriptingServiceWithDatabase):
+    @classmethod
+    def setup_class(cls):
+        BaseTestScriptingServiceWithDatabase.setup_class()
+        cls.session = cls.driver.table_client.session().create()
+
+    @pytest.fixture(autouse=True, scope='function')
+    def init_test(self, tmp_path):
+        self.tmp_path = tmp_path
+        self.table_path = self.root_dir + "/" + self.tmp_path.name
+        create_wide_table_with_data(self.session, self.table_path)
+
+    def test_wide_table(self):
+        script = "SELECT * FROM `{}`;".format(self.table_path)
+        output = self.execute_ydb_cli_command_with_db(["yql", "-s", script])
+        return self.canonical_result(output, self.tmp_path)

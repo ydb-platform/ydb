@@ -74,7 +74,7 @@ namespace NSQLTranslationV1 {
         TNodePtr PrepareSamplingRate(TPosition pos, ESampleClause clause, TNodePtr samplingRate);
         virtual bool SetSamplingOptions(TContext& ctx, TPosition pos, ESampleClause clause, ESampleMode mode, TNodePtr samplingRate, TNodePtr samplingSeed);
         virtual bool SetTableHints(TContext& ctx, TPosition pos, const TTableHints& hints, const TTableHints& contextHints);
-        virtual bool CalculateGroupingHint(TContext& ctx, const TVector<TString>& columns, ui64& hint) const;
+        virtual bool AddGrouping(TContext& ctx, const TVector<TString>& columns, TString& groupingColumn);
         virtual TNodePtr BuildFilter(TContext& ctx, const TString& label);
         virtual TNodePtr BuildFilterLambda();
         virtual TNodePtr BuildFlattenByColumns(const TString& label);
@@ -86,6 +86,7 @@ namespace NSQLTranslationV1 {
         virtual TNodePtr BuildCalcOverWindow(TContext& ctx, const TString& label);
         virtual TNodePtr BuildSort(TContext& ctx, const TString& label);
         virtual TNodePtr BuildCleanupColumns(TContext& ctx, const TString& label);
+        virtual TNodePtr BuildGroupingColumns(const TString& label);
         virtual bool BuildSamplingLambda(TNodePtr& node);
         virtual bool SetSamplingRate(TContext& ctx, ESampleClause clause, TNodePtr samplingRate);
         virtual IJoin* GetJoin();
@@ -306,9 +307,9 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildDropTable(TPosition pos, const TTableRef& table, bool missingOk, ETableType tableType, TScopedStatePtr scoped);
     TNodePtr BuildWriteTable(TPosition pos, const TString& label, const TTableRef& table, EWriteColumnMode mode, TNodePtr options,
         TScopedStatePtr scoped);
-    TSourcePtr TryMakeSourceFromExpression(TContext& ctx, const TString& currService, const TDeferredAtom& currCluster,
+    TSourcePtr TryMakeSourceFromExpression(TPosition pos, TContext& ctx, const TString& currService, const TDeferredAtom& currCluster,
         TNodePtr node, const TString& view = {});
-    void MakeTableFromExpression(TContext& ctx, TNodePtr node, TDeferredAtom& table, const TString& prefix = {});
-    TDeferredAtom MakeAtomFromExpression(TContext& ctx, TNodePtr node, const TString& prefix = {});
+    void MakeTableFromExpression(TPosition pos, TContext& ctx, TNodePtr node, TDeferredAtom& table, const TString& prefix = {});
+    TDeferredAtom MakeAtomFromExpression(TPosition pos, TContext& ctx, TNodePtr node, const TString& prefix = {});
     TString NormalizeTypeString(const TString& str);
 }  // namespace NSQLTranslationV1

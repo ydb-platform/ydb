@@ -1,6 +1,7 @@
 #pragma once
 #include "aligned_page_pool.h"
 #include "mkql_mem_info.h"
+#include <ydb/library/yql/core/pg_settings/guc_settings.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/context.h>
 #include <ydb/library/yql/public/udf/udf_allocator.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
@@ -205,6 +206,12 @@ public:
     void InvalidateMemInfo() { MyState_.InvalidateMemInfo(); }
 
     bool IsAttached() const { return AttachedCount_ > 0; }
+
+    void SetGUCSettings(const TGUCSettings::TPtr& GUCSettings) {
+        Acquire();
+        PgSetGUCSettings(MyState_.MainContext, GUCSettings);
+        Release();
+    }
 
 private:
     const bool InitiallyAcquired_;

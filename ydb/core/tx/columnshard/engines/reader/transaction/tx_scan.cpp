@@ -4,8 +4,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/plain_reader/constructor/constructor.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/sys_view/common/schema.h>
-#include <ydb/core/tx/columnshard/engines/reader/sys_view/chunks/chunks.h>
-#include <ydb/core/tx/columnshard/engines/reader/sys_view/portions/portions.h>
+#include <ydb/core/tx/columnshard/engines/reader/sys_view/abstract/policy.h>
 
 namespace NKikimr::NOlap::NReader {
 
@@ -116,6 +115,7 @@ static bool FillPredicatesFromRange(TReadDescription& read, const ::NKikimrTx::T
 }
 
 bool TTxScan::Execute(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) {
+    TMemoryProfileGuard mpg("TTxScan::Execute");
     auto& record = Ev->Get()->Record;
     TSnapshot snapshot(record.GetSnapshot().GetStep(), record.GetSnapshot().GetTxId());
     const auto scanId = record.GetScanId();
@@ -130,16 +130,13 @@ bool TTxScan::Execute(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/
     bool isIndex = false;
     std::unique_ptr<IScannerConstructor> scannerConstructor = [&]() {
         const ui64 itemsLimit = record.HasItemsLimit() ? record.GetItemsLimit() : 0;
-        if (read.TableName.EndsWith(TIndexInfo::STORE_INDEX_STATS_TABLE) ||
-            read.TableName.EndsWith(TIndexInfo::TABLE_INDEX_STATS_TABLE)) {
-            return std::unique_ptr<IScannerConstructor>(new NSysView::NChunks::TConstructor(snapshot, itemsLimit, record.GetReverse()));
+        auto sysViewPolicy = NSysView::NAbstract::ISysViewPolicy::BuildByPath(read.TableName);
+        isIndex = !sysViewPolicy;
+        if (!sysViewPolicy) {
+            return std::unique_ptr<IScannerConstructor>(new NPlain::TIndexScannerConstructor(snapshot, itemsLimit, record.GetReverse()));
+        } else {
+            return sysViewPolicy->CreateConstructor(snapshot, itemsLimit, record.GetReverse());
         }
-        if (read.TableName.EndsWith(TIndexInfo::STORE_INDEX_PORTION_STATS_TABLE) ||
-            read.TableName.EndsWith(TIndexInfo::TABLE_INDEX_PORTION_STATS_TABLE)) {
-            return std::unique_ptr<IScannerConstructor>(new NSysView::NPortions::TConstructor(snapshot, itemsLimit, record.GetReverse()));
-        }
-        isIndex = true;
-        return std::unique_ptr<IScannerConstructor>(new NPlain::TIndexScannerConstructor(snapshot, itemsLimit, record.GetReverse()));
     }();
     read.ColumnIds.assign(record.GetColumnTags().begin(), record.GetColumnTags().end());
     read.StatsMode = record.GetStatsMode();
@@ -153,7 +150,7 @@ bool TTxScan::Execute(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/
 
     if (!record.RangesSize()) {
         auto range = scannerConstructor->BuildReadMetadata(Self, read);
-        if (range) {
+        if (range.IsSuccess()) {
             ReadMetadataRange = range.DetachResult();
         } else {
             ErrorDescription = range.GetErrorMessage();
@@ -199,7 +196,7 @@ struct TContainerPrinter {
 };
 
 void TTxScan::Complete(const TActorContext& ctx) {
-
+    TMemoryProfileGuard mpg("TTxScan::Complete");
     auto& request = Ev->Get()->Record;
     auto scanComputeActor = Ev->Sender;
     const auto& snapshot = request.GetSnapshot();

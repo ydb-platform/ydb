@@ -542,11 +542,11 @@ namespace NKikimr {
             IndexMerger.Finish();
 
             // reset transformed item and try to create new one if we want to keep this item
-            TransformedItem = nullptr;
-            if (GcmpIt.KeepItem()) {
-                const bool keepData = GcmpIt.KeepData();
+            const bool keepData = GcmpIt.KeepData();
+            const bool keepItem = GcmpIt.KeepItem();
+            TransformedItem = Hmp->Transform(key, &IndexMerger.GetMemRec(), IndexMerger.GetDataMerger(), keepData, keepItem);
+            if (keepItem) {
                 ++(keepData ? Statistics.KeepItemsWithData : Statistics.KeepItemsWOData);
-                TransformedItem = Hmp->Transform(key, &IndexMerger.GetMemRec(), IndexMerger.GetDataMerger(), keepData);
             } else {
                 ++Statistics.DontKeepItems;
             }

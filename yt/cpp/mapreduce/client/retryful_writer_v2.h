@@ -32,6 +32,8 @@ public:
     void NotifyRowEnd() override;
     void Abort() override;
 
+    size_t GetBufferMemoryUsage() const override;
+
 protected:
     void DoWrite(const void* buf, size_t len) override;
     void DoFinish() override;

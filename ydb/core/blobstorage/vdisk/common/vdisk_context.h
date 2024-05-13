@@ -119,7 +119,7 @@ namespace NKikimr {
                 case NKikimrProto::OK:
                     if constexpr (T::EventType != TEvBlobStorage::EvLogResult) {
                         // we have different semantics for TEvLogResult StatusFlags
-                        OutOfSpaceState.UpdateLocal(ev.StatusFlags);
+                        OutOfSpaceState.UpdateLocalChunk(ev.StatusFlags);
                     } else {
                         // update log space flags
                         OutOfSpaceState.UpdateLocalLog(ev.StatusFlags);

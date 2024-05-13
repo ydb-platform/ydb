@@ -3,7 +3,7 @@
 from json import JSONEncoder
 from http.cookiejar import CookieJar
 from io import IOBase
-from typing import Any, Callable, Dict, List, Optional, Pattern, Type, TypeVar, Union
+from typing import Any, Callable, Dict, List, Optional, Pattern, Type, TypeVar, Union, overload
 
 from requests import Response, Session
 from urllib3.response import HTTPResponse
@@ -54,7 +54,7 @@ class MockerCore:
       text: Union[str, Callback[str]] = ...,
       content: Union[bytes, Callback[bytes]] = ...,
       body: Union[IOBase, Callback[IOBase]] = ...,
-      raw: HTTPResponse = ...,
+      raw: Union[HTTPResponse, Callback[HTTPResponse]] = ...,
       exc: Union[Exception, Type[Exception]] = ...,
       additional_matcher: AdditionalMatcher = ...,
       json_encoder: Optional[Type[JSONEncoder]] = ...,
@@ -77,7 +77,7 @@ class MockerCore:
       text: Union[str, Callback[str]] = ...,
       content: Union[bytes, Callback[bytes]] = ...,
       body: Union[IOBase, Callback[IOBase]] = ...,
-      raw: HTTPResponse = ...,
+      raw: Union[HTTPResponse, Callback[HTTPResponse]] = ...,
       exc: Union[Exception, Type[Exception]] = ...,
       additional_matcher: AdditionalMatcher = ...,
       json_encoder: Optional[Type[JSONEncoder]] = ...,
@@ -99,7 +99,7 @@ class MockerCore:
       text: Union[str, Callback[str]] = ...,
       content: Union[bytes, Callback[bytes]] = ...,
       body: Union[IOBase, Callback[IOBase]] = ...,
-      raw: HTTPResponse = ...,
+      raw: Union[HTTPResponse, Callback[HTTPResponse]] = ...,
       exc: Union[Exception, Type[Exception]] = ...,
       additional_matcher: AdditionalMatcher = ...,
       json_encoder: Optional[Type[JSONEncoder]] = ...,
@@ -121,7 +121,7 @@ class MockerCore:
       text: Union[str, Callback[str]] = ...,
       content: Union[bytes, Callback[bytes]] = ...,
       body: Union[IOBase, Callback[IOBase]] = ...,
-      raw: HTTPResponse = ...,
+      raw: Union[HTTPResponse, Callback[HTTPResponse]] = ...,
       exc: Union[Exception, Type[Exception]] = ...,
       additional_matcher: AdditionalMatcher = ...,
       json_encoder: Optional[Type[JSONEncoder]] = ...,
@@ -143,7 +143,7 @@ class MockerCore:
       text: Union[str, Callback[str]] = ...,
       content: Union[bytes, Callback[bytes]] = ...,
       body: Union[IOBase, Callback[IOBase]] = ...,
-      raw: HTTPResponse = ...,
+      raw: Union[HTTPResponse, Callback[HTTPResponse]] = ...,
       exc: Union[Exception, Type[Exception]] = ...,
       additional_matcher: AdditionalMatcher = ...,
       json_encoder: Optional[Type[JSONEncoder]] = ...,
@@ -165,7 +165,7 @@ class MockerCore:
       text: Union[str, Callback[str]] = ...,
       content: Union[bytes, Callback[bytes]] = ...,
       body: Union[IOBase, Callback[IOBase]] = ...,
-      raw: HTTPResponse = ...,
+      raw: Union[HTTPResponse, Callback[HTTPResponse]] = ...,
       exc: Union[Exception, Type[Exception]] = ...,
       additional_matcher: AdditionalMatcher = ...,
       json_encoder: Optional[Type[JSONEncoder]] = ...,
@@ -187,7 +187,7 @@ class MockerCore:
       text: Union[str, Callback[str]] = ...,
       content: Union[bytes, Callback[bytes]] = ...,
       body: Union[IOBase, Callback[IOBase]] = ...,
-      raw: HTTPResponse = ...,
+      raw: Union[HTTPResponse, Callback[HTTPResponse]] = ...,
       exc: Union[Exception, Type[Exception]] = ...,
       additional_matcher: AdditionalMatcher = ...,
       json_encoder: Optional[Type[JSONEncoder]] = ...,
@@ -209,7 +209,7 @@ class MockerCore:
       text: Union[str, Callback[str]] = ...,
       content: Union[bytes, Callback[bytes]] = ...,
       body: Union[IOBase, Callback[IOBase]] = ...,
-      raw: HTTPResponse = ...,
+      raw: Union[HTTPResponse, Callback[HTTPResponse]] = ...,
       exc: Union[Exception, Type[Exception]] = ...,
       additional_matcher: AdditionalMatcher = ...,
       json_encoder: Optional[Type[JSONEncoder]] = ...,
@@ -231,7 +231,7 @@ class MockerCore:
       text: Union[str, Callback[str]] = ...,
       content: Union[bytes, Callback[bytes]] = ...,
       body: Union[IOBase, Callback[IOBase]] = ...,
-      raw: HTTPResponse = ...,
+      raw: Union[HTTPResponse, Callback[HTTPResponse]] = ...,
       exc: Union[Exception, Type[Exception]] = ...,
       additional_matcher: AdditionalMatcher = ...,
       json_encoder: Optional[Type[JSONEncoder]] = ...,
@@ -239,6 +239,7 @@ class MockerCore:
     ) -> _Matcher: ...
 
 _T = TypeVar('_T')
+_CallableT = TypeVar("_CallableT", bound=Callable)
 
 class Mocker(MockerCore):
     TEST_PREFIX: str = ...
@@ -246,6 +247,7 @@ class Mocker(MockerCore):
 
     def __init__(
       self,
+      *,
       kw: str = ...,
       case_sensitive: bool = ...,
       adapter: Any = ...,
@@ -255,9 +257,12 @@ class Mocker(MockerCore):
     ) -> None: ...
     def __enter__(self) -> Any: ...
     def __exit__(self, type: Any, value: Any, traceback: Any) -> None: ...
-    def __call__(self, obj: Any) -> Any: ...
+    @overload
+    def __call__(self, obj: type[_T]) -> type[_T]: ...
+    @overload
+    def __call__(self, obj: _CallableT) -> _CallableT: ...
     def copy(self) -> Mocker: ...
-    def decorate_callable(self, func: Callable[..., _T]) -> Callable[..., _T]: ...
+    def decorate_callable(self, func: _CallableT) -> _CallableT: ...
     def decorate_class(self, klass: Type[_T]) -> Type[_T]: ...
 
 mock = Mocker

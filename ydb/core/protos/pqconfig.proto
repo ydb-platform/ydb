@@ -1,6 +1,8 @@
 import "ydb/public/api/protos/draft/persqueue_error_codes.proto";
 import "ydb/public/api/protos/draft/persqueue_common.proto";
 
+import "ydb/public/api/protos/annotations/sensitive.proto";
+
 import "ydb/core/protos/base.proto";
 import "ydb/core/protos/msgbus_kv.proto";
 import "ydb/core/protos/node_limits.proto";
@@ -219,11 +221,11 @@ message TMirrorPartitionConfig {
     message TCredentials {
         message IamCredentials {
             optional string Endpoint = 1;
-            optional string ServiceAccountKey = 2;
+            optional string ServiceAccountKey = 2 [(Ydb.sensitive) = true];
         }
         oneof Credentials {
-            string OauthToken = 1;
-            string JwtParams = 2;
+            string OauthToken = 1 [(Ydb.sensitive) = true];
+            string JwtParams = 2 [(Ydb.sensitive) = true];
             IamCredentials Iam = 3;
         }
     }
@@ -390,6 +392,10 @@ message TPQTabletConfig {
         // The maximum number of partitions that will be supported by the strategy. The strategy will not create partitions if the specified
         // amount is reached, even if the load exceeds the current capabilities of the topic.
         required uint32 MaxPartitionCount = 2;
+        optional uint32 MaxActivePartitionCount = 3;
+        optional uint32 ScaleThresholdSeconds = 4 [default = 300];
+        optional uint32 ScaleUpPartitionWriteSpeedThresholdPercent = 5 [default = 80];
+        optional uint32 ScaleDownPartitionWriteSpeedThresholdPercent = 6 [default = 20];
     }
     optional TPartitionStrategy PartitionStrategy = 35;
 
@@ -725,6 +731,12 @@ message TAggregatedCounters {
     }
 }
 
+enum EScaleStatus {
+    NORMAL = 0;
+    NEED_SPLIT = 1;
+    NEED_MERGE = 2;
+}
+
 message TStatusResponse {
     enum EStatus {
         STATUS_OK = 0;
@@ -785,6 +797,11 @@ message TStatusResponse {
 
         optional int64 UsedReserveSize = 31;
         optional TAggregatedCounters AggregatedCounters = 32;
+
+        optional uint32 Generation = 33;
+        optional uint64 Cookie = 34;
+
+        optional EScaleStatus ScaleStatus = 35;
     }
 
     message TConsumerResult {
@@ -931,6 +948,19 @@ message TEvProposeTransaction {
         TDataTransaction Data = 3;
         TConfigTransaction Config = 4;
     }
+    optional NActorsProto.TActorId SupportivePartitionActor = 5;
+};
+
+message TError {
+    enum EKind {
+        OK = 0;
+        ERROR = 1;
+        INTERNAL = 2;
+        BAD_REQUEST = 3;
+    }
+
+    optional EKind Kind = 1;
+    optional string Reason = 2;
 };
 
 message TEvProposeTransactionResult {
@@ -953,6 +983,7 @@ message TEvProposeTransactionResult {
     optional string StatusMessage = 7;
     optional uint64 Step = 8;
     repeated fixed64 DomainCoordinators = 9;
+    repeated TError Errors = 10;
 };
 
 message TEvCancelTransactionProposal {
@@ -985,10 +1016,31 @@ message TEvCheckPartitionStatusResponse {
     optional uint64 SeqNo = 2;
 };
 
-// The consumer's reading of the partition is finished
+// The consumer's reading of the partition is finished  (from the partition)
 message TEvReadingPartitionStatusRequest {
     optional string Consumer = 1;
     optional uint32 PartitionId = 2;
+    optional uint32 Generation = 3;
+    optional uint32 Cookie = 4;
+};
+
+// The consumer's reading of the partition is finished (from ReadSession)
+message TEvReadingPartitionFinishedRequest {
+    optional string Consumer = 1;
+    optional uint32 PartitionId = 2;
+    optional bool ScaleAwareSDK = 3;
+    optional bool StartedReadingFromEndOffset = 4;
+};
+
+// The consumer's reading of the partition is started (from ReadSession)
+message TEvReadingPartitionStartedRequest {
+    optional string Consumer = 1;
+    optional uint32 PartitionId = 2;
+};
+
+message TEvPartitionScaleStatusChanged {
+    required uint32 PartitionId = 1;
+    required EScaleStatus ScaleStatus = 2;
 };
 
 message TTransaction {

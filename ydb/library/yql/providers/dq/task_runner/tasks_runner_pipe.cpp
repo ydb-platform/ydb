@@ -11,6 +11,7 @@
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/utils/rope_over_buffer.h>
+#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
 
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 
@@ -1370,6 +1371,20 @@ public:
 
         NYql::NDqProto::TPrepareResponse ret;
         ret.Load(&Input);
+
+        auto state = TFailureInjector::GetCurrentState();
+        for (auto& [k, v]: state) {
+            NDqProto::TCommandHeader header;
+            header.SetVersion(1);
+            header.SetCommand(NDqProto::TCommandHeader::CONFIGURE_FAILURE_INJECTOR);
+            header.Save(&Output);
+            NYql::NDqProto::TConfigureFailureInjectorRequest request;
+            request.SetName(k);
+            request.SetSkip(v.Skip);
+            request.SetFail(v.CountOfFails);
+            request.Save(&Output);
+        }
+
         return ret;
     }
 
@@ -1715,7 +1730,7 @@ public:
         return sink;
     }
 
-    std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr> GetInputTransform(ui64 /*inputIndex*/) override {
+    std::optional<std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr>> GetInputTransform(ui64 /*inputIndex*/) override {
         return {};
     }
 

@@ -13,6 +13,7 @@ SRCS(
     distconf_mon.cpp
     distconf_persistent_storage.cpp
     distconf_scatter_gather.cpp
+    distconf_validate.cpp
     node_warden.h
     node_warden_cache.cpp
     node_warden_events.h

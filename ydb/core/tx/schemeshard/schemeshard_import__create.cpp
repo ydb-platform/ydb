@@ -115,7 +115,7 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
             break;
 
         default:
-            Y_DEBUG_ABORT_UNLESS(false, "Unknown import kind");
+            Y_DEBUG_ABORT("Unknown import kind");
         }
 
         Y_ABORT_UNLESS(importInfo != nullptr);

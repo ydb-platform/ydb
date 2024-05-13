@@ -13,6 +13,7 @@ PEERDIR(
 SRCS(
     helper.cpp
     controllers.cpp
+    columnshard_ut_common.cpp
 )
 
 YQL_LAST_ABI_VERSION()

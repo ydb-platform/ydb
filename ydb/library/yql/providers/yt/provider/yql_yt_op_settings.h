@@ -118,11 +118,11 @@ enum class EYtSettingType: ui64 {
 Y_DECLARE_FLAGS(EYtSettingTypes, EYtSettingType);
 Y_DECLARE_OPERATORS_FOR_FLAGS(EYtSettingTypes);
 
-constexpr auto DqReadSupportedSettings = EYtSettingType::SysColumns | EYtSettingType::Sample | EYtSettingType::Unordered | EYtSettingType::NonUnique;
+constexpr auto DqReadSupportedSettings = EYtSettingType::SysColumns | EYtSettingType::Sample | EYtSettingType::Unordered | EYtSettingType::NonUnique | EYtSettingType::KeyFilter2;
 constexpr auto DqOpSupportedSettings = EYtSettingType::Ordered | EYtSettingType::Limit | EYtSettingType::SortLimitBy | EYtSettingType::SortBy |
                                        EYtSettingType::ReduceBy | EYtSettingType::ForceTransform | EYtSettingType::JobCount | EYtSettingType::JoinReduce |
                                        EYtSettingType::FirstAsPrimary | EYtSettingType::Flow | EYtSettingType::KeepSorted | EYtSettingType::KeySwitch |
-                                       EYtSettingType::ReduceInputType | EYtSettingType::MapOutputType;
+                                       EYtSettingType::ReduceInputType | EYtSettingType::MapOutputType | EYtSettingType::Sharded;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 

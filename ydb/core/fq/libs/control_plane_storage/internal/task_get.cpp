@@ -455,7 +455,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
             for (const auto& connection: task.Internal.connection()) {
                 const auto serviceAccountId = ExtractServiceAccountId(connection);
                 if (!serviceAccountId) {
-                        continue;
+                    continue;
                 }
                 auto* account = newTask->add_service_accounts();
                 account->set_value(serviceAccountId);

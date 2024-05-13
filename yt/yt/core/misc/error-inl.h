@@ -76,6 +76,32 @@ TError::TErrorOr(TErrorCode code, const char (&messageOrFormat)[Length], TArgs&&
     : TErrorOr(code, NYT::NDetail::FormatErrorMessage(messageOrFormat, std::forward<TArgs>(args)...))
 { }
 
+template <CInvocable<bool(const TError&)> TFilter>
+std::optional<TError> TError::FindMatching(const TFilter& filter) const
+{
+    if (!Impl_) {
+        return {};
+    }
+
+    if (filter(*this)) {
+        return *this;
+    }
+
+    for (const auto& innerError : InnerErrors()) {
+        if (auto innerResult = innerError.FindMatching(filter)) {
+            return innerResult;
+        }
+    }
+
+    return {};
+}
+
+template <CInvocable<bool(TErrorCode)> TFilter>
+std::optional<TError> TError::FindMatching(const TFilter& filter) const
+{
+    return FindMatching([&] (const TError& error) { return filter(error.GetCode()); });
+}
+
 template <class... TArgs>
     requires std::constructible_from<TError, TArgs...>
 TError TError::Wrap(TArgs&&... args) const &
@@ -196,28 +222,31 @@ TErrorOr<T>& TErrorOr<T>::operator = (TErrorOr<T>&& other) noexcept
 }
 
 template <class T>
-T&& TErrorOr<T>::ValueOrThrow() &&
+template <class... TArgs>
+T&& TErrorOr<T>::ValueOrThrow(TArgs&&... args) &&
 {
     if (!IsOK()) {
-        THROW_ERROR std::move(*this);
+        THROW_ERROR std::move(*this).Wrap(std::forward<TArgs>(args)...);
     }
     return std::move(*Value_);
 }
 
 template <class T>
-T& TErrorOr<T>::ValueOrThrow() &
+template <class... TArgs>
+T& TErrorOr<T>::ValueOrThrow(TArgs&&... args) &
 {
     if (!IsOK()) {
-        THROW_ERROR *this;
+        THROW_ERROR Wrap(std::forward<TArgs>(args)...);
     }
     return *Value_;
 }
 
 template <class T>
-const T& TErrorOr<T>::ValueOrThrow() const &
+template <class... TArgs>
+const T& TErrorOr<T>::ValueOrThrow(TArgs&&... args) const &
 {
     if (!IsOK()) {
-        THROW_ERROR *this;
+        THROW_ERROR Wrap(std::forward<TArgs>(args)...);
     }
     return *Value_;
 }

@@ -102,7 +102,7 @@ struct TCredentialsKey: std::tuple<TString, TString, TString> {
         case NKikimrReplication::TConnectionParams::kStaticCredentials:
             return TCredentialsKey(params.GetEndpoint(), params.GetDatabase(), params.GetStaticCredentials().GetUser());
         case NKikimrReplication::TConnectionParams::kOAuthToken:
-            return TCredentialsKey(params.GetEndpoint(), params.GetDatabase(), params.GetOAuthToken() /* TODO */);
+            return TCredentialsKey(params.GetEndpoint(), params.GetDatabase(), params.GetOAuthToken().GetToken() /* TODO */);
         default:
             Y_ABORT("Unexpected credentials");
         }
@@ -187,7 +187,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             ydbProxy = GetOrCreateYdbProxy(TCredentialsKey::FromParams(params), params.GetStaticCredentials());
             break;
         case NKikimrReplication::TConnectionParams::kOAuthToken:
-            ydbProxy = GetOrCreateYdbProxy(TCredentialsKey::FromParams(params), params.GetOAuthToken());
+            ydbProxy = GetOrCreateYdbProxy(TCredentialsKey::FromParams(params), params.GetOAuthToken().GetToken());
             break;
         default:
             Y_ABORT("Unexpected credentials");

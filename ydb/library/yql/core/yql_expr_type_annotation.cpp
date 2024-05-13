@@ -3981,7 +3981,7 @@ bool EnsureAnySeqType(TPositionHandle position, const TTypeAnnotationNode& type,
     return false;
 }
 
-bool EnsureStructOrOptionalStructType(const TExprNode& node, TExprContext& ctx) {
+bool EnsureStructOrOptionalStructType(const TExprNode& node, bool& isOptional, const TStructExprType*& structType, TExprContext& ctx) {
     if (HasError(node.GetTypeAnn(), ctx)) {
         return false;
     }
@@ -3992,10 +3992,11 @@ bool EnsureStructOrOptionalStructType(const TExprNode& node, TExprContext& ctx) 
         return false;
     }
 
-    return EnsureStructOrOptionalStructType(node.Pos(), *node.GetTypeAnn(), ctx);
+    return EnsureStructOrOptionalStructType(node.Pos(), *node.GetTypeAnn(), isOptional, structType, ctx);
 }
-
-bool EnsureStructOrOptionalStructType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
+bool EnsureStructOrOptionalStructType(TPositionHandle position, const TTypeAnnotationNode& type, bool& isOptional,
+    const TStructExprType*& structType, TExprContext& ctx)
+{
     if (HasError(&type, ctx)) {
         return false;
     }
@@ -4005,6 +4006,7 @@ bool EnsureStructOrOptionalStructType(TPositionHandle position, const TTypeAnnot
         ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected either struct or optional of struct, but got: " << type));
         return false;
     }
+
     if (kind == ETypeAnnotationKind::Optional) {
         auto itemType = type.Cast<TOptionalExprType>()->GetItemType();
         kind = itemType->GetKind();
@@ -4012,6 +4014,11 @@ bool EnsureStructOrOptionalStructType(TPositionHandle position, const TTypeAnnot
             ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected either struct or optional of struct, but got: " << type));
             return false;
         }
+        isOptional = true;
+        structType = itemType->Cast<TStructExprType>();
+    } else {
+        isOptional = false;
+        structType = type.Cast<TStructExprType>();
     }
 
     return true;

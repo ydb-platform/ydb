@@ -95,7 +95,7 @@ void TBaseChangeSender::EnqueueRecords(TVector<TEvChangeExchange::TEvEnqueueReco
     RequestRecords();
 }
 
-bool TBaseChangeSender::RequestRecords() {
+bool TBaseChangeSender::RequestRecords(bool forceAtLeastOne) {
     if (!Enqueued) {
         return false;
     }
@@ -105,7 +105,11 @@ bool TBaseChangeSender::RequestRecords() {
 
     while (it != Enqueued.end()) {
         if (MemUsage && (MemUsage + it->BodySize) > MemLimit) {
-            break;
+            if (!forceAtLeastOne) {
+                break;
+            }
+
+            forceAtLeastOne = false;
         }
 
         MemUsage += it->BodySize;
@@ -161,7 +165,20 @@ void TBaseChangeSender::SendRecords() {
     THashSet<ui64> registrations;
     bool needToResolve = false;
 
+    // used to avoid deadlock between RequestRecords & SendRecords
+    bool processedAtLeastOne = false;
+
     while (it != PendingSent.end()) {
+        if (Enqueued && Enqueued.begin()->Order <= it->first) {
+            break;
+        }
+
+        processedAtLeastOne = true;
+
+        if (PendingBody && PendingBody.begin()->Order <= it->first) {
+            break;
+        }
+
         if (!it->second->IsBroadcast()) {
             const ui64 partitionId = Resolver->GetPartitionId(it->second);
             if (!Senders.contains(partitionId)) {
@@ -215,7 +232,7 @@ void TBaseChangeSender::SendRecords() {
         Resolver->Resolve();
     }
 
-    RequestRecords();
+    RequestRecords(!processedAtLeastOne);
 }
 
 void TBaseChangeSender::ForgetRecords(TVector<ui64>&& records) {

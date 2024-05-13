@@ -5,6 +5,7 @@
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/string/split.h>
+#include <util/system/env.h>
 #include <library/cpp/resource/resource.h>
 
 namespace NYql::NPg {
@@ -1429,7 +1430,7 @@ ui32 FindOperator(const THashMap<TString, TVector<ui32>>& operatorsByName, const
 
         return operId;
     }
-    
+
     // for example, some operators are based on SQL system_functions.sql
     return 0;
 }
@@ -1611,6 +1612,36 @@ struct TCatalog {
 #include "columns.generated.h"
         })
     {
+        if ( GetEnv("YDB_EXPERIMENTAL_PG") == "1"){
+            // zabbix config
+            AllStaticTables.push_back(
+                {{"public", "config"}, ERelKind::Relation, 100001}
+            );
+            AllStaticColumns.push_back(
+                {"public", "config", "configid", "bigint"}
+            );
+            AllStaticColumns.push_back(
+                {"public", "config", "server_check_interval", "integer"}
+            );
+
+            AllStaticColumns.push_back(
+                {"public", "config", "dbversion_status", "text"}
+            );
+
+            // zabbix dbversion
+            AllStaticTables.push_back(
+                {{"public", "dbversion"}, ERelKind::Relation, 100002}
+            );
+            AllStaticColumns.push_back(
+                {"public", "dbversion", "dbversionid", "bigint"}
+            );
+            AllStaticColumns.push_back(
+                {"public", "dbversion", "mandatory", "integer"}
+            );
+            AllStaticColumns.push_back(
+                {"public", "dbversion", "mandatory", "optional"}
+            );
+        }
         THashSet<ui32> usedTableOids;
         for (const auto& t : AllStaticTables) {
             StaticColumns.insert(std::make_pair(t, TVector<TColumnInfo>()));

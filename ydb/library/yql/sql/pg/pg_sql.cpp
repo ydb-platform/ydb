@@ -314,6 +314,8 @@ public:
                 BlockEngineEnabled = true;
             } else if (flag == "BlockEngineForce") {
                 BlockEngineForce = true;
+            } if (flag == "UnorderedResult") {
+                UnorderedResult = true;
             }
         }
 
@@ -344,7 +346,7 @@ public:
 
     void OnResult(const List* raw) {
         if (!PerStatementResult) {
-             AstParseResults[StatementId].Pool = std::make_unique<TMemoryPool>(4096);
+            AstParseResults[StatementId].Pool = std::make_unique<TMemoryPool>(4096);
             AstParseResults[StatementId].Root = ParseResult(raw);
             if (!State.AutoParamValues.empty()) {
                 AstParseResults[StatementId].PgAutoParamValues = std::move(State.AutoParamValues);
@@ -443,6 +445,9 @@ public:
                 return false;
             }
         }
+        if (StmtParseInfo) {
+            (*StmtParseInfo)[StatementId].CommandTagName = GetCommandName(node);
+        }
         switch (NodeTag(node)) {
         case T_SelectStmt:
             return ParseSelectStmt(CAST_NODE(SelectStmt, node), false) != nullptr;
@@ -475,6 +480,7 @@ public:
                     "escape_string_warning",               // zabbix
                     "bytea_output",                        // zabbix
                     "datestyle",                           // pgadmin 4
+                    "timezone",                            // mediawiki
                     NULL,
                 };
 
@@ -495,6 +501,10 @@ public:
             return ParseTransactionStmt(CAST_NODE(TransactionStmt, node));
         case T_IndexStmt:
             return ParseIndexStmt(CAST_NODE(IndexStmt, node)) != nullptr;
+        case T_CreateSeqStmt:
+            return ParseCreateSeqStmt(CAST_NODE(CreateSeqStmt, node)) != nullptr;
+        case T_AlterSeqStmt:
+            return ParseAlterSeqStmt(CAST_NODE(AlterSeqStmt, node)) != nullptr;
         default:
             NodeNotImplemented(value, node);
             return false;
@@ -1311,7 +1321,7 @@ public:
             return State.Statements.back();
         }
 
-        auto resOptions = QL(QL(QA("type")), QL(QA("autoref")));
+        auto resOptions = BuildResultOptions(!sort);
         State.Statements.push_back(L(A("let"), A("output"), output));
         State.Statements.push_back(L(A("let"), A("result_sink"), L(A("DataSink"), QA(TString(NYql::ResultProviderName)))));
         State.Statements.push_back(L(A("let"), A("world"), L(A("Write!"),
@@ -1319,6 +1329,17 @@ public:
         State.Statements.push_back(L(A("let"), A("world"), L(A("Commit!"),
             A("world"), A("result_sink"))));
         return State.Statements.back();
+    }
+
+    TAstNode* BuildResultOptions(bool unordered) {
+        TVector<TAstNode*> options;
+        options.push_back(QL(QA("type")));
+        options.push_back(QL(QA("autoref")));
+        if (unordered && UnorderedResult) {
+            options.push_back(QL(QA("unordered")));
+        }
+
+        return QVL(options.data(), options.size());
     }
 
     [[nodiscard]]
@@ -2075,6 +2096,9 @@ public:
             case OBJECT_INDEX: {
                 return ParseDropIndexStmt(value, nameListNodes);
             }
+            case OBJECT_SEQUENCE: {
+                return ParseDropSequenceStmt(value, nameListNodes);
+            }
             default: {
                 AddError("Not supported object type for DROP");
                 return nullptr;
@@ -2191,6 +2215,46 @@ public:
         return State.Statements.back();
     }
 
+    TAstNode* ParseDropSequenceStmt(const DropStmt* value, const TVector<const List*>& names) {
+        if (value->behavior == DROP_CASCADE) {
+            AddError("CASCADE is not implemented");
+            return nullptr;
+        }
+
+        if (names.size() != 1) {
+            AddError("DROP SEQUENCE requires exactly one sequence");
+            return nullptr;
+        }
+
+        for (const auto& nameList : names) {
+            const auto [clusterName, indexName] = getSchemaAndObjectName(nameList);
+            const auto [sink, key] = ParseQualifiedPgObjectName(
+                /* catalogName */ "",
+                clusterName,
+                indexName,
+                "pgSequence"
+            );
+
+            TString mode = (value->missing_ok) ? "drop_if_exists" : "drop";
+            State.Statements.push_back(L(
+                A("let"),
+                A("world"),
+                L(
+                    A("Write!"),
+                    A("world"),
+                    sink,
+                    key,
+                    L(A("Void")),
+                    QL(
+                        QL(QA("mode"), QA(mode))
+                    )
+                )
+            ));
+        }
+
+        return State.Statements.back();
+    }
+
     [[nodiscard]]
     TAstNode* ParseVariableSetStmt(const VariableSetStmt* value, bool isSetConfig = false) {
         if (value->kind != VAR_SET_VALUE) {
@@ -2248,7 +2312,7 @@ public:
             }
         }
 
-        if (name == "useblocks" || name == "emitaggapply") {
+        if (name == "useblocks" || name == "emitaggapply" || name == "unorderedresult") {
             if (ListLength(value->args) != 1) {
                 AddError(TStringBuilder() << "VariableSetStmt, expected 1 arg, but got: " << ListLength(value->args));
                 return nullptr;
@@ -2257,9 +2321,13 @@ public:
             auto arg = ListNodeNth(value->args, 0);
             if (NodeTag(arg) == T_A_Const && (NodeTag(CAST_NODE(A_Const, arg)->val) == T_String)) {
                 TString rawStr = StrVal(CAST_NODE(A_Const, arg)->val);
-                auto configSource = L(A("DataSource"), QA(TString(NYql::ConfigProviderName)));
-                State.Statements.push_back(L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
-                    QA(TString(rawStr == "true" ? "" : "Disable") + TString((name == "useblocks") ? "UseBlocks" : "PgEmitAggApply")))));
+                if (name == "unorderedresult") {
+                    UnorderedResult = (rawStr == "true");
+                } else {
+                    auto configSource = L(A("DataSource"), QA(TString(NYql::ConfigProviderName)));
+                    State.Statements.push_back(L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
+                        QA(TString(rawStr == "true" ? "" : "Disable") + TString((name == "useblocks") ? "UseBlocks" : "PgEmitAggApply")))));
+                }
             } else {
                 AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
                 return nullptr;
@@ -2484,6 +2552,13 @@ public:
         if (varName == "standard_conforming_strings"){
             return "on";
         }
+        if (varName == "search_path"){
+            auto searchPath = Settings.GUCSettings->Get("search_path");
+            return searchPath ? *searchPath : "public";
+        }
+        if (varName == "default_transaction_read_only"){
+            return "off"; // mediawiki
+        }
         if (varName == "transaction_isolation"){
             return "serializable";
         }
@@ -2536,7 +2611,7 @@ public:
         State.Statements.push_back(L(A("let"), A("output"), output));
         State.Statements.push_back(L(A("let"), A("result_sink"), L(A("DataSink"), QA(TString(NYql::ResultProviderName)))));
 
-        const auto resOptions = QL(QL(QA("type")), QL(QA("autoref")));
+        const auto resOptions = BuildResultOptions(true);
         State.Statements.push_back(L(A("let"), A("world"), L(A("Write!"),
             A("world"), A("result_sink"), L(A("Key")), A("output"), resOptions)));
         State.Statements.push_back(L(A("let"), A("world"), L(A("Commit!"),
@@ -2646,6 +2721,159 @@ public:
                 )
             )
         ));
+
+        return State.Statements.back();
+    }
+
+    [[nodiscard]]
+    TAstNode* ParseCreateSeqStmt(const CreateSeqStmt* value) {
+
+        std::vector<TAstNode*> options;
+
+        TString mode = (value->if_not_exists) ? "create_if_not_exists" : "create";
+        options.push_back(QL(QA("mode"), QA(mode)));
+
+        auto [sink, key] = ParseQualifiedPgObjectName(
+            value->sequence->catalogname,
+            value->sequence->schemaname,
+            value->sequence->relname,
+            "pgSequence"
+        );
+
+        if (!sink || !key) {
+            return nullptr;
+        }
+
+        const auto relPersistence = static_cast<NPg::ERelPersistence>(value->sequence->relpersistence);
+        switch (relPersistence) {
+            case NPg::ERelPersistence::Temp:
+                options.push_back(QL(QA("temporary")));
+                break;
+            case NPg::ERelPersistence::Unlogged:
+                AddError("UNLOGGED sequence not supported");
+                return nullptr;
+                break;
+            case NPg::ERelPersistence::Permanent:
+                break;
+        }
+
+        for (int i = 0; i < ListLength(value->options); ++i) {
+            auto rawNode = ListNodeNth(value->options, i);
+
+            switch (NodeTag(rawNode)) {
+                case T_DefElem: {
+                    const auto* defElem = CAST_NODE(DefElem, rawNode);
+                    TString nameElem = defElem->defname;
+                    if (defElem->arg) {
+                        switch (NodeTag(defElem->arg))
+                        {
+                            case T_Integer:
+                                options.emplace_back(QL(QAX(nameElem), QA(ToString(intVal(defElem->arg)))));
+                                break;
+                            case T_Float:
+                                options.emplace_back(QL(QAX(nameElem), QA(strVal(defElem->arg))));
+                                break;
+                            case T_TypeName: {
+                                const auto* typeName = CAST_NODE_EXT(PG_TypeName, T_TypeName, defElem->arg);
+                                if (ListLength(typeName->names) > 0) {
+                                    options.emplace_back(QL(QAX(nameElem),
+                                        QAX(StrVal(ListNodeNth(typeName->names, ListLength(typeName->names) - 1)))));
+                                    }
+                                break;
+                            }
+                            default:
+                                NodeNotImplemented(defElem->arg);
+                                return nullptr;
+                        }
+                    }
+                    break;
+                }
+                default:
+                    NodeNotImplemented(rawNode);
+                    return nullptr;
+            }
+        }
+
+        if (value->for_identity) {
+            options.push_back(QL(QA("for_identity")));
+        }
+
+        if (value->ownerId != InvalidOid) {
+            options.push_back(QL(QA("owner_id"), QA(ToString(value->ownerId))));
+        }
+
+        State.Statements.push_back(
+                L(A("let"), A("world"),
+                  L(A("Write!"), A("world"), sink, key, L(A("Void")),
+                    QVL(options.data(), options.size()))));
+
+        return State.Statements.back();
+    }
+
+    [[nodiscard]]
+    TAstNode* ParseAlterSeqStmt(const AlterSeqStmt* value) {
+
+        std::vector<TAstNode*> options;
+        TString mode = (value->missing_ok) ? "alter_if_exists" : "alter";
+
+        options.push_back(QL(QA("mode"), QA(mode)));
+
+        auto [sink, key] = ParseQualifiedPgObjectName(
+            value->sequence->catalogname,
+            value->sequence->schemaname,
+            value->sequence->relname,
+            "pgSequence"
+        );
+
+        if (!sink || !key) {
+            return nullptr;
+        }
+
+        for (int i = 0; i < ListLength(value->options); ++i) {
+            auto rawNode = ListNodeNth(value->options, i);
+
+            switch (NodeTag(rawNode)) {
+                case T_DefElem: {
+                    const auto* defElem = CAST_NODE(DefElem, rawNode);
+                    TString nameElem = defElem->defname;
+                    if (defElem->arg) {
+                        switch (NodeTag(defElem->arg))
+                        {
+                            case T_Integer:
+                                options.emplace_back(QL(QAX(nameElem), QA(ToString(intVal(defElem->arg)))));
+                                break;
+                            case T_Float:
+                                options.emplace_back(QL(QAX(nameElem), QA(strVal(defElem->arg))));
+                                break;
+                            case T_TypeName: {
+                                const auto* typeName = CAST_NODE_EXT(PG_TypeName, T_TypeName, defElem->arg);
+                                if (ListLength(typeName->names) > 0) {
+                                    options.emplace_back(QL(QAX(nameElem),
+                                        QAX(StrVal(ListNodeNth(typeName->names, ListLength(typeName->names) - 1)))));
+                                    }
+                                break;
+                            }
+                            default:
+                                NodeNotImplemented(defElem->arg);
+                                return nullptr;
+                        }
+                    }
+                    break;
+                }
+                default:
+                    NodeNotImplemented(rawNode);
+                    return nullptr;
+            }
+        }
+
+        if (value->for_identity) {
+            options.push_back(QL(QA("for_identity")));
+        }
+
+        State.Statements.push_back(
+                L(A("let"), A("world"),
+                  L(A("Write!"), A("world"), sink, key, L(A("Void")),
+                    QVL(options.data(), options.size()))));
 
         return State.Statements.back();
     }
@@ -2764,8 +2992,10 @@ public:
 
 
     TAstNode* BuildPgObjectExpression(const TStringBuf objectName, const TStringBuf objectType) {
+        bool noPrefix = (objectType == "pgIndex");
+        TString name = noPrefix ? TString(objectName) : TablePathPrefix + TString(objectName);
         return L(A("Key"), QL(QA("pgObject"),
-                              L(A("String"), QA(objectName)),
+                              L(A("String"), QAX(std::move(name))),
                               L(A("String"), QA(objectType))
                               ));
     }
@@ -3163,8 +3393,14 @@ public:
         case SVFOP_CURRENT_ROLE:
         case SVFOP_USER:
             return L(A("PgConst"), QA("postgres"), L(A("PgType"), QA("name")));
-        case SVFOP_CURRENT_CATALOG:
-            return L(A("PgConst"), QA("postgres"), L(A("PgType"), QA("name")));
+        case SVFOP_CURRENT_CATALOG: {
+            std::optional<TString> database;
+            if (Settings.GUCSettings) {
+                database = Settings.GUCSettings->Get("ydb_database");
+            }
+
+            return L(A("PgConst"), QA(database ? *database : "postgres"), L(A("PgType"), QA("name")));
+        }
         case SVFOP_CURRENT_SCHEMA: {
             std::optional<TString> searchPath;
             if (Settings.GUCSettings) {
@@ -3634,6 +3870,17 @@ public:
         auto name = names.back();
         if (name == "shobj_description" || name == "obj_description") {
             AddWarning(TIssuesIds::PG_COMPAT, name + " function forced to NULL");
+            return L(A("Null"));
+        }
+
+        // for zabbix https://github.com/ydb-platform/ydb/issues/2904
+        if (name == "pg_try_advisory_lock" || name == "pg_try_advisory_lock_shared" || name == "pg_advisory_unlock" || name == "pg_try_advisory_xact_lock" || name == "pg_try_advisory_xact_lock_shared"){
+            AddWarning(TIssuesIds::PG_COMPAT, name + " function forced to return OK without waiting and without really lock/unlock");
+                return L(A("PgConst"), QA("true"), L(A("PgType"), QA("bool")));
+        }
+
+        if (name == "pg_advisory_lock" || name == "pg_advisory_lock_shared" || name == "pg_advisory_unlock_all" || name == "pg_advisory_xact_lock" || name == "pg_advisory_xact_lock_shared"){
+            AddWarning(TIssuesIds::PG_COMPAT, name + " function forced to return OK without waiting and without really lock/unlock");
             return L(A("Null"));
         }
 
@@ -4395,10 +4642,7 @@ public:
         if (!lhs || !rhs) {
             return nullptr;
         }
-        auto pred = L(A("Coalesce"),
-                L(A("FromPg"), L(A("PgOp"), QA("="), lhs, rhs)),
-                L(A("Bool"), QA("false")));
-        return L(A("If"), pred, lhs, L(A("Null")));
+        return L(A("PgNullIf"), lhs, rhs);
     }
 
     TAstNode* ParseAExprIn(const A_Expr* value, const TExprSettings& settings) {
@@ -4746,6 +4990,7 @@ private:
     bool DqEngineForce = false;
     bool BlockEngineEnabled = false;
     bool BlockEngineForce = false;
+    bool UnorderedResult = false;
     TString TablePathPrefix;
     TVector<ui32> RowStarts;
     ui32 QuerySize;
@@ -4783,7 +5028,7 @@ TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQ
     TConverter converter(results, settings, query, stmtParseInfo, true);
     NYql::PGParse(query, converter);
     for (auto& res : results) {
-        res.ActualSyntaxType = NYql::ESyntaxType::Pg; 
+        res.ActualSyntaxType = NYql::ESyntaxType::Pg;
     }
     return results;
 }

@@ -682,19 +682,7 @@ void TPersQueue::ReplyError(const TActorContext& ctx, const ui64 responseCookie,
 
 void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
 {
-    THashSet<ui32> was;
-    if (NewConfig.PartitionsSize()) {
-        for (const auto& partition : NewConfig.GetPartitions()) {
-            was.insert(partition.GetPartitionId());
-        }
-    } else {
-        for (const auto partitionId : NewConfig.GetPartitionIds()) {
-            was.insert(partitionId);
-        }
-    }
-    for (const auto& partition : Config.GetPartitions()) {
-        Y_VERIFY_S(was.contains(partition.GetPartitionId()), "New config is bad, missing partition " << partition.GetPartitionId());
-    }
+    EnsurePartitionsAreNotDeleted(NewConfig);
 
     // in order to answer only after all parts are ready to work
     Y_ABORT_UNLESS(ConfigInited && AllOriginalPartitionsInited());
@@ -726,12 +714,6 @@ void TPersQueue::ApplyNewConfig(const NKikimrPQ::TPQTabletConfig& newConfig,
                                 const TActorContext& ctx)
 {
     Config = newConfig;
-
-    if (!Config.PartitionsSize()) {
-        for (const auto partitionId : Config.GetPartitionIds()) {
-            Config.AddPartitions()->SetPartitionId(partitionId);
-        }
-    }
 
     ui32 cacheSize = CACHE_SIZE;
     if (Config.HasCacheSize()) {
@@ -1016,12 +998,6 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
         Y_ABORT_UNLESS(res);
 
         Migrate(Config);
-
-        if (!Config.PartitionsSize()) {
-            for (const auto partitionId : Config.GetPartitionIds()) {
-                Config.AddPartitions()->SetPartitionId(partitionId);
-            }
-        }
 
         TopicName = Config.GetTopicName();
         TopicPath = Config.GetTopicPath();
@@ -2148,7 +2124,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
             }
             Y_ABORT_UNLESS(partNo == totalParts);
         } else if (cmd.GetHeartbeat().GetData().size() > mSize) {
-            Y_DEBUG_ABORT_UNLESS(false, "This should never happen");
+            Y_DEBUG_ABORT("This should never happen");
             ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, TStringBuilder()
                 << "Too big heartbeat message, must be at most " << mSize << ", but got " << cmd.GetHeartbeat().GetData().size());
             return;
@@ -3197,8 +3173,15 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
         return;
     }
 
-    if (txBody.GetImmediate() && !txBody.HasWriteId()) {
-        const TPartitionInfo& partition = Partitions.at(*partitionId);
+    if (txBody.GetImmediate()) {
+        TPartitionId originalPartitionId(txBody.GetOperations(0).GetPartitionId());
+        const TPartitionInfo& partition = Partitions.at(originalPartitionId);
+
+        if (txBody.HasWriteId()) {
+            Y_ABORT_UNLESS(Partitions.contains(*partitionId));
+            const TPartitionInfo& partition = Partitions.at(*partitionId);
+            ActorIdToProto(partition.Actor, event.MutableSupportivePartitionActor());
+        }
 
         ctx.Send(partition.Actor, ev.Release());
     } else {
@@ -3768,9 +3751,11 @@ void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
             event = std::make_unique<TEvPQ::TEvTxCalcPredicate>(tx.Step, tx.TxId);
         }
 
-        event->AddOperation(operation.GetConsumer(),
-                            operation.GetBegin(),
-                            operation.GetEnd());
+        if (operation.HasBegin()) {
+            event->AddOperation(operation.GetConsumer(),
+                                operation.GetBegin(),
+                                operation.GetEnd());
+        }
     }
 
     if (tx.WriteId.Defined()) {
@@ -4250,12 +4235,6 @@ void TPersQueue::CreateNewPartitions(NKikimrPQ::TPQTabletConfig& config,
 
     Y_ABORT_UNLESS(ConfigInited && AllOriginalPartitionsInited());
 
-    if (!config.PartitionsSize()) {
-        for (const auto partitionId : config.GetPartitionIds()) {
-            config.AddPartitions()->SetPartitionId(partitionId);
-        }
-    }
-
     for (const auto& partition : config.GetPartitions()) {
         const TPartitionId partitionId(partition.GetPartitionId());
         if (Partitions.contains(partitionId)) {
@@ -4274,15 +4253,8 @@ void TPersQueue::CreateNewPartitions(NKikimrPQ::TPQTabletConfig& config,
 void TPersQueue::EnsurePartitionsAreNotDeleted(const NKikimrPQ::TPQTabletConfig& config) const
 {
     THashSet<ui32> was;
-
-    if (config.PartitionsSize()) {
-        for (const auto& partition : config.GetPartitions()) {
-            was.insert(partition.GetPartitionId());
-        }
-    } else {
-        for (const auto partitionId : config.GetPartitionIds()) {
-            was.insert(partitionId);
-        }
+    for (const auto& partition : config.GetPartitions()) {
+        was.insert(partition.GetPartitionId());
     }
 
     for (const auto& partition : Config.GetPartitions()) {
@@ -4445,6 +4417,13 @@ void TPersQueue::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const
     }
 }
 
+void TPersQueue::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx)
+{
+    if (ReadBalancerActorId) {
+        ctx.Send(ReadBalancerActorId, ev->Release().Release());
+    }
+}
+
 TString TPersQueue::LogPrefix() const {
     return TStringBuilder() << SelfId() << " ";
 }
@@ -4498,6 +4477,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvPersQueue::TEvCancelTransactionProposal, Handle);
         HFuncTraced(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
         HFuncTraced(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
+        HFuncTraced(TEvPQ::TEvPartitionScaleStatusChanged, Handle);
         HFuncTraced(NLongTxService::TEvLongTxService::TEvLockStatus, Handle);
         HFuncTraced(TEvPQ::TEvReadingPartitionStatusRequest, Handle);
         default:

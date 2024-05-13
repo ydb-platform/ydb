@@ -36,7 +36,7 @@ struct TEvPersQueue {
         EvDescribeResponse,
         EvGetReadSessionsInfo,
         EvReadSessionsInfoResponse,
-        EvWakeupClient,
+        EvWakeupClient, // deprecated
         EvUpdateACL,
         EvCheckACL,
         EvCheckACLResponse,
@@ -50,6 +50,8 @@ struct TEvPersQueue {
         EvPeriodicTopicStats,
         EvGetPartitionsLocation,
         EvGetPartitionsLocationResponse,
+        EvReadingPartitionFinished,
+        EvReadingPartitionStarted,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -196,16 +198,6 @@ struct TEvPersQueue {
         TEvPartitionClientInfoResponse() = default;
     };
 
-    struct TEvWakeupClient : TEventLocal<TEvWakeupClient, EvWakeupClient> {
-        TEvWakeupClient(const TString& client, const ui32 group)
-            : Client(client)
-            , Group(group)
-        {}
-
-        TString Client;
-        ui32 Group;
-    };
-
     struct TEvDescribe : public TEventPB<TEvDescribe, NKikimrPQ::TDescribe, EvDescribe> {
         TEvDescribe()
         {}
@@ -270,5 +262,26 @@ struct TEvPersQueue {
 
     using TEvProposeTransactionAttach = TEvDataShard::TEvProposeTransactionAttach;
     using TEvProposeTransactionAttachResult = TEvDataShard::TEvProposeTransactionAttachResult;
+
+    struct TEvReadingPartitionFinishedRequest : public TEventPB<TEvReadingPartitionFinishedRequest, NKikimrPQ::TEvReadingPartitionFinishedRequest, EvReadingPartitionFinished> {
+        TEvReadingPartitionFinishedRequest() = default;
+
+        TEvReadingPartitionFinishedRequest(const TString& consumer, ui32 partitionId, bool scaleAwareSDK, bool startedReadingFromEndOffset) {
+            Record.SetConsumer(consumer);
+            Record.SetPartitionId(partitionId);
+            Record.SetScaleAwareSDK(scaleAwareSDK);
+            Record.SetStartedReadingFromEndOffset(startedReadingFromEndOffset);
+        }
+    };
+
+    struct TEvReadingPartitionStartedRequest : public TEventPB<TEvReadingPartitionStartedRequest, NKikimrPQ::TEvReadingPartitionStartedRequest, EvReadingPartitionStarted> {
+        TEvReadingPartitionStartedRequest() = default;
+
+        TEvReadingPartitionStartedRequest(const TString& consumer, ui32 partitionId) {
+            Record.SetConsumer(consumer);
+            Record.SetPartitionId(partitionId);
+        }
+    };
+
 };
 } //NKikimr

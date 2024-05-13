@@ -11,7 +11,9 @@ SRCS(
     chunked_memory_pool_ut.cpp
     chunked_memory_pool_allocator_ut.cpp
     chunked_memory_pool_output_ut.cpp
+    erased_storage_ut.cpp
     free_list_ut.cpp
+    function_view_ut.cpp
     intrusive_ptr_ut.cpp
     shared_range_ut.cpp
     weak_ptr_ut.cpp
@@ -26,6 +28,8 @@ ENDIF()
 
 PEERDIR(
     library/cpp/testing/gtest
+    library/cpp/int128
+    library/cpp/yt/misc
     library/cpp/yt/memory
 )
 

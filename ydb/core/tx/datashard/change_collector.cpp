@@ -137,6 +137,7 @@ public:
             .WithPathId(pathId)
             .WithTableId(tableId.PathId)
             .WithSchemaVersion(userTable->GetTableSchemaVersion())
+            .WithSchema(userTable) // used for debugging purposes
             .WithBody(body.SerializeAsString())
             .Build();
 

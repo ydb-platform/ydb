@@ -4,6 +4,8 @@
 
 #include <yt/yt/client/cypress_client/public.h>
 
+#include <yt/yt/client/tablet_client/public.h>
+
 #include <yt/yt/client/transaction_client/public.h>
 
 #include <yt/yt/core/misc/range.h>
@@ -426,6 +428,9 @@ static constexpr TMasterTableSchemaId NullTableSchemaId = TMasterTableSchemaId()
 using TDynamicTableKeyMask = ui64;
 
 static_assert(sizeof(TDynamicTableKeyMask) * 8 == MaxKeyColumnCountInDynamicTable);
+
+// Function that compares two TUnversionedValue values.
+using TUUComparerSignature = int(const TUnversionedValue*, const TUnversionedValue*, int);
 
 ////////////////////////////////////////////////////////////////////////////////
 

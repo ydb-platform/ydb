@@ -1,4 +1,4 @@
 RECURSE(
-    template
     gen_queries
+    template
 )

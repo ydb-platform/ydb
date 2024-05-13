@@ -155,6 +155,16 @@ void PgReleaseThreadContext(void* ctx) {
     Y_UNUSED(ctx);
 }
 
+void PgSetGUCSettings(void* ctx, const TGUCSettings::TPtr& GUCSettings) {
+    Y_UNUSED(ctx);
+    Y_UNUSED(GUCSettings);
+}
+
+std::optional<std::string> PGGetGUCSetting(const std::string& key) {
+    Y_UNUSED(key);
+    throw yexception() << "PG types are not supported";
+}
+
 ui64 PgValueSize(const NUdf::TUnboxedValuePod& value, i32 typeLen) {
     Y_UNUSED(typeLen);
     Y_UNUSED(value);

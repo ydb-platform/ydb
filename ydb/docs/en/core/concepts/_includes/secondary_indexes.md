@@ -59,5 +59,5 @@ A secondary index can be:
 
 ## Purpose and use of secondary indexes {#best_practices}
 
-For information about the purpose and use of secondary indexes for app development, see the [recommendations](../../best_practices/secondary_indexes.md).
+For information about the purpose and use of secondary indexes for app development, see the [recommendations](../../dev/secondary-indexes.md).
 

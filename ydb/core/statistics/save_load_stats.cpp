@@ -161,15 +161,17 @@ private:
     const TPathId PathId;
     const ui64 StatType;
     const TString ColumnName;
+    const ui64 Cookie;
 
-    TMaybe<TString> Data;
+    std::optional<TString> Data;
 
 public:
-    TLoadStatisticsQuery(const TPathId& pathId, ui64 statType, const TString& columnName)
+    TLoadStatisticsQuery(const TPathId& pathId, ui64 statType, const TString& columnName, ui64 cookie)
         : NKikimr::TQueryBase(NKikimrServices::STATISTICS, {})
         , PathId(pathId)
         , StatType(statType)
         , ColumnName(columnName)
+        , Cookie(cookie)
     {}
 
     void OnRunQuery() override {
@@ -218,7 +220,7 @@ public:
             return;
         }
         result.TryNextRow();
-        Data = result.ColumnParser("data").GetOptionalString();
+        Data = *result.ColumnParser("data").GetOptionalString();
         Finish();
     }
 
@@ -226,6 +228,7 @@ public:
         Y_UNUSED(issues);
         auto response = std::make_unique<TEvStatistics::TEvLoadStatisticsQueryResponse>();
         response->Success = (status == Ydb::StatusIds::SUCCESS);
+        response->Cookie = Cookie;
         if (response->Success) {
             response->Data = Data;
         }
@@ -233,8 +236,10 @@ public:
     }
 };
 
-NActors::IActor* CreateLoadStatisticsQuery(const TPathId& pathId, ui64 statType, const TString& columnName) {
-    return new TLoadStatisticsQuery(pathId, statType, columnName);
+NActors::IActor* CreateLoadStatisticsQuery(const TPathId& pathId, ui64 statType,
+    const TString& columnName, ui64 cookie)
+{
+    return new TLoadStatisticsQuery(pathId, statType, columnName, cookie);
 }
 
 } // NKikimr::NStat

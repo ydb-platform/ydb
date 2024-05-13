@@ -1,6 +1,6 @@
 #include "federated_read_session.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/log_lazy.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/log_lazy.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/topic_impl.h>
 
 #define INCLUDE_YDB_INTERNAL_H
@@ -116,7 +116,6 @@ void TFederatedReadSessionImpl::OpenSubSessionsImpl(const std::vector<std::share
             .Database(db->path())
             .DiscoveryEndpoint(db->endpoint());
         auto subclient = make_shared<NTopic::TTopicClient::TImpl>(Connections, settings);
-        subclient->SetProvidedCodecs(ProvidedCodecs);
         auto subsession = subclient->CreateReadSession(FromFederated(Settings, db, EventFederator));
         SubSessions.emplace_back(subsession, db);
     }

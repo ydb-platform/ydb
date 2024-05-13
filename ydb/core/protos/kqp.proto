@@ -115,6 +115,7 @@ message TQueryRequest {
     optional string ClientSdkBuildInfo = 31;
     optional string ApplicationName = 32;
     optional string UserSID = 33;
+    optional uint64 OutputChunkMaxSize = 34;
 }
 
 message TKqpPathIdProto {
@@ -258,6 +259,14 @@ message TPreparedQuery {
     optional NKqpProto.TKqpPhyQuery PhysicalQuery = 6;
 };
 
+message TQueryResponsePgInfo {
+    optional string CommandTag = 1;
+}
+
+message TQueryResponseExtraInfo {
+    optional TQueryResponsePgInfo PgInfo = 1;
+}
+
 message TQueryResponse {
     optional bytes SessionId = 1;
     reserved 2; // (deprecated) QueryErrors
@@ -275,6 +284,7 @@ message TQueryResponse {
     repeated Ydb.ResultSet YdbResults = 13;
     optional TTopicOperationsResponse TopicOperations = 14;
     optional string QueryDiagnostics = 15;
+    optional TQueryResponseExtraInfo ExtraInfo = 16;
 }
 
 message TEvQueryResponse {
@@ -330,6 +340,7 @@ message TSessionInfo {
     optional int64 StateChangeAt = 13;
     optional string UserSID = 14;
     optional bool PgWire = 15 [default = false];
+    optional string UserName = 16;
 }
 
 message TEvListSessionsRequest {
@@ -360,7 +371,6 @@ message TKqpDefaultSettings {
 
 message TCreateSessionRequest {
     optional string Database = 1;
-    optional string ApplicationName = 2;
 }
 
 message TEvCreateSessionRequest {
@@ -381,6 +391,7 @@ message TEvCreateSessionRequest {
     optional string ClientSdkBuildInfo = 10;
     optional string ApplicationName = 11;
     optional string UserSID = 12;
+    optional string UserName = 13;
 }
 
 message TCreateSessionResponse {
@@ -562,6 +573,8 @@ message TEvStartKqpTasksRequest {
     optional NActorsProto.TActorId ExecuterActorId = 4;
     optional TKqpSnapshot Snapshot = 5;
     optional bool StartAllOrFail = 6 [default = true];
+    optional uint64 OutputChunkMaxSize = 7 [default = 0]; // 0 - use some default value 
+    optional string SerializedGUCSettings = 8;
 }
 
 message TEvStartKqpTasksResponse {
@@ -705,12 +718,22 @@ message TEvKqpOutputActorResultInfo {
     repeated NKikimrDataEvents.TLock Locks = 1;
 }
 
+message TKqpTableSinkLocks {
+    repeated NKikimrDataEvents.TLock Locks = 1;
+    repeated uint64 SendingShards = 2;
+    repeated uint64 ReceivingShards = 3;
+}
+
 message TKqpTableSinkSettings {
     optional NKqpProto.TKqpPhyTableId Table = 3;
     repeated TKqpColumnMetadataProto KeyColumns = 4;
     repeated TKqpColumnMetadataProto Columns = 5;
     optional uint64 LockTxId = 6;
     optional uint64 LockNodeId = 7;
+    optional bool FinalTx = 8; // If tx is immediate then commit, otherwise send prepare
+    optional bool ImmediateTx = 9; // Try to be immediate tx
+    optional bool InconsistentTx = 10; // Write each batch in it's own single immediate tx
+    optional TKqpTableSinkLocks Locks = 11;
 }
 
 message TKqpStreamLookupSettings {

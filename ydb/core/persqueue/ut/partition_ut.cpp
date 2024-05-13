@@ -267,6 +267,10 @@ protected:
     void TestWriteSubDomainOutOfSpace(TDuration quotaWaitDuration, bool ignoreQuotaDeadline);
     void WaitKeyValueRequest(TMaybe<ui64>& cookie);
 
+    void CmdChangeOwner(ui64 cookie, const TString& sourceId, TDuration duration, TString& ownerCookie);
+
+    void EmulateKVTablet();
+
     TMaybe<TTestContext> Ctx;
     TMaybe<TFinalizer> Finalizer;
 
@@ -453,57 +457,68 @@ void TPartitionFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
     auto event = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>();
     UNIT_ASSERT(event != nullptr);
 
-    UNIT_ASSERT_VALUES_EQUAL(event->Record.GetCookie(), 1);             // SET_OFFSET_COOKIE
+    for (unsigned i = 0; i < event->Record.CmdWriteSize(); ++i) {
+        auto& cmd = event->Record.GetCmdWrite(i);
+        TString key = cmd.GetKey();
 
-    if (matcher.Count.Defined()) {
-        UNIT_ASSERT_VALUES_EQUAL(*matcher.Count,
-                                 event->Record.CmdWriteSize() + event->Record.CmdDeleteRangeSize());
-    }
-
-    //
-    // TxMeta
-    //
-    if (matcher.PlanStep.Defined()) {
-        NKikimrPQ::TPartitionTxMeta meta;
-        UNIT_ASSERT(meta.ParseFromString(event->Record.GetCmdWrite(0).GetValue()));
-
-        UNIT_ASSERT_VALUES_EQUAL(*matcher.PlanStep, meta.GetPlanStep());
-    }
-    if (matcher.TxId.Defined()) {
-        NKikimrPQ::TPartitionTxMeta meta;
-        UNIT_ASSERT(meta.ParseFromString(event->Record.GetCmdWrite(0).GetValue()));
-
-        UNIT_ASSERT_VALUES_EQUAL(*matcher.TxId, meta.GetTxId());
-    }
-
-    //
-    // CmdWrite
-    //
-    for (auto& [index, userInfo] : matcher.UserInfos) {
-        UNIT_ASSERT(index < event->Record.CmdWriteSize());
-
-        NKikimrPQ::TUserInfo ud;
-        UNIT_ASSERT(ud.ParseFromString(event->Record.GetCmdWrite(index).GetValue()));
-
-        if (userInfo.Session) {
-            UNIT_ASSERT(ud.HasSession());
-            UNIT_ASSERT_VALUES_EQUAL(*userInfo.Session, ud.GetSession());
+        UNIT_ASSERT(key.size() >= 1);
+        switch (key[0]) {
+        case TKeyPrefix::TypeTxMeta: {
+            NKikimrPQ::TPartitionTxMeta meta;
+            UNIT_ASSERT(meta.ParseFromString(event->Record.GetCmdWrite(i).GetValue()));
+            if (matcher.PlanStep.Defined()) {
+                UNIT_ASSERT_VALUES_EQUAL(*matcher.PlanStep, meta.GetPlanStep());
+            }
+            if (matcher.TxId.Defined()) {
+                UNIT_ASSERT_VALUES_EQUAL(*matcher.TxId, meta.GetTxId());
+            }
+            break;
         }
-        if (userInfo.Generation) {
-            UNIT_ASSERT(ud.HasGeneration());
-            UNIT_ASSERT_VALUES_EQUAL(*userInfo.Generation, ud.GetGeneration());
+        case TKeyPrefix::TypeInfo: {
+            UNIT_ASSERT(key.size() >= (1 + 10 + 1)); // type + partition + mark
+            if (key[11] != TKeyPrefix::MarkUser) {
+                break;
+            }
+
+            NKikimrPQ::TUserInfo ud;
+            UNIT_ASSERT(ud.ParseFromString(event->Record.GetCmdWrite(i).GetValue()));
+
+            bool match = false;
+            for (auto& [_, userInfo] : matcher.UserInfos) {
+                if (userInfo.Session && ud.HasSession()) {
+                    if (*userInfo.Session != ud.GetSession()) {
+                        continue;
+                    }
+
+                    match = true;
+
+                    if (userInfo.Generation) {
+                        UNIT_ASSERT(ud.HasGeneration());
+                        UNIT_ASSERT_VALUES_EQUAL(*userInfo.Generation, ud.GetGeneration());
+                    }
+                    if (userInfo.Step) {
+                        UNIT_ASSERT(ud.HasStep());
+                        UNIT_ASSERT_VALUES_EQUAL(*userInfo.Step, ud.GetStep());
+                    }
+                    if (userInfo.Offset) {
+                        UNIT_ASSERT(ud.HasOffset());
+                        UNIT_ASSERT_VALUES_EQUAL(*userInfo.Offset, ud.GetOffset());
+                    }
+                    if (userInfo.ReadRuleGeneration) {
+                        UNIT_ASSERT(ud.HasReadRuleGeneration());
+                        UNIT_ASSERT_VALUES_EQUAL(*userInfo.ReadRuleGeneration, ud.GetReadRuleGeneration());
+                    }
+                }
+
+                if (match) {
+                    break;
+                }
+            }
+
+            UNIT_ASSERT(match);
+
+            break;
         }
-        if (userInfo.Step) {
-            UNIT_ASSERT(ud.HasStep());
-            UNIT_ASSERT_VALUES_EQUAL(*userInfo.Step, ud.GetStep());
-        }
-        if (userInfo.Offset) {
-            UNIT_ASSERT(ud.HasOffset());
-            UNIT_ASSERT_VALUES_EQUAL(*userInfo.Offset, ud.GetOffset());
-        }
-        if (userInfo.ReadRuleGeneration) {
-            UNIT_ASSERT(ud.HasReadRuleGeneration());
-            UNIT_ASSERT_VALUES_EQUAL(*userInfo.ReadRuleGeneration, ud.GetReadRuleGeneration());
         }
     }
 
@@ -543,7 +558,6 @@ void TPartitionFixture::SendCmdWriteResponse(NMsgBusProxy::EResponseStatus statu
 {
     auto event = MakeHolder<TEvKeyValue::TEvResponse>();
     event->Record.SetStatus(status);
-    event->Record.SetCookie(1); // SET_OFFSET_COOKIE
 
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
@@ -975,7 +989,8 @@ void TPartitionFixture::ShadowPartitionCountersTest(bool isFirstClass) {
     TAutoPtr<IEventHandle> handle;
     std::function<bool(const TEvPQ::TEvProxyResponse&)> truth = [&](const TEvPQ::TEvProxyResponse& e) { return cookie == e.Cookie; };
 
-    TString data{"d", 500};
+    TString data = "d";
+    data.resize(500);
     //auto fullData = data;
     ui64 currTotalSize = 0, currUncSize = 0;
     ui64 accWaitTime = 0, partWaitTime = 0;
@@ -1080,17 +1095,14 @@ void TPartitionFixture::TestWriteSubDomainOutOfSpace(TDuration quotaWaitDuration
                     {.Version=2, .Consumers={{.Consumer="client-1"}}});
 
     TMaybe<ui64> kvCookie;
-    WaitKeyValueRequest(kvCookie); // the partition saves the configuration
 
     SendSubDomainStatus(true);
 
     ui64 cookie = 1;
     ui64 messageNo = 0;
+    TString ownerCookie;
 
-    SendChangeOwner(cookie, "owner1", Ctx->Edge, true);
-    auto ownerEvent = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(1));
-    UNIT_ASSERT(ownerEvent != nullptr);
-    auto ownerCookie = ownerEvent->Response->GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
+    CmdChangeOwner(cookie, "owner1", TDuration::Seconds(1), ownerCookie);
 
     TAutoPtr<IEventHandle> handle;
     std::function<bool(const TEvPQ::TEvProxyResponse&)> truth = [&](const TEvPQ::TEvProxyResponse& e) {
@@ -1663,6 +1675,24 @@ Y_UNIT_TEST_F(TabletConfig_Is_Newer_That_PartitionConfig, TPartitionFixture)
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 }
 
+void TPartitionFixture::CmdChangeOwner(ui64 cookie, const TString& sourceId, TDuration duration, TString& ownerCookie)
+{
+    SendChangeOwner(cookie, sourceId, Ctx->Edge);
+
+    EmulateKVTablet();
+
+    auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(duration);
+    UNIT_ASSERT(event != nullptr);
+    ownerCookie = event->Response->GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
+}
+
+void TPartitionFixture::EmulateKVTablet()
+{
+    TMaybe<ui64> cookie;
+    WaitKeyValueRequest(cookie);
+    SendDiskStatusResponse(&cookie);
+}
+
 Y_UNIT_TEST_F(ReserveSubDomainOutOfSpace, TPartitionFixture)
 {
     Ctx->Runtime->GetAppData().FeatureFlags.SetEnableTopicDiskSubDomainQuota(true);
@@ -1684,27 +1714,33 @@ Y_UNIT_TEST_F(ReserveSubDomainOutOfSpace, TPartitionFixture)
 
     ui64 cookie = 1;
     ui64 messageNo = 0;
+    TString ownerCookie;
 
-    SendChangeOwner(cookie, "owner1", Ctx->Edge);
-    auto ownerEvent = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(1));
-    UNIT_ASSERT(ownerEvent != nullptr);
-    auto ownerCookie = ownerEvent->Response->GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
+    CmdChangeOwner(cookie, "owner1", TDuration::Seconds(1), ownerCookie);
 
     TAutoPtr<IEventHandle> handle;
-    std::function<bool(const TEvPQ::TEvProxyResponse&)> truth = [&](const TEvPQ::TEvProxyResponse& e) { return cookie == e.Cookie; };
+    std::function<bool(const TEvPQ::TEvProxyResponse&)> truth = [&](const TEvPQ::TEvProxyResponse& e) {
+        return cookie == e.Cookie;
+    };
 
     // First message will be processed because used storage 0 and limit 0. That is, the limit is not exceeded.
     SendReserveBytes(++cookie, 7, ownerCookie, messageNo++);
 
     // Second message will not be processed because the limit is exceeded.
     SendReserveBytes(++cookie, 13, ownerCookie, messageNo++);
-    auto reserveEvent = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvProxyResponse>(handle, truth, TDuration::Seconds(1));
-    UNIT_ASSERT(reserveEvent == nullptr);
+
+    {
+        auto reserveEvent = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvProxyResponse>(handle, truth, TDuration::Seconds(1));
+        UNIT_ASSERT(reserveEvent == nullptr);
+    }
 
     // SudDomain quota available - second message will be processed..
     SendSubDomainStatus(false);
-    reserveEvent = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvProxyResponse>(handle, truth, TDuration::Seconds(1));
-    UNIT_ASSERT(reserveEvent != nullptr);
+
+    {
+        auto reserveEvent = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvProxyResponse>(handle, truth, TDuration::Seconds(1));
+        UNIT_ASSERT(reserveEvent != nullptr);
+    }
 }
 
 Y_UNIT_TEST_F(WriteSubDomainOutOfSpace, TPartitionFixture)
@@ -1725,17 +1761,14 @@ Y_UNIT_TEST_F(WriteSubDomainOutOfSpace, TPartitionFixture)
                     {.Version=2, .Consumers={{.Consumer="client-1"}}});
 
     TMaybe<ui64> kvCookie;
-    WaitKeyValueRequest(kvCookie); // партиция сохраняет конфигурацию
 
     SendSubDomainStatus(true);
 
     ui64 cookie = 1;
     ui64 messageNo = 0;
+    TString ownerCookie;
 
-    SendChangeOwner(cookie, "owner1", Ctx->Edge, true);
-    auto ownerEvent = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(1));
-    UNIT_ASSERT(ownerEvent != nullptr);
-    auto ownerCookie = ownerEvent->Response->GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
+    CmdChangeOwner(cookie, "owner1", TDuration::Seconds(1), ownerCookie);
 
     TAutoPtr<IEventHandle> handle;
     std::function<bool(const TEvPQ::TEvError&)> truth = [&](const TEvPQ::TEvError& e) {

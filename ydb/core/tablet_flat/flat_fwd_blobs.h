@@ -3,7 +3,6 @@
 #include "flat_fwd_iface.h"
 #include "flat_fwd_page.h"
 #include "flat_fwd_misc.h"
-#include "flat_page_blobs.h"
 #include "flat_part_screen.h"
 #include "flat_part_slice.h"
 
@@ -33,7 +32,7 @@ namespace NFwd {
             for (auto &it: Pages) it.Release();
         }
 
-        TResult Handle(IPageLoadingQueue *head, ui32 ref, ui64 lower) noexcept override
+        TResult Get(IPageLoadingQueue *head, ui32 ref, EPage, ui64 lower) noexcept override
         {
             Y_ABORT_UNLESS(ref >= Lower, "Cannot handle backward blob reads");
 
@@ -55,21 +54,19 @@ namespace NFwd {
             Preload(head, upper);
         }
 
-        void Apply(TArrayRef<NPageCollection::TLoadedPage> loaded) noexcept override
+        void Fill(NPageCollection::TLoadedPage& page, EPage) noexcept override
         {
-            for (auto &one: loaded) {
-                if (!Pages || one.PageId < Pages.front().PageId) {
-                    Y_ABORT("Blobs fwd cache got page below queue");
-                } else if (one.PageId > Pages.back().PageId) {
-                    Y_ABORT("Blobs fwd cache got page above queue");
-                } else if (one.Data.size() > OnFetch) {
-                    Y_ABORT("Blobs fwd cache ahead counters is out of sync");
-                }
-
-                Stat.Saved += one.Data.size();
-                OnFetch -= one.Data.size();
-                OnHold += Lookup(one.PageId).Settle(one);
+            if (!Pages || page.PageId < Pages.front().PageId) {
+                Y_ABORT("Blobs fwd cache got page below queue");
+            } else if (page.PageId > Pages.back().PageId) {
+                Y_ABORT("Blobs fwd cache got page above queue");
+            } else if (page.Data.size() > OnFetch) {
+                Y_ABORT("Blobs fwd cache ahead counters is out of sync");
             }
+
+            Stat.Saved += page.Data.size();
+            OnFetch -= page.Data.size();
+            OnHold += Lookup(page.PageId).Settle(page);
 
             Shrink(false /* do not drop loading pages */);
         }
@@ -151,7 +148,7 @@ namespace NFwd {
                     } else if (page.Fetch == EFetch::None) {
                         auto size = head->AddToQueue(Grow, EPage::Opaque);
 
-                        Y_ABORT_UNLESS(size == page.Size, "Inconsistent page sizez");
+                        Y_ABORT_UNLESS(size == page.Size, "Inconsistent page sizes");
 
                         page.Fetch = EFetch::Wait;
                         Stat.Fetch += page.Size;

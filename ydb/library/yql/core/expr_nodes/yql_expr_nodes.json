@@ -993,6 +993,21 @@
             "Match": {"Type": "Callable", "Name": "Timestamp"}
         },
         {
+            "Name": "TCoDate32",
+            "Base": "TCoDateBase",
+            "Match": {"Type": "Callable", "Name": "Date32"}
+        },
+        {
+            "Name": "TCoDatetime64",
+            "Base": "TCoDateBase",
+            "Match": {"Type": "Callable", "Name": "Datetime64"}
+        },
+        {
+            "Name": "TCoTimestamp64",
+            "Base": "TCoDateBase",
+            "Match": {"Type": "Callable", "Name": "Timestamp64"}
+        },
+        {
             "Name": "TCoTzDateBase",
             "Base": "TCoDateBase",
             "Match": {"Type": "CallableBase"},
@@ -1017,6 +1032,11 @@
             "Name": "TCoInterval",
             "Base": "TCoDataCtor",
             "Match": {"Type": "Callable", "Name": "Interval"}
+        },
+        {
+            "Name": "TCoInterval64",
+            "Base": "TCoDataCtor",
+            "Match": {"Type": "Callable", "Name": "Interval64"}
         },
         {
             "Name": "TCoDecimal",
@@ -1670,7 +1690,8 @@
                 {"Index": 3, "Name": "SortDirections",    "Type": "TExprBase"},
                 {"Index": 4, "Name": "KeySelectorLambda", "Type": "TCoLambda"}
             ]
-        },        {
+        },
+        {
             "Name": "TCoAscending",
             "Base": "TCoInputBase",
             "Match": {"Type": "Callable", "Name": "Ascending"}
@@ -2497,6 +2518,14 @@
             ]
         },
         {
+            "Name": "TCoStablePickle",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "StablePickle"},
+            "Children": [
+                {"Index": 0, "Name": "Value", "Type": "TExprBase"}
+            ]
+        },
+        {
             "Name": "TCoUnpickle",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "Unpickle"},
@@ -2518,6 +2547,19 @@
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "ReturningStar"},
             "Children": []
+        },
+        {
+            "Name": "TCoReplicationTarget",
+            "Base": "TExprBase",
+            "Match": {"Type": "Tuple"},
+            "Children": [
+                {"Index": 0, "Name": "RemotePath", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "LocalPath", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TCoReplicationTargetList",
+            "ListBase": "TCoReplicationTarget"
         }
     ]
 }

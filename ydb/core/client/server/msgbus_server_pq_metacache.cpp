@@ -511,9 +511,10 @@ private:
 
         for (const auto& [path, database] : waiter->GetTopics()) {
             auto split = NKikimr::SplitPath(path);
-            Y_ABORT_UNLESS(!split.empty());
             TSchemeCacheNavigate::TEntry entry;
-            entry.Path.insert(entry.Path.end(), split.begin(), split.end());
+            if (!split.empty()) {
+                entry.Path.insert(entry.Path.end(), split.begin(), split.end());
+            }
 
             entry.SyncVersion = waiter->SyncVersion;
             entry.ShowPrivatePath = waiter->ShowPrivate;

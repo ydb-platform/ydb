@@ -925,6 +925,7 @@ TString GetPrettyStatistics(const TString& statistics) {
                     RemapNode(writer, p.second, "TaskRunner.Stage=Total.ResultRows", "ResultRows");
                     RemapNode(writer, p.second, "TaskRunner.Stage=Total.EgressBytes", "EgressBytes");
                     RemapNode(writer, p.second, "TaskRunner.Stage=Total.EgressRows", "EgressRows");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.MkqlMaxMemoryUsage", "MaxMemoryUsage");
                 writer.OnEndMap();
             }
             // YQv2
@@ -944,6 +945,7 @@ TString GetPrettyStatistics(const TString& statistics) {
                     RemapNode(writer, p.second, "ResultRows", "ResultRows");
                     RemapNode(writer, p.second, "EgressBytes", "EgressBytes");
                     RemapNode(writer, p.second, "EgressRows", "EgressRows");
+                    RemapNode(writer, p.second, "MaxMemoryUsage", "MaxMemoryUsage");
                 writer.OnEndMap();
             }
         }
@@ -1032,12 +1034,59 @@ TPublicStat GetPublicStat(const TString& statistics) {
     return counters;
 }
 
+void CleanupPlans(NJson::TJsonValue& node) {
+    node.EraseValue("Stats");
+    if (auto* plans = node.GetValueByPath("Plans")) {
+        if (plans->IsArray()) {
+            for (auto& plan : plans->GetArraySafe()) {
+                CleanupPlans(plan);
+            }
+        }
+    }
+}
+
+TString CleanupPlanStats(const TString& plan) {
+    NJson::TJsonReaderConfig jsonConfig;
+    NJson::TJsonValue planRoot;
+
+    if (NJson::ReadJsonTree(plan, &jsonConfig, &planRoot)) {
+        planRoot.EraseValue("SimplifiedPlan");
+        if (auto* plan = planRoot.GetValueByPath("Plan")) {
+            CleanupPlans(*plan);
+            return NJson::WriteJson(&planRoot, false);
+        }
+    }
+
+    return plan;
+}
+
+TString SimplifiedPlan(const TString& plan) {
+    NJson::TJsonReaderConfig jsonConfig;
+    NJson::TJsonValue planRoot;
+
+    if (NJson::ReadJsonTree(plan, &jsonConfig, &planRoot)) {
+        if (auto* simplified = planRoot.GetValueByPath("SimplifiedPlan")) {
+            if (auto* plan = planRoot.GetValueByPath("Plan")) {
+                plan->Swap(*simplified);
+                planRoot.EraseValue("SimplifiedPlan");
+                return NJson::WriteJson(&planRoot, false);
+            }
+        }
+    }
+
+    return plan;
+}
+
 struct TNoneStatProcessor : IPlanStatProcessor {
     Ydb::Query::StatsMode GetStatsMode() override {
         return Ydb::Query::StatsMode::STATS_MODE_NONE;
     }
 
     TString ConvertPlan(const TString& plan) override {
+        return plan;
+    }
+
+    TString GetPlanVisualization(const TString& plan) override {
         return plan;
     }
 
@@ -1061,7 +1110,7 @@ struct TBasicStatProcessor : TNoneStatProcessor {
     }
 };
 
-struct TFullStatProcessor : IPlanStatProcessor {
+struct TPlanStatProcessor : IPlanStatProcessor {
     Ydb::Query::StatsMode GetStatsMode() override {
         return Ydb::Query::StatsMode::STATS_MODE_FULL;
     }
@@ -1070,12 +1119,16 @@ struct TFullStatProcessor : IPlanStatProcessor {
         return plan;
     }
 
+    TString GetPlanVisualization(const TString& plan) override {
+        return plan;
+    }
+
     TString GetQueryStat(const TString& plan, double& cpuUsage) override {
         return GetV1StatFromV2Plan(plan, &cpuUsage);
     }
 
     TPublicStat GetPublicStat(const TString& stat) override {
-        return NFq::GetPublicStat(stat);
+        return ::NFq::GetPublicStat(stat);
     }
 
     THashMap<TString, i64> GetFlatStat(TStringBuf plan) override {
@@ -1083,7 +1136,19 @@ struct TFullStatProcessor : IPlanStatProcessor {
     }
 };
 
-struct TProfileStatProcessor : TFullStatProcessor {
+struct TFullStatProcessor : TPlanStatProcessor {
+    TString GetPlanVisualization(const TString& plan) override {
+        return CleanupPlanStats(plan);
+    }
+};
+
+struct TCostStatProcessor : TPlanStatProcessor {
+    TString GetPlanVisualization(const TString& plan) override {
+        return SimplifiedPlan(plan);
+    }
+};
+
+struct TProfileStatProcessor : TPlanStatProcessor {
     Ydb::Query::StatsMode GetStatsMode() override {
         return Ydb::Query::StatsMode::STATS_MODE_PROFILE;
     }
@@ -1099,7 +1164,9 @@ std::unique_ptr<IPlanStatProcessor> CreateStatProcessor(const TString& statViewN
     // disallow none and basic stat since they do not support metering
     // if (statViewName == "stat_none") return std::make_unique<TNoneStatProcessor>();
     // if (statViewName == "stat_basc") return std::make_unique<TBasicStatProcessor>();
+    if (statViewName == "stat_plan") return std::make_unique<TPlanStatProcessor>();
     if (statViewName == "stat_full") return std::make_unique<TFullStatProcessor>();
+    if (statViewName == "stat_cost") return std::make_unique<TCostStatProcessor>();
     if (statViewName == "stat_prof") return std::make_unique<TProfileStatProcessor>();
     if (statViewName == "stat_prod") return std::make_unique<TProdStatProcessor>();
     return std::make_unique<TFullStatProcessor>();
@@ -1150,17 +1217,24 @@ Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(const TString& queryP
         Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Error plan conversion: " << ex.what()));
     }
 
+    auto planView = plan;
+    try {
+        planView = Processor->GetPlanVisualization(planView);
+    } catch(const NJson::TJsonException& ex) {
+        Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Error plan visualization: " << ex.what()));
+    }
+
     if (Compressor.IsEnabled()) {
         auto [astCompressionMethod, astCompressed] = Compressor.Compress(queryAst);
         pingTaskRequest.mutable_ast_compressed()->set_method(astCompressionMethod);
         pingTaskRequest.mutable_ast_compressed()->set_data(astCompressed);
 
-        auto [planCompressionMethod, planCompressed] = Compressor.Compress(plan);
+        auto [planCompressionMethod, planCompressed] = Compressor.Compress(planView);
         pingTaskRequest.mutable_plan_compressed()->set_method(planCompressionMethod);
         pingTaskRequest.mutable_plan_compressed()->set_data(planCompressed);
     } else {
         pingTaskRequest.set_ast(queryAst);
-        pingTaskRequest.set_plan(plan);
+        pingTaskRequest.set_plan(planView);
     }
 
     CpuUsage = 0.0;
@@ -1175,6 +1249,38 @@ Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(const TString& queryP
     }
 
     return pingTaskRequest;
+}
+
+TString GetStatViewName(const TRunActorParams& params) {
+    static TStringBuf hint("--fq_dev_hint_");
+    auto p = params.Sql.find(hint);
+    if (p != params.Sql.npos) {
+        p += hint.size();
+        auto p1 = params.Sql.find("\n", p);
+        TString mode = params.Sql.substr(p, p1 == params.Sql.npos ? params.Sql.npos : p1 - p);
+        if (mode) {
+            return mode;
+        }
+    }
+
+    if (!params.Config.GetControlPlaneStorage().GetDumpRawStatistics()) {
+        return "stat_prod";
+    }
+
+    switch (params.Config.GetControlPlaneStorage().GetStatsMode()) {
+        case Ydb::Query::StatsMode::STATS_MODE_UNSPECIFIED:
+            return "stat_full";
+        case Ydb::Query::StatsMode::STATS_MODE_NONE:
+            return "stat_none";
+        case Ydb::Query::StatsMode::STATS_MODE_BASIC:
+            return "stat_basc";
+        case Ydb::Query::StatsMode::STATS_MODE_FULL:
+            return "stat_full";
+        case Ydb::Query::StatsMode::STATS_MODE_PROFILE:
+            return "stat_prof";
+        default:
+            return "stat_full";
+    }
 }
 
 } // namespace NFq

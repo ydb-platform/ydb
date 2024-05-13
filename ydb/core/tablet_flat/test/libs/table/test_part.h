@@ -4,7 +4,7 @@
 #include <ydb/core/tablet_flat/flat_fwd_blobs.h>
 #include <ydb/core/tablet_flat/flat_fwd_cache.h>
 #include <ydb/core/tablet_flat/flat_part_iface.h>
-#include <ydb/core/tablet_flat/flat_part_index_iter.h>
+#include <ydb/core/tablet_flat/flat_part_index_iter_flat_index.h>
 #include <ydb/core/tablet_flat/flat_part_laid.h>
 #include <ydb/core/tablet_flat/flat_row_scheme.h>
 #include <ydb/core/tablet_flat/flat_table_misc.h>
@@ -47,14 +47,14 @@ namespace NTest {
             return Store->PageCollectionBytes(0) + Store->PageCollectionBytes(Store->GetOuterRoom());
         }
 
-        ui64 GetPageSize(NPage::TPageId id, NPage::TGroupId groupId) const override
+        ui64 GetPageSize(NPage::TPageId pageId, NPage::TGroupId groupId) const override
         {
-            return Store->GetPageSize(groupId.Index, id);
+            return Store->GetPageSize(groupId.Index, pageId);
         }
 
-        NPage::EPage GetPageType(NPage::TPageId id, NPage::TGroupId groupId) const override
+        NPage::EPage GetPageType(NPage::TPageId pageId, NPage::TGroupId groupId) const override
         {
-            return Store->GetPageType(groupId.Index, id);
+            return Store->GetPageType(groupId.Index, pageId);
         }
 
         ui8 GetGroupChannel(NPage::TGroupId groupId) const override
@@ -101,9 +101,9 @@ namespace NTest {
             return { true, Get(part, room, ref) };
         }
 
-        const TSharedData* TryGetPage(const TPart *part, TPageId ref, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart *part, TPageId pageId, TGroupId groupId) override
         {
-            return Get(part, groupId.Index, ref);
+            return Get(part, groupId.Index, pageId);
         }
 
     private:
@@ -148,9 +148,9 @@ namespace NTest {
     namespace IndexTools {
         using TGroupId = NPage::TGroupId;
 
-        inline const TPartIndexIt::TRecord * GetFlatRecord(const TPart& part, ui32 pageIndex) {
+        inline const TPartGroupFlatIndexIter::TRecord * GetFlatRecord(const TPart& part, ui32 pageIndex) {
             TTestEnv env;
-            TPartIndexIt index(&part, &env, { });
+            TPartGroupFlatIndexIter index(&part, &env, { });
 
             Y_ABORT_UNLESS(index.Seek(0) == EReady::Data);
             for (TPageId p = 0; p < pageIndex; p++) {
@@ -160,9 +160,9 @@ namespace NTest {
             return index.GetRecord();
         }
 
-        inline const TPartIndexIt::TRecord * GetFlatLastRecord(const TPart& part) {
+        inline const TPartGroupFlatIndexIter::TRecord * GetFlatLastRecord(const TPart& part) {
             TTestEnv env;
-            TPartIndexIt index(&part, &env, { });
+            TPartGroupFlatIndexIter index(&part, &env, { });
             Y_ABORT_UNLESS(index.SeekLast() == EReady::Data);
             return index.GetLastRecord();
         }
@@ -179,6 +179,23 @@ namespace NTest {
                     break;
                 }
                 result++;
+            }
+
+            return result;
+        }
+
+        inline ui64 CountDataSize(const TPart& part, TGroupId groupId) {
+            size_t result = 0;
+
+            TTestEnv env;
+            auto index = CreateIndexIter(&part, &env, groupId);
+            for (size_t i = 0; ; i++) {
+                auto ready = i == 0 ? index->Seek(0) : index->Next();
+                if (ready != EReady::Data) {
+                    Y_ABORT_UNLESS(ready != EReady::Page, "Unexpected page fault");
+                    break;
+                }
+                result += part.GetPageSize(index->GetPageId(), groupId);
             }
 
             return result;

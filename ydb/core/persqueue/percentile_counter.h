@@ -78,13 +78,13 @@ public:
 class TPartitionHistogramWrapper {
 private:
     bool IsSupportivePartition;
-    THolder<NKikimr::NPQ::TPercentileCounter> Histogram;
+    std::unique_ptr<NKikimr::NPQ::TPercentileCounter> Histogram;
     TMap<ui32, ui64> Values;
     bool Inited = false;
 
 public:
     TPartitionHistogramWrapper() = default;
-    void Setup(bool isSupportivePartition, NKikimr::NPQ::TPercentileCounter* histogram);
+    void Setup(bool isSupportivePartition, std::unique_ptr<NKikimr::NPQ::TPercentileCounter>&& histogram);
     void IncFor(ui64 key, ui64 value = 1);
     TVector<ui64> GetValues() const;
     template<class TIterable>

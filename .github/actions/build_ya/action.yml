@@ -37,7 +37,6 @@ runs:
       env:
         build_preset: ${{ inputs.build_preset }}
       run: |
-        echo "SHELLOPTS=xtrace" >> $GITHUB_ENV
         export TMP_DIR=$(pwd)/tmp_build
         echo "TMP_DIR=$TMP_DIR" >> $GITHUB_ENV
         
@@ -54,6 +53,7 @@ runs:
       id: build
       shell: bash
       run: |
+        set -x
         extra_params=()
 
         if [ ! -z "${{ inputs.build_target }}" ]; then
@@ -115,7 +115,7 @@ runs:
         # to be sure
         set -o pipefail
         
-        ./ya make -k --build "${build_type}" --force-build-depends -D'BUILD_LANGUAGES=CPP PY3 PY2 GO' -T --stat -DCONSISTENT_DEBUG \
+        ./ya make -k --build "${build_type}" --force-build-depends -T --stat -DCONSISTENT_DEBUG \
           --log-file "$TMP_DIR/ya_log.txt" --evlog-file "$TMP_DIR/ya_evlog.jsonl" \
           --cache-size 512G --link-threads "${{ inputs.link_threads }}" \
           "${extra_params[@]}" |& tee $TMP_DIR/ya_make.log && echo "status=true" >> $GITHUB_OUTPUT || (
@@ -128,6 +128,7 @@ runs:
       if: always()
       shell: bash
       run: |
+        set -x
         echo "::group::s3-sync"
         s3cmd sync --acl-private --exclude="ya_make.log" --no-progress --stats --no-check-md5 "$TMP_DIR/" "$S3_BUCKET_PATH/build_logs/"
         s3cmd sync --acl-public --no-progress --stats --no-check-md5 "$TMP_DIR/ya_make.log" "$S3_BUCKET_PATH/build_logs/"
@@ -137,6 +138,7 @@ runs:
       if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
       shell: bash
       run: |
+        set -x
         if [ "${{ steps.build.outputs.status }}" == "failed" ]; then
           echo "Build failed. see the [build logs]($LOG_URL)." | .github/scripts/tests/comment-pr.py --fail
         else

@@ -25,7 +25,7 @@ size_t ConsumerCount(const NKikimrPQ::TPQTabletConfig& config);
 
 const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config, const ui32 partitionId);
 
-// The graph of split-merge operations. 
+// The graph of split-merge operations.
 class TPartitionGraph {
 public:
     struct Node {
@@ -43,6 +43,8 @@ public:
         std::vector<Node*> Children;
         // All parents include parents of parents and so on
         std::set<Node*> HierarhicalParents;
+
+        bool IsRoot() const;
     };
 
     TPartitionGraph();
@@ -50,6 +52,7 @@ public:
 
     const Node* GetPartition(ui32 id) const;
     std::set<ui32> GetActiveChildren(ui32 id) const;
+    void Travers(ui32 id, std::function<bool (ui32 id)> func, bool includeSelf = false) const;
 
 private:
     std::unordered_map<ui32, Node> Partitions;

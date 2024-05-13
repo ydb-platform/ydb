@@ -669,7 +669,8 @@ value {
             << "\"" << CGIEscapeRet("lorem ipsum") << "\"," // string
             << "\"" << CGIEscapeRet("lorem ipsum dolor sit amet") << "\"," // utf8
             << "\"" << CGIEscapeRet(R"({"key": "value"})") << "\"," // json
-            << "\"" << CGIEscapeRet(R"({"key": "value"})") << "\"" // jsondoc
+            << "\"" << CGIEscapeRet(R"({"key": "value"})") << "\"," // jsondoc
+            << "65df1ec1-a97d-47b2-ae56-3c023da6ee8c"
         << Endl;
 
         TString yson = TStringBuilder() << "[[[[["
@@ -691,7 +692,8 @@ value {
             << "[\"" << 100500 << "\"];" // uint32
             << "[\"" << 200500 << "\"];" // uint64
             << "[\"" << 255 << "\"];" // uint8
-            << "[\"" << "lorem ipsum dolor sit amet" << "\"]" // utf8
+            << "[\"" << "lorem ipsum dolor sit amet" << "\"];" // utf8
+            << "[[\"" << "wR7fZX2pskeuVjwCPabujA==" << "\"]]" // uuid
         << "]];\%false]]]";
 
         const auto data = TTestData(std::move(csv), std::move(yson));
@@ -717,6 +719,7 @@ value {
             Columns { Name: "utf8_value" Type: "Utf8" }
             Columns { Name: "json_value" Type: "Json" }
             Columns { Name: "jsondoc_value" Type: "JsonDocument" }
+            Columns { Name: "uuid_value" Type: "Uuid" }
             KeyColumnNames: ["key"]
         )", {data}, data.Data.size() + 1);
 
@@ -740,6 +743,7 @@ value {
             "utf8_value",
             "json_value",
             "jsondoc_value",
+            "uuid_value",
         });
         NKqp::CompareYson(data.YsonStr, content);
     }

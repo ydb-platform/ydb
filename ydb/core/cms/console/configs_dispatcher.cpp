@@ -64,6 +64,7 @@ const THashSet<ui32> DYNAMIC_KINDS({
     (ui32)NKikimrConsole::TConfigItem::AllowEditYamlInUiItem,
     (ui32)NKikimrConsole::TConfigItem::BackgroundCleaningConfigItem,
     (ui32)NKikimrConsole::TConfigItem::TracingConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::BlobStorageConfigItem,
 });
 
 const THashSet<ui32> NON_YAML_KINDS({

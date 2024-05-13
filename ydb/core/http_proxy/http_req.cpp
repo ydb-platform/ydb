@@ -511,11 +511,15 @@ namespace NKikimr::NHttpProxy {
 
                     switch (retryClass) {
                     case ERetryErrorClass::ShortRetry:
+                        [[fallthrough]];
+
                     case ERetryErrorClass::LongRetry:
                         RetryCounter.Click();
                         if (RetryCounter.HasAttemps()) {
                             return HttpContext.Driver ? SendGrpcRequest(ctx) : SendGrpcRequestNoDriver(ctx);
                         }
+                        [[fallthrough]];
+
                     case ERetryErrorClass::NoRetry: {
                         TString errorText;
                         TStringOutput stringOutput(errorText);

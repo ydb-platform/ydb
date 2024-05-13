@@ -31,6 +31,14 @@ static void FillTableStats(NKikimrTableStats::TTableStats* stats, const TPartiti
     stats->SetRangeReadRows(tableStats.RangeReadRows);
 
     stats->SetPartCount(tableStats.PartCount);
+
+    auto* storagePoolsStats = stats->MutableStoragePools()->MutablePoolsUsage();
+    for (const auto& [poolKind, stats] : tableStats.StoragePoolsStats) {
+        auto* storagePoolStats = storagePoolsStats->Add();
+        storagePoolStats->SetPoolKind(poolKind);
+        storagePoolStats->SetDataSize(stats.DataSize);
+        storagePoolStats->SetIndexSize(stats.IndexSize);
+    }
 }
 
 static void FillTableMetrics(NKikimrTabletBase::TMetrics* metrics, const TPartitionStats& tableStats) {
@@ -401,12 +409,12 @@ void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr path
     auto* pathDescription = Result->Record.MutablePathDescription();
     auto description = pathDescription->MutableColumnTableDescription();
     description->CopyFrom(tableInfo->Description);
-    description->MutableSharding()->CopyFrom(tableInfo->Sharding);
+    description->MutableSharding()->CopyFrom(tableInfo->Description.GetSharding());
 
     if (tableInfo->IsStandalone()) {
         FillAggregatedStats(*pathDescription, tableInfo->GetStats());
     } else {
-        const TOlapStoreInfo::TPtr storeInfo = *Self->OlapStores.FindPtr(*tableInfo->OlapStorePathId);
+        const TOlapStoreInfo::TPtr storeInfo = *Self->OlapStores.FindPtr(tableInfo->GetOlapStorePathIdVerified());
         Y_ABORT_UNLESS(storeInfo, "OlapStore not found");
 
         auto& preset = storeInfo->SchemaPresets.at(description->GetSchemaPresetId());
@@ -707,6 +715,14 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
     diskSpaceUsage->MutableTopics()->SetAccountSize(subDomainInfo->GetPQAccountStorage());
     diskSpaceUsage->MutableTopics()->SetDataSize(subDomainInfo->GetDiskSpaceUsage().Topics.DataSize);
     diskSpaceUsage->MutableTopics()->SetUsedReserveSize(subDomainInfo->GetDiskSpaceUsage().Topics.UsedReserveSize);
+    auto* storagePoolsUsage = diskSpaceUsage->MutableStoragePoolsUsage();
+    for (const auto& [poolKind, usage] : subDomainInfo->GetDiskSpaceUsage().StoragePoolsUsage) {
+        auto* storagePoolUsage = storagePoolsUsage->Add();
+        storagePoolUsage->SetPoolKind(poolKind);
+        storagePoolUsage->SetDataSize(usage.DataSize);
+        storagePoolUsage->SetIndexSize(usage.IndexSize);
+        storagePoolUsage->SetTotalSize(usage.DataSize + usage.IndexSize);
+    }
 
     if (subDomainInfo->GetDeclaredSchemeQuotas()) {
         entry->MutableDeclaredSchemeQuotas()->CopyFrom(*subDomainInfo->GetDeclaredSchemeQuotas());

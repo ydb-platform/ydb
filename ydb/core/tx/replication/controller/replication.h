@@ -109,6 +109,8 @@ public:
     void SetNextTargetId(ui64 value);
     ui64 GetNextTargetId() const;
 
+    void UpdateSecret(const TString& secretValue);
+
     void SetTenant(const TString& value);
     const TString& GetTenant() const;
 

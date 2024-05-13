@@ -4,14 +4,14 @@ During [initial deployment](../initial-deployment.md), the Ansible playbook sets
 
 ## View logs via Ansible playbook
 
-[ydb-ansible-examples](https://github.com/ydb-platform/ydb-ansible-examples) repository contains a playbook called `logs.yaml` that can be used to show logs of all {{ ydb-short-name }} nodes in a cluster. The playbook gathers logs from nodes and outputs them to `stdout`, which allows to pipe them for further processing, for example with commands like `grep` or `awk`.
+[ydb-ansible-examples](https://github.com/ydb-platform/ydb-ansible-examples) repository contains a playbook called `ydb_platform.ydb.logs` that can be used to show logs of all {{ ydb-short-name }} nodes in a cluster. The playbook gathers logs from nodes and outputs them to `stdout`, which allows to pipe them for further processing, for example with commands like `grep` or `awk`.
 
 ### All logs of all nodes
 
-By default, the `logs.yaml` playbook fetches logs of all {{ ydb-short-name }} nodes. The command to do it:
+By default, the `ydb_platform.ydb.logs` playbook fetches logs of all {{ ydb-short-name }} nodes. The command to do it:
 
 ```bash
-ansible-playbook logs.yaml
+ansible-playbook ydb_platform.ydb.logs
 ```
 
 ### Filter by node type
@@ -21,18 +21,18 @@ There are two main node types in a {{ ydb-short-name }} cluster:
 * Storage (also known as static)
 * Database (also known as dynamic)
 
-Tasks in the `logs.yaml` playbook are tagged with node types, so you can use Ansible's tags functionality to filter logs by node type. 
+Tasks in the `ydb_platform.ydb.logs` playbook are tagged with node types, so you can use Ansible's tags functionality to filter logs by node type. 
 
 These two commands are equivalent and will output the storage node logs:
 ```bash
-ansible-playbook logs.yaml --tags storage
-ansible-playbook logs.yaml --tags static
+ansible-playbook ydb_platform.ydb.logs --tags storage
+ansible-playbook ydb_platform.ydb.logs --tags static
 ```
 
 These two commands are equivalent, too, and will output the database node logs:
 ```bash
-ansible-playbook logs.yaml --tags database
-ansible-playbook logs.yaml --tags dynamic
+ansible-playbook ydb_platform.ydb.logs --tags database
+ansible-playbook ydb_platform.ydb.logs --tags dynamic
 ```
 
 ### Filter by hostname 
@@ -40,13 +40,13 @@ ansible-playbook logs.yaml --tags dynamic
 To show logs of a specific host or subset of hosts, use the `--limit` argument:
 
 ```bash
-ansible-playbook logs.yaml --limit='<hostname>'
-ansible-playbook logs.yaml --limit='<hostname-1,hosntname-2>'
+ansible-playbook ydb_platform.ydb.logs --limit='<hostname>'
+ansible-playbook ydb_platform.ydb.logs --limit='<hostname-1,hosntname-2>'
 ```
 
 It can be used together with tags, too:
 ```bash
-ansible-playbook logs.yaml --tags database --limit='<hostname>'
+ansible-playbook ydb_platform.ydb.logs --tags database --limit='<hostname>'
 ```
 
 ## View logs via ssh

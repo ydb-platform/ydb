@@ -154,20 +154,24 @@ class TColumnShardPayloadSerializer : public IPayloadSerializer {
             return NArrow::SerializeBatchNoCompression(Data);
         }
 
-        i64 GetSerializedMemory() const override {
-            // For columnshard there are no hard 8MB operation limit,
-            // so we can use approx estimate.
-            return NArrow::GetBatchDataSize(Data);
-        }
-
         i64 GetMemory() const override {
-            return NArrow::GetBatchDataSize(Data);
+            return Memory;
         }
 
-        TBatch(const TRecordBatchPtr& data) : Data(data) {}
+        TRecordBatchPtr Extract() {
+            Memory = 0;
+            TRecordBatchPtr result = std::move(Data);
+            return result;
+        }
+
+        TBatch(const TRecordBatchPtr& data)
+            : Data(data)
+            , Memory(NArrow::GetBatchDataSize(Data)) {
+        }
 
     private:
         TRecordBatchPtr Data;
+        i64 Memory;
     };
 
     struct TUnpreparedBatch {
@@ -227,7 +231,7 @@ public:
         FlushUnsharded(false);
     }
 
-    void ReturnBatch(IPayloadSerializer::IBatchPtr&& batch) override {
+    void AddBatch(IPayloadSerializer::IBatchPtr&& batch) override {
         Y_UNUSED(batch);
     }
 
@@ -385,43 +389,38 @@ private:
 };
 
 class TDataShardPayloadSerializer : public IPayloadSerializer {
-    /*class TBatch : public IPayloadSerializer::IBatch {
+    class TBatch : public IPayloadSerializer::IBatch {
     public:
         TString SerializeToString() const override {
-            return ;
+            return TSerializedCellMatrix::Serialize(Data, Rows, Columns);
         }
 
         i64 GetMemory() const override {
             return Size;
         }
 
+        bool IsEmpty() const {
+            return Data.empty();
+        }
+
         std::vector<TCell> Extract() {
             Size = 0;
+            Rows = 0;
             return std::move(Data);
+        }
+
+        TBatch(std::vector<TCell>&& data, i64 size, ui32 rows, ui16 columns)
+            : Data(std::move(data))
+            , Size(size)
+            , Rows(rows)
+            , Columns(columns) {
         }
 
     private:
         std::vector<TCell> Data;
         ui64 Size = 0;
-    };*/
-
-    class TBatch : public IPayloadSerializer::IBatch {
-    public:
-        TString SerializeToString() const override {
-            return Data;
-        }
-
-        i64 GetSerializedMemory() const override {
-            return Data.size();
-        }
-
-        i64 GetMemory() const override {
-            return Data.size();
-        }
-
-        TBatch(TString&& data) : Data(std::move(data)) {}
-
-        TString Data;
+        ui32 Rows = 0;
+        ui16 Columns = 0;
     };
 
 public:
@@ -480,7 +479,7 @@ public:
         });
     }
 
-    void ReturnBatch(IPayloadSerializer::IBatchPtr&& batch) override {
+    void AddBatch(IPayloadSerializer::IBatchPtr&& batch) override {
         Y_UNUSED(batch);
     }
 
@@ -513,10 +512,16 @@ public:
         return IsClosed() && IsEmpty();
     }
 
-    TString ExtractNextBatch(TCellsBatcher& batcher, bool force) {
+    IBatchPtr ExtractNextBatch(TCellsBatcher& batcher, bool force) {
         auto batchResult = batcher.Flush(force);
         Memory -= batchResult.Memory;
-        return batchResult.Data;
+        const ui32 rows = batchResult.Data.size() / Columns.size();
+        YQL_ENSURE(Columns.size() <= std::numeric_limits<ui16>::max());
+        return MakeIntrusive<TBatch>(
+            std::move(batchResult.Data),
+            static_cast<i64>(batchResult.MemorySerialized),
+            rows,
+            static_cast<ui16>(Columns.size()));
     }
 
     TBatches FlushBatchesForce() override {
@@ -524,10 +529,10 @@ public:
         for (auto& [shardId, batcher] : Batchers) {
             while (true) {
                 auto batch = ExtractNextBatch(batcher, true);
-                if (batch.empty()) {
+                if (batch->IsEmpty()) {
                     break;
                 }
-                result[shardId].emplace_back(MakeIntrusive<TBatch>(std::move(batch)));
+                result[shardId].emplace_back(batch);
             };
         }
         Batchers.clear();
@@ -539,7 +544,7 @@ public:
             return {};
         }
         auto& batcher = Batchers.at(shardId);
-        return MakeIntrusive<TBatch>(ExtractNextBatch(batcher, false));
+        return ExtractNextBatch(batcher, false);
     }
 
     const THashSet<ui64>& GetShardIds() const override {

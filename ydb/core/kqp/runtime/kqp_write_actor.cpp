@@ -295,7 +295,7 @@ public:
             Settings.GetInconsistentTx())
     {
         YQL_ENSURE(std::holds_alternative<ui64>(TxId));
-        YQL_ENSURE(!InconsistentTx || ImmediateTx);
+        YQL_ENSURE(!InconsistentTx || !ImmediateTx);
         EgressStats.Level = args.StatsLevel;
     }
 
@@ -694,7 +694,7 @@ private:
                 locks->AddReceivingShards(shardId);
                 *locks->AddLocks() = *shard.GetLock();
             }
-        } else {
+        } else if (!InconsistentTx) {
             evWrite->SetLockId(Settings.GetLockTxId(), Settings.GetLockNodeId());
         }
 

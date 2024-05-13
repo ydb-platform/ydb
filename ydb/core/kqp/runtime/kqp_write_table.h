@@ -15,7 +15,6 @@ public:
     class IBatch : public TThrRefBase {
     public:
         virtual TString SerializeToString() const = 0;
-        virtual i64 GetSerializedMemory() const = 0;
         virtual i64 GetMemory() const = 0;
         bool IsEmpty() const;
     };
@@ -23,7 +22,7 @@ public:
     using IBatchPtr = TIntrusivePtr<IBatch>;
 
     virtual void AddData(NMiniKQL::TUnboxedValueBatch&& data) = 0;
-    virtual void ReturnBatch(IBatchPtr&& batch) = 0;
+    virtual void AddBatch(IBatchPtr&& batch) = 0;
 
     virtual void Close() = 0;
 
@@ -71,8 +70,8 @@ public:
     virtual ui64 GetNextNewShardId() = 0;
 
     struct TMessageMetadata {
-        ui64 SendAttempts = 0;
         ui64 Cookie = 0;
+        ui64 OperationsCount = 0;
         bool IsFinal = false;
     };
     virtual std::optional<TMessageMetadata> GetMessageMetadata(ui64 shardId) = 0;

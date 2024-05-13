@@ -59,8 +59,7 @@ public:
             InsertAst(compileResult);
         }
 
-        auto it = Index.emplace(compileResult->Uid, TCacheEntry{compileResult,
-                                    TAppData::TimeProvider->Now() + Ttl});
+        auto it = Index.emplace(compileResult->Uid, TCacheEntry{compileResult, TAppData::TimeProvider->Now() + Ttl});
         Y_ABORT_UNLESS(it.second);
 
         TItem* item = &const_cast<TItem&>(*it.first);
@@ -93,6 +92,7 @@ public:
             TItem* item = &const_cast<TItem&>(*it);
             DecBytes(item->Value.ReplayMessage.size());
             item->Value.ReplayMessage = replayMessage;
+            item->Value.LastReplayTime = TInstant::Now();
             IncBytes(replayMessage.size());
         }
     }
@@ -242,7 +242,7 @@ private:
         TKqpCompileResult::TConstPtr CompileResult;
         TInstant ExpiredAt;
         TString ReplayMessage = "";
-        TInstant LastReplayTime;
+        TInstant LastReplayTime = TInstant::Zero();
     };
 
     using TList = TLRUList<TString, TCacheEntry>;

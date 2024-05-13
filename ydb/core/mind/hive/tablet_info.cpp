@@ -324,9 +324,11 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
                 BLOG_W("Ignoring too high CPU metric (" << metrics.GetCPU() << ") for tablet " << ToString());
             } else {
                 ResourceMetricsAggregates.MaximumCPU.SetValue(metrics.GetCPU(), now);
-                ResourceValues.SetCPU(ResourceMetricsAggregates.MaximumCPU.GetValue());
             }
+        } else {
+            ResourceMetricsAggregates.MaximumCPU.AdvanceTime(now);
         }
+        ResourceValues.SetCPU(ResourceMetricsAggregates.MaximumCPU.GetValue());
     }
     if (Find(allowedMetricIds, NKikimrTabletBase::TMetrics::kMemoryFieldNumber) != allowedMetricIds.end()) {
         if (metrics.HasMemory()) {
@@ -334,9 +336,11 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
                 BLOG_W("Ignoring too high Memory metric (" << metrics.GetMemory() << ") for tablet " << ToString());
             } else {
                 ResourceMetricsAggregates.MaximumMemory.SetValue(metrics.GetMemory(), now);
-                ResourceValues.SetMemory(ResourceMetricsAggregates.MaximumMemory.GetValue());
             }
+        } else {
+            ResourceMetricsAggregates.MaximumMemory.AdvanceTime(now);
         }
+        ResourceValues.SetMemory(ResourceMetricsAggregates.MaximumMemory.GetValue());
     }
     if (Find(allowedMetricIds, NKikimrTabletBase::TMetrics::kNetworkFieldNumber) != allowedMetricIds.end()) {
         if (metrics.HasNetwork()) {
@@ -344,9 +348,11 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
                 BLOG_W("Ignoring too high Network metric (" << metrics.GetNetwork() << ") for tablet " << ToString());
             } else {
                 ResourceMetricsAggregates.MaximumNetwork.SetValue(metrics.GetNetwork(), now);
-                ResourceValues.SetNetwork(ResourceMetricsAggregates.MaximumNetwork.GetValue());
             }
+        } else {
+            ResourceMetricsAggregates.MaximumNetwork.AdvanceTime(now);
         }
+        ResourceValues.SetNetwork(ResourceMetricsAggregates.MaximumNetwork.GetValue());
     }
     if (metrics.HasStorage()) {
         ResourceValues.SetStorage(metrics.GetStorage());

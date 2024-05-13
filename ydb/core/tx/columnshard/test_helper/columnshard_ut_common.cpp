@@ -1,6 +1,7 @@
 #include "columnshard_ut_common.h"
 
 #include <ydb/core/tx/columnshard/common/tests/shard_reader.h>
+#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/engines/reader/sys_view/portions/portions.h>
 
 #include <ydb/core/base/tablet.h>
@@ -423,6 +424,12 @@ namespace NKikimr::NColumnShard {
 
     void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId,
                  const TestTableDescription& table, TString codec) {
+
+        auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
+        while (controller && !controller->IsActiveTablet(TTestTxConfig::TxTablet0)) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+
         using namespace NTxUT;
         NOlap::TSnapshot snap(10, 10);
         TString txBody;

@@ -96,28 +96,31 @@ namespace NActors {
 
         STFUNC(StateFunc) {
             TGuard<TMutex> guard(Runtime->Mutex);
-            bool verbose = (Runtime->CurrentDispatchContext ? !Runtime->CurrentDispatchContext->Options->Quiet : true) && VERBOSE;
-            if (Runtime->BlockedOutput.find(ev->Sender) != Runtime->BlockedOutput.end()) {
-                verbose = false;
-            }
+
+            bool verbose = (
+                VERBOSE &&
+                !(Runtime->CurrentDispatchContext && Runtime->CurrentDispatchContext->Options->Quiet) &&
+                !Runtime->BlockedOutput.contains(ev->Sender)
+            );
 
             if (verbose) {
                 Cerr << "Got event at " << TInstant::MicroSeconds(Runtime->CurrentTimestamp) << ", ";
                 PrintEvent(ev, Runtime);
             }
 
-            if (!Runtime->EventFilterFunc(*Runtime, ev)) {
+            if (Runtime->EventFilterFunc(*Runtime, ev)) {
+                if (verbose) {
+                    Cerr << "Event was dropped\n";
+                }
+            } else {
                 ui32 nodeId = ev->GetRecipientRewrite().NodeId();
                 Y_ABORT_UNLESS(nodeId != 0);
                 ui32 mailboxHint = ev->GetRecipientRewrite().Hint();
                 Runtime->GetMailbox(nodeId, mailboxHint).Send(ev);
                 Runtime->MailboxesHasEvents.Signal();
-                if (verbose)
+                if (verbose) {
                     Cerr << "Event was added to sent queue\n";
-            }
-            else {
-                if (verbose)
-                    Cerr << "Event was dropped\n";
+                }
             }
         }
 

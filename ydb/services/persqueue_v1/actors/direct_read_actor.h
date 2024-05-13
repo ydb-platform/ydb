@@ -70,16 +70,16 @@ private:
             HFunc(NGRpcService::TGRpcRequestProxy::TEvRefreshTokenResponse, Handle);
 
             // proxy events
-            HFunc(TEvPQProxy::TEvAuthResultOk, Handle); // form auth actor
+            HFunc(TEvPQProxy::TEvAuthResultOk, Handle); // from auth actor
             HFunc(TEvPQProxy::TEvInitDirectRead,  Handle); // from gRPC
             HFunc(TEvPQProxy::TEvDone, Handle); // from gRPC
             HFunc(TEvPQProxy::TEvCloseSession, Handle); // from auth actor
             HFunc(TEvPQProxy::TEvStartDirectRead, Handle); // from gRPC
             HFunc(TEvPQProxy::TEvAuth, Handle); // from gRPC
 
-            hFunc(TEvPQProxy::TEvDirectReadCloseSession, HandleSessionKilled) // from CachingService 
-            hFunc(TEvPQProxy::TEvDirectReadDestroyPartitionSession, HandleDestroyPartitionSession) // from CachingService 
-            hFunc(TEvPQProxy::TEvDirectReadSendClientData, HandleGotData) // from CachingService 
+            hFunc(TEvPQProxy::TEvDirectReadCloseSession, HandleSessionKilled) // from CachingService
+            hFunc(TEvPQProxy::TEvDirectReadDestroyPartitionSession, HandleDestroyPartitionSession) // from CachingService
+            hFunc(TEvPQProxy::TEvDirectReadSendClientData, HandleGotData) // from CachingService
             // system events
             HFunc(TEvents::TEvWakeup, Handle);
 
@@ -109,7 +109,7 @@ private:
     void Handle(TEvPQProxy::TEvStartDirectRead::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvAuth::TPtr& ev, const TActorContext& ctx);
 
-    // Caching service events 
+    // Caching service events
     void HandleSessionKilled(TEvPQProxy::TEvDirectReadCloseSession::TPtr& ev);
     void HandleDestroyPartitionSession(TEvPQProxy::TEvDirectReadDestroyPartitionSession::TPtr& ev);
 
@@ -156,11 +156,11 @@ private:
     THashMap<TString, NPersQueue::TTopicConverterPtr> FullPathToConverter; // PrimaryFullPath -> Converter, for balancer replies matching
     THashSet<TString> TopicsToResolve;
 
-   // Response that currenly pending quota
+    // Response that currently pending quota
     TFormedDirectReadResponse::TPtr PendingQuota;
 
-   // Responses that will be quoted next
-   std::deque<TFormedDirectReadResponse::TPtr> WaitingQuota;
+    // Responses that will be quoted next
+    std::deque<TFormedDirectReadResponse::TPtr> WaitingQuota;
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
 

@@ -48,8 +48,7 @@ TDirectReadSessionActor::TDirectReadSessionActor(
 
 void TDirectReadSessionActor::Bootstrap(const TActorContext& ctx) {
     if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
-        ++(*GetServiceCounters(Counters, "pqproxy|readSession")
-           ->GetNamedCounter("sensor", "DirectSessionsCreatedTotal", true));
+        GetServiceCounters(Counters, "pqproxy|readSession")->GetNamedCounter("sensor", "DirectSessionsCreatedTotal", true)->Inc();
     }
 
     Request->GetStreamCtx()->Attach(ctx.SelfID);
@@ -148,7 +147,7 @@ void TDirectReadSessionActor::Die(const TActorContext& ctx) {
     }
 
     if (DirectSessionsActive) {
-        --(*DirectSessionsActive);
+        DirectSessionsActive->Dec();
     }
 
     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, LOG_PREFIX << " proxy is DEAD");
@@ -239,8 +238,9 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvInitDirectRead::TPtr& ev, co
                 "unauthenticated access is forbidden, please provide credentials");
         }
     } else {
-        Y_ABORT_UNLESS(Request->GetYdbToken());
-        Auth = *(Request->GetYdbToken());
+        auto token = Request->GetYdbToken();
+        Y_ABORT_UNLESS(token.Defined());
+        Auth = std::move(*token);
         Token = new NACLib::TUserToken(Request->GetSerializedToken());
     }
 
@@ -267,19 +267,18 @@ void TDirectReadSessionActor::SetupCounters() {
         return;
     }
 
-    auto subGroup = GetServiceCounters(Counters, "pqproxy|readSession");
-    subGroup = subGroup->GetSubgroup("Client", ClientId)->GetSubgroup("ConsumerPath", ClientPath);
+    auto subGroup = GetServiceCounters(Counters, "pqproxy|readSession")
+                    ->GetSubgroup("Client", ClientId)
+                    ->GetSubgroup("ConsumerPath", ClientPath);
     const TString name = "sensor";
 
     Errors = subGroup->GetExpiringNamedCounter(name, "Errors", true);
     DirectSessionsActive = subGroup->GetExpiringNamedCounter(name, "DirectSessionsActive", false);
     DirectSessionsCreated = subGroup->GetExpiringNamedCounter(name, "DirectSessionsCreated", true);
 
-    ++(*DirectSessionsCreated);
-    ++(*DirectSessionsActive);
+    DirectSessionsActive->Inc();
+    DirectSessionsCreated->Inc();
 }
-
-
 
 void TDirectReadSessionActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TActorContext& ctx) {
     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " auth ok"
@@ -289,10 +288,8 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, cons
     LastACLCheckTimestamp = ctx.Now();
     AuthInitActor = TActorId();
 
-
     if (!InitDone) {
         for (const auto& [name, t] : ev->Get()->TopicAndTablets) { // TODO: return something from Init and Auth Actor (Full Path - ?)
-
             if (!GetMeteringMode()) {
                 SetMeteringMode(t.MeteringMode);
             } else if (*GetMeteringMode() != t.MeteringMode) {
@@ -306,7 +303,6 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, cons
         } else {
             InitSession(ctx);
         }
-
     } else {
         for (const auto& [name, t] : ev->Get()->TopicAndTablets) {
             if (t.MeteringMode != *GetMeteringMode()) {
@@ -329,9 +325,9 @@ void TDirectReadSessionActor::CloseSession(PersQueue::ErrorCode::ErrorCode code,
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, LOG_PREFIX << " Close session with reason: " << reason);
     if (code != PersQueue::ErrorCode::OK) {
         if (Errors) {
-            ++(*Errors);
+            Errors->Inc();
         } else if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
-            ++(*GetServiceCounters(Counters, "pqproxy|readSession")->GetCounter("Errors", true));
+            GetServiceCounters(Counters, "pqproxy|readSession")->GetCounter("Errors", true)->Inc();
         }
 
         TServerMessage result;
@@ -457,11 +453,10 @@ void TDirectReadSessionActor::HandleDestroyPartitionSession(TEvPQProxy::TEvDirec
     result.set_status(ConvertPersQueueInternalCodeToStatus(ev->Get()->Code));
     FillIssue(stop->add_issues(), ev->Get()->Code, ev->Get()->Reason);
     WriteToStreamOrDie(ActorContext(), std::move(result));
-
 }
 
 void TDirectReadSessionActor::HandleSessionKilled(TEvPQProxy::TEvDirectReadCloseSession::TPtr& ev) {
-    // ToDo: Close session uses other error code.
+    // TODO: Close session uses other error code.
     CloseSession(ev->Get()->Code, ev->Get()->Reason);
 }
 

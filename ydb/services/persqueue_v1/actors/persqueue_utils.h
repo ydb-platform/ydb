@@ -53,10 +53,6 @@ Ydb::StatusIds::StatusCode ConvertPersQueueInternalCodeToStatus(const NPersQueue
 
 Ydb::PersQueue::ErrorCode::ErrorCode ConvertOldCode(const NPersQueue::NErrorCode::EErrorCode code);
 
-// to suppress clangd false positive warning
-// remove before ship
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunused-function"
 static inline bool InternalErrorCode(Ydb::PersQueue::ErrorCode::ErrorCode errorCode) {
     switch(errorCode) {
         // TODO: check list
@@ -71,10 +67,8 @@ static inline bool InternalErrorCode(Ydb::PersQueue::ErrorCode::ErrorCode errorC
     }
     return false;
 }
-#pragma clang diagnostic pop
 
 void FillIssue(Ydb::Issue::IssueMessage* issue, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode, const TString& errorReason);
-
 
 static inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>  GetTicketParserEntries(const TString& dbId, const TString& folderId, bool useKafkaApi = false) {
     TVector<TString> permissions = {

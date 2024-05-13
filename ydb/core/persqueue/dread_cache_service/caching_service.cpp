@@ -76,19 +76,23 @@ private:
 
         sessionIter->second.Client = TCacheClientContext{ev->Sender, ev->Get()->StartingReadId};
         AssignByProxy[ev->Sender].insert(key.PartitionSessionId);
-        while(SendNextReadToClient(sessionIter)) {
+        while (SendNextReadToClient(sessionIter)) {
             // Empty
         }
     }
 
     void HandleDestroyClientSession(TEvPQProxy::TEvDirectReadDataSessionDead::TPtr& ev) {
         auto assignIter = AssignByProxy.find(ev->Sender);
-        if (assignIter.IsEnd())
+        if (assignIter.IsEnd()) {
             return;
-        for (auto id : assignIter->second) {
-            return DestroyClientSession(ServerSessions.find(
-                    TReadSessionKey{ev->Get()->Session, id}), false,
-                    Ydb::PersQueue::ErrorCode::ErrorCode::OK, "", ev->Sender
+        }
+        for (auto partitionSessionId : assignIter->second) {
+            return DestroyClientSession(
+                ServerSessions.find(TReadSessionKey{ev->Get()->Session, partitionSessionId}),
+                false,
+                Ydb::PersQueue::ErrorCode::ErrorCode::OK,
+                "",
+                ev->Sender
             );
         }
     }
@@ -344,13 +348,14 @@ private:
         if (nextData == sessionIter->second.Reads.end()) {
             return false;
         }
-        auto result = SendData(sessionIter->first.PartitionSessionId, client, nextData->first, nextData->second);
+        auto& [readId, response] = *nextData;
+        auto result = SendData(sessionIter->first.PartitionSessionId, client, readId, response);
         if (!result) {
-            //ToDo: for discuss. Error in parsing partition response - shall we kill the entire session or just the partition session?
+            // TODO: for discuss. Error in parsing partition response - shall we kill the entire session or just the partition session?
             DestroyClientSession(sessionIter, false, Ydb::PersQueue::ErrorCode::OK, "");
             return false;
         }
-        client.NextReadId = nextData->first + 1;
+        client.NextReadId = readId + 1;
         return true;
     }
 
@@ -363,7 +368,7 @@ private:
         directReadMessage->set_direct_read_id(readId);
         directReadMessage->set_partition_session_id(partSessionId);
 
-        auto ok = VaildatePartitionResponse(proxyClient, *response);
+        auto ok = ValidatePartitionResponse(proxyClient, *response);
         if (!ok) {
             return false;
         }
@@ -421,7 +426,7 @@ private:
             counter->Sub(-value);
     }
 
-    bool VaildatePartitionResponse(
+    bool ValidatePartitionResponse(
             TCacheClientContext& proxyClient, NKikimrClient::TResponse& response
     ) {
         if (response.HasErrorCode() && response.GetErrorCode() != NPersQueue::NErrorCode::OK) {
@@ -441,6 +446,7 @@ private:
             );
             return false;
         }
+
         if (!response.HasPartitionResponse()) { //this is incorrect answer, die
             CloseSession(
                     proxyClient.ProxyId,
@@ -462,7 +468,11 @@ private:
         return true;
     }
 
-    void FillBatchedData(auto* partitionData, const NKikimrClient::TCmdReadResult& res, ui64 assignId) {
+    void FillBatchedData(
+            StreamReadMessage::ReadResponse::PartitionData* partitionData,
+            const NKikimrClient::TCmdReadResult& res,
+            ui64 assignId
+    ) {
         partitionData->set_partition_session_id(assignId);
 
         i32 batchCodec = 0; // UNSPECIFIED
@@ -481,8 +491,12 @@ private:
                 sourceId = NPQ::NSourceIdEncoding::Decode(r.GetSourceId());
             }
 
-            i64 currBatchWrittenAt = currentBatch ? ::google::protobuf::util::TimeUtil::TimestampToMilliseconds(currentBatch->written_at()) : 0;
-            if (currentBatch == nullptr || currBatchWrittenAt != static_cast<i64>(r.GetWriteTimestampMS()) ||
+            using TimeUtil = ::google::protobuf::util::TimeUtil;
+
+            i64 currBatchWrittenAt = currentBatch ? TimeUtil::TimestampToMilliseconds(currentBatch->written_at()) : 0;
+            if (
+                    currentBatch == nullptr ||
+                    currBatchWrittenAt != static_cast<i64>(r.GetWriteTimestampMS()) ||
                     currentBatch->producer_id() != sourceId ||
                     GetDataChunkCodec(proto) != batchCodec
             ) {
@@ -490,35 +504,39 @@ private:
                 currentBatch = partitionData->add_batches();
                 i64 write_ts = static_cast<i64>(r.GetWriteTimestampMS());
                 Y_ABORT_UNLESS(write_ts >= 0);
-                *currentBatch->mutable_written_at() = ::google::protobuf::util::TimeUtil::MillisecondsToTimestamp(write_ts);
+                *currentBatch->mutable_written_at() = TimeUtil::MillisecondsToTimestamp(write_ts);
                 currentBatch->set_producer_id(std::move(sourceId));
                 batchCodec = GetDataChunkCodec(proto);
                 currentBatch->set_codec(batchCodec);
 
                 if (proto.HasMeta()) {
                     const auto& header = proto.GetMeta();
+                    auto& meta = *currentBatch->mutable_write_session_meta();
                     if (header.HasServer()) {
-                         (*currentBatch->mutable_write_session_meta())["server"] = header.GetServer();
+                        meta["server"] = header.GetServer();
                     }
                     if (header.HasFile()) {
-                         (*currentBatch->mutable_write_session_meta())["file"] = header.GetFile();
+                        meta["file"] = header.GetFile();
                     }
                     if (header.HasIdent()) {
-                         (*currentBatch->mutable_write_session_meta())["ident"] = header.GetIdent();
+                        meta["ident"] = header.GetIdent();
                     }
                     if (header.HasLogType()) {
-                         (*currentBatch->mutable_write_session_meta())["logtype"] = header.GetLogType();
+                        meta["logtype"] = header.GetLogType();
                     }
                 }
+
                 if (proto.HasExtraFields()) {
                     const auto& map = proto.GetExtraFields();
+                    auto& meta = *currentBatch->mutable_write_session_meta();
                     for (const auto& kv : map.GetItems()) {
-                         (*currentBatch->mutable_write_session_meta())[kv.GetKey()] = kv.GetValue();
+                        meta[kv.GetKey()] = kv.GetValue();
                     }
                 }
 
                 if (proto.HasIp() && IsUtf(proto.GetIp())) {
-                    (*currentBatch->mutable_write_session_meta())["_ip"] = proto.GetIp();
+                    auto& meta = *currentBatch->mutable_write_session_meta();
+                    meta["_ip"] = proto.GetIp();
                 }
             }
 
@@ -528,17 +546,15 @@ private:
             message->set_offset(r.GetOffset());
             message->set_data(proto.GetData());
             message->set_uncompressed_size(r.GetUncompressedSize());
-
-            *message->mutable_created_at() =
-                ::google::protobuf::util::TimeUtil::MillisecondsToTimestamp(r.GetCreateTimestampMS());
-
             message->set_message_group_id(currentBatch->producer_id());
-            auto* msgMeta = message->mutable_metadata_items();
-            *msgMeta = (proto.GetMessageMeta());
+            *message->mutable_created_at() = TimeUtil::MillisecondsToTimestamp(r.GetCreateTimestampMS());
+            *message->mutable_metadata_items() = proto.GetMessageMeta();
         }
     }
 private:
     TSessionsMap ServerSessions;
+
+    // directReadSessionActor ID -> partitionSessionIds
     THashMap<TActorId, TSet<ui64>> AssignByProxy;
 
     ::NMonitoring::TDynamicCounterPtr Counters;

@@ -1,8 +1,7 @@
-#include "read_session_actor.h"
-
-
-#include "helpers.h"
-#include "read_init_auth_actor.h"
+#include <ydb/services/persqueue_v1/actors/read_session_actor.h>
+#include <ydb/services/persqueue_v1/actors/helpers.h>
+#include <ydb/services/persqueue_v1/actors/read_init_auth_actor.h>
+#include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
 
 #include <ydb/library/persqueue/topic_parser/counters.h>
 #include <ydb/core/persqueue/user_info.h>

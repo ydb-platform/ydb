@@ -2,7 +2,6 @@
 
 #include "events.h"
 #include "partition_actor.h"
-#include "persqueue_utils.h"
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>

@@ -868,8 +868,8 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
             for (ui32 i = 0; i < count; ++i) {
                 auto writeSome = [&]() {
-                    TString data(size, 'x');
-                    UNIT_ASSERT(writer->Write(data));
+                TString data(size, 'x');
+                UNIT_ASSERT(writer->Write(data));
                 };
                 writeSome();
             }
@@ -923,7 +923,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             if (status.Defined()){
                 if (status.GetRef() != Ydb::StatusIds_StatusCode_SCHEME_ERROR) {
                     SendReadSessionAssign(assingId.Defined() ? *assingId : GetNextAssign(topic).second);
-                }
+            }
                 UNIT_ASSERT(ReadStream->Read(&resp));
                 Cerr << "Got direct read init response: " << resp.ShortDebugString() << Endl;
                 UNIT_ASSERT(resp.status() == status.GetRef());

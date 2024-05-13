@@ -2750,27 +2750,24 @@ TUserInfoBase& TPartition::GetOrCreatePendingUser(const TString& user,
                                                   TMaybe<ui64> readRuleGeneration)
 {
     TUserInfoBase* userInfo = nullptr;
-    auto i = PendingUsersInfo.find(user);
-    if (i == PendingUsersInfo.end()) {
-        auto ui = UsersInfoStorage->GetIfExists(user);
-        auto [p, _] = PendingUsersInfo.emplace(user, UsersInfoStorage->CreateUserInfo(user, readRuleGeneration));
 
-        if (ui) {
-            p->second.Session = ui->Session;
-            p->second.PartitionSessionId = ui->PartitionSessionId;
-            p->second.PipeClient = ui->PipeClient;
-
-            p->second.Generation = ui->Generation;
-            p->second.Step = ui->Step;
-            p->second.Offset = ui->Offset;
-            p->second.ReadRuleGeneration = ui->ReadRuleGeneration;
-            p->second.Important = ui->Important;
-            p->second.ReadFromTimestamp = ui->ReadFromTimestamp;
-        }
-
-        userInfo = &p->second;
-    } else {
+    if (auto i = PendingUsersInfo.find(user); i != PendingUsersInfo.end()) {
         userInfo = &i->second;
+    } else {
+        auto& p = PendingUsersInfo.emplace(user, UsersInfoStorage->CreateUserInfo(user, readRuleGeneration)).first->second;
+        userInfo = &p;
+
+        if (auto ui = UsersInfoStorage->GetIfExists(user)) {
+            p.Session = ui->Session;
+            p.PartitionSessionId = ui->PartitionSessionId;
+            p.PipeClient = ui->PipeClient;
+            p.Generation = ui->Generation;
+            p.Step = ui->Step;
+            p.Offset = ui->Offset;
+            p.ReadRuleGeneration = ui->ReadRuleGeneration;
+            p.Important = ui->Important;
+            p.ReadFromTimestamp = ui->ReadFromTimestamp;
+        }
     }
 
     AffectedUsers.insert(user);

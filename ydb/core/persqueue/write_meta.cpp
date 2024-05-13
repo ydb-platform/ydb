@@ -81,4 +81,3 @@ NKikimrPQClient::TDataChunk GetDeserializedData(const TString& string) {
 }
 
 } // NKikimr
-

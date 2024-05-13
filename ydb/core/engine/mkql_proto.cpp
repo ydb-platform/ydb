@@ -30,9 +30,6 @@ bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
         return false; \
     }
 
-    CHECK_OR_RETURN_ERROR(types.size() >= tupleValue.TupleSize(),
-        "The size fo type array less then value tuple size");
-
     // Please note we modify notNullTypes during tuplyType verification to allow cast nullable to non nullable value 
     if (notNullTypes) {
         CHECK_OR_RETURN_ERROR(notNullTypes.size() == types.size(),

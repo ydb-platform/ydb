@@ -141,7 +141,7 @@ class TestYdbOverFq(TestYdsBase):
 
         connection_response = client.create_yds_connection("yds_conn", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
 
-        logging.debug(str(connection_response))
+        logging.debug("connection_response: " + str(connection_response.result))
         assert not connection_response.issues, str(connection_response.issues)
 
         binding_response = client.create_yds_binding(name="yds_bind",
@@ -150,14 +150,15 @@ class TestYdbOverFq(TestYdsBase):
                                                      connection_id=connection_response.result.connection_id,
                                                      columns=make_columns([("Data", "STRING")]))
 
-        logging.debug(str(binding_response))
+        logging.debug("binding_response: " + str(binding_response.result))
         assert not binding_response.issues, str(binding_response.issues)
 
         driver = self.make_yq_driver(kikimr.endpoint(), client.folder_id, "root@builtin")
         ls_res = driver.scheme_client.list_directory("/")
         assert ls_res.is_directory()
         # as long as ANALYTICS requests can't process streams, don't list them in ydb_over_fq
-        assert len(ls_res.children) == 0
+        # can't check len(children), because other tests' interference
+        assert list(map(lambda ch: ch.name, ls_res.children)).count("yds_bind") == 0
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)

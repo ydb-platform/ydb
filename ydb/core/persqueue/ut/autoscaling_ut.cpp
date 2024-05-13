@@ -412,21 +412,22 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         readSession2.Close();
     }
 
-    /*
     Y_UNIT_TEST(PartitionSplit_ManySession_NewSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
 
-        TTestReadSession readSession1("Session-0", client, Max<size_t>(), false, {0, 1, 2}, true);
-        TTestReadSession readSession2("Session-1", client, Max<size_t>(), false, {0}, true);
-
         auto writeSession = CreateWriteSession(client, "producer-1", 0);
         UNIT_ASSERT(writeSession->Write(Msg("message_1", 2)));
 
         ui64 txId = 1023;
         SplitPartition(setup, ++txId, 0, "a");
+
+        Sleep(TDuration::Seconds(1));
+
+        TTestReadSession readSession1("Session-0", client, Max<size_t>(), false, {0, 1, 2}, true);
+        TTestReadSession readSession2("Session-1", client, Max<size_t>(), false, {0}, true);
 
         readSession1.WaitAndAssertPartitions({0, 1, 2}, "Must read all exists partitions because used new SDK");
         readSession1.Commit();
@@ -440,7 +441,6 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         readSession1.Close();
         readSession2.Close();
     }
-    */
 
     Y_UNIT_TEST(CommitTopPast_OldSDK) {
         TTopicSdkTestSetup setup = CreateSetup();

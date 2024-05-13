@@ -516,15 +516,12 @@ namespace NKikimr::NStorage {
         TIntrusivePtr<TStateStorageInfo> StateStorageInfo;
         TIntrusivePtr<TStateStorageInfo> BoardInfo;
         TIntrusivePtr<TStateStorageInfo> SchemeBoardInfo;
-        THashSet<TActorId> ReplicaStartPending;
 
         void StartDistributedConfigKeeper();
         void ForwardToDistributedConfigKeeper(STATEFN_SIG);
 
         NKikimrBlobStorage::TStorageConfig StorageConfig;
         THashSet<TActorId> StorageConfigSubscribers;
-        ui64 NextGoneCookie = 1;
-        std::unordered_map<ui64, std::function<void()>> GoneCallbacks;
 
         void Handle(TEvNodeWardenQueryStorageConfig::TPtr ev);
         void Handle(TEvNodeWardenStorageConfig::TPtr ev);
@@ -532,7 +529,6 @@ namespace NKikimr::NStorage {
         void ApplyStorageConfig(const NKikimrBlobStorage::TNodeWardenServiceSet& current,
                 const NKikimrBlobStorage::TNodeWardenServiceSet *proposed);
         void ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConfig *proposed);
-        void HandleGone(STATEFN_SIG);
         void ApplyStaticServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet& ss);
 
         void Handle(TEvNodeWardenQueryBaseConfig::TPtr ev);
@@ -629,8 +625,6 @@ namespace NKikimr::NStorage {
 
                 hFunc(TEvNodeWardenQueryBaseConfig, Handle);
                 hFunc(TEvNodeConfigInvokeOnRootResult, Handle);
-
-                fFunc(TEvents::TSystem::Gone, HandleGone);
 
                 default:
                     EnqueuePendingMessage(ev);

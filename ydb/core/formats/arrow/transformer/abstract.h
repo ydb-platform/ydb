@@ -10,12 +10,22 @@ class ITransformer {
 protected:
     virtual std::shared_ptr<arrow::RecordBatch> DoTransform(const std::shared_ptr<arrow::RecordBatch>& batch) const = 0;
     virtual TString DoDebugString() const = 0;
+    virtual bool IsEqualToSameClass(const ITransformer& item) const = 0;
 public:
     using TPtr = std::shared_ptr<ITransformer>;
     virtual ~ITransformer() = default;
 
+    virtual TString GetClassName() const = 0;
+
     TString DebugString() const {
         return DoDebugString();
+    }
+
+    bool IsEqualTo(const ITransformer& item) const {
+        if (GetClassName() != item.GetClassName()) {
+            return false;
+        }
+        return IsEqualToSameClass(item);
     }
 
     std::shared_ptr<arrow::RecordBatch> Transform(const std::shared_ptr<arrow::RecordBatch>& batch) const {

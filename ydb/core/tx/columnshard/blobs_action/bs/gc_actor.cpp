@@ -9,9 +9,17 @@ void TGarbageCollectionActor::Handle(TEvBlobStorage::TEvCollectGarbageResult::TP
         auto g = PassAwayGuard();
         ACFL_WARN("event", "blocked_gc_event");
         return;
+    } else if (ev->Get()->Status == NKikimrProto::OK) {
+        GCTask->OnGCResult(ev);
+        CheckFinished();
+    } else {
+        ACFL_ERROR()("event", "GC_ERROR")("details", ev->Get()->Print(true));
+        SendToBSProxy(NActors::TActivationContext::AsActorContext(), ev->Cookie, GCTask->BuildRequest(ev->Cookie).release(), ev->Cookie);
     }
-    GCTask->OnGCResult(ev);
-    if (GCTask->IsFinished()) {
+}
+
+void TGarbageCollectionActor::CheckFinished() {
+    if (SharedRemovingFinished && GCTask->IsFinished()) {
         auto g = PassAwayGuard();
         ACFL_DEBUG("actor", "TGarbageCollectionActor")("event", "finished");
         TActorContext::AsActorContext().Send(TabletActorId, std::make_unique<NColumnShard::TEvPrivate::TEvGarbageCollectionFinished>(GCTask));

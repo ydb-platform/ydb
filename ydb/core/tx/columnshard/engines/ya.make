@@ -30,6 +30,7 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/changes
     ydb/core/tx/columnshard/engines/portions
     ydb/core/tx/program
+    ydb/core/tx/columnshard/common
 
     # for NYql::NUdf alloc stuff used in binary_json
     ydb/library/yql/public/udf/service/exception_policy

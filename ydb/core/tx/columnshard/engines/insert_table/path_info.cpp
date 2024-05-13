@@ -39,6 +39,10 @@ bool TPathInfo::EraseCommitted(const TInsertedData& data) {
     return result;
 }
 
+bool TPathInfo::HasCommitted(const TInsertedData& data) {
+    return Committed.contains(data);
+}
+
 bool TPathInfo::AddCommitted(TInsertedData&& data, const bool load) {
     const ui64 dataSize = data.BlobSize();
     Summary->RemovePriority(*this);

@@ -1,5 +1,6 @@
 #pragma once
 #include "common/owner.h"
+#include "common/histogram.h"
 #include <ydb/core/tx/columnshard/common/portion.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/string/builder.h>
@@ -13,12 +14,17 @@ namespace NKikimr::NColumnShard {
 
 class TBaseGranuleDataClassSummary {
 protected:
-    i64 PortionsSize = 0;
+    i64 ColumnPortionsSize = 0;
+    i64 TotalPortionsSize = 0;
     i64 PortionsCount = 0;
     i64 RecordsCount = 0;
+    i64 MetadataMemoryPortionsSize = 0;
 public:
-    i64 GetPortionsSize() const {
-        return PortionsSize;
+    i64 GetColumnPortionsSize() const {
+        return ColumnPortionsSize;
+    }
+    i64 GetTotalPortionsSize() const {
+        return TotalPortionsSize;
     }
     i64 GetRecordsCount() const {
         return RecordsCount;
@@ -26,18 +32,21 @@ public:
     i64 GetPortionsCount() const {
         return PortionsCount;
     }
+    i64 GetMetadataMemoryPortionsSize() const {
+        return MetadataMemoryPortionsSize;
+    }
 
     TString DebugString() const {
-        return TStringBuilder() << "size:" << PortionsSize << ";count:" << PortionsCount << ";";
+        return TStringBuilder() << 
+            "columns_size:" << ColumnPortionsSize << 
+            ";total_size:" << TotalPortionsSize << 
+            ";count:" << PortionsCount << 
+            ";metadata_portions_size:" << MetadataMemoryPortionsSize <<
+            ";records_count:" << RecordsCount <<
+            ";";
     }
 
-    TBaseGranuleDataClassSummary operator+(const TBaseGranuleDataClassSummary& item) const {
-        TBaseGranuleDataClassSummary result;
-        result.PortionsSize = PortionsSize + item.PortionsSize;
-        result.PortionsCount = PortionsCount + item.PortionsCount;
-        result.RecordsCount = RecordsCount + item.RecordsCount;
-        return result;
-    }
+    TBaseGranuleDataClassSummary operator+(const TBaseGranuleDataClassSummary& item) const;
 };
 
 class TDataClassCounters {
@@ -53,7 +62,7 @@ public:
     }
 
     void OnPortionsInfo(const TBaseGranuleDataClassSummary& dataInfo) const {
-        PortionsSize->SetValue(dataInfo.GetPortionsSize());
+        PortionsSize->SetValue(dataInfo.GetTotalPortionsSize());
         PortionsCount->SetValue(dataInfo.GetPortionsCount());
     }
 };
@@ -113,143 +122,45 @@ public:
     }
 };
 
-class TIncrementalHistogram: public TCommonCountersOwner {
-private:
-    using TBase = TCommonCountersOwner;
-    std::map<i64, NMonitoring::TDynamicCounters::TCounterPtr> Counters;
-    NMonitoring::TDynamicCounters::TCounterPtr PlusInf;
-
-    NMonitoring::TDynamicCounters::TCounterPtr GetQuantile(const i64 value) const {
-        auto it = Counters.lower_bound(value);
-        if (it == Counters.end()) {
-            return PlusInf;
-        } else {
-            return it->second;
-        }
-    }
-public:
-
-    class TGuard {
-    private:
-        class TLineGuard {
-        private:
-            NMonitoring::TDynamicCounters::TCounterPtr Counter;
-            i64 Value = 0;
-        public:
-            TLineGuard(NMonitoring::TDynamicCounters::TCounterPtr counter)
-                : Counter(counter)
-            {
-
-            }
-
-            ~TLineGuard() {
-                Sub(Value);
-            }
-
-            void Add(const i64 value) {
-                Counter->Add(value);
-                Value += value;
-            }
-
-            void Sub(const i64 value) {
-                Counter->Sub(value);
-                Value -= value;
-                Y_ABORT_UNLESS(Value >= 0);
-            }
-        };
-
-        std::map<i64, TLineGuard> Counters;
-        TLineGuard PlusInf;
-
-        TLineGuard& GetLineGuard(const i64 value) {
-            auto it = Counters.lower_bound(value);
-            if (it == Counters.end()) {
-                return PlusInf;
-            } else {
-                return it->second;
-            }
-        }
-    public:
-        TGuard(const TIncrementalHistogram& owner)
-            : PlusInf(owner.PlusInf)
-        {
-            for (auto&& i : owner.Counters) {
-                Counters.emplace(i.first, TLineGuard(i.second));
-            }
-        }
-        void Add(const i64 value, const i64 count) {
-            GetLineGuard(value).Add(count);
-        }
-
-        void Sub(const i64 value, const i64 count) {
-            GetLineGuard(value).Sub(count);
-        }
-    };
-
-    std::shared_ptr<TGuard> BuildGuard() const {
-        return std::make_shared<TGuard>(*this);
-    }
-
-    TIncrementalHistogram(const TString& moduleId, const TString& metricId, const TString& category, const std::set<i64>& values)
-        : TBase(moduleId) {
-        DeepSubGroup("metric", metricId);
-        if (category) {
-            DeepSubGroup("category", category);
-        }
-        std::optional<TString> predName;
-        for (auto&& i : values) {
-            if (!predName) {
-                Counters.emplace(i, TBase::GetValue("(-Inf," + ::ToString(i) + "]"));
-            } else {
-                Counters.emplace(i, TBase::GetValue("(" + *predName + "," + ::ToString(i) + "]"));
-            }
-            predName = ::ToString(i);
-        }
-        Y_ABORT_UNLESS(predName);
-        PlusInf = TBase::GetValue("(" + *predName + ",+Inf)");
-    }
-
-    TIncrementalHistogram(const TString& moduleId, const TString& metricId, const TString& category, const std::map<i64, TString>& values)
-        : TBase(moduleId)
-    {
-        DeepSubGroup("metric", metricId);
-        if (category) {
-            DeepSubGroup("category", category);
-        }
-        std::optional<TString> predName;
-        for (auto&& i : values) {
-            if (!predName) {
-                Counters.emplace(i.first, TBase::GetValue("(-Inf," + i.second + "]"));
-            } else {
-                Counters.emplace(i.first, TBase::GetValue("(" + *predName + "," + i.second + "]"));
-            }
-            predName = i.second;
-        }
-        Y_ABORT_UNLESS(predName);
-        PlusInf = TBase::GetValue("(" + *predName + ",+Inf)");
-    }
-
-};
-
 class TEngineLogsCounters: public TCommonCountersOwner {
 private:
     using TBase = TCommonCountersOwner;
     NMonitoring::TDynamicCounters::TCounterPtr PortionToDropCount;
     NMonitoring::TDynamicCounters::TCounterPtr PortionToDropBytes;
+    NMonitoring::THistogramPtr PortionToDropLag;
+    NMonitoring::THistogramPtr SkipDeleteWithProcessMemory;
+    NMonitoring::THistogramPtr SkipDeleteWithTxLimit;
 
     NMonitoring::TDynamicCounters::TCounterPtr PortionToEvictCount;
     NMonitoring::TDynamicCounters::TCounterPtr PortionToEvictBytes;
+    NMonitoring::THistogramPtr PortionToEvictLag;
+    NMonitoring::THistogramPtr SkipEvictionWithProcessMemory;
+    NMonitoring::THistogramPtr SkipEvictionWithTxLimit;
+
+    NMonitoring::THistogramPtr ActualizationTaskSizeRemove;
+    NMonitoring::THistogramPtr ActualizationTaskSizeEvict;
+
+    NMonitoring::TDynamicCounters::TCounterPtr ActualizationSkipRWProgressCount;
+    NMonitoring::THistogramPtr ActualizationSkipTooFreshPortion;
 
     NMonitoring::TDynamicCounters::TCounterPtr PortionNoTtlColumnCount;
     NMonitoring::TDynamicCounters::TCounterPtr PortionNoTtlColumnBytes;
 
+    NMonitoring::TDynamicCounters::TCounterPtr StatUsageForTTLCount;
+    NMonitoring::TDynamicCounters::TCounterPtr ChunkUsageForTTLCount;
+
     NMonitoring::TDynamicCounters::TCounterPtr PortionNoBorderCount;
     NMonitoring::TDynamicCounters::TCounterPtr PortionNoBorderBytes;
+
+    NMonitoring::TDynamicCounters::TCounterPtr GranuleOptimizerLocked;
+
+    NMonitoring::TDynamicCounters::TCounterPtr IndexMetadataUsageBytes;
 
     TAgentGranuleDataCounters GranuleDataAgent;
     std::vector<std::shared_ptr<TIncrementalHistogram>> BlobSizeDistribution;
     std::vector<std::shared_ptr<TIncrementalHistogram>> PortionSizeDistribution;
     std::vector<std::shared_ptr<TIncrementalHistogram>> PortionRecordsDistribution;
+
 public:
 
     class TPortionsInfoGuard {
@@ -279,6 +190,8 @@ public:
 
     };
 
+    void OnActualizationTask(const ui32 evictCount, const ui32 removeCount) const;
+
     TPortionsInfoGuard BuildPortionBlobsGuard() const {
         return TPortionsInfoGuard(BlobSizeDistribution, PortionSizeDistribution, PortionRecordsDistribution);
     }
@@ -287,14 +200,40 @@ public:
         return GranuleDataAgent.RegisterClient();
     }
 
-    void OnPortionToEvict(const ui64 size) const {
-        PortionToEvictCount->Add(1);
-        PortionToEvictBytes->Add(size);
+    void OnActualizationSkipRWProgress() const {
+        ActualizationSkipRWProgressCount->Add(1);
     }
 
-    void OnPortionToDrop(const ui64 size) const {
+    void OnActualizationSkipTooFreshPortion(const TDuration dWait) const {
+        ActualizationSkipTooFreshPortion->Collect(dWait.Seconds());
+    }
+
+    void OnSkipDeleteWithProcessMemory(const TDuration lag) const {
+        SkipDeleteWithProcessMemory->Collect(lag.Seconds());
+    }
+
+    void OnSkipDeleteWithTxLimit(const TDuration lag) const {
+        SkipDeleteWithTxLimit->Collect(lag.Seconds());
+    }
+
+    void OnSkipEvictionWithProcessMemory(const TDuration lag) const {
+        SkipEvictionWithProcessMemory->Collect(lag.Seconds());
+    }
+
+    void OnSkipEvictionWithTxLimit(const TDuration lag) const {
+        SkipEvictionWithTxLimit->Collect(lag.Seconds());
+    }
+
+    void OnPortionToEvict(const ui64 size, const TDuration lag) const {
+        PortionToEvictCount->Add(1);
+        PortionToEvictBytes->Add(size);
+        PortionToEvictLag->Collect(lag.Seconds());
+    }
+
+    void OnPortionToDrop(const ui64 size, const TDuration lag) const {
         PortionToDropCount->Add(1);
         PortionToDropBytes->Add(size);
+        PortionToDropLag->Collect(lag.Seconds());
     }
 
     void OnPortionNoTtlColumn(const ui64 size) const {
@@ -302,9 +241,25 @@ public:
         PortionNoTtlColumnBytes->Add(size);
     }
 
+    void OnChunkUsageForTTL() const {
+        ChunkUsageForTTLCount->Add(1);
+    }
+
+    void OnStatUsageForTTL() const {
+        StatUsageForTTLCount->Add(1);
+    }
+
     void OnPortionNoBorder(const ui64 size) const {
         PortionNoBorderCount->Add(1);
         PortionNoBorderBytes->Add(size);
+    }
+
+    void OnIndexMetadataUsageBytes(const ui64 size) const {
+        IndexMetadataUsageBytes->Set(size);
+    }
+
+    void OnGranuleOptimizerLocked() const {
+        GranuleOptimizerLocked->Add(1);
     }
 
     TEngineLogsCounters();

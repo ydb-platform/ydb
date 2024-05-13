@@ -174,13 +174,15 @@ Y_UNIT_TEST_SUITE(TPQCompatTest) {
         // Local topic with client write disabled
         testServer.CreateTopic("/Root/LbCommunal/some-topic", "account", false, true);
         // Non-local topic with client write enabled
-        testServer.CreateTopic("/Root/LbCommunal/some-topic-mirrored-from-dc2", "account", true, true);
         testServer.CreateTopic("/Root/LbCommunal/.some-topic/mirrored-from-dc2", "account", true, true);
+        // this validation was relaxed
+        testServer.CreateTopic("/Root/LbCommunal/some-topic-mirrored-from-dc2", "account", true, false);
         // No account
         testServer.CreateTopic("/Root/LbCommunal/some-topic", "", true, true);
         // Mirrored-from local
         testServer.CreateTopic("/Root/LbCommunal/.some-topic/mirrored-from-dc1", "account", false, true);
-        testServer.CreateTopic("/Root/LbCommunal/some-topic-mirrored-from-dc1", "account", false, true);
+        // this validation was relaxed
+        testServer.CreateTopic("/Root/LbCommunal/some-topic-mirrored-from-dc1", "account", false, false);
         // Bad mirrored names
         testServer.CreateTopic("/Root/LbCommunal/.some-topic/some-topic", "account", false, true);
         // Mirrored-from non-existing

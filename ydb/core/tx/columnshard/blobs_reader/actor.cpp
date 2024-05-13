@@ -14,13 +14,13 @@ void TActor::Handle(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult::TPtr& ev) 
 
     bool aborted = false;
     if (event.Status != NKikimrProto::EReplyStatus::OK) {
-        WaitingBlobsCount.Sub(Task->GetWaitingCount());
-        if (!Task->AddError(event.BlobRange, IBlobsReadingAction::TErrorStatus::Fail(event.Status, "cannot get blob: " + event.Data.substr(0, 1024)))) {
+        WaitingBlobsCount.Sub(Task->GetWaitingRangesCount());
+        if (!Task->AddError(event.DataSourceId, event.BlobRange, IBlobsReadingAction::TErrorStatus::Fail(event.Status, "cannot get blob: " + event.Data.substr(0, 1024)))) {
             aborted = true;
         }
     } else {
         WaitingBlobsCount.Dec();
-        Task->AddData(event.BlobRange, event.Data);
+        Task->AddData(event.DataSourceId, event.BlobRange, event.Data);
     }
     if (aborted || Task->IsFinished()) {
         Task = nullptr;
@@ -46,8 +46,7 @@ void TActor::Bootstrap() {
     NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("external_task_id", externalTaskId);
     Task->StartBlobsFetching({});
     ACFL_DEBUG("task", Task->DebugString());
-    WaitingBlobsCount.Add(Task->GetReadRangesCount());
-    AFL_VERIFY(Task->GetAllRangesSize());
+    WaitingBlobsCount.Add(Task->GetWaitingRangesCount());
     Become(&TThis::StateWait);
     if (Task->IsFinished()) {
         PassAway();

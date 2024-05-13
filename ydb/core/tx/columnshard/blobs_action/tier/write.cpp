@@ -15,20 +15,15 @@ void TWriteAction::DoSendWriteBlobRequest(const TString& data, const TUnifiedBlo
     ExternalStorageOperator->Execute(evPtr);
 }
 
-void TWriteAction::DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& /*self*/, NColumnShard::TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
+void TWriteAction::DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& /*self*/, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
     if (blobsWroteSuccessfully) {
         for (auto&& i : GetBlobsForWrite()) {
             dbBlobs.RemoveTierDraftBlobId(GetStorageId(), i.first);
         }
-    } else {
-        for (auto&& i : GetBlobsForWrite()) {
-            dbBlobs.RemoveTierDraftBlobId(GetStorageId(), i.first);
-            dbBlobs.AddTierBlobToDelete(GetStorageId(), i.first);
-        }
     }
 }
 
-void TWriteAction::DoOnExecuteTxBeforeWrite(NColumnShard::TColumnShard& /*self*/, NColumnShard::TBlobManagerDb& dbBlobs) {
+void TWriteAction::DoOnExecuteTxBeforeWrite(NColumnShard::TColumnShard& /*self*/, TBlobManagerDb& dbBlobs) {
     for (auto&& i : GetBlobsForWrite()) {
         dbBlobs.AddTierDraftBlobId(GetStorageId(), i.first);
     }
@@ -43,7 +38,7 @@ NKikimr::NOlap::TUnifiedBlobId TWriteAction::AllocateNextBlobId(const TString& d
 void TWriteAction::DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& /*self*/, const bool blobsWroteSuccessfully) {
     if (!blobsWroteSuccessfully) {
         for (auto&& i : GetBlobsForWrite()) {
-            GCInfo->MutableBlobsToDelete().emplace_back(i.first);
+            GCInfo->MutableDraftBlobIdsToRemove().emplace_back(i.first);
         }
     }
 }

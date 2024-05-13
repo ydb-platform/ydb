@@ -18,8 +18,11 @@ ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/kafka_proxy/ut KafkaProtocol.CreatePartitionsScenario
 ydb/core/kafka_proxy/ut KafkaProtocol.ProduceScenario
 ydb/core/kqp/provider/ut KikimrIcGateway.TestLoadBasicSecretValueFromExternalDataSourceMetadata
-ydb/core/kqp/ut/federated_query/generic *
-ydb/core/kqp/ut/olap *
+ydb/core/kqp/ut/olap KqpOlapIndexes.IndexesActualization
+ydb/core/kqp/ut/olap KqpOlapBlobsSharing.*
+ydb/core/kqp/ut/olap KqpOlap.ScanQueryOltpAndOlap
+ydb/core/kqp/ut/olap KqpOlapStatistics.StatsUsageWithTTL
+ydb/core/kqp/ut/olap KqpOlap.YqlScriptOltpAndOlap
 ydb/core/kqp/ut/pg KqpPg.CreateIndex
 ydb/core/kqp/ut/query KqpLimits.QueryReplySize
 ydb/core/kqp/ut/query KqpQuery.QueryTimeout
@@ -32,9 +35,7 @@ ydb/core/kqp/ut/service KqpQueryService.QueryOnClosedSession
 ydb/core/kqp/ut/service KqpQueryServiceScripts.ForgetScriptExecutionRace
 ydb/core/kqp/ut/service KqpService.CloseSessionsWithLoad
 ydb/core/kqp/ut/service [38/50]*
-ydb/core/tx/columnshard/ut_schema TColumnShardTestSchema.ForgetAfterFail
-ydb/core/tx/columnshard/ut_schema TColumnShardTestSchema.RebootForgetAfterFail
-ydb/core/tx/columnshard/engines/ut *
+ydb/core/persqueue/ut TPQTest.*DirectRead*
 ydb/core/tx/coordinator/ut Coordinator.RestoreTenantConfiguration
 ydb/core/tx/datashard/ut_change_exchange Cdc.InitialScanDebezium
 ydb/core/tx/replication/ydb_proxy/ut YdbProxyTests.ReadTopic
@@ -81,8 +82,6 @@ ydb/tests/fq/s3 *
 ydb/tests/fq/yds *
 ydb/tests/functional/audit *
 ydb/tests/functional/blobstorage test_replication.py.TestReplicationAfterNodesRestart.test_replication*
-ydb/tests/functional/clickbench test.py.test_plans*
-ydb/tests/functional/clickbench test.py.test_run*
 ydb/tests/functional/kqp/kqp_indexes ConsistentIndexRead.InteractiveTx
 ydb/tests/functional/kqp/kqp_query_session KqpQuerySession.NoLocalAttach
 ydb/tests/functional/postgresql test_postgres.py.TestPostgresSuite.test_postgres_suite*

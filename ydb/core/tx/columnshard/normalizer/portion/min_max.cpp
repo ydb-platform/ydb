@@ -14,7 +14,7 @@ class TMinMaxSnapshotChangesTask: public NConveyor::ITask {
 public:
     using TDataContainer = std::vector<std::shared_ptr<TPortionInfo>>;
 private:
-    THashMap<NKikimr::NOlap::TBlobRange, TString> Blobs;
+    NBlobOperations::NRead::TCompositeReadBlobs Blobs;
     TDataContainer Portions;
     std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> Schemas;
     TNormalizationContext NormContext;
@@ -26,11 +26,10 @@ protected:
 
         for (auto&& portionInfo : Portions) {
             auto blobSchema = Schemas->FindPtr(portionInfo->GetPortionId());
-            THashMap<TBlobRange, TPortionInfo::TAssembleBlobInfo> blobsDataAssemble;
-            for (auto&& i : portionInfo->Records) {
-                auto blobIt = Blobs.find(i.BlobRange);
-                Y_ABORT_UNLESS(blobIt != Blobs.end());
-                blobsDataAssemble.emplace(i.BlobRange, blobIt->second);
+            THashMap<TChunkAddress, TPortionInfo::TAssembleBlobInfo> blobsDataAssemble;
+            for (auto&& i : portionInfo->GetRecords()) {
+                auto blobData = Blobs.Extract((*blobSchema)->GetIndexInfo().GetColumnStorageId(i.GetColumnId(), portionInfo->GetMeta().GetTierName()), portionInfo->RestoreBlobRange(i.BlobRange));
+                blobsDataAssemble.emplace(i.GetAddress(), blobData);
             }
 
             AFL_VERIFY(!!blobSchema)("details", portionInfo->DebugString());
@@ -47,7 +46,7 @@ protected:
     }
 
 public:
-    TMinMaxSnapshotChangesTask(THashMap<NKikimr::NOlap::TBlobRange, TString>&& blobs, const TNormalizationContext& nCtx, TDataContainer&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas)
+    TMinMaxSnapshotChangesTask(NBlobOperations::NRead::TCompositeReadBlobs&& blobs, const TNormalizationContext& nCtx, TDataContainer&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas)
         : Blobs(std::move(blobs))
         , Portions(std::move(portions))
         , Schemas(schemas)
@@ -61,12 +60,12 @@ public:
 
     static void FillBlobRanges(std::shared_ptr<IBlobsReadingAction> readAction, const std::shared_ptr<TPortionInfo>& portion) {
         for (auto&& chunk : portion->Records) {
-            readAction->AddRange(chunk.BlobRange);
+            readAction->AddRange(portion->RestoreBlobRange(chunk.BlobRange));
         }
     }
 
     static ui64 GetMemSize(const std::shared_ptr<TPortionInfo>& portion) {
-        return portion->GetRawBytes();
+        return portion->GetTotalRawBytes();
     }
 
     static bool CheckPortion(const TPortionInfo& portionInfo) {
@@ -103,7 +102,7 @@ public:
                 *rowProto.MutablePortionMeta() = std::move(*proto);
 
                 db.Table<Schema::IndexColumns>().Key(0, portionInfo->GetDeprecatedGranuleId(), chunk.ColumnId,
-                    portionInfo->GetMinSnapshot().GetPlanStep(), portionInfo->GetMinSnapshot().GetTxId(), portionInfo->GetPortion(), chunk.Chunk).Update(
+                    portionInfo->GetMinSnapshotDeprecated().GetPlanStep(), portionInfo->GetMinSnapshotDeprecated().GetTxId(), portionInfo->GetPortion(), chunk.Chunk).Update(
                     NIceDb::TUpdate<Schema::IndexColumns::Metadata>(rowProto.SerializeAsString())
                 );
             }
@@ -144,17 +143,12 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizer::Init(const 
             return TConclusionStatus::Fail("Not ready");
         }
 
-        TSnapshot lastSnapshot(0, 0);
-        ISnapshotSchema::TPtr currentSchema;
+        TPortionInfo::TSchemaCursor schema(tablesManager.GetPrimaryIndexSafe().GetVersionedIndex());
         auto initPortionCB = [&](const TPortionInfo& portion, const TColumnChunkLoadContext& loadContext) {
-            if (!currentSchema || lastSnapshot != portion.GetMinSnapshot()) {
-                currentSchema = tablesManager.GetPrimaryIndexSafe().GetVersionedIndex().GetSchema(portion.GetMinSnapshot());
-                lastSnapshot = portion.GetMinSnapshot();
-            }
+            auto currentSchema = schema.GetSchema(portion);
 
             AFL_VERIFY(portion.ValidSnapshotInfo())("details", portion.DebugString());
-            TColumnRecord rec(loadContext, currentSchema->GetIndexInfo());
-            if (!pkColumnIds.contains(rec.ColumnId)) {
+            if (!pkColumnIds.contains(loadContext.GetAddress().GetColumnId())) {
                 return;
             }
             auto it = portions.find(portion.GetPortion());
@@ -162,13 +156,11 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizer::Init(const 
             if (it == portions.end()) {
                 Y_ABORT_UNLESS(portion.Records.empty());
                 (*schemas)[portion.GetPortionId()] = currentSchema;
-                auto portionNew = std::make_shared<TPortionInfo>(portion);
-                portionNew->AddRecord(currentSchema->GetIndexInfo(), rec, portionMeta);
-                it = portions.emplace(portion.GetPortion(), portionNew).first;
-            } else {
-                AFL_VERIFY(it->second->IsEqualWithSnapshots(portion))("self", it->second->DebugString())("item", portion.DebugString());
-                it->second->AddRecord(currentSchema->GetIndexInfo(), rec, portionMeta);
+                it = portions.emplace(portion.GetPortion(), std::make_shared<TPortionInfo>(portion)).first;
             }
+            TColumnRecord rec(it->second->RegisterBlobId(loadContext.GetBlobRange().GetBlobId()), loadContext, currentSchema->GetIndexInfo().GetColumnFeaturesVerified(loadContext.GetAddress().GetColumnId()));
+            AFL_VERIFY(it->second->IsEqualWithSnapshots(portion))("self", it->second->DebugString())("item", portion.DebugString());
+            it->second->AddRecord(currentSchema->GetIndexInfo(), rec, portionMeta);
         };
 
         while (!rowset.EndOfSet()) {
@@ -178,7 +170,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizer::Init(const 
 
             portion.SetPathId(rowset.GetValue<Schema::IndexColumns::PathId>());
 
-            portion.SetMinSnapshot(rowset.GetValue<Schema::IndexColumns::PlanStep>(), rowset.GetValue<Schema::IndexColumns::TxId>());
+            portion.SetMinSnapshotDeprecated(NOlap::TSnapshot(rowset.GetValue<Schema::IndexColumns::PlanStep>(), rowset.GetValue<Schema::IndexColumns::TxId>()));
             portion.SetPortion(rowset.GetValue<Schema::IndexColumns::Portion>());
             portion.SetDeprecatedGranuleId(rowset.GetValue<Schema::IndexColumns::Granule>());
             portion.SetRemoveSnapshot(rowset.GetValue<Schema::IndexColumns::XPlanStep>(), rowset.GetValue<Schema::IndexColumns::XTxId>());

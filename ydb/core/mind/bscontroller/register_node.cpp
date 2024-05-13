@@ -554,6 +554,7 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
     }
     for (auto it = StaticVSlots.lower_bound(startingId); it != StaticVSlots.end() && it->first.NodeId == nodeId; ++it) {
         it->second.VDiskStatus = NKikimrBlobStorage::EVDiskStatus::ERROR;
+        it->second.ReadySince = TMonotonic::Max();
     }
     if (sh->VDiskStatusUpdate) {
         Send(SelfHealId, sh.Release());

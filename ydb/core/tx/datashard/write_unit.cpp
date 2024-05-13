@@ -97,7 +97,7 @@ public:
         self->IncCounter(COUNTER_WRITE_ROWS, matrix.GetRowCount());
         self->IncCounter(COUNTER_WRITE_BYTES, matrix.GetBuffer().size());
 
-        writeOp->SetWriteResult(NEvents::TDataEvents::TEvWriteResult::BuildCommited(self->TabletID(), writeOp->GetTxId()));
+        writeOp->SetWriteResult(NEvents::TDataEvents::TEvWriteResult::BuildCompleted(self->TabletID(), writeOp->GetTxId()));
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Executed write operation for " << *writeOp << " at " << self->TabletID());
     }

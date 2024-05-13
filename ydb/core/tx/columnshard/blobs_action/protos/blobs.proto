@@ -1,0 +1,19 @@
+package NKikimrColumnShardBlobOperationsProto;
+
+message TBlobTablets {
+    optional string BlobId = 1;
+    repeated uint64 TabletIds = 2;
+}
+
+message TTabletsByBlob {
+    repeated TBlobTablets Blobs = 1;
+}
+
+message TBlobTablet {
+    optional string BlobId = 1;
+    optional uint64 TabletId = 2;
+}
+
+message TTabletByBlob {
+    repeated TBlobTablet Blobs = 1;
+}

@@ -25,7 +25,7 @@ struct TExecutionOptions {
         YqlScript
     };
 
-    TString ScriptQuery;
+    std::vector<TString> ScriptQueries;
     TString SchemeQuery;
 
     bool ForgetExecution = false;
@@ -35,7 +35,7 @@ struct TExecutionOptions {
     TString TraceId = "kqprun";
 
     bool HasResults() const {
-        return ScriptQuery && ScriptQueryAction == NKikimrKqp::QUERY_ACTION_EXECUTE;
+        return !ScriptQueries.empty() && ScriptQueryAction == NKikimrKqp::QUERY_ACTION_EXECUTE;
     }
 };
 
@@ -53,11 +53,11 @@ void RunScript(const TExecutionOptions& executionOptions, const NKqpRun::TRunner
         }
     }
 
-    if (executionOptions.ScriptQuery) {
-        Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Executing script..." << colors.Default() << Endl;
+    for (size_t id = 0; id < executionOptions.ScriptQueries.size(); ++id) {
+        Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Executing script" << (executionOptions.ScriptQueries.size() > 1 ? TStringBuilder() << " " << id : TString()) << "..." << colors.Default() << Endl;
         switch (executionOptions.ClearExecution) {
         case TExecutionOptions::EClearExecutionCase::Disabled:
-            if (!runner.ExecuteScript(executionOptions.ScriptQuery, executionOptions.ScriptQueryAction, executionOptions.TraceId)) {
+            if (!runner.ExecuteScript(executionOptions.ScriptQueries[id], executionOptions.ScriptQueryAction, executionOptions.TraceId)) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Script execution failed";
             }
             Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Fetching script results..." << colors.Default() << Endl;
@@ -73,13 +73,13 @@ void RunScript(const TExecutionOptions& executionOptions, const NKqpRun::TRunner
             break;
 
         case TExecutionOptions::EClearExecutionCase::GenericQuery:
-            if (!runner.ExecuteQuery(executionOptions.ScriptQuery, executionOptions.ScriptQueryAction, executionOptions.TraceId)) {
+            if (!runner.ExecuteQuery(executionOptions.ScriptQueries[id], executionOptions.ScriptQueryAction, executionOptions.TraceId)) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Query execution failed";
             }
             break;
 
         case TExecutionOptions::EClearExecutionCase::YqlScript:
-            if (!runner.ExecuteYqlScript(executionOptions.ScriptQuery, executionOptions.ScriptQueryAction, executionOptions.TraceId)) {
+            if (!runner.ExecuteYqlScript(executionOptions.ScriptQueries[id], executionOptions.ScriptQueryAction, executionOptions.TraceId)) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Yql script execution failed";
             }
             break;
@@ -103,6 +103,16 @@ THolder<TFileOutput> SetupDefaultFileOutput(const TString& filePath, IOutputStre
         stream = fileHolder.Get();
     }
     return fileHolder;
+}
+
+
+template <typename EnumType>
+EnumType GetCaseVariant(const TString& optionName, const TString& caseName, const std::map<TString, EnumType>& casesMap) {
+    auto it = casesMap.find(caseName);
+    if (it == casesMap.end()) {
+        ythrow yexception() << "Option '" << optionName << "' has no case '" << caseName << "'";
+    }
+    return it->second;
 }
 
 
@@ -143,7 +153,7 @@ void RunMain(int argc, const char* argv[]) {
     TExecutionOptions executionOptions;
     NKqpRun::TRunnerOptions runnerOptions;
 
-    TString scriptQueryFile;
+    std::vector<TString> scriptQueryFiles;
     TString schemeQueryFile;
     TString resultOutputFile = "-";
     TString schemeQueryAstFile;
@@ -169,7 +179,7 @@ void RunMain(int argc, const char* argv[]) {
     options.AddLongOption('p', "script-query", "Script query to execute")
         .Optional()
         .RequiredArgument("FILE")
-        .StoreResult(&scriptQueryFile);
+        .AppendTo(&scriptQueryFiles);
     options.AddLongOption('s', "scheme-query", "Scheme query to execute")
         .Optional()
         .RequiredArgument("FILE")
@@ -273,27 +283,30 @@ void RunMain(int argc, const char* argv[]) {
 
     // Execution options
 
-    if (!schemeQueryFile && !scriptQueryFile) {
+    if (!schemeQueryFile && scriptQueryFiles.empty()) {
         ythrow yexception() << "Nothing to execute";
     }
+
     if (schemeQueryFile) {
         executionOptions.SchemeQuery = TFileInput(schemeQueryFile).ReadAll();
         ReplaceTemplate(NKqpRun::YQL_TOKEN_VARIABLE, yqlToken, executionOptions.SchemeQuery);
     }
-    if (scriptQueryFile) {
-        executionOptions.ScriptQuery = TFileInput(scriptQueryFile).ReadAll();
+
+    executionOptions.ScriptQueries.reserve(scriptQueryFiles.size());
+    for (const TString& scriptQueryFile : scriptQueryFiles) {
+        executionOptions.ScriptQueries.emplace_back(TFileInput(scriptQueryFile).ReadAll());
     }
 
-    executionOptions.ClearExecution =
-              (clearExecutionType == TStringBuf("query")) ? TExecutionOptions::EClearExecutionCase::GenericQuery
-            : (clearExecutionType == TStringBuf("yql-script")) ? TExecutionOptions::EClearExecutionCase::YqlScript
-            : (clearExecutionType == TStringBuf("disabled")) ? TExecutionOptions::EClearExecutionCase::Disabled
-            : TExecutionOptions::EClearExecutionCase::Disabled;
+    executionOptions.ClearExecution = GetCaseVariant<TExecutionOptions::EClearExecutionCase>("clear-execution", clearExecutionType, {
+        {"query", TExecutionOptions::EClearExecutionCase::GenericQuery},
+        {"yql-script", TExecutionOptions::EClearExecutionCase::YqlScript},
+        {"disabled", TExecutionOptions::EClearExecutionCase::Disabled}
+    });
 
-    executionOptions.ScriptQueryAction =
-              (scriptQueryAction == TStringBuf("execute")) ? NKikimrKqp::QUERY_ACTION_EXECUTE
-            : (scriptQueryAction == TStringBuf("explain")) ? NKikimrKqp::QUERY_ACTION_EXPLAIN
-            : NKikimrKqp::QUERY_ACTION_EXECUTE;
+    executionOptions.ScriptQueryAction = GetCaseVariant<NKikimrKqp::EQueryAction>("script-action", scriptQueryAction, {
+        {"execute", NKikimrKqp::QUERY_ACTION_EXECUTE},
+        {"explain", NKikimrKqp::QUERY_ACTION_EXPLAIN}
+    });
 
     // Runner options
 
@@ -302,24 +315,24 @@ void RunMain(int argc, const char* argv[]) {
     THolder<TFileOutput> scriptQueryAstFileHolder = SetupDefaultFileOutput(scriptQueryAstFile, runnerOptions.ScriptQueryAstOutput);
     THolder<TFileOutput> scriptQueryPlanFileHolder = SetupDefaultFileOutput(scriptQueryPlanFile, runnerOptions.ScriptQueryPlanOutput);
 
-    runnerOptions.TraceOptType =
-              (traceOptType == TStringBuf("all")) ? NKqpRun::TRunnerOptions::ETraceOptType::All
-            : (traceOptType == TStringBuf("scheme")) ? NKqpRun::TRunnerOptions::ETraceOptType::Scheme
-            : (traceOptType == TStringBuf("script")) ? NKqpRun::TRunnerOptions::ETraceOptType::Script
-            : (traceOptType == TStringBuf("disabled")) ? NKqpRun::TRunnerOptions::ETraceOptType::Disabled
-            : NKqpRun::TRunnerOptions::ETraceOptType::All;
+    runnerOptions.TraceOptType = GetCaseVariant<NKqpRun::TRunnerOptions::ETraceOptType>("trace-opt", traceOptType, {
+        {"all", NKqpRun::TRunnerOptions::ETraceOptType::All},
+        {"scheme", NKqpRun::TRunnerOptions::ETraceOptType::Scheme},
+        {"script", NKqpRun::TRunnerOptions::ETraceOptType::Script},
+        {"disabled", NKqpRun::TRunnerOptions::ETraceOptType::Disabled}
+    });
     runnerOptions.YdbSettings.TraceOptEnabled = runnerOptions.TraceOptType != NKqpRun::TRunnerOptions::ETraceOptType::Disabled;
 
-    runnerOptions.ResultOutputFormat =
-              (resultOutputFormat == TStringBuf("rows")) ? NKqpRun::TRunnerOptions::EResultOutputFormat::RowsJson
-            : (resultOutputFormat == TStringBuf("full")) ? NKqpRun::TRunnerOptions::EResultOutputFormat::FullJson
-            : NKqpRun::TRunnerOptions::EResultOutputFormat::RowsJson;
+    runnerOptions.ResultOutputFormat = GetCaseVariant<NKqpRun::TRunnerOptions::EResultOutputFormat>("result-format", resultOutputFormat, {
+        {"rows", NKqpRun::TRunnerOptions::EResultOutputFormat::RowsJson},
+        {"full", NKqpRun::TRunnerOptions::EResultOutputFormat::FullJson}
+    });
 
-    runnerOptions.PlanOutputFormat =
-              (planOutputFormat == TStringBuf("pretty")) ? NYdb::NConsoleClient::EOutputFormat::Pretty
-            : (planOutputFormat == TStringBuf("table")) ? NYdb::NConsoleClient::EOutputFormat::PrettyTable
-            : (planOutputFormat == TStringBuf("json")) ? NYdb::NConsoleClient::EOutputFormat::JsonUnicode
-            : NYdb::NConsoleClient::EOutputFormat::Default;
+    runnerOptions.PlanOutputFormat = GetCaseVariant<NYdb::NConsoleClient::EOutputFormat>("plan-format", planOutputFormat, {
+        {"pretty", NYdb::NConsoleClient::EOutputFormat::Pretty},
+        {"table", NYdb::NConsoleClient::EOutputFormat::PrettyTable},
+        {"json", NYdb::NConsoleClient::EOutputFormat::JsonUnicode},
+    });
 
     // Ydb settings
 

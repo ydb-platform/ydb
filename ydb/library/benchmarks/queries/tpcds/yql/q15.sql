@@ -3,8 +3,12 @@
 -- NB: Subquerys
 
 -- start query 1 in stream 0 using template query15.tpl and seed 1819994127
+$todecimal = ($x) -> {
+  return cast(cast($x as string?) as decimal(7,2))
+};
+
 select  customer_address.ca_zip
-       ,sum(cs_sales_price)
+       ,sum($todecimal(cs_sales_price))
  from {{catalog_sales}} as catalog_sales
      cross join {{customer}} as customer
      cross join {{customer_address}} as customer_address

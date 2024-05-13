@@ -57,7 +57,7 @@ IPayloadSerializerPtr CreateDataShardPayloadSerializer(
     const NMiniKQL::TTypeEnvironment& typeEnv);
 
 
-class IShardedEvWriteController : public TThrRefBase {
+class IShardedWriteController : public TThrRefBase {
 public:
     virtual void OnPartitioningChanged(const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry) = 0;
     virtual void OnPartitioningChanged(
@@ -88,7 +88,7 @@ public:
     virtual bool IsFinished() = 0;
 };
 
-using IShardedEvWriteControllerPtr = TIntrusivePtr<IShardedEvWriteController>;
+using IShardedWriteControllerPtr = TIntrusivePtr<IShardedWriteController>;
 
 }
 }

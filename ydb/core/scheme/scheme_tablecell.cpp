@@ -325,7 +325,7 @@ TCellsBatcher::TBatch TCellsBatcher::Flush(bool force) {
     return res;
 }
 
-ui64 TCellsBatcher::AddRow(TVector<TCell>&& cells) {
+ui64 TCellsBatcher::AddRow(TArrayRef<TCell> cells) {
     Y_ABORT_UNLESS(cells.size() == ColCount);
     ui64 newMemory = 0;
     for (const auto& cell : cells) {
@@ -337,7 +337,7 @@ ui64 TCellsBatcher::AddRow(TVector<TCell>&& cells) {
         Batches.back().MemorySerialized = CellMatrixHeaderSize;
     }
 
-    for (const auto& cell : cells) {
+    for (auto& cell : cells) {
         Batches.back().Data.emplace_back(std::move(cell));
     }
 

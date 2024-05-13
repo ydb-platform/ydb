@@ -667,7 +667,7 @@ public:
 
     TBatch Flush(bool force);
 
-    ui64 AddRow(TVector<TCell>&& cells);
+    ui64 AddRow(TArrayRef<TCell> cells);
 
 private:
     std::deque<TBatch> Batches;

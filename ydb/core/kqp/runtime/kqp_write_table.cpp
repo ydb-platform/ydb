@@ -232,30 +232,38 @@ public:
     }
 
     void AddBatch(IPayloadSerializer::IBatchPtr&& batch) override {
-        Y_UNUSED(batch);
+        auto columnshardBatch = dynamic_cast<TBatch*>(batch.Get());
+        YQL_ENSURE(columnshardBatch);
+        auto data = columnshardBatch->Extract();
+        YQL_ENSURE(data);
+        ShardAndFlushBatch(data, false);
     }
 
     void FlushUnsharded(bool force) {
         if ((BatchBuilder.Bytes() > 0 && force) || BatchBuilder.Bytes() >= MaxUnshardedBatchBytes) {
             const auto unshardedBatch = BatchBuilder.FlushBatch(true);
             YQL_ENSURE(unshardedBatch);
-            for (auto [shardId, shardBatch] : Sharding->SplitByShardsToArrowBatches(unshardedBatch)) {
-                const i64 shardBatchMemory = NArrow::GetBatchDataSize(shardBatch);
-                YQL_ENSURE(shardBatchMemory != 0);
-
-                auto& unpreparedBatch = UnpreparedBatches[shardId];
-                unpreparedBatch.TotalDataSize += shardBatchMemory;
-                unpreparedBatch.Batches.emplace_back(shardBatch);
-                Memory += shardBatchMemory;
-
-                FlushUnpreparedBatch(shardId, unpreparedBatch, false);
-
-                ShardIds.insert(shardId);
-            }
+            ShardAndFlushBatch(unshardedBatch, force);
         }
     }
 
-    void FlushUnpreparedBatch(const ui64 shardId, TUnpreparedBatch& unpreparedBatch, bool force = true) {
+    void ShardAndFlushBatch(const TRecordBatchPtr& unshardedBatch, bool force) {
+        for (auto [shardId, shardBatch] : Sharding->SplitByShardsToArrowBatches(unshardedBatch)) {
+            const i64 shardBatchMemory = NArrow::GetBatchDataSize(shardBatch);
+            YQL_ENSURE(shardBatchMemory != 0);
+
+            auto& unpreparedBatch = UnpreparedBatches[shardId];
+            unpreparedBatch.TotalDataSize += shardBatchMemory;
+            unpreparedBatch.Batches.emplace_back(shardBatch);
+            Memory += shardBatchMemory;
+
+            FlushUnpreparedBatch(shardId, unpreparedBatch, force);
+
+            ShardIds.insert(shardId);
+        }
+    }
+
+    void FlushUnpreparedBatch(const ui64 shardId, TUnpreparedBatch& unpreparedBatch, bool force) {
         while (!unpreparedBatch.Batches.empty() && (unpreparedBatch.TotalDataSize >= MaxBatchBytes || force)) {
             std::vector<TRecordBatchPtr> toPrepare;
             i64 toPrepareSize = 0;
@@ -337,7 +345,7 @@ public:
 
     TBatches FlushBatchesForce() override {
         FlushUnsharded(true);
-        FlushUnpreparedForce();
+        //FlushUnpreparedForce();
 
         TBatches newBatches;
         std::swap(Batches, newBatches);
@@ -438,13 +446,35 @@ public:
         , KeyColumnTypes(BuildKeyColumnTypes(SchemeEntry)) {
     }
 
+    void AddRow(TArrayRef<TCell> row, const TKeyDesc& keyRange) {
+        auto shardIter = std::lower_bound(
+            std::begin(keyRange.GetPartitions()),
+            std::end(keyRange.GetPartitions()),
+            TArrayRef(row.data(), KeyColumnTypes.size()),
+            [this](const auto &partition, const auto& key) {
+                const auto& range = *partition.Range;
+                return 0 > CompareBorders<true, false>(range.EndKeyPrefix.GetCells(), key,
+                    range.IsInclusive || range.IsPoint, true, KeyColumnTypes);
+            });
+
+        YQL_ENSURE(shardIter != keyRange.GetPartitions().end());
+
+        auto batcherIter = Batchers.find(shardIter->ShardId);
+        if (batcherIter == std::end(Batchers)) {
+            Batchers.emplace(
+                shardIter->ShardId,
+                TCellsBatcher(Columns.size(), MaxBatchBytes));
+        }
+
+        Memory += Batchers.at(shardIter->ShardId).AddRow(row);
+        ShardIds.insert(shardIter->ShardId);
+    }
+
     void AddData(NMiniKQL::TUnboxedValueBatch&& data) override {
         YQL_ENSURE(!Closed);
 
         TVector<TCell> cells(Columns.size());
         data.ForEachRow([&](const auto& row) {
-            const auto& keyRange = GetKeyRange();
-
             for (size_t index = 0; index < Columns.size(); ++index) {
                 cells[WriteIndex[index]] = MakeCell(
                     Columns[index].PType,
@@ -452,35 +482,23 @@ public:
                     TypeEnv,
                     /* copy */ true);
             }
-
-            auto shardIter = std::lower_bound(
-                std::begin(keyRange.GetPartitions()),
-                std::end(keyRange.GetPartitions()),
-                TArrayRef(cells.data(), KeyColumnTypes.size()),
-                [this](const auto &partition, const auto& key) {
-                    const auto& range = *partition.Range;
-                    return 0 > CompareBorders<true, false>(range.EndKeyPrefix.GetCells(), key,
-                        range.IsInclusive || range.IsPoint, true, KeyColumnTypes);
-                });
-
-            YQL_ENSURE(shardIter != keyRange.GetPartitions().end());
-
-            auto batcherIter = Batchers.find(shardIter->ShardId);
-            if (batcherIter == std::end(Batchers)) {
-                Batchers.emplace(
-                    shardIter->ShardId,
-                    TCellsBatcher(Columns.size(), MaxBatchBytes));
-            }
-
-            Memory += Batchers.at(shardIter->ShardId).AddRow(std::move(cells));
-            ShardIds.insert(shardIter->ShardId);
+            AddRow(cells, GetKeyRange());
 
             cells.resize(Columns.size());
         });
     }
 
     void AddBatch(IPayloadSerializer::IBatchPtr&& batch) override {
-        Y_UNUSED(batch);
+        auto datashardBatch = dynamic_cast<TBatch*>(batch.Get());
+        YQL_ENSURE(datashardBatch);
+        auto data = datashardBatch->Extract();
+        const auto rows = data.size() / Columns.size();
+
+        for (size_t rowIndex = 0; rowIndex < rows; ++rowIndex) {
+            AddRow(
+                TArrayRef{&data[rowIndex * Columns.size()], Columns.size()},
+                GetKeyRange());
+        }
     }
 
     NKikimrDataEvents::EDataFormat GetDataFormat() override {

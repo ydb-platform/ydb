@@ -31,23 +31,23 @@ To work with the project on a local (intermediate or installation) machine, you 
 
 {% list tabs %}
 
-- Installing Ansible globally (in the system)
+- Installing Ansible globally (Ubuntu 22.04 LTS)
 
-  * Update the apt package list with `sudo apt update`.
-  * Upgrade packages with `sudo apt upgrade`.
+  * Update the apt package list with `sudo apt-get update`.
+  * Upgrade packages with `sudo apt-get upgrade`.
   * Install the `software-properties-common` package to manage your distribution's software sources – `sudo apt install software-properties-common`.
   * Add a new PPA to apt – `sudo add-apt-repository --yes --update ppa:ansible/ansible`.
-  * Install Ansible – `sudo apt install ansible-core` (note that installing just `ansible` will lead to an unsuitable outdated version).
+  * Install Ansible – `sudo apt-get install ansible-core` (note that installing just `ansible` will lead to an unsuitable outdated version).
   * Check the Ansible core version – `ansible --version`
 
 - Installing Ansible in a Python virtual environment
 
-  * Update the apt package list – `sudo apt update`.
-  * Install the `venv` package for Python3 – `sudo apt install python3-venv`
-  * Create a directory where the virtual environment will be created and where the playbooks will be downloaded. For example, `mkdir ydb-install-ansible`.
-  * Go to the created directory and create a virtual environment – `python3 -m venv ydb-ansible`.
-  * Activate the virtual environment – `source venv/bin/activate`. All further actions with Ansible are performed inside the virtual environment. You can exit it with the command `deactivate`.
-  * Install the recommended version of Ansible using the command `pip install -r requirements.txt`, while in the root directory of the downloaded repository.
+  * Update the apt package list – `sudo apt-get update`.
+  * Install the `venv` package for Python3 – `sudo apt-get install python3-venv`
+  * Create a directory where the virtual environment will be created and where the playbooks will be downloaded. For example, `mkdir venv-ansible`.
+  * Create a Python virtual environment – `python3 -m venv venv-ansible`.
+  * Activate the virtual environment – `source venv-ansible/bin/activate`. All further actions with Ansible are performed inside the virtual environment. You can exit it with the command `deactivate`.
+  * Install the recommended version of Ansible using the command `pip3 install -r requirements.txt`, while in the root directory of the downloaded repository.
   * Check the Ansible core version – `ansible --version`
 
 {% endlist %}

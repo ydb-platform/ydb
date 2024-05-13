@@ -1602,7 +1602,9 @@ class GnuCompiler(Compiler):
     def print_compiler(self):
         super(GnuCompiler, self).print_compiler()
 
-        emit('C_COMPILER_UNQUOTED', self.tc.c_compiler)
+        emit('C_COMPILER', '"{}"'.format(self.tc.c_compiler))
+        emit('C_COMPILER_OLD_UNQUOTED', self.tc.c_compiler)
+        emit('C_COMPILER_OLD', '${quo:C_COMPILER_OLD_UNQUOTED}')
         emit('OPTIMIZE', self.optimize)
         emit('WERROR_MODE', self.tc.werror_mode)
         emit('_C_FLAGS', self.c_flags)
@@ -1611,7 +1613,9 @@ class GnuCompiler(Compiler):
         append('C_DEFINES', self.c_defines)
         append('C_WARNING_OPTS', self.c_warnings)
         append('CXX_WARNING_OPTS', self.cxx_warnings)
-        emit('CXX_COMPILER_UNQUOTED', self.tc.cxx_compiler)
+        emit('CXX_COMPILER', '"{}"'.format(self.tc.cxx_compiler))
+        emit('CXX_COMPILER_OLD_UNQUOTED', format(self.tc.cxx_compiler))
+        emit('CXX_COMPILER_OLD', '${quo:CXX_COMPILER_OLD_UNQUOTED}')
         # TODO(somov): Убрать чтение настройки из os.environ
         emit('USE_ARC_PROFILE', 'yes' if preset('USE_ARC_PROFILE') or os.environ.get('USE_ARC_PROFILE') else 'no')
         emit('DEBUG_INFO_FLAGS', self.debug_info_flags)
@@ -2113,9 +2117,12 @@ class MSVCCompiler(MSVC, Compiler):
         if self.tc.use_arcadia_toolchain:
             emit('USE_ARCADIA_TOOLCHAIN', 'yes')
 
-        emit('CXX_COMPILER_UNQUOTED', self.tc.cxx_compiler)
-        emit('C_COMPILER_UNQUOTED', self.tc.c_compiler)
-        emit('MASM_COMPILER_UNQUOTED', self.tc.masm_compiler)
+        emit('CXX_COMPILER_UNQUOTED', '"{}"'.format(self.tc.cxx_compiler))
+        emit('CXX_COMPILER_OLD_UNQUOTED', self.tc.cxx_compiler)
+        emit('C_COMPILER_UNQUOTED', '"{}"'.format(self.tc.c_compiler))
+        emit('C_COMPILER_OLD_UNQUOTED', self.tc.c_compiler)
+        emit('MASM_COMPILER_UNQUOTED', '"{}"'.format(self.tc.masm_compiler))
+        emit('MASM_COMPILER_OLD_UNQUOTED', self.tc.masm_compiler)
         append('C_DEFINES', defines)
         append('C_WARNING_OPTS', c_warnings)
         emit('_CXX_DEFINES', cxx_defines)
@@ -2156,8 +2163,12 @@ class MSVCLinker(MSVC, Linker):
         linker = self.tc.link
         linker_lib = self.tc.lib
 
-        emit('_MSVC_LIB_UNQUOTED', linker_lib)
-        emit('_MSVC_LINK_UNQUOTED', linker)
+        emit('_MSVC_LIB', '"{}"'.format(linker_lib))
+        emit('_MSVC_LIB_OLD_UNQUOTED', linker_lib)
+        emit('_MSVC_LIB_OLD', '${quo:_MSVC_LIB_OLD_UNQUOTED}')
+        emit('_MSVC_LINK', '"{}"'.format(linker))
+        emit('_MSVC_LINK_OLD_UNQUOTED', linker)
+        emit('_MSVC_LINK_OLD', '${quo:_MSVC_LINK_OLD_UNQUOTED}')
 
         if self.build.is_release:
             emit('LINK_EXE_FLAGS_PER_TYPE', '$LINK_EXE_FLAGS_RELEASE')
@@ -2383,8 +2394,9 @@ class Cuda(object):
         self.cuda_host_msvc_version.emit()
         self.cuda_nvcc_flags.emit()
 
-        emit('NVCC_UNQUOTED', self.build.host.exe('$CUDA_ROOT', 'bin', 'nvcc'))
-        emit('NVCC', '${quo:NVCC_UNQUOTED}')
+        emit('NVCC', '"{}"'.format(self.build.host.exe('$CUDA_ROOT', 'bin', 'nvcc')))
+        emit('NVCC_OLD_UNQUOTED', self.build.host.exe('$CUDA_ROOT', 'bin', 'nvcc'))
+        emit('NVCC_OLD', '${quo:NVCC_OLD_UNQUOTED}')
         emit('NVCC_FLAGS', self.nvcc_flags, '$CUDA_NVCC_FLAGS')
         emit('NVCC_OBJ_EXT', '.o' if not self.build.target.is_windows else '.obj')
 
@@ -2393,9 +2405,9 @@ class Cuda(object):
         if self.build.host_target[1].is_linux:
             mtime = ' --mtime ${tool:"tools/mtime0"} '
         if not self.cuda_use_clang.value:
-            cmd = '$YMAKE_PYTHON ${input:"build/scripts/compile_cuda.py"}' + mtime + '$NVCC $NVCC_STD $NVCC_FLAGS -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} --cflags $C_FLAGS_PLATFORM $CXXFLAGS $NVCC_STD $NVCC_CFLAGS $SRCFLAGS ${input;hide:"build/platform/cuda/cuda_runtime_include.h"} $CUDA_HOST_COMPILER_ENV ${kv;hide:"p CC"} ${kv;hide:"pc light-green"}'  # noqa E501
+            cmd = '$YMAKE_PYTHON ${input:"build/scripts/compile_cuda.py"}' + mtime + '$NVCC_OLD $NVCC_STD $NVCC_FLAGS -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} --cflags $C_FLAGS_PLATFORM $CXXFLAGS $NVCC_STD $NVCC_CFLAGS $SRCFLAGS ${input;hide:"build/platform/cuda/cuda_runtime_include.h"} $CUDA_HOST_COMPILER_ENV ${kv;hide:"p CC"} ${kv;hide:"pc light-green"}'  # noqa E501
         else:
-            cmd = '$CXX_COMPILER --cuda-path=$CUDA_ROOT $C_FLAGS_PLATFORM -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} $CXXFLAGS $SRCFLAGS $TOOLCHAIN_ENV ${kv;hide:"p CU"} ${kv;hide:"pc green"}'  # noqa E501
+            cmd = '$CXX_COMPILER_OLD --cuda-path=$CUDA_ROOT $C_FLAGS_PLATFORM -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} $CXXFLAGS $SRCFLAGS $TOOLCHAIN_ENV ${kv;hide:"p CU"} ${kv;hide:"pc green"}'  # noqa E501
 
         emit('_SRC_CU_CMD', cmd)
         emit('_SRC_CU_PEERDIR', ' '.join(sorted(self.peerdirs)))

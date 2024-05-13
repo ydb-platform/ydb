@@ -2557,8 +2557,10 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             {"ENDPOINT", "localhost:2135"},
             {"DATABASE", "/MyDatabase"},
             {"TOKEN", "foo"},
+            {"TOKEN_SECRET_NAME", "foo_secret_name"},
             {"USER", "user"},
             {"PASSWORD", "bar"},
+            {"PASSWORD_SECRET_NAME", "bar_secret_name"},
         };
 
         for (const auto& [k, v] : settings) {

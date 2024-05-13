@@ -1141,34 +1141,24 @@ struct TEvPQ {
     };
 
     struct TEvDeletePartition : TEventLocal<TEvDeletePartition, EvDeletePartition> {
-        explicit TEvDeletePartition(ui64 cookie) :
-            Cookie(cookie)
-        {
-        }
-
-        ui64 Cookie;
     };
 
     struct TEvDeletePartitionDone : TEventLocal<TEvDeletePartitionDone, EvDeletePartitionDone> {
-        TEvDeletePartitionDone(const NPQ::TPartitionId& partitionId, ui64 cookie) :
-            PartitionId(partitionId),
-            Cookie(cookie)
+        explicit TEvDeletePartitionDone(const NPQ::TPartitionId& partitionId) :
+            PartitionId(partitionId)
         {
         }
 
         NPQ::TPartitionId PartitionId;
-        ui64 Cookie;
     };
 
     struct TEvTransactionCompleted : TEventLocal<TEvTransactionCompleted, EvTransactionCompleted> {
-        TEvTransactionCompleted(const NPQ::TPartitionId& partitionId, ui64 writeId) :
-            PartitionId(partitionId),
+        explicit TEvTransactionCompleted(TMaybe<ui64> writeId) :
             WriteId(writeId)
         {
         }
 
-        NPQ::TPartitionId PartitionId;
-        ui64 WriteId = 0;
+        TMaybe<ui64> WriteId;
     };
 };
 

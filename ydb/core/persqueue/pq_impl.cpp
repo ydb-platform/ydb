@@ -4434,11 +4434,12 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const T
 void TPersQueue::Handle(TEvPQ::TEvDeletePartitionDone::TPtr& ev, const TActorContext& ctx)
 {
     auto* event = ev->Get();
-    const ui64 writeId = event->Cookie;
+    Y_ABORT_UNLESS(event->PartitionId.WriteId.Defined());
+    const ui64 writeId = *event->PartitionId.WriteId;
     Y_ABORT_UNLESS(TxWrites.contains(writeId));
     TTxWriteInfo& writeInfo = TxWrites.at(writeId);
     Y_ABORT_UNLESS(writeInfo.Partitions.contains(event->PartitionId.OriginalPartitionId));
-    const TPartitionId partitionId = writeInfo.Partitions.at(event->PartitionId.OriginalPartitionId);
+    const TPartitionId& partitionId = writeInfo.Partitions.at(event->PartitionId.OriginalPartitionId);
     Y_ABORT_UNLESS(partitionId == event->PartitionId);
     Y_ABORT_UNLESS(partitionId.IsSupportivePartition());
     Y_ABORT_UNLESS(Partitions.contains(partitionId));
@@ -4452,13 +4453,18 @@ void TPersQueue::Handle(TEvPQ::TEvDeletePartitionDone::TPtr& ev, const TActorCon
         UnsubscribeWriteId(writeId, ctx);
         TxWrites.erase(writeId);
     }
+
     TryWriteTxs(ctx);
 }
 
 void TPersQueue::Handle(TEvPQ::TEvTransactionCompleted::TPtr& ev, const TActorContext&)
 {
     auto* event = ev->Get();
-    ui64 writeId = event->WriteId;
+    if (!event->WriteId.Defined()) {
+        return;
+    }
+
+    const ui64 writeId = *event->WriteId;
     Y_ABORT_UNLESS(TxWrites.contains(writeId));
     TTxWriteInfo& writeInfo = TxWrites.at(writeId);
     Y_ABORT_UNLESS(writeInfo.Partitions.size() == 1);
@@ -4466,7 +4472,7 @@ void TPersQueue::Handle(TEvPQ::TEvTransactionCompleted::TPtr& ev, const TActorCo
     for (auto& [_, partitionId] : writeInfo.Partitions) {
         Y_ABORT_UNLESS(Partitions.contains(partitionId));
         const TPartitionInfo& partition = Partitions.at(partitionId);
-        Send(partition.Actor, new TEvPQ::TEvDeletePartition(writeId));
+        Send(partition.Actor, new TEvPQ::TEvDeletePartition);
     }
 }
 

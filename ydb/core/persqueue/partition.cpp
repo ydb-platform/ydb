@@ -1578,7 +1578,7 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
     const auto minWriteLatency = TDuration::MilliSeconds(AppData(ctx)->PQConfig.GetMinWriteLatencyMs());
 
     if (writeDuration > minWriteLatency) {
-        OnHandleWriteResponse(response.GetCookie(), ctx);
+        OnHandleWriteResponse(ctx);
     } else {
         ctx.Schedule(minWriteLatency - writeDuration, new TEvPQ::TEvHandleWriteResponse(response.GetCookie()));
     }
@@ -1658,14 +1658,15 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
 
     THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
 
-    if (DeletePartitionCookie) {
+    if (DeletePartitionState == DELETION_INITED) {
         ScheduleNegativeReplies();
         ScheduleDeletePartitionDone();
 
-        request->Record.SetCookie(DELETE_PARTITION_COOKIE);
         AddCmdDeleteRangeForAllKeys(*request);
 
         ctx.Send(Tablet, request.Release());
+
+        DeletePartitionState = DELETION_IN_PROCESS;
 
         return;
     }
@@ -2644,7 +2645,7 @@ void TPartition::SchedulePartitionConfigChanged()
 void TPartition::ScheduleDeletePartitionDone()
 {
     Replies.emplace_back(Tablet,
-                         MakeHolder<TEvPQ::TEvDeletePartitionDone>(Partition, DeletePartitionCookie).Release());
+                         MakeHolder<TEvPQ::TEvDeletePartitionDone>(Partition).Release());
 }
 
 void TPartition::AddCmdDeleteRange(NKikimrClient::TKeyValueRequest& request,
@@ -3036,12 +3037,13 @@ void TPartition::HandleOnInit(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorC
     PendingEvents.emplace_back(ev->ReleaseBase().Release());
 }
 
-void TPartition::Handle(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorContext& ctx)
+void TPartition::Handle(TEvPQ::TEvDeletePartition::TPtr&, const TActorContext& ctx)
 {
     Y_ABORT_UNLESS(IsSupportive());
-    Y_ABORT_UNLESS(DeletePartitionCookie == 0);
+    Y_ABORT_UNLESS(DeletePartitionState == DELETION_NOT_INITED);
 
-    DeletePartitionCookie = ev->Get()->Cookie;
+    DeletePartitionState = DELETION_INITED;
+
     ProcessTxsAndUserActs(ctx);
 }
 
@@ -3097,8 +3099,13 @@ void TPartition::ScheduleTransactionCompleted(const NKikimrPQ::TEvProposeTransac
     Y_ABORT_UNLESS(tx.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData);
     Y_ABORT_UNLESS(tx.HasData());
 
+    TMaybe<ui64> writeId;
+    if (tx.GetData().HasWriteId()) {
+        writeId = tx.GetData().GetWriteId();
+    }
+
     Replies.emplace_back(Tablet,
-                         MakeHolder<TEvPQ::TEvTransactionCompleted>(Partition, tx.GetData().GetWriteId()).Release());
+                         MakeHolder<TEvPQ::TEvTransactionCompleted>(writeId).Release());
 }
 
 const NKikimrPQ::TPQTabletConfig::TPartition* TPartition::GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config)

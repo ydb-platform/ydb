@@ -91,8 +91,10 @@ private:
     static const ui32 MAX_ERRORS_COUNT_TO_STORE = 10;
     static const ui32 SCALE_REQUEST_REPEAT_MIN_SECONDS = 60;
 
-    enum ECookie : ui64 {
-        DELETE_PARTITION_COOKIE = 6,
+    enum EDeletePartitionState {
+        DELETION_NOT_INITED = 0,
+        DELETION_INITED = 1,
+        DELETION_IN_PROCESS = 2,
     };
 
 private:
@@ -805,7 +807,7 @@ private:
 
     bool IsSupportive() const;
 
-    ui64 DeletePartitionCookie = 0;
+    EDeletePartitionState DeletePartitionState = DELETION_NOT_INITED;
 
     void ScheduleDeletePartitionDone();
     void ScheduleNegativeReplies();
@@ -816,7 +818,7 @@ private:
     void ScheduleNegativeReply(const TTransaction& tx);
     void ScheduleNegativeReply(const TMessage& msg);
 
-    void OnHandleWriteResponse(ui64 cookie, const TActorContext& ctx);
+    void OnHandleWriteResponse(const TActorContext& ctx);
 
     void ScheduleTransactionCompleted(const NKikimrPQ::TEvProposeTransaction& tx);
 };

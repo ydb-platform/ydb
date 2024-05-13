@@ -437,21 +437,18 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
     UpdateUserInfoEndOffset(ctx.Now());
 }
 
-void TPartition::OnHandleWriteResponse(ui64 cookie, const TActorContext& ctx)
+void TPartition::OnHandleWriteResponse(const TActorContext& ctx)
 {
     KVWriteInProgress = false;
-    if (cookie == DELETE_PARTITION_COOKIE) {
-        DeletePartitionCookie = 0;
-    }
     OnProcessTxsAndUserActsWriteComplete(ctx);
     HandleWriteResponse(ctx);
     ProcessTxsAndUserActs(ctx);
 }
 
-void TPartition::Handle(TEvPQ::TEvHandleWriteResponse::TPtr& ev, const TActorContext& ctx)
+void TPartition::Handle(TEvPQ::TEvHandleWriteResponse::TPtr&, const TActorContext& ctx)
 {
     PQ_LOG_T("TPartition::HandleOnWrite TEvHandleWriteResponse.");
-    OnHandleWriteResponse(ev->Get()->Cookie, ctx);
+    OnHandleWriteResponse(ctx);
 }
 
 void TPartition::UpdateAfterWriteCounters(bool writeComplete) {

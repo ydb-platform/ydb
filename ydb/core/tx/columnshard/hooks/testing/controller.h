@@ -23,11 +23,11 @@ private:
     YDB_READONLY(TAtomicCounter, IndexesSkippedNoData, 0);
     YDB_READONLY(TAtomicCounter, TieringUpdates, 0);
     YDB_READONLY(TAtomicCounter, NeedActualizationCount, 0);
-    
+
     YDB_READONLY(TAtomicCounter, ActualizationsCount, 0);
     YDB_READONLY(TAtomicCounter, ActualizationRefreshSchemeCount, 0);
     YDB_READONLY(TAtomicCounter, ActualizationRefreshTieringCount, 0);
-    
+
     YDB_ACCESSOR_DEF(std::optional<TDuration>, LagForCompactionBeforeTierings);
     YDB_ACCESSOR(std::optional<TDuration>, GuaranteeIndexationInterval, TDuration::Zero());
     YDB_ACCESSOR(std::optional<TDuration>, PeriodicWakeupActivationPeriod, std::nullopt);
@@ -49,6 +49,9 @@ private:
     YDB_ACCESSOR(bool, IndexWriteControllerEnabled, true);
     mutable TAtomicCounter IndexWriteControllerBrokeCount;
     std::set<EBackground> DisabledBackgrounds;
+
+    TMutex ActiveTabletsMutex;
+    std::set<ui64> ActiveTablets;
 
     class TBlobInfo {
     private:
@@ -280,6 +283,26 @@ public:
     ui32 GetShardActualsCount() const {
         TGuard<TMutex> g(Mutex);
         return ShardActuals.size();
+    }
+
+    void OnSwitchToWork(const ui64 tabletId) override {
+        TGuard<TMutex> g(ActiveTabletsMutex);
+        ActiveTablets.emplace(tabletId);
+    }
+
+    void OnCleanupActors(const ui64 tabletId) override {
+        TGuard<TMutex> g(ActiveTabletsMutex);
+        ActiveTablets.erase(tabletId);
+    }
+
+    ui64 GetActiveTabletsCount() const {
+        TGuard<TMutex> g(ActiveTabletsMutex);
+        return ActiveTablets.size();
+    }
+
+    bool IsActiveTablet(const ui64 tabletId) const {
+        TGuard<TMutex> g(ActiveTabletsMutex);
+        return ActiveTablets.contains(tabletId);
     }
 
     virtual void AddPortionForActualizer(const i32 portionsCount) override {

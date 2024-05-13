@@ -206,6 +206,14 @@ public:
         static std::shared_ptr<NColumnShard::NTiers::TConfigsSnapshot> result = std::make_shared<NColumnShard::NTiers::TConfigsSnapshot>(TInstant::Now());
         return result;
     }
+
+    virtual void OnSwitchToWork(const ui64 tabletId) {
+        Y_UNUSED(tabletId);
+    }
+
+    virtual void OnCleanupActors(const ui64 tabletId) {
+        Y_UNUSED(tabletId);
+    }
 };
 
 class TControllers {
@@ -241,6 +249,12 @@ public:
 
     static ICSController::TPtr GetColumnShardController() {
         return Singleton<TControllers>()->CSController;
+    }
+
+    template <class T>
+    static T* GetControllerAs() {
+        auto controller = Singleton<TControllers>()->CSController;
+        return dynamic_cast<T*>(controller.get());
     }
 };
 

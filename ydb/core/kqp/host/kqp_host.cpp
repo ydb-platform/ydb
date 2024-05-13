@@ -983,6 +983,10 @@ public:
         SessionCtx->SetDatabase(database);
         SessionCtx->SetCluster(cluster);
         SessionCtx->SetTempTables(std::move(tempTablesState));
+
+        if (FederatedQuerySetup) {
+            ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory({}, FederatedQuerySetup->S3GatewayConfig.GetGeneratorPathsLimit());
+        }
     }
 
     IAsyncQueryResultPtr ExecuteSchemeQuery(const TKqpQueryRef& query, bool isSql, const TExecSettings& settings) override {
@@ -1688,7 +1692,7 @@ private:
     TIntrusivePtr<TExecuteContext> ExecuteCtx;
     TIntrusivePtr<TKqlTransformContext> TransformCtx;
     TIntrusivePtr<IKqpRunner> KqpRunner;
-    NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory{NExternalSource::CreateExternalSourceFactory({})};
+    NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory;
 
     TKqpTempTablesState::TConstPtr TempTablesState;
     NActors::TActorSystem* ActorSystem = nullptr;

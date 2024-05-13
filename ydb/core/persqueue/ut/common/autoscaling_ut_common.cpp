@@ -209,6 +209,7 @@ TTestReadSession::TTestReadSession(const TString& name, TTopicClient& client, si
                 Cerr << ">>>>> " << Name << " Received TEndPartitionSessionEvent message " << ev.DebugString() << Endl << Flush;
                 auto partitionId = ev.GetPartitionSession()->GetPartitionId();
                 EndedPartitions.insert(partitionId);
+                EndedPartitionEvents.push_back(ev);
     });
 
 

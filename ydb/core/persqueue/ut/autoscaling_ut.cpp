@@ -111,6 +111,8 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             }
         }
 
+        UNIT_ASSERT_C(readSession.EndedPartitionEvents.empty(), "Old SDK is not support EndPartitionEvent");
+
         writeSession->Close(TDuration::Seconds(1));
         readSession.Close();
     }
@@ -149,6 +151,12 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
                 UNIT_ASSERT_C(false, "Unexpected message: " << info.Data);
             }
         }
+
+        UNIT_ASSERT_VALUES_EQUAL_C(1, readSession.EndedPartitionEvents.size(), "Only one partition was ended");
+        auto& ev = readSession.EndedPartitionEvents.front();
+        UNIT_ASSERT_VALUES_EQUAL_C(std::vector<ui32>{}, ev.GetAdjacentPartitionIds(), "There isn`t adjacent partitions after split");
+        std::vector<ui32> children = {1, 2};
+        UNIT_ASSERT_VALUES_EQUAL_C(children, ev.GetChildPartitionIds(), "");
 
         writeSession->Close(TDuration::Seconds(1));
         readSession.Close();
@@ -273,6 +281,17 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
                 UNIT_ASSERT_C(false, "Unexpected message: " << info.Data);
             }
         }
+
+        if (newSDK) {
+            UNIT_ASSERT_VALUES_EQUAL_C(2, readSession.EndedPartitionEvents.size(), "Two partition was ended which was merged");
+            for (auto& ev : readSession.EndedPartitionEvents) {
+                UNIT_ASSERT(ev.GetAdjacentPartitionIds() == std::vector<ui32>{0} || ev.GetAdjacentPartitionIds() == std::vector<ui32>{1});
+                UNIT_ASSERT_VALUES_EQUAL_C(std::vector<ui32>{2}, ev.GetChildPartitionIds(), "");
+            }
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL_C(0, readSession.EndedPartitionEvents.size(), "OLD SDK");
+        }
+
 
         writeSession1->Close(TDuration::Seconds(1));
         writeSession2->Close(TDuration::Seconds(1));

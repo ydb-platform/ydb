@@ -55,6 +55,7 @@ struct TTestReadSession {
     std::optional<std::set<size_t>> ExpectedPartitions;
 
     std::set<size_t> EndedPartitions;
+    std::vector<TReadSessionEvent::TEndPartitionSessionEvent> EndedPartitionEvents;
 
     TMutex Lock;
     TSemaphore Semaphore;

@@ -12,6 +12,7 @@
 
 #include <ydb/core/tablet_flat/flat_executor.pb.h>
 #include <ydb/core/util/pb.h>
+#include <util/string/builder.h>
 #include <util/generic/xrange.h>
 
 namespace NKikimr {
@@ -70,7 +71,7 @@ namespace NBoot {
         void Decode(const NPageCollection::TLargeGlobId &snap, TArrayRef<const char> body) noexcept
         {
             bool ok = ParseFromStringNoSizeLimit(Proto, body);
-            Y_ABORT_UNLESS(ok);
+            Y_ABORT_UNLESS(ok, "%s", (TStringBuilder() << "Failed to parse snapshot " << snap.Lead).c_str());
 
             bool huge = (body.size() > 10*1024*1024);
 

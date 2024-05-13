@@ -256,7 +256,7 @@ THolder<TEvPartitionWriter::TEvWriteRequest> Convert(const TProduceRequestData::
     // partitionRequest->SetCmdWriteOffset();
     partitionRequest->SetCookie(cookie);
     if (chargeExtraRU) {
-        partitionRequest->SetChargeExtraRUCount(1);
+        partitionRequest->SetChargeExtraRU(true);
     }
 
     ui64 totalSize = 0;

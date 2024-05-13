@@ -122,6 +122,8 @@ namespace NKikimr::NColumnShard {
             namespace NTypeIds = NScheme::NTypeIds;
             static const THashSet<NScheme::TTypeId> pkSupportedTypes = {
                 NTypeIds::Timestamp,
+                NTypeIds::Date32,
+                NTypeIds::Datetime64,
                 NTypeIds::Timestamp64,
                 NTypeIds::Interval64,
                 NTypeIds::Int8,

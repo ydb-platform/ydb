@@ -188,8 +188,10 @@ public:
 
     void ThrowOnError() const;
 
-    std::optional<TError> FindMatching(std::function<bool(const TError&)> filter) const;
-    std::optional<TError> FindMatching(std::function<bool(TErrorCode)> filter) const;
+    template <CInvocable<bool(const TError&)> TFilter>
+    std::optional<TError> FindMatching(const TFilter& filter) const;
+    template <CInvocable<bool(TErrorCode)> TFilter>
+    std::optional<TError> FindMatching(const TFilter& filter) const;
     std::optional<TError> FindMatching(TErrorCode code) const;
     std::optional<TError> FindMatching(const THashSet<TErrorCode>& codes) const;
 

@@ -176,10 +176,14 @@ void TPartition::ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue
 
 void TPartition::ReplyPropose(const TActorContext& ctx,
                               const NKikimrPQ::TEvProposeTransaction& event,
-                              NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode)
+                              NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode,
+                              NKikimrPQ::TError::EKind kind,
+                              const TString& reason)
 {
     ctx.Send(ActorIdFromProto(event.GetSourceActor()),
-             MakeReplyPropose(event, statusCode).Release());
+             MakeReplyPropose(event,
+                              statusCode,
+                              kind, reason).Release());
 }
 
 void TPartition::ReplyOk(const TActorContext& ctx, const ui64 dst) {
@@ -910,14 +914,18 @@ void TPartition::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TAc
     if (!txBody.GetImmediate()) {
         ReplyPropose(ctx,
                      event,
-                     NKikimrPQ::TEvProposeTransactionResult::ABORTED);
+                     NKikimrPQ::TEvProposeTransactionResult::ABORTED,
+                     NKikimrPQ::TError::INTERNAL,
+                     "immediate transaction is expected");
         return;
     }
 
     if (ImmediateTxCount >= MAX_TXS) {
         ReplyPropose(ctx,
                      event,
-                     NKikimrPQ::TEvProposeTransactionResult::OVERLOADED);
+                     NKikimrPQ::TEvProposeTransactionResult::OVERLOADED,
+                     NKikimrPQ::TError::INTERNAL,
+                     "the allowed number of transactions has been exceeded");
         return;
     }
 
@@ -1045,7 +1053,9 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoError::TPtr& ev, const TActorConte
 
     if (auto* t = TryGetCurrentImmediateTransaction()) {
         ScheduleReplyPropose(t->Record,
-                             NKikimrPQ::TEvProposeTransactionResult::ABORTED);
+                             NKikimrPQ::TEvProposeTransactionResult::ABORTED,
+                             NKikimrPQ::TError::BAD_REQUEST,
+                             ev->Get()->Message);
 
         UserActionAndTransactionEvents.pop_front();
         --ImmediateTxCount;
@@ -2224,7 +2234,9 @@ void TPartition::ProcessImmediateTx(const NKikimrPQ::TEvProposeTransaction& tx,
 
     if (!predicate) {
         ScheduleReplyPropose(tx,
-                             NKikimrPQ::TEvProposeTransactionResult::ABORTED);
+                             NKikimrPQ::TEvProposeTransactionResult::ABORTED,
+                             NKikimrPQ::TError::INTERNAL,
+                             "not an empty list of keys");
         return;
     }
 
@@ -2242,7 +2254,9 @@ void TPartition::ProcessImmediateTx(const NKikimrPQ::TEvProposeTransaction& tx,
 
         if (!PendingUsersInfo.contains(user) && AffectedUsers.contains(user)) {
             ScheduleReplyPropose(tx,
-                                 NKikimrPQ::TEvProposeTransactionResult::ABORTED);
+                                 NKikimrPQ::TEvProposeTransactionResult::ABORTED,
+                                 NKikimrPQ::TError::BAD_REQUEST,
+                                 "the consumer has been deleted");
             return;
         }
 
@@ -2250,19 +2264,25 @@ void TPartition::ProcessImmediateTx(const NKikimrPQ::TEvProposeTransaction& tx,
 
         if (operation.GetBegin() > operation.GetEnd()) {
             ScheduleReplyPropose(tx,
-                                 NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST);
+                                 NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST,
+                                 NKikimrPQ::TError::BAD_REQUEST,
+                                 "incorrect offset range (begin > end)");
             return;
         }
 
         if (userInfo.Offset != (i64)operation.GetBegin()) {
             ScheduleReplyPropose(tx,
-                                 NKikimrPQ::TEvProposeTransactionResult::ABORTED);
+                                 NKikimrPQ::TEvProposeTransactionResult::ABORTED,
+                                 NKikimrPQ::TError::BAD_REQUEST,
+                                 "incorrect offset range (gap)");
             return;
         }
 
         if (operation.GetEnd() > EndOffset) {
             ScheduleReplyPropose(tx,
-                                 NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST);
+                                 NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST,
+                                 NKikimrPQ::TError::BAD_REQUEST,
+                                 "incorrect offset range (commit to the future)");
             return;
         }
 
@@ -2270,7 +2290,9 @@ void TPartition::ProcessImmediateTx(const NKikimrPQ::TEvProposeTransaction& tx,
     }
 
     ScheduleReplyPropose(tx,
-                         NKikimrPQ::TEvProposeTransactionResult::COMPLETE);
+                         NKikimrPQ::TEvProposeTransactionResult::COMPLETE,
+                         NKikimrPQ::TError::OK,
+                         "");
 
     CommitWriteOperations(ctx);
 }
@@ -2579,11 +2601,14 @@ void TPartition::ScheduleReplyError(const ui64 dst,
 }
 
 void TPartition::ScheduleReplyPropose(const NKikimrPQ::TEvProposeTransaction& event,
-                                      NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode)
+                                      NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode,
+                                      NKikimrPQ::TError::EKind kind,
+                                      const TString& reason)
 {
     Replies.emplace_back(ActorIdFromProto(event.GetSourceActor()),
                          MakeReplyPropose(event,
-                                          statusCode).Release());
+                                          statusCode,
+                                          kind, reason).Release());
 }
 
 void TPartition::ScheduleReplyCommitDone(ui64 step, ui64 txId)
@@ -2810,13 +2835,21 @@ THolder<TEvPQ::TEvError> TPartition::MakeReplyError(const ui64 dst,
 }
 
 THolder<TEvPersQueue::TEvProposeTransactionResult> TPartition::MakeReplyPropose(const NKikimrPQ::TEvProposeTransaction& event,
-                                                                                NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode)
+                                                                                NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode,
+                                                                                NKikimrPQ::TError::EKind kind,
+                                                                                const TString& reason)
 {
     auto response = MakeHolder<TEvPersQueue::TEvProposeTransactionResult>();
 
     response->Record.SetOrigin(TabletID);
     response->Record.SetStatus(statusCode);
     response->Record.SetTxId(event.GetTxId());
+
+    if (kind != NKikimrPQ::TError::OK) {
+        auto* error = response->Record.MutableErrors()->Add();
+        error->SetKind(kind);
+        error->SetReason(reason);
+    }
 
     return response;
 }

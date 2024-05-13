@@ -19,7 +19,6 @@ namespace NSQLTranslationV1 {
 namespace {
 
 TNodePtr AddTablePathPrefix(TContext& ctx, TStringBuf prefixPath, const TDeferredAtom& path) {
-    Y_UNUSED(ctx);
     if (prefixPath.empty()) {
         return path.Build();
     }
@@ -35,7 +34,7 @@ TNodePtr AddTablePathPrefix(TContext& ctx, TStringBuf prefixPath, const TDeferre
     TNodePtr buildPathNode = new TCallNodeImpl(pathNode->GetPos(), "BuildTablePath", { prefixNode, pathNode });
 
     TDeferredAtom result;
-    MakeTableFromExpression(ctx, buildPathNode, result);
+    MakeTableFromExpression(ctx.Pos(), ctx, buildPathNode, result);
     return result.Build();
 }
 
@@ -325,14 +324,14 @@ bool TContext::IsAlreadyDeclared(const TString& varName) const {
     return Variables.find(varName) != Variables.end() && !WeakVariables.contains(varName);
 }
 
-void TContext::DeclareVariable(const TString& varName, const TNodePtr& typeNode, bool isWeak) {
+void TContext::DeclareVariable(const TString& varName, const TPosition& pos, const TNodePtr& typeNode, bool isWeak) {
     if (isWeak) {
-        auto inserted = Variables.emplace(varName, typeNode);
+        auto inserted = Variables.emplace(varName, std::make_pair(pos, typeNode));
         YQL_ENSURE(inserted.second);
         WeakVariables.insert(varName);
     } else {
         WeakVariables.erase(WeakVariables.find(varName));
-        Variables[varName] = typeNode;
+        Variables[varName] = std::make_pair(pos, typeNode);
     }
 }
 

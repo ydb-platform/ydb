@@ -1,5 +1,5 @@
 ```text
-├── 8-nodes-block-4-2 / 9-nodes-mirror-3-dc
+├── 3-nodes-mirror-3-dc / 9-nodes-mirror-3-dc / 8-nodes-block-4-2
 │   ├── ansible.cfg # An Ansible configuration file containing settings for connecting to servers and project structure options. It is essential for customizing Ansible's behavior and specifying default settings.
 │   ├── ansible_vault_password_file # A file containing the password for decrypting encrypted data with Ansible Vault, such as sensitive variables or configuration details. This is crucial for securely managing secrets like the root user password.
 │   ├── creds # A directory for environment variables that specify the username and password for YDB, facilitating secure access to the database.

@@ -71,7 +71,7 @@ namespace NBoot {
         void Decode(const NPageCollection::TLargeGlobId &snap, TArrayRef<const char> body) noexcept
         {
             bool ok = ParseFromStringNoSizeLimit(Proto, body);
-            Y_ABORT_UNLESS(ok, "%s", (TStringBuilder() << "Failed to parse snapshot " << snap.Lead).c_str());
+            Y_VERIFY_S(ok, "Failed to parse snapshot " << snap.Lead);
 
             bool huge = (body.size() > 10*1024*1024);
 

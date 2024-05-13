@@ -40,11 +40,18 @@ copy=[
     "cmake/global_flags.cmake",
 ]
 
+# DEPRECATED - remove after yexport release
 [common]
 template={ path="common_cmake_lists.jinja", dest="CMakeLists.txt" }
 
+# DEPRECATED - remove after yexport release
 [dir]
 template={ path="dir_cmake_lists.jinja", dest="CMakeLists{PLATFORM}.txt" }
+
+# WORKAROUND - used for all targets in hardcoded-cmake
+[targets.EMPTY]
+template={ path="dir_cmake_lists.jinja", dest="CMakeLists{PLATFORM}.txt" }
+merge_platform_template={ path="common_cmake_lists.jinja", dest="CMakeLists.txt" }
 
 [attrs.root]
 project_name="str"

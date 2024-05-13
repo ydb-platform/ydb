@@ -16,6 +16,7 @@ extern "C" {
 
 #undef TypeName
 #undef Max
+#undef bind
 
 struct TMainContext {
     MemoryContextData Data;

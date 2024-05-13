@@ -405,6 +405,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
     TString nextProvider;
     TMaybe<IDataProvider*> calcProvider;
     TExprNode::TPtr calcWorldRoot;
+    TPositionHandle pipelinePos;
     bool isAtomPipeline = false;
     bool isOptionalAtom = false;
     bool isTypePipeline = false;
@@ -980,6 +981,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             return nullptr;
         }
 
+        pipelinePos = node->Pos();
         isAtomPipeline = node->IsCallable("EvaluateAtom");
         isTypePipeline = node->IsCallable("EvaluateType");
         isCodePipeline = node->IsCallable("EvaluateCode");

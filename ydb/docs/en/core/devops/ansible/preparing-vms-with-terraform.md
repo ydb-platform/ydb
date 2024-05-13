@@ -111,9 +111,9 @@ If you already use Terraform providers provided in the [official repository](htt
 
 ## Deployment overview
 
-The following are step-by-step instructions for creating infrastructure in [AWS](#aws-cluster), [Azure](#aws-cluster), [GCP](#gcp-cluster), or [Yandex Cloud](#gcp-cluster). The scenarios proposed by Terraform deploy the same type of infrastructure:
+The following are step-by-step instructions for creating infrastructure in [AWS](#aws-cluster), [Azure](#aws-cluster), [GCP](#gcp-cluster), or [Yandex Cloud](#gcp-cluster). By default, example Terraform scenarios deploy the same type of infrastructure:
 
-* 9 VMs in three availability zones (16 vCPU, 32 GB RAM, additional 200GB disk for data).
+* VMs in three availability zones.
 * Cloud network, public and private subnets (per subnet per availability zone).
 * Private DNS zone.
 * Security groups allowing ICMP and traffic on ports: 22, 65535, 19001, 8765, and 2135.

@@ -1,8 +1,8 @@
 <tmp_path>/program.sql:<main>: Error: Expression evaluation
 
-    <tmp_path>/program.sql:<main>:4:26: Error: At function: EvaluateAtom
+    <tmp_path>/program.sql:<main>:4:8: Error: At function: EvaluateAtom
     	select ListExtract(value,key) from Input;
-	                         ^
+	       ^
         <tmp_path>/program.sql:<main>:4:1: Error: Failed to evaluate unresolved argument: row. Did you use a column?
         	select ListExtract(value,key) from Input;
 	^

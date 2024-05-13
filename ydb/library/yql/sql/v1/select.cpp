@@ -412,8 +412,9 @@ protected:
     }
 
     TMaybe<bool> AddColumn(TContext& ctx, TColumnNode& column) override {
-        auto& label = *column.GetSourceName();
-        if (!label.empty() && label != GetLabel()) {
+        const auto& label = *column.GetSourceName();
+        const auto& source = GetLabel();
+        if (!label.empty() && label != source && !(source.StartsWith(label) && source[label.size()] == ':')) {
             if (column.IsReliable()) {
                 ctx.Error(column.GetPos()) << "Unknown correlation name: " << label;
             }
@@ -703,7 +704,8 @@ public:
     }
 
     bool ShouldUseSourceAsColumn(const TString& source) const override {
-        return source && source != GetLabel();
+        const auto& label = GetLabel();
+        return source && source != label && !(label.StartsWith(source) && label[source.size()] == ':');
     }
 
     TMaybe<bool> AddColumn(TContext& ctx, TColumnNode& column) override {
@@ -851,7 +853,7 @@ public:
         Y_UNUSED(initSrc);
         auto source = Node->GetSource();
         if (!source) {
-            NewSource = TryMakeSourceFromExpression(ctx, Service, Cluster, Node);
+            NewSource = TryMakeSourceFromExpression(Pos, ctx, Service, Cluster, Node);
             source = NewSource.Get();
         }
 

@@ -38,7 +38,7 @@ on:
         default: "small,medium,large"
       test_type:
         type: string
-        default: "unittest,py3test,py2test,pytest"
+        default: ""
       folder_prefix:
         type: string
         default: "ya-"

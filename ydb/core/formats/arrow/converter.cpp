@@ -182,9 +182,18 @@ static std::shared_ptr<arrow::Array> InplaceConvertColumn(const std::shared_ptr<
             newData->type = arrow::timestamp(arrow::TimeUnit::MICRO);
             return std::make_shared<arrow::TimestampArray>(newData);
         }
+        case NScheme::NTypeIds::Date32: {
+
+            Y_ABORT_UNLESS(arrow::bit_width(column->type()->id()) == 32);
+
+            auto newData = column->data()->Copy();
+            newData->type = arrow::int32();
+            return std::make_shared<arrow::NumericArray<arrow::Int32Type>>(newData);
+        }
         case NScheme::NTypeIds::Timestamp64:
-        case NScheme::NTypeIds::Interval64: {
-            Y_ABORT_UNLESS(arrow::is_primitive(column->type()->id()));
+        case NScheme::NTypeIds::Interval64:
+        case NScheme::NTypeIds::Datetime64: {
+
             Y_ABORT_UNLESS(arrow::bit_width(column->type()->id()) == 64);
 
             auto newData = column->data()->Copy();
@@ -237,11 +246,13 @@ bool TArrowToYdbConverter::NeedInplaceConversion(const NScheme::TTypeInfo& typeI
             return typeInRequest.GetTypeId() == NScheme::NTypeIds::Utf8;
         case NScheme::NTypeIds::Date:
             return typeInRequest.GetTypeId() == NScheme::NTypeIds::Uint16;
+        case NScheme::NTypeIds::Date32:
         case NScheme::NTypeIds::Datetime:
             return typeInRequest.GetTypeId() == NScheme::NTypeIds::Int32;
         case NScheme::NTypeIds::Timestamp:
         case NScheme::NTypeIds::Timestamp64:
         case NScheme::NTypeIds::Interval64:
+        case NScheme::NTypeIds::Datetime64:
             return typeInRequest.GetTypeId() == NScheme::NTypeIds::Int64;
         default:
             break;

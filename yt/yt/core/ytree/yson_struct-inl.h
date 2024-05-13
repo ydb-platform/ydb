@@ -264,8 +264,7 @@ TYsonStructRegistrar<TStruct>::operator TYsonStructRegistrar<TBase>()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class T>
-    requires CExternallySerializable<T>
+template <CExternallySerializable T>
 void Serialize(const T& value, NYson::IYsonConsumer* consumer)
 {
     using TSerializer = typename TGetExternalizedYsonStructTraits<T>::TExternalSerializer;
@@ -273,28 +272,13 @@ void Serialize(const T& value, NYson::IYsonConsumer* consumer)
     Serialize(serializer, consumer);
 }
 
-template <class T>
-    requires CExternallySerializable<T>
-void DeserializeExternalized(T& value, INodePtr node, bool postprocess, bool setDefaults)
+template <CExternallySerializable T, CYsonStructSource TSource>
+void Deserialize(T& value, TSource source, bool postprocess, bool setDefaults)
 {
     using TTraits = TGetExternalizedYsonStructTraits<T>;
     using TSerializer = typename TTraits::TExternalSerializer;
     auto serializer = TSerializer::template CreateWritable<T, TSerializer>(value, setDefaults);
-    serializer.Load(node, postprocess, setDefaults);
-}
-
-template <class T>
-    requires CExternallySerializable<T>
-void Deserialize(T& value, INodePtr node)
-{
-    DeserializeExternalized(value, std::move(node), /*postprocess*/ true, /*setDefaults*/ true);
-}
-
-template <class T>
-    requires CExternallySerializable<T>
-void Deserialize(T& value, NYson::TYsonPullParserCursor* cursor)
-{
-    Deserialize(value, NYson::ExtractTo<NYTree::INodePtr>(cursor));
+    serializer.Load(std::move(source), postprocess, setDefaults);
 }
 
 template <class T>

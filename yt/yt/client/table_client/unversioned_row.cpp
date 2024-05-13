@@ -331,7 +331,7 @@ int CompareRowValues(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
         try {
             auto lhsData = TYsonStringBuf(lhs.AsStringBuf());
             auto rhsData = TYsonStringBuf(rhs.AsStringBuf());
-            return CompareCompositeValues(lhsData, rhsData);
+            return CompareYsonValues(lhsData, rhsData);
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION(
                 NTableClient::EErrorCode::IncomparableComplexValues,
@@ -354,7 +354,7 @@ int CompareRowValues(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
         try {
             auto lhsData = TYsonStringBuf(lhs.AsStringBuf());
             auto rhsData = TYsonStringBuf(rhs.AsStringBuf());
-            return CompareCompositeValues(lhsData, rhsData);
+            return CompareYsonValues(lhsData, rhsData);
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION(
                 NTableClient::EErrorCode::IncomparableComplexValues,

@@ -1,4 +1,11 @@
 {
+    "test.test[action-eval_atom_wrong_type_expr--Debug]": [],
+    "test.test[action-eval_atom_wrong_type_expr--Plan]": [],
+    "test.test[action-eval_atom_wrong_type_expr--Results]": [
+        {
+            "uri": "file://test.test_action-eval_atom_wrong_type_expr--Results_/extracted"
+        }
+    ],
     "test.test[action-eval_code_nested-default.txt-Debug]": [
         {
             "checksum": "5a27e97d60365ff30542677c4f432c25",

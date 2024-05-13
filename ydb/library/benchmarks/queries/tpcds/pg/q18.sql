@@ -29,7 +29,8 @@ select  i_item_id,
  order by ca_country nulls first,
         ca_state nulls first,
         ca_county nulls first,
-	i_item_id nulls first
+	i_item_id nulls first, 
+    agg6 nulls first
  limit 100;
 
 -- end query 1 in stream 0 using template ../query_templates/query18.tpl

@@ -270,6 +270,7 @@ PEERDIR(
     ydb/library/login
     ydb/library/login/protos
     ydb/library/yql/minikql
+    ydb/library/yql/providers/common/proto
     ydb/services/bg_tasks
 )
 

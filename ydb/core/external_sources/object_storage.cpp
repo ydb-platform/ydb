@@ -20,8 +20,9 @@ namespace NKikimr::NExternalSource {
 namespace {
 
 struct TObjectStorageExternalSource : public IExternalSource {
-    explicit TObjectStorageExternalSource(const std::vector<TRegExMatch>& hostnamePatterns)
+    explicit TObjectStorageExternalSource(const std::vector<TRegExMatch>& hostnamePatterns, size_t pathsLimit)
         : HostnamePatterns(hostnamePatterns)
+        , PathsLimit(pathsLimit)
     {}
 
     virtual TString Pack(const NKikimrExternalSources::TSchema& schema,
@@ -47,7 +48,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
             }
         }
 
-        if (auto issues = Validate(schema, objectStorage)) {
+        if (auto issues = Validate(schema, objectStorage, PathsLimit)) {
             ythrow TExternalSourceException() << issues.ToString();
         }
 
@@ -116,7 +117,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
     }
 
     template<typename TScheme, typename TObjectStorage>
-    static NYql::TIssues Validate(const TScheme& schema, const TObjectStorage& objectStorage, size_t pathsLimit = 50000) {
+    static NYql::TIssues Validate(const TScheme& schema, const TObjectStorage& objectStorage, size_t pathsLimit) {
         NYql::TIssues issues;
         issues.AddIssues(ValidateFormatSetting(objectStorage.format(), objectStorage.format_setting()));
         issues.AddIssues(ValidateRawFormat(objectStorage.format(), schema, objectStorage.partitioned_by()));
@@ -472,12 +473,13 @@ private:
 
 private:
     const std::vector<TRegExMatch> HostnamePatterns;
+    const size_t PathsLimit;
 };
 
 }
 
-IExternalSource::TPtr CreateObjectStorageExternalSource(const std::vector<TRegExMatch>& hostnamePatterns) {
-    return MakeIntrusive<TObjectStorageExternalSource>(hostnamePatterns);
+IExternalSource::TPtr CreateObjectStorageExternalSource(const std::vector<TRegExMatch>& hostnamePatterns, size_t pathsLimit) {
+    return MakeIntrusive<TObjectStorageExternalSource>(hostnamePatterns, pathsLimit);
 }
 
 NYql::TIssues Validate(const FederatedQuery::Schema& schema, const FederatedQuery::ObjectStorageBinding::Subset& objectStorage, size_t pathsLimit) {

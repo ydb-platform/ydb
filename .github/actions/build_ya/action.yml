@@ -149,6 +149,12 @@ runs:
       shell: bash
       run: |
         set -x
+        cat <<"EOF" > $TMP_DIR/YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS
+        $CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS
+        EOF
+        export YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=$TMP_DIR/YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS
+        python3 -m pip install ydb ydb[yc]
+
         if [ "${{ steps.build.outputs.status }}" == "failed" ]; then
           echo "Build failed, no analytics is send"
         else
@@ -160,6 +166,7 @@ runs:
             rm -f $ydbd_stripped_path
             ya tool strip $ydbd_path -o $ydbd_stripped_path
             du -shL $ydbd_stripped_path
+            python .github/scripts/send_build_stats.py
           else
             echo "No ydbd exists"
           fi

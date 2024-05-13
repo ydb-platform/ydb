@@ -154,8 +154,12 @@ runs:
         else
           ydbd_path=ydb/apps/ydbd/ydbd
           if [ -e  $ydbd_path ]; then
+            ydbd_stripped_path=ydb/apps/ydbd/ydbd_stripped
             echo "Ydbd exists"
             du -shL $ydbd_path
+            rm -f $ydbd_stripped_path
+            ya tool strip $ydbd_path $ydbd_stripped_path
+            du -shL $ydbd_stripped_path
           else
             echo "No ydbd exists"
           fi

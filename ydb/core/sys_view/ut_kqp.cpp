@@ -1526,7 +1526,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 18);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 19);
 
             THashSet<TString> names;
             for (const auto& child : children) {
@@ -1544,7 +1544,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 12);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 13);
 
             THashSet<TString> names;
             for (const auto& child : children) {

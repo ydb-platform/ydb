@@ -32,12 +32,12 @@ private:
 
 }
 
-IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TString>& hostnamePatterns) {
+IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TString>& hostnamePatterns, size_t pathsLimit) {
     std::vector<TRegExMatch> hostnamePatternsRegEx(hostnamePatterns.begin(), hostnamePatterns.end());
     return MakeIntrusive<TExternalSourceFactory>(TMap<TString, IExternalSource::TPtr>{
         {
             ToString(NYql::EDatabaseType::ObjectStorage),
-            CreateObjectStorageExternalSource(hostnamePatternsRegEx)
+            CreateObjectStorageExternalSource(hostnamePatternsRegEx, pathsLimit)
         },
         {
             ToString(NYql::EDatabaseType::ClickHouse),

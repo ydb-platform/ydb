@@ -297,7 +297,7 @@ private:
                         isDeriv = true;
                     } else if (name == "TaskCount") {
                         publicCounterName = "query.running_tasks";
-                        isDeriv = true;
+                        isDeriv = false;
                     } else if (name == "MultiHop_LateThrownEventsCount") {
                         publicCounterName = "query.late_events";
                         isDeriv = true;

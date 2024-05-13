@@ -1161,11 +1161,13 @@ struct TEvPQ {
     };
 
     struct TEvTransactionCompleted : TEventLocal<TEvTransactionCompleted, EvTransactionCompleted> {
-        explicit TEvTransactionCompleted(ui64 writeId) :
+        TEvTransactionCompleted(const NPQ::TPartitionId& partitionId, ui64 writeId) :
+            PartitionId(partitionId),
             WriteId(writeId)
         {
         }
 
+        NPQ::TPartitionId PartitionId;
         ui64 WriteId = 0;
     };
 };

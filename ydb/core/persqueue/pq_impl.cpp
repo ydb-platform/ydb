@@ -4455,6 +4455,21 @@ void TPersQueue::Handle(TEvPQ::TEvDeletePartitionDone::TPtr& ev, const TActorCon
     TryWriteTxs(ctx);
 }
 
+void TPersQueue::Handle(TEvPQ::TEvTransactionCompleted::TPtr& ev, const TActorContext&)
+{
+    auto* event = ev->Get();
+    ui64 writeId = event->WriteId;
+    Y_ABORT_UNLESS(TxWrites.contains(writeId));
+    TTxWriteInfo& writeInfo = TxWrites.at(writeId);
+    Y_ABORT_UNLESS(writeInfo.Partitions.size() == 1);
+
+    for (auto& [_, partitionId] : writeInfo.Partitions) {
+        Y_ABORT_UNLESS(Partitions.contains(partitionId));
+        const TPartitionInfo& partition = Partitions.at(partitionId);
+        Send(partition.Actor, new TEvPQ::TEvDeletePartition(writeId));
+    }
+}
+
 TString TPersQueue::LogPrefix() const {
     return TStringBuilder() << SelfId() << " ";
 }
@@ -4512,6 +4527,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(NLongTxService::TEvLongTxService::TEvLockStatus, Handle);
         HFuncTraced(TEvPQ::TEvReadingPartitionStatusRequest, Handle);
         HFuncTraced(TEvPQ::TEvDeletePartitionDone, Handle);
+        HFuncTraced(TEvPQ::TEvTransactionCompleted, Handle);
         default:
             return false;
     }

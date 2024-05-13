@@ -817,6 +817,8 @@ private:
     void ScheduleNegativeReply(const TMessage& msg);
 
     void OnHandleWriteResponse(ui64 cookie, const TActorContext& ctx);
+
+    void ScheduleTransactionCompleted(const NKikimrPQ::TEvProposeTransaction& tx);
 };
 
 } // namespace NKikimr::NPQ

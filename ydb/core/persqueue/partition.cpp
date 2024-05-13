@@ -1020,6 +1020,7 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoResponse::TPtr& ev, const TActorCo
         --ImmediateTxCount;
 
         ProcessImmediateTx(tx, predicate, ctx);
+        ScheduleTransactionCompleted(tx);
         TxInProgress = false;
         ContinueProcessTxsAndUserActs(ctx);
 
@@ -1056,6 +1057,7 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoError::TPtr& ev, const TActorConte
                              NKikimrPQ::TEvProposeTransactionResult::ABORTED,
                              NKikimrPQ::TError::BAD_REQUEST,
                              ev->Get()->Message);
+        ScheduleTransactionCompleted(t->Record);
 
         UserActionAndTransactionEvents.pop_front();
         --ImmediateTxCount;
@@ -3088,6 +3090,15 @@ void TPartition::ScheduleNegativeReply(const TTransaction&)
 void TPartition::ScheduleNegativeReply(const TMessage& msg)
 {
     ScheduleReplyError(msg.GetCookie(), NPersQueue::NErrorCode::ERROR, "The transaction is completed");
+}
+
+void TPartition::ScheduleTransactionCompleted(const NKikimrPQ::TEvProposeTransaction& tx)
+{
+    Y_ABORT_UNLESS(tx.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData);
+    Y_ABORT_UNLESS(tx.HasData());
+
+    Replies.emplace_back(Tablet,
+                         MakeHolder<TEvPQ::TEvTransactionCompleted>(Partition, tx.GetData().GetWriteId()).Release());
 }
 
 const NKikimrPQ::TPQTabletConfig::TPartition* TPartition::GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config)

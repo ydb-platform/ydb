@@ -1800,10 +1800,12 @@ class MSVCToolchainOptions(ToolchainOptions):
 
         self.under_wine_compiler = self.params.get('wine', False)
         self.under_wine_tools = not build.host.is_windows
+        self.under_wine_link = self.under_wine_tools
         self.under_wine_lib = self.under_wine_tools
         self.system_msvc = self.params.get('system_msvc', False)
         self.ide_msvs = self.params.get('ide_msvs', False)
         self.use_clang = self.params.get('use_clang', False)
+        self.use_msvc_linker = is_positive('USE_MSVC_LINKER')
         self.use_arcadia_toolchain = self.params.get('use_arcadia_toolchain', False)
 
         self.sdk_version = None
@@ -1872,7 +1874,13 @@ class MSVCToolchainOptions(ToolchainOptions):
             ])
 
             self.masm_compiler = win_path_fix(os.path.join(bindir, tools_name, asm_name))
-            self.link = win_path_fix(os.path.join(bindir, tools_name, 'link.exe'))
+
+            if self.use_clang and not self.use_msvc_linker:
+                self.link = self.host.exe(self.name_marker, "bin", "lld-link")
+                self.under_wine_link = False
+            else:
+                self.link = win_path_fix(os.path.join(bindir, tools_name, 'link.exe'))
+                self.under_wine_link = self.under_wine_tools
 
             if self.use_clang:
                 self.lib = self.host.exe(self.name_marker, "bin", "llvm-lib")
@@ -1921,6 +1929,8 @@ class MSVCToolchain(MSVC, Toolchain):
 
         if self.tc.under_wine_tools:
             emit('_UNDER_WINE_TOOLS', 'yes')
+        if self.tc.under_wine_link:
+            emit('_UNDER_WINE_LINK', 'yes')
         if self.tc.under_wine_lib:
             emit('_UNDER_WINE_LIB', 'yes')
         if self.tc.under_wine_compiler:

@@ -77,6 +77,7 @@ private:
             HFunc(TEvPQProxy::TEvStartDirectRead, Handle); // from gRPC
             HFunc(TEvPQProxy::TEvAuth, Handle); // from gRPC
 
+            HFunc(TEvPQProxy::TEvDirectReadDataSessionConnected, Handle); // from CachingService
             hFunc(TEvPQProxy::TEvDirectReadCloseSession, HandleSessionKilled) // from CachingService
             hFunc(TEvPQProxy::TEvDirectReadDestroyPartitionSession, HandleDestroyPartitionSession) // from CachingService
             hFunc(TEvPQProxy::TEvDirectReadSendClientData, HandleGotData) // from CachingService
@@ -107,6 +108,7 @@ private:
     void Handle(TEvPQProxy::TEvCloseSession::TPtr& ev, const TActorContext& ctx);
     //void Handle(TEvPQProxy::TEvDieCommand::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvStartDirectRead::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQProxy::TEvDirectReadDataSessionConnected::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvAuth::TPtr& ev, const TActorContext& ctx);
 
     // Caching service events

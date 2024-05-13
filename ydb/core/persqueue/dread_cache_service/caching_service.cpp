@@ -74,8 +74,16 @@ private:
             return;
         }
 
-        sessionIter->second.Client = TCacheClientContext{ev->Sender, ev->Get()->StartingReadId};
-        AssignByProxy[ev->Sender].insert(key.PartitionSessionId);
+        auto sender = ev->Sender;
+        auto startingReadId = ev->Get()->StartingReadId;
+
+        // Respond with StartDirectReadPartitionSessionResponse right away,
+        // so the client knows that the partition session has been started successfully.
+        // Without this response, the client might have to wait until there are topic messages to send.
+        ctx.Send(sender, ev->Release());
+
+        sessionIter->second.Client = TCacheClientContext{sender, startingReadId};
+        AssignByProxy[sender].insert(key.PartitionSessionId);
         while (SendNextReadToClient(sessionIter)) {
             // Empty
         }
@@ -392,7 +400,6 @@ private:
         const auto& ctx = ActorContext();
         ctx.Send(proxyId, new TEvPQProxy::TEvDirectReadCloseSession(code, reason));
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, TStringBuilder() << " Direct read cache: close session for proxy " << proxyId.ToString());
-
     }
 
     bool DestroyPartitionSession(

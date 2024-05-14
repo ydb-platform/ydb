@@ -727,7 +727,7 @@ public:
         for (ui32 i : PatternNodes->GetMutables().SerializableValues) {
             const NUdf::TUnboxedValuePod& mutableValue = Ctx->MutableValues[i];
             if (mutableValue.IsInvalid()) {
-                WriteUi32(result, std::numeric_limits<ui32>::max()); // -1.
+                WriteUi64(result, std::numeric_limits<ui64>::max()); // -1.
             } else if (mutableValue.IsBoxed()) {
                 NUdf::TUnboxedValue list = mutableValue.Save();
 
@@ -743,7 +743,7 @@ public:
             } else { // No load was done during previous runs (if any).
                 MKQL_ENSURE(mutableValue.HasValue() && (mutableValue.IsString() || mutableValue.IsEmbedded()), "State is expected to have data or invalid value");
                 const NUdf::TStringRef savedRef = mutableValue.AsStringRef();
-                WriteUi32(result, savedRef.Size());
+                WriteUi64(result, savedRef.Size());
                 result.AppendNoAlias(savedRef.Data(), savedRef.Size());
             }
         }
@@ -754,7 +754,7 @@ public:
         Prepare();
 
         for (ui32 i : PatternNodes->GetMutables().SerializableValues) {
-            if (const ui32 size = ReadUi32(state); size != std::numeric_limits<ui32>::max()) {
+            if (const ui64 size = ReadUi64(state); size != std::numeric_limits<ui64>::max()) {
                 MKQL_ENSURE(state.Size() >= size, "Serialized state is corrupted - buffer is too short (" << state.Size() << ") for specified size: " << size);
                 const NUdf::TStringRef savedRef(state.Data(), size);
                 Ctx->MutableValues[i] = MakeString(savedRef);

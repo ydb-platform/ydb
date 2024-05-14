@@ -347,7 +347,7 @@ protected:
 class TNodeStateHelper {
 public:
     static void AddNodeState(TString& result, const TStringBuf& state) {
-        WriteUi32(result, state.Size());
+        WriteUi64(result, state.Size());
         result.AppendNoAlias(state.Data(), state.Size());
     }
 };

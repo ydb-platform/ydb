@@ -21,7 +21,7 @@ target_link_libraries(columnshard-transactions-operators INTERFACE
   yutil
   tx-columnshard-transactions
   data_sharing-destination-events
-  columnshard-export-manager
+  columnshard-export-session
 )
 
 
@@ -35,7 +35,7 @@ target_link_libraries(columnshard-transactions-operators.global PUBLIC
   yutil
   tx-columnshard-transactions
   data_sharing-destination-events
-  columnshard-export-manager
+  columnshard-export-session
 )
 
 target_sources(columnshard-transactions-operators.global PRIVATE

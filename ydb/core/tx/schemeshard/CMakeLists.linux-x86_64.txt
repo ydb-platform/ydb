@@ -140,6 +140,7 @@ target_link_libraries(core-tx-schemeshard PUBLIC
   library-yql-minikql
   providers-common-proto
   ydb-services-bg_tasks
+  columnshard-bg_tasks-manager
 )
 
 target_sources(core-tx-schemeshard PRIVATE
@@ -290,6 +291,7 @@ target_sources(core-tx-schemeshard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_svp_migration.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_types.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_utils.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_bg_tasks__list.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_export__cancel.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_export__create.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_export__forget.cpp

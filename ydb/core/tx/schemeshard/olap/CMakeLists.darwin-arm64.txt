@@ -12,6 +12,7 @@
 # by maintainers. Any complex modifications which can't be easily ported back to the ya build
 # system may be rejected.
 
+add_subdirectory(bg_tasks)
 add_subdirectory(columns)
 add_subdirectory(common)
 add_subdirectory(indexes)
@@ -31,6 +32,7 @@ target_link_libraries(tx-schemeshard-olap INTERFACE
   contrib-libs-cxxsupp
   yutil
   schemeshard-olap-columns
+  schemeshard-olap-bg_tasks
   schemeshard-olap-indexes
   schemeshard-olap-schema
   schemeshard-olap-common

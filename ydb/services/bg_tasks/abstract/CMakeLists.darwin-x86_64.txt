@@ -22,6 +22,7 @@ target_link_libraries(services-bg_tasks-abstract PUBLIC
   library-actors-core
   api-protos
   services-bg_tasks-protos
+  ydb-library-conclusion
   ydb-core-base
 )
 

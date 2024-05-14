@@ -180,6 +180,8 @@ target_sources(contrib-libs-icu PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/libs/icu/common/uloc.cpp
   ${PROJECT_SOURCE_DIR}/contrib/libs/icu/common/uloc_keytype.cpp
   ${PROJECT_SOURCE_DIR}/contrib/libs/icu/common/uloc_tag.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/icu/common/ulocale.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/icu/common/ulocbuilder.cpp
   ${PROJECT_SOURCE_DIR}/contrib/libs/icu/common/umapfile.cpp
   ${PROJECT_SOURCE_DIR}/contrib/libs/icu/common/umath.cpp
   ${PROJECT_SOURCE_DIR}/contrib/libs/icu/common/umutablecptrie.cpp
@@ -333,6 +335,17 @@ target_sources(contrib-libs-icu PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/libs/icu/i18n/measunit.cpp
   ${PROJECT_SOURCE_DIR}/contrib/libs/icu/i18n/measunit_extra.cpp
   ${PROJECT_SOURCE_DIR}/contrib/libs/icu/i18n/measure.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/icu/i18n/messageformat2.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/icu/i18n/messageformat2_arguments.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/icu/i18n/messageformat2_checker.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/icu/i18n/messageformat2_data_model.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/icu/i18n/messageformat2_errors.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/icu/i18n/messageformat2_evaluation.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/icu/i18n/messageformat2_formattable.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/icu/i18n/messageformat2_formatter.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/icu/i18n/messageformat2_function_registry.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/icu/i18n/messageformat2_parser.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/libs/icu/i18n/messageformat2_serializer.cpp
   ${PROJECT_SOURCE_DIR}/contrib/libs/icu/i18n/msgfmt.cpp
   ${PROJECT_SOURCE_DIR}/contrib/libs/icu/i18n/name2uni.cpp
   ${PROJECT_SOURCE_DIR}/contrib/libs/icu/i18n/nfrs.cpp
@@ -497,6 +510,6 @@ target_sources(contrib-libs-icu PRIVATE
 
 target_rodata_sources(contrib-libs-icu
   PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/icu/icudt73_dat.rodata
+  ${PROJECT_SOURCE_DIR}/contrib/libs/icu/icudt75_dat.rodata
 )
 

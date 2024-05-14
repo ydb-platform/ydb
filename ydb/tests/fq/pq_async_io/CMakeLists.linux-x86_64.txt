@@ -24293,7 +24293,7 @@ target_sources(ydb-tests-fq-pq_async_io PRIVATE
   ${PROJECT_BINARY_DIR}/library/python/import_tracing/lib/ab9a933ec8d278e5f7ac616f2ecdfa7f.cpp
   ${PROJECT_BINARY_DIR}/library/python/import_tracing/constructor/336d5ebc5436534e61d16e63ddfca327.cpp
   ${PROJECT_BINARY_DIR}/library/python/import_tracing/constructor/120f0c43b8446a9717cf36342092d9f3.cpp
-  ${PROJECT_BINARY_DIR}/contrib/python/types-protobuf/8285a3bd9340ddbfca7351711733164a.cpp
+  ${PROJECT_BINARY_DIR}/contrib/python/types-protobuf/d98c5c21e54da433623d6c129e01d532.cpp
   ${PROJECT_BINARY_DIR}/contrib/python/types-protobuf/15481d8ccf07e4123dcaabd0aa106141.cpp
   ${PROJECT_BINARY_DIR}/contrib/python/mypy-protobuf/350a4a807d384e8707aecfa18abb689a.cpp
   ${PROJECT_BINARY_DIR}/contrib/python/mypy-protobuf/e5a2bb5074bf080673a62c2660fec142.cpp
@@ -28398,7 +28398,7 @@ resources(ydb-tests-fq-pq_async_io
 )
 
 resources(ydb-tests-fq-pq_async_io
-  ${PROJECT_BINARY_DIR}/contrib/python/types-protobuf/8285a3bd9340ddbfca7351711733164a.cpp
+  ${PROJECT_BINARY_DIR}/contrib/python/types-protobuf/d98c5c21e54da433623d6c129e01d532.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/contrib/python/types-protobuf/-
   ${PROJECT_SOURCE_DIR}/contrib/python/types-protobuf/.dist-info/METADATA
@@ -28406,6 +28406,8 @@ resources(ydb-tests-fq-pq_async_io
   ${PROJECT_SOURCE_DIR}/contrib/python/types-protobuf/.dist-info/top_level.txt
   ${PROJECT_SOURCE_DIR}/contrib/python/types-protobuf/-
   ${PROJECT_SOURCE_DIR}/contrib/python/types-protobuf/google-stubs/METADATA.toml
+  ${PROJECT_SOURCE_DIR}/contrib/python/types-protobuf/-
+  ${PROJECT_SOURCE_DIR}/contrib/python/types-protobuf/google-stubs/protobuf/py.typed
   KEYS
   resfs/src/resfs/file/contrib/python/types-protobuf/.dist-info/METADATA=contrib/python/types-protobuf/.dist-info/METADATA
   resfs/file/contrib/python/types-protobuf/.dist-info/METADATA
@@ -28413,6 +28415,8 @@ resources(ydb-tests-fq-pq_async_io
   resfs/file/contrib/python/types-protobuf/.dist-info/top_level.txt
   resfs/src/resfs/file/contrib/python/types-protobuf/google-stubs/METADATA.toml=contrib/python/types-protobuf/google-stubs/METADATA.toml
   resfs/file/contrib/python/types-protobuf/google-stubs/METADATA.toml
+  resfs/src/resfs/file/contrib/python/types-protobuf/google-stubs/protobuf/py.typed=contrib/python/types-protobuf/google-stubs/protobuf/py.typed
+  resfs/file/contrib/python/types-protobuf/google-stubs/protobuf/py.typed
 )
 
 resources(ydb-tests-fq-pq_async_io

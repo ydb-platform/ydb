@@ -32,6 +32,5 @@ target_link_libraries(tx-columnshard-transactions PUBLIC
 target_sources(tx-columnshard-transactions PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/transactions/tx_controller.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/transactions/locks_db.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/transactions/propose_transaction_base.cpp
 )
 

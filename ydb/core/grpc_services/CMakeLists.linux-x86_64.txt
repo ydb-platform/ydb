@@ -57,6 +57,7 @@ target_link_libraries(ydb-core-grpc_services PUBLIC
   core-tx-datashard
   core-tx-sharding
   core-tx-data_events
+  olap-bg_tasks-events
   ydb-core-util
   ydb-core-ydb_convert
   ydb-core-security

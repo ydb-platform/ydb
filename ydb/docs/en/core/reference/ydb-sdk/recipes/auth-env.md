@@ -102,15 +102,15 @@ Below are examples of the code for authentication using environment variables in
 
 - Node.js
 
-  {% include [auth-env](../../../../../_includes/nodejs/auth-env.md) %}
+  {% include [auth-env](../../../../core/_includes/nodejs/) %}
 
 - Python
 
-  {% include [auth-env](../../../../../_includes/python/auth-env.md) %}
+  {% include [auth-env](../../../../core/_includes/python/auth-env.md) %}
 
 - Python (asyncio)
 
-  {% include [auth-env](../../../../../_includes/python/async/auth-env.md) %}
+  {% include [auth-env](../../../../core/_includes/python/async/auth-env.md) %}
 
 - C#
 

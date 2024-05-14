@@ -872,7 +872,7 @@ message AlterPartitioningSettings {
     optional int64 set_min_active_partitions = 1 [(Ydb.value) = ">= 0"];
     // Maximum partition count auto merge would stop working at.
     // Zero value means default - 1.
-    optional int64 max_active_partitions = 3 [(Ydb.value) = ">= 0"];
+    optional int64 set_max_active_partitions = 3 [(Ydb.value) = ">= 0"];
     // Limit for total partition count, including active (open for write) and read-only partitions.
     // Zero value means default - 100.
     // Use set_max_active_partitions

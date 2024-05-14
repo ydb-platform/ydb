@@ -3413,7 +3413,10 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
         fileQueueBatchObjectCountLimit = FromString<ui64>(it->second);
     }
     
-    ui64 fileQueueConsumersCountDelta = readRanges.size();
+    ui64 fileQueueConsumersCountDelta = 0;
+    if (readRanges.size() > 1) {
+        fileQueueConsumersCountDelta = readRanges.size() - 1;
+    }
 
     if (params.HasFormat() && params.HasRowType()) {
         const auto pb = std::make_unique<TProgramBuilder>(typeEnv, functionRegistry);

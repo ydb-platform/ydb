@@ -448,7 +448,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         TTopicClient client = setup.MakeClient();
 
-        TTestReadSession readSession1("Session-0", client, Max<size_t>(), false, {0, 1, 2}, true);
+        TTestReadSession readSession1("Session-0", client, Max<size_t>(), false, {}, true);
         TTestReadSession readSession2("Session-1", client, Max<size_t>(), false, {0}, true);
 
         auto writeSession = CreateWriteSession(client, "producer-1", 0);

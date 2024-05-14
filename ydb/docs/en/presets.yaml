@@ -1,2 +1,16 @@
 default:
   lang: en
+  pub-cover-size: 700x400
+  team:
+      bondar:
+        name: Oleg Bondar
+        position: CPO YDB
+        profile: https://www.linkedin.com/in/olegbondar2000/
+      ivanov:
+        name: Evgenii Ivanov
+        position: Senior developer
+        profile: https://www.linkedin.com/in/eivanov89/  
+      ozeritskiy:
+        name: Alexey Ozeritskiy
+        position: Lead Software Engineer
+        profile: https://www.linkedin.com/in/alexey-ozeritskiy/

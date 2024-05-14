@@ -30,7 +30,7 @@ namespace NYT::NConcurrency {
 
 using namespace NProfiling;
 
-inline const NLogging::TLogger Logger("FairShareThreadPool");
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "FairShareThreadPool");
 
 ////////////////////////////////////////////////////////////////////////////////
 

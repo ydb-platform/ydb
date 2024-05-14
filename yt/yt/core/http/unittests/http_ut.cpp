@@ -1025,7 +1025,7 @@ TEST_P(THttpServerTest, ResponseStreaming)
     Sleep(TDuration::MilliSeconds(10));
 }
 
-const auto& Logger = HttpLogger;
+static constexpr auto& Logger = HttpLogger;
 
 class TCancelingHandler
     : public IHttpHandler
@@ -1068,7 +1068,7 @@ TEST_P(THttpServerTest, RequestCancel)
     Server->AddHandler("/cancel", handler);
     Server->Start();
 
-    auto dialer = CreateDialer(New<TDialerConfig>(), Poller, HttpLogger);
+    auto dialer = CreateDialer(New<TDialerConfig>(), Poller, HttpLogger());
     auto connection = WaitFor(dialer->Dial(TNetworkAddress::CreateIPv6Loopback(TestPort)))
         .ValueOrThrow();
     WaitFor(connection->Write(TSharedRef::FromString("POST /cancel HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n")))
@@ -1107,7 +1107,7 @@ TEST_P(THttpServerTest, RequestHangUp)
     Server->AddHandler("/validating", validating);
     Server->Start();
 
-    auto dialer = CreateDialer(New<TDialerConfig>(), Poller, HttpLogger);
+    auto dialer = CreateDialer(New<TDialerConfig>(), Poller, HttpLogger());
     auto connection = WaitFor(dialer->Dial(TNetworkAddress::CreateIPv6Loopback(TestPort)))
         .ValueOrThrow();
     WaitFor(connection->Write(TSharedRef::FromString("POST /validating HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n")))
@@ -1134,7 +1134,7 @@ TEST_P(THttpServerTest, ConnectionKeepAlive)
     Server->AddHandler("/echo", New<TEchoHttpHandler>());
     Server->Start();
 
-    auto dialer = CreateDialer(New<TDialerConfig>(), Poller, HttpLogger);
+    auto dialer = CreateDialer(New<TDialerConfig>(), Poller, HttpLogger());
 
     // Many requests.
     {
@@ -1218,7 +1218,7 @@ TEST_P(THttpServerTest, ReuseConnections)
     Server->AddHandler("/echo", New<TEchoHttpHandler>());
     Server->Start();
 
-    auto dialer = NNet::CreateDialer(New<TDialerConfig>(), Poller, HttpLogger);
+    auto dialer = NNet::CreateDialer(New<TDialerConfig>(), Poller, HttpLogger());
     auto dialerMock = New<TDialerMock>(dialer);
     auto clientConfig = New<NHttp::TClientConfig>();
     clientConfig->MaxIdleConnections = 2;
@@ -1253,7 +1253,7 @@ TEST_P(THttpServerTest, DropConnectionsByTimeout)
     Server->AddHandler("/echo", New<TEchoHttpHandler>());
     Server->Start();
 
-    auto dialer = NNet::CreateDialer(New<TDialerConfig>(), Poller, HttpLogger);
+    auto dialer = NNet::CreateDialer(New<TDialerConfig>(), Poller, HttpLogger());
     auto dialerMock = New<TDialerMock>(dialer);
     auto clientConfig = New<NHttp::TClientConfig>();
     clientConfig->MaxIdleConnections = 1;
@@ -1290,7 +1290,7 @@ TEST_P(THttpServerTest, ConnectionsDropRoutine)
     Server->AddHandler("/echo", New<TEchoHttpHandler>());
     Server->Start();
 
-    auto dialer = NNet::CreateDialer(New<TDialerConfig>(), Poller, HttpLogger);
+    auto dialer = NNet::CreateDialer(New<TDialerConfig>(), Poller, HttpLogger());
     auto dialerMock = New<TDialerMock>(dialer);
     auto clientConfig = New<NHttp::TClientConfig>();
     clientConfig->MaxIdleConnections = 1;

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "http.h"
+#include "public.h"
 
 #include <yt/yt/core/logging/log.h>
 
@@ -10,7 +10,7 @@ namespace NYT::NHttp {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline const NLogging::TLogger HttpLogger("Http");
+YT_DEFINE_GLOBAL(const NLogging::TLogger, HttpLogger, "Http");
 inline const NProfiling::TProfiler HttpProfiler = NProfiling::TProfiler{"/http"}.WithHot();
 
 ////////////////////////////////////////////////////////////////////////////////

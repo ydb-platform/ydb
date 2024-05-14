@@ -120,8 +120,8 @@ VALUES
                 "$id": sanitize_str(str(uuid.uuid4())),
                 "$build_preset": sanitize_str(build_preset),
                 "$binary_path": sanitize_str(YDBD_PATH),
-                "$size_stripped_bytes": int(binary_size_bytes.decode("utf-8")),
-                "$size_bytes": int(binary_size_stripped_bytes.decode("utf-8")),
+                "$size_stripped_bytes": int(binary_size_stripped_bytes.decode("utf-8")),
+                "$size_bytes": int(binary_size_bytes.decode("utf-8")),
                 "$git_commit_time": git_commit_time_unix,
                 "$git_commit_message": sanitize_str(git_commit_message),
             }

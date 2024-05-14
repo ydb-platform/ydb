@@ -263,13 +263,13 @@ private:
                 auto methodSlice = BuildGrpcMethodString();
                 Call_ = TGrpcCallPtr(grpc_channel_create_call(
                     Owner_->Channel_.Unwrap(),
-                    nullptr,
-                    0,
+                    /*parent_call*/ nullptr,
+                    /*propagation_mask*/ 0,
                     completionQueueGuard->Unwrap(),
                     methodSlice,
-                    nullptr,
+                    /*host*/ nullptr,
                     GetDeadline(),
-                    nullptr));
+                    /*reserved*/ nullptr));
                 grpc_slice_unref(methodSlice);
 
                 Tracer_ = New<TGrpcCallTracer>();

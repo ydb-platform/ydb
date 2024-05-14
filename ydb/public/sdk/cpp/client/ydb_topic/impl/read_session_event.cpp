@@ -16,6 +16,7 @@ using TCompressedMessage = TDataReceivedEvent::TCompressedMessage;
 using TCommitOffsetAcknowledgementEvent = TReadSessionEvent::TCommitOffsetAcknowledgementEvent;
 using TStartPartitionSessionEvent = TReadSessionEvent::TStartPartitionSessionEvent;
 using TStopPartitionSessionEvent = TReadSessionEvent::TStopPartitionSessionEvent;
+using TEndPartitionSessionEvent = TReadSessionEvent::TEndPartitionSessionEvent;
 using TPartitionSessionStatusEvent = TReadSessionEvent::TPartitionSessionStatusEvent;
 using TPartitionSessionClosedEvent = TReadSessionEvent::TPartitionSessionClosedEvent;
 
@@ -337,6 +338,38 @@ void TPrintable<TStopPartitionSessionEvent>::DebugString(TStringBuilder& ret, bo
     self->GetPartitionSession()->DebugString(ret);
     ret << " CommittedOffset: " << self->GetCommittedOffset()
         << " }";
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// NTopic::TReadSessionEvent::TEndPartitionSessionEvent
+
+TEndPartitionSessionEvent::TEndPartitionSessionEvent(TPartitionSession::TPtr partitionSession, std::vector<ui32>&& adjacentPartitionIds, std::vector<ui32>&& childPartitionIds)
+    : TPartitionSessionAccessor(std::move(partitionSession))
+    , AdjacentPartitionIds(std::move(adjacentPartitionIds))
+    , ChildPartitionIds(std::move(childPartitionIds)) {
+}
+
+void JoinIds(TStringBuilder& ret, const std::vector<ui32> ids) {
+    ret << "[";
+    for (size_t i = 0; i < ids.size(); ++i) {
+        if (i) {
+            ret << ", ";
+        }
+        ret << ids[i];
+    }
+    ret << "]";
+}
+
+template<>
+void TPrintable<TEndPartitionSessionEvent>::DebugString(TStringBuilder& ret, bool) const {
+    const auto* self = static_cast<const TEndPartitionSessionEvent*>(this);
+    ret << "EndPartitionSession {";
+    self->GetPartitionSession()->DebugString(ret);
+    ret << " AdjacentPartitionIds: ";
+    JoinIds(ret, self->GetAdjacentPartitionIds());
+    ret << " ChildPartitionIds: ";
+    JoinIds(ret, self->GetChildPartitionIds());
+    ret << " }";
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

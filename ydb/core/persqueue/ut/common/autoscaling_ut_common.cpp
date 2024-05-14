@@ -119,7 +119,7 @@ std::shared_ptr<ISimpleBlockingWriteSession> CreateWriteSession(TTopicClient& cl
 }
 
 
-TTestReadSession::TTestReadSession(const TString& name, TTopicClient& client, size_t expectedMessagesCount, bool autoCommit, std::set<ui32> partitions)
+TTestReadSession::TTestReadSession(const TString& name, TTopicClient& client, size_t expectedMessagesCount, bool autoCommit, std::set<ui32> partitions, bool autoscalingSupport)
     : Name(name)
     , AutoCommit(autoCommit)
     , Semaphore(name.c_str(), SemCount)  {
@@ -128,7 +128,8 @@ TTestReadSession::TTestReadSession(const TString& name, TTopicClient& client, si
 
     auto readSettings = TReadSessionSettings()
         .ConsumerName(TEST_CONSUMER)
-        .AppendTopics(TEST_TOPIC);
+        .AppendTopics(TEST_TOPIC)
+        .AutoscalingSupport(autoscalingSupport);
     for (auto partitionId : partitions) {
         readSettings.Topics_[0].AppendPartitionIds(partitionId);
     }
@@ -201,6 +202,16 @@ TTestReadSession::TTestReadSession(const TString& name, TTopicClient& client, si
             (const TSessionClosedEvent& ev) mutable {
                 Cerr << ">>>>> " << Name << " Received TSessionClosedEvent message " << ev.DebugString() << Endl << Flush;
     });
+
+    readSettings.EventHandlers_.EndPartitionSessionHandler(
+            [&]
+            (TReadSessionEvent::TEndPartitionSessionEvent& ev) mutable {
+                Cerr << ">>>>> " << Name << " Received TEndPartitionSessionEvent message " << ev.DebugString() << Endl << Flush;
+                auto partitionId = ev.GetPartitionSession()->GetPartitionId();
+                EndedPartitions.insert(partitionId);
+                EndedPartitionEvents.push_back(ev);
+    });
+
 
     Session = client.CreateReadSession(readSettings);
 }

@@ -28,7 +28,7 @@ TStatus RemoveTable(TTableClient& client, const TString& path, const TDropTableS
 
 TStatus RemoveThrowQuery(const TString& entry, TTableClient& client, const TString& path, const TRemoveDirectorySettings& settings) {
     // This is temporary solution, safe deleting of columnstore is impossible now
-    return client.RetryOperationSync([path, settings](TSession session) {
+    return client.RetryOperationSync([path, settings, entry](TSession session) {
         auto execSettings = TExecSchemeQuerySettings().UseClientTimeoutForOperation(settings.UseClientTimeoutForOperation_)
             .ClientTimeout(settings.ClientTimeout_).OperationTimeout(settings.OperationTimeout_).CancelAfter(settings.CancelAfter_)
             .Header(settings.Header_).ReportCostInfo(settings.ReportCostInfo_).RequestType(settings.RequestType_).TraceId(settings.TraceId_);

@@ -179,10 +179,10 @@ std::tuple<TString, NYdb::TParams, std::function<std::pair<TString, NYdb::TParam
         }
 
         if (shouldAbortTask) {
-            Ydb::Issue::IssueMessage abortIssueMsg;
-            abortIssueMsg.set_message("Query was aborted by system due to high failure rate");
-            abortIssueMsg.set_severity(NYql::TSeverityIds::S_ERROR);
-            *task.Query.add_issue() = abortIssueMsg;
+            NYql::TIssue abortIssueMsg;
+            abortIssueMsg.SetMessage("Query was aborted by system due to high failure rate");
+            abortIssueMsg.SetCode(0, NYql::TSeverityIds::S_ERROR);
+            AddTransientIssues(task.Query.mutable_transient_issue(), NYql::TIssues{abortIssueMsg});
             task.Query.mutable_meta()->set_status(FederatedQuery::QueryMeta::ABORTING_BY_SYSTEM);
         }
 

@@ -243,7 +243,7 @@ THolder<TEvPartitionWriter::TEvWriteRequest> Convert(const TProduceRequestData::
                                                      const TString& topicName,
                                                      ui64 cookie,
                                                      const TString& clientDC,
-                                                     bool chargeExtraRU) {
+                                                     bool ruPerRequest) {
     auto ev = MakeHolder<TEvPartitionWriter::TEvWriteRequest>();
     auto& request = ev->Record;
 
@@ -255,8 +255,8 @@ THolder<TEvPartitionWriter::TEvWriteRequest> Convert(const TProduceRequestData::
     partitionRequest->SetPartition(data.Index);
     // partitionRequest->SetCmdWriteOffset();
     partitionRequest->SetCookie(cookie);
-    if (chargeExtraRU) {
-        partitionRequest->SetChargeExtraRU(true);
+    if (ruPerRequest) {
+        partitionRequest->SetMeteringV2Enabled(true);
     }
 
     ui64 totalSize = 0;
@@ -323,7 +323,7 @@ void TKafkaProduceActor::ProcessRequest(TPendingRequest::TPtr pendingRequest, co
     pendingRequest->StartTime = ctx.Now();
 
     size_t position = 0;
-    bool chargeExtraRU = Context->Config.GetChargeExtraRUOnRequest();
+    bool ruPerRequest = Context->Config.GetMeteringV2Enabled();
     for(const auto& topicData : r->TopicData) {
         const TString& topicPath = NormalizePath(Context->DatabasePath, *topicData.Name);
         for(const auto& partitionData : topicData.PartitionData) {
@@ -340,8 +340,8 @@ void TKafkaProduceActor::ProcessRequest(TPendingRequest::TPtr pendingRequest, co
                 pendingRequest->WaitAcceptingCookies.insert(ownCookie);
                 pendingRequest->WaitResultCookies.insert(ownCookie);
 
-                auto ev = Convert(partitionData, *topicData.Name, ownCookie, ClientDC, chargeExtraRU);
-                chargeExtraRU = false;
+                auto ev = Convert(partitionData, *topicData.Name, ownCookie, ClientDC, ruPerRequest);
+                ruPerRequest = false;
 
                 Send(writer.second, std::move(ev));
             } else {

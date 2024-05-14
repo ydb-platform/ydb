@@ -480,8 +480,8 @@ public:
         SetMeteringMode(it->second.PQInfo->Description.GetPQTabletConfig().GetMeteringMode());
 
         if (IsQuotaRequired()) {
-            PendingQuotaAmount = CalcRuConsumption(GetPayloadSize(record)) + (Settings.ChargeExtraRU ? 1 : 0);
-            Settings.ChargeExtraRU = false;
+            PendingQuotaAmount = CalcRuConsumption(GetPayloadSize(record)) + (Settings.RuPerRequest ? 1 : 0);
+            Settings.RuPerRequest = false;
             RequestDataQuota(PendingQuotaAmount, ctx);
         } else {
             ProceedFetchRequest(ctx);

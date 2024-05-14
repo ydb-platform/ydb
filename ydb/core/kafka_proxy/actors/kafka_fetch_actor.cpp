@@ -34,8 +34,8 @@ void TKafkaFetchActor::SendFetchRequests(const TActorContext& ctx) {
     for (size_t topicIndex = 0; topicIndex <  Response->Responses.size(); topicIndex++) {
         TVector<NKikimr::NPQ::TPartitionFetchRequest> partPQRequests;
         PrepareFetchRequestData(topicIndex, partPQRequests);
-        auto chargeExtraRU = topicIndex == 0 && Context->Config.GetChargeExtraRUOnRequest();
-        NKikimr::NPQ::TFetchRequestSettings request(Context->DatabasePath, partPQRequests, FetchRequestData->MaxWaitMs, FetchRequestData->MaxBytes, Context->RlContext, *Context->UserToken, chargeExtraRU);
+        auto ruPerRequest = topicIndex == 0 && Context->Config.GetMeteringV2Enabled();
+        NKikimr::NPQ::TFetchRequestSettings request(Context->DatabasePath, partPQRequests, FetchRequestData->MaxWaitMs, FetchRequestData->MaxBytes, Context->RlContext, *Context->UserToken, ruPerRequest);
         auto fetchActor = NKikimr::NPQ::CreatePQFetchRequestActor(request, NKikimr::MakeSchemeCacheID(), ctx.SelfID);
         auto actorId = ctx.Register(fetchActor);
         PendingResponses++;

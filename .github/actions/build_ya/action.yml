@@ -145,6 +145,15 @@ runs:
           echo "Build successful." | .github/scripts/tests/comment-pr.py --ok
         fi
 
+    - name: build_stats
+      shell: bash
+      continue-on-error: true
+      run: |
+        set -x
+        export build_preset="${{ inputs.build_preset }}" 
+        python3 -m pip install ydb ydb[yc]
+        python3 .github/scripts/send_build_stats.py
+
     - name: show free space
       if: always()
       shell: bash

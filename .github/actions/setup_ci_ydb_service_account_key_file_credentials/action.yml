@@ -1,0 +1,19 @@
+name: setup_ci_ydb_service_account_key_file_credentials
+description: setup environment for access to ydb instance in cloud
+inputs:
+  ci_ydb_service_account_key_file_credentials:
+    required: false
+    description: "token for access"
+runs:
+  using: "composite"
+  steps:
+    - name: drop file and set environment variable 
+      if: "${{ inputs.ci_ydb_service_account_key_file_credentials != '' }}"
+      shell: bash
+      run: |
+        set -eu
+        export YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=/tmp/ydb_service_account.json
+        cat << EOF > $YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS
+        ${{ inputs.ci_ydb_service_account_key_file_credentials}}
+        EOF
+        echo "YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=$YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" >> $GITHUB_ENV

@@ -901,16 +901,11 @@ private:
                 Y_ENSURE(QueryPlanNodes.contains(stageId));
                 auto& commonNode = QueryPlanNodes[stageId];
 
-                auto& parentNode = GetParent(stageId);
-                parentNode.Plans.erase(stageId);
+                if (!commonNode.CteName) {
+                    commonNode.CteName = TStringBuilder() << commonNode.TypeName << "_" << stageId;
+                }
 
-                auto& cteNode = AddPlanNode(QueryPlanNodes.begin()->second);
-                cteNode.Plans.insert(stageId);
-                cteNode.TypeName = TStringBuilder() << commonNode.TypeName;
-                cteNode.CteName = TStringBuilder() << cteNode.TypeName << "_" << stageId;
-
-                parentNode.CteRefName = *cteNode.CteName;
-                planNode.CteRefName = *cteNode.CteName;
+                planNode.CteRefName = *commonNode.CteName;
 
                 return;
             }
@@ -1951,7 +1946,7 @@ TVector<NJson::TJsonValue> RemoveRedundantNodes(NJson::TJsonValue& plan, const T
     }
 
     const auto typeName = planMap.at("Node Type").GetStringSafe();
-    if (redundantNodes.contains(typeName) || typeName.find("Precompute") != TString::npos) {
+    if (redundantNodes.contains(typeName) || typeName.find("Precompute") != TString::npos || typeName.find("ConstantExpr") != TString::npos) {
         return children;
     }
 
@@ -1986,7 +1981,15 @@ NJson::TJsonValue ReconstructQueryPlanRec(const NJson::TJsonValue& plan,
 
         result["Node Type"] = plan.GetMapSafe().at("Node Type").GetStringSafe();
 
+        if (plan.GetMapSafe().contains("CTE Name")) {
+            auto precompute = plan.GetMapSafe().at("CTE Name").GetStringSafe();
+            if (precomputes.contains(precompute)) {
+                planInputs.AppendValue(ReconstructQueryPlanRec(precomputes.at(precompute), 0, planIndex, precomputes, nodeCounter));
+            }
+        }
+
         if (!plan.GetMapSafe().contains("Plans")) {
+            result["Plans"] = planInputs;
             return result;
         }
 
@@ -2208,6 +2211,7 @@ NJson::TJsonValue SimplifyQueryPlan(NJson::TJsonValue& plan) {
 
     int nodeCounter = 0;
     plan = ReconstructQueryPlanRec(plan, 0, planIndex, precomputes, nodeCounter);
+
     RemoveRedundantNodes(plan, redundantNodes);
     ComputeCpuTimes(plan);
     ComputeTotalRows(plan);

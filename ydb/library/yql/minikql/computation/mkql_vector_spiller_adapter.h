@@ -7,6 +7,7 @@
 #include <ydb/library/actors/util/rope.h>
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 
+
 namespace NKikimr::NMiniKQL {
 
 ///Stores long vectors of any type (excepting pointers). Tested on int and chars.

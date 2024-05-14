@@ -7,6 +7,10 @@ Video recordings from conferences and webinars. The materials are divided by cat
 
 {% list tabs %}
 
+  - 2024
+
+    {% include [Conf42](./_includes/conferences/2024/Conf42.md) %}
+
   - 2023
 
     {% include [HighLoad](./_includes/conferences/2023/HighLoad.md) %}

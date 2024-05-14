@@ -11,6 +11,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
+#include <ydb/core/tx/schemeshard/olap/bg_tasks/events/global.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/public/lib/operation_id/operation_id.h>
 
@@ -50,6 +51,8 @@ class TListOperationsRPC: public TRpcOperationRequestActor<TListOperationsRPC, T
         const auto& request = *GetProtoRequest();
 
         switch (ParseKind(GetProtoRequest()->kind())) {
+        case TOperationId::SS_BG_TASKS:
+            return new NSchemeShard::NBackground::TEvListRequest(DatabaseName, request.page_size(), request.page_token());
         case TOperationId::EXPORT:
             return new TEvExport::TEvListExportsRequest(DatabaseName, request.page_size(), request.page_token(), request.kind());
         case TOperationId::IMPORT:
@@ -112,6 +115,24 @@ class TListOperationsRPC: public TRpcOperationRequestActor<TListOperationsRPC, T
         for (const auto& entry : record.GetEntries()) {
             auto operation = response.add_operations();
             ::NKikimr::NGRpcService::ToOperation(entry, operation);
+        }
+        response.set_next_page_token(record.GetNextPageToken());
+        Reply(response);
+    }
+
+    void Handle(NSchemeShard::NBackground::TEvListResponse::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+
+        LOG_D("Handle TEvSchemeShard::TEvBGTasksListResponse: record# " << record.ShortDebugString());
+
+        TResponse response;
+
+        response.set_status(record.GetStatus());
+        if (record.GetIssues().size()) {
+            response.mutable_issues()->CopyFrom(record.GetIssues());
+        }
+        for (const auto& entry : record.GetEntries()) {
+            *response.add_operations() = entry;
         }
         response.set_next_page_token(record.GetNextPageToken());
         Reply(response);

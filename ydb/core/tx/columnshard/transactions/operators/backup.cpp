@@ -1,10 +1,11 @@
 #include "backup.h"
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
+#include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
 
 namespace NKikimr::NColumnShard {
 
-bool TBackupTransactionOperator::Parse(TColumnShard& /*owner*/, const TString& data) {
+bool TBackupTransactionOperator::Parse(TColumnShard& owner, const TString& data) {
     NKikimrTxColumnShard::TBackupTxBody txBody;
     if (!txBody.ParseFromString(data)) {
         return false;
@@ -29,39 +30,54 @@ bool TBackupTransactionOperator::Parse(TColumnShard& /*owner*/, const TString& d
     }
     NArrow::NSerialization::TSerializerContainer serializer(std::make_shared<NArrow::NSerialization::TNativeSerializer>());
     ExportTask = std::make_shared<NOlap::NExport::TExportTask>(id.DetachResult(), selector.DetachResult(), storeInitializer.DetachResult(), serializer);
+    NOlap::NBackground::TTask task(::ToString(ExportTask->GetIdentifier().GetPathId()), std::make_shared<NOlap::NBackground::TFakeStatusChannel>(), ExportTask);
+    TxAddTask = owner.GetBackgroundSessionsManager()->TxAddTask(task);
+    if (!TxAddTask) {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_add_task");
+        return false;
+    }
     return true;
 }
 
-TBackupTransactionOperator::TProposeResult TBackupTransactionOperator::ExecuteOnPropose(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& /*txc*/) const {
-    auto proposition = owner.GetExportsManager()->ProposeTask(ExportTask);
-    if (!proposition) {
-        return TProposeResult(NKikimrTxColumnShard::EResultStatus::ERROR,
-            TStringBuilder() << "Invalid backup task TxId# " << GetTxId() << ": " << ExportTask->DebugString() << ": " << proposition.GetErrorMessage());
-    }
+TBackupTransactionOperator::TProposeResult TBackupTransactionOperator::ExecuteOnPropose(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& txc) const {
+    AFL_VERIFY(!!TxAddTask);
+    AFL_VERIFY(TxAddTask->Execute(txc, NActors::TActivationContext::AsActorContext()));
     return TProposeResult();
 }
 
-bool TBackupTransactionOperator::ExecuteOnProgress(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) {
-    Y_UNUSED(version);
-    AFL_VERIFY(ExportTask);
-    owner.GetExportsManager()->ConfirmSessionOnExecute(ExportTask->GetIdentifier(), txc);
+bool TBackupTransactionOperator::CompleteOnPropose(TColumnShard& /*owner*/, const TActorContext& ctx) const {
+    AFL_VERIFY(!!TxAddTask);
+    TxAddTask->Complete(ctx);
     return true;
+}
+
+bool TBackupTransactionOperator::ExecuteOnProgress(TColumnShard& owner, const NOlap::TSnapshot& /*version*/, NTabletFlatExecutor::TTransactionContext& txc) {
+    AFL_VERIFY(ExportTask);
+    if (!TxConfirm) {
+        auto control = ExportTask->BuildConfirmControl();
+        TxConfirm = owner.GetBackgroundSessionsManager()->TxApplyControl(control);
+    }
+    return TxConfirm->Execute(txc, NActors::TActivationContext::AsActorContext());
 }
 
 bool TBackupTransactionOperator::CompleteOnProgress(TColumnShard& owner, const TActorContext& ctx) {
     AFL_VERIFY(ExportTask);
-    owner.GetExportsManager()->ConfirmSessionOnComplete(ExportTask->GetIdentifier());
+    AFL_VERIFY(!!TxConfirm);
+    TxConfirm->Complete(ctx);
+
     auto result = std::make_unique<TEvColumnShard::TEvProposeTransactionResult>(
         owner.TabletID(), TxInfo.TxKind, GetTxId(), NKikimrTxColumnShard::SUCCESS);
     result->Record.SetStep(TxInfo.PlanStep);
     ctx.Send(TxInfo.Source, result.release(), 0, TxInfo.Cookie);
-    AFL_VERIFY(owner.GetExportsManager()->GetSessionVerified(ExportTask->GetIdentifier())->Start(owner.GetStoragesManager(), (NOlap::TTabletId)owner.TabletID(), owner.SelfId()));
     return true;
 }
 
 bool TBackupTransactionOperator::ExecuteOnAbort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) {
-    owner.GetExportsManager()->RemoveSession(ExportTask->GetIdentifier(), txc);
-    return true;
+    if (!TxAbort) {
+        auto control = ExportTask->BuildAbortControl();
+        TxAbort = owner.GetBackgroundSessionsManager()->TxApplyControl(control);
+    }
+    return TxAbort->Execute(txc, NActors::TActivationContext::AsActorContext());
 }
 
 }

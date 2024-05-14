@@ -4,13 +4,14 @@
 
 #include <ydb/library/yql/minikql/defs.h>
 #include <ydb/library/yql/minikql/computation/mkql_spiller.h>
+#include <ydb/library/actors/util/rope.h>
 
 namespace NKikimr::NMiniKQL {
 
 ///Stores long vectors of any type (excepting pointers). Tested on int and chars.
 ///The adapter places moved vectors into buffer and flushes buffer on disk when sizeLimit is reached.
 ///Returns vectors in FIFO order.
-template<class T>
+template<class T, class Alloc>
 class TVectorSpillerAdapter {
 public:
     enum class EState {
@@ -25,6 +26,10 @@ public:
         : Spiller(spiller)
         , SizeLimit(sizeLimit)
     {
+    }
+
+    bool HasRunningAsyncIoOperation() const {
+        return ReadOperation.has_value() && !ReadOperation->HasValue() || WriteOperation.has_value() && !WriteOperation->HasValue();
     }
 
     ///Returns current stete of the adapter
@@ -50,12 +55,12 @@ public:
 
     ///Adds new vector to storage. Will not launch real disk operation if case of small vectors
     ///(if inner buffer is not full).
-    void AddData(std::vector<T>&& vec) {
+    void AddData(std::vector<T, Alloc>&& vec) {
         MKQL_ENSURE(CurrentVector.empty(), "Internal logic error");
         MKQL_ENSURE(State == EState::AcceptingData, "Internal logic error");
 
-        CurrentVector = vec;
         StoredChunksElementsCount.push(vec.size());
+        CurrentVector = std::move(vec);
         NextVectorPositionToSave = 0;
 
         SaveNextPartOfVector();
@@ -67,9 +72,11 @@ public:
     void Update() {
         switch (State) {
             case EState::SpillingData:
-                if (!WriteOperation.HasValue()) return;
+                MKQL_ENSURE(WriteOperation.has_value(), "Internal logic error");
+                if (!WriteOperation->HasValue()) return;
 
-                StoredChunks.push(WriteOperation.ExtractValue());
+                StoredChunks.push(WriteOperation->ExtractValue());
+                WriteOperation = std::nullopt;
                 if (IsFinalizing) {
                     State = EState::AcceptingDataRequests;
                     return;
@@ -83,9 +90,10 @@ public:
                 SaveNextPartOfVector();
                 return;
             case EState::RestoringData:
-                if (!ReadOperation.HasValue()) return;
-                // TODO: check spilling error here: YQL-17970
-                Buffer = std::move(ReadOperation.ExtractValue().value());
+                MKQL_ENSURE(ReadOperation.has_value(), "Internal logic error");
+                if (!ReadOperation->HasValue()) return;
+                Buffer = std::move(ReadOperation->ExtractValue().value());
+                ReadOperation = std::nullopt;
                 StoredChunks.pop();
 
                 LoadNextVector();
@@ -96,7 +104,7 @@ public:
     }
 
     ///Get requested vector.
-    std::vector<T>&& ExtractVector() {
+    std::vector<T, Alloc>&& ExtractVector() {
         StoredChunksElementsCount.pop();
         State = EState::AcceptingDataRequests;
         return std::move(CurrentVector);
@@ -131,7 +139,7 @@ public:
 
 private:
 
-    void CopyRopeToTheEndOfVector(std::vector<T>& vec, TRope& rope) {
+    void CopyRopeToTheEndOfVector(std::vector<T, Alloc>& vec, TRope& rope) {
         for (auto it = rope.begin(); it != rope.end(); ++it) {
             const T* data = reinterpret_cast<const T*>(it.ContiguousData());
             vec.insert(vec.end(), data, data + it.ContiguousSize() / sizeof(T)); // size is always multiple of sizeof(T)
@@ -159,8 +167,10 @@ private:
         WriteOperation = Spiller->Put(std::move(Buffer));
     }
 
-    void AddDataToRope(T* data, size_t count) {
-        Buffer.Insert(Buffer.End(), TRope(TString(reinterpret_cast<const char*>(data), count * sizeof(T))));
+    void AddDataToRope(const T* data, size_t count) {
+        TRope tmp = TRope::Uninitialized(count * sizeof(T));
+        TRopeUtils::Memcpy(tmp.begin(), reinterpret_cast<const char*>(data), count * sizeof(T));
+        Buffer.Insert(Buffer.End(), std::move(tmp));
     }
 
     void SaveNextPartOfVector() {
@@ -192,14 +202,14 @@ private:
     TRope Buffer;
 
     // Used to store vector while spilling and also used while restoring the data
-    std::vector<T> CurrentVector;
+    std::vector<T, Alloc> CurrentVector;
     size_t NextVectorPositionToSave = 0;
 
     std::queue<ISpiller::TKey> StoredChunks; 
     std::queue<size_t> StoredChunksElementsCount;
 
-    NThreading::TFuture<ISpiller::TKey> WriteOperation;
-    NThreading::TFuture<std::optional<TRope>> ReadOperation;
+    std::optional<NThreading::TFuture<ISpiller::TKey>> WriteOperation = std::nullopt;
+    std::optional<NThreading::TFuture<std::optional<TRope>>> ReadOperation = std::nullopt;
 
     bool IsFinalizing = false;
 };

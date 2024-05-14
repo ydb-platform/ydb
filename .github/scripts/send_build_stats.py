@@ -3,6 +3,7 @@
 import os
 import ydb 
 import uuid
+import subprocess
 
 """
 CREATE TABLE binary_size (
@@ -28,6 +29,8 @@ CREATE TABLE binary_size (
     PRIMARY KEY (id)
 )
 """
+
+YDBD_PATH = "ydb/apps/ydbd/ydbd"
 
 from_env_columns = [
     "github_head_ref",
@@ -86,10 +89,6 @@ def main():
             for type_ in uint64_types:
                 text_query_builder.append("DECLARE ${} as Uint64;".format(type_))
             
-            # text_query_builder.append("DECLARE $v as Uint64;")
-            # text_query_builder.append("INSERT $v;")
-            
-
             text_query_builder.append("""INSERT INTO binary_size
             (
                 {}
@@ -103,13 +102,17 @@ def main():
             text_query = "".join(text_query_builder)
 
             prepared_query = session.prepare(text_query)
+            
+            binary_size_str = subprocess.check_output(["bash", "-c", "cat {} | wc -c".format(YDBD_PATH)])
+            binary_size_stripped_str = subprocess.check_output(["bash", "-c", "./ya tool strip {} -o - | wc -c".format(YDBD_PATH)])
+
 
             parameters = {
                 "$id": uuid.uuid4().bytes,
                 "$build_type": b"sample",
                 "$binary_path": b"sample",
-                "$size_stripped_bytes": 123,
-                "$size_bytes": 123,
+                "$size_stripped_bytes": int(binary_size_str),
+                "$size_bytes": (binary_size_stripped_str),
             }
 
             for column in from_env_columns:

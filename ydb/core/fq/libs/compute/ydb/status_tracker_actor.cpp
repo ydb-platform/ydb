@@ -259,7 +259,7 @@ public:
         LOG_I("Execution status: Complete " << Status << ", StatusCode: " << NYql::NDqProto::StatusIds::StatusCode_Name(StatusCode) << " Issues: " << Issues.ToOneLineString());
         OnPingRequestStart();
 
-        ComputeStatus = GetComputeStatus();
+        ComputeStatus = FederatedQuery::QueryMeta::COMPLETING;
         Fq::Private::PingTaskRequest pingTaskRequest = Builder.Build(QueryStats, Issues, ComputeStatus, std::nullopt);
         if (Builder.Issues) {
             LOG_W(Builder.Issues.ToOneLineString());
@@ -270,13 +270,6 @@ public:
         Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest));
     }
 
-    FederatedQuery::QueryMeta::ComputeStatus GetComputeStatus() {
-        return Params.Status == FederatedQuery::QueryMeta::FAILING
-            || Params.Status == FederatedQuery::QueryMeta::COMPLETING
-            || Params.Status == FederatedQuery::QueryMeta::ABORTING_BY_SYSTEM
-            || Params.Status == FederatedQuery::QueryMeta::ABORTING_BY_USER 
-            ? Params.Status : FederatedQuery::QueryMeta::COMPLETING;
-    }
 
 private:
     TRunActorParams Params;
@@ -293,7 +286,7 @@ private:
     Ydb::TableStats::QueryStats QueryStats;
     NKikimr::TBackoffTimer BackoffTimer;
     NFq::TStatusCodeByScopeCounters::TPtr FailedStatusCodeCounters;
-    FederatedQuery::QueryMeta::ComputeStatus ComputeStatus = GetComputeStatus();
+    FederatedQuery::QueryMeta::ComputeStatus ComputeStatus = FederatedQuery::QueryMeta::RUNNING;
     TInstant StartTime;
 };
 

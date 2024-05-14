@@ -194,9 +194,7 @@ TPingTaskParams ConstructHardPingTask(
                 transientIssues->AddIssue(NYql::TIssue(builder));
             } else {
                 // failure query should be processed instantly
-                queryStatus = IsIn({ FederatedQuery::QueryMeta::FAILING,
-                                    FederatedQuery::QueryMeta::ABORTING_BY_SYSTEM,
-                                    FederatedQuery::QueryMeta::ABORTING_BY_USER }, query.meta().status()) ? query.meta().status() : FederatedQuery::QueryMeta::FAILING;
+                queryStatus = FederatedQuery::QueryMeta::FAILING;
                 backoff = TDuration::Zero();
                 TStringBuilder builder;
                 builder << "Query failed with code " << NYql::NDqProto::StatusIds_StatusCode_Name(request.status_code());
@@ -206,18 +204,7 @@ TPingTaskParams ConstructHardPingTask(
                 builder << " at " << Now();
 
                 // in case of problems with finalization, do not change the issues
-                auto isInProgress = IsIn({ 
-                    FederatedQuery::QueryMeta::STARTING,
-                    FederatedQuery::QueryMeta::FAILING,
-                    FederatedQuery::QueryMeta::ABORTING_BY_SYSTEM,
-                    FederatedQuery::QueryMeta::ABORTING_BY_USER, 
-                    FederatedQuery::QueryMeta::RESUMING,
-                    FederatedQuery::QueryMeta::RUNNING,
-                    FederatedQuery::QueryMeta::COMPLETING,
-                    FederatedQuery::QueryMeta::FAILING,
-                    FederatedQuery::QueryMeta::PAUSING }, query.meta().status());
-
-                if (isInProgress) {
+                if (query.meta().status() == FederatedQuery::QueryMeta::FAILING || query.meta().status() == FederatedQuery::QueryMeta::ABORTING_BY_SYSTEM || query.meta().status() == FederatedQuery::QueryMeta::ABORTING_BY_USER) {
                     if (issues) {
                         transientIssues->AddIssues(*issues);
                     }

@@ -205,8 +205,8 @@ namespace NKikimr {
         ui32 MaxChunksSize;
 
     public:
-        void Bootstrap(const TActorContext &ctx) {
-            TInstant startTime = TAppData::TimeProvider->Now();
+        void Bootstrap(const TActorContext&) {
+            THPTimer timer;
             std::unique_ptr<NSyncLog::TNaiveFragmentWriter> fragmentWriter;
 
             if (CompressChunks) {
@@ -237,36 +237,36 @@ namespace NKikimr {
 
             addChunk();
 
-            TInstant finishTime = TAppData::TimeProvider->Now();
-            LOG_DEBUG_S(ctx, NKikimrServices::BS_SYNCER, VCtx->VDiskLogPrefix
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_SYNCER, VCtx->VDiskLogPrefix
                     << "TLocalSyncDataCutterActor: VDiskId# " << Ev->VDiskID.ToString()
                     << " dataSize# " << Ev->Data.size()
-                    << " duration# %s" << (finishTime - startTime));
+                    << " duration# " << TDuration::Seconds(timer.Passed()));
 
             Become(&TThis::StateFunc);
         }
 
-        void Finish(const TActorContext& ctx, const NKikimrProto::EReplyStatus& status) {
-            ctx.Send(ParentId, new TEvLocalSyncDataResult(status, TAppData::TimeProvider->Now(), nullptr, nullptr));
+        void Finish(const NKikimrProto::EReplyStatus& status) {
+            Send(ParentId, new TEvLocalSyncDataResult(status, TAppData::TimeProvider->Now(), nullptr, nullptr));
             PassAway();
         }
 
-        void Handle(const TEvLocalSyncDataResult::TPtr& ev, const TActorContext& ctx) {
+        void Handle(const TEvLocalSyncDataResult::TPtr& ev) {
             if (ev->Get()->Status == NKikimrProto::OK) {
                 --ChunksInFlight;
                 if (Chunks.empty() && ChunksInFlight == 0) {
-                    Finish(ctx, NKikimrProto::OK);
+                    Finish(NKikimrProto::OK);
                 } else {
-                    SendChunks(ctx);
+                    SendChunks();
                 }
             } else {
-                Finish(ctx, ev->Get()->Status);
+                Finish(ev->Get()->Status);
             }
         }
 
-        void SendChunks(const TActorContext& ctx) {
+        void SendChunks() {
+            Cerr << "Send chunks" << Endl;
             while (ChunksInFlight < MaxChunksInFlight && !Chunks.empty()) {
-                ctx.Send(SkeletonId, new TEvLocalSyncData(Ev->VDiskID, Ev->SyncState, std::move(Chunks.back())));
+                Send(SkeletonId, new TEvLocalSyncData(Ev->VDiskID, Ev->SyncState, std::move(Chunks.back())));
                 Chunks.pop_back();
                 ++ChunksInFlight;
             }
@@ -293,7 +293,7 @@ namespace NKikimr {
         {}
 
     STRICT_STFUNC(StateFunc, {
-        HFunc(TEvLocalSyncDataResult, Handle);
+        hFunc(TEvLocalSyncDataResult, Handle);
     })
 
     };

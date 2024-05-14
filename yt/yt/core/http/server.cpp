@@ -25,7 +25,7 @@ using namespace NConcurrency;
 using namespace NProfiling;
 using namespace NNet;
 
-static const auto& Logger = HttpLogger;
+static constexpr auto& Logger = HttpLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 

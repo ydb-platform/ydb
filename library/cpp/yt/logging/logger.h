@@ -181,6 +181,10 @@ public:
 
     explicit operator bool() const;
 
+    //! Enables using |Logger| in YT_LOG_* macros as both data members and functions
+    //! (e.g. those introduced by YT_DEFINE_GLOBAL).
+    const TLogger& operator()() const;
+
     const TLoggingCategory* GetCategory() const;
 
     //! Validate that level is admitted by logger's own min level
@@ -292,7 +296,7 @@ void LogStructuredEvent(
 
 #define YT_LOG_EVENT_WITH_ANCHOR(logger, level, anchor, ...) \
     do { \
-        const auto& logger__ = (logger); \
+        const auto& logger__ = (logger)(); \
         auto level__ = (level); \
         \
         if (!logger__.IsLevelEnabled(level__)) { \

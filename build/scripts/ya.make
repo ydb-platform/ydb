@@ -86,6 +86,7 @@ ELSEIF (PY3)
         gen_yql_python_udf.py
         generate_mf.py
         generate_pom.py
+        generate_win_vfs.py
         go_proto_wrapper.py
         java_pack_to_file.py
         jni_swig.py

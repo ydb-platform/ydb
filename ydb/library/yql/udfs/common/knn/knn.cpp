@@ -83,13 +83,24 @@ SIMPLE_STRICT_UDF(TManhattanDistance, TOptional<float>(TAutoMap<const char*>, TA
     return TUnboxedValuePod{ret.value()};
 }
 
+SIMPLE_STRICT_UDF(TEuclideanDistance, TOptional<float>(TAutoMap<const char*>, TAutoMap<const char*>)) {
+    Y_UNUSED(valueBuilder);
+
+    const auto ret = KnnEuclideanDistance(args[0].AsStringRef(), args[1].AsStringRef());
+    if (Y_UNLIKELY(!ret))
+        return {};
+
+    return TUnboxedValuePod{ret.value()};
+}
+
 SIMPLE_MODULE(TKnnModule,
     TFromBinaryString, 
     TToBinaryString,
     TInnerProductSimilarity,
     TCosineSimilarity,
     TCosineDistance,
-    TManhattanDistance
+    TManhattanDistance,
+    TEuclideanDistance
     )
 
 REGISTER_MODULES(TKnnModule)

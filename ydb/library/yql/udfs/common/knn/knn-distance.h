@@ -7,6 +7,7 @@
 
 #include <library/cpp/dot_product/dot_product.h>
 #include <library/cpp/l1_distance/l1_distance.h>
+#include <library/cpp/l2_distance/l2_distance.h>
 #include <util/generic/array_ref.h>
 #include <util/generic/buffer.h>
 #include <util/stream/format.h>
@@ -51,6 +52,49 @@ static std::optional<float> KnnManhattanDistance(const TStringRef& str1, const T
             for (size_t i = 0; i < vector1.size(); ++i)
                 ret += __builtin_popcountll(vector1[i] ^ vector2[i]);
             return ret;
+        }
+        default:
+            return {};
+    }    
+}
+
+static std::optional<float> KnnEuclideanDistance(const TStringRef& str1, const TStringRef& str2) {
+    const ui8 format1 = str1.Data()[str1.Size() - HeaderLen];
+    const ui8 format2 = str2.Data()[str2.Size() - HeaderLen];
+
+    if (Y_UNLIKELY(format1 != format2))
+        return {};
+
+    switch (format1) {
+        case EFormat::FloatVector: {
+            const TArrayRef<const float> vector1 = TKnnSerializerFacade::GetArray<float>(str1); 
+            const TArrayRef<const float> vector2 = TKnnSerializerFacade::GetArray<float>(str2); 
+
+            if (Y_UNLIKELY(vector1.size() != vector2.size() || vector1.empty() || vector2.empty()))
+                return {};
+
+            return ::L2Distance(vector1.data(), vector2.data(), vector1.size());            
+        }
+        case EFormat::ByteVector: {
+            const TArrayRef<const ui8> vector1 = TKnnSerializerFacade::GetArray<ui8>(str1); 
+            const TArrayRef<const ui8> vector2 = TKnnSerializerFacade::GetArray<ui8>(str2); 
+
+            if (Y_UNLIKELY(vector1.size() != vector2.size() || vector1.empty() || vector2.empty()))
+                return {};
+
+            return ::L2Distance(vector1.data(), vector2.data(), vector1.size());            
+        }
+        case EFormat::BitVector: {
+            const TArrayRef<const ui64> vector1 = TKnnBitVectorSerializer::GetArray64(str1); 
+            const TArrayRef<const ui64> vector2 = TKnnBitVectorSerializer::GetArray64(str2); 
+
+            if (Y_UNLIKELY(vector1.size() != vector2.size() || vector1.empty() || vector1.size() > UINT16_MAX))
+                return {};  
+
+            ui16 ret = 0;
+            for (size_t i = 0; i < vector1.size(); ++i)
+                ret += __builtin_popcountll(vector1[i] ^ vector2[i]);
+            return NPrivate::NL2Distance::L2DistanceSqrt<ui64>(ret);
         }
         default:
             return {};

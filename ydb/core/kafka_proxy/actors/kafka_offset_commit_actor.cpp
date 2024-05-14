@@ -83,13 +83,13 @@ void TKafkaOffsetCommitActor::Handle(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk
                 continue;
             }
 
-            auto tabletIdIt = topicIt->second.PartitionIdToTabletId.find(partitionRequest.PartitionIndex);
-            if (tabletIdIt == topicIt->second.PartitionIdToTabletId.end()) {
+            auto tabletIdIt = topicIt->second.Partitions.find(partitionRequest.PartitionIndex);
+            if (tabletIdIt == topicIt->second.Partitions.end()) {
                 AddPartitionResponse(UNKNOWN_TOPIC_OR_PARTITION, topicReq.Name.value(), partitionRequest.PartitionIndex, ctx);
                 continue;
             }
 
-            ui64 tabletId = tabletIdIt->second;
+            ui64 tabletId = tabletIdIt->second.TabletId;
 
             if (!TabletIdToPipe.contains(tabletId)) {
                 NTabletPipe::TClientConfig clientConfig;
@@ -114,9 +114,9 @@ void TKafkaOffsetCommitActor::Handle(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk
             commit->SetStrict(true);
 
             PendingResponses++;
-            KAFKA_LOG_D("Send commit request for group# " << Message->GroupId.value() << 
-                ", topic# " << topicIt->second.TopicNameConverter->GetPrimaryPath() << 
-                ", partition# " << partitionRequest.PartitionIndex << 
+            KAFKA_LOG_D("Send commit request for group# " << Message->GroupId.value() <<
+                ", topic# " << topicIt->second.TopicNameConverter->GetPrimaryPath() <<
+                ", partition# " << partitionRequest.PartitionIndex <<
                 ", offset# " << partitionRequest.CommittedOffset);
 
             TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
@@ -172,7 +172,7 @@ void TKafkaOffsetCommitActor::AddPartitionResponse(EKafkaErrors error, const TSt
 
 void TKafkaOffsetCommitActor::Bootstrap(const NActors::TActorContext& ctx) {
     THashSet<TString> topicsToResolve;
-    for (auto topicReq: Message->Topics) { 
+    for (auto topicReq: Message->Topics) {
         topicsToResolve.insert(NormalizePath(Context->DatabasePath, topicReq.Name.value()));
     }
 
@@ -183,7 +183,7 @@ void TKafkaOffsetCommitActor::Bootstrap(const NActors::TActorContext& ctx) {
     auto topicHandler = std::make_unique<NPersQueue::TTopicsListController>(
         topicConverterFactory
     );
-    
+
     auto topicsToConverter = topicHandler->GetReadTopicsList(topicsToResolve, false, Context->DatabasePath);
     if (!topicsToConverter.IsValid) {
         KAFKA_LOG_CRIT("Commit offsets failed. reason# topicsToConverter is not valid");

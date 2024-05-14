@@ -2854,9 +2854,9 @@
     ],
     "test.test[window-win_func_over_group_by_compl--Debug]": [
         {
-            "checksum": "879d4f4becf233599ea60f4645c5e60b",
-            "size": 10447,
-            "uri": "https://{canondata_backend}/1937027/16b7289b1b8f5fdff728155d836fa2b238949b2d/resource.tar.gz#test.test_window-win_func_over_group_by_compl--Debug_/opt.yql"
+            "checksum": "5be5c6a8b9d59e8191117eba40666c7b",
+            "size": 10407,
+            "uri": "https://{canondata_backend}/1809005/3e49db5707e4bdeb046d566ca12933bc1e63c00d/resource.tar.gz#test.test_window-win_func_over_group_by_compl--Debug_/opt.yql"
         }
     ],
     "test.test[window-win_func_over_group_by_compl--Plan]": [

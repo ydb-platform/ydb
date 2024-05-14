@@ -293,6 +293,44 @@ void TTxController::OnTabletInit() {
     }
 }
 
+TTxProposeResult TTxController::ProposeTransaction(const TTxController::TBasicTxInfo& txInfo, const TString& txBody, const TActorId source, const ui64 cookie, NTabletFlatExecutor::TTransactionContext& txc) {
+    auto txOperator = TTxController::ITransactionOperator::TFactory::MakeHolder(txInfo.TxKind, TTxController::TTxInfo(txInfo.TxKind, txInfo.TxId));
+    if (!txOperator || !txOperator->Parse(Owner, txBody)) {
+        TTxController::TProposeResult proposeResult(NKikimrTxColumnShard::EResultStatus::ERROR, TStringBuilder() << "Error processing commit TxId# " << txInfo.TxId
+            << (txOperator ? ". Parsing error " : ". Unknown operator for txKind"));
+        return TTxProposeResult(txInfo, std::move(proposeResult));
+    }
+
+    auto txInfoPtr = GetTxInfo(txInfo.TxId);
+    if (!!txInfoPtr) {
+        if (!txOperator->AllowTxDups() && (txInfoPtr->Source != source || txInfoPtr->Cookie != cookie)) {
+            TTxController::TProposeResult proposeResult(NKikimrTxColumnShard::EResultStatus::ERROR, TStringBuilder() << "Another commit TxId# " << txInfo.TxId << " has already been proposed");
+            return TTxProposeResult(txInfo, std::move(proposeResult));
+        } else {
+            return TTxProposeResult(*txInfoPtr, TTxController::TProposeResult());
+        }
+    } else {
+        auto proposeResult = txOperator->ExecuteOnPropose(Owner, txc);
+        if (!proposeResult.IsFail()) {
+            const auto fullTxInfo = txOperator->TxWithDeadline() ? RegisterTxWithDeadline(txInfo.TxId, txInfo.TxKind, txBody, source, cookie, txc)
+                : RegisterTx(txInfo.TxId, txInfo.TxKind, txBody, source, cookie, txc);
+
+            return TTxProposeResult(fullTxInfo, std::move(proposeResult));
+        } else {
+            return TTxProposeResult(txInfo, std::move(proposeResult));
+        }
+    }
+}
+
+void TTxController::CompleteTransaction(const ui64 txId, const TActorContext& ctx) {
+    auto txOperator = GetTxOperator(txId);
+    if (!txOperator) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "cannot found txOperator in propose transaction base")("tx_id", txId);
+    } else {
+        txOperator->CompleteOnPropose(Owner, ctx);
+    }
+}
+
 }
 
 template <>

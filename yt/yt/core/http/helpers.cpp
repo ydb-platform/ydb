@@ -25,7 +25,7 @@
 
 namespace NYT::NHttp {
 
-static const auto& Logger = HttpLogger;
+static constexpr auto& Logger = HttpLogger;
 
 using namespace NJson;
 using namespace NYson;

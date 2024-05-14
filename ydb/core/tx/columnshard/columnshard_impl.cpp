@@ -16,6 +16,7 @@
 #include "blobs_action/transaction/tx_remove_blobs.h"
 #include "blobs_action/transaction/tx_gc_insert_table.h"
 #include "blobs_action/transaction/tx_gc_indexed.h"
+#include "bg_tasks/events/events.h"
 
 #include "data_sharing/destination/session/destination.h"
 #include "data_sharing/source/session/source.h"
@@ -26,10 +27,10 @@
 #include "engines/changes/cleanup_tables.h"
 #include "engines/changes/ttl.h"
 
-#include "export/manager/manager.h"
-
 #include "resource_subscriber/counters.h"
 
+#include "bg_tasks/adapter/adapter.h"
+#include "bg_tasks/manager/manager.h"
 #include "hooks/abstract/abstract.h"
 
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -66,7 +67,6 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , TTabletExecutedFlat(info, tablet, nullptr)
     , ProgressTxController(std::make_unique<TTxController>(*this))
     , StoragesManager(std::make_shared<NOlap::TStoragesManager>(*this))
-    , ExportsManager(std::make_shared<NOlap::NExport::TExportsManager>())
     , DataLocksManager(std::make_shared<NOlap::NDataLocks::TManager>())
     , PeriodicWakeupActivationPeriod(NYDBTest::TControllers::GetColumnShardController()->GetPeriodicWakeupActivationPeriod(TSettings::DefaultPeriodicWakeupActivationPeriod))
     , StatsReportInterval(NYDBTest::TControllers::GetColumnShardController()->GetStatsReportInterval(TSettings::DefaultStatsReportInterval))
@@ -519,8 +519,6 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     }
 //  !!!!!! MUST BE FIRST THROUGH DATA HAVE TO BE SAME IN SESSIONS AFTER TABLET RESTART
     SharingSessionsManager->Start(*this);
-
-    ExportsManager->Start(this);
 
     SetupIndexation();
     SetupCompaction();
@@ -1015,20 +1013,6 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvFinishedFromSource::T
     }
 };
 
-void TColumnShard::Handle(NOlap::NExport::NEvents::TEvExportSaveCursor::TPtr& ev, const TActorContext& ctx) {
-    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("process", "Export")("event", "NExport::NEvents::TEvExportSaveCursor");
-    auto currentSession = ExportsManager->GetSessionOptional(ev->Get()->GetIdentifier());
-    if (!currentSession) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "ignore_inactual_export_session")("sesion_id", ev->Get()->GetIdentifier().ToString());
-        return;
-    }
-
-    auto txConclusion = currentSession->SaveCursorTx(this, ev->Get()->DetachCursor(), currentSession);
-    AFL_VERIFY(txConclusion.IsSuccess())("error", txConclusion.GetErrorMessage());
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "on_save_cursor")("id", ev->Get()->GetIdentifier().ToString());
-    Execute(txConclusion->release(), ctx);
-}
-
 void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator::TPtr& ev, const TActorContext& ctx) {
     AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("process", "BlobsSharing")("event", "TEvAckFinishFromInitiator");
     auto currentSession = SharingSessionsManager->GetDestinationSession(ev->Get()->Record.GetSessionId());
@@ -1076,6 +1060,10 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvApplyLinksModificatio
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "on_change_links_finish")("tablet_id", modifiedTabletId);
         Execute(txConclusion->release(), ctx);
     }
+}
+
+void TColumnShard::Handle(TAutoPtr<TEventHandle<NOlap::NBackground::TEvExecuteGeneralLocalTransaction>>& ev, const TActorContext& ctx) {
+    Execute(ev->Get()->ExtractTransaction().release(), ctx);
 }
 
 void TColumnShard::Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs::TPtr& ev, const TActorContext& ctx) {

@@ -11,6 +11,10 @@ namespace NKikimr::NColumnShard {
     public:
         using TBase::TBase;
 
+        virtual bool AllowTxDups() const override {
+            return true;
+        }
+
         virtual bool Parse(TColumnShard& /*owner*/, const TString& data) override {
             if (!SchemaTxBody.ParseFromString(data)) {
                 return false;

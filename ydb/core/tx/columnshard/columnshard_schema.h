@@ -52,7 +52,8 @@ struct Schema : NIceDb::Schema {
         OperationTxIdsId,
         BackupIdsDeprecated,
         ExportSessionsId,
-        PortionsTableId
+        PortionsTableId,
+        BackgroundSessionsTableId
     };
 
     enum class ETierTables: ui32 {
@@ -326,16 +327,6 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<TxId, LockId>;
     };
 
-    struct ExportPersistentSessions : NIceDb::Schema::Table<ExportSessionsId> {
-        struct Identifier : Column<1, NScheme::NTypeIds::String> {};
-        struct Status: Column<2, NScheme::NTypeIds::String> {};
-        struct Task: Column<3, NScheme::NTypeIds::String> {};
-        struct Cursor: Column<4, NScheme::NTypeIds::String> {};
-
-        using TKey = TableKey<Identifier>;
-        using TColumns = TableColumns<Identifier, Status, Task, Cursor>;
-    };
-
     struct TierBlobsDraft: NIceDb::Schema::Table<(ui32)ETierTables::TierBlobsDraft> {
         struct StorageId: Column<1, NScheme::NTypeIds::String> {};
         struct BlobId: Column<2, NScheme::NTypeIds::String> {};
@@ -465,6 +456,18 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<PathId, PortionId, SchemaVersion, XPlanStep, XTxId, Metadata>;
     };
 
+    struct BackgroundSessions: Table<BackgroundSessionsTableId> {
+        struct ClassName: Column<1, NScheme::NTypeIds::String> {};
+        struct Identifier: Column<2, NScheme::NTypeIds::String> {};
+        struct StatusChannel: Column<3, NScheme::NTypeIds::String> {};
+        struct LogicDescription: Column<4, NScheme::NTypeIds::String> {};
+        struct Progress: Column<5, NScheme::NTypeIds::String> {};
+        struct State: Column<6, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<ClassName, Identifier>;
+        using TColumns = TableColumns<ClassName, Identifier, StatusChannel, LogicDescription, Progress, State>;
+    };
+
     using TTables = SchemaTables<
         Value,
         TxInfo,
@@ -494,8 +497,8 @@ struct Schema : NIceDb::Schema {
         SourceSessions,
         DestinationSessions,
         OperationTxIds,
-        ExportPersistentSessions,
-        IndexPortions
+        IndexPortions,
+        BackgroundSessions
         >;
 
     //

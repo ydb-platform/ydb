@@ -54,12 +54,15 @@ struct TTestReadSession {
     std::set<size_t> Partitions;
     std::optional<std::set<size_t>> ExpectedPartitions;
 
+    std::set<size_t> EndedPartitions;
+    std::vector<TReadSessionEvent::TEndPartitionSessionEvent> EndedPartitionEvents;
+
     TMutex Lock;
     TSemaphore Semaphore;
 
     static constexpr size_t SemCount = 1;
 
-    TTestReadSession(const TString& name, TTopicClient& client, size_t expectedMessagesCount = Max<size_t>(), bool autoCommit = true, std::set<ui32> partitions = {});
+    TTestReadSession(const TString& name, TTopicClient& client, size_t expectedMessagesCount = Max<size_t>(), bool autoCommit = true, std::set<ui32> partitions = {}, bool autoscalingSupport = true);
 
     void WaitAllMessages();
     NThreading::TFuture<std::set<size_t>> Wait(std::set<size_t> partitions, const TString& message);

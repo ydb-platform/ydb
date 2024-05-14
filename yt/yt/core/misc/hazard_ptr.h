@@ -12,8 +12,6 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-extern const NLogging::TLogger LockFreePtrLogger;
-
 void ReclaimHazardPointers(bool flush = true);
 
 using THazardPtrReclaimer = void(*)(TPackedPtr packedPtr);

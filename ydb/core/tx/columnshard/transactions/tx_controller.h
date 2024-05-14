@@ -10,6 +10,88 @@ namespace NKikimr::NColumnShard {
 
 class TColumnShard;
 
+struct TBasicTxInfo {
+    const NKikimrTxColumnShard::ETransactionKind TxKind;
+    const ui64 TxId;
+public:
+    TBasicTxInfo(const NKikimrTxColumnShard::ETransactionKind& txKind, const ui64 txId)
+        : TxKind(txKind)
+        , TxId(txId) {
+    }
+};
+
+struct TFullTxInfo: public TBasicTxInfo {
+    ui64 MaxStep = Max<ui64>();
+    ui64 MinStep = 0;
+    ui64 PlanStep = 0;
+    TActorId Source;
+    ui64 Cookie = 0;
+public:
+    TFullTxInfo(const NKikimrTxColumnShard::ETransactionKind& txKind, const ui64 txId)
+        : TBasicTxInfo(txKind, txId) {
+    }
+};
+
+class TTxProposeResult {
+public:
+    class TProposeResult {
+        YDB_READONLY(NKikimrTxColumnShard::EResultStatus, Status, NKikimrTxColumnShard::EResultStatus::PREPARED);
+        YDB_READONLY_DEF(TString, StatusMessage);
+    public:
+        TProposeResult() = default;
+        TProposeResult(NKikimrTxColumnShard::EResultStatus status, const TString& statusMessage)
+            : Status(status)
+            , StatusMessage(statusMessage) {
+        }
+
+        bool IsFail() const {
+            return Status != NKikimrTxColumnShard::EResultStatus::PREPARED && Status != NKikimrTxColumnShard::EResultStatus::SUCCESS;
+        }
+
+        TString DebugString() const {
+            return TStringBuilder() << "status=" << (ui64)Status << ";message=" << StatusMessage;
+        }
+    };
+
+private:
+    std::optional<TBasicTxInfo> BaseTxInfo;
+    std::optional<TFullTxInfo> FullTxInfo;
+    TProposeResult ProposeResult;
+public:
+    TTxProposeResult(const TBasicTxInfo& txInfo, TProposeResult&& result)
+        : BaseTxInfo(txInfo)
+        , ProposeResult(std::move(result)) {
+
+    }
+    TTxProposeResult(const TFullTxInfo& txInfo, TProposeResult&& result)
+        : FullTxInfo(txInfo)
+        , ProposeResult(std::move(result)) {
+
+    }
+
+    ui64 GetTxId() const noexcept {
+        return FullTxInfo ? FullTxInfo->TxId : BaseTxInfo->TxId;
+    }
+
+    bool IsError() const {
+        return !!BaseTxInfo;
+    }
+
+    const TProposeResult& GetProposeResult() const {
+        return ProposeResult;
+    }
+
+    const TFullTxInfo& GetFullTxInfoVerified() const {
+        AFL_VERIFY(!!FullTxInfo);
+        return *FullTxInfo;
+    }
+
+    const TBasicTxInfo& GetBaseTxInfoVerified() const {
+        AFL_VERIFY(!!BaseTxInfo);
+        return *BaseTxInfo;
+    }
+};
+
 class TTxController {
 public:
     struct TPlanQueueItem {
@@ -30,46 +112,9 @@ public:
         }
     };
 
-    struct TBasicTxInfo {
-        const NKikimrTxColumnShard::ETransactionKind TxKind;
-        const ui64 TxId;
-    public:
-        TBasicTxInfo(const NKikimrTxColumnShard::ETransactionKind& txKind, const ui64 txId)
-            : TxKind(txKind)
-            , TxId(txId)
-        {}
-    };
-
-    struct TTxInfo : public TBasicTxInfo {
-        ui64 MaxStep = Max<ui64>();
-        ui64 MinStep = 0;
-        ui64 PlanStep = 0;
-        TActorId Source;
-        ui64 Cookie = 0;
-    public:
-        TTxInfo(const NKikimrTxColumnShard::ETransactionKind& txKind, const ui64 txId)
-            : TBasicTxInfo(txKind, txId)
-        {}
-    };
-
-    class TProposeResult {
-        YDB_READONLY(NKikimrTxColumnShard::EResultStatus, Status, NKikimrTxColumnShard::EResultStatus::PREPARED);
-        YDB_READONLY_DEF(TString, StatusMessage);
-    public:
-        TProposeResult() = default;
-        TProposeResult(NKikimrTxColumnShard::EResultStatus status, const TString& statusMessage)
-            : Status(status)
-            , StatusMessage(statusMessage)
-        {}
-
-        bool operator!() const {
-            return Status != NKikimrTxColumnShard::EResultStatus::PREPARED && Status != NKikimrTxColumnShard::EResultStatus::SUCCESS;
-        }
-
-        TString DebugString() const {
-            return TStringBuilder() << "status=" << (ui64) Status << ";message=" << StatusMessage;
-        }
-    };
+    using TBasicTxInfo = TBasicTxInfo;
+    using TTxInfo = TFullTxInfo;
+    using TProposeResult = TTxProposeResult::TProposeResult;
 
     class ITransactionOperator {
     protected:
@@ -84,6 +129,10 @@ public:
 
         ui64 GetTxId() const {
             return TxInfo.TxId;
+        }
+
+        virtual bool AllowTxDups() const {
+            return false;
         }
 
         virtual ~ITransactionOperator() {}
@@ -122,6 +171,9 @@ private:
     ui64 GetAllowedStep() const;
     bool AbortTx(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
 
+    TTxInfo RegisterTx(const ui64 txId, const NKikimrTxColumnShard::ETransactionKind& txKind, const TString& txBody, const TActorId& source, const ui64 cookie, NTabletFlatExecutor::TTransactionContext& txc);
+    TTxInfo RegisterTxWithDeadline(const ui64 txId, const NKikimrTxColumnShard::ETransactionKind& txKind, const TString& txBody, const TActorId& source, const ui64 cookie, NTabletFlatExecutor::TTransactionContext& txc);
+
 public:
     TTxController(TColumnShard& owner);
 
@@ -133,8 +185,8 @@ public:
 
     bool Load(NTabletFlatExecutor::TTransactionContext& txc);
 
-    TTxInfo RegisterTx(const ui64 txId, const NKikimrTxColumnShard::ETransactionKind& txKind, const TString& txBody, const TActorId& source, const ui64 cookie, NTabletFlatExecutor::TTransactionContext& txc);
-    TTxInfo RegisterTxWithDeadline(const ui64 txId, const NKikimrTxColumnShard::ETransactionKind& txKind, const TString& txBody, const TActorId& source, const ui64 cookie, NTabletFlatExecutor::TTransactionContext& txc);
+    TTxProposeResult ProposeTransaction(const TBasicTxInfo& txInfo, const TString& txBody, const TActorId source, const ui64 cookie, NTabletFlatExecutor::TTransactionContext& txc);
+    void CompleteTransaction(const ui64 txId, const TActorContext& ctx);
 
     bool ExecuteOnCancel(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
     bool CompleteOnCancel(const ui64 txId, const TActorContext& ctx);

@@ -48,7 +48,7 @@ TSqueezeState::TSqueezeState(const TSqueezeState& state)
 {}
 
 NUdf::TUnboxedValue TSqueezeState::Save(TComputationContext& ctx) const {
-    TOutputSerializer out(EMkqlStateType::SIMPLE_BLOB, StateVersion);
+    TOutputSerializer out(EMkqlStateType::SIMPLE_BLOB, StateVersion, ctx);
     out.Write(static_cast<ui8>(Stage));
     if (ESqueezeState::Work == Stage) {
         InSave->SetValue(ctx, State->GetValue(ctx));

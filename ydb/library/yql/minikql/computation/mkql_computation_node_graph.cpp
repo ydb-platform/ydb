@@ -729,9 +729,17 @@ public:
             if (mutableValue.IsInvalid()) {
                 WriteUi32(result, std::numeric_limits<ui32>::max()); // -1.
             } else if (mutableValue.IsBoxed()) {
-                NUdf::TUnboxedValue saved = mutableValue.Save();
-                const TStringBuf savedBuf = saved.AsStringRef();
-                NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(result, savedBuf);
+                NUdf::TUnboxedValue list = mutableValue.Save();
+
+                TString taskState;
+                auto listIt = list.GetListIterator();
+                NUdf::TUnboxedValue str;
+                while (listIt.Next(str)) {
+                    const TStringBuf savedBuf = str.AsStringRef();
+                    taskState.AppendNoAlias(savedBuf.Data(), savedBuf.Size());
+                }
+
+                NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(result, taskState);
             } else { // No load was done during previous runs (if any).
                 MKQL_ENSURE(mutableValue.HasValue() && (mutableValue.IsString() || mutableValue.IsEmbedded()), "State is expected to have data or invalid value");
                 const NUdf::TStringRef savedRef = mutableValue.AsStringRef();

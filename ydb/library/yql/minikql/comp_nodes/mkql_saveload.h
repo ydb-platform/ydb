@@ -127,7 +127,8 @@ public:
     }
 
 public:
-    TOutputSerializer(EMkqlStateType stateType, ui32 stateVersion) {
+    TOutputSerializer(EMkqlStateType stateType, ui32 stateVersion, TComputationContext& ctx)
+        : Ctx(ctx) {
         Write(static_cast<ui32>(stateType));
         Write(stateVersion);
     }
@@ -178,13 +179,62 @@ public:
         Buf.AppendNoAlias(state.data(), state.size());
     }
 
+    class TRangeList: public TComputationValue<TRangeList> {
+        const size_t MaxValueLen = 10000;
+
+        class TIterator : public TComputationValue<TIterator> {
+            const size_t MaxValueLen = 10000;
+
+        public:
+            TIterator(TMemoryUsageInfo* memInfo, const TString& buf)
+                : TComputationValue<TIterator>(memInfo)
+                , Buf(buf)
+                , Index(0)
+            {}
+
+        private:
+            bool Next(NUdf::TUnboxedValue& value) override {
+                if (Buf.size() == Index) {
+                    return false;
+                }
+                size_t nextSize = std::min(Buf.size() - Index, MaxValueLen);
+
+                NUdf::TStringValue str(nextSize);
+                std::memcpy(str.Data(), Buf.Data() + Index, nextSize);
+                Index += nextSize;
+                value = NUdf::TUnboxedValuePod(std::move(str));
+                return true;
+            }
+            const TString& Buf;
+            size_t Index;
+        };
+
+        public:
+
+        TRangeList(TMemoryUsageInfo* memInfo, TComputationContext& ctx, TString&& buf)
+            : TComputationValue<TRangeList>(memInfo)
+            , Ctx(ctx)
+            , Buf(buf)
+        {}
+
+        ui64 GetListLength() const override {
+            return Buf.size() / MaxValueLen + ((Buf.size() % MaxValueLen) ? 1 : 0);
+        }
+
+        NUdf::TUnboxedValue GetListIterator() const override {
+            return Ctx.HolderFactory.Create<TIterator>(Buf);
+        }
+        private:
+        TComputationContext& Ctx;
+        TString Buf;
+    };
+
     NUdf::TUnboxedValue MakeState() {
-        NUdf::TStringValue str(Buf.size());
-        std::memcpy(str.Data(), Buf.Data(), Buf.Size());
-        return NUdf::TUnboxedValuePod(std::move(str));
+        return Ctx.HolderFactory.Create<TRangeList>(Ctx, std::move(Buf));
     }
 protected:
     TString Buf;
+    TComputationContext& Ctx;
 };
 
 

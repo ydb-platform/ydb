@@ -269,10 +269,11 @@ public:
     , Cache(cache)
     , Terminating(false)
     , SerializerContext(ctx, rowType, rowPacker)
+    , Ctx(ctx)
     {}
 
     NUdf::TUnboxedValue Save() const override {
-        TMrOutputSerializer out(SerializerContext, EMkqlStateType::SIMPLE_BLOB, StateVersion);
+        TMrOutputSerializer out(SerializerContext, EMkqlStateType::SIMPLE_BLOB, StateVersion, Ctx);
         out.Write(CurPartitionPackedKey);
         bool isValid = static_cast<bool>(PartitionHandler);
         out.Write(isValid);
@@ -386,6 +387,7 @@ private:
     NUdf::TUnboxedValue DelayedRow;
     bool Terminating;
     TSerializerContext SerializerContext;
+    TComputationContext& Ctx;
 };
 
 class TStateForInterleavedPartitions
@@ -413,10 +415,11 @@ public:
     , NfaTransitionGraph(TNfaTransitionGraphBuilder::Create(parameters.Pattern, parameters.VarNamesLookup))
     , Cache(cache)
     , SerializerContext(ctx, rowType, rowPacker)
+    , Ctx(ctx)
     {}
 
     NUdf::TUnboxedValue Save() const override {
-        TMrOutputSerializer serializer(SerializerContext, EMkqlStateType::SIMPLE_BLOB, StateVersion);
+        TMrOutputSerializer serializer(SerializerContext, EMkqlStateType::SIMPLE_BLOB, StateVersion, Ctx);
         serializer.Write(Partitions.size());
 
         for (const auto& [key, state] : Partitions) {
@@ -529,6 +532,7 @@ private:
     const TNfaTransitionGraph::TPtr NfaTransitionGraph;
     const TContainerCacheOnContext& Cache;
     TSerializerContext SerializerContext;
+    TComputationContext& Ctx;
 };
 
 template<class State>

@@ -34,8 +34,8 @@ private:
     };
 
 public:
-    TMrOutputSerializer(const TSerializerContext& context, EMkqlStateType stateType, ui32 stateVersion)
-        : TOutputSerializer(stateType, stateVersion)
+    TMrOutputSerializer(const TSerializerContext& context, EMkqlStateType stateType, ui32 stateVersion, TComputationContext& ctx)
+        : TOutputSerializer(stateType, stateVersion, ctx)
         , Context(context)
     {} 
 

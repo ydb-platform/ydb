@@ -119,7 +119,7 @@ public:
         }
 
         NUdf::TUnboxedValue Save() const override {
-            TOutputSerializer out(EMkqlStateType::SIMPLE_BLOB, StateVersion);
+            TOutputSerializer out(EMkqlStateType::SIMPLE_BLOB, StateVersion, Ctx);
             out.Write<ui32>(Heap.size());
 
             for (const TEntry& entry : Heap) {

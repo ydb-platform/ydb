@@ -101,7 +101,7 @@ public:
 
         NUdf::TUnboxedValue Save() const override {
             MKQL_ENSURE(Ready.empty(), "Inconsistent state to save, not all elements are fetched");
-            TOutputSerializer out(EMkqlStateType::SIMPLE_BLOB, StateVersion);
+            TOutputSerializer out(EMkqlStateType::SIMPLE_BLOB, StateVersion, Ctx);
 
             out.Write<ui32>(StatesMap.size());
             for (const auto& [key, state] : StatesMap) {

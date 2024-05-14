@@ -112,7 +112,7 @@ def main():
                 "$build_type": b"sample",
                 "$binary_path": b"sample",
                 "$size_stripped_bytes": int(binary_size_bytes.decode("utf-8")),
-                "$size_bytes": (binary_size_stripped_bytes.decode("utf-8")),
+                "$size_bytes": int(binary_size_stripped_bytes.decode("utf-8")),
             }
 
             for column in from_env_columns:

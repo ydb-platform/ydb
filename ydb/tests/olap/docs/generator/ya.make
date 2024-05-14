@@ -7,7 +7,7 @@ PY_SRCS(
 
 PEERDIR(
     ydb/tests/olap/scenario/helpers
-    contrib/python/pyaml
+    contrib/python/PyYAML
 )
 
 END()

@@ -19,7 +19,6 @@ PY3TEST()
         contrib/python/allure-pytest
         contrib/python/allure-python-commons
         contrib/python/pandas
-        contrib/python/pyaml
         contrib/python/requests
         ydb/public/sdk/python
         ydb/public/sdk/python/enable_v3_new_behavior

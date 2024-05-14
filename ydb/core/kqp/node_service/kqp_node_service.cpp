@@ -342,10 +342,14 @@ private:
 
         LOG_D("TxId: " << txId << ", channels: " << requestChannels
 <<<<<<< HEAD
+<<<<<<< HEAD
             << ", computeActors: " << msg.GetTasks().size() << ", memory: " << request.CalculateTotalMemory());
 =======
             << ", computeActors: " << msg.GetTasks().size() << ", memory: " << request.TotalMemory);
 >>>>>>> 52b8923c3c (remove useless memory check in node service)
+=======
+            << ", computeActors: " << msg.GetTasks().size() << ", memory: " << request.CalculateTotalMemory());
+>>>>>>> 0fd51383b2 (remove unclear resource free mechanism)
 
         TVector<ui64> allocatedTasks;
         allocatedTasks.reserve(msg.GetTasks().size());

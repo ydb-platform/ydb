@@ -86,9 +86,6 @@ namespace NBalancing {
             }
         }
 
-        constexpr static TDuration JOB_GRANULARITY = TDuration::MilliSeconds(1);
-        constexpr static TDuration SEND_TIMEOUT = TDuration::Seconds(300);
-
         void CollectKeys() {
             THPTimer timer;
 
@@ -111,14 +108,17 @@ namespace NBalancing {
                 if (auto partsToSend = merger.Ingress.LocalParts(top.GType) & moveMask; !partsToSend.Empty()) {
                     // collect parts to send on main
                     auto lastBalancingTimeIt = Ctx->LastBalancingTime.find(key);
-                    if (lastBalancingTimeIt != Ctx->LastBalancingTime.end() && lastBalancingTimeIt->second + SEND_TIMEOUT > TlsActivationContext->Now()) {
+                    if (lastBalancingTimeIt == Ctx->LastBalancingTime.end()) {
+                        lastBalancingTimeIt = Ctx->LastBalancingTime.emplace(key, TlsActivationContext->Now()).first;
+                    }
+                    if (lastBalancingTimeIt->second + SEND_TIMEOUT > TlsActivationContext->Now()) {
                         // skip balancing for this key
                         continue;
                     }
 
                     for (const auto& [parts, data]: merger.Parts) {
                         if (!(partsToSend & parts).Empty()) {
-                            Ctx->LastBalancingTime[key] = TlsActivationContext->Now();
+                            lastBalancingTimeIt->second = TlsActivationContext->Now();
                             SendOnMainParts.push(TPartInfo{
                                 .Key=It.GetCurKey().LogoBlobID(),
                                 .PartsMask=parts,
@@ -233,7 +233,8 @@ namespace NBalancing {
             CreateVDisksQueues();
             It.SeekToFirst();
             Become(&TThis::StateFunc);
-            Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup());            
+            ++Ctx->MonGroup.BalancingIterations();
+            Schedule(TDuration::Seconds(10), new NActors::TEvents::TEvWakeup());
         }
     };
 

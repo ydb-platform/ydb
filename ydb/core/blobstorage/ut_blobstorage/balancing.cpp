@@ -231,20 +231,20 @@ struct TStopOneNodeTest {
             Env.SendPut(step, data, NKikimrProto::OK);
             Env->Sim(TDuration::Seconds(10));
             Env.StartNode(nodeIdWithBlob);
-            Env->Sim(TDuration::Seconds(10));
+            Env->Sim(TDuration::Seconds(400));
 
             Cerr << "Start compaction 1" << Endl;
             for (ui32 pos = 0; pos < Env->Settings.NodeCount; ++pos) {
                 Env->CompactVDisk(Env.GroupInfo->GetActorId(pos));
             }
-            Env->Sim(TDuration::Seconds(10));
+            Env->Sim(TDuration::Seconds(400));
             Cerr << "Finish compaction 1" << Endl;
 
             Cerr << "Start compaction 2" << Endl;
             for (ui32 pos = 0; pos < Env->Settings.NodeCount; ++pos) {
                 Env->CompactVDisk(Env.GroupInfo->GetActorId(pos));
             }
-            Env->Sim(TDuration::Seconds(10));
+            Env->Sim(TDuration::Seconds(400));
             Cerr << "Finish compaction 2" << Endl;
 
             Env.CheckPartsLocations(MakeLogoBlobId(step, data.size()));
@@ -321,19 +321,19 @@ struct TRandomTest {
         for (ui32 pos = 0; pos < Env->Settings.NodeCount; ++pos) {
             Env.StartNode(pos);
         }
-        Env->Sim(TDuration::Seconds(10));
+        Env->Sim(TDuration::Seconds(400));
 
         Cerr << "Start compaction 1" << Endl;
         for (ui32 pos = 0; pos < Env->Settings.NodeCount; ++pos) {
             Env->CompactVDisk(Env.GroupInfo->GetActorId(pos));
         }
-        Env->Sim(TDuration::Seconds(60));
+        Env->Sim(TDuration::Seconds(400));
 
         Cerr << "Start compaction 2" << Endl;
         for (ui32 pos = 0; pos < Env->Settings.NodeCount; ++pos) {
             Env->CompactVDisk(Env.GroupInfo->GetActorId(pos));
         }
-        Env->Sim(TDuration::Seconds(60));
+        Env->Sim(TDuration::Seconds(400));
 
         Cerr << "Start checking" << Endl;
         for (ui32 step: successfulSteps) {
@@ -401,21 +401,21 @@ struct TTwoPartsOnOneNodeTest {
         // start all stopped nodes
         Env.StartNode(partIdxToNodeId[1]);
         Env.StartNode(handoffNodeIds[1]);
-        Env->Sim(TDuration::Seconds(10));
+        Env->Sim(TDuration::Seconds(400));
 
         // run compactions
         Cerr << "Start compaction 1" << Endl;
         for (ui32 pos = 0; pos < Env->Settings.NodeCount; ++pos) {
             Env->CompactVDisk(Env.GroupInfo->GetActorId(pos));
         }
-        Env->Sim(TDuration::Seconds(10));
+        Env->Sim(TDuration::Seconds(400));
         Cerr << "Finish compaction 1" << Endl;
 
         Cerr << "Start compaction 2" << Endl;
         for (ui32 pos = 0; pos < Env->Settings.NodeCount; ++pos) {
             Env->CompactVDisk(Env.GroupInfo->GetActorId(pos));
         }
-        Env->Sim(TDuration::Seconds(10));
+        Env->Sim(TDuration::Seconds(400));
         Cerr << "Finish compaction 2" << Endl;
 
         Env.CheckPartsLocations(MakeLogoBlobId(step, data.size()));

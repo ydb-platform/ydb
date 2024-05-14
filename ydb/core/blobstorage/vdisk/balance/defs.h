@@ -20,7 +20,7 @@ namespace NKikimr {
         TIntrusivePtr<TVDiskConfig> VDiskCfg;
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
 
-        THashMap<TLogoBlobID, TInstant> LastBalancingTime;
+        THashMap<TLogoBlobID, TInstant>& LastBalancingTime;
 
         TBalancingCtx(
             TIntrusivePtr<TVDiskContext> vCtx,
@@ -29,7 +29,8 @@ namespace NKikimr {
             TActorId skeletonId,
             NKikimr::THullDsSnap snap,
             TIntrusivePtr<TVDiskConfig> vDiskCfg,
-            TIntrusivePtr<TBlobStorageGroupInfo> gInfo
+            TIntrusivePtr<TBlobStorageGroupInfo> gInfo,
+            THashMap<TLogoBlobID, TInstant>& lastBalancingTime
         )
             : VCtx(std::move(vCtx))
             , PDiskCtx(std::move(pDiskCtx))
@@ -39,6 +40,7 @@ namespace NKikimr {
             , Snap(std::move(snap))
             , VDiskCfg(std::move(vDiskCfg))
             , GInfo(std::move(gInfo))
+            , LastBalancingTime(lastBalancingTime)
         {
         }
     };
@@ -55,5 +57,9 @@ namespace NBalancing {
 
     constexpr ui32 SENDER_ID = 0;
     constexpr ui32 DELETER_ID = 1;
+
+    constexpr static TDuration JOB_GRANULARITY = TDuration::MilliSeconds(1);
+    constexpr static TDuration SEND_TIMEOUT = TDuration::Minutes(5);
+
 } // NBalancing
 } // NKikimr

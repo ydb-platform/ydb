@@ -231,7 +231,7 @@ public:
         if (!hasScanQueryMemory) {
             Counters->RmNotEnoughMemory->Inc();
             TStringBuilder reason;
-            reason << "TxId: " << txId << ", taskId: " << taskId << ". Not enough ScanQueryMemory, requested: " << resources.Memory;
+            reason << "TxId: " << txId << ", taskId: " << taskId << ". Not enough memory for query, requested: " << resources.Memory;
             if (details) {
                 details->FailReason = reason;
                 details->Status = NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_MEMORY;

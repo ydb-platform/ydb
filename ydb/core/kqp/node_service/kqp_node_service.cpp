@@ -345,17 +345,6 @@ private:
         LOG_D("TxId: " << txId << ", channels: " << requestChannels
             << ", computeActors: " << msg.GetTasks().size() << ", memory: " << request.TotalMemory);
 
-        auto txMemory = bucket.GetTxMemory(txId, memoryPool) + request.TotalMemory;
-        if (txMemory > Config.GetQueryMemoryLimit()) {
-            LOG_N("TxId: " << txId << ", requested too many memory: " << request.TotalMemory
-                << "(" << txMemory << " for this Tx), limit: " << Config.GetQueryMemoryLimit());
-
-            Counters->RmNotEnoughMemory->Inc();
-
-            return ReplyError(txId, request.Executer, msg, NKikimrKqp::TEvStartKqpTasksResponse::QUERY_MEMORY_LIMIT_EXCEEDED,
-                TStringBuilder() << "Required: " << txMemory << ", limit: " << Config.GetQueryMemoryLimit());
-        }
-
         TVector<ui64> allocatedTasks;
         allocatedTasks.reserve(msg.GetTasks().size());
         for (auto& task : request.InFlyTasks) {

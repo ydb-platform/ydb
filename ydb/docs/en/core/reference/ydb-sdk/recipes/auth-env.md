@@ -102,15 +102,54 @@ Below are examples of the code for authentication using environment variables in
 
 - Node.js
 
-  {% include [auth-env](../../../../_includes/nodejs/auth-env.md) %}
+  ```typescript
+    import { Driver, getCredentialsFromEnv } from 'ydb-sdk';
+
+    export async function connect(endpoint: string, database: string) {
+        const authService = getCredentialsFromEnv();
+        const driver = new Driver({endpoint, database, authService});
+        const timeout = 10000;
+        if (!await driver.ready(timeout)) {
+            console.log(`Driver has not become ready in ${timeout}ms!`);
+            process.exit(1);
+        }
+        console.log('Driver connected')
+        return driver
+    }
+  ```
 
 - Python
 
-  {% include [auth-env](../../../../_includes/python/auth-env.md) %}
+  ```python
+    import os
+    import ydb
+
+    with ydb.Driver(
+        connection_string=os.environ["YDB_CONNECTION_STRING"],
+        credentials=ydb.credentials_from_env_variables(),
+    ) as driver:
+        driver.wait(timeout=5)
+        ...
+  ```
 
 - Python (asyncio)
 
-  {% include [auth-env](../../../../_includes/python/async/auth-env.md) %}
+  ```python
+    import os
+    import ydb
+    import asyncio
+
+    async def ydb_init():
+        async with ydb.aio.Driver(
+            endpoint=os.environ["YDB_ENDPOINT"],
+            database=os.environ["YDB_DATABASE"],
+            credentials=ydb.credentials_from_env_variables(),
+        ) as driver:
+            await driver.wait()
+            ...
+
+    asyncio.run(ydb_init())
+  ```
 
 - C#
 

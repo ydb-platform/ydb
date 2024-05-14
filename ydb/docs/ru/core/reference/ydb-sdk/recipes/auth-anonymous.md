@@ -91,15 +91,15 @@
 
 - Node.js
 
-  {% include [auth-anonymous](../../../../_includes/nodejs/auth-anonymous.md) %}
+  {% include [auth-anonymous](../../../_includes/nodejs/auth-anonymous.md) %}
 
 - Python
 
-  {% include [auth-anonymous](../../../../_includes/python/auth-anonymous.md) %}
+  {% include [auth-anonymous](../../../_includes/python/auth-anonymous.md) %}
 
 - Python (asyncio)
 
-  {% include [auth-anonymous](../../../../_includes/python/async/auth-anonymous.md) %}
+  {% include [auth-anonymous](../../../_includes/python/async/auth-anonymous.md) %}
 
 - C# (.NET)
 

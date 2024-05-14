@@ -103,16 +103,16 @@ def main():
 
             prepared_query = session.prepare(text_query)
             
-            binary_size_str = subprocess.check_output(["bash", "-c", "cat {} | wc -c".format(YDBD_PATH)])
-            binary_size_stripped_str = subprocess.check_output(["bash", "-c", "./ya tool strip {} -o - | wc -c".format(YDBD_PATH)])
+            binary_size_bytes = subprocess.check_output(["bash", "-c", "cat {} | wc -c".format(YDBD_PATH)])
+            binary_size_stripped_bytes = subprocess.check_output(["bash", "-c", "./ya tool strip {} -o - | wc -c".format(YDBD_PATH)])
 
 
             parameters = {
                 "$id": uuid.uuid4().bytes,
                 "$build_type": b"sample",
                 "$binary_path": b"sample",
-                "$size_stripped_bytes": int(binary_size_str),
-                "$size_bytes": (binary_size_stripped_str),
+                "$size_stripped_bytes": int(binary_size_bytes.decode("utf-8")),
+                "$size_bytes": (binary_size_stripped_bytes.decode("utf-8")),
             }
 
             for column in from_env_columns:

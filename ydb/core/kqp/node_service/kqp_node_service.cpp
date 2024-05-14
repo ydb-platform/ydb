@@ -368,29 +368,13 @@ private:
 
             NRm::TKqpNotEnoughResources resourcesResponse;
             if (!ResourceManager()->AllocateResources(txId, task.first, resourcesRequest, &resourcesResponse)) {
-                NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason failReason = NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR;
-                TStringBuilder error;
-                if (resourcesResponse.ScanQueryMemory()) {
-                    error << "TxId: " << txId << ", NodeId: " << SelfId().NodeId() << ", not enough memory, requested " << task.second.Memory;
-                    LOG_N(error);
-
-                    failReason = NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_MEMORY;
-                }
-
-                if (resourcesResponse.QueryMemoryLimit()) {
-                    error << "TxId: " << txId << ", NodeId: " << SelfId().NodeId() << ", memory limit exceeded, requested " << task.second.Memory;
-                    LOG_N(error);
-
-                    failReason = NKikimrKqp::TEvStartKqpTasksResponse::QUERY_MEMORY_LIMIT_EXCEEDED;
-                }
-
                 for (ui64 taskId : allocatedTasks) {
                     ResourceManager()->FreeResources(txId, taskId);
                 }
 
                 ResourceManager()->FreeExecutionUnits(executionUnits);
 
-                ReplyError(txId, request.Executer, msg, failReason, error);
+                ReplyError(txId, request.Executer, msg, resourcesResponse.GetStatus(), resourcesResponse.GetFailReason());
                 return;
             }
 

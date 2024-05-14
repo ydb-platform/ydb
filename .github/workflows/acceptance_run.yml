@@ -41,9 +41,11 @@ jobs:
     - name: Write secret to file
       shell: bash
       run: |
-        cat << EOF > /tmp/bla.json
+        export YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=/tmp/ydb_service_account.json
+        cat << EOF > $YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS
         ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
         EOF
+        echo "YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=$YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" >> $GITHUB_ENV
 
     - name: Build and test
       uses: ./.github/actions/build_and_test_ya

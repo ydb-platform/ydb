@@ -37,7 +37,7 @@ UINT64_COLUMNS = [
     "size_stripped_bytes",
 ]
 
-all_columns = STRING_COLUMNS + DATETIME_COLUMNS + UINT64_COLUMNS
+ALL_COLUMNS = STRING_COLUMNS + DATETIME_COLUMNS + UINT64_COLUMNS
 
 
 def sanitize_str(s):
@@ -80,8 +80,8 @@ VALUES
     {}                   
 );                         
 """.format(
-                    ", \n    ".join(all_columns),
-                    ", \n    ".join(["$" + column for column in all_columns]),
+                    ", \n    ".join(ALL_COLUMNS),
+                    ", \n    ".join(["$" + column for column in ALL_COLUMNS]),
                 )
             )
 

@@ -91,6 +91,8 @@ struct TReplicationCardFetchOptions
 
     operator size_t() const;
     bool operator == (const TReplicationCardFetchOptions& other) const = default;
+
+    bool Contains(const TReplicationCardFetchOptions& other) const;
 };
 
 void FormatValue(TStringBuilderBase* builder, const TReplicationCardFetchOptions& options, TStringBuf /*spec*/);

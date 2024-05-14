@@ -575,6 +575,9 @@ message TConfigRequest {
 
     // is this command originated by self-heal decommission?
     bool IsSelfHealReasonDecommit = 12;
+
+    // requesting user identifier
+    string UserSID = 13;
 }
 
 enum ETriStateBool {
@@ -676,6 +679,7 @@ message TBaseConfig {
     repeated TGroup Group = 3;
     repeated TNode Node = 4;
     repeated TDevice Device = 5;
+    TUpdateSettings Settings = 6;
 }
 
 message TMoveCommand {

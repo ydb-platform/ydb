@@ -641,48 +641,6 @@ TExprNode::TPtr RemoveNothingFromCoalesce(const TExprNode& node, TExprContext& c
     return ctx.ChangeChildren(node, std::move(newChildren));
 }
 
-TExprNode::TPtr OptimizeTryMember(const TExprNode::TPtr& node, TExprContext& ctx) {
-    YQL_CLOG(DEBUG, Core) << "Optimize " << node->Content();
-    const bool isStructOptional = node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional;
-    const TStructExprType* structType = RemoveOptionalType(node->Head().GetTypeAnn())->Cast<TStructExprType>();
-    const bool isOptional = node->Tail().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional;
-    const auto memberName = node->Child(1)->Content();
-    const auto wrappedDefault = ctx.WrapByCallableIf(isStructOptional && !node->TailPtr()->IsCallable("Null") &&
-        node->TailPtr()->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional, "Just", node->TailPtr());
-
-    for (const auto& field : structType->GetItems()) {
-        if (field->GetName() == memberName) {
-            const bool just = (isStructOptional || isOptional) && field->GetItemType()->GetKind() != ETypeAnnotationKind::Optional;
-            auto memberArg = isStructOptional ? ctx.NewArgument(node->Pos(), "x") : node->HeadPtr();
-            auto member = ctx.NewCallable(node->Pos(), "Member", { memberArg, node->ChildPtr(1) });
-            auto body = ctx.WrapByCallableIf(just, "Just", std::move(member));
-            if (!isStructOptional) {
-                return body;
-            }
-
-            auto lambda = ctx.NewLambda(node->Pos(), ctx.NewArguments(node->Pos(), { memberArg }), std::move(body));
-            if (node->TailPtr()->IsCallable("Null")) {
-                return ctx.Builder(node->Pos())
-                    .Callable("FlatMap")
-                        .Add(0, node->HeadPtr())
-                        .Add(1, lambda)
-                    .Seal()
-                    .Build();
-            }
-
-            return ctx.Builder(node->Pos())
-                .Callable("IfPresent")
-                    .Add(0, node->HeadPtr())
-                    .Add(1, lambda)
-                    .Add(2, wrappedDefault)
-                .Seal()
-                .Build();
-        }
-    }
-
-    return wrappedDefault;
-}
-
 TExprNode::TPtr RemoveOptionalReduceOverData(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (node->Head().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional) {
         YQL_CLOG(DEBUG, Core) << "Remove " << node->Content() << " over data";
@@ -2494,7 +2452,7 @@ TExprNode::TPtr OptimizeReorder(const TExprNode::TPtr& node, TExprContext& ctx) 
         return ctx.ChangeChild(*node, 0U, node->Head().HeadPtr());
     }
 
-    if (const auto& lambda = node->Tail(); lambda.Tail().GetDependencyScope()->second != &lambda) {
+    if (const auto& lambda = node->Tail(); lambda.Tail().GetDependencyScope()->second != &lambda && IsStrict(lambda.TailPtr())) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " by constant";
         return IsTop ?
             ctx.Builder(node->Pos())
@@ -4621,8 +4579,6 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     };
 
     map["IfPresent"] = std::bind(&OptimizeIfPresent<true>, _1, _2);
-
-    map["TryMember"] = std::bind(&OptimizeTryMember, _1, _2);
 
     map["Optional"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
         YQL_CLOG(DEBUG, Core) << node->Content();

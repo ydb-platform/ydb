@@ -6,6 +6,7 @@ namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxNavigate : public TTxBase {
     std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> Request;
+    bool Cancelled = false;
 
     TTxNavigate(TSelf* self, NSchemeCache::TSchemeCacheNavigate* request)
         : TTxBase(self)
@@ -23,7 +24,19 @@ struct TStatisticsAggregator::TTxNavigate : public TTxBase {
         const auto& entry = Request->ResultSet.front();
 
         if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-            return true; // TODO: handle error
+            Cancelled = true;
+
+            if (!Self->ScanTablesByTime.empty()) {
+                auto& topTable = Self->ScanTablesByTime.top();
+                auto pathId = topTable.PathId;
+                if (pathId == Self->ScanTableId.PathId) {
+                    Self->ScanTablesByTime.pop();
+                    db.Table<Schema::ScanTables>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
+                }
+            }
+
+            Self->ResetScanState(db);
+            return true;
         }
 
         Self->Columns.clear();
@@ -55,6 +68,11 @@ struct TStatisticsAggregator::TTxNavigate : public TTxBase {
 
     void Complete(const TActorContext&) override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxNavigate::Complete");
+
+        if (Cancelled) {
+            Self->ScheduleNextScan();
+            return;
+        }
 
         Self->Resolve();
     }

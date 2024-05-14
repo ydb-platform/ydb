@@ -1361,6 +1361,7 @@ message TIndexInfo
 {
     required NYT.NProto.TGuid index_table_id = 1;
     required int32 index_kind = 2; // NTableClient::ESecondaryIndexKind
+    optional string predicate = 3;
 }
 
 message TReqGetTableMountInfo

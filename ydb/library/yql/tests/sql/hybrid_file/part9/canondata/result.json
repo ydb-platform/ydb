@@ -225,9 +225,9 @@
     ],
     "test.test[aggr_factory-list--Debug]": [
         {
-            "checksum": "83c7062f8000ac17b84b097fca6ddfcf",
-            "size": 7940,
-            "uri": "https://{canondata_backend}/1900335/3723346a2da176c5ee65dcf2ea559b19068a6488/resource.tar.gz#test.test_aggr_factory-list--Debug_/opt.yql_patched"
+            "checksum": "c9a04b2ec09ae5adf6085f4f103081aa",
+            "size": 7908,
+            "uri": "https://{canondata_backend}/1936947/3ba513bb137f3de526f55306a2bbecb9e5ed975d/resource.tar.gz#test.test_aggr_factory-list--Debug_/opt.yql_patched"
         }
     ],
     "test.test[aggr_factory-list--Plan]": [
@@ -2927,9 +2927,9 @@
     ],
     "test.test[window-generic/aggregations_after_current--Debug]": [
         {
-            "checksum": "656f147844ed85b377a34e23e45249ed",
-            "size": 10225,
-            "uri": "https://{canondata_backend}/1917492/092f6b955a43bed7a63b100561946af917330bfe/resource.tar.gz#test.test_window-generic_aggregations_after_current--Debug_/opt.yql_patched"
+            "checksum": "f6ab86e0b8ef924335420010ec1370a9",
+            "size": 10162,
+            "uri": "https://{canondata_backend}/1937424/f451f285fc7754f944209343662da0cffa8b8855/resource.tar.gz#test.test_window-generic_aggregations_after_current--Debug_/opt.yql_patched"
         }
     ],
     "test.test[window-generic/aggregations_after_current--Plan]": [
@@ -2969,9 +2969,9 @@
     ],
     "test.test[window-win_by_all_percentile_interval-default.txt-Debug]": [
         {
-            "checksum": "aec46d4cf6b1d432d2d65588e143daf5",
-            "size": 6376,
-            "uri": "https://{canondata_backend}/1900335/3723346a2da176c5ee65dcf2ea559b19068a6488/resource.tar.gz#test.test_window-win_by_all_percentile_interval-default.txt-Debug_/opt.yql_patched"
+            "checksum": "e7556d1abd0367a43c1cec9a3e9e522a",
+            "size": 6352,
+            "uri": "https://{canondata_backend}/1937424/f451f285fc7754f944209343662da0cffa8b8855/resource.tar.gz#test.test_window-win_by_all_percentile_interval-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[window-win_by_all_percentile_interval-default.txt-Plan]": [
@@ -2997,9 +2997,9 @@
     ],
     "test.test[window-win_func_over_group_by_compl--Debug]": [
         {
-            "checksum": "830e184b2c655e36bf04d6cb1e91b864",
-            "size": 11966,
-            "uri": "https://{canondata_backend}/1937367/49c64cc02672876c23ccd5878b5b598389e8c1ca/resource.tar.gz#test.test_window-win_func_over_group_by_compl--Debug_/opt.yql_patched"
+            "checksum": "a83df0c180ad50022c91d2bf13d38b89",
+            "size": 11928,
+            "uri": "https://{canondata_backend}/1936947/3ba513bb137f3de526f55306a2bbecb9e5ed975d/resource.tar.gz#test.test_window-win_func_over_group_by_compl--Debug_/opt.yql_patched"
         }
     ],
     "test.test[window-win_func_over_group_by_compl--Plan]": [

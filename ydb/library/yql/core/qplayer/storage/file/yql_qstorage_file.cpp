@@ -19,7 +19,11 @@ protected:
     TWriterBase(TFsPath& path, TInstant writtenAt)
         : Path_(path)
         , WrittenAt_(writtenAt)
-    {}
+    {
+        NFs::Remove(Path_.GetPath() + ".dat");
+        NFs::Remove(Path_.GetPath() + ".idx");
+        NFs::Remove(Path_.GetPath() + ".idx.tmp");
+    }
 
 protected:
     void WriteIndex(ui64 totalItems, ui64 totalBytes, ui64 checksum) const {
@@ -50,10 +54,10 @@ protected:
 
 class TBufferedWriter : public TWriterBase {
 public:
-    TBufferedWriter(TFsPath& path, TInstant writtenAt)
+    TBufferedWriter(TFsPath& path, TInstant writtenAt, const TQWriterSettings& settings)
         : TWriterBase(path, writtenAt)
         , Storage_(MakeMemoryQStorage())
-        , Writer_(Storage_->MakeWriter("", {}))
+        , Writer_(Storage_->MakeWriter("", settings))
     {
     }
 
@@ -97,21 +101,39 @@ private:
 
 class TUnbufferedWriter : public TWriterBase {
 public:
-    TUnbufferedWriter(TFsPath& path, TInstant writtenAt)
+    TUnbufferedWriter(TFsPath& path, TInstant writtenAt, const TQWriterSettings& settings)
         : TWriterBase(path, writtenAt)
-        , DataFile_(Path_.GetPath() + ".dat")
+        , Settings_(settings)
     {
-        DataFile_.Write(&WrittenAt_, sizeof(WrittenAt_));
+        DataFile_.ConstructInPlace(Path_.GetPath() + ".dat");
+        DataFile_->Write(&WrittenAt_, sizeof(WrittenAt_));
+    }
+
+    ~TUnbufferedWriter() {
+        if (!Committed_) {
+            DataFile_.Clear();
+            NFs::Remove(Path_.GetPath() + ".dat");
+        }
     }
 
     NThreading::TFuture<void> Put(const TQItemKey& key, const TString& value) final {
         with_lock(Mutex_) {
             Y_ENSURE(!Committed_);
-            if (Keys_.emplace(key).second) {
-                SaveString(DataFile_, key.Component, TotalBytes_, Checksum_);
-                SaveString(DataFile_, key.Label, TotalBytes_, Checksum_);
-                SaveString(DataFile_, value, TotalBytes_, Checksum_);
-                ++TotalItems_;
+            if (!Overflow_) {
+                if (Keys_.emplace(key).second) {
+                    SaveString(*DataFile_, key.Component, TotalBytes_, Checksum_);
+                    SaveString(*DataFile_, key.Label, TotalBytes_, Checksum_);
+                    SaveString(*DataFile_, value, TotalBytes_, Checksum_);
+                    ++TotalItems_;
+                }
+
+                if (Settings_.ItemsLimit && TotalItems_ > *Settings_.ItemsLimit) {
+                    Overflow_ = true;
+                }
+
+                if (Settings_.BytesLimit && TotalBytes_ > *Settings_.BytesLimit) {
+                    Overflow_ = true;
+                }
             }
 
             return NThreading::MakeFuture();
@@ -120,22 +142,29 @@ public:
 
     NThreading::TFuture<void> Commit() final {
         with_lock(Mutex_) {
+            if (Overflow_) {
+                throw yexception() << "Overflow of qwriter";
+            }
+
             Y_ENSURE(!Committed_);
             Committed_ = true;
-            DataFile_.Finish();
+            DataFile_->Finish();
+            DataFile_.Clear();
             WriteIndex(TotalItems_, TotalBytes_, Checksum_);
             return NThreading::MakeFuture();
         }
     }
 
 private:
+    const TQWriterSettings Settings_;
     TMutex Mutex_;
-    TFileOutput DataFile_;
+    TMaybe<TFileOutput> DataFile_;
     ui64 TotalItems_ = 0;
     ui64 TotalBytes_ = 0;
     ui64 Checksum_ = 0;
     THashSet<TQItemKey> Keys_;
     bool Committed_ = false;
+    bool Overflow_ = false;
 };
 
 class TStorage : public IQStorage {
@@ -154,23 +183,23 @@ public:
         auto opPath = Folder_ / operationId;
         auto writtenAt = writerSettings.WrittenAt.GetOrElse(Now());
         if (Settings_.BufferUntilCommit) {
-            return std::make_shared<TBufferedWriter>(opPath, writtenAt);
+            return std::make_shared<TBufferedWriter>(opPath, writtenAt, writerSettings);
         } else {
-            return std::make_shared<TUnbufferedWriter>(opPath, writtenAt);
+            return std::make_shared<TUnbufferedWriter>(opPath, writtenAt, writerSettings);
         }
     }
 
-    IQReaderPtr MakeReader(const TString& operationId, const TQReaderSettings& settings) const final {
-        Y_UNUSED(settings);
+    IQReaderPtr MakeReader(const TString& operationId, const TQReaderSettings& readerSettings) const final {
+        Y_UNUSED(readerSettings);
         auto memory = MakeMemoryQStorage();
         LoadFile(operationId, memory);
         return memory->MakeReader("", {});
     }
 
-    IQIteratorPtr MakeIterator(const TString& operationId, const TQIteratorSettings& settings) const {
+    IQIteratorPtr MakeIterator(const TString& operationId, const TQIteratorSettings& iteratorSettings) const {
         auto memory = MakeMemoryQStorage();
         LoadFile(operationId, memory);
-        return memory->MakeIterator("", settings);
+        return memory->MakeIterator("", iteratorSettings);
     }
 
 private:

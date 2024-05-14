@@ -1040,6 +1040,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("abc", ""), 3);
         UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("apple", "apple"), 0);
         UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("apple", "aple"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("UPPER", "upper"), 0);
         UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("horse", "ros"), 3);
         UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("intention", "execution"), 5);
         UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("/slice/db", "/slice"), 3);
@@ -1048,64 +1049,48 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(LevenshteinDistance("/slice/db", "/slice/db26000"), 5);
     }
 
-    Y_UNIT_TEST(FuzzySearcher)
+    TVector<TString> SimilarWordsDictionary = { "/slice", "/slice/db", "/slice/db26000" };
+    TVector<TString> DifferentWordsDictionary = { "/orders", "/peoples", "/OrdinaryScheduleTables" };
+
+    void FuzzySearcherTest(TVector<TString>& dictionary, TString search, ui32 limit, TVector<TString> expectations) {
+        auto fuzzy = FuzzySearcher<TString>(dictionary);
+        auto result = fuzzy.Search(search, limit);
+
+        UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());
+        for (ui32 i = 0; i < expectations.size(); i++) {
+            UNIT_ASSERT_VALUES_EQUAL(expectations[i], result[i]);
+        }
+    }
+
+    Y_UNIT_TEST(FuzzySearcherLimit1OutOf4)
     {
-        TVector<TString> dictionary = { "/slice", "/slice/db", "/slice/db26000" };
+        FuzzySearcherTest(SimilarWordsDictionary, "/slice/db", 1, { "/slice/db" });
+    }
 
-        {
-            TVector<TString> expectations = { "/slice/db" };
-            auto fuzzy = FuzzySearcher<TString>(dictionary);
-            auto result = fuzzy.Search("/slice/db", 1);
+    Y_UNIT_TEST(FuzzySearcherLimit2OutOf4)
+    {
+        FuzzySearcherTest(SimilarWordsDictionary, "/slice/db", 2, { "/slice/db", "/slice/db26000" });
+    }
 
-            UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());
-            for (ui32 i = 0; i < expectations.size(); i++) {
-                UNIT_ASSERT_VALUES_EQUAL(expectations[i], result[i]);
-            }
-        }
+    Y_UNIT_TEST(FuzzySearcherLimit3OutOf4)
+    {
+        FuzzySearcherTest(SimilarWordsDictionary, "/slice/db", 3, { "/slice/db", "/slice/db26000", "/slice"});
+    }
 
-        {
-            TVector<TString> expectations = { "/slice/db", "/slice" };
-            auto fuzzy = FuzzySearcher<TString>(dictionary);
-            auto result = fuzzy.Search("/slice/db", 2);
+    Y_UNIT_TEST(FuzzySearcherLimit4OutOf4)
+    {
+        FuzzySearcherTest(SimilarWordsDictionary, "/slice/db", 4, { "/slice/db", "/slice/db26000", "/slice"});
+    }
 
-            UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());
-            for (ui32 i = 0; i < expectations.size(); i++) {
-                UNIT_ASSERT_VALUES_EQUAL(expectations[i], result[i]);
-            }
-        }
+    Y_UNIT_TEST(FuzzySearcherLongWord)
+    {
+        FuzzySearcherTest(SimilarWordsDictionary, "/slice/db26001", 10, { "/slice/db26000", "/slice/db", "/slice"});
+    }
 
-        {
-            TVector<TString> expectations = { "/slice/db", "/slice", "/slice/db26000"};
-            auto fuzzy = FuzzySearcher<TString>(dictionary);
-            auto result = fuzzy.Search("/slice/db", 3);
-
-            UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());
-            for (ui32 i = 0; i < expectations.size(); i++) {
-                UNIT_ASSERT_VALUES_EQUAL(expectations[i], result[i]);
-            }
-        }
-
-        {
-            TVector<TString> expectations = { "/slice/db", "/slice", "/slice/db26000" };
-            auto fuzzy = FuzzySearcher<TString>(dictionary);
-            auto result = fuzzy.Search("/slice/db", 4);
-
-            UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());
-            for (ui32 i = 0; i < expectations.size(); i++) {
-                UNIT_ASSERT_VALUES_EQUAL(expectations[i], result[i]);
-            }
-        }
-
-        {
-            TVector<TString> expectations = { "/slice/db26000", "/slice/db", "/slice" };
-            auto fuzzy = FuzzySearcher<TString>(dictionary);
-            auto result = fuzzy.Search("/slice/db26001");
-
-            UNIT_ASSERT_VALUES_EQUAL(expectations.size(), result.size());
-            for (ui32 i = 0; i < expectations.size(); i++) {
-                UNIT_ASSERT_VALUES_EQUAL(expectations[i], result[i]);
-            }
-        }
+    Y_UNIT_TEST(FuzzySearcherPriority)
+    {
+        FuzzySearcherTest(DifferentWordsDictionary, "/ord", 10, { "/orders", "/OrdinaryScheduleTables", "/peoples"});
+        FuzzySearcherTest(DifferentWordsDictionary, "Tables", 10, { "/OrdinaryScheduleTables", "/orders", "/peoples"});
     }
 
     void JsonAutocompleteTest(HTTP_METHOD method, NJson::TJsonValue& value, TString prefix = "", TString database = "", TVector<TString> tables = {}, ui32 limit = 10, bool lowerCaseContentType = false) {
@@ -1136,6 +1121,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
             if (prefix) {
                 httpReq.CgiParameters.emplace("prefix", prefix);
             }
+            httpReq.CgiParameters.emplace("limit", ToString(limit));
         } else if (method == HTTP_METHOD_POST) {
             NJson::TJsonArray tableArray;
             for (const TString& table : tables) {
@@ -1145,13 +1131,13 @@ Y_UNIT_TEST_SUITE(Viewer) {
             NJson::TJsonValue root = NJson::TJsonMap{
                 {"database", database},
                 {"table", tableArray},
-                {"prefix", prefix}
+                {"prefix", prefix},
+                {"limit", limit}
             };
             httpReq.PostContent = NJson::WriteJson(root);
-            auto contType = lowerCaseContentType ? "content-type" : "Content-Type";
-            httpReq.HttpHeaders.AddHeader(contType, "application/json");
+            auto contentType = lowerCaseContentType ? "content-type" : "Content-Type";
+            httpReq.HttpHeaders.AddHeader(contentType, "application/json");
         }
-        httpReq.CgiParameters.emplace("limit", ToString(limit));
         httpReq.CgiParameters.emplace("direct", "1");
         auto page = MakeHolder<TMonPage>("viewer", "title");
         TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/autocomplete", nullptr);
@@ -1236,7 +1222,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         });
     }
 
-    Y_UNIT_TEST(JsonAutocompleteDatabase) {
+    Y_UNIT_TEST(JsonAutocompleteStartOfDatabaseName) {
         NJson::TJsonValue value;
         JsonAutocompleteTest(HTTP_METHOD_GET, value, "/Root");
         VerifyJsonAutocompleteSuccess(value, {
@@ -1246,16 +1232,22 @@ Y_UNIT_TEST_SUITE(Viewer) {
             "/Root/MyDatabase",
             "/Root/TestDatabase"
         });
+    }
 
+    Y_UNIT_TEST(JsonAutocompleteEndOfDatabaseName) {
+        NJson::TJsonValue value;
         JsonAutocompleteTest(HTTP_METHOD_GET, value, "Database");
         VerifyJsonAutocompleteSuccess(value, {
-            "/Root/test",
             "/Root/MyDatabase",
-            "/Root/slice",
             "/Root/TestDatabase",
+            "/Root/test",
+            "/Root/slice",
             "/Root/qwerty"
         });
+    }
 
+    Y_UNIT_TEST(JsonAutocompleteSimilarDatabaseName) {
+        NJson::TJsonValue value;
         JsonAutocompleteTest(HTTP_METHOD_GET, value, "/Root/Database");
         VerifyJsonAutocompleteSuccess(value, {
             "/Root/MyDatabase",
@@ -1264,19 +1256,28 @@ Y_UNIT_TEST_SUITE(Viewer) {
             "/Root/slice",
             "/Root/qwerty"
         });
+    }
 
+    Y_UNIT_TEST(JsonAutocompleteSimilarDatabaseNameWithLimit) {
+        NJson::TJsonValue value;
         JsonAutocompleteTest(HTTP_METHOD_GET, value, "/Root/Database", "", {}, 2);
         VerifyJsonAutocompleteSuccess(value, {
             "/Root/MyDatabase",
             "/Root/TestDatabase"
         });
+    }
 
+    Y_UNIT_TEST(JsonAutocompleteSimilarDatabaseNamePOST) {
+        NJson::TJsonValue value;
         JsonAutocompleteTest(HTTP_METHOD_POST, value, "/Root/Database", "", {}, 2);
         VerifyJsonAutocompleteSuccess(value, {
             "/Root/MyDatabase",
             "/Root/TestDatabase"
         });
+    }
 
+    Y_UNIT_TEST(JsonAutocompleteSimilarDatabaseNameLowerCase) {
+        NJson::TJsonValue value;
         JsonAutocompleteTest(HTTP_METHOD_POST, value, "/Root/Database", "", {}, 2, true);
         VerifyJsonAutocompleteSuccess(value, {
             "/Root/MyDatabase",
@@ -1293,7 +1294,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
             "orders",
             "products"
         });
+    }
 
+    Y_UNIT_TEST(JsonAutocompleteSchemePOST) {
+        NJson::TJsonValue value;
         JsonAutocompleteTest(HTTP_METHOD_POST, value, "clien", "/Root/Database");
         VerifyJsonAutocompleteSuccess(value, {
             "clients",
@@ -1302,7 +1306,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         });
     }
 
-    Y_UNIT_TEST(JsonAutocompleteColumns) {
+    Y_UNIT_TEST(JsonAutocompleteEmptyColumns) {
         NJson::TJsonValue value;
         JsonAutocompleteTest(HTTP_METHOD_GET, value, "", "/Root/Database", {"orders"});
         VerifyJsonAutocompleteSuccess(value, {
@@ -1310,14 +1314,20 @@ Y_UNIT_TEST_SUITE(Viewer) {
             "name",
             "description"
         });
+    }
 
+    Y_UNIT_TEST(JsonAutocompleteColumns) {
+        NJson::TJsonValue value;
         JsonAutocompleteTest(HTTP_METHOD_GET, value, "nam", "/Root/Database", {"orders", "products"});
         VerifyJsonAutocompleteSuccess(value, {
             "name",
             "id",
             "description",
         });
+    }
 
+    Y_UNIT_TEST(JsonAutocompleteColumnsPOST) {
+        NJson::TJsonValue value;
         JsonAutocompleteTest(HTTP_METHOD_POST, value, "nam", "/Root/Database", {"orders", "products"});
         VerifyJsonAutocompleteSuccess(value, {
             "name",

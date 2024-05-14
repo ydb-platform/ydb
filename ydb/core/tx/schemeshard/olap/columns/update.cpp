@@ -193,6 +193,8 @@ namespace NKikimr::NSchemeShard {
             case NYql::NProto::Date:
             case NYql::NProto::Datetime:
             case NYql::NProto::Timestamp:
+            case NYql::NProto::Date32:
+            case NYql::NProto::Datetime64:
             case NYql::NProto::Timestamp64:
             case NYql::NProto::Interval64:
                 return true;

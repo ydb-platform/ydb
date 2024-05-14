@@ -77,7 +77,7 @@ from
      and time_dim.t_minute >= 30
      and ((household_demographics.hd_dep_count = 2 and household_demographics.hd_vehicle_count<=2+2) or
           (household_demographics.hd_dep_count = 4 and household_demographics.hd_vehicle_count<=4+2) or
-          (household_demographics.hd_dep_count = 4 and household_demographics.hd_vehicle_count<=3+2))
+          (household_demographics.hd_dep_count = 3 and household_demographics.hd_vehicle_count<=3+2))
      and store.s_store_name = 'ese') s7,
  (select count(*) h12_to_12_30
  from {{store_sales}}, {{household_demographics}} , {{time_dim}}, {{store}}

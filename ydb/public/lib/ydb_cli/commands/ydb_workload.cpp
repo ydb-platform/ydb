@@ -496,17 +496,19 @@ TStatus TWorkloadCommandInit::SendDataPortion(NYdbWorkload::IBulkDataGenerator::
     if (auto* value = std::get_if<TValue>(&portion->Data)) {
         return TableClient->BulkUpsert(portion->Table, std::move(*value)).GetValueSync();
     }
+    NRetry::TRetryOperationSettings retrySettings;
+    retrySettings.RetryUndefined(true);
     if (auto* value = std::get_if<NYdbWorkload::IBulkDataGenerator::TDataPortion::TCsv>(&portion->Data)) {
         return TableClient->RetryOperationSync([value, portion](NTable::TTableClient& client) {
             NTable::TBulkUpsertSettings settings;
             settings.FormatSettings(value->FormatString);
             return client.BulkUpsert(portion->Table, NTable::EDataFormat::CSV, value->Data, TString(), settings).GetValueSync();
-        });
+        }, retrySettings);
     }
     if (auto* value = std::get_if<NYdbWorkload::IBulkDataGenerator::TDataPortion::TArrow>(&portion->Data)) {
         return TableClient->RetryOperationSync([value, portion](NTable::TTableClient& client) {
             return client.BulkUpsert(portion->Table, NTable::EDataFormat::ApacheArrow, value->Data, value->Schema).GetValueSync();
-        });
+        }, retrySettings);
     }
     Y_FAIL_S("Invalid data portion");
 }

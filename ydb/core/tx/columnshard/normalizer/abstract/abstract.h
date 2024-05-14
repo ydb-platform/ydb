@@ -6,6 +6,11 @@
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/library/conclusion/result.h>
+#include <library/cpp/object_factory/object_factory.h>
+
+namespace NKikimr::NIceDb {
+    class TNiceDb;
+}
 
 namespace NKikimr::NOlap {
 
@@ -45,15 +50,24 @@ namespace NKikimr::NOlap {
         }
     };
 
+    enum class ENormalizerSequentialId : ui32 {
+        Granules = 1,
+        Chunks,
+        PortionsMetadata,
+        PortionsCleaner,
+        TablesCleaner
+    };
+
     class TNormalizationContext {
         YDB_ACCESSOR_DEF(TActorId, ResourceSubscribeActor);
-        YDB_ACCESSOR_DEF(TActorId, ColumnshardActor);
+        YDB_ACCESSOR_DEF(TActorId, ShardActor);
         std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
     public:
         void SetResourcesGuard(std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> rg) {
             ResourcesGuard = rg;
         }
     };
+
 
     class TNormalizationController;
 
@@ -86,34 +100,81 @@ namespace NKikimr::NOlap {
         void Start(const TNormalizationController& /* controller */, const TNormalizationContext& /*nCtx*/) override;
     };
 
-    class INormalizerComponent {
+    class TNormalizationController {
     public:
+        class TInitContext {
+            TIntrusiveConstPtr<TTabletStorageInfo> StorageInfo;
+        public:
+            TInitContext(TTabletStorageInfo* info)
+                : StorageInfo(info)
+            {}
+
+            TIntrusiveConstPtr<TTabletStorageInfo> GetStorageInfo() const {
+                return StorageInfo;
+            }
+        };
+
+        class INormalizerComponent {
+        public:
+            using TPtr = std::shared_ptr<INormalizerComponent>;
+            using TFactory = NObjectFactory::TParametrizedObjectFactory<INormalizerComponent, ENormalizerSequentialId, TInitContext>;
+
+            virtual ~INormalizerComponent() {}
+
+            bool HasActiveTasks() const {
+                return AtomicGet(ActiveTasksCount) > 0;
+            }
+
+            void OnResultReady() {
+                AFL_VERIFY(ActiveTasksCount > 0);
+                AtomicDecrement(ActiveTasksCount);
+            }
+
+            i64 GetActiveTasksCount() const {
+                return AtomicGet(ActiveTasksCount);
+            }
+
+            virtual ENormalizerSequentialId GetType() const = 0;
+
+            const TString& GetName() const {
+                static TString name = ToString(GetType());
+                return name;
+            }
+
+            ui32 GetSequentialId() const {
+                return (ui32) GetType();
+            }
+
+            TConclusion<std::vector<INormalizerTask::TPtr>> Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
+                if (controller.HasLastAppliedNormalizerId() && controller.GetLastAppliedNormalizerIdUnsafe() >= GetSequentialId()) {
+                    return std::vector<INormalizerTask::TPtr>();
+                }
+                auto result = DoInit(controller, txc);
+                if (!result.IsSuccess()) {
+                    return result;
+                }
+                AtomicSet(ActiveTasksCount, result.GetResult().size());
+                return result;
+            }
+
+        private:
+            virtual TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) = 0;
+
+            TAtomic ActiveTasksCount = 0;
+        };
         using TPtr = std::shared_ptr<INormalizerComponent>;
 
-        virtual ~INormalizerComponent() {}
-
-        bool WaitResult() const {
-            return AtomicGet(ActiveTasksCount) > 0;
-        }
-
-        void OnResultReady() {
-            AFL_VERIFY(ActiveTasksCount > 0);
-            AtomicDecrement(ActiveTasksCount);
-        }
-
-        virtual const TString& GetName() const = 0;
-        virtual TConclusion<std::vector<INormalizerTask::TPtr>> Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) = 0;
-    protected:
-        TAtomic ActiveTasksCount = 0;
-    };
-
-    class TNormalizationController {
+    private:
         std::shared_ptr<IStoragesManager> StoragesManager;
         NOlap::NResourceBroker::NSubscribe::TTaskContext TaskSubscription;
 
-        std::vector<NOlap::INormalizerComponent::TPtr> Normalizers;
+        std::vector<INormalizerComponent::TPtr> Normalizers;
         ui64 CurrentNormalizerIndex = 0;
         std::vector<TNormalizerCounters> Counters;
+        YDB_READONLY_OPT(ui32, LastAppliedNormalizerId);
+
+    private:
+        void RegisterNormalizer(INormalizerComponent::TPtr normalizer);
 
     public:
         TNormalizationController(std::shared_ptr<IStoragesManager> storagesManager, const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>& counters)
@@ -124,7 +185,14 @@ namespace NKikimr::NOlap {
             return TaskSubscription;
         }
 
-        void RegisterNormalizer(INormalizerComponent::TPtr normalizer);
+        void InitNormalizers(const TInitContext& ctx);
+        void UpdateControllerState(NIceDb::TNiceDb& db);
+        void InitControllerState(NIceDb::TNiceDb& db);
+
+        ui32 GetLastNormalizerSequentialId() {
+            AFL_VERIFY(!Normalizers.empty());
+            return Normalizers.back()->GetSequentialId();
+        }
 
         std::shared_ptr<IStoragesManager> GetStoragesManager() const {
             AFL_VERIFY(!!StoragesManager);

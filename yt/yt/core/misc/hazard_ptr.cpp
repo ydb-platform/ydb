@@ -1,5 +1,7 @@
 #include "hazard_ptr.h"
 
+#include "private.h"
+
 #include <yt/yt/core/misc/singleton.h>
 #include <yt/yt/core/misc/proc.h>
 #include <yt/yt/core/misc/ring_queue.h>
@@ -23,8 +25,7 @@ using namespace NConcurrency;
 
 /////////////////////////////////////////////////////////////////////////////
 
-inline const NLogging::TLogger LockFreePtrLogger("LockFree");
-static const auto& Logger = LockFreePtrLogger;
+static constexpr auto& Logger = LockFreeLogger;
 
 ////////////////////////////////////////////////////////////////////////////
 
@@ -32,7 +33,7 @@ namespace NDetail {
 
 ////////////////////////////////////////////////////////////////////////////
 
-YT_THREAD_LOCAL(THazardPointerSet) HazardPointers;
+YT_DEFINE_THREAD_LOCAL(THazardPointerSet, HazardPointers);
 
 //! A simple container based on free list which supports only Enqueue and DequeueAll.
 template <class T>
@@ -112,8 +113,8 @@ struct THazardThreadState
     { }
 };
 
-YT_THREAD_LOCAL(THazardThreadState*) HazardThreadState;
-YT_THREAD_LOCAL(bool) HazardThreadStateDestroyed;
+YT_DEFINE_THREAD_LOCAL(THazardThreadState*, HazardThreadState);
+YT_DEFINE_THREAD_LOCAL(bool, HazardThreadStateDestroyed);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -204,15 +205,15 @@ void THazardPointerManager::Shutdown()
 
 void THazardPointerManager::RetireHazardPointer(TPackedPtr packedPtr, THazardPtrReclaimer reclaimer)
 {
-    auto* threadState = HazardThreadState;
+    auto* threadState = HazardThreadState();
     if (Y_UNLIKELY(!threadState)) {
-        if (HazardThreadStateDestroyed) {
+        if (HazardThreadStateDestroyed()) {
             // Looks like a global shutdown.
             reclaimer(packedPtr);
             return;
         }
         InitThreadState();
-        threadState = HazardThreadState;
+        threadState = HazardThreadState();
     }
 
     threadState->RetireList.push({packedPtr, reclaimer});
@@ -229,7 +230,7 @@ void THazardPointerManager::RetireHazardPointer(TPackedPtr packedPtr, THazardPtr
 
 bool THazardPointerManager::TryReclaimHazardPointers()
 {
-    auto* threadState = HazardThreadState;
+    auto* threadState = HazardThreadState();
     if (!threadState || threadState->RetireList.empty()) {
         return false;
     }
@@ -254,15 +255,15 @@ void THazardPointerManager::ReclaimHazardPointers(bool flush)
 
 void THazardPointerManager::InitThreadState()
 {
-    if (!HazardThreadState) {
-        YT_VERIFY(!HazardThreadStateDestroyed);
-        HazardThreadState = AllocateThreadState();
+    if (!HazardThreadState()) {
+        YT_VERIFY(!HazardThreadStateDestroyed());
+        HazardThreadState() = AllocateThreadState();
     }
 }
 
-THazardThreadState* THazardPointerManager::AllocateThreadState()
+YT_PREVENT_TLS_CACHING THazardThreadState* THazardPointerManager::AllocateThreadState()
 {
-    auto* threadState = new THazardThreadState(&GetTlsRef(HazardPointers));
+    auto* threadState = new THazardThreadState(&HazardPointers());
 
     struct THazardThreadStateDestroyer
     {
@@ -275,7 +276,7 @@ THazardThreadState* THazardPointerManager::AllocateThreadState()
     };
 
     // Unregisters thread from hazard ptr manager on thread exit.
-    YT_THREAD_LOCAL(THazardThreadStateDestroyer) destroyer{threadState};
+    thread_local THazardThreadStateDestroyer destroyer{threadState};
 
     {
         auto guard = WriterGuard(ThreadRegistryLock_);
@@ -385,8 +386,8 @@ void THazardPointerManager::DestroyThreadState(THazardThreadState* threadState)
 
     delete threadState;
 
-    HazardThreadState = nullptr;
-    HazardThreadStateDestroyed = true;
+    HazardThreadState() = nullptr;
+    HazardThreadStateDestroyed() = true;
 }
 
 void THazardPointerManager::BeforeFork()
@@ -404,8 +405,8 @@ void THazardPointerManager::AfterForkChild()
     ThreadRegistry_.Clear();
     ThreadCount_ = 0;
 
-    if (HazardThreadState) {
-        ThreadRegistry_.PushBack(HazardThreadState);
+    if (HazardThreadState()) {
+        ThreadRegistry_.PushBack(HazardThreadState());
         ThreadCount_ = 1;
     }
 

@@ -11,6 +11,10 @@ namespace NKikimr::NColumnShard {
     public:
         using TBase::TBase;
 
+        virtual bool AllowTxDups() const override {
+            return true;
+        }
+
         virtual bool Parse(TColumnShard& /*owner*/, const TString& data) override {
             if (!SchemaTxBody.ParseFromString(data)) {
                 return false;
@@ -122,6 +126,8 @@ namespace NKikimr::NColumnShard {
             namespace NTypeIds = NScheme::NTypeIds;
             static const THashSet<NScheme::TTypeId> pkSupportedTypes = {
                 NTypeIds::Timestamp,
+                NTypeIds::Date32,
+                NTypeIds::Datetime64,
                 NTypeIds::Timestamp64,
                 NTypeIds::Interval64,
                 NTypeIds::Int8,

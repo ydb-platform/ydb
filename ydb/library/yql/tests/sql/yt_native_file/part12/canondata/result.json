@@ -484,9 +484,9 @@
     ],
     "test.test[blocks-lazy_nonstrict_with_scalar_ctx--Peephole]": [
         {
-            "checksum": "6652cd5761c3af50b3c30de660f1664e",
-            "size": 4380,
-            "uri": "https://{canondata_backend}/1942278/90a4195afff0e9c50d03b8fbd12c9ece91506f18/resource.tar.gz#test.test_blocks-lazy_nonstrict_with_scalar_ctx--Peephole_/opt.yql"
+            "checksum": "45812c32d8514261fc41efebc9c3c035",
+            "size": 4607,
+            "uri": "https://{canondata_backend}/1937367/2ec8630d9f1bdfb88ed5405e89fd4cbcf848b591/resource.tar.gz#test.test_blocks-lazy_nonstrict_with_scalar_ctx--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-lazy_nonstrict_with_scalar_ctx--Plan]": [
@@ -1001,6 +1001,27 @@
     "test.test[expr-non_persistable_group_by_column_fail--Results]": [
         {
             "uri": "file://test.test_expr-non_persistable_group_by_column_fail--Results_/extracted"
+        }
+    ],
+    "test.test[expr-struct_merge-default.txt-Debug]": [
+        {
+            "checksum": "54a15a62a123d1a72d9190f26324aa13",
+            "size": 796,
+            "uri": "https://{canondata_backend}/1784826/6c4ac0f02ea872d52d4b59ee9d0f2b2963fe6800/resource.tar.gz#test.test_expr-struct_merge-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[expr-struct_merge-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1881367/84017fd57088f9d554efcf1a44f82b22e5b164b7/resource.tar.gz#test.test_expr-struct_merge-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[expr-struct_merge-default.txt-Results]": [
+        {
+            "checksum": "83bf749394c8035e5f04d3cf2e23c44c",
+            "size": 9246,
+            "uri": "https://{canondata_backend}/1784826/6c4ac0f02ea872d52d4b59ee9d0f2b2963fe6800/resource.tar.gz#test.test_expr-struct_merge-default.txt-Results_/results.txt"
         }
     ],
     "test.test[flatten_by-flatten_one_field--Debug]": [

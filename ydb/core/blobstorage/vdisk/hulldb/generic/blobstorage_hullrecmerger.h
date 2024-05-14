@@ -23,31 +23,40 @@ namespace NKikimr {
             return MergeData;
         }
 
-        ui32 GetMemRecsMerged() const {
-            return MemRecsMerged;
-        }
+        ui32 GetNumKeepFlags() const { return NumKeepFlags; }
+        ui32 GetNumDoNotKeepFlags() const { return NumDoNotKeepFlags >> 1; }
 
     protected:
         const TBlobStorageGroupType GType;
         TMemRec MemRec;
-        ui32 MemRecsMerged; // number of items that took part in a merge for the current key
+        ui32 MemRecsMerged = 0; // number of items that took part in a merge for the current key
+        ui32 NumKeepFlags = 0;
+        ui32 NumDoNotKeepFlags = 0;
         bool Finished;
         const bool MergeData;
 
         TRecordMergerBase(const TBlobStorageGroupType &gtype, bool mergeData)
             : GType(gtype)
             , MemRec()
-            , MemRecsMerged(0)
             , Finished(false)
             , MergeData(mergeData)
         {}
 
         void Clear() {
             MemRecsMerged = 0;
+            NumKeepFlags = 0;
+            NumDoNotKeepFlags = 0;
             Finished = false;
         }
 
         void AddBasic(const TMemRec &memRec, const TKey &key) {
+            if constexpr (std::is_same_v<TMemRec, TMemRecLogoBlob>) {
+                const int mode = memRec.GetIngress().GetCollectMode(TIngress::IngressMode(GType));
+                static_assert(CollectModeKeep == 1);
+                static_assert(CollectModeDoNotKeep == 2);
+                NumKeepFlags += mode & CollectModeKeep;
+                NumDoNotKeepFlags += mode & CollectModeDoNotKeep;
+            }
             if (MemRecsMerged == 0) {
                 MemRec = memRec;
                 MemRec.SetNoBlob();

@@ -300,12 +300,12 @@ public:
         REGISTER_ALL(TGetOperationCommand,                 "get_operation",                   Null,       Structured, false, false);
 
         REGISTER    (TDumpJobContextCommand,               "dump_job_context",                Null,       Null,       true,  false, ApiVersion3);
-        REGISTER    (TAbandonJobCommand,                   "abandon_job",                     Null,       Null,       false, false, ApiVersion3);
-        REGISTER    (TAbortJobCommand,                     "abort_job",                       Null,       Null,       false, false, ApiVersion3);
+        REGISTER    (TAbandonJobCommand,                   "abandon_job",                     Null,       Null,       true, false, ApiVersion3);
+        REGISTER    (TAbortJobCommand,                     "abort_job",                       Null,       Null,       true, false, ApiVersion3);
 
         REGISTER    (TDumpJobContextCommand,               "dump_job_context",                Null,       Structured, true,  false, ApiVersion4);
-        REGISTER    (TAbandonJobCommand,                   "abandon_job",                     Null,       Structured, false, false, ApiVersion4);
-        REGISTER    (TAbortJobCommand,                     "abort_job",                       Null,       Structured, false, false, ApiVersion4);
+        REGISTER    (TAbandonJobCommand,                   "abandon_job",                     Null,       Structured, true, false, ApiVersion4);
+        REGISTER    (TAbortJobCommand,                     "abort_job",                       Null,       Structured, true, false, ApiVersion4);
 
         REGISTER_ALL(TGetVersionCommand,                   "get_version",                     Null,       Structured, false, false);
         REGISTER_ALL(TGetSupportedFeaturesCommand,         "get_supported_features",          Null,       Structured, false, false);
@@ -324,66 +324,66 @@ public:
         REGISTER_ALL(TResetStateHashCommand,               "reset_state_hash",                Null,       Structured, true,  false);
         REGISTER_ALL(THealExecNodeCommand,                 "heal_exec_node",                  Null,       Structured, true,  false);
 
-        REGISTER_ALL(TSuspendCoordinatorCommand,           "suspend_coordinator",             Null,       Structured, false,  false);
-        REGISTER_ALL(TResumeCoordinatorCommand,            "resume_coordinator",              Null,       Structured, false,  false);
-        REGISTER_ALL(TMigrateReplicationCardsCommand,      "migrate_replication_cards",       Null,       Structured, false,  false);
-        REGISTER_ALL(TSuspendChaosCellsCommand,            "suspend_chaos_cells",             Null,       Structured, false,  false);
-        REGISTER_ALL(TResumeChaosCellsCommand,             "resume_chaos_cells",              Null,       Structured, false,  false);
+        REGISTER_ALL(TSuspendCoordinatorCommand,           "suspend_coordinator",             Null,       Structured, true,  false);
+        REGISTER_ALL(TResumeCoordinatorCommand,            "resume_coordinator",              Null,       Structured, true,  false);
+        REGISTER_ALL(TMigrateReplicationCardsCommand,      "migrate_replication_cards",       Null,       Structured, true,  false);
+        REGISTER_ALL(TSuspendChaosCellsCommand,            "suspend_chaos_cells",             Null,       Structured, true,  false);
+        REGISTER_ALL(TResumeChaosCellsCommand,             "resume_chaos_cells",              Null,       Structured, true,  false);
 
-        REGISTER_ALL(TSuspendTabletCellsCommand,           "suspend_tablet_cells",            Null,       Structured, false,  false);
-        REGISTER_ALL(TResumeTabletCellsCommand,            "resume_tablet_cells",             Null,       Structured, false,  false);
+        REGISTER_ALL(TSuspendTabletCellsCommand,           "suspend_tablet_cells",            Null,       Structured, true,  false);
+        REGISTER_ALL(TResumeTabletCellsCommand,            "resume_tablet_cells",             Null,       Structured, true,  false);
 
         REGISTER    (TAddMaintenanceCommand,               "add_maintenance",                 Null,       Structured, true,   false, ApiVersion4);
         REGISTER    (TRemoveMaintenanceCommand,            "remove_maintenance",              Null,       Structured, true,   false, ApiVersion4);
-        REGISTER_ALL(TDisableChunkLocationsCommand,        "disable_chunk_locations",         Null,       Structured, false,  false);
-        REGISTER_ALL(TDestroyChunkLocationsCommand,        "destroy_chunk_locations",         Null,       Structured, false,  false);
-        REGISTER_ALL(TResurrectChunkLocationsCommand,      "resurrect_chunk_locations",       Null,       Structured, false,  false);
-        REGISTER_ALL(TRequestRestartCommand,               "request_restart",                 Null,       Structured, false,  false);
+        REGISTER_ALL(TDisableChunkLocationsCommand,        "disable_chunk_locations",         Null,       Structured, true,  false);
+        REGISTER_ALL(TDestroyChunkLocationsCommand,        "destroy_chunk_locations",         Null,       Structured, true,  false);
+        REGISTER_ALL(TResurrectChunkLocationsCommand,      "resurrect_chunk_locations",       Null,       Structured, true,  false);
+        REGISTER_ALL(TRequestRestartCommand,               "request_restart",                 Null,       Structured, true,  false);
 
-        REGISTER_ALL(TSetUserPasswordCommand,              "set_user_password",               Null,       Structured, false,  false);
-        REGISTER_ALL(TIssueTokenCommand,                   "issue_token",                     Null,       Structured, false,  false);
-        REGISTER_ALL(TRevokeTokenCommand,                  "revoke_token",                    Null,       Structured, false,  false);
+        REGISTER_ALL(TSetUserPasswordCommand,              "set_user_password",               Null,       Structured, true,  false);
+        REGISTER_ALL(TIssueTokenCommand,                   "issue_token",                     Null,       Structured, true,  false);
+        REGISTER_ALL(TRevokeTokenCommand,                  "revoke_token",                    Null,       Structured, true,  false);
         REGISTER_ALL(TListUserTokensCommand,               "list_user_tokens",                Null,       Structured, false,  false);
 
-        REGISTER    (TRegisterQueueConsumerCommand,        "register_queue_consumer",         Null,       Structured, false,  false, ApiVersion4);
-        REGISTER    (TUnregisterQueueConsumerCommand,      "unregister_queue_consumer",       Null,       Structured, false,  false, ApiVersion4);
+        REGISTER    (TRegisterQueueConsumerCommand,        "register_queue_consumer",         Null,       Structured, true,  false, ApiVersion4);
+        REGISTER    (TUnregisterQueueConsumerCommand,      "unregister_queue_consumer",       Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TListQueueConsumerRegistrationsCommand,    "list_queue_consumer_registrations",       Null,       Structured, false,  false, ApiVersion4);
         REGISTER    (TPullQueueCommand,                    "pull_queue",                      Null,       Tabular,    false,  true, ApiVersion4);
         REGISTER    (TPullConsumerCommand,                 "pull_consumer",                   Null,       Tabular,    false,  true, ApiVersion4);
-        REGISTER    (TAdvanceConsumerCommand,              "advance_consumer",                Null,       Structured, true,   true, ApiVersion4);
+        REGISTER    (TAdvanceConsumerCommand,              "advance_consumer",                Null,       Structured, true,   false, ApiVersion4);
 
-        REGISTER    (TStartQueryCommand,                   "start_query",                     Null,       Structured, false, false, ApiVersion4);
-        REGISTER    (TAbortQueryCommand,                   "abort_query",                     Null,       Structured, false, false, ApiVersion4);
+        REGISTER    (TStartQueryCommand,                   "start_query",                     Null,       Structured, true, false, ApiVersion4);
+        REGISTER    (TAbortQueryCommand,                   "abort_query",                     Null,       Structured, true, false, ApiVersion4);
         REGISTER    (TGetQueryCommand,                     "get_query",                       Null,       Structured, false, false, ApiVersion4);
         REGISTER    (TListQueriesCommand,                  "list_queries",                    Null,       Structured, false, false, ApiVersion4);
         REGISTER    (TGetQueryResultCommand,               "get_query_result",                Null,       Structured, false, false, ApiVersion4);
         REGISTER    (TReadQueryResultCommand,              "read_query_result",               Null,       Tabular,    false, true, ApiVersion4);
-        REGISTER    (TAlterQueryCommand,                   "alter_query",                     Null,       Tabular,    false, false, ApiVersion4);
+        REGISTER    (TAlterQueryCommand,                   "alter_query",                     Null,       Tabular,    true, false, ApiVersion4);
         REGISTER    (TGetQueryTrackerInfoCommand,          "get_query_tracker_info",          Null,       Structured, false, false, ApiVersion4);
 
         REGISTER_ALL(TGetBundleConfigCommand,              "get_bundle_config",               Null,       Structured, false,  false);
-        REGISTER_ALL(TSetBundleConfigCommand,              "set_bundle_config",               Structured, Null,       false,  false);
+        REGISTER_ALL(TSetBundleConfigCommand,              "set_bundle_config",               Structured, Null,       true,  false);
 
-        REGISTER    (TGetPipelineSpecCommand,              "get_pipeline_spec",               Null,       Structured, true,   false, ApiVersion4);
+        REGISTER    (TGetPipelineSpecCommand,              "get_pipeline_spec",               Null,       Structured, false,   false, ApiVersion4);
         REGISTER    (TSetPipelineSpecCommand,              "set_pipeline_spec",               Structured, Structured, true,   false, ApiVersion4);
         REGISTER    (TRemovePipelineSpecCommand,           "remove_pipeline_spec",            Null,       Structured, true,   false, ApiVersion4);
-        REGISTER    (TGetPipelineDynamicSpecCommand,       "get_pipeline_dynamic_spec",       Null,       Structured, true,   false, ApiVersion4);
+        REGISTER    (TGetPipelineDynamicSpecCommand,       "get_pipeline_dynamic_spec",       Null,       Structured, false,   false, ApiVersion4);
         REGISTER    (TSetPipelineDynamicSpecCommand,       "set_pipeline_dynamic_spec",       Structured, Structured, true,   false, ApiVersion4);
         REGISTER    (TRemovePipelineDynamicSpecCommand,    "remove_pipeline_dynamic_spec",    Null,       Structured, true,   false, ApiVersion4);
-        REGISTER    (TStartPipelineCommand,                "start_pipeline",                  Null,       Structured, false,  false, ApiVersion4);
-        REGISTER    (TStopPipelineCommand,                 "stop_pipeline",                   Null,       Structured, false,  false, ApiVersion4);
-        REGISTER    (TPausePipelineCommand,                "pause_pipeline",                  Null,       Structured, false,  false, ApiVersion4);
+        REGISTER    (TStartPipelineCommand,                "start_pipeline",                  Null,       Structured, true,  false, ApiVersion4);
+        REGISTER    (TStopPipelineCommand,                 "stop_pipeline",                   Null,       Structured, true,  false, ApiVersion4);
+        REGISTER    (TPausePipelineCommand,                "pause_pipeline",                  Null,       Structured, true,  false, ApiVersion4);
 
         if (Config_->EnableInternalCommands) {
             REGISTER_ALL(TReadHunksCommand,                "read_hunks",                      Null,       Structured, false,  true );
-            REGISTER_ALL(TWriteHunksCommand,               "write_hunks",                     Null,       Structured, false,  true );
-            REGISTER_ALL(TLockHunkStoreCommand,            "lock_hunk_store",                 Null,       Structured, false,  true );
-            REGISTER_ALL(TUnlockHunkStoreCommand,          "unlock_hunk_store",               Null,       Structured, false,  true );
+            REGISTER_ALL(TWriteHunksCommand,               "write_hunks",                     Null,       Structured, true,  true );
+            REGISTER_ALL(TLockHunkStoreCommand,            "lock_hunk_store",                 Null,       Structured, true,  true );
+            REGISTER_ALL(TUnlockHunkStoreCommand,          "unlock_hunk_store",               Null,       Structured, true,  true );
             REGISTER_ALL(TGetConnectionConfigCommand,      "get_connection_config",           Null,       Structured, false,  false);
-            REGISTER_ALL(TIssueLeaseCommand,               "issue_lease",                     Null,       Structured, false,  false);
-            REGISTER_ALL(TRevokeLeaseCommand,              "revoke_lease",                    Null,       Structured, false,  false);
-            REGISTER_ALL(TReferenceLeaseCommand,           "reference_lease",                 Null,       Structured, false,  false);
-            REGISTER_ALL(TUnreferenceLeaseCommand,         "unreference_lease",               Null,       Structured, false,  false);
+            REGISTER_ALL(TIssueLeaseCommand,               "issue_lease",                     Null,       Structured, true,  false);
+            REGISTER_ALL(TRevokeLeaseCommand,              "revoke_lease",                    Null,       Structured, true,  false);
+            REGISTER_ALL(TReferenceLeaseCommand,           "reference_lease",                 Null,       Structured, true,  false);
+            REGISTER_ALL(TUnreferenceLeaseCommand,         "unreference_lease",               Null,       Structured, true,  false);
         }
 
 #undef REGISTER

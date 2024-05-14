@@ -21,6 +21,7 @@ PEERDIR(
     ydb/library/yql/core
     ydb/library/yql/core/facade
     ydb/library/yql/core/services
+    ydb/library/yql/core/services/mounts
     ydb/library/yql/core/file_storage
     ydb/library/yql/core/qplayer/storage/memory
     ydb/library/yql/providers/common/udf_resolve

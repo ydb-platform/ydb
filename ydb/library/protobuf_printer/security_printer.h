@@ -34,4 +34,13 @@ public:
     }
 };
 
+template <typename TMsg>
+inline TString SecureDebugString(const TMsg& message) {
+    TString result;
+    TSecurityTextFormatPrinter<TMsg> printer;
+    printer.SetSingleLineMode(true);
+    printer.PrintToString(message, &result);
+    return result;
+}
+
 } // namespace NKikimr

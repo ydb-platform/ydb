@@ -1,6 +1,7 @@
 #include <ydb/library/yql/core/pg_settings/guc_settings.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/interface.h>
 #include <ydb/library/yql/parser/pg_wrapper/memory_context.h>
+#include <ydb/library/yql/parser/pg_wrapper/pg_catalog_consts.h>
 #include <ydb/library/yql/minikql/computation/mkql_block_impl.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
@@ -287,11 +288,11 @@ private:
                 content = "template0";
                 break;
             }
-            case 3: {
+            case PG_POSTGRES_DATABASE_ID: {
                 content = "postgres";
                 break;
             }
-            case 4: {
+            case PG_CURRENT_DATABASE_ID: {
                 Y_ENSURE(PGGetGUCSetting("ydb_database"));
                 content = *PGGetGUCSetting("ydb_database");
                 break;
@@ -328,7 +329,7 @@ public:
                 static const std::pair<const char*, TPgDatabaseFiller> AllPgDatabaseFillers[] = {
                     {"oid", [](ui32 index) { return ScalarDatumToPod(ObjectIdGetDatum(index)); }},
                     {"datdba", [](ui32) { return ScalarDatumToPod(ObjectIdGetDatum(1)); }},
-                    {"datistemplate", [](ui32 index) { return ScalarDatumToPod(BoolGetDatum(index < 3)); }},
+                    {"datistemplate", [](ui32 index) { return ScalarDatumToPod(BoolGetDatum(index < PG_POSTGRES_DATABASE_ID)); }},
                     {"datallowconn", [](ui32 index) { return ScalarDatumToPod(BoolGetDatum(index != 2)); }},
                     {"datname", MakePgDatabaseDatnameColumn},
                     {"encoding", [](ui32) { return ScalarDatumToPod(Int32GetDatum(PG_UTF8)); }},
@@ -563,8 +564,11 @@ public:
                     rows.emplace_back(row);
                 });
             } else if (Table_ == "pg_database") {
-                ui32 tableSize = PGGetGUCSetting("ydb_database") ? 4 : 3;
-                for (ui32 index = 1; index <= tableSize; ++index) {
+                TVector <ui32> dbOids = {1, 2, 3};
+                if (PGGetGUCSetting("ydb_database")) {
+                    dbOids.emplace_back(PG_CURRENT_DATABASE_ID);
+                }
+                for (ui32 index : dbOids) {
                     NUdf::TUnboxedValue* items;
                     auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgDatabaseFillers_.size(), items);
                     for (ui32 i = 0; i < PgDatabaseFillers_.size(); ++i) {
@@ -4816,7 +4820,7 @@ void PgAcquireThreadContext(void* ctx) {
         main->PrevStackBase = set_stack_base();
         yql_error_report_active = true;
         if (main->GUCSettings && main->GUCSettings->Get("ydb_database")) {
-            MyDatabaseId = 4;
+            MyDatabaseId = PG_CURRENT_DATABASE_ID;
         }
     }
 }
@@ -4831,7 +4835,7 @@ void PgReleaseThreadContext(void* ctx) {
         LoadRecordCacheState(&main->PrevRecordCacheState);
         restore_stack_base(main->PrevStackBase);
         yql_error_report_active = false;
-        MyDatabaseId = 3;
+        MyDatabaseId = PG_POSTGRES_DATABASE_ID;
     }
 }
 
@@ -4840,7 +4844,7 @@ void PgSetGUCSettings(void* ctx, const TGUCSettings::TPtr& GUCSettings) {
         auto main = (TMainContext*)ctx;
         main->GUCSettings = GUCSettings;
         if (main->GUCSettings->Get("ydb_database")) {
-            MyDatabaseId = 4;
+            MyDatabaseId = PG_CURRENT_DATABASE_ID;
         }
     }
     PgCreateSysCacheEntries(ctx);

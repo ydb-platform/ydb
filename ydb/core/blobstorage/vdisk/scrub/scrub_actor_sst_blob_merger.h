@@ -103,8 +103,7 @@ namespace NKikimr {
                 Merger.Finish();
 
                 // obtain keep status
-                NGc::TKeepStatus status = Essence->Keep(id, Merger.GetMemRec(), Merger.GetMemRecsMerged(), AllowKeepFlags,
-                    true /*allowGarbageCollection*/);
+                NGc::TKeepStatus status = Essence->Keep(id, Merger.GetMemRec(), {}, AllowKeepFlags, true /*allowGarbageCollection*/);
 
                 // clear merger for next operation
                 Merger.Clear();

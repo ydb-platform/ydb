@@ -5,6 +5,8 @@ allowCustomResources: true
 resources:
   script:
     - _assets/gtm.js
+  style:
+    - _assets/tags.css   
 
 docs-viewer:
   project-name: ydb

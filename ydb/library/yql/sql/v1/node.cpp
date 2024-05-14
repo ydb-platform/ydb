@@ -358,6 +358,14 @@ void MergeHints(TTableHints& base, const TTableHints& overrides) {
     }
 }
 
+TTableHints CloneContainer(const TTableHints& hints) {
+    TTableHints result;
+    for (auto& [name, nodes] : hints) {
+        result.emplace(std::make_pair(name, CloneContainer(nodes)));
+    }
+    return result;
+}
+
 TAstAtomNode::TAstAtomNode(TPosition pos, const TString& content, ui32 flags, bool isOptionalArg)
     : INode(pos)
     , Content(content)
@@ -797,7 +805,12 @@ bool TExternalFunctionConfig::DoInit(TContext& ctx, ISource* src) {
 }
 
 INode::TPtr TExternalFunctionConfig::DoClone() const {
-    return {};
+    TFunctionConfig cloned;
+    for (auto& [name, node] : Config) {
+        cloned[name] = SafeClone(node);
+    }
+
+    return new TExternalFunctionConfig(GetPos(), cloned);
 }
 
 bool TWinRank::DoInit(TContext& ctx, ISource* src) {
@@ -1585,7 +1598,7 @@ public:
     }
 
     TPtr DoClone() const override {
-        return {};
+        return new TInvalidLiteralNode(GetPos());
     }
 };
 
@@ -1979,7 +1992,7 @@ TAstNode* TListOfNamedNodes::Translate(TContext& ctx) const {
 }
 
 TNodePtr TListOfNamedNodes::DoClone() const {
-    return {};
+    return new TListOfNamedNodes(GetPos(), CloneContainer(Exprs));
 }
 
 void TListOfNamedNodes::DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const {
@@ -2014,7 +2027,7 @@ TString TArgPlaceholderNode::GetName() const {
 }
 
 TNodePtr TArgPlaceholderNode::DoClone() const {
-    return {};
+    return new TArgPlaceholderNode(GetPos(), Name);
 }
 
 TNodePtr BuildArgPlaceholder(TPosition pos, const TString& name) {
@@ -2360,9 +2373,15 @@ public:
     {
         Add("bind", AstNode(module), BuildQuotedAtom(pos, alias));
     }
+private:
+    TBindNode(const TBindNode& other)
+        : TAstListNode(other.GetPos())
+    {
+        Nodes = CloneContainer(other.Nodes);
+    }
 
     TPtr DoClone() const final {
-        return {};
+        return new TBindNode(*this);
     }
 };
 
@@ -2390,9 +2409,15 @@ public:
         }
     }
 
-protected:
+private:
+    TLambdaNode(const TLambdaNode& other)
+        : TAstListNode(other.GetPos())
+    {
+        Nodes = CloneContainer(other.Nodes);
+    }
+
     TPtr DoClone() const final {
-        return {};
+        return new TLambdaNode(*this);
     }
 
     void DoUpdateState() const final {
@@ -2573,7 +2598,7 @@ bool TUdfNode::DoInit(TContext& ctx, ISource* src) {
     if (TStructNode* named_args = dynamic_cast<TStructNode*>(Args[1].Get()); named_args) {
         for (const auto &arg: named_args->GetExprs()) {
             if (arg->GetLabel() == "TypeConfig") {
-                TypeConfig = MakeAtomFromExpression(ctx, arg);
+                TypeConfig = MakeAtomFromExpression(Pos, ctx, arg);
             } else if (arg->GetLabel() == "RunConfig") {
                 RunConfig = arg;
             }
@@ -2808,7 +2833,7 @@ TNodePtr GroundWithExpr(const TNodePtr& ground, const TNodePtr& expr) {
     return ground ? expr->Y("block", expr->Q(expr->L(ground, expr->Y("return", expr)))) : expr;
 }
 
-TSourcePtr TryMakeSourceFromExpression(TContext& ctx, const TString& currService, const TDeferredAtom& currCluster,
+TSourcePtr TryMakeSourceFromExpression(TPosition pos, TContext& ctx, const TString& currService, const TDeferredAtom& currCluster,
     TNodePtr node, const TString& view) {
     if (currCluster.Empty()) {
         ctx.Error() << "No cluster name given and no default cluster is selected";
@@ -2827,14 +2852,18 @@ TSourcePtr TryMakeSourceFromExpression(TContext& ctx, const TString& currService
         return nullptr;
     }
 
-    auto wrappedNode = node->Y("EvaluateAtom", node);
+    auto wrappedNode = new TAstListNodeImpl(pos, { 
+        new TAstAtomNodeImpl(pos, "EvaluateAtom", TNodeFlags::Default),
+        node
+    });
+
     TNodePtr tableKey = BuildTableKey(node->GetPos(), currService, currCluster, TDeferredAtom(wrappedNode, ctx), {view});
     TTableRef table(ctx.MakeName("table"), currService, currCluster, tableKey);
     table.Options = BuildInputOptions(node->GetPos(), GetContextHints(ctx));
     return BuildTableSource(node->GetPos(), table);
 }
 
-void MakeTableFromExpression(TContext& ctx, TNodePtr node, TDeferredAtom& table, const TString& prefix) {
+void MakeTableFromExpression(TPosition pos, TContext& ctx, TNodePtr node, TDeferredAtom& table, const TString& prefix) {
     if (auto literal = node->GetLiteral("String")) {
         table = TDeferredAtom(node->GetPos(), prefix + *literal);
         return;
@@ -2852,11 +2881,15 @@ void MakeTableFromExpression(TContext& ctx, TNodePtr node, TDeferredAtom& table,
         node = node->Y("Concat", node->Y("String", node->Q(prefix)), node);
     }
 
-    auto wrappedNode = node->Y("EvaluateAtom", node);
+    auto wrappedNode = new TAstListNodeImpl(pos, { 
+        new TAstAtomNodeImpl(pos, "EvaluateAtom", TNodeFlags::Default),
+        node
+    });
+
     table = TDeferredAtom(wrappedNode, ctx);
 }
 
-TDeferredAtom MakeAtomFromExpression(TContext& ctx, TNodePtr node, const TString& prefix) {
+TDeferredAtom MakeAtomFromExpression(TPosition pos, TContext& ctx, TNodePtr node, const TString& prefix) {
     if (auto literal = node->GetLiteral("String")) {
         return TDeferredAtom(node->GetPos(), prefix + *literal);
     }
@@ -2865,7 +2898,11 @@ TDeferredAtom MakeAtomFromExpression(TContext& ctx, TNodePtr node, const TString
         node = node->Y("Concat", node->Y("String", node->Q(prefix)), node);
     }
 
-    auto wrappedNode = node->Y("EvaluateAtom", node);
+    auto wrappedNode = new TAstListNodeImpl(pos, { 
+        new TAstAtomNodeImpl(pos, "EvaluateAtom", TNodeFlags::Default),
+        node
+    });
+
     return TDeferredAtom(wrappedNode, ctx);
 }
 
@@ -2893,7 +2930,7 @@ public:
     }
 
     TPtr DoClone() const final {
-        return {};
+        return new TTupleResultNode(Node->Clone(), EnsureTupleSize);
     }
 
     void DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const final {

@@ -2071,8 +2071,9 @@ private:
             appendToSorted = attrs.HasKey("sorted_by") && !attrs["sorted_by"].AsList().empty();
         }
 
-        NYT::TNode storageAttrs = NYT::TNode::CreateMap();
         auto yqlAttrs = NYT::TNode::CreateMap();
+
+        auto storageAttrs = NYT::TNode::CreateMap();
         if (appendToSorted || EYtWriteMode::RenewKeepMeta == mode) {
             yqlAttrs = GetUserAttributes(entry->Tx, dstPath, false);
             storageAttrs = entry->Tx->Get(dstPath + "/@", TGetOptions()
@@ -2086,8 +2087,30 @@ private:
             );
         }
 
+        bool forceMerge = combineChunks;
+
         NYT::MergeNodes(yqlAttrs, GetUserAttributes(entry->Tx, srcPaths.back(), true));
         NYT::MergeNodes(yqlAttrs, YqlOpOptionsToAttrs(execCtx->Session_->OperationOptions_));
+        if (EYtWriteMode::RenewKeepMeta == mode) {
+            auto dstAttrs = entry->Tx->Get(dstPath + "/@", TGetOptions()
+                .AttributeFilter(TAttributeFilter()
+                    .AddAttribute("annotation")
+                    .AddAttribute("expiration_time")
+                    .AddAttribute("expiration_timeout")
+                    .AddAttribute("tablet_cell_bundle")
+                    .AddAttribute("enable_dynamic_store_read")
+                )
+            );
+            if (dstAttrs.AsMap().contains("tablet_cell_bundle") && dstAttrs["tablet_cell_bundle"] != "default") {
+                forceMerge = true;
+            }
+            dstAttrs.AsMap().erase("tablet_cell_bundle");
+            if (dstAttrs.AsMap().contains("enable_dynamic_store_read")) {
+                forceMerge = true;
+            }
+            dstAttrs.AsMap().erase("enable_dynamic_store_read");
+            NYT::MergeNodes(yqlAttrs, dstAttrs);
+        }
         NYT::TNode& rowSpecNode = yqlAttrs[YqlRowSpecAttribute];
         const auto nativeYtTypeCompatibility = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
         const bool rowSpecCompactForm = execCtx->Options_.Config()->UseYqlRowSpecCompactForm.Get().GetOrElse(DEFAULT_ROW_SPEC_COMPACT_FORM);
@@ -2102,7 +2125,7 @@ private:
             }
         };
 
-        if (EYtWriteMode::Renew == mode) {
+        if (EYtWriteMode::Renew == mode || EYtWriteMode::RenewKeepMeta == mode) {
             const auto expirationIt = strOpts.find(EYtSettingType::Expiration);
             bool isTimestamp = false, isDuration = false;
             TInstant stamp;
@@ -2139,7 +2162,6 @@ private:
             }
         }
 
-        bool forceMerge = combineChunks;
         bool forceTransform = false;
 
 #define DEFINE_OPT(name, attr, transform)                                                               \

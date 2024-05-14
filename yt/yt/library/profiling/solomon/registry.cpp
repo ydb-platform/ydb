@@ -522,7 +522,7 @@ NProto::TSensorDump TSolomonRegistry::DumpSensors(std::vector<TTagId> extraTags)
     {
         auto guard = Guard(DynamicTagsLock_);
         for (const auto& [key, value] : DynamicTags_) {
-            extraTags.push_back(Tags_.Encode(std::make_pair(key, value)));
+            extraTags.push_back(Tags_.Encode(std::pair(key, value)));
         }
     }
 
@@ -551,10 +551,10 @@ NProto::TSensorDump TSolomonRegistry::DumpSensors(const std::optional<TString>& 
 {
     std::vector<TTagId> extraTags;
     if (host) {
-        extraTags.push_back(Tags_.Encode(std::make_pair("host", *host)));
+        extraTags.push_back(Tags_.Encode(std::pair("host", *host)));
     }
     for (const auto& [key, value] : instanceTags) {
-        extraTags.push_back(Tags_.Encode(std::make_pair(key, value)));
+        extraTags.push_back(Tags_.Encode(std::pair(key, value)));
     }
     return DumpSensors(extraTags);
 }

@@ -379,6 +379,7 @@ void TAlignedPagePoolImpl<T>::ReturnBlock(void* ptr, size_t size) noexcept {
         Y_DEBUG_ABORT_UNLESS(ActiveBlocks.erase(ptr));
     }
 #endif
+    UpdateMemoryYellowZone();
 }
 
 template<typename T>
@@ -497,6 +498,19 @@ void TAlignedPagePoolImpl<T>::Free(void* ptr, size_t size) noexcept {
     TotalAllocated -= size;
     if (Counters.TotalBytesAllocatedCntr) {
         (*Counters.TotalBytesAllocatedCntr) -= size;
+    }
+}
+
+template<typename T>
+void TAlignedPagePoolImpl<T>::UpdateMemoryYellowZone() {
+    if (Limit == 0) return;
+    if (IncreaseMemoryLimitCallback && !IsMaximumLimitValueReached) return;
+
+    ui8 usedMemoryPercent = 100 * GetUsed() / Limit;
+    if (usedMemoryPercent >= EnableMemoryYellowZoneThreshold) {
+        IsMemoryYellowZoneReached = true;
+    } else if (usedMemoryPercent <= DisableMemoryYellowZoneThreshold) {
+        IsMemoryYellowZoneReached = false;
     }
 }
 

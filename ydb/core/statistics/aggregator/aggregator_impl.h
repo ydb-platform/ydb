@@ -120,6 +120,8 @@ private:
     void PersistScanTableId(NIceDb::TNiceDb& db);
     void PersistScanStartTime(NIceDb::TNiceDb& db);
 
+    void ResetScanState(NIceDb::TNiceDb& db);
+
     STFUNC(StateInit) {
         StateInitImpl(ev, SelfId());
     }

@@ -141,6 +141,9 @@ namespace NKikimr::NStorage {
                 case TQuery::kDropDonor:
                     return DropDonor(record.GetDropDonor());
 
+                case TQuery::kReassignStateStorageNode:
+                    return ReassignStateStorageNode(record.GetReassignStateStorageNode());
+
                 case TQuery::REQUEST_NOT_SET:
                     return FinishWithError(TResult::ERROR, "Request field not set");
             }
@@ -176,9 +179,15 @@ namespace NKikimr::NStorage {
             }
 
             bool found = false;
-            const ui32 groupId = cmd.GetVDiskId().GetGroupID();
+            const TVDiskID vdiskId = VDiskIDFromVDiskID(cmd.GetVDiskId());
             for (const auto& group : Self->StorageConfig->GetBlobStorageConfig().GetServiceSet().GetGroups()) {
-                if (group.GetGroupID() == groupId) {
+                if (group.GetGroupID() == vdiskId.GroupID) {
+                    if (group.GetGroupGeneration() != vdiskId.GroupGeneration) {
+                        return FinishWithError(TResult::ERROR, TStringBuilder() << "group generation mismatch"
+                            << " GroupId# " << group.GetGroupID()
+                            << " Generation# " << group.GetGroupGeneration()
+                            << " VDiskId# " << vdiskId);
+                    }
                     found = true;
                     if (!cmd.GetIgnoreGroupFailModelChecks()) {
                         IssueVStatusQueries(group);
@@ -187,7 +196,7 @@ namespace NKikimr::NStorage {
                 }
             }
             if (!found) {
-                return FinishWithError(TResult::ERROR, TStringBuilder() << "GroupId# " << groupId << " not found");
+                return FinishWithError(TResult::ERROR, TStringBuilder() << "GroupId# " << vdiskId.GroupID << " not found");
             }
 
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryBaseConfig);
@@ -370,7 +379,8 @@ namespace NKikimr::NStorage {
                         Self->AllocateStaticGroup(&config, vdiskId.GroupID, vdiskId.GroupGeneration + 1,
                             TBlobStorageGroupType((TBlobStorageGroupType::EErasureSpecies)group.GetErasureSpecies()),
                             settings.GetGeometry(), settings.GetPDiskFilter(), replacedDisks, forbid, maxSlotSize,
-                            &BaseConfig.value(), cmd.GetConvertToDonor());
+                            &BaseConfig.value(), cmd.GetConvertToDonor(), cmd.GetIgnoreVSlotQuotaCheck(),
+                            cmd.GetIsSelfHealReasonDecommit());
                     } catch (const TExConfigError& ex) {
                         STLOG(PRI_NOTICE, BS_NODE, NW49, "ReassignGroupDisk failed to allocate group", (SelfId, SelfId()),
                             (Config, config),
@@ -497,6 +507,87 @@ namespace NKikimr::NStorage {
             if (!changes) {
                 return Finish(Sender, SelfId(), PrepareResult(TResult::OK, std::nullopt).release(), 0, Cookie);
             }
+
+            config.SetGeneration(config.GetGeneration() + 1);
+            StartProposition(&config);
+        }
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // State Storage operation
+
+        void ReassignStateStorageNode(const TQuery::TReassignStateStorageNode& cmd) {
+            if (!RunCommonChecks()) {
+                return;
+            }
+
+            NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
+
+            auto process = [&](const char *name, auto hasFunc, auto mutableFunc) {
+                if (!(config.*hasFunc)()) {
+                    FinishWithError(TResult::ERROR, TStringBuilder() << name << " configuration is not filled in");
+                    return false;
+                }
+
+                auto *m = (config.*mutableFunc)();
+                auto *ring = m->MutableRing();
+                if (ring->RingSize() && ring->NodeSize()) {
+                    FinishWithError(TResult::ERROR, TStringBuilder() << name << " incorrect configuration:"
+                        " both Ring and Node fields are set");
+                    return false;
+                }
+
+                const size_t numItems = Max(ring->RingSize(), ring->NodeSize());
+                bool found = false;
+
+                auto replace = [&](auto *ring, size_t i) {
+                    if (ring->GetNode(i) == cmd.GetFrom()) {
+                        if (found) {
+                            FinishWithError(TResult::ERROR, TStringBuilder() << name << " ambiguous From node");
+                            return false;
+                        } else {
+                            found = true;
+                            ring->MutableNode()->Set(i, cmd.GetTo());
+                        }
+                    }
+                    return true;
+                };
+
+                for (size_t i = 0; i < numItems; ++i) {
+                    if (ring->RingSize()) {
+                        const auto& r = ring->GetRing(i);
+                        if (r.RingSize()) {
+                            FinishWithError(TResult::ERROR, TStringBuilder() << name << " incorrect configuration:"
+                                " Ring is way too nested");
+                            return false;
+                        }
+                        const size_t numNodes = r.NodeSize();
+                        for (size_t k = 0; k < numNodes; ++k) {
+                            if (r.GetNode(k) == cmd.GetFrom() && !replace(ring->MutableRing(i), k)) {
+                                return false;
+                            }
+                        }
+                    } else {
+                        if (ring->GetNode(i) == cmd.GetFrom() && !replace(ring, i)) {
+                            return false;
+                        }
+                    }
+                }
+                if (!found) {
+                    FinishWithError(TResult::ERROR, TStringBuilder() << name << " From node not found");
+                    return false;
+                }
+
+                return true;
+            };
+
+#define F(NAME) \
+            if (cmd.Get##NAME() && !process(#NAME, &NKikimrBlobStorage::TStorageConfig::Has##NAME##Config, \
+                    &NKikimrBlobStorage::TStorageConfig::Mutable##NAME##Config)) { \
+                return; \
+            }
+            F(StateStorage)
+            F(StateStorageBoard)
+            F(SchemeBoard)
 
             config.SetGeneration(config.GetGeneration() + 1);
             StartProposition(&config);

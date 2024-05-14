@@ -14,6 +14,7 @@ SRCS(
     fetch_request_actor.cpp
     header.cpp
     heartbeat.cpp
+    key.cpp
     metering_sink.cpp
     mirrorer.cpp
     mirrorer.h
@@ -33,7 +34,7 @@ SRCS(
     pq_l2_cache.cpp
     pq_rl_helpers.cpp
     quota_tracker.cpp
-    read_balancer__types.cpp
+    read_balancer__balancing.cpp
     read_balancer.cpp
     account_read_quoter.cpp
     read_quoter.cpp
@@ -49,6 +50,7 @@ SRCS(
     dread_cache_service/caching_service.cpp
 )
 
+GENERATE_ENUM_SERIALIZATION(read_balancer__balancing.h)
 GENERATE_ENUM_SERIALIZATION(sourceid_info.h)
 
 PEERDIR(

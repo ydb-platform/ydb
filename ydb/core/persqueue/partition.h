@@ -103,7 +103,8 @@ private:
     bool LastOffsetHasBeenCommited(const TUserInfo& userInfo) const;
 
     void ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error);
-    void ReplyPropose(const TActorContext& ctx, const NKikimrPQ::TEvProposeTransaction& event, NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode);
+    void ReplyPropose(const TActorContext& ctx, const NKikimrPQ::TEvProposeTransaction& event, NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode,
+                      NKikimrPQ::TError::EKind kind, const TString& reason);
     void ReplyErrorForStoredWrites(const TActorContext& ctx);
 
     void ReplyGetClientOffsetOk(const TActorContext& ctx, const ui64 dst, const i64 offset, const TInstant writeTimestamp, const TInstant createTimestamp);
@@ -284,7 +285,9 @@ private:
                             NPersQueue::NErrorCode::EErrorCode errorCode,
                             const TString& error);
     void ScheduleReplyPropose(const NKikimrPQ::TEvProposeTransaction& event,
-                              NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode);
+                              NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode,
+                              NKikimrPQ::TError::EKind kind,
+                              const TString& reason);
     void ScheduleReplyCommitDone(ui64 step, ui64 txId);
     void ScheduleDropPartitionLabeledCounters(const TString& group);
     void SchedulePartitionConfigChanged();
@@ -311,7 +314,9 @@ private:
                                             NPersQueue::NErrorCode::EErrorCode errorCode,
                                             const TString& error);
     THolder<TEvPersQueue::TEvProposeTransactionResult> MakeReplyPropose(const NKikimrPQ::TEvProposeTransaction& event,
-                                                                        NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode);
+                                                                        NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode,
+                                                                        NKikimrPQ::TError::EKind kind,
+                                                                        const TString& reason);
     THolder<TEvPQ::TEvTxCommitDone> MakeCommitDone(ui64 step, ui64 txId);
 
     bool BeginTransaction(const TEvPQ::TEvTxCalcPredicate& event,

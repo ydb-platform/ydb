@@ -77,4 +77,9 @@ namespace NKikimr::NPublicHttp {
     google::protobuf::Arena* TGrpcRequestContextWrapper::GetArena() {
         return &Arena;
     }
+
+    TString TGrpcRequestContextWrapper::GetPeer() const {
+       return RequestContext.GetPeer();
+    }
+
 } // namespace NKikimr::NPublicHttp

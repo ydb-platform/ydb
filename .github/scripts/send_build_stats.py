@@ -9,7 +9,7 @@ import subprocess
 
 YDBD_PATH = "ydb/apps/ydbd/ydbd"
 
-from_env_columns = [
+FROM_ENV_COLUMNS = [
     "github_head_ref",
     "github_workflow",
     "github_workflow_ref",
@@ -21,23 +21,23 @@ from_env_columns = [
     "github_ref",
 ]
 
-string_columns = from_env_columns + [
+STRING_COLUMNS = FROM_ENV_COLUMNS + [
     "id",
     "git_commit_message",
     "binary_path",
     "build_preset",
 ]
 
-datetime_colums = [
+DATETIME_COLUMNS = [
     "git_commit_time",
 ]
 
-uint64_columns = [
+UINT64_COLUMNS = [
     "size_bytes",
     "size_stripped_bytes",
 ]
 
-all_columns = string_columns + datetime_colums + uint64_columns
+all_columns = STRING_COLUMNS + DATETIME_COLUMNS + UINT64_COLUMNS
 
 
 def sanitize_str(s):
@@ -63,11 +63,11 @@ def main():
         )
         with session.transaction() as tx:
             text_query_builder = []
-            for type_ in string_columns:
+            for type_ in STRING_COLUMNS:
                 text_query_builder.append("DECLARE ${} as String;".format(type_))
-            for type_ in uint64_columns:
+            for type_ in UINT64_COLUMNS:
                 text_query_builder.append("DECLARE ${} as Uint64;".format(type_))
-            for type_ in datetime_colums:
+            for type_ in DATETIME_COLUMNS:
                 text_query_builder.append("DECLARE ${} as Datetime;".format(type_))
 
             text_query_builder.append(
@@ -104,7 +104,7 @@ VALUES
                     ["git", "show", "--no-patch", "--format=%cI", github_sha]
                 )
                 git_commit_message_bytes = subprocess.check_output(
-                    ["git", "log", "--format=%B", "-n", "1", github_sha]
+                    ["git", "log", "--format=%s", "-n", "1", github_sha]
                 )
                 git_commit_time = datetime.datetime.fromisoformat(
                     git_commit_time_bytes.decode("utf-8").strip()
@@ -126,7 +126,7 @@ VALUES
                 "$git_commit_message": sanitize_str(git_commit_message),
             }
 
-            for column in from_env_columns:
+            for column in FROM_ENV_COLUMNS:
                 value = os.environ.get(column.upper(), None)
                 parameters["$" + column] = sanitize_str(value)
 

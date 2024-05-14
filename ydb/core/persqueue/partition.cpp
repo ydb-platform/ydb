@@ -19,7 +19,6 @@
 #include <util/folder/path.h>
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace {
 
@@ -365,7 +364,6 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
 }
 
 void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
-    DBGTRACE("TPartition::AddMetaKey");
     //Set Start Offset
     auto write = request->Record.AddCmdWrite();
     TKeyPrefix ikey(TKeyPrefix::TypeMeta, Partition);
@@ -393,7 +391,6 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
     write->SetKey(ikey.Data(), ikey.Size());
     write->SetValue(out.c_str(), out.size());
     write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
-
 }
 
 bool TPartition::CleanUp(TEvKeyValue::TEvRequest* request, const TActorContext& ctx) {
@@ -980,7 +977,6 @@ void TPartition::Handle(TEvPQ::TEvTxCalcPredicate::TPtr& ev, const TActorContext
 
 void TPartition::Handle(TEvPQ::TEvTxCommit::TPtr& ev, const TActorContext& ctx)
 {
-    DBGTRACE("TPartition::Handle(TEvPQ::TEvTxCommit)");
     EndTransaction(*ev->Get(), ctx);
 
     TxInProgress = false;
@@ -990,7 +986,6 @@ void TPartition::Handle(TEvPQ::TEvTxCommit::TPtr& ev, const TActorContext& ctx)
 
 void TPartition::Handle(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext& ctx)
 {
-    DBGTRACE("TPartition::Handle(TEvPQ::TEvTxRollback)");
     EndTransaction(*ev->Get(), ctx);
 
     TxInProgress = false;
@@ -1000,7 +995,6 @@ void TPartition::Handle(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext& ctx
 
 void TPartition::Handle(TEvPQ::TEvGetWriteInfoResponse::TPtr& ev, const TActorContext& ctx)
 {
-    DBGTRACE("TPartition::Handle(TEvPQ::TEvGetWriteInfoResponse)");
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
                 "TEvGetWriteInfoResponse Cookie: " << ev->Get()->Cookie);
 
@@ -1022,7 +1016,6 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoResponse::TPtr& ev, const TActorCo
     WriteInfoResponse = ev->Release();
 
     if (auto* t = TryGetCurrentImmediateTransaction()) {
-        DBGTRACE_LOG("immediate tx");
         if (!WriteInfoResponse->BodyKeys.empty()) {
             predicate = false;
         }
@@ -1059,7 +1052,6 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoResponse::TPtr& ev, const TActorCo
 
 void TPartition::Handle(TEvPQ::TEvGetWriteInfoError::TPtr& ev, const TActorContext& ctx)
 {
-    DBGTRACE("TPartition::Handle(TEvPQ::TEvGetWriteInfoError)");
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
                 "TEvGetWriteInfoError Cookie: " << ev->Get()->Cookie);
 
@@ -1068,7 +1060,6 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoError::TPtr& ev, const TActorConte
     WriteInfoResponse = nullptr;
 
     if (auto* t = TryGetCurrentImmediateTransaction()) {
-        DBGTRACE_LOG("immediate tx");
         ScheduleReplyPropose(t->Record,
                              NKikimrPQ::TEvProposeTransactionResult::ABORTED,
                              NKikimrPQ::TError::BAD_REQUEST,
@@ -1656,9 +1647,7 @@ size_t TPartition::GetUserActCount(const TString& consumer) const
 
 void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
 {
-    DBGTRACE("TPartition::ProcessTxsAndUserActs");
     if (KVWriteInProgress || TxInProgress) {
-        DBGTRACE_LOG("skip");
         return;
     }
 
@@ -1671,16 +1660,12 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
 
 void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
 {
-    DBGTRACE("TPartition::ContinueProcessTxsAndUserActs");
-    DBGTRACE_LOG("Partition=" << Partition);
-    DBGTRACE_LOG("DeletePartitionState=" << (int)DeletePartitionState);
     Y_ABORT_UNLESS(!KVWriteInProgress);
     Y_ABORT_UNLESS(!TxInProgress);
 
     THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
 
     if (DeletePartitionState == DELETION_INITED) {
-        DBGTRACE_LOG("deletion inited");
         ScheduleNegativeReplies();
         ScheduleDeletePartitionDone();
 
@@ -1689,6 +1674,7 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
         ctx.Send(Tablet, request.Release());
 
         DeletePartitionState = DELETION_IN_PROCESS;
+        KVWriteInProgress = true;
 
         return;
     }
@@ -1696,7 +1682,6 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
     HaveWriteMsg = false;
 
     if (UserActionAndTransactionEvents.empty()) {
-        DBGTRACE_LOG("empty queue");
         const auto now = ctx.Now();
 
         if (ManageWriteTimestampEstimate) {
@@ -1712,7 +1697,6 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
         ProcessReserveRequests(ctx);
 
         if (haveChanges || TxIdHasChanged || !AffectedUsers.empty() || ChangeConfig) {
-            DBGTRACE_LOG("begin write");
             AddCmdWriteTxMeta(request->Record);
             AddCmdWriteUserInfos(request->Record);
             AddCmdWriteConfig(request->Record);
@@ -1727,7 +1711,6 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
             KVWriteInProgress = true;
             HaveWriteMsg = true;
         } else {
-            DBGTRACE_LOG("reply");
             AnswerCurrentWrites(ctx);
             AnswerCurrentReplies(ctx);
         }
@@ -1763,7 +1746,6 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
     }
 
     if (HaveWriteMsg) {
-        DBGTRACE_LOG("have write operation");
         if (!DiskIsFull) {
             EndAppendHeadWithNewWrites(request.Get(), ctx);
             EndProcessWrites(request.Get(), ctx);
@@ -3093,7 +3075,6 @@ void TPartition::ScheduleNegativeReplies()
 
 void TPartition::AddCmdDeleteRangeForAllKeys(TEvKeyValue::TEvRequest& request)
 {
-    DBGTRACE("TPartition::AddCmdDeleteRangeForAllKeys");
     NPQ::AddCmdDeleteRange(request, TKeyPrefix::TypeInfo, Partition);
     NPQ::AddCmdDeleteRange(request, TKeyPrefix::TypeData, Partition);
     NPQ::AddCmdDeleteRange(request, TKeyPrefix::TypeTmpData, Partition);

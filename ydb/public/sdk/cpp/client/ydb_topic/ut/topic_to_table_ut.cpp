@@ -4,11 +4,11 @@
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/ut_utils.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
+#include <ydb/core/persqueue/key.h>
 
 #include <library/cpp/logger/stream.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NYdb::NTopic::NTests {
 
@@ -39,6 +39,7 @@ protected:
     NTable::TSession CreateTableSession();
     NTable::TTransaction BeginTx(NTable::TSession& session);
     void CommitTx(NTable::TTransaction& tx, EStatus status = EStatus::SUCCESS);
+    void RollbackTx(NTable::TTransaction& tx, EStatus status = EStatus::SUCCESS);
 
     TTopicReadSessionPtr CreateReader();
 
@@ -79,12 +80,18 @@ protected:
     void WaitForAcks(const TString& topicPath,
                      const TString& messageGroupId);
 
-    ui64 GetTopicTabletId(const TActorId& actorId,
-                          const TString& topicPath,
-                          ui32 partition);
-    void PrintTopicTabletId(const TString& topicPath);
-    THashSet<TString> GetTabletKeys(const TActorId& actorId,
-                                    ui64 tabletId);
+    enum EEndOfTransaction {
+        Commit,
+        Rollback,
+        CloseTableSession
+    };
+
+    struct TTransactionCompletionTestDescription {
+        TVector<TString> Topics;
+        EEndOfTransaction EndOfTransaction = Commit;
+    };
+
+    void TestTheCompletionOfATransaction(const TTransactionCompletionTestDescription& d);
 
 protected:
     const TDriver& GetDriver() const;
@@ -94,6 +101,14 @@ private:
     E ReadEvent(TTopicReadSessionPtr reader, NTable::TTransaction& tx);
     template<class E>
     E ReadEvent(TTopicReadSessionPtr reader);
+
+    ui64 GetTopicTabletId(const TActorId& actorId,
+                          const TString& topicPath,
+                          ui32 partition);
+    THashSet<TString> GetTabletKeys(const TActorId& actorId,
+                                    ui64 tabletId);
+
+    void CheckTabletKeys(const TString& topicName);
 
     std::unique_ptr<TTopicSdkTestSetup> Setup;
     std::unique_ptr<TDriver> Driver;
@@ -127,6 +142,12 @@ NTable::TTransaction TFixture::BeginTx(NTable::TSession& session)
 void TFixture::CommitTx(NTable::TTransaction& tx, EStatus status)
 {
     auto result = tx.Commit().ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), status);
+}
+
+void TFixture::RollbackTx(NTable::TTransaction& tx, EStatus status)
+{
+    auto result = tx.Rollback().ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), status);
 }
 
@@ -657,23 +678,6 @@ THashSet<TString> TFixture::GetTabletKeys(const TActorId& actorId, ui64 tabletId
     return keys;
 }
 
-void TFixture::PrintTopicTabletId(const TString& topicPath)
-{
-    DBGTRACE("TFixture::PrintTopicTabletId");
-    auto& runtime = Setup->GetRuntime();
-    TActorId edge = runtime.AllocateEdgeActor();
-
-    ui64 tabletId = GetTopicTabletId(edge, topicPath, 0);
-    DBGTRACE_LOG("tabletId=" << tabletId);
-
-    auto keys = GetTabletKeys(edge, tabletId);
-    DBGTRACE_LOG("keys.size=" << keys.size());
-
-    for (auto& key : keys) {
-        DBGTRACE_LOG(key);
-    }
-}
-
 Y_UNIT_TEST_F(WriteToTopic_Demo_1, TFixture)
 {
     CreateTopic("topic_A");
@@ -1071,19 +1075,70 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_10, TFixture)
     }
 }
 
+void TFixture::CheckTabletKeys(const TString& topicName)
+{
+    auto& runtime = Setup->GetRuntime();
+    TActorId edge = runtime.AllocateEdgeActor();
+    ui64 tabletId = GetTopicTabletId(edge, "/Root/" + topicName, 0);
+    auto keys = GetTabletKeys(edge, tabletId);
+
+    const THashSet<char> types {
+        NPQ::TKeyPrefix::TypeInfo,
+        NPQ::TKeyPrefix::TypeData,
+        NPQ::TKeyPrefix::TypeTmpData,
+        NPQ::TKeyPrefix::TypeMeta,
+        NPQ::TKeyPrefix::TypeTxMeta,
+    };
+
+    for (auto& key : keys) {
+        UNIT_ASSERT_GT(key.size(), 0);
+        if (key[0] == '_') {
+            continue;
+        }
+        UNIT_ASSERT_C(types.contains(key[0]), "unexpected type '" << key[0] << "'");
+    }
+}
+
+void TFixture::TestTheCompletionOfATransaction(const TTransactionCompletionTestDescription& d)
+{
+    for (auto& topic : d.Topics) {
+        CreateTopic(topic);
+    }
+
+    {
+        NTable::TSession tableSession = CreateTableSession();
+        NTable::TTransaction tx = BeginTx(tableSession);
+
+        for (auto& topic : d.Topics) {
+            WriteToTopic(topic, TEST_MESSAGE_GROUP_ID, "message", &tx);
+            WaitForAcks(topic, TEST_MESSAGE_GROUP_ID);
+        }
+
+        switch (d.EndOfTransaction) {
+        case Commit:
+            CommitTx(tx, EStatus::SUCCESS);
+            break;
+        case Rollback:
+            RollbackTx(tx, EStatus::SUCCESS);
+            break;
+        case CloseTableSession:
+            break;
+        }
+    }
+
+    Sleep(TDuration::Seconds(5));
+
+    for (auto& topic : d.Topics) {
+        CheckTabletKeys(topic);
+    }
+}
+
 Y_UNIT_TEST_F(WriteToTopic_Demo_11, TFixture)
 {
-    DBGTRACE("WriteToTopic_Demo_11");
-    CreateTopic("topic_A");
-    PrintTopicTabletId("/Root/topic_A");
-    NTable::TSession tableSession = CreateTableSession();
-    NTable::TTransaction tx_1 = BeginTx(tableSession);
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", &tx_1);
-    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
-    PrintTopicTabletId("/Root/topic_A");
-    CommitTx(tx_1, EStatus::SUCCESS);
-    Sleep(TDuration::Seconds(5));
-    PrintTopicTabletId("/Root/topic_A");
+    for (auto endOfTransaction : {Commit, Rollback, CloseTableSession}) {
+        TestTheCompletionOfATransaction({.Topics={"topic_A"}, .EndOfTransaction = endOfTransaction});
+        TestTheCompletionOfATransaction({.Topics={"topic_A", "topic_B"}, .EndOfTransaction = endOfTransaction});
+    }
 }
 
 }

@@ -3173,12 +3173,13 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
         return;
     }
 
+
     if (txBody.GetImmediate()) {
         TPartitionId originalPartitionId(txBody.GetOperations(0).GetPartitionId());
         const TPartitionInfo& partition = Partitions.at(originalPartitionId);
 
         if (txBody.HasWriteId()) {
-            Y_ABORT_UNLESS(Partitions.contains(*partitionId));
+            // the condition `Partition.contains(*partitioned)` is checked above
             const TPartitionInfo& partition = Partitions.at(*partitionId);
             ActorIdToProto(partition.Actor, event.MutableSupportivePartitionActor());
         }
@@ -3843,7 +3844,6 @@ void TPersQueue::SendEvProposeTransactionResult(const TActorContext& ctx,
     result->Record.SetTxId(tx.TxId);
     result->Record.SetStep(tx.Step);
 
-
     ctx.Send(tx.SourceActor, std::move(result));
 }
 
@@ -4088,7 +4088,11 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
     case NKikimrPQ::TTransaction::EXECUTED:
         PQ_LOG_T("TxId="<< tx.TxId << ", State=EXECUTED, tx.HaveAllRecipientsReceive()=" << tx.HaveAllRecipientsReceive());
         if (tx.HaveAllRecipientsReceive()) {
-            DeleteTx(tx);
+            if (tx.WriteId.Defined()) {
+                BeginDeleteTx(tx);
+            } else {
+                DeleteTx(tx);
+            }
         }
 
         break;
@@ -4407,13 +4411,26 @@ void TPersQueue::ProcessCheckPartitionStatusRequests(const TPartitionId& partiti
     }
 }
 
-void TPersQueue::Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& /*ctx*/)
+void TPersQueue::Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext&)
 {
     auto& record = ev->Get()->Record;
     ui64 writeId = record.GetLockId();
-    if (TxWrites.contains(writeId)) {
-        TTxWriteInfo& txWrite = TxWrites.at(writeId);
-        txWrite.LongTxSubscriptionStatus = record.GetStatus();
+
+    if (!TxWrites.contains(writeId)) {
+        // the transaction has already been completed
+        return;
+    }
+
+    TTxWriteInfo& writeInfo = TxWrites.at(writeId);
+    writeInfo.LongTxSubscriptionStatus = record.GetStatus();
+
+    if (writeInfo.LongTxSubscriptionStatus == NKikimrLongTxService::TEvLockStatus::STATUS_SUBSCRIBED) {
+        return;
+    }
+
+    if (!writeInfo.TxId.Defined()) {
+        // the message TEvProposeTransaction will not come anymore
+        BeginDeletePartitions(writeInfo);
     }
 }
 
@@ -4449,6 +4466,11 @@ void TPersQueue::Handle(TEvPQ::TEvDeletePartitionDone::TPtr& ev, const TActorCon
     writeInfo.Partitions.erase(partitionId.OriginalPartitionId);
     if (writeInfo.Partitions.empty()) {
         UnsubscribeWriteId(writeId, ctx);
+        if (writeInfo.TxId.Defined()) {
+            if (auto tx = GetTransaction(ctx, *writeInfo.TxId); tx) {
+                DeleteTx(*tx);
+            }
+        }
         TxWrites.erase(writeId);
     }
 
@@ -4467,11 +4489,37 @@ void TPersQueue::Handle(TEvPQ::TEvTransactionCompleted::TPtr& ev, const TActorCo
     TTxWriteInfo& writeInfo = TxWrites.at(writeId);
     Y_ABORT_UNLESS(writeInfo.Partitions.size() == 1);
 
+    BeginDeletePartitions(writeInfo);
+}
+
+void TPersQueue::BeginDeleteTx(const TDistributedTransaction& tx)
+{
+    Y_ABORT_UNLESS(tx.WriteId.Defined());
+    const ui64 writeId = *tx.WriteId;
+    if (!TxWrites.contains(writeId)) {
+        // the transaction has already been completed
+        return;
+    }
+
+    TTxWriteInfo& writeInfo = TxWrites.at(writeId);
+    if (writeInfo.LongTxSubscriptionStatus == NKikimrLongTxService::TEvLockStatus::STATUS_SUBSCRIBED) {
+        return;
+    }
+
+    BeginDeletePartitions(writeInfo);
+}
+
+void TPersQueue::BeginDeletePartitions(TTxWriteInfo& writeInfo)
+{
+    if (writeInfo.Deleting) {
+        return;
+    }
     for (auto& [_, partitionId] : writeInfo.Partitions) {
         Y_ABORT_UNLESS(Partitions.contains(partitionId));
         const TPartitionInfo& partition = Partitions.at(partitionId);
         Send(partition.Actor, new TEvPQ::TEvDeletePartition);
     }
+    writeInfo.Deleting = true;
 }
 
 TString TPersQueue::LogPrefix() const {

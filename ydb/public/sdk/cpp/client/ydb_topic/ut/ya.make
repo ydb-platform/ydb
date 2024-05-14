@@ -29,7 +29,6 @@ PEERDIR(
 
     ydb/core/tx/schemeshard/ut_helpers
     ydb/core/persqueue/ut/common
-    ydb/library/dbgtrace
 )
 
 YQL_LAST_ABI_VERSION()

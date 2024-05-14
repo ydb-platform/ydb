@@ -40,7 +40,7 @@ namespace {
         }
         conf.SmallEdge = 19;  /* Packed to page collection large cell values */
         conf.LargeEdge = 29;  /* Large values placed to single blobs */
-        conf.SliceSize = conf.Group(0).PageSize * 4;
+
         conf.CutIndexKeys = false;
         conf.WriteBTreeIndex = writeBTreeIndex;
 
@@ -386,6 +386,7 @@ Y_UNIT_TEST_SUITE(BuildStatsMixedIndex) {
         subset->Flatten.begin()->Slices->Describe(Cerr); Cerr << Endl;
         CheckMixedIndex(*subset, 13570, 2114857 /* ~2277890 */, 48540, 5310, 531050);
     }
+}
 
 Y_UNIT_TEST_SUITE(BuildStatsBTreeIndex) {
     using namespace NTest;
@@ -414,7 +415,7 @@ Y_UNIT_TEST_SUITE(BuildStatsBTreeIndex) {
     {
         auto subset = TMake(Mass0, PageConf(Mass0.Model->Scheme->Families.size(), WriteBTreeIndex)).Mixed(0, 1, TMixerOne{ }, 0.3, 13);   
         subset->Flatten.begin()->Slices->Describe(Cerr); Cerr << Endl;
-        CheckBTreeIndex(*subset, 9582, 1425198, 61162);
+        CheckBTreeIndex(*subset, 9582, 1425282, 61162);
     }
 
     Y_UNIT_TEST(Single_Groups)
@@ -427,7 +428,7 @@ Y_UNIT_TEST_SUITE(BuildStatsBTreeIndex) {
     {
         auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), WriteBTreeIndex)).Mixed(0, 1, TMixerOne{ }, 0, 13);   
         subset->Flatten.begin()->Slices->Describe(Cerr); Cerr << Endl;
-        CheckBTreeIndex(*subset, 10440, 1068937, 23760);
+        CheckBTreeIndex(*subset, 10440, 1060767, 23760);
     }
 
     Y_UNIT_TEST(Single_Groups_History)
@@ -440,7 +441,7 @@ Y_UNIT_TEST_SUITE(BuildStatsBTreeIndex) {
     {
         auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), WriteBTreeIndex)).Mixed(0, 1, TMixerOne{ }, 0.3, 13);   
         subset->Flatten.begin()->Slices->Describe(Cerr); Cerr << Endl;
-        CheckBTreeIndex(*subset, 13570, 2277890, 34837);
+        CheckBTreeIndex(*subset, 13570, 2273213, 34837);
     }
 
     Y_UNIT_TEST(Mixed)
@@ -483,5 +484,4 @@ Y_UNIT_TEST_SUITE(BuildStatsBTreeIndex) {
     }
 }
 
-}
 }

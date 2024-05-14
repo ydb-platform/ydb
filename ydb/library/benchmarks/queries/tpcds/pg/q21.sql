@@ -22,8 +22,8 @@ select  *
    group by w_warehouse_name, i_item_id) x
  where (case when inv_before > 0
              then inv_after / inv_before
-             else null::int8
-             end) between (2.0/3.0)::int8 and (3.0/2.0)::int8
+             else null::numeric
+             end) between (2.0/3.0)::numeric and (3.0/2.0)::numeric
  order by w_warehouse_name
          ,i_item_id
  limit 100;

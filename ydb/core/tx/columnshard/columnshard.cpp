@@ -4,9 +4,10 @@
 #include "resource_subscriber/actor.h"
 #include "engines/writer/buffer/actor.h"
 #include "engines/column_engine_logs.h"
-#include "export/manager/manager.h"
+#include "bg_tasks/manager/manager.h"
 
 #include <ydb/core/tx/tiering/manager.h>
+#include <ydb/core/tx/columnshard/bg_tasks/adapter/adapter.h>
 #include <ydb/core/protos/table_stats.pb.h>
 
 namespace NKikimr {
@@ -20,11 +21,13 @@ IActor* CreateColumnShard(const TActorId& tablet, TTabletStorageInfo* info) {
 namespace NKikimr::NColumnShard {
 
 void TColumnShard::CleanupActors(const TActorContext& ctx) {
+    if (BackgroundSessionsManager) {
+        BackgroundSessionsManager->Stop();
+    }
     ctx.Send(ResourceSubscribeActor, new TEvents::TEvPoisonPill);
     ctx.Send(BufferizationWriteActorId, new TEvents::TEvPoisonPill);
 
     StoragesManager->Stop();
-    ExportsManager->Stop();
     DataLocksManager->Stop();
     if (Tiers) {
         Tiers->Stop(true);
@@ -55,6 +58,7 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
     }
     CSCounters.OnIndexMetadataLimit(NOlap::IColumnEngine::GetMetadataLimit());
     EnqueueBackgroundActivities();
+    BackgroundSessionsManager->Start();
     ctx.Send(SelfId(), new TEvPrivate::TEvPeriodicWakeup());
     NYDBTest::TControllers::GetColumnShardController()->OnSwitchToWork(TabletID());
 }
@@ -62,7 +66,6 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
 void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     const TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("self_id", SelfId());
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "OnActivateExecutor");
-
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr.release());
 
     const auto selfActorId = SelfId();
@@ -76,6 +79,7 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
         Tiers->TakeConfigs(NYDBTest::TControllers::GetColumnShardController()->GetFallbackTiersSnapshot(), nullptr);
     }
+    BackgroundSessionsManager = std::make_shared<NOlap::NBackground::TSessionsManager>(std::make_shared<NBackground::TAdapter>(selfActorId, (NOlap::TTabletId)TabletID(), *this));
 
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "initialize_tiring_finished");
     auto& icb = *AppData(ctx)->Icb;

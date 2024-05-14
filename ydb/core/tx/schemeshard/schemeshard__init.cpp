@@ -4800,6 +4800,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        {
+            if (!Self->BackgroundSessionsManager->LoadIdempotency(txc)) {
+                return false;
+            }
+        }
+
         for (auto& item : Self->Operations) {
             auto& operation = item.second;
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

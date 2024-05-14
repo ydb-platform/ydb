@@ -73,7 +73,7 @@ SIMPLE_STRICT_UDF(TCosineDistance, TOptional<float>(TAutoMap<const char*>, TAuto
 
 
 
-SIMPLE_STRICT_UDF(TManhattanDistance, TOptional<ui16>(TAutoMap<const char*>, TAutoMap<const char*>)) {
+SIMPLE_STRICT_UDF(TManhattanDistance, TOptional<float>(TAutoMap<const char*>, TAutoMap<const char*>)) {
     Y_UNUSED(valueBuilder);
 
     const auto ret = KnnManhattanDistance(args[0].AsStringRef(), args[1].AsStringRef());

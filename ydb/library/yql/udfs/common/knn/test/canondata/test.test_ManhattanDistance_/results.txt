@@ -13,7 +13,69 @@
                                     "OptionalType";
                                     [
                                         "DataType";
-                                        "Uint16"
+                                        "Float"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            "9"
+                        ]
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Float"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            "9"
+                        ]
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Float"
                                     ]
                                 ]
                             ]
@@ -42,7 +104,7 @@
                                     "OptionalType";
                                     [
                                         "DataType";
-                                        "Uint16"
+                                        "Float"
                                     ]
                                 ]
                             ]
@@ -73,7 +135,7 @@
                                     "OptionalType";
                                     [
                                         "DataType";
-                                        "Uint16"
+                                        "Float"
                                     ]
                                 ]
                             ]
@@ -104,7 +166,7 @@
                                     "OptionalType";
                                     [
                                         "DataType";
-                                        "Uint16"
+                                        "Float"
                                     ]
                                 ]
                             ]

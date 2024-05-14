@@ -12,6 +12,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/dot_product
+    library/cpp/l1_distance
 )
 
 

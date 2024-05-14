@@ -1,12 +1,21 @@
---bit vector serialization
-$positive = Knn::ToBinaryString(ListReplicate(1.0f, 64), "bit");
-$positive_double_size = Knn::ToBinaryString(ListReplicate(1.0f, 128), "bit");
-$negative = Knn::ToBinaryString(ListReplicate(-1.0f, 64), "bit");
-$negative_and_positive = Knn::ToBinaryString(ListFromRange(-63.0f, 64.1f), "bit");
-$negative_and_positive_striped = Knn::ToBinaryString(ListFlatten(ListReplicate([-1.0f, 1.0f], 32)), "bit");
+--float vector
+$float_vector1 = Knn::ToBinaryString([1.0f, 2.0f, 3.0f]);
+$float_vector2 = Knn::ToBinaryString([4.0f, 5.0f, 6.0f]);
+select Knn::ManhattanDistance($float_vector1, $float_vector2);
 
--- manhattan distance
-select Knn::ManhattanDistance($positive, $positive_double_size);
-select Knn::ManhattanDistance($positive, $negative);
-select Knn::ManhattanDistance($positive_double_size, $negative_and_positive);
-select Knn::ManhattanDistance($positive, $negative_and_positive_striped);
+--byte vector
+$byte_vector1 = Knn::ToBinaryString([1.0f, 2.0f, 3.0f], "byte");
+$byte_vector2 = Knn::ToBinaryString([4.0f, 5.0f, 6.0f], "byte");
+select Knn::ManhattanDistance($byte_vector1, $byte_vector2);
+
+--bit vector
+$bitvector_positive = Knn::ToBinaryString(ListReplicate(1.0f, 64), "bit");
+$bitvector_positive_double_size = Knn::ToBinaryString(ListReplicate(1.0f, 128), "bit");
+$bitvector_negative = Knn::ToBinaryString(ListReplicate(-1.0f, 64), "bit");
+$bitvector_negative_and_positive = Knn::ToBinaryString(ListFromRange(-63.0f, 64.1f), "bit");
+$bitvector_negative_and_positive_striped = Knn::ToBinaryString(ListFlatten(ListReplicate([-1.0f, 1.0f], 32)), "bit");
+
+select Knn::ManhattanDistance($bitvector_positive, $bitvector_positive_double_size);
+select Knn::ManhattanDistance($bitvector_positive, $bitvector_negative);
+select Knn::ManhattanDistance($bitvector_positive_double_size, $bitvector_negative_and_positive);
+select Knn::ManhattanDistance($bitvector_positive, $bitvector_negative_and_positive_striped);

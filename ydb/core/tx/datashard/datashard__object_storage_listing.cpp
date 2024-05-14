@@ -257,13 +257,7 @@ public:
 
                             Y_VERIFY(columnId < value.Cells().size());
 
-                            NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType matchType;
-
-                            if (matchTypes.size() == filterColumnIds.size()) {
-                                matchType = matchTypes[i];
-                            } else {
-                                matchType = NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType_EQUAL;
-                            }
+                            NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType matchType = matchTypes[i];
 
                             switch (matchType) {
                                 case NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType_EQUAL:

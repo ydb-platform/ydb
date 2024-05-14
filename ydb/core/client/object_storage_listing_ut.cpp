@@ -486,8 +486,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
     }
 
     void TestS3Listing(TFlatMsgBusClient& annoyingClient, ui64 bucket, const TString& pathPrefix, const TString& pathDelimiter,
-                       ui32 maxKeys, const TVector<TString>& columnsToReturn)
-    {
+                       ui32 maxKeys, const TVector<TString>& columnsToReturn) {
         Cout << Endl << "---------------------------------------" << Endl
              << "Bucket" << bucket << " : " << pathPrefix << Endl;
 

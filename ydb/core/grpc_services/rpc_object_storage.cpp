@@ -845,8 +845,7 @@ private:
 
                 const auto& cell = row.GetCells()[i];
                 vb.AddMember(colMeta.Name);
-                if (colMeta.PType.GetTypeId() == NScheme::NTypeIds::Pg)
-                {
+                if (colMeta.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
                     const NPg::TConvertResult& pgResult = NPg::PgNativeTextFromNativeBinary(cell.AsBuf(), colMeta.PType.GetTypeDesc());
                     if (pgResult.Error) {
                         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "PgNativeTextFromNativeBinary error " << *pgResult.Error);
@@ -854,8 +853,7 @@ private:
                     const NYdb::TPgValue pgValue{cell.IsNull() ? NYdb::TPgValue::VK_NULL : NYdb::TPgValue::VK_TEXT, pgResult.Str, getPgTypeFromColMeta(colMeta)};
                     vb.Pg(pgValue);
                 }
-                else
-                {
+                else {
                     const NScheme::TTypeInfo& typeInfo = colMeta.PType;
 
                     if (cell.IsNull()) {

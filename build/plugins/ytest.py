@@ -1313,9 +1313,7 @@ def on_add_linter_check(unit, *args):
             test_files.append(path)
 
     if lint_name == 'cpp_style':
-        cpp_extensions = ["cpp", "cxx", "cc", "c"]
-        header_extensions = ["h", "hh", "hpp"]
-        files_dart = reference_group_var("ALL_SRCS", cpp_extensions + header_extensions)
+        files_dart = reference_group_var("ALL_SRCS", consts.STYLE_CPP_ALL_EXTS)
     else:
         if not test_files:
             unit.message(['WARN', 'No files to lint for {}'.format(lint_name)])

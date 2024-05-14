@@ -49,7 +49,7 @@ string_columns = from_env_columns + [
     "id",
     "git_commit_message",
     "binary_path",
-    "build_type",
+    "build_preset",
 ]
 
 datetime_colums = [
@@ -72,16 +72,10 @@ def sanitize_str(s):
 
 
 def main():
-    """
-    os.environ[
-        "YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
-    ] = "/tmp/ydb_service_account.json"
-    """
-
     with ydb.Driver(
         endpoint="grpcs://ydb.serverless.yandexcloud.net:2135",
         database="/ru-central1/b1ggceeul2pkher8vhb6/etn6d1qbals0c29ho4lf",
-        credentials=ydb.credentials_from_env_variables(),
+        credentials=ydb.credentials_from_env_variables()  # see YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS,
     ) as driver:
         driver.wait(timeout=10, fail_fast=True)
         session = ydb.retry_operation_sync(
@@ -122,7 +116,7 @@ VALUES
                 ["bash", "-c", "./ya tool strip {} -o - | wc -c".format(YDBD_PATH)]
             )
 
-            build_type = os.environ.get("build_type", None)
+            build_preset = os.environ.get("build_preset", None)
             github_sha = os.environ.get("GITHUB_SHA", None)
 
             if github_sha is not None:
@@ -144,7 +138,7 @@ VALUES
 
             parameters = {
                 "$id": sanitize_str(str(uuid.uuid4())),
-                "$build_type": sanitize_str(build_type),
+                "$build_preset": sanitize_str(build_preset),
                 "$binary_path": sanitize_str(YDBD_PATH),
                 "$size_stripped_bytes": int(binary_size_bytes.decode("utf-8")),
                 "$size_bytes": int(binary_size_stripped_bytes.decode("utf-8")),

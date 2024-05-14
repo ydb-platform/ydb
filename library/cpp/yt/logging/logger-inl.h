@@ -64,6 +64,11 @@ Y_FORCE_INLINE bool TLogger::IsLevelEnabled(ELogLevel level) const
     return IsLevelEnabledHeavy(level);
 }
 
+Y_FORCE_INLINE const TLogger& TLogger::operator()() const
+{
+    return *this;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace NDetail {

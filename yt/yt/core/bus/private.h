@@ -12,7 +12,7 @@ namespace NYT::NBus {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline const NLogging::TLogger BusLogger("Bus");
+YT_DEFINE_GLOBAL(const NLogging::TLogger, BusLogger, "Bus");
 inline const NProfiling::TProfiler BusProfiler("/bus");
 
 using TConnectionId = TGuid;

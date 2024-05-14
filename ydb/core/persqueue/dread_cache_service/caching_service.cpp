@@ -77,10 +77,10 @@ private:
         auto sender = ev->Sender;
         auto startingReadId = ev->Get()->StartingReadId;
 
-        // Respond with StartDirectReadPartitionSessionResponse right away,
+        // Let the proxy respond with StartDirectReadPartitionSessionResponse right away,
         // so the client knows that the partition session has been started successfully.
         // Without this response, the client might have to wait until there are topic messages to send.
-        ctx.Send(sender, ev->Release());
+        ctx.Send(sender, new TEvPQProxy::TEvDirectReadDataSessionConnectedResponse(key.PartitionSessionId, ev->Get()->Generation));
 
         sessionIter->second.Client = TCacheClientContext{sender, startingReadId};
         AssignByProxy[sender].insert(key.PartitionSessionId);

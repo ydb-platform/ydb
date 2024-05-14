@@ -930,7 +930,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
             Topic::StreamDirectReadMessage::FromServer resp;
             UNIT_ASSERT(DirectStream->Read(&resp));
-                Cerr << "Got direct read init response: " << resp.ShortDebugString() << Endl;
+            Cerr << "Got direct read init response: " << resp.ShortDebugString() << Endl;
 
             UNIT_ASSERT_EQUAL(resp.status(), status);
 

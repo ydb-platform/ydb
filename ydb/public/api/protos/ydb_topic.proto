@@ -608,11 +608,11 @@ message StreamDirectReadMessage {
         repeated Ydb.Issue.IssueMessage issues = 2;
 
         oneof server_message {
-            InitDirectReadResponse init_direct_read_response = 6;
-            StartDirectReadPartitionSessionResponse start_direct_read_partition_session_response = 7;
-            StopDirectReadPartitionSession stop_direct_read_partition_session = 3;
-            DirectReadResponse direct_read_response = 4;
-            UpdateTokenResponse update_token_response = 5;
+            InitDirectReadResponse init_direct_read_response = 3;
+            StartDirectReadPartitionSessionResponse start_direct_read_partition_session_response = 4;
+            StopDirectReadPartitionSession stop_direct_read_partition_session = 5;
+            DirectReadResponse direct_read_response = 6;
+            UpdateTokenResponse update_token_response = 7;
         }
     }
 
@@ -632,9 +632,8 @@ message StreamDirectReadMessage {
         }
     }
 
+    // Response to the handshake.
     message InitDirectReadResponse {
-        // Read session identifier.
-        string session_id = 1;
     }
 
     // Command from client to create and start a direct read partition session.
@@ -653,6 +652,9 @@ message StreamDirectReadMessage {
     message StartDirectReadPartitionSessionResponse {
         // Partition session identifier of partition to start read.
         int64 partition_session_id = 1;
+
+        // Partition generation.
+        int64 generation = 2;
     }
 
     // Command from server to stop a direct read partition session.
@@ -667,7 +669,6 @@ message StreamDirectReadMessage {
         // Partition session identifier.
         int64 partition_session_id = 3;
     }
-
 
     // Messages that have been read directly from the partition node.
     // It's a response to StreamRead.ReadRequest

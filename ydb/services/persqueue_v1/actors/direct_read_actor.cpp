@@ -192,10 +192,11 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvStartDirectRead::TPtr& ev, c
     );
 }
 
-void TDirectReadSessionActor::Handle(TEvPQProxy::TEvDirectReadDataSessionConnected::TPtr& ev, const TActorContext& ctx) {
+void TDirectReadSessionActor::Handle(TEvPQProxy::TEvDirectReadDataSessionConnectedResponse::TPtr& ev, const TActorContext& ctx) {
     TServerMessage result;
     result.set_status(Ydb::StatusIds::SUCCESS);
-    result.mutable_start_direct_read_partition_session_response()->set_partition_session_id(ev->Get()->ReadKey.PartitionSessionId);
+    result.mutable_start_direct_read_partition_session_response()->set_partition_session_id(ev->Get()->AssignId);
+    result.mutable_start_direct_read_partition_session_response()->set_generation(ev->Get()->Generation);
     if (!WriteToStreamOrDie(ctx, std::move(result))) {
         return;
     }

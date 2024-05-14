@@ -670,6 +670,13 @@ void KqpNode::ExecuterLost() {
         UNIT_ASSERT_VALUES_EQUAL("executer lost", abortEvent->Get()->Record.GetLegacyMessage());
     }
 
+    {
+        NKikimr::TActorSystemStub stub;
+        TMap<ui64, TMockComputeActor> Task2ActorEmpty;
+        CompFactory->Task2Actor.swap(Task2ActorEmpty);
+        Task2ActorEmpty.clear();
+    }
+
     size_t iterations = 30;
     while (KqpCounters->RmComputeActors->Val() != 0 && iterations > 0) {
         Sleep(TDuration::MilliSeconds(300));
@@ -730,6 +737,13 @@ void KqpNode::TerminateTx() {
         for (auto&[taskId, computeActor] : CompFactory->Task2Actor) {
             auto abortEvent = Runtime->GrabEdgeEvent<TEvKqp::TEvAbortExecution>(computeActor.ActorId);
             UNIT_ASSERT_VALUES_EQUAL("terminate", abortEvent->Get()->Record.GetLegacyMessage());
+        }
+
+        {
+            NKikimr::TActorSystemStub stub;
+            TMap<ui64, TMockComputeActor> Task2ActorEmpty;
+            CompFactory->Task2Actor.swap(Task2ActorEmpty);
+            Task2ActorEmpty.clear();
         }
     }
 

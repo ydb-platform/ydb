@@ -285,12 +285,11 @@ private:
         auto requester = ev->Sender;
 
         ui64 txId = msg.GetTxId();
-        bool isScan = msg.HasSnapshot();
         const ui64 outputChunkMaxSize = msg.GetOutputChunkMaxSize();
 
         YQL_ENSURE(msg.GetStartAllOrFail()); // todo: support partial start
 
-        LOG_D("TxId: " << txId << ", new " << (isScan ? "scan " : "") << "compute tasks request from " << requester
+        LOG_D("TxId: " << txId << ", new compute tasks request from " << requester
             << " with " << msg.GetTasks().size() << " tasks: " << TasksIdsStr(msg.GetTasks()));
 
         NKqpNode::TTasksRequest request;
@@ -339,11 +338,10 @@ private:
             LOG_D("TxId: " << txId << ", task: " << taskCtx.TaskId << ", requested memory: " << taskCtx.Memory);
 
             requestChannels += estimation.ChannelBuffersCount;
-            request.TotalMemory += taskCtx.Memory;
         }
 
         LOG_D("TxId: " << txId << ", channels: " << requestChannels
-            << ", computeActors: " << msg.GetTasks().size() << ", memory: " << request.TotalMemory);
+            << ", computeActors: " << msg.GetTasks().size() << ", memory: " << request.CalculateTotalMemory());
 
         TVector<ui64> allocatedTasks;
         allocatedTasks.reserve(msg.GetTasks().size());
@@ -526,19 +524,13 @@ private:
 
     void TerminateTx(ui64 txId, const TString& reason) {
         auto& bucket = GetStateBucketByTx(Buckets, txId);
-        auto tasksToAbort = bucket.RemoveTx(txId);
+        auto tasksToAbort = bucket.GetTasksByTxId(txId);
 
         if (!tasksToAbort.empty()) {
-            LOG_D("TxId: " << txId << ", cancel granted resources");
-            ResourceManager()->FreeResources(txId);
-
-            for (const auto& tasksRequest: tasksToAbort) {
-                ResourceManager()->FreeExecutionUnits(tasksRequest.InFlyTasks.size());
-                for (const auto& [taskId, task] : tasksRequest.InFlyTasks) {
-                    auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::UNSPECIFIED,
-                        reason);
-                    Send(task.ComputeActorId, abortEv.Release());
-                }
+            for (const auto& [taskId, computeActorId]: tasksToAbort) {
+                auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::UNSPECIFIED,
+                    reason);
+                Send(computeActorId, abortEv.Release());
             }
         }
     }

@@ -150,7 +150,6 @@ runs:
       continue-on-error: true
       run: |
         set -x
-        set +e  # do not fail build if script failed (yet?)
         export build_preset="${{ inputs.build_preset }}" 
         python3 -m pip install ydb ydb[yc]
         python3 .github/scripts/send_build_stats.py

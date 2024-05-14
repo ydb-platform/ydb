@@ -71,11 +71,12 @@ public:
     }
 
     virtual void Complete(const TActorContext& ctx) override {
+        Y_ABORT_UNLESS(Ev);
+        Y_ABORT_UNLESS(Result);
+
         auto& record = Proto(Ev->Get());
         const ui64 txId = record.GetTxId();
 
-        Y_ABORT_UNLESS(Ev);
-        Y_ABORT_UNLESS(Result);
         Self->GetProgressTxController().CompleteTransaction(txId, ctx);
         ctx.Send(Ev->Get()->GetSource(), Result.release());
         Self->TryRegisterMediatorTimeCast();

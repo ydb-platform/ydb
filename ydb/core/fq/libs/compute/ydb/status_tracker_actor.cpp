@@ -259,7 +259,7 @@ public:
         LOG_I("Execution status: Complete " << Status << ", StatusCode: " << NYql::NDqProto::StatusIds::StatusCode_Name(StatusCode) << " Issues: " << Issues.ToOneLineString());
         OnPingRequestStart();
 
-        ComputeStatus = FederatedQuery::QueryMeta::COMPLETING;
+        ComputeStatus = ::FederatedQuery::QueryMeta::COMPLETING;
         Fq::Private::PingTaskRequest pingTaskRequest = Builder.Build(QueryStats, Issues, ComputeStatus, std::nullopt);
         if (Builder.Issues) {
             LOG_W(Builder.Issues.ToOneLineString());
@@ -269,7 +269,6 @@ public:
 
         Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest));
     }
-
 
 private:
     TRunActorParams Params;

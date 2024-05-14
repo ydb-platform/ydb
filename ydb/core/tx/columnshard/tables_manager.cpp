@@ -183,10 +183,13 @@ bool TTablesManager::LoadIndex(NOlap::TDbWrapper& idxDB) {
     return true;
 }
 
-bool TTablesManager::HasTable(const ui64 pathId) const {
+bool TTablesManager::HasTable(const ui64 pathId, bool withDeleted) const {
     auto it = Tables.find(pathId);
-    if (it == Tables.end() || it->second.IsDropped()) {
+    if (it == Tables.end()) {
         return false;
+    }
+    if (it->second.IsDropped()) {
+        return withDeleted;
     }
     return true;
 }

@@ -29,6 +29,7 @@ void TColumnShard::CleanupActors(const TActorContext& ctx) {
     if (Tiers) {
         Tiers->Stop(true);
     }
+    NYDBTest::TControllers::GetColumnShardController()->OnCleanupActors(TabletID());
 }
 
 void TColumnShard::BecomeBroken(const TActorContext& ctx) {
@@ -55,6 +56,7 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
     CSCounters.OnIndexMetadataLimit(NOlap::IColumnEngine::GetMetadataLimit());
     EnqueueBackgroundActivities();
     ctx.Send(SelfId(), new TEvPrivate::TEvPeriodicWakeup());
+    NYDBTest::TControllers::GetColumnShardController()->OnSwitchToWork(TabletID());
 }
 
 void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {

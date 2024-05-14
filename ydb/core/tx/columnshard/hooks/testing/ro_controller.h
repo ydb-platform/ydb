@@ -23,7 +23,7 @@ private:
     YDB_READONLY(TAtomicCounter, IndexesSkippedNoData, 0);
     YDB_READONLY(TAtomicCounter, TieringUpdates, 0);
     YDB_READONLY(TAtomicCounter, NeedActualizationCount, 0);
-    
+
     YDB_READONLY(TAtomicCounter, ActualizationsCount, 0);
     YDB_READONLY(TAtomicCounter, ActualizationRefreshSchemeCount, 0);
     YDB_READONLY(TAtomicCounter, ActualizationRefreshTieringCount, 0);

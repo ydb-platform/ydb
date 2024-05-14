@@ -222,7 +222,7 @@ public:
     const TTableInfo& GetTable(const ui64 pathId) const;
     ui64 GetMemoryUsage() const;
 
-    bool HasTable(const ui64 pathId) const;
+    bool HasTable(const ui64 pathId, bool withDeleted = false) const;
     bool IsReadyForWrite(const ui64 pathId) const;
     bool HasPreset(const ui32 presetId) const;
 

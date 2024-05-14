@@ -104,15 +104,16 @@ description: "В разделе приведены примеры кода ау�
 
 - Node.js
 
-  {% include [auth-env](../../../../_includes/nodejs/auth-env.md) %}
+  {% include [auth-env](../../../../../_includes/nodejs/auth-env.md) %}
+
 
 - Python
 
-  {% include [auth-env](../../../../_includes/python/auth-env.md) %}
+  {% include [auth-env](../../../../../_includes/python/auth-env.md) %}
 
 - Python (asyncio)
 
-  {% include [auth-env](../../../../_includes/python/async/auth-env.md) %}
+  {% include [auth-env](../../../../../_includes/python/async/auth-env.md) %}
 
 - C#
 

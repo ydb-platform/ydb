@@ -106,11 +106,11 @@ def main():
             binary_size_bytes = subprocess.check_output(["bash", "-c", "cat {} | wc -c".format(YDBD_PATH)])
             binary_size_stripped_bytes = subprocess.check_output(["bash", "-c", "./ya tool strip {} -o - | wc -c".format(YDBD_PATH)])
 
-
+            build_type = os.environ.get("build_type", "N/A").encode("utf-8")
             parameters = {
                 "$id": uuid.uuid4().bytes,
-                "$build_type": b"sample",
-                "$binary_path": b"sample",
+                "$build_type": build_type,
+                "$binary_path": YDBD_PATH,
                 "$size_stripped_bytes": int(binary_size_bytes.decode("utf-8")),
                 "$size_bytes": int(binary_size_stripped_bytes.decode("utf-8")),
             }

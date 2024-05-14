@@ -12,6 +12,6 @@ runs:
         set -eu
         export YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=/tmp/ydb_service_account.json
         cat << EOF > $YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS
-        ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+        ${{ inputs.ci_ydb_service_account_key_file_credentials }}
         EOF
         echo "YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=$YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" >> $GITHUB_ENV

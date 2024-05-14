@@ -34,7 +34,7 @@ with ssr as
      {{promotion}}
  where cs_sold_date_sk = d_date_sk
        and d_date between cast('2002-08-06' as date)
-                  and (cast('2000-08-06' as date) + interval '30' day)::date
+                  and (cast('2002-08-06' as date) + interval '30' day)::date
         and cs_catalog_page_sk = cp_catalog_page_sk
        and cs_item_sk = i_item_sk
        and i_current_price > 50::numeric
@@ -90,8 +90,8 @@ group by web_site_id)
  from   wsr
  ) x
  group by rollup (channel, id)
- order by channel
-         ,id
+ order by channel nulls first
+         ,id nulls first
  limit 100;
 
 -- end query 1 in stream 0 using template ../query_templates/query80.tpl

@@ -2086,7 +2086,7 @@ private:
             );
         }
 
-        bool forceMerge = false;
+        bool forceMerge = combineChunks;
 
         NYT::MergeNodes(yqlAttrs, GetUserAttributes(entry->Tx, srcPaths.back(), true));
         NYT::MergeNodes(yqlAttrs, YqlOpOptionsToAttrs(execCtx->Session_->OperationOptions_));
@@ -2161,9 +2161,6 @@ private:
             }
         }
 
-        if (combineChunks) {
-            forceMerge = true;
-        }
         bool forceTransform = false;
 
 #define DEFINE_OPT(name, attr, transform)                                                               \

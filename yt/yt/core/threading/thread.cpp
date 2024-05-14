@@ -23,7 +23,7 @@ namespace NYT::NThreading {
 YT_DEFINE_THREAD_LOCAL(TThreadId, CurrentUniqueThreadId) ;
 static std::atomic<TThreadId> UniqueThreadIdGenerator;
 
-static const auto& Logger = ThreadingLogger;
+static constexpr auto& Logger = ThreadingLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -68,7 +68,7 @@ class TServer
 {
 public:
     explicit TServer(TServerConfigPtr config)
-        : TServerBase(GrpcLogger.WithTag("GrpcServerId: %v", TGuid::Create()))
+        : TServerBase(GrpcLogger().WithTag("GrpcServerId: %v", TGuid::Create()))
         , Config_(std::move(config))
         , ShutdownCookie_(RegisterShutdownCallback(
             "GrpcServer",

@@ -324,7 +324,7 @@ IClientPtr CreateClient(
 {
     return CreateClient(
         config,
-        CreateDialer(New<TDialerConfig>(), poller, HttpLogger),
+        CreateDialer(New<TDialerConfig>(), poller, HttpLogger()),
         poller->GetInvoker());
 }
 

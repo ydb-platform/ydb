@@ -57,7 +57,7 @@ public:
             .EndMap()))
         , ServiceName_(std::move(serviceName))
         , PeerDiscovery_(std::move(peerDiscovery))
-        , Logger(RpcClientLogger.WithTag(
+        , Logger(RpcClientLogger().WithTag(
             "ChannelId: %v, Endpoint: %v, Service: %v",
             TGuid::Create(),
             EndpointDescription_,

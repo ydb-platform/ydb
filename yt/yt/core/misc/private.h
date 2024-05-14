@@ -1,13 +1,15 @@
 #pragma once
 
-#include <yt/yt/core/logging/log.h>
+#include "common.h"
 
-namespace NYT::NThreading {
+#include <library/cpp/yt/logging/logger.h>
 
-////////////////////////////////////////////////////////////////////////////////
-
-YT_DEFINE_GLOBAL(const NLogging::TLogger, ThreadingLogger, "Threading");
+namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NThreading
+YT_DEFINE_GLOBAL(const NLogging::TLogger, LockFreeLogger, "LockFree");
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT

@@ -1,5 +1,7 @@
 #include "hazard_ptr.h"
 
+#include "private.h"
+
 #include <yt/yt/core/misc/singleton.h>
 #include <yt/yt/core/misc/proc.h>
 #include <yt/yt/core/misc/ring_queue.h>
@@ -23,8 +25,7 @@ using namespace NConcurrency;
 
 /////////////////////////////////////////////////////////////////////////////
 
-inline const NLogging::TLogger LockFreePtrLogger("LockFree");
-static const auto& Logger = LockFreePtrLogger;
+static constexpr auto& Logger = LockFreeLogger;
 
 ////////////////////////////////////////////////////////////////////////////
 

@@ -1,17 +1,11 @@
 #include <yt/yt/core/test_framework/framework.h>
 
-#include <yt/yt/core/logging/log.h>
-
 #include <yt/yt/core/rpc/roaming_channel.h>
 
 #include <yt/yt/core/rpc/unittests/lib/common.h>
 
 namespace NYT::NRpc {
 namespace {
-
-////////////////////////////////////////////////////////////////////////////////
-
-const NLogging::TLogger Logger("RoamingChannelTest");
 
 ////////////////////////////////////////////////////////////////////////////////
 

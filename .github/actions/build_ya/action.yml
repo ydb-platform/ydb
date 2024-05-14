@@ -147,6 +147,7 @@ runs:
 
     - name: build_stats
       shell: bash
+      continue-on-error: true
       run: |
         set -x
         set +e  # do not fail build if script failed (yet?)

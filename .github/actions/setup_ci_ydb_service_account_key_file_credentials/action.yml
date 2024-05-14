@@ -5,6 +5,7 @@ inputs:
     required: true
     description: "token for access"
 runs:
+  using: "composite"
   steps:
     - name: drop file and set environment variable 
       shell: bash

@@ -87,14 +87,6 @@ NKikimrScheme::TEvModifySchemeTransaction GetRecordForPrint(const NKikimrScheme:
     return recordForPrint;
 }
 
-TString PrintSecurely(const NKikimrScheme::TEvModifySchemeTransaction& record) {
-    TSecurityTextFormatPrinter<NKikimrScheme::TEvModifySchemeTransaction> printer;
-    printer.SetSingleLineMode(true);
-    TString string;
-    printer.PrintToString(record, &string);
-    return string;
-}
-
 THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request, TOperationContext& context) {
     THolder<TProposeResponse> response = nullptr;
 
@@ -193,7 +185,7 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
                                     << ", already accepted parts: " << operation->Parts.size()
                                     << ", propose result status: " << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
                                     << ", with reason: " << response->Record.GetReason()
-                                    << ", tx message: " << PrintSecurely(record));
+                                    << ", tx message: " << SecureDebugString(record));
                 }
 
                 Y_VERIFY_S(context.IsUndoChangesSafe(),
@@ -204,7 +196,7 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
                                << ", already accepted parts: " << operation->Parts.size()
                                << ", propose result status: " << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
                                << ", with reason: " << response->Record.GetReason()
-                               << ", tx message: " << PrintSecurely(record));
+                               << ", tx message: " << SecureDebugString(record));
 
                 context.OnComplete = {}; // recreate
                 context.DbChanges = {};
@@ -247,7 +239,7 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
 
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "TTxOperationPropose Execute"
-                        << ", message: " << PrintSecurely(Request->Get()->Record)
+                        << ", message: " << SecureDebugString(Request->Get()->Record)
                         << ", at schemeshard: " << selfId);
 
         txc.DB.NoMoreReadsForTx();

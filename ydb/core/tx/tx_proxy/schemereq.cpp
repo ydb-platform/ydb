@@ -1,18 +1,18 @@
 #include "proxy.h"
 
-#include <ydb/core/docapi/traits.h>
-#include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/public/api/protos/ydb_issue_message.pb.h>
-#include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/base/tx_processing.h>
-#include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/base/path.h>
-
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/base/tx_processing.h>
+#include <ydb/core/docapi/traits.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/library/aclib/aclib.h>
-
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/protobuf_printer/security_printer.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
+#include <ydb/public/api/protos/ydb_issue_message.pb.h>
+
 #include <util/string/cast.h>
 
 namespace NKikimr {
@@ -1168,7 +1168,7 @@ void TFlatSchemeReq::Bootstrap(const TActorContext &ctx) {
                 "Actor# " << ctx.SelfID.ToString()
                           << " txid# " << TxId
                           << " Bootstrap EvSchemeRequest"
-                          << " record: " << GetRequestProto().DebugString());
+                          << " record: " << SecureDebugString(GetRequestProto()));
     Y_ABORT_UNLESS(GetRequestEv().HasModifyScheme());
     Y_ABORT_UNLESS(!GetRequestEv().HasTransactionalModification());
 
@@ -1303,7 +1303,7 @@ void TSchemeTransactionalReq::Bootstrap(const TActorContext &ctx) {
                 "Actor# " << ctx.SelfID.ToString()
                           << " txid# " << TxId
                           << " Bootstrap EvSchemeRequest"
-                          << " record: " << GetRequestProto().DebugString());
+                          << " record: " << SecureDebugString(GetRequestProto()));
     Y_ABORT_UNLESS(!GetRequestEv().HasModifyScheme());
     Y_ABORT_UNLESS(GetRequestEv().HasTransactionalModification());
 

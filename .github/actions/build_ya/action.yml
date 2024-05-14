@@ -149,9 +149,9 @@ runs:
       shell: bash
       run: |
         set -x
-        cat <<"EOF" > $TMP_DIR/YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS
-        $CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS
-        EOF
+        # cat <<"EOF" > $TMP_DIR/YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS
+        # $CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS
+        # EOF
         export YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=$TMP_DIR/YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS
         python3 -m pip install ydb ydb[yc]
 

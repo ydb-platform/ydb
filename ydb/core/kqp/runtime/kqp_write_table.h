@@ -52,7 +52,7 @@ IPayloadSerializerPtr CreateColumnShardPayloadSerializer(
 
 IPayloadSerializerPtr CreateDataShardPayloadSerializer(
     const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
-    const NSchemeCache::TSchemeCacheRequest::TEntry& partitionsEntry,
+    NSchemeCache::TSchemeCacheRequest::TEntry&& partitionsEntry,
     const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
     const NMiniKQL::TTypeEnvironment& typeEnv);
 
@@ -62,7 +62,7 @@ public:
     virtual void OnPartitioningChanged(const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry) = 0;
     virtual void OnPartitioningChanged(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
-        const NSchemeCache::TSchemeCacheRequest::TEntry& partitionsEntry) = 0;
+        NSchemeCache::TSchemeCacheRequest::TEntry&& partitionsEntry) = 0;
 
     virtual void AddData(NMiniKQL::TUnboxedValueBatch&& data) = 0;
     virtual void Close() = 0;
@@ -89,6 +89,11 @@ public:
 };
 
 using IShardedWriteControllerPtr = TIntrusivePtr<IShardedWriteController>;
+
+
+IShardedWriteControllerPtr CreateShardedWriteController(
+    TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumns,
+    const NMiniKQL::TTypeEnvironment& typeEnv);
 
 }
 }

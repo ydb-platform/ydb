@@ -379,7 +379,7 @@ public:
 private:
 
     const NMiniKQL::TTypeEnvironment& TypeEnv;
-    const NSchemeCache::TSchemeCacheNavigate::TEntry& SchemeEntry;
+    const NSchemeCache::TSchemeCacheNavigate::TEntry SchemeEntry;
     std::shared_ptr<NSharding::TShardingBase> Sharding;
 
     const TVector<TSysTables::TTableColumnInfo> Columns;
@@ -434,12 +434,12 @@ class TDataShardPayloadSerializer : public IPayloadSerializer {
 public:
     TDataShardPayloadSerializer(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
-        const NSchemeCache::TSchemeCacheRequest::TEntry& partitionsEntry,
+        NSchemeCache::TSchemeCacheRequest::TEntry&& partitionsEntry,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
         const NMiniKQL::TTypeEnvironment& typeEnv)
         : TypeEnv(typeEnv)
         , SchemeEntry(schemeEntry)
-        , PartitionsEntry(partitionsEntry)
+        , KeyDescription(std::move(partitionsEntry.KeyDescription))
         , Columns(BuildColumns(inputColumns))
         , WriteIndex(BuildWriteIndexKeyFirst(SchemeEntry, inputColumns))
         , WriteColumnIds(BuildWriteColumnIds(inputColumns, WriteIndex))
@@ -571,12 +571,13 @@ public:
 
 private:
     const TKeyDesc& GetKeyRange() const {
-        return *PartitionsEntry.KeyDescription.Get();
+        return *KeyDescription;
     }
 
     const NMiniKQL::TTypeEnvironment& TypeEnv;
-    const NSchemeCache::TSchemeCacheNavigate::TEntry& SchemeEntry;
-    const NSchemeCache::TSchemeCacheRequest::TEntry& PartitionsEntry;
+    const NSchemeCache::TSchemeCacheNavigate::TEntry SchemeEntry;
+    THolder<TKeyDesc> KeyDescription;
+    //const NSchemeCache::TSchemeCacheRequest::TEntry PartitionsEntry;
 
     const TVector<TSysTables::TTableColumnInfo> Columns;
     const std::vector<ui32> WriteIndex;
@@ -607,11 +608,229 @@ IPayloadSerializerPtr CreateColumnShardPayloadSerializer(
 
 IPayloadSerializerPtr CreateDataShardPayloadSerializer(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
-        const NSchemeCache::TSchemeCacheRequest::TEntry& partitionsEntry,
+        NSchemeCache::TSchemeCacheRequest::TEntry&& partitionsEntry,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
         const NMiniKQL::TTypeEnvironment& typeEnv) {
     return MakeIntrusive<TDataShardPayloadSerializer>(
-        schemeEntry, partitionsEntry, inputColumns, typeEnv);
+        schemeEntry, std::move(partitionsEntry), inputColumns, typeEnv);
+}
+
+namespace {
+
+class TShardsInfo {
+public:
+    class TShardInfo {
+        friend class TShardsInfo;
+        TShardInfo(i64& memory)
+            : Memory(memory) {
+        }
+
+    public:
+        size_t Size() const {
+            return Batches.size();
+        }
+
+        bool IsEmpty() const {
+            return Batches.empty();
+        }
+
+        bool IsClosed() const {
+            return Closed;
+        }
+
+        bool IsFinished() const {
+            return IsClosed() && IsEmpty();
+        }
+
+        void Close() {
+            Closed = true;
+        }
+
+        void MakeNextBatches(i64 maxDataSize, ui64 maxCount) {
+            YQL_ENSURE(BatchesInFlight == 0);
+            i64 dataSize = 0;
+            while (BatchesInFlight < maxCount
+                    && BatchesInFlight < Batches.size()
+                    && dataSize + GetBatch(BatchesInFlight)->GetMemory() <= maxDataSize) {
+                dataSize += GetBatch(BatchesInFlight)->GetMemory();
+                ++BatchesInFlight;
+            }
+            YQL_ENSURE(BatchesInFlight == Batches.size() || GetBatch(BatchesInFlight)->GetMemory() <= maxDataSize); 
+        }
+
+        const IPayloadSerializer::IBatchPtr& GetBatch(size_t index) const {
+            return Batches.at(index);
+        }
+
+        std::optional<ui64> PopBatches(const ui64 cookie) {
+            if (BatchesInFlight != 0 && Cookie == cookie) {
+                ui64 dataSize = 0;
+                for (size_t index = 0; index < BatchesInFlight; ++index) {
+                    dataSize += Batches.front()->GetMemory();
+                    Batches.pop_front();
+                }
+
+                ++Cookie;
+                SendAttempts = 0;
+                BatchesInFlight = 0;
+
+                Memory -= dataSize;
+                return dataSize;
+            }
+            return std::nullopt;
+        }
+
+        void PushBatch(IPayloadSerializer::IBatchPtr&& batch) {
+            YQL_ENSURE(!IsClosed());
+            Batches.emplace_back(std::move(batch));
+            Memory += Batches.back()->GetMemory();
+        }
+
+        ui64 GetCookie() const {
+            return Cookie;
+        }
+
+        size_t GetBatchesInFlight() const {
+            return BatchesInFlight;
+        }
+
+        ui32 GetSendAttempts() const {
+            return SendAttempts;
+        }
+
+        void IncSendAttempts() {
+            ++SendAttempts;
+        }
+
+    private:
+        std::deque<IPayloadSerializer::IBatchPtr> Batches;
+        bool Closed = false;
+        i64& Memory;
+
+        ui64 Cookie = 1;
+        ui32 SendAttempts = 0;
+        size_t BatchesInFlight = 0;
+    };
+
+    TShardInfo& GetShard(const ui64 shard) {
+        auto it = ShardsInfo.find(shard);
+        if (it != std::end(ShardsInfo)) {
+            return it->second;
+        }
+
+        auto [insertIt, _] = ShardsInfo.emplace(shard, TShardInfo(Memory));
+        return insertIt->second;
+    }
+
+    TVector<ui64> GetPendingShards() {
+        TVector<ui64> result;
+        for (const auto& [id, shard] : ShardsInfo) {
+            if (!shard.IsEmpty() && shard.GetSendAttempts() == 0) {
+                result.push_back(id);
+            }
+        }
+        return result;
+    }
+
+    bool Has(ui64 shardId) const {
+        return ShardsInfo.contains(shardId);
+    }
+
+    bool IsEmpty() const {
+        for (const auto& [_, shard] : ShardsInfo) {
+            if (!shard.IsEmpty()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool IsFinished() const {
+        for (const auto& [_, shard] : ShardsInfo) {
+            if (!shard.IsFinished()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    THashMap<ui64, TShardInfo>& GetShards() {
+        return ShardsInfo;
+    }
+
+    i64 GetMemory() const {
+        return Memory;
+    }
+
+private:
+    THashMap<ui64, TShardInfo> ShardsInfo;
+    i64 Memory = 0;
+};
+
+/*class TShardedWriteController : public IShardedWriteController {
+public:
+    void OnPartitioningChanged(const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry) override {
+        if (Serializer) {
+            ForceFlush();
+        }
+        //Serializer = ...
+        ReshardData();
+    }
+
+    void OnPartitioningChanged(
+        const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
+        NSchemeCache::TSchemeCacheRequest::TEntry&& partitionsEntry) override {
+        if (Serializer) {
+            ForceFlush();
+        }
+        //Serializer = ...
+        ReshardData();
+    }
+
+    void AddData(NMiniKQL::TUnboxedValueBatch&& data) override {
+    }
+
+    void Close() override {
+        Close = true;
+
+    }
+
+    ui64 GetNextNewShardId() override {
+    }
+
+    std::optional<TMessageMetadata> GetMessageMetadata(ui64 shardId) override {
+    }
+
+    bool SerializeMessage(ui64 shardId, NKikimr::NEvents::TDataEvents::TEvWrite& evWrite) override {
+    }
+
+    bool OnMessageSent(ui64 shardId, ui64 cookie) override {
+    }
+
+    bool OnMessageAcknowledged(ui64 shardId, ui64 cookie) override {
+    }
+
+    i64 GetMemory() override {
+    }
+
+    bool IsClosed() override {
+        return Closed;
+    }
+
+    bool IsEmpty() override {
+    }
+
+    bool IsFinished() override {
+        return IsClosed() && IsEmpty();
+    }
+
+private:
+    TShardsInfo ShardsInfo;
+    bool Closed = false;
+
+    IPayloadSerializerPtr Serializer = nullptr;
+};*/
+
 }
 
 }

@@ -792,7 +792,7 @@ private:
             } else {
                 Serializer = CreateDataShardPayloadSerializer(
                     *SchemeEntry,
-                    *SchemeRequest,
+                    std::move(*SchemeRequest),
                     columnsMetadata,
                     TypeEnv);
             }

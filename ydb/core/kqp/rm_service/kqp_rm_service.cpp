@@ -232,10 +232,14 @@ public:
             Counters->RmNotEnoughMemory->Inc();
             TStringBuilder reason;
 <<<<<<< HEAD
+<<<<<<< HEAD
             reason << "TxId: " << txId << ", taskId: " << taskId << ". Not enough memory for query, requested: " << resources.Memory;
 =======
             reason << "TxId: " << txId << ", taskId: " << taskId << ". Not enough ScanQueryMemory, requested: " << resources.Memory;
 >>>>>>> 739b0bd083 (cleanup issue reporting in resource manager & node service)
+=======
+            reason << "TxId: " << txId << ", taskId: " << taskId << ". Not enough memory for query, requested: " << resources.Memory;
+>>>>>>> 52b8923c3c (remove useless memory check in node service)
             if (details) {
                 details->FailReason = reason;
                 details->Status = NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_MEMORY;

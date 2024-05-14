@@ -183,9 +183,9 @@
     ],
     "test.test[aggr_factory-avg-default.txt-Debug]": [
         {
-            "checksum": "cf0a329d525cd56abf97a85a54df8a33",
-            "size": 7336,
-            "uri": "https://{canondata_backend}/1871102/c16b260c9474b6209b41c05f68145ad16f292a86/resource.tar.gz#test.test_aggr_factory-avg-default.txt-Debug_/opt.yql_patched"
+            "checksum": "294e7d1800060dd734935af3e5d45220",
+            "size": 7304,
+            "uri": "https://{canondata_backend}/1925821/388676377b8029f361a2f44783f99dd3d81d73e6/resource.tar.gz#test.test_aggr_factory-avg-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[aggr_factory-avg-default.txt-Plan]": [
@@ -2647,9 +2647,9 @@
     ],
     "test.test[window-win_func_over_group_by_list_names--Debug]": [
         {
-            "checksum": "318fd5436548c683a73c9b68bded826b",
-            "size": 12857,
-            "uri": "https://{canondata_backend}/1784826/cbf6ad4c227ab017bb5ebc2f4ab5719247fa9785/resource.tar.gz#test.test_window-win_func_over_group_by_list_names--Debug_/opt.yql_patched"
+            "checksum": "a8a593bf62b2fff909bd4fa3f2c4c428",
+            "size": 12819,
+            "uri": "https://{canondata_backend}/1925821/388676377b8029f361a2f44783f99dd3d81d73e6/resource.tar.gz#test.test_window-win_func_over_group_by_list_names--Debug_/opt.yql_patched"
         }
     ],
     "test.test[window-win_func_over_group_by_list_names--Plan]": [
@@ -2661,9 +2661,9 @@
     ],
     "test.test[window-win_func_over_group_by_list_names_order_prefix--Debug]": [
         {
-            "checksum": "f6c26ca8f0d4ff8ad3eb792cab60671e",
-            "size": 12694,
-            "uri": "https://{canondata_backend}/1784826/cbf6ad4c227ab017bb5ebc2f4ab5719247fa9785/resource.tar.gz#test.test_window-win_func_over_group_by_list_names_order_prefix--Debug_/opt.yql_patched"
+            "checksum": "5ace311af633194e81f6219235fbdda9",
+            "size": 12656,
+            "uri": "https://{canondata_backend}/1925821/388676377b8029f361a2f44783f99dd3d81d73e6/resource.tar.gz#test.test_window-win_func_over_group_by_list_names_order_prefix--Debug_/opt.yql_patched"
         }
     ],
     "test.test[window-win_func_over_group_by_list_names_order_prefix--Plan]": [

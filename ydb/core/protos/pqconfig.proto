@@ -385,6 +385,16 @@ message TPQTabletConfig {
     }
     optional EMeteringMode MeteringMode = 34;
 
+    enum TPartitionStrategyType {
+        // The autoscaling is disabled.
+        DISABLED = 0;
+        // The autoscaling algorithm will increase partitions count depending on the load characteristics.
+        // The autoscaling algorithm will never decrease the number of partitions.
+        CAN_SPLIT = 1;
+        // The autoscaling algorithm will both increase and decrease partitions count depending on the load characteristics.
+        CAN_SPLIT_AND_MERGE = 2;
+    }
+    
     // Strategy for automatically changing the number of topic partitions depending on the load
     message TPartitionStrategy {
         // The minimum number of partitions that will be supported by the strategy
@@ -392,10 +402,10 @@ message TPQTabletConfig {
         // The maximum number of partitions that will be supported by the strategy. The strategy will not create partitions if the specified
         // amount is reached, even if the load exceeds the current capabilities of the topic.
         required uint32 MaxPartitionCount = 2;
-        optional uint32 MaxActivePartitionCount = 3;
-        optional uint32 ScaleThresholdSeconds = 4 [default = 300];
-        optional uint32 ScaleUpPartitionWriteSpeedThresholdPercent = 5 [default = 80];
-        optional uint32 ScaleDownPartitionWriteSpeedThresholdPercent = 6 [default = 20];
+        optional uint32 ScaleThresholdSeconds = 3 [default = 300];
+        optional uint32 ScaleUpPartitionWriteSpeedThresholdPercent = 4 [default = 80];
+        optional uint32 ScaleDownPartitionWriteSpeedThresholdPercent = 5 [default = 20];
+        optional TPartitionStrategyType PartitionStrategyType = 6;
     }
     optional TPartitionStrategy PartitionStrategy = 35;
 

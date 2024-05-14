@@ -27,7 +27,8 @@ void TTopicSdkTestSetup::CreateTopic(const TString& path, const TString& consume
     TTopicClient client(MakeDriver());
 
     TCreateTopicSettings topics;
-    TPartitioningSettings partitions(partitionCount, maxPartitionCount.value_or(partitionCount));
+    TAutoscalingSettings scalingSettings(EAutoscalingStrategy::ScaleUp, TDuration::Seconds(1), 1, 10);
+    TPartitioningSettings partitions(partitionCount, maxPartitionCount.value_or(partitionCount), 10, scalingSettings);
 
     topics.PartitioningSettings(partitions);
     TConsumerSettings<TCreateTopicSettings> consumers(topics, consumer);

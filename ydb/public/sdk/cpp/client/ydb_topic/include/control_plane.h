@@ -31,6 +31,13 @@ enum class EMeteringMode : ui32 {
     Unknown = std::numeric_limits<int>::max(),
 };
 
+enum class EAutoscalingStrategy: ui32 {
+    Unspecified = 0,
+    Disabled = 1,
+    ScaleUp = 2,
+    ScaleUpAndDown = 3,
+};
+
 
 class TConsumer {
 public:
@@ -150,20 +157,96 @@ private:
     TMaybe<TPartitionLocation> PartitionLocation_;
 };
 
-class TPartitioningSettings {
-public:
-    TPartitioningSettings() : MinActivePartitions_(0), PartitionCountLimit_(0){}
-    TPartitioningSettings(const Ydb::Topic::PartitioningSettings& settings);
-    TPartitioningSettings(ui64 minActivePartitions, ui64 partitionCountLimit)
-        : MinActivePartitions_(minActivePartitions)
-        , PartitionCountLimit_(partitionCountLimit) {
-    }
+struct TAlterPartitioningSettings;
+struct TAlterTopicSettings;
 
+struct TAutoscalingSettings {
+public:
+    TAutoscalingSettings()
+        : Strategy_(EAutoscalingStrategy::Disabled)
+        , ThresholdTime_(TDuration::Seconds(300))
+        , ScaleDownThresholdPercent_(30)
+        , ScaleUpThresholdPercent_(90) {
+    }
+    TAutoscalingSettings(const Ydb::Topic::AutoscalingSettings& settings);
+    TAutoscalingSettings(EAutoscalingStrategy strategy, TDuration thresholdTime, ui64 scaleUpThresholdPercent, ui64 scaleDownThresholdPercent)
+        : Strategy_(strategy)
+        , ThresholdTime_(thresholdTime)
+        , ScaleDownThresholdPercent_(scaleDownThresholdPercent)
+        , ScaleUpThresholdPercent_(scaleUpThresholdPercent) {}
+
+    EAutoscalingStrategy GetStrategy() const;
+    TDuration GetThresholdTime() const;
+    ui32 GetScaleDownThresholdPercent() const;
+    ui32 GetScaleUpThresholdPercent() const;
+private:
+    EAutoscalingStrategy Strategy_;
+    TDuration ThresholdTime_;
+    ui32 ScaleDownThresholdPercent_;
+    ui32 ScaleUpThresholdPercent_;
+};
+
+struct TAlterAutoscalingSettings {
+    using TSelf = TAlterAutoscalingSettings;
+    public:
+        TAlterAutoscalingSettings(TAlterPartitioningSettings& parent): Parent_(parent) {}
+
+    FLUENT_SETTING_OPTIONAL(EAutoscalingStrategy, Strategy);
+    FLUENT_SETTING_OPTIONAL(TDuration, ThresholdTime);
+    FLUENT_SETTING_OPTIONAL(ui64, ScaleUpThresholdPercent);
+    FLUENT_SETTING_OPTIONAL(ui64, ScaleDownThresholdPercent);
+
+    TAlterPartitioningSettings& EndAlterAutoscalingSettings() { return Parent_; };
+
+    private:
+        TAlterPartitioningSettings& Parent_;
+};
+
+class TPartitioningSettings {
+    using TSelf = TPartitioningSettings;
+public:
+    TPartitioningSettings() : MinActivePartitions_(1), MaxActivePartitions_(1), PartitionCountLimit_(1), AutoscalingSettings_(){}
+    TPartitioningSettings(const Ydb::Topic::PartitioningSettings& settings);
+    TPartitioningSettings(ui64 minActivePartitions, ui64 partitionCountLimit, ui64 maxActivePartitions = 1, TAutoscalingSettings autoscalingSettings = {})
+        : MinActivePartitions_(minActivePartitions)
+        , MaxActivePartitions_(maxActivePartitions)
+        , PartitionCountLimit_(partitionCountLimit) // savnik delete?
+        , AutoscalingSettings_(autoscalingSettings)
+ {
+    }
     ui64 GetMinActivePartitions() const;
+    ui64 GetMaxActivePartitions() const;
     ui64 GetPartitionCountLimit() const;
+    TAutoscalingSettings GetAutoscalingSettings() const;
 private:
     ui64 MinActivePartitions_;
-    ui64 PartitionCountLimit_;
+    ui64 MaxActivePartitions_;
+    ui64  PartitionCountLimit_;
+    TAutoscalingSettings AutoscalingSettings_;
+};
+
+struct TAlterTopicSettings;
+
+struct TAlterPartitioningSettings {
+    using TSelf = TAlterPartitioningSettings;
+    public:
+        TAlterPartitioningSettings(TAlterTopicSettings& parent): Parent_(parent) {}
+
+    FLUENT_SETTING_OPTIONAL(ui64, MinActivePartitions);
+    FLUENT_SETTING_OPTIONAL(ui64, MaxActivePartitions);
+    //FLUENT_SETTING_OPTIONAL(TAlterAutoscalingSettings, AutoscalingSettings);
+
+    TAlterTopicSettings& EndAlterTopicPartitioningSettings() { return Parent_; };
+
+    TAlterAutoscalingSettings& BeginAlterAutoscalingSettings() {
+        AutoscalingSettings_.ConstructInPlace(*this);
+        return *AutoscalingSettings_;
+    }
+
+    TMaybe<TAlterAutoscalingSettings> AutoscalingSettings_;
+
+private:
+    TAlterTopicSettings& Parent_;
 };
 
 class TTopicDescription {
@@ -481,19 +564,23 @@ struct TCreateTopicSettings : public TOperationRequestSettings<TCreateTopicSetti
         return *this;
     }
 
-    TCreateTopicSettings& PartitioningSettings(ui64 minActivePartitions, ui64 partitionCountLimit) {
-        PartitioningSettings_ = TPartitioningSettings(minActivePartitions, partitionCountLimit);
+    TPartitioningSettings& BeginConfigurePartitioning() {
+        PartitioningSettings_ = TPartitioningSettings {};
+        return PartitioningSettings_;
+    }
+
+    TCreateTopicSettings& PartitioningSettings(ui64 minActivePartitions, ui64 partitionCountLimit, ui64 maxActivePartitions = 0, TAutoscalingSettings autoscalingSettings = {}) {
+        PartitioningSettings_ = TPartitioningSettings(minActivePartitions, partitionCountLimit, maxActivePartitions, autoscalingSettings);
         return *this;
     }
 };
-
 
 struct TAlterTopicSettings : public TOperationRequestSettings<TAlterTopicSettings> {
 
     using TSelf = TAlterTopicSettings;
     using TAlterAttributes = TMap<TString, TString>;
 
-    FLUENT_SETTING_OPTIONAL(TPartitioningSettings, AlterPartitioningSettings);
+    // FLUENT_SETTING_OPTIONAL(TAlterPartitioningSettings, AlterPartitioningSettings);
 
     FLUENT_SETTING_OPTIONAL(TDuration, SetRetentionPeriod);
 
@@ -546,10 +633,19 @@ struct TAlterTopicSettings : public TOperationRequestSettings<TAlterTopicSetting
         return AlterConsumers_.back();
     }
 
-    TAlterTopicSettings& AlterPartitioningSettings(ui64 minActivePartitions, ui64 partitionCountLimit) {
-        AlterPartitioningSettings_ = TPartitioningSettings(minActivePartitions, partitionCountLimit);
+    TAlterPartitioningSettings& BeginAlterPartitioningSettings() {
+        AlterPartitioningSettings_.ConstructInPlace(*this);
+        return *AlterPartitioningSettings_;
+    }
+
+    TAlterTopicSettings& AlterPartitioningSettings(ui64 minActivePartitions, ui64 maxActivePartitions) {
+        AlterPartitioningSettings_.ConstructInPlace(*this);
+        AlterPartitioningSettings_->MinActivePartitions(minActivePartitions);
+        AlterPartitioningSettings_->MaxActivePartitions(maxActivePartitions);
         return *this;
     }
+
+    TMaybe<TAlterPartitioningSettings> AlterPartitioningSettings_;
 };
 
 

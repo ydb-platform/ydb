@@ -1,6 +1,7 @@
 #include "partition.h"
 #include "partition_util.h"
 #include <memory>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 
@@ -1009,6 +1010,8 @@ bool DiskIsFull(TEvKeyValue::TEvResponse::TPtr& ev) {
 
 void AddCmdDeleteRange(TEvKeyValue::TEvRequest& request, TKeyPrefix::EType c, const TPartitionId& partitionId)
 {
+    DBGTRACE("AddCmdDeleteRange");
+    DBGTRACE_LOG("partitionId=" << partitionId);
     auto keyPrefixes = MakeKeyPrefixRange(c, partitionId);
     const TKeyPrefix& from = keyPrefixes.first;
     const TKeyPrefix& to = keyPrefixes.second;
@@ -1017,7 +1020,12 @@ void AddCmdDeleteRange(TEvKeyValue::TEvRequest& request, TKeyPrefix::EType c, co
     auto range = del->MutableRange();
 
     range->SetFrom(from.Data(), from.Size());
+    range->SetIncludeFrom(true);
     range->SetTo(to.Data(), to.Size());
+    range->SetIncludeTo(false);
+
+    DBGTRACE_LOG("from=" << TString(from.Data(), from.Size()));
+    DBGTRACE_LOG("to=" << TString(to.Data(), to.Size()));
 }
 
 static void RequestRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition,

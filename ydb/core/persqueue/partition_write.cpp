@@ -22,6 +22,7 @@
 #include <util/folder/path.h>
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 
@@ -1444,6 +1445,7 @@ void TPartition::BeginHandleRequests(TEvKeyValue::TEvRequest* request, const TAc
 
 void TPartition::EndHandleRequests(TEvKeyValue::TEvRequest* request, const TActorContext& ctx)
 {
+    DBGTRACE("TPartition::EndHandleRequests");
     HaveDrop = CleanUp(request, ctx);
 
     ProcessReserveRequests(ctx);

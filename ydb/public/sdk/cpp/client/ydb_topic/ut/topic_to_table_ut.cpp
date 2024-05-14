@@ -3,10 +3,12 @@
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/ut_utils.h>
+#include <ydb/core/keyvalue/keyvalue_events.h>
 
 #include <library/cpp/logger/stream.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NYdb::NTopic::NTests {
 
@@ -76,6 +78,13 @@ protected:
                                    const TDuration& duration);
     void WaitForAcks(const TString& topicPath,
                      const TString& messageGroupId);
+
+    ui64 GetTopicTabletId(const TActorId& actorId,
+                          const TString& topicPath,
+                          ui32 partition);
+    void PrintTopicTabletId(const TString& topicPath);
+    THashSet<TString> GetTabletKeys(const TActorId& actorId,
+                                    ui64 tabletId);
 
 protected:
     const TDriver& GetDriver() const;
@@ -569,6 +578,102 @@ void TFixture::WaitForAcks(const TString& topicPath, const TString& messageGroup
     UNIT_ASSERT(context.AckCount == context.WriteCount);
 }
 
+ui64 TFixture::GetTopicTabletId(const TActorId& actorId, const TString& topicPath, ui32 partition)
+{
+    auto navigate = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
+    navigate->DatabaseName = "/Root";
+
+    NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+    entry.Path = SplitPath(topicPath);
+    entry.SyncVersion = true;
+    entry.ShowPrivatePath = true;
+    entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
+
+    navigate->ResultSet.push_back(std::move(entry));
+    //navigate->UserToken = "root@builtin";
+    navigate->Cookie = 12345;
+
+    auto& runtime = Setup->GetRuntime();
+
+    runtime.Send(MakeSchemeCacheID(), actorId,
+                 new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()),
+                 0,
+                 true);
+    auto response = runtime.GrabEdgeEvent<TEvTxProxySchemeCache::TEvNavigateKeySetResult>();
+
+    UNIT_ASSERT_VALUES_EQUAL(response->Request->Cookie, 12345);
+    UNIT_ASSERT_VALUES_EQUAL(response->Request->ErrorCount, 0);
+
+    auto& front = response->Request->ResultSet.front();
+    UNIT_ASSERT(front.PQGroupInfo);
+    UNIT_ASSERT_GT(front.PQGroupInfo->Description.PartitionsSize(), 0);
+    UNIT_ASSERT_LT(partition, front.PQGroupInfo->Description.PartitionsSize());
+
+    for (size_t i = 0; i < front.PQGroupInfo->Description.PartitionsSize(); ++i) {
+        auto& p = front.PQGroupInfo->Description.GetPartitions(partition);
+        if (p.GetPartitionId() == partition) {
+            return p.GetTabletId();
+        }
+    }
+
+    UNIT_FAIL("unknown partition");
+
+    return Max<ui64>();
+}
+
+THashSet<TString> TFixture::GetTabletKeys(const TActorId& actorId, ui64 tabletId)
+{
+    using TEvKeyValue = NKikimr::TEvKeyValue;
+
+    auto request = std::make_unique<TEvKeyValue::TEvRequest>();
+    request->Record.SetCookie(12345);
+
+    auto cmd = request->Record.AddCmdReadRange();
+    TString from(1, '\x00');
+    TString to(1, '\xFF');
+    auto range = cmd->MutableRange();
+    range->SetFrom(from);
+    range->SetIncludeFrom(true);
+    range->SetTo(to);
+    range->SetIncludeTo(true);
+
+    auto& runtime = Setup->GetRuntime();
+
+    runtime.SendToPipe(tabletId, actorId, request.release());
+    auto response = runtime.GrabEdgeEvent<TEvKeyValue::TEvResponse>();
+
+    UNIT_ASSERT(response->Record.HasCookie());
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetCookie(), 12345);
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.ReadRangeResultSize(), 1);
+
+    THashSet<TString> keys;
+
+    auto& result = response->Record.GetReadRangeResult(0);
+    for (size_t i = 0; i < result.PairSize(); ++i) {
+        auto& kv = result.GetPair(i);
+        keys.insert(kv.GetKey());
+    }
+
+    return keys;
+}
+
+void TFixture::PrintTopicTabletId(const TString& topicPath)
+{
+    DBGTRACE("TFixture::PrintTopicTabletId");
+    auto& runtime = Setup->GetRuntime();
+    TActorId edge = runtime.AllocateEdgeActor();
+
+    ui64 tabletId = GetTopicTabletId(edge, topicPath, 0);
+    DBGTRACE_LOG("tabletId=" << tabletId);
+
+    auto keys = GetTabletKeys(edge, tabletId);
+    DBGTRACE_LOG("keys.size=" << keys.size());
+
+    for (auto& key : keys) {
+        DBGTRACE_LOG(key);
+    }
+}
+
 Y_UNIT_TEST_F(WriteToTopic_Demo_1, TFixture)
 {
     CreateTopic("topic_A");
@@ -964,6 +1069,21 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_10, TFixture)
         UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
         UNIT_ASSERT_VALUES_EQUAL(messages[1], "message #2");
     }
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_11, TFixture)
+{
+    DBGTRACE("WriteToTopic_Demo_11");
+    CreateTopic("topic_A");
+    PrintTopicTabletId("/Root/topic_A");
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx_1 = BeginTx(tableSession);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", &tx_1);
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+    PrintTopicTabletId("/Root/topic_A");
+    CommitTx(tx_1, EStatus::SUCCESS);
+    Sleep(TDuration::Seconds(5));
+    PrintTopicTabletId("/Root/topic_A");
 }
 
 }

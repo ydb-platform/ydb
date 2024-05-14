@@ -114,8 +114,8 @@ select
         and ws_sold_date_sk = d_date_sk
         and ws_sold_time_sk = t_time_sk
  	and ws_ship_mode_sk = sm_ship_mode_sk
-        and d_year = 2002
- 	and t_time between 49530 and 49530+28800
+        and d_year = 2001
+ 	and t_time between 9453 and 9453+28800
  	and sm_carrier in ('MSC','GERMA')
      group by
         w_warehouse_name

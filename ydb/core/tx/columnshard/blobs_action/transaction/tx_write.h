@@ -1,14 +1,13 @@
 #pragma once
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
-#include <ydb/core/tx/columnshard/transactions/propose_transaction_base.h>
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
 
 namespace NKikimr::NColumnShard {
 
-class TTxWrite : public TProposeTransactionBase {
+class TTxWrite : public NTabletFlatExecutor::TTransactionBase<TColumnShard> {
 public:
     TTxWrite(TColumnShard* self, const TEvPrivate::TEvWriteBlobsResult::TPtr& putBlobResult)
-        : TProposeTransactionBase(self)
+        : NTabletFlatExecutor::TTransactionBase<TColumnShard>(self)
         , PutBlobResult(putBlobResult)
         , TabletTxNo(++Self->TabletTxCounter)
     {}
@@ -25,8 +24,6 @@ private:
 
 
     bool InsertOneBlob(TTransactionContext& txc, const NOlap::TWideSerializedBatch& batch, const TWriteId writeId);
-    void OnProposeResult(TTxController::TProposeResult& proposeResult, const TTxController::TTxInfo& txInfo) override;
-    void OnProposeError(TTxController::TProposeResult& proposeResult, const TTxController::TBasicTxInfo& txInfo) override;
 
     TStringBuilder TxPrefix() const {
         return TStringBuilder() << "TxWrite[" << ToString(TabletTxNo) << "] ";

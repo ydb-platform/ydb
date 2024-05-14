@@ -99,7 +99,8 @@ namespace {
             UNIT_ASSERT_C(attempt + 1 < attempts, "Too many attempts");
         }
 
-        Cerr << "Stats: " << stats.RowCount << " " << stats.DataSize.Size << " " << stats.IndexSize.Size << " " << stats.DataSizeHistogram.size() << " " << stats.RowCountHistogram.size() << Endl;
+        Cerr << "Got     : " << stats.RowCount << " " << stats.DataSize.Size << " " << stats.IndexSize.Size << " " << stats.DataSizeHistogram.size() << " " << stats.RowCountHistogram.size() << Endl;
+        Cerr << "Expected: " << expectedRows << " " << expectedData << " " << expectedIndex << " " << stats.DataSizeHistogram.size() << " " << stats.RowCountHistogram.size() << Endl;
         UNIT_ASSERT_VALUES_EQUAL(stats.RowCount, expectedRows);
         UNIT_ASSERT_VALUES_EQUAL(stats.DataSize.Size, expectedData);
         UNIT_ASSERT_VALUES_EQUAL(stats.IndexSize.Size, expectedIndex);
@@ -141,7 +142,8 @@ namespace {
             UNIT_ASSERT_C(attempt + 1 < attempts, "Too many attempts");
         }
 
-        Cerr << "Stats: " << stats.RowCount << " " << stats.DataSize.Size << " " << stats.IndexSize.Size << " " << stats.DataSizeHistogram.size() << " " << stats.RowCountHistogram.size() << Endl;
+        Cerr << "Got     : " << stats.RowCount << " " << stats.DataSize.Size << " " << stats.IndexSize.Size << " " << stats.DataSizeHistogram.size() << " " << stats.RowCountHistogram.size() << Endl;
+        Cerr << "Expected: " << expectedRows << " " << expectedData << " " << expectedIndex << " " << stats.DataSizeHistogram.size() << " " << stats.RowCountHistogram.size() << Endl;
         UNIT_ASSERT_VALUES_EQUAL(stats.RowCount, expectedRows);
         UNIT_ASSERT_VALUES_EQUAL(stats.DataSize.Size, expectedData);
         UNIT_ASSERT_VALUES_EQUAL(stats.IndexSize.Size, expectedIndex);
@@ -405,14 +407,14 @@ Y_UNIT_TEST_SUITE(BuildStatsBTreeIndex) {
     Y_UNIT_TEST(Single_History)
     {
         auto subset = TMake(Mass0, PageConf(Mass0.Model->Scheme->Families.size(), WriteBTreeIndex)).Mixed(0, 1, TMixerOne{ }, 0.3);
-        CheckMixedIndex(*subset, 24000, 3547100, 61162);
+        CheckBTreeIndex(*subset, 24000, 3547100, 61162);
     }
 
     Y_UNIT_TEST(Single_History_Slices)
     {
         auto subset = TMake(Mass0, PageConf(Mass0.Model->Scheme->Families.size(), WriteBTreeIndex)).Mixed(0, 1, TMixerOne{ }, 0.3, 13);   
         subset->Flatten.begin()->Slices->Describe(Cerr); Cerr << Endl;
-        CheckMixedIndex(*subset, 9582, 1425198, 61162);
+        CheckBTreeIndex(*subset, 9582, 1425198, 61162);
     }
 
     Y_UNIT_TEST(Single_Groups)

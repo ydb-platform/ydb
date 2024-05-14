@@ -1,3 +1,4 @@
+#include "flat_part_index_iter_bree_index.h"
 #include "flat_stat_table.h"
 #include "flat_table_subset.h"
 #include "library/cpp/int128/int128.h"
@@ -11,6 +12,7 @@ using TGroupId = NPage::TGroupId;
 using TFrames = NPage::TFrames;
 using TBtreeIndexNode = NPage::TBtreeIndexNode;
 using TChild = TBtreeIndexNode::TChild;
+using TCells = NPage::TCells;
 
 TChild GetPrevChild(const TPart* part, TGroupId groupId, TRowId rowId, IPages* env, bool& ready) {
     auto& meta = part->IndexPages.GetBTree(groupId);
@@ -72,6 +74,16 @@ TChild GetPrevHistoryChild(const TPart* part, TGroupId groupId, TRowId rowId, IP
     TPageId pageId = meta.PageId;
     TChild result{0, 0, 0, 0, 0};
 
+    // Minimum key is (rowId, max, max)
+    ui64 startStep = Max<ui64>();
+    ui64 startTxId = Max<ui64>();
+    TCell keyCells[3] = {
+        TCell::Make(rowId),
+        TCell::Make(startStep),
+        TCell::Make(startTxId),
+    };
+    TCells key{ keyCells, 3 };
+
     for (ui32 height = 0; height < meta.LevelCount; height++) {
         auto page = env->TryGetPage(part, pageId, {});
         if (!page) {
@@ -79,7 +91,7 @@ TChild GetPrevHistoryChild(const TPart* part, TGroupId groupId, TRowId rowId, IP
             return result;
         }
         auto node = TBtreeIndexNode(*page);
-        auto pos = node.Seek(rowId);
+        auto pos = node.Seek(ESeek::Lower, key, part->Scheme->HistoryGroup.ColsKeyIdx, part->Scheme->HistoryKeys.Get());
         pageId = node.GetShortChild(pos).PageId;
         if (pos) {
             if (node.IsShortChildFormat()) {
@@ -100,6 +112,16 @@ TChild GetHistoryChild(const TPart* part, TGroupId groupId, TRowId rowId, IPages
     TPageId pageId = meta.PageId;
     TChild result = meta;
 
+    // Maximum key is (rowId, 0, 0)
+    ui64 endStep = 0;
+    ui64 endTxId = 0;
+    TCell keyCells[3] = {
+        TCell::Make(rowId),
+        TCell::Make(endStep),
+        TCell::Make(endTxId),
+    };
+    TCells key{ keyCells, 3 };
+
     for (ui32 height = 0; height < meta.LevelCount; height++) {
         auto page = env->TryGetPage(part, pageId, {});
         if (!page) {
@@ -107,7 +129,7 @@ TChild GetHistoryChild(const TPart* part, TGroupId groupId, TRowId rowId, IPages
             return result;
         }
         auto node = TBtreeIndexNode(*page);
-        auto pos = node.Seek(rowId);
+        auto pos = node.Seek(ESeek::Lower, key, part->Scheme->HistoryGroup.ColsKeyIdx, part->Scheme->HistoryKeys.Get());
         pageId = node.GetShortChild(pos).PageId;
         if (node.IsShortChildFormat()) {
             auto& child = node.GetShortChild(pos);
@@ -155,6 +177,19 @@ void AddSliceDataSize(TStats& stats, ui8 channel, const TChild& prevChild, const
     }
 }
 
+ui64 GetBeginDataSize(TPartGroupBtreeIndexIter iter, TRowId rowId, bool& ready) {
+    auto seek = iter.Seek(rowId);
+    if (seek == EReady::Page) {
+        ready = false;
+        return 0;
+    }
+
+    auto node = iter.GetNode();
+    if (node.BeginRowId == rowId) {
+        return node.B
+    }
+}
+
 bool AddDataSize(const TPartView& part, TStats& stats, IPages* env) {
     bool ready = true;
 
@@ -165,7 +200,11 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env) {
     { // main group
         TGroupId groupId{};
         auto channel = part->GetGroupChannel(groupId);
+        TPartGroupBtreeIndexIter iter(part.Part.Get(), env, groupId);
+
         for (const auto& slice : *part.Slices) {
+            iter.Seek(slice.BeginRowId())
+
             auto prevChild = GetPrevChild(part.Part.Get(), groupId, slice.BeginRowId(), env, ready);
             auto lastChild = GetChild(part.Part.Get(), groupId, slice.EndRowId() - 1, env, ready);
             if (!ready) {
@@ -199,7 +238,7 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env) {
         }
     }
 
-    if (part->HistoricGroupsCount && false) { // main history group
+    if (part->HistoricGroupsCount) { // main history group
         TGroupId groupId{0, true};
         auto channel = part->GetGroupChannel(groupId);
         for (const auto& slice : *part.Slices) {

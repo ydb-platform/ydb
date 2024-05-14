@@ -34,8 +34,3 @@ message ListingResponse {
     bool is_truncated = 5;
     bytes next_continuation_token = 6;
 }
-
-message ContinuationToken {
-    string last_path = 1;
-    bool is_folder = 2;
-}

@@ -215,7 +215,7 @@ private:
 
     std::unique_ptr<IRequestNoOpCtx> GrpcRequest;
     const Ydb::ObjectStorage::ListingRequest* Request;
-    std::optional<Ydb::ObjectStorage::ContinuationToken> ContinuationToken;
+    std::optional<NKikimrTxDataShard::TObjectStorageListingContinuationToken> ContinuationToken;
     THolder<const NACLib::TUserToken> UserToken;
     ui32 MaxKeys;
     TActorId SchemeCache;
@@ -269,7 +269,7 @@ public:
         }
 
         if (Request->continuation_token()) {
-            Ydb::ObjectStorage::ContinuationToken token;
+            NKikimrTxDataShard::TObjectStorageListingContinuationToken token;
             if (!token.ParseFromString(Request->continuation_token())) {
                 return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, "Invalid ContinuationToken", ctx);
             }
@@ -901,7 +901,7 @@ private:
         }
         
         if (isTruncated && (lastDirectory || lastFile)) {
-            Ydb::ObjectStorage::ContinuationToken token;
+            NKikimrTxDataShard::TObjectStorageListingContinuationToken token;
             
             if (lastDirectory > lastFile) {
                 token.set_last_path(lastDirectory);

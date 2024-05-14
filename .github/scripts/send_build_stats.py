@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import json
 import os
 import ydb 
 import uuid
@@ -90,16 +91,16 @@ def main():
                 text_query_builder.append("DECLARE ${} as Uint64;".format(type_))
             
             text_query_builder.append("""INSERT INTO binary_size
-            (
-                {}
-            )
-            VALUES
-            (
-                {}                   
-            );                         
-            """.format(", ".join(string_types + uint64_types), ", ".join(["$" + column for column in string_types + uint64_types])))
+(
+    {}
+)
+VALUES
+(
+    {}                   
+);                         
+""".format(", \n    ".join(string_types + uint64_types), ", \n    ".join(["$" + column for column in string_types + uint64_types])))
 
-            text_query = "".join(text_query_builder)
+            text_query = "\n".join(text_query_builder)
 
             prepared_query = session.prepare(text_query)
             
@@ -108,9 +109,9 @@ def main():
 
             build_type = os.environ.get("build_type", "N/A").encode("utf-8")
             parameters = {
-                "$id": uuid.uuid4().bytes,
+                "$id": str(uuid.uuid4()).encode("utf-8"),
                 "$build_type": build_type,
-                "$binary_path": YDBD_PATH,
+                "$binary_path": YDBD_PATH.encode("utf-8"),
                 "$size_stripped_bytes": int(binary_size_bytes.decode("utf-8")),
                 "$size_bytes": int(binary_size_stripped_bytes.decode("utf-8")),
             }
@@ -120,6 +121,11 @@ def main():
                 value_bytes = value.encode("utf-8")
                 parameters["$" + column] = value_bytes
             
+            print("Executing query:\n{}".format(text_query))
+            print("With parameters:")
+            for k, v in parameters.items():
+                print("{}: {}".format(k, v))
+
             result_sets = tx.execute(prepared_query, parameters, commit_tx=True)
             
 

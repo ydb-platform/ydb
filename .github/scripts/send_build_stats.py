@@ -109,7 +109,7 @@ VALUES
                 git_commit_time = datetime.datetime.fromisoformat(
                     git_commit_time_bytes.decode("utf-8").strip()
                 )
-                git_commit_message = git_commit_message_bytes.decode("utf-8")
+                git_commit_message = git_commit_message_bytes.decode("utf-8").strip()
                 git_commit_time_unix = int(git_commit_time.timestamp())
             else:
                 git_commit_time = None

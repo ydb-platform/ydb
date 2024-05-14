@@ -15,6 +15,10 @@ namespace NKikimr::NColumnShard {
     public:
         using TBase::TBase;
 
+        virtual bool AllowTxDups() const override {
+            return true;
+        }
+
         virtual bool Parse(TColumnShard& owner, const TString& data) override;
 
         virtual TProposeResult ExecuteOnPropose(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) const override;

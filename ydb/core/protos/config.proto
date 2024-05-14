@@ -1715,7 +1715,7 @@ message TKafkaProxyConfig {
     }
 
     optional TProxy Proxy = 7;
-    optional bool ChargeExtraRUOnRequest = 10 [default = false];
+    optional bool MeteringV2Enabled = 10 [default = false];
 }
 
 message TAwsCompatibilityConfig {

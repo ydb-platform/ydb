@@ -49,11 +49,17 @@ NTable::EReady TDataShardUserDb::SelectRow(
 }
 
 ui64 CalculateKeyBytes(const TArrayRef<const TRawTypeValue> key) {
-    return std::accumulate(key.begin(), key.end(), 0, [](ui64 bytes, const TRawTypeValue& value) { return bytes + value.IsEmpty() ? 1 : value.Size(); });
+    ui64 bytes = 0ull;
+    for (const TRawTypeValue& value : key)
+        bytes += value.IsEmpty() ? 1ull : value.Size();
+    return bytes;
 };
 
 ui64 CalculateValueBytes(const TArrayRef<const NIceDb::TUpdateOp> ops) {
-    return std::accumulate(ops.begin(), ops.end(), 0, [](ui64 bytes, const NIceDb::TUpdateOp& op) { return bytes + op.Value.IsEmpty() ? 1 : op.Value.Size(); });
+    ui64 bytes = 0ull;
+    for (const NIceDb::TUpdateOp& op : ops)
+        bytes += op.Value.IsEmpty() ? 1ull : op.Value.Size();
+    return bytes;
 };
 
 void TDataShardUserDb::UpdateRow(

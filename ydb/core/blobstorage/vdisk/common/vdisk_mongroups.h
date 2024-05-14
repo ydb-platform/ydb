@@ -592,12 +592,14 @@ public:                                                                         
         public:
             GROUP_CONSTRUCTOR(TBalancingGroup)
             {
+                COUNTER_INIT(BalancingIterations, false);
                 COUNTER_INIT(PlannedToSendOnMain, false);
                 COUNTER_INIT(SentOnMain, false);
                 COUNTER_INIT(CandidatesToDelete, false);
                 COUNTER_INIT(MarkedReadyToDelete, false);
             }
 
+            COUNTER_DEF(BalancingIterations);
             COUNTER_DEF(PlannedToSendOnMain);
             COUNTER_DEF(SentOnMain);
             COUNTER_DEF(CandidatesToDelete);

@@ -303,13 +303,12 @@ TTxProposeResult TTxController::ProposeTransaction(const TTxController::TBasicTx
 
     auto txInfoPtr = GetTxInfo(txInfo.TxId);
     if (!!txInfoPtr) {
-//        if (txInfoPtr->Source != source || txInfoPtr->Cookie != cookie) {
-//            TTxController::TProposeResult proposeResult(NKikimrTxColumnShard::EResultStatus::ERROR, TStringBuilder() << "Another commit TxId# " << txInfo.TxId << " has already been proposed");
-//            return TTxProposeResult(txInfo, std::move(proposeResult));
-//        } else {
-//            return TTxProposeResult(*txInfoPtr, TTxController::TProposeResult());
-//        }
-        return TTxProposeResult(*txInfoPtr, TTxController::TProposeResult());
+        if (!txOperator->AllowTxDups() && (txInfoPtr->Source != source || txInfoPtr->Cookie != cookie)) {
+            TTxController::TProposeResult proposeResult(NKikimrTxColumnShard::EResultStatus::ERROR, TStringBuilder() << "Another commit TxId# " << txInfo.TxId << " has already been proposed");
+            return TTxProposeResult(txInfo, std::move(proposeResult));
+        } else {
+            return TTxProposeResult(*txInfoPtr, TTxController::TProposeResult());
+        }
     } else {
         auto proposeResult = txOperator->ExecuteOnPropose(Owner, txc);
         if (!proposeResult.IsFail()) {

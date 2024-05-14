@@ -131,6 +131,10 @@ public:
             return TxInfo.TxId;
         }
 
+        virtual bool AllowTxDups() const {
+            return false;
+        }
+
         virtual ~ITransactionOperator() {}
 
         virtual bool TxWithDeadline() const {

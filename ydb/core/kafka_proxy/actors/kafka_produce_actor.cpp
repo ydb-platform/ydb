@@ -323,7 +323,7 @@ void TKafkaProduceActor::ProcessRequest(TPendingRequest::TPtr pendingRequest, co
     pendingRequest->StartTime = ctx.Now();
 
     size_t position = 0;
-    bool ruPerRequest = Context->Config.KafkaMeteringV2Enabled();
+    bool ruPerRequest = Context->Config.GetMeteringV2Enabled();
     for(const auto& topicData : r->TopicData) {
         const TString& topicPath = NormalizePath(Context->DatabasePath, *topicData.Name);
         for(const auto& partitionData : topicData.PartitionData) {

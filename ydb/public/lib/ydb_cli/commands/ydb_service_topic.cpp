@@ -285,10 +285,6 @@ namespace {
             .DefaultValue(0)
             .Optional()
             .StoreResult(&RetentionStorageMb_);
-        config.Opts->AddLongOption("retention-storage-mb", "Storage retention in megabytes")
-            .DefaultValue(0)
-            .Optional()
-            .StoreResult(&RetentionStorageMb_);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
         AddAllowedCodecs(config, AllowedCodecs);

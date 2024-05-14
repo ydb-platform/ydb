@@ -222,7 +222,7 @@ const TVector<NScheme::TPermissions>& TTopicDescription::GetEffectivePermissions
 
 TPartitioningSettings::TPartitioningSettings(const Ydb::Topic::PartitioningSettings& settings)
     : MinActivePartitions_(settings.min_active_partitions())
-    , MaxActivePartitions_(settings.max_active_partitions()) //этого поля на сервере может не быть, и сюда придет дефолтное значение. Норм ли это
+    , MaxActivePartitions_(settings.max_active_partitions())
     , PartitionCountLimit_(settings.partition_count_limit())
     , AutoscalingSettings_(settings.autoscaling_settings())
 {}
@@ -243,7 +243,7 @@ TAutoscalingSettings TPartitioningSettings::GetAutoscalingSettings() const {
     return AutoscalingSettings_;
 }
 
-TAutoscalingSettings::TAutoscalingSettings(const Ydb::Topic::AutoscalingSettings& settings) // savnik check can be empty
+TAutoscalingSettings::TAutoscalingSettings(const Ydb::Topic::AutoscalingSettings& settings)
     : Strategy_(static_cast<EAutoscalingStrategy>(settings.strategy()))
     , ThresholdTime_(TDuration::Seconds(settings.partition_write_speed().threshold_time().seconds()))
     , ScaleDownThresholdPercent_(settings.partition_write_speed().scale_down_threshold_percent())

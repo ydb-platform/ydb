@@ -48,7 +48,7 @@ static std::optional<float> KnnManhattanDistance(const TStringRef& str1, const T
             if (Y_UNLIKELY(vector1.size() != vector2.size() || vector1.empty() || vector1.size() > UINT16_MAX))
                 return {};  
 
-            ui16 ret = 0;
+            ui64 ret = 0;
             for (size_t i = 0; i < vector1.size(); ++i)
                 ret += __builtin_popcountll(vector1[i] ^ vector2[i]);
             return ret;
@@ -91,10 +91,10 @@ static std::optional<float> KnnEuclideanDistance(const TStringRef& str1, const T
             if (Y_UNLIKELY(vector1.size() != vector2.size() || vector1.empty() || vector1.size() > UINT16_MAX))
                 return {};  
 
-            ui16 ret = 0;
+            ui64 ret = 0;
             for (size_t i = 0; i < vector1.size(); ++i)
                 ret += __builtin_popcountll(vector1[i] ^ vector2[i]);
-            return NPrivate::NL2Distance::L2DistanceSqrt<ui64>(ret);
+            return NPrivate::NL2Distance::L2DistanceSqrt(ret);
         }
         default:
             return {};

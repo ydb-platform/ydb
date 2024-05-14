@@ -93,6 +93,7 @@ namespace {
     bool ParseRangeKey(
             const NKikimrMiniKQL::TParams& proto,
             TConstArrayRef<NScheme::TTypeInfo> keyTypes,
+            const TVector<bool>& notNullTypes,
             TSerializedCellVec& buf,
             EParseRangeKeyExp exp,
             TVector<TString>& unresolvedKeys)
@@ -108,7 +109,7 @@ namespace {
             auto& value = proto.GetValue();
             auto& type = proto.GetType();
             TString errStr;
-            bool res = NMiniKQL::CellsFromTuple(&type, value, keyTypes, true, key, errStr, memoryOwner);
+            bool res = NMiniKQL::CellsFromTuple(&type, value, keyTypes, notNullTypes, true, key, errStr, memoryOwner);
             if (!res) {
                 unresolvedKeys.push_back("Failed to parse range key tuple: " + errStr);
                 return false;
@@ -534,16 +535,20 @@ private:
         }
 
         TVector<NScheme::TTypeInfo> keyTypes(res.Columns.size());
+        TVector<bool> notNullKeys(res.Columns.size());
         TVector<TKeyDesc::TColumnOp> columns(res.Columns.size());
         {
             size_t no = 0;
             size_t keys = 0;
+
+            const auto& notNullColumns = res.NotNullColumns;
 
             for (auto &entry : res.Columns) {
                 auto& col = entry.second;
 
                 if (col.KeyOrder != -1) {
                     keyTypes[col.KeyOrder] = col.PType;
+                    notNullKeys[col.KeyOrder] = notNullColumns.contains(col.Name);
                     ++keys;
                 }
 
@@ -564,6 +569,7 @@ private:
             }
 
             keyTypes.resize(keys);
+            notNullKeys.resize(keys);
         }
 
         if (!colNameToPos.empty()) {
@@ -595,9 +601,9 @@ private:
                 ? (toInclusive ? EParseRangeKeyExp::NONE : EParseRangeKeyExp::TO_NULL)
                 : EParseRangeKeyExp::NONE);
 
-        if (!ParseRangeKey(Settings.KeyRange.GetFrom(), keyTypes,
+        if (!ParseRangeKey(Settings.KeyRange.GetFrom(), keyTypes, notNullKeys,
                         KeyFromValues, fromExpand, UnresolvedKeys) ||
-            !ParseRangeKey(Settings.KeyRange.GetTo(), keyTypes,
+            !ParseRangeKey(Settings.KeyRange.GetTo(), keyTypes, notNullKeys,
                         KeyToValues, toExpand, UnresolvedKeys))
         {
             TxProxyMon->ResolveKeySetWrongRequest->Inc();

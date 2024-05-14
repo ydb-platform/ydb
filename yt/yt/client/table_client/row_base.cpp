@@ -118,6 +118,7 @@ void ValidateKeyValueType(EValueType type)
         type != EValueType::Double &&
         type != EValueType::Boolean &&
         type != EValueType::String &&
+        type != EValueType::Any &&
         type != EValueType::Composite &&
         type != EValueType::Null &&
         type != EValueType::Min &&

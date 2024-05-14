@@ -116,7 +116,14 @@ private:
             PushSettingsToStat(settings, nodeName, "SkipDqReadSettings", DqReadSupportedSettings);
             return false;
         }
-
+        if (HasNonEmptyKeyFilter(section)) {
+            PushSkipStat("NonEmptyKeyFilter", nodeName);
+            return false;
+        }
+        auto sampleSetting = GetSetting(section.Settings().Ref(), EYtSettingType::Sample);
+        if (sampleSetting && sampleSetting->Child(1)->Child(0)->Content() == "system") {
+            return false;
+        }
         ui64 dataSize = 0ULL, dataChunks = 0ULL;
         for (const auto& path : section.Paths()) {
             const TYtPathInfo info(path);
@@ -247,19 +254,6 @@ private:
         }
         auto newWorld = ApplySyncListToWorld(sort.World().Ptr(), syncList, ctx);
 
-        TExprNode::TPtr direct, selector;
-        if (const auto& sorted = TYtOutTableInfo(sort.Output().Item(0)).RowSpec->GetForeignSort(); !sorted.empty()) {
-            TExprNode::TListType nodes(sorted.size());
-            std::transform(sorted.cbegin(), sorted.cend(), nodes.begin(), [&](const std::pair<TString, bool>& item) { return MakeBool(sort.Pos(), item.second, ctx); });
-            direct = nodes.size() > 1U ? ctx.NewList(sort.Pos(), std::move(nodes)) : std::move(nodes.front());
-            nodes.resize(sorted.size());
-            auto arg = ctx.NewArgument(sort.Pos(), "row");
-            std::transform(sorted.cbegin(), sorted.cend(), nodes.begin(), [&](const std::pair<TString, bool>& item) {
-                return ctx.NewCallable(sort.Pos(), "Member", {arg, ctx.NewAtom(sort.Pos(), item.first)});
-            });
-            selector = ctx.NewLambda(sort.Pos(), ctx.NewArguments(sort.Pos(), {std::move(arg)}), nodes.size() > 1U ? ctx.NewList(sort.Pos(), std::move(nodes)) : std::move(nodes.front()));
-        }
-
         const auto input = Build<TCoToFlow>(ctx, sort.Pos())
             .Input<TYtTableContent>()
                 .Input<TYtReadTable>()
@@ -279,6 +273,7 @@ private:
             limit = GetLimitExpr(limitNode, ctx);
         }
 
+        auto [direct, selector] = GetOutputSortSettings(sort, ctx);
         auto work = direct && selector ?
             limit ?
                 Build<TCoTopSort>(ctx, sort.Pos())
@@ -598,6 +593,23 @@ private:
                         .Build()
                     .Done();
 
+        auto partitionsByKeys = Build<TCoPartitionsByKeys>(ctx, reduce.Pos())
+                                                .Input(std::move(input))
+                                                .KeySelectorLambda(extract)
+                                                .SortDirections(std::move(sortDirs))
+                                                .SortKeySelectorLambda(std::move(sortKeys))
+                                                .ListHandlerLambda(std::move(reducer))
+                                            .Done().Ptr();
+
+        auto [direct, selector] = GetOutputSortSettings(reduce, ctx);
+        if (direct && selector) {
+            partitionsByKeys = Build<TCoSort>(ctx, reduce.Pos())
+                    .Input(std::move(partitionsByKeys))
+                    .SortDirections(std::move(direct))
+                    .KeySelectorLambda(std::move(selector))
+                    .Done().Ptr();
+        }
+
         return Build<TYtTryFirst>(ctx, reduce.Pos())
             .template First<TYtDqProcessWrite>()
                 .World(std::move(newWorld))
@@ -610,13 +622,7 @@ private:
                             .template Program<TCoLambda>()
                                 .Args({})
                                 .template Body<TDqWrite>()
-                                    .template Input<TCoPartitionsByKeys>()
-                                        .Input(std::move(input))
-                                        .KeySelectorLambda(extract)
-                                        .SortDirections(std::move(sortDirs))
-                                        .SortKeySelectorLambda(std::move(sortKeys))
-                                        .ListHandlerLambda(std::move(reducer))
-                                    .Build()
+                                    .Input(std::move(partitionsByKeys))
                                     .Provider().Value(YtProviderName).Build()
                                     .template Settings<TCoNameValueTupleList>().Build()
                                 .Build()
@@ -665,6 +671,24 @@ private:
             return MakeYtReduceByDq(mapReduce, ctx);
         }
         return node;
+    }
+
+    std::pair<TExprNode::TPtr, TExprNode::TPtr> GetOutputSortSettings(const TYtOutputOpBase& op, TExprContext& ctx) const {
+        TExprNode::TPtr direct, selector;
+        if (const auto& sorted = TYtOutTableInfo(op.Output().Item(0)).RowSpec->GetForeignSort(); !sorted.empty()) {
+            TExprNode::TListType nodes(sorted.size());
+            std::transform(sorted.cbegin(), sorted.cend(), nodes.begin(),
+                                [&](const std::pair<TString, bool>& item) { return MakeBool(op.Pos(), item.second, ctx); });
+            direct = nodes.size() > 1U ? ctx.NewList(op.Pos(), std::move(nodes)) : std::move(nodes.front());
+            nodes.resize(sorted.size());
+            auto arg = ctx.NewArgument(op.Pos(), "row");
+            std::transform(sorted.cbegin(), sorted.cend(), nodes.begin(), [&](const std::pair<TString, bool>& item) {
+                return ctx.NewCallable(op.Pos(), "Member", {arg, ctx.NewAtom(op.Pos(), item.first)});
+            });
+            selector = ctx.NewLambda(op.Pos(), ctx.NewArguments(op.Pos(), {std::move(arg)}),
+                                nodes.size() > 1U ? ctx.NewList(op.Pos(), std::move(nodes)) : std::move(nodes.front()));
+        }
+        return std::make_pair(direct, selector);
     }
 
     void PushSkipStat(const TStringBuf& statName, const TStringBuf& nodeName) const {

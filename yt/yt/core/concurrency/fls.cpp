@@ -20,8 +20,8 @@ std::atomic<int> FlsSize;
 NThreading::TForkAwareSpinLock FlsLock;
 std::array<TFlsSlotDtor, MaxFlsSize> FlsDtors;
 
-YT_THREAD_LOCAL(TFls*) PerThreadFls;
-YT_THREAD_LOCAL(TFls*) CurrentFls;
+YT_DEFINE_THREAD_LOCAL(TFls*, PerThreadFls);
+YT_DEFINE_THREAD_LOCAL(TFls*, CurrentFls);
 
 int AllocateFlsSlot(TFlsSlotDtor dtor)
 {
@@ -42,13 +42,14 @@ void DestructFlsSlot(int index, TFls::TCookie cookie)
 
 TFls* GetPerThreadFls()
 {
-    if (!PerThreadFls) {
+    auto& perThreadFls = PerThreadFls();
+    if (!perThreadFls) {
         // This is only needed when some code attempts to interact with FLS outside of a fiber context.
         // Unfortunately there's no safe place to destroy this FLS upon thread shutdown.
-        PerThreadFls = new TFls();
-        NSan::MarkAsIntentionallyLeaked(PerThreadFls);
+        perThreadFls = new TFls();
+        NSan::MarkAsIntentionallyLeaked(perThreadFls);
     }
-    return PerThreadFls;
+    return perThreadFls;
 }
 
 } // namespace NDetail
@@ -79,7 +80,7 @@ void TFls::Set(int index, TCookie cookie)
 TFls* SwapCurrentFls(TFls* newFls)
 {
 
-    return std::exchange(NDetail::CurrentFls, newFls);
+    return std::exchange(NDetail::CurrentFls(), newFls);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -101,7 +101,7 @@ BuildFolderListItemExpr(TExprContext &ctx, NYql::TPositionHandle pos,
 }
 
 TWalkFoldersImpl::TWalkFoldersImpl(const TString& sessionId, const TString& cluster, TYtSettings::TConstPtr config, 
-    TPosition pos, TYtKey::TWalkFoldersArgs&& args, const IYtGateway::TPtr gateway):
+    TPosition pos, const TYtKey::TWalkFoldersArgs& args, const IYtGateway::TPtr gateway):
     Pos_(pos), SessionId_(sessionId), Cluster_(cluster), Config_(config), Gateway_(gateway) {
     
     PreHandler_ = args.PreHandler->IsCallable("Void") ? Nothing() : MakeMaybe(args.PreHandler);
@@ -202,7 +202,7 @@ IGraphTransformer::TStatus TWalkFoldersImpl::AfterListFolderOp(TExprContext& ctx
         }
 
         Y_ENSURE(!ProcessFoldersQueue_.empty(), "Got future result for Yt List but no folder in queue");
-        auto folderListVal = BatchFolderListFuture_->ExtractValue();
+        auto folderListVal = BatchFolderListFuture_->GetValueSync();
         if (folderListVal.Success()) {
             auto& folder = ProcessFoldersQueue_.front();
             YQL_CLOG(INFO, ProviderYt) << "Got " << folderListVal.Items.size() << " results for list op at `" << folder.Folder.Prefix << "`";
@@ -452,7 +452,7 @@ IGraphTransformer::TStatus TWalkFoldersImpl::HandleAfterResolveFuture(TExprConte
         return IGraphTransformer::TStatus::Repeat;
     }
 
-    auto res = BatchResolveFuture_->ExtractValue();
+    auto res = BatchResolveFuture_->GetValueSync();
     BatchResolveFuture_ = Nothing();
     YQL_CLOG(INFO, ProviderYt) << "Added items to handle after batch resolve future completion";
 

@@ -718,7 +718,7 @@ private:
             sizeSum += f.GetSize();
         }
 
-        i64 dataLimit = static_cast<i64>(4_GB);
+        i64 dataLimit = static_cast<i64>(State->Settings->_MaxAttachmentsSize.Get().GetOrElse(TDqSettings::TDefault::MaxAttachmentsSize));
         if (sizeSum > dataLimit) {
             YQL_CLOG(WARN, ProviderDq) << "Too much data: " << sizeSum << " > " << dataLimit;
             fallbackFlag = true;

@@ -100,16 +100,18 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
         const TString topicName = "NonExistentTopic";
         InitSource(topicName);
 
-        while (true) {
-            try {
-                SourceRead<TString>(UVParser);
-            } catch (yexception& e) {
-                UNIT_ASSERT_STRING_CONTAINS(e.what(), "Read session to topic \"NonExistentTopic\" was closed");
+        TInstant deadline = Now() + TDuration::Seconds(5);
+        auto future = CaSetup->AsyncInputPromises.FatalError.GetFuture();
+        bool failured = false;
+        while (Now() < deadline) {
+            SourceRead<TString>(UVParser);
+            if (future.HasValue()) {
+                UNIT_ASSERT_STRING_CONTAINS(future.GetValue().ToOneLineString(), "Read session to topic \"NonExistentTopic\" was closed");
+                failured = true;
                 break;
             }
-
-            sleep(1);
         }
+        UNIT_ASSERT_C(failured, "Failure timeout");
     }
 
     Y_UNIT_TEST(TestSaveLoadPqRead) {

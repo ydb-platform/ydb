@@ -106,6 +106,7 @@ public:
         OPTION_FIELD(TIntrusivePtr<IRandomProvider>, RandomProvider)
         OPTION_FIELD(TIntrusivePtr<ITimeProvider>, TimeProvider)
         OPTION_FIELD(TStatWriter, StatWriter)
+        OPTION_FIELD_DEFAULT(bool, CreateOperationTracker, true)
     };
 
     //////////////////////////////////////////////////////////////

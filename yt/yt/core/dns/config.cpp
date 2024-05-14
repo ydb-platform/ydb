@@ -18,6 +18,10 @@ void TAresDnsResolverConfig::Register(TRegistrar registrar)
         .Default(TDuration::Seconds(3));
     registrar.Parameter("jitter", &TThis::Jitter)
         .Default(0.5);
+    registrar.Parameter("force_tcp", &TThis::ForceTcp)
+        .Default(false);
+    registrar.Parameter("keep_socket", &TThis::KeepSocket)
+        .Default(true);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

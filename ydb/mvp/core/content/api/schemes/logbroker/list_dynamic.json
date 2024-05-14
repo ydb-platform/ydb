@@ -1,0 +1,267 @@
+{
+    "get": {
+        "tags": ["LB UI v2"],
+        "security": { "Bearer": [] },
+        "produces": ["application/json"],
+        "summary": "Lists directory or account content listing with dynamic state properties collected and aggregated from all clusters",
+        "parameters": [{
+            "name": "installation",
+            "in": "path",
+            "description": "Logbroker installation, such as logbroker and logbroker-prestable",
+            "required": true,
+            "type" : "string"
+        },{
+            "name": "path",
+            "in": "query",
+            "description": "Path for a directory or account to browse",
+            "required": false,
+            "type": "string"
+        }],
+        "responses": {
+            "200": {
+                "description": "OK",
+                "schema": {
+                    "type": "object",
+                    "title" : "TResponse",
+                    "required":["items"],
+                    "properties": {
+                        "error": {
+                            "$ref": "#/definitions/TError"
+                        },
+                        "items": {
+                            "title" : "TListing",
+                            "type": "array",
+                            "items": {
+                                "title" : "TListingItem",
+                                "type": "object",
+                                "required": ["path", "resultType"],
+                                "properties": {
+                                    "path": {
+                                        "type": "string"
+                                    },
+                                    "resultType": {
+                                        "type": "string",
+                                        "enum": ["account", "directory", "topic", "consumer"]
+                                    },
+                                    "error": {
+                                        "$ref": "#/definitions/TError"
+                                    },
+                                    "account": {
+                                        "title": "TAccount",
+                                        "type": "object",
+                                        "properties": {
+                                            "properties": {
+                                                "type": "object",
+                                                "title": "TAccountProperties",
+                                                "properties": {
+                                                    "activeTopicsCount" : {
+                                                        "type": "integer",
+                                                        "format": "int64",
+                                                        "description": "count of account topics that were written to during last hour"
+                                                    },
+                                                    "activeConsumersCount" : {
+                                                        "type": "integer",
+                                                        "format": "int64",
+                                                        "description": "count of account consumers that performed read during last hour"
+                                                    },
+                                                    "diskSize" : {
+                                                        "type": "integer",
+                                                        "format": "int64",
+                                                        "description": "sum of all account topics partitions (excluding mirrors partitions) size in bytes"
+                                                    }
+                                                }
+                                            },
+                                            "readStatistics" : {
+                                                "title": "TAccountReadStatistics",
+                                                "type": "object",
+                                                "properties": {
+                                                    "topicsReadSpeed": {
+                                                        "description" : "Sum of all account topics read speed by all consumers",
+                                                        "$ref": "#/definitions/TIoAverageSpeed"
+                                                    },
+                                                    "consumersReadSpeed": {
+                                                        "description" : "Sum of all account consumers read speed of all topics",
+                                                        "$ref": "#/definitions/TIoAverageSpeed"
+                                                    }
+                                                }
+                                            },
+                                            "writeStatistics" : {
+                                                "title": "TAccountWriteStatistics",
+                                                "type" : "object",
+                                                "properties" : {
+                                                    "writeSpeed": {
+                                                        "description" : "sum of write speed to all account topics",
+                                                        "$ref": "#/definitions/TIoAverageSpeed"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "directory": {
+                                        "title" : "TDirectory",
+                                        "type": "object",
+                                        "properties": {
+                                            "properties": {
+                                                "type": "object",
+                                                "title": "TDirectoryProperties",
+                                                "properties": {
+                                                    "diskSize" : {
+                                                        "type": "integer",
+                                                        "format": "int64",
+                                                        "description": "sum of all topics located in this directory partitions (excluding mirror partitions) size in bytes"
+                                                    }
+                                                }
+                                            },
+                                            "writeStatistics" : {
+                                                "title": "TDirectoryWriteStatistics",
+                                                "type" : "object",
+                                                "properties" : {
+                                                    "writeSpeed": {
+                                                        "description": "Sum of write speed to all topics (excluding write speed to mirror topic instances) within this directory",
+                                                        "$ref": "#/definitions/TIoAverageSpeed"
+                                                    },
+                                                    "writeIdleTime" : {
+                                                        "type" : "string",
+                                                        "description" : "Max write idle time across all topic partitions (excluding mirror partitions) located in this or child directory in ISO 8601 Duration format"
+                                                    },
+                                                    "writeTimeLag" : {
+                                                        "type" : "string",
+                                                        "description" : "Max message write lag across all topic partitions (excluding mirror partitions) in this or child directory during last minute in ISO 8601 Duration format"
+                                                    }
+                                                }
+                                            },
+                                            "readStatistics" : {
+                                                "title" : "TDirectoryReadStatistics",
+                                                "type" : "object",
+                                                "properties" : {
+                                                    "topicsReadSpeed": {
+                                                        "description" : "sum of all topics within this directory read speed by all consumers",
+                                                        "$ref": "#/definitions/TIoAverageSpeed"
+                                                    },
+                                                    "consumersReadSpeed": {
+                                                        "description" : "sum of all consumers within this directory read speed of all topics",
+                                                        "$ref": "#/definitions/TIoAverageSpeed"
+                                                    },
+                                                    "readIdleTime" : {
+                                                        "type" : "string",
+                                                        "description" : "Max read idle time across all consumers in this or child directory in ISO 8601 Duration format"
+                                                    },
+                                                    "readTimeLag" : {
+                                                        "type" : "string",
+                                                        "description" : "Max last message read lag across all consumers in this or child directory in ISO 8601 Duration format"
+                                                    },
+                                                    "writeTimeLag" : {
+                                                        "type": "string",
+                                                        "description" : "Max messages write lag that were read by any consumer in this or child directory during one minute before last read in ISO 8601 Duration format"
+                                                    },
+                                                    "unreadMessagesCount" : {
+                                                        "type" : "integer",
+                                                        "format" : "int64",
+                                                        "description" : "Sum of all unread messages in all topic partitions of all topics located in this directory"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "topic": {
+                                        "title" : "TTopic",
+                                        "type": "object",
+                                        "properties": {
+                                            "properties": {
+                                                "type": "object",
+                                                "title": "TTopicProperties",
+                                                "properties": {
+                                                    "activeConsumersCount" : {
+                                                        "type": "integer",
+                                                        "format": "int64",
+                                                        "description": "count of all consumers that read from this topic during last hour"
+                                                    },
+                                                    "diskSize" : {
+                                                        "type": "integer",
+                                                        "format": "int64",
+                                                        "description": "sum of all topic partitions (excluding mirror partitions) size in bytes"
+                                                    }                                                }
+                                            },
+                                            "writeStatistics" : {
+                                                "title": "TTopicWriteStatistics",
+                                                "type" : "object",
+                                                "properties" : {
+                                                    "writeSpeed": {
+                                                        "description": "Sum of all producers write speed",
+                                                        "$ref": "#/definitions/TIoAverageSpeed"
+                                                    },
+                                                    "writeIdleTime" : {
+                                                        "type" : "string",
+                                                        "description" : "Max write idle time across all topic partitions (excluding mirror partitions) in ISO 8601 Duration format"
+                                                    },
+                                                    "writeTimeLag" : {
+                                                        "type" : "string",
+                                                        "description" : "Max message write lag across all topic partitions (excluding mirror partitions) during last minute in ISO 8601 Duration format"
+                                                    }
+                                                }
+                                            },
+                                            "readStatistics" : {
+                                                "title" : "TTopicReadStatistics",
+                                                "type" : "object",
+                                                "properties" : {
+                                                    "readSpeed": {
+                                                        "description" : "Sum of all topic consumers read speed",
+                                                        "$ref": "#/definitions/TIoAverageSpeed"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "consumer": {
+                                        "title" : "TConsumer",
+                                        "type": "object",
+                                        "properties": {
+                                            "properties": {
+                                                "type": "object",
+                                                "title": "TConsumerProperties",
+                                                "properties": {
+                                                    "activeTopicsCount" : {
+                                                        "type": "integer",
+                                                        "format": "int64",
+                                                        "description": "count of all topics that this consumer read during last hour"
+                                                    }
+                                                }
+                                            },
+                                            "readStatistics" : {
+                                                "title" : "TConsumerReadStatistics",
+                                                "type" : "object",
+                                                "properties" : {
+                                                    "readSpeed" : {
+                                                        "description" : "Sum of all topics read speed",
+                                                        "$ref": "#/definitions/TIoAverageSpeed"
+                                                    },
+                                                    "readIdleTime" : {
+                                                        "type" : "string",
+                                                        "description" : "Max read idle time across all topic partitions that this consumer consumes in ISO 8601 Duration format"
+                                                    },
+                                                    "readTimeLag" : {
+                                                        "type" : "string",
+                                                        "description" : "Max last message read lag across all topic partitions that this consumer consumes in ISO 8601 Duration format"
+                                                    },
+                                                    "writeTimeLag" : {
+                                                        "type": "string",
+                                                        "description" : "Max messages write lag that were read by this consumer during one minute before last read in ISO 8601 Duration format"
+                                                    },
+                                                    "unreadMessagesCount" : {
+                                                        "type" : "integer",
+                                                        "format" : "int64",
+                                                        "description" : "Sum of all unread messages in all topic partitions consumed by this consumer"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

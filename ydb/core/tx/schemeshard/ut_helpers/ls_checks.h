@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/core/protos/replication.pb.h>
 
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/scheme/scheme_pathid.h>
@@ -118,6 +119,7 @@ namespace NLs {
     TCheckFunc HasTtlDisabled();
     TCheckFunc IsBackupTable(bool value);
     TCheckFunc ReplicationMode(NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode mode);
+    TCheckFunc ReplicationState(NKikimrReplication::TReplicationState::StateCase state);
 
     TCheckFunc HasColumnTableSchemaPreset(const TString& presetName);
     TCheckFunc HasColumnTableSchemaVersion(ui64 schemaVersion);
@@ -135,6 +137,13 @@ namespace NLs {
     TCheckFunc IndexState(NKikimrSchemeOp::EIndexState state);
     TCheckFunc IndexKeys(const TVector<TString>& keyNames);
     TCheckFunc IndexDataColumns(const TVector<TString>& dataColumnNames);
+
+    TCheckFunc SequenceIncrement(i64 increment);
+    TCheckFunc SequenceMaxValue(i64 maxValue);
+    TCheckFunc SequenceMinValue(i64 minValue);
+    TCheckFunc SequenceCycle(bool cycle);
+    TCheckFunc SequenceStartValue(i64 startValue);
+    TCheckFunc SequenceCache(ui64 cache);
 
     TCheckFunc StreamMode(NKikimrSchemeOp::ECdcStreamMode mode);
     TCheckFunc StreamFormat(NKikimrSchemeOp::ECdcStreamFormat format);
@@ -156,7 +165,7 @@ namespace NLs {
     TCheckFunc DatabaseQuotas(ui64 dataStreamShards);
     TCheckFunc SharedHive(ui64 sharedHiveId);
     TCheckFunc ServerlessComputeResourcesMode(NKikimrSubDomains::EServerlessComputeResourcesMode serverlessComputeResourcesMode);
-    
+
     template<class TCheck>
     void PerformAllChecks(const NKikimrScheme::TEvDescribeSchemeResult& result, TCheck&& check) {
         check(result);

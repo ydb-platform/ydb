@@ -49,6 +49,13 @@ public:
     );
 
     MOCK_METHOD(
+        i64,
+        GetTotalSize,
+        (),
+        (const, override)
+    );
+
+    MOCK_METHOD(
         NYTree::IAttributeDictionary&,
         GetEndpointAttributes,
         (),
@@ -326,6 +333,13 @@ public:
         SetRawResponseInfo,
         (TString info, bool incremental),
         (override)
+    );
+
+    MOCK_METHOD(
+        const IMemoryUsageTrackerPtr&,
+        GetMemoryUsageTracker,
+        (),
+        (const, override)
     );
 
     MOCK_METHOD(

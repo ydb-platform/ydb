@@ -2,9 +2,7 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_federated_topic/impl/federated_topic_impl.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/callback_context.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/read_session.h>
-
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/callback_context.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/read_session.h>
 
 namespace NYdb::NFederatedTopic {

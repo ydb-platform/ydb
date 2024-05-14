@@ -14,6 +14,7 @@ namespace NKqpRun {
 constexpr char YQL_TOKEN_VARIABLE[] = "YQL_TOKEN";
 
 struct TYdbSetupSettings {
+    i32 NodeCount = 1;
     TString DomainName = "Root";
 
     bool TraceOptEnabled = false;

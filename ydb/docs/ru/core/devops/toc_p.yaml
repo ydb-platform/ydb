@@ -1,6 +1,8 @@
 items:
 - name: Обзор
   href: index.md
+- name: Системные требования
+  href: system-requirements.md
 - name: Ansible
   include:
     mode: link
@@ -12,4 +14,4 @@ items:
 - name: Вручную
   include:
     mode: link
-    path: ../cluster/toc_p.yaml
+    path: manual/toc_p.yaml

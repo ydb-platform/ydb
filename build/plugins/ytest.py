@@ -192,8 +192,6 @@ def validate_test(unit, kw):
     else:
         if is_force_sandbox:
             errors.append('ya:force_sandbox can be used with LARGE tests only')
-        if consts.YaTestTags.NoFuse in tags:
-            errors.append('ya:nofuse can be used with LARGE tests only')
         if consts.YaTestTags.Privileged in tags:
             errors.append("ya:privileged can be used with LARGE tests only")
         if in_autocheck and size == consts.TestSize.Large:
@@ -634,9 +632,6 @@ def onadd_check(unit, *args):
     check_type = flat_args[0]
 
     if check_type in ("check.data", "check.resource") and unit.get('VALIDATE_DATA') == "no":
-        return
-
-    if check_type == "check.external" and (len(flat_args) == 1 or not flat_args[1]):
         return
 
     test_dir = _common.get_norm_unit_path(unit)

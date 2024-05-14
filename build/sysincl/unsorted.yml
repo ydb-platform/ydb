@@ -136,11 +136,6 @@
   - xmlparse/xmlparse.h
   - xmltok/xmlparse.h
   - yca/yca.h
-  #if CONTRIB && defined(_HAVE_LIBIDSA)
-  - idsa.h
-  #endif
-  - ../../VC/include/math.h
-  - ../../VC/include/cfloat
   - prof.h
   - ll_alloc_hook.c
   - cpptl/config.h
@@ -152,26 +147,10 @@
   - value.h
   - sljit/sljitLir.c
   - pcre_printint.c
-  #ifdef defined(emacs) && CONTRIB && TRASH
-  - blockinput.h
-  #endif
-  #if defined(__atmos__) && CONTRIB
-  - kernel.h
-  #endif
   #if defined(_LIBC) && CONTRIB && TRASH
   - not-cancel.h
   - local-setxid.h
   - vasprintf.h
-  #endif
-
-- case_sensitive: false
-  includes:
-  #if defined(WINDOWS) && CONTRIB && TRASH
-  - ../include/locale.h
-  - ../include/signal.h
-  - ../include/sys/stat.h
-  - ../include/fcntl.h
-  - ../include/math.h
   #endif
 
 - source_filter: "^contrib/(libs/(apache|httpd|libuv)|python/uWSGI)"
@@ -250,12 +229,6 @@
   - varargs.h
   - vm/vm_param.h
   #endif
-  #if defined(__GNUC__)
-  - varargs.h
-  - stdfix.h
-  - mm_malloc.h
-  - quadmath.h
-  #endif
   #if defined(_MSC_VER)
   - comdef.h
   - comutil.h
@@ -315,17 +288,6 @@
   #if defined(HAVE_DMALLOC)
   - dmalloc.h
   #endif
-  #if defined(HAVE_ALTIVEC)
-  - altivec.h
-  #endif
-  #if defined(_LIBC) && TRASH
-  - ../locale/localeinfo.h
-  - ../locale/elem-hash.h
-  - ../locale/coll-lookup.h
-  #endif
-  #if defined(HAVE_CONFIG_H) && TODO
-  - config_auto.h
-  #endif
   #if defined(_TRASH_) && TODO
   - gcrypt.h
   - gdwmfapi.h
@@ -362,11 +324,6 @@
   - sys/videoio.h
   - libv4l2.h
   - soundcard.h
-  - ../ucrt/fcntl.h
-  - ../ucrt/locale.h
-  - ../ucrt/math.h
-  - ../ucrt/signal.h
-  - ../ucrt/sys/stat.h
   - asm/page.h
   - asm/sgidefs.h
   - ndir.h
@@ -451,12 +408,6 @@
 # These includes are not used in autocheck builds, but might be necessary for
 # some external builds with exotic settings
 
-- case_sensitive: false
-  includes:
-  #if defined(WINDOWS) && CONTRIB && TRASH
-  - ../include/stdint.h
-  #endif
-
 - source_filter: ".*contrib.*"
   includes:
   #if defined (__OpenBSD__) && CONTRIB
@@ -540,8 +491,6 @@
   - win32thread.h
   - bsd/ctypes.h
   - sfio.h
-  - ../../VC/include/stdio.h
-  - ../ucrt/stdio.h
   - GL/glx.h
   - CL/va_ext.h
   - sys/sysconf.h

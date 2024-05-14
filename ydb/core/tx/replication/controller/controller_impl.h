@@ -66,6 +66,7 @@ private:
 
     // handlers
     void Handle(TEvController::TEvCreateReplication::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvController::TEvAlterReplication::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvController::TEvDropReplication::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvDropReplication::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvDiscoveryTargetsResult::TPtr& ev, const TActorContext& ctx);
@@ -74,6 +75,7 @@ private:
     void Handle(TEvPrivate::TEvDropStreamResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCreateDstResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvDropDstResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvResolveSecretResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvUpdateTenantNodes::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRunWorkers::TPtr& ev, const TActorContext& ctx);
@@ -94,6 +96,7 @@ private:
     class TTxInitSchema;
     class TTxInit;
     class TTxCreateReplication;
+    class TTxAlterReplication;
     class TTxDropReplication;
     class TTxDiscoveryTargetsResult;
     class TTxAssignStreamName;
@@ -101,11 +104,13 @@ private:
     class TTxDropStreamResult;
     class TTxCreateDstResult;
     class TTxDropDstResult;
+    class TTxResolveSecretResult;
 
     // tx runners
     void RunTxInitSchema(const TActorContext& ctx);
     void RunTxInit(const TActorContext& ctx);
     void RunTxCreateReplication(TEvController::TEvCreateReplication::TPtr& ev, const TActorContext& ctx);
+    void RunTxAlterReplication(TEvController::TEvAlterReplication::TPtr& ev, const TActorContext& ctx);
     void RunTxDropReplication(TEvController::TEvDropReplication::TPtr& ev, const TActorContext& ctx);
     void RunTxDropReplication(TEvPrivate::TEvDropReplication::TPtr& ev, const TActorContext& ctx);
     void RunTxDiscoveryTargetsResult(TEvPrivate::TEvDiscoveryTargetsResult::TPtr& ev, const TActorContext& ctx);
@@ -114,6 +119,7 @@ private:
     void RunTxDropStreamResult(TEvPrivate::TEvDropStreamResult::TPtr& ev, const TActorContext& ctx);
     void RunTxCreateDstResult(TEvPrivate::TEvCreateDstResult::TPtr& ev, const TActorContext& ctx);
     void RunTxDropDstResult(TEvPrivate::TEvDropDstResult::TPtr& ev, const TActorContext& ctx);
+    void RunTxResolveSecretResult(TEvPrivate::TEvResolveSecretResult::TPtr& ev, const TActorContext& ctx);
 
     // other
     template <typename T>

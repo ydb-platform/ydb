@@ -33,4 +33,6 @@ enum ETxTypes {
     TXTYPE_CREATE_DST_RESULT = 7 [(TxTypeOpts) = {Name: "TxCreateDstResult"}];
     TXTYPE_DROP_STREAM_RESULT = 8 [(TxTypeOpts) = {Name: "TxDropStreamResult"}];
     TXTYPE_DROP_DST_RESULT = 9 [(TxTypeOpts) = {Name: "TxDropDstResult"}];
+    TXTYPE_ALTER_REPLICATION = 10 [(TxTypeOpts) = {Name: "TxAlterReplication"}];
+    TXTYPE_RESOLVE_SECRET_RESULT = 11 [(TxTypeOpts) = {Name: "TxResolveSecretResult"}];
 }

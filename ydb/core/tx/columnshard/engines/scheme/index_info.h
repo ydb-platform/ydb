@@ -24,10 +24,6 @@ namespace arrow {
     class Schema;
 }
 
-namespace NKikimr::NArrow {
-    struct TSortDescription;
-}
-
 namespace NKikimr::NOlap {
 
 class TPortionInfoWithBlobs;
@@ -46,12 +42,17 @@ private:
     std::map<TString, NStatistics::TOperatorContainer> StatisticsByName;
     TIndexInfo(const TString& name);
     bool SchemeNeedActualization = false;
+    bool ExternalGuaranteeExclusivePK = false;
     bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<IStoragesManager>& operators);
     TColumnFeatures& GetOrCreateColumnFeatures(const ui32 columnId) const;
     void BuildSchemaWithSpecials();
     void BuildArrowSchema();
     void InitializeCaches(const std::shared_ptr<IStoragesManager>& operators);
 public:
+    bool GetExternalGuaranteeExclusivePK() const {
+        return ExternalGuaranteeExclusivePK;
+    }
+
     const TColumnFeatures& GetColumnFeaturesVerified(const ui32 columnId) const {
         auto it = ColumnFeatures.find(columnId);
         AFL_VERIFY(it != ColumnFeatures.end());
@@ -303,9 +304,6 @@ public:
     /// Returns whether the sorting keys defined.
     bool IsSorted() const { return true; }
     bool IsSortedColumn(const ui32 columnId) const { return GetPKFirstColumnId() == columnId; }
-
-    std::shared_ptr<NArrow::TSortDescription> SortDescription() const;
-    std::shared_ptr<NArrow::TSortDescription> SortReplaceDescription() const;
 
     static const std::set<ui32>& GetSpecialColumnIdsSet() {
         static const std::set<ui32> result(GetSpecialColumnIds().begin(), GetSpecialColumnIds().end());

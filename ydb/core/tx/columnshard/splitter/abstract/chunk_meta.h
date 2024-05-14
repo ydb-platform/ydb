@@ -28,7 +28,9 @@ public:
     }
     ui32 GetNumRows() const {
         return NumRows;
-
+    }
+    ui32 GetRecordsCount() const {
+        return NumRows;
     }
     ui32 GetRawBytes() const {
         return RawBytes;

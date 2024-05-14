@@ -26,12 +26,12 @@ bool TExportsManager::Load(NTable::TDatabase& database) {
             NKikimrColumnShardExportProto::TExportTask taskProto;
             AFL_VERIFY(taskProto.ParseFromString(rowset.GetValue<Schema::ExportPersistentSessions::Task>()));
             auto task = TExportTask::BuildFromProto(taskProto);
-            AFL_VERIFY(task)("event", "cannot_parse_export_session_task")("error", task.GetErrorMessage());
+            AFL_VERIFY(task.IsSuccess())("error", task.GetErrorMessage());
 
             NKikimrColumnShardExportProto::TCursor cursorProto;
             AFL_VERIFY(cursorProto.ParseFromString(rowset.GetValue<Schema::ExportPersistentSessions::Cursor>()));
             auto cursor = TCursor::BuildFromProto(cursorProto);
-            AFL_VERIFY(cursor)("event", "cannot_parse_export_session_cursor")("error", cursor.GetErrorMessage());
+            AFL_VERIFY(cursor.IsSuccess())("error", cursor.GetErrorMessage());
 
             TSession::EStatus status;
             AFL_VERIFY(TryFromString(rowset.GetValue<Schema::ExportPersistentSessions::Status>(), status));

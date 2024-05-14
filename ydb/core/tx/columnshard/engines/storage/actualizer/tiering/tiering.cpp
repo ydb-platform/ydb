@@ -19,7 +19,7 @@ std::shared_ptr<NKikimr::NOlap::ISnapshotSchema> TTieringActualizer::GetTargetSc
 }
 
 std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::BuildActualizationInfo(const TPortionInfo& portion, const TInstant now) const {
-    std::shared_ptr<ISnapshotSchema> portionSchema = VersionedIndex.GetSchema(portion.GetMinSnapshot());
+    std::shared_ptr<ISnapshotSchema> portionSchema = portion.GetSchema(VersionedIndex);
     std::shared_ptr<ISnapshotSchema> targetSchema = GetTargetSchema(portionSchema);
     const TString& currentTierName = portion.GetTierNameDef(IStoragesManager::DefaultStorageId);
 
@@ -124,7 +124,7 @@ void TTieringActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, co
                 }
                 auto info = BuildActualizationInfo(*portion, tasksContext.Now);
                 AFL_VERIFY(info);
-                auto portionScheme = VersionedIndex.GetSchema(portion->GetMinSnapshot());
+                auto portionScheme = portion->GetSchema(VersionedIndex);
                 TPortionEvictionFeatures features(portionScheme, info->GetTargetScheme(), portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
                 features.SetTargetTierName(info->GetTargetTierName());
 

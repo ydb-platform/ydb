@@ -2,7 +2,7 @@
 
 -- NB: Subquerys
 -- start query 1 in stream 0 using template query85.tpl and seed 622697896
-select  substring(cast(reason.r_reason_desc as string),1,20) bla
+select  substring(cast(reason.r_reason_desc as string),0,20) bla
        ,avg(ws_quantity) bla2
        ,avg(wr_refunded_cash) bla3
        ,avg(wr_fee) bla4

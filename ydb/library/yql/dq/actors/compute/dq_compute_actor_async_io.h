@@ -250,10 +250,7 @@ public:
     struct TLookupSourceArguments {
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
         NActors::TActorId ParentId;
-        google::protobuf::Any DataSource; //provider specific data source
-        TString ServiceAccountId;
-        TString ServiceAccountSignature;
-        TString Table;
+        google::protobuf::Any LookupSource; //provider specific data source
         const NKikimr::NMiniKQL::TStructType* KeyType;
         const NKikimr::NMiniKQL::TStructType* PayloadType;
         const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;

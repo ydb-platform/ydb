@@ -1,5 +1,11 @@
 #include <ydb/core/persqueue/ut/common/autoscaling_ut_common.h>
 
+
+static inline IOutputStream& operator<<(IOutputStream& o, const std::set<size_t> t) {
+    o << "[" << JoinRange(", ", t.begin(), t.end()) << "]";
+
+    return o;
+}
 namespace NKikimr {
 
 using namespace NYdb::NTopic;
@@ -23,7 +29,7 @@ TEvTx* CreateRequest(ui64 txId, NKikimrSchemeOp::TModifyScheme&& tx) {
 void DoRequest(TTopicSdkTestSetup& setup, ui64& txId, NKikimrSchemeOp::TPersQueueGroupDescription& scheme) {
     Sleep(TDuration::Seconds(1));
 
-    Cerr << "ALTER_SCHEME: " << scheme << Endl;
+    Cerr << "ALTER_SCHEME: " << scheme << Endl << Flush;
 
     const auto sender = setup.GetRuntime().AllocateEdgeActor();
     const auto request = CreateRequest(txId, CreateTransaction("/Root", scheme));
@@ -112,11 +118,20 @@ std::shared_ptr<ISimpleBlockingWriteSession> CreateWriteSession(TTopicClient& cl
     return client.CreateSimpleBlockingWriteSession(writeSettings);
 }
 
-TTestReadSession::TTestReadSession(TTopicClient& client, size_t expectedMessagesCount, bool autoCommit)
-    : AutoCommit(autoCommit) {
+
+TTestReadSession::TTestReadSession(const TString& name, TTopicClient& client, size_t expectedMessagesCount, bool autoCommit, std::set<ui32> partitions)
+    : Name(name)
+    , AutoCommit(autoCommit)
+    , Semaphore(name.c_str(), SemCount)  {
+
+    Acquire();
+
     auto readSettings = TReadSessionSettings()
         .ConsumerName(TEST_CONSUMER)
         .AppendTopics(TEST_TOPIC);
+    for (auto partitionId : partitions) {
+        readSettings.Topics_[0].AppendPartitionIds(partitionId);
+    }
 
     readSettings.EventHandlers_.SimpleDataHandlers(
         [&, expectedMessagesCount]
@@ -129,7 +144,7 @@ TTestReadSession::TTestReadSession(TTopicClient& client, size_t expectedMessages
                     << ", message=" << message.GetData()
                     << ", seqNo=" << message.GetSeqNo()
                     << ", offset=" << message.GetOffset()
-                    << Endl;
+                    << Endl << Flush;
             ReceivedMessages.push_back({message.GetPartitionSession()->GetPartitionId(),
                                         message.GetSeqNo(),
                                         message.GetOffset(),
@@ -143,23 +158,55 @@ TTestReadSession::TTestReadSession(TTopicClient& client, size_t expectedMessages
         }
 
         if (ReceivedMessages.size() == expectedMessagesCount) {
-            Promise.SetValue();
+            DataPromise.SetValue(ReceivedMessages);
         }
     });
 
     readSettings.EventHandlers_.StartPartitionSessionHandler(
-        [&]
-        (TReadSessionEvent::TStartPartitionSessionEvent& ev) mutable {
-            Cerr << ">>>>> Received TStartPartitionSessionEvent message " << ev.DebugString() << Endl;
-            Partitions.insert(ev.GetPartitionSession()->GetPartitionId());
-            ev.Confirm();
+            [&]
+            (TReadSessionEvent::TStartPartitionSessionEvent& ev) mutable {
+                Cerr << ">>>>> " << Name << " Received TStartPartitionSessionEvent message " << ev.DebugString() << Endl << Flush;
+                auto partitionId = ev.GetPartitionSession()->GetPartitionId();
+                Modify([&](std::set<size_t>& s) { s.insert(partitionId); });
+                if (Offsets.contains(partitionId)) {
+                    Cerr << ">>>>> " << Name << " Start reading partition " << partitionId << " from offset " << Offsets[partitionId] << Endl << Flush;
+                    ev.Confirm(Offsets[partitionId], TMaybe<ui64>());
+                } else {
+                    Cerr << ">>>>> " << Name << " Start reading partition " << partitionId << " without offset" << Endl << Flush;
+                    ev.Confirm();
+                }
+    });
+
+    readSettings.EventHandlers_.StopPartitionSessionHandler(
+            [&]
+            (TReadSessionEvent::TStopPartitionSessionEvent& ev) mutable {
+                Cerr << ">>>>> " << Name << " Received TStopPartitionSessionEvent message " << ev.DebugString() << Endl << Flush;
+                auto partitionId = ev.GetPartitionSession()->GetPartitionId();
+                Modify([&](std::set<size_t>& s) { s.erase(partitionId); });
+                Cerr << ">>>>> " << Name << " Stop reading partition " << partitionId << Endl << Flush;
+                ev.Confirm();
+    });
+
+    readSettings.EventHandlers_.PartitionSessionClosedHandler(
+            [&]
+            (TReadSessionEvent::TPartitionSessionClosedEvent& ev) mutable {
+                Cerr << ">>>>> " << Name << " Received TPartitionSessionClosedEvent message " << ev.DebugString() << Endl << Flush;
+                auto partitionId = ev.GetPartitionSession()->GetPartitionId();
+                Modify([&](std::set<size_t>& s) { s.erase(partitionId); });
+                Cerr << ">>>>> " << Name << " Stop (closed) reading partition " << partitionId << Endl << Flush;
+    });
+
+    readSettings.EventHandlers_.SessionClosedHandler(
+                    [Name=name]
+            (const TSessionClosedEvent& ev) mutable {
+                Cerr << ">>>>> " << Name << " Received TSessionClosedEvent message " << ev.DebugString() << Endl << Flush;
     });
 
     Session = client.CreateReadSession(readSettings);
 }
 
 void TTestReadSession::WaitAllMessages() {
-    Promise.GetFuture().GetValueSync();
+    DataPromise.GetFuture().GetValue(TDuration::Seconds(5));
 }
 
 void TTestReadSession::Commit() {
@@ -170,5 +217,81 @@ void TTestReadSession::Commit() {
         }
     }
 }
+
+void TTestReadSession::Acquire() {
+    Cerr << ">>>>> " << Name << " Acquire()" << Endl << Flush;
+    Semaphore.Acquire();
+}
+
+void TTestReadSession::Release() {
+    Cerr << ">>>>> " << Name << " Release()" << Endl << Flush;
+    Semaphore.Release();
+}
+
+NThreading::TFuture<std::set<size_t>> TTestReadSession::Wait(std::set<size_t> partitions, const TString& message) {
+    Cerr << ">>>>> " << Name << " Wait partitions " << partitions << " " << message << Endl << Flush;
+
+    with_lock (Lock) {
+        ExpectedPartitions = partitions;
+        PartitionsPromise = NThreading::NewPromise<std::set<size_t>>();
+
+        if (Partitions == ExpectedPartitions.value()) {
+            PartitionsPromise.SetValue(ExpectedPartitions.value());
+        }
+    }
+
+    return PartitionsPromise.GetFuture();
+}
+
+void TTestReadSession::Assert(const std::set<size_t>& expected, NThreading::TFuture<std::set<size_t>> f, const TString& message) {
+    auto actual = f.HasValue() ? f.GetValueSync() : GetPartitions();
+    Cerr << ">>>>> " << Name << " Partitions " << actual << " received #2" << Endl << Flush;
+    UNIT_ASSERT_VALUES_EQUAL_C(expected, actual, message);
+    Release();
+}
+
+void TTestReadSession::WaitAndAssertPartitions(std::set<size_t> partitions, const TString& message) {
+    auto f = Wait(partitions, message);
+    f.Wait(TDuration::Seconds(60));
+    Assert(partitions, f, message);
+}
+
+void TTestReadSession::Run() {
+    ExpectedPartitions = std::nullopt;
+    Semaphore.TryAcquire();
+    Release();
+}
+
+void TTestReadSession::Close() {
+    Run();
+    Cerr << ">>>>> " << Name << " Closing reading session " << Endl << Flush;
+    Session->Close();
+    Session.reset();
+}
+
+std::set<size_t> TTestReadSession::GetPartitions() {
+    with_lock (Lock) {
+        return Partitions;
+    }
+}
+
+void TTestReadSession::Modify(std::function<void (std::set<size_t>&)> modifier) {
+    bool found = false;
+
+    with_lock (Lock) {
+        modifier(Partitions);
+
+        if (ExpectedPartitions && Partitions == ExpectedPartitions.value()) {
+            ExpectedPartitions = std::nullopt;
+            PartitionsPromise.SetValue(Partitions);
+            found = true;
+        }
+    }
+
+    if (found) {
+        Acquire();
+    }
+}
+
 
 }

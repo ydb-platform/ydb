@@ -79,7 +79,7 @@ void TListQueueConsumerRegistrationsCommand::DoExecute(ICommandContextPtr contex
     auto registrations = WaitFor(asyncResult)
         .ValueOrThrow();
 
-    ProduceOutput(context, [&](NYson::IYsonConsumer* consumer) {
+    ProduceOutput(context, [&] (NYson::IYsonConsumer* consumer) {
         BuildYsonFluently(consumer)
             .DoListFor(registrations, [=] (TFluentList fluent, const TListQueueConsumerRegistrationsResult& registration) {
                 fluent

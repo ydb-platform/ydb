@@ -23,7 +23,7 @@ Release date: October 12, 2023.
 * A new option `PostgreSQL` has been added to the query type selector settings, which is available when the `Enable additional query modes` parameter is enabled. Also, the query history now takes into account the syntax used when executing the query.
 * The YQL query template for creating a table has been updated. Added a description of the available parameters.
 * Now sorting and filtering for Storage and Nodes tables takes place on the server. To use this functionality, you need to enable the parameter `Offload tables filters and sorting to backend` in the experiments section.
-* Buttons for creating, changing and deleting [topics](https://ydb.tech/ru/docs/concepts/topic) have been added to the context menu.
+* Buttons for creating, changing and deleting [topics](concepts/topic.md) have been added to the context menu.
 * Added sorting by criticality for all issues in the tree in `Healthcheck`.
 
 **Performance:**
@@ -154,8 +154,8 @@ Release date: May 5, 2023. To update to version 23.1, select the [Downloads](dow
 **Functionality:**
 
 * Added [initial table scan](concepts/cdc.md#initial-scan) when creating a CDC changefeed. Now, you can export all the data existing at the time of changefeed creation.
-* Added [atomic index replacement](best_practices/secondary_indexes.md#atomic-index-replacement). Now, you can atomically replace one pre-defined index with another. This operation is absolutely transparent for your application. Indexes are replaced seamlessly, with no downtime.
-* Added the [audit log](cluster/audit-log.md): Event stream including data about all the operations on {{ ydb-short-name }} objects.
+* Added [atomic index replacement](dev/secondary-indexes.md#atomic-index-replacement). Now, you can atomically replace one pre-defined index with another. This operation is absolutely transparent for your application. Indexes are replaced seamlessly, with no downtime.
+* Added the [audit log](security/audit-log.md): Event stream including data about all the operations on {{ ydb-short-name }} objects.
 
 **Performance:**
 

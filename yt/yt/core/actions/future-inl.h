@@ -6,7 +6,6 @@
 #undef FUTURE_INL_H_
 
 #include "bind.h"
-#include "invoker_util.h"
 
 #include <yt/yt/core/concurrency/delayed_executor.h>
 #include <yt/yt/core/concurrency/thread_affinity.h>
@@ -22,20 +21,20 @@
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
-// Forward declarations
 
 namespace NConcurrency {
 
-// scheduler.h
+// Forward declaration from scheduler.h
 TCallback<void(const NYT::TError&)> GetCurrentFiberCanceler();
-
-////////////////////////////////////////////////////////////////////////////////
 
 //! Thrown when a fiber is being terminated by an external event.
 class TFiberCanceledException
 { };
 
 } // namespace NConcurrency
+
+// Forward declaration from invoker_util.h.
+IInvokerPtr GetSyncInvoker();
 
 namespace NDetail {
 
@@ -700,7 +699,7 @@ void InterceptExceptions(const TPromise<T>& promise, const F& func)
         promise.Set(ex.Error());
     } catch (const std::exception& ex) {
         promise.Set(NYT::TError(ex));
-    } catch (NConcurrency::TFiberCanceledException& ) {
+    } catch (const NConcurrency::TFiberCanceledException&) {
         promise.Set(MakeAbandonedError());
     }
 }
@@ -2184,7 +2183,7 @@ private:
     std::atomic<int> ResponseCount_ = 0;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ErrorsLock_);
-    std::vector<TError> Errors_;
+    std::vector<NYT::TError> Errors_;
 
     void OnFutureSet(int /*index*/, const NYT::TErrorOr<T>& result)
     {
@@ -2408,7 +2407,7 @@ public:
         , ConcurrencyLimit_(concurrencyLimit)
         , Futures_(Callbacks_.size(), VoidFuture)
         , Results_(Callbacks_.size())
-        , CurrentIndex_(std::min(ConcurrencyLimit_, ssize(Callbacks_)))
+        , CurrentIndex_(std::min<int>(ConcurrencyLimit_, ssize(Callbacks_)))
     { }
 
     TFuture<std::vector<TErrorOr<T>>> Run()
@@ -2431,14 +2430,14 @@ public:
 
 private:
     const std::vector<TCallback<TFuture<T>()>> Callbacks_;
-    const i64 ConcurrencyLimit_;
+    const int ConcurrencyLimit_;
     const TPromise<std::vector<TErrorOr<T>>> Promise_ = NewPromise<std::vector<TErrorOr<T>>>();
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
     std::optional<TError> CancelationError_;
     std::vector<TFuture<void>> Futures_;
     std::vector<TErrorOr<T>> Results_;
-    i64 CurrentIndex_;
+    int CurrentIndex_;
     int FinishedCount_ = 0;
 
 
@@ -2463,7 +2462,9 @@ private:
         }
 
         future.Subscribe(
-            BIND_NO_PROPAGATE(&TCancelableBoundedConcurrencyRunner::OnResult, MakeStrong(this), index));
+            BIND_NO_PROPAGATE(&TCancelableBoundedConcurrencyRunner::OnResult, MakeStrong(this), index)
+                // NB: Sync invoker protects from unbounded recursion.
+                .Via(GetSyncInvoker()));
     }
 
     void OnResult(int index, const NYT::TErrorOr<T>& result)
@@ -2504,7 +2505,7 @@ private:
         }
 
         // NB: Setting of CancelationError_ disallows modification of CurrentIndex_ and Futures_.
-        for (int index = 0; index < std::min(ssize(Futures_), CurrentIndex_); ++index) {
+        for (int index = 0; index < std::min<int>(ssize(Futures_), CurrentIndex_); ++index) {
             Futures_[index].Cancel(wrappedError);
         }
 

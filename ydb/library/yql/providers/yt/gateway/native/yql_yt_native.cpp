@@ -2120,9 +2120,10 @@ private:
             if (deadline || isTimestamp) {
                 yqlAttrs["expiration_time"] = isTimestamp ? stamp.ToStringUpToSeconds()
                                                           : deadline->ToStringUpToSeconds();
-            } else if (interval || isDuration) {
-                yqlAttrs["expiration_time"] = isDuration ? (Now() + duration).ToStringUpToSeconds()
-                                                         : (Now() + *interval).ToStringUpToSeconds();
+            }
+            if (interval || isDuration) {
+                yqlAttrs["expiration_timeout"] = isDuration ? duration.MilliSeconds()
+                                                         : (*interval).MilliSeconds();
             }
             if (execCtx->Options_.Config()->NightlyCompress.Get(cluster).GetOrElse(false)) {
                 yqlAttrs["force_nightly_compress"] = true;
@@ -2491,7 +2492,9 @@ private:
                     for (const auto& tag : attrs[SecurityTagsName].AsList()) {
                         securityTags.push_back(tag.AsString());
                     }
-                    metaInfo->Attrs[SecurityTagsName] = JoinSeq(',', securityTags);
+                    if (!securityTags.empty()) {
+                        metaInfo->Attrs[SecurityTagsName] = JoinSeq(';', securityTags);
+                    }
                 }
 
                 NYT::TNode schemaAttrs;
@@ -3307,6 +3310,9 @@ private:
                 TGatewayTransformer transform(execCtx, entry, pgmBuilder, *tmpFiles);
                 size_t nodeCount = 0;
                 builder.UpdateLambdaCode(mapLambda, nodeCount, transform);
+                if (nodeCount > execCtx->Options_.Config()->LLVMNodeCountLimit.Get(execCtx->Cluster_).GetOrElse(DEFAULT_LLVM_NODE_COUNT_LIMIT)) {
+                    execCtx->Options_.OptLLVM("OFF");
+                }
                 job->SetLambdaCode(mapLambda);
                 job->SetOptLLVM(execCtx->Options_.OptLLVM());
                 job->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
@@ -3520,6 +3526,9 @@ private:
                 TGatewayTransformer transform(execCtx, entry, pgmBuilder, *tmpFiles);
                 size_t nodeCount = 0;
                 builder.UpdateLambdaCode(reduceLambda, nodeCount, transform);
+                if (nodeCount > execCtx->Options_.Config()->LLVMNodeCountLimit.Get(execCtx->Cluster_).GetOrElse(DEFAULT_LLVM_NODE_COUNT_LIMIT)) {
+                    execCtx->Options_.OptLLVM("OFF");
+                }
                 job->SetLambdaCode(reduceLambda);
                 job->SetOptLLVM(execCtx->Options_.OptLLVM());
                 job->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
@@ -3765,6 +3774,9 @@ private:
                 TGatewayTransformer transform(execCtx, entry, pgmBuilder, *tmpFiles);
                 size_t nodeCount = 0;
                 builder.UpdateLambdaCode(mapLambda, nodeCount, transform);
+                if (nodeCount > execCtx->Options_.Config()->LLVMNodeCountLimit.Get(execCtx->Cluster_).GetOrElse(DEFAULT_LLVM_NODE_COUNT_LIMIT)) {
+                    execCtx->Options_.OptLLVM("OFF");
+                }
                 mapJob->SetLambdaCode(mapLambda);
                 mapJob->SetOptLLVM(execCtx->Options_.OptLLVM());
                 mapJob->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
@@ -3791,6 +3803,9 @@ private:
                 TGatewayTransformer transform(execCtx, entry, pgmBuilder, *tmpFiles);
                 size_t nodeCount = 0;
                 builder.UpdateLambdaCode(reduceLambda, nodeCount, transform);
+                if (nodeCount > execCtx->Options_.Config()->LLVMNodeCountLimit.Get(execCtx->Cluster_).GetOrElse(DEFAULT_LLVM_NODE_COUNT_LIMIT)) {
+                    execCtx->Options_.OptLLVM("OFF");
+                }
                 reduceJob->SetLambdaCode(reduceLambda);
                 reduceJob->SetOptLLVM(execCtx->Options_.OptLLVM());
                 reduceJob->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
@@ -3934,6 +3949,9 @@ private:
                 TGatewayTransformer transform(execCtx, entry, pgmBuilder, *tmpFiles);
                 size_t nodeCount = 0;
                 builder.UpdateLambdaCode(reduceLambda, nodeCount, transform);
+                if (nodeCount > execCtx->Options_.Config()->LLVMNodeCountLimit.Get(execCtx->Cluster_).GetOrElse(DEFAULT_LLVM_NODE_COUNT_LIMIT)) {
+                    execCtx->Options_.OptLLVM("OFF");
+                }
                 reduceJob->SetLambdaCode(reduceLambda);
                 reduceJob->SetOptLLVM(execCtx->Options_.OptLLVM());
                 reduceJob->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
@@ -4193,6 +4211,9 @@ private:
                 }
                 size_t nodeCount = 0;
                 std::tie(lambda, nodeCount) = builder.Serialize(root);
+                if (nodeCount > execCtx->Options_.Config()->LLVMNodeCountLimit.Get(execCtx->Cluster_).GetOrElse(DEFAULT_LLVM_NODE_COUNT_LIMIT)) {
+                    execCtx->Options_.OptLLVM("OFF");
+                }
 
                 if (transform.CanExecuteInternally() && !testRun) {
                     const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
@@ -4765,6 +4786,9 @@ private:
             }
             size_t nodeCount = 0;
             std::tie(lambda, nodeCount) = builder.Serialize(root);
+            if (nodeCount > execCtx->Options_.Config()->LLVMNodeCountLimit.Get(execCtx->Cluster_).GetOrElse(DEFAULT_LLVM_NODE_COUNT_LIMIT)) {
+                execCtx->Options_.OptLLVM("OFF");
+            }
 
             if (transform.CanExecuteInternally()) {
                 TExploringNodeVisitor explorer;

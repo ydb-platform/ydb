@@ -49,6 +49,20 @@
             },
             "formula": "build/external_resources/bloat/resources.json"
         },
+        "buf": {
+            "executable": {
+                "buf": [
+                    "buf"
+                ]
+            },
+            "formula": {
+                "by_platform": {
+                    "linux-x86_64": {
+                        "uri": "sbr:1812152858"
+                    }
+                }
+            }
+        },
         "clang-format": {
             "executable": {
                 "clang-format": [
@@ -206,7 +220,7 @@
                     "gofmt"
                 ]
             },
-            "formula": "build/external_resources/go_tools/go1.21.json"
+            "formula": "build/external_resources/go_tools/go1.22.json"
         },
         "python": {
             "executable": {
@@ -337,6 +351,22 @@
                 "bloat": {
                     "bottle": "bloat",
                     "executable": "bloat"
+                }
+            }
+        },
+        "buf": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    }
+                }
+            ],
+            "tools": {
+                "buf": {
+                    "bottle": "buf",
+                    "executable": "buf"
                 }
             }
         },
@@ -1703,7 +1733,7 @@
         "golang": {
             "params": {
                 "type": "golang",
-                "version": "1.20.6"
+                "version": "1.22.1"
             },
             "platforms": [
                 {
@@ -1955,6 +1985,9 @@
         "bloat": {
             "description": "Run bloat tool",
             "visible": false
+        },
+        "buf": {
+            "description": "Protobuf lint and breaking change detector"
         },
         "c++": {
             "description": "Run C++ compiler"

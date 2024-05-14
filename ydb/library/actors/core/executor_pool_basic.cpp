@@ -1,5 +1,6 @@
 #include "executor_pool_basic.h"
 #include "executor_pool_basic_feature_flags.h"
+#include "executor_pool_jail.h"
 #include "actor.h"
 #include "config.h"
 #include "executor_thread_ctx.h"
@@ -45,7 +46,8 @@ namespace NActors {
         i16 maxThreadCount,
         i16 defaultThreadCount,
         i16 priority,
-        bool hasOwnSharedThread)
+        bool hasOwnSharedThread,
+        TExecutorPoolJail *jail)
         : TExecutorPoolBase(poolId, threads, affinity)
         , DefaultSpinThresholdCycles(spinThreshold * NHPTimer::GetCyclesPerSecond() * 0.000001) // convert microseconds to cycles
         , SpinThresholdCycles(DefaultSpinThresholdCycles)
@@ -67,7 +69,9 @@ namespace NActors {
         , Harmonizer(harmonizer)
         , HasOwnSharedThread(hasOwnSharedThread)
         , Priority(priority)
+        , Jail(jail)
     {
+        Y_UNUSED(Jail);
         for (ui32 idx = 0; idx < MaxSharedThreadsForPool; ++idx) {
             SharedThreads[idx].store(nullptr, std::memory_order_release);
         }
@@ -119,7 +123,7 @@ namespace NActors {
         MaxThreadCount = MaxFullThreadCount + HasOwnSharedThread;
     }
 
-    TBasicExecutorPool::TBasicExecutorPool(const TBasicExecutorPoolConfig& cfg, IHarmonizer *harmonizer)
+    TBasicExecutorPool::TBasicExecutorPool(const TBasicExecutorPoolConfig& cfg, IHarmonizer *harmonizer, TExecutorPoolJail *jail)
         : TBasicExecutorPool(
             cfg.PoolId,
             cfg.Threads,
@@ -135,7 +139,8 @@ namespace NActors {
             cfg.MaxThreadCount,
             cfg.DefaultThreadCount,
             cfg.Priority,
-            cfg.HasSharedThread
+            cfg.HasSharedThread,
+            jail
         )
     {
         SoftProcessingDurationTs = cfg.SoftProcessingDurationTs;
@@ -186,8 +191,6 @@ namespace NActors {
         TWorkerId workerId = wctx.WorkerId;
         Y_DEBUG_ABORT_UNLESS(workerId < MaxFullThreadCount);
 
-        TlsThreadContext->Timers.Reset();
-
         if (workerId >= 0) {
             Threads[workerId].UnsetWork();
         } else {
@@ -197,7 +200,7 @@ namespace NActors {
 
         if (Harmonizer) {
             LWPROBE(TryToHarmonize, PoolId, PoolName);
-            Harmonizer->Harmonize(TlsThreadContext->Timers.HPStart);
+            Harmonizer->Harmonize(TlsThreadContext->StartOfElapsingTime.load(std::memory_order_relaxed));
         }
 
         TAtomic x = AtomicGet(Semaphore);
@@ -205,8 +208,6 @@ namespace NActors {
         while (!StopFlag.load(std::memory_order_acquire)) {
             if (!semaphore.OldSemaphore || workerId >= 0 && semaphore.CurrentSleepThreadCount < 0) {
                 if (workerId < 0 || !wctx.IsNeededToWaitNextActivation) {
-                    TlsThreadContext->Timers.HPNow = GetCycleCountFast();
-                    wctx.AddElapsedCycles(ActorSystemIndex, TlsThreadContext->Timers.HPNow - TlsThreadContext->Timers.HPStart);
                     return 0;
                 }
 
@@ -227,13 +228,6 @@ namespace NActors {
                         wctx.SharedThread->SetWork();
                     }
                     AtomicDecrement(Semaphore);
-                    TlsThreadContext->Timers.HPNow = GetCycleCountFast();
-                    TlsThreadContext->Timers.Elapsed += TlsThreadContext->Timers.HPNow - TlsThreadContext->Timers.HPStart;
-                    wctx.AddElapsedCycles(ActorSystemIndex, TlsThreadContext->Timers.Elapsed);
-                    if (TlsThreadContext->Timers.Parked > 0) {
-                        wctx.AddParkedCycles(TlsThreadContext->Timers.Parked);
-                    }
-
                     return activation;
                 }
             }

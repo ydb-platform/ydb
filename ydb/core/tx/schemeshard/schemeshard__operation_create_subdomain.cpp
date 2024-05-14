@@ -256,13 +256,12 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        context.SS->PersistPath(db, newNode->PathId);
         context.SS->ApplyAndPersistUserAttrs(db, newNode->PathId);
 
         if (!acl.empty()) {
             newNode->ApplyACL(acl);
-            context.SS->PersistACL(db, newNode);
         }
+        context.SS->PersistPath(db, newNode->PathId);
 
         context.SS->PersistUpdateNextPathId(db);
 
@@ -295,6 +294,12 @@ public:
         }
 
         if (settings.HasDatabaseQuotas()) {
+            if (!requestedStoragePools.empty()
+                    && !CheckStorageQuotasKinds(settings.GetDatabaseQuotas(), requestedStoragePools, dstPath.PathString(), errStr)
+            ) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                return result;
+            }
             alter->SetDatabaseQuotas(settings.GetDatabaseQuotas());
         }
 

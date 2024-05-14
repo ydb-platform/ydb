@@ -1,6 +1,8 @@
 items:
 - name: Overview
   href: index.md
+- name: System requirements
+  href: system-requirements.md
 - name: Ansible
   include:
     mode: link
@@ -12,4 +14,4 @@ items:
 - name: Manual
   include:
     mode: link
-    path: ../cluster/toc_p.yaml
+    path: manual/toc_p.yaml

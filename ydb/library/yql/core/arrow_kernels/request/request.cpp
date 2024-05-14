@@ -1,5 +1,6 @@
 #include "request.h"
 #include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
+#include <ydb/library/yql/providers/common/mkql/yql_provider_mkql.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
@@ -7,7 +8,9 @@
 
 namespace NYql {
 
-TKernelRequestBuilder::TKernelRequestBuilder(const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry)
+using namespace NKikimr::NMiniKQL;
+
+TKernelRequestBuilder::TKernelRequestBuilder(const IFunctionRegistry& functionRegistry)
     : Alloc_(__LOCATION__)
     , Env_(Alloc_)
     , Pb_(Env_, functionRegistry)
@@ -20,13 +23,16 @@ TKernelRequestBuilder::~TKernelRequestBuilder() {
 }
 
 ui32 TKernelRequestBuilder::AddUnaryOp(EUnaryOp op, const TTypeAnnotationNode* arg1Type, const TTypeAnnotationNode* retType) {
-    const TGuard<NKikimr::NMiniKQL::TScopedAlloc> allocGuard(Alloc_);
+    const TGuard<TScopedAlloc> allocGuard(Alloc_);
     const auto returnType = MakeType(retType);
     Y_UNUSED(returnType);
     const auto arg = MakeArg(arg1Type);
     switch (op) {
     case EUnaryOp::Not:
         Items_.emplace_back(Pb_.BlockNot(arg));
+        break;
+    case EUnaryOp::Just:
+        Items_.emplace_back(Pb_.BlockJust(arg));
         break;
     case EUnaryOp::Size:
     case EUnaryOp::Minus:
@@ -39,7 +45,7 @@ ui32 TKernelRequestBuilder::AddUnaryOp(EUnaryOp op, const TTypeAnnotationNode* a
 }
 
 ui32 TKernelRequestBuilder::AddBinaryOp(EBinaryOp op, const TTypeAnnotationNode* arg1Type, const TTypeAnnotationNode* arg2Type, const TTypeAnnotationNode* retType) {
-    const TGuard<NKikimr::NMiniKQL::TScopedAlloc> allocGuard(Alloc_);
+    const TGuard<TScopedAlloc> allocGuard(Alloc_);
     const auto returnType = MakeType(retType);
     const auto arg1 = MakeArg(arg1Type);
     const auto arg2 = MakeArg(arg2Type);
@@ -77,10 +83,20 @@ ui32 TKernelRequestBuilder::AddBinaryOp(EBinaryOp op, const TTypeAnnotationNode*
     return Items_.size() - 1;
 }
 
+ui32 TKernelRequestBuilder::AddIf(const TTypeAnnotationNode* conditionType, const TTypeAnnotationNode* thenType, const TTypeAnnotationNode* elseType) {
+    const TGuard<TScopedAlloc> allocGuard(Alloc_);
+    const auto arg1 = MakeArg(conditionType);
+    const auto arg2 = MakeArg(thenType);
+    const auto arg3 = MakeArg(elseType);
+
+    Items_.emplace_back(Pb_.BlockIf(arg1, arg2, arg3));
+    return Items_.size() - 1;
+}
+
 ui32 TKernelRequestBuilder::Udf(const TString& name, bool isPolymorphic, const TTypeAnnotationNode::TListType& argTypes,
     const TTypeAnnotationNode* retType) {
-    const TGuard<NKikimr::NMiniKQL::TScopedAlloc> allocGuard(Alloc_);
-    std::vector<NKikimr::NMiniKQL::TType*> inputTypes;
+    const TGuard<TScopedAlloc> allocGuard(Alloc_);
+    std::vector<TType*> inputTypes;
     for (const auto& type : argTypes) {
         inputTypes.emplace_back(MakeType(type));
     }
@@ -91,7 +107,7 @@ ui32 TKernelRequestBuilder::Udf(const TString& name, bool isPolymorphic, const T
         Pb_.NewEmptyTupleType()});
 
     auto udf = Pb_.Udf(isPolymorphic ? name : (name + "_BlocksImpl"), Pb_.NewVoid(), userType);
-    NKikimr::NMiniKQL::TRuntimeNode::TList args;
+    TRuntimeNode::TList args;
     for (const auto& type : argTypes) {
         args.emplace_back(MakeArg(type));
     }
@@ -103,8 +119,23 @@ ui32 TKernelRequestBuilder::Udf(const TString& name, bool isPolymorphic, const T
     return Items_.size() - 1;
 }
 
+ui32 TKernelRequestBuilder::AddScalarApply(const TExprNode& lambda, const TTypeAnnotationNode::TListType& argTypes, TExprContext& ctx) {
+    const TGuard<TScopedAlloc> allocGuard(Alloc_);
+    TRuntimeNode::TList args(argTypes.size());
+    std::transform(argTypes.cbegin(), argTypes.cend(), args.begin(), std::bind(&TKernelRequestBuilder::MakeArg, this, std::placeholders::_1));
+
+    NCommon::TMkqlCommonCallableCompiler compiler;
+    NCommon::TMkqlBuildContext compileCtx(compiler, Pb_, ctx);
+    const auto apply = Pb_.ScalarApply(args, [&lambda, &compileCtx] (const TArrayRef<const TRuntimeNode>& args) {
+        return MkqlBuildLambda(lambda, compileCtx, TRuntimeNode::TList(args.cbegin(), args.cend()));
+    });
+
+    Items_.emplace_back(apply);
+    return Items_.size() - 1U;
+}
+
 ui32 TKernelRequestBuilder::JsonExists(const TTypeAnnotationNode* arg1Type, const TTypeAnnotationNode* arg2Type, const TTypeAnnotationNode* retType) {
-    const TGuard<NKikimr::NMiniKQL::TScopedAlloc> allocGuard(Alloc_);
+    const TGuard<TScopedAlloc> allocGuard(Alloc_);
 
     bool isScalar = false;
     bool isBinaryJson = (RemoveOptionalType(NYql::GetBlockItemType(*arg1Type, isScalar))->Cast<TDataExprType>()->GetSlot() == EDataSlot::JsonDocument);
@@ -139,7 +170,7 @@ ui32 TKernelRequestBuilder::JsonExists(const TTypeAnnotationNode* arg1Type, cons
 }
 
 ui32 TKernelRequestBuilder::JsonValue(const TTypeAnnotationNode* arg1Type, const TTypeAnnotationNode* arg2Type, const TTypeAnnotationNode* retType) {
-    const TGuard<NKikimr::NMiniKQL::TScopedAlloc> allocGuard(Alloc_);
+    const TGuard<TScopedAlloc> allocGuard(Alloc_);
 
     bool isScalar = false;
     bool isBinaryJson = (RemoveOptionalType(NYql::GetBlockItemType(*arg1Type, isScalar))->Cast<TDataExprType>()->GetSlot() == EDataSlot::JsonDocument);
@@ -173,7 +204,7 @@ ui32 TKernelRequestBuilder::JsonValue(const TTypeAnnotationNode* arg1Type, const
             auto path = Pb_.Apply(compilePath, { args[1] });
             auto dictType = Pb_.NewDictType(Pb_.NewDataType(NUdf::EDataSlot::Utf8), Pb_.NewResourceType("JsonNode"), false);
             auto resultTuple = Pb_.Apply(jsonValue, { input, path, Pb_.NewDict(dictType, {})});
-            return Pb_.VisitAll(resultTuple, [&](ui32 index, NKikimr::NMiniKQL::TRuntimeNode item) {
+            return Pb_.VisitAll(resultTuple, [&](ui32 index, TRuntimeNode item) {
                 if (index == 0) {
                     return Pb_.NewEmptyOptional(outType->GetItemType());
                 }
@@ -195,15 +226,15 @@ ui32 TKernelRequestBuilder::JsonValue(const TTypeAnnotationNode* arg1Type, const
 }
 
 TString TKernelRequestBuilder::Serialize() {
-    const TGuard<NKikimr::NMiniKQL::TScopedAlloc> allocGuard(Alloc_);
+    const TGuard<TScopedAlloc> allocGuard(Alloc_);
     const auto kernelTuple = Items_.empty() ? Pb_.AsScalar(Pb_.NewEmptyTuple()) : Pb_.BlockAsTuple(Items_);
     const auto argsTuple = ArgsItems_.empty() ? Pb_.AsScalar(Pb_.NewEmptyTuple()) : Pb_.BlockAsTuple(ArgsItems_);
     const auto tuple = Pb_.BlockAsTuple( { argsTuple, kernelTuple });
-    return NKikimr::NMiniKQL::SerializeRuntimeNode(tuple, Env_);
+    return SerializeRuntimeNode(tuple, Env_);
 }
 
-NKikimr::NMiniKQL::TRuntimeNode TKernelRequestBuilder::MakeArg(const TTypeAnnotationNode* type) {
-    auto [it, inserted] = CachedArgs_.emplace(type, NKikimr::NMiniKQL::TRuntimeNode());
+TRuntimeNode TKernelRequestBuilder::MakeArg(const TTypeAnnotationNode* type) {
+    auto [it, inserted] = CachedArgs_.emplace(type, TRuntimeNode());
     if (!inserted) {
         return it->second;
     }
@@ -214,7 +245,7 @@ NKikimr::NMiniKQL::TRuntimeNode TKernelRequestBuilder::MakeArg(const TTypeAnnota
     return arg;
 }
 
-NKikimr::NMiniKQL::TBlockType* TKernelRequestBuilder::MakeType(const TTypeAnnotationNode* type) {
+TBlockType* TKernelRequestBuilder::MakeType(const TTypeAnnotationNode* type) {
     auto [it, inserted] = CachedTypes_.emplace(type, nullptr);
     if (!inserted) {
         return it->second;
@@ -226,7 +257,7 @@ NKikimr::NMiniKQL::TBlockType* TKernelRequestBuilder::MakeType(const TTypeAnnota
         ythrow yexception() << err.Str();
     }
 
-    return it->second = AS_TYPE(NKikimr::NMiniKQL::TBlockType, ret);
+    return it->second = AS_TYPE(TBlockType, ret);
 }
 
 }

@@ -25,7 +25,7 @@ TConclusionStatus TSimpleColumnInfo::DeserializeFromProto(const NKikimrSchemeOp:
     if (columnInfo.HasSerializer()) {
         AFL_VERIFY(Serializer.DeserializeFromProto(columnInfo.GetSerializer()));
     } else if (columnInfo.HasCompression()) {
-        AFL_VERIFY(Serializer.DeserializeFromProto(columnInfo.GetCompression()));
+        Serializer.DeserializeFromProto(columnInfo.GetCompression()).Validate();
     }
     AFL_VERIFY(Serializer);
     if (columnInfo.HasDictionaryEncoding()) {

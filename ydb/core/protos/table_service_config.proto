@@ -280,4 +280,15 @@ message TTableServiceConfig {
 
     optional uint64 IdxLookupJoinPointsLimit = 58 [default = 1];
     optional bool OldLookupJoinBehaviour = 59 [default = false]; 
+
+    optional bool EnableOltpSink = 60 [default = false];
+
+    enum EBlockChannelsMode {
+        BLOCK_CHANNELS_SCALAR = 0;
+        BLOCK_CHANNELS_AUTO = 1;
+        BLOCK_CHANNELS_FORCE = 2;
+    }
+    optional EBlockChannelsMode BlockChannelsMode = 61 [default = BLOCK_CHANNELS_SCALAR];
+    
+    optional uint64 QueryReplayCacheUploadTTLSec = 62 [default = 36000];
 };

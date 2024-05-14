@@ -18,6 +18,8 @@ import tempfile
 
 import six
 
+from functools import total_ordering
+
 logger = logging.getLogger(__name__ if __name__ != '__main__' else 'ymake_conf.py')
 
 
@@ -82,6 +84,7 @@ class ConfigureError(Exception):
     pass
 
 
+@total_ordering
 class Platform(object):
     def __init__(self, name, os, arch):
         """
@@ -273,8 +276,8 @@ class Platform(object):
     def __eq__(self, other):
         return (self.name, self.os, self.arch) == (other.name, other.os, other.arch)
 
-    def __cmp__(self, other):
-        return cmp((self.name, self.os, self.arch), (other.name, other.os, other.arch))
+    def __lt__(self, other):
+        return (self.name, self.os, self.arch) < (other.name, other.os, other.arch)
 
     def __hash__(self):
         return hash((self.name, self.os, self.arch))
@@ -1346,7 +1349,7 @@ class GnuToolchain(Toolchain):
 
     def setup_apple_arcadia_sdk(self, target):
         if target.is_ios:
-            self.setup_xcode_sdk(project='build/platform/ios_sdk', var='${IOS_SDK_ROOT_RESOURCE_GLOBAL}')
+            self.setup_xcode_sdk(project='build/internal/platform/ios_sdk', var='${IOS_SDK_ROOT_RESOURCE_GLOBAL}')
             self.platform_projects.append('build/internal/platform/macos_system_stl')
         if target.is_macos:
             self.setup_xcode_sdk(project='build/internal/platform/macos_sdk', var='${MACOS_SDK_RESOURCE_GLOBAL}')
@@ -1729,9 +1732,9 @@ class LD(Linker):
 
         self.ld_sdk = select(default=None, selectors=[
             # -platform_version <platform> <min_version> <sdk_version>
-            (target.is_macos, '-Wl,-platform_version,macos,11.0,11.0'),
-            (not target.is_iossim and target.is_ios, '-Wl,-platform_version,ios,11.0,13.1'),
-            (target.is_iossim, '-Wl,-platform_version,ios-simulator,14.0,14.5'),
+            (target.is_macos, '-Wl,-platform_version,macos,{MACOS_VERSION_MIN},11.0'.format(MACOS_VERSION_MIN=MACOS_VERSION_MIN)),
+            (not target.is_iossim and target.is_ios, '-Wl,-platform_version,ios,{IOS_VERSION_MIN},13.1'.format(IOS_VERSION_MIN=IOS_VERSION_MIN)),
+            (target.is_iossim, '-Wl,-platform_version,ios-simulator,{IOS_VERSION_MIN},14.5'.format(IOS_VERSION_MIN=IOS_VERSION_MIN)),
         ])
 
         if self.build.profiler_type == Profiler.GProf:
@@ -1793,6 +1796,7 @@ class MSVCToolchainOptions(ToolchainOptions):
 
         self.under_wine_compiler = self.params.get('wine', False)
         self.under_wine_tools = not build.host.is_windows
+        self.under_wine_lib = self.under_wine_tools
         self.system_msvc = self.params.get('system_msvc', False)
         self.ide_msvs = self.params.get('ide_msvs', False)
         self.use_clang = self.params.get('use_clang', False)
@@ -1865,7 +1869,15 @@ class MSVCToolchainOptions(ToolchainOptions):
 
             self.masm_compiler = win_path_fix(os.path.join(bindir, tools_name, asm_name))
             self.link = win_path_fix(os.path.join(bindir, tools_name, 'link.exe'))
-            self.lib = win_path_fix(os.path.join(bindir, tools_name, 'lib.exe'))
+
+            if self.use_clang:
+                self.lib = self.host.exe(self.name_marker, "bin", "llvm-lib")
+                self.under_wine_lib = False
+            else:
+                self.lib = win_path_fix(os.path.join(bindir, tools_name, 'lib.exe'))
+                self.under_wine_lib = self.under_wine_tools
+
+            logger.debug("link {}; lib {}".format(self.link, self.lib))
 
 
 class MSVC(object):
@@ -1905,6 +1917,8 @@ class MSVCToolchain(MSVC, Toolchain):
 
         if self.tc.under_wine_tools:
             emit('_UNDER_WINE_TOOLS', 'yes')
+        if self.tc.under_wine_lib:
+            emit('_UNDER_WINE_LIB', 'yes')
         if self.tc.under_wine_compiler:
             emit('_UNDER_WINE_COMPILER', 'yes')
         if self.tc.use_clang:
@@ -2395,7 +2409,7 @@ class Cuda(object):
             return False
 
         if host != target:
-            if not(host.is_linux_x86_64 and target.is_linux_armv8):
+            if not (host.is_linux_x86_64 and target.is_linux_armv8):
                 return False
             if not self.cuda_version.from_user:
                 return False

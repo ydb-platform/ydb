@@ -9,7 +9,7 @@
                 ["c_acctbal", ["DataType", "Double"]],
                 ["c_address", ["DataType", "String"]],
                 ["c_comment", ["DataType", "String"]],
-                ["c_custkey", ["DataType", "Int32"]],
+                ["c_custkey", ["DataType", "Int64"]],
                 ["c_mktsegment", ["DataType", "String"]],
                 ["c_name", ["DataType", "String"]],
                 ["c_nationkey", ["DataType", "Int32"]],
@@ -30,15 +30,15 @@
                 ["l_extendedprice", ["DataType", "Double"]],
                 ["l_linenumber", ["DataType", "Int32"]],
                 ["l_linestatus", ["DataType", "String"]], 
-                ["l_orderkey", ["DataType", "Int32"]],
-                ["l_partkey", ["DataType", "Int32"]],
+                ["l_orderkey", ["DataType", "Int64"]],
+                ["l_partkey", ["DataType", "Int64"]],
                 ["l_quantity", ["DataType", "Double"]],
                 ["l_receiptdate", ["DataType", "Date"]],
                 ["l_returnflag", ["DataType", "String"]],
                 ["l_shipdate", ["DataType", "Date"]],
                 ["l_shipinstruct", ["DataType", "String"]],
                 ["l_shipmode", ["DataType", "String"]],
-                ["l_suppkey", ["DataType", "Int32"]],
+                ["l_suppkey", ["DataType", "Int64"]],
                 ["l_tax", ["DataType", "Double"]]
             ]
         ]
@@ -66,9 +66,9 @@
             "StructType", [
                 ["o_clerk", ["DataType", "String"]],
                 ["o_comment", ["DataType", "String"]],
-                ["o_custkey", ["DataType", "Int32"]],
+                ["o_custkey", ["DataType", "Int64"]],
                 ["o_orderdate", ["DataType", "Date"]], 
-                ["o_orderkey", ["DataType", "Int32"]],
+                ["o_orderkey", ["DataType", "Int64"]],
                 ["o_orderpriority", ["DataType", "String"]], 
                 ["o_orderstatus", ["DataType", "String"]],
                 ["o_shippriority", ["DataType", "Int32"]],
@@ -88,7 +88,7 @@
                 ["p_container",  ["DataType", "String"]],
                 ["p_mfgr", ["DataType", "String"]], 
                 ["p_name", ["DataType", "String"]],
-                ["p_partkey", ["DataType", "Int32"]],
+                ["p_partkey", ["DataType", "Int64"]],
                 ["p_retailprice", ["DataType", "Double"]],
                 ["p_size", ["DataType", "Int32"]],
                 ["p_type", ["DataType", "String"]]
@@ -104,8 +104,8 @@
             "StructType", [
                 ["ps_availqty", ["DataType", "Int32"]],
                 ["ps_comment", ["DataType", "String"]],
-                ["ps_partkey", ["DataType", "Int32"]], 
-                ["ps_suppkey", ["DataType", "Int32"]],
+                ["ps_partkey", ["DataType", "Int64"]], 
+                ["ps_suppkey", ["DataType", "Int64"]],
                 ["ps_supplycost", ["DataType", "Double"]]
             ]
         ]
@@ -136,7 +136,7 @@
                 ["s_name", ["DataType", "String"]],
                 ["s_nationkey", ["DataType", "Int32"]],
                 ["s_phone", ["DataType", "String"]],
-                ["s_suppkey", ["DataType", "Int32"]]
+                ["s_suppkey", ["DataType", "Int64"]]
             ]
         ]
     }

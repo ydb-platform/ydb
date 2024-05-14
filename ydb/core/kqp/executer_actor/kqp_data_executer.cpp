@@ -13,6 +13,7 @@
 #include <ydb/core/client/minikql_compile/db_key_resolver.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
+#include <ydb/core/kqp/common/kqp_tx.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/runtime/kqp_transport.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
@@ -128,13 +129,15 @@ public:
         const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
         const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
         const TActorId& creator, TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-        const bool enableOlapSink, const bool useEvWrite, ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup)
+        const bool enableOlapSink, const bool useEvWrite, ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
+        const TGUCSettings::TPtr& GUCSettings)
         : TBase(std::move(request), database, userToken, counters, executerRetriesConfig, chanTransportVersion, aggregation,
             maximalSecretsSnapshotWaitTime, userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter, "DataExecuter", streamResult)
         , AsyncIoFactory(std::move(asyncIoFactory))
         , EnableOlapSink(enableOlapSink)
         , UseEvWrite(useEvWrite)
         , FederatedQuerySetup(federatedQuerySetup)
+        , GUCSettings(GUCSettings)
     {
         Target = creator;
 
@@ -925,8 +928,11 @@ private:
         }
         }
 
-        auto issue = YqlIssue({}, issueCode);
-        ReplyErrorAndDie(statusCode, issue);
+        if (result.ErrorsSize()) {
+            ReplyErrorAndDie(statusCode, YqlIssue({}, issueCode, result.GetErrors(0).GetReason()));
+        } else {
+            ReplyErrorAndDie(statusCode, YqlIssue({}, issueCode));
+        }
     }
 
     void CheckPrepareCompleted() {
@@ -1464,6 +1470,7 @@ private:
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
         auto getShardTask = [&](ui64 shardId) -> TTask& {
+            YQL_ENSURE(!UseEvWrite);
             auto it  = shardTasks.find(shardId);
             if (it != shardTasks.end()) {
                 return TasksGraph.GetTask(it->second);
@@ -1603,6 +1610,7 @@ private:
 
     void ExecuteDatashardTransaction(ui64 shardId, NKikimrTxDataShard::TKqpTransaction& kqpTx, const bool isOlap)
     {
+        YQL_ENSURE(!UseEvWrite);
         TShardState shardState;
         shardState.State = ImmediateTx ? TShardState::EState::Executing : TShardState::EState::Preparing;
         shardState.DatashardState.ConstructInPlace();
@@ -1650,7 +1658,6 @@ private:
 
         std::unique_ptr<IEventBase> ev;
         if (isOlap) {
-            YQL_ENSURE(!UseEvWrite);
             const ui32 flags =
                 (ImmediateTx ? NKikimrTxColumnShard::ETransactionFlag::TX_FLAG_IMMEDIATE: 0);
             ev.reset(new TEvColumnShard::TEvProposeTransaction(
@@ -1824,14 +1831,8 @@ private:
         return false;
     }
 
-    bool HasOlapSink(const NKqpProto::TKqpPhyStage& stage) {
-        for (const auto& sink : stage.GetSinks()) {
-            if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink) {
-                return true;
-            }
-        }
-
-        return false;
+    bool HasOlapSink(const NKqpProto::TKqpPhyStage& stage, const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpPhyTable>& tables) {
+        return NKqp::HasOlapTableWriteInStage(stage, tables);
     }
 
     void Execute() {
@@ -1863,7 +1864,7 @@ private:
                     }
                 }
 
-                const bool hasOlapSink = HasOlapSink(stage);
+                const bool hasOlapSink = HasOlapSink(stage, tx.Body->GetTables());
                 if ((stageInfo.Meta.IsOlap() && HasDmlOperationOnOlap(tx.Body->GetType(), stage))
                     || (!EnableOlapSink && hasOlapSink)) {
                     auto error = TStringBuilder() << "Data manipulation queries do not support column shard tables.";
@@ -1893,12 +1894,12 @@ private:
                         default:
                             YQL_ENSURE(false, "unknown source type");
                     }
-                } else if (StreamResult && stageInfo.Meta.IsOlap()) {
+                } else if (StreamResult && stageInfo.Meta.IsOlap() && stage.SinksSize() == 0) {
                     BuildScanTasksFromShards(stageInfo);
-                } else if (stageInfo.Meta.ShardOperations.empty()) {
-                    BuildComputeTasks(stageInfo, std::max<ui32>(ShardsOnNode.size(), ResourceSnapshot.size()));
                 } else if (stageInfo.Meta.IsSysView()) {
                     BuildSysViewScanTasks(stageInfo);
+                } else if (stageInfo.Meta.ShardOperations.empty() || stage.SinksSize() > 0) {
+                    BuildComputeTasks(stageInfo, std::max<ui32>(ShardsOnNode.size(), ResourceSnapshot.size()));
                 } else {
                     BuildDatashardTasks(stageInfo);
                 }
@@ -1988,10 +1989,11 @@ private:
         BuildDatashardTxs(datashardTasks, datashardTxs, evWriteTxs, topicTxs);
         YQL_ENSURE(evWriteTxs.empty() || datashardTxs.empty());
 
-        // Single-shard transactions are always immediate
+        // Single-shard datashard transactions are always immediate
         ImmediateTx = (datashardTxs.size() + evWriteTxs.size() + Request.TopicOperations.GetSize() + sourceScanPartitionsCount) <= 1
                     && !UnknownAffectedShardCount
-                    && evWriteTxs.empty();
+                    && evWriteTxs.empty()
+                    && !HasOlapTable;
 
         switch (Request.IsolationLevel) {
             // OnlineRO with AllowInconsistentReads = true
@@ -2310,10 +2312,26 @@ private:
 
             absl::flat_hash_set<ui64> sendingShardsSet;
             absl::flat_hash_set<ui64> receivingShardsSet;
+            ui64 arbiter = 0;
 
             // Gather shards that need to send/receive readsets (shards with effects)
             if (needCommit) {
                 for (auto& [shardId, tx] : datashardTxs) {
+                    if (tx->HasLocks()) {
+                        // Locks may be broken so shards with locks need to send readsets
+                        sendingShardsSet.insert(shardId);
+                    }
+                    if (ShardsWithEffects.contains(shardId)) {
+                        // Volatile transactions may abort effects, so they send readsets
+                        if (VolatileTx) {
+                            sendingShardsSet.insert(shardId);
+                        }
+                        // Effects are only applied when all locks are valid
+                        receivingShardsSet.insert(shardId);
+                    }
+                }
+
+                for (auto& [shardId, tx] : evWriteTxs) {
                     if (tx->HasLocks()) {
                         // Locks may be broken so shards with locks need to send readsets
                         sendingShardsSet.insert(shardId);
@@ -2336,6 +2354,48 @@ private:
                 if (auto tabletIds = Request.TopicOperations.GetReceivingTabletIds()) {
                     receivingShardsSet.insert(tabletIds.begin(), tabletIds.end());
                 }
+
+                // The current value of 5 is arbitrary. Writing to 5 shards in
+                // a single transaction is unusual enough, and having latency
+                // regressions is unlikely. Full mesh readset count grows like
+                // 2n(n-1), and arbiter reduces it to 4(n-1). Here's a readset
+                // count table for various small `n`:
+                //
+                // n = 2: 4 -> 4
+                // n = 3: 12 -> 8
+                // n = 4: 24 -> 12
+                // n = 5: 40 -> 16
+                // n = 6: 60 -> 20
+                // n = 7: 84 -> 24
+                //
+                // The ideal crossover is at n = 4, since the readset count
+                // doesn't change when going from 3 to 4 shards, but the
+                // increase in latency may not really be worth it. With n = 5
+                // the readset count lowers from 24 to 16 readsets when going
+                // from 4 to 5 shards. This makes 5 shards potentially cheaper
+                // than 4 shards when readsets dominate the workload, but at
+                // the price of possible increase in latency. Too many readsets
+                // cause interconnect overload and reduce throughput however,
+                // so we don't want to use a crossover value that is too high.
+                const size_t minArbiterMeshSize = 5; // TODO: make configurable?
+                if (VolatileTx &&
+                    receivingShardsSet.size() >= minArbiterMeshSize &&
+                    AppData()->FeatureFlags.GetEnableVolatileTransactionArbiters())
+                {
+                    std::vector<ui64> candidates;
+                    candidates.reserve(receivingShardsSet.size());
+                    for (ui64 candidate : receivingShardsSet) {
+                        // Note: all receivers are also senders in volatile transactions
+                        if (Y_LIKELY(sendingShardsSet.contains(candidate))) {
+                            candidates.push_back(candidate);
+                        }
+                    }
+                    if (candidates.size() >= minArbiterMeshSize) {
+                        // Select a random arbiter
+                        ui32 index = RandomNumber<ui32>(candidates.size());
+                        arbiter = candidates.at(index);
+                    }
+                }
             }
 
             // Encode sending/receiving shards in tx bodies
@@ -2350,18 +2410,25 @@ private:
                     shardTx->MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
                     *shardTx->MutableLocks()->MutableSendingShards() = sendingShards;
                     *shardTx->MutableLocks()->MutableReceivingShards() = receivingShards;
+                    if (arbiter) {
+                        shardTx->MutableLocks()->SetArbiterShard(arbiter);
+                    }
                 }
 
                 for (auto& [_, tx] : evWriteTxs) {
                     tx->MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
                     *tx->MutableLocks()->MutableSendingShards() = sendingShards;
                     *tx->MutableLocks()->MutableReceivingShards() = receivingShards;
+                    if (arbiter) {
+                        tx->MutableLocks()->SetArbiterShard(arbiter);
+                    }
                 }
 
                 for (auto& [_, tx] : topicTxs) {
                     tx.SetOp(NKikimrPQ::TDataTransaction::Commit);
                     *tx.MutableSendingShards() = sendingShards;
                     *tx.MutableReceivingShards() = receivingShards;
+                    YQL_ENSURE(!arbiter);
                 }
             }
         }
@@ -2396,11 +2463,32 @@ private:
 
         const bool singlePartitionOptAllowed = !HasOlapTable && !UnknownAffectedShardCount && !HasExternalSources && DatashardTxs.empty() && EvWriteTxs.empty();
         const bool useDataQueryPool = !(HasExternalSources && DatashardTxs.empty() && EvWriteTxs.empty());
-        const bool localComputeTasks = !((HasExternalSources || HasOlapTable || HasDatashardSourceScan) && DatashardTxs.empty());
+        const bool localComputeTasks = !DatashardTxs.empty();
 
-        Planner = CreateKqpPlanner(TasksGraph, TxId, SelfId(), GetSnapshot(),
-            Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode, false, Nothing(),
-            ExecuterSpan, std::move(ResourceSnapshot), ExecuterRetriesConfig, useDataQueryPool, localComputeTasks, Request.MkqlMemoryLimit, AsyncIoFactory, singlePartitionOptAllowed, GetUserRequestContext(), FederatedQuerySetup);
+        Planner = CreateKqpPlanner({
+            .TasksGraph = TasksGraph,
+            .TxId = TxId,
+            .Executer = SelfId(),
+            .Snapshot = GetSnapshot(),
+            .Database = Database,
+            .UserToken = UserToken,
+            .Deadline = Deadline.GetOrElse(TInstant::Zero()),
+            .StatsMode = Request.StatsMode,
+            .WithSpilling = false,
+            .RlPath = Nothing(),
+            .ExecuterSpan =  ExecuterSpan,
+            .ResourcesSnapshot = std::move(ResourceSnapshot),
+            .ExecuterRetriesConfig = ExecuterRetriesConfig,
+            .UseDataQueryPool = useDataQueryPool,
+            .LocalComputeTasks = localComputeTasks,
+            .MkqlMemoryLimit = Request.MkqlMemoryLimit,
+            .AsyncIoFactory = AsyncIoFactory,
+            .AllowSinglePartitionOpt = singlePartitionOptAllowed,
+            .UserRequestContext = GetUserRequestContext(),
+            .FederatedQuerySetup = FederatedQuerySetup,
+            .OutputChunkMaxSize = Request.OutputChunkMaxSize,
+            .GUCSettings = GUCSettings
+        });
 
         auto err = Planner->PlanExecution();
         if (err) {
@@ -2605,6 +2693,7 @@ private:
     bool EnableOlapSink = false;
     bool UseEvWrite = false;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
+    const TGUCSettings::TPtr GUCSettings;
 
     bool HasExternalSources = false;
     bool SecretSnapshotRequired = false;
@@ -2649,11 +2738,11 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, const TActorId& creator,
     TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
     const bool enableOlapSink, const bool useEvWrite, ui32 statementResultIndex,
-    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup)
+    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings)
 {
     return new TKqpDataExecuter(std::move(request), database, userToken, counters, streamResult, executerRetriesConfig,
         std::move(asyncIoFactory), chanTransportVersion, aggregation, creator, maximalSecretsSnapshotWaitTime, userRequestContext,
-        enableOlapSink, useEvWrite, statementResultIndex, federatedQuerySetup);
+        enableOlapSink, useEvWrite, statementResultIndex, federatedQuerySetup, GUCSettings);
 }
 
 } // namespace NKqp

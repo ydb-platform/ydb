@@ -7,7 +7,7 @@ import "ydb/core/scheme/protos/key_range.proto";
 import "ydb/core/scheme/protos/pathid.proto";
 import "ydb/core/protos/data_events.proto";
 import "ydb/core/protos/kqp.proto";
-import "ydb/core/protos/ssa.proto";
+import "ydb/core/formats/arrow/protos/ssa.proto";
 import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/tx.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
@@ -524,11 +524,6 @@ enum ETransactionKind {
     // kinds. See NKikimr::NDataShard::EOperationKind.
 }
 
-message TMvccSnapshot {
-    optional uint64 Step = 10;
-    optional uint64 TxId = 11;
-}
-
 message TEvProposeTransaction {
     optional ETransactionKind TxKind = 1;
     optional NActorsProto.TActorId SourceDeprecated = 2 [deprecated = true]; // for compatibility with old tx engine
@@ -539,7 +534,8 @@ message TEvProposeTransaction {
     optional uint64 SchemeShardId = 7;
     optional NKikimrSubDomains.TProcessingParams ProcessingParams = 8;
     optional uint64 SubDomainPathId = 9; // LocalPathId (SchemeShardId is the OwnerId)
-    optional TMvccSnapshot MvccSnapshot = 10;
+    optional NKikimrDataEvents.TMvccSnapshot MvccSnapshot = 10;
+    optional bool MvccSnapshotRepeatable = 11 [default = true];
 }
 
 message TEvCancelTransactionProposal {
@@ -1454,6 +1450,7 @@ message TEvCdcStreamScanResponse {
 
 message TEvStatisticsScanRequest {
     optional NKikimrDataEvents.TTableId TableId = 1;
+    optional bytes StartKey = 2;
 }
 
 message TEvStatisticsScanResponse {
@@ -1907,6 +1904,10 @@ message TTxVolatileDetails {
 
     // When true all preceding transactions are dependencies
     optional bool CommitOrdered = 8;
+
+    // When true marks an arbiter for other participants
+    // Arbiters hold outgoing readsets until the transaction is decided
+    optional bool IsArbiter = 9;
 }
 
 // Sent by datashard when some overload reason stopped being relevant

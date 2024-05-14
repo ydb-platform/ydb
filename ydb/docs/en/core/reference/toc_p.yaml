@@ -7,6 +7,10 @@ items:
   include:
     mode: link
     path: ../postgresql/toc_p.yaml
+- name: Embedded UI
+  include:
+    mode: link
+    path: embedded-ui/toc_p.yaml
 - name: Integrations
   include: 
     mode: link
@@ -27,3 +31,7 @@ items:
   include:
     mode: link
     path: ydb-dstool/toc_p.yaml
+- name: Observability
+  include:
+    mode: link
+    path: observability/toc_p.yaml

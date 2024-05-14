@@ -1,5 +1,7 @@
 --!syntax_v1
-CREATE TABLE `{table}`
+{createExternal}
+
+CREATE {external} TABLE `{path}`
 (
     WatchID Int64 {notnull},
     JavaEnable Int16 {notnull},
@@ -105,13 +107,12 @@ CREATE TABLE `{table}`
     HasGCLID Int16 {notnull},
     RefererHash Int64 {notnull},
     URLHash Int64 {notnull},
-    CLID Int32 {notnull},
-
-    PRIMARY KEY (EventTime, CounterID, EventDate, UserID, WatchID)
+    CLID Int32 {notnull}
+    {primary_key}(CounterID, EventDate, UserID, EventTime, WatchID)
 )
-{partition}
+{partition_by}(CounterID, EventDate, UserID, EventTime, WatchID)
 WITH (
-    {store}
+    {store}"{s3_prefix}/hits",
     AUTO_PARTITIONING_BY_SIZE = ENABLED,
-    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 128
+    {partitioning} = 128
 );

@@ -23,8 +23,8 @@ END()
 
 RECURSE(
     public
-    ut
     public/ut
+    ut
 )
 
 RECURSE_FOR_TESTS(

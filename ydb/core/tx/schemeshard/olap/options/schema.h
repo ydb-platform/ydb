@@ -8,6 +8,7 @@ class TOlapSchema;
 class TOlapOptionsDescription {
 private:
     YDB_READONLY(bool, SchemeNeedActualization, false);
+    YDB_READONLY(bool, ExternalGuaranteeExclusivePK, false);
 public:
     bool ApplyUpdate(const TOlapOptionsUpdate& schemaUpdate, IErrorCollector& errors);
 

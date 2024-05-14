@@ -99,6 +99,9 @@ namespace NKikimr::NBsController {
                         for (bool value : settings.GetEnableDonorMode()) {
                             Self->DonorMode = value;
                             db.Table<T>().Key(true).Update<T::DonorModeEnable>(Self->DonorMode);
+                            auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
+                            ev->DonorMode = Self->DonorMode;
+                            Self->Send(Self->SelfHealId, ev.release());
                         }
                         for (ui64 value : settings.GetScrubPeriodicitySeconds()) {
                             Self->ScrubPeriodicity = TDuration::Seconds(value);
@@ -347,6 +350,7 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(SanitizeGroup)
                     HANDLE_COMMAND(CancelVirtualGroup)
                     HANDLE_COMMAND(SetVDiskReadOnly)
+                    HANDLE_COMMAND(RestartPDisk)
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kAddMigrationPlan:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteMigrationPlan:

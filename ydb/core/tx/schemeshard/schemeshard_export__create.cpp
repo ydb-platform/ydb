@@ -129,7 +129,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
             break;
 
         default:
-            Y_DEBUG_ABORT_UNLESS(false, "Unknown export kind");
+            Y_DEBUG_ABORT("Unknown export kind");
         }
 
         Y_ABORT_UNLESS(exportInfo != nullptr);

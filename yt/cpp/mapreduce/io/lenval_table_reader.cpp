@@ -111,8 +111,8 @@ void TLenvalTableReader::Next()
             Length_ = static_cast<ui32>(value);
             RowTaken_ = false;
             AtStart_ = false;
-        } catch (const std::exception& e) {
-            if (!PrepareRetry()) {
+        } catch (const std::exception& ex) {
+            if (!PrepareRetry(std::make_exception_ptr(ex))) {
                 throw;
             }
             continue;
@@ -121,9 +121,9 @@ void TLenvalTableReader::Next()
     }
 }
 
-bool TLenvalTableReader::Retry()
+bool TLenvalTableReader::Retry(const std::exception_ptr& error)
 {
-    if (PrepareRetry()) {
+    if (PrepareRetry(error)) {
         RowTaken_ = true;
         Next();
         return true;
@@ -183,9 +183,9 @@ bool TLenvalTableReader::IsRawReaderExhausted() const
     return Finished_;
 }
 
-bool TLenvalTableReader::PrepareRetry()
+bool TLenvalTableReader::PrepareRetry(const std::exception_ptr& error)
 {
-    if (Input_.Retry(RangeIndex_, RowIndex_)) {
+    if (Input_.Retry(RangeIndex_, RowIndex_, error)) {
         if (RangeIndex_) {
             RangeIndexShift_ += *RangeIndex_;
         }

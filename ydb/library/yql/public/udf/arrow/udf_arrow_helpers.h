@@ -592,13 +592,16 @@ public:
 }
 }
 
-#define BEGIN_ARROW_UDF(udfNameBlocks, signatureFunc, optArgc) \
+#define BEGIN_ARROW_UDF_IMPL(udfNameBlocks, signatureFunc, optArgc, isStrict) \
     class udfNameBlocks { \
     public: \
         typedef bool TTypeAwareMarker; \
         static const ::NYql::NUdf::TStringRef& Name() { \
             static auto name = ::NYql::NUdf::TStringRef::Of(#udfNameBlocks).Substring(1, 256); \
             return name; \
+        } \
+        static bool IsStrict() { \
+            return isStrict; \
         } \
         static ::NYql::NUdf::TType* GetSignatureType(::NYql::NUdf::IFunctionTypeInfoBuilder& builder) { \
             return builder.SimpleSignatureType<signatureFunc>(optArgc); \
@@ -611,16 +614,20 @@ public:
     };
 
 #define BEGIN_SIMPLE_ARROW_UDF(udfName, signatureFunc) \
-    BEGIN_ARROW_UDF(udfName##_BlocksImpl, signatureFunc, 0) \
+    BEGIN_ARROW_UDF_IMPL(udfName##_BlocksImpl, signatureFunc, 0, false) \
     UDF_IMPL(udfName, builder.SimpleSignature<signatureFunc>().SupportsBlocks();, ;, ;, "", "", udfName##_BlocksImpl)
 
 #define BEGIN_SIMPLE_STRICT_ARROW_UDF(udfName, signatureFunc) \
-    BEGIN_ARROW_UDF(udfName##_BlocksImpl, signatureFunc, 0) \
+    BEGIN_ARROW_UDF_IMPL(udfName##_BlocksImpl, signatureFunc, 0, true) \
     UDF_IMPL(udfName, builder.SimpleSignature<signatureFunc>().SupportsBlocks().IsStrict();, ;, ;, "", "", udfName##_BlocksImpl)
 
 #define BEGIN_SIMPLE_ARROW_UDF_WITH_OPTIONAL_ARGS(udfName, signatureFunc, optArgc) \
-    BEGIN_ARROW_UDF(udfName##_BlocksImpl, signatureFunc, optArgc) \
-    UDF_IMPL(udfName, builder.SimpleSignature<signatureFunc>().OptionalArgs(optArgc).SupportsBlocks();, ;, ;, "", "", udfName##_BlocksImpl)
+    BEGIN_ARROW_UDF_IMPL(udfName##_BlocksImpl, signatureFunc, optArgc, false) \
+    UDF_IMPL(udfName, builder.SimpleSignature<signatureFunc>().SupportsBlocks().OptionalArgs(optArgc);, ;, ;, "", "", udfName##_BlocksImpl)
+
+#define BEGIN_SIMPLE_STRICT_ARROW_UDF_WITH_OPTIONAL_ARGS(udfName, signatureFunc, optArgc) \
+    BEGIN_ARROW_UDF_IMPL(udfName##_BlocksImpl, signatureFunc, optArgc, true) \
+    UDF_IMPL(udfName, builder.SimpleSignature<signatureFunc>().SupportsBlocks().IsStrict().OptionalArgs(optArgc);, ;, ;, "", "", udfName##_BlocksImpl)
 
 #define END_ARROW_UDF(udfNameBlocks, exec) \
     inline bool udfNameBlocks::DeclareSignature(\
@@ -629,6 +636,9 @@ public:
         ::NYql::NUdf::IFunctionTypeInfoBuilder& builder, \
         bool typesOnly) { \
             if (Name() == name) { \
+                if (IsStrict()) { \
+                    builder.IsStrict(); \
+                } \
                 PrepareSimpleArrowUdf(builder, GetSignatureType(builder), userType, exec, typesOnly, TString(name)); \
                 return true; \
             } \

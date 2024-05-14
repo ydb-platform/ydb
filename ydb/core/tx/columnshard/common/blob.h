@@ -193,7 +193,7 @@ struct TBlobRange {
 
     bool operator<(const TBlobRange& br) const {
         if (BlobId != br.BlobId) {
-            return BlobId.Hash() < br.BlobId.Hash();
+            return BlobId.GetLogoBlobId().Compare(br.BlobId.GetLogoBlobId()) < 0;
         } else if (Offset != br.Offset) {
             return Offset < br.Offset;
         } else {
@@ -207,6 +207,21 @@ struct TBlobRange {
 
     bool IsNextRangeFor(const TBlobRange& br) const {
         return BlobId == br.BlobId && br.Offset + br.Size == Offset;
+    }
+
+    bool TryGlueSameBlob(const TBlobRange& br, const ui64 limit) {
+        if (GetBlobId() != br.GetBlobId()) {
+            return false;
+        }
+        const ui32 right = std::max<ui32>(Offset + Size, br.Offset + br.Size);
+        const ui32 offset = std::min<ui32>(Offset, br.Offset);
+        const ui32 size = right - offset;
+        if (size > limit) {
+            return false;
+        }
+        Size = size;
+        Offset = offset;
+        return true;
     }
 
     bool TryGlueWithNext(const TBlobRange& br) {
@@ -365,11 +380,6 @@ IOutputStream& operator <<(IOutputStream& out, const NKikimr::NOlap::TUnifiedBlo
 
 inline
 IOutputStream& operator <<(IOutputStream& out, const NKikimr::NOlap::TBlobRange& blobRange) {
-    return out << blobRange.ToString();
-}
-
-inline
-IOutputStream& operator <<(IOutputStream& out, const NKikimr::NOlap::TBlobRangeLink16& blobRange) {
     return out << blobRange.ToString();
 }
 

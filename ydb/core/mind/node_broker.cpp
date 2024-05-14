@@ -64,7 +64,7 @@ void TNodeBroker::OnActivateExecutor(const TActorContext &ctx)
     MinDynamicId = Max(MaxStaticId + 1, (ui64)Min(appData->DynamicNameserviceConfig->MinDynamicNodeId, TActorId::MaxNodeId));
     MaxDynamicId = Max(MinDynamicId, (ui64)Min(appData->DynamicNameserviceConfig->MaxDynamicNodeId, TActorId::MaxNodeId));
 
-    EnableSlotNameGeneration = appData->FeatureFlags.GetEnableSlotNameGeneration();
+    EnableDynamicNodeNameGeneration = appData->FeatureFlags.GetEnableDynamicNodeNameGeneration();
 
     ClearState();
 
@@ -107,6 +107,7 @@ bool TNodeBroker::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
                 << "  MaxStaticNodeId: " << AppData(ctx)->DynamicNameserviceConfig->MaxStaticNodeId << Endl
                 << "  MaxDynamicNodeId: " << AppData(ctx)->DynamicNameserviceConfig->MaxDynamicNodeId << Endl
                 << "  EpochDuration: " << EpochDuration << Endl
+                << "  NodeNamePrefix: " << NodeNamePrefix << Endl
                 << "  BannedIds:";
             for (auto &pr : BannedIds)
                 str << " [" << pr.first << ", " << pr.second << "]";
@@ -339,9 +340,15 @@ void TNodeBroker::FillNodeInfo(const TNodeInfo &node,
     info.SetAddress(node.Address);
     info.SetExpire(node.Expire.GetValue());
     node.Location.Serialize(info.MutableLocation(), false);
-    if (EnableSlotNameGeneration && node.SlotIndex.has_value()) {
-        const TString slotName = TStringBuilder() << "slot-" << node.SlotIndex;
-        info.SetSlotName(slotName);
+    FillNodeName(node.SlotIndex, info);
+}
+
+void TNodeBroker::FillNodeName(const std::optional<ui32> &slotIndex,
+                               NKikimrNodeBroker::TNodeInfo &info) const
+{
+    if (EnableDynamicNodeNameGeneration && slotIndex.has_value()) {
+        const TString name = TStringBuilder() << NodeNamePrefix << slotIndex.value();
+        info.SetName(name);
     }
 }
 
@@ -438,8 +445,9 @@ void TNodeBroker::AddNodeToEpochCache(const TNodeInfo &node)
 
 void TNodeBroker::SubscribeForConfigUpdates(const TActorContext &ctx)
 {
-    ui32 item = (ui32)NKikimrConsole::TConfigItem::NodeBrokerConfigItem;
-    NConsole::SubscribeViaConfigDispatcher(ctx, {item}, ctx.SelfID);
+    ui32 nodeBrokerItem = (ui32)NKikimrConsole::TConfigItem::NodeBrokerConfigItem;
+    ui32 featureFlagsItem = (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem;
+    NConsole::SubscribeViaConfigDispatcher(ctx, {nodeBrokerItem, featureFlagsItem}, ctx.SelfID);
 }
 
 void TNodeBroker::ProcessTx(ITransaction *tx,
@@ -479,6 +487,8 @@ void TNodeBroker::LoadConfigFromProto(const NKikimrNodeBroker::TConfig &config)
                     " small. Using min. value: " << MIN_LEASE_DURATION);
         EpochDuration = MIN_LEASE_DURATION;
     }
+
+    NodeNamePrefix = config.GetNodeNamePrefix();
 
     BannedIds.clear();
     for (auto &banned : config.GetBannedNodeIds())
@@ -779,7 +789,12 @@ void TNodeBroker::DbUpdateNodeLocation(const TNodeInfo &node,
 
 void TNodeBroker::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                          const TActorContext &ctx)
-{
+{   
+    const auto& appConfig = ev->Get()->Record.GetConfig();
+    if (appConfig.HasFeatureFlags()) {
+        EnableDynamicNodeNameGeneration = appConfig.GetFeatureFlags().GetEnableDynamicNodeNameGeneration();
+    }
+
     if (ev->Get()->Record.HasLocal() && ev->Get()->Record.GetLocal()) {
         ProcessTx(CreateTxUpdateConfig(ev), ctx);
     } else {

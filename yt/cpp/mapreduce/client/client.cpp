@@ -52,8 +52,6 @@
 #include <util/string/type.h>
 #include <util/system/env.h>
 
-#include <exception>
-
 using namespace NYT::NDetail::NRawClient;
 
 namespace NYT {
@@ -1361,6 +1359,7 @@ TClientPtr CreateClientImpl(
     context.ProxyAddress = options.ProxyAddress_;
 
     context.ServerName = serverName;
+    ApplyProxyUrlAliasingRules(context.ServerName);
 
     if (context.ServerName.find('.') == TString::npos &&
         context.ServerName.find(':') == TString::npos &&
@@ -1448,9 +1447,6 @@ IClientPtr CreateClientFromEnv(const TCreateClientOptions& options)
     if (!serverName) {
         ythrow yexception() << "YT_PROXY is not set";
     }
-
-    NDetail::ApplyProxyUrlAliasingRules(serverName);
-
     return NDetail::CreateClientImpl(serverName, options);
 }
 

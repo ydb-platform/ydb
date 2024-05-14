@@ -151,8 +151,8 @@ class TExprTypeSaver: public TSaver<TExprTypeSaver<TSaver>> {
     }
 
 public:
-    TExprTypeSaver(typename TBase::TConsumer& consumer)
-        : TBase(consumer)
+    TExprTypeSaver(typename TBase::TConsumer& consumer, bool extendedForm)
+        : TBase(consumer, extendedForm)
     {
     }
 
@@ -238,27 +238,27 @@ public:
     }
 };
 
-void SaveStructTypeToYson(NYson::TYsonConsumerBase& writer, const TStructExprType* type, const TMaybe<TVector<TString>>& columns, const TStructMemberMapper& mapper) {
-    TExprTypeSaver<TYqlTypeYsonSaverImpl> saver(writer);
+void SaveStructTypeToYson(NYson::TYsonConsumerBase& writer, const TStructExprType* type, const TMaybe<TVector<TString>>& columns, const TStructMemberMapper& mapper, bool extendedForm) {
+    TExprTypeSaver<TYqlTypeYsonSaverImpl> saver(writer, extendedForm);
     saver.SaveStructType(type, columns, mapper);
 }
 
-void WriteTypeToYson(NYson::TYsonConsumerBase& writer, const TTypeAnnotationNode* type) {
-    TExprTypeSaver<TYqlTypeYsonSaverImpl> saver(writer);
+void WriteTypeToYson(NYson::TYsonConsumerBase& writer, const TTypeAnnotationNode* type, bool extendedForm) {
+    TExprTypeSaver<TYqlTypeYsonSaverImpl> saver(writer, extendedForm);
     saver.Save(type);
 }
 
-NYT::TNode TypeToYsonNode(const TTypeAnnotationNode* type) {
+NYT::TNode TypeToYsonNode(const TTypeAnnotationNode* type, bool extendedForm) {
     NYT::TNode res;
     NYT::TNodeBuilder builder(&res);
-    WriteTypeToYson(builder, type);
+    WriteTypeToYson(builder, type, extendedForm);
     return res;
 }
 
-TString WriteTypeToYson(const TTypeAnnotationNode* type, NYson::EYsonFormat format) {
+TString WriteTypeToYson(const TTypeAnnotationNode* type, NYson::EYsonFormat format, bool extendedForm) {
     TStringStream stream;
     NYson::TYsonWriter writer(&stream, format);
-    WriteTypeToYson(writer, type);
+    WriteTypeToYson(writer, type, extendedForm);
     return stream.Str();
 }
 
@@ -423,14 +423,14 @@ void WriteResOrPullType(NYson::TYsonConsumerBase& writer,const TTypeAnnotationNo
     if (columns.empty() ||
         type->GetKind() != ETypeAnnotationKind::List ||
         type->Cast<TListExprType>()->GetItemType()->GetKind() != ETypeAnnotationKind::Struct) {
-        WriteTypeToYson(writer, type);
+        WriteTypeToYson(writer, type, true);
     } else {
         writer.OnBeginList();
         writer.OnListItem();
         writer.OnStringScalar("ListType");
         writer.OnListItem();
 
-        SaveStructTypeToYson(writer, type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>(), columns);
+        SaveStructTypeToYson(writer, type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>(), columns, {}, true);
 
         writer.OnEndList();
     }

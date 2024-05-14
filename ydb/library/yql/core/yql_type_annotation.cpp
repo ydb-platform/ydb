@@ -16,6 +16,8 @@ namespace NYql {
 
 using namespace NKikimr;
 
+const TString ModuleResolverComponent = "ModuleResolver";
+
 bool TTypeAnnotationContext::Initialize(TExprContext& ctx) {
     if (!InitializeResult) {
         InitializeResult = DoInitialize(ctx);
@@ -257,24 +259,26 @@ bool TModuleResolver::AddFromFile(const std::string_view& file, TExprContext& ct
     }
 
     TString body;
-    switch (block->Type) {
-    case EUserDataType::RAW_INLINE_DATA:
-        body = block->Data;
-        break;
-    case EUserDataType::PATH:
-        body = TFileInput(block->Data).ReadAll();
-        break;
-    case EUserDataType::URL:
-        if (!UrlLoader) {
-            ctx.AddError(TIssue(pos, TStringBuilder() << "Unable to load file \"" << file
-                << "\" from url, because url loader is not available"));
-            return false;
-        }
+    if (!QContext.CanRead()) {
+        switch (block->Type) {
+        case EUserDataType::RAW_INLINE_DATA:
+            body = block->Data;
+            break;
+        case EUserDataType::PATH:
+            body = TFileInput(block->Data).ReadAll();
+            break;
+        case EUserDataType::URL:
+            if (!UrlLoader) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Unable to load file \"" << file
+                    << "\" from url, because url loader is not available"));
+                return false;
+            }
 
-        body = UrlLoader->Load(block->Data, block->UrlToken);
-        break;
-    default:
-        throw yexception() << "Unknown block type " << block->Type;
+            body = UrlLoader->Load(block->Data, block->UrlToken);
+            break;
+        default:
+            throw yexception() << "Unknown block type " << block->Type;
+        }
     }
 
     return AddFromMemory(fullName, moduleName, isYql, body, ctx, syntaxVersion, packageVersion, pos);
@@ -308,6 +312,18 @@ bool TModuleResolver::AddFromMemory(const std::string_view& file, const TString&
 }
 
 bool TModuleResolver::AddFromMemory(const TString& fullName, const TString& moduleName, bool isYql, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos, std::vector<TString>* exports, std::vector<TString>* imports) {
+    auto query = body;
+    if (QContext.CanRead()) {
+        auto item = QContext.GetReader()->Get({ModuleResolverComponent, fullName}).GetValueSync();
+        if (!item) {
+            throw yexception() << "Missing replay data";
+        }
+
+        query = item->Value;
+    } else if (QContext.CanWrite()) {
+        QContext.GetWriter()->Put({ModuleResolverComponent, fullName}, query).GetValueSync();
+    }
+
     const auto addSubIssues = [&fullName](TIssue&& issue, const TIssues& issues) {
         std::for_each(issues.begin(), issues.end(), [&](const TIssue& i) {
             issue.AddSubIssue(MakeIntrusive<TIssue>(TPosition(i.Position.Column, i.Position.Row, fullName), i.GetMessage()));
@@ -317,7 +333,7 @@ bool TModuleResolver::AddFromMemory(const TString& fullName, const TString& modu
 
     TAstParseResult astRes;
     if (isYql) {
-        astRes = ParseAst(body, nullptr, fullName);
+        astRes = ParseAst(query, nullptr, fullName);
         if (!astRes.IsOk()) {
             ctx.AddError(addSubIssues(TIssue(pos, TStringBuilder() << "Failed to parse YQL: " << fullName), astRes.Issues));
             return false;
@@ -331,7 +347,7 @@ bool TModuleResolver::AddFromMemory(const TString& fullName, const TString& modu
         settings.SyntaxVersion = syntaxVersion;
         settings.V0Behavior = NSQLTranslation::EV0Behavior::Silent;
         settings.FileAliasPrefix = FileAliasPrefix;
-        astRes = SqlToYql(body, settings);
+        astRes = SqlToYql(query, settings);
         if (!astRes.IsOk()) {
             ctx.AddError(addSubIssues(TIssue(pos, TStringBuilder() << "Failed to parse SQL: " << fullName), astRes.Issues));
             return false;

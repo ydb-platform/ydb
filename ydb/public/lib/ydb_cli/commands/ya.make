@@ -12,6 +12,7 @@ SRCS(
     tpch.cpp
     query_workload.cpp
     ydb_admin.cpp
+    ydb_benchmark.cpp
     ydb_sdk_core_access.cpp
     ydb_command.cpp
     ydb_dynamic_config.cpp

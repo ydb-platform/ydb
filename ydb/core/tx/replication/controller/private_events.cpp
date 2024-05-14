@@ -181,6 +181,33 @@ TString TEvPrivate::TEvUpdateTenantNodes::ToString() const {
     << " }";
 }
 
+TEvPrivate::TEvResolveSecretResult::TEvResolveSecretResult(ui64 rid, const TString& secretValue)
+    : ReplicationId(rid)
+    , SecretValue(secretValue)
+    , Success(true)
+{
+}
+
+TEvPrivate::TEvResolveSecretResult::TEvResolveSecretResult(ui64 rid, bool success, const TString& error)
+    : ReplicationId(rid)
+    , Success(success)
+    , Error(error)
+{
+    Y_ABORT_UNLESS(!success);
+}
+
+TString TEvPrivate::TEvResolveSecretResult::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {"
+        << " ReplicationId: " << ReplicationId
+        << " Success: " << Success
+        << " Error: " << Error
+    << " }";
+}
+
+bool TEvPrivate::TEvResolveSecretResult::IsSuccess() const {
+    return Success;
+}
+
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::NController::TEvPrivate::TEvDiscoveryTargetsResult::TAddEntry, stream, value) {

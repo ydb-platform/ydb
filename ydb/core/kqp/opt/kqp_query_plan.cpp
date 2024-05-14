@@ -2,7 +2,7 @@
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
-#include <ydb/core/protos/ssa.pb.h>
+#include <ydb/core/formats/arrow/protos/ssa.pb.h>
 #include <ydb/public/lib/value/value.h>
 
 #include <ydb/library/yql/ast/yql_ast_escaping.h>
@@ -2057,7 +2057,7 @@ NJson::TJsonValue ReconstructQueryPlanRec(const NJson::TJsonValue& plan,
         }
 
         // Sometimes we have multiple inputs for these operators, break after the first one
-        if (opName == "Filter" || opName == "TopSort") {
+        if (opName == "Filter" || opName == "TopSort" || opName == "Aggregate") {
             break;
         }
     }
@@ -2119,8 +2119,6 @@ double ComputeCpuTimes(NJson::TJsonValue& plan) {
     }
 
     if (plan.GetMapSafe().contains("Stats") && plan.GetMapSafe().contains("Operators")) {
-        YQL_CLOG(TRACE, CoreDq) << "Found Operators";
-
         auto& ops = plan.GetMapSafe().at("Operators").GetArraySafe();
 
         const auto& stats = plan.GetMapSafe().at("Stats").GetMapSafe();
@@ -2142,6 +2140,45 @@ double ComputeCpuTimes(NJson::TJsonValue& plan) {
     }
 
     return currCpuTime;
+}
+
+void ComputeTotalRows(NJson::TJsonValue& plan) {
+    
+    if (plan.GetMapSafe().contains("Plans")) {
+        for (auto& p : plan.GetMapSafe().at("Plans").GetArraySafe()) {
+            ComputeTotalRows(p);
+        }
+    }
+
+    if (plan.GetMapSafe().contains("Stats") && plan.GetMapSafe().contains("Operators")) {
+        auto& ops = plan.GetMapSafe().at("Operators").GetArraySafe();
+
+        const auto& stats = plan.GetMapSafe().at("Stats").GetMapSafe();
+
+        if (stats.contains("OutputRows")) {
+            auto outputRows = stats.at("OutputRows");
+            double nRows;
+            if (outputRows.IsMap()) {
+                nRows = outputRows.GetMapSafe().at("Sum").GetDouble();
+            } else {
+                nRows = outputRows.GetDouble();
+            }
+            ops[0]["A-Rows"] = nRows;
+        }
+    }
+}
+
+void RemoveStats(NJson::TJsonValue& plan) {
+
+    if (plan.GetMapSafe().contains("Plans")) {
+        for (auto& p : plan.GetMapSafe().at("Plans").GetArraySafe()) {
+            RemoveStats(p);
+        }
+    }
+
+    if (plan.GetMapSafe().contains("Stats")) {
+        plan.GetMapSafe().erase("Stats");
+    }
 }
 
 NJson::TJsonValue SimplifyQueryPlan(NJson::TJsonValue& plan) {
@@ -2170,6 +2207,8 @@ NJson::TJsonValue SimplifyQueryPlan(NJson::TJsonValue& plan) {
     plan = ReconstructQueryPlanRec(plan, 0, planIndex, precomputes, nodeCounter);
     RemoveRedundantNodes(plan, redundantNodes);
     ComputeCpuTimes(plan);
+    ComputeTotalRows(plan);
+    RemoveStats(plan);
 
     return plan;
 }
@@ -2187,11 +2226,6 @@ TString AddSimplifiedPlan(const TString& planText, bool analyzeMode) {
 
     planJson["SimplifiedPlan"] = SimplifyQueryPlan(planCopy.GetMapSafe().at("Plan"));
 
-    // Don't print the OLAP plan yet, there are some non UTF-8 symbols there that need to be fixed
-    //TTempBufOutput stringStream;
-    //NYdb::NConsoleClient::TQueryPlanPrinter printer(NYdb::NConsoleClient::EOutputFormat::PrettyTable, analyzeMode, stringStream);
-    //printer.Print(planJson.GetStringRobust());
-    //planJson["OLAPText"] = stringStream.Data();
     return planJson.GetStringRobust();
 }
 

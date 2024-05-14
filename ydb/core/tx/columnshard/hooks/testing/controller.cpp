@@ -4,34 +4,19 @@
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
 #include <ydb/core/tx/columnshard/engines/changes/indexation.h>
+#include <ydb/core/tx/columnshard/engines/changes/ttl.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 
 namespace NKikimr::NYDBTest::NColumnShard {
 
-bool TController::DoOnAfterFilterAssembling(const std::shared_ptr<arrow::RecordBatch>& batch) {
-    if (batch) {
-        FilteredRecordsCount.Add(batch->num_rows());
-    }
-    return true;
-}
-
-bool TController::DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& /*changes*/, const ::NKikimr::NColumnShard::TColumnShard& shard) {
+bool TController::DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& change, const ::NKikimr::NColumnShard::TColumnShard& shard) {
     TGuard<TMutex> g(Mutex);
-    Indexations.Inc();
     if (SharingIds.empty()) {
         TCheckContext context;
         CheckInvariants(shard, context);
     }
-    return true;
-}
-
-bool TController::DoOnStartCompaction(std::shared_ptr<NOlap::TColumnEngineChanges>& changes) {
-    TGuard<TMutex> g(Mutex);
-    if (auto compaction = dynamic_pointer_cast<NOlap::TCompactColumnEngineChanges>(changes)) {
-        Compactions.Inc();
-    }
-    return true;
+    return TBase::DoOnWriteIndexComplete(change, shard);
 }
 
 void TController::DoOnAfterGCAction(const ::NKikimr::NColumnShard::TColumnShard& /*shard*/, const NOlap::IBlobsGCAction& action) {
@@ -134,6 +119,26 @@ bool TController::IsTrivialLinks() const {
         }
     }
     return true;
+}
+
+::NKikimr::NColumnShard::TBlobPutResult::TPtr TController::OverrideBlobPutResultOnCompaction(const ::NKikimr::NColumnShard::TBlobPutResult::TPtr original, const NOlap::TWriteActionsCollection& actions) const {
+    if (IndexWriteControllerEnabled) {
+        return original;
+    }
+    bool found = false;
+    for (auto&& i : actions) {
+        if (i.first != NOlap::NBlobOperations::TGlobal::DefaultStorageId) {
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        return original;
+    }
+    IndexWriteControllerBrokeCount.Inc();
+    ::NKikimr::NColumnShard::TBlobPutResult::TPtr result = std::make_shared<::NKikimr::NColumnShard::TBlobPutResult>(*original);
+    result->SetPutStatus(NKikimrProto::EReplyStatus::ERROR);
+    return result;
 }
 
 }

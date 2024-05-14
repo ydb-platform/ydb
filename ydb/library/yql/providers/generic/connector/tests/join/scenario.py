@@ -2,7 +2,7 @@ from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 impo
 from ydb.library.yql.providers.generic.connector.tests.utils.comparator import data_outs_equal
 from ydb.library.yql.providers.generic.connector.tests.utils.log import make_logger
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
-from ydb.library.yql.providers.generic.connector.tests.utils.runner import Runner
+from ydb.library.yql.providers.generic.connector.tests.utils.run.parent import Runner
 
 from ydb.library.yql.providers.generic.connector.tests.utils.clients.clickhouse import Client as ClickHouseClient
 import ydb.library.yql.providers.generic.connector.tests.utils.scenario.clickhouse as clickhouse_scenario

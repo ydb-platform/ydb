@@ -1,6 +1,6 @@
 PY3TEST()
 
-OWNER(g:frontend-build-platform)
+SUBSCRIBER(g:frontend-build-platform)
 
 PEERDIR(
     build/plugins/lib/nots/semver

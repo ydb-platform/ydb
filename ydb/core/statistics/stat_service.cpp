@@ -1,5 +1,6 @@
 #include "stat_service.h"
 #include "events.h"
+#include "save_load_stats.h"
 
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/base/feature_flags.h>
@@ -58,6 +59,7 @@ public:
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             hFunc(TEvStatistics::TEvStatisticsIsDisabled, Handle);
+            hFunc(TEvStatistics::TEvLoadStatisticsQueryResponse, Handle);
             hFunc(TEvPrivate::TEvRequestTimeout, Handle);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
@@ -92,10 +94,32 @@ private:
         auto& request = InFlight[requestId];
         request.ReplyToActorId = ev->Sender;
         request.EvCookie = ev->Cookie;
+        request.StatType = ev->Get()->StatType;
         request.StatRequests.swap(ev->Get()->StatRequests);
 
         if (!EnableStatistics) {
             ReplyFailed(requestId, true);
+            return;
+        }
+
+        if (request.StatType == EStatType::COUNT_MIN_SKETCH) {
+            request.StatResponses.reserve(request.StatRequests.size());
+            ui32 reqIndex = 0;
+            for (const auto& req : request.StatRequests) {
+                auto& response = request.StatResponses.emplace_back();
+                response.Req = req;
+                if (!req.ColumnName) {
+                    response.Success = false;
+                    ++reqIndex;
+                    continue;
+                }
+                ui64 loadCookie = NextLoadQueryCookie++;
+                LoadQueriesInFlight[loadCookie] = std::make_pair(requestId, reqIndex);
+                Register(CreateLoadStatisticsQuery(req.PathId, request.StatType,
+                    *req.ColumnName, loadCookie));
+                ++request.ReplyCounter;
+                ++reqIndex;
+            }
             return;
         }
 
@@ -349,6 +373,40 @@ private:
         ReplyAllFailed();
     }
 
+    void Handle(TEvStatistics::TEvLoadStatisticsQueryResponse::TPtr& ev) {
+        ui64 cookie = ev->Get()->Cookie;
+
+        auto itLoadQuery = LoadQueriesInFlight.find(cookie);
+        Y_ABORT_UNLESS(itLoadQuery != LoadQueriesInFlight.end());
+        auto [requestId, requestIndex] = itLoadQuery->second;
+
+        auto itRequest = InFlight.find(requestId);
+        Y_ABORT_UNLESS(itRequest != InFlight.end());
+        auto& request = itRequest->second;
+
+        auto& response = request.StatResponses[requestIndex];
+        Y_ABORT_UNLESS(request.StatType == EStatType::COUNT_MIN_SKETCH);
+
+        if (ev->Get()->Success) {
+            response.Success = true;
+            auto& data = ev->Get()->Data;
+            Y_ABORT_UNLESS(data);
+            response.CountMinSketch.CountMin.reset(TCountMinSketch::FromString(data->Data(), data->Size()));
+        } else {
+            response.Success = false;
+        }
+
+        if (--request.ReplyCounter == 0) {
+            auto result = std::make_unique<TEvStatistics::TEvGetStatisticsResult>();
+            result->Success = true;
+            result->StatResponses.swap(request.StatResponses);
+
+            Send(request.ReplyToActorId, result.release(), 0, request.EvCookie);
+
+            InFlight.erase(requestId);
+        }
+    }
+
     void Handle(TEvPrivate::TEvRequestTimeout::TPtr& ev) {
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
             "EvRequestTimeout"
@@ -450,7 +508,7 @@ private:
                 stat.RowCount = 0;
                 stat.BytesSize = 0;
             }
-            rsp.Statistics = stat;
+            rsp.Simple = stat;
 
             result->StatResponses.push_back(rsp);
         }
@@ -483,7 +541,7 @@ private:
             TStatSimple stat;
             stat.RowCount = 0;
             stat.BytesSize = 0;
-            rsp.Statistics = stat;
+            rsp.Simple = stat;
 
             result->StatResponses.push_back(rsp);
         }
@@ -518,10 +576,16 @@ private:
         NActors::TActorId ReplyToActorId;
         ui64 EvCookie = 0;
         ui64 SchemeShardId = 0;
+        EStatType StatType = EStatType::SIMPLE;
         std::vector<TRequest> StatRequests;
+        std::vector<TResponse> StatResponses;
+        size_t ReplyCounter = 0;
     };
     std::unordered_map<ui64, TRequestState> InFlight; // request id -> state
     ui64 NextRequestId = 1;
+
+    std::unordered_map<ui64, std::pair<ui64, ui32>> LoadQueriesInFlight; // load cookie -> req id, req index
+    ui64 NextLoadQueryCookie = 1;
 
     std::unordered_set<ui64> NeedSchemeShards;
 

@@ -179,7 +179,7 @@ private:
         const TString& url,
         Args&&... args)
     {
-        return BIND([=, this, this_ = MakeStrong(this), func = std::move(func), ...args = std::move(args)] () {
+        return BIND([=, this, this_ = MakeStrong(this), func = std::move(func), ...args = std::move(args)] {
             return DoMakeRequest(std::move(func), responseChecker, url, std::forward<Args>(args)...);
         }).AsyncVia(Invoker_).Run();
     }

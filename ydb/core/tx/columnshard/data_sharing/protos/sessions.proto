@@ -57,3 +57,7 @@ message TSourceSession {
         repeated TPathPortionsHash PathHashes = 7;
     }
 }
+
+message TEvProposeFromInitiator {
+    optional TDestinationSession Session = 1;
+}

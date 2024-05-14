@@ -2,7 +2,7 @@
 #include "flat_row_celled.h"
 #include "flat_row_remap.h"
 #include "flat_bloom_hash.h"
-#include "flat_part_iter_multi.h"
+#include "flat_part_iter.h"
 #include "flat_part_laid.h"
 #include "flat_part_charge_range.h"
 #include "flat_part_charge_create.h"
@@ -972,7 +972,7 @@ TMemTable& TTable::MemTable()
     return *Mutable;
 }
 
-TAutoPtr<TTableIt> TTable::Iterate(TRawVals key_, TTagsRef tags, IPages* env, ESeek seek,
+TAutoPtr<TTableIter> TTable::Iterate(TRawVals key_, TTagsRef tags, IPages* env, ESeek seek,
         TRowVersion snapshot,
         const ITransactionMapPtr& visible,
         const ITransactionObserverPtr& observer) const noexcept
@@ -982,27 +982,27 @@ TAutoPtr<TTableIt> TTable::Iterate(TRawVals key_, TTagsRef tags, IPages* env, ES
     const TCelled key(key_, *Scheme->Keys, false);
     const ui64 limit = seek == ESeek::Exact ? 1 : Max<ui64>();
 
-    TAutoPtr<TTableIt> dbIter(new TTableIt(Scheme.Get(), tags, limit, snapshot,
+    TAutoPtr<TTableIter> dbIter(new TTableIter(Scheme.Get(), tags, limit, snapshot,
             TMergedTransactionMap::Create(visible, CommittedTransactions),
             observer));
 
     if (Mutable) {
-        dbIter->Push(TMemIt::Make(*Mutable, Mutable->Snapshot(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Forward));
+        dbIter->Push(TMemIter::Make(*Mutable, Mutable->Snapshot(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Forward));
     }
 
     if (MutableBackup) {
-        dbIter->Push(TMemIt::Make(*MutableBackup, MutableBackup->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Forward));
+        dbIter->Push(TMemIter::Make(*MutableBackup, MutableBackup->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Forward));
     }
 
     for (auto& fti : Frozen) {
         const TMemTable* memTable = fti.Get();
 
-        dbIter->Push(TMemIt::Make(*memTable, memTable->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Forward));
+        dbIter->Push(TMemIter::Make(*memTable, memTable->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Forward));
     }
 
     if (Flatten) {
         for (const auto& run : GetLevels()) {
-            auto iter = MakeHolder<TRunIt>(run, dbIter->Remap.Tags, Scheme->Keys, env);
+            auto iter = MakeHolder<TRunIter>(run, dbIter->Remap.Tags, Scheme->Keys, env);
 
             if (iter->Seek(key, seek) != EReady::Gone)
                 dbIter->Push(std::move(iter));
@@ -1019,7 +1019,7 @@ TAutoPtr<TTableIt> TTable::Iterate(TRawVals key_, TTagsRef tags, IPages* env, ES
     return dbIter;
 }
 
-TAutoPtr<TTableReverseIt> TTable::IterateReverse(TRawVals key_, TTagsRef tags, IPages* env, ESeek seek,
+TAutoPtr<TTableReverseIter> TTable::IterateReverse(TRawVals key_, TTagsRef tags, IPages* env, ESeek seek,
         TRowVersion snapshot,
         const ITransactionMapPtr& visible,
         const ITransactionObserverPtr& observer) const noexcept
@@ -1029,27 +1029,27 @@ TAutoPtr<TTableReverseIt> TTable::IterateReverse(TRawVals key_, TTagsRef tags, I
     const TCelled key(key_, *Scheme->Keys, false);
     const ui64 limit = seek == ESeek::Exact ? 1 : Max<ui64>();
 
-    TAutoPtr<TTableReverseIt> dbIter(new TTableReverseIt(Scheme.Get(), tags, limit, snapshot,
+    TAutoPtr<TTableReverseIter> dbIter(new TTableReverseIter(Scheme.Get(), tags, limit, snapshot,
             TMergedTransactionMap::Create(visible, CommittedTransactions),
             observer));
 
     if (Mutable) {
-        dbIter->Push(TMemIt::Make(*Mutable, Mutable->Snapshot(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Reverse));
+        dbIter->Push(TMemIter::Make(*Mutable, Mutable->Snapshot(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Reverse));
     }
 
     if (MutableBackup) {
-        dbIter->Push(TMemIt::Make(*MutableBackup, MutableBackup->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Reverse));
+        dbIter->Push(TMemIter::Make(*MutableBackup, MutableBackup->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Reverse));
     }
 
     for (auto& fti : Frozen) {
         const TMemTable* memTable = fti.Get();
 
-        dbIter->Push(TMemIt::Make(*memTable, memTable->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Reverse));
+        dbIter->Push(TMemIter::Make(*memTable, memTable->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Reverse));
     }
 
     if (Flatten) {
         for (const auto& run : GetLevels()) {
-            auto iter = MakeHolder<TRunIt>(run, dbIter->Remap.Tags, Scheme->Keys, env);
+            auto iter = MakeHolder<TRunIter>(run, dbIter->Remap.Tags, Scheme->Keys, env);
 
             if (iter->SeekReverse(key, seek) != EReady::Gone)
                 dbIter->Push(std::move(iter));
@@ -1068,7 +1068,7 @@ TAutoPtr<TTableReverseIt> TTable::IterateReverse(TRawVals key_, TTagsRef tags, I
 
 EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
                       ui64 flg, TRowVersion snapshot,
-                      TDeque<TPartSimpleIt>& tempIterators,
+                      TDeque<TPartIter>& tempIterators,
                       TSelectStats& stats,
                       const ITransactionMapPtr& visible,
                       const ITransactionObserverPtr& observer) const noexcept
@@ -1097,7 +1097,7 @@ EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
     // Mutable has the newest data
     if (Mutable) {
         lastEpoch = Mutable->Epoch;
-        if (auto it = TMemIt::Make(*Mutable, Mutable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
+        if (auto it = TMemIter::Make(*Mutable, Mutable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
             if (it->IsValid() && (snapshotFound || it->SkipToRowVersion(snapshot, stats, committed, observer))) {
                 // N.B. stop looking for snapshot after the first hit
                 snapshotFound = true;
@@ -1109,7 +1109,7 @@ EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
     // Mutable data that is transitioning to frozen
     if (MutableBackup && !row.IsFinalized()) {
         lastEpoch = MutableBackup->Epoch;
-        if (auto it = TMemIt::Make(*MutableBackup, MutableBackup->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
+        if (auto it = TMemIter::Make(*MutableBackup, MutableBackup->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
             if (it->IsValid() && (snapshotFound || it->SkipToRowVersion(snapshot, stats, committed, observer))) {
                 // N.B. stop looking for snapshot after the first hit
                 snapshotFound = true;
@@ -1123,7 +1123,7 @@ EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
         const auto& memTable = *pos;
         Y_ABORT_UNLESS(lastEpoch > memTable->Epoch, "Ordering of epochs is incorrect");
         lastEpoch = memTable->Epoch;
-        if (auto it = TMemIt::Make(*memTable, memTable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
+        if (auto it = TMemIter::Make(*memTable, memTable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
             if (it->IsValid() && (snapshotFound || it->SkipToRowVersion(snapshot, stats, committed, observer))) {
                 // N.B. stop looking for snapshot after the first hit
                 snapshotFound = true;
@@ -1143,7 +1143,7 @@ EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
                     part->MightHaveKey(prefix.Get(part->Scheme->Groups[0].KeyTypes.size())))
                 {
                     ++stats.Sieved;
-                    TPartSimpleIt& it = tempIterators.emplace_back(part, tags, Scheme->Keys, env);
+                    TPartIter& it = tempIterators.emplace_back(part, tags, Scheme->Keys, env);
                     it.SetBounds(pos->Slice);
                     auto res = it.Seek(key, ESeek::Exact);
                     if (res == EReady::Data) {
@@ -1223,7 +1223,7 @@ TSelectRowVersionResult TTable::SelectRowVersion(
     // Mutable has the newest data
     if (Mutable) {
         lastEpoch = Mutable->Epoch;
-        if (auto it = TMemIt::Make(*Mutable, Mutable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
+        if (auto it = TMemIter::Make(*Mutable, Mutable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
             if (it->IsValid()) {
                 if (auto rowVersion = it->SkipToCommitted(committed, observer)) {
                     return *rowVersion;
@@ -1235,7 +1235,7 @@ TSelectRowVersionResult TTable::SelectRowVersion(
     // Mutable data that is transitioning to frozen
     if (MutableBackup) {
         lastEpoch = MutableBackup->Epoch;
-        if (auto it = TMemIt::Make(*MutableBackup, MutableBackup->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
+        if (auto it = TMemIter::Make(*MutableBackup, MutableBackup->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
             if (it->IsValid()) {
                 if (auto rowVersion = it->SkipToCommitted(committed, observer)) {
                     return *rowVersion;
@@ -1249,7 +1249,7 @@ TSelectRowVersionResult TTable::SelectRowVersion(
         const auto& memTable = *pos;
         Y_ABORT_UNLESS(lastEpoch > memTable->Epoch, "Ordering of epochs is incorrect");
         lastEpoch = memTable->Epoch;
-        if (auto it = TMemIt::Make(*memTable, memTable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
+        if (auto it = TMemIter::Make(*memTable, memTable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
             if (it->IsValid()) {
                 if (auto rowVersion = it->SkipToCommitted(committed, observer)) {
                     return *rowVersion;
@@ -1267,7 +1267,7 @@ TSelectRowVersionResult TTable::SelectRowVersion(
             if ((readFlags & EHint::NoByKey) ||
                 part->MightHaveKey(prefix.Get(part->Scheme->Groups[0].KeyTypes.size())))
             {
-                TPartSimpleIt it(part, { }, Scheme->Keys, env);
+                TPartIter it(part, { }, Scheme->Keys, env);
                 it.SetBounds(pos->Slice);
                 auto res = it.Seek(key, ESeek::Exact);
                 if (res == EReady::Data && ready) {

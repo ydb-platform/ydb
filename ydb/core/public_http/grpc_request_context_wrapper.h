@@ -46,8 +46,9 @@ public:
     virtual void FinishStreamingOk() {}
     virtual TAsyncFinishResult GetFinishFuture() { return {}; }
     virtual bool IsClientLost() const { return false; }
-    virtual TString GetPeer() const { return {}; }
+    virtual TString GetPeer() const;
     virtual bool SslServer() const { return false; }
+    virtual bool IsStreamCall() const { return false; }
 };
 
 } // namespace NKikimr::NPublicHttp

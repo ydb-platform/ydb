@@ -641,48 +641,6 @@ TExprNode::TPtr RemoveNothingFromCoalesce(const TExprNode& node, TExprContext& c
     return ctx.ChangeChildren(node, std::move(newChildren));
 }
 
-TExprNode::TPtr OptimizeTryMember(const TExprNode::TPtr& node, TExprContext& ctx) {
-    YQL_CLOG(DEBUG, Core) << "Optimize " << node->Content();
-    const bool isStructOptional = node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional;
-    const TStructExprType* structType = RemoveOptionalType(node->Head().GetTypeAnn())->Cast<TStructExprType>();
-    const bool isOptional = node->Tail().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional;
-    const auto memberName = node->Child(1)->Content();
-    const auto wrappedDefault = ctx.WrapByCallableIf(isStructOptional && !node->TailPtr()->IsCallable("Null") &&
-        node->TailPtr()->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional, "Just", node->TailPtr());
-
-    for (const auto& field : structType->GetItems()) {
-        if (field->GetName() == memberName) {
-            const bool just = (isStructOptional || isOptional) && field->GetItemType()->GetKind() != ETypeAnnotationKind::Optional;
-            auto memberArg = isStructOptional ? ctx.NewArgument(node->Pos(), "x") : node->HeadPtr();
-            auto member = ctx.NewCallable(node->Pos(), "Member", { memberArg, node->ChildPtr(1) });
-            auto body = ctx.WrapByCallableIf(just, "Just", std::move(member));
-            if (!isStructOptional) {
-                return body;
-            }
-
-            auto lambda = ctx.NewLambda(node->Pos(), ctx.NewArguments(node->Pos(), { memberArg }), std::move(body));
-            if (node->TailPtr()->IsCallable("Null")) {
-                return ctx.Builder(node->Pos())
-                    .Callable("FlatMap")
-                        .Add(0, node->HeadPtr())
-                        .Add(1, lambda)
-                    .Seal()
-                    .Build();
-            }
-
-            return ctx.Builder(node->Pos())
-                .Callable("IfPresent")
-                    .Add(0, node->HeadPtr())
-                    .Add(1, lambda)
-                    .Add(2, wrappedDefault)
-                .Seal()
-                .Build();
-        }
-    }
-
-    return wrappedDefault;
-}
-
 TExprNode::TPtr RemoveOptionalReduceOverData(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (node->Head().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional) {
         YQL_CLOG(DEBUG, Core) << "Remove " << node->Content() << " over data";
@@ -696,7 +654,7 @@ TExprNode::TPtr RemoveOptionalReduceOverData(const TExprNode::TPtr& node, TExprC
 }
 
 TExprNode::TPtr PropagateCoalesceWithConstIntoLogicalOps(const TExprNode::TPtr& node, TExprContext& ctx) {
-    if (node->Head().IsCallable({"Likely", "AssumeStrict"})) {
+    if (node->Head().IsCallable({"Likely", "AssumeStrict", "AssumeNonStrict"})) {
         const auto value = FromString<bool>(node->Child(1)->Head().Content());
         if (!value) {
             YQL_CLOG(DEBUG, Core) << "PropagateCoalesceWithConst over " << node->Head().Content() << " (false)";
@@ -2494,7 +2452,7 @@ TExprNode::TPtr OptimizeReorder(const TExprNode::TPtr& node, TExprContext& ctx) 
         return ctx.ChangeChild(*node, 0U, node->Head().HeadPtr());
     }
 
-    if (const auto& lambda = node->Tail(); lambda.Tail().GetDependencyScope()->second != &lambda) {
+    if (const auto& lambda = node->Tail(); lambda.Tail().GetDependencyScope()->second != &lambda && IsStrict(lambda.TailPtr())) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " by constant";
         return IsTop ?
             ctx.Builder(node->Pos())
@@ -3992,6 +3950,20 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                       });
 
             if (!tupleElementsHaveSameType) {
+                if (!collection->IsList()) {
+                    TExprNodeList collectionItems;
+                    for (ui32 i = 0; i < tupleType->GetSize(); ++i) {
+                        collectionItems.push_back(ctx.Builder(collection->Pos())
+                            .Callable("Nth")
+                                .Add(0, collection)
+                                .Atom(1, i)
+                            .Seal()
+                            .Build()
+                        );
+                    }
+                    YQL_CLOG(DEBUG, Core) << "IN non-literal heterogeneous tuple";
+                    return ctx.ChangeChild(*node, TCoSqlIn::idx_Collection, ctx.NewList(collection->Pos(), std::move(collectionItems)));
+                }
                 YQL_CLOG(DEBUG, Core) << "IN heterogeneous tuple";
                 auto collections = DeduplicateAndSplitTupleCollectionByTypes(*collection, ctx);
                 YQL_ENSURE(collections.size() > 1);
@@ -4389,6 +4361,23 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             return ctx.ChangeChild(node->Head(), 0U, ExpandType(node->Pos(), *node->GetTypeAnn(), ctx));
         }
 
+        if (node->Head().IsCallable("If") && node->Head().ChildrenSize() == 3) {
+            TCoIf childIf(node->HeadPtr());
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
+            return Build<TCoIf>(ctx, node->Pos())
+                .InitFrom(childIf)
+                .ThenValue<TCoNth>()
+                    .InitFrom(TCoNth(node))
+                    .Tuple(childIf.ThenValue())
+                .Build()
+                .ElseValue<TCoNth>()
+                    .InitFrom(TCoNth(node))
+                    .Tuple(childIf.ElseValue())
+                .Build()
+                .Done()
+                .Ptr();
+        }
+
         return node;
     };
 
@@ -4591,8 +4580,6 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
     map["IfPresent"] = std::bind(&OptimizeIfPresent<true>, _1, _2);
 
-    map["TryMember"] = std::bind(&OptimizeTryMember, _1, _2);
-
     map["Optional"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
         YQL_CLOG(DEBUG, Core) << node->Content();
         return ctx.NewCallable(node->Pos(), "Just", {node->TailPtr()});
@@ -4764,6 +4751,20 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
     map["Top"] = std::bind(&OptimizeReorder<true, false>, _1, _2);
     map["TopSort"] = std::bind(&OptimizeReorder<true, true>, _1, _2);
+
+    map["AssumeStrict"] = map["AssumeNonStrict"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        if (node->Head().IsCallable({"AssumeStrict", "AssumeNonStrict"})) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
+            return ctx.ChangeChild(*node, 0, node->Head().HeadPtr());
+        }
+        const auto maybeStrict = IsStrictNoRecurse(node->Head());
+        if (maybeStrict.Defined() && *maybeStrict == node->IsCallable("AssumeStrict")) {
+            YQL_CLOG(DEBUG, Core) << "Drop " << node->Content() << " over "
+                << (*maybeStrict ? "strict " : "non strict ") << node->Head().Content();
+            return node->HeadPtr();
+        }
+        return node;
+    };
 
     map["Minus"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
         if (node->Head().IsCallable("Minus")) {

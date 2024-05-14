@@ -77,7 +77,7 @@ public:
     }
 
     inline TVector(TSelf&& src) noexcept
-        : TBase(std::forward<TSelf>(src))
+        : TBase(std::move(src))
     {
     }
 
@@ -93,7 +93,7 @@ public:
     }
 
     inline TSelf& operator=(TSelf&& src) noexcept {
-        TBase::operator=(std::forward<TSelf>(src));
+        TBase::operator=(std::move(src));
         return *this;
     }
 
@@ -111,22 +111,18 @@ public:
     }
 
     inline yssize_t ysize() const noexcept {
-        return (yssize_t)TBase::size();
+        return static_cast<yssize_t>(TBase::size());
     }
 
+    void yresize(size_type newSize) {
 #if defined(_YNDX_LIBCXX_ENABLE_VECTOR_POD_RESIZE_UNINITIALIZED) && !defined(__CUDACC__)
-    void yresize(size_type newSize) {
-        if (std::is_standard_layout_v<T> && std::is_trivial_v<T>) {
+        if constexpr (std::is_standard_layout_v<T> && std::is_trivial_v<T>) {
             TBase::resize_uninitialized(newSize);
-        } else {
-            TBase::resize(newSize);
+            return;
         }
-    }
-#else
-    void yresize(size_type newSize) {
+#endif
         TBase::resize(newSize);
     }
-#endif
 
     inline void crop(size_type size) {
         if (this->size() > size) {

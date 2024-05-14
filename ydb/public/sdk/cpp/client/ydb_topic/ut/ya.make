@@ -22,7 +22,8 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils
 
     ydb/public/sdk/cpp/client/ydb_topic
-    ydb/public/sdk/cpp/client/ydb_topic/codecs
+    ydb/public/sdk/cpp/client/ydb_topic/include
+    ydb/public/sdk/cpp/client/ydb_topic/common
     ydb/public/sdk/cpp/client/ydb_topic/impl
     ydb/public/sdk/cpp/client/ydb_topic/ut/ut_utils
 

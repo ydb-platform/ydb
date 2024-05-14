@@ -33,7 +33,7 @@ static void WalkImpl(
 {
     onElement(*walkContext, descriptor);
     walkContext->Stack.push_back(descriptor);
-    auto g = Finally([&]() {
+    auto g = Finally([&] {
         walkContext->Stack.pop_back();
     });
     const auto metatype = descriptor.GetType()->GetMetatype();
@@ -801,7 +801,7 @@ int TDictLogicalType::GetTypeComplexity() const
 void TDictLogicalType::ValidateNode(const TWalkContext&) const
 {
     TComplexTypeFieldDescriptor descriptor("<dict-key>", GetKey());
-    Walk(descriptor, [](const TWalkContext&, const TComplexTypeFieldDescriptor& descriptor) {
+    Walk(descriptor, [] (const TWalkContext&, const TComplexTypeFieldDescriptor& descriptor) {
         const auto& logicalType = descriptor.GetType();
 
         // NB. We intentionally list all metatypes and simple types here.
@@ -1702,7 +1702,7 @@ void Deserialize(TTypeV3LogicalTypeWrapper& wrapper, NYTree::INodePtr node)
     if (node->GetType() == NYTree::ENodeType::String) {
         auto typeNameString = node->AsString()->GetValue();
         auto typeName = FromTypeV3(typeNameString);
-        std::visit([&](const auto& arg) {
+        std::visit([&] (const auto& arg) {
             using T = std::decay_t<decltype(arg)>;
             if constexpr (std::is_same_v<T, ESimpleLogicalValueType>) {
                 wrapper.LogicalType = SimpleLogicalType(arg);
@@ -1724,7 +1724,7 @@ void Deserialize(TTypeV3LogicalTypeWrapper& wrapper, NYTree::INodePtr node)
     auto mapNode = node->AsMap();
     auto typeNameString = mapNode->GetChildValueOrThrow<TString>("type_name");
     auto typeName = FromTypeV3(typeNameString);
-    std::visit([&](const auto& typeName) {
+    std::visit([&] (const auto& typeName) {
         using T = std::decay_t<decltype(typeName)>;
         if constexpr (std::is_same_v<T, ESimpleLogicalValueType>) {
             wrapper.LogicalType = SimpleLogicalType(typeName);
@@ -1835,7 +1835,7 @@ void DeserializeV3Impl(TLogicalTypePtr& type, TYsonPullParserCursor* cursor, int
     if ((*cursor)->GetType() == EYsonItemType::StringValue) {
         auto typeNameString = (*cursor)->UncheckedAsString();
         auto typeName = FromTypeV3(typeNameString);
-        std::visit([&](const auto& arg) {
+        std::visit([&] (const auto& arg) {
             using T = std::decay_t<decltype(arg)>;
             if constexpr (std::is_same_v<T, ESimpleLogicalValueType>) {
                 type = SimpleLogicalType(arg);
@@ -1947,7 +1947,7 @@ void DeserializeV3Impl(TLogicalTypePtr& type, TYsonPullParserCursor* cursor, int
         THROW_ERROR_EXCEPTION("\"type_name\" is required");
     }
 
-    type = std::visit([&](const auto& typeName) {
+    type = std::visit([&] (const auto& typeName) {
         using T = std::decay_t<decltype(typeName)>;
         if constexpr (std::is_same_v<T, ESimpleLogicalValueType>) {
             return SimpleLogicalType(typeName);

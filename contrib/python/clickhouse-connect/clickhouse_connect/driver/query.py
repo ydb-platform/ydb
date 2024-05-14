@@ -5,12 +5,14 @@ import uuid
 import pytz
 
 from enum import Enum
+from io import IOBase
 from typing import Any, Tuple, Dict, Sequence, Optional, Union, Generator
 from datetime import date, datetime, tzinfo
 
 from pytz.exceptions import UnknownTimeZoneError
 
 from clickhouse_connect import common
+from clickhouse_connect.driver import tzutil
 from clickhouse_connect.driver.common import dict_copy, empty_gen, StreamContext
 from clickhouse_connect.driver.external import ExternalData
 from clickhouse_connect.driver.types import Matrix, Closable
@@ -169,7 +171,7 @@ class QueryContext(BaseQueryContext):
         elif self.apply_server_tz:
             active_tz = self.server_tz
         else:
-            active_tz = self.local_tz
+            active_tz = tzutil.local_tz
         if active_tz == pytz.UTC:
             return None
         return active_tz
@@ -338,7 +340,7 @@ class QueryResult(Closable):
 
 
 BS = '\\'
-must_escape = (BS, '\'', '`')
+must_escape = (BS, '\'', '`', '\t', '\n')
 
 
 def quote_identifier(identifier: str):
@@ -398,20 +400,24 @@ def format_query_value(value: Any, server_tz: tzinfo = pytz.UTC):
     if isinstance(value, date):
         return f"'{value.isoformat()}'"
     if isinstance(value, list):
-        return f"[{', '.join(format_query_value(x, server_tz) for x in value)}]"
+        return f"[{', '.join(str_query_value(x, server_tz) for x in value)}]"
     if isinstance(value, tuple):
-        return f"({', '.join(format_query_value(x, server_tz) for x in value)})"
+        return f"({', '.join(str_query_value(x, server_tz) for x in value)})"
     if isinstance(value, dict):
         if common.get_setting('dict_parameter_format') == 'json':
             return format_str(any_to_json(value).decode())
-        pairs = [format_query_value(k, server_tz) + ':' + format_query_value(v, server_tz)
+        pairs = [str_query_value(k, server_tz) + ':' + str_query_value(v, server_tz)
                  for k, v in value.items()]
         return f"{{{', '.join(pairs)}}}"
     if isinstance(value, Enum):
         return format_query_value(value.value, server_tz)
     if isinstance(value, (uuid.UUID, ipaddress.IPv4Address, ipaddress.IPv6Address)):
         return f"'{value}'"
-    return str(value)
+    return value
+
+
+def str_query_value(value: Any, server_tz: tzinfo = pytz.UTC):
+    return str(format_query_value(value, server_tz))
 
 
 # pylint: disable=too-many-branches
@@ -435,8 +441,7 @@ def format_bind_value(value: Any, server_tz: tzinfo = pytz.UTC, top_level: bool 
             return escape_str(value)
         return format_str(value)
     if isinstance(value, datetime):
-        if value.tzinfo is None:
-            value = value.replace(tzinfo=server_tz)
+        value = value.astimezone(server_tz)
         val = value.strftime('%Y-%m-%d %H:%M:%S')
         if top_level:
             return val
@@ -487,6 +492,12 @@ def to_arrow(content: bytes):
     pyarrow = check_arrow()
     reader = pyarrow.ipc.RecordBatchFileReader(content)
     return reader.read_all()
+
+
+def to_arrow_batches(buffer: IOBase) -> StreamContext:
+    pyarrow = check_arrow()
+    reader = pyarrow.ipc.open_stream(buffer)
+    return StreamContext(buffer, reader)
 
 
 def arrow_buffer(table) -> Tuple[Sequence[str], bytes]:

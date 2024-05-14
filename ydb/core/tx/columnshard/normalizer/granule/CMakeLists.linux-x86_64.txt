@@ -13,16 +13,28 @@
 # system may be rejected.
 
 
-add_library(columnshard-normalizer-granule)
+add_library(columnshard-normalizer-granule INTERFACE)
 
-target_link_libraries(columnshard-normalizer-granule PUBLIC
+target_link_libraries(columnshard-normalizer-granule INTERFACE
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   columnshard-normalizer-abstract
 )
 
-target_sources(columnshard-normalizer-granule PRIVATE
+
+add_global_library_for(columnshard-normalizer-granule.global
+  columnshard-normalizer-granule
+)
+
+target_link_libraries(columnshard-normalizer-granule.global PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  columnshard-normalizer-abstract
+)
+
+target_sources(columnshard-normalizer-granule.global PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/granule/normalizer.cpp
 )
 

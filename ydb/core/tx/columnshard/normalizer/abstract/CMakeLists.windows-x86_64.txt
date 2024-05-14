@@ -13,11 +13,19 @@
 # system may be rejected.
 
 
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
+
 add_library(columnshard-normalizer-abstract)
 
 target_link_libraries(columnshard-normalizer-abstract PUBLIC
   contrib-libs-cxxsupp
   yutil
+  tools-enum_parser-enum_serialization_runtime
   ydb-core-tablet_flat
   columnshard-blobs_action-abstract
   tx-columnshard-resource_subscriber
@@ -25,5 +33,11 @@ target_link_libraries(columnshard-normalizer-abstract PUBLIC
 
 target_sources(columnshard-normalizer-abstract PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/abstract/abstract.cpp
+)
+
+generate_enum_serilization(columnshard-normalizer-abstract
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/abstract/abstract.h
+  INCLUDE_HEADERS
+  ydb/core/tx/columnshard/normalizer/abstract/abstract.h
 )
 

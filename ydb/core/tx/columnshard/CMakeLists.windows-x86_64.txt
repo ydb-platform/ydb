@@ -83,6 +83,7 @@ target_link_libraries(core-tx-columnshard PUBLIC
   tx-columnshard-resource_subscriber
   columnshard-normalizer-granule
   columnshard-normalizer-portion
+  columnshard-normalizer-tables
   columnshard-blobs_action-storages_manager
   core-tx-tiering
   tx-conveyor-usage

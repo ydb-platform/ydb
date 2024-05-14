@@ -27,6 +27,24 @@ target_link_libraries(columnshard-normalizer-portion PUBLIC
 
 target_sources(columnshard-normalizer-portion PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/portion/normalizer.cpp
+)
+
+
+add_global_library_for(columnshard-normalizer-portion.global
+  columnshard-normalizer-portion
+)
+
+target_link_libraries(columnshard-normalizer-portion.global PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  columnshard-normalizer-abstract
+  tx-columnshard-blobs_reader
+  columnshard-engines-portions
+  tx-conveyor-usage
+)
+
+target_sources(columnshard-normalizer-portion.global PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/portion/portion.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/portion/chunks.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/portion/clean.cpp

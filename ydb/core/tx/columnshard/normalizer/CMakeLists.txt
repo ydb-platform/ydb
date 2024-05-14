@@ -15,3 +15,4 @@
 add_subdirectory(abstract)
 add_subdirectory(granule)
 add_subdirectory(portion)
+add_subdirectory(tables)

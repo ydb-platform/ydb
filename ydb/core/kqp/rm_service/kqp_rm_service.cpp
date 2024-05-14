@@ -231,7 +231,11 @@ public:
         if (!hasScanQueryMemory) {
             Counters->RmNotEnoughMemory->Inc();
             TStringBuilder reason;
+<<<<<<< HEAD
             reason << "TxId: " << txId << ", taskId: " << taskId << ". Not enough memory for query, requested: " << resources.Memory;
+=======
+            reason << "TxId: " << txId << ", taskId: " << taskId << ". Not enough ScanQueryMemory, requested: " << resources.Memory;
+>>>>>>> 739b0bd083 (cleanup issue reporting in resource manager & node service)
             if (details) {
                 details->FailReason = reason;
                 details->Status = NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_MEMORY;

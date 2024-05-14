@@ -24,7 +24,7 @@ constexpr auto MemoryAllocationTag = "memory_tag";
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TImpl>
-using TRpcTest = TTestBase<TImpl>;
+using TRpcTest = TRpcTestBase<TImpl>;
 TYPED_TEST_SUITE(TRpcTest, TAllTransports);
 
 TYPED_TEST(TRpcTest, ResponseWithAllocationTags)

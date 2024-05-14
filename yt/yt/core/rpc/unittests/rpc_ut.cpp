@@ -1,5 +1,7 @@
 #include <yt/yt/core/rpc/unittests/lib/common.h>
 
+#include <random>
+
 namespace NYT::NRpc {
 namespace {
 
@@ -41,13 +43,13 @@ TString StringFromSharedRef(const TSharedRef& sharedRef)
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TImpl>
-using TRpcTest = TTestBase<TImpl>;
+using TRpcTest = TRpcTestBase<TImpl>;
 template <class TImpl>
-using TNotUdsTest = TTestBase<TImpl>;
+using TNotUdsTest = TRpcTestBase<TImpl>;
 template <class TImpl>
-using TNotGrpcTest = TTestBase<TImpl>;
+using TNotGrpcTest = TRpcTestBase<TImpl>;
 template <class TImpl>
-using TGrpcTest = TTestBase<TImpl>;
+using TGrpcTest = TRpcTestBase<TImpl>;
 TYPED_TEST_SUITE(TRpcTest, TAllTransports);
 TYPED_TEST_SUITE(TNotUdsTest, TWithoutUds);
 TYPED_TEST_SUITE(TNotGrpcTest, TWithoutGrpc);

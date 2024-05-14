@@ -1859,6 +1859,10 @@ private:
             issue.set_severity(NYql::TSeverityIds::S_ERROR);
         }
 
+        if (!QueryStateUpdateRequest.has_result_id() && FinalQueryStatus != FederatedQuery::QueryMeta::COMPLETED && FinalQueryStatus != FederatedQuery::QueryMeta::COMPLETING) {
+            QueryStateUpdateRequest.mutable_result_id()->set_value("");
+        }
+
         Send(Pinger, new TEvents::TEvForwardPingRequest(QueryStateUpdateRequest, true));
 
         PassAway();

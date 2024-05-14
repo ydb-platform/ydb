@@ -933,6 +933,20 @@ private:
 #undef DECLARE_HANDLER
 #undef DECLARE_TEMPLATE_HANDLER
 
+        template<bool E = !UseMigrationProtocol>
+        constexpr std::enable_if_t<E, bool>
+        operator()(typename TAReadSessionEvent<false>::TEndPartitionSessionEvent&) {
+            if (this->template PushHandler<typename TAReadSessionEvent<false>::TEndPartitionSessionEvent>(
+                std::move(TParent::TBaseHandlersVisitor::Event),
+                [this](){
+                    return this->Settings.EventHandlers_.EndPartitionSessionHandler_;
+                }(),
+                this->Settings.EventHandlers_.CommonHandler_)) {
+                return false;
+            }
+            return false;
+        }
+
         bool Visit() {
             return std::visit(*this, TParent::TBaseHandlersVisitor::Event);
         }

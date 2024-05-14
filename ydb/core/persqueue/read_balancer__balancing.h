@@ -194,7 +194,6 @@ struct TConsumer {
 
     std::unordered_map<ui32, TPartition> Partitions;
 
-    size_t ActiveFamilyCount;
     bool BalanceScheduled;
 
     TConsumer(TBalancer& balancer, const TString& consumerName);

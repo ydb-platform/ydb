@@ -204,6 +204,8 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
         } else if (auto* x = std::get_if<TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
             x->Confirm();
             return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
+        } else if (auto* x = std::get_if<TReadSessionEvent::TEndPartitionSessionEvent>(&*event)) {
+            // do nothing.
         } else if (auto* x = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&*event)) {
             if (AutoCommit) {
                 DeferredCommit.Add(*x);

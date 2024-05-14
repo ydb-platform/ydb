@@ -104,6 +104,13 @@ struct TReadSessionSettings: public TRequestSettings<TReadSessionSettings> {
         FLUENT_SETTING(std::function<void(TReadSessionEvent::TStopPartitionSessionEvent&)>,
                        StopPartitionSessionHandler);
 
+        //! Function to handle end partition session events.
+        //! If this handler is set, end partition session events will be handled by handler,
+        //! otherwise sent to TReadSession::GetEvent().
+        //! Default value is empty function (not set).
+        FLUENT_SETTING(std::function<void(TReadSessionEvent::TEndPartitionSessionEvent&)>,
+                       EndPartitionSessionHandler);
+
         //! Function to handle partition session status events.
         //! If this handler is set, partition session status events will be handled by handler,
         //! otherwise sent to TReadSession::GetEvent().
@@ -185,6 +192,9 @@ struct TReadSessionSettings: public TRequestSettings<TReadSessionSettings> {
     FLUENT_SETTING(TReaderCounters::TPtr, Counters);
 
     FLUENT_SETTING_DEFAULT(TDuration, ConnectTimeout, TDuration::Seconds(30));
+
+    //! AutoscalingSupport.
+    FLUENT_SETTING_OPTIONAL(bool, AutoscalingSupport);
 
     //! Log.
     FLUENT_SETTING_OPTIONAL(TLog, Log);

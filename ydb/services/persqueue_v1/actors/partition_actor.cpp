@@ -1069,11 +1069,21 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
         if (record.GetReadingFinished()) {
             ReadingFinishedSent = true;
 
+            std::vector<ui32> adjacentPartitionIds;
+            adjacentPartitionIds.reserve(record.GetAdjacentPartitionIds().size());
+            adjacentPartitionIds.insert(adjacentPartitionIds.end(), record.GetAdjacentPartitionIds().begin(), record.GetAdjacentPartitionIds().end());
+
+            std::vector<ui32> childPartitionIds;
+            childPartitionIds.reserve(record.GetChildPartitionIds().size());
+            childPartitionIds.insert(childPartitionIds.end(), record.GetChildPartitionIds().begin(), record.GetChildPartitionIds().end());
+
             // TODO Tx
-            ctx.Send(ParentId, new TEvPQProxy::TEvReadingFinished(Topic->GetInternalName(), Partition.Partition, FirstRead));
+            ctx.Send(ParentId, new TEvPQProxy::TEvReadingFinished(Topic->GetInternalName(), Partition.Partition, FirstRead,
+                     std::move(adjacentPartitionIds), std::move(childPartitionIds)));
         } else if (FirstRead) {
             ctx.Send(ParentId, new TEvPQProxy::TEvReadingStarted(Topic->GetInternalName(), Partition.Partition));
         }
+
         FirstRead = false;
     }
 }

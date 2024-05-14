@@ -283,10 +283,11 @@ struct TTestSchema {
 
     static TString CreateTableTxBody(ui64 pathId, const std::vector<NArrow::NTest::TTestColumn>& columns,
         const std::vector<NArrow::NTest::TTestColumn>& pk,
-        const TTableSpecials& specialsExt = {})
+        const TTableSpecials& specialsExt = {}, ui64 generation = 0)
     {
         auto specials = specialsExt;
         NKikimrTxColumnShard::TSchemaTxBody tx;
+        tx.MutableSeqNo()->SetGeneration(generation);
         auto* table = tx.MutableEnsureTables()->AddTables();
         table->SetPathId(pathId);
 
@@ -564,8 +565,10 @@ namespace NKikimr::NColumnShard {
 
     void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId,
                  const TestTableDescription& table = {}, TString codec = "none");
+    void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const NOlap::TSnapshot& snapshot, bool succeed = true);
 
     void PrepareTablet(TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema, const ui32 keySize = 1);
+    void PrepareTablet(TTestBasicRuntime& runtime, const TString& schemaTxBody, bool succeed);
 
     std::shared_ptr<arrow::RecordBatch> ReadAllAsBatch(TTestBasicRuntime& runtime, const ui64 tableId, const NOlap::TSnapshot& snapshot, const std::vector<NArrow::NTest::TTestColumn>& schema);
 }

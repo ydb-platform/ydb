@@ -39,7 +39,7 @@ INormalizerTask::TPtr TPortionsNormalizer::BuildTask(std::vector<std::shared_ptr
     return std::make_shared<TTrivialNormalizerTask>(std::make_shared<TNormalizerResult>(std::move(portions), schemas));
 }
 
- TConclusion<bool> TPortionsNormalizer::DoInit(const TNormalizationController&, NTabletFlatExecutor::TTransactionContext& txc) {
+ TConclusion<bool> TPortionsNormalizer::DoInitImpl(const TNormalizationController&, NTabletFlatExecutor::TTransactionContext& txc) {
     using namespace NColumnShard;
 
     NIceDb::TNiceDb db(txc.DB);

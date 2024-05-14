@@ -50,6 +50,9 @@ private:
     mutable TAtomicCounter IndexWriteControllerBrokeCount;
     std::set<EBackground> DisabledBackgrounds;
 
+    TMutex ActiveTabletsMutex;
+    std::set<ui64> ActiveTablets;
+
     class TBlobInfo {
     private:
         const NOlap::TUnifiedBlobId BlobId;
@@ -277,6 +280,26 @@ public:
     }
 
     bool HasPKSortingOnly() const;
+
+    void OnSwitchToWork(const ui64 tabletId) override {
+        TGuard<TMutex> g(ActiveTabletsMutex);
+        ActiveTablets.emplace(tabletId);
+    }
+
+    void OnCleanupActors(const ui64 tabletId) override {
+        TGuard<TMutex> g(ActiveTabletsMutex);
+        ActiveTablets.erase(tabletId);
+    }
+
+    ui64 GetActiveTabletsCount() const {
+        TGuard<TMutex> g(ActiveTabletsMutex);
+        return ActiveTablets.size();
+    }
+
+    bool IsActiveTablet(const ui64 tabletId) const {
+        TGuard<TMutex> g(ActiveTabletsMutex);
+        return ActiveTablets.contains(tabletId);
+    }
 };
 
 }

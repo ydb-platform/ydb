@@ -6,8 +6,8 @@
 
 namespace NKikimr::NOlap {
 
-TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
-    auto initRes = DoInit(controller,txc);
+TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
+    auto initRes = DoInitImpl(controller,txc);
 
     if (initRes.IsFail()) {
         return initRes;
@@ -104,8 +104,6 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::Init(co
     if (package.size() > 0) {
         tasks.emplace_back(BuildTask(std::move(package), schemas));
     }
-
-    AtomicSet(ActiveTasksCount, tasks.size());
     ACFL_INFO("normalizer", "TPortionsNormalizer")("message", TStringBuilder() << brokenPortioncCount << " portions found");
     return tasks;
 }

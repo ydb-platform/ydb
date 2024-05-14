@@ -6,30 +6,6 @@ import ydb
 import uuid
 import subprocess
 
-"""
-CREATE TABLE binary_size (
-    id String NOT NULL,
-    github_head_ref String,
-    github_workflow String,
-    github_workflow_ref String,
-
-    github_sha String,
-    github_repository String,
-
-    github_event_name String,
-
-    github_ref_type String,
-    github_ref_name String,
-    github_ref String,
-
-    binary_path String,
-    size_bytes Uint64,
-    size_stripped_bytes Uint64,
-    build_type String,
-
-    PRIMARY KEY (id)
-)
-"""
 
 YDBD_PATH = "ydb/apps/ydbd/ydbd"
 
@@ -72,10 +48,14 @@ def sanitize_str(s):
 
 
 def main():
+    if "YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
+        print("Env variable YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping")
+        return 1
+
     with ydb.Driver(
         endpoint="grpcs://ydb.serverless.yandexcloud.net:2135",
         database="/ru-central1/b1ggceeul2pkher8vhb6/etn6d1qbals0c29ho4lf",
-        credentials=ydb.credentials_from_env_variables()  # see YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS,
+        credentials=ydb.credentials_from_env_variables()
     ) as driver:
         driver.wait(timeout=10, fail_fast=True)
         session = ydb.retry_operation_sync(
@@ -155,8 +135,8 @@ VALUES
             for k, v in parameters.items():
                 print("{}: {}".format(k, v))
 
-            result_sets = tx.execute(prepared_query, parameters, commit_tx=True)
+            tx.execute(prepared_query, parameters, commit_tx=True)
 
 
 if __name__ == "__main__":
-    main()
+    exit(main())

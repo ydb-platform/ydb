@@ -266,18 +266,9 @@ public:
     TDqsPipelineConfigurator(const TDqStatePtr& state, const THashMap<TString, TString>& providerParams)
         : State_(state)
         , ProviderParams_(providerParams)
-    {
-        for (const auto& ds: State_->TypeCtx->DataSources) {
-            if (const auto dq = ds->GetDqIntegration()) {
-                UniqIntegrations_.emplace(dq);
-            }
-        }
-        for (const auto& ds: State_->TypeCtx->DataSinks) {
-            if (const auto dq = ds->GetDqIntegration()) {
-                UniqIntegrations_.emplace(dq);
-            }
-        }
-    }
+        , UniqIntegrations_(GetUniqueIntegrations(*State_->TypeCtx))
+    {}
+
 private:
     void AfterCreate(TTransformationPipeline*) const final {}
 

@@ -124,4 +124,8 @@ TString KqpExprToPrettyString(const NNodes::TExprBase& expr, TExprContext& ctx);
 
 TString PrintKqpStageOnly(const NNodes::TDqStageBase& stage, TExprContext& ctx);
 
+class IGraphTransformer;
+struct TTypeAnnotationContext;
+TAutoPtr<IGraphTransformer> GetDqIntegrationPeepholeTransformer(bool beforeDqTransforms, TIntrusivePtr<TTypeAnnotationContext> typesCtx);
+
 } // namespace NYql

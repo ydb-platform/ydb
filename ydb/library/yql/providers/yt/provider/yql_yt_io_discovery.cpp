@@ -192,7 +192,7 @@ public:
                         return ctx.ChangeChild(readNode.Ref(), 2, InitializeWalkFolders(std::move(key), cluster, keyPos, ctx));
                     }
                     else if (key.GetWalkFolderImplArgs()) {
-                        Y_ENSURE(PendingWalkFoldersKeys_.contains(key.GetWalkFolderImplArgs()->StateKey));
+                        PendingWalkFoldersKeys_.insert(key.GetWalkFolderImplArgs()->StateKey);
                     }
                     else if (!key.IsAnonymous()) {
                         if (PendingCanonizations_.insert(std::make_pair(std::make_pair(cluster, key.GetPath()), paths.size())).second) {
@@ -707,7 +707,7 @@ private:
                     YQL_CLOG(INFO, ProviderYt) << "Failed to parse WalkFolderImpl args";
                     return {};
                 }
-                const auto instanceKey = parsedKey.GetWalkFolderImplArgs()->StateKey;
+                const ui64 instanceKey = parsedKey.GetWalkFolderImplArgs()->StateKey;
                 if (*PendingWalkFoldersKeys_.begin() != instanceKey) {
                     return readNode.Ptr();
                 }
@@ -865,7 +865,7 @@ private:
     TWalkFoldersImpl& GetCurrentWalkFoldersInstance() const {
         Y_ENSURE(!PendingWalkFoldersKeys_.empty());
         const auto key = PendingWalkFoldersKeys_.begin();
-        auto stateIt = State_->WalkFoldersState.find(key);
+        auto stateIt = State_->WalkFoldersState.find(*key);
         YQL_ENSURE(stateIt != State_->WalkFoldersState.end());
         return stateIt->second; 
     }
@@ -884,7 +884,7 @@ private:
     THashMap<std::pair<TString, TYtKey::TRange>, std::pair<TPosition, NThreading::TFuture<IYtGateway::TTableRangeResult>>> PendingRanges_;
     THashMap<std::pair<TString, TYtKey::TFolderList>, std::pair<TPosition, NThreading::TFuture<IYtGateway::TFolderResult>>> PendingFolders_;
     THashMap<std::pair<TString, TString>, size_t> PendingCanonizations_; // cluster, original table path -> positions in canon result
-    THashSet<ui64> PendingWalkFoldersKeys_;
+    TSet<ui64> PendingWalkFoldersKeys_;
     NThreading::TFuture<IYtGateway::TCanonizePathsResult> CanonizeFuture_;
     NThreading::TFuture<void> CanonizationRangesFoldersFuture_;
 

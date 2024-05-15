@@ -2,6 +2,8 @@
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
 #include <ydb/core/blobstorage/vdisk/skeleton/blobstorage_skeletonfront.h>
 
+const int SOME = 42;
+
 namespace NKikimr {
 
     IActor* CreateVDisk(const TIntrusivePtr<TVDiskConfig> &cfg,

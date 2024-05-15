@@ -541,67 +541,6 @@ std::unique_ptr<typename TTraits::TResult> MakeStringBlockReaderImpl(bool isOpti
     }
 }
 
-namespace {
-template <typename TTraits>
-std::unique_ptr<typename TTraits::TResult> UnsupportedDataBlockReader(bool) {
-    Y_ENSURE(false, "Unsupported data slot");
-    return nullptr;
-}
-}
-
-template <typename TTraits>
-constexpr auto GetDataBlockReaderMaker(EDataSlot slot) {
-    switch (slot) {
-    case NUdf::EDataSlot::Int8:
-        return &MakeFixedSizeBlockReaderImpl<TTraits, i8>;
-    case NUdf::EDataSlot::Bool:
-    case NUdf::EDataSlot::Uint8:
-        return &MakeFixedSizeBlockReaderImpl<TTraits, ui8>;
-    case NUdf::EDataSlot::Int16:
-        return &MakeFixedSizeBlockReaderImpl<TTraits, i16>;
-    case NUdf::EDataSlot::Uint16:
-    case NUdf::EDataSlot::Date:
-        return &MakeFixedSizeBlockReaderImpl<TTraits, ui16>;
-    case NUdf::EDataSlot::Int32:
-    case NUdf::EDataSlot::Date32:
-        return &MakeFixedSizeBlockReaderImpl<TTraits, i32>;
-    case NUdf::EDataSlot::Uint32:
-    case NUdf::EDataSlot::Datetime:
-        return &MakeFixedSizeBlockReaderImpl<TTraits, ui32>;
-    case NUdf::EDataSlot::Int64:
-    case NUdf::EDataSlot::Interval:
-    case NUdf::EDataSlot::Interval64:
-    case NUdf::EDataSlot::Datetime64:
-    case NUdf::EDataSlot::Timestamp64:
-        return &MakeFixedSizeBlockReaderImpl<TTraits, i64>;
-    case NUdf::EDataSlot::Uint64:
-    case NUdf::EDataSlot::Timestamp:
-        return &MakeFixedSizeBlockReaderImpl<TTraits, ui64>;
-    case NUdf::EDataSlot::Float:
-        return &MakeFixedSizeBlockReaderImpl<TTraits, float>;
-    case NUdf::EDataSlot::Double:
-        return &MakeFixedSizeBlockReaderImpl<TTraits, double>;
-    case NUdf::EDataSlot::String:
-        return &MakeStringBlockReaderImpl<TTraits, arrow::BinaryType, NUdf::EDataSlot::String>;
-    case NUdf::EDataSlot::Yson:
-        return &MakeStringBlockReaderImpl<TTraits, arrow::BinaryType, NUdf::EDataSlot::Yson>;
-    case NUdf::EDataSlot::JsonDocument:
-        return &MakeStringBlockReaderImpl<TTraits, arrow::BinaryType, NUdf::EDataSlot::JsonDocument>;
-    case NUdf::EDataSlot::Utf8:
-        return &MakeStringBlockReaderImpl<TTraits, arrow::StringType, NUdf::EDataSlot::Utf8>;
-    case NUdf::EDataSlot::Json:
-        return &MakeStringBlockReaderImpl<TTraits, arrow::StringType, NUdf::EDataSlot::Json>;
-    case NUdf::EDataSlot::TzDate:
-        return &TTraits::template MakeTzDate<TTzDate>;
-    case NUdf::EDataSlot::TzDatetime:
-        return &TTraits::template MakeTzDate<TTzDatetime>;
-    case NUdf::EDataSlot::TzTimestamp:
-        return &TTraits::template MakeTzDate<TTzTimestamp>;
-    default: 
-        return &UnsupportedDataBlockReader<TTraits>;
-    }
-}
-
 template <typename TTraits>
 std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHelper& typeInfoHelper, const TType* type, const IPgBuilder* pgBuilder) {
     const TType* unpacked = type;
@@ -668,9 +607,50 @@ std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHe
 
     TDataTypeInspector typeData(typeInfoHelper, type);
     if (typeData) {
-        const auto typeId = typeData.GetTypeId();
-        const auto makeBlockReaderImpl = GetDataBlockReaderMaker<TTraits>(GetDataSlot(typeId));
-        return makeBlockReaderImpl(isOptional);
+        auto typeId = typeData.GetTypeId();
+        switch (GetDataSlot(typeId)) {
+        case NUdf::EDataSlot::Int8:
+            return MakeFixedSizeBlockReaderImpl<TTraits, i8>(isOptional);
+        case NUdf::EDataSlot::Bool:
+        case NUdf::EDataSlot::Uint8:
+            return MakeFixedSizeBlockReaderImpl<TTraits, ui8>(isOptional);
+        case NUdf::EDataSlot::Int16:
+            return MakeFixedSizeBlockReaderImpl<TTraits, i16>(isOptional);
+        case NUdf::EDataSlot::Uint16:
+        case NUdf::EDataSlot::Date:
+            return MakeFixedSizeBlockReaderImpl<TTraits, ui16>(isOptional);
+        case NUdf::EDataSlot::Int32:
+        case NUdf::EDataSlot::Date32:
+            return MakeFixedSizeBlockReaderImpl<TTraits, i32>(isOptional);
+        case NUdf::EDataSlot::Uint32:
+        case NUdf::EDataSlot::Datetime:
+            return MakeFixedSizeBlockReaderImpl<TTraits, ui32>(isOptional);
+        case NUdf::EDataSlot::Int64:
+        case NUdf::EDataSlot::Interval:
+        case NUdf::EDataSlot::Interval64:
+        case NUdf::EDataSlot::Datetime64:
+        case NUdf::EDataSlot::Timestamp64:
+            return MakeFixedSizeBlockReaderImpl<TTraits, i64>(isOptional);
+        case NUdf::EDataSlot::Uint64:
+        case NUdf::EDataSlot::Timestamp:
+            return MakeFixedSizeBlockReaderImpl<TTraits, ui64>(isOptional);
+        case NUdf::EDataSlot::Float:
+            return MakeFixedSizeBlockReaderImpl<TTraits, float>(isOptional);
+        case NUdf::EDataSlot::Double:
+            return MakeFixedSizeBlockReaderImpl<TTraits, double>(isOptional);
+        case NUdf::EDataSlot::String:
+            return MakeStringBlockReaderImpl<TTraits, arrow::BinaryType, NUdf::EDataSlot::String>(isOptional);
+        case NUdf::EDataSlot::Yson:
+            return MakeStringBlockReaderImpl<TTraits, arrow::BinaryType, NUdf::EDataSlot::Yson>(isOptional);
+        case NUdf::EDataSlot::JsonDocument:
+            return MakeStringBlockReaderImpl<TTraits, arrow::BinaryType, NUdf::EDataSlot::JsonDocument>(isOptional);
+        case NUdf::EDataSlot::Utf8:
+            return MakeStringBlockReaderImpl<TTraits, arrow::StringType, NUdf::EDataSlot::Utf8>(isOptional);
+        case NUdf::EDataSlot::Json:
+            return MakeStringBlockReaderImpl<TTraits, arrow::StringType, NUdf::EDataSlot::Json>(isOptional);
+        default:
+            Y_ENSURE(false, "Unsupported data slot");
+        }
     }
 
     TResourceTypeInspector resource(typeInfoHelper, type);

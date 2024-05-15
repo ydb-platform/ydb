@@ -544,14 +544,6 @@ public:
     void DoAddNotNull(TBlockItem value, size_t count) {
         std::fill(this->DataPtr + this->GetCurrLen(), this->DataPtr + this->GetCurrLen() + count, value.Get<TLayout>());
     }
-
-    using TBase::Add;
-
-    void Add(TLayout&& value) {
-        Y_DEBUG_ABORT_UNLESS(this->GetCurrLen() < this->MaxLen);
-        this->PlaceItem(std::move(value));
-        this->SetCurrLen(this->GetCurrLen() + 1);
-    }
 };
 
 template<bool Nullable>
@@ -1178,12 +1170,12 @@ public:
     
     void AddToChildren(NUdf::TUnboxedValuePod value) {
         DateBuilder_.Add(value);
-        TimezoneBuilder_.Add(value.GetTimezoneId());
+        TimezoneBuilder_.Add(TBlockItem(value.GetTimezoneId()));
     }
     
     void AddToChildren(TBlockItem value) {
         DateBuilder_.Add(value);
-        TimezoneBuilder_.Add(value.GetTimezoneId());
+        TimezoneBuilder_.Add(TBlockItem(value.GetTimezoneId()));
     }
 
     void AddToChildren(TInputBuffer& input) {

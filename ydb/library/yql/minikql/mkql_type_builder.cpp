@@ -1467,8 +1467,15 @@ bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& ty
         type = MakeTzDateArrowType<NYql::NUdf::EDataSlot::TzTimestamp>();
         return true;
     }
-    default:
+    case NUdf::EDataSlot::Uuid: {
         return false;
+    }
+    case NUdf::EDataSlot::Decimal: {
+        return false;
+    }
+    case NUdf::EDataSlot::DyNumber: {
+        return false;
+    }
     }
 }
 
@@ -2433,8 +2440,15 @@ size_t CalcMaxBlockItemSize(const TType* type) {
             return sizeof(typename NUdf::TDataType<NUdf::TTzDatetime>::TLayout) + sizeof(NYql::NUdf::TTimezoneId);
         case NUdf::EDataSlot::TzTimestamp:
             return sizeof(typename NUdf::TDataType<NUdf::TTzTimestamp>::TLayout) + sizeof(NYql::NUdf::TTimezoneId);
-        default:
+        case NUdf::EDataSlot::Uuid: {
             MKQL_ENSURE(false, "Unsupported data slot: " << slot);
+        }
+        case NUdf::EDataSlot::Decimal: {
+            MKQL_ENSURE(false, "Unsupported data slot: " << slot);
+        }
+        case NUdf::EDataSlot::DyNumber: {
+            MKQL_ENSURE(false, "Unsupported data slot: " << slot);
+        }
         }
     }
 

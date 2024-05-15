@@ -212,7 +212,7 @@ public:
                 return {};
             }
         }
-        return static_cast<TDerived*>(this)->GetChildrenNotNullItems(data, index);
+        return static_cast<TDerived*>(this)->GetChildrenItems(data, index);
     }
 
     TBlockItem GetScalarItem(const arrow::Scalar& scalar) final {
@@ -223,7 +223,7 @@ public:
         }
 
         const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(scalar);
-        return static_cast<TDerived*>(this)->GetChildrenNotNullScalarItems(structScalar);
+        return static_cast<TDerived*>(this)->GetChildrenScalarItems(structScalar);
     }
 
     ui64 GetDataWeight(const arrow::ArrayData& data) const final {
@@ -257,7 +257,7 @@ public:
             out.PushChar(1);
         }
 
-        static_cast<const TDerived*>(this)->SaveChildrenNotNullItems(data, index, out);
+        static_cast<const TDerived*>(this)->SaveChildrenItems(data, index, out);
     }
 
     void SaveScalarItem(const arrow::Scalar& scalar, TOutputBuffer& out) const final {
@@ -270,7 +270,7 @@ public:
 
         const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(scalar);
 
-        static_cast<const TDerived*>(this)->SaveChildrenNotNullScalarItems(structScalar, out);
+        static_cast<const TDerived*>(this)->SaveChildrenScalarItems(structScalar, out);
     }
 };
 
@@ -282,7 +282,7 @@ public:
         , Items(Children.size())
     {}
 
-    TBlockItem GetChildrenNotNullItems(const arrow::ArrayData& data, size_t index) {
+    TBlockItem GetChildrenItems(const arrow::ArrayData& data, size_t index) {
         for (ui32 i = 0; i < Children.size(); ++i) {
             Items[i] = Children[i]->GetItem(*data.child_data[i], index);
         }
@@ -290,7 +290,7 @@ public:
         return TBlockItem(Items.data());
     }
 
-    TBlockItem GetChildrenNotNullScalarItems(const arrow::StructScalar& structScalar) {
+    TBlockItem GetChildrenScalarItems(const arrow::StructScalar& structScalar) {
         for (ui32 i = 0; i < Children.size(); ++i) {
             Items[i] = Children[i]->GetScalarItem(*structScalar.value[i]);
         }
@@ -326,15 +326,6 @@ public:
 
         return size;
     }
-    
-    size_t GetChildrenDataWeight(const TBlockItem* items) const {
-        size_t size = 0;
-        for (ui32 i = 0; i < Children.size(); ++i) {
-            size += Children[i]->GetDataWeight(items[i]);
-        }
-
-        return size;
-    }
 
     size_t GetChildrenDefaultDataWeight() const {
         size_t size = 0;
@@ -344,13 +335,13 @@ public:
         return size;
     }
 
-    void SaveChildrenNotNullItems(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const {
+    void SaveChildrenItems(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const {
         for (ui32 i = 0; i < Children.size(); ++i) {
             Children[i]->SaveItem(*data.child_data[i], index, out);
         }
     }
     
-    void SaveChildrenNotNullScalarItems(const arrow::StructScalar& structScalar, TOutputBuffer& out) const {
+    void SaveChildrenScalarItems(const arrow::StructScalar& structScalar, TOutputBuffer& out) const {
         for (ui32 i = 0; i < Children.size(); ++i) {
             Children[i]->SaveScalarItem(*structScalar.value[i], out);
         }
@@ -364,7 +355,7 @@ private:
 template<typename TTzDate, bool Nullable>
 class TTzDateBlockReader final : public TTupleBlockReaderBase<Nullable, TTzDateBlockReader<TTzDate, Nullable>> {
 public:
-    TBlockItem GetChildrenNotNullItems(const arrow::ArrayData& data, size_t index) {
+    TBlockItem GetChildrenItems(const arrow::ArrayData& data, size_t index) {
         Y_DEBUG_ABORT_UNLESS(data.child_data.size() == 2);
 
         TBlockItem item {DateReader_.GetItem(*data.child_data[0], index)};
@@ -372,7 +363,7 @@ public:
         return item;
     }
 
-    TBlockItem GetChildrenNotNullScalarItems(const arrow::StructScalar& structScalar) {
+    TBlockItem GetChildrenScalarItems(const arrow::StructScalar& structScalar) {
         Y_DEBUG_ABORT_UNLESS(structScalar.value.size() == 2);
 
         TBlockItem item {DateReader_.GetScalarItem(*structScalar.value[0])};
@@ -405,12 +396,12 @@ public:
         return size;
     }
 
-    void SaveChildrenNotNullItems(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const {
+    void SaveChildrenItems(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const {
         DateReader_.SaveItem(*data.child_data[0], index, out);
         TimezoneReader_.SaveItem(*data.child_data[1], index, out);
     }
     
-    void SaveChildrenNotNullScalarItems(const arrow::StructScalar& structScalar, TOutputBuffer& out) const {
+    void SaveChildrenScalarItems(const arrow::StructScalar& structScalar, TOutputBuffer& out) const {
         DateReader_.SaveScalarItem(*structScalar.value[0], out);
         TimezoneReader_.SaveScalarItem(*structScalar.value[1], out);
     }

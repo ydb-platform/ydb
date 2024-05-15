@@ -558,6 +558,25 @@ Fault tolerance<br>mode | Fail<br>domain | Fail<br>realm | Number of<br>data cen
 `mirror-3-dc` | Rack | Data center | 3 | 4 in each data center | Can stand a failure of a data center and 1 rack in one of the two other data centers
 `mirror-3-dc` | Server | Data center | 3 | Doesn't matter | Can stand a failure of a data center and 1 server in one of the two other data centers
 
+## Node Broker Configuration {#node-broker-config}
+
+Node Broker is a system tablet that is responsible for registering dynamic nodes in the {{ ydb-short-name }} cluster.
+
+Node Broker can automatically generate names for dynamic nodes, which identify the node within the tenant and are displayed in metrics instead of the host name. If a dynamic node has been shut down, after a timeout its name can be taken by a new dynamic node. This allows node names to be reused when host names are changed.
+
+To enable automatic node name generation, you need to add the following to the configuration:
+
+```yaml
+feature_flags:
+  enable_dynamic_node_name_generation: true
+```
+
+The node name consists of a prefix and the sequential number of the node within the tenant. By default, the prefix is `slot-`. To override the prefix, you need to add the following to the configuration:
+
+```yaml
+node_broker_config:
+  node_name_prefix: <new prefix>
+```
 
 ## Sample cluster configurations {#examples}
 

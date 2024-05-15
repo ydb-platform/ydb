@@ -41,7 +41,7 @@ inputs:
     type: boolean
     required: true
     description: If true, compares build graphs between the current and previous commits to find a list of modules to build.
-    folder_prefix:
+  folder_prefix:
     type: string
     default: "ya-"
   put_build_results_to_cache:

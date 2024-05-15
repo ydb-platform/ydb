@@ -63,16 +63,12 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
             std::memcpy(currStrPtr, IColumnsVals[i].data(), IColumnsVals[i].size() );
             currStrPtr+=IColumnsVals[i].size();
         }
-
-
     }
-
 
     TempTuple[0] &= ui64(0x1); // Setting only nulls in key bit, all other bits are ignored for key hash
     for (ui32 i = 1; i < NullsBitmapSize_; i ++) {
         TempTuple[i] = 0;
     }
-
 
     XXH64_hash_t hash = XXH64(TempTuple.data() + NullsBitmapSize_, (TempTuple.size() - NullsBitmapSize_) * sizeof(ui64), 0);
 
@@ -80,35 +76,31 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
 
     ui64 bucket = hash & BucketsMask;
 
-    
-
     std::vector<ui64, TMKQLAllocator<ui64>> & keyIntVals = TableBuckets[bucket].KeyIntVals;
     std::vector<ui32, TMKQLAllocator<ui32>> & stringsOffsets = TableBuckets[bucket].StringsOffsets;
     std::vector<ui64, TMKQLAllocator<ui64>> & dataIntVals = TableBuckets[bucket].DataIntVals;
     std::vector<char, TMKQLAllocator<char>> & stringVals = TableBuckets[bucket].StringsValues;
     KeysHashTable & kh = TableBuckets[bucket].AnyHashTable;
 
-    ui32 offset = keyIntVals.size(); // Offset of tuple inside the keyIntVals vector
+    ui32 offset = TableBucketsStats[bucket].KeyIntValsTotalSize; // Offset of tuple inside the keyIntVals vector
+    ui32 localOffset = keyIntVals.size();
 
     keyIntVals.push_back(hash);
     keyIntVals.insert(keyIntVals.end(), intColumns, intColumns + NullsBitmapSize_);
     keyIntVals.insert(keyIntVals.end(), TempTuple.begin() + NullsBitmapSize_, TempTuple.end());
 
-
-
     if (IsAny_) {
-        if ( !AddKeysToHashTable(kh, keyIntVals.begin() + offset) ) {
-            keyIntVals.resize(offset);
+        if ( !AddKeysToHashTable(kh, keyIntVals.begin() + localOffset) ) {
+            keyIntVals.resize(localOffset);
             return;
         }
     }
-
 
     TableBucketsStats[bucket].TuplesNum++;
 
     if (NumberOfStringColumns || NumberOfIColumns ) {
         stringsOffsets.push_back(offset); // Adding offset to tuple in keyIntVals vector
-        stringsOffsets.push_back(stringVals.size());  // Adding offset to string values
+        stringsOffsets.push_back(TableBucketsStats[bucket].StringValuesTotalSize);  // Adding offset to string values
 
 
         // Adding strings sizes for keys and data
@@ -126,9 +118,7 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
                 stringsOffsets.push_back(IColumnsVals[i].size());
             }
         }
-
     }
-
 
     // Adding data values
     ui64 * dataColumns = intColumns + NullsBitmapSize_ + NumberOfKeyIntColumns;
@@ -145,10 +135,7 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
 
     for ( ui64 i = 0; i < NumberOfDataIColumns; i++) {
         stringVals.insert( stringVals.end(), IColumnsVals[NumberOfKeyIColumns + i].begin(), IColumnsVals[NumberOfKeyIColumns + i].end());
-
     }
-
-
 }
 
 void TTable::ResetIterator() {

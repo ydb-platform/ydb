@@ -610,7 +610,7 @@ namespace {
             } else {
                 return client.StreamExecuteQuery(
                     query,
-                    NQuery::TTxControl::BeginTx().CommitTx(),
+                    NQuery::TTxControl::NoTx().CommitTx(),
                     settings
                 );
             }

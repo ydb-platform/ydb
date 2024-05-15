@@ -14,6 +14,13 @@ TProgramFactory::TProgramFactory(const TProgramFactoryOptions& options)
 {
     EnsureLoggingInitialized();
 
+    if (!TryFromString(Options_.BlockEngineSettings, BlockEngineMode_)) {
+        ythrow TCompileError("", "") << "Unknown BlockEngineSettings value: expected "
+                                     << GetEnumAllNames<EBlockEngineMode>()
+                                     << ", but got: "
+                                     << Options_.BlockEngineSettings;
+    }
+
     NUserData::TUserData::UserDataToLibraries(Options_.UserData_, Modules_);
 
     UserData_ = GetYqlModuleResolver(ExprContext_, ModuleResolver_, Options_.UserData_, {}, {});

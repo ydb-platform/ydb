@@ -83,7 +83,7 @@ runs:
         build_preset: ${{ inputs.build_preset }}
 
     - name: Generate ya.make with affected test suites and modules list
-      if: inputs.increment == 'true' || increment_build == 'true'
+      if: inputs.increment == 'true' || inputs.increment_build == 'true'
       uses: ./.github/actions/graph_compare
  
     - name: Change target in case of incremental (tests)

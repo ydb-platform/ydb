@@ -3,6 +3,7 @@ import sys
 import signal
 import traceback
 import html
+import math
 from pathlib import Path
 
 import cyson as yson
@@ -93,15 +94,19 @@ def main():
                                 val = valData[row][col]
                                 ref = refData[row][col]
                                 if isOptional:
-                                    if len(ref) == 0:
-                                        assert len(val) == 0, 'NULL != NOT NULL at {}, {}'.format(row, col)
+                                    if ref is None:
+                                        assert val is None, 'NULL != NOT NULL at {}, {}'.format(row, col)
                                         continue
-                                    assert len(val) == 1, 'NOT NULL != NULL at {}, {}'.format(row, col)
+                                    assert val is not None, 'NOT NULL != NULL at {}, {}'.format(row, col)
                                     ref = ref[0]
                                     val = val[0]
                                 if isDouble:
                                     val = float(val)
                                     ref = float(ref)
+                                    if math.isnan(val):
+                                        assert math.isnan(ref), '{} != {} at {}, {}'.format(val, ref, row, col)
+                                        continue
+                                    assert not math.isnan(ref), '{} != {} at {}, {}'.format(val, ref, row, col)
                                     assert abs(val - ref) <= 1e-5*max(abs(val), abs(ref), 1), 'abs({} - {}) >= eps at {}, {}'.format(val, ref, row, col)
                                 else:
                                     assert val == ref, '{} != {} type {} at {}, {}'.format(val, ref, stypes[col][1][1], row, col)

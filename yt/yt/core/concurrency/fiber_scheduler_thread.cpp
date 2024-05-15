@@ -897,6 +897,10 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+std::atomic<bool> ShutdownManagerPrepared_ = false;
+
+////////////////////////////////////////////////////////////////////////////////
+
 TFiberSchedulerThread::TFiberSchedulerThread(
     TString threadGroupName,
     TString threadName,
@@ -910,6 +914,10 @@ void TFiberSchedulerThread::ThreadMain()
 {
     // Hold this strongly.
     auto this_ = MakeStrong(this);
+
+    if (!ShutdownManagerPrepared_.exchange(true, std::memory_order::relaxed)) {
+        EnsureSafeShutdown();
+    }
 
     try {
         YT_LOG_DEBUG("Thread started (Name: %v)",

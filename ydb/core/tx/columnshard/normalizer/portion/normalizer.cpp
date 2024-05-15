@@ -52,7 +52,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::Init(co
             if (!columnsFilter.empty() && !columnsFilter.contains(loadContext.GetAddress().GetColumnId())) {
                 return;
             }
-            auto it = portions.find(portion.GetPortionIdVerified());
+            auto it = portions.find(portion.GetPortionId());
             if (it == portions.end()) {
                 Y_ABORT_UNLESS(portion.Records.empty());
                 (*schemas)[portion.GetPortionId()] = currentSchema;
@@ -70,7 +70,6 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::Init(co
             Y_ABORT_UNLESS(index == 0);
 
             portion.SetPathId(rowset.GetValue<Schema::IndexColumns::PathId>());
-
             portion.SetMinSnapshotDeprecated(NOlap::TSnapshot(rowset.GetValue<Schema::IndexColumns::PlanStep>(), rowset.GetValue<Schema::IndexColumns::TxId>()));
             portion.SetPortion(rowset.GetValue<Schema::IndexColumns::Portion>());
             portion.SetDeprecatedGranuleId(rowset.GetValue<Schema::IndexColumns::Granule>());

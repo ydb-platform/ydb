@@ -17,5 +17,4 @@ runs:
         ${{ inputs.ci_ydb_service_account_key_file_credentials}}
         EOF
 
-        This env var interfere with tests, temporary disabled
         echo "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=$CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" >> $GITHUB_ENV

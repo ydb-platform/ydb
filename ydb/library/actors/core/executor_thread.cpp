@@ -201,9 +201,7 @@ namespace NActors {
         bool wasWorking = false;
         NHPTimer::STime hpnow = Ctx.HPStart;
         NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfElapsingTime(hpnow);
-        if (Y_LIKELY(hpprev < hpnow)) {
-            Ctx.AddElapsedCycles(ActorSystemIndex, hpnow - hpprev);
-        }
+        Ctx.AddElapsedCycles(ActorSystemIndex, hpnow - hpprev);
         NHPTimer::STime eventStart = Ctx.HPStart;
 
         for (; Ctx.ExecutedEvents < Ctx.EventsPerMailbox; ++Ctx.ExecutedEvents) {
@@ -268,9 +266,9 @@ namespace NActors {
                     if (mailbox->IsEmpty()) // was not-free and become free, we must reclaim mailbox
                         reclaimAsFree = true;
 
-                    if (Y_LIKELY(hpprev < hpnow)) {
-                        Ctx.AddEventProcessingStats(hpprev, hpnow, activityType, CurrentActorScheduledEventsCounter);
-                    }
+                    
+                    Ctx.AddElapsedCycles(activityType, hpnow - hpprev);
+                    Ctx.AddEventProcessingStats(eventStart, hpnow, activityType, CurrentActorScheduledEventsCounter);
                     NHPTimer::STime elapsed = hpnow - eventStart;
                     if (elapsed > 1000000) {
                         LwTraceSlowEvent(ev.Get(), evTypeForTracing, actorType, Ctx.PoolId, CurrentRecipient, NHPTimer::GetSeconds(elapsed) * 1000.0);
@@ -292,9 +290,7 @@ namespace NActors {
                     }
                     hpnow = GetCycleCountFast();
                     hpprev = TlsThreadContext->UpdateStartOfElapsingTime(hpnow);
-                    if (Y_LIKELY(hpprev < hpnow)) {
-                        Ctx.AddElapsedCycles(ActorSystemIndex, hpnow - hpprev);
-                    }
+                    Ctx.AddElapsedCycles(ActorSystemIndex, hpnow - hpprev);
                 }
                 eventStart = hpnow;
 
@@ -786,12 +782,10 @@ namespace NActors {
         NHPTimer::STime hpnow = GetCycleCountFast();
         ui64 activityType = TlsThreadCtx.ElapsingActorActivity.load(std::memory_order_acquire);
         NHPTimer::STime hpprev = TlsThreadCtx.UpdateStartOfElapsingTime(hpnow);
-        if (Y_LIKELY(hpprev < hpnow)) {
-            if (activityType == Max<ui64>()) {
-                Ctx.AddParkedCycles(hpnow - hpprev);
-            } else {
-                Ctx.AddElapsedCycles(activityType, hpnow - hpprev);
-            }
+        if (activityType == Max<ui64>()) {
+            Ctx.AddParkedCycles(hpnow - hpprev);
+        } else {
+            Ctx.AddElapsedCycles(activityType, hpnow - hpprev);
         }
         Ctx.GetCurrentStats(statsCopy);
     }
@@ -800,12 +794,10 @@ namespace NActors {
         NHPTimer::STime hpnow = GetCycleCountFast();
         ui64 activityType = TlsThreadCtx.ElapsingActorActivity.load(std::memory_order_acquire);
         NHPTimer::STime hpprev = TlsThreadCtx.UpdateStartOfElapsingTime(hpnow);
-        if (Y_LIKELY(hpprev < hpnow)) {
-            if (activityType == Max<ui64>()) {
-                Ctx.AddParkedCycles(hpnow - hpprev);
-            } else {
-                Ctx.AddElapsedCycles(activityType, hpnow - hpprev);
-            }
+        if (activityType == Max<ui64>()) {
+            Ctx.AddParkedCycles(hpnow - hpprev);
+        } else {
+            Ctx.AddElapsedCycles(activityType, hpnow - hpprev);
         }
         statsCopy = TExecutorThreadStats();
         statsCopy.Aggregate(SharedStats[poolId]);

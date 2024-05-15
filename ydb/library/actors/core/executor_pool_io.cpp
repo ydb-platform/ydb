@@ -39,9 +39,7 @@ namespace NActors {
             NHPTimer::STime hpnow = GetCycleCountFast();
             NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfElapsingTime(hpnow);
             TlsThreadContext->ElapsingActorActivity.store(Max<ui64>(), std::memory_order_release);
-            if (Y_LIKELY(hpprev < hpnow)) {
-                wctx.AddElapsedCycles(ActorSystemIndex, hpnow - hpprev);
-            }
+            wctx.AddElapsedCycles(ActorSystemIndex, hpnow - hpprev);
 
             if (threadCtx.WaitingPad.Park())
                 return 0;
@@ -49,9 +47,7 @@ namespace NActors {
             hpnow = GetCycleCountFast();
             hpprev = TlsThreadContext->UpdateStartOfElapsingTime(hpnow);
             TlsThreadContext->ElapsingActorActivity.store(ActorSystemIndex, std::memory_order_release);
-            if (Y_LIKELY(hpprev < hpnow)) {
-                wctx.AddElapsedCycles(ActorSystemIndex, hpnow - hpprev);
-            }
+            wctx.AddElapsedCycles(ActorSystemIndex, hpnow - hpprev);
         }
 
         while (!StopFlag.load(std::memory_order_acquire)) {

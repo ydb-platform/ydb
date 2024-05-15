@@ -98,7 +98,6 @@ namespace {
             ui64 significantChange,
             TInstant now,
             bool force,
-            TInstant& lastUpdate,
             const TCallback& callback)
     {
         bool haveChanges = false;
@@ -111,7 +110,6 @@ namespace {
                 auto [lit, inserted] = levels.insert({groupId, 0});
                 if (inserted || lit->second != levelVal || force) {
                     lit->second = levelVal;
-                    lastUpdate = now;
                     haveChanges = true;
                     // N.B. keep going so all levels are properly updated
                 }
@@ -146,14 +144,12 @@ bool TResourceMetricsSendState::FillChanged(TResourceMetricsValues& src, NKikimr
         if (levelCPU != LevelCPU || force) {
             metrics.SetCPU(cpu);
             LevelCPU = levelCPU;
-            LastUpdates.LastCPUUpdate = now;
             have = true;
         }
     } else if (force && src.CPU.IsValueObsolete(now)) {
         src.CPU.Set(0, now);
         metrics.SetCPU(0);
         LevelCPU = 0;
-        LastUpdates.LastCPUUpdate = now;
         have = true;
     }
 
@@ -163,14 +159,12 @@ bool TResourceMetricsSendState::FillChanged(TResourceMetricsValues& src, NKikimr
         if (levelMemory != LevelMemory || force) {
             metrics.SetMemory(memory);
             LevelMemory = levelMemory;
-            LastUpdates.LastMemoryUpdate = now;
             have = true;
         }
     } else if (force && src.Memory.IsValueObsolete(now)) {
         src.Memory.Set(0);
         metrics.SetMemory(0);
         LevelMemory = 0;
-        LastUpdates.LastMemoryUpdate = now;
         have = true;
     }
 
@@ -180,14 +174,12 @@ bool TResourceMetricsSendState::FillChanged(TResourceMetricsValues& src, NKikimr
         if (levelNetwork != LevelNetwork || force) {
             metrics.SetNetwork(network);
             LevelNetwork = levelNetwork;
-            LastUpdates.LastNetworkUpdate = now;
             have = true;
         }
     } else if (force && src.Network.IsValueObsolete(now)) {
         src.Network.Set(0, now);
         metrics.SetNetwork(0);
         LevelNetwork = 0;
-        LastUpdates.LastNetworkUpdate = now;
         have = true;
     }
 
@@ -199,7 +191,6 @@ bool TResourceMetricsSendState::FillChanged(TResourceMetricsValues& src, NKikimr
         if (levelStorage != LevelStorage || force) {
             metrics.SetStorage(storage);
             LevelStorage = levelStorage;
-            LastUpdates.LastStorageUpdate = now;
             have = true;
         }
     } else if (force) {
@@ -215,7 +206,6 @@ bool TResourceMetricsSendState::FillChanged(TResourceMetricsValues& src, NKikimr
         ui32 levelStorage = storage / SignificantChangeStorage;
         metrics.SetStorage(storage);
         LevelStorage = levelStorage;
-        LastUpdates.LastStorageUpdate = now;
         have = true;
     }
 
@@ -225,7 +215,6 @@ bool TResourceMetricsSendState::FillChanged(TResourceMetricsValues& src, NKikimr
         SignificantChangeThroughput,
         now,
         force,
-        LastUpdates.LastReadThroughputUpdate,
         [&metrics](TChannel channel, TGroupId groupId, ui64 value) {
             auto& throughput= *metrics.AddGroupReadThroughput();
             throughput.SetChannel(channel);
@@ -239,7 +228,6 @@ bool TResourceMetricsSendState::FillChanged(TResourceMetricsValues& src, NKikimr
         SignificantChangeThroughput,
         now,
         force,
-        LastUpdates.LastWriteThroughputUpdate,
         [&metrics](TChannel channel, TGroupId groupId, ui64 value) {
             auto& throughput= *metrics.AddGroupWriteThroughput();
             throughput.SetChannel(channel);
@@ -253,7 +241,6 @@ bool TResourceMetricsSendState::FillChanged(TResourceMetricsValues& src, NKikimr
         SignificantChangeIops,
         now,
         force,
-        LastUpdates.LastReadIopsUpdate,
         [&metrics](TChannel channel, TGroupId groupId, ui64 value) {
             auto& iops = *metrics.AddGroupReadIops();
             iops.SetChannel(channel);
@@ -267,7 +254,6 @@ bool TResourceMetricsSendState::FillChanged(TResourceMetricsValues& src, NKikimr
         SignificantChangeIops,
         now,
         force,
-        LastUpdates.LastWriteIopsUpdate,
         [&metrics](TChannel channel, TGroupId groupId, ui64 value) {
             auto& iops = *metrics.AddGroupWriteIops();
             iops.SetChannel(channel);
@@ -280,12 +266,16 @@ bool TResourceMetricsSendState::FillChanged(TResourceMetricsValues& src, NKikimr
 
 bool TResourceMetricsSendState::TryUpdate(TResourceMetricsValues& src, const TActorContext& ctx) {
     TInstant now = ctx.Now();
-    if (LastUpdates.LastAnyUpdate() + TDuration::Seconds(1) < now) {
+    if (LastAnyUpdate + TDuration::Seconds(1) < now) {
         return false; // too soon
     }
     NKikimrTabletBase::TMetrics values;
-    bool updated = FillChanged(src, values, now, now > LastUpdates.LastAllUpdate() + TDuration::Seconds(60));
+    bool force = LastAllUpdate + TDuration::Seconds(60) < now;
+    bool updated = FillChanged(src, values, now, force);
     if (updated) {
+        if (force) {
+            LastAllUpdate = now;
+        }
         ctx.Send(Launcher, new TEvLocal::TEvTabletMetrics(TabletId, FollowerId, values));
     }
     return updated;

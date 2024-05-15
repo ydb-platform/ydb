@@ -18,7 +18,7 @@ def main():
     data = []
     print('<tr><th>')
     for dirname in args:
-        for name in map(str, Path(dirname).glob('**/summary.tsv')):
+        for name in sorted(map(str, Path(dirname).glob('**/summary.tsv'))):
             name = str(name)
             with open(name) as f:
                 cmdline = f.readline()

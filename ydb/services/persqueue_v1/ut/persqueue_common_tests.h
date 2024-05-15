@@ -20,7 +20,7 @@
 
 #include <util/string/join.h>
 
-#include <grpc++/client_context.h>
+#include <grpcpp/client_context.h>
 
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>

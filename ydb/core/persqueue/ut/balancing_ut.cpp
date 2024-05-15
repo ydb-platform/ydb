@@ -71,8 +71,8 @@ Y_UNIT_TEST_SUITE(Balancing) {
             readSession3.WaitAndAssertPartitions({0}, "The reading session should read partitions 0 and 1 because it clearly required them to be read.");
             readSession2.WaitAndAssertPartitions({1}, "The reading session should read partitions 0 and 1 because it clearly required them to be read.");
 
-            auto p0 = readSession0.Partitions;
-            p0.insert(readSession1.Partitions.begin(), readSession1.Partitions.end());
+            auto p0 = readSession0.Impl->Partitions;
+            p0.insert(readSession1.Impl->Partitions.begin(), readSession1.Impl->Partitions.end());
             UNIT_ASSERT_VALUES_EQUAL_C(8, p0.size(), "Must read all partitions but " << p0);
         }
 

@@ -45,7 +45,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         readSession.WaitAllMessages();
 
-        for(const auto& info : readSession.ReceivedMessages) {
+        for(const auto& info : readSession.Impl->ReceivedMessages) {
             if (info.Data == "message_1.1") {
                 UNIT_ASSERT_EQUAL(0, info.PartitionId);
                 UNIT_ASSERT_EQUAL(2, info.SeqNo);
@@ -92,14 +92,14 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         readSession.WaitAndAssertPartitions({0}, "We are reading only one partition because offset is not commited");
         readSession.Run();
-        readSession.AutoCommit = true;
+        readSession.Impl->AutoCommit = true;
         readSession.Commit();
         readSession.WaitAndAssertPartitions({0, 1, 2}, "We are reading all partitions because offset is commited");
         readSession.Run();
 
         readSession.WaitAllMessages();
 
-        for(const auto& info : readSession.ReceivedMessages) {
+        for(const auto& info : readSession.Impl->ReceivedMessages) {
             if (info.Data == "message_1.1") {
                 UNIT_ASSERT_EQUAL(0, info.PartitionId);
                 UNIT_ASSERT_EQUAL(2, info.SeqNo);
@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             }
         }
 
-        UNIT_ASSERT_C(readSession.EndedPartitionEvents.empty(), "Old SDK is not support EndPartitionEvent");
+        UNIT_ASSERT_C(readSession.Impl->EndedPartitionEvents.empty(), "Old SDK is not support EndPartitionEvent");
 
         writeSession->Close(TDuration::Seconds(1));
         readSession.Close();
@@ -140,7 +140,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         readSession.WaitAllMessages();
 
-        for(const auto& info : readSession.ReceivedMessages) {
+        for(const auto& info : readSession.Impl->ReceivedMessages) {
             if (info.Data == "message_1.1") {
                 UNIT_ASSERT_EQUAL(0, info.PartitionId);
                 UNIT_ASSERT_EQUAL(2, info.SeqNo);
@@ -152,8 +152,8 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             }
         }
 
-        UNIT_ASSERT_VALUES_EQUAL_C(1, readSession.EndedPartitionEvents.size(), "Only one partition was ended");
-        auto& ev = readSession.EndedPartitionEvents.front();
+        UNIT_ASSERT_VALUES_EQUAL_C(1, readSession.Impl->EndedPartitionEvents.size(), "Only one partition was ended");
+        auto& ev = readSession.Impl->EndedPartitionEvents.front();
         UNIT_ASSERT_VALUES_EQUAL_C(std::vector<ui32>{}, ev.GetAdjacentPartitionIds(), "There isn`t adjacent partitions after split");
         std::vector<ui32> children = {1, 2};
         UNIT_ASSERT_VALUES_EQUAL_C(children, ev.GetChildPartitionIds(), "");
@@ -198,7 +198,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         Cerr << ">>>>> All messages received" << Endl;
 
-        for(const auto& info : readSession.ReceivedMessages) {
+        for(const auto& info : readSession.Impl->ReceivedMessages) {
             if (info.Data == "message_1.1") {
                 UNIT_ASSERT_EQUAL(0, info.PartitionId);
                 UNIT_ASSERT_EQUAL(2, info.SeqNo);
@@ -267,7 +267,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         readSession.WaitAllMessages();
 
-        for(const auto& info : readSession.ReceivedMessages) {
+        for(const auto& info : readSession.Impl->ReceivedMessages) {
             if (info.Data == TString("message_1.1")) {
                 UNIT_ASSERT_EQUAL(0, info.PartitionId);
                 UNIT_ASSERT_EQUAL(2, info.SeqNo);
@@ -283,13 +283,13 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         }
 
         if (autoscaleAwareSDK) {
-            UNIT_ASSERT_VALUES_EQUAL_C(2, readSession.EndedPartitionEvents.size(), "Two partition was ended which was merged");
-            for (auto& ev : readSession.EndedPartitionEvents) {
+            UNIT_ASSERT_VALUES_EQUAL_C(2, readSession.Impl->EndedPartitionEvents.size(), "Two partition was ended which was merged");
+            for (auto& ev : readSession.Impl->EndedPartitionEvents) {
                 UNIT_ASSERT(ev.GetAdjacentPartitionIds() == std::vector<ui32>{0} || ev.GetAdjacentPartitionIds() == std::vector<ui32>{1});
                 UNIT_ASSERT_VALUES_EQUAL_C(std::vector<ui32>{2}, ev.GetChildPartitionIds(), "");
             }
         } else {
-            UNIT_ASSERT_VALUES_EQUAL_C(0, readSession.EndedPartitionEvents.size(), "OLD SDK");
+            UNIT_ASSERT_VALUES_EQUAL_C(0, readSession.Impl->EndedPartitionEvents.size(), "OLD SDK");
         }
 
 
@@ -353,7 +353,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         readSession.WaitAndAssertPartitions({0}, "Must secondary read for check read from end");
         readSession.WaitAndAssertPartitions({}, "Partition must be released for secondary read because start not from the end of partition after 2 seconds");
 
-        readSession.Offsets[0] = 1;
+        readSession.SetOffset(0, 1);
         readSession.WaitAndAssertPartitions({0, 1, 2}, "Must read from all partitions because had been read from the end of partition");
 
         readSession.Close();
@@ -393,12 +393,12 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         SplitPartition(setup, ++txId, 0, "a");
 
         TTestReadSession readSession1("Session-0", client, Max<size_t>(), false, {0, 1, 2}, false);
-        readSession1.Offsets[0] = 1;
+        readSession1.SetOffset(0, 1);
         readSession1.WaitAndAssertPartitions({0, 1, 2}, "Must read all exists partitions because read the partition 0 from offset 1");
-        readSession1.Offsets[0] = 0;
+        readSession1.SetOffset(0, 0);
 
         TTestReadSession readSession2("Session-1", client, Max<size_t>(), false, {0}, false);
-        readSession2.Offsets[0] = 0;
+        readSession2.SetOffset(0, 0);
 
         readSession2.WaitAndAssertPartitions({0}, "Must read partition 0 because it defined in the readSession");
         readSession2.Run();

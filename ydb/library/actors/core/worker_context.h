@@ -140,7 +140,7 @@ namespace NActors {
             RelaxedStore(&Stats->ReceivedEvents, RelaxedLoad(&Stats->ReceivedEvents) + 1);
             RelaxedStore(&Stats->ReceivedEventsByActivity[activityType], RelaxedLoad(&Stats->ReceivedEventsByActivity[activityType]) + 1);
             RelaxedStore(&Stats->ScheduledEventsByActivity[activityType], RelaxedLoad(&Stats->ScheduledEventsByActivity[activityType]) + scheduled);
-            return std::max<i64>(0, elapsed);
+            return elapsed;
         }
 
         void UpdateActorsStats(size_t dyingActorsCnt) {

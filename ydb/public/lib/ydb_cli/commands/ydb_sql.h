@@ -31,6 +31,8 @@ private:
     TString Syntax;
     bool ExplainMode = false;
     bool ExplainAnalyzeMode = false;
+    bool ExecutionPlan = false;
+    bool RunAsync = false;
 };
 
 }

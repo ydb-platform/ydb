@@ -27,6 +27,13 @@ TCommandSql::TCommandSql(TString query, TString collectStatsMode)
 void TCommandSql::Config(TConfig& config) {
     TYdbCommand::Config(config);
     AddExamplesOption(config);
+    config.Opts->AddLongOption("async", "Execute script (query) asynchronously. "
+            "Operation will be started on server and its Id will be printed."
+            "To get operation status use \"ydb operation get\" command."
+            "To fetch query results use \"--fetch <operation_id>\" option of this command.")
+        .StoreTrue(&RunAsync);
+    config.Opts->AddLongOption("fetch", "Path to file with script (query) text").RequiredArgument("PATH")
+        .StoreResult(&QueryFile);
     config.Opts->AddLongOption("explain", "Execute explain request for the query. Shows query plan. "
             "The query is not actually executed, thus does not affect the database.")
         .StoreTrue(&ExplainMode);
@@ -34,12 +41,15 @@ void TCommandSql::Config(TConfig& config) {
             "Query results are ignored.\n"
             "Important! The query is actually executed, so any changes will be applied in the database.")
         .StoreTrue(&ExplainAnalyzeMode);
+    config.Opts->AddLongOption("execution-plan", "Show execution plan instead of logical plan. "
+            "Execution plan is more informative but less readable.")
+        .StoreTrue(&ExecutionPlan);
     config.Opts->AddLongOption("stats", "Statistics collection mode [none, basic, full, profile]\n"
             "Has no effect with analyze mode.")
         .RequiredArgument("[String]").StoreResult(&CollectStatsMode);
-    config.Opts->AddLongOption('q', "query", "Text of query to execute").RequiredArgument("[String]")
+    config.Opts->AddLongOption('s', "script", "Script (query) text to execute").RequiredArgument("[String]")
         .StoreResult(&Query);
-    config.Opts->AddLongOption('f', "file", "Path to file with query text").RequiredArgument("PATH")
+    config.Opts->AddLongOption('f', "file", "Path to file with script (query) text").RequiredArgument("PATH")
         .StoreResult(&QueryFile);
     config.Opts->AddLongOption("syntax", "Query syntax [yql, pg]")
         .RequiredArgument("[String]").DefaultValue("yql").StoreResult(&Syntax)
@@ -105,9 +115,14 @@ void TCommandSql::Parse(TConfig& config) {
                 break;
             }
         }
-        if (ExplainAnalyzeMode && (CollectStatsMode == "")) {
-            throw TMisuseException() << "Both mutually exclusive options \"Explain mode\" (\"--explain\") "
-                << "and \"Explain-analyze mode\" (\"--explain-analyze\") were provided.";
+        if (ExplainAnalyzeMode && (CollectStatsMode == "none" || CollectStatsMode == "basic")) {
+            throw TMisuseException() << "\"" << CollectStatsMode
+                << "\" stats collection mode is too low for Explain-analyze mode to  show any info";
+        }
+        if (ExecutionPlan && !ExplainMode
+                && (CollectStatsMode.Empty() || CollectStatsMode == "none"|| CollectStatsMode == "basic")) {
+            throw TMisuseException() << "--execution-plan has no effect with \"" << CollectStatsMode
+                << "\" stats collection mode. It's too low to show query plan.";
         }
     }
     if (QueryFile) {
@@ -240,10 +255,12 @@ bool TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
 
     if (plan) {
         if (!ExplainMode) {
-            Cout << Endl << "Full statistics:" << Endl;
+            Cout << Endl << "Query plan:" << Endl;
         }
-
-        TQueryPlanPrinter queryPlanPrinter(OutputFormat, /* analyzeMode */ true);
+        // TODO: get rid of pretty-table format, refactor TQueryPrinter to reflect that
+        EOutputFormat format = (OutputFormat == EOutputFormat::Default || OutputFormat == EOutputFormat::Pretty)
+            && !ExecutionPlan ? EOutputFormat::PrettyTable : OutputFormat;
+        TQueryPlanPrinter queryPlanPrinter(format, /* show actual costs */ !ExplainMode);
         queryPlanPrinter.Print(*plan);
     }
 

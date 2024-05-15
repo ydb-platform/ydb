@@ -75,20 +75,6 @@ The action can be performed if the checks are successful, and temporary locks ar
 
 The [ydbops](https://github.com/ydb-platform/ydbops) utility tool uses CMS for cluster maintenance without downtime. You can also use the CMS directly through the [gRPC API](https://github.com/ydb-platform/ydb/blob/main/ydb/public/api/grpc/draft/ydb_maintenance_v1.proto).
 
-### Take out a node for maintenance {#node-maintenance}
-
-{% note info "Functionality in development" %}
-
-Functionality is expected in upcoming versions of `ydbops`.
-
-{% endnote %}
-
-To take out a node for maintenance, you can use the command:
-```
-$ ydbops node maintenance --host <node_id>
-```
-When executing this command, `ydbops` will acquire an exclusive lock on the node in CMS.
-
 ### Rolling restart {##rolling-restart}
 
 To perform a rolling restart of the entire cluster, you can use the command:
@@ -97,4 +83,14 @@ $ ydbops restart --endpoint grpc://<cluster-fqdn> --availability-mode strong
 ```
 If your systemd unit name is different from the default one, you may need to override it with `--systemd-unit` flag.
 
-The `ydbops` utility will automatically create a maintenance task to restart the entire cluster using the given availability mode. As it progresses, `ydbops` will refresh the maintenance task and acquire exclusive locks on the nodes in the CMS until all nodes are restarted.
+The `ydbops` utility will automatically create a maintenance task to restart the entire cluster using the given availability mode. As it progresses, the `ydbops` will refresh the maintenance task and acquire exclusive locks on the nodes in the CMS until all nodes are restarted.
+
+### Take out a node for maintenance {#node-maintenance}
+
+{% note info "Functionality in development" %}
+
+Functionality is expected in upcoming versions of the `ydbops`.
+
+{% endnote %}
+
+To take out a node for maintenance, you can use the `ydbops` utility. When taking a node out, `ydbops` will acquire an exclusive lock on this node in CMS.

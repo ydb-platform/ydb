@@ -157,12 +157,11 @@ TMaybe<TString> SerializeRichYPathAttrs(const NYT::TRichYPath& richPath) {
 }
 
 void DeserializeRichYPathAttrs(const TString& serializedAttrs, NYT::TRichYPath& richPath) {
-    NYT::TNode attrsNode = NYT::NodeFromYsonString(serializedAttrs);
-    auto originalYPath = richPath.Path_;
-    NYT::TNode pathNode = "";
-    pathNode.Attributes() = attrsNode;
+    NYT::TNode pathNode;
+    NYT::TNodeBuilder pathNodeBuilder(&pathNode);
+    NYT::Serialize(richPath, &pathNodeBuilder);
+    NYT::MergeNodes(pathNode.Attributes(), NYT::NodeFromYsonString(serializedAttrs));
     NYT::Deserialize(richPath, pathNode);
-    richPath.Path_ = originalYPath;
 }
 
 IYtGateway::TCanonizedPath CanonizedPath(const TString& path) {

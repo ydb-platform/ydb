@@ -45,17 +45,16 @@ struct TKqpResourcesRequest {
 
 /// detailed information on allocation failure
 struct TKqpNotEnoughResources {
-    std::bitset<32> State;
+    NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason Status = NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR;
+    TString FailReason;
 
-    bool NotReady() const         { return State.test(0); }
-    bool QueryMemoryLimit() const { return State.test(1); }
-    bool ScanQueryMemory() const  { return State.test(2); }
-    bool DataQueryMemory() const  { return State.test(3); }
+    NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason GetStatus() const {
+        return Status;
+    }
 
-    void SetNotReady()         { State.set(0); }
-    void SetQueryMemoryLimit() { State.set(1); }
-    void SetScanQueryMemory()  { State.set(2); }
-    void SetDataQueryMemory()  { State.set(3); }
+    TString GetFailReason() const {
+        return FailReason;
+    }
 };
 
 /// local resources snapshot

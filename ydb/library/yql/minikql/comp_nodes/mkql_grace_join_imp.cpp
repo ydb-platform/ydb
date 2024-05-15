@@ -82,8 +82,8 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
     std::vector<char, TMKQLAllocator<char>> & stringVals = TableBuckets[bucket].StringsValues;
     KeysHashTable & kh = TableBuckets[bucket].AnyHashTable;
 
-    ui32 offset = TableBucketsStats[bucket].KeyIntValsTotalSize; // Offset of tuple inside the keyIntVals vector
-    ui32 localOffset = keyIntVals.size();
+    ui64 totalOffset = TableBucketsStats[bucket].KeyIntValsTotalSize; // Offset of tuple inside the keyIntVals vector
+    ui64 localOffset = keyIntVals.size();
 
     keyIntVals.push_back(hash);
     keyIntVals.insert(keyIntVals.end(), intColumns, intColumns + NullsBitmapSize_);
@@ -99,7 +99,7 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
     TableBucketsStats[bucket].TuplesNum++;
 
     if (NumberOfStringColumns || NumberOfIColumns ) {
-        stringsOffsets.push_back(offset); // Adding offset to tuple in keyIntVals vector
+        stringsOffsets.push_back(totalOffset); // Adding offset to tuple in keyIntVals vector
         stringsOffsets.push_back(TableBucketsStats[bucket].StringValuesTotalSize);  // Adding offset to string values
 
 
@@ -128,6 +128,7 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
     char ** dataStringsColumns = stringColumns + NumberOfKeyStringColumns;
     ui32 * dataStringsSizes = stringsSizes + NumberOfKeyStringColumns;
 
+    ui64 initialStringsSize = stringVals.size();
     for( ui64 i = 0; i < NumberOfDataStringColumns; i++) {
         ui32 currStringSize = *(dataStringsSizes + i);
         stringVals.insert(stringVals.end(), *(dataStringsColumns + i), *(dataStringsColumns + i) + currStringSize);
@@ -136,6 +137,9 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
     for ( ui64 i = 0; i < NumberOfDataIColumns; i++) {
         stringVals.insert( stringVals.end(), IColumnsVals[NumberOfKeyIColumns + i].begin(), IColumnsVals[NumberOfKeyIColumns + i].end());
     }
+
+    TableBucketsStats[bucket].KeyIntValsTotalSize += TempTuple.size();
+    TableBucketsStats[bucket].StringValuesTotalSize += stringVals.size() - initialStringsSize;
 }
 
 void TTable::ResetIterator() {

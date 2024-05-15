@@ -39,7 +39,8 @@ inputs:
   increment_build:
     # TODO: merge this input with 'increment'
     type: boolean
-    required: true
+    required: false
+    default: "false"
     description: If true, compares build graphs between the current and previous commits to find a list of modules to build.
   folder_prefix:
     type: string

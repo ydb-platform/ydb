@@ -19,7 +19,7 @@ except Exception:
 RE_DIGITS = re.compile(r'([0-9]+)')
 
 
-def run(argv, err, out):
+def run(argv, out, err):
 
     start_time = time_ns()
     pid = os.posix_spawn(argv[0], argv, {}, file_actions=(

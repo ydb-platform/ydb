@@ -1170,8 +1170,7 @@ public:
     static const int HIVE_SYNCHRONIZATION_PERIOD_MS = 10000;
 
     bool IsHiveSynchronizationPeriod(NKikimrHive::TEvResponseHiveInfo& hiveInfo) {
-        auto hiveUptime = hiveInfo.GetStartTimeTimestamp() - hiveInfo.GetResponseTimestamp();
-        return hiveUptime > HIVE_SYNCHRONIZATION_PERIOD_MS;
+        return hiveInfo.GetStartTimeTimestamp() + HIVE_SYNCHRONIZATION_PERIOD_MS < hiveInfo.GetResponseTimestamp();
     }
 
     void AggregateHiveInfo() {

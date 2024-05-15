@@ -667,7 +667,7 @@ void KqpNode::ExecuterLost() {
 
     for (auto& [taskId, computeActor] : CompFactory->Task2Actor) {
         auto abortEvent = Runtime->GrabEdgeEvent<TEvKqp::TEvAbortExecution>(computeActor.ActorId);
-        UNIT_ASSERT_VALUES_EQUAL("executer lost", abortEvent->Get()->Record.GetLegacyMessage());
+        UNIT_ASSERT_VALUES_EQUAL("executer lost: 1", abortEvent->Get()->Record.GetLegacyMessage());
     }
 
     {

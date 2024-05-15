@@ -292,8 +292,14 @@ private:
         LOG_D("TxId: " << txId << ", new compute tasks request from " << requester
             << " with " << msg.GetTasks().size() << " tasks: " << TasksIdsStr(msg.GetTasks()));
 
-        NKqpNode::TTasksRequest request;
-        request.Executer = ActorIdFromProto(msg.GetExecuterActorId());
+        auto now = TAppData::TimeProvider->Now();
+        NKqpNode::TTasksRequest request(txId, ActorIdFromProto(msg.GetExecuterActorId()), now);
+        auto& msgRtSettings = msg.GetRuntimeSettings();
+        if (msgRtSettings.GetTimeoutMs() > 0) {
+            // compute actor should not arm timer since in case of timeout it will receive TEvAbortExecution from Executer
+            auto timeout = TDuration::MilliSeconds(msgRtSettings.GetTimeoutMs());
+            request.Deadline = now + timeout + /* gap */ TDuration::Seconds(5);
+        }
 
         auto& bucket = GetStateBucketByTx(Buckets, txId);
 
@@ -385,14 +391,6 @@ private:
         memoryLimits.MkqlHeavyProgramMemoryLimit = Config.GetMkqlHeavyProgramMemoryLimit();
 
         NYql::NDq::TComputeRuntimeSettings runtimeSettingsBase;
-        auto& msgRtSettings = msg.GetRuntimeSettings();
-        if (msgRtSettings.GetTimeoutMs() > 0) {
-            // compute actor should not arm timer since in case of timeout it will receive TEvAbortExecution from Executer
-            auto timeout = TDuration::MilliSeconds(msgRtSettings.GetTimeoutMs());
-            request.Deadline = TAppData::TimeProvider->Now() + timeout + /* gap */ TDuration::Seconds(5);
-            bucket.InsertExpiringRequest(request.Deadline, txId, requester);
-        }
-
         runtimeSettingsBase.ExtraMemoryAllocationPool = memoryPool;
         runtimeSettingsBase.FailOnUndelivery = msgRtSettings.GetExecType() != NYql::NDqProto::TComputeRuntimeSettings::SCAN;
 
@@ -530,36 +528,30 @@ private:
         Counters->NodeServiceProcessCancelTime->Collect(timer.Passed() * SecToUsec);
     }
 
-    void TerminateTx(ui64 txId, const TString& reason) {
+    void TerminateTx(ui64 txId, const TString& reason, NYql::NDqProto::StatusIds_StatusCode status = NYql::NDqProto::StatusIds::UNSPECIFIED) {
         auto& bucket = GetStateBucketByTx(Buckets, txId);
         auto tasksToAbort = bucket.GetTasksByTxId(txId);
 
         if (!tasksToAbort.empty()) {
+            TStringBuilder finalReason;
+            finalReason << "node service cancelled the task, because it " << reason
+                << ", NodeId: "<< SelfId().NodeId()
+                << ", TxId: " << txId;
+
+            LOG_E(finalReason);
             for (const auto& [taskId, computeActorId]: tasksToAbort) {
-                auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::UNSPECIFIED,
-                    reason);
-                Send(computeActorId, abortEv.Release());
+                auto abortEv = std::make_unique<TEvKqp::TEvAbortExecution>(status, reason);
+                Send(computeActorId, abortEv.release());
             }
         }
     }
 
     void HandleWork(TEvents::TEvWakeup::TPtr& ev) {
         Schedule(TDuration::Seconds(1), ev->Release().Release());
-        std::vector<ui64> txIdsToFree;
         for (auto& bucket : *Buckets) {
             auto expiredRequests = bucket.ClearExpiredRequests();
             for (auto& cxt : expiredRequests) {
-                    LOG_D("txId: " << cxt.RequestId.TxId << ", requester: " << cxt.RequestId.Requester
-                        << ", execution timeout, request: " << cxt.Exists);
-                    if (!cxt.Exists) {
-                        // it is ok since in most cases requests is finished by exlicit TEvAbortExecution from their Executer
-                        LOG_I("txId: " << cxt.RequestId.TxId << ", requester: " << cxt.RequestId.Requester
-                            << ", unknown request");
-                        continue;
-                    }
-                    // don't send to executer and compute actors, they will be destroyed by TEvAbortExecution in that order:
-                    // KqpProxy -> SessionActor -> Executer -> ComputeActor
-                    ResourceManager()->FreeResources(cxt.RequestId.TxId);
+                TerminateTx(cxt.TxId, "reached execution deadline", NYql::NDqProto::StatusIds::TIMEOUT);
             }
         }
     }
@@ -627,9 +619,9 @@ private:
         switch (ev->Get()->SourceType) {
             case TEvKqpNode::TEvStartKqpTasksResponse::EventType: {
                 ui64 txId = ev->Cookie;
-                LOG_E("TxId: " << txId << ", executer lost: " << (int) ev->Get()->Reason);
-
-                TerminateTx(txId, "executer lost");
+                TStringBuilder reason;
+                reason << "executer lost: " << (int) ev->Get()->Reason;
+                TerminateTx(txId, reason, NYql::NDqProto::StatusIds::ABORTED);
                 break;
             }
 

@@ -386,7 +386,7 @@ def _setup_eslint(unit):
         "LINT-FILE-PROCESSING-TIME": str(ESLINT_FILE_PROCESSING_TIME_DEFAULT),
     }
 
-    _add_test(unit, "eslint.new", lint_files, deps, test_record, mod_dir)
+    _add_test(unit, "eslint", lint_files, deps, test_record, mod_dir)
     unit.set(["TEST_RECIPES_VALUE", user_recipes])
 
 

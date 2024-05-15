@@ -606,7 +606,7 @@ public:
             LOG_D(
                 "TS3FileQueueActor",
                 "HandleUpdateConsumersCount Reducing ConsumersCount by " << ev->Get()->Record.GetConsumersCountDelta() 
-                    << " to " << ConsumersCount << ", recieved from " << ev->Sender);
+                    << " to " << ConsumersCount << ", received from " << ev->Sender);
         }
         Send(ev->Sender, new TEvS3FileQueue::TEvAck(ev->Get()->Record.GetTransportMeta()));
     }

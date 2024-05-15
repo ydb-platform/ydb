@@ -47,7 +47,7 @@ namespace NActors {
             hpnow = GetCycleCountFast();
             hpprev = TlsThreadContext->UpdateStartOfElapsingTime(hpnow);
             TlsThreadContext->ElapsingActorActivity.store(ActorSystemIndex, std::memory_order_release);
-            wctx.AddElapsedCycles(ActorSystemIndex, hpnow - hpprev);
+            wctx.AddParkedCycles(hpnow - hpprev);
         }
 
         while (!StopFlag.load(std::memory_order_acquire)) {

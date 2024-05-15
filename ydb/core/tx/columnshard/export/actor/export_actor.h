@@ -48,14 +48,10 @@ protected:
         TBase::Send(*ScanActorId, new NKqp::TEvKqpCompute::TEvScanDataAck(FreeSpace, (ui64)TabletId, 1));
     }
 
-    virtual void OnSessionStateSaved() override {
-        AFL_VERIFY(ExportSession->IsFinished());
-        NYDBTest::TControllers::GetColumnShardController()->OnExportFinished();
-        Session->FinishActor();
-    }
+    virtual void OnSessionStateSaved() override;
 
     virtual void OnTxCompleted(const ui64 /*txId*/) override {
-        AFL_VERIFY(false);
+        Session->FinishActor();
     }
 
     virtual void OnSessionProgressSaved() override {

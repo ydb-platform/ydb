@@ -16,11 +16,29 @@ public:
     void Complete(const TActorContext& ctx) override;
     TTxType GetTxType() const override { return TXTYPE_WRITE; }
 
-
 private:
     TEvPrivate::TEvWriteBlobsResult::TPtr PutBlobResult;
     const ui32 TabletTxNo;
-    std::vector<std::unique_ptr<NActors::IEventBase>> Results;
+
+    class TReplyInfo {
+    private:
+        std::unique_ptr<NActors::IEventBase> Event;
+        TActorId DestinationForReply;
+    public:
+        TReplyInfo(std::unique_ptr<NActors::IEventBase>&& ev, const TActorId& destinationForReply)
+            : Event(std::move(ev))
+            , DestinationForReply(destinationForReply)
+        {
+
+        }
+
+        void DoSendReply(const TActorContext& ctx) {
+            ctx.Send(DestinationForReply, Event.release());
+        }
+    };
+
+    std::vector<TReplyInfo> Results;
+    std::vector<std::shared_ptr<TTxController::ITransactionOperator>> ResultOperators;
 
 
     bool InsertOneBlob(TTransactionContext& txc, const NOlap::TWideSerializedBatch& batch, const TWriteId writeId);

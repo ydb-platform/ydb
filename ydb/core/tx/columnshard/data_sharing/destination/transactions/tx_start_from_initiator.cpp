@@ -21,7 +21,8 @@ bool TTxConfirmFromInitiator::DoExecute(NTabletFlatExecutor::TTransactionContext
     NIceDb::TNiceDb db(txc.DB);
     Session->Confirm(true);
     db.Table<Schema::DestinationSessions>().Key(Session->GetSessionId())
-        .Update(NIceDb::TUpdate<Schema::DestinationSessions::Cursor>(Session->SerializeCursorToProto().SerializeAsString()));
+        .Update(NIceDb::TUpdate<Schema::DestinationSessions::Cursor>(Session->SerializeCursorToProto().SerializeAsString()))
+        .Update(NIceDb::TUpdate<Schema::DestinationSessions::Details>(Session->SerializeDataToProto().SerializeAsString()));
     return true;
 }
 

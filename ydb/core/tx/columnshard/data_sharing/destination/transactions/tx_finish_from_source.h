@@ -10,6 +10,7 @@ private:
     using TBase = TExtendedTransactionBase<NColumnShard::TColumnShard>;
     std::shared_ptr<TDestinationSession> Session;
     const TTabletId SourceTabletId;
+    bool Finished = false;
 protected:
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override;
     virtual void DoComplete(const TActorContext& ctx) override;

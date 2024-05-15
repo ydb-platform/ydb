@@ -7287,9 +7287,10 @@
     },
     {
         "TableId": 109,
-        "TableName": "View",
+        "TableName": "BackgroundSessions",
         "TableKey": [
-            1
+            1,
+            2
         ],
         "ColumnsAdded": [
             {

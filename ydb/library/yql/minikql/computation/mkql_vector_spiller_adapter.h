@@ -5,6 +5,7 @@
 #include <ydb/library/yql/minikql/defs.h>
 #include <ydb/library/yql/minikql/computation/mkql_spiller.h>
 #include <ydb/library/actors/util/rope.h>
+#include <ydb/library/yql/minikql/mkql_alloc.h>
 
 namespace NKikimr::NMiniKQL {
 

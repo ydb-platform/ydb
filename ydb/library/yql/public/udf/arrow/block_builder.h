@@ -76,18 +76,19 @@ public:
         std::vector<TBlockArrayTree::Ptr> Children;
     };
 
-    TArrayBuilderBase(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen)
+    TArrayBuilderBase(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen, size_t* totalAllocated)
         : ArrowType(std::move(arrowType))
         , Pool(&pool)
         , MaxLen(maxLen)
         , MaxBlockSizeInBytes(typeInfoHelper.GetMaxBlockBytes())
+        , TotalAllocated_(totalAllocated)
     {
         Y_ABORT_UNLESS(ArrowType);
         Y_ABORT_UNLESS(maxLen > 0);
     }
 
-    TArrayBuilderBase(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen)
-        : TArrayBuilderBase(typeInfoHelper, GetArrowType(typeInfoHelper, type), pool, maxLen)
+    TArrayBuilderBase(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen, size_t* totalAllocated)
+        : TArrayBuilderBase(typeInfoHelper, GetArrowType(typeInfoHelper, type), pool, maxLen, totalAllocated)
     {
     }
 
@@ -241,6 +242,10 @@ protected:
     virtual void DoAddMany(const arrow::ArrayData& array, const ui64* indexes, size_t count) = 0;
     virtual TBlockArrayTree::Ptr DoBuildTree(bool finish) = 0;
 
+    virtual void DoReserve() = 0;
+    // will be called immediately after DoReserve()
+    virtual size_t GetAllocatedSize() const = 0;
+
 private:
     static size_t CalcSliceSize(const TBlockArrayTree& tree) {
         if (tree.Payload.empty()) {
@@ -301,25 +306,39 @@ protected:
         CurrLen = len;
     }
 
+    void Reserve() {
+        DoReserve();
+        if (TotalAllocated_) {
+            *TotalAllocated_ += GetAllocatedSize();
+        }
+    }
+
+    void AddExtraAllocated(size_t bytes) {
+        if (TotalAllocated_) {
+            *TotalAllocated_ += bytes;
+        }
+    }
+
     const std::shared_ptr<arrow::DataType> ArrowType;
     arrow::MemoryPool* const Pool;
     const size_t MaxLen;
     const size_t MaxBlockSizeInBytes;
 private:
     size_t CurrLen = 0;
+    size_t* TotalAllocated_ = nullptr;
 };
 
 template<typename TLayout, bool Nullable, typename TDerived>
 class TFixedSizeArrayBuilderBase : public TArrayBuilderBase {
 public:
-    TFixedSizeArrayBuilderBase(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen)
-        : TArrayBuilderBase(typeInfoHelper, std::move(arrowType), pool, maxLen)
+    TFixedSizeArrayBuilderBase(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen, size_t* totalAllocated)
+        : TArrayBuilderBase(typeInfoHelper, std::move(arrowType), pool, maxLen, totalAllocated)
     {
         Reserve();
     }
 
-    TFixedSizeArrayBuilderBase(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen)
-        : TArrayBuilderBase(typeInfoHelper, type, pool, maxLen)
+    TFixedSizeArrayBuilderBase(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen, size_t* totalAllocated)
+        : TArrayBuilderBase(typeInfoHelper, type, pool, maxLen, totalAllocated)
     {
         Reserve();
     }
@@ -469,7 +488,7 @@ protected:
     TLayout* DataPtr = nullptr;
 
 private:
-    void Reserve() {
+    void DoReserve() final {
         DataBuilder = std::make_unique<TTypedBufferBuilder<TLayout>>(Pool);
         DataBuilder->Reserve(MaxLen + 1);
         DataPtr = DataBuilder->MutableData();
@@ -478,6 +497,16 @@ private:
             NullBuilder->Reserve(MaxLen + 1);
             NullPtr = NullBuilder->MutableData();
         }
+    }
+
+    size_t GetAllocatedSize() const final {
+        Y_ENSURE(DataBuilder);
+        size_t result = DataBuilder->Capacity();
+        if constexpr (Nullable) {
+            Y_ENSURE(NullBuilder);
+            result += NullBuilder->Capacity();
+        }
+        return result;
     }
 
     std::unique_ptr<TTypedBufferBuilder<ui8>> NullBuilder;
@@ -490,12 +519,12 @@ class TFixedSizeArrayBuilder final: public TFixedSizeArrayBuilderBase<TLayout, N
     using TDerived = TFixedSizeArrayBuilder<TLayout, Nullable>;
 
 public:
-    TFixedSizeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen)
-        : TFixedSizeArrayBuilderBase<TLayout, Nullable, TDerived>(typeInfoHelper, std::move(arrowType), pool, maxLen)
+    TFixedSizeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen, size_t* totalAllocated = nullptr)
+        : TFixedSizeArrayBuilderBase<TLayout, Nullable, TDerived>(typeInfoHelper, std::move(arrowType), pool, maxLen, totalAllocated)
     {}
 
-    TFixedSizeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen)
-        : TFixedSizeArrayBuilderBase<TLayout, Nullable, TDerived>(typeInfoHelper, type, pool, maxLen)
+    TFixedSizeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen, size_t* totalAllocated = nullptr)
+        : TFixedSizeArrayBuilderBase<TLayout, Nullable, TDerived>(typeInfoHelper, type, pool, maxLen, totalAllocated)
     {}
 
     void DoAddNotNull(TUnboxedValuePod value) {
@@ -518,12 +547,12 @@ public:
 template<bool Nullable>
 class TResourceArrayBuilder final: public TFixedSizeArrayBuilderBase<TUnboxedValue, Nullable, TResourceArrayBuilder<Nullable>> {
 public:
-    TResourceArrayBuilder(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen)
-        : TFixedSizeArrayBuilderBase<TUnboxedValue, Nullable, TResourceArrayBuilder<Nullable>>(typeInfoHelper, std::move(arrowType), pool, maxLen)
+    TResourceArrayBuilder(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen, size_t* totalAllocated = nullptr)
+        : TFixedSizeArrayBuilderBase<TUnboxedValue, Nullable, TResourceArrayBuilder<Nullable>>(typeInfoHelper, std::move(arrowType), pool, maxLen, totalAllocated)
     {}
 
-    TResourceArrayBuilder(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen)
-        : TFixedSizeArrayBuilderBase<TUnboxedValue, Nullable, TResourceArrayBuilder<Nullable>>(typeInfoHelper, type, pool, maxLen)
+    TResourceArrayBuilder(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen, size_t* totalAllocated = nullptr)
+        : TFixedSizeArrayBuilderBase<TUnboxedValue, Nullable, TResourceArrayBuilder<Nullable>>(typeInfoHelper, type, pool, maxLen, totalAllocated)
     {}
 
     void DoAddNotNull(TUnboxedValuePod value) {
@@ -556,14 +585,14 @@ template<typename TStringType, bool Nullable, EPgStringType PgString = EPgString
 class TStringArrayBuilder final : public TArrayBuilderBase {
 public:
     using TOffset = typename TStringType::offset_type;
-    TStringArrayBuilder(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen)
-        : TArrayBuilderBase(typeInfoHelper, std::move(arrowType), pool, maxLen)
+    TStringArrayBuilder(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen, size_t* totalAllocated = nullptr)
+        : TArrayBuilderBase(typeInfoHelper, std::move(arrowType), pool, maxLen, totalAllocated)
     {
         Reserve();
     }
 
-    TStringArrayBuilder(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen)
-        : TArrayBuilderBase(typeInfoHelper, type, pool, maxLen)
+    TStringArrayBuilder(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen, size_t* totalAllocated = nullptr)
+        : TArrayBuilderBase(typeInfoHelper, type, pool, maxLen, totalAllocated)
     {
         Reserve();
     }
@@ -624,7 +653,7 @@ public:
                 FlushChunk(false);
             }
             if (size > MaxBlockSizeInBytes) {
-                DataBuilder->Reserve(size);
+                ReserveForLargeString(size);
             }
         }
 
@@ -741,7 +770,7 @@ public:
                     }
                     dstOffset = OffsetsBuilder->End();
                 } else {
-                    DataBuilder->Reserve(strSize);
+                    ReserveForLargeString(strSize);
                     availBytes = strSize;
                 }
             }
@@ -790,7 +819,7 @@ public:
                     FlushChunk(false);
                     dataLen = 0;
                 } else {
-                    DataBuilder->Reserve(strSize);
+                    ReserveForLargeString(strSize);
                     availBytes = strSize;
                 }
             }
@@ -828,7 +857,7 @@ public:
                     FlushChunk(false);
                     dataLen = 0;
                 } else {
-                    DataBuilder->Reserve(str.size());
+                    ReserveForLargeString(str.size());
                     availBytes = str.size();
                 }
             }
@@ -845,7 +874,7 @@ public:
     }
 
 private:
-    void Reserve() {
+    void DoReserve() final {
         if constexpr (Nullable) {
             NullBuilder = std::make_unique<TTypedBufferBuilder<ui8>>(Pool);
             NullBuilder->Reserve(MaxLen + 1);
@@ -854,6 +883,24 @@ private:
         OffsetsBuilder->Reserve(MaxLen + 1);
         DataBuilder = std::make_unique<TTypedBufferBuilder<ui8>>(Pool);
         DataBuilder->Reserve(MaxBlockSizeInBytes);
+    }
+
+    size_t GetAllocatedSize() const final {
+        Y_ENSURE(DataBuilder && OffsetsBuilder);
+        size_t result = DataBuilder->Capacity() + OffsetsBuilder->Capacity();
+        if constexpr (Nullable) {
+            Y_ENSURE(NullBuilder);
+            result += NullBuilder->Capacity();
+        }
+        return result;
+    }
+
+    void ReserveForLargeString(size_t strSize) {
+        size_t before = DataBuilder->Capacity();
+        DataBuilder->Reserve(strSize);
+        size_t after = DataBuilder->Capacity();
+        Y_ENSURE(before <= after);
+        AddExtraAllocated(after - before);
     }
 
     void AppendCurrentOffset() {
@@ -893,8 +940,8 @@ template<bool Nullable>
 class TTupleArrayBuilder final : public TArrayBuilderBase {
 public:
     TTupleArrayBuilder(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen,
-                       TVector<TArrayBuilderBase::Ptr>&& children)
-        : TArrayBuilderBase(typeInfoHelper, type, pool, maxLen)
+                       TVector<TArrayBuilderBase::Ptr>&& children, size_t* totalAllocated)
+        : TArrayBuilderBase(typeInfoHelper, type, pool, maxLen, totalAllocated)
         , Children(std::move(children))
     {
         Reserve();
@@ -1040,11 +1087,20 @@ public:
     }
 
 private:
-    void Reserve() {
+    void DoReserve() final {
         if constexpr (Nullable) {
             NullBuilder = std::make_unique<TTypedBufferBuilder<ui8>>(Pool);
             NullBuilder->Reserve(MaxLen + 1);
         }
+    }
+
+    size_t GetAllocatedSize() const final {
+        size_t result = 0;
+        if constexpr (Nullable) {
+            Y_ENSURE(NullBuilder);
+            result += NullBuilder->Capacity();
+        }
+        return result;
     }
 
 private:
@@ -1054,8 +1110,9 @@ private:
 
 class TExternalOptionalArrayBuilder final : public TArrayBuilderBase {
 public:
-    TExternalOptionalArrayBuilder(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen, std::unique_ptr<TArrayBuilderBase>&& inner)
-        : TArrayBuilderBase(typeInfoHelper, type, pool, maxLen)
+    TExternalOptionalArrayBuilder(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen,
+        std::unique_ptr<TArrayBuilderBase>&& inner, size_t* totalAllocated)
+        : TArrayBuilderBase(typeInfoHelper, type, pool, maxLen, totalAllocated)
         , Inner(std::move(inner))
     {
         Reserve();
@@ -1157,9 +1214,14 @@ public:
     }
 
 private:
-    void Reserve() {
+    void DoReserve() final {
         NullBuilder = std::make_unique<TTypedBufferBuilder<ui8>>(Pool);
         NullBuilder->Reserve(MaxLen + 1);
+    }
+
+    size_t GetAllocatedSize() const final {
+        Y_ENSURE(NullBuilder);
+        return NullBuilder->Capacity();
     }
 
 private:
@@ -1169,12 +1231,13 @@ private:
 
 std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderBase(
     const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, 
-    size_t maxBlockLength, const IPgBuilder* pgBuilder);
+    size_t maxBlockLength, const IPgBuilder* pgBuilder, size_t* totalAllocated);
 
 template<bool Nullable>
 inline std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderImpl(
     const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, 
-    size_t maxLen, const IPgBuilder* pgBuilder) {
+    size_t maxLen, const IPgBuilder* pgBuilder, size_t* totalAllocated)
+{
     if constexpr (Nullable) {
         TOptionalTypeInspector typeOpt(typeInfoHelper, type);
         type = typeOpt.GetItemType();
@@ -1185,11 +1248,11 @@ inline std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderImpl(
         TVector<std::unique_ptr<TArrayBuilderBase>> members;
         for (ui32 i = 0; i < typeStruct.GetMembersCount(); i++) {
             const TType* memberType = typeStruct.GetMemberType(i);
-            auto memberBuilder = MakeArrayBuilderBase(typeInfoHelper, memberType, pool, maxLen, pgBuilder);
+            auto memberBuilder = MakeArrayBuilderBase(typeInfoHelper, memberType, pool, maxLen, pgBuilder, totalAllocated);
             members.push_back(std::move(memberBuilder));
         }
         // XXX: Use Tuple array builder for Struct.
-        return std::make_unique<TTupleArrayBuilder<Nullable>>(typeInfoHelper, type, pool, maxLen, std::move(members));
+        return std::make_unique<TTupleArrayBuilder<Nullable>>(typeInfoHelper, type, pool, maxLen, std::move(members), totalAllocated);
     }
 
     TTupleTypeInspector typeTuple(typeInfoHelper, type);
@@ -1197,11 +1260,11 @@ inline std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderImpl(
         TVector<std::unique_ptr<TArrayBuilderBase>> children;
         for (ui32 i = 0; i < typeTuple.GetElementsCount(); ++i) {
             const TType* childType = typeTuple.GetElementType(i);
-            auto childBuilder = MakeArrayBuilderBase(typeInfoHelper, childType, pool, maxLen, pgBuilder);
+            auto childBuilder = MakeArrayBuilderBase(typeInfoHelper, childType, pool, maxLen, pgBuilder, totalAllocated);
             children.push_back(std::move(childBuilder));
         }
 
-        return std::make_unique<TTupleArrayBuilder<Nullable>>(typeInfoHelper, type, pool, maxLen, std::move(children));
+        return std::make_unique<TTupleArrayBuilder<Nullable>>(typeInfoHelper, type, pool, maxLen, std::move(children), totalAllocated);
     }
 
     TDataTypeInspector typeData(typeInfoHelper, type);
@@ -1209,41 +1272,41 @@ inline std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderImpl(
         auto typeId = typeData.GetTypeId();
         switch (GetDataSlot(typeId)) {
         case NUdf::EDataSlot::Int8:
-            return std::make_unique<TFixedSizeArrayBuilder<i8, Nullable>>(typeInfoHelper, type, pool, maxLen);
+            return std::make_unique<TFixedSizeArrayBuilder<i8, Nullable>>(typeInfoHelper, type, pool, maxLen, totalAllocated);
         case NUdf::EDataSlot::Uint8:
         case NUdf::EDataSlot::Bool:
-            return std::make_unique<TFixedSizeArrayBuilder<ui8, Nullable>>(typeInfoHelper, type, pool, maxLen);
+            return std::make_unique<TFixedSizeArrayBuilder<ui8, Nullable>>(typeInfoHelper, type, pool, maxLen, totalAllocated);
         case NUdf::EDataSlot::Int16:
-            return std::make_unique<TFixedSizeArrayBuilder<i16, Nullable>>(typeInfoHelper, type, pool, maxLen);
+            return std::make_unique<TFixedSizeArrayBuilder<i16, Nullable>>(typeInfoHelper, type, pool, maxLen, totalAllocated);
         case NUdf::EDataSlot::Uint16:
         case NUdf::EDataSlot::Date:
-            return std::make_unique<TFixedSizeArrayBuilder<ui16, Nullable>>(typeInfoHelper, type, pool, maxLen);
+            return std::make_unique<TFixedSizeArrayBuilder<ui16, Nullable>>(typeInfoHelper, type, pool, maxLen, totalAllocated);
         case NUdf::EDataSlot::Int32:
         case NUdf::EDataSlot::Date32:
-            return std::make_unique<TFixedSizeArrayBuilder<i32, Nullable>>(typeInfoHelper, type, pool, maxLen);
+            return std::make_unique<TFixedSizeArrayBuilder<i32, Nullable>>(typeInfoHelper, type, pool, maxLen, totalAllocated);
         case NUdf::EDataSlot::Uint32:
         case NUdf::EDataSlot::Datetime:
-            return std::make_unique<TFixedSizeArrayBuilder<ui32, Nullable>>(typeInfoHelper, type, pool, maxLen);
+            return std::make_unique<TFixedSizeArrayBuilder<ui32, Nullable>>(typeInfoHelper, type, pool, maxLen, totalAllocated);
         case NUdf::EDataSlot::Int64:
         case NUdf::EDataSlot::Interval:
         case NUdf::EDataSlot::Interval64:
         case NUdf::EDataSlot::Datetime64:
         case NUdf::EDataSlot::Timestamp64:
-            return std::make_unique<TFixedSizeArrayBuilder<i64, Nullable>>(typeInfoHelper, type, pool, maxLen);
+            return std::make_unique<TFixedSizeArrayBuilder<i64, Nullable>>(typeInfoHelper, type, pool, maxLen, totalAllocated);
         case NUdf::EDataSlot::Uint64:
         case NUdf::EDataSlot::Timestamp:
-            return std::make_unique<TFixedSizeArrayBuilder<ui64, Nullable>>(typeInfoHelper, type, pool, maxLen);
+            return std::make_unique<TFixedSizeArrayBuilder<ui64, Nullable>>(typeInfoHelper, type, pool, maxLen, totalAllocated);
         case NUdf::EDataSlot::Float:
-            return std::make_unique<TFixedSizeArrayBuilder<float, Nullable>>(typeInfoHelper, type, pool, maxLen);
+            return std::make_unique<TFixedSizeArrayBuilder<float, Nullable>>(typeInfoHelper, type, pool, maxLen, totalAllocated);
         case NUdf::EDataSlot::Double:
-            return std::make_unique<TFixedSizeArrayBuilder<double, Nullable>>(typeInfoHelper, type, pool, maxLen);
+            return std::make_unique<TFixedSizeArrayBuilder<double, Nullable>>(typeInfoHelper, type, pool, maxLen, totalAllocated);
         case NUdf::EDataSlot::String:
         case NUdf::EDataSlot::Yson:
         case NUdf::EDataSlot::JsonDocument:
-            return std::make_unique<TStringArrayBuilder<arrow::BinaryType, Nullable>>(typeInfoHelper, type, pool, maxLen);
+            return std::make_unique<TStringArrayBuilder<arrow::BinaryType, Nullable>>(typeInfoHelper, type, pool, maxLen, totalAllocated);
         case NUdf::EDataSlot::Utf8:
         case NUdf::EDataSlot::Json:
-            return std::make_unique<TStringArrayBuilder<arrow::StringType, Nullable>>(typeInfoHelper, type, pool, maxLen);
+            return std::make_unique<TStringArrayBuilder<arrow::StringType, Nullable>>(typeInfoHelper, type, pool, maxLen, totalAllocated);
         default:
             Y_ENSURE(false, "Unsupported data slot");
         }
@@ -1251,25 +1314,25 @@ inline std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderImpl(
     
     TResourceTypeInspector resource(typeInfoHelper, type);
     if (resource) {
-        return std::make_unique<TResourceArrayBuilder<Nullable>>(typeInfoHelper, type, pool, maxLen);
+        return std::make_unique<TResourceArrayBuilder<Nullable>>(typeInfoHelper, type, pool, maxLen, totalAllocated);
     }
 
     TPgTypeInspector typePg(typeInfoHelper, type);
     if (typePg) {
         auto desc = typeInfoHelper.FindPgTypeDescription(typePg.GetTypeId());
         if (desc->PassByValue) {
-            return std::make_unique<TFixedSizeArrayBuilder<ui64, true>>(typeInfoHelper, type, pool, maxLen);
+            return std::make_unique<TFixedSizeArrayBuilder<ui64, true>>(typeInfoHelper, type, pool, maxLen, totalAllocated);
         } else {
             if (desc->Typelen == -1) {
-                auto ret = std::make_unique<TStringArrayBuilder<arrow::BinaryType, true, EPgStringType::Text>>(typeInfoHelper, type, pool, maxLen);
+                auto ret = std::make_unique<TStringArrayBuilder<arrow::BinaryType, true, EPgStringType::Text>>(typeInfoHelper, type, pool, maxLen, totalAllocated);
                 ret->SetPgBuilder(pgBuilder, desc->Typelen);
                 return ret;
             } else if (desc->Typelen == -2) {
-                auto ret = std::make_unique<TStringArrayBuilder<arrow::BinaryType, true, EPgStringType::CString>>(typeInfoHelper, type, pool, maxLen);
+                auto ret = std::make_unique<TStringArrayBuilder<arrow::BinaryType, true, EPgStringType::CString>>(typeInfoHelper, type, pool, maxLen, totalAllocated);
                 ret->SetPgBuilder(pgBuilder, desc->Typelen);
                 return ret;
             } else {
-                auto ret = std::make_unique<TStringArrayBuilder<arrow::BinaryType, true, EPgStringType::Fixed>>(typeInfoHelper, type, pool, maxLen);
+                auto ret = std::make_unique<TStringArrayBuilder<arrow::BinaryType, true, EPgStringType::Fixed>>(typeInfoHelper, type, pool, maxLen, totalAllocated);
                 ret->SetPgBuilder(pgBuilder, desc->Typelen);
                 return ret;
             }
@@ -1281,7 +1344,7 @@ inline std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderImpl(
 
 inline std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderBase(
     const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, 
-    size_t maxBlockLength, const IPgBuilder* pgBuilder) {
+    size_t maxBlockLength, const IPgBuilder* pgBuilder, size_t* totalAllocated) {
     const TType* unpacked = type;
     TOptionalTypeInspector typeOpt(typeInfoHelper, type);
     if (typeOpt) {
@@ -1313,25 +1376,25 @@ inline std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderBase(
             ++nestLevel;
         }
 
-        auto builder = MakeArrayBuilderBase(typeInfoHelper, previousType, pool, maxBlockLength, pgBuilder);
+        auto builder = MakeArrayBuilderBase(typeInfoHelper, previousType, pool, maxBlockLength, pgBuilder, totalAllocated);
         for (ui32 i = 1; i < nestLevel; ++i) {
-            builder = std::make_unique<TExternalOptionalArrayBuilder>(typeInfoHelper, types[nestLevel - 1 - i], pool, maxBlockLength, std::move(builder));
+            builder = std::make_unique<TExternalOptionalArrayBuilder>(typeInfoHelper, types[nestLevel - 1 - i], pool, maxBlockLength, std::move(builder), totalAllocated);
         }
 
         return builder;
     } else {
         if (typeOpt) {
-            return MakeArrayBuilderImpl<true>(typeInfoHelper, type, pool, maxBlockLength, pgBuilder);
+            return MakeArrayBuilderImpl<true>(typeInfoHelper, type, pool, maxBlockLength, pgBuilder, totalAllocated);
         } else {
-            return MakeArrayBuilderImpl<false>(typeInfoHelper, type, pool, maxBlockLength, pgBuilder);
+            return MakeArrayBuilderImpl<false>(typeInfoHelper, type, pool, maxBlockLength, pgBuilder, totalAllocated);
         }
     }
 }
 
 inline std::unique_ptr<IArrayBuilder> MakeArrayBuilder(
     const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, 
-    size_t maxBlockLength, const IPgBuilder* pgBuilder) {
-    return MakeArrayBuilderBase(typeInfoHelper, type, pool, maxBlockLength, pgBuilder);
+    size_t maxBlockLength, const IPgBuilder* pgBuilder, size_t* totalAllocated = nullptr) {
+    return MakeArrayBuilderBase(typeInfoHelper, type, pool, maxBlockLength, pgBuilder, totalAllocated);
 }
 
 inline std::unique_ptr<IScalarBuilder> MakeScalarBuilder(const ITypeInfoHelper& typeInfoHelper, const TType* type) {

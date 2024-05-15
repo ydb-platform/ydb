@@ -16,8 +16,6 @@ using namespace NYdb::NScheme;
 Y_UNIT_TEST_SUITE(KqpSystemView) {
 
     Y_UNIT_TEST(Join) {
-        return; // nodes table is currently switched off
-
         TKikimrRunner kikimr;
         auto client = kikimr.GetTableClient();
 
@@ -418,8 +416,6 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
     }
 
     Y_UNIT_TEST(NodesSimple) {
-        return; // nodes table is currenty switched off
-
         TKikimrRunner kikimr("", KikimrDefaultUtDomainRoot, 3);
         auto client = kikimr.GetTableClient();
 
@@ -442,8 +438,6 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
     }
 
     Y_UNIT_TEST(NodesRange1) {
-        return; // nodes table is currenty switched off
-
         TKikimrRunner kikimr("", KikimrDefaultUtDomainRoot, 5);
         auto client = kikimr.GetTableClient();
 
@@ -468,8 +462,6 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
     }
 
     Y_UNIT_TEST(NodesRange2) {
-        return; // nodes table is currenty switched off
-
         TKikimrRunner kikimr("", KikimrDefaultUtDomainRoot, 5);
         auto client = kikimr.GetTableClient();
 

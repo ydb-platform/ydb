@@ -418,7 +418,7 @@ namespace NKikimr {
                             LocRecCtx->PDiskCtx->Dsk->ChunkSize,
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
-                            Config->MinHugeBlobInBytes,
+                            Config->OldMinHugeBlobInBytes,
                             Config->MilestoneHugeBlobInBytes,
                             Config->MaxLogoBlobDataSize,
                             Config->HugeBlobOverhead,
@@ -440,7 +440,7 @@ namespace NKikimr {
                             LocRecCtx->PDiskCtx->Dsk->ChunkSize,
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
-                            Config->MinHugeBlobInBytes,
+                            Config->OldMinHugeBlobInBytes,
                             Config->MilestoneHugeBlobInBytes,
                             Config->MaxLogoBlobDataSize,
                             Config->HugeBlobOverhead,
@@ -448,8 +448,6 @@ namespace NKikimr {
                             lsn, entryPoint, logFunc);
             }
             HugeBlobCtx = std::make_shared<THugeBlobCtx>(
-                    Config->MinHugeBlobInBytes,
-                    LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                     LocRecCtx->RepairedHuge->Heap->BuildHugeSlotsMap(),
                     Config->AddHeader);
             HugeKeeperInitialized = true;

@@ -238,7 +238,7 @@ void TDistributedTransaction::OnReadSet(const NKikimrTx::TEvReadSet& event,
 
         ++ReadSetCount;
     } else {
-        Y_DEBUG_ABORT_UNLESS(false, "unknown sender tablet %" PRIu64, event.GetTabletProducer());
+        Y_DEBUG_ABORT("unknown sender tablet %" PRIu64, event.GetTabletProducer());
     }
 }
 

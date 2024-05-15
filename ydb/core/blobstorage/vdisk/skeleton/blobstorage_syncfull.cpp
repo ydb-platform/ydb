@@ -20,11 +20,10 @@ namespace NKikimr {
 
         bool Check(const TKeyLogoBlob &key,
                    const TMemRecLogoBlob &memRec,
-                   ui32 recsMerged,
                    bool allowKeepFlags,
                    bool allowGarbageCollection) const {
-            return TLogoBlobFilter::Check(key.LogoBlobID()) &&
-                    BarriersEssence->Keep(key, memRec, recsMerged, allowKeepFlags, allowGarbageCollection).KeepData;
+            return TLogoBlobFilter::Check(key.LogoBlobID()) && BarriersEssence->Keep(key, memRec, {},
+                allowKeepFlags, allowGarbageCollection).KeepData;
         }
 
         TIntrusivePtr<THullCtx> HullCtx;
@@ -151,7 +150,7 @@ namespace NKikimr {
             // copy data until we have some space
             while (it.Valid() && (data->size() + NSyncLog::MaxRecFullSize <= data->capacity())) {
                 key = it.GetCurKey();
-                if (filter.Check(key, it.GetMemRec(), it.GetMemRecsMerged(), HullCtx->AllowKeepFlags, true /*allowGarbageCollection*/))
+                if (filter.Check(key, it.GetMemRec(), HullCtx->AllowKeepFlags, true /*allowGarbageCollection*/))
                     Serialize(ctx, data, key, it.GetMemRec());
                 it.Next();
             }

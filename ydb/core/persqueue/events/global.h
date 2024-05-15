@@ -36,7 +36,7 @@ struct TEvPersQueue {
         EvDescribeResponse,
         EvGetReadSessionsInfo,
         EvReadSessionsInfoResponse,
-        EvWakeupClient,
+        EvWakeupClient, // deprecated
         EvUpdateACL,
         EvCheckACL,
         EvCheckACLResponse,
@@ -196,16 +196,6 @@ struct TEvPersQueue {
 
     struct TEvPartitionClientInfoResponse : TEventPB<TEvPartitionClientInfoResponse, NKikimrPQ::TClientInfoResponse, EvPartitionClientInfoResponse> {
         TEvPartitionClientInfoResponse() = default;
-    };
-
-    struct TEvWakeupClient : TEventLocal<TEvWakeupClient, EvWakeupClient> {
-        TEvWakeupClient(const TString& client, const ui32 group)
-            : Client(client)
-            , Group(group)
-        {}
-
-        TString Client;
-        ui32 Group;
     };
 
     struct TEvDescribe : public TEventPB<TEvDescribe, NKikimrPQ::TDescribe, EvDescribe> {

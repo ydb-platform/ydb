@@ -1,4 +1,6 @@
 items:
+- name: Обзор
+  href: index.md
 - name: Метрики
   include:
     mode: link

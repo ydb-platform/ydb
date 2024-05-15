@@ -7,8 +7,8 @@ import "ydb/public/api/client/yc_private/operation/operation.proto";
 // A set of methods for managing operations that are asynchronous API requests.
 service OperationService {
   // Returns the specified operation.
-  rpc Get (GetOperationRequest) returns (operation.Operation);
-  rpc Cancel (CancelOperationRequest) returns (operation.Operation);
+  rpc Get (GetOperationRequest) returns (.ydb.yc.priv.operation.Operation);
+  rpc Cancel (CancelOperationRequest) returns (.ydb.yc.priv.operation.Operation);
 }
 
 message GetOperationRequest {

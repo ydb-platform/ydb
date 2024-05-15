@@ -230,7 +230,7 @@ public:
     }
 
     void ExtractTableName(TContext&ctx, TTableArg& arg) {
-        MakeTableFromExpression(ctx, arg.Expr, arg.Id);
+        MakeTableFromExpression(Pos, ctx, arg.Expr, arg.Id);
     }
 
     TNodePtr BuildKeys(TContext& ctx, ITableKeys::EBuildKeysMode mode) override {
@@ -739,7 +739,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TIntoTableOptions(GetPos(), Columns, Hints);
+        return new TIntoTableOptions(GetPos(), Columns, CloneContainer(Hints));
     }
 
 private:
@@ -2300,7 +2300,7 @@ public:
     bool DoInit(TContext& ctx, ISource* src) override {
         Scoped->UseCluster(ServiceId, Cluster);
 
-        auto keys = Y("Key", Q(Y(Q("id"), Y("String", BuildQuotedAtom(Pos, Id)))));
+        auto keys = Y("Key", Q(Y(Q("replication"), Y("String", BuildQuotedAtom(Pos, Id)))));
         auto options = FillOptions(Y(Q(Y(Q("mode"), Q(Mode)))));
 
         Add("block", Q(Y(
@@ -2328,7 +2328,7 @@ public:
             std::vector<std::pair<TString, TString>>&& targets,
             std::map<TString, TNodePtr>&& settings,
             const TObjectOperatorContext& context)
-        : TAsyncReplication(pos, id, "createAsyncReplication", context)
+        : TAsyncReplication(pos, id, "create", context)
         , Targets(std::move(targets))
         , Settings(std::move(settings))
     {
@@ -2379,22 +2379,14 @@ TNodePtr BuildCreateAsyncReplication(TPosition pos, const TString& id,
 class TDropAsyncReplication final: public TAsyncReplication {
 public:
     explicit TDropAsyncReplication(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context)
-        : TAsyncReplication(pos, id, "dropAsyncReplication", context)
-        , Cascade(cascade)
+        : TAsyncReplication(pos, id, cascade ? "dropCascade" : "drop", context)
     {
     }
 
 protected:
     INode::TPtr FillOptions(INode::TPtr options) const override {
-        if (Cascade) {
-            options = L(options, Q(Y(Q("cascade"))));
-        }
-
         return options;
     }
-
-private:
-    const bool Cascade;
 
 }; // TDropAsyncReplication
 
@@ -2407,7 +2399,7 @@ public:
     explicit TAlterAsyncReplication(TPosition pos, const TString& id,
             std::map<TString, TNodePtr>&& settings,
             const TObjectOperatorContext& context)
-        : TAsyncReplication(pos, id, "alterAsyncReplication", context)
+        : TAsyncReplication(pos, id, "alter", context)
         , Settings(std::move(settings))
     {
     }
@@ -2645,11 +2637,14 @@ public:
         bool hasError = false;
         if (TopLevel) {
             for (auto& var: ctx.Variables) {
-                if (!var.second->Init(ctx, src)) {
+                if (!var.second.second->Init(ctx, src)) {
                     hasError = true;
                     continue;
                 }
-                Add(Y("declare", var.first, var.second));
+                Add(Y(
+                    "declare", 
+                    new TAstAtomNodeImpl(var.second.first, var.first, TNodeFlags::ArbitraryContent), 
+                    var.second.second));
             }
 
             for (const auto& overrideLibrary: ctx.OverrideLibraries) {
@@ -3017,7 +3012,7 @@ public:
     }
 
     TPtr DoClone() const final {
-        return {};
+        return new TSqlLambda(Pos, TVector<TString>(Args), CloneContainer(ExprSeq));
     }
 
     void DoUpdateState() const override {
@@ -3072,7 +3067,7 @@ public:
     }
 
     TPtr DoClone() const final {
-        return {};
+        return new TWorldIf(GetPos(), SafeClone(Predicate), SafeClone(ThenNode), SafeClone(ElseNode), IsEvaluate);
     }
 
 private:
@@ -3124,7 +3119,7 @@ public:
     }
 
     TPtr DoClone() const final {
-        return{};
+        return new TWorldFor(GetPos(), SafeClone(List), SafeClone(BodyNode), SafeClone(ElseNode), IsEvaluate, IsParallel);
     }
 
 private:

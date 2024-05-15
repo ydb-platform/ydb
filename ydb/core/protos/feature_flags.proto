@@ -135,4 +135,6 @@ message TFeatureFlags {
     optional bool ExtendedVDiskCounters = 120 [default = true];
     optional bool ExtendedPDiskSensors = 121 [default = true];
     optional bool EnableDynamicNodeNameGeneration = 122 [default = false];
+    optional bool EnableBackupService = 123 [default = false];
+    optional bool EnableVolatileTransactionArbiters = 124 [default = false];
 }

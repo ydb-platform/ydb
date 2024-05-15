@@ -1423,7 +1423,7 @@ enum EOperationType {
     // Replication
     ESchemeOpCreateReplication = 76;
     ESchemeOpAlterReplication = 77;
-    ESchemeOpDropReplication = 78;
+    ESchemeOpDropReplicationCascade = 78;
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // BlobDepot
@@ -1456,6 +1456,8 @@ enum EOperationType {
     ESchemeOpCreateView = 93;
     ESchemeOpAlterView = 94;
     ESchemeOpDropView = 95;
+
+    ESchemeOpDropReplication = 96;
 }
 
 message TApplyIf {

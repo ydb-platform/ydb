@@ -38,6 +38,8 @@ struct TRequestResult {
 
     TRequestResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues);
 
+    TRequestResult(Ydb::StatusIds::StatusCode status, const google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>& issues);
+
     bool IsSuccess() const;
 
     TString ToString() const;
@@ -53,6 +55,8 @@ public:
     TRequestResult ScriptRequest(const TString& script, NKikimrKqp::EQueryAction action, const TString& traceId, TString& operation) const;
 
     TRequestResult QueryRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets) const;
+
+    TRequestResult YqlScriptRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets) const;
 
     TRequestResult GetScriptExecutionOperationRequest(const TString& operation, TExecutionMeta& meta) const;
 

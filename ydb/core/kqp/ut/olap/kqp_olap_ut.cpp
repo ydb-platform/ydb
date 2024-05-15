@@ -942,12 +942,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`level` = Int8("1"))",
             R"(`level` = Int16("1"))",
             R"(`level` = Int32("1"))",
-            R"((`level`, `uid`, `resource_id`) = (Int32("1"), "uid_3000001", "10001"))",
             R"(`level` > Int32("3"))",
             R"(`level` < Int32("1"))",
             R"(`level` >= Int32("4"))",
             R"(`level` <= Int32("0"))",
             R"(`level` != Int32("0"))",
+            R"((`level`, `uid`, `resource_id`) = (Int32("1"), "uid_3000001", "10001"))",
             R"((`level`, `uid`, `resource_id`) > (Int32("1"), "uid_3000001", "10001"))",
             R"((`level`, `uid`, `resource_id`) > (Int32("1"), "uid_3000000", "10001"))",
             R"((`level`, `uid`, `resource_id`) < (Int32("1"), "uid_3000002", "10001"))",
@@ -1015,8 +1015,17 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`level` / 2.f <= 1.)",
             R"(`level` % 3. != 1.f)",
             //R"(`timestamp` >= Timestamp("1970-01-01T00:00:00.000001Z"))",
-            R"(`timestamp` >= Timestamp("1970-01-01T00:00:00.000001Z") AND `level` > 3)",
-            R"((`timestamp`, `level`) >= (Timestamp("1970-01-01T00:00:00.000001Z"), 3))",
+            R"(`timestamp` >= Timestamp("1970-01-01T00:00:03.000001Z") AND `level` < 4)",
+            R"((`timestamp`, `level`) >= (Timestamp("1970-01-01T00:00:03.000001Z"), 3))",
+#endif
+#if SSA_RUNTIME_VERSION >= 5U
+            R"(IF(`level` > 3, -`level`, +`level`) < 2)",
+            R"(StartsWith(`message` ?? `resource_id`, "10000"))",
+            R"(NOT EndsWith(`message` ?? `resource_id`, "xxx"))",
+            R"(ChooseMembers(TableRow(), ['level', 'uid', 'resource_id']) == <|level:1, uid:"uid_3000001", resource_id:"10001"|>)",
+            R"(ChooseMembers(TableRow(), ['level', 'uid', 'resource_id']) != <|level:1, uid:"uid_3000001", resource_id:"10001"|>)",
+            R"(`uid` LIKE "_id%000_")",
+            R"(`uid` ILIKE "UID%002")",
 #endif
         };
 
@@ -1077,6 +1086,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`level` >= CAST("2" As Uint32))",
             R"(`level` = NULL)",
             R"(`level` > NULL)",
+            R"(Re2::Match('uid.*')(`uid`))",
 #if SSA_RUNTIME_VERSION < 2U
             R"(`uid` LIKE "%30000%")",
             R"(`uid` LIKE "uid%")",
@@ -1265,7 +1275,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                         TStringBuilder() << "Predicate was pushed down. Query: " << query);
 #endif
     }
-
+#if SSA_RUNTIME_VERSION < 5U
     Y_UNIT_TEST(PredicatePushdown_LikeNotPushedDownIfAnsiLikeDisabled) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
@@ -1291,7 +1301,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT_C(ast.find("KqpOlapFilter") == std::string::npos,
                         TStringBuilder() << "Predicate pushed down. Query: " << query);
     }
-
+#endif
     Y_UNIT_TEST(PredicatePushdown_MixStrictAndNotStrict) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
@@ -2484,6 +2494,99 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             Sleep(TDuration::Seconds(2));
         }
         testHelper.ReadData("SELECT value FROM `/Root/ColumnTableTest` WHERE id = 1", "[[110]]");
+    }
+
+    void RunBlockChannelTest(auto blockChannelsMode) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        appConfig.MutableTableServiceConfig()->SetBlockChannelsMode(blockChannelsMode);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(true);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        const TString query = R"(
+            CREATE TABLE `/Root/ColumnShard` (
+                a Uint64 NOT NULL,
+                b Int32,
+                c Int64,
+                PRIMARY KEY (a)
+            )
+            PARTITION BY HASH(a)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4);
+        )";
+
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+        { 
+            auto prepareResult = client.ExecuteQuery(R"(
+                REPLACE INTO `/Root/ColumnShard` (a, b, c) VALUES
+                    (1u, 1, 5),
+                    (2u, 2, 5),
+                    (3u, 2, 0),
+                    (4u, 2, 5);
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(prepareResult.IsSuccess());;
+        }
+
+        {
+            NYdb::NQuery::TExecuteQuerySettings scanSettings;
+            scanSettings.ExecMode(NYdb::NQuery::EExecMode::Explain);
+            auto it = client.StreamExecuteQuery(R"(
+                SELECT
+                    b, COUNT(*), SUM(a)
+                FROM `/Root/ColumnShard`
+                WHERE c = 5
+                GROUP BY b
+                ORDER BY b;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), scanSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            auto plan = CollectStreamResult(it);
+
+            switch (blockChannelsMode) {
+                case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_SCALAR:
+                    UNIT_ASSERT_C(plan.QueryStats->Getquery_ast().Contains("return (FromFlow (NarrowMap (WideFromBlocks"), plan.QueryStats->Getquery_ast());
+                    break;
+                case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO:
+                    UNIT_ASSERT_C(plan.QueryStats->Getquery_ast().Contains("return (FromFlow (ExpandMap (NarrowMap (WideFromBlocks"), plan.QueryStats->Getquery_ast());
+                    break;
+                case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_FORCE:
+                    UNIT_ASSERT_C(plan.QueryStats->Getquery_ast().Contains("return (FromFlow (WideToBlocks"), plan.QueryStats->Getquery_ast());
+                    break;
+            }
+        }
+
+        { 
+            auto it = client.StreamExecuteQuery(R"(
+                SELECT
+                    b, COUNT(*), SUM(a)
+                FROM `/Root/ColumnShard`
+                WHERE c = 5
+                GROUP BY b
+                ORDER BY b;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(output, R"([[[1];1u;1u];[[2];2u;6u]])");
+        }
+    }
+
+    Y_UNIT_TEST(BlockChannelScalar) {
+        RunBlockChannelTest(NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_SCALAR);
+    }
+
+    Y_UNIT_TEST(BlockChannelAuto) {
+        RunBlockChannelTest(NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO);
+    }
+
+    Y_UNIT_TEST(BlockChannelForce) {
+        RunBlockChannelTest(NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_FORCE);
     }
 }
 

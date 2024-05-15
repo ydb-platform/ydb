@@ -110,12 +110,6 @@ namespace NKikimr {
             void TabletStateRequest(const NKikimrClient::TTabletStateRequest& request, TResponseCallback callback);
 
             /////////////////////////////////////////////////////////////////////////////////////////////////
-            // BLOBSTORAGE LOAD TEST
-            /////////////////////////////////////////////////////////////////////////////////////////////////
-            void BlobStorageLoadRequest(const NKikimrClient::TBsTestLoadRequest& request, TResponseCallback callback);
-            void BlobStorageGetRequest(const NKikimrClient::TBsGetRequest& request, TResponseCallback callback);
-
-            /////////////////////////////////////////////////////////////////////////////////////////////////
             // HTTP INTERFACE
             /////////////////////////////////////////////////////////////////////////////////////////////////
             void DbSchema(const NKikimrClient::TJSON& request, TJSONCallback callback);

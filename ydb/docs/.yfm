@@ -5,6 +5,8 @@ allowCustomResources: true
 resources:
   script:
     - _assets/gtm.js
+  style:
+    - _assets/tags.css   
 
 docs-viewer:
   project-name: ydb
@@ -12,7 +14,7 @@ docs-viewer:
   langs: ['en','ru']
   themes: ['light', 'dark']
   metrika: 88962303
-  favicon-src: https://storage.yandexcloud.net/ydb-www-prod-site-assets/favicon/favicon.ico
+  favicon-src: https://storage.yandexcloud.net/ydb-www-prod-site-assets/favicon-202305/favicon.ico
 
   github-url-prefix: https://github.com/ydb-platform/ydb/tree/main/ydb/docs
   

@@ -204,7 +204,7 @@ def on_peerdir_ts_resource(unit, *resources):
 
 @_with_report_configure_error
 def on_ts_configure(unit):
-    # type: (Unit, *str) -> None
+    # type: (Unit) -> None
     from lib.nots.package_manager.base import PackageJson
     from lib.nots.package_manager.base.utils import build_pj_path
     from lib.nots.typescript import TsConfig
@@ -373,11 +373,12 @@ def _setup_eslint(unit):
     if not lint_files:
         return
 
+    mod_dir = unit.get("MODDIR")
+
     unit.on_peerdir_ts_resource("eslint")
     user_recipes = unit.get("TEST_RECIPES_VALUE")
-    unit.on_setup_extract_node_modules_recipe(unit.get("MODDIR"))
+    unit.on_setup_install_node_modules_recipe()
 
-    mod_dir = unit.get("MODDIR")
     lint_files = _resolve_module_files(unit, mod_dir, lint_files)
     deps = _create_pm(unit).get_peers_from_package_json()
     test_record = {
@@ -385,7 +386,7 @@ def _setup_eslint(unit):
         "LINT-FILE-PROCESSING-TIME": str(ESLINT_FILE_PROCESSING_TIME_DEFAULT),
     }
 
-    _add_test(unit, "eslint", lint_files, deps, test_record, mod_dir)
+    _add_test(unit, "eslint.new", lint_files, deps, test_record, mod_dir)
     unit.set(["TEST_RECIPES_VALUE", user_recipes])
 
 
@@ -461,7 +462,7 @@ def _add_test(unit, test_type, test_files, deps=None, test_record=None, test_cwd
         # Key to discover suite (see devtools/ya/test/explore/__init__.py#gen_suite)
         "SCRIPT-REL-PATH": test_type,
         # Test name as shown in PR check, should be unique inside one module
-        "TEST-NAME": test_type.lower(),
+        "TEST-NAME": test_type.lower().replace(".new", ""),
         "TEST-TIMEOUT": unit.get("TEST_TIMEOUT") or "",
         "TEST-ENV": ytest.prepare_env(unit.get("TEST_ENV_VALUE")),
         "TESTED-PROJECT-NAME": os.path.splitext(unit.filename())[0],
@@ -575,20 +576,6 @@ def on_node_modules_configure(unit):
             __set_append(unit, "_NODE_MODULES_INOUTS", _build_directives("output", ["hide"], sorted(outs)))
 
         if pj.get_use_prebuilder():
-            lf = pm.load_lockfile_from_dir(pm.sources_path)
-            is_valid, invalid_keys = lf.validate_has_addons_flags()
-
-            if not is_valid:
-                ymake.report_configure_error(
-                    "Project is configured to use @yatool/prebuilder. \n"
-                    + "Some packages in the pnpm-lock.yaml are misconfigured.\n"
-                    + "Run `ya tool nots update-lockfile` to fix lockfile.\n"
-                    + "All packages with `requiresBuild:true` have to be marked with `hasAddons:true/false`.\n"
-                    + "Misconfigured keys: \n"
-                    + "  - "
-                    + "\n  - ".join(invalid_keys)
-                )
-
             unit.on_peerdir_ts_resource("@yatool/prebuilder")
             unit.set(
                 [
@@ -596,6 +583,39 @@ def on_node_modules_configure(unit):
                     "--yatool-prebuilder-path $YATOOL_PREBUILDER_ROOT/node_modules/@yatool/prebuilder",
                 ]
             )
+
+            # YATOOL_PREBUILDER_0_7_0_RESOURCE_GLOBAL
+            prebuilder_major = unit.get("YATOOL_PREBUILDER-ROOT-VAR-NAME").split("_")[2]
+            logger.info(f"Detected prebuilder \033[0;32mv{prebuilder_major}.x.x\033[0;49m")
+
+            if prebuilder_major == "0":
+                # TODO: FBP-1408
+                lf = pm.load_lockfile_from_dir(pm.sources_path)
+                is_valid, invalid_keys = lf.validate_has_addons_flags()
+
+                if not is_valid:
+                    ymake.report_configure_error(
+                        "Project is configured to use @yatool/prebuilder. \n"
+                        + "Some packages in the pnpm-lock.yaml are misconfigured.\n"
+                        + "Run \033[0;32m`ya tool nots update-lockfile`\033[0;49m to fix lockfile.\n"
+                        + "All packages with `requiresBuild:true` have to be marked with `hasAddons:true/false`.\n"
+                        + "Misconfigured keys: \n"
+                        + "  - "
+                        + "\n  - ".join(invalid_keys)
+                    )
+            else:
+                lf = pm.load_lockfile_from_dir(pm.sources_path)
+                requires_build_packages = lf.get_requires_build_packages()
+                is_valid, validation_messages = pj.validate_prebuilds(requires_build_packages)
+
+                if not is_valid:
+                    ymake.report_configure_error(
+                        "Project is configured to use @yatool/prebuilder. \n"
+                        + "Some packages are misconfigured.\n"
+                        + "Run \033[0;32m`ya tool nots update-lockfile`\033[0;49m to fix pnpm-lock.yaml and package.json.\n"
+                        + "Validation details: \n"
+                        + "\n".join(validation_messages)
+                    )
 
 
 @_with_report_configure_error
@@ -676,6 +696,17 @@ def on_ts_files(unit, *files):
     if all_cmds:
         new_cmds.insert(0, all_cmds)
     unit.set(["_TS_FILES_COPY_CMD", " && ".join(new_cmds)])
+
+
+@_with_report_configure_error
+def on_ts_package_check_files(unit):
+    ts_files = unit.get("_TS_FILES_COPY_CMD")
+    if ts_files == "":
+        ymake.report_configure_error(
+            "\n"
+            "In the TS_PACKAGE module, you should define at least one file using the TS_FILES() macro.\n"
+            "Docs: https://docs.yandex-team.ru/frontend-in-arcadia/references/TS_PACKAGE#ts-files."
+        )
 
 
 @_with_report_configure_error

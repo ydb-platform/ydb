@@ -15,7 +15,7 @@ using namespace NYson;
 TEST(TCompositeCompare, Simple)
 {
     auto compare = [] (TStringBuf lhs, TStringBuf rhs) {
-        return CompareCompositeValues(TYsonStringBuf(lhs), TYsonStringBuf(rhs));
+        return CompareYsonValues(TYsonStringBuf(lhs), TYsonStringBuf(rhs));
     };
 
     EXPECT_EQ(-1, compare("-4", "42"));

@@ -15,6 +15,7 @@ SRCS(
     resolve_local_db_table.cpp
     rpc_alter_coordination_node.cpp
     rpc_alter_table.cpp
+    rpc_backup.cpp
     rpc_begin_transaction.cpp
     rpc_calls.cpp
     rpc_cancel_operation.cpp
@@ -119,6 +120,7 @@ PEERDIR(
     ydb/core/tx/datashard
     ydb/core/tx/sharding
     ydb/core/tx/data_events
+    ydb/core/tx/schemeshard/olap/bg_tasks/events
     ydb/core/util
     ydb/core/ydb_convert
     ydb/core/security

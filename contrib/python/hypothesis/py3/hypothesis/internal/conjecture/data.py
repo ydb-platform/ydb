@@ -91,6 +91,9 @@ DRAW_FLOAT_LABEL = calc_label_from_name("drawing a float")
 FLOAT_STRATEGY_DO_DRAW_LABEL = calc_label_from_name(
     "getting another float in FloatStrategy"
 )
+INTEGER_WEIGHTED_DISTRIBUTION = calc_label_from_name(
+    "drawing from a weighted distribution in integers"
+)
 
 InterestingOrigin = Tuple[
     Type[BaseException], str, int, Tuple[Any, ...], Tuple[Tuple[Any, ...], ...]
@@ -1673,6 +1676,7 @@ class HypothesisProvider(PrimitiveProvider):
         center: Optional[int] = None,
         forced: Optional[int] = None,
         fake_forced: bool = False,
+        _vary_effective_size: bool = True,
     ) -> int:
         assert lower <= upper
         assert forced is None or lower <= forced <= upper
@@ -1709,14 +1713,27 @@ class HypothesisProvider(PrimitiveProvider):
         bits = gap.bit_length()
         probe = gap + 1
 
-        if bits > 24 and self.draw_boolean(
-            7 / 8, forced=None if forced is None else False, fake_forced=fake_forced
+        if (
+            bits > 24
+            and _vary_effective_size
+            and self.draw_boolean(
+                7 / 8, forced=None if forced is None else False, fake_forced=fake_forced
+            )
         ):
+            self._cd.start_example(INTEGER_WEIGHTED_DISTRIBUTION)
             # For large ranges, we combine the uniform random distribution from draw_bits
             # with a weighting scheme with moderate chance.  Cutoff at 2 ** 24 so that our
             # choice of unicode characters is uniform but the 32bit distribution is not.
             idx = INT_SIZES_SAMPLER.sample(self._cd)
-            bits = min(bits, INT_SIZES[idx])
+            force_bits = min(bits, INT_SIZES[idx])
+            forced = self._draw_bounded_integer(
+                lower=center if above else max(lower, center - 2**force_bits - 1),
+                upper=center if not above else min(upper, center + 2**force_bits - 1),
+                _vary_effective_size=False,
+            )
+            self._cd.stop_example()
+
+            assert lower <= forced <= upper
 
         while probe > gap:
             self._cd.start_example(INTEGER_RANGE_DRAW_LABEL)
@@ -1960,6 +1977,7 @@ class ConjectureData:
         self.extra_information = ExtraInformation()
 
         self.ir_tree_nodes = ir_tree_prefix
+        self._node_index = 0
         self.start_example(TOP_LABEL)
 
     def __repr__(self):
@@ -2257,10 +2275,11 @@ class ConjectureData:
     def _pop_ir_tree_node(self, ir_type: IRTypeName, kwargs: IRKWargsType) -> IRNode:
         assert self.ir_tree_nodes is not None
 
-        if self.ir_tree_nodes == []:
+        if self._node_index == len(self.ir_tree_nodes):
             self.mark_overrun()
 
-        node = self.ir_tree_nodes.pop(0)
+        node = self.ir_tree_nodes[self._node_index]
+        self._node_index += 1
         # If we're trying to draw a different ir type at the same location, then
         # this ir tree has become badly misaligned. We don't have many good/simple
         # options here for realigning beyond giving up.

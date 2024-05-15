@@ -18,7 +18,7 @@ namespace NYT::NCompression::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto& Logger = CompressionLogger;
+static constexpr auto& Logger = CompressionLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -50,7 +50,7 @@ void ZstdCompress(int level, TSource* source, TBlob* output)
     }
 
     auto context = ZSTD_createCCtx();
-    auto contextGuard = Finally([&] () {
+    auto contextGuard = Finally([&] {
         ZSTD_freeCCtx(context);
     });
 

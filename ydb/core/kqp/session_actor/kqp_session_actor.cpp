@@ -174,6 +174,7 @@ public:
         , QueryServiceConfig(queryServiceConfig)
         , MetadataProviderConfig(metadataProviderConfig)
         , KqpTempTablesAgentActor(kqpTempTablesAgentActor)
+        , GUCSettings(std::make_shared<TGUCSettings>())
     {
         RequestCounters = MakeIntrusive<TKqpRequestCounters>();
         RequestCounters->Counters = Counters;
@@ -185,6 +186,7 @@ public:
         FillSettings.RowsLimitPerWrite = Config->_ResultRowsLimit.Get();
         FillSettings.Format = IDataProvider::EResultFormat::Custom;
         FillSettings.FormatDetails = TString(KikimrMkqlProtoFormat);
+        FillGUCSettings();
 
         auto optSessionId = TryDecodeYdbSessionId(SessionId);
         YQL_ENSURE(optSessionId, "Can't decode ydb session Id");
@@ -1168,6 +1170,15 @@ public:
         return false;
     }
 
+    void FillGUCSettings() {
+        if (Settings.Database) {
+            GUCSettings->Set("ydb_database", Settings.Database.substr(1, Settings.Database.Size() - 1));
+        }
+        if (Settings.UserName) {
+            GUCSettings->Set("ydb_user", *Settings.UserName);
+        }
+    }
+
     void SendToSchemeExecuter(const TKqpPhyTxHolder::TConstPtr& tx) {
         YQL_ENSURE(QueryState);
 
@@ -1205,7 +1216,7 @@ public:
             RequestCounters, Settings.TableService.GetAggregationConfig(), Settings.TableService.GetExecuterRetriesConfig(),
             AsyncIoFactory, QueryState ? QueryState->PreparedQuery : nullptr, Settings.TableService.GetChannelTransportVersion(), SelfId(), 2 * TDuration::Seconds(MetadataProviderConfig.GetRefreshPeriodSeconds()),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
-            Settings.TableService.GetEnableOlapSink(), useEvWrite, QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup);
+            Settings.TableService.GetEnableOlapSink(), useEvWrite, QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup, GUCSettings);
 
         auto exId = RegisterWithSameMailbox(executerActor);
         LOG_D("Created new KQP executer: " << exId << " isRollback: " << isRollback);
@@ -2420,7 +2431,7 @@ private:
     bool HasOlapTable = false;
     bool HasOltpTable = false;
 
-    TGUCSettings::TPtr GUCSettings = std::make_shared<TGUCSettings>();
+    TGUCSettings::TPtr GUCSettings;
 };
 
 } // namespace
@@ -2436,8 +2447,7 @@ IActor* CreateKqpSessionActor(const TActorId& owner, const TString& sessionId,
 {
     return new TKqpSessionActor(owner, sessionId, kqpSettings, workerSettings, federatedQuerySetup,
                                 std::move(asyncIoFactory),  std::move(moduleResolverState), counters,
-                                queryServiceConfig, metadataProviderConfig, kqpTempTablesAgentActor
-                                );
+                                queryServiceConfig, metadataProviderConfig, kqpTempTablesAgentActor);
 }
 
 }

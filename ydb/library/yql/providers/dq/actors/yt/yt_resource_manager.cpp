@@ -683,6 +683,16 @@ namespace NYql {
                                         .DoIf(Options.YtBackend.HasUseTmpFs() && Options.YtBackend.GetUseTmpFs(), [&] (NYT::TFluentMap fluent) {
                                             fluent.Item("tmpfs_path").Value(fileCache);
                                         })
+                                        .DoIf(Options.YtBackend.HasDiskRequest(), [&] (NYT::TFluentMap fluent) {
+                                            auto& diskRequest = Options.YtBackend.GetDiskRequest();
+                                            fluent.Item("disk_request")
+                                                .BeginMap()
+                                                    .DoIf(diskRequest.HasDiskSpace(), [&] (NYT::TFluentMap fluent) { fluent.Item("disk_space").Value(diskRequest.GetDiskSpace()); } )
+                                                    .DoIf(diskRequest.HasInodeCount(), [&] (NYT::TFluentMap fluent) { fluent.Item("inode_count").Value(diskRequest.GetInodeCount()); } )
+                                                    .DoIf(diskRequest.HasAccount(), [&] (NYT::TFluentMap fluent) { fluent.Item("account").Value(diskRequest.GetAccount()); } )
+                                                    .DoIf(diskRequest.HasMediumName(), [&] (NYT::TFluentMap fluent) { fluent.Item("medium_name").Value(diskRequest.GetMediumName()); } )
+                                                .EndMap();
+                                        })
                                     .EndMap();
                             })
                         .EndMap()

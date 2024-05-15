@@ -1309,8 +1309,9 @@ TDescribePartitionActor::TDescribePartitionActor(NKikimr::NGRpcService::IRequest
 {
 }
 
-void TDescribePartitionActor::Bootstrap(const NActors::TActorContext& ctx)
-{
+void TDescribePartitionActor::Bootstrap(const NActors::TActorContext& ctx) {
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "TDescribePartitionActor" << ctx.SelfID.ToString() << ": Bootstrap");
+    CheckAccessWithWriteTopicPermission = true;
     TBase::Bootstrap(ctx);
     SendDescribeProposeRequest(ctx);
     Become(&TDescribePartitionActor::StateWork);
@@ -1318,6 +1319,14 @@ void TDescribePartitionActor::Bootstrap(const NActors::TActorContext& ctx)
 
 void TDescribePartitionActor::StateWork(TAutoPtr<IEventHandle>& ev) {
     switch (ev->GetTypeRewrite()) {
+        case TEvTxProxySchemeCache::TEvNavigateKeySetResult::EventType:
+            if (NeedToRequestWithDescribeSchema(ev)) {
+                // We do not have the UpdateRow permission. Check if we're allowed to DescribeSchema.
+                CheckAccessWithWriteTopicPermission = false;
+                SendDescribeProposeRequest(ActorContext());
+                break;
+            }
+            [[fallthrough]];
         default:
             if (!TDescribeTopicActorImpl::StateWork(ev, ActorContext())) {
                 TBase::StateWork(ev);
@@ -1325,14 +1334,35 @@ void TDescribePartitionActor::StateWork(TAutoPtr<IEventHandle>& ev) {
     }
 }
 
-void TDescribePartitionActor::HandleCacheNavigateResponse(
-    TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev
-) {
-    Y_ABORT_UNLESS(ev->Get()->Request.Get()->ResultSet.size() == 1); // describe for only one topic
+// Return true if we need to send a second request to SchemeCache with DescribeSchema permission,
+// because the first request checking the UpdateRow permission resulted in an AccessDenied error.
+bool TDescribePartitionActor::NeedToRequestWithDescribeSchema(TAutoPtr<IEventHandle>& ev) {
+    if (!CheckAccessWithWriteTopicPermission) {
+        // We've already sent a request with DescribeSchema, ev is a response to it.
+        return false;
+    }
+
+    auto evNav = *reinterpret_cast<typename TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
+    auto const& entries = evNav->Get()->Request.Get()->ResultSet;
+    Y_ABORT_UNLESS(entries.size() == 1);
+
+    if (entries.front().Status != NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied) {
+        // We do have access to the requested entity or there was an error.
+        // Transfer ownership to the ev pointer, and let the base classes' StateWork methods handle the response.
+        ev = *reinterpret_cast<TAutoPtr<IEventHandle>*>(&evNav);
+        return false;
+    }
+
+    return true;
+}
+
+void TDescribePartitionActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+    auto const& entries = ev->Get()->Request.Get()->ResultSet;
+    Y_ABORT_UNLESS(entries.size() == 1); // describe for only one topic
     if (ReplyIfNotTopic(ev)) {
         return;
     }
-    PQGroupInfo = ev->Get()->Request->ResultSet[0].PQGroupInfo;
+    PQGroupInfo = entries[0].PQGroupInfo;
     auto* partRes = Result.mutable_partition();
     partRes->set_partition_id(Settings.Partitions[0]);
     partRes->set_active(true);

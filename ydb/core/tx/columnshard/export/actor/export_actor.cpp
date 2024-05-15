@@ -9,11 +9,11 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev) {
     AFL_VERIFY(!!data || ev->Get()->Finished);
     if (data) {
         CurrentData = NArrow::ToBatch(data, true);
-        CurrentDataBlob = Serializer->SerializeFull(CurrentData);
+        CurrentDataBlob = ExportSession->GetTask().GetSerializer()->SerializeFull(CurrentData);
         if (data) {
             auto controller = std::make_shared<TWriteController>(SelfId(), std::vector<TString>({CurrentDataBlob}), 
-                BlobsOperator->StartWritingAction(NBlobOperations::EConsumer::EXPORT), Cursor, ShardTabletId, Selector->GetPathId());
-            Register(CreateWriteActor((ui64)ShardTabletId, controller, TInstant::Max()));
+                BlobsOperator->StartWritingAction(NBlobOperations::EConsumer::EXPORT), ExportSession->GetCursor(), TabletId, ExportSession->GetTask().GetSelector()->GetPathId());
+            Register(CreateWriteActor((ui64)TabletId, controller, TInstant::Max()));
         }
     } else {
         CurrentData = nullptr;
@@ -21,16 +21,16 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev) {
         TBase::Send(SelfId(), new NEvents::TEvExportWritingFinished);
     }
     TOwnedCellVec lastKey = ev->Get()->LastKey;
-    AFL_VERIFY(!Cursor.IsFinished());
-    Cursor.InitNext(ev->Get()->LastKey, ev->Get()->Finished);
+    AFL_VERIFY(!ExportSession->GetCursor().IsFinished());
+    ExportSession->MutableCursor().InitNext(ev->Get()->LastKey, ev->Get()->Finished);
 }
 
 void TActor::HandleExecute(NEvents::TEvExportWritingFailed::TPtr& /*ev*/) {
     SwitchStage(EStage::WaitWriting, EStage::WaitWriting);
     auto controller = std::make_shared<TWriteController>(SelfId(), std::vector<TString>({CurrentDataBlob}), 
         BlobsOperator->StartWritingAction(NBlobOperations::EConsumer::EXPORT),
-        Cursor, ShardTabletId, Selector->GetPathId());
-    Register(CreateWriteActor((ui64)ShardTabletId, controller, TInstant::Max()));
+        ExportSession->GetCursor(), TabletId, ExportSession->GetTask().GetSelector()->GetPathId());
+    Register(CreateWriteActor((ui64)TabletId, controller, TInstant::Max()));
 }
 
 }

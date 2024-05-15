@@ -82,7 +82,17 @@ namespace NYql::NDq {
             , HolderFactory(holderFactory)
             , ColumnDestinations(CreateColumnDestination())
             , MaxKeysInRequest(maxKeysInRequest)
+            , KeyTypeHelper(keyType)
+            , RequestedKeys(1000,
+                            KeyTypeHelper.GetValueHash(),
+                            KeyTypeHelper.GetValueEqual())
         {
+        }
+
+        ~TGenericLookupActor() {
+            auto guard = Guard(*Alloc);
+            KeyTypeHelper = TKeyTypeHelper{};
+            RequestedKeys = TRequestedKeys(0, KeyTypeHelper.GetValueHash(), KeyTypeHelper.GetValueEqual());
         }
 
         void Bootstrap() {
@@ -184,6 +194,8 @@ namespace NYql::NDq {
             NConnector::NApi::TListSplitsRequest splitRequest;
             *splitRequest.add_selects() = CreateSelect(keys);
             splitRequest.Setmax_split_count(1);
+            Y_ABORT_UNLESS(RequestedKeys.empty());
+            RequestedKeys.insert(keys.begin(), keys.end());
             Connector->ListSplits(splitRequest).Subscribe([actorSystem = TActivationContext::ActorSystem(), selfId = SelfId()](const NConnector::TListSplitsStreamIteratorAsyncResult& asyncResult) {
                 auto result = ExtractFromConstFuture(asyncResult);
                 if (result.Status.Ok()) {
@@ -238,18 +250,26 @@ namespace NYql::NDq {
             auto height = columns[0].size();
             for (size_t i = 0; i != height; ++i) {
                 NUdf::TUnboxedValue* keyItems;
-                auto key = HolderFactory.CreateDirectArrayHolder(KeyType->GetMembersCount(), keyItems);
+                NUdf::TUnboxedValue key = HolderFactory.CreateDirectArrayHolder(KeyType->GetMembersCount(), keyItems);
                 NUdf::TUnboxedValue* outputItems;
-                auto output = HolderFactory.CreateDirectArrayHolder(PayloadType->GetMembersCount(), outputItems);
+                NUdf::TUnboxedValue output = HolderFactory.CreateDirectArrayHolder(PayloadType->GetMembersCount(), outputItems);
                 for (size_t j = 0; j != columns.size(); ++j) {
                     (ColumnDestinations[j].first == EColumnDestination::Key ? keyItems : outputItems)[ColumnDestinations[j].second] = columns[j][i];
                 }
-                LookupResult.emplace_back(std::move(key), std::move(output));
+                if (auto it = RequestedKeys.find(key); it != RequestedKeys.end()) { //remove duplicatas in lookup results
+                    LookupResult.emplace_back(std::move(key), std::move(output));
+                    RequestedKeys.erase(it);
+                }
             }
         }
 
         void FinalizeRequest() {
-            YQL_CLOG(INFO, ProviderGeneric) << "Sending lookup results with " << LookupResult.size() << " rows";
+            YQL_CLOG(INFO, ProviderGeneric) << "Sending lookup results with " << LookupResult.size() << " filled rows, " << RequestedKeys.size() << " empty rows";
+            auto guard = Guard(*Alloc);
+            for (auto&& k : RequestedKeys) {
+                LookupResult.emplace_back(std::move(k), NUdf::TUnboxedValue{});
+            }
+            RequestedKeys.clear();
             auto ev = new IDqAsyncLookupSource::TEvLookupResult(Alloc, std::move(LookupResult));
             TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(ParentId, SelfId(), ev));
             LookupResult = {};
@@ -343,6 +363,14 @@ namespace NYql::NDq {
         const std::vector<std::pair<EColumnDestination, size_t>> ColumnDestinations;
         const size_t MaxKeysInRequest;
         std::atomic_bool InProgress;
+        using TKeyTypeHelper = NKikimr::NMiniKQL::TKeyTypeContanerHelper<true, true, false>;
+        TKeyTypeHelper KeyTypeHelper;
+        using TRequestedKeys = std::unordered_set<
+            NUdf::TUnboxedValue,
+            NKikimr::NMiniKQL::TValueHasher,
+            NKikimr::NMiniKQL::TValueEqual,
+            NKikimr::NMiniKQL::TMKQLAllocator<NUdf::TUnboxedValue>>;
+        TRequestedKeys RequestedKeys;
         NConnector::IReadSplitsStreamIterator::TPtr ReadSplitsIterator; //TODO move me to TEvReadSplitsPart
         NKikimr::NMiniKQL::TKeyPayloadPairVector LookupResult;
     };
@@ -360,6 +388,7 @@ namespace NYql::NDq {
         const size_t maxKeysInRequest)
     {
         auto tokenProvider = NYql::NDq::CreateGenericTokenProvider(lookupSource.GetToken(), lookupSource.GetServiceAccountId(), lookupSource.GetServiceAccountIdSignature(), credentialsFactory);
+        auto guard = Guard(*alloc);
         const auto actor = new TGenericLookupActor(
             connectorClient,
             std::move(tokenProvider),

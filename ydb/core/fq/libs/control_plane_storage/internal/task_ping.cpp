@@ -55,6 +55,7 @@ struct TPingTaskParams {
 struct TFinalStatus {
     FederatedQuery::QueryMeta::ComputeStatus Status = FederatedQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED;
     NYql::NDqProto::StatusIds::StatusCode StatusCode = NYql::NDqProto::StatusIds::UNSPECIFIED;
+    FederatedQuery::QueryContent::QueryType QueryType = FederatedQuery::QueryContent::QUERY_TYPE_UNSPECIFIED;
     NYql::TIssues Issues;
     NYql::TIssues TransientIssues;
     StatsValuesList FinalStatistics;
@@ -419,6 +420,7 @@ TPingTaskParams ConstructHardPingTask(
         }
 
         finalStatus->Status = query.meta().status();
+        finalStatus->QueryType = query.content().type();
         finalStatus->StatusCode = internal.status_code();
         finalStatus->CloudId = internal.cloud_id();
         finalStatus->JobId = jobId;
@@ -490,9 +492,14 @@ TPingTaskParams ConstructHardPingTask(
             updateQueryTtl = "`" EXPIRE_AT_COLUMN_NAME "` = NULL";
         }
 
+        TString updateResultId;
+        if (request.has_result_id()) {
+            updateResultId = "`" RESULT_ID_COLUMN_NAME "` = $result_id, ";
+        }
+
         writeQueryBuilder.AddText(
             "UPSERT INTO `" JOBS_TABLE_NAME "` (`" SCOPE_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME "`, `" JOB_ID_COLUMN_NAME "`, `" JOB_COLUMN_NAME "`) VALUES($scope, $query_id, $job_id, $job);\n"
-            "UPDATE `" QUERIES_TABLE_NAME "` SET `" QUERY_COLUMN_NAME "` = $query, `" STATUS_COLUMN_NAME "` = $status, `" INTERNAL_COLUMN_NAME "` = $internal, `" RESULT_ID_COLUMN_NAME "` = $result_id, " + updateResultSetsExpire + ", " + updateQueryTtl + ", `" META_REVISION_COLUMN_NAME  "` = `" META_REVISION_COLUMN_NAME "` + 1\n"
+            "UPDATE `" QUERIES_TABLE_NAME "` SET `" QUERY_COLUMN_NAME "` = $query, `" STATUS_COLUMN_NAME "` = $status, `" INTERNAL_COLUMN_NAME "` = $internal, " + updateResultId + updateResultSetsExpire + ", " + updateQueryTtl + ", `" META_REVISION_COLUMN_NAME  "` = `" META_REVISION_COLUMN_NAME "` + 1\n"
             "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
         );
 
@@ -663,7 +670,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
             if (success) {
                 actorSystem->Send(ControlPlaneStorageServiceActorId(), new TEvControlPlaneStorage::TEvFinalStatusReport(
                     request.query_id().value(), finalStatus->JobId, finalStatus->CloudId, scope, std::move(finalStatus->FinalStatistics),
-                    finalStatus->Status, finalStatus->StatusCode, finalStatus->Issues, finalStatus->TransientIssues));
+                    finalStatus->Status, finalStatus->StatusCode, finalStatus->QueryType, finalStatus->Issues, finalStatus->TransientIssues));
             }
         });
 }
@@ -677,7 +684,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvFinalStatus
     if (IsFailedStatus(event.Status)) {
         FailedStatusCodeCounters->IncByScopeAndStatusCode(event.Scope, event.StatusCode, event.Issues);
         LOG_YQ_AUDIT_SERVICE_INFO("FinalFailedStatus: cloud id: [" << event.CloudId  << "], scope: [" << event.Scope << "], query id: [" <<
-                                event.QueryId << "], job id: [" << event.JobId << "], "
+                                event.QueryId << "], job id: [" << event.JobId << "], query type: [" << FederatedQuery::QueryContent::QueryType_Name(event.QueryType) << "], "
                                 "status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(event.Status) <<
                                 ", label: " << LabelNameFromStatusCodeAndIssues(event.StatusCode, event.Issues) <<
                                 ", status code: " << NYql::NDqProto::StatusIds::StatusCode_Name(event.StatusCode) <<
@@ -693,7 +700,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvFinalStatus
 
     Statistics statistics{event.Statistics};
     LOG_YQ_AUDIT_SERVICE_INFO("FinalStatus: cloud id: [" << event.CloudId  << "], scope: [" << event.Scope << "], query id: [" <<
-                              event.QueryId << "], job id: [" << event.JobId << "], " << statistics << ", " <<
+                              event.QueryId << "], job id: [" << event.JobId << "], query type: [" << FederatedQuery::QueryContent::QueryType_Name(event.QueryType) << "], "  << statistics << ", " <<
                               "status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(event.Status));
 }
 

@@ -1,18 +1,18 @@
 #include "proxy.h"
 
-#include <ydb/core/docapi/traits.h>
-#include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/public/api/protos/ydb_issue_message.pb.h>
-#include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/base/tx_processing.h>
-#include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/base/path.h>
-
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/base/tx_processing.h>
+#include <ydb/core/docapi/traits.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/library/aclib/aclib.h>
-
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/protobuf_printer/security_printer.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
+#include <ydb/public/api/protos/ydb_issue_message.pb.h>
+
 #include <util/string/cast.h>
 
 namespace NKikimr {
@@ -148,6 +148,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropColumnTable:
         case NKikimrSchemeOp::ESchemeOpDropSequence:
         case NKikimrSchemeOp::ESchemeOpDropReplication:
+        case NKikimrSchemeOp::ESchemeOpDropReplicationCascade:
         case NKikimrSchemeOp::ESchemeOpDropBlobDepot:
         case NKikimrSchemeOp::ESchemeOpDropExternalTable:
         case NKikimrSchemeOp::ESchemeOpDropExternalDataSource:
@@ -618,6 +619,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropColumnTable:
         case NKikimrSchemeOp::ESchemeOpDropSequence:
         case NKikimrSchemeOp::ESchemeOpDropReplication:
+        case NKikimrSchemeOp::ESchemeOpDropReplicationCascade:
         case NKikimrSchemeOp::ESchemeOpDropBlobDepot:
         case NKikimrSchemeOp::ESchemeOpDropExternalTable:
         case NKikimrSchemeOp::ESchemeOpDropExternalDataSource:
@@ -886,7 +888,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, "Unexpected response from scheme cache"
             << ": " << navigate->ToString(*AppData()->TypeRegistry));
-        Y_DEBUG_ABORT_UNLESS(false, "Unreachable");
+        Y_DEBUG_ABORT("Unreachable");
 
         TxProxyMon->ResolveKeySetFail->Inc();
         ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, ctx);
@@ -1166,7 +1168,7 @@ void TFlatSchemeReq::Bootstrap(const TActorContext &ctx) {
                 "Actor# " << ctx.SelfID.ToString()
                           << " txid# " << TxId
                           << " Bootstrap EvSchemeRequest"
-                          << " record: " << GetRequestProto().DebugString());
+                          << " record: " << SecureDebugString(GetRequestProto()));
     Y_ABORT_UNLESS(GetRequestEv().HasModifyScheme());
     Y_ABORT_UNLESS(!GetRequestEv().HasTransactionalModification());
 
@@ -1301,7 +1303,7 @@ void TSchemeTransactionalReq::Bootstrap(const TActorContext &ctx) {
                 "Actor# " << ctx.SelfID.ToString()
                           << " txid# " << TxId
                           << " Bootstrap EvSchemeRequest"
-                          << " record: " << GetRequestProto().DebugString());
+                          << " record: " << SecureDebugString(GetRequestProto()));
     Y_ABORT_UNLESS(!GetRequestEv().HasModifyScheme());
     Y_ABORT_UNLESS(GetRequestEv().HasTransactionalModification());
 

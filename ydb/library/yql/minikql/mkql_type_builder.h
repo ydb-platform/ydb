@@ -21,6 +21,7 @@ public:
 
 constexpr size_t MaxBlockSizeInBytes = 240_KB;
 static_assert(MaxBlockSizeInBytes < (size_t)std::numeric_limits<i32>::max());
+static_assert(MaxBlockSizeInBytes % 64 == 0, "arrow buffers are allocated with buffer size aligned to next 64 byte boundary");
 
 // maximum size of block item in bytes
 size_t CalcMaxBlockItemSize(const TType* type);
@@ -162,8 +163,8 @@ public:
     void Unused2() override;
     void Unused3() override;
 
-    NUdf::IFunctionTypeInfoBuilder15& SupportsBlocks() override;
-    NUdf::IFunctionTypeInfoBuilder15& IsStrict() override;
+    NUdf::IFunctionTypeInfoBuilder15& SupportsBlocksImpl() override;
+    NUdf::IFunctionTypeInfoBuilder15& IsStrictImpl() override;
     const NUdf::IBlockTypeHelper& IBlockTypeHelper() const override;
 
     bool GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef& value) const override;

@@ -2124,7 +2124,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
             }
             Y_ABORT_UNLESS(partNo == totalParts);
         } else if (cmd.GetHeartbeat().GetData().size() > mSize) {
-            Y_DEBUG_ABORT_UNLESS(false, "This should never happen");
+            Y_DEBUG_ABORT("This should never happen");
             ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, TStringBuilder()
                 << "Too big heartbeat message, must be at most " << mSize << ", but got " << cmd.GetHeartbeat().GetData().size());
             return;

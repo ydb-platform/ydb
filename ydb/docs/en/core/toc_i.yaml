@@ -11,10 +11,6 @@ items:
   include:
     mode: link
     path: devops/toc_p.yaml
-- name: For DBA
-  include:
-    mode: link
-    path: dba/toc_p.yaml
 - name: For Developers
   include:
     mode: link
@@ -39,8 +35,10 @@ items:
   include:
     mode: link
     path: downloads/toc_p.yaml
-- name: Public talks
-  href: public-talks.md
+- name: Public materials
+  include:
+    mode: link
+    path: public-materials/toc_p.yaml
 - name: Changelog
   include:
     mode: link

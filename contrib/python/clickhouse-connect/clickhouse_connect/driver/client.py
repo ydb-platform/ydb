@@ -1,6 +1,6 @@
 import io
 import logging
-from datetime import tzinfo, datetime
+from datetime import tzinfo
 
 import pytz
 
@@ -12,6 +12,7 @@ from clickhouse_connect import common
 from clickhouse_connect.common import version
 from clickhouse_connect.datatypes.registry import get_from_name
 from clickhouse_connect.datatypes.base import ClickHouseType
+from clickhouse_connect.driver import tzutil
 from clickhouse_connect.driver.common import dict_copy, StreamContext, coerce_int, coerce_bool
 from clickhouse_connect.driver.constants import CH_VERSION_WITH_PROTOCOL, PROTOCOL_VERSION_WITH_LOW_CARD
 from clickhouse_connect.driver.exceptions import ProgrammingError, OperationalError
@@ -39,6 +40,7 @@ class Client(ABC):
     optional_transport_settings = set()
     database = None
     max_error_message = 0
+    apply_server_timezone = False
 
     def __init__(self,
                  database: str,
@@ -56,16 +58,21 @@ class Client(ABC):
         self.query_limit = coerce_int(query_limit)
         self.query_retries = coerce_int(query_retries)
         self.server_host_name = server_host_name
-        self.server_tz = pytz.UTC
+        self.server_tz, dst_safe = pytz.UTC, True
         self.server_version, server_tz = \
             tuple(self.command('SELECT version(), timezone()', use_database=False))
         try:
-            self.server_tz = pytz.timezone(server_tz)
+            server_tz = pytz.timezone(server_tz)
+            server_tz, dst_safe = tzutil.normalize_timezone(server_tz)
+            if apply_server_timezone is None:
+                apply_server_timezone = dst_safe
+            self.apply_server_timezone = apply_server_timezone == 'always' or coerce_bool(apply_server_timezone)
         except UnknownTimeZoneError:
             logger.warning('Warning, server is using an unrecognized timezone %s, will use UTC default', server_tz)
-        offsets_differ = datetime.now().astimezone().utcoffset() != datetime.now(tz=self.server_tz).utcoffset()
-        self.apply_server_timezone = apply_server_timezone == 'always' or (
-                coerce_bool(apply_server_timezone) and offsets_differ)
+
+        if not self.apply_server_timezone and not tzutil.local_tz_dst_safe:
+            logger.warning('local timezone %s may return unexpected times due to Daylight Savings Time/' +
+                           'Summer Time differences', tzutil.local_tz.tzname())
         readonly = 'readonly'
         if not self.min_version('19.17'):
             readonly = common.get_setting('readonly')
@@ -256,8 +263,7 @@ class Client(ABC):
                   settings: Optional[Dict[str, Any]] = None,
                   fmt: str = None,
                   use_database: bool = True,
-                  external_data: Optional[ExternalData] = None,
-                  stream: bool = False) -> Union[bytes, io.IOBase]:
+                  external_data: Optional[ExternalData] = None) -> bytes:
         """
         Query method that simply returns the raw ClickHouse format bytes
         :param query: Query statement/format string
@@ -269,6 +275,25 @@ class Client(ABC):
         :param external_data  External data to send with the query
         :return: bytes representing raw ClickHouse return value based on format
         """
+
+    @abstractmethod
+    def raw_stream(self, query: str,
+                   parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
+                   settings: Optional[Dict[str, Any]] = None,
+                   fmt: str = None,
+                   use_database: bool = True,
+                   external_data: Optional[ExternalData] = None) -> io.IOBase:
+        """
+       Query method that returns the result as an io.IOBase iterator
+       :param query: Query statement/format string
+       :param parameters: Optional dictionary used to format the query
+       :param settings: Optional dictionary of ClickHouse settings (key/string values)
+       :param fmt: ClickHouse output format
+       :param use_database  Send the database parameter to ClickHouse so the command will be executed in the client
+        database context.
+       :param external_data  External data to send with the query
+       :return: io.IOBase stream/iterator for the result
+       """
 
     # pylint: disable=duplicate-code,too-many-arguments,unused-argument
     def query_np(self,
@@ -487,12 +512,11 @@ class Client(ABC):
         :return: Generator that yields a PyArrow.Table for per block representing the result set
         """
         settings = self._update_arrow_settings(settings, use_strings)
-        return to_arrow_batches(self.raw_query(query,
-                                               parameters,
-                                               settings,
-                                               fmt='ArrowStream',
-                                               external_data=external_data,
-                                               stream=True))
+        return to_arrow_batches(self.raw_stream(query,
+                                                parameters,
+                                                settings,
+                                                fmt='ArrowStream',
+                                                external_data=external_data))
 
     def _update_arrow_settings(self,
                                settings: Optional[Dict[str, Any]],

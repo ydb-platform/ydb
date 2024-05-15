@@ -49,9 +49,37 @@ public:
         TVector<std::function<void()>> OnPersistent;
     };
 
-    struct TChg {
-        ui64 Serial;
-        TEpoch Epoch;
+    struct TChangeCounter {
+        /**
+         * Monotonic change counter for a table or an entire database. Serial
+         * is incremented and persisted on each successful Commit() that has
+         * data changes (i.e. not empty). Note: this may or may not be zero
+         * when table has no changes, or when all changes have been compacted.
+         */
+        ui64 Serial = 0;
+
+        /**
+         * Monotonic epoch of a table's current memtable. This is incremented
+         * each time a memtable is flushed and a new one is started. The
+         * current memtable may or may not have additional changes.
+         */
+        TEpoch Epoch = TEpoch::Zero();
+
+        TChangeCounter() = default;
+
+        TChangeCounter(ui64 serial, TEpoch epoch)
+            : Serial(serial)
+            , Epoch(epoch)
+        {}
+
+        bool operator==(const TChangeCounter& rhs) const = default;
+        bool operator!=(const TChangeCounter& rhs) const = default;
+
+        /**
+         * Compares two change counters, such that when a < b then b either
+         * has more changes than a, or it's impossible to determine.
+         */
+        bool operator<(const TChangeCounter& rhs) const;
     };
 
     TDatabase(const TDatabase&) = delete;
@@ -60,14 +88,11 @@ public:
 
     void SetTableObserver(ui32 table, TIntrusivePtr<ITableObserver> ptr) noexcept;
 
-    /* Returns durable monotonic change number for table or entire database
-        on default (table = Max<ui32>()). Serial is incremented for each
-        successful Commit(). AHTUNG: Serial may go to the past in case of
-        migration to older db versions with (Evolution < 18). Thus do not
-        rely on durability until of kikimr stable 18-08.
+    /**
+     * Returns durable monotonic change counter for a table (or a database when
+     * table = Max<ui32>() by default).
      */
-
-    TChg Head(ui32 table = Max<ui32>()) const noexcept;
+    TChangeCounter Head(ui32 table = Max<ui32>()) const noexcept;
 
     /*_ Call Next() before accessing each row including the 1st row. */
 

@@ -25,6 +25,7 @@ ENDIF()
         library/cpp/logger
         library/cpp/resource
         library/cpp/yson
+        library/cpp/digest/md5
         yt/cpp/mapreduce/interface
         ydb/library/yql/sql/pg
         ydb/library/yql/core/facade
@@ -83,6 +84,7 @@ ENDIF()
         ydb/library/yql/providers/yt/lib/config_clusters
         ydb/library/yql/parser/pg_wrapper
         ydb/library/yql/utils/log/proto
+        ydb/library/yql/core/qplayer/storage/file
 
         ydb/library/yql/utils/actor_system
         ydb/core/fq/libs/actors

@@ -165,7 +165,7 @@ namespace NKikimr {
                     bool allowKeepFlags = HullCtx->AllowKeepFlags;
                     NGc::TKeepStatus keep = BarriersEssence->Keep(dbIt.GetCurKey(),
                                                                   dbMerger.GetMemRec(),
-                                                                  dbMerger.GetMemRecsMerged(),
+                                                                  {subsMerger, dbMerger},
                                                                   allowKeepFlags,
                                                                   AllowGarbageCollection);
                     if (keep.KeepIndex) {

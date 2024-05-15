@@ -1,5 +1,6 @@
 #include "partition.h"
 #include "partition_util.h"
+#include <memory>
 
 namespace NKikimr::NPQ {
 
@@ -782,15 +783,17 @@ void TPartition::SetupTopicCounters(const TActorContext& ctx) {
 
 
     subGroup = GetServiceCounters(counters, "pqproxy|writeInfo");
-    MessageSize.Setup(
-        IsSupportive(),
-        new NKikimr::NPQ::TPercentileCounter(
-        subGroup, labels, {{"sensor", "MessageSize" + suffix}}, "Size",
-        TVector<std::pair<ui64, TString>>{
-            {1_KB, "1kb"}, {5_KB, "5kb"}, {10_KB, "10kb"},
-            {20_KB, "20kb"}, {50_KB, "50kb"}, {100_KB, "100kb"}, {200_KB, "200kb"},
-            {512_KB, "512kb"},{1024_KB, "1024kb"}, {2048_KB,"2048kb"}, {5120_KB, "5120kb"},
-            {10240_KB, "10240kb"}, {65536_KB, "65536kb"}, {999'999'999, "99999999kb"}}, true));
+    {
+        std::unique_ptr<TPercentileCounter> percentileCounter(new TPercentileCounter( 
+            subGroup, labels, {{"sensor", "MessageSize" + suffix}}, "Size",
+            TVector<std::pair<ui64, TString>>{
+                {1_KB, "1kb"}, {5_KB, "5kb"}, {10_KB, "10kb"},
+                {20_KB, "20kb"}, {50_KB, "50kb"}, {100_KB, "100kb"}, {200_KB, "200kb"},
+                {512_KB, "512kb"},{1024_KB, "1024kb"}, {2048_KB,"2048kb"}, {5120_KB, "5120kb"},
+                {10240_KB, "10240kb"}, {65536_KB, "65536kb"}, {999'999'999, "99999999kb"}}, true));
+
+        MessageSize.Setup(IsSupportive(), std::move(percentileCounter));
+    }
 
     subGroup = GetServiceCounters(counters, "pqproxy|writeSession");
     auto txSuffix = IsSupportive() ? "Uncommitted" : suffix;
@@ -871,19 +874,18 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
                         {180'000,"180000"}, {9'999'999, "999999"}}, true));
 
     subgroups.back().second = "topic.write.message_size_bytes";
-    MessageSize.Setup(
-        IsSupportive(),
-        new NKikimr::NPQ::TPercentileCounter(
+    {
+        std::unique_ptr<TPercentileCounter> percentileCounter(new TPercentileCounter(
             NPersQueue::GetCountersForTopic(counters, IsServerless), {},
-                    subgroups, "bin",
-                    TVector<std::pair<ui64, TString>>{
-                        {1024, "1024"}, {5120, "5120"}, {10'240, "10240"},
-                        {20'480, "20480"}, {51'200, "51200"}, {102'400, "102400"},
-                        {204'800, "204800"}, {524'288, "524288"},{1'048'576, "1048576"},
-                        {2'097'152,"2097152"}, {5'242'880, "5242880"}, {10'485'760, "10485760"},
-                            {67'108'864, "67108864"}, {999'999'999, "99999999"}}, true
-        )
-    );
+            subgroups, "bin",
+            TVector<std::pair<ui64, TString>>{
+                {1024, "1024"}, {5120, "5120"}, {10'240, "10240"},
+                {20'480, "20480"}, {51'200, "51200"}, {102'400, "102400"},
+                {204'800, "204800"}, {524'288, "524288"},{1'048'576, "1048576"},
+                {2'097'152,"2097152"}, {5'242'880, "5242880"}, {10'485'760, "10485760"},
+                {67'108'864, "67108864"}, {999'999'999, "99999999"}}, true));
+        MessageSize.Setup(IsSupportive(), std::move(percentileCounter));
+    }
 
     subgroups.pop_back();
     TString bytesSuffix = IsSupportive() ? "uncommitted_bytes" : "bytes";
@@ -1005,12 +1007,17 @@ bool DiskIsFull(TEvKeyValue::TEvResponse::TPtr& ev) {
     return !diskIsOk;
 }
 
-static std::pair<TKeyPrefix, TKeyPrefix> MakeKeyPrefixRange(TKeyPrefix::EType type, const TPartitionId& partition)
+void AddCmdDeleteRange(TEvKeyValue::TEvRequest& request, TKeyPrefix::EType c, const TPartitionId& partitionId)
 {
-    TKeyPrefix from(type, partition);
-    TKeyPrefix to(type, TPartitionId(partition.OriginalPartitionId, partition.WriteId, partition.InternalPartitionId + 1));
+    auto keyPrefixes = MakeKeyPrefixRange(c, partitionId);
+    const TKeyPrefix& from = keyPrefixes.first;
+    const TKeyPrefix& to = keyPrefixes.second;
 
-    return {std::move(from), std::move(to)};
+    auto del = request.Record.AddCmdDeleteRange();
+    auto range = del->MutableRange();
+
+    range->SetFrom(from.Data(), from.Size());
+    range->SetTo(to.Data(), to.Size());
 }
 
 static void RequestRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition,
@@ -1037,15 +1044,7 @@ static void RequestRange(const TActorContext& ctx, const TActorId& dst, const TP
         read->SetIncludeData(true);
 
     if (dropTmp) {
-        keyPrefixes = MakeKeyPrefixRange(TKeyPrefix::TypeTmpData, partition);
-        const TKeyPrefix& from = keyPrefixes.first;
-        const TKeyPrefix& to = keyPrefixes.second;
-
-        auto del = request->Record.AddCmdDeleteRange();
-        auto range = del->MutableRange();
-
-        range->SetFrom(from.Data(), from.Size());
-        range->SetTo(to.Data(), to.Size());
+        AddCmdDeleteRange(*request, TKeyPrefix::TypeTmpData, partition);
     }
 
     ctx.Send(dst, request.Release());

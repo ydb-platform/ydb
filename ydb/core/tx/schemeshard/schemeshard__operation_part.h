@@ -588,13 +588,15 @@ ISubOperation::TPtr CreateDropSequence(TOperationId id, const TTxTransaction& tx
 ISubOperation::TPtr CreateDropSequence(TOperationId id, TTxState::ETxState state);
 ISubOperation::TPtr CreateCopySequence(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateCopySequence(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateAlterSequence(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateAlterSequence(TOperationId id, TTxState::ETxState state);
 
 ISubOperation::TPtr CreateNewReplication(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateNewReplication(TOperationId id, TTxState::ETxState state);
 ISubOperation::TPtr CreateAlterReplication(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateAlterReplication(TOperationId id, TTxState::ETxState state);
-ISubOperation::TPtr CreateDropReplication(TOperationId id, const TTxTransaction& tx);
-ISubOperation::TPtr CreateDropReplication(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateDropReplication(TOperationId id, const TTxTransaction& tx, bool cascade);
+ISubOperation::TPtr CreateDropReplication(TOperationId id, TTxState::ETxState state, bool cascade);
 
 ISubOperation::TPtr CreateNewBlobDepot(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateNewBlobDepot(TOperationId id, TTxState::ETxState state);

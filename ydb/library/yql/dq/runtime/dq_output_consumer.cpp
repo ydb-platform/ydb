@@ -20,6 +20,11 @@ using namespace NKikimr;
 using namespace NMiniKQL;
 using namespace NUdf;
 
+inline ui64 SpreadHash(ui64 hash) {
+    // https://probablydance.com/2018/06/16/fibonacci-hashing-the-optimization-that-the-world-forgot-or-a-better-alternative-to-integer-modulo/
+    return ((unsigned __int128)hash * 11400714819323198485llu) >> 64;
+}
+
 
 class TDqOutputMultiConsumer : public IDqOutputConsumer {
 public:
@@ -189,6 +194,9 @@ private:
             hash = CombineHashes(hash, HashColumn(keyId, columnValue));
         }
 
+
+        hash = SpreadHash(hash);
+
         return hash % Outputs.size();
     }
 
@@ -199,6 +207,8 @@ private:
             MKQL_ENSURE_S(KeyColumns[keyId].Index < OutputWidth);
             hash = CombineHashes(hash, HashColumn(keyId, values[KeyColumns[keyId].Index]));
         }
+
+        hash = SpreadHash(hash);
 
         return hash % Outputs.size();
     }
@@ -302,6 +312,8 @@ private:
             YQL_ENSURE(KeyColumns_[keyId].Index < OutputWidth_);
             hash = CombineHashes(hash, HashColumn(keyId, values[KeyColumns_[keyId].Index]));
         }
+
+        hash = SpreadHash(hash);
 
         return hash % Outputs_.size();
     }
@@ -500,6 +512,9 @@ private:
             }
             hash = CombineHashes(hash, keyHash);
         }
+
+        hash = SpreadHash(hash);
+
         return hash % Outputs_.size();
     }
 

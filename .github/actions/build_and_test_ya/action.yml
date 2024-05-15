@@ -30,7 +30,8 @@ inputs:
     default: "small,medium,large"
   test_type:
     type: string
-    default: "unittest,py3test,py2test,pytest"
+    default: ""
+    description: "run only specific test types (or all by default)"
   increment:
     type: boolean
     required: true
@@ -111,6 +112,7 @@ runs:
         build_target: ${{ steps.test_run_choice.outputs.target }}
         build_preset: ${{ inputs.build_preset }}
         test_size: ${{ inputs.test_size }}
+        test_type: ${{ inputs.test_type }}
         testman_token: ${{ fromJSON( inputs.secs ).TESTMO_TOKEN }}
         testman_url: ${{  fromJSON( inputs.vars ).TESTMO_URL }}
         testman_project_id: ${{  fromJSON( inputs.vars ).TESTMO_PROJECT_ID }}

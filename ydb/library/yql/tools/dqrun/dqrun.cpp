@@ -70,6 +70,7 @@
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
 #include <ydb/library/yql/utils/bindings/utils.h>
+#include <ydb/library/yql/core/qplayer/storage/file/yql_qstorage_file.h>
 
 #include <ydb/core/fq/libs/actors/database_resolver.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
@@ -83,6 +84,7 @@
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/logger/priority.h>
 #include <library/cpp/protobuf/util/pb_io.h>
+#include <library/cpp/digest/md5/md5.h>
 #include <ydb/library/actors/http/http_proxy.h>
 
 #include <util/generic/string.h>
@@ -161,6 +163,28 @@ void ReadGatewaysConfig(const TString& configFile, TGatewaysConfig* config, THas
     if (config->HasSqlCore()) {
         sqlFlags.insert(config->GetSqlCore().GetTranslationFlags().begin(), config->GetSqlCore().GetTranslationFlags().end());
     }
+}
+
+void PatchGatewaysConfig(TGatewaysConfig* config, const TString& mrJobBin, const TString& mrJobUdfsDir,
+    size_t numThreads, bool keepTemp)
+{
+    auto ytConfig = config->MutableYt();
+    ytConfig->SetGatewayThreads(numThreads);
+    if (mrJobBin.empty()) {
+        ytConfig->ClearMrJobBin();
+    } else {
+        ytConfig->SetMrJobBin(mrJobBin);
+        ytConfig->SetMrJobBinMd5(MD5::File(mrJobBin));
+    }
+
+    if (mrJobUdfsDir.empty()) {
+        ytConfig->ClearMrJobUdfsDir();
+    } else {
+        ytConfig->SetMrJobUdfsDir(mrJobUdfsDir);
+    }
+    auto attr = ytConfig->MutableDefaultSettings()->Add();
+    attr->SetName("KeepTempTables");
+    attr->SetValue(keepTemp ? "yes" : "no");
 }
 
 TFileStoragePtr CreateFS(const TString& paramsFile, const TString& defYtServer) {
@@ -453,6 +477,9 @@ int RunMain(int argc, const char* argv[])
     int verbosity = 3;
     bool showLog = false;
     bool emulateYt = false;
+    TString mrJobBin;
+    TString mrJobUdfsDir;
+    size_t numYtThreads = 1;
     TString token = GetEnv("YQL_TOKEN");
     if (!token) {
         TString home = GetEnv("HOME");
@@ -466,10 +493,14 @@ int RunMain(int argc, const char* argv[])
     TString folderId;
 
     TRunOptions runOptions;
+    TString qStorageDir;
+    TString opId;
+    IQStoragePtr qStorage;
+    TQContext qContext;
 
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
     opts.AddLongOption('p', "program", "Program to execute (use '-' to read from stdin)")
-        .Required()
+        .Optional()
         .RequiredArgument("FILE")
         .StoreResult(&progFile);
     opts.AddLongOption('s', "sql", "Program is SQL query")
@@ -545,6 +576,16 @@ int RunMain(int argc, const char* argv[])
         .Optional()
         .NoArgument()
         .SetFlag(&udfResolverFilterSyscalls);
+    opts.AddLongOption("mrjob-bin", "Path to mrjob binary")
+        .Optional()
+        .StoreResult(&mrJobBin);
+    opts.AddLongOption("mrjob-udfsdir", "Path to udfs for mr jobs")
+        .Optional()
+        .StoreResult(&mrJobUdfsDir);
+    opts.AddLongOption("yt-threads", "YT gateway threads")
+        .Optional()
+        .RequiredArgument("COUNT")
+        .StoreResult(&numYtThreads);
     opts.AddLongOption('v', "verbosity", "Log verbosity level")
         .Optional()
         .RequiredArgument("LEVEL")
@@ -589,6 +630,10 @@ int RunMain(int argc, const char* argv[])
     opts.AddLongOption("no-force-dq", "don't set force dq mode").Optional().NoArgument().SetFlag(&runOptions.NoForceDq);
     opts.AddLongOption("ansi-lexer", "Use ansi lexer").Optional().NoArgument().SetFlag(&runOptions.AnsiLexer);
     opts.AddLongOption('E', "emulate-yt", "Emulate YT tables").Optional().NoArgument().SetFlag(&emulateYt);
+    opts.AddLongOption("qstorage-dir", "directory for QStorage").StoreResult(&qStorageDir).DefaultValue(".");
+    opts.AddLongOption("op-id", "QStorage operation id").StoreResult(&opId).DefaultValue("dummy_op");
+    opts.AddLongOption("capture", "write query metadata to QStorage").NoArgument();
+    opts.AddLongOption("replay", "read query metadata from QStorage").NoArgument();
 
     opts.AddLongOption("dq-host", "Dq Host");
     opts.AddLongOption("dq-port", "Dq Port");
@@ -620,9 +665,22 @@ int RunMain(int argc, const char* argv[])
 
     NLastGetopt::TOptsParseResult res(&opts, argc, argv);
 
+    if (!res.Has("program") && !res.Has("replay")) {
+        YQL_LOG(ERROR) << "Either program or replay option should be specified";
+        return 1;
+    }
+
     if (runOptions.PeepholeOnly) {
         Cerr << "Peephole optimization is not supported yet" << Endl;
         return 1;
+    }
+
+    if (res.Has("replay")) {
+        qStorage = MakeFileQStorage(qStorageDir);
+        qContext = TQContext(qStorage->MakeReader(opId, {}));
+    } else if (res.Has("capture")) {
+        qStorage = MakeFileQStorage(qStorageDir);
+        qContext = TQContext(qStorage->MakeWriter(opId, {}));
     }
 
     if (res.Has("dq-host")) {
@@ -715,6 +773,7 @@ int RunMain(int argc, const char* argv[])
 
     TGatewaysConfig gatewaysConfig;
     ReadGatewaysConfig(gatewaysCfgFile, &gatewaysConfig, sqlFlags);
+    PatchGatewaysConfig(&gatewaysConfig, mrJobBin, mrJobUdfsDir, numYtThreads, res.Has("keep-temp"));
     if (runOptions.AnalyzeQuery) {
         auto* setting = gatewaysConfig.MutableDq()->AddDefaultSettings();
         setting->SetName("AnalyzeQuery");
@@ -923,12 +982,15 @@ int RunMain(int argc, const char* argv[])
     TProgramFactory progFactory(emulateYt, funcRegistry.Get(), ctx.NextUniqueId, dataProvidersInit, "dqrun");
     progFactory.AddUserDataTable(std::move(dataTable));
     progFactory.SetModules(moduleResolver);
+    IUdfResolver::TPtr udfResolverImpl;
     if (udfResolver) {
-        progFactory.SetUdfResolver(NCommon::CreateOutProcUdfResolver(funcRegistry.Get(), storage,
-            udfResolver, {}, {}, udfResolverFilterSyscalls, {}));
+        udfResolverImpl = NCommon::CreateOutProcUdfResolver(funcRegistry.Get(), storage,
+            udfResolver, {}, {}, udfResolverFilterSyscalls, {});
     } else {
-        progFactory.SetUdfResolver(NCommon::CreateSimpleUdfResolver(funcRegistry.Get(), storage, true));
+        udfResolverImpl = NCommon::CreateSimpleUdfResolver(funcRegistry.Get(), storage, true);
     }
+
+    progFactory.SetUdfResolver(udfResolverImpl);
     progFactory.SetFileStorage(storage);
     progFactory.SetUrlPreprocessing(new TUrlPreprocessing(gatewaysConfig));
     progFactory.SetGatewaysConfig(&gatewaysConfig);
@@ -957,12 +1019,20 @@ int RunMain(int argc, const char* argv[])
     );
 
     TProgramPtr program;
-    if (progFile == TStringBuf("-")) {
-        program = progFactory.Create("-stdin-", Cin.ReadAll());
+    if (res.Has("replay") && res.Has("capture")) {
+        YQL_LOG(ERROR) << "replay and capture options can't be used simultaneously";
+        return 1;
+    }
+
+    if (res.Has("replay")) {
+        program = progFactory.Create("-replay-", "", opId, EHiddenMode::Disable, qContext);
+    } else if (progFile == TStringBuf("-")) {
+        program = progFactory.Create("-stdin-", Cin.ReadAll(), opId, EHiddenMode::Disable, qContext);
     } else {
-        program = progFactory.Create(TFile(progFile, RdOnly));
+        program = progFactory.Create(TFile(progFile, RdOnly), opId, qContext);
         program->SetQueryName(progFile);
     }
+
     if (paramsFile) {
         TString parameters = TFileInput(paramsFile).ReadAll();
         program->SetParametersYson(parameters);
@@ -993,6 +1063,10 @@ int RunMain(int argc, const char* argv[])
         metricsRegistry->TakeSnapshot(&snapshot);
         auto output = MakeHolder<TFileOutput>(metricsFile);
         SerializeToTextFormat(snapshot, *output.Get());
+    }
+
+    if (result == 0 && res.Has("capture")) {
+        qContext.GetWriter()->Commit().GetValueSync();
     }
 
     return result;

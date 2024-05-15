@@ -256,7 +256,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         NPersQueue::TWriteSessionSettings writeSettings;
         writeSettings.Path(setup->GetTestTopic()).MessageGroupId(TEST_MESSAGE_GROUP_ID);
         writeSettings.Codec(NPersQueue::ECodec::RAW);
-        NPersQueue::IExecutor::TPtr executor = new NPersQueue::TSyncExecutor();
+        IExecutor::TPtr executor = new TSyncExecutor();
         writeSettings.CompressionExecutor(executor);
 
         ui64 count = 100u;
@@ -609,7 +609,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         NPersQueue::TWriteSessionSettings writeSettings;
         writeSettings.Path(setup->GetTestTopic()).MessageGroupId("src_id");
         writeSettings.Codec(NPersQueue::ECodec::RAW);
-        NPersQueue::IExecutor::TPtr executor = new NPersQueue::TSyncExecutor();
+        IExecutor::TPtr executor = new TSyncExecutor();
         writeSettings.CompressionExecutor(executor);
 
         auto& client = setup->GetPersQueueClient();
@@ -794,6 +794,9 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                 [&](TReadSessionEvent::TStopPartitionSessionEvent& event) {
                     event.Confirm();
                 },
+                [&](TReadSessionEvent::TEndPartitionSessionEvent&) {
+                    // do nothing
+                },
                 [&](TReadSessionEvent::TPartitionSessionStatusEvent&) {
                     UNIT_FAIL("Test does not support lock sessions yet");
                 },
@@ -931,7 +934,23 @@ Y_UNIT_TEST_SUITE(TSettingsValidation) {
         //Specify msg groupId and don't specify deduplication. Should work with dedup enable
         runTest({}, "msgGroup", {}, true, EExpectedTestResult::SUCCESS);
         runTest({}, "msgGroup", {}, false, EExpectedTestResult::SUCCESS);
+    }
 
+    Y_UNIT_TEST(ValidateSettingsFailOnStart) {
+        TTopicSdkTestSetup setup(TEST_CASE_NAME);
+        TTopicClient client = setup.MakeClient();
+
+        auto readSettings = TReadSessionSettings()
+            .ConsumerName(TEST_CONSUMER)
+            .MaxMemoryUsageBytes(0)
+            .AppendTopics(TEST_TOPIC);
+
+        auto readSession = client.CreateReadSession(readSettings);
+        auto event = readSession->GetEvent(true);
+        UNIT_ASSERT(event.Defined());
+
+        auto& closeEvent = std::get<NYdb::NTopic::TSessionClosedEvent>(*event);
+        UNIT_ASSERT(closeEvent.DebugString().Contains("Too small max memory usage"));
     }
 
 } // Y_UNIT_TEST_SUITE(TSettingsValidation)

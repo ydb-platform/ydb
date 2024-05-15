@@ -54,6 +54,12 @@ TTablesStorage::TTableExtractedGuard TTablesStorage::TakeAlterVerified(const TPa
     return TTableExtractedGuard(*this, id, ExtractPtr(id), true);
 }
 
+ TColumnTableInfo::TPtr TTablesStorage::GetVerifiedPtr(const TPathId& id) const {
+    auto it = Tables.find(id);
+    Y_ABORT_UNLESS(it != Tables.end());
+    return it->second;
+}
+
 TTablesStorage::TTableReadGuard TTablesStorage::GetVerified(const TPathId& id) const {
     auto it = Tables.find(id);
     Y_ABORT_UNLESS(it != Tables.end());
@@ -82,25 +88,30 @@ size_t TTablesStorage::Drop(const TPathId& id) {
     }
 }
 
-NKikimr::NSchemeShard::TColumnTablesLayout TTablesStorage::GetTablesLayout(const std::vector<ui64>& tabletIds) const {
-    THashMap<ui64, TColumnTablesLayout::TTableIdsGroup> tablesByShard;
+TColumnTablesLayout TTablesStorage::GetTablesLayout(const std::vector<ui64>& tabletIds) const {
+    std::vector<TColumnTablesLayout::TTablesGroup> groups;
+    groups.reserve(tabletIds.size());
     for (auto&& i : tabletIds) {
         auto it = TablesByShard.find(i);
         if (it == TablesByShard.end()) {
-            tablesByShard.emplace(i, TColumnTablesLayout::TTableIdsGroup());
+            groups.emplace_back(&Default<TColumnTablesLayout::TTableIdsGroup>(), std::set<ui64>({i}));
         } else {
-            tablesByShard.emplace(i, it->second);
+            groups.emplace_back(&it->second, std::set<ui64>({i}));
         }
     }
-    THashMap<TColumnTablesLayout::TTableIdsGroup, TColumnTablesLayout::TShardIdsGroup> shardsByTables;
-    for (auto&& i : tablesByShard) {
-        Y_ABORT_UNLESS(shardsByTables[i.second].AddId(i.first));
+    std::sort(groups.begin(), groups.end());
+    ui32 delta = 0;
+    for (ui32 i = 0; i + delta + 1 < groups.size();) {
+        if (delta) {
+            groups[i + 1] = std::move(groups[i + delta + 1]);
+        }
+        if (groups[i].TryMerge(groups[i + 1])) {
+            ++delta;
+        } else {
+            ++i;
+        }
     }
-    std::vector<TColumnTablesLayout::TTablesGroup> groups;
-    groups.reserve(shardsByTables.size());
-    for (auto&& i : shardsByTables) {
-        groups.emplace_back(TColumnTablesLayout::TTablesGroup(i.first, std::move(i.second)));
-    }
+    groups.resize(groups.size() - delta);
     return TColumnTablesLayout(std::move(groups));
 }
 

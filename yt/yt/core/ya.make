@@ -9,6 +9,8 @@ IF (ARCH_X86_64)
     CFLAGS(-mpclmul)
 ENDIF()
 
+NO_LTO()
+
 SRCS(
     actions/cancelable_context.cpp
     actions/current_invoker.cpp
@@ -117,7 +119,6 @@ SRCS(
     misc/coro_pipe.cpp
     misc/crash_handler.cpp
     misc/digest.cpp
-    misc/dnf.cpp
     misc/error.cpp
     misc/error_code.cpp
     misc/ema_counter.cpp

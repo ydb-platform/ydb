@@ -3,7 +3,6 @@ RECURSE(
     base
     client
     http
-    proto
     queues
 )
 

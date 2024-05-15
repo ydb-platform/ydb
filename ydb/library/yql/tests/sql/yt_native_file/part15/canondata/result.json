@@ -253,9 +253,9 @@
     ],
     "test.test[aggr_factory-top-default.txt-Debug]": [
         {
-            "checksum": "604eb0532536c965ae9169dd0d2c5d2e",
-            "size": 7885,
-            "uri": "https://{canondata_backend}/1942173/74408257f99fa053878b4c348dd56d42ab4853e2/resource.tar.gz#test.test_aggr_factory-top-default.txt-Debug_/opt.yql"
+            "checksum": "bcd6e213dcf93c02e60aae6da53a62aa",
+            "size": 7877,
+            "uri": "https://{canondata_backend}/1903280/7468524e3d561bebec3932d27b90fab4825f5047/resource.tar.gz#test.test_aggr_factory-top-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[aggr_factory-top-default.txt-Plan]": [
@@ -585,6 +585,32 @@
             "checksum": "65dd1c9c4370f9aa46ae219aacbca7c6",
             "size": 80111,
             "uri": "https://{canondata_backend}/1031349/e5d1799a61a873650fc835d1adb819a8a8b7486d/resource.tar.gz#test.test_bigdate-round-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[bigdate-table_yt_native-wo_compat-Debug]": [
+        {
+            "checksum": "02e287f97f9c3f26559b08dcfd63f2ae",
+            "size": 2233,
+            "uri": "https://{canondata_backend}/1600758/92222eda66311de21f198cbe659c30169e1e43cd/resource.tar.gz#test.test_bigdate-table_yt_native-wo_compat-Debug_/opt.yql"
+        }
+    ],
+    "test.test[bigdate-table_yt_native-wo_compat-Plan]": [
+        {
+            "checksum": "e0f35ef373cd9d021ca9fb323a644a86",
+            "size": 9997,
+            "uri": "https://{canondata_backend}/1600758/92222eda66311de21f198cbe659c30169e1e43cd/resource.tar.gz#test.test_bigdate-table_yt_native-wo_compat-Plan_/plan.txt"
+        }
+    ],
+    "test.test[bigdate-table_yt_native-wo_compat-Results]": [
+        {
+            "checksum": "acf426a10cca74e7a405e0eb7da4a20c",
+            "size": 98,
+            "uri": "https://{canondata_backend}/1600758/92222eda66311de21f198cbe659c30169e1e43cd/resource.tar.gz#test.test_bigdate-table_yt_native-wo_compat-Results_/Output.txt"
+        },
+        {
+            "checksum": "4ed7b7fbbcc093abc1d69b1946523398",
+            "size": 1477,
+            "uri": "https://{canondata_backend}/1600758/92222eda66311de21f198cbe659c30169e1e43cd/resource.tar.gz#test.test_bigdate-table_yt_native-wo_compat-Results_/Output.yqlrun.txt.attr"
         }
     ],
     "test.test[binding-table_filter_strict_binding-default.txt-Debug]": [

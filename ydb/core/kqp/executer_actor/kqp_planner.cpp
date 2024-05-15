@@ -79,6 +79,7 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , UserRequestContext(args.UserRequestContext)
     , FederatedQuerySetup(args.FederatedQuerySetup)
     , OutputChunkMaxSize(args.OutputChunkMaxSize)
+    , GUCSettings(std::move(args.GUCSettings))
 {
     if (!Database) {
         // a piece of magic for tests
@@ -203,6 +204,10 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
         request.SetOutputChunkMaxSize(OutputChunkMaxSize);
     }
 
+    if (GUCSettings) {
+        request.SetSerializedGUCSettings(GUCSettings->SerializeToString());
+    }
+
     return result;
 }
 
@@ -248,6 +253,10 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
         }
 
         return nullptr;
+    }
+
+    if (ResourcesSnapshot.empty()) {
+        ResourcesSnapshot = std::move(GetKqpResourceManager()->GetClusterResources());
     }
 
     if (ResourcesSnapshot.empty() || (ResourcesSnapshot.size() == 1 && ResourcesSnapshot[0].GetNodeId() == ExecuterId.NodeId())) {
@@ -349,7 +358,7 @@ void TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, bool shareMailbox, bool op
     limits.MemoryQuotaManager = std::make_shared<NYql::NDq::TGuaranteeQuotaManager>(limit * 2, limit);
 
     auto computeActor = NKikimr::NKqp::CreateKqpComputeActor(ExecuterId, TxId, taskDesc, AsyncIoFactory,
-        settings, limits, ExecuterSpan.GetTraceId(), TasksGraph.GetMeta().GetArenaIntrusivePtr(), FederatedQuerySetup);
+        settings, limits, ExecuterSpan.GetTraceId(), TasksGraph.GetMeta().GetArenaIntrusivePtr(), FederatedQuerySetup, GUCSettings);
 
     if (optimizeProtoForLocalExecution) {
         TVector<google::protobuf::Message*>& taskSourceSettings = static_cast<TKqpComputeActor*>(computeActor)->MutableTaskSourceSettings();
@@ -402,6 +411,8 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
 
     nComputeTasks = ComputeTasks.size();
 
+    // explicit requirement to execute task on the same node because it has dependencies
+    // on datashard tx.
     if (LocalComputeTasks) {
         bool shareMailbox = (ComputeTasks.size() <= 1);
         for (ui64 taskId : ComputeTasks) {

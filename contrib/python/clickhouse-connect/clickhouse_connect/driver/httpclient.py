@@ -1,3 +1,4 @@
+import io
 import json
 import logging
 import re
@@ -67,7 +68,7 @@ class HttpClient(Client):
                  http_proxy: Optional[str] = None,
                  https_proxy: Optional[str] = None,
                  server_host_name: Optional[str] = None,
-                 apply_server_timezone: Optional[Union[str, bool]] = True):
+                 apply_server_timezone: Optional[Union[str, bool]] = None):
         """
         Create an HTTP ClickHouse Connect client
         See clickhouse_connect.get_client for parameters
@@ -436,27 +437,36 @@ class HttpClient(Client):
             else:
                 self._error_handler(response)
 
-    def ping(self):
-        """
-        See BaseClient doc_string for this method
-        """
-        try:
-            response = self.http.request('GET', f'{self.url}/ping', timeout=3)
-            return 200 <= response.status < 300
-        except HTTPError:
-            logger.debug('ping failed', exc_info=True)
-            return False
-
     def raw_query(self, query: str,
                   parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
                   settings: Optional[Dict[str, Any]] = None,
                   fmt: str = None,
                   use_database: bool = True,
-                  external_data: Optional[ExternalData] = None,
-                  stream: bool = False) -> Union[bytes, HTTPResponse]:
+                  external_data: Optional[ExternalData] = None) -> bytes:
         """
         See BaseClient doc_string for this method
         """
+        body, params, fields = self._prep_raw_query(query, parameters, settings, fmt, use_database, external_data)
+        return self._raw_request(body, params, fields=fields).data
+
+    def raw_stream(self, query: str,
+                   parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
+                   settings: Optional[Dict[str, Any]] = None,
+                   fmt: str = None,
+                   use_database: bool = True,
+                   external_data: Optional[ExternalData] = None) -> io.IOBase:
+        """
+        See BaseClient doc_string for this method
+        """
+        body, params, fields = self._prep_raw_query(query, parameters, settings, fmt, use_database, external_data)
+        return self._raw_request(body, params, fields=fields, stream=True)
+
+    def _prep_raw_query(self, query: str,
+                        parameters: Optional[Union[Sequence, Dict[str, Any]]],
+                        settings: Optional[Dict[str, Any]],
+                        fmt: str,
+                        use_database: bool,
+                        external_data: Optional[ExternalData]):
         final_query, bind_params = bind_query(query, parameters, self.server_tz)
         if fmt:
             final_query += f'\n FORMAT {fmt}'
@@ -472,8 +482,18 @@ class HttpClient(Client):
         else:
             body = final_query
             fields = None
-        response = self._raw_request(body, params, fields=fields, stream=stream)
-        return response if stream else response.data
+        return body, params, fields
+
+    def ping(self):
+        """
+        See BaseClient doc_string for this method
+        """
+        try:
+            response = self.http.request('GET', f'{self.url}/ping', timeout=3)
+            return 200 <= response.status < 300
+        except HTTPError:
+            logger.debug('ping failed', exc_info=True)
+            return False
 
     def close(self):
         if self._owns_pool_manager:

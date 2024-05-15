@@ -320,13 +320,20 @@ namespace NKikimr::NPersQueueTests {
             }
         }
 
-        Y_UNIT_TEST(TestReadAtTimestamp) {
+        Y_UNIT_TEST(TestReadAtTimestamp_3) {
+            auto generate = [](ui32 messageId) {
+                return TStringBuilder() << "Hello___" << messageId << "___" << CreateGuidAsString() << TString(1_MB, 'a');
+            };
+
+            TestReadAtTimestampImpl(3, generate);
+        }
+
+        Y_UNIT_TEST(TestReadAtTimestamp_10) {
             auto generate = [](ui32 messageId) {
                 return TStringBuilder() << "Hello___" << messageId << "___" << CreateGuidAsString() << TString(1_MB, 'a');
             };
 
             TestReadAtTimestampImpl(10, generate);
-            TestReadAtTimestampImpl(3, generate);
         }
 
         Y_UNIT_TEST(TestWriteStat1stClass) {

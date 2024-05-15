@@ -30,6 +30,7 @@ from hypothesis.internal.conjecture.data import (
     Status,
     StringKWargs,
 )
+from hypothesis.internal.escalation import InterestingOrigin
 from hypothesis.internal.floats import (
     count_between_floats,
     float_to_int,
@@ -62,6 +63,15 @@ class Killed:
 
     next_node = attr.ib()
 
+    def _repr_pretty_(self, p, cycle):
+        assert cycle is False
+        p.text("Killed")
+
+
+def _node_pretty(ir_type, value, kwargs, *, forced):
+    forced_marker = " [forced]" if forced else ""
+    return f"{ir_type} {value}{forced_marker} {kwargs}"
+
 
 @attr.s(slots=True)
 class Branch:
@@ -78,13 +88,32 @@ class Branch:
         assert max_children > 0
         return max_children
 
+    def _repr_pretty_(self, p, cycle):
+        assert cycle is False
+        for i, (value, child) in enumerate(self.children.items()):
+            if i > 0:
+                p.break_()
+            p.text(_node_pretty(self.ir_type, value, self.kwargs, forced=False))
+            with p.indent(2):
+                p.break_()
+                p.pretty(child)
+
 
 @attr.s(slots=True, frozen=True)
 class Conclusion:
     """Represents a transition to a finished state."""
 
-    status = attr.ib()
-    interesting_origin = attr.ib()
+    status: Status = attr.ib()
+    interesting_origin: Optional[InterestingOrigin] = attr.ib()
+
+    def _repr_pretty_(self, p, cycle):
+        assert cycle is False
+        o = self.interesting_origin
+        # avoid str(o), which can include multiple lines of context
+        origin = (
+            "" if o is None else f", {o.exc_type.__name__} at {o.filename}:{o.lineno}"
+        )
+        p.text(f"Conclusion ({self.status!r}{origin})")
 
 
 # The number of max children where, beyond this, it is practically impossible
@@ -492,6 +521,29 @@ class TreeNode:
                 )
         return self.is_exhausted
 
+    def _repr_pretty_(self, p, cycle):
+        assert cycle is False
+        indent = 0
+        for i, (ir_type, kwargs, value) in enumerate(
+            zip(self.ir_types, self.kwargs, self.values)
+        ):
+            with p.indent(indent):
+                if i > 0:
+                    p.break_()
+                p.text(_node_pretty(ir_type, value, kwargs, forced=i in self.forced))
+            indent += 2
+
+        if isinstance(self.transition, Branch):
+            if len(self.values) > 0:
+                p.break_()
+            p.pretty(self.transition)
+
+        if isinstance(self.transition, (Killed, Conclusion)):
+            with p.indent(indent):
+                if len(self.values) > 0:
+                    p.break_()
+                p.pretty(self.transition)
+
 
 class DataTree:
     """
@@ -888,6 +940,10 @@ class DataTree:
         if child in children:
             children.remove(child)
 
+    def _repr_pretty_(self, p, cycle):
+        assert cycle is False
+        return p.pretty(self.root)
+
 
 class TreeRecordingObserver(DataObserver):
     def __init__(self, tree):
@@ -1043,8 +1099,9 @@ class TreeRecordingObserver(DataObserver):
                 or new_transition.status != Status.VALID
             ):
                 raise Flaky(
-                    f"Inconsistent test results! Test case was {node.transition!r} "
-                    f"on first run but {new_transition!r} on second"
+                    f"Inconsistent results from replaying a test case!\n"
+                    f"  last: {node.transition.status.name} from {node.transition.interesting_origin}\n"
+                    f"  this: {new_transition.status.name} from {new_transition.interesting_origin}"
                 )
         else:
             node.transition = new_transition

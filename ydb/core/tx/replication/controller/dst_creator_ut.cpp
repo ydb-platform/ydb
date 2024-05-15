@@ -13,7 +13,7 @@ namespace NKikimr::NReplication::NController {
 Y_UNIT_TEST_SUITE(DstCreator) {
     using namespace NTestHelpers;
 
-    Y_UNIT_TEST(Basic) {
+    void Basic(const TString& replicatedPath) {
         TEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
 
@@ -29,14 +29,14 @@ Y_UNIT_TEST_SUITE(DstCreator) {
 
         env.CreateTable("/Root", *MakeTableDescription(tableDesc));
         env.GetRuntime().Register(CreateDstCreator(
-            env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(), 1 /* rid */, 1 /* tid */,
-            TReplication::ETargetKind::Table, "/Root/Table", "/Root/Replicated"
+            env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(), env.GetPathId("/Root"),
+            1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table, "/Root/Table", replicatedPath
         ));
 
         auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrScheme::StatusSuccess);
 
-        auto desc = env.GetDescription("/Root/Replicated");
+        auto desc = env.GetDescription(replicatedPath);
         const auto& replicatedDesc = desc.GetPathDescription().GetTable();
 
         UNIT_ASSERT_VALUES_EQUAL(replicatedDesc.KeyColumnNamesSize(), tableDesc.KeyColumns.size());
@@ -58,13 +58,21 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         UNIT_ASSERT_VALUES_EQUAL(replCfg.GetConsistency(), NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_WEAK);
     }
 
+    Y_UNIT_TEST(Basic) {
+        Basic("/Root/Replicated");
+    }
+
+    Y_UNIT_TEST(WithIntermediateDir) {
+        Basic("/Root/Dir/Replicated");
+    }
+
     Y_UNIT_TEST(NonExistentSrc) {
         TEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
 
         env.GetRuntime().Register(CreateDstCreator(
-            env.GetSender(), env.GetSchemeshardId("/Root"), env.GetYdbProxy(), 1 /* rid */, 1 /* tid */,
-            TReplication::ETargetKind::Table, "/Root/Table", "/Root/Replicated"
+            env.GetSender(), env.GetSchemeshardId("/Root"), env.GetYdbProxy(), env.GetPathId("/Root"),
+            1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table, "/Root/Table", "/Root/Replicated"
         ));
 
         auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
@@ -79,15 +87,21 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             return copy;
         };
 
+        auto clearConfig = [](const TTestTableDescription& desc) {
+            auto copy = desc;
+            copy.ReplicationConfig.Clear();
+            return copy;
+        };
+
         TEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
 
-        env.CreateTable("/Root", *MakeTableDescription(changeName(desc, "Src")));
+        env.CreateTable("/Root", *MakeTableDescription(clearConfig(changeName(desc, "Src"))));
         env.CreateTable("/Root", *MakeTableDescription(mod(changeName(desc, "Dst"))));
 
         env.GetRuntime().Register(CreateDstCreator(
-            env.GetSender(), env.GetSchemeshardId("/Root"), env.GetYdbProxy(), 1 /* rid */, 1 /* tid */,
-            TReplication::ETargetKind::Table, "/Root/Src", "/Root/Dst"
+            env.GetSender(), env.GetSchemeshardId("/Root"), env.GetYdbProxy(), env.GetPathId("/Root"),
+            1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table, "/Root/Src", "/Root/Dst"
         ));
 
         auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
@@ -215,13 +229,14 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     }
 
     Y_UNIT_TEST(UnsupportedReplicationMode) {
-        auto clearMode = [](const TTestTableDescription& desc) {
+        auto changeMode = [](const TTestTableDescription& desc) {
             auto copy = desc;
             copy.ReplicationConfig->Mode = TTestTableDescription::TReplicationConfig::MODE_NONE;
+            copy.ReplicationConfig->Consistency = TTestTableDescription::TReplicationConfig::CONSISTENCY_UNKNOWN;
             return copy;
         };
 
-        ExistingDst(NKikimrScheme::StatusSchemeError, "Unsupported replication mode", clearMode, TTestTableDescription{
+        ExistingDst(NKikimrScheme::StatusSchemeError, "Unsupported replication mode", changeMode, TTestTableDescription{
             .Name = "Table",
             .KeyColumns = {"key"},
             .Columns = {

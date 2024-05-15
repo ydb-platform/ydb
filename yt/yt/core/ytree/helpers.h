@@ -48,20 +48,13 @@ struct TAttributeDictionarySerializer
 
 void ValidateYTreeKey(TStringBuf key);
 
-void ValidateYPathResolutionDepth(const NYPath::TYPath& path, int depth);
+void ValidateYPathResolutionDepth(TYPathBuf path, int depth);
 
 //! Helps implementing IAttributeDictionary::ListPairs by delegating to
 //! IAttributeDictionary::ListKeys and IAttributeDictionary::FindYson for those not capable
 //! of providing a custom efficient implementation.
 std::vector<std::pair<TString, NYson::TYsonString>> ListAttributesPairs(const IAttributeDictionary& attributes);
 
-////////////////////////////////////////////////////////////////////////////////
-
-//! Creates typed context and deserializes it. Throws if deserialization fails.
-template <class TReq, class TRsp>
-TIntrusivePtr<TTypedYPathServiceContext<TReq, TRsp>> DeserializeAsTypedOrThrow(
-    const IYPathServiceContextPtr& context,
-    const NRpc::THandlerInvocationOptions& options);
 
 ////////////////////////////////////////////////////////////////////////////////
 

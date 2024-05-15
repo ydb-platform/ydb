@@ -22,7 +22,7 @@
 
 namespace NYT::NConcurrency {
 
-static const auto& Logger = ConcurrencyLogger;
+static constexpr auto& Logger = ConcurrencyLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -130,16 +130,16 @@ TExecutionStack::~TExecutionStack()
     ::DeleteFiber(Handle_);
 }
 
-static YT_THREAD_LOCAL(void*) FiberTrampolineOpaque;
+YT_DEFINE_THREAD_LOCAL(void*, FiberTrampolineOpaque);
 
 void TExecutionStack::SetOpaque(void* opaque)
 {
-    FiberTrampolineOpaque = opaque;
+    FiberTrampolineOpaque() = opaque;
 }
 
 void* TExecutionStack::GetOpaque()
 {
-    return FiberTrampolineOpaque;
+    return FiberTrampolineOpaque();
 }
 
 void TExecutionStack::SetTrampoline(void (*trampoline)(void*))
@@ -151,7 +151,7 @@ void TExecutionStack::SetTrampoline(void (*trampoline)(void*))
 VOID CALLBACK TExecutionStack::FiberTrampoline(PVOID opaque)
 {
     auto* stack = reinterpret_cast<TExecutionStack*>(opaque);
-    stack->Trampoline_(FiberTrampolineOpaque);
+    stack->Trampoline_(FiberTrampolineOpaque());
 }
 
 #else

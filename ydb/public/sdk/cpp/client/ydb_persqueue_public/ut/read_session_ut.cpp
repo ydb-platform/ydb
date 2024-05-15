@@ -636,8 +636,7 @@ TSingleClusterReadSessionImpl* TReadSessionImplTestSetup::GetSession() {
             GetEventsQueue(),
             FakeContext,
             PartitionIdStart,
-            PartitionIdStep,
-            ProvidedCodecs);
+            PartitionIdStep);
         Session = CbContext->TryGet();
     }
     return Session.get();

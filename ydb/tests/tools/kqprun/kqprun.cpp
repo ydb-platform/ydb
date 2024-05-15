@@ -19,17 +19,23 @@
 
 
 struct TExecutionOptions {
-    TString ScriptQuery;
+    enum class EClearExecutionCase {
+        Disabled,
+        GenericQuery,
+        YqlScript
+    };
+
+    std::vector<TString> ScriptQueries;
     TString SchemeQuery;
 
-    bool ClearExecution = false;
     bool ForgetExecution = false;
+    EClearExecutionCase ClearExecution = EClearExecutionCase::Disabled;
     NKikimrKqp::EQueryAction ScriptQueryAction = NKikimrKqp::QUERY_ACTION_EXECUTE;
 
     TString TraceId = "kqprun";
 
     bool HasResults() const {
-        return ScriptQuery && ScriptQueryAction == NKikimrKqp::QUERY_ACTION_EXECUTE;
+        return !ScriptQueries.empty() && ScriptQueryAction == NKikimrKqp::QUERY_ACTION_EXECUTE;
     }
 };
 
@@ -37,36 +43,46 @@ struct TExecutionOptions {
 void RunScript(const TExecutionOptions& executionOptions, const NKqpRun::TRunnerOptions& runnerOptions) {
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
 
-    Cout << colors.Yellow() << "Initialization of kqp runner..." << colors.Default() << Endl;
+    Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Initialization of kqp runner..." << colors.Default() << Endl;
     NKqpRun::TKqpRunner runner(runnerOptions);
 
     if (executionOptions.SchemeQuery) {
-        Cout << colors.Yellow() << "Executing scheme query..." << colors.Default() << Endl;
+        Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Executing scheme query..." << colors.Default() << Endl;
         if (!runner.ExecuteSchemeQuery(executionOptions.SchemeQuery, executionOptions.TraceId)) {
-            ythrow yexception() << "Scheme query execution failed";
+            ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Scheme query execution failed";
         }
     }
 
-    if (executionOptions.ScriptQuery) {
-        Cout << colors.Yellow() << "Executing script..." << colors.Default() << Endl;
-        if (!executionOptions.ClearExecution) {
-            if (!runner.ExecuteScript(executionOptions.ScriptQuery, executionOptions.ScriptQueryAction, executionOptions.TraceId)) {
-                ythrow yexception() << "Script execution failed";
+    for (size_t id = 0; id < executionOptions.ScriptQueries.size(); ++id) {
+        Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Executing script" << (executionOptions.ScriptQueries.size() > 1 ? TStringBuilder() << " " << id : TString()) << "..." << colors.Default() << Endl;
+        switch (executionOptions.ClearExecution) {
+        case TExecutionOptions::EClearExecutionCase::Disabled:
+            if (!runner.ExecuteScript(executionOptions.ScriptQueries[id], executionOptions.ScriptQueryAction, executionOptions.TraceId)) {
+                ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Script execution failed";
             }
-            Cout << colors.Yellow() << "Fetching script results..." << colors.Default() << Endl;
+            Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Fetching script results..." << colors.Default() << Endl;
             if (!runner.FetchScriptResults()) {
-                ythrow yexception() << "Fetch script results failed";
+                ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Fetch script results failed";
             }
             if (executionOptions.ForgetExecution) {
-                Cout << colors.Yellow() << "Forgetting script execution operation..." << colors.Default() << Endl;
+                Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Forgetting script execution operation..." << colors.Default() << Endl;
                 if (!runner.ForgetExecutionOperation()) {
-                    ythrow yexception() << "Forget script execution operation failed";
+                    ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Forget script execution operation failed";
                 }
             }
-        } else {
-            if (!runner.ExecuteQuery(executionOptions.ScriptQuery, executionOptions.ScriptQueryAction, executionOptions.TraceId)) {
-                ythrow yexception() << "Query execution failed";
+            break;
+
+        case TExecutionOptions::EClearExecutionCase::GenericQuery:
+            if (!runner.ExecuteQuery(executionOptions.ScriptQueries[id], executionOptions.ScriptQueryAction, executionOptions.TraceId)) {
+                ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Query execution failed";
             }
+            break;
+
+        case TExecutionOptions::EClearExecutionCase::YqlScript:
+            if (!runner.ExecuteYqlScript(executionOptions.ScriptQueries[id], executionOptions.ScriptQueryAction, executionOptions.TraceId)) {
+                ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Yql script execution failed";
+            }
+            break;
         }
     }
 
@@ -74,7 +90,7 @@ void RunScript(const TExecutionOptions& executionOptions, const NKqpRun::TRunner
         runner.PrintScriptResults();
     }
 
-    Cout << colors.Yellow() << "Finalization of kqp runner..." << colors.Default() << Endl;
+    Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Finalization of kqp runner..." << colors.Default() << Endl;
 }
 
 
@@ -90,6 +106,16 @@ THolder<TFileOutput> SetupDefaultFileOutput(const TString& filePath, IOutputStre
 }
 
 
+template <typename EnumType>
+EnumType GetCaseVariant(const TString& optionName, const TString& caseName, const std::map<TString, EnumType>& casesMap) {
+    auto it = casesMap.find(caseName);
+    if (it == casesMap.end()) {
+        ythrow yexception() << "Option '" << optionName << "' has no case '" << caseName << "'";
+    }
+    return it->second;
+}
+
+
 void ReplaceTemplate(const TString& variableName, const TString& variableValue, TString& query) {
     TString variableTemplate = TStringBuilder() << "${" << variableName << "}";
     for (size_t position = query.find(variableTemplate); position != TString::npos; position = query.find(variableTemplate, position)) {
@@ -102,7 +128,7 @@ void ReplaceTemplate(const TString& variableName, const TString& variableValue, 
 TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> CreateFunctionRegistry(const TString& udfsDirectory, TVector<TString> udfsPaths, bool excludeLinkedUdfs) {
     if (!udfsDirectory.empty() || !udfsPaths.empty()) {
         NColorizer::TColors colors = NColorizer::AutoColors(Cout);
-        Cout << colors.Yellow() << "Fetching udfs..." << colors.Default() << Endl;
+        Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Fetching udfs..." << colors.Default() << Endl;
     }
 
     NKikimr::NMiniKQL::FindUdfsInDir(udfsDirectory, &udfsPaths);
@@ -127,7 +153,7 @@ void RunMain(int argc, const char* argv[]) {
     TExecutionOptions executionOptions;
     NKqpRun::TRunnerOptions runnerOptions;
 
-    TString scriptQueryFile;
+    std::vector<TString> scriptQueryFiles;
     TString schemeQueryFile;
     TString resultOutputFile = "-";
     TString schemeQueryAstFile;
@@ -137,6 +163,7 @@ void RunMain(int argc, const char* argv[]) {
     TString appConfigFile = "./configuration/app_config.conf";
     std::vector<TString> tablesMappingList;
 
+    TString clearExecutionType = "disabled";
     TString traceOptType = "disabled";
     TString scriptQueryAction = "execute";
     TString planOutputFormat = "pretty";
@@ -152,7 +179,7 @@ void RunMain(int argc, const char* argv[]) {
     options.AddLongOption('p', "script-query", "Script query to execute")
         .Optional()
         .RequiredArgument("FILE")
-        .StoreResult(&scriptQueryFile);
+        .AppendTo(&scriptQueryFiles);
     options.AddLongOption('s', "scheme-query", "Scheme query to execute")
         .Optional()
         .RequiredArgument("FILE")
@@ -188,11 +215,11 @@ void RunMain(int argc, const char* argv[]) {
         .RequiredArgument("FILE")
         .StoreResult(&scriptQueryPlanFile);
 
-    options.AddLongOption('C', "clear-execution", "Execute script query without RunScriptActor in one query request")
+    options.AddLongOption('C', "clear-execution", "Execute script query without creating additional tables, one of { query | yql-script }")
         .Optional()
-        .NoArgument()
-        .DefaultValue(executionOptions.ClearExecution)
-        .SetFlag(&executionOptions.ClearExecution);
+        .RequiredArgument("STR")
+        .DefaultValue(clearExecutionType)
+        .StoreResult(&clearExecutionType);
     options.AddLongOption('F', "forget", "Forget script execution operation after fetching results, cannot be used with -C")
         .Optional()
         .NoArgument()
@@ -228,6 +255,11 @@ void RunMain(int argc, const char* argv[]) {
         .NoArgument()
         .DefaultValue(emulateYt)
         .SetFlag(&emulateYt);
+    options.AddLongOption('N', "node-count", "Number of nodes to create")
+        .Optional()
+        .RequiredArgument("INT")
+        .DefaultValue(runnerOptions.YdbSettings.NodeCount)
+        .StoreResult(&runnerOptions.YdbSettings.NodeCount);
 
     options.AddLongOption('u', "udf", "Load shared library with UDF by given path")
         .Optional()
@@ -251,21 +283,30 @@ void RunMain(int argc, const char* argv[]) {
 
     // Execution options
 
-    if (!schemeQueryFile && !scriptQueryFile) {
+    if (!schemeQueryFile && scriptQueryFiles.empty()) {
         ythrow yexception() << "Nothing to execute";
     }
+
     if (schemeQueryFile) {
         executionOptions.SchemeQuery = TFileInput(schemeQueryFile).ReadAll();
         ReplaceTemplate(NKqpRun::YQL_TOKEN_VARIABLE, yqlToken, executionOptions.SchemeQuery);
     }
-    if (scriptQueryFile) {
-        executionOptions.ScriptQuery = TFileInput(scriptQueryFile).ReadAll();
+
+    executionOptions.ScriptQueries.reserve(scriptQueryFiles.size());
+    for (const TString& scriptQueryFile : scriptQueryFiles) {
+        executionOptions.ScriptQueries.emplace_back(TFileInput(scriptQueryFile).ReadAll());
     }
 
-    executionOptions.ScriptQueryAction =
-              (scriptQueryAction == TStringBuf("execute")) ? NKikimrKqp::QUERY_ACTION_EXECUTE
-            : (scriptQueryAction == TStringBuf("explain")) ? NKikimrKqp::QUERY_ACTION_EXPLAIN
-            : NKikimrKqp::QUERY_ACTION_EXECUTE;
+    executionOptions.ClearExecution = GetCaseVariant<TExecutionOptions::EClearExecutionCase>("clear-execution", clearExecutionType, {
+        {"query", TExecutionOptions::EClearExecutionCase::GenericQuery},
+        {"yql-script", TExecutionOptions::EClearExecutionCase::YqlScript},
+        {"disabled", TExecutionOptions::EClearExecutionCase::Disabled}
+    });
+
+    executionOptions.ScriptQueryAction = GetCaseVariant<NKikimrKqp::EQueryAction>("script-action", scriptQueryAction, {
+        {"execute", NKikimrKqp::QUERY_ACTION_EXECUTE},
+        {"explain", NKikimrKqp::QUERY_ACTION_EXPLAIN}
+    });
 
     // Runner options
 
@@ -274,26 +315,30 @@ void RunMain(int argc, const char* argv[]) {
     THolder<TFileOutput> scriptQueryAstFileHolder = SetupDefaultFileOutput(scriptQueryAstFile, runnerOptions.ScriptQueryAstOutput);
     THolder<TFileOutput> scriptQueryPlanFileHolder = SetupDefaultFileOutput(scriptQueryPlanFile, runnerOptions.ScriptQueryPlanOutput);
 
-    runnerOptions.TraceOptType =
-              (traceOptType == TStringBuf("all")) ? NKqpRun::TRunnerOptions::ETraceOptType::All
-            : (traceOptType == TStringBuf("scheme")) ? NKqpRun::TRunnerOptions::ETraceOptType::Scheme
-            : (traceOptType == TStringBuf("script")) ? NKqpRun::TRunnerOptions::ETraceOptType::Script
-            : (traceOptType == TStringBuf("disabled")) ? NKqpRun::TRunnerOptions::ETraceOptType::Disabled
-            : NKqpRun::TRunnerOptions::ETraceOptType::All;
+    runnerOptions.TraceOptType = GetCaseVariant<NKqpRun::TRunnerOptions::ETraceOptType>("trace-opt", traceOptType, {
+        {"all", NKqpRun::TRunnerOptions::ETraceOptType::All},
+        {"scheme", NKqpRun::TRunnerOptions::ETraceOptType::Scheme},
+        {"script", NKqpRun::TRunnerOptions::ETraceOptType::Script},
+        {"disabled", NKqpRun::TRunnerOptions::ETraceOptType::Disabled}
+    });
     runnerOptions.YdbSettings.TraceOptEnabled = runnerOptions.TraceOptType != NKqpRun::TRunnerOptions::ETraceOptType::Disabled;
 
-    runnerOptions.ResultOutputFormat =
-              (resultOutputFormat == TStringBuf("rows")) ? NKqpRun::TRunnerOptions::EResultOutputFormat::RowsJson
-            : (resultOutputFormat == TStringBuf("full")) ? NKqpRun::TRunnerOptions::EResultOutputFormat::FullJson
-            : NKqpRun::TRunnerOptions::EResultOutputFormat::RowsJson;
+    runnerOptions.ResultOutputFormat = GetCaseVariant<NKqpRun::TRunnerOptions::EResultOutputFormat>("result-format", resultOutputFormat, {
+        {"rows", NKqpRun::TRunnerOptions::EResultOutputFormat::RowsJson},
+        {"full", NKqpRun::TRunnerOptions::EResultOutputFormat::FullJson}
+    });
 
-    runnerOptions.PlanOutputFormat =
-              (planOutputFormat == TStringBuf("pretty")) ? NYdb::NConsoleClient::EOutputFormat::Pretty
-            : (planOutputFormat == TStringBuf("table")) ? NYdb::NConsoleClient::EOutputFormat::PrettyTable
-            : (planOutputFormat == TStringBuf("json")) ? NYdb::NConsoleClient::EOutputFormat::JsonUnicode
-            : NYdb::NConsoleClient::EOutputFormat::Default;
+    runnerOptions.PlanOutputFormat = GetCaseVariant<NYdb::NConsoleClient::EOutputFormat>("plan-format", planOutputFormat, {
+        {"pretty", NYdb::NConsoleClient::EOutputFormat::Pretty},
+        {"table", NYdb::NConsoleClient::EOutputFormat::PrettyTable},
+        {"json", NYdb::NConsoleClient::EOutputFormat::JsonUnicode},
+    });
 
     // Ydb settings
+
+    if (runnerOptions.YdbSettings.NodeCount < 1) {
+        ythrow yexception() << "Number of nodes less than one";
+    }
 
     if (logFile != "-") {
         runnerOptions.YdbSettings.LogOutputFile = logFile;
@@ -337,6 +382,7 @@ void RunMain(int argc, const char* argv[]) {
     RunScript(executionOptions, runnerOptions);
 }
 
+
 void KqprunTerminateHandler() {
     NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
 
@@ -346,6 +392,7 @@ void KqprunTerminateHandler() {
 
     abort();
 }
+
 
 int main(int argc, const char* argv[]) {
     std::set_terminate(KqprunTerminateHandler);

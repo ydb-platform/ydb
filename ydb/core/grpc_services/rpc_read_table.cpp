@@ -243,8 +243,11 @@ private:
                 return ReplyFinishStream(Ydb::StatusIds::UNAUTHORIZED, issueMessage, ctx);
             }
             case TEvTxUserProxy::TResultStatus::ResolveError: {
-                const NYql::TIssue& issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Got ResolveError response from TxProxy");
+                NYql::TIssue issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Got ResolveError response from TxProxy");
                 auto tmp = issueMessage.Add();
+                for (const auto& unresolved : msg->Record.GetUnresolvedKeys()) {
+                    issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(unresolved));
+                }
                 NYql::IssueToMessage(issue, tmp);
                 return ReplyFinishStream(Ydb::StatusIds::SCHEME_ERROR, issueMessage, ctx);
             }

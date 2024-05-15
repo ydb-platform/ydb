@@ -8,6 +8,7 @@
 #include "flat_part_pinout.h"
 #include "flat_part_slice.h"
 #include "flat_table_committed.h"
+#include "flat_page_data.h"
 
 namespace NKikimr {
 namespace NTable {

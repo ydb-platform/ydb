@@ -5,7 +5,7 @@ PEERDIR(
 )
 
 SRCS(
-    granules.cpp
+    GLOBAL granules.cpp
 )
 
 END()

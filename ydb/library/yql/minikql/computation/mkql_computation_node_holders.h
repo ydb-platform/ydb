@@ -1037,11 +1037,12 @@ void GetDictionaryKeyTypes(const TType* keyType, TKeyTypes& types, bool& isTuple
 template<bool SupportEqual, bool SupportHash, bool SupportLess>
 class TKeyTypeContanerHelper {
 public:
+    TKeyTypeContanerHelper() = default;
     TKeyTypeContanerHelper(const TType* type) {
         bool encoded;
         bool useIHash;
         GetDictionaryKeyTypes(type, KeyTypes, IsTuple, encoded, useIHash);
-        if (useIHash) {
+        if (useIHash || encoded) {
             if constexpr(SupportEqual) {
                 Equate = MakeEquateImpl(type);
             }
@@ -1064,7 +1065,7 @@ public: //unavailable getters may be eliminated at compile time, but it'd make c
     }
     TValueLess GetValueLess() const{
         Y_ABORT_UNLESS(SupportLess);
-        return GetValueLess(KeyTypes, IsTuple , Compare.Get());
+        return TValueLess(KeyTypes, IsTuple , Compare.Get());
     }
 private:
     TKeyTypes KeyTypes;

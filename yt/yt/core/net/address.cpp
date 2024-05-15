@@ -52,7 +52,7 @@ using namespace NDns;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto& Logger = NetLogger;
+static constexpr auto& Logger = NetLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 // These are implemented in local_address.cpp.
@@ -545,11 +545,11 @@ bool ParseIP6Address(TStringBuf* str, TIP6Address* address)
     auto words = address->GetRawWords();
     std::fill_n(address->GetRawBytes(), TIP6Address::ByteSize, 0);
 
-    auto isEnd = [&] () {
+    auto isEnd = [&] {
         return str->empty() || (*str)[0] == '/';
     };
 
-    auto tokenizeAbbrev = [&] () {
+    auto tokenizeAbbrev = [&] {
         if (str->size() >= 2 && (*str)[0] == ':' && (*str)[1] == ':') {
             str->Skip(2);
             return true;
@@ -709,7 +709,7 @@ void FormatValue(TStringBuilderBase* builder, const TIP6Address& address, TStrin
     std::pair<int, int> maxRun = {-1, -1};
     int start = -1;
     int end = -1;
-    auto endRun = [&] () {
+    auto endRun = [&] {
         if ((end - start) >= (maxRun.second - maxRun.first) && (end - start) > 1) {
             maxRun = {start, end};
         }
@@ -803,10 +803,35 @@ void Serialize(const TIP6Address& value, IYsonConsumer* consumer)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+int GetMaskSize(const TIP6Address& mask)
+{
+    int size = 0;
+    const auto* parts = mask.GetRawDWords();
+    for (size_t partIndex = 0; partIndex < 4; ++partIndex) {
+        size += __builtin_popcount(parts[partIndex]);
+    }
+    return size;
+}
+
 TIP6Network::TIP6Network(const TIP6Address& network, const TIP6Address& mask)
     : Network_(network)
     , Mask_(mask)
-{ }
+{
+    // We allow only masks that can be written by using prefix notation,
+    // e.g. /64. In prefix notation no ones can go after zeros.
+    bool seenOne = false;
+    const auto* bytes = mask.GetRawBytes();
+    for (int i = 0; i < static_cast<int>(TIP6Address::ByteSize * 8); ++i) {
+        auto val = *(bytes + i / 8) & (1 << (i % 8));
+        if (val) {
+            seenOne = true;
+        } else {
+            if (seenOne) {
+                THROW_ERROR_EXCEPTION("Invalid network mask %Qv", ToString(mask));
+            }
+        }
+    }
+}
 
 const TIP6Address& TIP6Network::GetAddress() const
 {
@@ -820,12 +845,12 @@ const TIP6Address& TIP6Network::GetMask() const
 
 int TIP6Network::GetMaskSize() const
 {
-    int size = 0;
-    const auto* parts = Mask_.GetRawDWords();
-    for (size_t partIndex = 0; partIndex < 4; ++partIndex) {
-        size += __builtin_popcount(parts[partIndex]);
-    }
-    return size;
+    return ::NYT::NNet::GetMaskSize(Mask_);
+}
+
+std::optional<ui32> TIP6Network::GetProjectId() const
+{
+    return ProjectId_;
 }
 
 bool TIP6Network::Contains(const TIP6Address& address) const
@@ -847,8 +872,7 @@ TIP6Network TIP6Network::FromString(TStringBuf str)
 bool TIP6Network::FromString(TStringBuf str, TIP6Network* network)
 {
     auto buf = str;
-    std::optional<ui32> projectId = std::nullopt;
-    if (!ParseProjectId(&buf, &projectId)) {
+    if (!ParseProjectId(&buf, &network->ProjectId_)) {
         return false;
     }
 
@@ -861,13 +885,9 @@ bool TIP6Network::FromString(TStringBuf str, TIP6Network* network)
         return false;
     }
 
-    if (projectId) {
-        network->Network_.GetRawWords()[2] = *projectId;
-        network->Network_.GetRawWords()[3] = *projectId >> 16;
-    }
-
+    // Set mask based on mask size.
     network->Mask_ = TIP6Address();
-    auto bytes = network->Mask_.GetRawBytes();
+    auto* bytes = network->Mask_.GetRawBytes();
     for (int i = 0; i < static_cast<int>(TIP6Address::ByteSize * 8); ++i) {
         if (i >= static_cast<int>(TIP6Address::ByteSize * 8) - maskSize) {
             *(bytes + i / 8) |= (1 << (i % 8));
@@ -876,9 +896,16 @@ bool TIP6Network::FromString(TStringBuf str, TIP6Network* network)
         }
     }
 
-    if (projectId) {
+    if (network->ProjectId_) {
         static_assert(TIP6Address::ByteSize == 16);
-        network->Mask_.GetRawDWords()[1] = 0xffffffff;
+
+        // Set 64-95 bits of address to ::::[project_id_low:project_id_high]::
+        network->Network_.GetRawWords()[2] = *network->ProjectId_;
+        network->Network_.GetRawWords()[3] = *network->ProjectId_ >> 16;
+
+        // Set 64-95 bits of mask to ::::[ffff:ffff]::
+        network->Mask_.GetRawWords()[2] = 0xffff;
+        network->Mask_.GetRawWords()[3] = 0xffff;
     }
 
     return true;
@@ -886,9 +913,30 @@ bool TIP6Network::FromString(TStringBuf str, TIP6Network* network)
 
 void FormatValue(TStringBuilderBase* builder, const TIP6Network& network, TStringBuf /*spec*/)
 {
-    builder->AppendFormat("%v/%v",
-        network.GetAddress(),
-        network.GetMaskSize());
+    auto projectId = network.GetProjectId();
+    if (projectId) {
+        // The network has been created from string in
+        // project id notation. Save it just the way it came.
+
+        // Recover original network address.
+        auto address = network.GetAddress();
+        address.GetRawWords()[2] = 0;
+        address.GetRawWords()[3] = 0;
+
+        // Recover original mask.
+        auto mask = network.GetMask();
+        mask.GetRawWords()[2] = 0;
+        mask.GetRawWords()[3] = 0;
+
+        builder->AppendFormat("%x@%v/%v",
+            *projectId,
+            address,
+            GetMaskSize(mask));
+    } else {
+        builder->AppendFormat("%v/%v",
+            network.GetAddress(),
+            network.GetMaskSize());
+    }
 }
 
 TString ToString(const TIP6Network& network)

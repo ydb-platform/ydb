@@ -30,6 +30,9 @@ TEST(TQueryBuilderTest, Simple)
     b.AddHavingConjunct("group_expr > 42");
     b.AddHavingConjunct("group_expr < 420");
 
+    b.AddJoinExpression("table1", "lookup1", "(idx) = (lookup1.idx)", ETableJoinType::Inner);
+    b.AddJoinExpression("table2", "lookup2", "(idx) = (lookup2.idx)", ETableJoinType::Left);
+
     b.SetLimit(43);
 
     EXPECT_EQ(xIndex, 0);
@@ -39,6 +42,8 @@ TEST(TQueryBuilderTest, Simple)
     EXPECT_EQ(b.Build(),
         "(x), (y) AS y_alias, (z) "
         "FROM [//t] "
+        "JOIN [table1] AS [lookup1] ON (idx) = (lookup1.idx) "
+        "LEFT JOIN [table2] AS [lookup2] ON (idx) = (lookup2.idx) "
         "WHERE (x > y_alias) AND (y = 177 OR y % 2 = 0) "
         "GROUP BY (x + y * z) AS group_expr, (x - 1) "
         "HAVING (group_expr > 42) AND (group_expr < 420) "

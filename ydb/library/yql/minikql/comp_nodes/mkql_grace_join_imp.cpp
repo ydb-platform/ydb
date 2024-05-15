@@ -4,9 +4,7 @@
 #include <ydb/library/yql/utils/log/log.h>
 
 #include <contrib/libs/xxhash/xxhash.h>
-#include <chrono>
 #include <string_view>
-#include <format>
 
 
 namespace NKikimr {
@@ -106,7 +104,7 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
     }
 
 
-    TableBuckets[bucket].TuplesNum++;
+    TableBucketsStats[bucket].TuplesNum++;
 
     if (NumberOfStringColumns || NumberOfIColumns ) {
         stringsOffsets.push_back(offset); // Adding offset to tuple in keyIntVals vector
@@ -166,21 +164,21 @@ void TTable::ResetIterator() {
 }
 
 // Checks if there are more tuples and sets bucketId and tupleId to next valid.
-inline bool HasMoreTuples(std::vector<TTableBucket> & tableBuckets, ui64 & bucketId, ui64 & tupleId ) {
+inline bool HasMoreTuples(std::vector<TTableBucketStats> & tableBucketsStats, ui64 & bucketId, ui64 & tupleId ) {
 
-    if (bucketId >= tableBuckets.size()) return false;
+    if (bucketId >= tableBucketsStats.size()) return false;
 
-    if ( tupleId >= tableBuckets[bucketId].TuplesNum ) {
+    if ( tupleId >= tableBucketsStats[bucketId].TuplesNum ) {
         tupleId = 0;
         bucketId ++;
 
-        if (bucketId == tableBuckets.size()) {
+        if (bucketId == tableBucketsStats.size()) {
             return false;
         }
 
-        while( tableBuckets[bucketId].TuplesNum == 0 ) {
+        while( tableBucketsStats[bucketId].TuplesNum == 0 ) {
            bucketId ++;
-            if (bucketId == tableBuckets.size()) {
+            if (bucketId == tableBucketsStats.size()) {
                 return false;
             }
         }
@@ -193,7 +191,7 @@ inline bool HasMoreTuples(std::vector<TTableBucket> & tableBuckets, ui64 & bucke
 
 // Returns value of next tuple. Returs true if there are more tuples
 bool TTable::NextTuple(TupleData & td){
-    if (HasMoreTuples(TableBuckets, CurrIterBucket, CurrIterIndex )) {
+    if (HasMoreTuples(TableBucketsStats, CurrIterBucket, CurrIterIndex )) {
         GetTupleData(CurrIterBucket, CurrIterIndex, td);
         CurrIterIndex++;
         return true;
@@ -316,6 +314,9 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
         TTableBucket * bucket1 = &JoinTable1->TableBuckets[bucket];
         TTableBucket * bucket2 = &JoinTable2->TableBuckets[bucket];
 
+        ui64 tuplesNum1 = JoinTable1->TableBucketsStats[bucket].TuplesNum;
+        ui64 tuplesNum2 = JoinTable1->TableBucketsStats[bucket].TuplesNum;
+
         ui64 headerSize1 = JoinTable1->HeaderSize;
         ui64 headerSize2 = JoinTable2->HeaderSize;
         ui64 nullsSize1 = JoinTable1->NullsBitmapSize_;
@@ -328,27 +329,28 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
         bool table2HasKeyIColumns = (JoinTable2->NumberOfKeyIColumns != 0);
 
 
-        if ( bucket2->TuplesNum > bucket1->TuplesNum ) {
+        if (tuplesNum2 > tuplesNum1) {
             std::swap(bucket1, bucket2);
             std::swap(headerSize1, headerSize2);
             std::swap(nullsSize1, nullsSize2);
             std::swap(keyIntOffset1, keyIntOffset2);
             std::swap(table1HasKeyStringColumns, table2HasKeyStringColumns);
             std::swap(table1HasKeyIColumns, table2HasKeyIColumns);
+            std::swap(tuplesNum1, tuplesNum2);
        }
 
-        joinResults.reserve(3 * bucket1->TuplesNum );
+        joinResults.reserve(3 * tuplesNum1 );
 
         ui64 slotSize = headerSize2;
 
-        ui64 avgStringsSize = ( 3 * (bucket2->KeyIntVals.size() - bucket2->TuplesNum * headerSize2) ) / ( 2 * bucket2->TuplesNum + 1)  + 1;
+        ui64 avgStringsSize = ( 3 * (bucket2->KeyIntVals.size() - tuplesNum2 * headerSize2) ) / ( 2 * tuplesNum2 + 1)  + 1;
 
         if (table2HasKeyStringColumns || table2HasKeyIColumns ) {
             slotSize = slotSize + avgStringsSize;
         }
 
         
-        ui64 nSlots = 3 * bucket2->TuplesNum + 1;
+        ui64 nSlots = 3 * tuplesNum2 + 1;
         joinSlots.clear();
         spillSlots.clear();
         slotToIdx.clear();
@@ -501,7 +503,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
                     JoinTuplesIds joinIds;
                     joinIds.id1 = tuple1Idx;
                     joinIds.id2 = slotToIdx[(slotIt - joinSlots.begin()) / slotSize];
-                    if (JoinTable2->TableBuckets[bucket].TuplesNum > JoinTable1->TableBuckets[bucket].TuplesNum)
+                    if (JoinTable2->TableBucketsStats[bucket].TuplesNum > JoinTable1->TableBucketsStats[bucket].TuplesNum)
                     {
                         std::swap(joinIds.id1, joinIds.id2);
                     }
@@ -783,11 +785,11 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
 
     if (JoinKind == EJoinKind::Cross) {
 
-        if (HasMoreTuples(JoinTable1->TableBuckets, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex))
+        if (HasMoreTuples(JoinTable1->TableBucketsStats, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex))
         {
             JoinTable1->GetTupleData(JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex, td1);
 
-            if (HasMoreTuples(JoinTable2->TableBuckets, JoinTable2->CurrIterBucket, JoinTable2->CurrIterIndex))
+            if (HasMoreTuples(JoinTable2->TableBucketsStats, JoinTable2->CurrIterBucket, JoinTable2->CurrIterIndex))
             {
                 JoinTable2->GetTupleData(JoinTable2->CurrIterBucket, JoinTable2->CurrIterIndex, td2);
                 JoinTable2->CurrIterIndex++;
@@ -806,7 +808,7 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
     }
 
     if ( JoinKind == EJoinKind::Inner ) {
-        while(HasMoreTuples(JoinTable1->TableBuckets, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex)) {
+        while(HasMoreTuples(JoinTable1->TableBucketsStats, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex)) {
             ui32 tupleId2;
             if (HasJoinedTupleId(JoinTable1, tupleId2))
             {
@@ -822,7 +824,7 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
     }
 
     if ( JoinKind == EJoinKind::Left ) {
-        while (HasMoreTuples(JoinTable1->TableBuckets, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex)) {
+        while (HasMoreTuples(JoinTable1->TableBucketsStats, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex)) {
             ui32 tupleId2;
             if (HasJoinedTupleId(JoinTable1, tupleId2))
             {
@@ -857,7 +859,7 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
     }
 
     if (  JoinKind == EJoinKind::Right ) {
-        while(HasMoreTuples(JoinTable1->TableBuckets, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex)) {
+        while(HasMoreTuples(JoinTable1->TableBucketsStats, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex)) {
             ui32 tupleId2;
             if (HasJoinedTupleId(JoinTable1, tupleId2))
             {
@@ -898,7 +900,7 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
         if ( RightTableBatch_ && HasMoreRightTuples_ )
             return false;
 
-        while(HasMoreTuples(JoinTable1->TableBuckets, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex)) {
+        while(HasMoreTuples(JoinTable1->TableBucketsStats, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex)) {
             ui32 tupleId2;
 
             bool globalMatchedId = false;
@@ -929,7 +931,7 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
         if (LeftTableBatch_ && HasMoreLeftTuples_ )
             return false;
 
-        while(HasMoreTuples(JoinTable1->TableBuckets, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex)) {
+        while(HasMoreTuples(JoinTable1->TableBucketsStats, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex)) {
             ui32 tupleId2;
 
             bool globalMatchedId = false;
@@ -961,7 +963,7 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
         if (RightTableBatch_ && HasMoreRightTuples_ )
             return false;
 
-        while(HasMoreTuples(JoinTable1->TableBuckets, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex)) {
+        while(HasMoreTuples(JoinTable1->TableBucketsStats, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex)) {
             ui32 tupleId2;
 
             if ( !RightTableBatch_  && HasJoinedTupleId(JoinTable1, tupleId2))
@@ -995,7 +997,7 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
         if (LeftTableBatch_ && HasMoreLeftTuples_ )
             return false;
 
-        while(HasMoreTuples(JoinTable1->TableBuckets, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex)) {
+        while(HasMoreTuples(JoinTable1->TableBucketsStats, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex)) {
             ui32 tupleId2;
             if ( !LeftTableBatch_ && HasJoinedTupleId(JoinTable1, tupleId2))
             {
@@ -1022,7 +1024,7 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
     }
 
     if ( JoinKind == EJoinKind::Full ) {
-        if(HasMoreTuples(JoinTable1->TableBuckets, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex)) {
+        if(HasMoreTuples(JoinTable1->TableBucketsStats, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex)) {
             ui32 tupleId2;
             if (HasJoinedTupleId(JoinTable1, tupleId2))
             {
@@ -1048,7 +1050,7 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
             Table2Initialized_ = true;
         }
 
-        while (HasMoreTuples(JoinTable2->TableBuckets, JoinTable2->CurrIterBucket, JoinTable2->CurrIterIndex)) {
+        while (HasMoreTuples(JoinTable2->TableBucketsStats, JoinTable2->CurrIterBucket, JoinTable2->CurrIterIndex)) {
 
             if (CurrIterBucket != JoinTable2->CurrIterBucket) {
                 CurrIterBucket = JoinTable2->CurrIterBucket;
@@ -1072,7 +1074,7 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
     }
 
     if ( JoinKind == EJoinKind::Exclusion ) {
-        while (HasMoreTuples(JoinTable1->TableBuckets, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex)) {
+        while (HasMoreTuples(JoinTable1->TableBucketsStats, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex)) {
             ui32 tupleId2;
             if (HasJoinedTupleId(JoinTable1, tupleId2))
             {
@@ -1090,7 +1092,7 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
 
         td1.AllNulls = true;
 
-        while (HasMoreTuples(JoinTable2->TableBuckets, JoinTable2->CurrIterBucket, JoinTable2->CurrIterIndex)) {
+        while (HasMoreTuples(JoinTable2->TableBucketsStats, JoinTable2->CurrIterBucket, JoinTable2->CurrIterIndex)) {
 
             if (CurrIterBucket != JoinTable2->CurrIterBucket) {
                 CurrIterBucket = JoinTable2->CurrIterBucket;
@@ -1121,7 +1123,6 @@ void TTable::Clear() {
 
         for (ui64 bucket = 0; bucket < NumberOfBuckets; bucket++) {
             TTableBucket & tb = TableBuckets[bucket];
-            tb.TuplesNum = 0;
             tb.KeyIntVals.clear();
             tb.DataIntVals.clear();
             tb.StringsOffsets.clear();
@@ -1130,6 +1131,11 @@ void TTable::Clear() {
             tb.InterfaceOffsets.clear();
             tb.JoinIds.clear();
             tb.RightIds.clear();
+
+            TTableBucketStats & tbs = TableBucketsStats[bucket];
+            tbs.TuplesNum = 0;
+            tbs.KeyIntValsTotalSize = 0;
+            tbs.KeyIntValsTotalSize = 0;
         }
 
 
@@ -1165,6 +1171,7 @@ TTable::TTable( ui64 numberOfKeyIntColumns, ui64 numberOfKeyStringColumns,
     HeaderSize = HashSize + NullsBitmapSize_ + NumberOfKeyIntColumns + NumberOfKeyIColumns + TotalStringsSize;
 
     TableBuckets.resize(NumberOfBuckets);
+    TableBucketsStats.resize(NumberOfBuckets);
 
     const ui64 reservedSizePerTuple = (2 * DefaultTupleBytes) / sizeof(ui64);
 

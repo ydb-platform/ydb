@@ -24,7 +24,7 @@ inputs:
   do_link:
     required: false
     default: "false"
-    description: "Perform linkage or not (temporary transitional flaf)"
+    description: "Perform linkage or not (temporary transitional flag)"
 outputs:
   success:
     value: ${{ steps.build.outputs.status }}
@@ -121,8 +121,8 @@ runs:
         # to be sure
         set -o pipefail
         
-        # We don't want to put binaries (elf) to cache because its are too big, 
-        # so, if cache specified we do not perform linkage see '--dist-cache-evict-bins' flag
+        # We don't want to put binaries (exe, so) to cache because they are too big, 
+        # so, if cache specified we do not perform linkage (see '--dist-cache-evict-bins' flag)
         ./ya make -k --build "${build_type}" --force-build-depends -T --stat -DCONSISTENT_DEBUG \
           --log-file "$TMP_DIR/ya_log.txt" --evlog-file "$TMP_DIR/ya_evlog.jsonl" \
           --cache-size 512G --link-threads "${{ inputs.link_threads }}" \

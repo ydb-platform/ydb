@@ -23,6 +23,7 @@
 #include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
 #include <ydb/library/yql/providers/pg/provider/yql_pg_provider_impl.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
+#include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 
@@ -921,6 +922,8 @@ private:
             hasFederatedSorcesOrSinks = hasFederatedSorcesOrSinks
                 || node.Maybe<TS3DataSource>()
                 || node.Maybe<TS3DataSink>()
+                || node.Maybe<TYtDSource>()
+                || node.Maybe<TYtDSink>()
                 || node.Maybe<TGenDataSource>();
 
             return !hasFederatedSorcesOrSinks;

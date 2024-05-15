@@ -2095,8 +2095,7 @@ private:
                 KqpShardsResolverId = this->RegisterWithSameMailbox(kqpShardsResolver);
                 return;
             } else if (HasOlapTable) {
-                GetResourcesSnapshot();
-                return;
+                ResourceSnapshotRequired = true;
             }
         }
         DoExecute();
@@ -2106,10 +2105,8 @@ private:
         if (!TBase::HandleResolve(ev)) {
             return;
         }
-        if (HasOlapTable) {
-            GetResourcesSnapshot();
-            return;
-        } else if (HasDatashardSourceScan) {
+        if (HasOlapTable || HasDatashardSourceScan) {
+            ResourceSnapshotRequired = ResourceSnapshotRequired || HasOlapTable;
             DoExecute();
             return;
         }

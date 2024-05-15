@@ -250,6 +250,7 @@ protected:
         if (event->Get()->Timeout) {
             ConnectionTimeout = event->Get()->Timeout;
         }
+        ALOG_DEBUG(HttpLog, "Scheduling timeout for " << ctx.SelfID << " in " << ConnectionTimeout);
         ctx.Schedule(ConnectionTimeout, new NActors::TEvents::TEvWakeup());
         LastActivity = ctx.Now();
         TBase::Become(&TOutgoingConnectionActor::StateResolving);
@@ -279,10 +280,12 @@ protected:
     }
 
     void HandleTimeout(const NActors::TActorContext& ctx) {
+        ALOG_DEBUG(HttpLog, GetSocketName() << "timeout");
         TDuration inactivityTime = ctx.Now() - LastActivity;
         if (inactivityTime >= ConnectionTimeout) {
             FailConnection(ctx, "Connection timed out");
         } else {
+            ALOG_DEBUG(HttpLog, GetSocketName() << "waiting for more");
             ctx.Schedule(Min(ConnectionTimeout - inactivityTime, TDuration::MilliSeconds(100)), new NActors::TEvents::TEvWakeup());
         }
     }

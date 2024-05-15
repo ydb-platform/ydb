@@ -729,17 +729,25 @@ public:
             if (mutableValue.IsInvalid()) {
                 WriteUi64(result, std::numeric_limits<ui64>::max()); // -1.
             } else if (mutableValue.IsBoxed()) {
-                NUdf::TUnboxedValue list = mutableValue.Save();
-
-                TString taskState;
-                auto listIt = list.GetListIterator();
-                NUdf::TUnboxedValue str;
-                while (listIt.Next(str)) {
-                    const TStringBuf savedBuf = str.AsStringRef();
-                    taskState.AppendNoAlias(savedBuf.Data(), savedBuf.Size());
+                TList<TString> taskState;
+                size_t taskStateSize = 0;
+                {
+                    NUdf::TUnboxedValue list = mutableValue.Save();
+                    auto listIt = list.GetListIterator();
+                    NUdf::TUnboxedValue str;
+                    while (listIt.Next(str)) {
+                        const TStringBuf strRef = str.AsStringRef();
+                        taskStateSize += strRef.Size();
+                        taskState.push_back({});
+                        taskState.back().AppendNoAlias(strRef.Data(), strRef.Size());
+                    }
                 }
-
-                NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(result, taskState);
+                WriteUi64(result, taskStateSize);
+                for (auto it = taskState.begin(); it != taskState.end();) {
+                    result.AppendNoAlias(it->Data(), it->Size());
+                    it = taskState.erase(it);
+                }
+                //NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(result, taskState);
             } else { // No load was done during previous runs (if any).
                 MKQL_ENSURE(mutableValue.HasValue() && (mutableValue.IsString() || mutableValue.IsEmbedded()), "State is expected to have data or invalid value");
                 const NUdf::TStringRef savedRef = mutableValue.AsStringRef();

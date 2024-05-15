@@ -180,7 +180,6 @@ public:
     }
 
     class TRangeList: public TComputationValue<TRangeList> {
-        const size_t MaxValueLen = 10000;
 
         class TIterator : public TComputationValue<TIterator> {
             const size_t MaxValueLen = 10000;
@@ -209,8 +208,7 @@ public:
             size_t Index;
         };
 
-        public:
-
+    public:
         TRangeList(TMemoryUsageInfo* memInfo, TComputationContext& ctx, TString&& buf)
             : TComputationValue<TRangeList>(memInfo)
             , Ctx(ctx)
@@ -218,13 +216,14 @@ public:
         {}
 
         ui64 GetListLength() const override {
-            return Buf.size() / MaxValueLen + ((Buf.size() % MaxValueLen) ? 1 : 0);
+            ThrowNotSupported(__func__);
+            return 0;
         }
 
         NUdf::TUnboxedValue GetListIterator() const override {
             return Ctx.HolderFactory.Create<TIterator>(Buf);
         }
-        private:
+    private:
         TComputationContext& Ctx;
         TString Buf;
     };

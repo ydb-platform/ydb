@@ -149,7 +149,7 @@ public:
         }
     }
 };
-
+/*
 class TPortinosCleaner : public NYDBTest::ILocalDBModifier {
 public:
     virtual void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
@@ -173,6 +173,7 @@ public:
         }
     }
 };
+*/
 
 template <class TLocalDBModifier>
 class TPrepareLocalDBController: public NKikimr::NYDBTest::NColumnShard::TController {
@@ -249,10 +250,11 @@ Y_UNIT_TEST_SUITE(Normalizers) {
     Y_UNIT_TEST(ColumnChunkNormalizer) {
         TestNormalizerImpl<TColumnChunksCleaner>();
     }
-
+/*
     Y_UNIT_TEST(PortionsNormalizer) {
         TestNormalizerImpl<TPortinosCleaner>();
     }
+*/
 }
 
 } // namespace NKikimr

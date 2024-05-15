@@ -1,7 +1,7 @@
 #include "normalizer.h"
 
 #include <ydb/core/tx/columnshard/tables_manager.h>
-#include <ydb/core/tx/columnshard/engines/portions/constructor.h>
+#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 
 namespace NKikimr::NOlap {
@@ -35,7 +35,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::Init(co
 
     auto columnsFilter = GetColumnsFilter(tablesManager.GetPrimaryIndexSafe().GetVersionedIndex().GetLastSchema());
 
-    THashMap<ui64, TPortionInfoConstructor> portions;
+    THashMap<ui64, std::shared_ptr<TPortionInfo>> portions;
     auto schemas = std::make_shared<THashMap<ui64, ISnapshotSchema::TPtr>>();
 
     {
@@ -45,33 +45,36 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::Init(co
         }
 
         TPortionInfo::TSchemaCursor schema(tablesManager.GetPrimaryIndexSafe().GetVersionedIndex());
-        auto initPortion = [&](TPortionInfoConstructor&& portion, const TColumnChunkLoadContext& loadContext) {
+        auto initPortionCB = [&](const TPortionInfo& portion, const TColumnChunkLoadContext& loadContext) {
             auto currentSchema = schema.GetSchema(portion);
-            portion.SetSchemaVersion(currentSchema->GetVersion());
+            AFL_VERIFY(portion.ValidSnapshotInfo())("details", portion.DebugString());
 
-            if (!columnsFilter.contains(loadContext.GetAddress().GetColumnId())) {
-                return;
-            }
-            auto it = portions.find(portion.GetPortionIdVerified());
+            auto it = portions.find(portion.GetPortionId());
             if (it == portions.end()) {
-                (*schemas)[portion.GetPortionIdVerified()] = currentSchema;
-                const ui64 portionId = portion.GetPortionIdVerified();
-                it = portions.emplace(portionId, std::move(portion)).first;
-            } else {
-                it->second.Merge(std::move(portion));
+                Y_ABORT_UNLESS(portion.Records.empty());
+                (*schemas)[portion.GetPortionId()] = currentSchema;
+                it = portions.emplace(portion.GetPortionId(), std::make_shared<TPortionInfo>(portion)).first;
             }
-            it->second.LoadRecord(currentSchema->GetIndexInfo(), loadContext);
+            TColumnRecord rec(it->second->RegisterBlobId(loadContext.GetBlobRange().GetBlobId()), loadContext, currentSchema->GetIndexInfo().GetColumnFeaturesVerified(loadContext.GetAddress().GetColumnId()));
+            AFL_VERIFY(it->second->IsEqualWithSnapshots(portion))("self", it->second->DebugString())("item", portion.DebugString());
+            auto portionMeta = loadContext.GetPortionMeta();
+            it->second->AddRecord(currentSchema->GetIndexInfo(), rec, portionMeta);
         };
 
         while (!rowset.EndOfSet()) {
-            TPortionInfoConstructor portion(rowset.GetValue<Schema::IndexColumns::PathId>(), rowset.GetValue<Schema::IndexColumns::Portion>());
-            Y_ABORT_UNLESS(rowset.GetValue<Schema::IndexColumns::Index>() == 0);
+            TPortionInfo portion = TPortionInfo::BuildEmpty();
+            auto index = rowset.GetValue<Schema::IndexColumns::Index>();
+            Y_ABORT_UNLESS(index == 0);
+
+            portion.SetPathId(rowset.GetValue<Schema::IndexColumns::PathId>());
 
             portion.SetMinSnapshotDeprecated(NOlap::TSnapshot(rowset.GetValue<Schema::IndexColumns::PlanStep>(), rowset.GetValue<Schema::IndexColumns::TxId>()));
+            portion.SetPortion(rowset.GetValue<Schema::IndexColumns::Portion>());
+            portion.SetDeprecatedGranuleId(rowset.GetValue<Schema::IndexColumns::Granule>());
             portion.SetRemoveSnapshot(rowset.GetValue<Schema::IndexColumns::XPlanStep>(), rowset.GetValue<Schema::IndexColumns::XTxId>());
 
             NOlap::TColumnChunkLoadContext chunkLoadContext(rowset, &DsGroupSelector);
-            initPortion(std::move(portion), chunkLoadContext);
+            initPortionCB(portion, chunkLoadContext);
 
             if (!rowset.Next()) {
                 return TConclusionStatus::Fail("Not ready");
@@ -83,8 +86,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::Init(co
     package.reserve(100);
 
     ui64 brokenPortioncCount = 0;
-    for (auto&& portionConstructor : portions) {
-        auto portionInfo = std::make_shared<TPortionInfo>(portionConstructor.second.Build(false));
+    for (auto&& [_, portionInfo] : portions) {
         if (CheckPortion(*portionInfo)) {
             continue;
         }

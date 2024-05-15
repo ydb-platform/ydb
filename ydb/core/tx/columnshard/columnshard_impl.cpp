@@ -43,7 +43,7 @@
 
 
 #include <ydb/core/tx/columnshard/normalizer/granule/normalizer.h>
-#include <ydb/core/tx/columnshard/normalizer/portion/portion.h>
+//#include <ydb/core/tx/columnshard/normalizer/portion/portion.h>
 #include <ydb/core/tx/columnshard/normalizer/portion/chunks.h>
 
 namespace NKikimr::NColumnShard {
@@ -97,7 +97,6 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
 
     NormalizerController.RegisterNormalizer(std::make_shared<NOlap::TGranulesNormalizer>());
     NormalizerController.RegisterNormalizer(std::make_shared<NOlap::TChunksNormalizer>(Info()));
-    NormalizerController.RegisterNormalizer(std::make_shared<NOlap::TPortionsNormalizer>(Info()));
 }
 
 void TColumnShard::OnDetach(const TActorContext& ctx) {

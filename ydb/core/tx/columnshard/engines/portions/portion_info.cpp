@@ -382,7 +382,6 @@ const TString& TPortionInfo::GetEntityStorageId(const ui32 columnId, const TInde
 }
 
 ISnapshotSchema::TPtr TPortionInfo::GetSchema(const TVersionedIndex& index) const {
-    AFL_VERIFY(SchemaVersion);
     if (SchemaVersion) {
         auto schema = index.GetSchema(SchemaVersion.value());
         AFL_VERIFY(!!schema)("details", TStringBuilder() << "cannot find schema for version " << SchemaVersion.value());

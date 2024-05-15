@@ -51,7 +51,7 @@ public:
     {}
 
     TPersQueueV1TestServer CreateServer() {
-        return TPersQueueV1TestServer({.CheckAcl=false, .TenantModeEnabled=TenantModeEnabled});
+        return TPersQueueV1TestServer({.CheckACL=false, .TenantModeEnabled=TenantModeEnabled});
     }
 
     TPersQueueV1TestServerWithRateLimiter CreateServerWithRateLimiter() {

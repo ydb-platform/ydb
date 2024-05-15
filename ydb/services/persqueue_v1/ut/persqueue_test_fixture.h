@@ -60,10 +60,13 @@ static void ModifyTopicACL(NYdb::TDriver* driver, const TString& topic, const TV
             Y_UNUSED(settings);
         }
 
+        virtual NKikimr::Tests::TServerSettings GetServerSettings() {
+            return NKikimr::NPersQueueTests::PQSettings();
+        }
 
         void InitializePQ() {
             Y_ABORT_UNLESS(Server == nullptr);
-            Server = MakeHolder<NPersQueue::TTestServer>(false);
+            Server = MakeHolder<NPersQueue::TTestServer>(GetServerSettings(), false);
             Server->ServerSettings.PQConfig.SetTopicsAreFirstClassCitizen(TenantModeEnabled());
             Server->ServerSettings.PQConfig.MutablePQDiscoveryConfig()->SetLBFrontEnabled(true);
             Server->ServerSettings.PQConfig.SetACLRetryTimeoutSec(1);
@@ -215,7 +218,7 @@ static void ModifyTopicACL(NYdb::TDriver* driver, const TString& topic, const TV
     };
 
     struct TPersQueueV1TestServerSettings {
-        bool CheckAcl = false;
+        bool CheckACL = false;
         bool TenantModeEnabled = false;
         ui32 NodeCount = PQ_DEFAULT_NODE_COUNT;
     };
@@ -224,7 +227,7 @@ static void ModifyTopicACL(NYdb::TDriver* driver, const TString& topic, const TV
     public:
         explicit TPersQueueV1TestServer(const TPersQueueV1TestServerSettings& settings = {})
             : TPersQueueV1TestServerBase(settings.TenantModeEnabled)
-            , CheckACL(settings.CheckAcl)
+            , Settings(settings)
         {
             InitAll();
         }
@@ -234,11 +237,18 @@ static void ModifyTopicACL(NYdb::TDriver* driver, const TString& topic, const TV
         }
 
         void AlterSettings(NKikimr::Tests::TServerSettings& settings) override {
-            if (CheckACL)
+            if (Settings.CheckACL) {
                 settings.PQConfig.SetCheckACL(true);
+            }
         }
+
+        NKikimr::Tests::TServerSettings GetServerSettings() override {
+            return NKikimr::NPersQueueTests::PQSettings()
+                .SetNodeCount(Settings.NodeCount);
+        }
+
     private:
-        bool CheckACL;
+        TPersQueueV1TestServerSettings Settings;
     };
 
     class TPersQueueV1TestServerWithRateLimiter : public TPersQueueV1TestServerBase {

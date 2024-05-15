@@ -48,8 +48,8 @@
 //    unreferenced variable of this type generates a warning iff B is false.
 // 3. static_warning_impl<B>::type overloads operator& to return a dynamically
 //    allocated int pointer only is B is true, so  returning the address of an
-//    automatic variable of this type generates a warning iff B is fasle.
-// 4. static_warning_impl<B>::STATIC_WARNING is decalred as a struct iff B is
+//    automatic variable of this type generates a warning iff B is false.
+// 4. static_warning_impl<B>::STATIC_WARNING is declared as a struct iff B is
 //    false.
 // 5. static_warning_impl<B>::type is incomplete iff B is false, so deleting a
 //    pointer to this type generates a warning iff B is false.

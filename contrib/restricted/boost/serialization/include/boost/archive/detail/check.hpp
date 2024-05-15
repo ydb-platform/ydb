@@ -94,7 +94,7 @@ inline void check_object_tracking(){
     // may be an indicator of an error usage of the
     // serialization library and should be double checked.
     // See documentation on object tracking.  Also, see the
-    // "rationale" section of the documenation
+    // "rationale" section of the documentation
     // for motivation for this checking.
 
     BOOST_STATIC_WARNING(typex::value);

@@ -18,7 +18,7 @@
 #include <boost/config.hpp>
 
 #ifndef BOOST_NO_EXCEPTIONS
-#include <exception>
+#include <boost/throw_exception.hpp>
 #endif
 
 namespace boost {
@@ -32,7 +32,8 @@ BOOST_NORETURN inline void throw_exception(std::exception const & e) {
 
 #else
 
-template<class E> BOOST_NORETURN inline void throw_exception(E const & e){
+template<class E>
+BOOST_NORETURN inline void throw_exception(E const & e){
     throw e;
 }
 

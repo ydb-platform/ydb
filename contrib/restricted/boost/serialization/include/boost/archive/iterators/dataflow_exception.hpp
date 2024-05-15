@@ -46,7 +46,7 @@ public:
     dataflow_exception(exception_code c = other_exception) : code(c)
     {}
 
-    const char *what( ) const noexcept BOOST_OVERRIDE
+    const char *what( ) const BOOST_NOEXCEPT_OR_NOTHROW BOOST_OVERRIDE
     {
         const char *msg = "unknown exception code";
         switch(code){

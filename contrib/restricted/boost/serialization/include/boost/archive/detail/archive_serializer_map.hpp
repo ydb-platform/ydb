@@ -7,7 +7,7 @@
 #endif
 
 /////////1/////////2/////////3/////////4/////////5/////////6/////////7/////////8
-// archive_serializer_map.hpp: extenstion of type_info required for
+// archive_serializer_map.hpp: extension of type_info required for
 // serialization.
 
 // (C) Copyright 2009 Robert Ramey - http://www.rrsd.com .
@@ -17,7 +17,7 @@
 
 //  See http://www.boost.org for updates, documentation, and revision history.
 
-// note: this is nothing more than the thinest of wrappers around
+// note: this is nothing more than the thinnest of wrappers around
 // basic_serializer_map so we can have a one map / archive type.
 
 #include <boost/config.hpp>

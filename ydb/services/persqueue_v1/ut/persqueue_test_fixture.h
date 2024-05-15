@@ -214,11 +214,17 @@ static void ModifyTopicACL(NYdb::TDriver* driver, const TString& topic, const TV
         THolder<NYdb::NPersQueue::TPersQueueClient> PersQueueClient;
     };
 
+    struct TPersQueueV1TestServerSettings {
+        bool CheckAcl = false;
+        bool TenantModeEnabled = false;
+        ui32 NodeCount = PQ_DEFAULT_NODE_COUNT;
+    };
+
     class TPersQueueV1TestServer : public TPersQueueV1TestServerBase {
     public:
-        TPersQueueV1TestServer(bool checkAcl = false, bool tenantModeEnabled = false)
-            : TPersQueueV1TestServerBase(tenantModeEnabled)
-            , CheckACL(checkAcl)
+        explicit TPersQueueV1TestServer(const TPersQueueV1TestServerSettings& settings = {})
+            : TPersQueueV1TestServerBase(settings.TenantModeEnabled)
+            , CheckACL(settings.CheckAcl)
         {
             InitAll();
         }

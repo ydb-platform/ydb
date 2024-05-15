@@ -224,17 +224,14 @@ namespace NKikimr {
                 }
             };
 
-            auto copy = [&] (const void* ptr) {
-                const NSyncLog::TRecordHdr* rec = (const NSyncLog::TRecordHdr*)((char*)ptr - sizeof(NSyncLog::TRecordHdr));
+            NSyncLog::TFragmentReader fragmentReader(Ev->Data);
+            std::vector<const NSyncLog::TRecordHdr*> records = fragmentReader.ListRecords();
+            for (const NSyncLog::TRecordHdr* rec : records) {
                 if (fragmentWriter->GetSize() + rec->GetSize() > MaxChunksSize) {
                     addChunk();
                 }
                 fragmentWriter->Push(rec, rec->GetSize());
-            };
-
-            NSyncLog::TFragmentReader fragmentReader(Ev->Data);
-            fragmentReader.ForEach(copy, copy, copy, copy);
-
+            }
             addChunk();
 
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_SYNCER, VCtx->VDiskLogPrefix

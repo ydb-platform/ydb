@@ -119,6 +119,7 @@ order by cs1.product_name
        ,cs1.store_name
        ,cs2.cnt
        ,s11
-       ,s21;
+       ,s21
+       ,s22;
 
 -- end query 1 in stream 0 using template query64.tpl

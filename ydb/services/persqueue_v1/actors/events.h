@@ -559,6 +559,16 @@ struct TEvPQProxy {
         ui64 StartingReadId;
     };
 
+    struct TEvDirectReadDataSessionConnectedResponse : public TEventLocal<TEvDirectReadDataSessionConnectedResponse, EvDirectReadDataSessionConnected> {
+        TEvDirectReadDataSessionConnectedResponse(ui64 assignId, ui32 tabletGeneration)
+            : AssignId(assignId)
+            , Generation(tabletGeneration)
+        {}
+
+        const ui64 AssignId;
+        ui32 Generation;
+    };
+
     struct TEvDirectReadDataSessionDead : public TEventLocal<TEvDirectReadDataSessionDead, EvDirectReadDataSessionDead> {
         TEvDirectReadDataSessionDead(const TString& session)
             : Session(session)

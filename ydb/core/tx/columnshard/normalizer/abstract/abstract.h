@@ -53,9 +53,9 @@ namespace NKikimr::NOlap {
     enum class ENormalizerSequentialId : ui32 {
         Granules = 1,
         Chunks,
-        PortionsMetadata,
         PortionsCleaner,
-        TablesCleaner
+        TablesCleaner,
+        // PortionsMetadata
     };
 
     class TNormalizationContext {

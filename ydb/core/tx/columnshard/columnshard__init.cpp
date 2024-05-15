@@ -75,14 +75,6 @@ bool TTxInit::Precharge(TTransactionContext& txc) {
     ready = ready && Schema::GetSpecialValueOpt(db, Schema::EValueIds::OwnerPath, Self->OwnerPath);
 
 
-    {
-        ui64 lastCompletedStep = 0;
-        ui64 lastCompletedTx = 0;
-        ready = ready && Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastCompletedStep, lastCompletedStep);
-        ready = ready && Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastCompletedTxId, lastCompletedTx);
-        Self->LastCompletedTx = NOlap::TSnapshot(lastCompletedStep, lastCompletedTx);
-    }
-
     if (!ready) {
         return false;
     }

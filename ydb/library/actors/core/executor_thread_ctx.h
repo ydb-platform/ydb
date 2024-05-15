@@ -97,15 +97,19 @@ namespace NActors {
             }
 
             NHPTimer::STime hpnow = GetCycleCountFast();
-            NHPTimer::STime hpprev = TlsThreadContext->StartOfElapsingTime.exchange(hpnow, std::memory_order_acq_rel);
+            NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfElapsingTime(hpnow);
             TlsThreadContext->ElapsingActorActivity.store(Max<ui64>(), std::memory_order_release);
-            TlsThreadContext->WorkerCtx->AddElapsedCycles(TlsThreadContext->ActorSystemIndex, hpnow - hpprev);
+            if (Y_LIKELY(hpprev < hpnow)) {
+                TlsThreadContext->WorkerCtx->AddElapsedCycles(TlsThreadContext->ActorSystemIndex, hpnow - hpprev);
+            }
             do {
                 if (WaitingPad.Park()) // interrupted
                     return true;
                 hpnow = GetCycleCountFast();
-                hpprev = TlsThreadContext->StartOfElapsingTime.exchange(hpnow, std::memory_order_acq_rel);
-                TlsThreadContext->WorkerCtx->AddParkedCycles(hpnow - hpprev);
+                hpprev = TlsThreadContext->UpdateStartOfElapsingTime(hpnow);
+                if (Y_LIKELY(hpprev < hpnow)) {
+                    TlsThreadContext->WorkerCtx->AddParkedCycles(hpnow - hpprev);
+                }
                 state = GetState<TWaitState>();
             } while (static_cast<EThreadState>(state) == EThreadState::Sleep && !stopFlag->load(std::memory_order_relaxed));
             TlsThreadContext->ElapsingActorActivity.store(TlsThreadContext->ActorSystemIndex, std::memory_order_release);

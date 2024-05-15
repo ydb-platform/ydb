@@ -497,7 +497,7 @@ namespace NKikimr::NStorage {
                 for (size_t i = 0; i < ss->PDisksSize(); ++i) {
                     if (const auto& pdisk = ss->GetPDisks(i); pdisk.HasNodeID() && pdisk.HasPDiskID() &&
                             pdisk.GetNodeID() == vslotId.GetNodeId() && pdisk.GetPDiskID() == vslotId.GetPDiskId()) {
-                        ss->MutablePDisks()->DeleteSubrange(i--, 1);
+                        ss->MutablePDisks()->DeleteSubrange(i, 1);
                         changes = true;
                         break;
                     }

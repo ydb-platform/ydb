@@ -781,6 +781,13 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
     };
 
     if (useStreamIndexLookupJoin) {
+        if (filter.IsValid()) {
+            leftData = Build<TCoFilter>(ctx, join.Pos())
+                .Input(leftData)
+                .Lambda(filter.Cast())
+                .Done();
+        }
+
         auto leftInput = Build<TCoFlatMap>(ctx, join.Pos())
             .Input(leftData)
             .Lambda()

@@ -1042,7 +1042,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     }
 
     Y_UNIT_TEST(DirectReadStop) {
-        TPersQueueV1TestServer server{{.CheckACL=true}};
+        TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         SET_LOCALS;
 
         server.Server->AnnoyingClient->AlterTopicNoLegacy("Root/PQ/rt3.dc1--acc--topic1", 2);

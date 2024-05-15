@@ -231,18 +231,8 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             return TRuntimeNode();
         });
 
-    std::unordered_set<TString> usedProviders;
-    for (const auto& provider : typesCtx.DataSources) {
-        if (auto* dqIntegration = provider->GetDqIntegration()) {
-            dqIntegration->RegisterMkqlCompiler(*compiler);
-            usedProviders.emplace(provider->GetName());
-        }
-    }
-
-    for (const auto& provider : typesCtx.DataSinks) {
-        if (auto* dqIntegration = provider->GetDqIntegration(); dqIntegration && !usedProviders.contains(TString(provider->GetName()))) {
-            dqIntegration->RegisterMkqlCompiler(*compiler);
-        }
+    for (auto* dqIntegration : GetUniqueIntegrations(typesCtx)) {
+        dqIntegration->RegisterMkqlCompiler(*compiler);
     }
 
     compiler->AddCallable(TKqpWideReadTable::CallableName(),

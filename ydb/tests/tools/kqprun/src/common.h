@@ -39,6 +39,7 @@ struct TRunnerOptions {
     enum class EResultOutputFormat {
         RowsJson,  // Rows in json format
         FullJson,  // Columns, rows and types in json format
+        FullProto,  // Columns, rows and types in proto string format
     };
 
     IOutputStream* ResultOutput = &Cout;

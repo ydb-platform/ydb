@@ -223,6 +223,16 @@ private:
 
         case TRunnerOptions::EResultOutputFormat::FullJson:
             resultSet.PrintJSON(*Options_.ResultOutput);
+            *Options_.ResultOutput << Endl;
+            break;
+
+        case TRunnerOptions::EResultOutputFormat::FullProto:
+            TString resultSetString;
+            google::protobuf::TextFormat::Printer printer;
+            printer.SetSingleLineMode(false);
+            printer.SetUseUtf8StringEscaping(true);
+            printer.PrintToString(resultSet, &resultSetString);
+            *Options_.ResultOutput << resultSetString;
             break;
         }
     }

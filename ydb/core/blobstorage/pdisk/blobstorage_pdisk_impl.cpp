@@ -654,48 +654,6 @@ void TPDisk::AskVDisksToCutLogs(TOwner ownerFilter, bool doForce) {
         *Mon.TooMuchLogChunks = 0;
     }
     if (logChunkCount > cutThreshold || doForce) {
-        if (logChunkCount > cutThreshold * Cfg->InsaneLogChunksMultiplier) {
-            if (InsaneLogChunks == 0) {
-                InsaneLogChunks = logChunkCount + activeOwners;
-            } else {
-                if (logChunkCount > InsaneLogChunks) {
-                    // There were too many log chunks and now there are even more.
-                    // We asked VDisks to cut logs, but either they ignored us, or there is some error in PDisk.
-                    // VERIFY with as much info as possible, so that PDisk starts up rather fast.
-                    TStringStream str;
-                    str << "VDisk did not cut the log!";
-                    str << " logChunkCount# " << logChunkCount << " > " << " InsaneLogChunks# " << InsaneLogChunks;
-                    str << " at PDiskId# " << (ui32)PDiskId;
-                    str << " cutThreshold# " << cutThreshold;
-                    for (ui32 owner = 0; owner < OwnerData.size(); ++owner) {
-                        const TOwnerData &data = OwnerData[owner];
-                        if (data.VDiskId != TVDiskID::InvalidId) {
-                            str << " OwnerId# " << (ui32)owner;
-                            str << " { VDiskId# " << data.VDiskId.ToStringWOGeneration();
-                            str << " CutLogId# " << data.CutLogId.ToString();
-                            str << " WhiteboardProxyId# " << data.WhiteboardProxyId;
-                            str << " CurLsnToKeep# " << data.CurrentFirstLsnToKeep;
-                            str << " FirstNonceToKeep# " << SysLogFirstNoncesToKeep.FirstNonceToKeep[owner];
-                            str << " AskedToCutLogAt# " << data.AskedToCutLogAt;
-                            str << " CutLogAt# " << data.CutLogAt;
-                            str << " } ";
-                        }
-                    }
-                    str << " LogChunks.begin# { ";
-                    auto chunkIt = LogChunks.begin();
-                    str << chunkIt->ToString();
-                    str << "}";
-                    str << " CommitState# ";
-                    str << ChunkState[LogChunks.begin()->ChunkIdx].CommitState;
-                    str << " details# ";
-                    OutputHtmlLogChunksDetails(str);
-                    Y_FAIL_S(str.Str());
-                }
-            }
-        } else {
-            InsaneLogChunks = 0;
-        }
-
         struct TChunkCutInfoPerOwner {
             size_t ChunksToCut = 0;
             size_t FirstLogChunkNumber = 0;

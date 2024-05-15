@@ -132,6 +132,12 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::SignalReadyEvents(TInt
                                                                             TReadSessionEventsQueue<UseMigrationProtocol>& queue,
                                                                             TDeferredActions<UseMigrationProtocol>& deferred)
 {
+    if constexpr (!UseMigrationProtocol) {
+        if (!CbContext->TryGet()->AllParentSessionsHasBeenRead(stream->GetPartitionId(), stream->GetPartitionSessionId())) {
+            return;
+        }
+    }
+
     auto moveToReadyQueue = [&](TRawPartitionStreamEvent<UseMigrationProtocol> &&event) {
         queue.SignalEventImpl(stream, deferred, event.IsDataEvent());
 
@@ -1384,6 +1390,12 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     childPartitionIds.reserve(msg.child_partition_ids_size());
     childPartitionIds.insert(childPartitionIds.end(), msg.child_partition_ids().begin(), msg.child_partition_ids().end());
 
+    for (auto child : childPartitionIds) {
+        RegisterParentPartition(child,
+                                partitionStream->GetPartitionId(),
+                                partitionStream->GetPartitionSessionId());
+    }
+
     bool pushRes = EventsQueue->PushEvent(
             partitionStream,
             TReadSessionEvent::TEndPartitionSessionEvent(std::move(partitionStream), std::move(adjacentPartitionIds), std::move(childPartitionIds)),
@@ -1801,6 +1813,55 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::TPartitionCookieMappin
 template<bool UseMigrationProtocol>
 bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::TPartitionCookieMapping::HasUnacknowledgedCookies() const {
     return CommitInflight != 0;
+}
+
+template<bool UseMigrationProtocol>
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::RegisterParentPartition(ui32 partitionId, ui32 parentPartitionId, ui64 parentPartitionSessionId) {
+    auto& values = HierarchyData[partitionId];
+    values.push_back({ parentPartitionId, parentPartitionSessionId});
+}
+
+template<bool UseMigrationProtocol>
+std::vector<ui64> TSingleClusterReadSessionImpl<UseMigrationProtocol>::GetParentPartitionSessions(ui32 partitionId, ui64 partitionSessionId) {
+    auto it = HierarchyData.find(partitionId);
+    if (it == HierarchyData.end()) {
+        return {};
+    }
+
+    auto& parents = it->second;
+
+    std::unordered_map<ui32, ui64> index;
+    for (auto& v : parents) {
+        if (v.PartitionSessionId > partitionSessionId) {
+            break;
+        }
+
+        index[v.PartitionId] = v.PartitionSessionId;
+    }
+
+    std::vector<ui64> result;
+    for (auto [_, v] : index) {
+        result.push_back(v);
+    }
+
+    return result;
+}
+
+template<bool UseMigrationProtocol>
+bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::AllParentSessionsHasBeenRead(ui32 partitionId, ui64 partitionSessionId) {
+    for (auto partitionSessionId : GetParentPartitionSessions(partitionId, partitionSessionId)) {
+        auto it = PartitionStreams.find(partitionSessionId);
+        if (it == PartitionStreams.end()) {
+            return false;
+        }
+
+        auto& partitionStream = it->second;
+        if (partitionStream->HasEvents()) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

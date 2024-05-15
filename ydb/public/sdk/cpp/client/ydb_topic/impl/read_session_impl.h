@@ -489,7 +489,9 @@ struct TRawPartitionStreamEvent {
 template <bool UseMigrationProtocol>
 class TRawPartitionStreamEventQueue {
 public:
-    TRawPartitionStreamEventQueue() = default;
+    TRawPartitionStreamEventQueue(TCallbackContextPtr<UseMigrationProtocol> cbContext)
+        : CbContext(cbContext) {
+    };
 
     template <class... Ts>
     TRawPartitionStreamEvent<UseMigrationProtocol>& emplace_back(Ts&&... event)
@@ -550,6 +552,7 @@ private:
                                  std::deque<TRawPartitionStreamEvent<UseMigrationProtocol>>& queue);
 
 private:
+    TCallbackContextPtr<UseMigrationProtocol> CbContext;
     std::deque<TRawPartitionStreamEvent<UseMigrationProtocol>> Ready;
     std::deque<TRawPartitionStreamEvent<UseMigrationProtocol>> NotReady;
 };
@@ -583,6 +586,7 @@ public:
         , AssignId(assignId)
         , FirstNotReadOffset(readOffset)
         , CbContext(std::move(cbContext))
+        , EventsQueue(CbContext)
     {
         TAPartitionStream<true>::PartitionStreamId = partitionStreamId;
         TAPartitionStream<true>::TopicPath = std::move(topicPath);
@@ -603,6 +607,7 @@ public:
         , AssignId(static_cast<ui64>(assignId))
         , FirstNotReadOffset(static_cast<ui64>(readOffset))
         , CbContext(std::move(cbContext))
+        , EventsQueue(CbContext)
     {
         TAPartitionStream<false>::PartitionSessionId = partitionStreamId;
         TAPartitionStream<false>::TopicPath = std::move(topicPath);
@@ -763,6 +768,7 @@ private:
 
     TMutex Lock;
 };
+
 
 template <bool UseMigrationProtocol>
 class TReadSessionEventsQueue: public TBaseSessionEventsQueue<TAReadSessionSettings<UseMigrationProtocol>,
@@ -1092,6 +1098,10 @@ public:
         return Log;
     }
 
+    void RegisterParentPartition(ui32 partitionId, ui32 parentPartitionId, ui64 parentPartitionSessionId);
+    std::vector<ui64> GetParentPartitionSessions(ui32 partitionId, ui64 partitionSessionId);
+    bool AllParentSessionsHasBeenRead(ui32 partitionId, ui64 partitionSessionId);
+
 private:
     void BreakConnectionAndReconnectImpl(TPlainStatus&& status, TDeferredActions<UseMigrationProtocol>& deferred);
 
@@ -1273,6 +1283,13 @@ private:
     std::atomic<int> DecompressionTasksInflight = 0;
     i64 ReadSizeBudget;
     i64 ReadSizeServerDelta = 0;
+
+    struct TParentInfo {
+        ui32 PartitionId;
+        ui64 PartitionSessionId;
+    };
+
+    std::unordered_map<ui32, std::vector<TParentInfo>> HierarchyData;
 };
 
 }  // namespace NYdb::NTopic

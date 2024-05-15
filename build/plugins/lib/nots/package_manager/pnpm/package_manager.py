@@ -43,6 +43,8 @@ class PnpmPackageManager(BasePackageManager):
         """
         ws = self._prepare_workspace()
 
+        self._copy_pnpm_patches()
+
         # Pure `tier 0` logic - isolated stores in the `build_root` (works in `distbuild` and `CI autocheck`)
         store_dir = self._nm_path(self._STORE_NM_PATH)
         virtual_store_dir = self._nm_path(self._VSTORE_NM_PATH)
@@ -239,6 +241,16 @@ class PnpmPackageManager(BasePackageManager):
         vs_lf_path = os.path.join(virtual_store_dir, "lock.yaml")
 
         shutil.copyfile(original_lf_path, vs_lf_path)
+
+    def _copy_pnpm_patches(self):
+        pj = self.load_package_json_from_dir(self.sources_path)
+        patchedDependencies: dict[str, str] = pj.data.get("pnpm", {}).get("patchedDependencies", {})
+
+        for p in patchedDependencies.values():
+            patch_source_path = os.path.join(self.sources_path, p)
+            patch_build_path = os.path.join(self.build_path, p)
+            os.makedirs(os.path.dirname(patch_build_path), exist_ok=True)
+            shutil.copyfile(patch_source_path, patch_build_path)
 
     def _get_default_options(self):
         return super(PnpmPackageManager, self)._get_default_options() + [

@@ -368,7 +368,7 @@ std::optional<ESimpleLogicalValueType> TOptionalLogicalType::Simplify() const
 size_t TOptionalLogicalType::GetMemoryUsage() const
 {
     if (Element_->GetMetatype() == ELogicalMetatype::Simple) {
-        // All optionals of simple logical types are signletons and therefore we assume they use no space.
+        // All optionals of simple logical types are singletons and therefore we assume they use no space.
         return 0;
     } else {
         return sizeof(*this) + Element_->GetMemoryUsage();
@@ -401,7 +401,7 @@ TSimpleLogicalType::TSimpleLogicalType(ESimpleLogicalValueType element)
 
 size_t TSimpleLogicalType::GetMemoryUsage() const
 {
-    // All simple logical types are signletons and therefore we assume they use no space.
+    // All simple logical types are singletons and therefore we assume they use no space.
     return 0;
 }
 

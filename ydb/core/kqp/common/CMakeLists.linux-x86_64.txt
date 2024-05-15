@@ -54,8 +54,10 @@ target_link_libraries(core-kqp-common PUBLIC
   yql-dq-expr_nodes
   ydb-library-aclib
   yql-core-issue
+  yql-core-services
   yql-dq-actors
   yql-dq-common
+  yql-dq-integration
   parser-pg_wrapper-interface
   public-lib-operation_id
   lib-operation_id-protos

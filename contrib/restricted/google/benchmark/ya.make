@@ -2,13 +2,13 @@
 
 LIBRARY()
 
-LICENSE(Apache-2.0)
-
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
 VERSION(1.8.3)
 
 ORIGINAL_SOURCE(https://github.com/google/benchmark/archive/v1.8.3.tar.gz)
+
+LICENSE(Apache-2.0)
+
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 ADDINCL(
     GLOBAL contrib/restricted/google/benchmark/include
@@ -59,4 +59,5 @@ END()
 
 RECURSE(
     test
+    tools
 )

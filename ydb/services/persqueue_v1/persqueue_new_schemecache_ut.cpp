@@ -506,7 +506,7 @@ namespace NKikimr::NPersQueueTests {
 
     Y_UNIT_TEST_SUITE(TPersqueueDataPlaneTestSuite) {
         Y_UNIT_TEST(WriteSession) {
-            TPersQueueV1TestServer server(true, true);
+            TPersQueueV1TestServer server({.CheckACL=true, .TenantModeEnabled=true});
 
             TString topic = "/Root/account1/write_topic";
             TString consumer = "consumer_aba";
@@ -570,7 +570,7 @@ namespace NKikimr::NPersQueueTests {
 
     Y_UNIT_TEST_SUITE(TPersqueueControlPlaneTestSuite) {
         Y_UNIT_TEST(SetupReadLockSessionWithDatabase) {
-            TPersQueueV1TestServer server(false, true);
+            TPersQueueV1TestServer server({.TenantModeEnabled=true});
 
             {
                 auto res = server.PersQueueClient->AddReadRule("/Root/acc/topic1", TAddReadRuleSettings().ReadRule(TReadRuleSettings().ConsumerName("user1")));
@@ -606,7 +606,7 @@ namespace NKikimr::NPersQueueTests {
         }
 
         Y_UNIT_TEST(SetupWriteLockSessionWithDatabase) {
-            TPersQueueV1TestServer server(false, true);
+            TPersQueueV1TestServer server({.TenantModeEnabled=true});
 
             auto stub = Ydb::PersQueue::V1::PersQueueService::NewStub(server.InsecureChannel);
             grpc::ClientContext grpcContext;
@@ -631,7 +631,7 @@ namespace NKikimr::NPersQueueTests {
         }
 
         Y_UNIT_TEST(TestAddRemoveReadRule) {
-            TPersQueueV1TestServer server(false, true);
+            TPersQueueV1TestServer server({.TenantModeEnabled=true});
             SET_LOCALS;
 
             pqClient->CreateConsumer("goodUser");

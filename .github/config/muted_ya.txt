@@ -62,7 +62,6 @@ ydb/services/persqueue_v1/ut TPersQueueTest.SetupLockSession
 ydb/services/persqueue_v1/ut TPQCompatTest.BadTopics
 ydb/services/persqueue_v1/ut TPersQueueTest.DirectRead*Cache*
 ydb/services/persqueue_v1/ut [3/10]*
-ydb/services/persqueue_v1/ut TPersQueueTest.DirectReadStop
 ydb/services/ydb/sdk_sessions_pool_ut YdbSdkSessionsPool.StressTestSync*
 ydb/services/ydb/sdk_sessions_ut YdbSdkSessions.TestActiveSessionCountAfterBadSession
 ydb/services/ydb/sdk_sessions_ut [6/10]*

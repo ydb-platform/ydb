@@ -93,4 +93,4 @@ Functionality is expected in upcoming versions of the `ydbops`.
 
 {% endnote %}
 
-To take out a node for maintenance, you can use the `ydbops` utility. When taking a node out, `ydbops` will acquire an exclusive lock on this node in CMS.
+To take out a node for maintenance, you can use the `ydbops` utility. When taking a node out, the `ydbops` will acquire an exclusive lock on this node in CMS.

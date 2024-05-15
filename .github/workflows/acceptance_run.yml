@@ -49,7 +49,7 @@ jobs:
         build_preset: ${{ inputs.build_preset || 'relwithdebinfo'}}
         build_target: "ydb/tests/acceptance"
         increment: false
-        run_tests: false
+        run_tests: true
         test_size: small,medium,large
         test_type: unittest,py3test,py2test,pytest
         test_threads: 1

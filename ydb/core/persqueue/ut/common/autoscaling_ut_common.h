@@ -40,32 +40,11 @@ struct TTestReadSession {
         bool Commited;
     };
 
-    TString Name;
-    std::unordered_map<ui32, ui64> Offsets;
-
-    bool AutoCommit;
-
-    std::shared_ptr<IReadSession> Session;
-
-    NThreading::TPromise<std::vector<MsgInfo>> DataPromise = NThreading::NewPromise<std::vector<MsgInfo>>();
-    NThreading::TPromise<std::set<size_t>> PartitionsPromise = NThreading::NewPromise<std::set<size_t>>();
-
-    std::vector<MsgInfo> ReceivedMessages;
-    std::set<size_t> Partitions;
-    std::optional<std::set<size_t>> ExpectedPartitions;
-
-    std::set<size_t> EndedPartitions;
-    std::vector<TReadSessionEvent::TEndPartitionSessionEvent> EndedPartitionEvents;
-
-    TMutex Lock;
-    TSemaphore Semaphore;
-
     static constexpr size_t SemCount = 1;
 
     TTestReadSession(const TString& name, TTopicClient& client, size_t expectedMessagesCount = Max<size_t>(), bool autoCommit = true, std::set<ui32> partitions = {}, bool autoscalingSupport = true);
 
     void WaitAllMessages();
-    NThreading::TFuture<std::set<size_t>> Wait(std::set<size_t> partitions, const TString& message);
 
     void Assert(const std::set<size_t>& expected, NThreading::TFuture<std::set<size_t>> f, const TString& message);
     void WaitAndAssertPartitions(std::set<size_t> partitions, const TString& message);
@@ -76,12 +55,45 @@ struct TTestReadSession {
     void Close();
 
     std::set<size_t> GetPartitions();
+    void SetOffset(ui32 partitionId, std::optional<ui64> offset);
 
-private:
-    void Acquire();
-    void Release();
+    struct TImpl {
 
-    void Modify(std::function<void (std::set<size_t>&)> modifier);
+        TImpl(const TString& name, bool autoCommit)
+            : Name(name)
+            , AutoCommit(autoCommit)
+            , Semaphore(name.c_str(), SemCount) {}
+
+        TString Name;
+        std::unordered_map<ui32, ui64> Offsets;
+
+        bool AutoCommit;
+
+        NThreading::TPromise<std::vector<MsgInfo>> DataPromise = NThreading::NewPromise<std::vector<MsgInfo>>();
+        NThreading::TPromise<std::set<size_t>> PartitionsPromise = NThreading::NewPromise<std::set<size_t>>();
+
+        std::vector<MsgInfo> ReceivedMessages;
+        std::set<size_t> Partitions;
+        std::optional<std::set<size_t>> ExpectedPartitions;
+
+        std::set<size_t> EndedPartitions;
+        std::vector<TReadSessionEvent::TEndPartitionSessionEvent> EndedPartitionEvents;
+
+        TMutex Lock;
+        TSemaphore Semaphore;
+
+        std::optional<ui64> GetOffset(ui32 partitionId) const;
+        void Modify(std::function<void (std::set<size_t>&)> modifier);
+
+        void Acquire();
+        void Release();
+
+        NThreading::TFuture<std::set<size_t>> Wait(std::set<size_t> partitions, const TString& message);
+    };
+
+    std::shared_ptr<IReadSession> Session;
+    std::shared_ptr<TImpl> Impl;
+
 };
 
 }

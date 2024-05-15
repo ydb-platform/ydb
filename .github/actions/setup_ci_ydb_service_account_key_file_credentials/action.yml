@@ -16,4 +16,6 @@ runs:
         cat << EOF > $YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS
         ${{ inputs.ci_ydb_service_account_key_file_credentials}}
         EOF
-        echo "YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=$YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" >> $GITHUB_ENV
+
+        # This env var interfere with tests, temporary disabled
+        # echo "YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=$YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" >> $GITHUB_ENV

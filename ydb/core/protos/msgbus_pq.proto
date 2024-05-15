@@ -445,6 +445,10 @@ message TPersQueuePartitionResponse {
         optional uint32 TopicQuotedTimeMs = 11;
         optional uint32 TotalTimeInPartitionQueueMs = 9;
         optional uint32 WriteTimeMs = 10;
+
+        // transactions
+        optional int64 MinSeqNo = 12;
+        optional int32 SupportivePartition = 13;
     }
 
     message TCmdGetMaxSeqNoResult {

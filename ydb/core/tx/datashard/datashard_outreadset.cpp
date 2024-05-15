@@ -178,7 +178,7 @@ void TOutReadSets::ResendAll(const TActorContext& ctx) {
         }
         ui64 seqNo = rs.first;
         ui64 target = rs.second.To;
-        Self->ResendReadSetQueue.Progress(rs.first, ctx);
+        Self->ResendReadSetQueue.Progress(seqNo, ctx);
         pendingPipeTrackerCommands.AttachTablet(seqNo, target);
     }
     pendingPipeTrackerCommands.Apply(Self->ResendReadSetPipeTracker, ctx);

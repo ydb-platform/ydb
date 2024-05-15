@@ -8,7 +8,7 @@ bool TTxFinishFromSource::DoExecute(NTabletFlatExecutor::TTransactionContext& tx
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::DestinationSessions>().Key(Session->GetSessionId())
         .Update(NIceDb::TUpdate<Schema::DestinationSessions::Cursor>(Session->SerializeCursorToProto().SerializeAsString()));
-    if (Session->GetSourcesInProgressCount() == 1) {
+    if (Session->GetSourcesInProgressCount() == 0) {
         Finished = true;
         if (Session->GetTransferContext().GetTxId()) {
             Self->GetProgressTxController().FinishProposeOnExecute(*Session->GetTransferContext().GetTxId(), txc);

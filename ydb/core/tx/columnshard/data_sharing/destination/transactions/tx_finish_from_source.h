@@ -20,6 +20,7 @@ public:
         , Session(session)
         , SourceTabletId(sourceTabletId)
     {
+        Session->GetCursorVerified(SourceTabletId).ReceiveFinished().Validate();
     }
 
     TTxType GetTxType() const override { return NColumnShard::TXTYPE_DATA_SHARING_FINISH_FROM_SOURCE; }

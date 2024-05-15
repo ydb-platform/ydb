@@ -95,9 +95,8 @@ NKikimr::TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TDestin
 }
 
 NKikimr::TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TDestinationSession::ReceiveFinished(NColumnShard::TColumnShard* self, const TTabletId sourceTabletId, const std::shared_ptr<TDestinationSession>& selfPtr) {
-    auto result = GetCursorVerified(sourceTabletId).ReceiveFinished();
-    if (!result) {
-        return result;
+    if (GetCursorVerified(sourceTabletId).GetDataFinished()) {
+        return TConclusionStatus::Fail("session finished already");
     }
     return std::unique_ptr<NTabletFlatExecutor::ITransaction>(new TTxFinishFromSource(self, sourceTabletId, selfPtr));
 }

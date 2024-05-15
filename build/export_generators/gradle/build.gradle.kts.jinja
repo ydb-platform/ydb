@@ -41,6 +41,9 @@ dependencies {
 {%  endif -%}
 {%  for library in target.consumer -%}
 {%      set classpath = library.classpath -%}
+{%      if classpath|replace('"','') == classpath -%}
+{%          set classpath = '"' + classpath + '"' -%}
+{%      endif -%}
 {%      if mainClass -%}
 {%          if library.excludes.consumer is defined %}
     implementation({{ classpath }}) {
@@ -60,6 +63,9 @@ dependencies {
 {%  for extra_target in extra_targets -%}
 {%      for library in extra_target.consumer -%}
 {%          set classpath = library.classpath -%}
+{%          if classpath|replace('"','') == classpath -%}
+{%              set classpath = '"' + classpath + '"' -%}
+{%          endif -%}
     testImplementation({{ classpath }})
 {%      endfor -%}
 {%  endfor -%}

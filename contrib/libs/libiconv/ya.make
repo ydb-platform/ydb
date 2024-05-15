@@ -18,7 +18,7 @@ IF (EXPORT_CMAKE)
             CMAKE_TARGET
             Iconv::Iconv
             CONAN
-            libiconv/1.15
+            libiconv/1.15 "&& conan-requires" libiconv/1.15
             CONAN_OPTIONS
             libiconv:shared=True
         )

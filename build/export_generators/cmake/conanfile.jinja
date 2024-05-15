@@ -1,20 +1,38 @@
 [requires]
-{% for package in conan_packages -%}
+{%- if conan.requires is defined -%}
+{%-     for package in conan.requires %}
 {{ package }}
-{% endfor %}
+{%-     endfor -%}
+{%- endif %}
+
 [tool_requires]
-{% for package in conan_tool_packages -%}
+{%- if conan.tool_requires is defined -%}
+{%-     for package in conan.tool_requires %}
 {{ package }}
-{% endfor %}
+{%-     endfor -%}
+{%- endif %}
+
 [options]
-{% for option in conan_options -%}
+{%- if conan.options is defined -%}
+{%-     for option in conan.options %}
 {{ option }}
-{% endfor %}
+{%-     endfor -%}
+{%- endif %}
+
 [imports]
-{% for imp in conan_imports -%}
-{{ imp }}
-{% endfor %}
+{%- if conan.imports is defined -%}
+{%-     for import_ in conan.imports %}
+{{ import_ }}
+{%-     endfor -%}
+{%- endif %}
+
 [generators]
 cmake_find_package
 cmake_paths
+{%- if conan.generators is defined -%}
+{%-     for generator in conan.generators %}
+{{ generator }}
+{%-     endfor -%}
+{%- endif %}
 
+{%- include "[generator]/debug.jinja" ignore missing -%}

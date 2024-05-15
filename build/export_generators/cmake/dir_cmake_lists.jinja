@@ -38,3 +38,4 @@ add_subdirectory({{ subdir }})
 {%-     endfor -%}
 {%- endif -%}
 {%- include 'epilogue.cmake' ignore missing -%}
+{%- include "[generator]/debug.jinja" ignore missing -%}

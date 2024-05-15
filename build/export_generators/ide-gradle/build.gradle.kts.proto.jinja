@@ -68,11 +68,15 @@ dependencies {
 {%-     if library.prebuilt and library.jar and (library.type != "contrib" or target.handler.build_contribs) %}
     implementation(files("$project_root/{{ library.jar }}"))
 {%-     else -%}
+{%-         set classpath = library.classpath -%}
+{%-         if classpath|replace('"','') == classpath -%}
+{%-             set classpath = '"' + classpath + '"' -%}
+{%-         endif %}
 {%-         if library.type != "contrib" %}
     implementation
 {%-         else %}
     api
-{%-         endif -%}({{ library.classpath }})
+{%-         endif -%}({{ classpath }})
 {%-         if library.excludes.consumer is defined %} {
 {%              for exclude in library.excludes.consumer -%}
 {%                  set classpath = exclude.classpath|replace('"','') -%}

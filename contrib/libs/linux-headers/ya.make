@@ -35,7 +35,7 @@ IF (OPENSOURCE_REPLACE_LINUX_HEADERS AND EXPORT_CMAKE)
     OPENSOURCE_EXPORT_REPLACEMENT(
         CMAKE linux-headers-generic
         CMAKE_TARGET linux-headers-generic::linux-headers-generic
-        CONAN linux-headers-generic/${OPENSOURCE_REPLACE_LINUX_HEADERS}
+        CONAN linux-headers-generic/${OPENSOURCE_REPLACE_LINUX_HEADERS} "&& conan-requires" linux-headers-generic/${OPENSOURCE_REPLACE_LINUX_HEADERS}
     )
 
 ELSE()

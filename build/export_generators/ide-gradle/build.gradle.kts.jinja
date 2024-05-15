@@ -168,14 +168,18 @@ dependencies {
 {%-     if library.prebuilt and library.jar and (library.type != "contrib" or build_contribs) %}
     implementation(files("$project_root/{{ library.jar }}"))
 {%-     else -%}
+{%-         set classpath = library.classpath -%}
+{%-         if classpath|replace('"','') == classpath -%}
+{%-             set classpath = '"' + classpath + '"' -%}
+{%-         endif -%}
 {%-         if library.type != "contrib" %}
 {%-             if library.testdep %}
     implementation(project(path = ":{{ library.testdep | replace("/", ":") }}", configuration = "testArtifacts"))
 {%-             else %}
-    implementation({{ library.classpath }})
+    implementation({{ classpath }})
 {%-             endif -%}
 {%-         else %}
-    api({{ library.classpath }})
+    api({{ classpath }})
 {%-         endif -%}
 {%-         if library.excludes.consumer is defined %} {
 {%              for exclude in library.excludes.consumer if exclude.classpath -%}
@@ -193,10 +197,14 @@ dependencies {
 {%-         if library.prebuilt and library.jar and (library.type != "contrib" or build_contribs) %}
     testImplementation(files("$project_root/{{ library.jar }}"))
 {%-         else -%}
+{%-             set classpath = library.classpath -%}
+{%-             if classpath|replace('"','') == classpath -%}
+{%-                 set classpath = '"' + classpath + '"' -%}
+{%-             endif %}
 {%-             if library.type != "contrib" and library.testdep %}
     testImplementation(project(path = ":{{ library.testdep | replace("/", ":") }}", configuration = "testArtifacts"))
 {%-             else %}
-    testImplementation({{ library.classpath }})
+    testImplementation({{ classpath }})
 {%-             endif -%}
 {%-             if library.excludes.consumer is defined %} {
 {%                  for exclude in library.excludes.consumer if exclude.classpath -%}

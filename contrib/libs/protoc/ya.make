@@ -18,7 +18,7 @@ IF (OPENSOURCE_REPLACE_PROTOBUF AND EXPORT_CMAKE)
     OPENSOURCE_EXPORT_REPLACEMENT(
         CMAKE Protobuf
         CMAKE_TARGET protobuf::libprotobuf protobuf::libprotoc
-        CONAN protobuf/${OPENSOURCE_REPLACE_PROTOBUF} "&& conan_require_tool" protobuf/${OPENSOURCE_REPLACE_PROTOBUF} "&& conan_import \"bin, protoc* -> ./bin\" && vanilla_protobuf"
+        CONAN protobuf/${OPENSOURCE_REPLACE_PROTOBUF} "&& conan-requires" protobuf/${OPENSOURCE_REPLACE_PROTOBUF} "&& conan_require_tool" protobuf/${OPENSOURCE_REPLACE_PROTOBUF} "&& conan-tool_requires" protobuf/${OPENSOURCE_REPLACE_PROTOBUF} "&& conan_import \"bin, protoc* -> ./bin\" && conan-imports \"bin, protoc* -> ./bin\" && vanilla_protobuf"
     )
 
 ELSE()

@@ -42,26 +42,26 @@ copy=[
 
 [targets.EMPTY]
 template={ path="dir_cmake_lists.jinja", dest="CMakeLists{PLATFORM}.txt" }
-merge_platform_template={ path="common_cmake_lists.jinja", dest="CMakeLists.txt" }
+merge_platform_template={ path="merge_platforms_cmake_lists.jinja", dest="CMakeLists.txt" }
 
 [targets.add_executable]
 template={ path="dir_cmake_lists.jinja", dest="CMakeLists{PLATFORM}.txt" }
-merge_platform_template={ path="common_cmake_lists.jinja", dest="CMakeLists.txt" }
+merge_platform_template={ path="merge_platforms_cmake_lists.jinja", dest="CMakeLists.txt" }
 
 [targets.add_global_library_for]
 is_extra_target = true
 
 [targets.add_library]
 template={ path="dir_cmake_lists.jinja", dest="CMakeLists{PLATFORM}.txt" }
-merge_platform_template={ path="common_cmake_lists.jinja", dest="CMakeLists.txt" }
+merge_platform_template={ path="merge_platforms_cmake_lists.jinja", dest="CMakeLists.txt" }
 
 [targets.add_shared_library]
 template={ path="dir_cmake_lists.jinja", dest="CMakeLists{PLATFORM}.txt" }
-merge_platform_template={ path="common_cmake_lists.jinja", dest="CMakeLists.txt" }
+merge_platform_template={ path="merge_platforms_cmake_lists.jinja", dest="CMakeLists.txt" }
 
 [targets.add_fat_object]
 template={ path="dir_cmake_lists.jinja", dest="CMakeLists{PLATFORM}.txt" }
-merge_platform_template={ path="common_cmake_lists.jinja", dest="CMakeLists.txt" }
+merge_platform_template={ path="merge_platforms_cmake_lists.jinja", dest="CMakeLists.txt" }
 
 [targets.add_recursive_library]
 is_extra_target = true
@@ -70,12 +70,35 @@ is_extra_target = true
 is_extra_target = true
 
 [attrs.root]
-project_name="str"
-project_language_list="list"
-platform_vars="list"
-includes="sorted_set"
-use_conan="bool"
+# DEPRECATED - Skipped old hardcoded-cmake attributes
+conan_require="skip"
+conan_require_tool="skip"
+conan_import="skip"
+conan_options="skip"
+add_language="skip"
+set_global_flags="skip"
+
+# Really used attributes
+conan-requires="sorted_set"
+conan-tool_requires="sorted_set"
+conan-imports="sorted_set"
+conan-options="set"
+conan-generators="sorted_set"
+
+project_languages="set"
 vanilla_protobuf="flag"
+includes="set"
+
+[attrs.platform]
+platform_vars-FAT_OBJECT_PREFIX="str"
+platform_vars-FAT_OBJECT_SUFFIX="str"
+platform_vars-RAGEL_FLAGS="str"
+platform_vars-YASM_FLAGS="str"
+platform_vars-CMAKE_CUDA_STANDARD="str"
+platform_vars-BISON_FLAGS="str"
+platform_vars-LEX_FLAGS="str"
+platform_vars-FBS_CPP_FLAGS="str"
+platform_vars-COMMON_PROTOC_FLAGS="str"
 
 [attrs.dir]
 
@@ -111,8 +134,8 @@ attrs=[
     "conan_config_install",
     "conan_load_buildinfo",
     "conan_parse_arguments",
-    "conan_require",
-    "conan_require_tool",
+    "conan-requires",
+    "conan-tool_requires",
     "old_conan_cmake_install",
 ]
 copy=["cmake/conan.cmake"]

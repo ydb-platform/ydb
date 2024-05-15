@@ -25,13 +25,14 @@ YDB is an open source Distributed SQL Database that combines high availability a
 YDB was designed from scratch to respond to the growing demand for scalable interactive web services. Scalability, strict consistency, and effective cross-row transactions were a must for such an OLTP-like workload. YDB was built by people with strong backgrounds in databases and distributed systems who have experience developing a NoSQL database and the MapReduce system for one of the largest search engines in the world.
 
 Basic YDB features:
-  - Both row-oriented and column-oriented [tables](https://ydb.tech/docs/en/concepts/datamodel/table) for transactional and analytical workloads. Also, [persistent queues (topics)](https://ydb.tech/docs/en/concepts/topic) for moving data around.
-  - Fault-tolerant configuration that survives disk, node, rack, or even datacenter outages.
-  - Automatic disaster recovery with minimum latency disruptions for applications.
-  - Independent horizontal scalability of storage and compute layers.
-  - ACID transactions across multiple nodes and tables with strict consistency.
-  - Rich [SQL dialect (YQL)](https://ydb.tech/docs/en/yql/reference/) for data manipulation and schema definition.
-  - [PostgreSQL-compatible mode](https://ydb.tech/docs/en/postgresql/intro) for table operations and [Kafka-compatible mode](https://ydb.tech/docs/en/reference/kafka-api/) for topics.
+
+- Both row-oriented and column-oriented [tables](https://ydb.tech/docs/en/concepts/datamodel/table) for transactional and analytical workloads. Also, [persistent queues (topics)](https://ydb.tech/docs/en/concepts/topic) for moving data around.
+- Fault-tolerant configuration that survives disk, node, rack, or even datacenter outages.
+- Automatic disaster recovery with minimum latency disruptions for applications.
+- Independent horizontal scalability of storage and compute layers.
+- ACID transactions across multiple nodes and tables with strict consistency.
+- Rich [SQL dialect (YQL)](https://ydb.tech/docs/en/yql/reference/) for data manipulation and schema definition.
+- [PostgreSQL-compatible mode](https://ydb.tech/docs/en/postgresql/intro) for table operations and [Kafka-compatible mode](https://ydb.tech/docs/en/reference/kafka-api/) for topics.
 - YDB clusters can be deployed with [Ansible](https://ydb.tech/docs/en/devops/ansible/), [Kubernetes](https://ydb.tech/docs/en/devops/kubernetes/), or [manually](https://ydb.tech/docs/en/devops/manual/).
 
 ### Fault-tolerant Configurations

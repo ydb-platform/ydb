@@ -302,7 +302,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
         TTableBucket * bucket2 = &JoinTable2->TableBuckets[bucket];
 
         ui64 tuplesNum1 = JoinTable1->TableBucketsStats[bucket].TuplesNum;
-        ui64 tuplesNum2 = JoinTable1->TableBucketsStats[bucket].TuplesNum;
+        ui64 tuplesNum2 = JoinTable2->TableBucketsStats[bucket].TuplesNum;
 
         ui64 headerSize1 = JoinTable1->HeaderSize;
         ui64 headerSize2 = JoinTable2->HeaderSize;

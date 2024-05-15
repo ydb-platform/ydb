@@ -66,27 +66,27 @@ struct TColorLimits {
 
     static TColorLimits MakeLogLimits() {
         return {
-            {250, 1000}, // Black: Stop early to leave some space for disaster recovery
-            {350, 1000}, // Red
-            {500, 1000}, // Orange
-            {600, 1000}, // PreOrange
-            {700, 1000}, // LightOrange
-            {900, 1000}, // Yellow
-            {930, 1000}, // LightYellow
-            {982, 1000}, // Cyan: Ask to cut log
+            {100, 1000}, // Black: Stop early to leave some space for disaster recovery
+            {150, 1000}, // Red
+            {200, 1000}, // Orange
+            {210, 1000}, // PreOrange
+            {250, 1000}, // LightOrange
+            {350, 1000}, // Yellow
+            {400, 1000}, // LightYellow
+            {450, 1000}, // Cyan
         };
     }
 
     static TColorLimits MakeExtendedLogLimits() {
         return {
-            {150, 1000}, // Black: Stop early to leave some space for disaster recovery
-            {200, 1000}, // Red
-            {500, 1000}, // Orange
-            {600, 1000}, // PreOrange
-            {700, 1000}, // LightOrange
-            {900, 1000}, // Yellow
-            {930, 1000}, // LightYellow
-            {982, 1000}, // Cyan: Ask to cut log
+            {50, 1000}, // Black: Stop early to leave some space for disaster recovery
+            {100, 1000}, // Red
+            {200, 1000}, // Orange
+            {210, 1000}, // PreOrange
+            {250, 1000}, // LightOrange
+            {350, 1000}, // Yellow
+            {400, 1000}, // LightYellow
+            {450, 1000}, // Cyan
         };
     }
 

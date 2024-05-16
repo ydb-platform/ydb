@@ -48,6 +48,10 @@ public:
         return true;
     }
 
+    ui64 GetSize() const override {
+        return Chunks.size();
+    }
+
     static std::optional<std::vector<INormalizerChanges::TPtr>> Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);

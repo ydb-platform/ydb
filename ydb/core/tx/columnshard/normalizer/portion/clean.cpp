@@ -34,6 +34,10 @@ public:
     void ApplyOnComplete(const TNormalizationController& /* normController */) const override {
         RemovingAction->OnCompleteTxAfterRemoving(true);
     }
+
+    ui64 GetSize() const override {
+        return Portions.size();
+    }
 };
 
 class TBlobsRemovingTask : public INormalizerTask {

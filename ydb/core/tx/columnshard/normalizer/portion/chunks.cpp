@@ -34,6 +34,10 @@ public:
         }
         return true;
     }
+
+    ui64 GetSize() const override {
+        return Chunks.size();
+    }
 };
 
 class TRowsAndBytesChangesTask: public NConveyor::ITask {

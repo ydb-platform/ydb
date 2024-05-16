@@ -272,6 +272,7 @@ bool TTxUpdateSchema::Execute(TTransactionContext& txc, const TActorContext&) {
         if (result.IsSuccess()) {
             NormalizerTasks = result.DetachResult();
             if (!NormalizerTasks.empty()) {
+                ACFL_WARN("normalizer_controller", Self->NormalizerController.DebugString())("tasks_count", NormalizerTasks.size());
                 break;
             }
             NIceDb::TNiceDb db(txc.DB);
@@ -337,6 +338,7 @@ bool TTxApplyNormalizer::Execute(TTransactionContext& txc, const TActorContext&)
 void TTxApplyNormalizer::Complete(const TActorContext& ctx) {
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("step", "TTxApplyNormalizer.Complete")("tablet_id", Self->TabletID())("event", "initialize_shard");
     AFL_VERIFY(!Self->NormalizerController.IsNormalizationFinished())("details", Self->NormalizerController.DebugString());
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("event", "apply_normalizer_changes")("details", Self->NormalizerController.DebugString())("size", Changes->GetSize());
     Changes->ApplyOnComplete(Self->NormalizerController);
     Self->NormalizerController.GetNormalizer()->OnResultReady();
     if (Self->NormalizerController.GetNormalizer()->HasActiveTasks()) {

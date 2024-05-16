@@ -53,9 +53,9 @@ namespace NKikimr::NOlap {
     enum class ENormalizerSequentialId : ui32 {
         Granules = 1,
         Chunks,
-        PortionsMetadata,
         PortionsCleaner,
-        TablesCleaner
+        TablesCleaner,
+        PortionsMetadata,
     };
 
     class TNormalizationContext {
@@ -88,6 +88,8 @@ namespace NKikimr::NOlap {
         virtual void ApplyOnComplete(const TNormalizationController& normalizationContext) const {
             Y_UNUSED(normalizationContext);
         }
+
+        virtual ui64 GetSize() const = 0;
     };
 
     class TTrivialNormalizerTask : public INormalizerTask {
@@ -95,7 +97,9 @@ namespace NKikimr::NOlap {
     public:
         TTrivialNormalizerTask(const INormalizerChanges::TPtr& changes)
             : Changes(changes)
-        {}
+        {
+            AFL_VERIFY(Changes);
+        }
 
         void Start(const TNormalizationController& /* controller */, const TNormalizationContext& /*nCtx*/) override;
     };
@@ -136,9 +140,8 @@ namespace NKikimr::NOlap {
 
             virtual ENormalizerSequentialId GetType() const = 0;
 
-            const TString& GetName() const {
-                static TString name = ToString(GetType());
-                return name;
+            TString GetName() const {
+                return ToString(GetType());
             }
 
             ui32 GetSequentialId() const {

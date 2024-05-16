@@ -953,14 +953,16 @@ private:
 
             this->template PushCommonHandler<>(
                 std::move(TParent::TBaseHandlersVisitor::Event),
-                [this](TReadSessionEvent::TEvent& event) {
+                [specific = this->Settings.EventHandlers_.EndPartitionSessionHandler_,
+                 common = this->Settings.EventHandlers_.CommonHandler_,
+                 cbContext = CbContext](TReadSessionEvent::TEvent& event) {
                 auto e = std::get<TReadSessionEvent::TEndPartitionSessionEvent>(event);
-                if (this->Settings.EventHandlers_.EndPartitionSessionHandler_) {
-                    this->Settings.EventHandlers_.EndPartitionSessionHandler_(e);
-                } else if (this->Settings.EventHandlers_.CommonHandler_) {
-                    this->Settings.EventHandlers_.CommonHandler_(event);
+                if (specific) {
+                    specific(e);
+                } else if (common) {
+                    common(event);
                 }
-                if (auto session = CbContext->LockShared()) {
+                if (auto session = cbContext->LockShared()) {
                     Cerr << ">>>>> operator() TEndPartitionSessionEvent AFTER" << Endl << Flush;
                     session->SetReadingFinished(e.GetPartitionSession()->GetPartitionSessionId(), e.GetChildPartitionIds());
                 }

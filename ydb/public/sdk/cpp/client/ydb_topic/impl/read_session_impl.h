@@ -1099,8 +1099,10 @@ public:
     }
 
     void RegisterParentPartition(ui32 partitionId, ui32 parentPartitionId, ui64 parentPartitionSessionId);
+    void UnregisterPartition(ui32 partitionId, ui64 partitionSessionId);
     std::vector<ui64> GetParentPartitionSessions(ui32 partitionId, ui64 partitionSessionId);
     bool AllParentSessionsHasBeenRead(ui32 partitionId, ui64 partitionSessionId);
+    void SetReadingFinished(ui64 partitionSessionId, const std::vector<ui32>& childIds);
 
 private:
     void BreakConnectionAndReconnectImpl(TPlainStatus&& status, TDeferredActions<UseMigrationProtocol>& deferred);
@@ -1290,6 +1292,7 @@ private:
     };
 
     std::unordered_map<ui32, std::vector<TParentInfo>> HierarchyData;
+    std::unordered_set<ui64> ReadingFinishedData;
 };
 
 }  // namespace NYdb::NTopic

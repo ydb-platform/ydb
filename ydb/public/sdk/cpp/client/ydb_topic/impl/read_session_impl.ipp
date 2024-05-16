@@ -134,6 +134,7 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::SignalReadyEvents(TInt
 {
     if constexpr (!UseMigrationProtocol) {
         if (!CbContext->TryGet()->AllParentSessionsHasBeenRead(stream->GetPartitionId(), stream->GetPartitionSessionId())) {
+            Cerr << ">>>>> SignalReadyEvents NOT AllParentSessionsHasBeenRead "  << stream->GetPartitionId() << Endl << Flush;
             return;
         }
     }
@@ -176,6 +177,14 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::SignalReadyEvents(TInt
             }
         } else {
             if (queue.TryApplyCallbackToEventImpl(front.GetEvent(), deferred)) {
+                if constexpr (!UseMigrationProtocol) {
+                    if (std::holds_alternative<TReadSessionEvent::TEndPartitionSessionEvent>(front.GetEvent())) {
+                        Cerr << ">>>>> SignalReadyEvents TEndPartitionSessionEvent " << Endl << Flush;
+                        auto session = CbContext->TryGet();
+                        auto& e = std::get<TReadSessionEvent::TEndPartitionSessionEvent>(front.GetEvent());
+                        session->SetReadingFinished(stream->GetPartitionSessionId(), e.GetChildPartitionIds());
+                    }
+                }
                 NotReady.pop_front();
             } else {
                 moveToReadyQueue(std::move(front));
@@ -1817,18 +1826,43 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::TPartitionCookieMappin
 
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::RegisterParentPartition(ui32 partitionId, ui32 parentPartitionId, ui64 parentPartitionSessionId) {
+    Cerr << ">>>>> RegisterParentPartition " << partitionId << " " << parentPartitionId << " " << parentPartitionSessionId << Endl;
+
     auto& values = HierarchyData[partitionId];
-    values.push_back({ parentPartitionId, parentPartitionSessionId});
+    values.push_back({parentPartitionId, parentPartitionSessionId});
+}
+
+template<bool UseMigrationProtocol>
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::UnregisterPartition(ui32 partitionId, ui64 partitionSessionId) {
+    auto it = HierarchyData.find(partitionId);
+    if (it != HierarchyData.end()) {
+        auto& values = it->second;
+        for (auto v = values.begin(); v != values.end();) {
+            if (v->PartitionSessionId < partitionSessionId) {
+                v = values.erase(v);
+            } else {
+                ++v;
+            }
+        }
+        if (values.empty()) {
+            HierarchyData.erase(it);
+        }
+    }
 }
 
 template<bool UseMigrationProtocol>
 std::vector<ui64> TSingleClusterReadSessionImpl<UseMigrationProtocol>::GetParentPartitionSessions(ui32 partitionId, ui64 partitionSessionId) {
+    Cerr << ">>>>> GetParentPartitionSessions " << partitionId << " " << partitionSessionId << Endl << Flush;
+
     auto it = HierarchyData.find(partitionId);
     if (it == HierarchyData.end()) {
+        Cerr << ">>>>> GetParentPartitionSessions NOT REGISTERED " << partitionId << Endl << Flush;
         return {};
     }
 
     auto& parents = it->second;
+
+    Cerr << ">>>>> GetParentPartitionSessions parent=" << parents.size() << Endl << Flush;
 
     std::unordered_map<ui32, ui64> index;
     for (auto& v : parents) {
@@ -1849,19 +1883,30 @@ std::vector<ui64> TSingleClusterReadSessionImpl<UseMigrationProtocol>::GetParent
 
 template<bool UseMigrationProtocol>
 bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::AllParentSessionsHasBeenRead(ui32 partitionId, ui64 partitionSessionId) {
-    for (auto partitionSessionId : GetParentPartitionSessions(partitionId, partitionSessionId)) {
-        auto it = PartitionStreams.find(partitionSessionId);
-        if (it == PartitionStreams.end()) {
-            return false;
-        }
-
-        auto& partitionStream = it->second;
-        if (partitionStream->HasEvents()) {
+    for (auto id : GetParentPartitionSessions(partitionId, partitionSessionId)) {
+        if (!ReadingFinishedData.contains(id)) {
+    Cerr << ">>>>> AllParentSessionsHasBeenRead 0 " << partitionId << " " << partitionSessionId << Endl << Flush;
             return false;
         }
     }
 
+    Cerr << ">>>>> AllParentSessionsHasBeenRead 2 " << partitionId << " " << partitionSessionId << Endl << Flush;
     return true;
+}
+
+template<bool UseMigrationProtocol>
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::SetReadingFinished(ui64 partitionSessionId, const std::vector<ui32>& childIds) {
+    Cerr << ">>>>> SetReadingFinished !!!! " << partitionSessionId << Endl << Flush;
+    ReadingFinishedData.insert(partitionSessionId);
+    for (auto& [_, s] : PartitionStreams) {
+        for (auto partitionId : childIds) {
+            if (s->GetPartitionId() == partitionId) {
+                Cerr << ">>>>> SignalReadyEvents " << partitionId << Endl << Flush;
+                EventsQueue->SignalReadyEvents(s);
+                break;
+            }
+        }
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2089,6 +2134,8 @@ TReadSessionEventInfo<UseMigrationProtocol>
 TReadSessionEventsQueue<UseMigrationProtocol>::GetEventImpl(size_t& maxByteSize,
                                                             TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator) // Assumes that we're under lock.
 {
+    Cerr << ">>>>> GetEventImpl 0" << Endl << Flush;
+
     Y_ASSERT(TParent::HasEventsImpl());
 
     if (!TParent::Events.empty()) {
@@ -2108,6 +2155,16 @@ TReadSessionEventsQueue<UseMigrationProtocol>::GetEventImpl(size_t& maxByteSize,
             partitionStream->PopEvent();
 
             TParent::Events.pop();
+
+            if constexpr (!UseMigrationProtocol) {
+                Cerr << ">>>>> GetEventImpl !!!!" << Endl << Flush;
+                if (std::holds_alternative<TReadSessionEvent::TEndPartitionSessionEvent>(*event)) {
+                    Cerr << ">>>>> GetEventImpl TEndPartitionSessionEvent" << Endl << Flush;
+                    auto session = frontCbContext->TryGet();
+                    auto& e = std::get<TReadSessionEvent::TEndPartitionSessionEvent>(*event);
+                    session->SetReadingFinished(partitionStream->GetPartitionSessionId(), e.GetChildPartitionIds());
+                }
+            }
         }
 
         TParent::RenewWaiterImpl();
@@ -2813,6 +2870,7 @@ void TDeferredActions<UseMigrationProtocol>::Read() {
 template<bool UseMigrationProtocol>
 void TDeferredActions<UseMigrationProtocol>::StartExecutorTasks() {
     for (auto&& [executor, task] : ExecutorsTasks) {
+        Cerr << ">>>>> StartExecutorTasks " << Endl << Flush;
         executor->Post(std::move(task));
     }
 }

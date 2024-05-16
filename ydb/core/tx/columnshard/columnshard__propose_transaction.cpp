@@ -61,11 +61,12 @@ public:
         }
         AFL_VERIFY(!!TxOperator);
         const ui64 txId = record.GetTxId();
-
+        if (Ev->Sender != TxOperator->GetTxInfo().Source) {
+            return;
+        }
         if (TxOperator->IsFail()) {
             TxOperator->SendReply(*Self, ctx);
-        }
-        if (TxOperator->IsAsync()) {
+        } else if (TxOperator->IsAsync()) {
             Self->GetProgressTxController().StartProposeOnComplete(txId, ctx);
         } else {
             Self->GetProgressTxController().FinishProposeOnComplete(txId, ctx);

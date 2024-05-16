@@ -132,7 +132,7 @@ public:
     using TProposeResult = TTxProposeResult::TProposeResult;
 
     class ITransactionOperator {
-    private:
+    public:
         enum class EStatus {
             Created,
             Parsed,
@@ -146,7 +146,7 @@ public:
     protected:
         TTxInfo TxInfo;
         YDB_READONLY_DEF(std::optional<TTxController::TProposeResult>, ProposeStartInfo);
-        EStatus Status = EStatus::Created;
+        std::optional<EStatus> Status = EStatus::Created;
     private:
         virtual bool DoParse(TColumnShard& owner, const TString& data) = 0;
         virtual TTxController::TProposeResult DoStartProposeOnExecute(TColumnShard & owner, NTabletFlatExecutor::TTransactionContext & txc) = 0;
@@ -156,16 +156,14 @@ public:
         virtual bool DoIsAsync() const = 0;
         virtual void DoSendReply(TColumnShard& owner, const TActorContext& ctx) = 0;
 
-        [[nodiscard]] bool SwitchState(const EStatus from, const EStatus to) {
-            if (Status == from) {
-                Status = to;
-                return true;
-            }
-            return false;
-        }
+        [[nodiscard]] bool SwitchState(const EStatus from, const EStatus to);
     public:
         using TPtr = std::shared_ptr<ITransactionOperator>;
         using TFactory = NObjectFactory::TParametrizedObjectFactory<ITransactionOperator, NKikimrTxColumnShard::ETransactionKind, TTxInfo>;
+
+        void ResetStatus() {
+            Status = {};
+        }
 
         bool IsFail() const {
             return ProposeStartInfo && ProposeStartInfo->IsFail();
@@ -211,7 +209,7 @@ public:
             return true;
         }
 
-        bool Parse(TColumnShard& owner, const TString& data) {
+        bool Parse(TColumnShard& owner, const TString& data, const bool onLoad = false) {
             const bool result = DoParse(owner, data);
             if (!result) {
                 ProposeStartInfo = TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::ERROR, TStringBuilder() << "Error processing commit TxId# " << TxInfo.TxId
@@ -219,6 +217,9 @@ public:
                 AFL_VERIFY(SwitchState(EStatus::Created, EStatus::Failed));
             } else {
                 AFL_VERIFY(SwitchState(EStatus::Created, EStatus::Parsed));
+            }
+            if (onLoad) {
+                Status = {};
             }
             return result;
         }

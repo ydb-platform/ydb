@@ -50,7 +50,7 @@ bool TTxController::Load(NTabletFlatExecutor::TTransactionContext& txc) {
         ITransactionOperator::TPtr txOperator(ITransactionOperator::TFactory::Construct(txKind, TTxInfo(txKind, txId)));
         Y_ABORT_UNLESS(!!txOperator);
         const TString txBody = rowset.GetValue<Schema::TxInfo::TxBody>();
-        Y_ABORT_UNLESS(txOperator->Parse(Owner, txBody));
+        Y_ABORT_UNLESS(txOperator->Parse(Owner, txBody, true));
 
         auto& txInfo = txOperator->MutableTxInfo();
         txInfo.MaxStep = rowset.GetValue<Schema::TxInfo::MaxStep>();
@@ -91,6 +91,7 @@ TTxController::ITransactionOperator::TPtr TTxController::GetVerifiedTxOperator(c
 
 std::shared_ptr<TTxController::ITransactionOperator> TTxController::UpdateTxSourceInfo(const ui64 txId, const TActorId& source, const ui64 cookie, NTabletFlatExecutor::TTransactionContext& txc) {
     auto op = GetVerifiedTxOperator(txId);
+    op->ResetStatus();
     auto& txInfo = op->MutableTxInfo();
     txInfo.Source = source;
     txInfo.Cookie = cookie;
@@ -352,6 +353,16 @@ void TTxController::FinishProposeOnComplete(const ui64 txId, const TActorContext
     AFL_VERIFY(!txOperator->IsFail());
     txOperator->FinishProposeOnComplete(Owner, ctx);
     txOperator->SendReply(Owner, ctx);
+}
+
+bool TTxController::ITransactionOperator::SwitchState(const EStatus from, const EStatus to) {
+    if (!Status || Status == from) {
+        Status = to;
+        return true;
+    } else {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("real_state", *Status)("expected", from);
+        return false;
+    }
 }
 
 }

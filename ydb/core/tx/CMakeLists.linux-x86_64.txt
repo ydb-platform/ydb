@@ -54,9 +54,9 @@ target_link_libraries(ydb-core-tx PUBLIC
 
 target_sources(ydb-core-tx PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/defs.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/message_seqno.h
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx.h
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx_processing.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/message_seqno.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx_proxy_schemereq.cpp
 )

@@ -25,7 +25,7 @@ target_link_libraries(columnshard-transactions-operators PUBLIC
 )
 
 target_sources(columnshard-transactions-operators PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/transactions/operators/ss_operation.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/transactions/operators/propose_tx.cpp
 )
 
 

@@ -1,14 +1,14 @@
 #pragma once
 
-#include "ss_operation.h"
+#include "propose_tx.h"
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/export/session/task.h>
 
 namespace NKikimr::NColumnShard {
 
-class TBackupTransactionOperator: public ISSTransactionOperator {
+class TBackupTransactionOperator: public IProposeTxOperator {
 private:
-    using TBase = ISSTransactionOperator;
+    using TBase = IProposeTxOperator;
 
     std::shared_ptr<NOlap::NExport::TExportTask> ExportTask;
     std::unique_ptr<NTabletFlatExecutor::ITransaction> TxAddTask;

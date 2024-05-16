@@ -19,6 +19,7 @@ namespace NKikimr::NColumnShard {
 
 using NOlap::TWriteId;
 using NOlap::IBlobGroupSelector;
+struct TFullTxInfo;
 
 struct Schema : NIceDb::Schema {
     // These settings are persisted on each Init. So we use empty settings in order not to overwrite what
@@ -122,10 +123,11 @@ struct Schema : NIceDb::Schema {
         struct MaxStep : Column<4, NScheme::NTypeIds::Uint64> {};
         struct PlanStep : Column<5, NScheme::NTypeIds::Uint64> {};
         struct Source : Column<6, NScheme::NTypeIds::ActorId> {};
-        struct Cookie : Column<7, NScheme::NTypeIds::Uint64> {};
+        struct Cookie: Column<7, NScheme::NTypeIds::Uint64> {};
+        struct SeqNo: Column<8, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<TxId>;
-        using TColumns = TableColumns<TxId, TxKind, TxBody, MaxStep, PlanStep, Source, Cookie>;
+        using TColumns = TableColumns<TxId, TxKind, TxBody, MaxStep, PlanStep, Source, Cookie, SeqNo>;
     };
 
     struct SchemaPresetInfo : Table<(ui32)ECommonTables::SchemaPresetInfo> {
@@ -568,16 +570,10 @@ struct Schema : NIceDb::Schema {
         SaveSpecialValue(db, key, serialized);
     }
 
-    static void SaveTxInfo(NIceDb::TNiceDb& db, ui64 txId, NKikimrTxColumnShard::ETransactionKind txKind,
-                           const TString& txBody, ui64 maxStep, const TActorId& source, ui64 cookie)
-    {
-        db.Table<TxInfo>().Key(txId).Update(
-            NIceDb::TUpdate<TxInfo::TxKind>(txKind),
-            NIceDb::TUpdate<TxInfo::TxBody>(txBody),
-            NIceDb::TUpdate<TxInfo::MaxStep>(maxStep),
-            NIceDb::TUpdate<TxInfo::Source>(source),
-            NIceDb::TUpdate<TxInfo::Cookie>(cookie));
-    }
+    static void SaveTxInfo(NIceDb::TNiceDb& db, const TFullTxInfo& txInfo,
+                           const TString& txBody);
+
+    static void UpdateTxInfoSource(NIceDb::TNiceDb& db, const TFullTxInfo& txInfo);
 
     static void UpdateTxInfoSource(NIceDb::TNiceDb& db, ui64 txId, const TActorId& source, ui64 cookie) {
         db.Table<TxInfo>().Key(txId).Update(

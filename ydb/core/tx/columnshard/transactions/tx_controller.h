@@ -4,6 +4,7 @@
 
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/data_events/events.h>
+#include <ydb/core/tx/message_seqno.h>
 
 
 namespace NKikimr::NColumnShard {
@@ -34,15 +35,34 @@ struct TFullTxInfo: public TBasicTxInfo {
     ui64 PlanStep = 0;
     TActorId Source;
     ui64 Cookie = 0;
+    std::optional<TMessageSeqNo> SeqNo;
 public:
+    TString SerializeSeqNoAsString() const {
+        if (!SeqNo) {
+            return "";
+        }
+        return SeqNo->SerializeToString();
+    }
+
+    void DeserializeSeqNoFromString(const TString& data) {
+        if (!data) {
+            SeqNo = std::nullopt;
+        } else {
+            TMessageSeqNo seqNo;
+            seqNo.DeserializeFromString(data).Validate();
+            SeqNo = seqNo;
+        }
+    }
+
     TFullTxInfo(const NKikimrTxColumnShard::ETransactionKind& txKind, const ui64 txId)
         : TBasicTxInfo(txKind, txId) {
     }
 
-    TFullTxInfo(const NKikimrTxColumnShard::ETransactionKind& txKind, const ui64 txId, const TActorId& source, const ui64 cookie)
+    TFullTxInfo(const NKikimrTxColumnShard::ETransactionKind& txKind, const ui64 txId, const TActorId& source, const ui64 cookie, const std::optional<TMessageSeqNo>& seqNo)
         : TBasicTxInfo(txKind, txId)
         , Source(source)
         , Cookie(cookie)
+        , SeqNo(seqNo)
     {
     }
 };
@@ -148,6 +168,7 @@ public:
         YDB_READONLY_DEF(std::optional<TTxController::TProposeResult>, ProposeStartInfo);
         std::optional<EStatus> Status = EStatus::Created;
     private:
+        friend class TTxController;
         virtual bool DoParse(TColumnShard& owner, const TString& data) = 0;
         virtual TTxController::TProposeResult DoStartProposeOnExecute(TColumnShard & owner, NTabletFlatExecutor::TTransactionContext & txc) = 0;
         virtual void DoStartProposeOnComplete(TColumnShard& owner, const TActorContext& ctx) = 0;
@@ -155,11 +176,20 @@ public:
         virtual void DoFinishProposeOnComplete(TColumnShard& owner, const TActorContext& ctx) = 0;
         virtual bool DoIsAsync() const = 0;
         virtual void DoSendReply(TColumnShard& owner, const TActorContext& ctx) = 0;
+        virtual bool DoCheckAllowUpdate(const TFullTxInfo& currentTxInfo) const = 0;
 
         [[nodiscard]] bool SwitchState(const EStatus from, const EStatus to);
+        TTxInfo& MutableTxInfo() {
+            return TxInfo;
+        }
+
     public:
         using TPtr = std::shared_ptr<ITransactionOperator>;
         using TFactory = NObjectFactory::TParametrizedObjectFactory<ITransactionOperator, NKikimrTxColumnShard::ETransactionKind, TTxInfo>;
+
+        bool CheckAllowUpdate(const TFullTxInfo& currentTxInfo) const {
+            return DoCheckAllowUpdate(currentTxInfo);
+        }
 
         void ResetStatus() {
             Status = {};
@@ -180,10 +210,6 @@ public:
         }
 
         const TTxInfo& GetTxInfo() const {
-            return TxInfo;
-        }
-
-        TTxInfo& MutableTxInfo() {
             return TxInfo;
         }
 
@@ -304,9 +330,9 @@ public:
 
     bool Load(NTabletFlatExecutor::TTransactionContext& txc);
 
-    [[nodiscard]] std::shared_ptr<TTxController::ITransactionOperator> UpdateTxSourceInfo(const ui64 txId, const TActorId& source, const ui64 cookie, NTabletFlatExecutor::TTransactionContext& txc);
+    [[nodiscard]] std::shared_ptr<TTxController::ITransactionOperator> UpdateTxSourceInfo(const TFullTxInfo& tx, NTabletFlatExecutor::TTransactionContext& txc);
 
-    [[nodiscard]] std::shared_ptr<TTxController::ITransactionOperator> StartProposeOnExecute(const TBasicTxInfo& txInfo, const TString& txBody, const TActorId source, const ui64 cookie, NTabletFlatExecutor::TTransactionContext& txc);
+    [[nodiscard]] std::shared_ptr<TTxController::ITransactionOperator> StartProposeOnExecute(const TBasicTxInfo& txInfo, const TString& txBody, const TActorId source, const ui64 cookie, const std::optional<TMessageSeqNo>& seqNo, NTabletFlatExecutor::TTransactionContext& txc);
     void StartProposeOnComplete(const ui64 txId, const TActorContext& ctx);
 
     void FinishProposeOnExecute(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);

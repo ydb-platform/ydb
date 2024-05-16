@@ -225,7 +225,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     /// GetWriteId
 
     void GetWriteId(const TActorContext& ctx) {
-        auto ev = MakeWriteIdRequest();
+        auto ev = MakeWriteIdRequest(Nothing());
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
         Become(&TThis::StateGetWriteId);
     }
@@ -262,7 +262,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         GetOwnership();
     }
 
-    THolder<NKqp::TEvKqp::TEvQueryRequest> MakeWriteIdRequest() {
+    THolder<NKqp::TEvKqp::TEvQueryRequest> MakeWriteIdRequest(TMaybe<ui32> supportivePartition) {
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
 
         if (Opts.Token) {
@@ -288,16 +288,21 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
         ev->Record.MutableRequest()->MutableTxControl()->set_tx_id(Opts.TxId);
 
-        auto* topics = ev->Record.MutableRequest()->MutableTopicOperations()->AddTopics();
+        auto* operations = ev->Record.MutableRequest()->MutableTopicOperations();
+        auto* topics = operations->AddTopics();
         topics->set_path(Opts.TopicPath);
         auto* partitions = topics->add_partitions();
         partitions->set_partition_id(PartitionId);
+
+        if (supportivePartition) {
+            operations->SetSupportivePartition(*supportivePartition);
+        }
 
         return ev;
     }
 
     void SetWriteId(NKikimrClient::TPersQueuePartitionRequest& request) {
-        if (WriteId != INVALID_WRITE_ID) {
+        if (HasWriteId()) {
             request.SetWriteId(WriteId);
         }
     }
@@ -697,6 +702,16 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
                 return WriteResult(EErrorCode::InternalError, error, std::move(record));
             }
 
+            if (HasWriteId() && FirstWriteResponse) {
+                auto& reply = response.GetCmdWriteResult(0);
+                DEBUG("Update tx in KQP." <<
+                      " Topic: " << Opts.TopicPath <<
+                      ", Partition: " << PartitionId <<
+                      ", SupportivePartition: " << reply.GetSupportivePartition() <<
+                      ", MinSeqNo: " << reply.GetMinSeqNo());
+                FirstWriteResponse = false;
+            }
+
             WriteResult(std::move(record));
         }
     }
@@ -829,6 +844,9 @@ public:
     }
 
 private:
+    bool HasWriteId() const {
+        return WriteId != INVALID_WRITE_ID;
+    }
 
     const TActorId Client;
     const ui64 TabletId;
@@ -865,6 +883,8 @@ private:
     EErrorCode ErrorCode = EErrorCode::InternalError;
 
     ui64 WriteId = INVALID_WRITE_ID;
+    bool FirstWriteResponse = true;
+    //ui64 MinSeqNo = 0;
 
     using IRetryPolicy = IRetryPolicy<Ydb::StatusIds::StatusCode>;
     using IRetryState = IRetryPolicy::IRetryState;

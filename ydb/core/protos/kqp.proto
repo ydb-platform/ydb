@@ -75,6 +75,7 @@ enum EQueryReplyFlags {
 message TTopicOperationsRequest {
     optional string Consumer = 1;
     repeated Ydb.Topic.UpdateOffsetsInTransactionRequest.TopicOffsets Topics = 2;
+    optional uint32 SupportivePartition = 3;
 }
 
 message TTopicOperationsResponse {

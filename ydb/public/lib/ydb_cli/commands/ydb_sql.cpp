@@ -28,24 +28,34 @@ void TCommandSql::Config(TConfig& config) {
     TYdbCommand::Config(config);
     AddExamplesOption(config);
     config.Opts->AddLongOption("async", "Execute script (query) asynchronously. "
-            "Operation will be started on server and its Id will be printed."
-            "To get operation status use \"ydb operation get\" command."
-            "To fetch query results use \"--fetch <operation_id>\" option of this command.")
+            "Operation will be started on server and its Id will be printed. "
+            "To get operation status use \"ydb operation get\" command. "
+            "To fetch query results use \"--fetch <operation_id>\" option of this command.\n"
+            "Note: query results will be stored on server and thus consume storage resources.")
         .StoreTrue(&RunAsync);
-    config.Opts->AddLongOption("fetch", "Path to file with script (query) text").RequiredArgument("PATH")
-        .StoreResult(&QueryFile);
+    config.Opts->AddLongOption("fetch", "Fetch results of existing operation. "
+            "Operation Id should be provided with this option.").RequiredArgument("STRING")
+        .StoreResult(&OperationIdToFetch);
+    config.Opts->AddLongOption("async-wait",
+            "Execute script (query) asynchronously and wait for results (using polling).\n"
+            "The difference between using and not-using this option:\n"
+            "  - If YDB CLI loses connection to the server when running a query without this option, "
+            "the stream breaks and command execution finishes with error. "
+            "If this option is used, the polling process continues and query results may still be received after reconnect.\n"
+            "  - Using this option will probably reduce performance due to artifitial delays between polling requests.\n"
+            "Note: query results will be stored on server and thus consume storage resources.")
+        .StoreTrue(&AsyncWait);
     config.Opts->AddLongOption("explain", "Execute explain request for the query. Shows query plan. "
             "The query is not actually executed, thus does not affect the database.")
         .StoreTrue(&ExplainMode);
     config.Opts->AddLongOption("explain-analyze", "Execute query in explain-analyze mode. Shows query plan only. "
             "Query results are ignored.\n"
-            "Important! The query is actually executed, so any changes will be applied in the database.")
+            "Important note: The query is actually executed, so any changes will be applied in the database.")
         .StoreTrue(&ExplainAnalyzeMode);
     config.Opts->AddLongOption("execution-plan", "Show execution plan instead of logical plan. "
             "Execution plan is more informative but less readable.")
         .StoreTrue(&ExecutionPlan);
-    config.Opts->AddLongOption("stats", "Statistics collection mode [none, basic, full, profile]\n"
-            "Has no effect with analyze mode.")
+    config.Opts->AddLongOption("stats", "Statistics collection mode [none, basic, full, profile]")
         .RequiredArgument("[String]").StoreResult(&CollectStatsMode);
     config.Opts->AddLongOption('s', "script", "Script (query) text to execute").RequiredArgument("[String]")
         .StoreResult(&Query);
@@ -138,30 +148,64 @@ int TCommandSql::Run(TConfig& config) {
 int TCommandSql::RunCommand(TConfig& config) {
     TDriver driver = CreateDriver(config);
     NQuery::TQueryClient client(driver);
+    
+    if (RunAsync) {
+        // ExecuteScript
+        NQuery::TExecuteScriptSettings settings;
 
-    NQuery::TExecuteQuerySettings settings;
+        if (ExplainMode) {
+            // Execute explain request for the query
+            settings.ExecMode(Ydb::Query::EXEC_MODE_EXPLAIN);
+        } else {
+            // Execute query
+            settings.ExecMode(Ydb::Query::EXEC_MODE_EXECUTE);
+            auto defaultStatsMode = ExplainAnalyzeMode ? NQuery::EStatsMode::Full : NQuery::EStatsMode::None;
+            auto actualStatsMode = ParseQueryStatsModeOrThrow(CollectStatsMode, defaultStatsMode);
+            Ydb::Query::StatsMode protoStatsMode;
+            switch (actualStatsMode) {
+                case NQuery::EStatsMode::Unspecified:
+                    protoStatsMode = Ydb::Query::StatsMode::STATS_MODE_UNSPECIFIED;
+                    break;
+                case NQuery::EStatsMode::None:
+                    protoStatsMode = Ydb::Query::StatsMode::STATS_MODE_NONE;
+                    break;
+                case NQuery::EStatsMode::Basic:
+                    protoStatsMode = Ydb::Query::StatsMode::STATS_MODE_BASIC;
+                    break;
+                case NQuery::EStatsMode::Full:
+                    protoStatsMode = Ydb::Query::StatsMode::STATS_MODE_FULL;
+                    break;
+                case NQuery::EStatsMode::Profile:
+                    protoStatsMode = Ydb::Query::StatsMode::STATS_MODE_PROFILE;
+                    break;
+                default:
+                    throw TMisuseException() << "Unknown stats collection mode \"" << CollectStatsMode << "\"";
+            }
+            settings.StatsMode(protoStatsMode);
+        }
 
-    SetInterruptHandlers();
+        if (!Parameters.empty() || !IsStdinInteractive()) {
+            // Execute query with parameters
+            THolder<TParamsBuilder> paramBuilder;
+            while (!IsInterrupted() && GetNextParams(paramBuilder)) {
+                auto asyncResult = client.ExecuteScript(
+                        Query,
+                        paramBuilder->Build(),
+                        settings
+                    );
 
-    if (ExplainMode) {
-        // Execute explain request for the query
-        settings.ExecMode(NQuery::EExecMode::Explain);
-    } else {
-        // Execute query
-        settings.ExecMode(NQuery::EExecMode::Execute);
-        auto defaultStatsMode = ExplainAnalyzeMode ? NQuery::EStatsMode::Full : NQuery::EStatsMode::None;
-        settings.StatsMode(ParseQueryStatsModeOrThrow(CollectStatsMode, defaultStatsMode));
-    }
-    if (!Parameters.empty() || !IsStdinInteractive()) {
-        // Execute query with parameters
-        THolder<TParamsBuilder> paramBuilder;
-        while (!IsInterrupted() && GetNextParams(paramBuilder)) {
-            auto asyncResult = client.StreamExecuteQuery(
-                    Query,
-                    NQuery::TTxControl::BeginTx().CommitTx(),
-                    paramBuilder->Build(),
-                    settings
-                );
+                auto result = asyncResult.GetValueSync();
+                ThrowOnError(result);
+                if (!PrintResponse(result)) {
+                    return EXIT_FAILURE;
+                }
+            }
+        } else {
+            // Execute query without parameters
+            auto asyncResult = client.ExecuteScript(
+                Query,
+                settings
+            );
 
             auto result = asyncResult.GetValueSync();
             ThrowOnError(result);
@@ -169,18 +213,53 @@ int TCommandSql::RunCommand(TConfig& config) {
                 return EXIT_FAILURE;
             }
         }
-    } else {
-        // Execute query without parameters
-        auto asyncResult = client.StreamExecuteQuery(
-            Query,
-            NQuery::TTxControl::BeginTx().CommitTx(),
-            settings
-        );
 
-        auto result = asyncResult.GetValueSync();
-        ThrowOnError(result);
-        if (!PrintResponse(result)) {
-            return EXIT_FAILURE;
+    } else {
+        // Single stream execution
+        SetInterruptHandlers();
+        NQuery::TExecuteQuerySettings settings;
+
+        if (ExplainMode) {
+            // Execute explain request for the query
+            settings.ExecMode(NQuery::EExecMode::Explain);
+        } else {
+            // Execute query
+            settings.ExecMode(NQuery::EExecMode::Execute);
+            auto defaultStatsMode = ExplainAnalyzeMode ? NQuery::EStatsMode::Full : NQuery::EStatsMode::None;
+            settings.StatsMode(ParseQueryStatsModeOrThrow(CollectStatsMode, defaultStatsMode));
+        }
+        if (!Parameters.empty() || !IsStdinInteractive()) {
+            // Execute query with parameters
+            THolder<TParamsBuilder> paramBuilder;
+            while (!IsInterrupted() && GetNextParams(paramBuilder)) {
+                auto asyncResult = client.StreamExecuteQuery(
+                        Query,
+                        // TODO: NoTx by default
+                        NQuery::TTxControl::BeginTx().CommitTx(),
+                        paramBuilder->Build(),
+                        settings
+                    );
+
+                auto result = asyncResult.GetValueSync();
+                ThrowOnError(result);
+                if (!PrintResponse(result)) {
+                    return EXIT_FAILURE;
+                }
+            }
+        } else {
+            // Execute query without parameters
+            auto asyncResult = client.StreamExecuteQuery(
+                Query,
+                // TODO: NoTx by default
+                NQuery::TTxControl::BeginTx().CommitTx(),
+                settings
+            );
+
+            auto result = asyncResult.GetValueSync();
+            ThrowOnError(result);
+            if (!PrintResponse(result)) {
+                return EXIT_FAILURE;
+            }
         }
     }
     return EXIT_SUCCESS;
@@ -268,6 +347,11 @@ bool TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
         Cerr << "<INTERRUPTED>" << Endl;
         return false;
     }
+    return true;
+}
+
+bool TCommandSql::PrintResponse(NQuery::TScriptExecutionOperation& result) {
+    Cout << "Operation info:" << Endl << result.ToString();
     return true;
 }
 

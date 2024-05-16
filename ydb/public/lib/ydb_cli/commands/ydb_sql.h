@@ -24,15 +24,18 @@ public:
 private:
     int RunCommand(TConfig& config);
     bool PrintResponse(NQuery::TExecuteQueryIterator& result);
+    bool PrintResponse(NQuery::TScriptExecutionOperation& result);
 
     TString CollectStatsMode;
     TString Query;
     TString QueryFile;
     TString Syntax;
+    TString OperationIdToFetch;
     bool ExplainMode = false;
     bool ExplainAnalyzeMode = false;
     bool ExecutionPlan = false;
     bool RunAsync = false;
+    bool AsyncWait = false;
 };
 
 }

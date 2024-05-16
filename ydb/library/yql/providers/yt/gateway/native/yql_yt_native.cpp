@@ -1927,7 +1927,9 @@ private:
             canonPath.Ranges = normalizedPath.GetRanges();
             rangeRes.Tables.push_back(std::move(canonPath));
         }
+
         SortBy(rangeRes.Tables, [] (const TCanonizedPath& path) { return path.Path; });
+        
         return rangeRes;
     }
 
@@ -1992,7 +1994,6 @@ private:
             entry->RangeCache.emplace(std::move(cacheKey), std::move(cached));
         }
 
-        
         SortBy(rangeRes.Tables, [] (const TCanonizedPath& path) { return path.Path; });
         
         return rangeRes;

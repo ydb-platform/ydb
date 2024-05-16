@@ -37,6 +37,7 @@ target_sources(core-statistics-aggregator PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/aggregator_impl.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/schema.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/tx_configure.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/tx_delete_query_response.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/tx_init.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/tx_init_schema.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/tx_navigate.cpp

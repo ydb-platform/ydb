@@ -187,6 +187,11 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::SignalReadyEvents(TInt
                 }
                 NotReady.pop_front();
             } else {
+                if constexpr (!UseMigrationProtocol) {
+                    if (std::holds_alternative<TReadSessionEvent::TEndPartitionSessionEvent>(front.GetEvent())) {
+                        Cerr << ">>>>> SignalReadyEvents TEndPartitionSessionEvent ENQUEUE" << Endl << Flush;
+                    }
+                }
                 moveToReadyQueue(std::move(front));
             }
         }
@@ -2173,6 +2178,9 @@ TReadSessionEventsQueue<UseMigrationProtocol>::GetEventImpl(size_t& maxByteSize,
     }
 
     Y_ASSERT(TParent::CloseEvent);
+
+    // TODO close
+
 
     return {*TParent::CloseEvent};
 }

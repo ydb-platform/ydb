@@ -321,37 +321,68 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
     auto input = program.Body();
 
     if (sinkEffect) {
+        auto sink = Build<TDqSink>(ctx, node.Pos())
+            .DataSink<TKqpTableSink>()
+                .Category(ctx.NewAtom(node.Pos(), NYql::KqpTableSinkName))
+                .Cluster(ctx.NewAtom(node.Pos(), "db"))
+                .Build()
+            .Index().Value("0").Build()
+            .Settings<TKqpTableSinkSettings>()
+                .Table(node.Table())
+                .Columns(node.Columns())
+                .Settings()
+                    .Build()
+                .Build()
+            .Done();
+
         const auto rowArgument = Build<TCoArgument>(ctx, node.Pos())
             .Name("row")
             .Done();
 
-        stageInput = Build<TDqStage>(ctx, node.Pos())
-            .Inputs()
-                .Add(dqUnion)
-                .Build()
-            .Program()
-                .Args({rowArgument})
-                .Body<TCoToFlow>()
-                    .Input(rowArgument)
+        if (table.Metadata->Kind == EKikimrTableKind::Olap) {
+            // OLAP is expected to write into all shards (hash partitioning),
+            // so we use serveral sinks for this without union all.
+            // (TODO: shuffle by shard instead of DqCnMap)
+
+            auto mapCn = Build<TDqCnMap>(ctx, node.Pos())
+                .Output(dqUnion.Output())
+                .Done();
+            stageInput = Build<TDqStage>(ctx, node.Pos())
+                .Inputs()
+                    .Add(mapCn)
                     .Build()
-                .Build()
-            .Outputs<TDqStageOutputsList>()
-                .Add<TDqSink>()
-                    .DataSink<TKqpTableSink>()
-                        .Category(ctx.NewAtom(node.Pos(), NYql::KqpTableSinkName))
-                        .Cluster(ctx.NewAtom(node.Pos(), "db"))
-                        .Build()
-                    .Index().Value("0").Build()
-                    .Settings<TKqpTableSinkSettings>()
-                        .Table(node.Table())
-                        .Columns(node.Columns())
-                        .Settings()
-                            .Build()
+                .Program()
+                    .Args({rowArgument})
+                    .Body<TCoToFlow>()
+                        .Input(rowArgument)
                         .Build()
                     .Build()
-                .Build()
-            .Settings().Build()
-            .Done();
+                .Outputs<TDqStageOutputsList>()
+                    .Add(sink)
+                    .Build()
+                .Settings().Build()
+                .Done();
+        } else {
+            // OLTP is expected to mostly use just few shards,
+            // so we use union all + one sink. It's important for write optimizations support.
+            // NOTE: OLTP large writes expected to fail anyway due to problems with locks/splits.
+
+            stageInput = Build<TDqStage>(ctx, node.Pos())
+                .Inputs()
+                    .Add(dqUnion)
+                    .Build()
+                .Program()
+                    .Args({rowArgument})
+                    .Body<TCoToFlow>()
+                        .Input(rowArgument)
+                        .Build()
+                    .Build()
+                .Outputs<TDqStageOutputsList>()
+                    .Add(sink)
+                    .Build()
+                .Settings().Build()
+                .Done();
+        }
 
         effect = Build<TKqpSinkEffect>(ctx, node.Pos())
             .Stage(stageInput.Cast().Ptr())

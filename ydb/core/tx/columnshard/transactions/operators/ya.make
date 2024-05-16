@@ -6,7 +6,7 @@ SRCS(
     GLOBAL ev_write.cpp
     GLOBAL backup.cpp
     GLOBAL sharing.cpp
-    ss_operation.cpp
+    propose_tx.cpp
 )
 
 PEERDIR(

@@ -23,6 +23,9 @@ namespace NKikimr::NColumnShard {
         virtual bool DoIsAsync() const override {
             return false;
         }
+        virtual bool DoCheckAllowUpdate(const TFullTxInfo& currentTxInfo) const override {
+            return (currentTxInfo.Source == GetTxInfo().Source && currentTxInfo.Cookie == GetTxInfo().Cookie);
+        }
         virtual void DoSendReply(TColumnShard& owner, const TActorContext& ctx) override {
             const auto& txInfo = GetTxInfo();
             std::unique_ptr<NActors::IEventBase> evResult;

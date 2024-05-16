@@ -71,10 +71,10 @@ public:
         PlanStep = proto.GetPlanStep();
         TxId = proto.GetTxId();
         if (!PlanStep) {
-            return TConclusionStatus::Fail("incorrect planStep in proto");
+            return TConclusionStatus::Fail("incorrect planStep in proto for snapshot");
         }
         if (!TxId) {
-            return TConclusionStatus::Fail("incorrect txId in proto");
+            return TConclusionStatus::Fail("incorrect txId in proto for snapshot");
         }
         return TConclusionStatus::Success();
     }

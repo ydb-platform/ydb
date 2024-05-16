@@ -34,6 +34,10 @@ public:
     void ApplyOnComplete(const TNormalizationController& /* normController */) const override {
         RemovingAction->OnCompleteTxAfterRemoving(true);
     }
+
+    ui64 GetSize() const override {
+        return Portions.size();
+    }
 };
 
 class TBlobsRemovingTask : public INormalizerTask {
@@ -52,6 +56,10 @@ public:
             removeAction->DeclareSelfRemove(blobId);
         }
         TActorContext::AsActorContext().Send(nCtx.GetShardActor(), std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(std::make_shared<TBlobsRemovingResult>(removeAction, std::move(Portions))));
+    }
+
+    ui64 GetObjectsCount() const override {
+        return Portions.size();
     }
 };
 

@@ -92,7 +92,7 @@ runs:
       shell: bash
       run: |
         if [ "${{ inputs.increment }}" == "true" ]; then
-          echo "target='.'" >> $GITHUB_OUTPUT
+          echo "target=." >> $GITHUB_OUTPUT
         else
           echo "target=${{ inputs.build_target }}" >> $GITHUB_OUTPUT
         fi
@@ -103,7 +103,7 @@ runs:
       shell: bash
       run: |
         if [ "${{ inputs.increment_build }}" == "true" ]; then
-          echo "target='.'" >> $GITHUB_OUTPUT
+          echo "target=." >> $GITHUB_OUTPUT
         else
           echo "target=${{ inputs.build_target }}" >> $GITHUB_OUTPUT
         fi

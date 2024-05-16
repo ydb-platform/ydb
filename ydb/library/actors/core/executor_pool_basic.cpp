@@ -1,5 +1,6 @@
 #include "executor_pool_basic.h"
 #include "executor_pool_basic_feature_flags.h"
+#include "executor_pool_basic_sanitizer.h"
 #include "executor_pool_jail.h"
 #include "actor.h"
 #include "config.h"
@@ -16,6 +17,13 @@
 #endif
 
 namespace NActors {
+
+#ifdef NDEBUG
+    constexpr bool DebugMode = true;
+#else
+    constexpr bool DebugMode = false;
+#endif
+
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
 
@@ -121,6 +129,10 @@ namespace NActors {
         DefaultThreadCount = DefaultFullThreadCount + HasOwnSharedThread;
         MinThreadCount = MinFullThreadCount + HasOwnSharedThread;
         MaxThreadCount = MaxFullThreadCount + HasOwnSharedThread;
+
+        if constexpr (DebugMode) {
+            Sanitizer.reset(new TBasicExecutorPoolSanitizer(this));
+        }
     }
 
     TBasicExecutorPool::TBasicExecutorPool(const TBasicExecutorPoolConfig& cfg, IHarmonizer *harmonizer, TExecutorPoolJail *jail)
@@ -450,6 +462,10 @@ namespace NActors {
         for (i16 i = 0; i != MaxFullThreadCount; ++i) {
             Threads[i].Thread->Start();
         }
+
+        if constexpr (DebugMode) {
+            Sanitizer->Start();
+        }
     }
 
     void TBasicExecutorPool::PrepareStop() {
@@ -458,11 +474,17 @@ namespace NActors {
             Threads[i].Thread->StopFlag.store(true, std::memory_order_release);
             Threads[i].Interrupt();
         }
+        if constexpr (DebugMode) {
+            Sanitizer->Stop();
+        }
     }
 
     void TBasicExecutorPool::Shutdown() {
         for (i16 i = 0; i != MaxFullThreadCount; ++i)
             Threads[i].Thread->Join();
+        if constexpr (DebugMode) {
+            Sanitizer->Join();
+        }
     }
 
     void TBasicExecutorPool::Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) {

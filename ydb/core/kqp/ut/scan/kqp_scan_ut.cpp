@@ -2365,8 +2365,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::TEvNavigateKeySetResult::EventType) {
-                IActor* actor = runtime->FindActor(ev->GetRecipientRewrite());
-                if (actor && actor->GetActivityType() == NKikimrServices::TActivity::KQP_STREAM_LOOKUP_ACTOR) {
+                Cerr << "Captured TEvTxProxySchemeCache::TEvNavigateKeySetResult from " << runtime->FindActorName(ev->Sender) << " to " << runtime->FindActorName(ev->GetRecipientRewrite()) << Endl;
+                if (runtime->FindActorName(ev->GetRecipientRewrite()) == "KQP_STREAM_LOOKUP_ACTOR") {
                     if (!firstAttemptToGetData) {
                         // capture response from scheme cache until CA calls GetAsyncInputData()
                         captured.push_back(ev.Release());

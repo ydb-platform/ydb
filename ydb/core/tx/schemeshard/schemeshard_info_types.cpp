@@ -300,7 +300,6 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
             TTableInfo::TColumn& column = alterData->Columns[colId];
             column = sourceColumn;
-
             if (columnFamily) {
                 column.Family = columnFamily->GetId();
             }

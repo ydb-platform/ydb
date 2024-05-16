@@ -712,7 +712,7 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
     }
 
     if (path.IsCommonSensePath()) {
-
+        return {CreateAlterTable(id, tx)};
     }
 
     TPath parent = path.Parent();

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/library/yql/minikql/computation/mkql_vector_spiller_adapter.h>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 #include <ydb/library/yql/public/udf/udf_type_builder.h>
@@ -69,7 +70,6 @@ struct TTableBucket {
     KeysHashTable AnyHashTable; // Hash table to process join only for unique keys (any join attribute)
 
  };
-
 
 struct TupleData {
     ui64 * IntColumns = nullptr; // Array of packed int  data of the table. Caller should allocate array of NumberOfIntColumns size
@@ -204,6 +204,65 @@ public:
     
     ~TTable();
 
+};
+
+// Class that spills bucket data.
+// If, after saving, data has accumulated in the bucket again, you can spill it again.
+// After restoring the entire bucket, it will contain all the data saved over different iterations.
+class TTableBucketSpiller {
+public:
+    TTableBucketSpiller(ISpiller::TPtr spiller, size_t sizeLimit);
+
+    // Takes the bucket and immediately starts spilling. Spilling continues until an async operation occurs.
+    void SpillBucket(TTableBucket&& bucket);
+    // Starts bucket restoration after spilling. Restores and unites all the buckets from different iterations. Will pause in case of async operation.
+    void StartBucketRestoration();
+    // Extracts bucket restored from spilling. This bucket will contain all the data from different iterations of spilling.
+    TTableBucket&& ExtractBucket();
+
+    // Updates the states of spillers. This update should be called after async operation completion to resume spilling/resoration.
+    void Update();
+    // Flushes all the data from inner spillers. Should be called when no more data is expected for spilling.
+    void Finalize();
+    // Checks if spillers are waiting for any running async operation. No calls other than update are allowed when the method returns true.
+    bool HasRunningAsyncIoOperation() const;
+
+private:
+    void ProcessBucketSpilling();
+    template <class T>
+    void AppendVector(std::vector<T, TMKQLAllocator<T>>& first, std::vector<T, TMKQLAllocator<T>>&& second) const;
+    void ProcessBucketRestoration();
+
+private:
+    enum class EState {
+        Spilling,
+        Restoring,
+        InMemory
+    };
+
+    enum class ENextVectorToProcess {
+        KeyAndVals,
+        DataIntVals,
+        StringsValues,
+        StringsOffsets,
+        InterfaceValues,
+        InterfaceOffsets,
+
+        None
+    };
+
+    TVectorSpillerAdapter<ui64, TMKQLAllocator<ui64>> StateUi64Adapter;
+    TVectorSpillerAdapter<ui32, TMKQLAllocator<ui32>> StateUi32Adapter;
+    TVectorSpillerAdapter<char, TMKQLAllocator<char>> StateCharAdapter;
+
+    EState State = EState::InMemory;
+    ENextVectorToProcess NextVectorToProcess = ENextVectorToProcess::None;
+
+    ui64 SpilledBucketsCount = 0;
+
+    bool IsFinalizing = false;
+
+    TTableBucket CurrentBucket;
 };
 
 

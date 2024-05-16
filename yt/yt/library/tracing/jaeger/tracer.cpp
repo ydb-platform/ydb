@@ -97,6 +97,9 @@ void TJaegerTracerConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("tvm_service", &TThis::TvmService)
         .Optional();
+
+    registrar.Parameter("test_drop_spans", &TThis::TestDropSpans)
+        .Default(false);
 }
 
 TJaegerTracerConfigPtr TJaegerTracerConfig::ApplyDynamic(const TJaegerTracerDynamicConfigPtr& dynamicConfig) const
@@ -592,6 +595,12 @@ void TJaegerTracer::Flush()
             }
             YT_LOG_DEBUG("Span queue is empty (Endpoint: %v)", endpoint);
             LastSuccessfulFlushTime_ = flushStartTime;
+            continue;
+        }
+
+        if (config->TestDropSpans) {
+            DropQueue(batchCount, endpoint);
+            YT_LOG_DEBUG("Spans dropped in test (BatchCount: %v, SpanCount: %v, Endpoint: %v)", batchCount, spanCount, endpoint);
             continue;
         }
 

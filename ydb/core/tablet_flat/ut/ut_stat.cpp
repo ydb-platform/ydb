@@ -136,7 +136,7 @@ namespace {
 
         const ui32 attempts = 10;
         for (ui32 attempt : xrange(attempts)) {
-            if (NTable::BuildStatsBTreeIndex(subset, stats, rowCountResolution, dataSizeResolution, &env, [](){})) {
+            if (NTable::BuildStatsBTreeIndex(subset, stats, rowCountResolution, dataSizeResolution, &env)) {
                 break;
             }
             UNIT_ASSERT_C(attempt + 1 < attempts, "Too many attempts");

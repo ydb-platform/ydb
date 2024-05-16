@@ -1,3 +1,5 @@
+#pragma once
+
 #include "flat_stat_table.h"
 #include "flat_table_subset.h"
 
@@ -147,12 +149,14 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env) {
         auto channel = part->GetGroupChannel(groupId);
         for (const auto& slice : *part.Slices) {
             TRowId beginRowId, endRowId;
-            ui64 beginDataSize = GetPrevHistoricDataSize(part.Part.Get(), groupId, slice.BeginRowId(), env, beginRowId, ready);
-            ui64 endDataSize = GetPrevHistoricDataSize(part.Part.Get(), groupId, slice.EndRowId(), env, endRowId, ready);
+            bool readySlice = true;
+            ui64 beginDataSize = GetPrevHistoricDataSize(part.Part.Get(), groupId, slice.BeginRowId(), env, beginRowId, readySlice);
+            ui64 endDataSize = GetPrevHistoricDataSize(part.Part.Get(), groupId, slice.EndRowId(), env, endRowId, readySlice);
+            ready &= readySlice;
             if (ready && endDataSize > beginDataSize) {
                 stats.DataSize.Add(endDataSize - beginDataSize, channel);
             }
-            if (ready && endRowId > beginRowId) {
+            if (readySlice && endRowId > beginRowId) {
                 historicSlices.emplace_back(beginRowId, endRowId);
             }
         }
@@ -175,10 +179,8 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env) {
 
 }
 
-inline bool BuildStatsBTreeIndex(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, IPages* env, TBuildStatsYieldHandler) {
+inline bool BuildStatsBTreeIndex(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, IPages* env) {
     stats.Clear();
-
-    Y_UNUSED(rowCountResolution, dataSizeResolution);
 
     bool ready = true;
     for (const auto& part : subset.Flatten) {
@@ -191,6 +193,7 @@ inline bool BuildStatsBTreeIndex(const TSubset& subset, TStats& stats, ui64 rowC
     }
 
     // TODO: build histogram here
+    Y_UNUSED(rowCountResolution, dataSizeResolution);
 
     return true;
 }

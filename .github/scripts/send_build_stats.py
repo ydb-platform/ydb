@@ -52,6 +52,10 @@ def main():
         print("Env variable YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping")
         return 1
 
+    if not os.path.exists(YDBD_PATH):
+        # can be possible due to incremental builds and ydbd itself is not affected by changes
+        print("{} not exists, exiting".format(YDBD_PATH))
+
     with ydb.Driver(
         endpoint="grpcs://ydb.serverless.yandexcloud.net:2135",
         database="/ru-central1/b1ggceeul2pkher8vhb6/etn6d1qbals0c29ho4lf",

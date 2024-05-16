@@ -2497,6 +2497,24 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             "<main>:1:40: Error: local: alternative is not implemented yet: 722:7: local_index\n");
     }
 
+    Y_UNIT_TEST(AlterTableAlterIndexSetPartitioningIsCorrect) {
+        const auto result = SqlToYql("USE plato; ALTER TABLE table ALTER INDEX index SET AUTO_PARTITIONING_MIN_PARTITIONS_COUNT 10");
+        UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+    }
+
+    Y_UNIT_TEST(AlterTableAlterIndexSetMultiplePartitioningSettings) {
+        const auto result = SqlToYql("USE plato; ALTER TABLE table ALTER INDEX index SET "
+            "(AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10)"
+        );
+        UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+    }
+
+    Y_UNIT_TEST(AlterTableAlterIndexResetPartitioningIsNotSupported) {
+        ExpectFailWithError("USE plato; ALTER TABLE table ALTER INDEX index RESET (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT)",
+            "<main>:1:55: Error: AUTO_PARTITIONING_MIN_PARTITIONS_COUNT reset is not supported\n"
+        );
+    }
+
     Y_UNIT_TEST(OptionalAliases) {
         UNIT_ASSERT(SqlToYql("USE plato; SELECT foo FROM (SELECT key foo FROM Input);").IsOk());
         UNIT_ASSERT(SqlToYql("USE plato; SELECT a.x FROM Input1 a JOIN Input2 b ON a.key = b.key;").IsOk());

@@ -282,20 +282,25 @@ void TTxController::OnTabletInit() {
 }
 
 std::shared_ptr<TTxController::ITransactionOperator> TTxController::StartProposeOnExecute(const TTxController::TBasicTxInfo& txInfo, const TString& txBody, const TActorId source, const ui64 cookie, NTabletFlatExecutor::TTransactionContext& txc) {
+    NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("method", "TTxController::StartProposeOnExecute")("tx_info", txInfo.DebugString());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "start");
     std::shared_ptr<TTxController::ITransactionOperator> txOperator(TTxController::ITransactionOperator::TFactory::Construct(txInfo.TxKind,
         TTxController::TTxInfo(txInfo.TxKind, txInfo.TxId, source, cookie)));
     AFL_VERIFY(!!txOperator);
     if (!txOperator->Parse(Owner, txBody)) {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse txOperator");
         return txOperator;
     }
 
     auto txInfoPtr = GetTxInfo(txInfo.TxId);
     if (!!txInfoPtr) {
         if (!txOperator->AllowTxDups() && (txInfoPtr->Source != source || txInfoPtr->Cookie != cookie)) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "incorrect duplication");
             TTxController::TProposeResult proposeResult(NKikimrTxColumnShard::EResultStatus::ERROR, TStringBuilder() << "Another commit TxId# " << txInfo.TxId << " has already been proposed");
             txOperator->SetProposeStartInfo(proposeResult);
             return txOperator;
         } else {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "update duplication data");
             return UpdateTxSourceInfo(txInfo.GetTxId(), source, cookie, txc);
         }
     } else {
@@ -305,35 +310,44 @@ std::shared_ptr<TTxController::ITransactionOperator> TTxController::StartPropose
             } else {
                 RegisterTx(txOperator, txBody, txc);
             }
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "registered");
+        } else {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "problem on start")("message", txOperator->GetProposeStartInfoVerified().GetStatusMessage());
         }
         return txOperator;
     }
 }
 
 void TTxController::StartProposeOnComplete(const ui64 txId, const TActorContext& ctx) {
+    NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("method", "TTxController::StartProposeOnComplete")("tx_id", txId);
     auto txOperator = GetTxOperator(txId);
     if (!txOperator) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "cannot found txOperator in propose transaction base")("tx_id", txId);
     } else {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "start");
         txOperator->StartProposeOnComplete(Owner, ctx);
     }
 }
 
 void TTxController::FinishProposeOnExecute(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
+    NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("method", "TTxController::FinishProposeOnExecute")("tx_id", txId);
     auto txOperator = GetTxOperator(txId);
     if (!txOperator) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "cannot found txOperator in propose transaction base")("tx_id", txId);
     } else {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "start");
         txOperator->FinishProposeOnExecute(Owner, txc);
     }
 }
 
 void TTxController::FinishProposeOnComplete(const ui64 txId, const TActorContext& ctx) {
+    NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("method", "TTxController::FinishProposeOnComplete")("tx_id", txId);
     auto txOperator = GetTxOperator(txId);
     if (!txOperator) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "cannot found txOperator in propose transaction finish")("tx_id", txId);
         return;
     }
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "start");
     TTxController::TProposeResult proposeResult = txOperator->GetProposeStartInfoVerified();
     AFL_VERIFY(!txOperator->IsFail());
     txOperator->FinishProposeOnComplete(Owner, ctx);

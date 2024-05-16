@@ -24,16 +24,18 @@ private:
     private:
         std::unique_ptr<NActors::IEventBase> Event;
         TActorId DestinationForReply;
+        const ui64 Cookie;
     public:
-        TReplyInfo(std::unique_ptr<NActors::IEventBase>&& ev, const TActorId& destinationForReply)
+        TReplyInfo(std::unique_ptr<NActors::IEventBase>&& ev, const TActorId& destinationForReply, const ui64 cookie)
             : Event(std::move(ev))
             , DestinationForReply(destinationForReply)
+            , Cookie(cookie)
         {
 
         }
 
         void DoSendReply(const TActorContext& ctx) {
-            ctx.Send(DestinationForReply, Event.release());
+            ctx.Send(DestinationForReply, Event.release(), 0, Cookie);
         }
     };
 

@@ -22,6 +22,10 @@ public:
     ui64 GetTxId() const {
         return TxId;
     }
+
+    TString DebugString() const {
+        return TStringBuilder() << TxId << ":" << NKikimrTxColumnShard::ETransactionKind_Name(TxKind);
+    }
 };
 
 struct TFullTxInfo: public TBasicTxInfo {

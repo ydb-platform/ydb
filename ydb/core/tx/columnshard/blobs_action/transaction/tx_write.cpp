@@ -98,12 +98,12 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
                 lock.SetGeneration(1);
                 lock.SetCounter(1);
                 auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID(), operation->GetLockId(), lock);
-                Results.emplace_back(std::move(ev), writeMeta.GetSource());
+                Results.emplace_back(std::move(ev), writeMeta.GetSource(), operation->GetCookie());
             }
         } else {
             Y_ABORT_UNLESS(aggr->GetWriteIds().size() == 1);
             auto ev = std::make_unique<TEvColumnShard::TEvWriteResult>(Self->TabletID(), writeMeta, (ui64)aggr->GetWriteIds().front(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
-            Results.emplace_back(std::move(ev), writeMeta.GetSource());
+            Results.emplace_back(std::move(ev), writeMeta.GetSource(), 0);
         }
     }
     return true;
@@ -120,6 +120,7 @@ void TTxWrite::Complete(const TActorContext& ctx) {
     for (auto&& i : buffer.GetRemoveActions()) {
         i->OnCompleteTxAfterRemoving(true);
     }
+
     AFL_VERIFY(buffer.GetAggregations().size() == Results.size() + ResultOperators.size());
     for (auto&& i : ResultOperators) {
         Self->GetProgressTxController().FinishProposeOnComplete(i->GetTxId(), ctx);

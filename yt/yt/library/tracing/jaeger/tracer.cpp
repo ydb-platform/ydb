@@ -124,6 +124,7 @@ TJaegerTracerConfigPtr TJaegerTracerConfig::ApplyDynamic(const TJaegerTracerDyna
     config->ProcessTags = ProcessTags;
     config->EnablePidTag = EnablePidTag;
     config->TvmService = TvmService;
+    config->TestDropSpans = TestDropSpans;
 
     config->Postprocess();
     return config;

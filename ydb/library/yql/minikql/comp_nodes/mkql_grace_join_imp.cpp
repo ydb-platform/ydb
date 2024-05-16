@@ -82,7 +82,7 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
     std::vector<char, TMKQLAllocator<char>> & stringVals = TableBuckets[bucket].StringsValues;
     KeysHashTable & kh = TableBuckets[bucket].AnyHashTable;
 
-    ui64 offset = keyIntVals.size();  // Offset of tuple inside the keyIntVals vector
+    ui32 offset = keyIntVals.size();  // Offset of tuple inside the keyIntVals vector
 
     keyIntVals.push_back(hash);
     keyIntVals.insert(keyIntVals.end(), intColumns, intColumns + NullsBitmapSize_);

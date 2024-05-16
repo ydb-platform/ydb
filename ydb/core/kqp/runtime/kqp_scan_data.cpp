@@ -602,7 +602,7 @@ ui64 TKqpScanComputeContext::TScanData::AddData(const TVector<TOwnedCellVec>& ba
 }
 
 TBytesStatistics TKqpScanComputeContext::TScanData::TRowBatchReader::AddData(const TBatchDataAccessor& batch, TMaybe<ui64> shardId,
-    const THolderFactory& holderFactory)
+    const THolderFactory& holderFactory, const TTypeEnvironment&)
 {
     TBytesStatistics stats;
     TUnboxedValueVector cells;
@@ -663,8 +663,13 @@ std::shared_ptr<arrow::Array> AdoptArrowTypeToYQL(const std::shared_ptr<arrow::A
 }
 
 TBytesStatistics TKqpScanComputeContext::TScanData::TBlockBatchReader::AddData(const TBatchDataAccessor& dataAccessor, TMaybe<ui64> /*shardId*/,
-    const THolderFactory& holderFactory)
+    const THolderFactory& holderFactory, const TTypeEnvironment& env)
 {
+    bool initConverters = Converters.empty();
+    if (initConverters) {
+        Converters.resize(Columns.size());
+    }
+
     TBytesStatistics stats;
     auto totalColsCount = TotalColumnsCount + 1;
     auto batches = NArrow::SliceToRecordBatches(dataAccessor.GetFiltered());
@@ -672,7 +677,17 @@ TBytesStatistics TKqpScanComputeContext::TScanData::TBlockBatchReader::AddData(c
         TUnboxedValueVector batchValues;
         batchValues.resize(totalColsCount);
         for (int i = 0; i < filtered->num_columns(); ++i) {
-            batchValues[i] = holderFactory.CreateArrowBlock(arrow::Datum(AdoptArrowTypeToYQL(filtered->column(i))));
+            const auto col = filtered->column(i);
+            if (initConverters) {
+                if (const auto tid = NPg::PgTypeIdFromTypeDesc(Columns[i].Type.GetTypeDesc())) {
+                    Converters[i] = NYql::BuildPgColumnConverter(col->type(), TPgType::Create(tid, env));
+                }
+            }
+
+            if (const auto& conv = Converters[i])
+                batchValues[i] = holderFactory.CreateArrowBlock(arrow::Datum(conv(col)));
+            else
+                batchValues[i] = holderFactory.CreateArrowBlock(arrow::Datum(AdoptArrowTypeToYQL(col)));
         }
         const ui64 batchByteSize = NArrow::GetBatchDataSize(filtered);
         stats.AddStatistics({batchByteSize, batchByteSize});
@@ -696,14 +711,14 @@ TBytesStatistics TKqpScanComputeContext::TScanData::TBlockBatchReader::AddData(c
 }
 
 ui64 TKqpScanComputeContext::TScanData::AddData(const TBatchDataAccessor& batch, TMaybe<ui64> shardId,
-    const THolderFactory& holderFactory)
+    const THolderFactory& holderFactory, const TTypeEnvironment& env)
 {
     // RecordBatch hasn't empty method so check the number of rows
     if (Finished || batch.GetRecordsCount() == 0) {
         return 0;
     }
 
-    TBytesStatistics stats = BatchReader->AddData(batch, shardId, holderFactory);
+    TBytesStatistics stats = BatchReader->AddData(batch, shardId, holderFactory, env);
     if (BasicStats) {
         BasicStats->Rows += batch.GetRecordsCount();
         BasicStats->Bytes += stats.DataBytes;

@@ -94,8 +94,10 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
             return false;
         }
 
-        if (!ResourceManager->AllocateResources(TxId, TaskId,
-                NRm::TKqpResourcesRequest{.MemoryPool = MemoryPool, .Memory = extraSize})) {
+        auto result = ResourceManager->AllocateResources(TxId, TaskId,
+            NRm::TKqpResourcesRequest{.MemoryPool = MemoryPool, .Memory = extraSize});
+
+        if (!result) {
             LOG_W("Can not allocate memory. TxId: " << TxId << ", taskId: " << TaskId << ", memory: +" << extraSize);
             return false;
         }
@@ -344,13 +346,14 @@ private:
             // we have to allocate memory instead of reserve only. currently, this memory will not be used for request processing.
             resourcesRequest.Memory = Min<double>(task.second.Memory, 1 << 19) /* 512kb limit for check that memory exists for processing with minimal requirements */;
 
-            NRm::TKqpNotEnoughResources resourcesResponse;
-            if (!ResourceManager()->AllocateResources(txId, task.first, resourcesRequest, &resourcesResponse)) {
+            auto result = ResourceManager()->AllocateResources(txId, task.first, resourcesRequest);
+
+            if (!result) {
                 for (ui64 taskId : allocatedTasks) {
                     ResourceManager()->FreeResources(txId, taskId);
                 }
 
-                ReplyError(txId, request.Executer, msg, resourcesResponse.GetStatus(), resourcesResponse.GetFailReason());
+                ReplyError(txId, request.Executer, msg, result.GetStatus(), result.GetFailReason());
                 return;
             }
 

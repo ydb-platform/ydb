@@ -88,7 +88,7 @@ public:
         }
     }
 
-    TMaybe<TRemoveTaskContext>  RemoveTask(ui64 txId, ui64 taskId, bool success)
+    TMaybe<TRemoveTaskContext> RemoveTask(ui64 txId, ui64 taskId, bool success)
     {
         TWriteGuard guard(RWLock);
         YQL_ENSURE(Requests.size() == SenderIdsByTxId.size());
@@ -110,7 +110,6 @@ public:
                     if (expireIt != ExpiringRequests.end()) {
                         ExpiringRequests.erase(expireIt);
                     }
-
                     Requests.erase(*senderIt);
                     SenderIdsByTxId.erase(senderIt);
                     YQL_ENSURE(Requests.size() == SenderIdsByTxId.size());

@@ -176,7 +176,7 @@ public:
         }
     }
 
-    bool AllocateExecutionUnits(ui32 cnt) override {
+    bool AllocateExecutionUnits(ui32 cnt) {
         i32 prev = ExecutionUnitsResource.fetch_sub(cnt);
         if (prev < (i32)cnt) {
             ExecutionUnitsResource.fetch_add(cnt);
@@ -187,7 +187,7 @@ public:
         }
     }
 
-    void FreeExecutionUnits(ui32 cnt) override {
+    void FreeExecutionUnits(ui32 cnt) {
         if (cnt == 0) {
             return;
         }
@@ -196,28 +196,34 @@ public:
         Counters->RmComputeActors->Sub(cnt);
     }
 
-    bool AllocateResources(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources,
-        TKqpNotEnoughResources* details = nullptr) override
+    TKqpRMAllocateResult AllocateResources(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources) override
     {
+        TKqpRMAllocateResult result;
         if (resources.ExecutionUnits) {
             if (!AllocateExecutionUnits(resources.ExecutionUnits)) {
                 TStringBuilder error;
                 error << "TxId: " << txId << ", NodeId: " << SelfId.NodeId() << ", not enough compute actors resource.";
-                if (details) {
-                    details->Status = NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_EXECUTION_UNITS;
-                    details->FailReason = error;
-                }
-                return false;
+                result.SetError(NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_EXECUTION_UNITS, error);
+                return result;
             }
         }
 
+        Y_DEFER {
+            if (!result) {
+                if (resources.ExecutionUnits) {
+                    FreeExecutionUnits(resources.ExecutionUnits);
+                }
+            }
+        };
+
         if (resources.MemoryPool == EKqpMemoryPool::DataQuery) {
             NotifyExternalResourcesAllocated(txId, taskId, resources);
-            return true;
+            return result;
         }
+
         Y_ABORT_UNLESS(resources.MemoryPool == EKqpMemoryPool::ScanQuery);
         if (Y_UNLIKELY(resources.Memory == 0)) {
-            return true;
+            return result;
         }
 
         auto now = ActorSystem->Timestamp();
@@ -228,15 +234,8 @@ public:
             if (Y_UNLIKELY(!ResourceBroker)) {
                 TStringBuilder reason;
                 reason << "AllocateResources: not ready yet. TxId: " << txId << ", taskId: " << taskId;
-                if (details) {
-                    details->FailReason = reason;
-                }
-
-                if (resources.ExecutionUnits) {
-                    FreeExecutionUnits(resources.ExecutionUnits);
-                }
-
-                return false;
+                result.SetError(NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR, reason);
+                return result;
             }
 
             hasScanQueryMemory = ScanQueryMemoryResource.Has(resources.Memory);
@@ -250,16 +249,8 @@ public:
             Counters->RmNotEnoughMemory->Inc();
             TStringBuilder reason;
             reason << "TxId: " << txId << ", taskId: " << taskId << ". Not enough memory for query, requested: " << resources.Memory;
-            if (details) {
-                details->FailReason = reason;
-                details->Status = NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_MEMORY;
-            }
-
-            if (resources.ExecutionUnits) {
-                FreeExecutionUnits(resources.ExecutionUnits);
-            }
-
-            return false;
+            result.SetError(NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_MEMORY, reason);
+            return result;
         }
 
         ui64 rbTaskId = LastResourceBrokerTaskId.fetch_add(1) + 1;
@@ -281,16 +272,8 @@ public:
                     TStringBuilder reason;
                     reason << "TxId: " << txId << ", taskId: " << taskId << ". Query memory limit exceeded: "
                         << "requested " << txTotalRequestedMemory;
-                    if (details) {
-                        details->FailReason = reason;
-                        details->Status = NKikimrKqp::TEvStartKqpTasksResponse::QUERY_MEMORY_LIMIT_EXCEEDED;
-                    }
-
-                    if (resources.ExecutionUnits) {
-                        FreeExecutionUnits(resources.ExecutionUnits);
-                    }
-
-                    return false;
+                    result.SetError(NKikimrKqp::TEvStartKqpTasksResponse::QUERY_MEMORY_LIMIT_EXCEEDED, reason);
+                    return result;
                 }
             }
 
@@ -310,16 +293,8 @@ public:
                 reason << "TxId: " << txId << ", taskId: " << taskId << ". Not enough ScanQueryMemory: "
                     << "requested " << resources.Memory;
                 LOG_AS_N(reason);
-                if (details) {
-                    details->Status = NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_MEMORY;
-                    details->FailReason = reason;
-                }
-
-                if (resources.ExecutionUnits) {
-                    FreeExecutionUnits(resources.ExecutionUnits);
-                }
-
-                return false;
+                result.SetError(NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_MEMORY, reason);
+                return result;
             }
 
             auto& txState = txBucket.Txs[txId];
@@ -353,16 +328,8 @@ public:
         }
 
         FireResourcesPublishing();
-        return true;
+        return result;
     }
-
-    /*bool AllocateResources(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources,
-        IKqpResourceManager::TResourcesAllocatedCallback&& onSuccess, IKqpResourceManager::TNotEnoughtResourcesCallback&& onFail, TDuration timeout = {}) override {
-        Y_UNUSED(txId, taskId, resources, onSuccess, onFail, timeout);
-
-        // TODO: for DataQuery resources only
-        return false;
-    }*/
 
     void FreeResources(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources) override {
 

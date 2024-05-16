@@ -212,7 +212,12 @@ public:
             PendingCanonizations_.clear();
             PendingFolders_.clear();
             PendingRanges_.clear();
+
+            for (const auto& key : PendingWalkFoldersKeys_) {
+                State_->WalkFoldersState.erase(key);
+            }
             PendingWalkFoldersKeys_.clear();
+
             YQL_CLOG(INFO, ProviderYt) << "YtIODiscovery - finish, status: " << (TStatus::ELevel)status.Level;
             return status;
         }

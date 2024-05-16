@@ -124,9 +124,17 @@ public:
             return out.MakeState();
         }
 
+        void Load(const NUdf::TStringRef& state) override {
+            TInputSerializer in(state, EMkqlStateType::SIMPLE_BLOB);
+            LoadStateImpl(in);
+        }
+
         void LoadState(NUdf::TUnboxedValue& state) override {
             TInputSerializer in(state, EMkqlStateType::SIMPLE_BLOB);
+             LoadStateImpl(in);
+        }
 
+        void LoadStateImpl(TInputSerializer& in) {
             const auto loadStateVersion = in.GetStateVersion();
             if (loadStateVersion != StateVersion) {
                 THROW yexception() << "Invalid state version " << loadStateVersion;

@@ -51,13 +51,17 @@ namespace NActors {
         }
 
         void AddElapsedCycles(ui32 activityType, i64 elapsed) {
-            Y_DEBUG_ABORT_UNLESS(activityType < Stats->MaxActivityType());
-            RelaxedStore(&Stats->ElapsedTicks, RelaxedLoad(&Stats->ElapsedTicks) + elapsed);
-            RelaxedStore(&Stats->ElapsedTicksByActivity[activityType], RelaxedLoad(&Stats->ElapsedTicksByActivity[activityType]) + elapsed);
+            if (Y_LIKELY(elapsed > 0)) {
+                Y_DEBUG_ABORT_UNLESS(activityType < Stats->MaxActivityType());
+                RelaxedStore(&Stats->ElapsedTicks, RelaxedLoad(&Stats->ElapsedTicks) + elapsed);
+                RelaxedStore(&Stats->ElapsedTicksByActivity[activityType], RelaxedLoad(&Stats->ElapsedTicksByActivity[activityType]) + elapsed);
+            }
         }
 
         void AddParkedCycles(i64 elapsed) {
-            RelaxedStore(&Stats->ParkedTicks, RelaxedLoad(&Stats->ParkedTicks) + elapsed);
+            if (Y_LIKELY(elapsed > 0)) {
+                RelaxedStore(&Stats->ParkedTicks, RelaxedLoad(&Stats->ParkedTicks) + elapsed);
+            }
         }
 
         void AddBlockedCycles(i64 elapsed) {
@@ -126,7 +130,6 @@ namespace NActors {
             RelaxedStore(&Stats->ReceivedEvents, RelaxedLoad(&Stats->ReceivedEvents) + 1);
             RelaxedStore(&Stats->ReceivedEventsByActivity[activityType], RelaxedLoad(&Stats->ReceivedEventsByActivity[activityType]) + 1);
             RelaxedStore(&Stats->ScheduledEventsByActivity[activityType], RelaxedLoad(&Stats->ScheduledEventsByActivity[activityType]) + scheduled);
-            AddElapsedCycles(activityType, elapsed);
             return elapsed;
         }
 

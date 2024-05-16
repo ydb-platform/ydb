@@ -22,7 +22,7 @@ namespace NKikimr::NColumnShard {
             return false;
         }
         virtual bool DoParse(TColumnShard& owner, const TString& data) override;
-        virtual bool DoAllowUpdateMessage(const TFullTxInfo& currentTxInfo) const override {
+        virtual bool DoCheckAllowUpdate(const TFullTxInfo& currentTxInfo) const override {
             return (currentTxInfo.Source == GetTxInfo().Source && currentTxInfo.Cookie == GetTxInfo().Cookie);
         }
     public:

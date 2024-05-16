@@ -23,7 +23,7 @@ namespace NKikimr::NColumnShard {
         virtual bool DoIsAsync() const override {
             return false;
         }
-        virtual bool DoAllowUpdateMessage(const TFullTxInfo& currentTxInfo) const override {
+        virtual bool DoCheckAllowUpdate(const TFullTxInfo& currentTxInfo) const override {
             return (currentTxInfo.Source == GetTxInfo().Source && currentTxInfo.Cookie == GetTxInfo().Cookie);
         }
         virtual void DoSendReply(TColumnShard& owner, const TActorContext& ctx) override {

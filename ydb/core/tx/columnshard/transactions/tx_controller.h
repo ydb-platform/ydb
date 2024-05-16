@@ -176,7 +176,7 @@ public:
         virtual void DoFinishProposeOnComplete(TColumnShard& owner, const TActorContext& ctx) = 0;
         virtual bool DoIsAsync() const = 0;
         virtual void DoSendReply(TColumnShard& owner, const TActorContext& ctx) = 0;
-        virtual bool DoAllowUpdateMessage(const TFullTxInfo& currentTxInfo) const = 0;
+        virtual bool DoCheckAllowUpdate(const TFullTxInfo& currentTxInfo) const = 0;
 
         [[nodiscard]] bool SwitchState(const EStatus from, const EStatus to);
         TTxInfo& MutableTxInfo() {
@@ -187,8 +187,8 @@ public:
         using TPtr = std::shared_ptr<ITransactionOperator>;
         using TFactory = NObjectFactory::TParametrizedObjectFactory<ITransactionOperator, NKikimrTxColumnShard::ETransactionKind, TTxInfo>;
 
-        bool AllowUpdateMessage(const TFullTxInfo& currentTxInfo) const {
-            return DoAllowUpdateMessage(currentTxInfo);
+        bool CheckAllowUpdate(const TFullTxInfo& currentTxInfo) const {
+            return DoCheckAllowUpdate(currentTxInfo);
         }
 
         void ResetStatus() {

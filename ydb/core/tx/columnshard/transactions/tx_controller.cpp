@@ -299,7 +299,7 @@ std::shared_ptr<TTxController::ITransactionOperator> TTxController::StartPropose
 
     auto txInfoPtr = GetTxInfo(txInfo.TxId);
     if (!!txInfoPtr) {
-        if (!txOperator->AllowUpdateMessage(*txInfoPtr)) {
+        if (!txOperator->CheckAllowUpdate(*txInfoPtr)) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "incorrect duplication");
             TTxController::TProposeResult proposeResult(NKikimrTxColumnShard::EResultStatus::ERROR, TStringBuilder() << "Another commit TxId# " << txInfo.TxId << " has already been proposed");
             txOperator->SetProposeStartInfo(proposeResult);

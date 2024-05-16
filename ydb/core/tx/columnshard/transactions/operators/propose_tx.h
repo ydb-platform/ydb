@@ -10,7 +10,7 @@ private:
     using TBase = TTxController::ITransactionOperator;
 protected:
     virtual void DoSendReply(TColumnShard& owner, const TActorContext& ctx) override;
-    virtual bool DoAllowUpdateMessage(const TFullTxInfo& currentTxInfo) const override {
+    virtual bool DoCheckAllowUpdate(const TFullTxInfo& currentTxInfo) const override {
         if (!currentTxInfo.SeqNo || !GetTxInfo().SeqNo) {
             return true;
         }

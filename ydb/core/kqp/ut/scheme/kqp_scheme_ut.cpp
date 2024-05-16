@@ -6343,6 +6343,41 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[]");
     }
 
+    Y_UNIT_TEST(Csv) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+
+        static const TString CsvFormatString = [] () {
+            Ydb::Formats::CsvSettings settings;
+            settings.set_header(true);
+            return settings.SerializeAsString();
+        } ();
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("date32").SetType(NScheme::NTypeIds::Date32),
+            TTestHelper::TColumnSchema().SetName("datetime64").SetType(NScheme::NTypeIds::Datetime64),
+            TTestHelper::TColumnSchema().SetName("ts64").SetType(NScheme::NTypeIds::Timestamp64),
+            TTestHelper::TColumnSchema().SetName("interval64").SetType(NScheme::NTypeIds::Interval64)
+        };
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+        TStringBuilder csv;
+        const auto time = TInstant::ParseIso8601("2024-05-16T13:30:27Z");
+        const auto interaval = TDuration::MicroSeconds(934344);
+        csv << "id," << "date32," << "datetime64," << "ts64," << "interval64" << Endl;
+        csv << "1," << time.Seconds() << ',' << time.Seconds() << ',' << time.Seconds() << ',' << interaval.MicroSeconds() << Endl;
+        csv << "2,2024-05-16,2024-05-16T13:30:27Z,2024-05-16T13:30:27Z," << interaval.MicroSeconds() << Endl;
+        TBulkUpsertSettings settings;
+        settings.FormatSettings(CsvFormatString);
+        const auto result = testHelper.GetKikimr().GetTableClient().BulkUpsert(testTable.GetName(), EDataFormat::CSV, csv, "", settings).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), ToString((const TStatus&)result));
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[[[19859];[1715866227];1;[934344];[1715866227000000]]]");
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=2", "[[[19859];[1715866227];2;[934344];[1715866227000000]]]");
+    }
+
     Y_UNIT_TEST(BulkError) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;

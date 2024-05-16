@@ -159,6 +159,30 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ConvertColumnTypes(std::shared_pt
                         }
                     }
                     arrResult = aBuilder.Finish();
+                } else if (originalType->id() == arrow::Int32Type::type_id) {
+                    arrResult = i64Arr;
+                    arrow::Int32Builder aBuilder;
+                    Y_ABORT_UNLESS(aBuilder.Reserve(parsedBatch->num_rows()).ok());
+                    for (long i = 0; i < parsedBatch->num_rows(); ++i) {
+                        if (i64Arr->IsNull(i)) {
+                            Y_ABORT_UNLESS(aBuilder.AppendNull().ok());
+                        } else {
+                            aBuilder.UnsafeAppend(i64Arr->Value(i) / 86400ull);
+                        }
+                    }
+                    arrResult = aBuilder.Finish();
+                } else if (originalType->id() == arrow::Int64Type::type_id) {
+                    arrResult = i64Arr;
+                    arrow::Int64Builder aBuilder;
+                    Y_ABORT_UNLESS(aBuilder.Reserve(parsedBatch->num_rows()).ok());
+                    for (long i = 0; i < parsedBatch->num_rows(); ++i) {
+                        if (i64Arr->IsNull(i)) {
+                            Y_ABORT_UNLESS(aBuilder.AppendNull().ok());
+                        } else {
+                            aBuilder.UnsafeAppend(i64Arr->Value(i));
+                        }
+                    }
+                    arrResult = aBuilder.Finish();
                 } else {
                     Y_ABORT_UNLESS(false);
                 }

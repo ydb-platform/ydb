@@ -1531,7 +1531,8 @@ private:
 };
 
 bool IsTypeSerializable(const TType* type) {
-    return !type->IsResource();
+    return ! (type->IsResource() || type->IsType() || type->IsStream() || type->IsCallable()
+        || type->IsAny() || type->IsFlow() || type->IsReservedKind());
 }
 
 }
@@ -1562,7 +1563,7 @@ IComputationNode* WrapWideCombinerT(TCallable& callable, const TComputationNodeF
     keyTypes.reserve(keysSize);
     for (ui32 i = index; i < index + keysSize; ++i) {
         TType *type = callable.GetInput(i).GetStaticType();
-        allowSpilling = IsTypeSerializable(type);
+        allowSpilling = allowSpilling && IsTypeSerializable(type);
 		keyAndStateItemTypes.push_back(type);
         bool optional;
         keyTypes.emplace_back(*UnpackOptionalData(callable.GetInput(i).GetStaticType(), optional)->GetDataSlot(), optional);
@@ -1576,7 +1577,7 @@ IComputationNode* WrapWideCombinerT(TCallable& callable, const TComputationNodeF
     nodes.InitResultNodes.reserve(stateSize);
     for (size_t i = 0; i != stateSize; ++i) {
         TType *type = callable.GetInput(index).GetStaticType();
-        allowSpilling = IsTypeSerializable(type);
+        allowSpilling = allowSpilling && IsTypeSerializable(type);
         keyAndStateItemTypes.push_back(type);
         nodes.InitResultNodes.push_back(LocateNode(ctx.NodeLocator, callable, index++));
     }
@@ -1614,7 +1615,7 @@ IComputationNode* WrapWideCombinerT(TCallable& callable, const TComputationNodeF
             usedInputItemTypes.reserve(inputItemTypes.size());
             for (size_t i = 0; i != inputItemTypes.size(); ++i) {
                 if (nodes.IsInputItemNodeUsed(i)) {
-                    allowSpilling = IsTypeSerializable(inputItemTypes[i]);
+                    allowSpilling = allowSpilling && IsTypeSerializable(inputItemTypes[i]);
                     usedInputItemTypes.push_back(inputItemTypes[i]);
                 }
             }

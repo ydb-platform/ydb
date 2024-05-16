@@ -48,6 +48,7 @@ def read_scan_rows(it) -> typing.List[ydb_pb.Value]:
 def make_columns(columns: typing.List[typing.Tuple[str, str]]) -> typing.List[ydb_pb.Column]:
     return [ydb_pb.Column(name=name, type=ydb_pb.Type(type_id=ydb_pb.Type.PrimitiveTypeId.Value(type))) for name, type in columns]
 
+
 class TestYdbOverFq(TestYdsBase):
     def make_binding(self, client: FederatedQueryClient, name: str, path: str, connection_id: str, columns: typing.List[typing.Tuple[str, str]]):
         columns = make_columns(columns)

@@ -96,7 +96,7 @@ class TestYdbOverFq(TestYdsBase):
 
         driver = self.make_yq_driver(kikimr.endpoint(), client.folder_id, "root@builtin")
 
-        # empty resultм
+        # empty result
         ls_res = driver.scheme_client.list_directory("/")
         assert ls_res.is_directory()
         assert len(ls_res.children) == 0

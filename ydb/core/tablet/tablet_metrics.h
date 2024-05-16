@@ -78,7 +78,8 @@ protected:
     THashMap<std::pair<TChannel, TGroupId>, ui32> LevelWriteThroughput;
     THashMap<std::pair<TChannel, TGroupId>, ui32> LevelReadIops;
     THashMap<std::pair<TChannel, TGroupId>, ui32> LevelWriteIops;
-    TInstant LastUpdate;
+    TInstant LastAllUpdate;
+    TInstant LastAnyUpdate;
 };
 
 class TResourceMetrics : public TResourceMetricsValues, public TResourceMetricsSendState {

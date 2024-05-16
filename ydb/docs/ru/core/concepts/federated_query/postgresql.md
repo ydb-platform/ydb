@@ -45,31 +45,31 @@ SELECT * FROM postgresql_datasource.<table_name>
 
 ## Поддерживаемые типы данных
 
-Ниже приведена таблица соответствия типов PostgreSQL и типов {{ ydb-full-name }}.
+В таблицах PostgreSQL по умолчанию все колонки могут содержать значения `NULL`, поэтому в {{ ydb-full-name }} колонки таблиц, извлечённых из внешнего источника данных PostgreSQL, отображаются как [опциональные](https://ydb.tech/docs/ru/yql/reference/types/optional). Ниже приведена таблица соответствия типов PostgreSQL и типов {{ ydb-full-name }}.
 
 |Тип данных PostgreSQL|Тип данных {{ ydb-full-name }}|Примечания|
 |---|----|------|
-|`boolean`|`Bool`||
-|`smallint`|`Int16`||
-|`int2`|`Int16`||
-|`integer`|`Int32`||
-|`int`|`Int32`||
-|`int4`|`Int32`||
-|`serial`|`Int32`||
-|`serial4`|`Int32`||
-|`bigint`|`Int64`||
-|`int8`|`Int64`||
-|`bigserial`|`Int64`||
-|`serial8`|`Int64`||
-|`real`|`Float`||
-|`float4`|`Float`||
-|`double precision`|`Double`||
-|`float8`|`Double`||
-|`date`|`Date`|Допустимый диапазон дат с 1970-01-01 и до 2105-12-31. При выходе значения за границы диапазона оно заменяется на `NULL`.|
-|`timestamp`|`Timestamp`|Допустимый диапазон дат с 1970-01-01 00:00 и до 2105-12-31 23:59. При выходе значения за границы диапазона оно заменяется на `NULL`.|
-|`bytea`|`String`||
-|`character`|`Utf8`|[Правила сортировки](https://www.postgresql.org/docs/current/collation.html) по умолчанию, строка дополняется пробелами до требуемой длины.|
-|`character varying`|`Utf8`|[Правила сортировки](https://www.postgresql.org/docs/current/collation.html) по умолчанию.|
-|`text`|`Utf8`|[Правила сортировки](https://www.postgresql.org/docs/current/collation.html) по умолчанию.|
+|`boolean`|`Optional<Bool>`||
+|`smallint`|`Optional<Int16>`||
+|`int2`|`Optional<Int16>`||
+|`integer`|`Optional<Int32>`||
+|`int`|`Optional<Int32>`||
+|`int4`|`Optional<Int32>`||
+|`serial`|`Optional<Int32>`||
+|`serial4`|`Optional<Int32>`||
+|`bigint`|`Optional<Int64>`||
+|`int8`|`Optional<Int64>`||
+|`bigserial`|`Optional<Int64>`||
+|`serial8`|`Optional<Int64>`||
+|`real`|`Optional<Float>`||
+|`float4`|`Optional<Float>`||
+|`double precision`|`Optional<Double>`||
+|`float8`|`Optional<Double>`||
+|`date`|`Optional<Date>`|Допустимый диапазон дат с 1970-01-01 и до 2105-12-31. При выходе значения за границы диапазона возвращается `NULL`.|
+|`timestamp`|`Optional<Timestamp>`|Допустимый диапазон времени с 1970-01-01 00:00:00 и до 2105-12-31 23:59:59. При выходе значения за границы диапазона возвращается значение `NULL`.|
+|`bytea`|`Optional<String>`||
+|`character`|`Optional<Utf8>`|[Правила сортировки](https://www.postgresql.org/docs/current/collation.html) по умолчанию, строка дополняется пробелами до требуемой длины.|
+|`character varying`|`Optional<Utf8>`|[Правила сортировки](https://www.postgresql.org/docs/current/collation.html) по умолчанию.|
+|`text`|`Optional<Utf8>`|[Правила сортировки](https://www.postgresql.org/docs/current/collation.html) по умолчанию.|
 
 Остальные типы данных не поддерживаются.

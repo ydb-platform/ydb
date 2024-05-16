@@ -1,12 +1,12 @@
 #pragma once
 
-#include "ss_operation.h"
+#include "propose_tx.h"
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 
 namespace NKikimr::NColumnShard {
 
-    class TLongTxTransactionOperator : public ISSTransactionOperator {
-        using TBase = ISSTransactionOperator;
+    class TLongTxTransactionOperator : public IProposeTxOperator {
+        using TBase = IProposeTxOperator;
         using TProposeResult = TTxController::TProposeResult;
         static inline auto Registrator = TFactory::TRegistrator<TLongTxTransactionOperator>(NKikimrTxColumnShard::TX_KIND_COMMIT);
     private:
@@ -22,6 +22,9 @@ namespace NKikimr::NColumnShard {
             return false;
         }
         virtual bool DoParse(TColumnShard& owner, const TString& data) override;
+        virtual bool DoCheckAllowUpdate(const TFullTxInfo& currentTxInfo) const override {
+            return (currentTxInfo.Source == GetTxInfo().Source && currentTxInfo.Cookie == GetTxInfo().Cookie);
+        }
     public:
         using TBase::TBase;
 

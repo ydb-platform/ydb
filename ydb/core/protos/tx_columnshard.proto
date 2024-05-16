@@ -4,6 +4,7 @@ import "ydb/core/tx/columnshard/engines/protos/portion_info.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/protos/long_tx_service.proto";
 import "ydb/core/protos/subdomains.proto";
+import "ydb/core/protos/tx.proto";
 import "ydb/core/formats/arrow/protos/ssa.proto";
 
 package NKikimrTxColumnShard;
@@ -147,6 +148,7 @@ message TEvProposeTransaction {
     optional uint64 SchemeShardId = 5;
     optional NKikimrSubDomains.TProcessingParams ProcessingParams = 6;
     optional uint64 Flags = 7;
+    optional NKikimrTx.TMessageSeqNo SeqNo = 8;
 }
 
 message TEvCheckPlannedTransaction {

@@ -2,7 +2,7 @@ LIBRARY()
 
 SRCS(
     defs.h
-    message_seqno.h
+    message_seqno.cpp
     tx.h
     tx.cpp
     tx_processing.h

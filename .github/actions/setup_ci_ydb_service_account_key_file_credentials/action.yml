@@ -12,10 +12,9 @@ runs:
       shell: bash
       run: |
         set -eu
-        export YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=/tmp/ydb_service_account.json
-        cat << EOF > $YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS
+        export CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=/tmp/ydb_service_account.json
+        cat << EOF > $CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS
         ${{ inputs.ci_ydb_service_account_key_file_credentials}}
         EOF
 
-        # This env var interfere with tests, temporary disabled
-        # echo "YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=$YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" >> $GITHUB_ENV
+        echo "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=$CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" >> $GITHUB_ENV

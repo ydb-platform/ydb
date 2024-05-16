@@ -60,6 +60,8 @@ public:
     void Run() override {
         try {
             RunImpl();
+        } catch (const TDtorException&) {
+            return; // coroutine terminated
         } catch (const TExTableStatsError& ex) {
             Send(ReplyTo, new TDataShard::TEvPrivate::TEvTableStatsError(TableId, ex.Code, ex.Message));
         } catch (...) {

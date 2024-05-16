@@ -208,6 +208,7 @@ END()
 
 RECURSE(
     arrow
+    cache
     driver
     federated
     hedging

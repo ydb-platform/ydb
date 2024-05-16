@@ -143,7 +143,7 @@ public:
         , State_(state)
         , CheckSelfMapJoin_(!TypeCtx_.ForceDq
             && !State_->Settings->SplitStageOnDqReplicate.Get().GetOrElse(TDqSettings::TDefault::SplitStageOnDqReplicate)
-            && State_->Settings->SpillingEngine == TDqSettings::ESpillingEngine::Disable)
+            && !State_->Settings->IsSpillingEnabled())
     {}
 
     bool ValidateDqExecution(const TExprNode& node) {

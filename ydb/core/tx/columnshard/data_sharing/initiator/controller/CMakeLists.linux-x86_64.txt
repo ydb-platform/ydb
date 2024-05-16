@@ -42,5 +42,6 @@ target_link_libraries(data_sharing-initiator-controller.global PUBLIC
 
 target_sources(data_sharing-initiator-controller.global PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/initiator/controller/test.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/initiator/controller/schemeshard.cpp
 )
 

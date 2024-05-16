@@ -13,14 +13,18 @@
 # system may be rejected.
 
 
-add_library(columnshard-transactions-operators INTERFACE)
+add_library(columnshard-transactions-operators)
 
-target_link_libraries(columnshard-transactions-operators INTERFACE
+target_link_libraries(columnshard-transactions-operators PUBLIC
   contrib-libs-cxxsupp
   yutil
   tx-columnshard-transactions
   data_sharing-destination-events
   columnshard-export-session
+)
+
+target_sources(columnshard-transactions-operators PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/transactions/operators/ss_operation.cpp
 )
 
 
@@ -41,5 +45,6 @@ target_sources(columnshard-transactions-operators.global PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/transactions/operators/long_tx_write.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/transactions/operators/ev_write.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/transactions/operators/backup.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/transactions/operators/sharing.cpp
 )
 

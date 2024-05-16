@@ -225,7 +225,7 @@ static void ModifyTopicACL(NYdb::TDriver* driver, const TString& topic, const TV
 
     class TPersQueueV1TestServer : public TPersQueueV1TestServerBase {
     public:
-        explicit TPersQueueV1TestServer(const TPersQueueV1TestServerSettings& settings = {})
+        explicit TPersQueueV1TestServer(const TPersQueueV1TestServerSettings& settings)
             : TPersQueueV1TestServerBase(settings.TenantModeEnabled)
             , Settings(settings)
         {

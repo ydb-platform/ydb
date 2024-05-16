@@ -648,7 +648,15 @@ std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHe
             return MakeStringBlockReaderImpl<TTraits, arrow::StringType, NUdf::EDataSlot::Utf8>(isOptional);
         case NUdf::EDataSlot::Json:
             return MakeStringBlockReaderImpl<TTraits, arrow::StringType, NUdf::EDataSlot::Json>(isOptional);
-        default:
+        case NUdf::EDataSlot::TzDate:
+            return TTraits::template MakeTzDate<TTzDate>(isOptional);
+        case NUdf::EDataSlot::TzDatetime:
+            return TTraits::template MakeTzDate<TTzDatetime>(isOptional);
+        case NUdf::EDataSlot::TzTimestamp:
+            return TTraits::template MakeTzDate<TTzTimestamp>(isOptional);
+        case NUdf::EDataSlot::Uuid:
+        case NUdf::EDataSlot::Decimal:
+        case NUdf::EDataSlot::DyNumber:
             Y_ENSURE(false, "Unsupported data slot");
         }
     }

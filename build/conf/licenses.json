@@ -331,14 +331,6 @@
             "Zlib",
             "zlib-acknowledgement",
             "ZPL-2.1"
-        ],
-        "dynamic": [
-            "LGPL",
-            "LGPL-2.0-only",
-            "LGPL-2.1-only",
-            "LGPL-2.1-or-later",
-            "LGPL-3.0-only",
-            "LGPL-3.0-or-later"
         ]
     },
     "REQUIRE_DERIVATIVE_DISCLOSURE": {
@@ -358,28 +350,12 @@
             "GPL-3.0-or-later",
             "GPLv2+",
             "TMate"
-        ],
-        "static": [
-            "EPL-1.0",
-            "EPL-2.0",
-            "LGPL",
-            "LGPL-2.0-only",
-            "LGPL-2.0-or-later WITH Libtool-exception",
-            "LGPL-2.0-or-later WITH Qt-LGPL-exception-1.1",
-            "LGPL-2.1-only",
-            "LGPL-2.1-or-later",
-            "LGPL-3.0-only",
-            "LGPL-3.0-or-later"
         ]
     },
     "REQUIRE_MODIFICATIONS_DISCLOSURE": {
         "default": [
             "CDDL-1.0",
             "CDDL-1.1"
-        ],
-        "dynamic": [
-            "EPL-1.0",
-            "EPL-2.0"
         ]
     },
     "SERVICE": {
@@ -392,18 +368,53 @@
         ]
     },
     "restricted": {
+        "LGPL": {
+            "static": [ "REQUIRE_DERIVATIVE_DISCLOSURE" ],
+            "dynamic": [ "REQUIRE_CITATION" ]
+        },
         "LGPL-1.0-or-later": {
-            "static": [
-                "REQUIRE_DERIVATIVE_DISCLOSURE"
-            ]
+            "static": [ "REQUIRE_DERIVATIVE_DISCLOSURE" ],
+            "dynamic": [ "REQUIRE_CITATION" ]
+        },
+        "LGPL-2.0-only": {
+            "static": [ "REQUIRE_DERIVATIVE_DISCLOSURE" ],
+            "dynamic": [ "REQUIRE_CITATION" ]
         },
         "LGPL-2.0-or-later": {
-            "static": [
-                "REQUIRE_DERIVATIVE_DISCLOSURE"
-            ],
-            "dynamic": [
-                "REQUIRE_CITATION"
-            ]
+            "static": [ "REQUIRE_DERIVATIVE_DISCLOSURE" ],
+            "dynamic": [ "REQUIRE_CITATION" ]
+        },
+        "LGPL-2.0-or-later WITH Libtool-exception": {
+            "static": [ "REQUIRE_DERIVATIVE_DISCLOSURE" ],
+            "dynamic": [ "REQUIRE_CITATION" ]
+        },
+        "LGPL-2.0-or-later WITH Qt-LGPL-exception-1.1": {
+            "static": [ "REQUIRE_DERIVATIVE_DISCLOSURE" ],
+            "dynamic": [ "REQUIRE_CITATION" ]
+        },
+        "LGPL-2.1-only": {
+            "static": [ "REQUIRE_DERIVATIVE_DISCLOSURE" ],
+            "dynamic": [ "REQUIRE_CITATION" ]
+        },
+        "LGPL-2.1-or-later": {
+            "static": [ "REQUIRE_DERIVATIVE_DISCLOSURE" ],
+            "dynamic": [ "REQUIRE_CITATION" ]
+        },
+        "LGPL-3.0-only": {
+            "static": [ "REQUIRE_DERIVATIVE_DISCLOSURE" ],
+            "dynamic": [ "REQUIRE_CITATION" ]
+        },
+        "LGPL-3.0-or-later": {
+            "static": [ "REQUIRE_DERIVATIVE_DISCLOSURE" ],
+            "dynamic": [ "REQUIRE_CITATION" ]
+        },
+        "EPL-1.0": {
+            "static": [ "REQUIRE_DERIVATIVE_DISCLOSURE" ],
+            "dynamic": [ "REQUIRE_MODIFICATIONS_DISCLOSURE" ]
+        },
+        "EPL-2.0": {
+            "static": [ "REQUIRE_DERIVATIVE_DISCLOSURE" ],
+            "dynamic": [ "REQUIRE_MODIFICATIONS_DISCLOSURE" ]
         }
     }
 }

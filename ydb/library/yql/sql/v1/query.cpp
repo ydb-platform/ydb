@@ -281,17 +281,20 @@ static INode::TPtr CreateIndexDesc(const TIndexDescription& index, ETableSetting
     }
     const auto& indexType = node.Y(node.Q("indexType"), CreateIndexType(index.Type, node));
     const auto& indexName = node.Y(node.Q("indexName"), BuildQuotedAtom(index.Name.Pos, index.Name.Name));
-    const auto& tableSettings = node.Y(
-        node.Q("tableSettings"),
-        node.Q(CreateTableSettings(index.TableSettings, parsingMode, node))
-    );
-    return node.Y(
+    auto indexNode = node.Y(
         node.Q(indexName),
         node.Q(indexType),
         node.Q(node.Y(node.Q("indexColumns"), node.Q(indexColumns))),
-        node.Q(node.Y(node.Q("dataColumns"), node.Q(dataColumns))),
-        node.Q(tableSettings)
+        node.Q(node.Y(node.Q("dataColumns"), node.Q(dataColumns)))
     );
+    if (index.TableSettings.IsSet()) {
+        const auto& tableSettings = node.Y(
+            node.Q("tableSettings"),
+            node.Q(CreateTableSettings(index.TableSettings, parsingMode, node))
+        );
+        indexNode = node.L(indexNode, tableSettings);
+    }
+    return indexNode;
 }
 
 static INode::TPtr CreateAlterIndex(const TIndexDescription& index, const INode& node) {

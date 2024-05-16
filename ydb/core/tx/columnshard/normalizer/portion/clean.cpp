@@ -57,10 +57,6 @@ public:
         }
         TActorContext::AsActorContext().Send(nCtx.GetShardActor(), std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(std::make_shared<TBlobsRemovingResult>(removeAction, std::move(Portions))));
     }
-
-    ui64 GetObjectsCount() const override {
-        return Portions.size();
-    }
 };
 
 

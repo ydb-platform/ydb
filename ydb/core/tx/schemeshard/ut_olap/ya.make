@@ -22,6 +22,7 @@ PEERDIR(
     ydb/core/tx
     ydb/core/tx/columnshard
     ydb/core/tx/columnshard/test_helper
+    ydb/core/tx/columnshard/hooks/testing
     ydb/core/tx/schemeshard/ut_helpers
     ydb/library/yql/public/udf/service/exception_policy
 )

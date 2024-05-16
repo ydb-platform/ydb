@@ -50,7 +50,13 @@ public:
                 Y_ABORT_UNLESS(Self->CurrentSchemeShardId == record.GetSchemeShardId());
             }
         }
-        TxOperator = Self->GetProgressTxController().StartProposeOnExecute(TTxController::TBasicTxInfo(txKind, txId), txBody, Ev->Get()->GetSource(), Ev->Cookie, txc);
+        std::optional<TMessageSeqNo> msgSeqNo;
+        if (Ev->Get()->Record.HasSeqNo()) {
+            TMessageSeqNo seqNo;
+            seqNo.DeserializeFromProto(Ev->Get()->Record.GetSeqNo()).Validate();
+            msgSeqNo = seqNo;
+        }
+        TxOperator = Self->GetProgressTxController().StartProposeOnExecute(TTxController::TBasicTxInfo(txKind, txId), txBody, Ev->Get()->GetSource(), Ev->Cookie, msgSeqNo, txc);
         return true;
     }
 

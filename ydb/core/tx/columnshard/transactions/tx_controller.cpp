@@ -60,6 +60,7 @@ bool TTxController::Load(NTabletFlatExecutor::TTransactionContext& txc) {
         txInfo.PlanStep = rowset.GetValueOrDefault<Schema::TxInfo::PlanStep>(0);
         txInfo.Source = rowset.GetValue<Schema::TxInfo::Source>();
         txInfo.Cookie = rowset.GetValue<Schema::TxInfo::Cookie>();
+        txInfo.DeserializeSeqNoFromString(rowset.GetValue<Schema::TxInfo::SeqNo>());
 
         if (txInfo.PlanStep != 0) {
             PlanQueue.emplace(txInfo.PlanStep, txInfo.TxId);
@@ -89,24 +90,26 @@ TTxController::ITransactionOperator::TPtr TTxController::GetVerifiedTxOperator(c
     return it->second;
 }
 
-std::shared_ptr<TTxController::ITransactionOperator> TTxController::UpdateTxSourceInfo(const ui64 txId, const TActorId& source, const ui64 cookie, NTabletFlatExecutor::TTransactionContext& txc) {
-    auto op = GetVerifiedTxOperator(txId);
+std::shared_ptr<TTxController::ITransactionOperator> TTxController::UpdateTxSourceInfo(const TFullTxInfo& tx, NTabletFlatExecutor::TTransactionContext& txc) {
+    auto op = GetVerifiedTxOperator(tx.GetTxId());
     op->ResetStatus();
     auto& txInfo = op->MutableTxInfo();
-    txInfo.Source = source;
-    txInfo.Cookie = cookie;
+    txInfo.Source = tx.Source;
+    txInfo.Cookie = tx.Cookie;
+    txInfo.SeqNo = tx.SeqNo;
 
     NIceDb::TNiceDb db(txc.DB);
-    Schema::UpdateTxInfoSource(db, txId, txInfo.Source, txInfo.Cookie);
+    Schema::UpdateTxInfoSource(db, txInfo);
     return op;
 }
 
 TTxController::TTxInfo TTxController::RegisterTx(const std::shared_ptr<TTxController::ITransactionOperator>& txOperator, const TString& txBody, NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
     auto& txInfo = txOperator->GetTxInfo();
+    AFL_VERIFY(txInfo.MaxStep == Max<ui64>());
     AFL_VERIFY(Operators.emplace(txInfo.TxId, txOperator).second);
 
-    Schema::SaveTxInfo(db, txInfo.TxId, txInfo.TxKind, txBody, Max<ui64>(), txInfo.Source, txInfo.Cookie);
+    Schema::SaveTxInfo(db, txInfo, txBody);
     return txInfo;
 }
 
@@ -119,7 +122,7 @@ TTxController::TTxInfo TTxController::RegisterTxWithDeadline(const std::shared_p
 
     AFL_VERIFY(Operators.emplace(txOperator->GetTxId(), txOperator).second);
 
-    Schema::SaveTxInfo(db, txInfo.TxId, txInfo.TxKind, txBody, txInfo.MaxStep, txInfo.Source, txInfo.Cookie);
+    Schema::SaveTxInfo(db, txInfo, txBody);
     DeadlineQueue.emplace(txInfo.MaxStep, txOperator->GetTxId());
     return txInfo;
 }
@@ -282,11 +285,12 @@ void TTxController::OnTabletInit() {
     }
 }
 
-std::shared_ptr<TTxController::ITransactionOperator> TTxController::StartProposeOnExecute(const TTxController::TBasicTxInfo& txInfo, const TString& txBody, const TActorId source, const ui64 cookie, NTabletFlatExecutor::TTransactionContext& txc) {
+std::shared_ptr<TTxController::ITransactionOperator> TTxController::StartProposeOnExecute(const TTxController::TBasicTxInfo& txInfo, const TString& txBody, const TActorId source, const ui64 cookie, 
+    const std::optional<TMessageSeqNo>& seqNo, NTabletFlatExecutor::TTransactionContext& txc) {
     NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("method", "TTxController::StartProposeOnExecute")("tx_info", txInfo.DebugString());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "start");
     std::shared_ptr<TTxController::ITransactionOperator> txOperator(TTxController::ITransactionOperator::TFactory::Construct(txInfo.TxKind,
-        TTxController::TTxInfo(txInfo.TxKind, txInfo.TxId, source, cookie)));
+        TTxController::TTxInfo(txInfo.TxKind, txInfo.TxId, source, cookie, seqNo)));
     AFL_VERIFY(!!txOperator);
     if (!txOperator->Parse(Owner, txBody)) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse txOperator");
@@ -295,14 +299,14 @@ std::shared_ptr<TTxController::ITransactionOperator> TTxController::StartPropose
 
     auto txInfoPtr = GetTxInfo(txInfo.TxId);
     if (!!txInfoPtr) {
-        if (!txOperator->AllowTxDups() && (txInfoPtr->Source != source || txInfoPtr->Cookie != cookie)) {
+        if (!txOperator->AllowUpdateMessage(*txInfoPtr)) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "incorrect duplication");
             TTxController::TProposeResult proposeResult(NKikimrTxColumnShard::EResultStatus::ERROR, TStringBuilder() << "Another commit TxId# " << txInfo.TxId << " has already been proposed");
             txOperator->SetProposeStartInfo(proposeResult);
             return txOperator;
         } else {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "update duplication data");
-            return UpdateTxSourceInfo(txInfo.GetTxId(), source, cookie, txc);
+            return UpdateTxSourceInfo(txOperator->GetTxInfo(), txc);
         }
     } else {
         if (txOperator->StartProposeOnExecute(Owner, txc)) {

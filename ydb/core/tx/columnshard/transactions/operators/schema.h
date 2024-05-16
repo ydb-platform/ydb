@@ -1,13 +1,13 @@
 #pragma once
 
-#include "ss_operation.h"
+#include "propose_tx.h"
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 
 namespace NKikimr::NColumnShard {
 
-    class TSchemaTransactionOperator : public ISSTransactionOperator {
+    class TSchemaTransactionOperator : public IProposeTxOperator {
     private:
-        using TBase = ISSTransactionOperator;
+        using TBase = IProposeTxOperator;
 
         using TProposeResult = TTxController::TProposeResult;
         static inline auto Registrator = TFactory::TRegistrator<TSchemaTransactionOperator>(NKikimrTxColumnShard::TX_KIND_SCHEMA);

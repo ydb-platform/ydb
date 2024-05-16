@@ -5,7 +5,7 @@
 
 namespace NKikimr::NColumnShard {
 
-bool TBackupTransactionOperator::Parse(TColumnShard& owner, const TString& data) {
+bool TBackupTransactionOperator::DoParse(TColumnShard& owner, const TString& data) {
     NKikimrTxColumnShard::TBackupTxBody txBody;
     if (!txBody.ParseFromString(data)) {
         return false;
@@ -29,7 +29,7 @@ bool TBackupTransactionOperator::Parse(TColumnShard& owner, const TString& data)
         return false;
     }
     NArrow::NSerialization::TSerializerContainer serializer(std::make_shared<NArrow::NSerialization::TNativeSerializer>());
-    ExportTask = std::make_shared<NOlap::NExport::TExportTask>(id.DetachResult(), selector.DetachResult(), storeInitializer.DetachResult(), serializer);
+    ExportTask = std::make_shared<NOlap::NExport::TExportTask>(id.DetachResult(), selector.DetachResult(), storeInitializer.DetachResult(), serializer, GetTxId());
     NOlap::NBackground::TTask task(::ToString(ExportTask->GetIdentifier().GetPathId()), std::make_shared<NOlap::NBackground::TFakeStatusChannel>(), ExportTask);
     TxAddTask = owner.GetBackgroundSessionsManager()->TxAddTask(task);
     if (!TxAddTask) {
@@ -39,36 +39,23 @@ bool TBackupTransactionOperator::Parse(TColumnShard& owner, const TString& data)
     return true;
 }
 
-TBackupTransactionOperator::TProposeResult TBackupTransactionOperator::ExecuteOnPropose(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& txc) const {
+TBackupTransactionOperator::TProposeResult TBackupTransactionOperator::DoStartProposeOnExecute(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& txc) {
     AFL_VERIFY(!!TxAddTask);
     AFL_VERIFY(TxAddTask->Execute(txc, NActors::TActivationContext::AsActorContext()));
     return TProposeResult();
 }
 
-bool TBackupTransactionOperator::CompleteOnPropose(TColumnShard& /*owner*/, const TActorContext& ctx) const {
+void TBackupTransactionOperator::DoStartProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& ctx) {
     AFL_VERIFY(!!TxAddTask);
     TxAddTask->Complete(ctx);
+    TxAddTask.reset();
+}
+
+bool TBackupTransactionOperator::ExecuteOnProgress(TColumnShard& /*owner*/, const NOlap::TSnapshot& /*version*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) {
     return true;
 }
 
-bool TBackupTransactionOperator::ExecuteOnProgress(TColumnShard& owner, const NOlap::TSnapshot& /*version*/, NTabletFlatExecutor::TTransactionContext& txc) {
-    AFL_VERIFY(ExportTask);
-    if (!TxConfirm) {
-        auto control = ExportTask->BuildConfirmControl();
-        TxConfirm = owner.GetBackgroundSessionsManager()->TxApplyControl(control);
-    }
-    return TxConfirm->Execute(txc, NActors::TActivationContext::AsActorContext());
-}
-
-bool TBackupTransactionOperator::CompleteOnProgress(TColumnShard& owner, const TActorContext& ctx) {
-    AFL_VERIFY(ExportTask);
-    AFL_VERIFY(!!TxConfirm);
-    TxConfirm->Complete(ctx);
-
-    auto result = std::make_unique<TEvColumnShard::TEvProposeTransactionResult>(
-        owner.TabletID(), TxInfo.TxKind, GetTxId(), NKikimrTxColumnShard::SUCCESS);
-    result->Record.SetStep(TxInfo.PlanStep);
-    ctx.Send(TxInfo.Source, result.release(), 0, TxInfo.Cookie);
+bool TBackupTransactionOperator::CompleteOnProgress(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) {
     return true;
 }
 

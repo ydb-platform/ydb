@@ -1,27 +1,29 @@
 #pragma once
 
+#include "ss_operation.h"
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 
 namespace NKikimr::NColumnShard {
 
-    class TLongTxTransactionOperator : public TTxController::ITransactionOperator {
-        using TBase = TTxController::ITransactionOperator;
+    class TLongTxTransactionOperator : public ISSTransactionOperator {
+        using TBase = ISSTransactionOperator;
         using TProposeResult = TTxController::TProposeResult;
         static inline auto Registrator = TFactory::TRegistrator<TLongTxTransactionOperator>(NKikimrTxColumnShard::TX_KIND_COMMIT);
+    private:
+        virtual TProposeResult DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override;
+        virtual void DoStartProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
+
+        }
+        virtual void DoFinishProposeOnExecute(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) override {
+        }
+        virtual void DoFinishProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
+        }
+        virtual bool DoIsAsync() const override {
+            return false;
+        }
+        virtual bool DoParse(TColumnShard& owner, const TString& data) override;
     public:
         using TBase::TBase;
-
-        bool Parse(TColumnShard& /*owner*/, const TString& data) override {
-            NKikimrTxColumnShard::TCommitTxBody commitTxBody;
-            if (!commitTxBody.ParseFromString(data)) {
-                return false;
-            }
-
-            for (auto& id : commitTxBody.GetWriteIds()) {
-                WriteIds.insert(TWriteId{id});
-            }
-            return true;
-        }
 
         void OnTabletInit(TColumnShard& owner) override {
            for (auto&& writeId : WriteIds) {
@@ -29,34 +31,6 @@ namespace NKikimr::NColumnShard {
                     owner.TabletID(), GetTxId(), (ui64)writeId);
                 owner.AddLongTxWrite(writeId, GetTxId());
             }
-        }
-
-        TProposeResult ExecuteOnPropose(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& /*txc*/) const override {
-            if (WriteIds.empty()) {
-                return TProposeResult(NKikimrTxColumnShard::EResultStatus::ERROR,
-                                        TStringBuilder() << "Commit TxId# " << GetTxId() << " has an empty list of write ids");
-            }
-
-            for (auto&& writeId : WriteIds) {
-                if (!owner.LongTxWrites.contains(writeId)) {
-                    return TProposeResult(NKikimrTxColumnShard::EResultStatus::ERROR,
-                        TStringBuilder() << "Commit TxId# " << GetTxId() << " references WriteId# " << (ui64)writeId << " that no longer exists");
-                }
-                auto& lw = owner.LongTxWrites[writeId];
-                if (lw.PreparedTxId != 0) {
-                    return TProposeResult(NKikimrTxColumnShard::EResultStatus::ERROR,
-                            TStringBuilder() << "Commit TxId# " << GetTxId() << " references WriteId# " << (ui64)writeId << " that is already locked by TxId# " << lw.PreparedTxId);
-                }
-            }
-
-            for (auto&& writeId : WriteIds) {
-                owner.AddLongTxWrite(writeId, GetTxId());
-            }
-            return TProposeResult();;
-        }
-
-        bool CompleteOnPropose(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) const override {
-            return true;
         }
 
         bool ExecuteOnProgress(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override {

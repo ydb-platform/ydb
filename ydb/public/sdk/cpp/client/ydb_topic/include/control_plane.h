@@ -12,7 +12,6 @@
 
 #include <limits>
 
-
 namespace NYdb {
     class TProtoAccessor;
 
@@ -37,7 +36,6 @@ enum class EAutoscalingStrategy: ui32 {
     ScaleUp = 2,
     ScaleUpAndDown = 3,
 };
-
 
 class TConsumer {
 public:
@@ -100,7 +98,6 @@ private:
     ui64 BytesWrittenPerMinute_;
     ui64 BytesWrittenPerHour_;
     ui64 BytesWrittenPerDay_;
-
 };
 
 class TPartitionConsumerStats {
@@ -161,12 +158,13 @@ struct TAlterPartitioningSettings;
 struct TAlterTopicSettings;
 
 struct TAutoscalingSettings {
+friend struct TAutoscalingSettingsBuilder;
 public:
     TAutoscalingSettings()
         : Strategy_(EAutoscalingStrategy::Disabled)
-        , ThresholdTime_(TDuration::Seconds(300))
-        , ScaleDownThresholdPercent_(30)
-        , ScaleUpThresholdPercent_(90) {
+        , ThresholdTime_(TDuration::Seconds(0))
+        , ScaleDownThresholdPercent_(0)
+        , ScaleUpThresholdPercent_(0) {
     }
     TAutoscalingSettings(const Ydb::Topic::AutoscalingSettings& settings);
     TAutoscalingSettings(EAutoscalingStrategy strategy, TDuration thresholdTime, ui64 scaleUpThresholdPercent, ui64 scaleDownThresholdPercent)
@@ -204,16 +202,18 @@ struct TAlterAutoscalingSettings {
 
 class TPartitioningSettings {
     using TSelf = TPartitioningSettings;
+    friend struct TPartitioningSettingsBuilder;
 public:
-    TPartitioningSettings() : MinActivePartitions_(1), MaxActivePartitions_(1), PartitionCountLimit_(1), AutoscalingSettings_(){}
+    TPartitioningSettings() : MinActivePartitions_(0), MaxActivePartitions_(0), PartitionCountLimit_(0), AutoscalingSettings_(){}
     TPartitioningSettings(const Ydb::Topic::PartitioningSettings& settings);
-    TPartitioningSettings(ui64 minActivePartitions, ui64 partitionCountLimit, ui64 maxActivePartitions = 1, TAutoscalingSettings autoscalingSettings = {})
+    TPartitioningSettings(ui64 minActivePartitions, ui64 maxActivePartitions, TAutoscalingSettings autoscalingSettings = {})
         : MinActivePartitions_(minActivePartitions)
         , MaxActivePartitions_(maxActivePartitions)
-        , PartitionCountLimit_(partitionCountLimit) // savnik delete?
+        , PartitionCountLimit_(0)
         , AutoscalingSettings_(autoscalingSettings)
  {
     }
+
     ui64 GetMinActivePartitions() const;
     ui64 GetMaxActivePartitions() const;
     ui64 GetPartitionCountLimit() const;
@@ -221,7 +221,7 @@ public:
 private:
     ui64 MinActivePartitions_;
     ui64 MaxActivePartitions_;
-    ui64  PartitionCountLimit_;
+    ui64 PartitionCountLimit_;
     TAutoscalingSettings AutoscalingSettings_;
 };
 
@@ -229,12 +229,11 @@ struct TAlterTopicSettings;
 
 struct TAlterPartitioningSettings {
     using TSelf = TAlterPartitioningSettings;
-    public:
-        TAlterPartitioningSettings(TAlterTopicSettings& parent): Parent_(parent) {}
+public:
+    TAlterPartitioningSettings(TAlterTopicSettings& parent): Parent_(parent) {} //savnik: check tabs
 
     FLUENT_SETTING_OPTIONAL(ui64, MinActivePartitions);
     FLUENT_SETTING_OPTIONAL(ui64, MaxActivePartitions);
-    //FLUENT_SETTING_OPTIONAL(TAlterAutoscalingSettings, AutoscalingSettings);
 
     TAlterTopicSettings& EndAlterTopicPartitioningSettings() { return Parent_; };
 
@@ -350,7 +349,6 @@ private:
 struct TDescribeTopicResult : public TStatus {
     friend class NYdb::TProtoAccessor;
 
-
     TDescribeTopicResult(TStatus&& status, Ydb::Topic::DescribeTopicResult&& result);
 
     const TTopicDescription& GetTopicDescription() const;
@@ -362,7 +360,6 @@ private:
 // Result for describe consumer request.
 struct TDescribeConsumerResult : public TStatus {
     friend class NYdb::TProtoAccessor;
-
 
     TDescribeConsumerResult(TStatus&& status, Ydb::Topic::DescribeConsumerResult&& result);
 
@@ -413,7 +410,6 @@ public:
 private:
     TSettings& Parent_;
 };
-
 
 struct TAlterConsumerSettings;
 struct TAlterTopicSettings;
@@ -469,7 +465,6 @@ private:
     TSettings& Parent_;
 };
 
-
 struct TAlterConsumerSettings {
     using TSelf = TAlterConsumerSettings;
 
@@ -506,7 +501,7 @@ private:
     TAlterTopicSettings& Parent_;
 };
 
-
+struct TPartitioningSettingsBuilder;
 struct TCreateTopicSettings : public TOperationRequestSettings<TCreateTopicSettings> {
 
     using TSelf = TCreateTopicSettings;
@@ -527,7 +522,6 @@ struct TCreateTopicSettings : public TOperationRequestSettings<TCreateTopicSetti
     FLUENT_SETTING_VECTOR(TConsumerSettings<TCreateTopicSettings>, Consumers);
 
     FLUENT_SETTING(TAttributes, Attributes);
-
 
     TCreateTopicSettings& SetSupportedCodecs(TVector<ECodec>&& codecs) {
         SupportedCodecs_ = std::move(codecs);
@@ -564,23 +558,79 @@ struct TCreateTopicSettings : public TOperationRequestSettings<TCreateTopicSetti
         return *this;
     }
 
-    TPartitioningSettings& BeginConfigurePartitioning() {
-        PartitioningSettings_ = TPartitioningSettings {};
-        return PartitioningSettings_;
-    }
-
-    TCreateTopicSettings& PartitioningSettings(ui64 minActivePartitions, ui64 partitionCountLimit, ui64 maxActivePartitions = 0, TAutoscalingSettings autoscalingSettings = {}) {
-        PartitioningSettings_ = TPartitioningSettings(minActivePartitions, partitionCountLimit, maxActivePartitions, autoscalingSettings);
+    TCreateTopicSettings& PartitioningSettings(ui64 minActivePartitions, ui64 /*partitionCountLimit*/, ui64 maxActivePartitions = 0, TAutoscalingSettings autoscalingSettings = {}) {
+        PartitioningSettings_ = TPartitioningSettings(minActivePartitions, maxActivePartitions, autoscalingSettings);
         return *this;
     }
+
+    TPartitioningSettingsBuilder BeginConfigurePartitioningSettings();
+};
+
+struct TAutoscalingSettingsBuilder {
+    using TSelf = TAutoscalingSettingsBuilder;
+public:
+    TAutoscalingSettingsBuilder(TPartitioningSettingsBuilder& parent, TAutoscalingSettings& settings): Parent_(parent), Settings_(settings) {}
+
+    TSelf Strategy(EAutoscalingStrategy value) {
+        Settings_.Strategy_ = value;
+        return *this;
+    }
+
+    TSelf ThresholdTime(TDuration value) {
+        Settings_.ThresholdTime_ = value;
+        return *this;
+    }
+
+    TSelf ScaleDownThresholdPercent(ui32 value) {
+        Settings_.ScaleDownThresholdPercent_ = value;
+        return *this;
+    }
+
+    TSelf ScaleUpThresholdPercent(ui32 value) {
+        Settings_.ScaleUpThresholdPercent_ = value;
+        return *this;
+    }
+
+    TPartitioningSettingsBuilder& EndConfigureAutoscalingSettings() {
+        return Parent_;
+    }
+
+private:
+    TPartitioningSettingsBuilder& Parent_;
+    TAutoscalingSettings& Settings_;
+};
+
+struct TPartitioningSettingsBuilder {
+    using TSelf = TPartitioningSettingsBuilder;
+public:
+    TPartitioningSettingsBuilder(TCreateTopicSettings& parent): Parent_(parent) {}
+
+    TSelf MinActivePartitions(ui64 value) {
+        Parent_.PartitioningSettings_.MinActivePartitions_ = value;
+        return *this;
+    }
+
+    TSelf MaxActivePartitions(ui64 value) {
+        Parent_.PartitioningSettings_.MaxActivePartitions_ = value;
+        return *this;
+    }
+
+    TAutoscalingSettingsBuilder BeginConfigureAutoscalingSettings() {
+        return {*this, Parent_.PartitioningSettings_.AutoscalingSettings_};
+    }
+
+    TCreateTopicSettings& EndConfigurePartitioningSettings() {
+        return Parent_;
+    }
+
+private:
+    TCreateTopicSettings& Parent_;
 };
 
 struct TAlterTopicSettings : public TOperationRequestSettings<TAlterTopicSettings> {
 
     using TSelf = TAlterTopicSettings;
     using TAlterAttributes = TMap<TString, TString>;
-
-    // FLUENT_SETTING_OPTIONAL(TAlterPartitioningSettings, AlterPartitioningSettings);
 
     FLUENT_SETTING_OPTIONAL(TDuration, SetRetentionPeriod);
 
@@ -648,6 +698,10 @@ struct TAlterTopicSettings : public TOperationRequestSettings<TAlterTopicSetting
     TMaybe<TAlterPartitioningSettings> AlterPartitioningSettings_;
 };
 
+inline TPartitioningSettingsBuilder TCreateTopicSettings::BeginConfigurePartitioningSettings() {
+    return {*this};
+}
+
 
 // Settings for drop resource request.
 struct TDropTopicSettings : public TOperationRequestSettings<TDropTopicSettings> {
@@ -684,4 +738,4 @@ struct TDescribePartitionSettings: public TOperationRequestSettings<TDescribePar
 // Settings for commit offset request.
 struct TCommitOffsetSettings : public TOperationRequestSettings<TCommitOffsetSettings> {};
 
-}
+}  // namespace NYdb::NTopic

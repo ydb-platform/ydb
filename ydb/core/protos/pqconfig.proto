@@ -385,7 +385,7 @@ message TPQTabletConfig {
     }
     optional EMeteringMode MeteringMode = 34;
 
-    enum TPartitionStrategyType { // savnik тут не должно быть анспецифайд?
+    enum TPartitionStrategyType {
         // The autoscaling is disabled.
         DISABLED = 0;
         // The autoscaling algorithm will increase partitions count depending on the load characteristics.

@@ -740,7 +740,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         } else if (settings.has_autoscaling_settings()) {
             const auto& autoScalteSettings = settings.autoscaling_settings();
             if (autoScalteSettings.min_active_partitions() > 0) {
-                minParts = autoScalteSettings.min_active_partitions(); // savnik откуда раньше бралось? Адекватно сетить количество груп на основе этого поля?
+                minParts = autoScalteSettings.min_active_partitions();
             }
             if (AppData(ctx)->FeatureFlags.GetEnableTopicSplitMerge()) {
                 auto pqTabletConfigPartStrategy = pqTabletConfig->MutablePartitionStrategy();
@@ -761,7 +761,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                         pqTabletConfigPartStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED);
                         break;
                 }
-                if (auto code = ValidatePartitionStrategy(*pqTabletConfigPartStrategy, error); code) { //savnik
+                if (auto code = ValidatePartitionStrategy(*pqTabletConfigPartStrategy, error); code) {
                     return code->YdbCode;
                 }
             }
@@ -1077,9 +1077,9 @@ namespace NKikimr::NGRpcProxy::V1 {
         if (request.has_partitioning_settings()) { // savnik: check for filled in sdk
             const auto& settings = request.partitioning_settings();
             if (settings.min_active_partitions() > 0) {
-                minParts = settings.min_active_partitions(); //savnik
+                minParts = settings.min_active_partitions();
             }
-            if (AppData(ctx)->FeatureFlags.GetEnableTopicSplitMerge() && request.has_partitioning_settings()) {
+            if (AppData(ctx)->FeatureFlags.GetEnableTopicSplitMerge() && request.has_partitioning_settings()) { // savnik fill it if splitMerge feature disabled?
                 auto pqTabletConfigPartStrategy = pqTabletConfig->MutablePartitionStrategy();
                 auto autoscaleSettings = settings.autoscaling_settings();
                 pqTabletConfigPartStrategy->SetMinPartitionCount(minParts);
@@ -1098,7 +1098,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                         pqTabletConfigPartStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED);
                         break;
                 }
-                if (auto code = ValidatePartitionStrategy(*pqTabletConfigPartStrategy, error); code) { //savnik
+                if (auto code = ValidatePartitionStrategy(*pqTabletConfigPartStrategy, error); code) {
                     return *code;
                 }
             }
@@ -1276,7 +1276,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                         }
                     }
                 }
-                if (auto code = ValidatePartitionStrategy(*pqTabletConfigPartStrategy, error); code) { //savnik: check *
+                if (auto code = ValidatePartitionStrategy(*pqTabletConfigPartStrategy, error); code) {
                     return code->YdbCode;
                 }
             }

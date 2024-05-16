@@ -213,7 +213,7 @@ namespace {
             .StoreResult(&ScaleDownThresholdPercent_);
 
         if (withDefault) {
-            straregy.DefaultValue("disabled"); // savnik
+            straregy.DefaultValue("disabled");
             thresholdTime.DefaultValue(300);
             upThresholdPercent.DefaultValue(90);
             downThresholdPercent.DefaultValue(30);
@@ -305,8 +305,8 @@ namespace {
         NYdb::NTopic::TTopicClient topicClient(driver);
 
         auto settings = NYdb::NTopic::TCreateTopicSettings();
-
-        auto autoscaleSettings = NTopic::TAutoscalingSettings(*GetAutoscalingStrategy(), TDuration::Seconds(*GetScaleThresholdTime()), *GetScaleUpThresholdPercent(), *GetScaleDownThresholdPercent()); // savnik ensure not empty
+        Y_ABORT_UNLESS(GetAutoscalingStrategy() || GetScaleThresholdTime() || GetScaleUpThresholdPercent() || GetScaleDownThresholdPercent(), "Autoscaling parameters for TCommandTopicCreate can not be empty");
+        auto autoscaleSettings = NTopic::TAutoscalingSettings(*GetAutoscalingStrategy(), TDuration::Seconds(*GetScaleThresholdTime()), *GetScaleUpThresholdPercent(), *GetScaleDownThresholdPercent());
         settings.PartitionWriteBurstBytes(PartitionWriteSpeedKbps_ * 1_KB);
         settings.PartitionWriteSpeedBytesPerSecond(PartitionWriteSpeedKbps_ * 1_KB);
 
@@ -392,7 +392,7 @@ namespace {
         if (GetScaleUpThresholdPercent().Defined() && *GetScaleUpThresholdPercent() != describeResult.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetScaleUpThresholdPercent()) {
             autoscalingSettings.ScaleUpThresholdPercent(*GetScaleUpThresholdPercent());
         }
-        //savnik: проверить, что ничего страшного, что может быть пустой объект, где все поля не заполнены
+        //savnik: check empty obj
 
         auto codecs = GetCodecs();
         if (!codecs.empty()) {

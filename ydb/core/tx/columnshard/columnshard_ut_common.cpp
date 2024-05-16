@@ -2,6 +2,7 @@
 
 #include "common/tests/shard_reader.h"
 #include "engines/reader/sys_view/chunks/chunks.h"
+#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_resolver.h>
@@ -416,10 +417,25 @@ namespace NKikimr::NColumnShard {
         return indexInfo;
     }
 
+    void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const NOlap::TSnapshot& snapshot, bool succeed) {
+
+        auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
+        while (controller && !controller->IsActiveTablet(TTestTxConfig::TxTablet0)) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+
+        using namespace NTxUT;
+        bool ok = ProposeSchemaTx(runtime, sender, txBody, snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(ok, succeed);
+        if (succeed) {
+            PlanSchemaTx(runtime, sender, snapshot);
+        }
+    }
+
     void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId,
                  const TestTableDescription& table, TString codec) {
         using namespace NTxUT;
-        NOlap::TSnapshot snap(10, 10);
+        NOlap::TSnapshot snapshot(10, 10);
         TString txBody;
         auto specials = TTestSchema::TTableSpecials().WithCodec(codec);
         if (table.InStore) {
@@ -427,11 +443,9 @@ namespace NKikimr::NColumnShard {
         } else {
             txBody = TTestSchema::CreateStandaloneTableTxBody(pathId, table.Schema, table.Pk, specials);
         }
-        bool ok = ProposeSchemaTx(runtime, sender, txBody, snap);
-        UNIT_ASSERT(ok);
-
-        PlanSchemaTx(runtime, sender, snap);
+        SetupSchema(runtime, sender, txBody, snapshot, true);
     }
+
 
     void PrepareTablet(TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema, const ui32 keySize) {
         using namespace NTxUT;
@@ -450,6 +464,18 @@ namespace NKikimr::NColumnShard {
         }
         TActorId sender = runtime.AllocateEdgeActor();
         SetupSchema(runtime, sender, tableId, tableDescription);
+    }
+
+    void PrepareTablet(TTestBasicRuntime& runtime, const TString& schemaTxBody, bool succeed) {
+        using namespace NTxUT;
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        runtime.DispatchEvents(options);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        SetupSchema(runtime, sender, schemaTxBody, NOlap::TSnapshot(1000, 100), succeed);
     }
 
     std::shared_ptr<arrow::RecordBatch> ReadAllAsBatch(TTestBasicRuntime& runtime, const ui64 tableId, const NOlap::TSnapshot& snapshot, const std::vector<NArrow::NTest::TTestColumn>& schema) {

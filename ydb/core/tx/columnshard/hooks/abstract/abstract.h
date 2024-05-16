@@ -166,7 +166,7 @@ public:
         return def;
     }
     virtual EOptimizerCompactionWeightControl GetCompactionControl() const {
-        return EOptimizerCompactionWeightControl::Force;
+        return EOptimizerCompactionWeightControl::Default;
     }
     virtual TDuration GetTTLDefaultWaitingDuration(const TDuration defaultValue) const {
         return defaultValue;
@@ -197,6 +197,14 @@ public:
     virtual NMetadata::NFetcher::ISnapshot::TPtr GetFallbackTiersSnapshot() const {
         static std::shared_ptr<NColumnShard::NTiers::TConfigsSnapshot> result = std::make_shared<NColumnShard::NTiers::TConfigsSnapshot>(TInstant::Now());
         return result;
+    }
+
+    virtual void OnSwitchToWork(const ui64 tabletId) {
+        Y_UNUSED(tabletId);
+    }
+
+    virtual void OnCleanupActors(const ui64 tabletId) {
+        Y_UNUSED(tabletId);
     }
 };
 
@@ -233,6 +241,12 @@ public:
 
     static ICSController::TPtr GetColumnShardController() {
         return Singleton<TControllers>()->CSController;
+    }
+
+    template <class T>
+    static T* GetControllerAs() {
+        auto controller = Singleton<TControllers>()->CSController;
+        return dynamic_cast<T*>(controller.get());
     }
 };
 

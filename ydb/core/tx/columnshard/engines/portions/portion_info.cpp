@@ -259,7 +259,8 @@ ui64 TPortionInfo::GetTxVolume() const {
 void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const {
     proto.SetPathId(PathId);
     proto.SetPortionId(Portion);
-    *proto.MutableMinSnapshot() = MinSnapshotDeprecated.SerializeToProto();
+    proto.SetSchemaVersion(GetSchemaVersionVerified());
+    *proto.MutableMinSnapshotDeprecated() = MinSnapshotDeprecated.SerializeToProto();
     if (!RemoveSnapshot.IsZero()) {
         *proto.MutableRemoveSnapshot() = RemoveSnapshot.SerializeToProto();
     }
@@ -281,6 +282,7 @@ void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortion
 TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info) {
     PathId = proto.GetPathId();
     Portion = proto.GetPortionId();
+    SchemaVersion = proto.GetSchemaVersion();
     for (auto&& i : proto.GetBlobIds()) {
         auto blobId = TUnifiedBlobId::BuildFromProto(i);
         if (!blobId) {
@@ -289,7 +291,7 @@ TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDat
         BlobIds.emplace_back(blobId.DetachResult());
     }
     {
-        auto parse = MinSnapshotDeprecated.DeserializeFromProto(proto.GetMinSnapshot());
+        auto parse = MinSnapshotDeprecated.DeserializeFromProto(proto.GetMinSnapshotDeprecated());
         if (!parse) {
             return parse;
         }

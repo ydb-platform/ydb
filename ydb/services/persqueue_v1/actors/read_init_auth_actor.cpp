@@ -204,7 +204,7 @@ bool TReadInitAndAuthActor::CheckTopicACL(
         //TODO : add here checking of client-service-type password. Provide it via API-call.
         if (!NPQ::HasConsumer(pqDescr.GetPQTabletConfig(), ClientId)) {
             CloseSession(
-                    TStringBuilder() << "no read rule provided for consumer '" << ClientPath << "' in topic '" << topic << "' in current cluster '" << LocalCluster,
+                    TStringBuilder() << "no read rule provided for consumer '" << ClientPath << "' in topic '" << topic << "' in current cluster '" << LocalCluster << "'",
                     PersQueue::ErrorCode::BAD_REQUEST, ctx
             );
             return false;

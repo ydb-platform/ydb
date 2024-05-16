@@ -13,4 +13,6 @@ NActors::IActor* CreateSaveStatisticsQuery(const TPathId& pathId, ui64 statType,
 NActors::IActor* CreateLoadStatisticsQuery(const TPathId& pathId, ui64 statType,
     const TString& columnName, ui64 cookie);
 
+NActors::IActor* CreateDeleteStatisticsQuery(const TPathId& pathId);
+
 };

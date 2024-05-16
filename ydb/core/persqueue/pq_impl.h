@@ -494,6 +494,10 @@ private:
 
     void BeginDeleteTx(const TDistributedTransaction& tx);
     void BeginDeletePartitions(TTxWriteInfo& writeInfo);
+
+    bool CheckTxWriteOperation(const NKikimrPQ::TPartitionOperation& operation,
+                               ui64 writeId) const;
+    bool CheckTxWriteOperations(const NKikimrPQ::TDataTransaction& txBody) const;
 };
 
 

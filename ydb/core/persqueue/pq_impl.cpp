@@ -3115,6 +3115,38 @@ void TPersQueue::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TAc
 
 }
 
+bool TPersQueue::CheckTxWriteOperation(const NKikimrPQ::TPartitionOperation& operation,
+                                       ui64 writeId) const
+{
+    TPartitionId partitionId(operation.GetPartitionId(),
+                             writeId,
+                             operation.GetSupportivePartition());
+    return Partitions.contains(partitionId);
+}
+
+bool TPersQueue::CheckTxWriteOperations(const NKikimrPQ::TDataTransaction& txBody) const
+{
+    if (!txBody.HasWriteId()) {
+        return true;
+    }
+
+    ui64 writeId = txBody.GetWriteId();
+
+    for (auto& operation : txBody.GetOperations()) {
+        auto isWrite = [](const NKikimrPQ::TPartitionOperation& o) {
+            return !o.HasBegin();
+        };
+
+        if (isWrite(operation)) {
+            if (!CheckTxWriteOperation(operation, writeId)) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
 void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransaction> ev,
                                        const TActorContext& ctx)
 {
@@ -3122,23 +3154,6 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
     Y_ABORT_UNLESS(event.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData);
     Y_ABORT_UNLESS(event.HasData());
     const NKikimrPQ::TDataTransaction& txBody = event.GetData();
-
-    for (auto& operation : txBody.GetOperations()) {
-        Y_ABORT_UNLESS(!operation.HasPath() || (operation.GetPath() == TopicPath));
-
-        bool isWriteOperation = !operation.HasBegin();
-
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
-                    "Tablet " << TabletID() <<
-                    " tx=" << event.GetTxId() <<
-                    ", write_id=" << txBody.GetWriteId() <<
-                    ", path=" << operation.GetPath() <<
-                    ", partition=" << operation.GetPartitionId() <<
-                    ", consumer=" << operation.GetConsumer() <<
-                    ", begin=" << operation.GetBegin() <<
-                    ", end=" << operation.GetEnd() <<
-                    ", is_write=" << isWriteOperation);
-    }
 
     if (TabletState != NKikimrPQ::ENormal) {
         SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
@@ -3152,6 +3167,13 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
     //
 
     if (txBody.OperationsSize() <= 0) {
+        SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
+                                    event.GetTxId(),
+                                    ctx);
+        return;
+    }
+
+    if (!CheckTxWriteOperations(txBody)) {
         SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
                                     event.GetTxId(),
                                     ctx);

@@ -78,7 +78,8 @@ void TTopicPartitionOperations::AddOperation(const TString& topic, ui32 partitio
     Operations_[consumer].AddOperation(consumer, range);
 }
 
-void TTopicPartitionOperations::AddOperation(const TString& topic, ui32 partition)
+void TTopicPartitionOperations::AddOperation(const TString& topic, ui32 partition,
+                                             TMaybe<ui32> supportivePartition)
 {
     Y_ABORT_UNLESS(Topic_.Empty() || Topic_ == topic);
     Y_ABORT_UNLESS(Partition_.Empty() || Partition_ == partition);
@@ -87,6 +88,8 @@ void TTopicPartitionOperations::AddOperation(const TString& topic, ui32 partitio
         Topic_ = topic;
         Partition_ = partition;
     }
+
+    SupportivePartition_ = supportivePartition;
 
     HasWriteOperations_ = true;
 }
@@ -112,6 +115,9 @@ void TTopicPartitionOperations::BuildTopicTxs(THashMap<ui64, NKikimrPQ::TDataTra
         NKikimrPQ::TPartitionOperation* o = tx.MutableOperations()->Add();
         o->SetPartitionId(*Partition_);
         o->SetPath(*Topic_);
+        if (SupportivePartition_.Defined()) {
+            o->SetSupportivePartition(*SupportivePartition_);
+        }
     }
 }
 
@@ -125,6 +131,10 @@ void TTopicPartitionOperations::Merge(const TTopicPartitionOperations& rhs)
         Topic_ = rhs.Topic_;
         Partition_ = rhs.Partition_;
         TabletId_ = rhs.TabletId_;
+    }
+
+    if (!SupportivePartition_.Defined() || (*SupportivePartition_ != Max<ui32>())) {
+        SupportivePartition_ = rhs.SupportivePartition_;
     }
 
     for (auto& [key, value] : rhs.Operations_) {
@@ -240,10 +250,11 @@ void TTopicOperations::AddOperation(const TString& topic, ui32 partition,
     HasReadOperations_ = true;
 }
 
-void TTopicOperations::AddOperation(const TString& topic, ui32 partition)
+void TTopicOperations::AddOperation(const TString& topic, ui32 partition,
+                                    TMaybe<ui32> supportivePartition)
 {
     TTopicPartition key{topic, partition};
-    Operations_[key].AddOperation(topic, partition);
+    Operations_[key].AddOperation(topic, partition, supportivePartition);
     HasWriteOperations_ = true;
 }
 

@@ -49,7 +49,8 @@ public:
     void AddOperation(const TString& topic, ui32 partition,
                       const TString& consumer,
                       const Ydb::Topic::OffsetsRange& range);
-    void AddOperation(const TString& topic, ui32 partition);
+    void AddOperation(const TString& topic, ui32 partition,
+                      TMaybe<ui32> supportivePartition);
 
     void BuildTopicTxs(THashMap<ui64, NKikimrPQ::TDataTransaction> &txs);
 
@@ -67,6 +68,7 @@ private:
     THashMap<TString, TConsumerOperations> Operations_;
     bool HasWriteOperations_ = false;
     TMaybe<ui64> TabletId_;
+    TMaybe<ui32> SupportivePartition_;
 };
 
 struct TTopicPartition {
@@ -98,7 +100,8 @@ public:
     void AddOperation(const TString& topic, ui32 partition,
                       const TString& consumer,
                       const Ydb::Topic::OffsetsRange& range);
-    void AddOperation(const TString& topic, ui32 partition);
+    void AddOperation(const TString& topic, ui32 partition,
+                      TMaybe<ui32> supportivePartition);
 
     void FillSchemeCacheNavigate(NSchemeCache::TSchemeCacheNavigate& navigate,
                                  TMaybe<TString> consumer);

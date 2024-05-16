@@ -36,6 +36,7 @@ namespace NKikimr::NPQ {
 #define ERROR(message) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, LOG_PREFIX << message);
 
 static const ui64 WRITE_BLOCK_SIZE = 4_KB;
+static const ui32 INVALID_PARTITION_ID = Max<ui32>();
 
 TString TEvPartitionWriter::TEvInitResult::TSuccess::ToString() const {
     auto out = TStringBuilder() << "Success {"
@@ -225,7 +226,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     /// GetWriteId
 
     void GetWriteId(const TActorContext& ctx) {
-        auto ev = MakeWriteIdRequest(Nothing());
+        auto ev = MakeWriteIdRequest();
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
         Become(&TThis::StateGetWriteId);
     }
@@ -262,7 +263,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         GetOwnership();
     }
 
-    THolder<NKqp::TEvKqp::TEvQueryRequest> MakeWriteIdRequest(TMaybe<ui32> supportivePartition) {
+    THolder<NKqp::TEvKqp::TEvQueryRequest> MakeWriteIdRequest(TMaybe<ui32> supportivePartition = Nothing()) {
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
 
         if (Opts.Token) {
@@ -704,11 +705,25 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
             if (HasWriteId() && FirstWriteResponse) {
                 auto& reply = response.GetCmdWriteResult(0);
+                ui64 seqNo = reply.GetSeqNo();
+                ui64 minSeqNo = reply.GetMinSeqNo();
+                ui32 supportivePartition = reply.GetSupportivePartition();
+
+                if (seqNo < minSeqNo) {
+                    supportivePartition = INVALID_PARTITION_ID;
+                }
+
                 DEBUG("Update tx in KQP." <<
                       " Topic: " << Opts.TopicPath <<
                       ", Partition: " << PartitionId <<
-                      ", SupportivePartition: " << reply.GetSupportivePartition() <<
-                      ", MinSeqNo: " << reply.GetMinSeqNo());
+                      ", SupportivePartition: " << supportivePartition <<
+                      ", MinSeqNo: " << minSeqNo <<
+                      ", SeqNo: " << seqNo);
+
+                const TActorContext& ctx = ActorContext();
+                auto ev = MakeWriteIdRequest(supportivePartition);
+                ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
+
                 FirstWriteResponse = false;
             }
 
@@ -884,7 +899,6 @@ private:
 
     ui64 WriteId = INVALID_WRITE_ID;
     bool FirstWriteResponse = true;
-    //ui64 MinSeqNo = 0;
 
     using IRetryPolicy = IRetryPolicy<Ydb::StatusIds::StatusCode>;
     using IRetryState = IRetryPolicy::IRetryState;

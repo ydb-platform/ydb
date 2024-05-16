@@ -134,6 +134,7 @@ runs:
     - name: build_stats
       shell: bash
       continue-on-error: true
+      if: always()
       run: |
         set -x
         export build_preset="${{ inputs.build_preset }}" 

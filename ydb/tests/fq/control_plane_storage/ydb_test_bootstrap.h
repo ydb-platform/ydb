@@ -127,7 +127,7 @@ struct TTestBootstrap {
             }
 
             ythrow yexception() << "Table with name " << name << " does not exist";
-        }, TRetryOptions(1000, TDuration::MilliSeconds(100), TDuration::MilliSeconds(50)), true);
+        }, TRetryOptions(2000, TDuration::MilliSeconds(100), TDuration::MilliSeconds(50)), true);
     }
 
     TMaybe<NYdb::TResultSet> GetTable(const TString& tableName)

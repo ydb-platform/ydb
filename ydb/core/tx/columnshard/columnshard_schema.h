@@ -579,6 +579,12 @@ struct Schema : NIceDb::Schema {
             NIceDb::TUpdate<TxInfo::Cookie>(cookie));
     }
 
+    static void UpdateTxInfoSource(NIceDb::TNiceDb& db, ui64 txId, const TActorId& source, ui64 cookie) {
+        db.Table<TxInfo>().Key(txId).Update(
+            NIceDb::TUpdate<TxInfo::Source>(source),
+            NIceDb::TUpdate<TxInfo::Cookie>(cookie));
+    }
+
     static void UpdateTxInfoPlanStep(NIceDb::TNiceDb& db, ui64 txId, ui64 planStep) {
         db.Table<TxInfo>().Key(txId).Update(
             NIceDb::TUpdate<TxInfo::PlanStep>(planStep));

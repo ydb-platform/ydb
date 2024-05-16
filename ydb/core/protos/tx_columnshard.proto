@@ -131,6 +131,7 @@ enum ETransactionKind {
     TX_KIND_DATA = 4;
     TX_KIND_COMMIT_WRITE = 5;
     TX_KIND_BACKUP = 6;
+    TX_KIND_SHARING = 7;
 }
 
 enum ETransactionFlag {

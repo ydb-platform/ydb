@@ -829,7 +829,8 @@ public:
     }
 
     bool TryApplyCallbackToEventImpl(typename TParent::TEvent& event,
-                                     TDeferredActions<UseMigrationProtocol>& deferred);
+                                     TDeferredActions<UseMigrationProtocol>& deferred,
+                                     TCallbackContextPtr<UseMigrationProtocol>& cbContext);
     bool HasDataEventCallback() const;
     void ApplyCallbackToEventImpl(TADataReceivedEvent<UseMigrationProtocol>& event,
                                   TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>&& eventsInfo,
@@ -865,13 +866,19 @@ public:
 
     void ClearAllEvents();
 
+    void SetCallbackContext(TCallbackContextPtr<UseMigrationProtocol>& ctx)  {
+        CbContext = ctx;
+    }
+
 private:
     struct THandlersVisitor : public TParent::TBaseHandlersVisitor {
         THandlersVisitor(const TAReadSessionSettings<UseMigrationProtocol>& settings,
                          typename TParent::TEvent& event,
-                         TDeferredActions<UseMigrationProtocol>& deferred)
+                         TDeferredActions<UseMigrationProtocol>& deferred,
+                         TCallbackContextPtr<UseMigrationProtocol>& cbContext)
             : TParent::TBaseHandlersVisitor(settings, event)
-            , Deferred(deferred) {
+            , Deferred(deferred)
+            , CbContext(cbContext) {
         }
 
 #define DECLARE_HANDLER(type, handler, answer)                      \
@@ -942,14 +949,22 @@ private:
         template<bool E = !UseMigrationProtocol>
         constexpr std::enable_if_t<E, bool>
         operator()(typename TAReadSessionEvent<false>::TEndPartitionSessionEvent&) {
-            if (this->template PushHandler<typename TAReadSessionEvent<false>::TEndPartitionSessionEvent>(
+            Cerr << ">>>>> operator() TEndPartitionSessionEvent " << Endl << Flush;
+
+            this->template PushCommonHandler<>(
                 std::move(TParent::TBaseHandlersVisitor::Event),
-                [this](){
-                    return this->Settings.EventHandlers_.EndPartitionSessionHandler_;
-                }(),
-                this->Settings.EventHandlers_.CommonHandler_)) {
-                return false;
-            }
+                [this](TReadSessionEvent::TEvent& event) {
+                auto e = std::get<TReadSessionEvent::TEndPartitionSessionEvent>(event);
+                if (this->Settings.EventHandlers_.EndPartitionSessionHandler_) {
+                    this->Settings.EventHandlers_.EndPartitionSessionHandler_(e);
+                } else if (this->Settings.EventHandlers_.CommonHandler_) {
+                    this->Settings.EventHandlers_.CommonHandler_(event);
+                }
+                if (auto session = CbContext->LockShared()) {
+                    Cerr << ">>>>> operator() TEndPartitionSessionEvent AFTER" << Endl << Flush;
+                    session->SetReadingFinished(e.GetPartitionSession()->GetPartitionSessionId(), e.GetChildPartitionIds());
+                }
+            });
             return false;
         }
 
@@ -962,6 +977,7 @@ private:
         }
 
         TDeferredActions<UseMigrationProtocol>& Deferred;
+        TCallbackContextPtr<UseMigrationProtocol> CbContext;
     };
 
     TADataReceivedEvent<UseMigrationProtocol>
@@ -970,12 +986,13 @@ private:
                          TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator); // Assumes that we're under lock.
 
     bool ApplyHandler(TReadSessionEventInfo<UseMigrationProtocol>& eventInfo, TDeferredActions<UseMigrationProtocol>& deferred) {
-        THandlersVisitor visitor(this->Settings, eventInfo.GetEvent(), deferred);
+        THandlersVisitor visitor(this->Settings, eventInfo.GetEvent(), deferred, CbContext);
         return visitor.Visit();
     }
 
 private:
     bool HasEventCallbacks;
+    TCallbackContextPtr<UseMigrationProtocol> CbContext;
 };
 
 }  // namespace NYdb::NTopic
@@ -1103,6 +1120,12 @@ public:
     std::vector<ui64> GetParentPartitionSessions(ui32 partitionId, ui64 partitionSessionId);
     bool AllParentSessionsHasBeenRead(ui32 partitionId, ui64 partitionSessionId);
     void SetReadingFinished(ui64 partitionSessionId, const std::vector<ui32>& childIds);
+
+    void SetSelfContext(TPtr ptr) {
+        Cerr << ">>>>> SetSelfContext" << Endl << Flush;
+        TEnableSelfContext<TSingleClusterReadSessionImpl<UseMigrationProtocol>>::SetSelfContext(std::move(ptr));
+        EventsQueue->SetCallbackContext(TEnableSelfContext<TSingleClusterReadSessionImpl<UseMigrationProtocol>>::SelfContext);
+    }
 
 private:
     void BreakConnectionAndReconnectImpl(TPlainStatus&& status, TDeferredActions<UseMigrationProtocol>& deferred);

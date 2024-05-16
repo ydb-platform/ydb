@@ -133,9 +133,11 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::SignalReadyEvents(TInt
                                                                             TDeferredActions<UseMigrationProtocol>& deferred)
 {
     if constexpr (!UseMigrationProtocol) {
-        if (!CbContext->TryGet()->AllParentSessionsHasBeenRead(stream->GetPartitionId(), stream->GetPartitionSessionId())) {
-            Cerr << ">>>>> SignalReadyEvents NOT AllParentSessionsHasBeenRead "  << stream->GetPartitionId() << Endl << Flush;
-            return;
+        if (auto session = CbContext->LockShared()) {
+            if (!session->AllParentSessionsHasBeenRead(stream->GetPartitionId(), stream->GetPartitionSessionId())) {
+                Cerr << ">>>>> SignalReadyEvents NOT AllParentSessionsHasBeenRead "  << stream->GetPartitionId() << Endl << Flush;
+                return;
+            }
         }
     }
 
@@ -176,13 +178,14 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::SignalReadyEvents(TInt
                 moveToReadyQueue(std::move(front));
             }
         } else {
-            if (queue.TryApplyCallbackToEventImpl(front.GetEvent(), deferred)) {
+            if (queue.TryApplyCallbackToEventImpl(front.GetEvent(), deferred, CbContext)) {
                 if constexpr (!UseMigrationProtocol) {
                     if (std::holds_alternative<TReadSessionEvent::TEndPartitionSessionEvent>(front.GetEvent())) {
                         Cerr << ">>>>> SignalReadyEvents TEndPartitionSessionEvent " << Endl << Flush;
-                        auto session = CbContext->TryGet();
                         auto& e = std::get<TReadSessionEvent::TEndPartitionSessionEvent>(front.GetEvent());
-                        session->SetReadingFinished(stream->GetPartitionSessionId(), e.GetChildPartitionIds());
+                        if (auto session = CbContext->LockShared()) {
+                            session->SetReadingFinished(stream->GetPartitionSessionId(), e.GetChildPartitionIds());
+                        }
                     }
                 }
                 NotReady.pop_front();
@@ -2165,9 +2168,10 @@ TReadSessionEventsQueue<UseMigrationProtocol>::GetEventImpl(size_t& maxByteSize,
                 Cerr << ">>>>> GetEventImpl !!!!" << Endl << Flush;
                 if (std::holds_alternative<TReadSessionEvent::TEndPartitionSessionEvent>(*event)) {
                     Cerr << ">>>>> GetEventImpl TEndPartitionSessionEvent" << Endl << Flush;
-                    auto session = frontCbContext->TryGet();
                     auto& e = std::get<TReadSessionEvent::TEndPartitionSessionEvent>(*event);
-                    session->SetReadingFinished(partitionStream->GetPartitionSessionId(), e.GetChildPartitionIds());
+                    if (auto session = frontCbContext->LockShared()) {
+                        session->SetReadingFinished(partitionStream->GetPartitionSessionId(), e.GetChildPartitionIds());
+                    }
                 }
             }
         }
@@ -2280,9 +2284,10 @@ void TReadSessionEventsQueue<UseMigrationProtocol>::SignalReadyEventsImpl(
 
 template <bool UseMigrationProtocol>
 bool TReadSessionEventsQueue<UseMigrationProtocol>::TryApplyCallbackToEventImpl(typename TParent::TEvent& event,
-                                                                                TDeferredActions<UseMigrationProtocol>& deferred)
+                                                                                TDeferredActions<UseMigrationProtocol>& deferred,
+                                                                                TCallbackContextPtr<UseMigrationProtocol>& cbContext)
 {
-    THandlersVisitor visitor(TParent::Settings, event, deferred);
+    THandlersVisitor visitor(TParent::Settings, event, deferred, cbContext);
     return visitor.Visit();
 }
 
@@ -2324,6 +2329,8 @@ void TReadSessionEventsQueue<UseMigrationProtocol>::ApplyCallbackToEventImpl(TAD
                        data = std::move(data),
                        eventsInfo = std::move(eventsInfo)]() mutable {
             typename TParent::TEvent event(std::move(data));
+
+            Cerr << ">>>>> DeferStartExecutorTask in ApplyCallbackToEventImpl" << Endl << Flush;
 
             func(event);
             eventsInfo.OnUserRetrievedEvent();

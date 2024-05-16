@@ -41,9 +41,8 @@ bool IsSuperUser(const NACLib::TUserToken* userToken) {
 }
 
 TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table, const NKikimrSchemeOp::TTableDescription& alter,
-                                      const bool shadowDataAllowed,
-                                      TString& errStr, NKikimrScheme::EStatus& status, TOperationContext& context,
-                                      const THashSet<TString>& localSequences) {
+                                      const bool shadowDataAllowed, const THashSet<TString>& localSequences,
+                                      TString& errStr, NKikimrScheme::EStatus& status, TOperationContext& context) {
     const TAppData* appData = AppData(context.Ctx);
 
     if (!path.IsCommonSensePath()) {
@@ -135,7 +134,9 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     const TSchemeLimits& limits = subDomain.GetSchemeLimits();
 
 
-    TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(table, copyAlter, *appData->TypeRegistry, limits, subDomain, context.SS->EnableTablePgTypes, errStr, localSequences);
+    TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(
+        table, copyAlter, *appData->TypeRegistry, limits, subDomain,
+        context.SS->EnableTablePgTypes, errStr, localSequences);
     if (!alterData) {
         status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;
@@ -413,7 +414,6 @@ public:
 
 class TAlterTable: public TSubOperation {
     bool AllowShadowData = false;
-    THashSet<TString> LocalSequences;
 
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
@@ -462,10 +462,6 @@ public:
 
     bool IsShadowDataAllowed() const {
         return AllowShadowData || AppData()->AllowShadowDataInSchemeShardForTests;
-    }
-
-    void SetLocalSequences(const THashSet<TString>& localSequences) {
-        LocalSequences = localSequences;
     }
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
@@ -525,6 +521,40 @@ public:
             }
         }
 
+        THashSet<TString> localSequences;
+
+        std::optional<TString> defaultFromSequence;
+        for (const auto& column: alter.GetColumns()) {
+            if (column.HasDefaultFromSequence()) {
+                defaultFromSequence = column.GetDefaultFromSequence();
+            }
+        }
+
+        if (defaultFromSequence.has_value()) {
+            Y_ABORT_UNLESS(alter.GetColumns().size() == 1);
+
+            const auto sequencePath = TPath::Resolve(*defaultFromSequence, context.SS);
+            {
+                const auto checks = sequencePath.Check();
+                checks
+                    .NotEmpty()
+                    .NotUnderDomainUpgrade()
+                    .IsAtLocalSchemeShard()
+                    .IsResolved()
+                    .NotDeleted()
+                    .IsSequence()
+                    .NotUnderDeleting()
+                    .NotUnderOperation();
+
+                if (!checks) {
+                    result->SetError(checks.GetStatus(), checks.GetError());
+                    return result;
+                }
+            }
+
+            localSequences.insert(sequencePath.PathString());
+        }
+
         TString errStr;
 
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
@@ -568,7 +598,8 @@ public:
         }
 
         NKikimrScheme::EStatus status;
-        TTableInfo::TAlterDataPtr alterData = ParseParams(path, table, alter, IsShadowDataAllowed(), errStr, status, context, LocalSequences);
+        TTableInfo::TAlterDataPtr alterData = ParseParams(
+            path, table, alter, IsShadowDataAllowed(), localSequences, errStr, status, context);
         if (!alterData) {
             result->SetError(status, errStr);
             return result;
@@ -629,11 +660,8 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperation::TPtr CreateAlterTable(
-        TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences) {
-    auto obj = MakeSubOperation<TAlterTable>(id, tx);
-    static_cast<TAlterTable*>(obj.Get())->SetLocalSequences(localSequences);
-    return obj;
+ISubOperation::TPtr CreateAlterTable(TOperationId id, const TTxTransaction& tx) {
+    return MakeSubOperation<TAlterTable>(id, tx);
 }
 
 ISubOperation::TPtr CreateAlterTable(TOperationId id, TTxState::ETxState state) {
@@ -684,35 +712,7 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
     }
 
     if (path.IsCommonSensePath()) {
-        const auto& alter = tx.GetAlterTable();
 
-        std::optional<TString> defaultFromSequence;
-        for (const auto& column: alter.GetColumns()) {
-            if (column.HasDefaultFromSequence()) {
-                defaultFromSequence = column.GetDefaultFromSequence();
-            }
-        }
-        Y_ABORT_UNLESS(!defaultFromSequence.has_value() || (alter.GetColumns().size() == 1));
-
-        const auto sequencePath = TPath::Resolve(*defaultFromSequence, context.SS);
-        {
-            const auto checks = sequencePath.Check();
-            checks
-                .NotEmpty()
-                .NotUnderDomainUpgrade()
-                .IsAtLocalSchemeShard()
-                .IsResolved()
-                .NotDeleted()
-                .IsSequence()
-                .NotUnderDeleting()
-                .NotUnderOperation();
-
-            if (!checks) {
-                return {CreateReject(id, checks.GetStatus(), checks.GetError())};
-            }
-        }
-
-        return {CreateAlterTable(id, tx, { sequencePath.PathString() })};
     }
 
     TPath parent = path.Parent();

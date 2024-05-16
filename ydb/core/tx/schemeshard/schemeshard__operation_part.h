@@ -347,8 +347,7 @@ ISubOperation::TPtr CreateCopyTable(TOperationId id, const TTxTransaction& tx,
 ISubOperation::TPtr CreateCopyTable(TOperationId id, TTxState::ETxState state);
 TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
 
-ISubOperation::TPtr CreateAlterTable(
-    TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences = {});
+ISubOperation::TPtr CreateAlterTable(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateAlterTable(TOperationId id, TTxState::ETxState state);
 TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 

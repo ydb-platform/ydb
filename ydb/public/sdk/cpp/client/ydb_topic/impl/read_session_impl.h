@@ -949,8 +949,6 @@ private:
         template<bool E = !UseMigrationProtocol>
         constexpr std::enable_if_t<E, bool>
         operator()(typename TAReadSessionEvent<false>::TEndPartitionSessionEvent&) {
-            Cerr << ">>>>> operator() TEndPartitionSessionEvent " << Endl << Flush;
-
             this->template PushCommonHandler<>(
                 std::move(TParent::TBaseHandlersVisitor::Event),
                 [specific = this->Settings.EventHandlers_.EndPartitionSessionHandler_,
@@ -963,7 +961,6 @@ private:
                     common(event);
                 }
                 if (auto session = cbContext->LockShared()) {
-                    Cerr << ">>>>> operator() TEndPartitionSessionEvent AFTER" << Endl << Flush;
                     session->SetReadingFinished(e.GetPartitionSession()->GetPartitionSessionId(), e.GetChildPartitionIds());
                 }
             });
@@ -1124,7 +1121,6 @@ public:
     void SetReadingFinished(ui64 partitionSessionId, const std::vector<ui32>& childIds);
 
     void SetSelfContext(TPtr ptr) {
-        Cerr << ">>>>> SetSelfContext" << Endl << Flush;
         TEnableSelfContext<TSingleClusterReadSessionImpl<UseMigrationProtocol>>::SetSelfContext(std::move(ptr));
         EventsQueue->SetCallbackContext(TEnableSelfContext<TSingleClusterReadSessionImpl<UseMigrationProtocol>>::SelfContext);
     }

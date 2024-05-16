@@ -135,7 +135,6 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::SignalReadyEvents(TInt
     if constexpr (!UseMigrationProtocol) {
         if (auto session = CbContext->LockShared()) {
             if (!session->AllParentSessionsHasBeenRead(stream->GetPartitionId(), stream->GetPartitionSessionId())) {
-                Cerr << ">>>>> SignalReadyEvents NOT AllParentSessionsHasBeenRead "  << stream->GetPartitionId() << Endl << Flush;
                 return;
             }
         }
@@ -179,22 +178,8 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::SignalReadyEvents(TInt
             }
         } else {
             if (queue.TryApplyCallbackToEventImpl(front.GetEvent(), deferred, CbContext)) {
-                if constexpr (!UseMigrationProtocol) {
-                    if (std::holds_alternative<TReadSessionEvent::TEndPartitionSessionEvent>(front.GetEvent())) {
-                        Cerr << ">>>>> SignalReadyEvents TEndPartitionSessionEvent " << Endl << Flush;
-                        auto& e = std::get<TReadSessionEvent::TEndPartitionSessionEvent>(front.GetEvent());
-                        if (auto session = CbContext->LockShared()) {
-                            session->SetReadingFinished(stream->GetPartitionSessionId(), e.GetChildPartitionIds());
-                        }
-                    }
-                }
                 NotReady.pop_front();
             } else {
-                if constexpr (!UseMigrationProtocol) {
-                    if (std::holds_alternative<TReadSessionEvent::TEndPartitionSessionEvent>(front.GetEvent())) {
-                        Cerr << ">>>>> SignalReadyEvents TEndPartitionSessionEvent ENQUEUE" << Endl << Flush;
-                    }
-                }
                 moveToReadyQueue(std::move(front));
             }
         }
@@ -1834,8 +1819,6 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::TPartitionCookieMappin
 
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::RegisterParentPartition(ui32 partitionId, ui32 parentPartitionId, ui64 parentPartitionSessionId) {
-    Cerr << ">>>>> RegisterParentPartition " << partitionId << " " << parentPartitionId << " " << parentPartitionSessionId << Endl;
-
     auto& values = HierarchyData[partitionId];
     values.push_back({parentPartitionId, parentPartitionSessionId});
 }
@@ -1860,17 +1843,12 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::UnregisterPartition(ui
 
 template<bool UseMigrationProtocol>
 std::vector<ui64> TSingleClusterReadSessionImpl<UseMigrationProtocol>::GetParentPartitionSessions(ui32 partitionId, ui64 partitionSessionId) {
-    Cerr << ">>>>> GetParentPartitionSessions " << partitionId << " " << partitionSessionId << Endl << Flush;
-
     auto it = HierarchyData.find(partitionId);
     if (it == HierarchyData.end()) {
-        Cerr << ">>>>> GetParentPartitionSessions NOT REGISTERED " << partitionId << Endl << Flush;
         return {};
     }
 
     auto& parents = it->second;
-
-    Cerr << ">>>>> GetParentPartitionSessions parent=" << parents.size() << Endl << Flush;
 
     std::unordered_map<ui32, ui64> index;
     for (auto& v : parents) {
@@ -1893,23 +1871,19 @@ template<bool UseMigrationProtocol>
 bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::AllParentSessionsHasBeenRead(ui32 partitionId, ui64 partitionSessionId) {
     for (auto id : GetParentPartitionSessions(partitionId, partitionSessionId)) {
         if (!ReadingFinishedData.contains(id)) {
-    Cerr << ">>>>> AllParentSessionsHasBeenRead 0 " << partitionId << " " << partitionSessionId << Endl << Flush;
             return false;
         }
     }
 
-    Cerr << ">>>>> AllParentSessionsHasBeenRead 2 " << partitionId << " " << partitionSessionId << Endl << Flush;
     return true;
 }
 
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::SetReadingFinished(ui64 partitionSessionId, const std::vector<ui32>& childIds) {
-    Cerr << ">>>>> SetReadingFinished !!!! " << partitionSessionId << Endl << Flush;
     ReadingFinishedData.insert(partitionSessionId);
     for (auto& [_, s] : PartitionStreams) {
         for (auto partitionId : childIds) {
             if (s->GetPartitionId() == partitionId) {
-                Cerr << ">>>>> SignalReadyEvents " << partitionId << Endl << Flush;
                 EventsQueue->SignalReadyEvents(s);
                 break;
             }
@@ -2142,8 +2116,6 @@ TReadSessionEventInfo<UseMigrationProtocol>
 TReadSessionEventsQueue<UseMigrationProtocol>::GetEventImpl(size_t& maxByteSize,
                                                             TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator) // Assumes that we're under lock.
 {
-    Cerr << ">>>>> GetEventImpl 0" << Endl << Flush;
-
     Y_ASSERT(TParent::HasEventsImpl());
 
     if (!TParent::Events.empty()) {
@@ -2165,9 +2137,7 @@ TReadSessionEventsQueue<UseMigrationProtocol>::GetEventImpl(size_t& maxByteSize,
             TParent::Events.pop();
 
             if constexpr (!UseMigrationProtocol) {
-                Cerr << ">>>>> GetEventImpl !!!!" << Endl << Flush;
                 if (std::holds_alternative<TReadSessionEvent::TEndPartitionSessionEvent>(*event)) {
-                    Cerr << ">>>>> GetEventImpl TEndPartitionSessionEvent" << Endl << Flush;
                     auto& e = std::get<TReadSessionEvent::TEndPartitionSessionEvent>(*event);
                     if (auto session = frontCbContext->LockShared()) {
                         session->SetReadingFinished(partitionStream->GetPartitionSessionId(), e.GetChildPartitionIds());
@@ -2329,8 +2299,6 @@ void TReadSessionEventsQueue<UseMigrationProtocol>::ApplyCallbackToEventImpl(TAD
                        data = std::move(data),
                        eventsInfo = std::move(eventsInfo)]() mutable {
             typename TParent::TEvent event(std::move(data));
-
-            Cerr << ">>>>> DeferStartExecutorTask in ApplyCallbackToEventImpl" << Endl << Flush;
 
             func(event);
             eventsInfo.OnUserRetrievedEvent();
@@ -2885,7 +2853,6 @@ void TDeferredActions<UseMigrationProtocol>::Read() {
 template<bool UseMigrationProtocol>
 void TDeferredActions<UseMigrationProtocol>::StartExecutorTasks() {
     for (auto&& [executor, task] : ExecutorsTasks) {
-        Cerr << ">>>>> StartExecutorTasks " << Endl << Flush;
         executor->Post(std::move(task));
     }
 }

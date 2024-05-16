@@ -69,6 +69,8 @@ struct TEvStatistics {
         EvScanTable,
         EvScanTableResponse,
 
+        EvDeleteStatisticsQueryResponse,
+
         EvEnd
     };
 
@@ -157,6 +159,13 @@ struct TEvStatistics {
         bool Success = true;
         ui64 Cookie = 0;
         std::optional<TString> Data;
+    };
+
+    struct TEvDeleteStatisticsQueryResponse : public TEventLocal<
+        TEvDeleteStatisticsQueryResponse,
+        EvDeleteStatisticsQueryResponse>
+    {
+        bool Success = true;
     };
 
     struct TEvScanTable : public TEventPB<

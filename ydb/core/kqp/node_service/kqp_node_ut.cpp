@@ -565,7 +565,7 @@ void KqpNode::NotEnoughComputeActors() {
         }
     }
 
-    AssertResourceBrokerSensors(0, 0, 0, 0, 0);
+    AssertResourceBrokerSensors(0, 0, 0, 4, 0);
 
     {
         NKikimr::TActorSystemStub stub;

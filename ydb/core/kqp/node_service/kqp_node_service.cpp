@@ -60,15 +60,8 @@ NKqpNode::TState& GetStateBucketByTx(std::shared_ptr<TBucketArray> buckets, ui64
 }
 
 void FinishKqpTask(ui64 txId, ui64 taskId, bool success, NKqpNode::TState& bucket, std::shared_ptr<NRm::IKqpResourceManager> ResourceManager) {
-    auto ctx = bucket.RemoveTask(txId, taskId, success);
-    if (ctx) {
-        ResourceManager->FreeExecutionUnits(1);
-        if (ctx->ComputeActorsNumber == 0) {
-            ResourceManager->FreeResources(txId);
-        } else {
-            ResourceManager->FreeResources(txId, taskId);
-        }
-    }
+    bucket.RemoveTask(txId, taskId, success);
+    ResourceManager->FreeResources(txId, taskId);
 }
 
 struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
@@ -86,7 +79,8 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
     , Buckets(std::move(buckets))
     , TxId(txId)
     , TaskId(taskId)
-    , InstantAlloc(instantAlloc) {
+    , InstantAlloc(instantAlloc)
+    {
     }
 
     ~TMemoryQuotaManager() override {
@@ -293,7 +287,7 @@ private:
             << " with " << msg.GetTasks().size() << " tasks: " << TasksIdsStr(msg.GetTasks()));
 
         auto now = TAppData::TimeProvider->Now();
-        NKqpNode::TTasksRequest request(txId, ActorIdFromProto(msg.GetExecuterActorId()), now);
+        NKqpNode::TTasksRequest request(txId, ev->Sender, now);
         auto& msgRtSettings = msg.GetRuntimeSettings();
         if (msgRtSettings.GetTimeoutMs() > 0) {
             // compute actor should not arm timer since in case of timeout it will receive TEvAbortExecution from Executer
@@ -317,16 +311,6 @@ private:
             memoryPool = NRm::EKqpMemoryPool::Unspecified;
         }
 
-        size_t executionUnits = msg.GetTasks().size();
-        if (!ResourceManager()->AllocateExecutionUnits(executionUnits)) {
-            Counters->RmNotEnoughComputeActors->Inc();
-            TStringBuilder error;
-            error << "TxId: " << txId << ", NodeId: " << SelfId().NodeId() << ", not enough compute actors, requested " << msg.GetTasks().size();
-            LOG_N(error);
-            ReplyError(txId, request.Executer, msg, NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_EXECUTION_UNITS, error);
-            return;
-        }
-
         ui32 requestChannels = 0;
         for (auto& dqTask : *msg.MutableTasks()) {
             auto estimation = EstimateTaskResources(dqTask, Config, msg.GetTasks().size());
@@ -347,21 +331,14 @@ private:
         }
 
         LOG_D("TxId: " << txId << ", channels: " << requestChannels
-<<<<<<< HEAD
-<<<<<<< HEAD
             << ", computeActors: " << msg.GetTasks().size() << ", memory: " << request.CalculateTotalMemory());
-=======
-            << ", computeActors: " << msg.GetTasks().size() << ", memory: " << request.TotalMemory);
->>>>>>> 52b8923c3c (remove useless memory check in node service)
-=======
-            << ", computeActors: " << msg.GetTasks().size() << ", memory: " << request.CalculateTotalMemory());
->>>>>>> 0fd51383b2 (remove unclear resource free mechanism)
 
         TVector<ui64> allocatedTasks;
         allocatedTasks.reserve(msg.GetTasks().size());
         for (auto& task : request.InFlyTasks) {
             NRm::TKqpResourcesRequest resourcesRequest;
             resourcesRequest.MemoryPool = memoryPool;
+            resourcesRequest.ExecutionUnits = 1;
 
             // !!!!!!!!!!!!!!!!!!!!!
             // we have to allocate memory instead of reserve only. currently, this memory will not be used for request processing.
@@ -372,8 +349,6 @@ private:
                 for (ui64 taskId : allocatedTasks) {
                     ResourceManager()->FreeResources(txId, taskId);
                 }
-
-                ResourceManager()->FreeExecutionUnits(executionUnits);
 
                 ReplyError(txId, request.Executer, msg, resourcesResponse.GetStatus(), resourcesResponse.GetFailReason());
                 return;
@@ -508,7 +483,7 @@ private:
 
         Counters->NodeServiceProcessTime->Collect(NHPTimer::GetTimePassed(&workHandlerStart) * SecToUsec);
 
-        bucket.NewRequest(txId, requester, std::move(request), memoryPool);
+        bucket.NewRequest(std::move(request));
     }
 
     // used only for unit tests

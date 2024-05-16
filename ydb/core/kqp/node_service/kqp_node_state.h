@@ -60,11 +60,6 @@ struct TTasksRequest {
 
 class TState {
 public:
-    struct TRequestId {
-        ui64 TxId = 0;
-        TActorId Requester;
-    };
-
     struct TRemoveTaskContext {
         ui64 ComputeActorsNumber = 0;
     };
@@ -79,18 +74,21 @@ public:
         return Requests.contains(std::make_pair(txId, requester));
     }
 
-    void NewRequest(ui64 txId, const TActorId& requester, TTasksRequest&& request, NRm::EKqpMemoryPool) {
+    void NewRequest(TTasksRequest&& request) {
+        TTasksRequest cur(std::move(request));
+        ui64 txId = cur.TxId;
+        TActorId executer = cur.Executer;
         TWriteGuard guard(RWLock);
-        auto [it, requestInserted] = Requests.emplace(std::make_pair(txId, requester), std::move(request));
-        auto inserted = SenderIdsByTxId.insert(std::make_pair(txId, requester))->second;
+        auto [it, requestInserted] = Requests.emplace(std::make_pair(txId, executer), std::move(cur));
+        auto inserted = SenderIdsByTxId.insert(std::make_pair(txId, executer))->second;
         YQL_ENSURE(requestInserted && inserted);
         YQL_ENSURE(Requests.size() == SenderIdsByTxId.size());
         if (it->second.Deadline) {
-            ExpiringRequests.emplace(std::make_tuple(it->second.Deadline, it->second.TxId, it->second.Executer));
+            ExpiringRequests.emplace(std::make_tuple(it->second.Deadline, txId, executer));
         }
     }
 
-    TMaybe<TRemoveTaskContext> RemoveTask(ui64 txId, ui64 taskId, bool success)
+    TMaybe<TRemoveTaskContext>  RemoveTask(ui64 txId, ui64 taskId, bool success)
     {
         TWriteGuard guard(RWLock);
         YQL_ENSURE(Requests.size() == SenderIdsByTxId.size());

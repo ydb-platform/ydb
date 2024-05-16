@@ -34,6 +34,7 @@ using TOnResourcesSnapshotCallback = std::function<void(TVector<NKikimrKqp::TKqp
 
 /// resources request
 struct TKqpResourcesRequest {
+    ui64 ExecutionUnits = 0;
     EKqpMemoryPool MemoryPool = EKqpMemoryPool::Unspecified;
     ui64 Memory = 0;
 
@@ -77,12 +78,12 @@ public:
     using TResourcesAllocatedCallback = std::function<void(NActors::TActorSystem* as)>;
     using TNotEnoughtResourcesCallback = std::function<void(NActors::TActorSystem* as, const TString& reason, bool byTimeout)>;
 
-    virtual bool AllocateResources(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources,
-        TResourcesAllocatedCallback&& onSuccess, TNotEnoughtResourcesCallback&& onFail, TDuration timeout = {}) = 0;
+    //virtual bool AllocateResources(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources,
+    //    TResourcesAllocatedCallback&& onSuccess, TNotEnoughtResourcesCallback&& onFail, TDuration timeout = {}) = 0;
 
     virtual void FreeResources(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources) = 0;
     virtual void FreeResources(ui64 txId, ui64 taskId) = 0;
-    virtual void FreeResources(ui64 txId) = 0;
+   // virtual void FreeResources(ui64 txId) = 0;
 
     virtual void NotifyExternalResourcesAllocated(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources) = 0;
     virtual void NotifyExternalResourcesFreed(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources) = 0;

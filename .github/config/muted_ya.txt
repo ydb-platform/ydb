@@ -28,6 +28,7 @@ ydb/core/kqp/ut/service KqpQueryService.QueryOnClosedSession
 ydb/core/kqp/ut/service KqpService.CloseSessionsWithLoad
 ydb/core/kqp/ut/service [38/50]*
 ydb/core/persqueue/ut TPQTest.*DirectRead*
+ydb/core/persqueue/ut TopicAutoscaling.PartitionSplit_ManySession_NewSDK
 ydb/core/tx/coordinator/ut Coordinator.RestoreTenantConfiguration
 ydb/core/tx/datashard/ut_change_exchange Cdc.InitialScanDebezium
 ydb/core/tx/schemeshard/ut_restore TImportTests.ShouldSucceedOnManyTables

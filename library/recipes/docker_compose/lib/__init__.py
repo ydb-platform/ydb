@@ -59,7 +59,7 @@ def start(argv):
 
         for net_name, net_config in six.iteritems(networks):
             while True:
-                subnet = "fc00:420:%04x::/32" % random.randrange(16**4)
+                subnet = "fc00:420:%04x::/48" % random.randrange(16**4)
                 if subnet not in subnets:
                     break
 

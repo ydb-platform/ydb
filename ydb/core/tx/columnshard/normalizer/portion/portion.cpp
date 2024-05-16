@@ -29,6 +29,10 @@ public:
         }
         return true;
     }
+
+    ui64 GetSize() const override {
+        return Portions.size();
+    }
 };
 
 bool TPortionsNormalizer::CheckPortion(const NColumnShard::TTablesManager&, const TPortionInfo& portionInfo) const {

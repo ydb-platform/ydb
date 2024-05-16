@@ -157,6 +157,10 @@ bool IsOverflow(ui64 a, ui64 b) {
     return b > diff;
 }
 
+bool IsOverflow(ui64 a, i64 b) {
+    return b > 0 ? IsOverflow(a, (ui64)b) : a < (ui64)-b;
+}
+
 TDuration FromUnit(int64_t interval, IPathGenerator::EIntervalUnit unit) {
     switch (unit) {
     case IPathGenerator::EIntervalUnit::MILLISECONDS:
@@ -203,13 +207,17 @@ TInstant AddUnit(TInstant current, int64_t interval, IPathGenerator::EIntervalUn
         return DoAddYears(current, interval);
     }
 
+    const TDuration delta = FromUnit(abs(interval), unit);
+    if (delta.GetValue() > std::numeric_limits<i64>::max()) {
+        ythrow yexception() << "Interval is overflowed";
+    }
 
-    const TDuration delta = FromUnit(interval, unit);
-    if (IsOverflow(current.GetValue(), delta.GetValue())) {
+    const i64 deltaValue = (interval > 0 ? 1LL : -1LL) * delta.GetValue();
+    if (IsOverflow(current.GetValue(), deltaValue)) {
         ythrow yexception() << "Timestamp is overflowed";
     }
 
-    return current + delta;
+    return interval > 0 ? current + delta : current - delta;
 }
 
 TInstant ParseDate(const TString& dateStr, const TInstant& now) {

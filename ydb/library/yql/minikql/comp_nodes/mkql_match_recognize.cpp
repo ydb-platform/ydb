@@ -289,7 +289,7 @@ public:
         return out.MakeState();
     }
 
-    void Load(const NUdf::TStringRef& state) override {
+    void LoadState(NUdf::TUnboxedValue& state) override {
         TMrInputSerializer in(SerializerContext, state);
 
         const auto loadStateVersion = in.GetStateVersion();
@@ -317,6 +317,10 @@ public:
         restoredRowPatternConfiguration->Load(in);
         MKQL_ENSURE(*restoredRowPatternConfiguration == *RowPatternConfiguration, "Restored and current RowPatternConfiguration is different");
         MKQL_ENSURE(in.Empty(), "State is corrupted");
+    }
+
+    bool HasListItems() const override {
+        return false;
     }
 
     bool ProcessInputRow(NUdf::TUnboxedValue&& row, TComputationContext& ctx) {
@@ -432,7 +436,7 @@ public:
         return serializer.MakeState();
     }
 
-    void Load(const NUdf::TStringRef& state) override {
+    void LoadState(NUdf::TUnboxedValue& state) override {
         TMrInputSerializer in(SerializerContext, state);
         
         const auto loadStateVersion = in.GetStateVersion();
@@ -467,6 +471,10 @@ public:
         MKQL_ENSURE(NfaTransitionGraph, "Empty NfaTransitionGraph");
         MKQL_ENSURE(*restoredTransitionGraph == *NfaTransitionGraph, "Restored and current NfaTransitionGraph is different");
         MKQL_ENSURE(in.Empty(), "State is corrupted");
+    }
+
+    bool HasListItems() const override {
+        return false;
     }
 
     bool ProcessInputRow(NUdf::TUnboxedValue&& row, TComputationContext& ctx) {
@@ -569,20 +577,24 @@ public:
                 RowType,
                 RowPacker
             );
-        } else if (stateValue.HasValue() && !stateValue.IsBoxed()) {
-            // Load from saved state.
-            NUdf::TUnboxedValue state = ctx.HolderFactory.Create<State>(
-                InputRowArg,
-                PartitionKey,
-                PartitionKeyType,
-                Parameters,
-                Cache,
-                ctx,
-                RowType,
-                RowPacker
-            );
-            state.Load(stateValue.AsStringRef());
-            stateValue = state;
+        } else if (stateValue.HasValue()) {
+            MKQL_ENSURE(stateValue.IsBoxed(), "Expected boxed value");
+            bool isStateToLoad = stateValue.HasListItems();
+            if (isStateToLoad) {
+                // Load from saved state.
+                NUdf::TUnboxedValue state = ctx.HolderFactory.Create<State>(
+                    InputRowArg,
+                    PartitionKey,
+                    PartitionKeyType,
+                    Parameters,
+                    Cache,
+                    ctx,
+                    RowType,
+                    RowPacker
+                );
+                state.LoadState(stateValue);
+                stateValue = state;
+            }
         }
         auto state = static_cast<State*>(stateValue.AsBoxed().Get());
         while (true) {

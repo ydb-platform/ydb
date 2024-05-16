@@ -747,8 +747,8 @@ public:
                     result.AppendNoAlias(it->Data(), it->Size());
                     it = taskState.erase(it);
                 }
-                //NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(result, taskState);
             } else { // No load was done during previous runs (if any).
+            // TODO
                 MKQL_ENSURE(mutableValue.HasValue() && (mutableValue.IsString() || mutableValue.IsEmbedded()), "State is expected to have data or invalid value");
                 const NUdf::TStringRef savedRef = mutableValue.AsStringRef();
                 WriteUi64(result, savedRef.Size());
@@ -764,8 +764,8 @@ public:
         for (ui32 i : PatternNodes->GetMutables().SerializableValues) {
             if (const ui64 size = ReadUi64(state); size != std::numeric_limits<ui64>::max()) {
                 MKQL_ENSURE(state.Size() >= size, "Serialized state is corrupted - buffer is too short (" << state.Size() << ") for specified size: " << size);
-                const NUdf::TStringRef savedRef(state.Data(), size);
-                Ctx->MutableValues[i] = MakeString(savedRef);
+                TStringBuf savedRef(state.Data(), size);
+                Ctx->MutableValues[i] = HolderFactory->Create<NKikimr::NMiniKQL::TSaveLoadList>(*Ctx, savedRef);
                 state.Skip(size);
             } // else leave it Invalid()
         }

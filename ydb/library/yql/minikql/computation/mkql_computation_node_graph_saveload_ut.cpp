@@ -86,7 +86,7 @@ namespace {
             return NUdf::TUnboxedValue::Zero();
         }
 
-        void Load(const NUdf::TStringRef& state) override {
+        void LoadState(NUdf::TUnboxedValue& state) override {
             Y_UNUSED(state);
         }
 

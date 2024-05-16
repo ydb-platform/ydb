@@ -100,7 +100,12 @@ public:
         }
 
     private:
-        void Load(const NUdf::TStringRef& state) override {
+
+        bool HasListItems() const override {
+            return false;
+        }
+
+        void LoadState(NUdf::TUnboxedValue& state) override {
             TInputSerializer in(state, EMkqlStateType::SIMPLE_BLOB);
 
             const auto loadStateVersion = in.GetStateVersion();
@@ -183,16 +188,21 @@ public:
                 Ahead->GetValue(ctx).Get<i64>(),
                 RowLimit->GetValue(ctx).Get<ui32>(),
                 ctx);
-        } else if (stateValue.HasValue() && !stateValue.IsBoxed()) {
-            // Load from saved state.
-            NUdf::TUnboxedValue state = ctx.HolderFactory.Create<TState>(
-                this,
-                Delay->GetValue(ctx).Get<i64>(),
-                Ahead->GetValue(ctx).Get<i64>(),
-                RowLimit->GetValue(ctx).Get<ui32>(),
-                ctx);
-            state.Load(stateValue.AsStringRef());
-            stateValue = state;
+        } else if (stateValue.HasValue()) {
+            MKQL_ENSURE(stateValue.IsBoxed(), "Expected boxed value");
+            bool isStateToLoad = stateValue.HasListItems();
+
+            if (isStateToLoad) {
+                // Load from saved state.
+                NUdf::TUnboxedValue state = ctx.HolderFactory.Create<TState>(
+                    this,
+                    Delay->GetValue(ctx).Get<i64>(),
+                    Ahead->GetValue(ctx).Get<i64>(),
+                    RowLimit->GetValue(ctx).Get<ui32>(),
+                    ctx);
+                state.LoadState(stateValue);
+                stateValue = state;
+            }
         }
         auto& state = *static_cast<TState *>(stateValue.AsBoxed().Get());
         while (true) {

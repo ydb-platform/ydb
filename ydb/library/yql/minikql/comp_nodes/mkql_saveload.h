@@ -83,6 +83,64 @@ enum class EMkqlStateType {
     INCREMENT
 };
 
+class TSaveLoadList: public TComputationValue<TSaveLoadList> {
+
+    class TIterator : public TComputationValue<TIterator> {
+        const size_t MaxValueLen = 10000;
+
+    public:
+        TIterator(TMemoryUsageInfo* memInfo, const TString& buf)
+            : TComputationValue<TIterator>(memInfo)
+            , Buf(buf)
+            , Index(0)
+        {}
+
+    private:
+        bool Next(NUdf::TUnboxedValue& value) override {
+            if (Buf.size() == Index) {
+                return false;
+            }
+            size_t nextSize = std::min(Buf.size() - Index, MaxValueLen);
+            NUdf::TStringValue str(nextSize);
+            std::memcpy(str.Data(), Buf.Data() + Index, nextSize);
+            Index += nextSize;
+            value = NUdf::TUnboxedValuePod(std::move(str));
+            return true;
+        }
+        const TString& Buf;
+        size_t Index;
+    };
+
+public:
+    TSaveLoadList(TMemoryUsageInfo* memInfo, TComputationContext& ctx, TString&& buf)
+        : TComputationValue<TSaveLoadList>(memInfo)
+        , Ctx(ctx)
+        , Buf(buf)
+    {}
+
+    TSaveLoadList(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TStringBuf& buf)
+        : TComputationValue<TSaveLoadList>(memInfo)
+        , Ctx(ctx)
+        , Buf(buf)
+    {}
+
+    ui64 GetListLength() const override {
+        ThrowNotSupported(__func__);
+        return 0;
+    }
+
+    bool HasListItems() const override {
+        return !Buf.empty();
+    }
+
+    NUdf::TUnboxedValue GetListIterator() const override {
+        return Ctx.HolderFactory.Create<TIterator>(Buf);
+    }
+private:
+    TComputationContext& Ctx;
+    TString Buf;
+};
+
 struct TOutputSerializer {
 public:
     static NUdf::TUnboxedValue MakeSimpleBlobState(const TString& blob, ui32 stateVersion) {
@@ -179,68 +237,29 @@ public:
         Buf.AppendNoAlias(state.data(), state.size());
     }
 
-    class TRangeList: public TComputationValue<TRangeList> {
-
-        class TIterator : public TComputationValue<TIterator> {
-            const size_t MaxValueLen = 10000;
-
-        public:
-            TIterator(TMemoryUsageInfo* memInfo, const TString& buf)
-                : TComputationValue<TIterator>(memInfo)
-                , Buf(buf)
-                , Index(0)
-            {}
-
-        private:
-            bool Next(NUdf::TUnboxedValue& value) override {
-                if (Buf.size() == Index) {
-                    return false;
-                }
-                size_t nextSize = std::min(Buf.size() - Index, MaxValueLen);
-
-                NUdf::TStringValue str(nextSize);
-                std::memcpy(str.Data(), Buf.Data() + Index, nextSize);
-                Index += nextSize;
-                value = NUdf::TUnboxedValuePod(std::move(str));
-                return true;
-            }
-            const TString& Buf;
-            size_t Index;
-        };
-
-    public:
-        TRangeList(TMemoryUsageInfo* memInfo, TComputationContext& ctx, TString&& buf)
-            : TComputationValue<TRangeList>(memInfo)
-            , Ctx(ctx)
-            , Buf(buf)
-        {}
-
-        ui64 GetListLength() const override {
-            ThrowNotSupported(__func__);
-            return 0;
-        }
-
-        NUdf::TUnboxedValue GetListIterator() const override {
-            return Ctx.HolderFactory.Create<TIterator>(Buf);
-        }
-    private:
-        TComputationContext& Ctx;
-        TString Buf;
-    };
-
     NUdf::TUnboxedValue MakeState() {
-        return Ctx.HolderFactory.Create<TRangeList>(Ctx, std::move(Buf));
+        return Ctx.HolderFactory.Create<TSaveLoadList>(Ctx, std::move(Buf));
     }
 protected:
     TString Buf;
     TComputationContext& Ctx;
 };
 
-
 struct TInputSerializer {
 public:
-    TInputSerializer(const NUdf::TStringRef& state, TMaybe<EMkqlStateType> expectedType = Nothing())
-        : Buf(state) { 
+    TInputSerializer(const TStringBuf& state, TMaybe<EMkqlStateType> expectedType = Nothing()) 
+        : Buf(state) {
+        Type = static_cast<EMkqlStateType>(Read<ui32>());
+        Read(StateVersion);
+        if (expectedType) {
+            MKQL_ENSURE(Type == *expectedType, "state type is not expected");
+        }
+    }
+   
+    TInputSerializer(NUdf::TUnboxedValue& state, TMaybe<EMkqlStateType> expectedType = Nothing())
+        : State(StateToString(state))
+        , Buf(State) {
+        state.Clear();
         Type = static_cast<EMkqlStateType>(Read<ui32>());
         Read(StateVersion);
         if (expectedType) {
@@ -336,7 +355,20 @@ public:
         return Buf.empty();
     }
 
+private:
+    TString StateToString(NUdf::TUnboxedValue& state) {
+        TString result;
+        auto listIt = state.GetListIterator();
+        NUdf::TUnboxedValue str;
+        while (listIt.Next(str)) {
+            const TStringBuf strRef = str.AsStringRef();
+            result.AppendNoAlias(strRef.Data(), strRef.Size());
+        }            
+        return result;
+    }
+
 protected:
+    TString State;
     TStringBuf Buf;
     EMkqlStateType Type{EMkqlStateType::SIMPLE_BLOB};
     ui32 StateVersion{0};

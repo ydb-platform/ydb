@@ -124,23 +124,8 @@ public:
             return out.MakeState();
         }
 
-
-        TString StateToString(NUdf::TUnboxedValue& state) {
-            TString result;
-            auto listIt = state.GetListIterator();
-            NUdf::TUnboxedValue str;
-            while (listIt.Next(str)) {
-                const TStringBuf strRef = str.AsStringRef();
-                result.AppendNoAlias(strRef.Data(), strRef.Size());
-            }
-            
-            return result;
-        }
-        void Load2(NUdf::TUnboxedValue& state) override {
-            TString str = StateToString(state);
-            state.Clear();
-
-            TInputSerializer in(str, EMkqlStateType::SIMPLE_BLOB);
+        void LoadState(NUdf::TUnboxedValue& state) override {
+            TInputSerializer in(state, EMkqlStateType::SIMPLE_BLOB);
 
             const auto loadStateVersion = in.GetStateVersion();
             if (loadStateVersion != StateVersion) {
@@ -170,6 +155,10 @@ public:
             }
 
             in(Finished);
+        }
+
+        bool HasListItems() const override {
+            return false;
         }
 
         TInstant GetWatermark() {
@@ -516,13 +505,12 @@ public:
             // Create new.
             valueRef = CreateStream(compCtx);
         } else if (valueRef.HasValue()) {
-            
             MKQL_ENSURE(valueRef.IsBoxed(), "Expected boxed value");
             bool isStateToLoad = valueRef.HasListItems();
             if (isStateToLoad) {
                 // Load from saved state.
                 NUdf::TUnboxedValue stream = CreateStream(compCtx);
-                stream.Load2(valueRef);
+                stream.LoadState(valueRef);
                 valueRef = stream;
             }
         }

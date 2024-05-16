@@ -347,10 +347,10 @@ public:
                 CanonizeFuture_ = {};
                 CanonizationRangesFoldersFuture_ = {};
 
-                PendingWalkFoldersKeys_.clear();
                 for (const auto& key : PendingWalkFoldersKeys_) {
                     State_->WalkFoldersState.erase(key);
                 }
+                PendingWalkFoldersKeys_.clear();
 
                 return TStatus::Error;
             }

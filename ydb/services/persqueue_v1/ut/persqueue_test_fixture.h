@@ -225,12 +225,16 @@ static void ModifyTopicACL(NYdb::TDriver* driver, const TString& topic, const TV
 
     class TPersQueueV1TestServer : public TPersQueueV1TestServerBase {
     public:
-        explicit TPersQueueV1TestServer(const TPersQueueV1TestServerSettings& settings = {})
+        explicit TPersQueueV1TestServer(const TPersQueueV1TestServerSettings& settings)
             : TPersQueueV1TestServerBase(settings.TenantModeEnabled)
             , Settings(settings)
         {
             InitAll();
         }
+
+        TPersQueueV1TestServer(bool checkAcl = false, bool tenantModeEnabled = false)
+            : TPersQueueV1TestServer({ .CheckACL = checkAcl, .TenantModeEnabled = tenantModeEnabled })
+        {}
 
         void InitAll() {
             InitializePQ();
@@ -331,4 +335,3 @@ static void ModifyTopicACL(NYdb::TDriver* driver, const TString& topic, const TV
 */
     };
 }
-

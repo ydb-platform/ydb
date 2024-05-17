@@ -45,7 +45,7 @@ SELECT * FROM postgresql_datasource.<table_name>
 
 ## Поддерживаемые типы данных
 
-В таблицах PostgreSQL по умолчанию все колонки могут содержать значения `NULL`, поэтому в {{ ydb-full-name }} колонки таблиц, извлечённых из внешнего источника данных PostgreSQL, отображаются как [опциональные](https://ydb.tech/docs/ru/yql/reference/types/optional). Ниже приведена таблица соответствия типов PostgreSQL и типов {{ ydb-full-name }}.
+В базе данных PostgreSQL признак опциональности значений колонки (разрешено или запрещено колонке содержать значения `NULL`) не является частью системы типов. Ограничение (constraint) `NOT NULL` для каждой колонки реализуется в виде атрибута `attnotnull` в системном каталоге [pg_attribute](https://www.postgresql.org/docs/current/catalog-pg-attribute.html), то есть на уровне метаданных таблицы. Следовательно, все базовые типы PostgreSQL по умолчанию могут содержать значения `NULL`, и в системе типов {{ ydb-full-name }} они должны отображаться в [опциональные](https://ydb.tech/docs/ru/yql/reference/types/optional) типы. Ниже приведена таблица соответствия типов PostgreSQL и типов {{ ydb-full-name }}.
 
 |Тип данных PostgreSQL|Тип данных {{ ydb-full-name }}|Примечания|
 |---|----|------|

@@ -72,9 +72,7 @@ PEERDIR(
 CHECK_DEPENDENT_DIRS(
     ALLOW_ONLY
     PEERDIRS
-    arc/api/public
-    build/internal/platform
-    build/platform
+    build
     certs
     contrib
     library

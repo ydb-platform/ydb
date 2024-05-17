@@ -86,7 +86,7 @@ public:
     virtual bool IsFinished() const override {
         return Status == EStatus::Finished;
     }
-    virtual bool IsReadyForRemove() const override {
+    virtual bool IsReadyForRemoveOnFinished() const override {
         return Status == EStatus::Aborted;
     }
 

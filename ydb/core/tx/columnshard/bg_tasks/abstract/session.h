@@ -87,7 +87,7 @@ public:
 
     virtual bool IsReadyForStart() const = 0;
     virtual bool IsFinished() const = 0;
-    virtual bool IsReadyForRemove() const = 0;
+    virtual bool IsReadyForRemoveOnFinished() const = 0;
 };
 
 template <class TProtoLogicExt, class TProtoProgressExt, class TProtoStateExt>

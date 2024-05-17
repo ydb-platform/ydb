@@ -76,4 +76,11 @@ std::shared_ptr<TTopicClient::TImpl::IWriteSessionConnectionProcessorFactory> TT
     return CreateConnectionProcessorFactory<TService, TRequest, TResponse>(&TService::Stub::AsyncStreamWrite, Connections_, DbDriverState_);
 }
 
+std::shared_ptr<TTopicClient::TImpl::IDirectReadSessionConnectionProcessorFactory> TTopicClient::TImpl::CreateDirectReadSessionConnectionProcessorFactory() {
+    using TService = Ydb::Topic::V1::TopicService;
+    using TRequest = Ydb::Topic::StreamDirectReadMessage::FromClient;
+    using TResponse = Ydb::Topic::StreamDirectReadMessage::FromServer;
+    return CreateConnectionProcessorFactory<TService, TRequest, TResponse>(&TService::Stub::AsyncStreamDirectRead, Connections_, DbDriverState_);
+}
+
 }

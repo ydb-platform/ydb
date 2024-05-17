@@ -806,6 +806,48 @@ message TEvPeriodicTableStats {
     repeated TEvPeriodicTableStats Tables = 14;
 }
 
+message TObjectStorageListingFilter {
+    enum EMatchType {
+        EQUAL = 0;
+        NOT_EQUAL = 1;
+    }
+    optional bytes Values = 1;
+    repeated uint32 Columns = 2;
+    repeated EMatchType MatchTypes = 3; 
+}
+
+message TEvObjectStorageListingRequest {
+    optional uint64 TableId = 1;
+    optional bytes SerializedKeyPrefix = 2;
+
+    optional string PathColumnPrefix = 3;
+    optional string PathColumnDelimiter = 4;
+
+    optional bytes SerializedStartAfterKeySuffix = 5;
+
+    repeated uint32 ColumnsToReturn = 6;
+    optional uint32 MaxKeys = 7;
+
+    optional string LastCommonPrefix = 8;
+    optional string LastPath = 9;
+
+    optional TObjectStorageListingFilter Filter = 10;
+}
+
+message TEvObjectStorageListingResponse {
+    optional uint64 TabletID = 1;
+    optional uint32 Status = 2;
+    optional string ErrorDescription = 3;
+    repeated string CommonPrefixesRows = 4;
+    repeated bytes ContentsRows = 5;        // TSerializedCellVec
+    optional bool MoreRows = 6;
+}
+
+message TObjectStorageListingContinuationToken {
+    optional string last_path = 1;
+    optional bool is_folder = 2;
+}
+
 message TSerializedRowColumnsScheme {
     repeated uint32 KeyColumnIds = 1;
     repeated uint32 ValueColumnIds = 2;

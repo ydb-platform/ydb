@@ -746,9 +746,10 @@ message TAlterColumnTable {
     optional TColumnDataLifeCycle AlterTtlSettings = 3;
 
     optional string AlterSchemaPresetName = 4;
+    optional string RESERVED_AlterTtlSettingsPresetName = 5;
 
-    optional TAlterShards AlterShards = 5;
-    optional TReshardColumnTable ReshardColumnTable = 6;
+    optional TAlterShards AlterShards = 6;
+    optional TReshardColumnTable ReshardColumnTable = 7;
 }
 
 message TReshardColumnTable {

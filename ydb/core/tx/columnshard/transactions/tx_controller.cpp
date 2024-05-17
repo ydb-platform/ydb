@@ -92,7 +92,7 @@ TTxController::ITransactionOperator::TPtr TTxController::GetVerifiedTxOperator(c
 
 std::shared_ptr<TTxController::ITransactionOperator> TTxController::UpdateTxSourceInfo(const TFullTxInfo& tx, NTabletFlatExecutor::TTransactionContext& txc) {
     auto op = GetVerifiedTxOperator(tx.GetTxId());
-    op->ResetStatus();
+    op->ResetStatusOnUpdate();
     auto& txInfo = op->MutableTxInfo();
     txInfo.Source = tx.Source;
     txInfo.Cookie = tx.Cookie;

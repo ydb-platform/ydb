@@ -276,6 +276,7 @@ bool TResourceMetricsSendState::TryUpdate(TResourceMetricsValues& src, const TAc
         if (force) {
             LastAllUpdate = now;
         }
+        LastAnyUpdate = now;
         ctx.Send(Launcher, new TEvLocal::TEvTabletMetrics(TabletId, FollowerId, values));
     }
     return updated;

@@ -1,3 +1,5 @@
+#include "schemeshard__operation_drop_cdc_stream.h"
+
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
@@ -433,6 +435,66 @@ private:
 
 } // anonymous
 
+void DoDropStream(
+    const NKikimrSchemeOp::TDropCdcStream& op,
+    const TOperationId& opId,
+    const TPath& workingDirPath,
+    const TPath& tablePath,
+    const TPath& streamPath,
+    const TTxId lockTxId,
+    TOperationContext& context,
+    TVector<ISubOperation::TPtr>& result)
+{
+    {
+        auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamAtTable);
+        outTx.MutableDropCdcStream()->CopyFrom(op);
+
+        if (lockTxId != InvalidTxId) {
+            outTx.MutableLockGuard()->SetOwnerTxId(ui64(lockTxId));
+        }
+
+        result.push_back(CreateDropCdcStreamAtTable(NextPartId(opId, result), outTx, lockTxId != InvalidTxId));
+    }
+
+    if (lockTxId != InvalidTxId) {
+        auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropLock);
+        outTx.SetFailOnExist(true);
+        outTx.SetInternal(true);
+        outTx.MutableLockConfig()->SetName(tablePath.LeafName());
+        outTx.MutableLockGuard()->SetOwnerTxId(ui64(lockTxId));
+
+        result.push_back(DropLock(NextPartId(opId, result), outTx));
+    }
+
+    {
+        auto outTx = TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamImpl);
+        outTx.MutableDrop()->SetName(streamPath.Base()->Name);
+
+        if (lockTxId != InvalidTxId) {
+            outTx.MutableLockGuard()->SetOwnerTxId(ui64(lockTxId));
+        }
+
+        result.push_back(CreateDropCdcStreamImpl(NextPartId(opId, result), outTx));
+    }
+
+    for (const auto& [name, pathId] : streamPath.Base()->GetChildren()) {
+        Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
+        auto implPath = context.SS->PathsById.at(pathId);
+
+        if (implPath->Dropped()) {
+            continue;
+        }
+
+        auto streamImpl = context.SS->PathsById.at(pathId);
+        Y_ABORT_UNLESS(streamImpl->IsPQGroup());
+
+        auto outTx = TransactionTemplate(streamPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup);
+        outTx.MutableDrop()->SetName(name);
+
+        result.push_back(CreateDropPQ(NextPartId(opId, result), outTx));
+    }
+}
+
 ISubOperation::TPtr CreateDropCdcStreamImpl(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TDropCdcStream>(id, tx);
 }
@@ -517,54 +579,7 @@ TVector<ISubOperation::TPtr> CreateDropCdcStream(TOperationId opId, const TTxTra
 
     TVector<ISubOperation::TPtr> result;
 
-    {
-        auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamAtTable);
-        outTx.MutableDropCdcStream()->CopyFrom(op);
-
-        if (lockTxId != InvalidTxId) {
-            outTx.MutableLockGuard()->SetOwnerTxId(ui64(lockTxId));
-        }
-
-        result.push_back(CreateDropCdcStreamAtTable(NextPartId(opId, result), outTx, lockTxId != InvalidTxId));
-    }
-
-    if (lockTxId != InvalidTxId) {
-        auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropLock);
-        outTx.SetFailOnExist(true);
-        outTx.SetInternal(true);
-        outTx.MutableLockConfig()->SetName(tablePath.LeafName());
-        outTx.MutableLockGuard()->SetOwnerTxId(ui64(lockTxId));
-
-        result.push_back(DropLock(NextPartId(opId, result), outTx));
-    }
-
-    {
-        auto outTx = TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamImpl);
-        outTx.MutableDrop()->SetName(streamPath.Base()->Name);
-
-        if (lockTxId != InvalidTxId) {
-            outTx.MutableLockGuard()->SetOwnerTxId(ui64(lockTxId));
-        }
-
-        result.push_back(CreateDropCdcStreamImpl(NextPartId(opId, result), outTx));
-    }
-
-    for (const auto& [name, pathId] : streamPath.Base()->GetChildren()) {
-        Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
-        auto implPath = context.SS->PathsById.at(pathId);
-
-        if (implPath->Dropped()) {
-            continue;
-        }
-
-        auto streamImpl = context.SS->PathsById.at(pathId);
-        Y_ABORT_UNLESS(streamImpl->IsPQGroup());
-
-        auto outTx = TransactionTemplate(streamPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup);
-        outTx.MutableDrop()->SetName(name);
-
-        result.push_back(CreateDropPQ(NextPartId(opId, result), outTx));
-    }
+    DoDropStream(op, opId, workingDirPath, tablePath, streamPath, lockTxId, context, result);
 
     return result;
 }

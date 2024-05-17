@@ -1,3 +1,5 @@
+#include "schemeshard__operation_alter_cdc_stream.h"
+
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
@@ -471,6 +473,36 @@ private:
 
 } // anonymous
 
+void DoAlterStream(
+    const NKikimrSchemeOp::TAlterCdcStream& op,
+    const TOperationId& opId,
+    const TPath& workingDirPath,
+    const TPath& tablePath,
+    TVector<ISubOperation::TPtr>& result)
+{
+    {
+        auto outTx = TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStreamImpl);
+        outTx.MutableAlterCdcStream()->CopyFrom(op);
+
+        if (op.HasGetReady()) {
+            outTx.MutableLockGuard()->SetOwnerTxId(op.GetGetReady().GetLockTxId());
+        }
+
+        result.push_back(CreateAlterCdcStreamImpl(NextPartId(opId, result), outTx));
+    }
+
+    {
+        auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStreamAtTable);
+        outTx.MutableAlterCdcStream()->CopyFrom(op);
+
+        if (op.HasGetReady()) {
+            outTx.MutableLockGuard()->SetOwnerTxId(op.GetGetReady().GetLockTxId());
+        }
+
+        result.push_back(CreateAlterCdcStreamAtTable(NextPartId(opId, result), outTx, op.HasGetReady()));
+    }
+}
+
 ISubOperation::TPtr CreateAlterCdcStreamImpl(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TAlterCdcStream>(id, tx);
 }
@@ -547,27 +579,7 @@ TVector<ISubOperation::TPtr> CreateAlterCdcStream(TOperationId opId, const TTxTr
 
     TVector<ISubOperation::TPtr> result;
 
-    {
-        auto outTx = TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStreamImpl);
-        outTx.MutableAlterCdcStream()->CopyFrom(op);
-
-        if (op.HasGetReady()) {
-            outTx.MutableLockGuard()->SetOwnerTxId(op.GetGetReady().GetLockTxId());
-        }
-
-        result.push_back(CreateAlterCdcStreamImpl(NextPartId(opId, result), outTx));
-    }
-
-    {
-        auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStreamAtTable);
-        outTx.MutableAlterCdcStream()->CopyFrom(op);
-
-        if (op.HasGetReady()) {
-            outTx.MutableLockGuard()->SetOwnerTxId(op.GetGetReady().GetLockTxId());
-        }
-
-        result.push_back(CreateAlterCdcStreamAtTable(NextPartId(opId, result), outTx, op.HasGetReady()));
-    }
+    DoAlterStream(op, opId, workingDirPath, tablePath, result);
 
     if (op.HasGetReady()) {
         auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropLock);

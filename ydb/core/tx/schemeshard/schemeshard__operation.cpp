@@ -1083,6 +1083,25 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
         return CreateDropView(NextPartId(), txState);
     case TTxState::ETxType::TxAlterView:
         Y_ABORT("TODO: implement");
+    // CDC
+    case TTxState::ETxType::TxCreateContinuousBackup:
+         Y_ABORT("TODO: implement"); // return CreateNewContinuousBackupImpl(NextPartId(), txState);
+    case TTxState::ETxType::TxCreateContinuousBackupAtTable:
+         Y_ABORT("TODO: implement"); // return CreateNewContinuousBackupAtTable(NextPartId(), txState, false);
+    case TTxState::ETxType::TxCreateContinuousBackupAtTableWithInitialScan:
+         Y_ABORT("TODO: implement"); // return CreateNewContinuousBackupAtTable(NextPartId(), txState, true);
+    case TTxState::ETxType::TxAlterContinuousBackup:
+         Y_ABORT("TODO: implement"); // return CreateAlterContinuousBackupImpl(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterContinuousBackupAtTable:
+         Y_ABORT("TODO: implement"); // return CreateAlterContinuousBackupAtTable(NextPartId(), txState, false);
+    case TTxState::ETxType::TxAlterContinuousBackupAtTableDropSnapshot:
+         Y_ABORT("TODO: implement"); // return CreateAlterContinuousBackupAtTable(NextPartId(), txState, true);
+    case TTxState::ETxType::TxDropContinuousBackup:
+         Y_ABORT("TODO: implement"); // return CreateDropContinuousBackupImpl(NextPartId(), txState);
+    case TTxState::ETxType::TxDropContinuousBackupAtTable:
+         Y_ABORT("TODO: implement"); // return CreateDropContinuousBackupAtTable(NextPartId(), txState, false);
+    case TTxState::ETxType::TxDropContinuousBackupAtTableDropSnapshot:
+         Y_ABORT("TODO: implement"); // return CreateDropContinuousBackupAtTable(NextPartId(), txState, true);
 
     case TTxState::ETxType::TxInvalid:
         Y_UNREACHABLE();
@@ -1311,6 +1330,21 @@ ISubOperation::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationType op
         return CreateDropView(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterView:
         Y_ABORT("TODO: implement");
+
+    // CDC
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateContinuousBackup:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateContinuousBackupImpl:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateContinuousBackupAtTable:
+        Y_ABORT("multipart operations are handled before, also they require transaction details");
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterContinuousBackup:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterContinuousBackupImpl:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterContinuousBackupAtTable:
+        Y_ABORT("multipart operations are handled before, also they require transaction details");
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropContinuousBackup:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropContinuousBackupImpl:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropContinuousBackupAtTable:
+        Y_ABORT("multipart operations are handled before, also they require transaction details");
+
     }
 
     Y_UNREACHABLE();
@@ -1363,6 +1397,12 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
         return CreateNewExternalDataSource(NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalTable:
         return CreateNewExternalTable(NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateContinuousBackup:
+        return  CreateNewContinuousBackup(NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterContinuousBackup:
+        return  CreateAlterContinuousBackup(NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropContinuousBackup:
+        return  CreateDropContinuousBackup(NextPartId(), tx, context);
     default:
         return {ConstructPart(opType, tx)};
     }

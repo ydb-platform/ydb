@@ -117,6 +117,14 @@ NThreading::TFuture<std::vector<Apache::Hadoop::Hive::Partition>> THiveMetastore
     });
 }
 
+NThreading::TFuture<std::string> THiveMetastoreClient::GetConfigValue(const std::string& name, const std::string& defaultValue) {
+    return RunOperation<std::string>([client=Client, name, defaultValue]()  {
+        std::string result;
+        client->get_config_value(result, name, defaultValue);
+        return result;
+    });
+}
+
 THiveMetastoreClient::~THiveMetastoreClient() {
     ThreadPool.Stop();
     Transport->close();

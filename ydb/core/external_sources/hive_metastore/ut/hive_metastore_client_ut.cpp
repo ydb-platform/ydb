@@ -234,5 +234,10 @@ Y_UNIT_TEST_SUITE(HiveMetastoreClient) {
             UNIT_ASSERT_VALUES_EQUAL(partitions[0].values[2], "1");
             UNIT_ASSERT_VALUES_EQUAL(partitions[0].sd.location, "s3a://datalake/year=1970/month=1/day=1");
         }
+
+        {
+            auto configValue = client.GetConfigValue("hive.metastore.port").GetValue(TDuration::Seconds(10));
+            UNIT_ASSERT_VALUES_EQUAL(configValue, "9083");
+        }
     }
 }

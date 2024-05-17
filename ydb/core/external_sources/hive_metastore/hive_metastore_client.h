@@ -28,6 +28,8 @@ public:
     NThreading::TFuture<void> DropPartition(const TString& databaseName, const TString& tableName, const std::vector<std::string>& partitionValues, bool deleteData = false);
     NThreading::TFuture<std::vector<Apache::Hadoop::Hive::Partition>> GetPartitionsByFilter(const TString& databaseName, const TString& tableName, const TString& filter, int16_t maxPartitions = -1);
 
+    NThreading::TFuture<std::string> GetConfigValue(const std::string& name, const std::string& defaultValue = {});
+
     ~THiveMetastoreClient();
 
 private:

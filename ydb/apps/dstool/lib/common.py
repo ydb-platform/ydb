@@ -57,6 +57,7 @@ class ConnectionParams:
         self.quiet = None
         self.http_timeout = None
         self.cafile = None
+        self.cadata = None
         self.insecure = None
         self.http = None
 
@@ -72,6 +73,14 @@ class ConnectionParams:
             return protocol, endpoint, int(port)
         else:
             return protocol, endpoint, self.mon_port
+
+    def get_cafile_data(self):
+        if self.cafile is None:
+            return None
+        if self.cadata is None:
+            with open(self.cafile, 'rb') as f:
+                self.cadata = f.read()
+        return self.cadata
 
     def get_netloc(self, host, port):
         netloc = '%s:%d' % (host, port)
@@ -317,10 +326,12 @@ def invoke_grpc(func, *params, explicit_host=None, host=None):
     options = [
         ('grpc.max_receive_message_length', 256 << 20),  # 256 MiB
     ]
-    with grpc.insecure_channel('%s:%d' % (host, connection_params.grpc_port), options) as channel:
-        if connection_params.verbose:
-            p = ', '.join('<<< %s >>>' % text_format.MessageToString(param, as_one_line=True) for param in params)
-            print('INFO: issuing %s(%s) @%s:%d' % (func, p, host, connection_params.grpc_port), file=sys.stderr)
+    if connection_params.verbose:
+        p = ', '.join('<<< %s >>>' % text_format.MessageToString(param, as_one_line=True) for param in params)
+        print('INFO: issuing %s(%s) @%s:%d protocol %s' % (func, p, host, connection_params.grpc_port,
+            connection_params.mon_protocol), file=sys.stderr)
+
+    def work(channel):
         try:
             stub = kikimr_grpc.TGRpcServerStub(channel)
             res = getattr(stub, func)(*params)
@@ -332,6 +343,16 @@ def invoke_grpc(func, *params, explicit_host=None, host=None):
                 print('ERROR: exception %s' % e, file=sys.stderr)
             raise ConnectionError("Can't connect to specified addresses by gRPC protocol")
 
+    hostport = '%s:%d' % (host, connection_params.grpc_port)
+    retval = None
+    if connection_params.mon_protocol == 'grpcs':
+        creds = grpc.ssl_channel_credentials(connection_params.get_cafile_data())
+        with grpc.secure_channel(hostport, creds, options) as channel:
+            retval = work(channel)
+    else:
+        with grpc.insecure_channel(hostport, options) as channel:
+            retval = work(channel)
+    return retval
 
 def invoke_bsc_request(request):
     if connection_params.http:

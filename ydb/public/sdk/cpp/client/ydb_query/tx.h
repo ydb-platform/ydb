@@ -65,7 +65,7 @@ struct TTxSettings {
 
     FLUENT_SETTING(TTxOnlineSettings, OnlineSettings);
 
-    ETransactionMode getMode() const {
+    ETransactionMode GetMode() const {
         return Mode_;
     }
 private:

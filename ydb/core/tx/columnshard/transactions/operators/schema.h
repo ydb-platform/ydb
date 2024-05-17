@@ -30,10 +30,6 @@ namespace NKikimr::NColumnShard {
     public:
         using TBase::TBase;
 
-        virtual bool AllowTxDups() const override {
-            return true;
-        }
-
         bool TxWithDeadline() const override {
             return false;
         }

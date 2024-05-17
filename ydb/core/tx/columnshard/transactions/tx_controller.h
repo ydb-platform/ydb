@@ -183,16 +183,16 @@ public:
             return TxInfo;
         }
 
+        void ResetStatusOnUpdate() {
+            Status = {};
+        }
+
     public:
         using TPtr = std::shared_ptr<ITransactionOperator>;
         using TFactory = NObjectFactory::TParametrizedObjectFactory<ITransactionOperator, NKikimrTxColumnShard::ETransactionKind, TTxInfo>;
 
         bool CheckAllowUpdate(const TFullTxInfo& currentTxInfo) const {
             return DoCheckAllowUpdate(currentTxInfo);
-        }
-
-        void ResetStatus() {
-            Status = {};
         }
 
         bool IsFail() const {
@@ -221,10 +221,6 @@ public:
             return TxInfo.TxId;
         }
 
-        virtual bool AllowTxDups() const {
-            return false;
-        }
-
         bool IsAsync() const {
             return DoIsAsync() && Status != EStatus::Failed && Status != EStatus::ReplySent;
         }
@@ -238,6 +234,7 @@ public:
         bool Parse(TColumnShard& owner, const TString& data, const bool onLoad = false) {
             const bool result = DoParse(owner, data);
             if (!result) {
+                AFL_VERIFY(!onLoad);
                 ProposeStartInfo = TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::ERROR, TStringBuilder() << "Error processing commit TxId# " << TxInfo.TxId
                     << ". Parsing error");
                 AFL_VERIFY(SwitchState(EStatus::Created, EStatus::Failed));
@@ -245,6 +242,7 @@ public:
                 AFL_VERIFY(SwitchState(EStatus::Created, EStatus::Parsed));
             }
             if (onLoad) {
+                ProposeStartInfo = TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::PREPARED, "success on iteration before restart");
                 Status = {};
             }
             return result;

@@ -651,8 +651,8 @@ message TAlterColumnStore {
 
 message TConsistencyShardingTablet {
     optional uint64 TabletId = 1;
-    optional uint64 FromInclude = 2;
-    optional uint64 ToNotInclude = 3;
+    optional uint64 HashIntervalLeftClosed = 2;
+    optional uint64 HashIntervalRightOpened = 3;
 }
 
 message TModuloShardingTablet {

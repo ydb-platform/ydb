@@ -9,50 +9,50 @@ public:
     class TConsistencyShardingTablet {
     private:
         YDB_ACCESSOR(ui64, TabletId, 0);
-        YDB_READONLY(ui64, FromInclude, 0);
-        YDB_READONLY(ui64, ToNotInclude, Max<ui64>());
+        YDB_READONLY(ui64, HashIntervalLeftClosed, 0);
+        YDB_READONLY(ui64, HashIntervalRightOpened, Max<ui64>());
     public:
         TConsistencyShardingTablet() = default;
-        TConsistencyShardingTablet(const ui64 tabletId, const ui64 fromInclude, const ui64 toNotInclude)
+        TConsistencyShardingTablet(const ui64 tabletId, const ui64 hashIntervalLeftClosed, const ui64 hashIntervalRightOpened)
             : TabletId(tabletId)
-            , FromInclude(fromInclude)
-            , ToNotInclude(toNotInclude) {
-            AFL_VERIFY(FromInclude < ToNotInclude);
+            , HashIntervalLeftClosed(hashIntervalLeftClosed)
+            , HashIntervalRightOpened(hashIntervalRightOpened) {
+            AFL_VERIFY(HashIntervalLeftClosed < HashIntervalRightOpened);
         }
 
         void CutHalfIntervalFromStart() {
-            const ui64 toHalf = 0.5 * ToNotInclude;
-            const ui64 fromHalf = 0.5 * FromInclude;
-            ToNotInclude = toHalf + fromHalf;
+            const ui64 toHalf = 0.5 * HashIntervalRightOpened;
+            const ui64 fromHalf = 0.5 * HashIntervalLeftClosed;
+            HashIntervalRightOpened = toHalf + fromHalf;
         }
 
         void CutHalfIntervalToEnd() {
-            const ui64 toHalf = 0.5 * ToNotInclude;
-            const ui64 fromHalf = 0.5 * FromInclude;
-            FromInclude = toHalf + fromHalf;
+            const ui64 toHalf = 0.5 * HashIntervalRightOpened;
+            const ui64 fromHalf = 0.5 * HashIntervalLeftClosed;
+            HashIntervalLeftClosed = toHalf + fromHalf;
         }
 
         NKikimrSchemeOp::TConsistencyShardingTablet SerializeToProto() const {
             NKikimrSchemeOp::TConsistencyShardingTablet result;
             result.SetTabletId(TabletId);
-            result.SetFromInclude(FromInclude);
-            result.SetToNotInclude(ToNotInclude);
+            result.SetHashIntervalLeftClosed(HashIntervalLeftClosed);
+            result.SetHashIntervalRightOpened(HashIntervalRightOpened);
             return result;
         }
 
         TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TConsistencyShardingTablet& proto) {
             TabletId = proto.GetTabletId();
-            FromInclude = proto.GetFromInclude();
-            ToNotInclude = proto.GetToNotInclude();
-            AFL_VERIFY(FromInclude < ToNotInclude);
+            HashIntervalLeftClosed = proto.GetHashIntervalLeftClosed();
+            HashIntervalRightOpened = proto.GetHashIntervalRightOpened();
+            AFL_VERIFY(HashIntervalLeftClosed < HashIntervalRightOpened);
             return TConclusionStatus::Success();
         }
 
         bool operator<(const TConsistencyShardingTablet& item) const {
-            if (FromInclude == item.FromInclude) {
-                return ToNotInclude < item.ToNotInclude;
+            if (HashIntervalLeftClosed == item.HashIntervalLeftClosed) {
+                return HashIntervalRightOpened < item.HashIntervalRightOpened;
             } else {
-                return FromInclude < item.FromInclude;
+                return HashIntervalLeftClosed < item.HashIntervalLeftClosed;
             }
         }
     };
@@ -74,12 +74,12 @@ private:
         {
             ui64 currentPos = 0;
             for (auto&& i : ActiveReadSpecialSharding) {
-                if (currentPos < i->GetFromInclude()) {
+                if (currentPos < i->GetHashIntervalLeftClosed()) {
                     return TConclusionStatus::Fail("sharding special intervals not covered (reading) full ui64 line");
-                } else if (currentPos > i->GetFromInclude()) {
+                } else if (currentPos > i->GetHashIntervalLeftClosed()) {
                     return TConclusionStatus::Fail("sharding intervals covered twice for reading full ui64 line");
                 }
-                currentPos = i->GetToNotInclude();
+                currentPos = i->GetHashIntervalRightOpened();
             }
             if (currentPos != Max<ui64>()) {
                 return TConclusionStatus::Fail("sharding special intervals not covered (reading) full ui64 line (final segment)");
@@ -88,10 +88,10 @@ private:
         {
             ui64 currentPos = 0;
             for (auto&& i : ActiveWriteSpecialSharding) {
-                if (currentPos < i->GetFromInclude()) {
+                if (currentPos < i->GetHashIntervalLeftClosed()) {
                     return TConclusionStatus::Fail("sharding special intervals not covered (writing) full ui64 line");
                 }
-                currentPos = std::max<ui64>(currentPos, i->GetToNotInclude());
+                currentPos = std::max<ui64>(currentPos, i->GetHashIntervalRightOpened());
             }
             if (currentPos != Max<ui64>()) {
                 return TConclusionStatus::Fail("sharding special intervals not covered (writing) full ui64 line (final segment)");
@@ -129,7 +129,7 @@ public:
             ui32 idxShard = 0;
             bool found = false;
             for (auto&& s : ActiveWriteSpecialSharding) {
-                if (s->GetFromInclude() > i || i >= s->GetToNotInclude()) {
+                if (s->GetHashIntervalLeftClosed() > i || i >= s->GetHashIntervalRightOpened()) {
                     break;
                 }
                 result[idxShard].emplace_back(idxRecord);
@@ -223,7 +223,7 @@ public:
         for (auto&& i : SpecialSharding) {
             const ui64 start = GetUnifiedDistributionBorder(idx, SpecialSharding.size());
             const ui64 finish = GetUnifiedDistributionBorder(idx + 1, SpecialSharding.size());
-            if (i.GetFromInclude() != start || i.GetToNotInclude() != finish) {
+            if (i.GetHashIntervalLeftClosed() != start || i.GetHashIntervalRightOpened() != finish) {
                 return false;
             }
             shardIdsCorrectOrder.emplace_back(i.GetTabletId());

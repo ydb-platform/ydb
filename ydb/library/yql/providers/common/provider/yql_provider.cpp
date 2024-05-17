@@ -1414,8 +1414,8 @@ bool ValidateFormatForInput(
             ++realSchemaColumnsCount;
         }
 
-        if (realSchemaColumnsCount > 1) {
-            ctx.AddError(TIssue(TStringBuilder() << "Only one column in schema supported in raw format (you have " 
+        if (realSchemaColumnsCount != 1) {
+            ctx.AddError(TIssue(TStringBuilder() << "Only one column in schema supported in raw format (you have "
                 << realSchemaColumnsCount << " fields)"));
             return false;
         }

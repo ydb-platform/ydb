@@ -48,6 +48,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
     THashMap<ui32, TSchemaPreset> schemaPresets;
     THashMap<ui32, TTableVersionsInfo> tableVersions;
     {
+        TMemoryProfileGuard g("TTablesManager/InitFromDB::Tables");
         auto rowset = db.Table<Schema::TableInfo>().Select();
         if (!rowset.IsReady()) {
             return false;
@@ -73,6 +74,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
 
     bool isFakePresetOnly = true;
     {
+        TMemoryProfileGuard g("TTablesManager/InitFromDB::SchemaPresets");
         auto rowset = db.Table<Schema::SchemaPresetInfo>().Select();
         if (!rowset.IsReady()) {
             return false;
@@ -96,6 +98,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
     }
 
     {
+        TMemoryProfileGuard g("TTablesManager/InitFromDB::Versions");
         auto rowset = db.Table<Schema::TableVersionInfo>().Select();
         if (!rowset.IsReady()) {
             return false;
@@ -136,6 +139,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
     }
 
     {
+        TMemoryProfileGuard g("TTablesManager/InitFromDB::PresetVersions");
         auto rowset = db.Table<Schema::SchemaPresetVersionInfo>().Select();
         if (!rowset.IsReady()) {
             return false;
@@ -159,6 +163,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
         }
     }
 
+    TMemoryProfileGuard g("TTablesManager/InitFromDB::Other");
     for (const auto& [id, preset] : schemaPresets) {
         if (isFakePresetOnly) {
             Y_ABORT_UNLESS(id == 0);

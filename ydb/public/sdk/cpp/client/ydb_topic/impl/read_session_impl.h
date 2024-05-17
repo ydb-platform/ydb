@@ -932,10 +932,6 @@ private:
                                  typename TAReadSessionEvent<false>::TPartitionSessionStatusEvent,
                                  PartitionStreamStatusHandler_,
                                  PartitionSessionStatusHandler_);
-        //DECLARE_TEMPLATE_HANDLER(typename TAReadSessionEvent<true>::TPartitionStreamClosedEvent,
-        //                         typename TAReadSessionEvent<false>::TPartitionSessionClosedEvent,
-        //                         PartitionStreamClosedHandler_,
-        //                         PartitionSessionClosedHandler_);
         DECLARE_HANDLER(TASessionClosedEvent<UseMigrationProtocol>, SessionClosedHandler_, false); // Not applied
 
 #undef DECLARE_HANDLER

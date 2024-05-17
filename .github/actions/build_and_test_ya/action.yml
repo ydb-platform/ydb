@@ -36,12 +36,6 @@ inputs:
     type: boolean
     required: true
     description: If true, compares build graphs between the current and previous commits to find a list of test suites to run. Otherwise, runs all tests.
-  increment_build:
-    # TODO: merge this input with 'increment'
-    type: boolean
-    required: false
-    default: "false"
-    description: If true, compares build graphs between the current and previous commits to find a list of modules to build.
   folder_prefix:
     type: string
     default: "ya-"
@@ -84,7 +78,7 @@ runs:
         build_preset: ${{ inputs.build_preset }}
 
     - name: Generate ya.make with affected test suites and modules list
-      if: inputs.increment == 'true' || inputs.increment_build == 'true'
+      if: inputs.increment == 'true'
       uses: ./.github/actions/graph_compare
  
     - name: Change target in case of incremental (tests)
@@ -97,23 +91,12 @@ runs:
           echo "target=${{ inputs.build_target }}" >> $GITHUB_OUTPUT
         fi
 
- 
-    - name: Change target in case of incremental (modules)
-      id: modules_choice
-      shell: bash
-      run: |
-        if [ "${{ inputs.increment_build }}" == "true" ]; then
-          echo "target=." >> $GITHUB_OUTPUT
-        else
-          echo "target=${{ inputs.build_target }}" >> $GITHUB_OUTPUT
-        fi
-
     - name: Build
       uses: ./.github/actions/build_ya
       id: build
       if: ${{ inputs.run_build == 'true' }}
       with:
-        build_target: ${{ steps.modules_choice.outputs.target }}
+        build_target: ${{ inputs.build_target }}
         build_preset: ${{ inputs.build_preset }}
         bazel_remote_uri: ${{  fromJSON( inputs.vars ).REMOTE_CACHE_URL || '' }}
         bazel_remote_username: ${{ inputs.put_build_results_to_cache &&  fromJSON( inputs.secs ).REMOTE_CACHE_USERNAME || '' }}

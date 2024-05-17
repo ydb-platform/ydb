@@ -21,10 +21,6 @@ inputs:
     required: false
     default: "8"
     description: "link threads count"
-  do_link:
-    required: false
-    default: "false"
-    description: "Perform linkage or not (temporary transitional flag)"
 outputs:
   success:
     value: ${{ steps.build.outputs.status }}
@@ -69,12 +65,10 @@ runs:
           extra_params+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
         fi
         
-        remote_put_params=()
-
         if [ ! -z "${{ inputs.bazel_remote_username }}" ]; then
-          remote_put_params+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
-          remote_put_params+=(--bazel-remote-password "${{ inputs.bazel_remote_password }}")
-          remote_put_params+=(--bazel-remote-put --dist-cache-evict-bins --add-result .o --add-result .a)
+          extra_params+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
+          extra_params+=(--bazel-remote-password "${{ inputs.bazel_remote_password }}")
+          extra_params+=(--bazel-remote-put --dist-cache-evict-bins --add-result .o --add-result .a)
         fi
         
         case "${{ inputs.build_preset }}" in
@@ -121,28 +115,14 @@ runs:
         # to be sure
         set -o pipefail
         
-        # We don't want to put binaries (exe, so) to cache because they are too big, 
-        # so, if cache specified we do not perform linkage (see '--dist-cache-evict-bins' flag)
         ./ya make -k --build "${build_type}" --force-build-depends -T --stat -DCONSISTENT_DEBUG \
           --log-file "$TMP_DIR/ya_log.txt" --evlog-file "$TMP_DIR/ya_evlog.jsonl" \
           --cache-size 512G --link-threads "${{ inputs.link_threads }}" \
-          "${extra_params[@]}" "${remote_put_params[@]}" |& tee $TMP_DIR/ya_make.log && echo "status=true" >> $GITHUB_OUTPUT || (
+          "${extra_params[@]}" |& tee $TMP_DIR/ya_make.log && echo "status=true" >> $GITHUB_OUTPUT || (
               RC=$?
               echo "::debug::ya make RC=$RC"
               echo "status=failed" >> $GITHUB_OUTPUT
           )
-
-        if [ "${{ inputs.do_link }}" == "true" ]; then
-          # Perform linkage without "${remote_put_params[@]}"
-          ./ya make -k --build "${build_type}" --force-build-depends -T --stat -DCONSISTENT_DEBUG \
-            --log-file "$TMP_DIR/ya_log_linkage.txt" --evlog-file "$TMP_DIR/ya_evlog_linkage.jsonl" \
-            --cache-size 512G --link-threads "${{ inputs.link_threads }}" \
-            "${extra_params[@]}" |& tee $TMP_DIR/ya_make.log && echo "status=true" >> $GITHUB_OUTPUT || (
-                RC=$?
-                echo "::debug::ya make RC=$RC"
-                echo "status=failed" >> $GITHUB_OUTPUT
-            )
-        fi
 
     - name: sync logs to s3
       if: always()
@@ -164,15 +144,6 @@ runs:
         else
           echo "Build successful." | .github/scripts/tests/comment-pr.py --ok
         fi
-
-    - name: build_stats
-      shell: bash
-      continue-on-error: true
-      run: |
-        set -x
-        export build_preset="${{ inputs.build_preset }}" 
-        python3 -m pip install ydb ydb[yc]
-        python3 .github/scripts/send_build_stats.py
 
     - name: show free space
       if: always()

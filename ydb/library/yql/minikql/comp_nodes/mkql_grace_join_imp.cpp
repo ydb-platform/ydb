@@ -137,7 +137,7 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
         stringVals.insert( stringVals.end(), IColumnsVals[NumberOfKeyIColumns + i].begin(), IColumnsVals[NumberOfKeyIColumns + i].end());
     }
 
-    TableBucketsStats[bucket].KeyIntValsTotalSize += TempTuple.size();
+    TableBucketsStats[bucket].KeyIntValsTotalSize += keyIntVals.size() - offset;
     TableBucketsStats[bucket].StringValuesTotalSize += stringVals.size() - initialStringsSize;
 }
 

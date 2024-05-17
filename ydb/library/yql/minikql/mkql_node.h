@@ -214,6 +214,11 @@ public:
     bool IsPresortSupported() const {
         return SupportsPresort;
     }
+
+    bool IsSerializable() const {
+        return ! (IsResource() || IsType() || IsStream() || IsCallable()
+            || IsAny() || IsFlow() || IsReservedKind());
+    }
 };
 
 class TTypeType : public TType {

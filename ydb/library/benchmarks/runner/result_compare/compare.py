@@ -46,6 +46,8 @@ def main():
                     coldata += [[dirname, q, elapsed, utime, stime, maxrss, exitcode]]
                 data += [coldata]
     print('<tr><th>Testcase' + '<th>Status<th>Real time, s<th>User time, s<th>RSS, MB<th>'*len(data) + '</tr>')
+    refDatas = [None]*len(data[0])
+    refTypes = [None]*len(data[0])
     for i in range(len(data[0])):
         q = data[0][i][1]
         print('<tr><td>{}'.format(html.escape(q)), end='')
@@ -68,16 +70,18 @@ def main():
                             valType = result[0][b'Write'][0][b'Type']
                             valData = result[0][b'Write'][0][b'Data']
                             pass
-                    if c == 0:
-                        data[c][i] += [valType, valData]
-                        print('<td>')
+                    if refDatas[i] is None:
+                        refDatas[i] = valData
+                        refTypes[i] = valType
+                        print('<td>REF')
                     else:
                         assert valType[0] == b'ListType'
                         assert valType[1][0] == b'StructType'
                         stypes = valType[1][1]
                         ncols = len(stypes)
-                        refType = data[0][i][-2]
-                        refData = data[0][i][-1]
+                        refType = refTypes[i]
+                        assert refType is not None, "Reference missing"
+                        refData = refDatas[i]
                         refstypes = refType[1][1]
                         assert ncols == len(refType[1][1]), 'Column number mismatch {} != {}'.format(ncols, len(refstypes))
                         nrows = len(valData)

@@ -222,7 +222,7 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::DeleteNotReadyTail(TDe
 template<bool UseMigrationProtocol>
 std::shared_ptr<TCallbackContext<TDirectReadConnection<UseMigrationProtocol>>> TDirectReadConnectionManager<UseMigrationProtocol>::CreateConnection(TNodeId nodeId) {
     return MakeWithCallbackContext<TDirectReadConnection<UseMigrationProtocol>>(
-        ReadSessionSettings, ServerSessionId, ClientContext->CreateContext(), ConnectionFactory, nodeId);
+        ServerSessionId, ReadSessionSettings, SingleClusterReadSession, ClientContext->CreateContext(), ConnectionFactory, nodeId);
 }
 
 template<bool UseMigrationProtocol>
@@ -342,27 +342,49 @@ inline void TDirectReadConnection<false>::OnReadDoneImpl(Ydb::Topic::StreamDirec
 
 template<>
 template<>
-inline void TDirectReadConnection<false>::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::StartDirectReadPartitionSessionResponse&&, TDeferredActions<false>&) {
+inline void TDirectReadConnection<false>::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::StartDirectReadPartitionSessionResponse&& response, TDeferredActions<false>&) {
     // Y_ABORT_UNLESS(Lock.IsLocked());
     // LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Server session id: " << msg.session_id());
 
     // RetryState = nullptr;
 
+    Cerr << response.DebugString() << Endl;
 }
 
 template<>
 template<>
-inline void TDirectReadConnection<false>::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::StopDirectReadPartitionSession&&, TDeferredActions<false>&) {
+inline void TDirectReadConnection<false>::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::StopDirectReadPartitionSession&& response, TDeferredActions<false>&) {
+    Cerr << response.DebugString() << Endl;
+}
+
+template <>
+template <>
+inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(Ydb::Topic::StreamReadMessage::ReadResponse&& msg, TDeferredActions<false>& deferred);
+
+template <>
+inline void TSingleClusterReadSessionImpl<false>::OnDirectReadDone(Ydb::Topic::StreamReadMessage::ReadResponse&& message, TDeferredActions<false>& deferred) {
+    with_lock(Lock) {
+        OnReadDoneImpl(std::move(message), deferred);
+    }
 }
 
 template<>
 template<>
-inline void TDirectReadConnection<false>::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&&, TDeferredActions<false>&) {
+inline void TDirectReadConnection<false>::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&& response, TDeferredActions<false>& deferred) {
+    Cerr << response.DebugString() << Endl;
+    Ydb::Topic::StreamReadMessage::ReadResponse r;
+    r.set_bytes_size(response.ByteSizeLong());
+    auto* data = r.add_partition_data();
+    data->CopyFrom(response.partition_data());
+    if (auto session = SingleClusterReadSession->LockShared()) {
+        session->OnDirectReadDone(std::move(r), deferred);
+    }
 }
 
 template<>
 template<>
-inline void TDirectReadConnection<false>::OnReadDoneImpl(Ydb::Topic::UpdateTokenResponse&&, TDeferredActions<false>&) {
+inline void TDirectReadConnection<false>::OnReadDoneImpl(Ydb::Topic::UpdateTokenResponse&& response, TDeferredActions<false>&) {
+    Cerr << response.DebugString() << Endl;
 }
 
 template<bool UseMigrationProtocol>
@@ -623,20 +645,13 @@ TSingleClusterReadSessionImpl<UseMigrationProtocol>::TSingleClusterReadSessionIm
     , NextPartitionStreamId(partitionStreamIdStart)
     , PartitionStreamIdStep(partitionStreamIdStep)
     , ConnectionFactory(std::move(connectionFactory))
+    , DirectConnectionFactory(std::move(directConnectionFactory))
     , EventsQueue(std::move(eventsQueue))
     , ClientContext(std::move(clientContext))
     , CookieMapping()
     , ReadSizeBudget(GetCompressedDataSizeLimit())
     , ReadSizeServerDelta(0)
 {
-    if constexpr (!UseMigrationProtocol) {
-        DirectReadConnectionManager = std::make_shared<TDirectReadConnectionManager<UseMigrationProtocol>>(
-            Settings,
-            this->SelfContext,
-            ClientContext->CreateContext(),
-            std::move(directConnectionFactory)
-        );
-    }
 }
 
 template<bool UseMigrationProtocol>
@@ -659,6 +674,14 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::Start() {
     Settings.EventHandlers_.HandlersExecutor_->Start();
     if (!Reconnect(TPlainStatus())) {
         AbortSession(EStatus::ABORTED, "Driver is stopping");
+    }
+    if constexpr (!UseMigrationProtocol) {
+        DirectReadConnectionManager = std::make_shared<TDirectReadConnectionManager<UseMigrationProtocol>>(
+            Settings,
+            this->SelfContext,
+            ClientContext->CreateContext(),
+            DirectConnectionFactory
+        );
     }
 }
 
@@ -906,6 +929,7 @@ inline void TSingleClusterReadSessionImpl<false>::InitImpl(TDeferredActions<fals
 
     init.set_consumer(Settings.ConsumerName_);
     init.set_auto_partitioning_support(Settings.AutoPartitioningSupport_);
+    init.set_direct_read(Settings.DirectRead_);
 
     for (const TTopicReadSettings& topic : Settings.Topics_) {
         auto* topicSettings = init.add_topics_read_settings();

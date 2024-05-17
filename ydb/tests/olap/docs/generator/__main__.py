@@ -12,23 +12,18 @@ from logging import error, getLogger
 from optparse import OptionParser
 
 
-NAME_PREFIX = 'ydb.tests.olap.'
-FILE_NAME_PREFIX = '/'.join(NAME_PREFIX.split('.'))
-
-
 class ModulePrinter:
     def __init__(self, options, module: types.ModuleType) -> None:
         self._options = options
         self._module = module
         self._output = None
 
-    @staticmethod
-    def _get_anchor(obj: any, with_module: bool) -> str | None:
+    def _get_anchor(self, obj: any, with_module: bool) -> str | None:
         def _is_interest_module(module_name: str) -> bool:
-            return module_name.startswith(NAME_PREFIX)
+            return module_name.startswith(self._options.name_prefix)
 
         def _get_module_anchor(module_name: str) -> str:
-            return f'./{ModulePrinter._get_stricted_name(module_name)}.md' if with_module else ''
+            return f'./{self._get_stricted_name(module_name)}.md' if with_module else ''
 
         if inspect.ismodule(obj) and _is_interest_module(obj.__name__):
             return _get_module_anchor(obj.__name__)
@@ -38,13 +33,11 @@ class ModulePrinter:
             return f'{_get_module_anchor(obj.__module__)}#{obj.__qualname__.replace("_", "")}'
         return None
 
-    @staticmethod
-    def _get_docs_link(obj: any, link_text: str, no_link_text: str | None = None) -> str:
-        link = ModulePrinter._get_anchor(obj, with_module=True)
+    def _get_docs_link(self, obj: any, link_text: str, no_link_text: str | None = None) -> str:
+        link = self._get_anchor(obj, with_module=True)
         return f'[{link_text}]({link})' if link is not None else no_link_text
 
-    @staticmethod
-    def get_doc(obj) -> dict:
+    def get_doc(self, obj) -> dict:
         def _subst_links(descr: str) -> str:
             if isinstance(obj, type):
                 # class
@@ -66,13 +59,13 @@ class ModulePrinter:
                 if module is None:
                     try:
                         evaluted = eval(name, obj_globals, obj_locals)
-                        link = ModulePrinter._get_docs_link(evaluted, '{#T}', name)
+                        link = self._get_docs_link(evaluted, '{#T}', name)
                     except BaseException as e:
                         error(f'cannot evalute {name}: {e}')
                         link = name
                 else:
-                    name = ModulePrinter._get_stricted_name(name)
-                    link = ModulePrinter._get_docs_link(module, '{#T}', name)
+                    name = self._get_stricted_name(name)
+                    link = self._get_docs_link(module, '{#T}', name)
                 tmp.append((start, end, link))
             for start, end, link in reversed(tmp):
                 descr = descr[:start] + link + descr[end:]
@@ -172,7 +165,7 @@ class ModulePrinter:
         subclasses = self.get_subclasses(cl)
         functions = self.get_functions(cl)
         self.print_toc(subclasses, functions)
-        if cl.__base__ is not None and cl.__base__.__module__.startswith(NAME_PREFIX):
+        if cl.__base__ is not None and cl.__base__.__module__.startswith(self._options.name_prefix):
             self.print_header('Inherits', 6)
             self._output.write(f'{self._get_docs_link(cl.__base__, "{#T}", f"{cl.__base__.__module__}.{cl.__base__.__qualname__}")}\n')
         doc = self.get_doc(cl)
@@ -246,18 +239,17 @@ class ModulePrinter:
             self._output.write(f'{ann_str}{ret_descr}\n')
         self.print_examples(doc)
 
-    @staticmethod
-    def _get_stricted_name(module: types.ModuleType | str) -> str:
+    def _get_stricted_name(self, module: types.ModuleType | str) -> str:
         if isinstance(module, types.ModuleType):
-            return ModulePrinter._get_stricted_name(module.__name__)
-        if module.startswith(NAME_PREFIX):
-            return module[len(NAME_PREFIX) :]
+            return self._get_stricted_name(module.__name__)
+        if module.startswith(self._options.name_prefix):
+            return module[len(self._options.name_prefix) :]
         return module
 
     def print_module(self) -> None:
         name = self._get_stricted_name(self._module)
         submodules = inspect.getmembers(
-            self._module, lambda x: inspect.ismodule(x) and inspect.getfile(x).startswith(FILE_NAME_PREFIX)
+            self._module, lambda x: inspect.ismodule(x) and x.__name__.startswith(self._options.name_prefix)
         )
         subclasses = self.get_subclasses(self._module, lambda x: inspect.getmodule(x) == self._module)
         functions = self.get_functions(self._module, lambda x: inspect.getmodule(x) == self._module)
@@ -276,7 +268,7 @@ class ModulePrinter:
     def generate_toc(self):
         name = self._get_stricted_name(self._module)
         submodules = inspect.getmembers(
-            self._module, lambda x: inspect.ismodule(x) and inspect.getfile(x).startswith(FILE_NAME_PREFIX)
+            self._module, lambda x: inspect.ismodule(x) and x.__name__.startswith(self._options.name_prefix)
         )
         children = [ModulePrinter(module=sub, options=self._options).generate_toc() for _, sub in submodules]
         toc = {'name': name, 'href': f'scenario_tests/{name}.md'}
@@ -289,6 +281,7 @@ def main():
     getLogger().setLevel('INFO')
     parser = OptionParser(usage='usage: %prog [options]')
     parser.add_option('-o', '--output-dir', dest='out_dir', help='Output dir')
+    parser.add_option('-p', '--name-prefix', dest='name_prefix', help='root module name prefix', default='ydb.tests.olap.')
     options, _ = parser.parse_args()
     if os.path.exists(options.out_dir):
         shutil.rmtree(options.out_dir)

@@ -26,13 +26,12 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
         if (entry.Status != NSchemeCache::TSchemeCacheRequest::EStatus::OkData) {
             Cancelled = true;
 
-            if (!Self->ScanTablesByTime.empty()) {
-                auto& topTable = Self->ScanTablesByTime.top();
-                auto pathId = topTable.PathId;
-                if (pathId == Self->ScanTableId.PathId) {
-                    Self->ScanTablesByTime.pop();
-                    db.Table<Schema::ScanTables>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
-                }
+            if (entry.Status == NSchemeCache::TSchemeCacheRequest::EStatus::PathErrorNotExist) {
+                Self->DropScanTable(db);
+                Self->DeleteStatisticsFromTable();
+            } else {
+                Self->RescheduleScanTable(db);
+                Self->ScheduleNextScan();
             }
 
             Self->ResetScanState(db);
@@ -58,7 +57,6 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
         SA_LOG_D("[" << Self->TabletID() << "] TTxResolve::Complete");
 
         if (Cancelled) {
-            Self->ScheduleNextScan();
             return;
         }
 

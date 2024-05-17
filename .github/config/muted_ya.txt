@@ -28,8 +28,10 @@ ydb/core/kqp/ut/service KqpQueryService.QueryOnClosedSession
 ydb/core/kqp/ut/service KqpService.CloseSessionsWithLoad
 ydb/core/kqp/ut/service [38/50]*
 ydb/core/persqueue/ut TPQTest.*DirectRead*
+ydb/core/persqueue/ut TopicAutoscaling.PartitionSplit_ManySession_NewSDK
 ydb/core/tx/coordinator/ut Coordinator.RestoreTenantConfiguration
 ydb/core/tx/datashard/ut_change_exchange Cdc.InitialScanDebezium
+ydb/core/tx/datashard/ut_build_index TTxDataShardBuildIndexScan.ShadowBorrowCompaction
 ydb/core/tx/schemeshard/ut_restore TImportTests.ShouldSucceedOnManyTables
 ydb/core/tx/schemeshard/ut_split_merge TSchemeShardSplitBySizeTest.Merge1KShards
 ydb/core/tx/tx_proxy/ut_ext_tenant TExtSubDomainTest.CreateTableInsideAndAlterDomainAndTable-AlterDatabaseCreateHiveFirst*
@@ -62,7 +64,6 @@ ydb/services/persqueue_v1/ut TPersQueueTest.SetupLockSession
 ydb/services/persqueue_v1/ut TPQCompatTest.BadTopics
 ydb/services/persqueue_v1/ut TPersQueueTest.DirectRead*Cache*
 ydb/services/persqueue_v1/ut [3/10]*
-ydb/services/persqueue_v1/ut TPersQueueTest.DirectReadStop
 ydb/services/ydb/sdk_sessions_pool_ut YdbSdkSessionsPool.StressTestSync*
 ydb/services/ydb/sdk_sessions_ut YdbSdkSessions.TestActiveSessionCountAfterBadSession
 ydb/services/ydb/sdk_sessions_ut [6/10]*

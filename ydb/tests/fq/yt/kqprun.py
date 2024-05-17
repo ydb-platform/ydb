@@ -1,5 +1,6 @@
 import os
 
+import pytest
 import yatest.common
 
 import yql_utils
@@ -43,10 +44,13 @@ class KqpRun(object):
             '--result-file=%(results_file)s ' \
             '--log-file=%(log_file)s ' \
             '--udfs-dir=%(udfs_dir)s ' \
+            '--result-format full-proto ' \
             '--result-rows-limit 0 ' % locals()
 
         if tables is not None:
             for table in tables:
+                if table.format != 'yson':
+                    pytest.skip('skip tests containing tables with a non-yson attribute format')
                 cmd += '--table=yt.Root/%s@%s ' % (table.full_name, table.yqlrun_file)
 
         proc_result = yatest.common.process.execute(cmd.strip().split(), check_exit_code=False, cwd=self.res_dir)

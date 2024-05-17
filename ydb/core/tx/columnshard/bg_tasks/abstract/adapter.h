@@ -1,6 +1,8 @@
 #pragma once
 #include "session.h"
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
+#include <ydb/core/tx/columnshard/common/tablet_id.h>
+
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/conclusion/status.h>

@@ -3487,7 +3487,7 @@ private:
             return node;
         }
 
-        auto count = CleanupWorld(countBase.Count(), ctx);
+        auto count = State_->PassiveExecution ? countBase.Count() : CleanupWorld(countBase.Count(), ctx);
         if (!count) {
             return {};
         }

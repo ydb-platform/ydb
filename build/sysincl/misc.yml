@@ -47,14 +47,14 @@
 
 - source_filter: "^contrib/tools/(bison|m4)/"
   includes:
-    - error.h:       contrib/tools/bison/gnulib/src/error.h
-    - fcntl.h:       contrib/tools/bison/gnulib/platform/posix/fcntl.h
-    - getopt.h:      contrib/tools/bison/gnulib/platform/posix/getopt.h
-    - obstack.h:     contrib/tools/bison/gnulib/src/obstack.h
-    - regex.h:       contrib/tools/bison/gnulib/src/regex.h
+    - error.h:       contrib/tools/bison/lib/error.h
+    - fcntl.h:       contrib/tools/bison/lib/platform/posix/fcntl.h
+    - getopt.h:      contrib/tools/bison/lib/platform/posix/getopt.h
+    - obstack.h:     contrib/tools/bison/lib/obstack.h
+    - regex.h:       contrib/tools/bison/lib/regex.h
     - system.h
-    - unlocked-io.h: contrib/tools/bison/gnulib/src/unlocked-io.h
-    # ucrt headers are included by bison/gnulib in a very specific way
+    - unlocked-io.h: contrib/tools/bison/lib/unlocked-io.h
+    # ucrt headers are included by bison/lib in a very specific way
     - ../ucrt/fcntl.h
     - ../ucrt/locale.h
     - ../ucrt/math.h

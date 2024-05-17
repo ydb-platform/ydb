@@ -65,7 +65,7 @@ CFLAGS(
 )
 
 PEERDIR(
-    contrib/tools/bison/gnulib
+    contrib/tools/bison/lib
 )
 
 END()

@@ -38,7 +38,11 @@ public:
     }
 
 protected:
+    // PartitionSessionId here and StreamReadMessage.PartitionSession.partition_session_id are not the same IDs!
+    // This one is generated on the client side, and the other one on the server side.
+    // Server side partition_session_id is also called AssignId, PartitionStreamId (for persqueue SDK).
     ui64 PartitionSessionId;
+
     TString TopicPath;
     ui64 PartitionId;
 };

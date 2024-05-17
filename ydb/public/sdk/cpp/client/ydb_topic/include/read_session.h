@@ -196,6 +196,8 @@ struct TReadSessionSettings: public TRequestSettings<TReadSessionSettings> {
     //! AutoPartitioningSupport.
     FLUENT_SETTING_DEFAULT(bool, AutoPartitioningSupport, false);
 
+    FLUENT_SETTING_DEFAULT(bool, DirectRead, false);
+
     //! Log.
     FLUENT_SETTING_OPTIONAL(TLog, Log);
 };

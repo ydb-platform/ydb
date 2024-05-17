@@ -62,6 +62,10 @@ public:
     bool GetForeign() const;
     void SetForeign(bool value);
 
+    // "read_via_exec_node"
+    bool GetReadViaExecNode() const;
+    void SetReadViaExecNode(bool value);
+
     // "columns"
     std::optional<std::vector<TString>> GetColumns() const;
     void SetColumns(const std::vector<TString>& columns);

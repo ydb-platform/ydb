@@ -932,50 +932,55 @@ private:
                                  typename TAReadSessionEvent<false>::TPartitionSessionStatusEvent,
                                  PartitionStreamStatusHandler_,
                                  PartitionSessionStatusHandler_);
-        DECLARE_TEMPLATE_HANDLER(typename TAReadSessionEvent<true>::TPartitionStreamClosedEvent,
-                                 typename TAReadSessionEvent<false>::TPartitionSessionClosedEvent,
-                                 PartitionStreamClosedHandler_,
-                                 PartitionSessionClosedHandler_);
+        //DECLARE_TEMPLATE_HANDLER(typename TAReadSessionEvent<true>::TPartitionStreamClosedEvent,
+        //                         typename TAReadSessionEvent<false>::TPartitionSessionClosedEvent,
+        //                         PartitionStreamClosedHandler_,
+        //                         PartitionSessionClosedHandler_);
         DECLARE_HANDLER(TASessionClosedEvent<UseMigrationProtocol>, SessionClosedHandler_, false); // Not applied
 
 #undef DECLARE_HANDLER
 #undef DECLARE_TEMPLATE_HANDLER
 
-        using TPartitionSessionClosedEvent = std::conditional_t<UseMigrationProtocol,
-                TAReadSessionEvent<true>::TPartitionStreamClosedEvent,
-                TAReadSessionEvent<false>::TPartitionSessionClosedEvent>;
-
-/*
-        bool operator()(TPartitionSessionClosedEvent&) {
-            auto specificProvider = [this](){
+        bool operator()(std::conditional_t<UseMigrationProtocol, typename TAReadSessionEvent<true>::TPartitionStreamClosedEvent, typename TAReadSessionEvent<false>::TPartitionSessionClosedEvent>&) {
+            auto specific = [this]() {
                     if constexpr (UseMigrationProtocol) {
                         return this->Settings.EventHandlers_.PartitionStreamClosedHandler_;
                     } else {
                         return this->Settings.EventHandlers_.PartitionSessionClosedHandler_;
                     }
-            };
+                }();
+
+            if (!specific && !this->Settings.EventHandlers_.CommonHandler_) {
+                return false;
+            }
 
             this->template PushCommonHandler<>(
                 std::move(TParent::TBaseHandlersVisitor::Event),
-                [specific = specificProvider(),
+                [specific = specific,
                  common = this->Settings.EventHandlers_.CommonHandler_,
-                 cbContext = CbContext](TReadSessionEvent::TEvent& event) {
-                auto& e = std::get<TPartitionSessionClosedEvent>(event);
+                 cbContext = CbContext](auto& event) {
+                auto& e = std::get<std::conditional_t<UseMigrationProtocol, typename TAReadSessionEvent<true>::TPartitionStreamClosedEvent, typename TAReadSessionEvent<false>::TPartitionSessionClosedEvent>>(event);
                 if (specific) {
                     specific(e);
                 } else if (common) {
                     common(event);
                 }
-                if (auto session = cbContext->LockShared()) {
-                    session->UnregisterPartition(e.GetPartitionSession()->GetPartitionId(), e.GetPartitionSession()->GetPartitionSessionId());
+                if constexpr (!UseMigrationProtocol) {
+                    if (auto session = cbContext->LockShared()) {
+                        session->UnregisterPartition(e.GetPartitionSession()->GetPartitionId(), e.GetPartitionSession()->GetPartitionSessionId());
+                    }
                 }
             });
-            return specificProvider() || this->Settings.EventHandlers_.CommonHandler_;
+
+            return true;
         }
-*/
+
         template<bool E = !UseMigrationProtocol>
         constexpr std::enable_if_t<E, bool>
         operator()(typename TAReadSessionEvent<false>::TEndPartitionSessionEvent&) {
+            if (!this->Settings.EventHandlers_.EndPartitionSessionHandler_ && !this->Settings.EventHandlers_.CommonHandler_) {
+                return false;
+            }
             this->template PushCommonHandler<>(
                 std::move(TParent::TBaseHandlersVisitor::Event),
                 [specific = this->Settings.EventHandlers_.EndPartitionSessionHandler_,
@@ -987,11 +992,8 @@ private:
                 } else if (common) {
                     common(event);
                 }
-                //if (auto session = cbContext->LockShared()) {
-                //    session->SetReadingFinished(e.GetPartitionSession()->GetPartitionSessionId(), e.GetChildPartitionIds());
-                //}
             });
-            return this->Settings.EventHandlers_.EndPartitionSessionHandler_ || this->Settings.EventHandlers_.CommonHandler_;
+            return true;
         }
 
         bool Visit() {

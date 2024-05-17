@@ -16,7 +16,7 @@ SIMPLE_STRICT_UDF_WITH_OPTIONAL_ARGS(TToBinaryString, TOptional<char*>(TAutoMap<
     const TUnboxedValuePod x = args[0];
 
     EFormat format = EFormat::FloatVector;
-    if(args[1]) {
+    if (args[1]) {
         const TStringRef formatStr = args[1].AsStringRef();
         if (formatStr == "float")
             format = EFormat::FloatVector;

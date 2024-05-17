@@ -1,4 +1,4 @@
-#include <ydb/core/external_sources/hive_metastore/gen-cpp/ThriftHiveMetastore.h>
+#include <ydb/core/external_sources/hive_metastore/hive_metastore_native/gen-cpp/ThriftHiveMetastore.h>
 
 #include <contrib/restricted/thrift/thrift/protocol/TBinaryProtocol.h>
 #include <contrib/restricted/thrift/thrift/transport/TSocket.h>

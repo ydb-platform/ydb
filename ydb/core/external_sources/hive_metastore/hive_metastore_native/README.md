@@ -7,6 +7,6 @@ sudo apt-get update
 sudo apt-get -y install thrift-compiler
 ```
 
-2. After installing the compiler, run the command `thrift -r --gen cpp hive_metastore.thrift` in the directory `ydb/core/external_sources` hive_metastore.
+2. After installing the compiler, run the command `thrift -r --gen cpp hive_metastore.thrift` in the directory `ydb/core/external_sources/hive_metastore/hive_metastore_native` hive_metastore.
 
 3. If there are any compilation problems after generating the files, please fix them manually

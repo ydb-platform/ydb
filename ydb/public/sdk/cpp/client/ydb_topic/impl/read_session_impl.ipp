@@ -482,7 +482,7 @@ inline void TSingleClusterReadSessionImpl<false>::InitImpl(TDeferredActions<fals
     auto& init = *req.mutable_init_request();
 
     init.set_consumer(Settings.ConsumerName_);
-    init.set_autoscaling_support(Settings.AutoscalingSupport_.GetOrElse(false));
+    init.set_autoscaling_support(Settings.AutoscalingSupport_);
 
     for (const TTopicReadSettings& topic : Settings.Topics_) {
         auto* topicSettings = init.add_topics_read_settings();
@@ -1888,7 +1888,7 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::AllParentSessionsHasBe
 
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStreamEnd(TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, const std::vector<ui32>& childIds) {
-    ReadingFinishedData.insert(partitionStream->GetAssignId()); // Check
+    ReadingFinishedData.insert(partitionStream->GetPartitionSessionId());
     for (auto& [_, s] : PartitionStreams) {
         for (auto partitionId : childIds) {
             if (s->GetPartitionId() == partitionId) {
@@ -2145,12 +2145,12 @@ TReadSessionEventsQueue<UseMigrationProtocol>::GetEventImpl(size_t& maxByteSize,
             TParent::Events.pop();
 
             if constexpr (!UseMigrationProtocol) {
-                // if (std::holds_alternative<TReadSessionEvent::TEndPartitionSessionEvent>(*event)) {
-                //     auto& e = std::get<TReadSessionEvent::TEndPartitionSessionEvent>(*event);
-                //     if (auto session = frontCbContext->LockShared()) {
-                //         session->SetReadingFinished(partitionStream->GetPartitionSessionId(), e.GetChildPartitionIds());
-                //     }
-                // }
+                if (std::holds_alternative<TReadSessionEvent::TPartitionSessionClosedEvent>(*event)) {
+                     auto& e = std::get<TReadSessionEvent::TPartitionSessionClosedEvent>(*event);
+                     if (auto session = frontCbContext->LockShared()) {
+                        session->UnregisterPartition(e.GetPartitionSession()->GetPartitionId(), e.GetPartitionSession()->GetPartitionSessionId());
+                     }
+                }
             }
         }
 

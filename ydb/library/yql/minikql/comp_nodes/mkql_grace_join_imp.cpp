@@ -1125,7 +1125,7 @@ void TTable::Clear() {
             TTableBucketStats & tbs = TableBucketsStats[bucket];
             tbs.TuplesNum = 0;
             tbs.KeyIntValsTotalSize = 0;
-            tbs.KeyIntValsTotalSize = 0;
+            tbs.StringValuesTotalSize = 0;
         }
 
 

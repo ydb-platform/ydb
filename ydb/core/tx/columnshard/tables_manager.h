@@ -13,31 +13,21 @@
 
 namespace NKikimr::NColumnShard {
 
-template<class TSchemaProto>
+template<class TVersionData>
 class TVersionedSchema {
-protected:
-    std::optional<NOlap::TSnapshot> DropVersion;
-    TMap<NOlap::TSnapshot, TSchemaProto> Versions;
-
+private:
+    TMap<NOlap::TSnapshot, TVersionData> Versions;
 public:
-    bool IsDropped() const {
-        return DropVersion.has_value();
-    }
-
     bool IsEmpty() const {
         return Versions.empty();
     }
 
-    void SetDropVersion(const NOlap::TSnapshot& version) {
-        DropVersion = version;
-    }
-
-    const TMap<NOlap::TSnapshot, TSchemaProto>& GetVersions() const {
+    const TMap<NOlap::TSnapshot, TVersionData>& GetVersions() const {
         return Versions;
     }
 
-    const TSchemaProto& GetVersion(const NOlap::TSnapshot& version) const {
-        const TSchemaProto* result = nullptr;
+    const TVersionData& GetVersion(const NOlap::TSnapshot& version) const {
+        const TVersionData* result = nullptr;
         for (auto ver : Versions) {
             if (ver.first > version) {
                 break;
@@ -48,7 +38,7 @@ public:
         return *result;
     }
 
-    void AddVersion(const NOlap::TSnapshot& version, const TSchemaProto& versionInfo) {
+    void AddVersion(const NOlap::TSnapshot& version, const TVersionData& versionInfo) {
         Versions[version] = versionInfo;
     }
 };
@@ -80,22 +70,15 @@ public:
             Name = rowset.template GetValue<Schema::SchemaPresetInfo::Name>();
         }
         Y_ABORT_UNLESS(!Id || Name == "default", "Unsupported preset at load time");
-
-        if (rowset.template HaveValue<Schema::SchemaPresetInfo::DropStep>() &&
-            rowset.template HaveValue<Schema::SchemaPresetInfo::DropTxId>())
-        {
-            DropVersion.emplace(rowset.template GetValue<Schema::SchemaPresetInfo::DropStep>(),
-                rowset.template GetValue<Schema::SchemaPresetInfo::DropTxId>());
-        }
         return true;
     }
 };
 
-class TTableInfo : public TVersionedSchema<NKikimrTxColumnShard::TTableVersionInfo> {
+class TTableInfo : public TVersionedSchema<ui32> {
 public:
-    using TTableVersionInfo = NKikimrTxColumnShard::TTableVersionInfo;
     ui64 PathId;
     TString TieringUsage;
+    std::optional<NOlap::TSnapshot> DropVersion;
 
 public:
     const TString& GetTieringUsage() const {
@@ -109,6 +92,14 @@ public:
 
     ui64 GetPathId() const {
         return PathId;
+    }
+
+    void SetDropVersion(const NOlap::TSnapshot& version) {
+        DropVersion = version;
+    }
+
+    bool IsDropped() const {
+        return DropVersion.has_value();
     }
 
     TTableInfo() = default;
@@ -131,7 +122,7 @@ public:
 class TTablesManager {
 private:
     THashMap<ui64, TTableInfo> Tables;
-    THashMap<ui32, TSchemaPreset> SchemaPresets;
+    THashSet<ui32> SchemaPresetsIds;
     THashSet<ui64> PathsToDrop;
     TTtl Ttl;
     std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex;
@@ -163,8 +154,8 @@ public:
         return Tables;
     }
 
-    const THashMap<ui32, TSchemaPreset>& GetSchemaPresets() const {
-        return SchemaPresets;
+    const THashSet<ui32>& GetSchemaPresets() const {
+        return SchemaPresetsIds;
     }
 
     bool HasPrimaryIndex() const {
@@ -233,7 +224,7 @@ public:
     bool RegisterSchemaPreset(const TSchemaPreset& schemaPreset, NIceDb::TNiceDb& db);
 
     void AddSchemaVersion(const ui32 presetId, const NOlap::TSnapshot& version, const NKikimrSchemeOp::TColumnTableSchema& schema, NIceDb::TNiceDb& db);
-    void AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& version, const TTableInfo::TTableVersionInfo& versionInfo, NIceDb::TNiceDb& db, std::shared_ptr<TTiersManager>& manager);
+    void AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& version, const NKikimrTxColumnShard::TTableVersionInfo& versionInfo, NIceDb::TNiceDb& db, std::shared_ptr<TTiersManager>& manager);
     bool FillMonitoringReport(NTabletFlatExecutor::TTransactionContext& txc, NJson::TJsonValue& json);
 };
 

@@ -7,7 +7,7 @@ namespace NKikimr::NKqp {
 TConclusionStatus TUpsertOptionsOperation::DoDeserialize(NYql::TObjectSettingsImpl::TFeaturesExtractor& features) {
     auto value = features.Extract<bool>("SCHEME_NEED_ACTUALIZATION", false);
     if (!value) {
-        TConclusionStatus::Fail("Incorrect value for SCHEME_NEED_ACTUALIZATION: cannot parse as boolean");
+        return TConclusionStatus::Fail("Incorrect value for SCHEME_NEED_ACTUALIZATION: cannot parse as boolean");
     }
     SchemeNeedActualization = *value;
     ExternalGuaranteeExclusivePK = features.Extract<bool>("EXTERNAL_GUARANTEE_EXCLUSIVE_PK");

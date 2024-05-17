@@ -54,7 +54,7 @@ TTxTasksList::TTxTasksList(TSelf* self, TEvListRequest::TPtr& ev)
     , RequestCookie(ev->Cookie)
     , DatabaseName(ev->Get()->Record.GetDatabaseName())
 {
-    if (ev->Get()->Record.HasPageSize()) {
+    if (ev->Get()->Record.HasPageSize() && ev->Get()->Record.GetPageSize()) {
         PageSize = ev->Get()->Record.GetPageSize();
     }
     if (ev->Get()->Record.HasPageToken()) {

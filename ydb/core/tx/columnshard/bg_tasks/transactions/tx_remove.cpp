@@ -9,7 +9,7 @@ bool TTxRemoveSession::Execute(NTabletFlatExecutor::TTransactionContext& txc, co
 }
 
 void TTxRemoveSession::Complete(const TActorContext& /*ctx*/) {
-    AFL_VERIFY(Sessions->RemoveSession(ClassName, Identifier));
+    AFL_VERIFY(Sessions->RemoveSession(ClassName, Identifier))("class_name", ClassName)("id", Identifier);
 }
 
 }

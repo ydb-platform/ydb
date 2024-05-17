@@ -14,13 +14,23 @@ private:
     bool Initialized = false;
 protected:
     [[nodiscard]] virtual TConclusionStatus DoInitialize(const TEntityInitializationContext& context) = 0;
-    virtual TConclusion<std::shared_ptr<ISSEntityUpdate>> DoCreateUpdate(const TUpdateInitializationContext& context, const std::shared_ptr<ISSEntity>& selfPtr) const = 0;
+    virtual TConclusion<std::shared_ptr<ISSEntityUpdate>> DoCreateUpdate(const TUpdateInitializationContext& context) const = 0;
+    virtual TConclusion<std::shared_ptr<ISSEntityUpdate>> DoRestoreUpdate(const TUpdateRestoreContext& context) const = 0;
+
 public:
     virtual ~ISSEntity() = default;
     virtual TString GetClassName() const = 0;
 
-    virtual TConclusion<std::shared_ptr<ISSEntityUpdate>> CreateUpdate(const TUpdateInitializationContext& context, const std::shared_ptr<ISSEntity>& selfPtr) const {
-        return DoCreateUpdate(context, selfPtr);
+    TConclusion<std::shared_ptr<ISSEntityUpdate>> CreateUpdate(const TUpdateInitializationContext& context) const {
+        return DoCreateUpdate(context);
+    }
+
+    TConclusion<std::shared_ptr<ISSEntityUpdate>> RestoreUpdate(const TUpdateRestoreContext& context) const {
+        return DoRestoreUpdate(context);
+    }
+
+    std::shared_ptr<ISSEntityUpdate> RestoreUpdateVerified(const TUpdateRestoreContext& context) const {
+        return RestoreUpdate(context).DetachResult();
     }
 
     [[nodiscard]] TConclusionStatus Initialize(const TEntityInitializationContext& context) {
@@ -34,6 +44,8 @@ public:
     {
 
     }
+
+    static std::shared_ptr<ISSEntity> GetEntityVerified(TOperationContext& context, const TPath& path);
 };
 
 }

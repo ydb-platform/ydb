@@ -2,6 +2,7 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard_identificators.h>
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/core/tx/sharding/sharding.h>
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 class ISSEntity;
@@ -22,6 +23,14 @@ public:
     TPathId GetOlapStorePathIdVerified() const {
         AFL_VERIFY(!IsStandalone());
         return PathIdFromPathId(Description.GetColumnStorePathId());
+    }
+
+    std::shared_ptr<NSharding::TShardingBase> GetShardingVerified(const TOlapSchema& olapSchema) const {
+        return NSharding::TShardingBase::BuildFromProto(olapSchema, Description.GetSharding()).DetachResult();
+    }
+
+    std::set<ui64> GetShardIdsSet() const {
+        return std::set<ui64>(Description.GetSharding().GetColumnShards().begin(), Description.GetSharding().GetColumnShards().end());
     }
 
     const auto& GetColumnShards() const {
@@ -47,7 +56,7 @@ public:
     TAggregatedStats Stats;
 
     TColumnTableInfo() = default;
-    TColumnTableInfo(ui64 alterVersion, NKikimrSchemeOp::TColumnTableDescription&& description,
+    TColumnTableInfo(ui64 alterVersion, const NKikimrSchemeOp::TColumnTableDescription& description,
         TMaybe<NKikimrSchemeOp::TColumnStoreSharding>&& standaloneSharding,
         TMaybe<NKikimrSchemeOp::TAlterColumnTable>&& alterBody = Nothing());
 

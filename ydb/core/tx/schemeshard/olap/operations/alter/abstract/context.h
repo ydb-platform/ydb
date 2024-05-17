@@ -6,6 +6,8 @@
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
+class ISSEntity;
+
 class TEntityInitializationContext {
 private:
     const TOperationContext* SSOperationContext = nullptr;
@@ -19,21 +21,51 @@ public:
     }
 };
 
-class TUpdateInitializationContext {
+class TUpdateRestoreContext {
 private:
+    const ISSEntity* OriginalEntity;
     const TOperationContext* SSOperationContext = nullptr;
-    const NKikimrSchemeOp::TModifyScheme* Modification = nullptr;
+    const ui64 TxId;
 public:
+    ui64 GetTxId() const {
+        return TxId;
+    }
+
+    const ISSEntity& GetOriginalEntity() const {
+        return *OriginalEntity;
+    }
+
+    template <class T>
+    const T& GetOriginalEntityAsVerified() const {
+        auto* result = dynamic_cast<const T*>(OriginalEntity);
+        AFL_VERIFY(!!result);
+        return *result;
+    }
+
     const TOperationContext* GetSSOperationContext() const {
         return SSOperationContext;
     }
+    TUpdateRestoreContext(const ISSEntity* originalEntity, const TOperationContext* ssOperationContext, const ui64 txId)
+        : OriginalEntity(originalEntity)
+        , SSOperationContext(ssOperationContext)
+        , TxId(txId) {
+        AFL_VERIFY(OriginalEntity);
+        AFL_VERIFY(SSOperationContext);
+        AFL_VERIFY(TxId);
+    }
+};
+
+class TUpdateInitializationContext: public TUpdateRestoreContext {
+private:
+    using TBase = TUpdateRestoreContext;
+    const NKikimrSchemeOp::TModifyScheme* Modification = nullptr;
+public:
     const NKikimrSchemeOp::TModifyScheme* GetModification() const {
         return Modification;
     }
-    TUpdateInitializationContext(const TOperationContext* ssOperationContext, const NKikimrSchemeOp::TModifyScheme* modification)
-        : SSOperationContext(ssOperationContext)
+    TUpdateInitializationContext(const ISSEntity* originalEntity, const TOperationContext* ssOperationContext, const NKikimrSchemeOp::TModifyScheme* modification, const ui64 txId)
+        : TBase(originalEntity, ssOperationContext, txId)
         , Modification(modification) {
-        AFL_VERIFY(SSOperationContext);
         AFL_VERIFY(Modification);
     }
 };
@@ -51,7 +83,7 @@ public:
     }
 };
 
-class TEvolutionStartContext {
+class TUpdateStartContext {
 private:
     const TPath* ObjectPath = nullptr;
     TOperationContext* SSOperationContext = nullptr;
@@ -67,14 +99,17 @@ public:
         return SSOperationContext;
     }
 
-    TEvolutionStartContext(const TPath* objectPath, TOperationContext* ssOperationContext, NIceDb::TNiceDb* db)
+    TUpdateStartContext(const TPath* objectPath, TOperationContext* ssOperationContext, NIceDb::TNiceDb* db)
         : ObjectPath(objectPath)
         , SSOperationContext(ssOperationContext)
-        , DB(db) {
+        , DB(db)
+    {
         AFL_VERIFY(DB);
         AFL_VERIFY(ObjectPath);
         AFL_VERIFY(SSOperationContext);
     }
 };
+
+using TUpdateFinishContext = TUpdateStartContext;
 
 }

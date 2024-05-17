@@ -10,6 +10,7 @@ SRCS(
     GLOBAL upsert_stat.cpp
     GLOBAL drop_stat.cpp
     GLOBAL upsert_opt.cpp
+    GLOBAL alter_sharding.cpp
 )
 
 PEERDIR(

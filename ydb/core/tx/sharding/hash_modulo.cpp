@@ -1,0 +1,150 @@
+#include "hash_modulo.h"
+
+namespace NKikimr::NSharding::NModulo {
+
+THashMap<ui64, std::vector<ui32>> THashShardingModuloN::MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch) const {
+    const std::vector<ui64> hashes = MakeHashes(batch);
+    if (!SpecialShardingInfo) {
+        THashMap<ui64, std::vector<ui32>> resultHash;
+        std::vector<std::vector<ui32>> result;
+        result.resize(GetShardsCount());
+        for (auto&& i : result) {
+            i.reserve(hashes.size());
+        }
+        ui32 idx = 0;
+        for (auto&& i : hashes) {
+            result[i % GetShardsCount()].emplace_back(idx++);
+        }
+        for (ui32 i = 0; i < result.size(); ++i) {
+            if (result[i].size()) {
+                resultHash[GetShardIds()[i]] = std::move(result[i]);
+            }
+        }
+        return resultHash;
+    } else {
+        return SpecialShardingInfo->MakeShardingWrite(hashes);
+    }
+}
+
+NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> THashShardingModuloN::DoBuildSplitShardsModifiers(const std::vector<ui64>& newTabletIds) const {
+    if (newTabletIds.size() != GetShardIds().size()) {
+        return TConclusionStatus::Fail("can multiple 2 only for add shards count");
+    }
+    if (!!SpecialShardingInfo) {
+        return TConclusionStatus::Fail("not unified shards distribution for module");
+    }
+    TSpecificShardingInfo info(GetShardIds());
+    std::vector<NKikimrSchemeOp::TAlterShards> result;
+    {
+        NKikimrSchemeOp::TAlterShards alter;
+        alter.MutableModification()->MutableModulo()->SetPartsCount(2 * GetShardIds().size());
+        for (auto&& i : GetShardIds()) {
+            auto specSharding = info.GetShardingTabletVerified(i);
+            AFL_VERIFY(specSharding.MutableAppropriateMods().size() == 1);
+            AFL_VERIFY(specSharding.MutableAppropriateMods().emplace(*specSharding.MutableAppropriateMods().begin() + GetShardIds().size()).second);
+            *alter.MutableModification()->MutableModulo()->AddShards() = specSharding.SerializeToProto();
+        }
+
+        result.emplace_back(std::move(alter));
+    }
+    {
+        ui32 idx = 0;
+        for (auto&& i : GetShardIds()) {
+            {
+                NKikimrSchemeOp::TAlterShards alter;
+                alter.MutableModification()->AddOpenWriteIds(newTabletIds[idx]);
+                auto specSharding = info.GetShardingTabletVerified(i);
+                specSharding.SetTabletId(newTabletIds[idx]);
+                AFL_VERIFY(specSharding.MutableAppropriateMods().size() == 1);
+                *alter.MutableModification()->MutableModulo()->AddShards() = specSharding.SerializeToProto();
+                result.emplace_back(alter);
+            }
+            {
+                NKikimrSchemeOp::TAlterShards alter;
+                auto& transfer = *alter.MutableTransfer()->AddTransfers();
+                transfer.SetDestinationTabletId(newTabletIds[idx]);
+                transfer.AddSourceTabletIds(i);
+                result.emplace_back(alter);
+            }
+            {
+                NKikimrSchemeOp::TAlterShards alter;
+                alter.MutableModification()->AddOpenReadIds(newTabletIds[idx]);
+                auto specSharding = info.GetShardingTabletVerified(i);
+                AFL_VERIFY(specSharding.MutableAppropriateMods().size() == 1);
+                const ui32 original = *specSharding.MutableAppropriateMods().begin();
+                specSharding.MutableAppropriateMods().erase(original);
+                specSharding.MutableAppropriateMods().emplace(original + GetShardIds().size());
+                *alter.MutableModification()->MutableModulo()->AddShards() = specSharding.SerializeToProto();
+                result.emplace_back(alter);
+            }
+            ++idx;
+        }
+    }
+    return result;
+}
+
+NKikimr::TConclusionStatus THashShardingModuloN::DoApplyModification(const NKikimrSchemeOp::TShardingModification& proto) {
+    AFL_VERIFY(!!SpecialShardingInfo);
+    if (!proto.HasModulo()) {
+        return TConclusionStatus::Success();
+    }
+
+    if (proto.GetModulo().HasPartsCount()) {
+        SpecialShardingInfo->SetPartsCount(proto.GetModulo().GetPartsCount());
+    }
+
+    for (auto&& i : proto.GetModulo().GetShards()) {
+        TSpecificShardingInfo::TModuloShardingTablet info;
+        {
+            auto conclusion = info.DeserializeFromProto(i);
+            if (conclusion.IsFail()) {
+                return conclusion;
+            }
+        }
+        if (!UpdateShardInfo(info)) {
+            return TConclusionStatus::Fail("no shard with same id on update modulo");
+        }
+    }
+    return TConclusionStatus::Success();
+}
+
+NKikimr::TConclusionStatus THashShardingModuloN::DoOnAfterModification() {
+    AFL_VERIFY(!!SpecialShardingInfo);
+
+    auto result = SpecialShardingInfo->BuildActivityIndex(GetClosedWritingShardIds(), GetClosedReadingShardIds());
+    if (result.IsFail()) {
+        return result;
+    }
+
+    std::vector<ui64> shardIdsOrdered;
+    if (SpecialShardingInfo->CheckUnifiedDistribution(GetPartsCount(), shardIdsOrdered)) {
+        SetShardIds(shardIdsOrdered);
+        SpecialShardingInfo.reset();
+    }
+
+    return TConclusionStatus::Success();
+}
+
+NKikimr::TConclusionStatus THashShardingModuloN::DoDeserializeFromProto(const NKikimrSchemeOp::TColumnTableSharding& proto) {
+    auto conclusion = TBase::DoDeserializeFromProto(proto);
+    if (conclusion.IsFail()) {
+        return conclusion;
+    }
+    if (!proto.HasHashSharding()) {
+        return TConclusionStatus::Fail("no data for modulo n sharding");
+    }
+    AFL_VERIFY(proto.GetHashSharding().GetFunction() == NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_MODULO_N);
+    {
+        TSpecificShardingInfo specialInfo;
+        auto result = specialInfo.DeserializeFromProto(proto, GetClosedWritingShardIds(), GetClosedReadingShardIds());
+        if (result.IsFail()) {
+            return result;
+        }
+        if (!specialInfo.IsEmpty()) {
+            SpecialShardingInfo = std::move(specialInfo);
+        }
+    }
+    return TConclusionStatus::Success();
+}
+
+}

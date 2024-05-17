@@ -1011,6 +1011,8 @@ public:
     static void FillTableBoundaries(const TTableInfo::TPtr tableInfo, google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TSplitBoundary>& boundaries);
 
     void Handle(NKikimr::NOlap::NBackground::TEvExecuteGeneralLocalTransaction::TPtr& ev, const TActorContext& ctx);
+    void Handle(NKikimr::NOlap::NBackground::TEvRemoveSession::TPtr& ev, const TActorContext& ctx);
+    
 
     void Handle(TEvSchemeShard::TEvInitRootShard::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvSchemeShard::TEvInitTenantSchemeShard::TPtr &ev, const TActorContext &ctx);

@@ -4,8 +4,14 @@
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
-NKikimr::TConclusion<std::shared_ptr<NKikimr::NSchemeShard::NOlap::NAlter::ISSEntityUpdate>> TStandaloneTable::DoCreateUpdate(const TUpdateInitializationContext& context, const std::shared_ptr<ISSEntity>& selfPtr) const {
-    auto result = std::make_shared<TStandaloneSchemaUpdate>(selfPtr);
+NKikimr::TConclusion<std::shared_ptr<ISSEntityUpdate>> TStandaloneTable::DoCreateUpdateImpl(const TUpdateInitializationContext& context) const {
+    std::shared_ptr<ISSEntityUpdate> result;
+    if (context.GetModification()->HasAlterTable() || context.GetModification()->HasAlterColumnTable()) {
+        result = std::make_shared<TStandaloneSchemaUpdate>();
+    }
+    if (!result) {
+        return TConclusionStatus::Fail("alter data not found");
+    }
     auto conclusion = result->Initialize(context);
     if (conclusion.IsFail()) {
         return conclusion;
@@ -13,23 +19,21 @@ NKikimr::TConclusion<std::shared_ptr<NKikimr::NSchemeShard::NOlap::NAlter::ISSEn
     return result;
 }
 
-NKikimr::TConclusionStatus TStandaloneTable::DoInitialize(const TEntityInitializationContext& context) {
-    return InitializeFromTableInfo(context.GetSSOperationContext()->SS->ColumnTables.GetVerifiedPtr(GetPathId()));
+NKikimr::TConclusionStatus TStandaloneTable::DoInitializeImpl(const TEntityInitializationContext& /*context*/) {
+    return InitializeFromTableInfo();
 }
 
-NKikimr::TConclusionStatus TStandaloneTable::InitializeFromTableInfo(const TColumnTableInfo::TPtr& tableInfo) {
-    AFL_VERIFY(!!tableInfo);
-    TableInfo = tableInfo;
-    if (!TableInfo->Description.HasSchema()) {
+NKikimr::TConclusionStatus TStandaloneTable::InitializeFromTableInfo() {
+    if (!GetTableInfoPtrVerified()->Description.HasSchema()) {
         return TConclusionStatus::Fail("path id object has no schema owned for " + GetPathId().ToString());
     }
     TOlapSchema schema;
-    schema.ParseFromLocalDB(TableInfo->Description.GetSchema());
+    schema.ParseFromLocalDB(GetTableInfoPtrVerified()->Description.GetSchema());
     TableSchema = std::move(schema);
 
-    if (TableInfo->Description.HasTtlSettings()) {
+    if (GetTableInfoPtrVerified()->Description.HasTtlSettings()) {
         TOlapTTL ttl;
-        ttl.DeserializeFromProto(TableInfo->Description.GetTtlSettings()).Validate();
+        ttl.DeserializeFromProto(GetTableInfoPtrVerified()->Description.GetTtlSettings()).Validate();
         TableTTL = std::move(ttl);
     }
 

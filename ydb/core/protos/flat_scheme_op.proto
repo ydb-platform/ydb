@@ -649,6 +649,17 @@ message TAlterColumnStore {
     repeated TRemoveColumnTableTtlSettingsPreset RESERVED_RemoveTtlSettingsPresets = 7;
 }
 
+message TConsistencyShardingTablet {
+    optional uint64 TabletId = 1;
+    optional uint64 FromInclude = 2;
+    optional uint64 ToNotInclude = 3;
+}
+
+message TModuloShardingTablet {
+    optional uint64 TabletId = 1;
+    repeated uint32 AppropriateMods = 2;
+}
+
 message TColumnTableSharding {
     // Version is incremented each time table sharding is changed
     // This field is managed by the system.
@@ -680,12 +691,19 @@ message TColumnTableSharding {
 
         // Argument for HASH_FUNCTION_CLOUD_LOGS
         optional uint32 ActiveShardsCount = 4;
+        repeated TConsistencyShardingTablet TabletsForConsistency = 5;
+
+        optional uint32 ModuloPartsCount = 6;
+        repeated TModuloShardingTablet TabletsForModulo = 7;
     }
 
     oneof Method {
         TRandomSharding RandomSharding = 5;
         THashSharding HashSharding = 6;
     }
+
+    repeated uint64 ClosedReadingShardIds = 7;
+    repeated uint64 ClosedWritingShardIds = 8;
 }
 
 message TColumnTableDescription {
@@ -728,7 +746,12 @@ message TAlterColumnTable {
     optional TColumnDataLifeCycle AlterTtlSettings = 3;
 
     optional string AlterSchemaPresetName = 4;
-    optional string RESERVED_AlterTtlSettingsPresetName = 5;
+
+    optional TAlterShards AlterShards = 5;
+    optional TReshardColumnTable ReshardColumnTable = 6;
+}
+
+message TReshardColumnTable {
 }
 
 message TLoginCreateUser {
@@ -1533,6 +1556,45 @@ message TLockGuard {
 message TDropIndex {
     optional string TableName = 1;
     optional string IndexName = 2;
+}
+
+message TConsistencyShardsModification {
+    repeated TConsistencyShardingTablet Shards = 1;
+}
+
+message TModuloShardsModification {
+    repeated TModuloShardingTablet Shards = 1;
+    optional uint32 PartsCount = 2;
+}
+
+message TShardingModification {
+    repeated uint64 NewShardIds = 1;
+
+    repeated uint64 CloseWriteIds = 2;
+    repeated uint64 CloseReadIds = 3;
+    repeated uint64 OpenWriteIds = 4;
+    repeated uint64 OpenReadIds = 5;
+
+    oneof Implementation {
+        TConsistencyShardsModification Consistency = 10;
+        TModuloShardsModification Modulo = 11;
+    }
+}
+
+message TShardingTransfer {
+    optional uint64 DestinationTabletId = 1;
+    repeated uint64 SourceTabletIds = 2;
+}
+
+message TShardingTransfers {
+    repeated TShardingTransfer Transfers = 1;
+}
+
+message TAlterShards {
+    oneof Implementation {
+        TShardingModification Modification = 20;
+        TShardingTransfers Transfer = 21;
+    }
 }
 
 // Request for scheme modification

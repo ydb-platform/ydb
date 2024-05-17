@@ -4428,6 +4428,7 @@ void TSchemeShard::StateConfigure(STFUNC_SIG) {
         HFuncTraced(TEvents::TEvUndelivered, Handle);
 
         HFuncTraced(NKikimr::NOlap::NBackground::TEvExecuteGeneralLocalTransaction, Handle);
+        HFuncTraced(NKikimr::NOlap::NBackground::TEvRemoveSession, Handle);
         HFuncTraced(TEvSchemeShard::TEvInitRootShard, Handle);
         HFuncTraced(TEvSchemeShard::TEvInitTenantSchemeShard, Handle);
         HFuncTraced(TEvSchemeShard::TEvMigrateSchemeShard, Handle);
@@ -4471,6 +4472,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvents::TEvUndelivered, Handle);
         HFuncTraced(TEvSchemeShard::TEvInitRootShard, Handle);
         HFuncTraced(NKikimr::NOlap::NBackground::TEvExecuteGeneralLocalTransaction, Handle);
+        HFuncTraced(NKikimr::NOlap::NBackground::TEvRemoveSession, Handle);
 
         HFuncTraced(TEvSchemeShard::TEvMeasureSelfResponseTime, SelfPinger->Handle);
         HFuncTraced(TEvSchemeShard::TEvWakeupToMeasureSelfResponseTime, SelfPinger->Handle);
@@ -5162,6 +5164,12 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvNotifyTxCompletion::TPtr &ev, const
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvInitRootShard::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxInitRootCompatibility(ev), ctx);
+}
+
+void TSchemeShard::Handle(NKikimr::NOlap::NBackground::TEvRemoveSession::TPtr& ev, const TActorContext& ctx) {
+    auto txRemove = BackgroundSessionsManager->TxRemove(ev->Get()->GetClassName(), ev->Get()->GetIdentifier());
+    AFL_VERIFY(!!txRemove);
+    Execute(txRemove.release(), ctx);
 }
 
 void TSchemeShard::Handle(NKikimr::NOlap::NBackground::TEvExecuteGeneralLocalTransaction::TPtr& ev, const TActorContext& ctx) {

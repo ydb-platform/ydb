@@ -32,43 +32,43 @@ private:
 public:
     void Validate(const TString& processInfo = Default<TString>()) const;
 
-    const TString& GetErrorMessage() const {
+    [[nodiscard]] const TString& GetErrorMessage() const {
         return ErrorMessage ? *ErrorMessage : Default<TString>();
     }
 
-    Ydb::StatusIds::StatusCode GetStatus() const {
+    [[nodiscard]] Ydb::StatusIds::StatusCode GetStatus() const {
         return Status;
     }
 
-    static TConclusionStatus Fail(const char* errorMessage) {
+    [[nodiscard]] static TConclusionStatus Fail(const char* errorMessage) {
         return TConclusionStatus(errorMessage);
     }
 
-    static TConclusionStatus Fail(const TString& errorMessage) {
+    [[nodiscard]] static TConclusionStatus Fail(const TString& errorMessage) {
         return TConclusionStatus(errorMessage);
     }
 
-    static TConclusionStatus Fail(const std::string& errorMessage) {
+    [[nodiscard]] static TConclusionStatus Fail(const std::string& errorMessage) {
         return TConclusionStatus(errorMessage);
     }
 
-    bool IsFail() const {
+    [[nodiscard]] bool IsFail() const {
         return !Ok();
     }
 
-    bool IsSuccess() const {
+    [[nodiscard]] bool IsSuccess() const {
         return Ok();
     }
 
-    bool Ok() const {
+    [[nodiscard]] bool Ok() const {
         return !ErrorMessage;
     }
 
-    bool operator!() const {
+    [[nodiscard]] bool operator!() const {
         return !!ErrorMessage;
     }
 
-    static TConclusionStatus Success() {
+    [[nodiscard]] static TConclusionStatus Success() {
         return TConclusionStatus();
     }
 };

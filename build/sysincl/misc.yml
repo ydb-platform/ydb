@@ -504,7 +504,7 @@
         - contrib/libs/glibcasm/glibc/include/stdint.h
         - contrib/libs/cxxsupp/libcxx/include/stdint.h
 
-- source_filter: "^contrib/tools/bison/bison/data"
+- source_filter: "^contrib/tools/bison/data"
   includes:
     - position.hh
 

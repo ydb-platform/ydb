@@ -4,6 +4,7 @@
 import boto3
 import json
 import logging
+import os
 import pytest
 import typing
 import ydb
@@ -44,9 +45,13 @@ def read_scan_rows(it) -> typing.List[ydb_pb.Value]:
     return scanned_rows
 
 
+def make_columns(columns: typing.List[typing.Tuple[str, str]]) -> typing.List[ydb_pb.Column]:
+    return [ydb_pb.Column(name=name, type=ydb_pb.Type(type_id=ydb_pb.Type.PrimitiveTypeId.Value(type))) for name, type in columns]
+
+
 class TestYdbOverFq(TestYdsBase):
     def make_binding(self, client: FederatedQueryClient, name: str, path: str, connection_id: str, columns: typing.List[typing.Tuple[str, str]]):
-        columns = [ydb_pb.Column(name=name, type=ydb_pb.Type(type_id=ydb_pb.Type.PrimitiveTypeId.Value(type))) for name, type in columns]
+        columns = make_columns(columns)
         client.create_object_storage_binding(name, path, "csv_with_names", connection_id, columns=columns)
 
     def make_yq_driver(self, endpoint: str, folder_id: str, token: str) -> ydb.Driver:
@@ -129,6 +134,32 @@ class TestYdbOverFq(TestYdsBase):
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder_v1"}], indirect=True)
     def test_list_directory_v1(self, kikimr, s3, client):
         self.list_directory_test_body(kikimr, s3, client)
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "list_without_streams"}], indirect=True)
+    def test_list_without_streams(self, kikimr, s3, client, yq_version):
+        self.init_topics(f"topic_to_not_list_{yq_version}")
+
+        connection_response = client.create_yds_connection("yds_conn", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
+
+        logging.debug("connection_response: " + str(connection_response.result))
+        assert not connection_response.issues, str(connection_response.issues)
+
+        binding_response = client.create_yds_binding(name="yds_bind",
+                                                     stream=self.input_topic,
+                                                     format="json_each_row",
+                                                     connection_id=connection_response.result.connection_id,
+                                                     columns=make_columns([("Data", "STRING")]))
+
+        logging.debug("binding_response: " + str(binding_response.result))
+        assert not binding_response.issues, str(binding_response.issues)
+
+        driver = self.make_yq_driver(kikimr.endpoint(), client.folder_id, "root@builtin")
+        ls_res = driver.scheme_client.list_directory("/")
+        assert ls_res.is_directory()
+        # as long as ANALYTICS requests can't process streams, don't list them in ydb_over_fq
+        # can't check len(children), because other tests' interference
+        assert list(map(lambda ch: ch.name, ls_res.children)).count("yds_bind") == 0
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)

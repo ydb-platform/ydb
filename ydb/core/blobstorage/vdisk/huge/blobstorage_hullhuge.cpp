@@ -27,6 +27,10 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
     ////////////////////////////////////////////////////////////////////////////
     class THugeBlobLogLsnFifo {
     public:
+        THugeBlobLogLsnFifo(ui64 seqWriteId = 0)
+            : SeqWriteId(seqWriteId)
+        {}
+
         ui64 Push(ui64 lsn) {
             Y_VERIFY_S(Fifo.empty() || Fifo.rbegin()->second <= lsn, ErrorReport(SeqWriteId, lsn));
             if (NodeCache.empty()) {
@@ -569,16 +573,16 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
         TMaybe<TInstant> LastCommitTime;
         std::shared_ptr<THullHugeKeeperPersState> Pers;
         THugeBlobLogLsnFifo LogLsnFifo;
+        THugeBlobLogLsnFifo CompactLsnFifo{1};
         ui64 LastReportedFirstLsnToKeep = 0;
+        ui32 ItemsAfterCommit = 0;
 
         THullHugeKeeperState(std::shared_ptr<THullHugeKeeperPersState> &&pers)
             : Pers(std::move(pers))
         {}
 
         ui64 FirstLsnToKeep() const {
-            ui64 persLsn = Pers->FirstLsnToKeep();
-            ui64 logLsnFifoLastKeepLsn = LogLsnFifo.FirstLsnToKeep();
-            return Min(persLsn, logLsnFifoLastKeepLsn);
+            return Pers->FirstLsnToKeep(Min(LogLsnFifo.FirstLsnToKeep(), CompactLsnFifo.FirstLsnToKeep()));
         }
 
         TString FirstLsnToKeepDecomposed() const {
@@ -586,6 +590,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             str << "{FirstLsnToKeep# " << FirstLsnToKeep()
                 << " pers# " << Pers->FirstLsnToKeepDecomposed()
                 << " LogLsnFifo# " << LogLsnFifo.FirstLsnToKeepDecomposed()
+                << " CompactLsnFifo# " << CompactLsnFifo.FirstLsnToKeepDecomposed()
                 << "}";
             return str.Str();
         }
@@ -595,9 +600,12 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             str << "WaitQueueSize: " << WaitQueueSize << "<br>";
             str << "WaitQueueByteSize: " << WaitQueueByteSize << "<br>";
             str << "Committing: " << boolToString(Committing) << "<br>";
+            str << "ItemsAfterCommit: " << ItemsAfterCommit << "<br>";
             str << "FreeUpToLsn: " << FreeUpToLsn << "<br>";
             str << "LastCommitTime: " << (LastCommitTime ? ToStringLocalTimeUpToSeconds(*LastCommitTime) : "not yet") << "<br>";
             str << "FirstLsnToKeep: " << FirstLsnToKeep() << "<br>";
+            str << "LogLsnFifo.FirstLsnToKeep: " << LogLsnFifo.FirstLsnToKeep() << "<br>";
+            str << "CompactLsnFifo.FirstLsnToKeep: " << CompactLsnFifo.FirstLsnToKeep() << "<br>";
             Pers->RenderHtml(str);
         }
 
@@ -746,8 +754,8 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
             // check what if we issue a new huge hull keeper entry point -- would it allow us to
             // move the FirstLsnToKeep barrier forward? if so, try to issue an entry point, otherwise exit
-            const bool inFlightWrites = State.LogLsnFifo.FirstLsnToKeep() != Max<ui64>();
-            if (!State.Pers->WouldNewEntryPointAdvanceLog(State.FreeUpToLsn, inFlightWrites)) {
+            const ui64 minInFlightLsn = Min(State.LogLsnFifo.FirstLsnToKeep(), State.CompactLsnFifo.FirstLsnToKeep());
+            if (!State.Pers->WouldNewEntryPointAdvanceLog(State.FreeUpToLsn, minInFlightLsn, State.ItemsAfterCommit)) {
                 // if we issue an entry point now, we will achieve nothing, so return
                 LOG_DEBUG(ctx, BS_LOGCUTTER,
                     VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix,
@@ -758,8 +766,9 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
             // allocate LSN for the brand new entry point
             ui64 lsn = HugeKeeperCtx->LsnMngr->AllocLsnForLocalUse().Point();
-            State.Pers->InitiateNewEntryPointCommit(lsn, inFlightWrites);
+            State.Pers->InitiateNewEntryPointCommit(lsn);
             State.Committing = true;
+            State.ItemsAfterCommit = 0;
             // serialize log record into string
             TString serialized = State.Pers->Serialize();
 
@@ -810,6 +819,12 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                           VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix,
                                 "THullHugeKeeper: TEvHullFreeHugeSlots: one slot: addr# %s freeRes# %s",
                                 x.ToString().data(), freeRes.ToString().data()));
+                ++State.ItemsAfterCommit;
+                Y_ABORT_UNLESS(msg->WId);
+            }
+
+            if (msg->WId) {
+                State.CompactLsnFifo.Pop(msg->WId, msg->DeletionLsn, true);
             }
 
             auto checkAndSet = [this, msg] (ui64 &dbLsn) {
@@ -872,6 +887,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                         "THullHugeKeeper: TEvHullHugeBlobLogged: %s", msg->ToString().data()));
             // manage log requests in flight
             State.LogLsnFifo.Pop(msg->WriteId, msg->RecLsn, msg->SlotIsUsed);
+            State.ItemsAfterCommit += msg->SlotIsUsed;
             // manage allocated slots
             const TDiskPart &hugeBlob = msg->HugeBlob;
             NHuge::THugeSlot hugeSlot(State.Pers->Heap->ConvertDiskPartToHugeSlot(hugeBlob));
@@ -889,6 +905,11 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             }
             // if we are not committing entrypoint right now, we can try to update it as the FirstLsnToKeep may have changed
             TryToCutLog(ctx);
+        }
+
+        void Handle(TEvHugePreCompact::TPtr ev, const TActorContext& ctx) {
+            const ui64 wId = State.CompactLsnFifo.Push(ev->Get()->LsnInfimum);
+            ctx.Send(ev->Sender, new TEvHugePreCompactResult(wId), 0, ev->Cookie);
         }
 
         void Handle(TEvHugeLockChunks::TPtr &ev, const TActorContext &ctx) {
@@ -971,6 +992,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             HFunc(TEvHullHugeCommitted, Handle)
             HFunc(TEvHullHugeWritten, Handle)
             HFunc(TEvHullHugeBlobLogged, Handle)
+            HFunc(TEvHugePreCompact, Handle)
             HFunc(TEvHugeLockChunks, Handle)
             HFunc(TEvHugeUnlockChunks, Handle)
             HFunc(TEvHugeStat, Handle)

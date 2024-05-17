@@ -102,6 +102,7 @@ namespace NKikimr {
         NPDisk::TCommitRecord CommitRecord;
         TStringStream DebugMessage;
         TString CallerInfo;
+        const ui64 WId;
 
         void Bootstrap(const TActorContext& ctx) {
             TThis::Become(&TThis::StateFunc);
@@ -136,11 +137,13 @@ namespace NKikimr {
         void Handle(NPDisk::TEvLogResult::TPtr& ev, const TActorContext& ctx) {
             CHECK_PDISK_RESPONSE(Ctx->HullCtx->VCtx, ev, ctx);
 
+            Y_VERIFY_S(!WId == Metadata.RemovedHugeBlobs.Empty(), "WId# " << WId << " RemovedHugeBlobs# " << Metadata.RemovedHugeBlobs.Size());
+
             // notify delayed deleter when log record is actually written; we MUST ensure that updates are coming in
             // order of increasing LSN's; this is achieved automatically as all actors reside on the same mailbox
             LevelIndex->DelayedCompactionDeleterInfo->Update(LsnSeg.Last, std::move(Metadata.RemovedHugeBlobs),
                 CommitRecord.DeleteToDecommitted ? CommitRecord.DeleteChunks : TVector<TChunkIdx>(),
-                PDiskSignatureForHullDbKey<TKey>(), ctx, Ctx->HugeKeeperId, Ctx->SkeletonId, Ctx->PDiskCtx,
+                PDiskSignatureForHullDbKey<TKey>(), WId, ctx, Ctx->HugeKeeperId, Ctx->SkeletonId, Ctx->PDiskCtx,
                 Ctx->HullCtx->VCtx);
 
             NPDisk::TEvLogResult* msg = ev->Get();
@@ -284,7 +287,8 @@ namespace NKikimr {
                 const TActorId& notifyID,
                 const TActorId& secondNotifyID,
                 THullCommitMeta&& metadata,
-                const TString &callerInfo)
+                const TString &callerInfo,
+                ui64 wId)
             : HullLogCtx(std::move(hullLogCtx))
             , Ctx(std::move(ctx))
             , LevelIndex(std::move(levelIndex))
@@ -292,7 +296,9 @@ namespace NKikimr {
             , SecondNotifyID(secondNotifyID)
             , Metadata(std::move(metadata))
             , CallerInfo(callerInfo)
+            , WId(wId)
         {
+            Y_ABORT_UNLESS(!WId == Metadata.RemovedHugeBlobs.Empty());
             // we create commit message in the constructor to avoid race condition
             GenerateCommitMessage();
         }
@@ -320,7 +326,8 @@ namespace NKikimr {
                     notifyID,
                     TActorId(),
                     {TVector<ui32>(), TVector<ui32>(), TDiskPartVec(), false},
-                    callerInfo)
+                    callerInfo,
+                    0)
         {}
     };
 
@@ -346,14 +353,16 @@ namespace NKikimr {
                 TVector<ui32>&& chunksAdded,
                 TVector<ui32>&& chunksDeleted,
                 TDiskPartVec&& removedHugeBlobs,
-                const TString &callerInfo)
+                const TString &callerInfo,
+                ui64 wId)
             : TBase(std::move(hullLogCtx),
                     std::move(ctx),
                     std::move(levelIndex),
                     notifyID,
                     TActorId(),
                     {std::move(chunksAdded), std::move(chunksDeleted), std::move(removedHugeBlobs), false},
-                    callerInfo)
+                    callerInfo,
+                    wId)
         {}
     };
 
@@ -375,14 +384,16 @@ namespace NKikimr {
                 const TActorId& notifyID,
                 TVector<ui32>&& chunksAdded,
                 TVector<ui32>&& chunksDeleted,
-                TDiskPartVec&& removedHugeBlobs)
+                TDiskPartVec&& removedHugeBlobs,
+                ui64 wId)
             : TBase(std::move(hullLogCtx),
                     std::move(ctx),
                     std::move(levelIndex),
                     notifyID,
                     TActorId(),
                     {std::move(chunksAdded), std::move(chunksDeleted), std::move(removedHugeBlobs), true},
-                    TString())
+                    TString(),
+                    wId)
         {}
     };
 
@@ -414,7 +425,8 @@ namespace NKikimr {
                     notifyID,
                     secondNotifyID,
                     {std::move(chunksAdded), std::move(chunksDeleted), std::move(replSst), numRecoveredBlobs},
-                    TString())
+                    TString(),
+                    0)
         {}
     };
 

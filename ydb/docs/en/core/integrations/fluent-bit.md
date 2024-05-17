@@ -3,7 +3,7 @@
 This section describes the integration between {{ ydb-short-name }} and log capture tool [FluentBit](https://fluentbit.io ) to save and analyse the log records in {{ ydb-short-name }}.
 
 
-## Введение
+## Overview
 
 FluentBit is a tool that can collect text data, manipulate it (modify, transform, combine) and send it into various repositories for further processing. A custom plugin library for FluentBit has been developed to support saving the log records into {{ ydb-short-name }}. The source code of the library is available in the [repository](https://github.com/ydb-platform/fluent-bit-ydb).
 
@@ -15,9 +15,9 @@ Deploying a log delivery scheme using FluentBit and {{ ydb-short-name }} as the 
 4. Configure FluentBit to send the logs to {{ ydb-short-name }} tables
 
 
-## Creating the tables for log data
+## Creating tables for log data
 
-Tables for log data storage must be created in the chosen {{ ydb-short-name }} database. The structure of the tables is determined by a set of fields of a specific log supplied using Fluent Bit. Different log types may be saved to different tables, depending on the requirements. Normally the table for log data contains the following fields:
+Tables for log data storage must be created in the chosen {{ ydb-short-name }} database. The structure of the tables is determined by a set of fields of a specific log supplied using FluentBit. Different log types may be saved to different tables, depending on the requirements. Normally the table for log data contains the following fields:
 
 * timestamp;
 * log level;
@@ -29,7 +29,7 @@ Tables for log data storage must be created in the chosen {{ ydb-short-name }} d
 
 Row-based and columnar tables can be both used for log data storage. Columnar tables are recommended, as they support more efficient data scans for log data retrieval.
 
-Example of the command to create the row-based table for log data storage:
+Example of the row-based table for log data storage:
 
 ```sql
 CREATE TABLE `fluent-bit/log` (
@@ -46,7 +46,7 @@ CREATE TABLE `fluent-bit/log` (
 );
 ```
 
-Example of the command to create the columnar table for log data storage:
+Example of the columnar table for log data storage:
 
 ```sql
 CREATE TABLE `fluent-bit/log` (
@@ -71,16 +71,16 @@ The command which creates the columnar table differs in just two last lines, whi
 
 ## FluentBit deployment and configuration
 
-FluentBit deployment should be performed in accordance with [its own documentation](https://docs.fluentbit.io/manual/installation/getting-started-with-fluent-bit).
+FluentBit deployment should be performed in accordance with [its documentation](https://docs.fluentbit.io/manual/installation/getting-started-with-fluent-bit).
 
-{{ ydb-short-name }} plugin for FluentBit is available in the source code form in the [repository](https://github.com/ydb-platform/fluent-bit-ydb), along with the build instructions. For container-based deployment the Docker image is provided: `ghcr.io/ydb-platform/fluent-bit-ydb`.
+{{ ydb-short-name }} plugin for FluentBit is available in the source code form in the [repository](https://github.com/ydb-platform/fluent-bit-ydb), along with the build instructions. Docker image is provided for container-based deployments: `ghcr.io/ydb-platform/fluent-bit-ydb`.
 
-The general logic, configuration syntax and procedures to set up the receiving, processing and delivering logs in the FluentBit environment are defined in the [FluentBit documentation](https://docs.fluentbit.io/manual/concepts/key-concepts).
+General logic, configuration syntax and procedures to set up the receiving, processing and delivering logs in the FluentBit environment are defined in the corresponding [FluentBit documentation](https://docs.fluentbit.io/manual/concepts/key-concepts).
 
 
 ## Writing logs to {{ ydb-short-name }} tables
 
-The list of the enabled FluentBit plugins is configured in a file (for example, `plugins.conf`), which is referenced through the `plugins_file` parameter in the `SERVICE` section of the main FluentBit configuration file. Below is the example of the {{ ydb-short-name }} plugin enabled (plugin library path may be different depending on your setup):
+Before using the {{ ydb-short-name }} output plugin, it needs to be enabled in the FluentBit settings. The list of the enabled FluentBit plugins is configured in a file (for example, `plugins.conf`), which is referenced through the `plugins_file` parameter in the `SERVICE` section of the main FluentBit configuration file. Below is the example of such file with {{ ydb-short-name }} plugin enabled (plugin library path may be different depending on your setup):
 
 ```text
 # plugins.conf
@@ -88,53 +88,53 @@ The list of the enabled FluentBit plugins is configured in a file (for example, 
     Path /usr/lib/fluent-bit/out_ydb.so
 ```
 
-The table below lists the configuration parameters supported by the {{ ydb-short-name }} plugin for FluentBit.
+The table below lists the configuration parameters supported by the {{ ydb-short-name }} output plugin for FluentBit.
 
-| **Ключ** | **Описание** |
+| **Parameter** | **Description** |
 |----------|--------------|
-| `Name`   | Тип плагина, константа `ydb` |
-| `Match`  | (опционально) [Выражение для отбора тегов](https://docs.fluentbit.io/manual/concepts/data-pipeline/router) записей, направляемых в {{ ydb-short-name }} |
-| `ConnectionURL` | URL для подключения к БД, включая протокол, хост, номер порта и путь к базе данных (см. [документацию](../concepts/connect.md)) |
-| `TablePath` | Путь к таблице, начиная от корня базы данных (пример: `fluent-bit/log`) |
-| `Columns` | JSON-структура, состоящая из пар имен колонок, и устанавливающая соответствие между исходными колонками записи и целевыми колонками таблицы. Может включать перечисленные далее служебные псевдо-колонки |
-| `CredentialsAnonymous` | Устанавливается в значение `1` для использования анонимной аутентификации |
-| `CredentialsToken` | Значение токена аутентификации, для использования аутентификации непосредственно по значению токена |
-| `CredentialsYcMetadata` | Устанавливается в значение `1` для использования аутентификации через метаданные виртуальной машины |
-| `CredentialsStatic` | Логин и пароль для использования статического режима аутентификации, указанные в формате `Логин:Пароль@` |
-| `CredentialsYcServiceAccountKeyFile` | Путь к файлу ключа сервисного аккаунта, для аутентификации по ключу сервисного аккаунта |
-| `CredentialsYcServiceAccountKeyJson` | JSON-данные ключа сервисного аккаунта, для аутентификации по ключу сервисного аккаунта без указания имени файла (удобно в среде K8s) |
-| `Certificates` | Путь к файлу с сертификатом CA, либо непосредственно содержимое сертификата CA |
-| `LogLevel` | Уровень логирования для плагина, одно из значений `disabled` (по умолчанию), `trace`, `debug`, `info`, `warn`, `error`, `fatal` or `panic` |
+| `Name`   | Plugin type, should be value `ydb` |
+| `Match`  | (optional) [Tag matching expression](https://docs.fluentbit.io/manual/concepts/data-pipeline/router) to select log records which should be routed to {{ ydb-short-name }} |
+| `ConnectionURL` | YDB connection URL, including the protocol, endpoint and database path (see the [documentation](../concepts/connect.md)) |
+| `TablePath` | Table path starting from database root (example: `fluent-bit/log`) |
+| `Columns` | JSON structure mapping the fields of FluentBit record to the columns of target YDB table. May include the pseudo-columns listed below |
+| `CredentialsAnonymous` | Configured as `1` for anonymous {{ ydb-short-name }} authentication |
+| `CredentialsToken` | Token value, to use the token authentication {{ ydb-short-name }} mode |
+| `CredentialsYcMetadata` | Configure as `1` for virtual machine metadata {{ ydb-short-name }} authentication |
+| `CredentialsStatic` | Username and password for {{ ydb-short-name }} authentication, specified in the following format: `username:password@` |
+| `CredentialsYcServiceAccountKeyFile` | Path of file containing the service account (SA) key, to use the SA key {{ ydb-short-name }} authentication |
+| `CredentialsYcServiceAccountKeyJson` | JSON data of the service account key to be used instead of the filename (useful in K8s environment) |
+| `Certificates` | Path to the certificate authority (CA) trusted certificates file, or the literal trusted CA certificate value |
+| `LogLevel` | Plugin specific logging level, should be one of `disabled` (default), `trace`, `debug`, `info`, `warn`, `error`, `fatal` or `panic` |
 
-Для использования в карте сопоставления колонок (параметр `Columns`), в дополнение к полям записи FluentBit, доступны следующие служебные псевдо-колонки:
+The following pseudo-columns are available, in addition to the actual FluentBit log record fields, to be used as source values in the column map (`Columns` parameter):
 
-* `.timestamp` - метка времени сообщения (обязательная)
-* `.input` - имя входного потока сообщений (обязательная)
-* `.hash` - uint64 хеш-код, вычисленный над всеми полями сообщения, кроме псевдо-колонок (опциональная)
-* `.other` - документ JSON, содержащий все поля сообщения, которые не были явным образом сопоставлены с конкретной выходной колонкой (опциональная)
+* `.timestamp` - log record timestamp (mandatory)
+* `.input` - log input stream name (mandatory)
+* `.hash` - uint64 hash code, computed over the log record fields (optional)
+* `.other` - JSON document containing all log record fields which were not explicitly mapped to any table column (optional)
 
-Пример значения параметра `Columns`:
+Example of `Columns` parameter value:
 
 ```json
 {".timestamp": "timestamp", ".input": "input", ".hash": "datahash", "log": "message", "level": "level", "host": "hostname", ".other": "other"}
 ```
 
-## Сбор логов в кластере Kubernetes
+## Collecting logs in the Kubernetes cluster
 
-FluentBit очень часто используется для сбора логов в кластерах Kubernetes. Принципиальная схема доставки логов запущенных приложений в Kubernetes с помощью FluentBit с последующим сохранением их в {{ ydb-short-name }} выглядит следующим образом:
+FluentBit is often used to collect logs in the Kubernetes environment. Below is the schema of log delivery process, implemented using FluentBit and {{ ydb-short-name }}, for applications running in the Kubernetes cluster:
 
 ![FluentBit in Kubernetes cluster](../_assets/fluent-bit-ydb-scheme.png)
-<small>Рисунок 1 — Схема взаимодействия FluentBit и {{ ydb-short-name }} в Kubernetes кластере</small>
+<small>Figure 1 —  Interaction diagram between FluentBit and {{ ydb-short-name }} in the Kubernetes cluster</small>
 
-На этой схеме:
+In this diagram:
 
-* Поды приложений пишут логи в stdout/stderr
-* Текст из stdout/stderr сохраняется в виде файлов на рабочих узлах Kubernetes
-* Под с FluentBit:
-  * Монтирует каталог с лог-файлами рабочего узла Kubernetes
-  * Вычитывает из лог-файлов содержимое
-  * Обогащает записи дополнительными метаданными
-  * Сохраняет записи в базу данных {{ ydb-short-name }}
+* Application pods write logs to stdout/stderr
+* Text from stdout/stderr is saved as files on Kubernetes worker nodes
+* Pod with FluentBit:
+  * Mounts a folder with log files for itself
+  * Reads the contents from the log files
+  * Enriches log records with additional metadata
+  * Saves records to {{ ydb-short-name }} database
 
 ### Таблица для хранения логов Kubernetes
 

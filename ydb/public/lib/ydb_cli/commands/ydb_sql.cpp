@@ -2,6 +2,7 @@
 
 #include <library/cpp/json/json_reader.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
+#include <ydb/public/lib/operation_id/operation_id.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/query_stats.h>
@@ -12,6 +13,8 @@
 
 namespace NYdb {
 namespace NConsoleClient {
+
+using namespace NKikimr::NOperationId;
 
 TCommandSql::TCommandSql()
     : TYdbCommand("sql", {}, "Execute SQL query")
@@ -148,6 +151,7 @@ int TCommandSql::Run(TConfig& config) {
 int TCommandSql::RunCommand(TConfig& config) {
     TDriver driver = CreateDriver(config);
     NQuery::TQueryClient client(driver);
+    SetInterruptHandlers();
     
     if (RunAsync) {
         // ExecuteScript
@@ -214,9 +218,11 @@ int TCommandSql::RunCommand(TConfig& config) {
             }
         }
 
+    } else if (OperationIdToFetch) {
+        // Fetch operation results
+        return FetchResults(driver, client);
     } else {
         // Single stream execution
-        SetInterruptHandlers();
         NQuery::TExecuteQuerySettings settings;
 
         if (ExplainMode) {
@@ -328,12 +334,12 @@ bool TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
         }
     } // TResultSetPrinter destructor should be called before printing stats
 
-    if (stats && !ExplainMode) {
+    if (stats && !ExplainMode && !ExplainAnalyzeMode) {
         Cout << Endl << "Statistics:" << Endl << *stats;
     }
 
     if (plan) {
-        if (!ExplainMode) {
+        if (!ExplainMode && !ExplainAnalyzeMode) {
             Cout << Endl << "Query plan:" << Endl;
         }
         // TODO: get rid of pretty-table format, refactor TQueryPrinter to reflect that
@@ -352,7 +358,51 @@ bool TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
 
 bool TCommandSql::PrintResponse(NQuery::TScriptExecutionOperation& result) {
     Cout << "Operation info:" << Endl << result.ToString();
+    TResultSetPrinter printer(OutputFormat, &IsInterrupted);
     return true;
+}
+
+int TCommandSql::FetchResults(TDriver& driver, NQuery::TQueryClient& client) {
+    // TODO: wait/retry
+
+    NKikimr::NOperationId::TOperationId operationId;
+    try {
+        operationId = TOperationId(OperationIdToFetch);
+    } catch (const yexception& ex) {
+        throw TMisuseException() << "Invalid operation ID to fetch";
+    }
+
+    if (operationId.GetKind() != Ydb::TOperationId::SCRIPT_EXECUTION) {
+        throw TMisuseException() << "Invalid operation kind. Expected SCRIPT_EXECUTION";
+    }
+
+    NOperation::TOperationClient operationClient(driver);
+    auto execScriptOperation = operationClient.Get<NQuery::TScriptExecutionOperation>(operationId).GetValueSync();
+    TResultSetPrinter printer(OutputFormat, &IsInterrupted);
+
+    for (size_t resultSetIndex = 0; resultSetIndex < execScriptOperation.Metadata().ResultSetsMeta.size(); ++resultSetIndex) {
+        TString const* nextFetchToken = nullptr;
+        while (!IsInterrupted()) {
+            NYdb::NQuery::TFetchScriptResultsSettings settings;
+            if (nextFetchToken != nullptr) {
+                settings.FetchToken(*nextFetchToken);
+            }
+
+            auto asyncResult = client.FetchScriptResults(operationId, resultSetIndex, settings);
+            auto result = asyncResult.GetValueSync();
+
+            if (result.HasResultSet() && !ExplainAnalyzeMode) {
+                printer.Print(result.ExtractResultSet());
+            }
+
+            if (result.GetNextFetchToken()) {
+                nextFetchToken = &result.GetNextFetchToken();
+            } else {
+                break;
+            }
+        }
+    }
+    return EXIT_SUCCESS;
 }
 
 }

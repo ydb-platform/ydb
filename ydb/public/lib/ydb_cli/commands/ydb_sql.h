@@ -25,6 +25,7 @@ private:
     int RunCommand(TConfig& config);
     bool PrintResponse(NQuery::TExecuteQueryIterator& result);
     bool PrintResponse(NQuery::TScriptExecutionOperation& result);
+    int FetchResults(TDriver& driver, NQuery::TQueryClient& client);
 
     TString CollectStatsMode;
     TString Query;

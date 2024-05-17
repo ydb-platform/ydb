@@ -248,7 +248,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
             ++realSchemaColumnsCount;
         }
 
-        if (realSchemaColumnsCount > 1) {
+        if (realSchemaColumnsCount != 1) {
             issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, TStringBuilder{} << TStringBuilder() << "Only one column in schema supported in raw format (you have " 
                 << realSchemaColumnsCount << " fields)"));
         }

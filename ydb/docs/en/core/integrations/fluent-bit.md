@@ -136,9 +136,9 @@ In this diagram:
   * Enriches log records with additional metadata
   * Saves records to {{ ydb-short-name }} database
 
-### Таблица для хранения логов Kubernetes
+### Table to store Kubernetes logs
 
-Структура таблицы {{ ydb-short-name }} для хранения логов Kubernetes:
+Below is the {{ ydb-short-name }} table structure to store the Kubernetes logs:
 
 ```sql
 CREATE TABLE `fluent-bit/log` (
@@ -157,23 +157,23 @@ CREATE TABLE `fluent-bit/log` (
   WITH (STORE = COLUMN, TTL = Interval(P14D) ON `timestamp`);
 ```
 
-Предназначение колонок:
+Columns purpose:
 
-* `timestamp` – временная метка лога;
-* `file` – название источника, из которого прочитан лог. В случае Kubernetes это будет имя файла, на worker ноде, в который записываются логи определенного pod;
-* `pipe` – stdout или stderr поток, куда была осуществлена запись на уровне приложения;
-* `datahash` – хеш-код, вычисленный над сообщением лога;
-* `message` – непосредственно само сообщение лога;
-* `message_parsed` – структурированное сообщение лога, если его удалось разобрать с помощью механизма парсеров в fluent-bit
-* `kubernetes` – информация о pod, например: название, неймспейс, логи и аннотации.
+* `timestamp` – the log record timestamp;
+* `file` – name of the source from which the log was read. In the case of Kubernetes, this will be the name of the file on the worker node in which the logs of a specific pod are written;
+* `pipe` – stdout or stderr stream where application-level writing was done;
+* `datahash` – hash code computed over the log record;
+* `message` – the log message;
+* `message_parsed` – a structured log message, if it could be parsed using the fluent-bit parsers
+* `kubernetes` – information about the pod, for example: name, namespace, logs and annotations.
 
-Опционально, можно установить TTL для строк таблицы, как показано в примере выше.
+Optionally, TTL can be configured for the table, as shown in the example.
 
-### Конфигурация FluentBit
+### FluentBit configuration
 
-Перед развертыванием FluentBit в среде Kubernetes необходимо подготовить файл настроек (обычно `values.yaml`), в котором указываются параметры сбора и обработки логов.
+In order to deploy FluentBit in the Kubernetes environment, a configuration file with the log collection and processing parameters must be prepared (typical file name: `values.yaml`).
 
-Необходимо указать репозиторий и версию образа контейнера FluentBit:
+It is necessary to replace the repository and image version of the FluentBit container:
 
 ```yaml
 image:
@@ -181,9 +181,9 @@ image:
   tag: latest
 ```
 
-В данном образе, по сравнению со стандартным, добавлена библиотека-плагин для поддержки {{ ydb-short-name }}.
+In this image, a plugin library has been added that implements {{ ydb-short-name }} support.
 
-В следующих строках определены правила монтирования папок с логами в поды FluentBit:
+The following lines define the rules for mounting log folders in FluentBit pods:
 
 ```yaml
 volumeMounts:
@@ -213,7 +213,7 @@ daemonSetVolumeMounts:
     readOnly: true
 ```
 
-Также необходимо переопределить команду и аргументы запуска FluentBit:
+FluentBit startup parameters should be configured as shown below:
 
 ```yaml
 command:
@@ -225,7 +225,7 @@ args:
   - --config=/fluent-bit/etc/conf/fluent-bit.conf
 ```
 
-Требуется настроить пайплайн сбора, преобразования и доставки логов:
+FluentBit pipeline for collecting, converting and delivering logs should be defined according to the example:
 
 ```yaml
 config:
@@ -264,13 +264,13 @@ config:
         CredentialsToken ${OUTPUT_YDB_CREDENTIALS_TOKEN}
 ```
 
-Описание конфигурационных блоков:
+Configuration blocks description:
 
-* `inputs` - в этом блоке указываются откуда считывать и как разбирать логи. В данном случае, будет осуществляться чтение файликов *.log  из папки /var/log/containers/ , которая была смонтирована с хоста
-* `filters` - в этом блоке указывается как будет осуществляться обработка логов. В данном случае: для каждого лога будут найдены соответствующие метаданные (в помощью kubernetes фильтра), а также, вырезаны неиспользуемые поля (_p, time)
-* `outputs` - в этом блоке указывается, куда будут отгружены логи. В данном случае в таблицу `fluent-bit/log` в базе данных {{ ydb-short-name }}. Параметры подключения к базе данных (в данном случае `ConnectionURL` и `CredentialsToken`) задаются с помощью переменных окружения – `OUTPUT_YDB_CONNECTION_URL`, `OUTPUT_YDB_CREDENTIALS_TOKEN`. При необходимости настройки аутентификации и состав используемых переменных окружения корректируются в зависимости от настроек используемого кластера {{ ydb-short-name }}.
+* `inputs` - this block specifies where to read and how to parse logs. In this case, `*.log` files will be read from the `/var/log/containers/` folder, which is mounted from the host
+* `filters` - this block specifies how the logs will be processed. In this case, for each log record the corresponding metadata is added (using the kubernetes filter), and unused fields (`_p`, `time`) are cut out
+* `outputs` - this block specifies where the logs will be sent. In this case, logs are saved into `fluent-bit/log` table in the {{ ydb-short-name }} database. Database connetion parameters (in the show example, `ConnectionURL` and `CredentialsToken`) are defined using the environment variables – `OUTPUT_YDB_CONNECTION_URL`, `OUTPUT_YDB_CREDENTIALS_TOKEN`. Authentication parameters and the set of corresponding environment variables is updated depending on the configuration of the {{ ydb-short-name }} cluster being used.
 
-Переменные окружения определяются следующим образом:
+Environment variables are defined as shown below:
 
 ```yaml
 env:
@@ -283,21 +283,21 @@ env:
         name: fluent-bit-ydb-plugin-token
 ```
 
-Данные аутентификации необходимо сохранить в конфигурации кластера Kubernetes в виде секрета. Пример команды для создания секрета:
+Authentication data should be stored in the Kubernetes cluster configuration as the secret object. Examlple of command to create the Kubernetes secret:
 
 ```sh
 kubectl create secret -n ydb-fluent-bit-integration generic fluent-bit-ydb-plugin-token --from-literal=token=<YDB TOKEN>
 ```
 
-### Развертывание FluentBit в кластере Kubernetes
+### Deploying FluentBit in the Kubernetes cluster
 
-[HELM](https://helm.sh) – способ пакетирования и установки приложений в кластере Kubernetes. Для развертывания FluentBit необходимо добавить репозиторий с соответствующим чартом (сценарием установки) с помощью команды:
+[HELM](https://helm.sh) is a tool to package and install applications in a Kubernetes cluster. To deploy FluentBit, the corresponding chart repository (containing the installation scenario) should be added using the following command:
 
 ```sh
 helm repo add fluent https://fluent.github.io/helm-charts
 ```
 
-После этого установка FluentBit в кластер Kubernetes выполняется с помощью следующей команды:
+After that FluentBit can be deployed to the Kubernetes cluster with the following command:
 
 ```sh
 helm upgrade --install fluent-bit fluent/fluent-bit \
@@ -307,31 +307,31 @@ helm upgrade --install fluent-bit fluent/fluent-bit \
   --values values.yaml
 ```
 
-В команде выше в аргументе `--values` указывается ранее подготовленный файл с настройками FluentBit.
+Argument `--values` in the example command shown above is used to reference the file containing the FluentBit settings.
 
-### Проверка установки
+### Installation verification
 
-Проверяем что FluentBit запустился, читая его логи (должны отсутствовать записи уровня `[error]`):
+Check that FluentBit has started by reading its logs (there should be no `[error]` level entries):
 
 ```sh
 kubectl logs -n ydb-fluent-bit-integration -l app.kubernetes.io/instance=fluent-bit
 ```
 
-Проверяем, что записи в таблице {{ ydb-short-name }} есть (появятся спустя примерно несколько минут после запуска FluentBit):
+Check that there are records in the {{ ydb-short-name }} table (they will appear approximately a few minutes after launching FluentBit):
 
 ```sql
 SELECT * FROM `fluent-bit/log` LIMIT 10 ORDER BY `timestamp` DESC
 ```
 
-### Очистка ресурсов
+### Resources cleanup
 
-Для удаления FluentBit достаточно удалить Kubernetes namespace, в который была выполнена установка:
+To remove FluentBit it is sufficient to delete the Kubernetes namespace which was used for the installation:
 
 ```sh
 kubectl delete namespace ydb-fluent-bit-integration
 ```
 
-Далее можно удалить таблицу с логами в базе данных {{ ydb-short-name }}:
+After uninstalling FluentBit, log storage table can be dropped from the {{ ydb-short-name }} database:
 
 ```sql
 DROP TABLE `fluent-bit/log`

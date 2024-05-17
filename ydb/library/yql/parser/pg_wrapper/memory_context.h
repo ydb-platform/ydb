@@ -16,6 +16,7 @@ extern "C" {
 
 #undef TypeName
 #undef Max
+#undef bind
 
 struct TMainContext {
     MemoryContextData Data;
@@ -30,5 +31,5 @@ struct TMainContext {
     TString LastError;
     TGUCSettings::TPtr GUCSettings;
     HeapTuple CurrentDatabaseName = nullptr;
-    HeapTuple PrevDatabaseName = nullptr;
+    HeapTuple CurrentUserName = nullptr;
 };

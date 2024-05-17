@@ -7,6 +7,12 @@ option java_package = "ru.yandex.kikimr.proto";
 message TStaticCredentials {
     optional string User = 1;
     optional string Password = 2 [(Ydb.sensitive) = true];
+    optional string PasswordSecretName = 3;
+}
+
+message TOAuthToken {
+    optional string Token = 1 [(Ydb.sensitive) = true];
+    optional string TokenSecretName = 2;
 }
 
 message TConnectionParams {
@@ -15,7 +21,7 @@ message TConnectionParams {
     // credentials
     oneof Credentials {
         TStaticCredentials StaticCredentials = 3;
-        string OAuthToken = 4 [(Ydb.sensitive) = true];
+        TOAuthToken OAuthToken = 4;
     }
 }
 
@@ -114,6 +120,7 @@ message TEvAlterReplicationResult {
 message TEvDropReplication {
     optional NKikimrProto.TPathID PathId = 1;
     optional TOperationId OperationId = 2;
+    optional bool Cascade = 3 [default = true];
 }
 
 message TEvDropReplicationResult {

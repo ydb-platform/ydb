@@ -48,7 +48,7 @@ using TObjectId = TGuid;
 constexpr TObjectId NullObjectId = {};
 
 //! |#|-prefix.
-extern const TStringBuf ObjectIdPathPrefix;
+inline const TStringBuf ObjectIdPathPrefix = "#";
 
 //! Used to mark counters for well-known ids.
 constexpr ui64 WellKnownCounterMask = 0x8000000000000000;

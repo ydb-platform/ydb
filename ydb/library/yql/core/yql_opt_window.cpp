@@ -44,13 +44,13 @@ EFrameBoundsType FrameBoundsType(const TWindowFrameSettings& settings) {
     return EFrameBoundsType::GENERIC;
 }
 
-TExprNode::TPtr ReplaceLastLambdaArgWithStringLiteral(const TExprNode& lambda, TStringBuf literal, TExprContext& ctx) {
+TExprNode::TPtr ReplaceLastLambdaArgWithUnsignedLiteral(const TExprNode& lambda, ui32 literal, TExprContext& ctx) {
     YQL_ENSURE(lambda.IsLambda());
     TExprNodeList args = lambda.ChildPtr(0)->ChildrenList();
     YQL_ENSURE(!args.empty());
 
     auto literalNode = ctx.Builder(lambda.Pos())
-        .Callable("String")
+        .Callable("Uint32")
             .Atom(0, literal)
         .Seal()
         .Build();
@@ -220,11 +220,11 @@ TCalcOverWindowTraits ExtractCalcOverWindowTraits(const TExprNode::TPtr& frames,
                 YQL_ENSURE(rawTraits.OutputType);
 
                 if (initLambda->Child(0)->ChildrenSize() == 2) {
-                    initLambda = ReplaceLastLambdaArgWithStringLiteral(*initLambda, name, ctx);
+                    initLambda = ReplaceLastLambdaArgWithUnsignedLiteral(*initLambda, i, ctx);
                 }
 
                 if (updateLambda->Child(0)->ChildrenSize() == 3) {
-                    updateLambda = ReplaceLastLambdaArgWithStringLiteral(*updateLambda, name, ctx);
+                    updateLambda = ReplaceLastLambdaArgWithUnsignedLiteral(*updateLambda, i, ctx);
                 }
 
                 auto lambdaInputType = traits->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
@@ -355,40 +355,27 @@ TExprNode::TPtr BuildQueue(TPositionHandle pos, const TTypeAnnotationNode& itemT
 TExprNode::TPtr CoalesceQueueOutput(TPositionHandle pos, const TExprNode::TPtr& output, bool rawOutputIsOptional,
     const TExprNode::TPtr& defaultValue, TExprContext& ctx)
 {
-    if (defaultValue->IsCallable("Null")) {
-        if (!rawOutputIsOptional) {
-            return output;
-        }
-
+    // output is has type Optional<RawOutputType>
+    if (!rawOutputIsOptional) {
         return ctx.Builder(pos)
-            .Callable("IfPresent")
+            .Callable("Coalesce")
                 .Add(0, output)
-                .Lambda(1)
-                    .Param("item")
-                    .Arg("item")
-                .Seal()
-                .Callable(2, "Null")
-                .Seal()
-            .Seal()
-            .Build();
-    }
-
-    if (defaultValue->IsCallable("EmptyList")) {
-        return ctx.Builder(pos)
-            .Callable("FlatMap")
-                .Add(0, output)
-                .Lambda(1)
-                    .Param("item")
-                    .Arg("item")
-                .Seal()
+                .Add(1, defaultValue)
             .Seal()
             .Build();
     }
 
     return ctx.Builder(pos)
-        .Callable("Coalesce")
+        .Callable("IfPresent")
             .Add(0, output)
-            .Add(1, defaultValue)
+            .Lambda(1)
+                .Param("item")
+                .Callable("Coalesce")
+                    .Arg(0, "item")
+                    .Add(1, defaultValue)
+                .Seal()
+            .Seal()
+            .Add(2, defaultValue)
         .Seal()
         .Build();
 }
@@ -871,6 +858,7 @@ class TChain1MapTraitsStateBase : public TChain1MapTraits {
 public:
     TChain1MapTraitsStateBase(TStringBuf name, const TRawTrait& raw)
         : TChain1MapTraits(name, raw.Pos)
+        , FrameNeverEmpty(raw.FrameSettings.IsNonEmpty())
         , InitLambda(raw.InitLambda)
         , UpdateLambda(raw.UpdateLambda)
         , CalculateLambda(raw.CalculateLambda)
@@ -894,6 +882,8 @@ protected:
     TExprNode::TPtr GetDefaultValue() const {
         return DefaultValue;
     }
+
+    const bool FrameNeverEmpty;
 
 private:
     const TExprNode::TPtr InitLambda;
@@ -930,6 +920,7 @@ public:
             return {};
         }
 
+        YQL_ENSURE(!FrameNeverEmpty);
         auto output = ctx.Builder(GetPos())
             .Callable("Map")
                 .Add(0, BuildQueuePeek(GetPos(), lagQueue, *LaggingQueueIndex, dependsOn, ctx))
@@ -1103,7 +1094,6 @@ public:
         : TChain1MapTraitsStateBase(name, raw)
         , QueueBegin(queueBegin)
         , QueueEnd(queueEnd)
-        , FrameNeverEmpty(raw.FrameSettings.IsNonEmpty())
         , OutputIsOptional(raw.OutputType->IsOptionalOrNull())
     {
     }
@@ -1185,7 +1175,6 @@ private:
 
     const ui64 QueueBegin;
     const ui64 QueueEnd;
-    const bool FrameNeverEmpty;
     const bool OutputIsOptional;
 };
 
@@ -1230,6 +1219,7 @@ public:
 private:
     TExprNode::TPtr BuildFinalOutput(TExprContext& ctx) const {
         const auto defaultValue = GetDefaultValue();
+        YQL_ENSURE(!FrameNeverEmpty);
 
         if (defaultValue->IsCallable("Null")) {
             auto resultingType = RawOutputType;
@@ -1239,18 +1229,6 @@ private:
 
             return ctx.Builder(GetPos())
                 .Callable("Nothing")
-                    .Add(0, ExpandType(GetPos(), *resultingType, ctx))
-                .Seal()
-                .Build();
-        }
-        if (defaultValue->IsCallable("EmptyList")) {
-            auto resultingType = RawOutputType;
-            if (resultingType->GetKind() != ETypeAnnotationKind::List) {
-                resultingType = ctx.MakeType<TListExprType>(resultingType);
-            }
-
-            return ctx.Builder(GetPos())
-                .Callable("List")
                     .Add(0, ExpandType(GetPos(), *resultingType, ctx))
                 .Seal()
                 .Build();
@@ -1774,7 +1752,7 @@ TExprNode::TPtr BuildFold1Lambda(TPositionHandle pos, const TExprNode::TPtr& fra
                 case EFold1LambdaKind::INIT: {
                     auto lambda = traits->ChildPtr(1);
                     if (lambda->Child(0)->ChildrenSize() == 2) {
-                        lambda = ReplaceLastLambdaArgWithStringLiteral(*lambda, column->Content(), ctx);
+                        lambda = ReplaceLastLambdaArgWithUnsignedLiteral(*lambda, i, ctx);
                     }
                     lambda = ReplaceFirstLambdaArgWithCastStruct(*lambda, *rowInputType, ctx);
                     YQL_ENSURE(lambda->Child(0)->ChildrenSize() == 1);
@@ -1803,7 +1781,7 @@ TExprNode::TPtr BuildFold1Lambda(TPositionHandle pos, const TExprNode::TPtr& fra
                 case EFold1LambdaKind::UPDATE: {
                     auto lambda = traits->ChildPtr(2);
                     if (lambda->Child(0)->ChildrenSize() == 3) {
-                        lambda = ReplaceLastLambdaArgWithStringLiteral(*lambda, column->Content(), ctx);
+                        lambda = ReplaceLastLambdaArgWithUnsignedLiteral(*lambda, i, ctx);
                     }
                     lambda = ReplaceFirstLambdaArgWithCastStruct(*lambda, *rowInputType, ctx);
                     YQL_ENSURE(lambda->Child(0)->ChildrenSize() == 2);

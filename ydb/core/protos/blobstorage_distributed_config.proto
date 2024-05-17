@@ -154,6 +154,10 @@ message TEvNodeConfigInvokeOnRoot {
         NKikimrBlobStorage.TVDiskID VDiskId = 1; // which one to reassign
         optional NKikimrBlobStorage.TPDiskId PDiskId = 2; // where to put it (optional)
         bool ConvertToDonor = 3; // convert the current disk to donor?
+        bool IgnoreGroupFailModelChecks = 4;
+        bool IgnoreDegradedGroupsChecks = 5;
+        bool IgnoreVSlotQuotaCheck = 6;
+        bool IsSelfHealReasonDecommit = 7;
     }
 
     // Regenerate configuration so the slain VDisk is no more reported as DESTROY one in the list.
@@ -167,12 +171,21 @@ message TEvNodeConfigInvokeOnRoot {
         NKikimrBlobStorage.TVSlotId VSlotId = 2;
     }
 
+    message TReassignStateStorageNode {
+        uint32 From = 1;
+        uint32 To = 2; // or zero to pick up automatically
+        bool StateStorage = 3;
+        bool StateStorageBoard = 4;
+        bool SchemeBoard = 5;
+    }
+
     oneof Request {
         TUpdateConfig UpdateConfig = 1;
         TQueryConfig QueryConfig = 2;
         TReassignGroupDisk ReassignGroupDisk = 3;
         TStaticVDiskSlain StaticVDiskSlain = 4;
         TDropDonor DropDonor = 5;
+        TReassignStateStorageNode ReassignStateStorageNode = 6;
     }
 }
 
@@ -207,6 +220,9 @@ message TEvNodeConfigInvokeOnRootResult {
     message TDropDonor {
     }
 
+    message TReassignStateStorageNode {
+    }
+
     EStatus Status = 1;
     optional string ErrorReason = 2;
     TScepter Scepter = 3;
@@ -217,5 +233,6 @@ message TEvNodeConfigInvokeOnRootResult {
         TReassignGroupDisk ReassignGroupDisk = 6;
         TStaticVDiskSlain StaticVDiskSlain = 7;
         TDropDonor DropDonor = 8;
+        TReassignStateStorageNode ReassignStateStorageNode = 9;
     }
 }

@@ -2,8 +2,9 @@ LIBRARY()
 
 SRCS(
     normalizer.cpp
-    portion.cpp
-    chunks.cpp
+    GLOBAL portion.cpp
+    GLOBAL chunks.cpp
+    GLOBAL clean.cpp
 )
 
 PEERDIR(

@@ -107,9 +107,9 @@ namespace {
             if (value.IsValueReady()) {
                 auto val = !value.IsValueObsolete(now) ? value.GetValue() : 0;
                 ui32 levelVal = val / significantChange;
-                auto& lit = levels[groupId];
-                if (lit != levelVal || force) {
-                    lit = levelVal;
+                auto [lit, inserted] = levels.insert({groupId, 0});
+                if (inserted || lit->second != levelVal || force) {
+                    lit->second = levelVal;
                     haveChanges = true;
                     // N.B. keep going so all levels are properly updated
                 }
@@ -149,6 +149,7 @@ bool TResourceMetricsSendState::FillChanged(TResourceMetricsValues& src, NKikimr
     } else if (force && src.CPU.IsValueObsolete(now)) {
         src.CPU.Set(0, now);
         metrics.SetCPU(0);
+        LevelCPU = 0;
         have = true;
     }
 
@@ -163,6 +164,7 @@ bool TResourceMetricsSendState::FillChanged(TResourceMetricsValues& src, NKikimr
     } else if (force && src.Memory.IsValueObsolete(now)) {
         src.Memory.Set(0);
         metrics.SetMemory(0);
+        LevelMemory = 0;
         have = true;
     }
 
@@ -177,6 +179,7 @@ bool TResourceMetricsSendState::FillChanged(TResourceMetricsValues& src, NKikimr
     } else if (force && src.Network.IsValueObsolete(now)) {
         src.Network.Set(0, now);
         metrics.SetNetwork(0);
+        LevelNetwork = 0;
         have = true;
     }
 
@@ -263,15 +266,18 @@ bool TResourceMetricsSendState::FillChanged(TResourceMetricsValues& src, NKikimr
 
 bool TResourceMetricsSendState::TryUpdate(TResourceMetricsValues& src, const TActorContext& ctx) {
     TInstant now = ctx.Now();
-    TDuration past = now - LastUpdate;
-    if (past < TDuration::Seconds(1)) {
+    if (LastAnyUpdate + TDuration::Seconds(1) < now) {
         return false; // too soon
     }
     NKikimrTabletBase::TMetrics values;
-    bool updated = FillChanged(src, values, now, past > TDuration::Seconds(60));
+    bool force = LastAllUpdate + TDuration::Seconds(60) < now;
+    bool updated = FillChanged(src, values, now, force);
     if (updated) {
+        if (force) {
+            LastAllUpdate = now;
+        }
+        LastAnyUpdate = now;
         ctx.Send(Launcher, new TEvLocal::TEvTabletMetrics(TabletId, FollowerId, values));
-        LastUpdate = now;
     }
     return updated;
 }

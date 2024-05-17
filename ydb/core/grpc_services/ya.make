@@ -72,6 +72,7 @@ SRCS(
     rpc_stream_execute_scan_query.cpp
     rpc_stream_execute_yql_script.cpp
     rpc_whoami.cpp
+    rpc_object_storage.cpp
     table_settings.cpp
 
     rpc_common/rpc_common_kqp_session.cpp
@@ -120,6 +121,7 @@ PEERDIR(
     ydb/core/tx/datashard
     ydb/core/tx/sharding
     ydb/core/tx/data_events
+    ydb/core/tx/schemeshard/olap/bg_tasks/events
     ydb/core/util
     ydb/core/ydb_convert
     ydb/core/security

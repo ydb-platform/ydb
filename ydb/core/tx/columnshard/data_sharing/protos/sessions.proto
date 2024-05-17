@@ -13,6 +13,7 @@ message TTransferContext {
     repeated uint64 SourceTabletIds = 2;
     optional bool Moving = 3[default = false];
     optional NKikimrColumnShardProto.TSnapshot SnapshotBarrier = 4;
+    optional uint64 TxId = 5;
 }
 
 message TDestinationSession {
@@ -56,4 +57,8 @@ message TSourceSession {
     message TCursorStatic {
         repeated TPathPortionsHash PathHashes = 7;
     }
+}
+
+message TEvProposeFromInitiator {
+    optional TDestinationSession Session = 1;
 }

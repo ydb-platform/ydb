@@ -583,10 +583,10 @@ public:
 
         if (CheckRequestDeadline(requestInfo, deadline, result) &&
             CreateNewSessionWorker(requestInfo, TString(DefaultKikimrPublicClusterName), true, request.GetDatabase(),
-                request.GetApplicationName(), event.GetSupportsBalancing(), event.GetPgWire(),
+                event.GetSupportsBalancing(), event.GetPgWire(),
                 event.GetClientAddress(), event.GetUserSID(), event.GetClientUserAgent(), event.GetClientSdkBuildInfo(),
                 event.GetClientPID(),
-                event.GetApplicationName(), result))
+                event.GetApplicationName(), event.GetUserName(), result))
         {
             auto& response = *responseEv->Record.MutableResponse();
             response.SetSessionId(result.Value->SessionId);
@@ -619,7 +619,7 @@ public:
         if (ev->Get()->GetSessionId().empty()) {
             TProcessResult<TKqpSessionInfo*> result;
             if (!CreateNewSessionWorker(requestInfo, TString(DefaultKikimrPublicClusterName), false,
-                database, {}, false, false, "", "", "", "", "", "", result))
+                database, false, false, "", "", "", "", "", "", Nothing(), result))
             {
                 ReplyProcessError(result.YdbStatus, result.Error, requestId);
                 return;
@@ -1415,11 +1415,12 @@ private:
     }
 
     bool CreateNewSessionWorker(const TKqpRequestInfo& requestInfo, const TString& cluster, bool longSession,
-        const TString& database, const TMaybe<TString>& applicationName, bool supportsBalancing, bool pgWire,
+        const TString& database, bool supportsBalancing, bool pgWire,
         const TString& clientHost, const TString& clientSid, const TString& userAgent,
         const TString& sdkBuildInfo,
         const TString& clientPid,
         const TString& clientApplicationName,
+        const TMaybe<TString>& clientUserName,
         TProcessResult<TKqpSessionInfo*>& result)
     {
         if (!database.empty() && AppData()->TenantName.empty()) {
@@ -1458,7 +1459,7 @@ private:
 
         auto dbCounters = Counters->GetDbCounters(database);
 
-        TKqpWorkerSettings workerSettings(cluster, database, applicationName, TableServiceConfig, QueryServiceConfig, dbCounters);
+        TKqpWorkerSettings workerSettings(cluster, database, clientApplicationName, clientUserName, TableServiceConfig, QueryServiceConfig, dbCounters);
         workerSettings.LongSession = longSession;
 
         auto config = CreateConfig(KqpSettings, workerSettings);

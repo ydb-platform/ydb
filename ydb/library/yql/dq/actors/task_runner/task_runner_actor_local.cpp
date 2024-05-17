@@ -49,7 +49,7 @@ public:
         , TaskId(taskId)
         , InputChannelsWithDisabledCheckpoints(std::move(inputChannelsWithDisabledCheckpoints))
         , MemoryQuota(std::move(memoryQuota))
-    { 
+    {
     }
 
     ~TLocalTaskRunnerActor()
@@ -427,7 +427,7 @@ private:
         }
 
         TaskRunner->Prepare(settings, ev->Get()->MemoryLimits, *ev->Get()->ExecCtx);
-        
+
         THashMap<ui64, std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr>> inputTransforms;
         for (auto i = 0; i != inputs.size(); ++i) {
             if (auto t = TaskRunner->GetInputTransform(i)) {
@@ -435,8 +435,10 @@ private:
             }
         }
 
-        auto wakeUpCallback = ev->Get()->ExecCtx->GetWakeupCallback();
-        TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(TxId, NActors::TActivationContext::ActorSystem(), wakeUpCallback));
+        if (settings.GetEnableSpilling()) {
+            auto wakeUpCallback = ev->Get()->ExecCtx->GetWakeupCallback();
+            TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(TxId, NActors::TActivationContext::ActorSystem(), wakeUpCallback));
+        }
 
         auto event = MakeHolder<TEvTaskRunnerCreateFinished>(
             TaskRunner->GetSecureParams(),

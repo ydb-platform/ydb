@@ -1301,6 +1301,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NGRpcService::TGRpcRequest
             serverMessage.set_status(Ydb::StatusIds::UNAVAILABLE);
             Request->GetStreamCtx()->WriteAndFinish(std::move(serverMessage), grpc::Status::OK);
         } else {
+            Request->RaiseIssues(ev->Get()->Issues);
             Request->ReplyUnauthenticated("refreshed token is invalid");
         }
         Die(ctx);

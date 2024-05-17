@@ -23,6 +23,7 @@
 #include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
 #include <ydb/library/yql/providers/pg/provider/yql_pg_provider_impl.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
+#include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 
@@ -921,6 +922,8 @@ private:
             hasFederatedSorcesOrSinks = hasFederatedSorcesOrSinks
                 || node.Maybe<TS3DataSource>()
                 || node.Maybe<TS3DataSink>()
+                || node.Maybe<TYtDSource>()
+                || node.Maybe<TYtDSink>()
                 || node.Maybe<TGenDataSource>();
 
             return !hasFederatedSorcesOrSinks;
@@ -1059,6 +1062,10 @@ public:
         SessionCtx->SetDatabase(database);
         SessionCtx->SetCluster(cluster);
         SessionCtx->SetTempTables(std::move(tempTablesState));
+
+        if (FederatedQuerySetup) {
+            ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory({}, FederatedQuerySetup->S3GatewayConfig.GetGeneratorPathsLimit());
+        }
     }
 
     IAsyncQueryResultPtr ExecuteSchemeQuery(const TKqpQueryRef& query, bool isSql, const TExecSettings& settings) override {
@@ -1826,6 +1833,7 @@ private:
             .Add(TCollectParametersTransformer::Sync(SessionCtx->QueryPtr()), "CollectParameters")
             .AddPostTypeAnnotation()
             .AddOptimization(true, false)
+            .Add(GetDqIntegrationPeepholeTransformer(true, TypesCtx), "DqIntegrationPeephole")
             .Add(TLogExprTransformer::Sync("Optimized expr"), "LogExpr")
             .AddRun(&NullProgressWriter)
             .Build();
@@ -1907,7 +1915,7 @@ private:
     TIntrusivePtr<TExecuteContext> ExecuteCtx;
     TIntrusivePtr<TKqlTransformContext> TransformCtx;
     TIntrusivePtr<IKqpRunner> KqpRunner;
-    NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory{NExternalSource::CreateExternalSourceFactory({})};
+    NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory;
 
     TKqpTempTablesState::TConstPtr TempTablesState;
     NActors::TActorSystem* ActorSystem = nullptr;

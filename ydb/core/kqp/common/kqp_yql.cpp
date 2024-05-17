@@ -2,6 +2,8 @@
 
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <ydb/library/yql/core/services/yql_transform_pipeline.h>
+#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
 
 namespace NYql {
 
@@ -452,6 +454,14 @@ TString PrintKqpStageOnly(const TDqStageBase& stage, TExprContext& ctx) {
 
     auto newStage = ctx.ReplaceNodes(stage.Ptr(), replaces);
     return KqpExprToPrettyString(TExprBase(newStage), ctx);
+}
+
+TAutoPtr<IGraphTransformer> GetDqIntegrationPeepholeTransformer(bool beforeDqTransforms, TIntrusivePtr<TTypeAnnotationContext> typesCtx) {
+    TTransformationPipeline dqIntegrationPeepholePipeline(typesCtx);
+    for (auto* dqIntegration : GetUniqueIntegrations(*typesCtx)) {
+        dqIntegration->ConfigurePeepholePipeline(beforeDqTransforms, {}, &dqIntegrationPeepholePipeline);
+    }
+    return dqIntegrationPeepholePipeline.Build();
 }
 
 } // namespace NYql

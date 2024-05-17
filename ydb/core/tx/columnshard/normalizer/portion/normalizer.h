@@ -1,7 +1,5 @@
 #pragma once
 
-#include "normalizer.h"
-
 #include <ydb/core/tx/columnshard/normalizer/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract_scheme.h>
 #include <ydb/core/tx/columnshard/blobs_action/counters/storage.h>
@@ -14,6 +12,9 @@
 #include <ydb/core/tx/columnshard/defs.h>
 
 
+namespace NKikimr::NColumnShard {
+    class TTablesManager;
+}
 namespace NKikimr::NOlap {
 
 template <class TConveyorTask>
@@ -78,19 +79,19 @@ public:
     }
 };
 
-class TPortionsNormalizerBase : public INormalizerComponent {
+class TPortionsNormalizerBase : public TNormalizationController::INormalizerComponent {
 public:
-    TPortionsNormalizerBase(TTabletStorageInfo* info)
-        : DsGroupSelector(info)
+    TPortionsNormalizerBase(const TNormalizationController::TInitContext& info)
+        : DsGroupSelector(info.GetStorageInfo())
     {}
 
-    virtual TConclusion<std::vector<INormalizerTask::TPtr>> Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override final;
+    virtual TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override final;
 
 protected:
     virtual INormalizerTask::TPtr BuildTask(std::vector<std::shared_ptr<TPortionInfo>>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas) const = 0;
-    virtual TConclusion<bool> DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc)  = 0;
+    virtual TConclusion<bool> DoInitImpl(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc)  = 0;
 
-    virtual bool CheckPortion(const TPortionInfo& /*portionInfo*/) const = 0;
+    virtual bool CheckPortion(const NColumnShard::TTablesManager& tablesManager, const TPortionInfo& /*portionInfo*/) const = 0;
 
     virtual std::set<ui32> GetColumnsFilter(const ISnapshotSchema::TPtr& schema) const {
         return schema->GetPkColumnsIds();

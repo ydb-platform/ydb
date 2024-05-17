@@ -51,16 +51,16 @@ void TYsonStructBase::Load(
     INodePtr node,
     bool postprocess,
     bool setDefaults,
-    const TYPath& path)
+    const NYPath::TYPath& path)
 {
-    Meta_->LoadStruct(this, node, postprocess, setDefaults, path);
+    Meta_->LoadStruct(this, std::move(node), postprocess, setDefaults, path);
 }
 
 void TYsonStructBase::Load(
     TYsonPullParserCursor* cursor,
     bool postprocess,
     bool setDefaults,
-    const TYPath& path)
+    const NYPath::TYPath& path)
 {
     Meta_->LoadStruct(this, cursor, postprocess, setDefaults, path);
 }
@@ -157,6 +157,11 @@ void TYsonStruct::InitializeRefCounted()
 
 ////////////////////////////////////////////////////////////////////////////////
 
+YT_DEFINE_THREAD_LOCAL(IYsonStructMeta*, CurrentlyInitializingYsonMeta, nullptr);
+YT_DEFINE_THREAD_LOCAL(i64, YsonMetaRegistryDepth, 0);
+
+////////////////////////////////////////////////////////////////////////////////
+
 TYsonStructRegistry* TYsonStructRegistry::Get()
 {
     return LeakySingleton<TYsonStructRegistry>();
@@ -164,20 +169,20 @@ TYsonStructRegistry* TYsonStructRegistry::Get()
 
 bool TYsonStructRegistry::InitializationInProgress()
 {
-    return CurrentlyInitializingMeta_ != nullptr;
+    return CurrentlyInitializingYsonMeta() != nullptr;
 }
 
 void TYsonStructRegistry::OnBaseCtorCalled()
 {
-    if (CurrentlyInitializingMeta_ != nullptr) {
-        ++RegistryDepth_;
+    if (CurrentlyInitializingYsonMeta() != nullptr) {
+        ++YsonMetaRegistryDepth();
     }
 }
 
 void TYsonStructRegistry::OnFinalCtorCalled()
 {
-    if (CurrentlyInitializingMeta_ != nullptr) {
-        --RegistryDepth_;
+    if (CurrentlyInitializingYsonMeta() != nullptr) {
+        --YsonMetaRegistryDepth();
     }
 }
 

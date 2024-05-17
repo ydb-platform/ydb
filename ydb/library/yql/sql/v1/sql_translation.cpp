@@ -1063,6 +1063,9 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
     TPosition pos(Context().Pos());
     TTableHints hints = GetContextHints(Ctx);
     TTableHints tableHints;
+
+    TMaybe<TString> keyFunc;
+
     auto& block = node.GetBlock3();
     switch (block.Alt_case()) {
         case TRule_table_ref::TBlock3::kAlt1: {
@@ -1096,7 +1099,7 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
             }
 
             auto& alt = block.GetAlt2();
-            const TString func(Id(alt.GetRule_an_id_expr1(), *this));
+            keyFunc = Id(alt.GetRule_an_id_expr1(), *this);
             TVector<TTableArg> args;
             if (alt.HasBlock3()) {
                 auto& argsBlock = alt.GetBlock3();
@@ -1115,8 +1118,8 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
                     args.push_back(std::move(*arg));
                 }
             }
-            tableHints = GetTableFuncHints(func);
-            tr.Keys = BuildTableKeys(pos, service, cluster, func, args);
+            tableHints = GetTableFuncHints(*keyFunc);
+            tr.Keys = BuildTableKeys(pos, service, cluster, *keyFunc, args);
             break;
         }
         case TRule_table_ref::TBlock3::kAlt3: {
@@ -1147,7 +1150,7 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
                     return false;
                 }
 
-                auto source = TryMakeSourceFromExpression(Ctx, service, cluster, namedNode, "@");
+                auto source = TryMakeSourceFromExpression(Ctx.Pos(), Ctx, service, cluster, namedNode, "@");
                 if (!source) {
                     Ctx.Error() << "Cannot infer cluster and table name";
                     return false;
@@ -1205,7 +1208,7 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
             }
 
             if (node.HasBlock4()) {
-                auto tmp = TableHintsImpl(node.GetBlock4().GetRule_table_hints1());
+                auto tmp = TableHintsImpl(node.GetBlock4().GetRule_table_hints1(), service, keyFunc.GetOrElse(""));
                 if (!tmp) {
                     return false;
                 }
@@ -1229,7 +1232,7 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
     MergeHints(hints, tableHints);
 
     if (node.HasBlock4()) {
-        auto tmp = TableHintsImpl(node.GetBlock4().GetRule_table_hints1());
+        auto tmp = TableHintsImpl(node.GetBlock4().GetRule_table_hints1(), service, keyFunc.GetOrElse(""));
         if (!tmp) {
             Ctx.Error() << "Failed to parse table hints";
             return false;
@@ -2435,7 +2438,7 @@ TNodePtr TSqlTranslation::IntegerOrBind(const TRule_integer_or_bind& node) {
             if (!namedNode) {
                 return {};
             }
-            auto atom = MakeAtomFromExpression(Ctx, namedNode);
+            auto atom = MakeAtomFromExpression(Ctx.Pos(), Ctx, namedNode);
             return atom.Build();
         }
         case TRule_integer_or_bind::ALT_NOT_SET:
@@ -2469,7 +2472,7 @@ TNodePtr TSqlTranslation::TypeNameTag(const TRule_type_name_tag& node) {
                 return {};
             }
             TDeferredAtom atom;
-            MakeTableFromExpression(Ctx, namedNode, atom);
+            MakeTableFromExpression(Ctx.Pos(), Ctx, namedNode, atom);
             return atom.Build();
         }
         case TRule_type_name_tag::ALT_NOT_SET:
@@ -3008,7 +3011,7 @@ bool TSqlTranslation::StructLiteralItem(TVector<TNodePtr>& labels, const TRule_e
         }
 
         TDeferredAtom atom;
-        MakeTableFromExpression(Ctx, labels.back(), atom);
+        MakeTableFromExpression(Ctx.Pos(), Ctx, labels.back(), atom);
         labels.back() = atom.Build();
         if (!labels.back()) {
             return false;
@@ -3046,7 +3049,7 @@ TNodePtr TSqlTranslation::StructLiteral(const TRule_struct_literal& node) {
     return BuildStructure(pos, values, labels);
 }
 
-bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& hints) {
+bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& hints, const TString& provider, const TString& keyFunc) {
     // table_hint:
     //      an_id_hint (EQUALS (type_name_tag | LPAREN type_name_tag (COMMA type_name_tag)* COMMA? RPAREN))?
     //    | (SCHEMA | COLUMNS) EQUALS? type_name_or_bind
@@ -3151,11 +3154,16 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
         }
 
         TPosition pos = Ctx.TokenPosition(alt.GetToken1());
-        auto labelsTuple = BuildTuple(pos, labels);
         TNodePtr structType = new TCallNodeImpl(pos, "StructType", structTypeItems);
-
-        hints["user_" + to_lower(alt.GetToken1().GetValue())] = { structType, labelsTuple };
-        break;
+        bool shouldEmitLabel = provider != YtProviderName || TCiString(keyFunc) == "object";
+        if (shouldEmitLabel) {
+            auto labelsTuple = BuildTuple(pos, labels);
+            hints["user_" + to_lower(alt.GetToken1().GetValue())] = { structType, labelsTuple };
+            break;
+        } else {
+            hints["user_" + to_lower(alt.GetToken1().GetValue())] = { structType };
+            break;
+        }
     }
 
     case TRule_table_hint::ALT_NOT_SET:
@@ -3165,19 +3173,19 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
     return true;
 }
 
-TMaybe<TTableHints> TSqlTranslation::TableHintsImpl(const TRule_table_hints& node) {
+TMaybe<TTableHints> TSqlTranslation::TableHintsImpl(const TRule_table_hints& node, const TString& provider, const TString& keyFunc) {
     TTableHints hints;
     auto& block = node.GetBlock2();
     bool hasErrors = false;
     switch (block.Alt_case()) {
     case TRule_table_hints::TBlock2::kAlt1: {
-        hasErrors = !TableHintImpl(block.GetAlt1().GetRule_table_hint1(), hints);
+        hasErrors = !TableHintImpl(block.GetAlt1().GetRule_table_hint1(), hints, provider, keyFunc);
         break;
     }
     case TRule_table_hints::TBlock2::kAlt2: {
-        hasErrors = !TableHintImpl(block.GetAlt2().GetRule_table_hint2(), hints);
+        hasErrors = !TableHintImpl(block.GetAlt2().GetRule_table_hint2(), hints, provider, keyFunc);
         for (const auto& x : block.GetAlt2().GetBlock3()) {
-            hasErrors = hasErrors || !TableHintImpl(x.GetRule_table_hint2(), hints);
+            hasErrors = hasErrors || !TableHintImpl(x.GetRule_table_hint2(), hints, provider, keyFunc);
         }
 
         break;
@@ -3200,7 +3208,8 @@ bool TSqlTranslation::SimpleTableRefImpl(const TRule_simple_table_ref& node, TTa
 
     TTableHints hints = GetContextHints(Context());
     if (node.HasBlock2()) {
-        auto tmp = TableHintsImpl(node.GetBlock2().GetRule_table_hints1());
+        const TString& service = Context().Scoped->CurrService;
+        auto tmp = TableHintsImpl(node.GetBlock2().GetRule_table_hints1(), service);
         if (!tmp) {
             Error() << "Failed to parse table hints";
             return false;
@@ -3262,7 +3271,7 @@ bool TSqlTranslation::SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& 
         }
 
         TDeferredAtom table;
-        MakeTableFromExpression(Context(), named, table);
+        MakeTableFromExpression(Context().Pos(), Context(), named, table);
         result = TTableRef(Context().MakeName("table"), service, cluster, nullptr);
         result.Keys = BuildTableKey(Context().Pos(), result.Service, result.Cluster, table, {at ? "@" : ""});
         break;
@@ -3491,7 +3500,7 @@ bool TSqlTranslation::RoleParameters(const TRule_create_user_option& node, TRole
 
     result.IsPasswordEncrypted = node.HasBlock1();
     if (!password->IsNull()) {
-        result.Password = MakeAtomFromExpression(Ctx, password);
+        result.Password = MakeAtomFromExpression(Ctx.Pos(), Ctx, password);
     }
 
     return true;
@@ -4290,7 +4299,7 @@ bool TSqlTranslation::BindParameterClause(const TRule_bind_parameter& node, TDef
         return false;
     }
 
-    result = MakeAtomFromExpression(Ctx, named);
+    result = MakeAtomFromExpression(Ctx.Pos(), Ctx, named);
     return true;
 }
 
@@ -4556,11 +4565,6 @@ public:
     {
     }
 
-    TReturningListColumns(TPosition pos, TNodePtr)
-        :INode(pos)
-    {
-    }
-
     void SetStar() {
         ColumnNames.clear();
         Star = true;
@@ -4584,7 +4588,7 @@ public:
     }
 
     TNodePtr DoClone() const override {
-        return new TReturningListColumns(Pos, Node->Clone());
+        return new TReturningListColumns(GetPos());
     }
 
     TAstNode* Translate(TContext& ctx) const override {

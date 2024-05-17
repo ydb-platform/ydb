@@ -161,7 +161,7 @@ struct TResurrectChunkLocationsResult
 struct TMasterConsistentState
 {
     i64 SequenceNumber;
-    i64 SegmentId;
+    int SegmentId;
 };
 
 using TCellIdToSnapshotIdMap = THashMap<NHydra::TCellId, int>;

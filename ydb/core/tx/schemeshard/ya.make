@@ -91,6 +91,7 @@ SRCS(
     schemeshard__operation_alter_login.cpp
     schemeshard__operation_alter_pq.cpp
     schemeshard__operation_alter_replication.cpp
+    schemeshard__operation_alter_sequence.cpp
     schemeshard__operation_alter_solomon.cpp
     schemeshard__operation_alter_subdomain.cpp
     schemeshard__operation_alter_table.cpp
@@ -199,6 +200,7 @@ SRCS(
     schemeshard_user_attr_limits.h
     schemeshard_utils.cpp
     schemeshard_utils.h
+    schemeshard_bg_tasks__list.cpp
     schemeshard_export__cancel.cpp
     schemeshard_export__create.cpp
     schemeshard_export__forget.cpp
@@ -273,7 +275,9 @@ PEERDIR(
     ydb/library/login/protos
     ydb/library/protobuf_printer
     ydb/library/yql/minikql
+    ydb/library/yql/providers/common/proto
     ydb/services/bg_tasks
+    ydb/core/tx/columnshard/bg_tasks/manager
 )
 
 YQL_LAST_ABI_VERSION()

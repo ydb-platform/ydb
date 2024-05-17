@@ -224,6 +224,7 @@ class TDataShard
     class TTxGetS3DownloadInfo;
     class TTxStoreS3DownloadInfo;
     class TTxS3UploadRows;
+    class TTxObjectStorageListing;
     class TTxExecuteMvccStateChange;
     class TTxGetRemovedRowVersions;
     class TTxCompactBorrowed;
@@ -297,7 +298,7 @@ class TDataShard
     friend class TReplicationSourceOffsetsClient;
     friend class TReplicationSourceOffsetsServer;
 
-    friend class TAsyncTableStatsBuilder;
+    friend class TTableStatsCoroBuilder;
     friend class TReadTableScan;
     friend class TWaitForStreamClearanceUnit;
     friend class TBuildIndexScan;
@@ -334,6 +335,7 @@ class TDataShard
     class TWaitVolatileDependencies;
     class TSendVolatileResult;
     class TSendVolatileWriteResult;
+    class TSendArbiterReadSets;
 
     struct TEvPrivate {
         enum EEv {
@@ -369,6 +371,7 @@ class TDataShard
             EvReadonlyLeaseConfirmation,
             EvPlanPredictedTxs,
             EvStatisticsScanFinished,
+            EvTableStatsError,
             EvEnd
         };
 
@@ -403,6 +406,29 @@ class TDataShard
             ui64 MemRowCount = 0;
             ui64 MemDataSize = 0;
             ui64 SearchHeight = 0;
+        };
+
+        struct TEvTableStatsError : public TEventLocal<TEvTableStatsError, EvTableStatsError> {
+            enum class ECode {
+                FETCH_PAGE_FAILED,
+                RESOURCE_ALLOCATION_FAILED,
+                ACTOR_DIED,
+                UNKNOWN
+            };
+
+            TEvTableStatsError(ui64 tableId, ECode code, const TString& msg)
+                : TableId(tableId)
+                , Code(code)
+                , Message(msg)
+            {}
+
+            TEvTableStatsError(ui64 tableId, ECode code)
+                : TEvTableStatsError(tableId, code, "")
+            {}
+
+            const ui64 TableId;
+            const ECode Code;
+            const TString Message;
         };
 
         struct TEvRemoveOldInReadSets : public TEventLocal<TEvRemoveOldInReadSets, EvRemoveOldInReadSets> {};
@@ -1255,6 +1281,7 @@ class TDataShard
     void Handle(TEvDataShard::TEvSplitPartitioningChanged::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvGetTableStats::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvTableStatsError::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvUploadRowsRequest::TPtr& ev, const TActorContext& ctx);
@@ -1285,6 +1312,7 @@ class TDataShard
     void Handle(TEvDataShard::TEvGetS3DownloadInfo::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvStoreS3DownloadInfo::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvObjectStorageListingRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCdcStreamScanRequest::TPtr& ev, const TActorContext& ctx);
@@ -2395,9 +2423,9 @@ private:
 
     // For follower only
     struct TFollowerState {
-        ui64 LastSysUpdate = 0;
-        ui64 LastSchemeUpdate = 0;
-        ui64 LastSnapshotsUpdate = 0;
+        NTable::TDatabase::TChangeCounter LastSysUpdate;
+        NTable::TDatabase::TChangeCounter LastSchemeUpdate;
+        NTable::TDatabase::TChangeCounter LastSnapshotsUpdate;
     };
 
     //
@@ -2953,6 +2981,7 @@ protected:
             HFuncTraced(TEvDataShard::TEvGetS3DownloadInfo, Handle);
             HFuncTraced(TEvDataShard::TEvStoreS3DownloadInfo, Handle);
             HFuncTraced(TEvDataShard::TEvS3UploadRowsRequest, Handle);
+            HFuncTraced(TEvDataShard::TEvObjectStorageListingRequest, Handle);
             HFuncTraced(TEvDataShard::TEvMigrateSchemeShardRequest, Handle);
             HFuncTraced(TEvTxProcessing::TEvPlanStep, Handle);
             HFuncTraced(TEvTxProcessing::TEvReadSet, Handle);
@@ -2989,6 +3018,7 @@ protected:
             HFunc(TEvDataShard::TEvSplitPartitioningChanged, Handle);
             HFunc(TEvDataShard::TEvGetTableStats, Handle);
             HFunc(TEvPrivate::TEvAsyncTableStats, Handle);
+            HFunc(TEvPrivate::TEvTableStatsError, Handle);
             HFunc(TEvDataShard::TEvKqpScan, Handle);
             HFunc(TEvDataShard::TEvUploadRowsRequest, Handle);
             HFunc(TEvDataShard::TEvEraseRowsRequest, Handle);

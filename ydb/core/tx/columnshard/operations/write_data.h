@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/abstract_scheme.h>
 #include <ydb/core/tx/columnshard/engines/scheme/filtered_scheme.h>
 #include <ydb/core/protos/data_events.pb.h>
+#include <ydb/core/protos/tx_columnshard.pb.h>
 
 
 namespace NKikimr::NColumnShard {

@@ -1306,6 +1306,11 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                             if (!ParseConstraintNode(ctx, columnMeta, columnTuple, constraint, SessionCtx->Config(), needEval, true)) {
                                 return TStatus::Error;
                             }
+
+                            if (needEval) {
+                                ctx.Step.Repeat(TExprStep::ExprEval);
+                                return TStatus(TStatus::Repeat, true);
+                            }
                         }
                     }
 
@@ -1480,7 +1485,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
         return true;
     }
 
-    static bool CheckCreateSequenceSettings(const TCoNameValueTupleList& settings, TExprContext& ctx) {
+    static bool CheckSequenceSettings(const TCoNameValueTupleList& settings, TExprContext& ctx) {
         const static std::unordered_set<TString> sequenceSettingNames =
             {"start", "increment", "cache", "minvalue", "maxvalue", "cycle"};
         for (const auto& setting : settings) {
@@ -1509,7 +1514,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleCreateSequence(TKiCreateSequence node, TExprContext& ctx) override {
-        if(!CheckCreateSequenceSettings(node.SequenceSettings(), ctx)) {
+        if(!CheckSequenceSettings(node.SequenceSettings(), ctx)) {
             return TStatus::Error;
         }
 
@@ -1541,6 +1546,21 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             auto name = setting.Name().Value();
             ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                 TStringBuilder() << "Unknown drop sequence setting: " << name));
+            return TStatus::Error;
+        }
+
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    virtual TStatus HandleAlterSequence(TKiAlterSequence node, TExprContext& ctx) override {
+        if(!CheckSequenceSettings(node.SequenceSettings(), ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!node.Settings().Empty()) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+                << "Unsupported sequence settings"));
             return TStatus::Error;
         }
 
@@ -1618,8 +1638,10 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             "endpoint",
             "database",
             "token",
+            "token_secret_name",
             "user",
             "password",
+            "password_secret_name",
         };
 
         if (!CheckReplicationSettings(node.ReplicationSettings(), supportedSettings, ctx)) {

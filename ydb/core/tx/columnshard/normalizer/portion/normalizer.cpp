@@ -6,8 +6,8 @@
 
 namespace NKikimr::NOlap {
 
-TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
-    auto initRes = DoInit(controller,txc);
+TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
+    auto initRes = DoInitImpl(controller,txc);
 
     if (initRes.IsFail()) {
         return initRes;
@@ -22,9 +22,9 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::Init(co
         return TConclusionStatus::Fail("Not ready");
     }
 
-    TTablesManager tablesManager(controller.GetStoragesManager(), 0);
+    NColumnShard::TTablesManager tablesManager(controller.GetStoragesManager(), 0);
     if (!tablesManager.InitFromDB(db)) {
-        ACFL_ERROR("normalizer", "TPortionsNormalizer")("error", "can't initialize tables manager");
+        ACFL_TRACE("normalizer", "TPortionsNormalizer")("error", "can't initialize tables manager");
         return TConclusionStatus::Fail("Can't load index");
     }
 
@@ -49,7 +49,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::Init(co
             auto currentSchema = schema.GetSchema(portion);
             portion.SetSchemaVersion(currentSchema->GetVersion());
 
-            if (!columnsFilter.contains(loadContext.GetAddress().GetColumnId())) {
+            if (!columnsFilter.empty() && !columnsFilter.contains(loadContext.GetAddress().GetColumnId())) {
                 return;
             }
             auto it = portions.find(portion.GetPortionIdVerified());
@@ -85,7 +85,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::Init(co
     ui64 brokenPortioncCount = 0;
     for (auto&& portionConstructor : portions) {
         auto portionInfo = std::make_shared<TPortionInfo>(portionConstructor.second.Build(false));
-        if (CheckPortion(*portionInfo)) {
+        if (CheckPortion(tablesManager,  *portionInfo)) {
             continue;
         }
         ++brokenPortioncCount;
@@ -100,8 +100,6 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::Init(co
     if (package.size() > 0) {
         tasks.emplace_back(BuildTask(std::move(package), schemas));
     }
-
-    AtomicSet(ActiveTasksCount, tasks.size());
     ACFL_INFO("normalizer", "TPortionsNormalizer")("message", TStringBuilder() << brokenPortioncCount << " portions found");
     return tasks;
 }

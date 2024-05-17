@@ -522,6 +522,9 @@ namespace NKikimr::NBsController {
                             sh->GroupsToUpdate[slot->GroupId].emplace();
                         }
                     }
+                    if (StaticPDisks.contains(overlay->first)) {
+                        state.PushStaticGroupsToSelfHeal = true;
+                    }
                 }
             }
 
@@ -633,6 +636,9 @@ namespace NKikimr::NBsController {
 
             for (auto& fn : Callbacks) {
                 fn();
+            }
+            if (PushStaticGroupsToSelfHeal) {
+                Self.PushStaticGroupsToSelfHeal();
             }
             return Self.NextConfigTxSeqNo++;
         }
@@ -1110,6 +1116,23 @@ namespace NKikimr::NBsController {
             if (groupInfo.DecommitStatus != NKikimrBlobStorage::TGroupDecommitStatus::NONE) {
                 group->SetDecommitStatus(groupInfo.DecommitStatus);
             }
+        }
+
+        void TBlobStorageController::SerializeSettings(NKikimrBlobStorage::TUpdateSettings *settings) {
+            settings->AddDefaultMaxSlots(DefaultMaxSlots);
+            settings->AddEnableSelfHeal(SelfHealEnable);
+            settings->AddEnableDonorMode(DonorMode);
+            settings->AddScrubPeriodicitySeconds(ScrubPeriodicity.Seconds());
+            settings->AddPDiskSpaceMarginPromille(PDiskSpaceMarginPromille);
+            settings->AddGroupReserveMin(GroupReserveMin);
+            settings->AddGroupReservePartPPM(GroupReservePart);
+            settings->AddMaxScrubbedDisksAtOnce(MaxScrubbedDisksAtOnce);
+            settings->AddPDiskSpaceColorBorder(PDiskSpaceColorBorder);
+            settings->AddEnableGroupLayoutSanitizer(GroupLayoutSanitizerEnabled);
+            // TODO: settings->AddSerialManagementStage(SerialManagementStage);
+            settings->AddAllowMultipleRealmsOccupation(AllowMultipleRealmsOccupation);
+            settings->AddUseSelfHealLocalPolicy(UseSelfHealLocalPolicy);
+            settings->AddTryToRelocateBrokenDisksLocallyFirst(TryToRelocateBrokenDisksLocallyFirst);
         }
 
 } // NKikimr::NBsController

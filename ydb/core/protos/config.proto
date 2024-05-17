@@ -1400,6 +1400,10 @@ message THiveConfig {
     optional bool EnableDestroyOperations = 74 [default = false];
 }
 
+message TBlobCacheConfig {
+    optional uint64 MaxSizeBytes = 1 [default = 1073741824];
+}
+
 message TColumnShardConfig {
     message TTablesStorageLayoutPolicy {
         message TMinimalTablesCountPolicy {
@@ -1711,6 +1715,7 @@ message TKafkaProxyConfig {
     }
 
     optional TProxy Proxy = 7;
+    optional bool MeteringV2Enabled = 10 [default = false];
 }
 
 message TAwsCompatibilityConfig {
@@ -1795,6 +1800,7 @@ message TAppConfig {
     optional bool AllowEditYamlInUi = 75;
     optional TS3ProxyResolverConfig S3ProxyResolverConfig = 76;
     optional TBackgroundCleaningConfig BackgroundCleaningConfig = 77;
+    optional TBlobCacheConfig BlobCacheConfig = 78;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

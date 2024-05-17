@@ -2,8 +2,8 @@
 
 #include "iface.h"
 
-#include <grpc++/support/byte_buffer.h>
-#include <grpc++/support/slice.h>
+#include <grpcpp/support/byte_buffer.h>
+#include <grpcpp/support/slice.h>
 
 #include <ydb/library/grpc/server/grpc_request_base.h>
 #include <library/cpp/string_utils/quote/quote.h>

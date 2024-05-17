@@ -3,9 +3,6 @@
 #include "federated_read_session.h"
 #include "federated_write_session.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/impl/read_session.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/impl/write_session.h>
-
 namespace NYdb::NFederatedTopic {
 
 std::shared_ptr<IFederatedReadSession>

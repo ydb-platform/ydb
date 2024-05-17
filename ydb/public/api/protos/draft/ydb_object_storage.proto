@@ -1,0 +1,36 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Ydb.ObjectStorage;
+option java_package = "com.yandex.ydb.object_storage";
+option java_outer_classname = "ObjectStorageProtos";
+
+import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/ydb_value.proto";
+import "ydb/public/api/protos/ydb_status_codes.proto";
+
+message ListingRequest {
+    enum EMatchType {
+        EQUAL = 0;
+        NOT_EQUAL = 1;
+    }
+    string table_name = 1;
+    TypedValue key_prefix = 2; // A tuple representing all key columns that preceed path column
+    string path_column_prefix = 3;
+    string path_column_delimiter = 4;
+    bytes continuation_token = 5;
+    TypedValue start_after_key_suffix = 6; // A tuple representing key columns that succeed path column
+    int32 max_keys = 7;
+    repeated string columns_to_return = 8;
+    reserved 9; // Deprecated filter
+    TypedValue matching_filter = 10;
+}
+
+message ListingResponse {
+    StatusIds.StatusCode status = 1;
+    repeated Ydb.Issue.IssueMessage issues = 2;
+    repeated string common_prefixes = 3;    // Folders.
+    Ydb.ResultSet contents = 4;           // Every Contents row starts with key suffix with KeySuffixSize columns
+    bool is_truncated = 5;
+    bytes next_continuation_token = 6;
+}

@@ -20,6 +20,7 @@ public:
 
 public:
     bool HasTenant(const TString& tenant) const;
+    bool HasNodes(const TString& tenant) const;
     const THashSet<ui32>& GetNodes(const TString& tenant) const;
     ui32 GetRandomNode(const TString& tenant) const;
 

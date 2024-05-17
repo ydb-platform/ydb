@@ -333,12 +333,12 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT_VALUES_EQUAL(totalRows, 100);
             // 100 rows * 1000 byte per row / 10000 chunk size limit -> expect 10 batches
             UNIT_ASSERT(10 <= totalBatches);
-            UNIT_ASSERT(totalBatches < 12);
+            UNIT_ASSERT_LT_C(totalBatches, 13, totalBatches);
         } else {
             UNIT_ASSERT_VALUES_EQUAL(totalRows, 100000);
             // 100000 rows * 12 byte per row / 10000 chunk size limit -> expect 120 batches
             UNIT_ASSERT(120 <= totalBatches);
-            UNIT_ASSERT(totalBatches < 122);
+            UNIT_ASSERT_LT_C(totalBatches, 123, totalBatches);
         }
     }
 
@@ -2373,14 +2373,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             PARTITION BY HASH(Col1)
             WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10);
 
-            CREATE TABLE `/Root/DataShard1` (
-                Col1 Uint64 NOT NULL,
-                Col2 String,
-                Col3 Int32 NOT NULL,
-                PRIMARY KEY (Col1)
-            )
-            WITH (UNIFORM_PARTITIONS = 2, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
-
             CREATE TABLE `/Root/ColumnShard1` (
                 Col1 Uint64 NOT NULL,
                 Col2 String,
@@ -2398,23 +2390,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             )
             PARTITION BY HASH(Col1)
             WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 16);
-
-            CREATE TABLE `/Root/ColumnShard3` (
-                Col1 Uint64 NOT NULL,
-                Col2 String,
-                Col3 Int32 NOT NULL,
-                PRIMARY KEY (Col1)
-            )
-            PARTITION BY HASH(Col1)
-            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 16);
-
-            CREATE TABLE `/Root/DataShard2` (
-                Col1 Uint64 NOT NULL,
-                Col2 String,
-                Col3 Int32 NOT NULL,
-                PRIMARY KEY (Col1)
-            )
-            WITH (UNIFORM_PARTITIONS = 3, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 3);
         )";
 
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();

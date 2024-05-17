@@ -3,7 +3,6 @@ LIBRARY()
 SRCS(
     tx_controller.cpp
     locks_db.cpp
-    propose_transaction_base.cpp
 )
 
 PEERDIR(
@@ -13,5 +12,6 @@ PEERDIR(
 )
 
 YQL_LAST_ABI_VERSION()
+GENERATE_ENUM_SERIALIZATION(tx_controller.h)
 
 END()

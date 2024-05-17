@@ -2813,14 +2813,10 @@ public:
     [[nodiscard]]
     TAstNode* ParseAlterSeqStmt(const AlterSeqStmt* value) {
 
-        if (value->missing_ok) {
-            AddError("alter if exists is not supported yet");
-            return nullptr;
-        }
-
         std::vector<TAstNode*> options;
+        TString mode = (value->missing_ok) ? "alter_if_exists" : "alter";
 
-        options.push_back(QL(QA("mode"), QA("alter")));
+        options.push_back(QL(QA("mode"), QA(mode)));
 
         auto [sink, key] = ParseQualifiedPgObjectName(
             value->sequence->catalogname,

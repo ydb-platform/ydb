@@ -331,7 +331,7 @@ int CompareRowValues(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
         try {
             auto lhsData = TYsonStringBuf(lhs.AsStringBuf());
             auto rhsData = TYsonStringBuf(rhs.AsStringBuf());
-            return CompareCompositeValues(lhsData, rhsData);
+            return CompareYsonValues(lhsData, rhsData);
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION(
                 NTableClient::EErrorCode::IncomparableComplexValues,
@@ -354,7 +354,7 @@ int CompareRowValues(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
         try {
             auto lhsData = TYsonStringBuf(lhs.AsStringBuf());
             auto rhsData = TYsonStringBuf(rhs.AsStringBuf());
-            return CompareCompositeValues(lhsData, rhsData);
+            return CompareYsonValues(lhsData, rhsData);
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION(
                 NTableClient::EErrorCode::IncomparableComplexValues,
@@ -707,7 +707,7 @@ void ValidateAnyValue(TStringBuf yson)
     ParseYsonStringBuffer(yson, EYsonType::Node, &validator);
 }
 
-bool ValidateSortedAnyValue(TStringBuf yson)
+bool CheckSortedAnyValue(TStringBuf yson)
 {
     TYsonAnyValidator validator;
     ParseYsonStringBuffer(yson, EYsonType::Node, &validator);
@@ -1071,11 +1071,11 @@ void ValidateValueType(
                     }
                     if (IsAnyOrComposite(value.Type)) {
                         if (columnSchema.SortOrder()) {
-                            bool canBeSorted = ValidateSortedAnyValue(value.AsStringBuf());
+                            bool canBeSorted = CheckSortedAnyValue(value.AsStringBuf());
                             if (!canBeSorted) {
                                 THROW_ERROR_EXCEPTION(
                                     NTableClient::EErrorCode::SchemaViolation,
-                                    "Cannot write value of type %Qlv, which contains a YSON map, into type any sorted column",
+                                    "Cannot write value of type %Qlv, which contains a YSON map, into sorted column of type any",
                                     value.Type);
                             }
                         } else if (validateAnyIsValidYson) {
@@ -1279,7 +1279,7 @@ bool ValidateNonKeyColumnsAgainstLock(
         int mappedId = ApplyIdMapping(value, &idMapping);
         if (mappedId < 0 || mappedId >= std::ssize(schema.Columns())) {
             int size = nameTable->GetSize();
-            if (value.Id < 0 || value.Id >= size) {
+            if (value.Id >= size) {
                 THROW_ERROR_EXCEPTION("Expected value id in range [0:%v] but got %v",
                     size - 1,
                     value.Id);

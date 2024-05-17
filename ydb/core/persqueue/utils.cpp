@@ -253,6 +253,10 @@ TPartitionGraph::Node::Node(ui32 id, ui64 tabletId)
     , TabletId(tabletId) {
 }
 
+bool TPartitionGraph::Node::IsRoot() const {
+    return Parents.empty();
+}
+
 TPartitionGraph MakePartitionGraph(const NKikimrPQ::TPQTabletConfig& config) {
     return TPartitionGraph(BuildGraph<NKikimrPQ::TPQTabletConfig::TPartition>(config.GetAllPartitions()));
 }

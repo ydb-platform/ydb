@@ -14,6 +14,7 @@ namespace NKqpRun {
 constexpr char YQL_TOKEN_VARIABLE[] = "YQL_TOKEN";
 
 struct TYdbSetupSettings {
+    i32 NodeCount = 1;
     TString DomainName = "Root";
 
     bool TraceOptEnabled = false;
@@ -38,6 +39,7 @@ struct TRunnerOptions {
     enum class EResultOutputFormat {
         RowsJson,  // Rows in json format
         FullJson,  // Columns, rows and types in json format
+        FullProto,  // Columns, rows and types in proto string format
     };
 
     IOutputStream* ResultOutput = &Cout;

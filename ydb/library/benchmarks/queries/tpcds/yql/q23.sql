@@ -2,7 +2,7 @@
 
 -- NB: Subquerys
 $blabla = (
-    select substring(cast(item.i_item_desc as string),1,30) itemdesc,item.i_item_sk item_sk,date_dim.d_date solddate
+    select substring(cast(item.i_item_desc as string),0,30) itemdesc,item.i_item_sk item_sk,date_dim.d_date solddate
   from {{store_sales}} as store_sales
       cross join {{date_dim}} as date_dim
       cross join {{item}} as item

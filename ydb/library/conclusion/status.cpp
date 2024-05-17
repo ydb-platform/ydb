@@ -3,8 +3,12 @@
 
 namespace NKikimr {
 
-void TConclusionStatus::Validate() const {
-    AFL_VERIFY(Ok())("problem", GetErrorMessage());
+void TConclusionStatus::Validate(const TString& processInfo) const {
+    if (processInfo) {
+        AFL_VERIFY(Ok())("problem", GetErrorMessage())("process_info", processInfo);
+    } else {
+        AFL_VERIFY(Ok())("problem", GetErrorMessage());
+    }
 }
 
 }

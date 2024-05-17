@@ -12,24 +12,24 @@ namespace NKikimr::NColumnShard {
 namespace NKikimr::NOlap {
 
 class TPortionsNormalizer : public TPortionsNormalizerBase {
+    static inline TFactory::TRegistrator<TPortionsNormalizer> Registrator = TFactory::TRegistrator<TPortionsNormalizer>(ENormalizerSequentialId::PortionsMetadata);
 public:
     class TNormalizerResult;
     class TTask;
 
 public:
-    TPortionsNormalizer(TTabletStorageInfo* info)
+    TPortionsNormalizer(const TNormalizationController::TInitContext& info)
         : TPortionsNormalizerBase(info)
     {}
 
-    virtual const TString& GetName() const override {
-        const static TString name = "TPortionsNormalizer";
-        return name;
+    virtual ENormalizerSequentialId GetType() const override {
+        return ENormalizerSequentialId::PortionsMetadata;
     }
 
     virtual INormalizerTask::TPtr BuildTask(std::vector<std::shared_ptr<TPortionInfo>>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas) const override;
-    virtual TConclusion<bool> DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override;
+    virtual TConclusion<bool> DoInitImpl(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override;
 
-    virtual bool CheckPortion(const TPortionInfo& portionInfo) const override;
+    virtual bool CheckPortion(const NColumnShard::TTablesManager& tablesManager, const TPortionInfo& portionInfo) const override;
 
 private:
     THashSet<TPortionAddress> KnownPortions;

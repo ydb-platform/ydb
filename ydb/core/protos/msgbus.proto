@@ -449,33 +449,6 @@ message TSchemeOperationStatus {
     optional TFlatTxPollOptions PollOptions = 10;
 };
 
-message TBsTestLoadRequest {
-    repeated uint32 NodeId = 1;
-    optional NKikimr.TEvLoadTestRequest Event = 2;
-};
-
-message TBsTestLoadResponse {
-    message TItem {
-        optional uint32 NodeId = 1;
-        optional uint32 Status = 2;
-        optional string ErrorReason = 3;
-    };
-    repeated TItem Items = 1;
-};
-
-message TBsGetRequest {
-    optional uint32 GroupId = 1;
-    oneof Query {
-        NKikimrProto.TLogoBlobID Extreme = 2;
-    };
-};
-
-message TBsGetResponse {
-    optional NKikimrProto.EReplyStatus Status = 1;
-    optional bytes Buffer = 2;
-    optional string ErrorDescription = 3;
-};
-
 message TJsonSettings {
     optional bool UI64AsString = 1 [default = false];
 };

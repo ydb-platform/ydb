@@ -190,4 +190,8 @@ enum ETxTypes {
     TXTYPE_DATA_SHARING_APPLY_LINKS_MODIFICATION = 27       [(TxTypeOpts) = {Name: "TxDataSharingApplyLinksModification"}];
     TXTYPE_DATA_SHARING_WRITE_SOURCE_CURSOR = 28            [(TxTypeOpts) = {Name: "TxDataSharingWriteSourceCursor"}];
     TXTYPE_EXPORT_SAVE_CURSOR = 29                          [(TxTypeOpts) = {Name: "TxExportSaveCursor"}];
+    TXTYPE_REMOVE_BACKGROUND_SESSION = 30                   [(TxTypeOpts) = {Name: "TxRemoveBackgroundSession"}];
+    TXTYPE_ADD_BACKGROUND_SESSION = 31                      [(TxTypeOpts) = {Name: "TxAddBackgroundSession"}];
+    TXTYPE_SAVE_BACKGROUND_SESSION_PROGRESS = 32            [(TxTypeOpts) = {Name: "TxSaveBackgroundSessionProgress"}];
+    TXTYPE_SAVE_BACKGROUND_SESSION_STATE = 33               [(TxTypeOpts) = {Name: "TxSaveBackgroundSessionState"}];
 }

@@ -3,6 +3,13 @@
 #include <ydb/core/tx/schemeshard/schemeshard_identificators.h>
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 
+namespace NKikimr::NSchemeShard::NOlap::NAlter {
+class ISSEntity;
+class ISSEntityEvolution;
+class TEntityInitializationContext;
+class TEvolutionInitializationContext;
+}
+
 namespace NKikimr::NSchemeShard {
 
 struct TColumnTableInfo {
@@ -44,6 +51,11 @@ public:
         TMaybe<NKikimrSchemeOp::TColumnStoreSharding>&& standaloneSharding,
         TMaybe<NKikimrSchemeOp::TAlterColumnTable>&& alterBody = Nothing());
 
+    const NKikimrSchemeOp::TColumnStoreSharding& GetStandaloneShardingVerified() const {
+        AFL_VERIFY(!!StandaloneSharding);
+        return *StandaloneSharding;
+    }
+
     const auto& GetOwnedColumnShardsVerified() const {
         AFL_VERIFY(IsStandalone());
         return StandaloneSharding->GetColumnShards();
@@ -81,6 +93,10 @@ public:
     void UpdateTableStats(const TPathId& pathId, const TPartitionStats& newStats) {
         Stats.UpdateTableStats(pathId, newStats);
     }
+
+    TConclusion<std::shared_ptr<NOlap::NAlter::ISSEntity>> BuildEntity(const TPathId& pathId, const NOlap::NAlter::TEntityInitializationContext& iContext) const;
+
+    TConclusion<std::shared_ptr<NOlap::NAlter::ISSEntityEvolution>> BuildEvolution(const TPathId& pathId, const NOlap::NAlter::TEvolutionInitializationContext& iContext) const;
 };
 
 }

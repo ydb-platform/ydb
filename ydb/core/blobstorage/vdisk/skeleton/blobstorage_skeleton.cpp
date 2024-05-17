@@ -192,6 +192,7 @@ namespace NKikimr {
                     if (!ApplyHugeBlobSize(type.GetMinHugeBlobSizeInBytes())) {
                         continue;
                     }
+                    Y_ABORT_UNLESS(MinREALHugeBlobInBytes);
                     if (Config->RunRepl) {
                         ctx.Send(Db->ReplID, new TEvMinHugeBlobSizeUpdate(MinREALHugeBlobInBytes));
                     }
@@ -1828,6 +1829,7 @@ namespace NKikimr {
             // check status
             if (ev->Get()->Status == NKikimrProto::OK) {
                 ApplyHugeBlobSize(Config->MinHugeBlobInBytes);
+                Y_ABORT_UNLESS(MinREALHugeBlobInBytes); 
                 // handle special case when donor disk starts and finds out that it has been wiped out
                 if (ev->Get()->LsnMngr->GetOriginallyRecoveredLsn() == 0 && Config->BaseInfo.DonorMode) {
                     // send drop donor cmd to NodeWarden
@@ -2792,7 +2794,7 @@ namespace NKikimr {
         THullCtxPtr HullCtx;
         THugeBlobCtxPtr HugeBlobCtx;
         std::shared_ptr<THullLogCtx> HullLogCtx;
-        ui32 MinREALHugeBlobInBytes;
+        ui32 MinREALHugeBlobInBytes = 0;
         std::shared_ptr<THull> Hull; // run it after local recovery
         std::shared_ptr<TOutOfSpaceLogic> OutOfSpaceLogic;
         std::shared_ptr<TQueryCtx> QueryCtx;

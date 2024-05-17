@@ -51,7 +51,10 @@ public:
         record.SetPgWire(true);
         NKikimrKqp::TCreateSessionRequest& request = *record.MutableRequest();
         if (ConnectionParams.count("application_name")) {
-            request.SetApplicationName(ConnectionParams["application_name"]);
+            record.SetApplicationName(ConnectionParams["application_name"]);
+        }
+        if (ConnectionParams.count("user")) {
+            record.SetUserName(ConnectionParams["user"]);
         }
         request.SetDatabase(database);
         BLOG_D("Sent CreateSessionRequest to kqpProxy " << ev->Record.ShortDebugString());

@@ -25,6 +25,7 @@ ENDIF()
         library/cpp/logger
         library/cpp/resource
         library/cpp/yson
+        library/cpp/digest/md5
         yt/cpp/mapreduce/interface
         ydb/library/yql/sql/pg
         ydb/library/yql/core/facade

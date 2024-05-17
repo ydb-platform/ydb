@@ -93,7 +93,7 @@ class Slice:
     def _dynamic_configure(self):
         dynamic_cfg_path = self.configurator.create_dynamic_cfg()
         # wait for bs to configure
-        time_remaining = 60
+        time_remaining = 120
         while True:
             try:
                 self._invoke_scripts(dynamic_cfg_path, ['init_storage.bash'])

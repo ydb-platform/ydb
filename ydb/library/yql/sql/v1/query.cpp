@@ -230,7 +230,7 @@ public:
     }
 
     void ExtractTableName(TContext&ctx, TTableArg& arg) {
-        MakeTableFromExpression(ctx, arg.Expr, arg.Id);
+        MakeTableFromExpression(Pos, ctx, arg.Expr, arg.Id);
     }
 
     TNodePtr BuildKeys(TContext& ctx, ITableKeys::EBuildKeysMode mode) override {
@@ -739,7 +739,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TIntoTableOptions(GetPos(), Columns, Hints);
+        return new TIntoTableOptions(GetPos(), Columns, CloneContainer(Hints));
     }
 
 private:
@@ -2637,11 +2637,14 @@ public:
         bool hasError = false;
         if (TopLevel) {
             for (auto& var: ctx.Variables) {
-                if (!var.second->Init(ctx, src)) {
+                if (!var.second.second->Init(ctx, src)) {
                     hasError = true;
                     continue;
                 }
-                Add(Y("declare", var.first, var.second));
+                Add(Y(
+                    "declare", 
+                    new TAstAtomNodeImpl(var.second.first, var.first, TNodeFlags::ArbitraryContent), 
+                    var.second.second));
             }
 
             for (const auto& overrideLibrary: ctx.OverrideLibraries) {
@@ -3009,7 +3012,7 @@ public:
     }
 
     TPtr DoClone() const final {
-        return {};
+        return new TSqlLambda(Pos, TVector<TString>(Args), CloneContainer(ExprSeq));
     }
 
     void DoUpdateState() const override {
@@ -3064,7 +3067,7 @@ public:
     }
 
     TPtr DoClone() const final {
-        return {};
+        return new TWorldIf(GetPos(), SafeClone(Predicate), SafeClone(ThenNode), SafeClone(ElseNode), IsEvaluate);
     }
 
 private:
@@ -3116,7 +3119,7 @@ public:
     }
 
     TPtr DoClone() const final {
-        return{};
+        return new TWorldFor(GetPos(), SafeClone(List), SafeClone(BodyNode), SafeClone(ElseNode), IsEvaluate, IsParallel);
     }
 
 private:

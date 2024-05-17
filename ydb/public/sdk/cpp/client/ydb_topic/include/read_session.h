@@ -196,6 +196,8 @@ struct TReadSessionSettings: public TRequestSettings<TReadSessionSettings> {
     //! AutoscalingSupport.
     FLUENT_SETTING_DEFAULT(bool, AutoscalingSupport, false);
 
+    FLUENT_SETTING_DEFAULT(bool, DirectRead, false);
+
     //! Log.
     FLUENT_SETTING_OPTIONAL(TLog, Log);
 };

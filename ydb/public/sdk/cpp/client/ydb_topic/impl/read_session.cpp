@@ -87,7 +87,8 @@ void TReadSession::CreateClusterSessionsImpl(TDeferredActions<false>& deferred) 
         EventsQueue,
         context,
         1,
-        1
+        1,
+        Client->CreateDirectReadSessionConnectionProcessorFactory()
     );
 
     deferred.DeferStartSession(CbContext);

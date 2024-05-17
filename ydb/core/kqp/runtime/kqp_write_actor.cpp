@@ -295,7 +295,7 @@ public:
             Settings.GetInconsistentTx())
     {
         YQL_ENSURE(std::holds_alternative<ui64>(TxId));
-        YQL_ENSURE(!InconsistentTx || !ImmediateTx);
+        YQL_ENSURE(!InconsistentTx && !ImmediateTx);
         EgressStats.Level = args.StatsLevel;
     }
 
@@ -361,7 +361,9 @@ private:
                 NYql::NDqProto::StatusIds::INTERNAL_ERROR);
         }
 
-        if (Finished || GetFreeSpace() <= 0) {
+        CA_LOG_D("ADDED data:" << GetFreeSpace() << " " << Serializer->GetMemory() << ".");
+
+        if (Finished || GetFreeSpace() <= 0/* || SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable*/) {
             TResumeNotificationManager resumeNotificator(*this);
             for (auto& [shardId, batches] : Serializer->FlushBatchesForce()) {
                 for (auto& batch : batches) {

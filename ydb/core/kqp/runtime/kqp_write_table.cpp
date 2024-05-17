@@ -265,6 +265,7 @@ public:
 
     void FlushUnpreparedBatch(const ui64 shardId, TUnpreparedBatch& unpreparedBatch, bool force) {
         while (!unpreparedBatch.Batches.empty() && (unpreparedBatch.TotalDataSize >= MaxBatchBytes || force)) {
+            YQL_ENSURE(false, "shard and flush called");
             std::vector<TRecordBatchPtr> toPrepare;
             i64 toPrepareSize = 0;
             while (!unpreparedBatch.Batches.empty()) {
@@ -281,10 +282,11 @@ public:
                     nextRowSize = rowCalculator.GetRowBytesSize(index);
 
                     if (toPrepareSize + nextRowSize >= (i64)MaxBatchBytes) {
+                        Memory -= NArrow::GetBatchDataSize(batch);
+
                         toPrepare.push_back(batch->Slice(0, index));
                         unpreparedBatch.Batches.push_front(batch->Slice(index, batch->num_rows() - index));
 
-                        Memory -= NArrow::GetBatchDataSize(batch);
                         Memory += NArrow::GetBatchDataSize(unpreparedBatch.Batches.front());
                         break;
                     } else {
@@ -345,7 +347,7 @@ public:
 
     TBatches FlushBatchesForce() override {
         FlushUnsharded(true);
-        //FlushUnpreparedForce();
+        FlushUnpreparedForce();
 
         TBatches newBatches;
         std::swap(Batches, newBatches);

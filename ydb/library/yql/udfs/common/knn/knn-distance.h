@@ -27,7 +27,7 @@ static std::optional<float> KnnManhattanDistance(const TStringRef& str1, const T
             const TArrayRef<const float> vector1 = TKnnSerializerFacade::GetArray<float>(str1); 
             const TArrayRef<const float> vector2 = TKnnSerializerFacade::GetArray<float>(str2); 
 
-            if (Y_UNLIKELY(vector1.size() != vector2.size() || vector1.empty() || vector2.empty()))
+            if (Y_UNLIKELY(vector1.size() != vector2.size() || vector1.empty()))
                 return {};
 
             return ::L1Distance(vector1.data(), vector2.data(), vector1.size());            
@@ -36,7 +36,7 @@ static std::optional<float> KnnManhattanDistance(const TStringRef& str1, const T
             const TArrayRef<const ui8> vector1 = TKnnSerializerFacade::GetArray<ui8>(str1); 
             const TArrayRef<const ui8> vector2 = TKnnSerializerFacade::GetArray<ui8>(str2); 
 
-            if (Y_UNLIKELY(vector1.size() != vector2.size() || vector1.empty() || vector2.empty()))
+            if (Y_UNLIKELY(vector1.size() != vector2.size() || vector1.empty()))
                 return {};
 
             return ::L1Distance(vector1.data(), vector2.data(), vector1.size());            
@@ -70,7 +70,7 @@ static std::optional<float> KnnEuclideanDistance(const TStringRef& str1, const T
             const TArrayRef<const float> vector1 = TKnnSerializerFacade::GetArray<float>(str1); 
             const TArrayRef<const float> vector2 = TKnnSerializerFacade::GetArray<float>(str2); 
 
-            if (Y_UNLIKELY(vector1.size() != vector2.size() || vector1.empty() || vector2.empty()))
+            if (Y_UNLIKELY(vector1.size() != vector2.size() || vector1.empty()))
                 return {};
 
             return ::L2Distance(vector1.data(), vector2.data(), vector1.size());            
@@ -79,7 +79,7 @@ static std::optional<float> KnnEuclideanDistance(const TStringRef& str1, const T
             const TArrayRef<const ui8> vector1 = TKnnSerializerFacade::GetArray<ui8>(str1); 
             const TArrayRef<const ui8> vector2 = TKnnSerializerFacade::GetArray<ui8>(str2); 
 
-            if (Y_UNLIKELY(vector1.size() != vector2.size() || vector1.empty() || vector2.empty()))
+            if (Y_UNLIKELY(vector1.size() != vector2.size() || vector1.empty()))
                 return {};
 
             return ::L2Distance(vector1.data(), vector2.data(), vector1.size());            
@@ -113,7 +113,7 @@ static std::optional<float> KnnDotProduct(const TStringRef& str1, const TStringR
             const TArrayRef<const float> vector1 = TKnnSerializerFacade::GetArray<float>(str1); 
             const TArrayRef<const float> vector2 = TKnnSerializerFacade::GetArray<float>(str2); 
 
-            if (Y_UNLIKELY(vector1.size() != vector2.size() || vector1.empty() || vector2.empty()))
+            if (Y_UNLIKELY(vector1.size() != vector2.size() || vector1.empty()))
                 return {};
 
             return ::DotProduct(vector1.data(), vector2.data(), vector1.size());
@@ -122,7 +122,7 @@ static std::optional<float> KnnDotProduct(const TStringRef& str1, const TStringR
             const TArrayRef<const ui8> vector1 = TKnnSerializerFacade::GetArray<ui8>(str1); 
             const TArrayRef<const ui8> vector2 = TKnnSerializerFacade::GetArray<ui8>(str2); 
 
-            if (Y_UNLIKELY(vector1.size() != vector2.size() || vector1.empty() || vector2.empty()))
+            if (Y_UNLIKELY(vector1.size() != vector2.size() || vector1.empty()))
                 return {};
 
             return ::DotProduct(vector1.data(), vector2.data(), vector1.size());
@@ -144,7 +144,7 @@ static std::optional<TTriWayDotProduct<float>> KnnTriWayDotProduct(const TString
             const TArrayRef<const float> vector1 = TKnnSerializerFacade::GetArray<float>(str1); 
             const TArrayRef<const float> vector2 = TKnnSerializerFacade::GetArray<float>(str2); 
 
-            if (Y_UNLIKELY(vector1.size() != vector2.size() || vector1.empty() || vector2.empty()))
+            if (Y_UNLIKELY(vector1.size() != vector2.size() || vector1.empty()))
                 return {};
 
             return ::TriWayDotProduct(vector1.data(), vector2.data(), vector1.size());
@@ -153,7 +153,7 @@ static std::optional<TTriWayDotProduct<float>> KnnTriWayDotProduct(const TString
             const TArrayRef<const ui8> vector1 = TKnnSerializerFacade::GetArray<ui8>(str1); 
             const TArrayRef<const ui8> vector2 = TKnnSerializerFacade::GetArray<ui8>(str2); 
 
-            if (Y_UNLIKELY(vector1.size() != vector2.size() || vector1.empty() || vector2.empty()))
+            if (Y_UNLIKELY(vector1.size() != vector2.size() || vector1.empty()))
                 return {};
 
             TTriWayDotProduct<float> result;

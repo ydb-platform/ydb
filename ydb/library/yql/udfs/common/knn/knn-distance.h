@@ -15,7 +15,7 @@
 using namespace NYql;
 using namespace NYql::NUdf;
 
-static std::optional<float> KnnManhattanDistance(const TStringRef& str1, const TStringRef& str2) {
+inline std::optional<float> KnnManhattanDistance(const TStringRef& str1, const TStringRef& str2) {
     const ui8 format1 = str1.Data()[str1.Size() - HeaderLen];
     const ui8 format2 = str2.Data()[str2.Size() - HeaderLen];
 

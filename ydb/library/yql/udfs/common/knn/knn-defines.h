@@ -8,4 +8,4 @@ enum EFormat : ui8 {
     BitVector = 10          // 1-bit per element
 };
 
-static constexpr size_t HeaderLen = sizeof(ui8);
+inline constexpr size_t HeaderLen = sizeof(ui8);

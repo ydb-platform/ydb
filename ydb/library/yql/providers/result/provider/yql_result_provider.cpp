@@ -1507,7 +1507,9 @@ namespace {
             return false;
         }
 
-        void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer) override {
+        void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer, std::optional<ui32> inputsLimit, std::optional<ui32> outputsLimit) override {
+            Y_UNUSED(inputsLimit);
+            Y_UNUSED(outputsLimit);
             if (auto resPull = TMaybeNode<TResPull>(&node)) {
                 auto dataSourceName = resPull.Cast().DelegatedSource().Value();
                 auto dataSource = Config->Types.DataSourceMap.FindPtr(dataSourceName);

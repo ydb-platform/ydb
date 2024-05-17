@@ -141,9 +141,11 @@ public:
         return false;
     }
 
-    void GetInputs(const TExprNode& node, TVector<TPinInfo>&) override {
+    ui32 GetInputs(const TExprNode& node, TVector<TPinInfo>&, std::optional<ui32> limit) override {
+        Y_UNUSED(limit);
         if (auto maybeRead = TMaybeNode<TS3ReadObject>(&node)) {
         }
+        return 0;
     }
 
     IDqIntegration* GetDqIntegration() override {

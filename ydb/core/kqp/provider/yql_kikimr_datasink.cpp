@@ -1402,15 +1402,6 @@ public:
         return false;
     }
 
-    void GetInputs(const TExprNode&, TVector<TPinInfo>&) override {
-    }
-
-    void GetOutputs(const TExprNode&, TVector<TPinInfo>&) override {
-    }
-
-    void WritePlanDetails(const TExprNode&, NYson::TYsonWriter&) override {
-    }
-
     TString GetProviderPath(const TExprNode&) override {
         return TString(KikimrProviderName);
     }

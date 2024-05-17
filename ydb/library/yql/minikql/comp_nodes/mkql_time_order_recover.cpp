@@ -191,7 +191,6 @@ public:
         } else if (stateValue.HasValue()) {
             MKQL_ENSURE(stateValue.IsBoxed(), "Expected boxed value");
             bool isStateToLoad = stateValue.HasListItems();
-
             if (isStateToLoad) {
                 // Load from saved state.
                 NUdf::TUnboxedValue state = ctx.HolderFactory.Create<TState>(

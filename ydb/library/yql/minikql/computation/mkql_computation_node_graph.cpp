@@ -731,8 +731,8 @@ public:
             } else if (mutableValue.IsBoxed()) {
                 TList<TString> taskState;
                 size_t taskStateSize = 0;
-                {
-                    NUdf::TUnboxedValue list = mutableValue.Save();
+
+                auto saveList = [&](auto& list) {
                     auto listIt = list.GetListIterator();
                     NUdf::TUnboxedValue str;
                     while (listIt.Next(str)) {
@@ -741,18 +741,22 @@ public:
                         taskState.push_back({});
                         taskState.back().AppendNoAlias(strRef.Data(), strRef.Size());
                     }
+                };
+                bool isList= mutableValue.HasListItems();
+                NUdf::TUnboxedValue list;
+                if (isList) {   // No load was done during previous runs 
+                    saveList(mutableValue);
+                } else {
+                    NUdf::TUnboxedValue list = mutableValue.Save();
+                    saveList(list);
                 }
                 WriteUi64(result, taskStateSize);
                 for (auto it = taskState.begin(); it != taskState.end();) {
                     result.AppendNoAlias(it->Data(), it->Size());
                     it = taskState.erase(it);
                 }
-            } else { // No load was done during previous runs (if any).
-            // TODO
-                MKQL_ENSURE(mutableValue.HasValue() && (mutableValue.IsString() || mutableValue.IsEmbedded()), "State is expected to have data or invalid value");
-                const NUdf::TStringRef savedRef = mutableValue.AsStringRef();
-                WriteUi64(result, savedRef.Size());
-                result.AppendNoAlias(savedRef.Data(), savedRef.Size());
+            } else {
+                MKQL_ENSURE(false, "State is expected to have data or invalid value");
             }
         }
         return result;

@@ -481,7 +481,7 @@ TFuture<IStateStorage::TSaveStateResult> TStateStorage::SaveState(
         checkpointId,
         TMaybe<TSession>(), 
         serializedState,
-        type);  
+        type);
 
     auto promise = NewPromise<TSaveStateResult>();
     auto future = UpsertRow(context);

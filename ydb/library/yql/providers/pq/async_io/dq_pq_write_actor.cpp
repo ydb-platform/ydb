@@ -354,7 +354,7 @@ private:
         return !events.empty();
     }
 
-    TSinkState BuildState(const NDqProto::TCheckpoint& /*checkpoint*/) {
+    TSinkState BuildState(const NDqProto::TCheckpoint& checkpoint) {
         NPq::NProto::TDqPqTopicSinkState stateProto;
         stateProto.SetSourceId(GetSourceId());
         stateProto.SetConfirmedSeqNo(ConfirmedSeqNo);
@@ -366,7 +366,7 @@ private:
         auto& data = sinkState.Data;
         data.Version = StateVersion;
         data.Blob = serializedState;
-        //SINK_LOG_T("Save checkpoint " << checkpoint << " state: " << stateProto << ". Sink state: " << sinkState);
+        SINK_LOG_T("Save checkpoint " << checkpoint << " state: " << stateProto);
         return sinkState;
     }
 

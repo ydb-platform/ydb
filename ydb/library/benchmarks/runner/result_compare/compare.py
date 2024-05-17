@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-import sys
 import signal
 import traceback
 import html
 import math
+import argparse
+import re
 from pathlib import Path
 
 import cyson as yson
@@ -11,11 +12,19 @@ import cyson as yson
 
 def main():
 
-    if len(sys.argv) < 2:
-        print('Usage: {} resultdir... >report.htm'.format(sys.argv[0]), file=sys.stderr)
-        sys.exit(1)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--blacklist-file', default=[], action='append', help='File with query name regexp that will be skipped for comparison')
+    parser.add_argument('resultdir', nargs='+', help='Directories for comparison')
 
-    rdirs = sys.argv[1:]
+    args = parser.parse_args()
+
+    blacklists = []
+    for blacklist_file in args.blacklist_file:
+        with open(blacklist_file) as f:
+            for line in f:
+                blacklists.append(re.compile(line.strip()))
+
+    rdirs = args.resultdir
     data = []
 
     print('''
@@ -61,6 +70,17 @@ def main():
             else:
                 print('<td><span class="ok">OK</span>')
             print('<td class="tabnum">{:.1f}<td class="tabnum">{:.1f}<td class="tabnum">{:.1f}'.format(elapsed, utime, maxrss/1024))
+
+            skip = False
+            for blacklisted in blacklists:
+                if re.fullmatch(blacklisted, q):
+                    skip = True
+                    break
+
+            if skip:
+                print('<td class="skipped"><span title="Query was blacklisted for comparison">SKIP</span>')
+                continue
+
             if exitcode == 0:
                 try:
                     valType = None

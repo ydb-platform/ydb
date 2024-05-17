@@ -200,19 +200,17 @@ enum ESimpleCounters {
 
     COUNTER_BACKUP_CONTROLLER_TABLET_COUNT = 160 [(CounterOpts) = {Name: "BackupControllers"}];
 
-<<<<<<< HEAD
     COUNTER_IN_FLIGHT_OPS_TxDropReplication = 161         [(CounterOpts) = {Name: "InFlightOps/DropReplication"}];
-=======
-    COUNTER_IN_FLIGHT_OPS_TxCreateContinuousBackup = 161          [(CounterOpts) = {Name: "InFlightOps/CreateContinuousBackup"}];
-    COUNTER_IN_FLIGHT_OPS_TxCreateContinuousBackupAtTable = 162   [(CounterOpts) = {Name: "InFlightOps/CreateContinuousBackupAtTable"}];
-    COUNTER_IN_FLIGHT_OPS_TxAlterContinuousBackup = 163          [(CounterOpts) = {Name: "InFlightOps/AlterContinuousBackup"}];
-    COUNTER_IN_FLIGHT_OPS_TxAlterContinuousBackupAtTable = 164   [(CounterOpts) = {Name: "InFlightOps/AlterContinuousBackupAtTable"}];
-    COUNTER_IN_FLIGHT_OPS_TxDropContinuousBackup = 165           [(CounterOpts) = {Name: "InFlightOps/DropContinuousBackup"}];
-    COUNTER_IN_FLIGHT_OPS_TxDropContinuousBackupAtTable = 166    [(CounterOpts) = {Name: "InFlightOps/DropContinuousBackupAtTable"}];
-    COUNTER_IN_FLIGHT_OPS_TxCreateContinuousBackupAtTableWithInitialScan = 167 [(CounterOpts) = {Name: "InFlightOps/CreateContinuousBackupAtTableWithInitialScan"}];
-    COUNTER_IN_FLIGHT_OPS_TxAlterContinuousBackupAtTableDropSnapshot = 168 [(CounterOpts) = {Name: "InFlightOps/AlterContinuousBackupAtTableDropSnapshot"}];
-    COUNTER_IN_FLIGHT_OPS_TxDropContinuousBackupAtTableDropSnapshot = 169 [(CounterOpts) = {Name: "InFlightOps/DropContinuousBackupAtTableDropSnapshot"}];
->>>>>>> WIP continuous backup op
+
+    COUNTER_IN_FLIGHT_OPS_TxCreateContinuousBackup = 162          [(CounterOpts) = {Name: "InFlightOps/CreateContinuousBackup"}];
+    COUNTER_IN_FLIGHT_OPS_TxCreateContinuousBackupAtTable = 163   [(CounterOpts) = {Name: "InFlightOps/CreateContinuousBackupAtTable"}];
+    COUNTER_IN_FLIGHT_OPS_TxAlterContinuousBackup = 164          [(CounterOpts) = {Name: "InFlightOps/AlterContinuousBackup"}];
+    COUNTER_IN_FLIGHT_OPS_TxAlterContinuousBackupAtTable = 165   [(CounterOpts) = {Name: "InFlightOps/AlterContinuousBackupAtTable"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropContinuousBackup = 166           [(CounterOpts) = {Name: "InFlightOps/DropContinuousBackup"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropContinuousBackupAtTable = 167    [(CounterOpts) = {Name: "InFlightOps/DropContinuousBackupAtTable"}];
+    COUNTER_IN_FLIGHT_OPS_TxCreateContinuousBackupAtTableWithInitialScan = 168 [(CounterOpts) = {Name: "InFlightOps/CreateContinuousBackupAtTableWithInitialScan"}];
+    COUNTER_IN_FLIGHT_OPS_TxAlterContinuousBackupAtTableDropSnapshot = 169 [(CounterOpts) = {Name: "InFlightOps/AlterContinuousBackupAtTableDropSnapshot"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropContinuousBackupAtTableDropSnapshot = 170 [(CounterOpts) = {Name: "InFlightOps/DropContinuousBackupAtTableDropSnapshot"}];
 }
 
 enum ECumulativeCounters {

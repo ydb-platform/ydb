@@ -240,6 +240,7 @@ namespace NKikimr {
                     << " duration# " << TDuration::Seconds(timer.Passed()));
 
             Become(&TThis::StateFunc);
+            SendChunks();
         }
 
         void Finish(const NKikimrProto::EReplyStatus& status) {
@@ -261,7 +262,6 @@ namespace NKikimr {
         }
 
         void SendChunks() {
-            Cerr << "Send chunks" << Endl;
             while (ChunksInFlight < MaxChunksInFlight && !Chunks.empty()) {
                 Send(SkeletonId, new TEvLocalSyncData(Ev->VDiskID, Ev->SyncState, std::move(Chunks.back())));
                 Chunks.pop_back();

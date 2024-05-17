@@ -13,59 +13,63 @@
 # system may be rejected.
 
 
-add_executable(ydb-core-client-ut)
+add_executable(ydb-core-tx-datashard-ut_object_storage_listing)
 
-target_compile_options(ydb-core-client-ut PRIVATE
+target_compile_options(ydb-core-tx-datashard-ut_object_storage_listing PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 
-target_include_directories(ydb-core-client-ut PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/client
+target_include_directories(ydb-core-tx-datashard-ut_object_storage_listing PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard
 )
 
-target_link_libraries(ydb-core-client-ut PUBLIC
+target_link_libraries(ydb-core-tx-datashard-ut_object_storage_listing PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   cpp-testing-unittest_main
-  ydb-core-client
+  core-tx-datashard
+  tx-datashard-ut_common
   library-cpp-getopt
   cpp-regex-pcre
   library-cpp-svnversion
-  core-client-scheme_cache_lib
-  test-libs-rows
+  kqp-ut-common
   core-testlib-default
+  ydb-core-tx
+  udf-service-exception_policy
+  public-lib-yson_value
+  cpp-client-ydb_result
 )
 
-target_link_options(ydb-core-client-ut PRIVATE
-  -Wl,-platform_version,macos,11.0,11.0
+target_link_options(ydb-core-tx-datashard-ut_object_storage_listing PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -framework
-  CoreFoundation
+  -lpthread
+  -lrt
+  -ldl
+  -lutil
 )
 
-target_sources(ydb-core-client-ut PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/client/cancel_tx_ut.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/client/client_ut.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/client/flat_ut.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/client/locks_ut.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/client/query_stats_ut.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/client/object_storage_listing_ut.cpp
+target_sources(ydb-core-tx-datashard-ut_object_storage_listing PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_object_storage_listing.cpp
 )
 
 set_property(
   TARGET
-  ydb-core-client-ut
+  ydb-core-tx-datashard-ut_object_storage_listing
   PROPERTY
   SPLIT_FACTOR
-  60
+  15
 )
 
 add_yunittest(
   NAME
-  ydb-core-client-ut
+  ydb-core-tx-datashard-ut_object_storage_listing
   TEST_TARGET
-  ydb-core-client-ut
+  ydb-core-tx-datashard-ut_object_storage_listing
   TEST_ARG
   --print-before-suite
   --print-before-test
@@ -76,7 +80,7 @@ add_yunittest(
 
 set_yunittest_property(
   TEST
-  ydb-core-client-ut
+  ydb-core-tx-datashard-ut_object_storage_listing
   PROPERTY
   LABELS
   MEDIUM
@@ -84,31 +88,30 @@ set_yunittest_property(
 
 set_yunittest_property(
   TEST
-  ydb-core-client-ut
+  ydb-core-tx-datashard-ut_object_storage_listing
   PROPERTY
   PROCESSORS
-  4
+  1
 )
 
 set_yunittest_property(
   TEST
-  ydb-core-client-ut
+  ydb-core-tx-datashard-ut_object_storage_listing
   PROPERTY
   ENVIRONMENT
-  YDB_UBSAN_OPTIONS=ydb/tests/supp/ubsan_default.txt
 )
 
 set_yunittest_property(
   TEST
-  ydb-core-client-ut
+  ydb-core-tx-datashard-ut_object_storage_listing
   PROPERTY
   TIMEOUT
   600
 )
 
-target_allocator(ydb-core-client-ut
-  system_allocator
+target_allocator(ydb-core-tx-datashard-ut_object_storage_listing
+  cpp-malloc-jemalloc
 )
 
-vcs_info(ydb-core-client-ut)
+vcs_info(ydb-core-tx-datashard-ut_object_storage_listing)
 

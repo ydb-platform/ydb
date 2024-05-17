@@ -146,6 +146,20 @@ get_built_tool_path(
   cpp_styleguide
 )
 
+get_built_tool_path(
+  TOOL_protoc_bin
+  TOOL_protoc_dependency
+  contrib/tools/protoc/bin
+  protoc
+)
+
+get_built_tool_path(
+  TOOL_cpp_styleguide_bin
+  TOOL_cpp_styleguide_dependency
+  contrib/tools/protoc/plugins/cpp_styleguide
+  cpp_styleguide
+)
+
 add_library(api-grpc-draft)
 set_property(TARGET api-grpc-draft PROPERTY PROTOC_EXTRA_OUTS
   .grpc.pb.cc
@@ -171,6 +185,7 @@ target_proto_messages(api-grpc-draft PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_logstore_v1.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_maintenance_v1.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_persqueue_v1.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_object_storage_v1.proto
 )
 
 target_sources(api-grpc-draft PRIVATE
@@ -192,6 +207,8 @@ target_sources(api-grpc-draft PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_maintenance_v1.grpc.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_persqueue_v1.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_object_storage_v1.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_object_storage_v1.grpc.pb.h
 )
 
 target_proto_addincls(api-grpc-draft

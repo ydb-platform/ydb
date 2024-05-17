@@ -52,5 +52,6 @@ target_sources(ydb-services-ydb PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/services/ydb/ydb_scheme.cpp
   ${PROJECT_SOURCE_DIR}/ydb/services/ydb/ydb_scripting.cpp
   ${PROJECT_SOURCE_DIR}/ydb/services/ydb/ydb_table.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/ydb/ydb_object_storage.cpp
 )
 

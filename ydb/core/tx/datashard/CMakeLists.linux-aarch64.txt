@@ -29,6 +29,7 @@ add_subdirectory(ut_kqp_scan)
 add_subdirectory(ut_locks)
 add_subdirectory(ut_minikql)
 add_subdirectory(ut_minstep)
+add_subdirectory(ut_object_storage_listing)
 add_subdirectory(ut_order)
 add_subdirectory(ut_range_ops)
 add_subdirectory(ut_read_iterator)
@@ -258,6 +259,7 @@ target_sources(core-tx-datashard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard__read_columns.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard__s3_download_txs.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard__s3_upload_txs.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard__object_storage_listing.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard__kqp_scan.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard__snapshot_txs.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard__stats.cpp

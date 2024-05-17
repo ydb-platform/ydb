@@ -2422,6 +2422,272 @@ get_built_tool_path(
 )
 
 get_built_tool_path(
+  TOOL_protoc-gen-mypy_bin
+  TOOL_protoc-gen-mypy_dependency
+  contrib/python/mypy-protobuf/bin/protoc-gen-mypy
+  protoc-gen-mypy
+)
+
+get_built_tool_path(
+  TOOL_protoc_bin
+  TOOL_protoc_dependency
+  contrib/tools/protoc
+  protoc
+)
+
+get_built_tool_path(
+  TOOL_rescompiler_bin
+  TOOL_rescompiler_dependency
+  tools/rescompiler/bin
+  rescompiler
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
   TOOL_rescompiler_bin
   TOOL_rescompiler_dependency
   tools/rescompiler/bin
@@ -2667,13 +2933,6 @@ get_built_tool_path(
 )
 
 get_built_tool_path(
-  TOOL_rescompiler_bin
-  TOOL_rescompiler_dependency
-  tools/rescompiler/bin
-  rescompiler
-)
-
-get_built_tool_path(
   TOOL_py3cc_bin
   TOOL_py3cc_dependency
   tools/py3cc
@@ -2821,241 +3080,17 @@ get_built_tool_path(
 )
 
 get_built_tool_path(
-  TOOL_py3cc_bin
-  TOOL_py3cc_dependency
-  tools/py3cc
-  py3cc
+  TOOL_protoc-gen-mypy_bin
+  TOOL_protoc-gen-mypy_dependency
+  contrib/python/mypy-protobuf/bin/protoc-gen-mypy
+  protoc-gen-mypy
 )
 
 get_built_tool_path(
-  TOOL_py3cc_bin
-  TOOL_py3cc_dependency
-  tools/py3cc
-  py3cc
-)
-
-get_built_tool_path(
-  TOOL_py3cc_bin
-  TOOL_py3cc_dependency
-  tools/py3cc
-  py3cc
-)
-
-get_built_tool_path(
-  TOOL_py3cc_bin
-  TOOL_py3cc_dependency
-  tools/py3cc
-  py3cc
-)
-
-get_built_tool_path(
-  TOOL_py3cc_bin
-  TOOL_py3cc_dependency
-  tools/py3cc
-  py3cc
-)
-
-get_built_tool_path(
-  TOOL_py3cc_bin
-  TOOL_py3cc_dependency
-  tools/py3cc
-  py3cc
-)
-
-get_built_tool_path(
-  TOOL_py3cc_bin
-  TOOL_py3cc_dependency
-  tools/py3cc
-  py3cc
-)
-
-get_built_tool_path(
-  TOOL_py3cc_bin
-  TOOL_py3cc_dependency
-  tools/py3cc
-  py3cc
-)
-
-get_built_tool_path(
-  TOOL_py3cc_bin
-  TOOL_py3cc_dependency
-  tools/py3cc
-  py3cc
-)
-
-get_built_tool_path(
-  TOOL_py3cc_bin
-  TOOL_py3cc_dependency
-  tools/py3cc
-  py3cc
-)
-
-get_built_tool_path(
-  TOOL_py3cc_bin
-  TOOL_py3cc_dependency
-  tools/py3cc
-  py3cc
-)
-
-get_built_tool_path(
-  TOOL_py3cc_bin
-  TOOL_py3cc_dependency
-  tools/py3cc
-  py3cc
-)
-
-get_built_tool_path(
-  TOOL_py3cc_bin
-  TOOL_py3cc_dependency
-  tools/py3cc
-  py3cc
-)
-
-get_built_tool_path(
-  TOOL_py3cc_bin
-  TOOL_py3cc_dependency
-  tools/py3cc
-  py3cc
-)
-
-get_built_tool_path(
-  TOOL_py3cc_bin
-  TOOL_py3cc_dependency
-  tools/py3cc
-  py3cc
-)
-
-get_built_tool_path(
-  TOOL_py3cc_bin
-  TOOL_py3cc_dependency
-  tools/py3cc
-  py3cc
-)
-
-get_built_tool_path(
-  TOOL_py3cc_bin
-  TOOL_py3cc_dependency
-  tools/py3cc
-  py3cc
-)
-
-get_built_tool_path(
-  TOOL_py3cc_bin
-  TOOL_py3cc_dependency
-  tools/py3cc
-  py3cc
-)
-
-get_built_tool_path(
-  TOOL_py3cc_bin
-  TOOL_py3cc_dependency
-  tools/py3cc
-  py3cc
-)
-
-get_built_tool_path(
-  TOOL_py3cc_bin
-  TOOL_py3cc_dependency
-  tools/py3cc
-  py3cc
-)
-
-get_built_tool_path(
-  TOOL_py3cc_bin
-  TOOL_py3cc_dependency
-  tools/py3cc
-  py3cc
-)
-
-get_built_tool_path(
-  TOOL_py3cc_bin
-  TOOL_py3cc_dependency
-  tools/py3cc
-  py3cc
-)
-
-get_built_tool_path(
-  TOOL_py3cc_bin
-  TOOL_py3cc_dependency
-  tools/py3cc
-  py3cc
-)
-
-get_built_tool_path(
-  TOOL_py3cc_bin
-  TOOL_py3cc_dependency
-  tools/py3cc
-  py3cc
-)
-
-get_built_tool_path(
-  TOOL_py3cc_bin
-  TOOL_py3cc_dependency
-  tools/py3cc
-  py3cc
-)
-
-get_built_tool_path(
-  TOOL_py3cc_bin
-  TOOL_py3cc_dependency
-  tools/py3cc
-  py3cc
-)
-
-get_built_tool_path(
-  TOOL_py3cc_bin
-  TOOL_py3cc_dependency
-  tools/py3cc
-  py3cc
-)
-
-get_built_tool_path(
-  TOOL_py3cc_bin
-  TOOL_py3cc_dependency
-  tools/py3cc
-  py3cc
-)
-
-get_built_tool_path(
-  TOOL_py3cc_bin
-  TOOL_py3cc_dependency
-  tools/py3cc
-  py3cc
-)
-
-get_built_tool_path(
-  TOOL_py3cc_bin
-  TOOL_py3cc_dependency
-  tools/py3cc
-  py3cc
-)
-
-get_built_tool_path(
-  TOOL_py3cc_bin
-  TOOL_py3cc_dependency
-  tools/py3cc
-  py3cc
-)
-
-get_built_tool_path(
-  TOOL_py3cc_bin
-  TOOL_py3cc_dependency
-  tools/py3cc
-  py3cc
-)
-
-get_built_tool_path(
-  TOOL_py3cc_bin
-  TOOL_py3cc_dependency
-  tools/py3cc
-  py3cc
-)
-
-get_built_tool_path(
-  TOOL_py3cc_bin
-  TOOL_py3cc_dependency
-  tools/py3cc
-  py3cc
+  TOOL_protoc_bin
+  TOOL_protoc_dependency
+  contrib/tools/protoc
+  protoc
 )
 
 get_built_tool_path(
@@ -3189,6 +3224,20 @@ get_built_tool_path(
   TOOL_rescompiler_dependency
   tools/rescompiler/bin
   rescompiler
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
 )
 
 get_built_tool_path(
@@ -24162,10 +24211,10 @@ target_sources(ydb-tests-fq-pq_async_io PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/generic/connector/api/common/07d0287b6627d89bf0729ab580bff38c.cpp
   ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/common/proto/7eeb4d6ba3590a14cd6b036af58a73ce.cpp
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/annotations/5c0f69237bcf84332bc2927ba70958e6.cpp
-  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/0793acbeb6505a05c99cc422ba2a989b.cpp
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/6fa2785ac53e0471f4e50058dcc2de17.cpp
   ${PROJECT_BINARY_DIR}/contrib/python/grpcio/py3/grpc._cython.cygrpc.reg3.cpp
   ${PROJECT_BINARY_DIR}/contrib/python/grpcio/py3/475700469cefab049c13c9a202d1fbc2.cpp
-  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/a8bbee73607af53d1f00b346b6b6cd0e.cpp
+  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/4d5d73ff4d2f6be82f05f4bee51d5adc.cpp
   ${PROJECT_BINARY_DIR}/contrib/python/PyYAML/py3/yaml._yaml.reg3.cpp
   ${PROJECT_BINARY_DIR}/contrib/python/PyYAML/py3/aca74c0b191d8a354860d91557d50891.cpp
   ${PROJECT_BINARY_DIR}/contrib/python/PyYAML/py3/3a1f5d79b87d4ec235e4647ca8a780f8.cpp
@@ -28558,7 +28607,7 @@ resources(ydb-tests-fq-pq_async_io
 )
 
 resources(ydb-tests-fq-pq_async_io
-  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/0793acbeb6505a05c99cc422ba2a989b.cpp
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/6fa2785ac53e0471f4e50058dcc2de17.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/-
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/draft/datastreams__intpy3___pb2.py
@@ -28592,6 +28641,10 @@ resources(ydb-tests-fq-pq_async_io
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/draft/ydb_maintenance__intpy3___pb2.py
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/-
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/draft/ydb_maintenance__intpy3___pb2.py.jnwv.yapyc3
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/-
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/draft/ydb_object_storage__intpy3___pb2.py
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/-
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/draft/ydb_object_storage__intpy3___pb2.py.jnwv.yapyc3
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/-
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_federation_discovery__intpy3___pb2.py
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/-
@@ -28729,6 +28782,10 @@ resources(ydb-tests-fq-pq_async_io
   resfs/file/py/ydb/public/api/protos/draft/ydb_maintenance_pb2.py
   resfs/src/resfs/file/py/ydb/public/api/protos/draft/ydb_maintenance_pb2.py.yapyc3=ydb/public/api/protos/draft/ydb_maintenance__intpy3___pb2.py.jnwv.yapyc3
   resfs/file/py/ydb/public/api/protos/draft/ydb_maintenance_pb2.py.yapyc3
+  resfs/src/resfs/file/py/ydb/public/api/protos/draft/ydb_object_storage_pb2.py=ydb/public/api/protos/draft/ydb_object_storage__intpy3___pb2.py
+  resfs/file/py/ydb/public/api/protos/draft/ydb_object_storage_pb2.py
+  resfs/src/resfs/file/py/ydb/public/api/protos/draft/ydb_object_storage_pb2.py.yapyc3=ydb/public/api/protos/draft/ydb_object_storage__intpy3___pb2.py.jnwv.yapyc3
+  resfs/file/py/ydb/public/api/protos/draft/ydb_object_storage_pb2.py.yapyc3
   resfs/src/resfs/file/py/ydb/public/api/protos/ydb_federation_discovery_pb2.py=ydb/public/api/protos/ydb_federation_discovery__intpy3___pb2.py
   resfs/file/py/ydb/public/api/protos/ydb_federation_discovery_pb2.py
   resfs/src/resfs/file/py/ydb/public/api/protos/ydb_federation_discovery_pb2.py.yapyc3=ydb/public/api/protos/ydb_federation_discovery__intpy3___pb2.py.jnwv.yapyc3
@@ -29282,7 +29339,7 @@ resources(ydb-tests-fq-pq_async_io
 )
 
 resources(ydb-tests-fq-pq_async_io
-  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/a8bbee73607af53d1f00b346b6b6cd0e.cpp
+  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/4d5d73ff4d2f6be82f05f4bee51d5adc.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/public/api/grpc/draft/-
   ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/dummy__intpy3___pb2.py
@@ -29356,6 +29413,14 @@ resources(ydb-tests-fq-pq_async_io
   ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_persqueue_v1__intpy3___pb2_grpc.py
   ${PROJECT_SOURCE_DIR}/ydb/public/api/grpc/draft/-
   ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_persqueue_v1__intpy3___pb2_grpc.py.pqmw.yapyc3
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/grpc/draft/-
+  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_object_storage_v1__intpy3___pb2.py
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/grpc/draft/-
+  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_object_storage_v1__intpy3___pb2.py.pqmw.yapyc3
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/grpc/draft/-
+  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_object_storage_v1__intpy3___pb2_grpc.py
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/grpc/draft/-
+  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_object_storage_v1__intpy3___pb2_grpc.py.pqmw.yapyc3
   KEYS
   resfs/src/resfs/file/py/ydb/public/api/grpc/draft/dummy_pb2.py=ydb/public/api/grpc/draft/dummy__intpy3___pb2.py
   resfs/file/py/ydb/public/api/grpc/draft/dummy_pb2.py
@@ -29429,6 +29494,14 @@ resources(ydb-tests-fq-pq_async_io
   resfs/file/py/ydb/public/api/grpc/draft/ydb_persqueue_v1_pb2_grpc.py
   resfs/src/resfs/file/py/ydb/public/api/grpc/draft/ydb_persqueue_v1_pb2_grpc.py.yapyc3=ydb/public/api/grpc/draft/ydb_persqueue_v1__intpy3___pb2_grpc.py.pqmw.yapyc3
   resfs/file/py/ydb/public/api/grpc/draft/ydb_persqueue_v1_pb2_grpc.py.yapyc3
+  resfs/src/resfs/file/py/ydb/public/api/grpc/draft/ydb_object_storage_v1_pb2.py=ydb/public/api/grpc/draft/ydb_object_storage_v1__intpy3___pb2.py
+  resfs/file/py/ydb/public/api/grpc/draft/ydb_object_storage_v1_pb2.py
+  resfs/src/resfs/file/py/ydb/public/api/grpc/draft/ydb_object_storage_v1_pb2.py.yapyc3=ydb/public/api/grpc/draft/ydb_object_storage_v1__intpy3___pb2.py.pqmw.yapyc3
+  resfs/file/py/ydb/public/api/grpc/draft/ydb_object_storage_v1_pb2.py.yapyc3
+  resfs/src/resfs/file/py/ydb/public/api/grpc/draft/ydb_object_storage_v1_pb2_grpc.py=ydb/public/api/grpc/draft/ydb_object_storage_v1__intpy3___pb2_grpc.py
+  resfs/file/py/ydb/public/api/grpc/draft/ydb_object_storage_v1_pb2_grpc.py
+  resfs/src/resfs/file/py/ydb/public/api/grpc/draft/ydb_object_storage_v1_pb2_grpc.py.yapyc3=ydb/public/api/grpc/draft/ydb_object_storage_v1__intpy3___pb2_grpc.py.pqmw.yapyc3
+  resfs/file/py/ydb/public/api/grpc/draft/ydb_object_storage_v1_pb2_grpc.py.yapyc3
 )
 
 resources(ydb-tests-fq-pq_async_io

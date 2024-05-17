@@ -34,11 +34,6 @@ public:
         NotifySubscribers.insert(actorId);
     }
 
-    virtual bool AllowTxDups() const override {
-        return true;
-    }
-
-
     virtual bool ExecuteOnProgress(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override;
 
     virtual bool CompleteOnProgress(TColumnShard& owner, const TActorContext& ctx) override;

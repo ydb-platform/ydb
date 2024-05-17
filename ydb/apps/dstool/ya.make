@@ -1,5 +1,7 @@
 PY3_PROGRAM(ydb-dstool)
 
+NO_EXPORT_DYNAMIC_SYMBOLS()
+
 STRIP()
 
 #

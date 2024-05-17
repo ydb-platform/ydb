@@ -30,7 +30,7 @@ SIMPLE_STRICT_UDF(TInnerProductSimilarity, TOptional<float>(TAutoMap<const char*
     const TArrayRef<const float> vector1 = TSerializerFacade::GetArray(args[0].AsStringRef()); 
     const TArrayRef<const float> vector2 = TSerializerFacade::GetArray(args[1].AsStringRef()); 
 
-    if (vector1.size() != vector2.size() || vector1.empty() || vector2.empty())
+    if (vector1.size() != vector2.size() || vector1.empty())
         return {};
 
     const float dotProduct = DotProduct(vector1.data(), vector2.data(), vector1.size());
@@ -57,7 +57,7 @@ SIMPLE_STRICT_UDF(TCosineDistance, TOptional<float>(TAutoMap<const char*>, TAuto
     const TArrayRef<const float> vector1 = TSerializerFacade::GetArray(args[0].AsStringRef()); 
     const TArrayRef<const float> vector2 = TSerializerFacade::GetArray(args[1].AsStringRef()); 
 
-    if (vector1.size() != vector2.size() || vector1.empty() || vector2.empty())
+    if (vector1.size() != vector2.size() || vector1.empty())
         return {};    
 
     const auto [ll, lr, rr] = TriWayDotProduct(vector1.data(), vector2.data(), vector1.size());

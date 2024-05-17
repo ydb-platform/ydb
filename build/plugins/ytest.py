@@ -357,8 +357,11 @@ def deserialize_list(val):
     return list(filter(None, val.replace('"', "").split(";")))
 
 
-def get_correct_expression_for_group_var(varname):
-    return r"\"${join=\;:" + varname + "}\""
+def reference_group_var(varname: str, extensions: list[str] | None = None) -> str:
+    if extensions is None:
+        return f'"${{join=\\;:{varname}}}"'
+
+    return serialize_list(f'${{ext={ext};join=\\;:{varname}}}' for ext in extensions)
 
 
 def count_entries(x):
@@ -1308,9 +1311,17 @@ def on_add_linter_check(unit, *args):
             test_files.append(path.replace(source_root_from_prefix, source_root_to_prefix, 1))
         elif path.startswith(source_root_to_prefix):
             test_files.append(path)
-    if not test_files:
-        unit.message(['WARN', 'No files to lint for {}'.format(lint_name)])
-        return
+
+    if lint_name == 'cpp_style':
+        cpp_extensions = ["cpp", "cxx", "cc", "c"]
+        header_extensions = ["h", "hh", "hpp"]
+        files_dart = reference_group_var("ALL_SRCS", cpp_extensions + header_extensions)
+    else:
+        if not test_files:
+            unit.message(['WARN', 'No files to lint for {}'.format(lint_name)])
+            return
+        files_dart = serialize_list(test_files)
+
     for arg in spec_args.get('EXTRA_PARAMS', []):
         if '=' not in arg:
             unit.message(['WARN', 'Wrong EXTRA_PARAMS value: "{}". Values must have format "name=value".'.format(arg)])
@@ -1343,8 +1354,8 @@ def on_add_linter_check(unit, *args):
         'OLD_PYTEST': 'no',
         'PYTHON-PATHS': '',
         # TODO remove FILES, see DEVTOOLS-7052
-        'FILES': serialize_list(test_files),
-        'TEST-FILES': serialize_list(test_files),
+        'FILES': files_dart,
+        'TEST-FILES': files_dart,
         # Linter specific parameters
         # TODO Add configs to DATA. See YMAKE-427
         'LINT-CONFIGS': serialize_list(configs),
@@ -1353,6 +1364,7 @@ def on_add_linter_check(unit, *args):
         'LINT-EXTRA-PARAMS': serialize_list(spec_args.get('EXTRA_PARAMS', [])),
         'LINTER': linter,
     }
+
     data = dump_test(unit, test_record)
     if data:
         unit.set_property(["DART_DATA", data])

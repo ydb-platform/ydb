@@ -173,6 +173,7 @@ public:
         NDqProto::TDqTask protoTask;
         protoTask.SetId(task.Id);
         protoTask.SetStageId(task.StageId.StageId);
+        protoTask.SetEnableSpilling(false); // TODO: enable spilling
         protoTask.MutableProgram()->CopyFrom(stage.GetProgram()); // it's not good...
 
         TaskId2StageId[task.Id] = task.StageId.StageId;

@@ -16,17 +16,7 @@ void RegisterDqsMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler, cons
             return TRuntimeNode();
         });
 
-    std::unordered_set<IDqIntegration*> integrations(ctx.DataSources.size() + ctx.DataSinks.size());
-    for (const auto& ds: ctx.DataSources) {
-        if (const auto dq = ds->GetDqIntegration()) {
-            integrations.emplace(dq);
-        }
-    }
-    for (const auto& ds: ctx.DataSinks) {
-        if (const auto dq = ds->GetDqIntegration()) {
-            integrations.emplace(dq);
-        }
-    }
+    auto integrations = GetUniqueIntegrations(ctx);
     std::for_each(integrations.cbegin(), integrations.cend(), std::bind(&IDqIntegration::RegisterMkqlCompiler, std::placeholders::_1, std::ref(compiler)));
 }
 

@@ -467,6 +467,7 @@ inline void TSingleClusterReadSessionImpl<false>::InitImpl(TDeferredActions<fals
     auto& init = *req.mutable_init_request();
 
     init.set_consumer(Settings.ConsumerName_);
+    init.set_autoscaling_support(Settings.AutoscalingSupport_.GetOrElse(false));
 
     for (const TTopicReadSettings& topic : Settings.Topics_) {
         auto* topicSettings = init.add_topics_read_settings();
@@ -887,6 +888,9 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnReadDone(NYdbGrpc::T
 
                     case TServerMessage<false>::kStopPartitionSessionRequest:
                         OnReadDoneImpl(std::move(*ServerMessage->mutable_stop_partition_session_request()), deferred);
+                        break;
+                    case TServerMessage<false>::kEndPartitionSession:
+                        OnReadDoneImpl(std::move(*ServerMessage->mutable_end_partition_session()), deferred);
                         break;
                     case TServerMessage<false>::kCommitOffsetResponse:
                         OnReadDoneImpl(std::move(*ServerMessage->mutable_commit_offset_response()), deferred);
@@ -1362,6 +1366,37 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
 template <>
 template <>
 inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
+    Ydb::Topic::StreamReadMessage::EndPartitionSession&& msg,
+    TDeferredActions<false>& deferred) {
+    Y_ABORT_UNLESS(Lock.IsLocked());
+
+    auto partitionStreamIt = PartitionStreams.find(msg.partition_session_id());
+    if (partitionStreamIt == PartitionStreams.end()) {
+        return;
+    }
+    TIntrusivePtr<TPartitionStreamImpl<false>> partitionStream = partitionStreamIt->second;
+
+    std::vector<ui32> adjacentPartitionIds;
+    adjacentPartitionIds.reserve(msg.adjacent_partition_ids_size());
+    adjacentPartitionIds.insert(adjacentPartitionIds.end(), msg.adjacent_partition_ids().begin(), msg.adjacent_partition_ids().end());
+
+    std::vector<ui32> childPartitionIds;
+    childPartitionIds.reserve(msg.child_partition_ids_size());
+    childPartitionIds.insert(childPartitionIds.end(), msg.child_partition_ids().begin(), msg.child_partition_ids().end());
+
+    bool pushRes = EventsQueue->PushEvent(
+            partitionStream,
+            TReadSessionEvent::TEndPartitionSessionEvent(std::move(partitionStream), std::move(adjacentPartitionIds), std::move(childPartitionIds)),
+            deferred);
+    if (!pushRes) {
+        AbortImpl();
+        return;
+    }
+}
+
+template <>
+template <>
+inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     Ydb::Topic::StreamReadMessage::CommitOffsetResponse&& msg,
     TDeferredActions<false>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
@@ -1826,6 +1861,7 @@ TReadSessionEventsQueue<UseMigrationProtocol>::TReadSessionEventsQueue(
                              || h.CommitOffsetAcknowledgementHandler_
                              || h.StartPartitionSessionHandler_
                              || h.StopPartitionSessionHandler_
+                             || h.EndPartitionSessionHandler_
                              || h.PartitionSessionStatusHandler_
                              || h.PartitionSessionClosedHandler_
                              || h.SessionClosedHandler_);

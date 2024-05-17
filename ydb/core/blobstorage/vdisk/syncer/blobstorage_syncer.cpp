@@ -298,10 +298,19 @@ namespace NKikimr {
             }
 
             Become(&TThis::RecoverLostDataStateFunc);
+            Phase = TPhaseVal::PhaseRecoverLostData;
+
+            if (SyncerCtx->Config->EnableVDiskCooldownTimeout) {
+                Schedule(SyncerCtx->Config->BaseInfo.YardInitDelay, new TEvents::TEvWakeup);
+            } else {
+                RecoverLostDataResumeAfterDelay(ctx);
+            }
+        }
+
+        void RecoverLostDataResumeAfterDelay(const TActorContext& ctx) {
             const TVDiskEternalGuid guid = GuidRecovOutcome->Guid;
             RecoverLostDataId = ctx.Register(CreateSyncerRecoverLostDataActor(SyncerCtx, GInfo, CommitterId, ctx.SelfID, guid));
             ActiveActors.Insert(RecoverLostDataId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
-            Phase = TPhaseVal::PhaseRecoverLostData;
         }
 
         void Handle(TEvSyncerLostDataRecovered::TPtr &ev, const TActorContext &ctx) {
@@ -322,6 +331,7 @@ namespace NKikimr {
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvSublogLine, Handle)
             HFunc(TEvVGenerationChange, RecoverLostDataModeHandle)
+            CFunc(TEvents::TSystem::Wakeup, RecoverLostDataResumeAfterDelay);
         )
 
         ////////////////////////////////////////////////////////////////////////

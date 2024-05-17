@@ -183,6 +183,7 @@ namespace NKikimr::NStorage {
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, {}, nullptr, 0));
             Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateDelete(pdiskId));
             LocalPDisks.erase(it);
+            PDiskRestartInFlight.erase(pdiskId);
 
             // mark vdisks still living over this PDisk as destroyed ones
             for (auto it = LocalVDisks.lower_bound({LocalNodeId, pdiskId, 0}); it != LocalVDisks.end() &&
@@ -224,6 +225,11 @@ namespace NKikimr::NStorage {
     }
 
     void TNodeWarden::OnPDiskRestartFinished(ui32 pdiskId, NKikimrProto::EReplyStatus status) {
+        if (PDiskRestartInFlight.erase(pdiskId) == 0) {
+            // There was no restart in progress.
+            return;
+        }
+
         const TPDiskKey pdiskKey(LocalNodeId, pdiskId);
 
         const TVSlotId from(pdiskKey.NodeId, pdiskKey.PDiskId, 0);
@@ -275,6 +281,13 @@ namespace NKikimr::NStorage {
             // In this case, PDisk has EntityStatus::RESTART instead of EntityStatus::INITIAL.
             StartLocalPDisk(pdisk);
             SendPDiskReport(pdiskId, NKikimrBlobStorage::TEvControllerNodeReport::PD_RESTARTED);
+            return;
+        }
+
+        const auto [_, inserted] = PDiskRestartInFlight.emplace(pdiskId);
+
+        if (!inserted) {
+            // Restart is already in progress.
             return;
         }
 

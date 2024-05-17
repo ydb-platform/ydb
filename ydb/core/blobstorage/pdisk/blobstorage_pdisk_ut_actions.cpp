@@ -2776,7 +2776,7 @@ void TTestRedZoneSurvivability::TestFSM(const TActorContext &ctx) {
         TEST_RESPONSE(EvLogResult, OK);
 
         VERBOSE_COUT(" Sending TEvLog to log ChunkSize bytes");
-        TRcBuf largeData = TRcBuf(PrepareData(ChunkSize * 20));
+        TRcBuf largeData = TRcBuf(PrepareData(ChunkSize * 130));
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, largeData, TLsnSeg(3, 3), (void*)43));
         break;
     }

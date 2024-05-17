@@ -48,6 +48,10 @@ public:
         return true;
     }
 
+    ui64 GetSize() const override {
+        return Chunks.size();
+    }
+
     static std::optional<std::vector<INormalizerChanges::TPtr>> Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
@@ -126,7 +130,7 @@ public:
 
 };
 
-TConclusion<std::vector<INormalizerTask::TPtr>> TGranulesNormalizer::Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
+TConclusion<std::vector<INormalizerTask::TPtr>> TGranulesNormalizer::DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
     auto changes = TNormalizerResult::Init(controller, txc);
     if (!changes) {
         return TConclusionStatus::Fail("Not ready");;
@@ -135,7 +139,6 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TGranulesNormalizer::Init(const 
     for (auto&& c : *changes) {
         tasks.emplace_back(std::make_shared<TTrivialNormalizerTask>(c));
     }
-    AtomicSet(ActiveTasksCount, tasks.size());
     return tasks;
 }
 

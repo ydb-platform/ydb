@@ -277,9 +277,9 @@
     ],
     "test.test[aggr_factory-avg_if-default.txt-Debug]": [
         {
-            "checksum": "84a907270bc4b177d5050416eadccdbc",
-            "size": 4876,
-            "uri": "https://{canondata_backend}/1880306/2a33b9c798cdb676ceda243cdc609d2afef27554/resource.tar.gz#test.test_aggr_factory-avg_if-default.txt-Debug_/opt.yql"
+            "checksum": "496c0a889fe95f98ae0fe4f603885dd6",
+            "size": 4839,
+            "uri": "https://{canondata_backend}/1775059/a87b6a4b522fa8101b4ec5137cfaf510753f50ae/resource.tar.gz#test.test_aggr_factory-avg_if-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[aggr_factory-avg_if-default.txt-Plan]": [
@@ -1719,9 +1719,9 @@
     ],
     "test.test[pg-select_agg_gs_grouping-default.txt-Debug]": [
         {
-            "checksum": "aa40f488e3c5e3611245ef70849583de",
-            "size": 1422,
-            "uri": "https://{canondata_backend}/1923547/68f2fa8e051f31489bd496c183d28c4abddf9f68/resource.tar.gz#test.test_pg-select_agg_gs_grouping-default.txt-Debug_/opt.yql"
+            "checksum": "a80533d891fca2e594eec11fba0fd364",
+            "size": 1925,
+            "uri": "https://{canondata_backend}/1937492/c57b901083ebc819cfb759ccf7c1f97d6a8fd4b9/resource.tar.gz#test.test_pg-select_agg_gs_grouping-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg-select_agg_gs_grouping-default.txt-Plan]": [
@@ -1733,9 +1733,9 @@
     ],
     "test.test[pg-select_agg_gs_grouping-default.txt-Results]": [
         {
-            "checksum": "081a18d682872cb899aacd374139028b",
+            "checksum": "d6a303f04da73501b13d2a077440b9bd",
             "size": 3326,
-            "uri": "https://{canondata_backend}/937458/419a96ea577b829313b24bc6972184dd67aa552e/resource.tar.gz#test.test_pg-select_agg_gs_grouping-default.txt-Results_/results.txt"
+            "uri": "https://{canondata_backend}/1937492/c57b901083ebc819cfb759ccf7c1f97d6a8fd4b9/resource.tar.gz#test.test_pg-select_agg_gs_grouping-default.txt-Results_/results.txt"
         }
     ],
     "test.test[pg-select_between-default.txt-Debug]": [

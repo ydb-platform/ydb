@@ -98,19 +98,19 @@ Below are examples of the code for authentication using a service account file i
 
   Loading service account data from a file:
 
-  {% include [auth-sa-file](../../../../_includes/nodejs/auth-sa-file.md) %}
+  {% include [auth-sa-file](../../../_includes/nodejs/auth-sa-file.md) %}
 
   Loading service account data from a third-party source (for example, a secret storage):
 
-  {% include [auth-sa-data](../../../../_includes/nodejs/auth-sa-data.md) %}
+  {% include [auth-sa-data](../../../_includes/nodejs/auth-sa-data.md) %}
 
 - Python
 
-  {% include [auth-sa-data](../../../../_includes/python/auth-service-account.md) %}
+  {% include [auth-sa-data](../../../_includes/python/auth-service-account.md) %}
 
 - Python (asyncio)
 
-  {% include [auth-sa-data](../../../../_includes/python/async/auth-service-account.md) %}
+  {% include [auth-sa-data](../../../_includes/python/async/auth-service-account.md) %}
 
 - C# (.NET)
 

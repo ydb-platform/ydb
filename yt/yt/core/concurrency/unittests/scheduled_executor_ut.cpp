@@ -19,16 +19,27 @@ class TScheduledExecutorTest
 
 ////////////////////////////////////////////////////////////////////////////////
 
+constexpr auto ErrorMargin = TDuration::MilliSeconds(20);
+
+////////////////////////////////////////////////////////////////////////////////
+
 void CheckTimeSlotCorrectness(const TDuration& interval)
 {
-    const auto& now = TInstant::Now();
-    auto lastTick = TInstant::FromValue((now.GetValue() / interval.GetValue()) * interval.GetValue());
-    EXPECT_LE(now - lastTick, TDuration::MilliSeconds(10));
+    auto nowValue = TInstant::Now().GetValue();
+    auto intervalValue = interval.GetValue();
+
+    // NB(arkady-e1ppa): DelayedExecutor has a CoalescingInterval of 100 microseconds
+    // which makes it possible to run callback (and thus this check)
+    // 100 microseconds earlier than the actual deadline
+    auto delay = TDuration::FromValue(nowValue % intervalValue);
+    auto error = std::min(delay, interval - delay);
+
+    EXPECT_LE(error, ErrorMargin);
 }
 
 TEST_W(TScheduledExecutorTest, Simple)
 {
-    const auto& interval = TDuration::MilliSeconds(200);
+    auto interval = TDuration::MilliSeconds(200);
     std::atomic<int> count = {0};
 
     auto callback = BIND([&] {
@@ -69,7 +80,7 @@ TEST_W(TScheduledExecutorTest, SimpleScheduleOutOfBand)
     {
         auto future1 = executor->GetExecutedEvent();
         auto future2 = executor->GetExecutedEvent();
-        const auto& now = TInstant::Now();
+        auto now = TInstant::Now();
         executor->ScheduleOutOfBand();
         WaitFor(AllSucceeded(std::vector<TFuture<void>>({future1, future2})))
             .ThrowOnError();
@@ -81,7 +92,7 @@ TEST_W(TScheduledExecutorTest, SimpleScheduleOutOfBand)
 
 TEST_W(TScheduledExecutorTest, ParallelStop)
 {
-    const auto& interval = TDuration::MilliSeconds(10);
+    auto interval = TDuration::MilliSeconds(10);
     std::atomic<int> count = {0};
 
     auto callback = BIND([&] {
@@ -121,7 +132,7 @@ TEST_W(TScheduledExecutorTest, ParallelStop)
 
 TEST_W(TScheduledExecutorTest, ParallelOnExecuted1)
 {
-    const auto& interval = TDuration::MilliSeconds(10);
+    auto interval = TDuration::MilliSeconds(10);
     std::atomic<int> count = 0;
 
     auto callback = BIND([&] {
@@ -160,7 +171,7 @@ TEST_W(TScheduledExecutorTest, ParallelOnExecuted1)
 
 TEST_W(TScheduledExecutorTest, ParallelOnExecuted2)
 {
-    const auto& interval = TDuration::MilliSeconds(400);
+    auto interval = TDuration::MilliSeconds(400);
     std::atomic<int> count = 0;
 
     auto callback = BIND([&] {
@@ -199,7 +210,7 @@ TEST_W(TScheduledExecutorTest, ParallelOnExecuted2)
 
 TEST_W(TScheduledExecutorTest, OnExecutedEventCanceled)
 {
-    const auto& interval = TDuration::MilliSeconds(50);
+    auto interval = TDuration::MilliSeconds(50);
     std::atomic<int> count = 0;
 
     auto callback = BIND([&] {
@@ -232,7 +243,7 @@ TEST_W(TScheduledExecutorTest, OnExecutedEventCanceled)
 
 TEST_W(TScheduledExecutorTest, Stop)
 {
-    const auto& interval = TDuration::MilliSeconds(20);
+    auto interval = TDuration::MilliSeconds(20);
     auto neverSetPromise = NewPromise<void>();
     auto immediatelyCancelableFuture = neverSetPromise.ToFuture().ToImmediatelyCancelable();
 

@@ -200,6 +200,7 @@ SRCS(
     schemeshard_user_attr_limits.h
     schemeshard_utils.cpp
     schemeshard_utils.h
+    schemeshard_bg_tasks__list.cpp
     schemeshard_export__cancel.cpp
     schemeshard_export__create.cpp
     schemeshard_export__forget.cpp
@@ -276,6 +277,7 @@ PEERDIR(
     ydb/library/yql/minikql
     ydb/library/yql/providers/common/proto
     ydb/services/bg_tasks
+    ydb/core/tx/columnshard/bg_tasks/manager
 )
 
 YQL_LAST_ABI_VERSION()

@@ -6,8 +6,8 @@
 
 namespace NKikimr::NOlap {
 
-TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
-    auto initRes = DoInit(controller,txc);
+TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
+    auto initRes = DoInitImpl(controller,txc);
 
     if (initRes.IsFail()) {
         return initRes;
@@ -24,7 +24,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::Init(co
 
     NColumnShard::TTablesManager tablesManager(controller.GetStoragesManager(), 0);
     if (!tablesManager.InitFromDB(db)) {
-        ACFL_ERROR("normalizer", "TPortionsNormalizer")("error", "can't initialize tables manager");
+        ACFL_TRACE("normalizer", "TPortionsNormalizer")("error", "can't initialize tables manager");
         return TConclusionStatus::Fail("Can't load index");
     }
 
@@ -100,8 +100,6 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::Init(co
     if (package.size() > 0) {
         tasks.emplace_back(BuildTask(std::move(package), schemas));
     }
-
-    AtomicSet(ActiveTasksCount, tasks.size());
     ACFL_INFO("normalizer", "TPortionsNormalizer")("message", TStringBuilder() << brokenPortioncCount << " portions found");
     return tasks;
 }

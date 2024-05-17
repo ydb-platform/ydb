@@ -134,7 +134,7 @@ protected:
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, ConnectionsSpinLock_);
     THashSet<TTcpConnectionPtr> Connections_;
 
-    NLogging::TLogger Logger = BusLogger;
+    NLogging::TLogger Logger = BusLogger();
 
     virtual void CreateServerSocket() = 0;
 

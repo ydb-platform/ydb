@@ -1,3 +1,5 @@
+#pragma once
+
 #include <ydb/library/yql/providers/yt/provider/yql_yt_gateway.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_key.h>
 

@@ -21,7 +21,7 @@ SIMPLE_STRICT_UDF_WITH_OPTIONAL_ARGS(TToBinaryString, TOptional<char*>(TAutoMap<
         if (formatStr == "float")
             format = EFormat::FloatVector;
         else if (formatStr == "byte")
-            format = EFormat::ByteVector;
+            format = EFormat::Uint8Vector;
         else if (formatStr == "bit")
             format = EFormat::BitVector;
         else

@@ -15,7 +15,7 @@
 using namespace NYql;
 using namespace NYql::NUdf;
 
-inline std::optional<float> KnnManhattanDistance(const TStringRef& str1, const TStringRef& str2) {
+static std::optional<float> KnnManhattanDistance(const TStringRef& str1, const TStringRef& str2) {
     const ui8 format1 = str1.Data()[str1.Size() - HeaderLen];
     const ui8 format2 = str2.Data()[str2.Size() - HeaderLen];
 
@@ -32,7 +32,7 @@ inline std::optional<float> KnnManhattanDistance(const TStringRef& str1, const T
 
             return ::L1Distance(vector1.data(), vector2.data(), vector1.size());            
         }
-        case EFormat::ByteVector: {
+        case EFormat::Uint8Vector: {
             const TArrayRef<const ui8> vector1 = TKnnSerializerFacade::GetArray<ui8>(str1); 
             const TArrayRef<const ui8> vector2 = TKnnSerializerFacade::GetArray<ui8>(str2); 
 
@@ -75,7 +75,7 @@ static std::optional<float> KnnEuclideanDistance(const TStringRef& str1, const T
 
             return ::L2Distance(vector1.data(), vector2.data(), vector1.size());            
         }
-        case EFormat::ByteVector: {
+        case EFormat::Uint8Vector: {
             const TArrayRef<const ui8> vector1 = TKnnSerializerFacade::GetArray<ui8>(str1); 
             const TArrayRef<const ui8> vector2 = TKnnSerializerFacade::GetArray<ui8>(str2); 
 
@@ -118,7 +118,7 @@ static std::optional<float> KnnDotProduct(const TStringRef& str1, const TStringR
 
             return ::DotProduct(vector1.data(), vector2.data(), vector1.size());
         }
-        case EFormat::ByteVector: {
+        case EFormat::Uint8Vector: {
             const TArrayRef<const ui8> vector1 = TKnnSerializerFacade::GetArray<ui8>(str1); 
             const TArrayRef<const ui8> vector2 = TKnnSerializerFacade::GetArray<ui8>(str2); 
 
@@ -149,7 +149,7 @@ static std::optional<TTriWayDotProduct<float>> KnnTriWayDotProduct(const TString
 
             return ::TriWayDotProduct(vector1.data(), vector2.data(), vector1.size());
         }
-        case EFormat::ByteVector: {
+        case EFormat::Uint8Vector: {
             const TArrayRef<const ui8> vector1 = TKnnSerializerFacade::GetArray<ui8>(str1); 
             const TArrayRef<const ui8> vector2 = TKnnSerializerFacade::GetArray<ui8>(str2); 
 

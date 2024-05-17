@@ -19,11 +19,6 @@
             "uri": "file://test.test_EuclideanDistance_/results.txt"
         }
     ],
-    "test.test[FloatByteSerialization]": [
-        {
-            "uri": "file://test.test_FloatByteSerialization_/results.txt"
-        }
-    ],
     "test.test[InnerProductSimilarity]": [
         {
             "uri": "file://test.test_InnerProductSimilarity_/results.txt"
@@ -42,6 +37,11 @@
     "test.test[ManhattanDistance]": [
         {
             "uri": "file://test.test_ManhattanDistance_/results.txt"
+        }
+    ],
+    "test.test[Uint8Serialization]": [
+        {
+            "uri": "file://test.test_Uint8Serialization_/results.txt"
         }
     ]
 }

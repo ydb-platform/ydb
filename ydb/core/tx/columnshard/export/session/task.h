@@ -23,6 +23,7 @@ private:
     YDB_READONLY_DEF(TSelectorContainer, Selector);
     YDB_READONLY_DEF(TStorageInitializerContainer, StorageInitializer);
     YDB_READONLY_DEF(NArrow::NSerialization::TSerializerContainer, Serializer);
+    YDB_READONLY_DEF(std::optional<ui64>, TxId);
 
     virtual TConclusionStatus DoDeserializeFromProto(const NKikimrColumnShardExportProto::TExportTask& proto) override;
     virtual NKikimrColumnShardExportProto::TExportTask DoSerializeToProto() const override;
@@ -30,6 +31,8 @@ private:
     virtual std::shared_ptr<NBackground::ISessionLogic> DoBuildSession() const override;
 
 public:
+
+
 
     virtual TString GetClassName() const override {
         return GetClassNameStatic();
@@ -44,11 +47,13 @@ public:
 
     TExportTask() = default;
 
-    TExportTask(const TIdentifier& id, const TSelectorContainer& selector, const TStorageInitializerContainer& storageInitializer, const NArrow::NSerialization::TSerializerContainer& serializer)
+    TExportTask(const TIdentifier& id, const TSelectorContainer& selector, const TStorageInitializerContainer& storageInitializer, 
+        const NArrow::NSerialization::TSerializerContainer& serializer, const std::optional<ui64> txId = {})
         : Identifier(id)
         , Selector(selector)
         , StorageInitializer(storageInitializer)
         , Serializer(serializer)
+        , TxId(txId)
     {
     }
 

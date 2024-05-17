@@ -1756,7 +1756,6 @@ private:
         auto pos = execCtx->Options_.Pos();
         try {
             auto entry = execCtx->GetOrCreateEntry();
-            auto deterministicMode = execCtx->Session_->DeterministicMode_;
 
             TString prefix = execCtx->Options_.Prefix();
             TString suffix = execCtx->Options_.Suffix();
@@ -1765,7 +1764,7 @@ private:
             with_lock(entry->Lock_) {
                 if (auto p = entry->RangeCache.FindPtr(cacheKey)) {
                     YQL_CLOG(INFO, ProviderYt) << "Found range in cache for key ('" << prefix << "','" << suffix << "',<filter with size " << filterLambda.Size() << ">) - number of items " << p->size();
-                    return MakeFuture(MakeTableRangeResult(*p, deterministicMode));
+                    return MakeFuture(MakeTableRangeResult(*p));
                 }
             }
 
@@ -1890,7 +1889,7 @@ private:
 
                 auto logCtx = execCtx->LogCtx_;
                 return ExecCalc(filterLambda, extraUsage, tmpTablePath, execCtx, entry, TNodeResultFactory())
-                    .Apply([logCtx, prefix, suffix, entry, deterministicMode, pos, errors = std::move(errors), cacheKey = std::move(cacheKey)](const TFuture<NYT::TNode>& f) mutable {
+                    .Apply([logCtx, prefix, suffix, entry, pos, errors = std::move(errors), cacheKey = std::move(cacheKey)](const TFuture<NYT::TNode>& f) mutable {
                         YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
                         std::vector<TString> names;
                         try {
@@ -1903,20 +1902,20 @@ private:
                                 }
                                 names.push_back(n.AsList().at(0).AsString());
                             }
-                            return MakeTableRangeResult(std::move(names), std::move(cacheKey), prefix, suffix, entry, deterministicMode);
+                            return MakeTableRangeResult(std::move(names), std::move(cacheKey), prefix, suffix, entry);
                         } catch (...) {
                             return ResultFromCurrentException<TTableRangeResult>(pos);
                         }
                     });
             }
-            return MakeFuture(MakeTableRangeResult(std::move(names), std::move(cacheKey), prefix, suffix, entry, deterministicMode));
+            return MakeFuture(MakeTableRangeResult(std::move(names), std::move(cacheKey), prefix, suffix, entry));
 
         } catch (...) {
             return MakeFuture(ResultFromCurrentException<TTableRangeResult>(pos));
         }
     }
 
-    static TTableRangeResult MakeTableRangeResult(const std::vector<NYT::TRichYPath>& paths, bool deterministicMode) {
+    static TTableRangeResult MakeTableRangeResult(const std::vector<NYT::TRichYPath>& paths) {
         TTableRangeResult rangeRes;
         rangeRes.SetSuccess();
 
@@ -1929,14 +1928,14 @@ private:
             canonPath.Ranges = normalizedPath.GetRanges();
             rangeRes.Tables.push_back(std::move(canonPath));
         }
-        if (deterministicMode) {
-            SortBy(rangeRes.Tables, [] (const TCanonizedPath& path) { return path.Path; });
-        }
+
+        SortBy(rangeRes.Tables, [] (const TCanonizedPath& path) { return path.Path; });
+        
         return rangeRes;
     }
 
     static TTableRangeResult MakeTableRangeResult(std::vector<TString>&& names, std::tuple<TString, TString, TString>&& cacheKey,
-        TString prefix, TString suffix, const TTransactionCache::TEntry::TPtr& entry, bool deterministicMode)
+        TString prefix, TString suffix, const TTransactionCache::TEntry::TPtr& entry)
     {
         TTableRangeResult rangeRes;
         rangeRes.SetSuccess();
@@ -1996,9 +1995,8 @@ private:
             entry->RangeCache.emplace(std::move(cacheKey), std::move(cached));
         }
 
-        if (deterministicMode) {
-            SortBy(rangeRes.Tables, [] (const TCanonizedPath& path) { return path.Path; });
-        }
+        SortBy(rangeRes.Tables, [] (const TCanonizedPath& path) { return path.Path; });
+        
         return rangeRes;
     }
 

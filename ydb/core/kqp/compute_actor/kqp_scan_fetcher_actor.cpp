@@ -106,7 +106,7 @@ void TKqpScanFetcherActor::HandleExecute(TEvKqpCompute::TEvScanInitActor::TPtr& 
     }
     auto& msg = ev->Get()->Record;
     auto scanActorId = ActorIdFromProto(msg.GetScanActorId());
-    InFlightShards.RegisterScannerActor(msg.GetTabletId(), scanActorId);
+    InFlightShards.RegisterScannerActor(msg.GetTabletId(), msg.GetGeneration(), scanActorId);
 }
 
 void TKqpScanFetcherActor::HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
@@ -114,7 +114,7 @@ void TKqpScanFetcherActor::HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
         return;
     }
     auto state = InFlightShards.GetShardStateByActorId(ev->Sender);
-    if (!state) {
+    if (!state || state->Generation != ev->Get()->Generation) {
         return;
     }
     AFL_ENSURE(state->State == EShardState::Running)("state", state->State)("actor_id", state->ActorId)("ev_sender", ev->Sender);
@@ -151,6 +151,9 @@ void TKqpScanFetcherActor::HandleExecute(TEvKqpCompute::TEvScanError::TPtr& ev) 
             AFL_WARN(NKikimrServices::KQP_COMPUTE)("event", "incorrect_error_source")("actor_id", ev->Sender)("tablet_id", msg.GetTabletId());
             return;
         }
+    }
+    if (state->Generation != ev->Get()->Record.GetGeneration()) {
+        return;
     }
 
     if (state->State == EShardState::Starting) {

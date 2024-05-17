@@ -183,6 +183,9 @@ class TColumnShard
     friend class TLongTxTransactionOperator;
     friend class TEvWriteTransactionOperator;
     friend class TBackupTransactionOperator;
+    friend class IProposeTxOperator;
+    friend class TSharingTransactionOperator;
+
 
     class TTxProgressTx;
     class TTxProposeCancel;

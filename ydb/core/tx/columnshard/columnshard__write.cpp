@@ -270,7 +270,6 @@ private:
     TCommitOperation::TPtr WriteCommit;
     TActorId Source;
     ui64 Cookie;
-    std::unique_ptr<NActors::IEventBase> Result;
 };
 
 bool TProposeWriteTransaction::Execute(TTransactionContext& txc, const TActorContext&) {
@@ -278,18 +277,13 @@ bool TProposeWriteTransaction::Execute(TTransactionContext& txc, const TActorCon
     proto.SetLockId(WriteCommit->GetLockId());
     TString txBody;
     Y_ABORT_UNLESS(proto.SerializeToString(&txBody));
-    auto result = Self->GetProgressTxController().ProposeTransaction(
-        TTxController::TBasicTxInfo(NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE, WriteCommit->GetTxId()), txBody, Source, Cookie, txc);
-    if (result.IsError()) {
-        Result = NEvents::TDataEvents::TEvWriteResult::BuildError(Self->TabletID(), result.GetTxId(), NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, result.GetProposeResult().GetStatusMessage());
-    } else {
-        Result = NEvents::TDataEvents::TEvWriteResult::BuildPrepared(Self->TabletID(), result.GetTxId(), Self->GetProgressTxController().BuildCoordinatorInfo(result.GetFullTxInfoVerified()));
-    }
+    Y_UNUSED(Self->GetProgressTxController().StartProposeOnExecute(
+        TTxController::TBasicTxInfo(NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE, WriteCommit->GetTxId()), txBody, Source, Cookie, {}, txc));
     return true;
 }
 
 void TProposeWriteTransaction::Complete(const TActorContext& ctx) {
-    ctx.Send(Source, Result.release(), 0, Cookie);
+    Self->GetProgressTxController().FinishProposeOnComplete(WriteCommit->GetTxId(), ctx);
 }
 
 void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx) {

@@ -601,9 +601,18 @@ public:
                 break;
             }
 
-            UnprocessedRows.pop_front();
+            auto hasNulls = [](const TOwnedCellVec& cellVec) {
+                for (const auto& cell : cellVec) {
+                    if (cell.IsNull()) {
+                        return true;
+                    }
+                }
 
-            if (!joinKey.data()->IsNull()) {  // don't use nulls as lookup keys, because null != null
+                return false;
+            };
+
+            UnprocessedRows.pop_front();
+            if (!hasNulls(joinKey)) {  // don't use nulls as lookup keys, because null != null
                 std::vector <std::pair<ui64, TOwnedTableRange>> partitions;
                 if (joinKey.size() < KeyColumns.size()) {
                     // build prefix range [[key_prefix, NULL, ..., NULL], [key_prefix, +inf, ..., +inf])
@@ -730,7 +739,7 @@ public:
                 for (size_t joinKeyIdx = 0; joinKeyIdx < LookupKeyColumns.size(); ++joinKeyIdx) {
                     auto it = ReadColumns.find(LookupKeyColumns[joinKeyIdx]->Name);
                     YQL_ENSURE(it != ReadColumns.end());
-                    joinKeyCells[joinKeyIdx] = row[std::distance(ReadColumns.begin(), it)];
+                    joinKeyCells[LookupKeyColumns[joinKeyIdx]->KeyOrder] = row[std::distance(ReadColumns.begin(), it)];
                 }
 
                 auto leftRowIt = PendingLeftRowsByKey.find(joinKeyCells);

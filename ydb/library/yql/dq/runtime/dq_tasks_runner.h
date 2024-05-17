@@ -347,6 +347,10 @@ public:
         return Task_->GetRequestContext();
     }
 
+    bool GetEnableSpilling() const {
+        return Task_->HasEnableSpilling() && Task_->GetEnableSpilling();
+    }
+
 private:
 
     // external callback to retrieve parameter value.
@@ -405,8 +409,8 @@ public:
 };
 
 TIntrusivePtr<IDqTaskRunner> MakeDqTaskRunner(
-    NKikimr::NMiniKQL::TScopedAlloc& alloc, 
-    const TDqTaskRunnerContext& ctx, 
+    NKikimr::NMiniKQL::TScopedAlloc& alloc,
+    const TDqTaskRunnerContext& ctx,
     const TDqTaskRunnerSettings& settings,
     const TLogFunc& logFunc
 );

@@ -138,7 +138,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
     }
 
     void HandleIncarnation(TMonotonic timestamp, ui32 orderNumber, ui64 incarnationGuid) {
-        timestamp += TDuration::Seconds(15); // TODO: cooldown timeout
+        timestamp += VDiskCooldownTimeoutOnProxy;
 
         Y_ABORT_UNLESS(orderNumber < IncarnationRecords.size());
         auto& record = IncarnationRecords[orderNumber];

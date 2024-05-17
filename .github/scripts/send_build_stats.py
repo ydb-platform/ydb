@@ -48,8 +48,17 @@ def sanitize_str(s):
 
 
 def main():
-    if "YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
-        print("Env variable YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping")
+    if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
+        print("Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping")
+        return 1
+    
+    # Do not set up 'real' variable from gh workflows because it interfere with ydb tests 
+    # So, set up it locally
+    os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]
+
+    if not os.path.exists(YDBD_PATH):
+        # can be possible due to incremental builds and ydbd itself is not affected by changes
+        print("{} not exists, skipping".format(YDBD_PATH))
         return 1
 
     with ydb.Driver(

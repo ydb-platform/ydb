@@ -35,3 +35,5 @@ items:
     href: ../../maintenance/manual/cms.md
 - name: Системные таблицы
   href: system-views.md
+- name: Обслуживание без потери доступности
+  href: maintenance-without-downtime.md

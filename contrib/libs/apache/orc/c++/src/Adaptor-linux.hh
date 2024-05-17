@@ -109,6 +109,7 @@ typedef SSIZE_T ssize_t;
 namespace orc {
   std::string to_string(double val);
   std::string to_string(int64_t val);
+  bool fileExists(const char* path);
 }
 
 #ifdef HAS_BUILTIN_OVERFLOW_CHECK

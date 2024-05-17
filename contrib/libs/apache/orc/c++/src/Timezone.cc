@@ -24,7 +24,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <filesystem>
+#include <atomic>
 #include <map>
 #include <sstream>
 
@@ -656,13 +656,79 @@ namespace orc {
     epoch = utcEpoch - getVariant(utcEpoch).gmtOffset;
   }
 
-  const char* getTimezoneDirectory() {
+  std::string getTimezoneDirectory() {
     const char* dir = getenv("TZDIR");
     if (!dir) {
-      dir = DEFAULT_TZDIR;
+      // this is present if we're in an activated conda environment
+      const char* condaPrefix = getenv("CONDA_PREFIX");
+      if (condaPrefix) {
+        std::string condaDir(condaPrefix);
+        condaDir += "/share/zoneinfo";
+        return condaDir;
+      } else {
+        dir = DEFAULT_TZDIR;
+      }
     }
     return dir;
   }
+
+  static std::vector<unsigned char> loadTZDB(const std::string& filename) {
+    std::vector<unsigned char> buffer;
+    if (!fileExists(filename.c_str())) {
+      std::stringstream ss;
+      ss << "Time zone file " << filename << " does not exist."
+         << " Please install IANA time zone database and set TZDIR env.";
+      throw TimezoneError(ss.str());
+    }
+    try {
+      std::unique_ptr<InputStream> file = readFile(filename);
+      size_t size = static_cast<size_t>(file->getLength());
+      buffer.resize(size);
+      file->read(&buffer[0], size, 0);
+    } catch (ParseError& err) {
+      throw TimezoneError(err.what());
+    }
+    return buffer;
+  }
+
+  class LazyTimezone : public Timezone {
+   private:
+    std::string filename_;
+    mutable std::unique_ptr<TimezoneImpl> impl_;
+    mutable std::once_flag initialized_;
+
+    TimezoneImpl* getImpl() const {
+      std::call_once(initialized_, [&]() {
+        auto buffer = loadTZDB(filename_);
+        impl_ = std::make_unique<TimezoneImpl>(filename_, std::move(buffer));
+      });
+      return impl_.get();
+    }
+
+   public:
+    LazyTimezone(const std::string& filename) : filename_(filename) {}
+
+    const TimezoneVariant& getVariant(int64_t clk) const override {
+      return getImpl()->getVariant(clk);
+    }
+    int64_t getEpoch() const override {
+      return getImpl()->getEpoch();
+    }
+    void print(std::ostream& os) const override {
+      return getImpl()->print(os);
+    }
+    uint64_t getVersion() const override {
+      return getImpl()->getVersion();
+    }
+
+    int64_t convertToUTC(int64_t clk) const override {
+      return getImpl()->convertToUTC(clk);
+    }
+
+    int64_t convertFromUTC(int64_t clk) const override {
+      return getImpl()->convertFromUTC(clk);
+    }
+  };
 
   /**
    * Get a timezone by absolute filename.
@@ -675,21 +741,7 @@ namespace orc {
     if (itr != timezoneCache.end()) {
       return *(itr->second).get();
     }
-    if (!std::filesystem::exists(std::filesystem::path(filename))) {
-      std::stringstream ss;
-      ss << "Time zone file " << filename << " does not exist."
-         << " Please install IANA time zone database and set TZDIR env.";
-      throw TimezoneError(ss.str());
-    }
-    try {
-      std::unique_ptr<InputStream> file = readFile(filename);
-      size_t size = static_cast<size_t>(file->getLength());
-      std::vector<unsigned char> buffer(size);
-      file->read(&buffer[0], size, 0);
-      timezoneCache[filename] = std::make_shared<TimezoneImpl>(filename, buffer);
-    } catch (ParseError& err) {
-      throw TimezoneError(err.what());
-    }
+    timezoneCache[filename] = std::make_shared<LazyTimezone>(filename);
     return *timezoneCache[filename].get();
   }
 

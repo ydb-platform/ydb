@@ -226,6 +226,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             dataReceived.Commit();
 
             auto& messages [[maybe_unused]] = dataReceived.GetMessages();
+            Cerr << dataReceived.DebugString() << Endl;
             // UNIT_ASSERT(messages.size() == 100);
             // UNIT_ASSERT(messages[0].GetData() == "message_using_MessageGroupId");
         }

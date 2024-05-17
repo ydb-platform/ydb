@@ -29,6 +29,8 @@ common:
     to: /yql/reference/index.md
   - from: /concepts/datatypes.md
     to: /yql/reference/types/index.md
+  - from: /public-talks/index.md
+    to: /public-materials/videos.md
 
 # DevOps-related redirects
   - from: /getting_started/kubernetes.md

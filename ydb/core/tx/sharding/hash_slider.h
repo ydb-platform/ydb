@@ -41,7 +41,9 @@ public:
         , NumActive(Min<ui32>(shardsCountActive, GetShardsCount()))
         , TsMin(0)
         , ChangePeriod(changePeriod.MicroSeconds())
-    {}
+    {
+        AFL_VERIFY(NumActive);
+    }
 
     // tsMin = GetTsMin(tabletIdsMap, timestamp);
     // tabletIds = GetTableIdsByTs(tabletIdsMap, timestamp);
@@ -50,8 +52,8 @@ public:
     // shardNo = (hash(uid) % nActive) + (tsInterval % numIntervals) * nActive;
     // tabletId = tabletIds[shardNo];
     ui32 ShardNo(ui64 timestamp, const ui64 uidHash) const {
-        ui32 tsInterval = (timestamp - TsMin) / ChangePeriod;
-        ui32 numIntervals = GetShardsCount() / NumActive;
+        const ui32 tsInterval = (timestamp - TsMin) / ChangePeriod;
+        const ui32 numIntervals = std::max<ui32>(1, GetShardsCount() / NumActive);
         return ((uidHash % NumActive) + (tsInterval % numIntervals) * NumActive) % GetShardsCount();
     }
 

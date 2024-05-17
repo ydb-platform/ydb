@@ -54,7 +54,7 @@ SIMPLE_STRICT_UDF(TCosineSimilarity, TOptional<float>(TAutoMap<const char*>, TAu
     if (Y_UNLIKELY(!ret))
         return {};
 
-    const auto& [ll, lr, rr] = ret.value();
+    const auto [ll, lr, rr] = ret.value();
     const float cosine = lr / std::sqrt(ll * rr);
     return TUnboxedValuePod{cosine};
 }
@@ -66,7 +66,7 @@ SIMPLE_STRICT_UDF(TCosineDistance, TOptional<float>(TAutoMap<const char*>, TAuto
     if (Y_UNLIKELY(!ret))
         return {};
 
-    const auto& [ll, lr, rr] = ret.value();
+    const auto [ll, lr, rr] = ret.value();
     const float cosine = lr / std::sqrt(ll * rr);
     return TUnboxedValuePod{1 - cosine};
 }

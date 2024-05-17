@@ -83,6 +83,13 @@ void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmDestroy() {
 }
 
 template<bool UseMigrationProtocol>
+void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmEnd(const std::vector<ui32>& childIds) {
+    if (auto sessionShared = CbContext->LockShared()) {
+        sessionShared->ConfirmPartitionStreamEnd(this, childIds);
+    }
+}
+
+template<bool UseMigrationProtocol>
 void TPartitionStreamImpl<UseMigrationProtocol>::StopReading() {
     Y_ABORT("Not implemented"); // TODO
 }
@@ -1825,18 +1832,19 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::RegisterParentPartitio
 
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::UnregisterPartition(ui32 partitionId, ui64 partitionSessionId) {
-    auto it = HierarchyData.find(partitionId);
-    if (it != HierarchyData.end()) {
+    for (auto it = HierarchyData.begin(); it != HierarchyData.end();) {
         auto& values = it->second;
         for (auto v = values.begin(); v != values.end();) {
-            if (v->PartitionSessionId < partitionSessionId) {
+            if (v->PartitionId == partitionId && v->PartitionSessionId < partitionSessionId) {
                 v = values.erase(v);
             } else {
                 ++v;
             }
         }
         if (values.empty()) {
-            HierarchyData.erase(it);
+            it = HierarchyData.erase(it);
+        } else {
+            ++it;
         }
     }
 }
@@ -1879,8 +1887,8 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::AllParentSessionsHasBe
 }
 
 template<bool UseMigrationProtocol>
-void TSingleClusterReadSessionImpl<UseMigrationProtocol>::SetReadingFinished(ui64 partitionSessionId, const std::vector<ui32>& childIds) {
-    ReadingFinishedData.insert(partitionSessionId);
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStreamEnd(TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, const std::vector<ui32>& childIds) {
+    ReadingFinishedData.insert(partitionStream->GetAssignId()); // Check
     for (auto& [_, s] : PartitionStreams) {
         for (auto partitionId : childIds) {
             if (s->GetPartitionId() == partitionId) {
@@ -2137,12 +2145,12 @@ TReadSessionEventsQueue<UseMigrationProtocol>::GetEventImpl(size_t& maxByteSize,
             TParent::Events.pop();
 
             if constexpr (!UseMigrationProtocol) {
-                if (std::holds_alternative<TReadSessionEvent::TEndPartitionSessionEvent>(*event)) {
-                    auto& e = std::get<TReadSessionEvent::TEndPartitionSessionEvent>(*event);
-                    if (auto session = frontCbContext->LockShared()) {
-                        session->SetReadingFinished(partitionStream->GetPartitionSessionId(), e.GetChildPartitionIds());
-                    }
-                }
+                // if (std::holds_alternative<TReadSessionEvent::TEndPartitionSessionEvent>(*event)) {
+                //     auto& e = std::get<TReadSessionEvent::TEndPartitionSessionEvent>(*event);
+                //     if (auto session = frontCbContext->LockShared()) {
+                //         session->SetReadingFinished(partitionStream->GetPartitionSessionId(), e.GetChildPartitionIds());
+                //     }
+                // }
             }
         }
 
@@ -2152,9 +2160,6 @@ TReadSessionEventsQueue<UseMigrationProtocol>::GetEventImpl(size_t& maxByteSize,
     }
 
     Y_ASSERT(TParent::CloseEvent);
-
-    // TODO close
-
 
     return {*TParent::CloseEvent};
 }

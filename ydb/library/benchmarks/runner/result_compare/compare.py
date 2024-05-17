@@ -23,7 +23,6 @@ def main():
 ''')
     print('<table border="1">')
     print('<tr><th>' + ''.join(map(lambda x: '<th colspan="5">' + html.escape(rdirs[x]), range(len(rdirs)))))
-    print('<tr><th>Testcase' + '<th>Status<th>Real time, s<th>User time, s<th>RSS, MB<th>'*len(rdirs) + '</tr>')
     print('<tr><th>')
 
     for dirname in rdirs:
@@ -46,6 +45,7 @@ def main():
                             pass
                     coldata += [[dirname, q, elapsed, utime, stime, maxrss, exitcode]]
                 data += [coldata]
+    print('<tr><th>Testcase' + '<th>Status<th>Real time, s<th>User time, s<th>RSS, MB<th>'*len(data) + '</tr>')
     for i in range(len(data[0])):
         q = data[0][i][1]
         print('<tr><td>{}'.format(html.escape(q)), end='')

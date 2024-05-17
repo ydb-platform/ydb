@@ -239,7 +239,7 @@ struct IServiceContext
     virtual bool IsResponseBodySerializedWithCompression() const = 0;
     virtual void SetResponseBodySerializedWithCompression() = 0;
 
-    //! Return total size of request. Sum of Header, Body, Attachments, TServiceContext, parsed RequestHeaderProto and TraceContext.
+    //! Returns total size of request. Sum of Header, Body, Attachments, TServiceContext, parsed RequestHeaderProto and TraceContext.
     virtual i64 GetTotalSize() const = 0;
 
     // Extension methods.

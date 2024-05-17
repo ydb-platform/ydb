@@ -343,7 +343,7 @@ private:
             } else if (partSize == 0) {
                 Parts_.push_back(TSharedRef::MakeEmpty());
             } else {
-                TSharedMutableRef part = TSharedMutableRef::Allocate<TPacketDecoderTag>(partSize);
+                auto part = TSharedMutableRef::Allocate<TPacketDecoderTag>(partSize);
                 BeginPhase(EPacketPhase::MessagePart, part.Begin(), part.Size());
                 Parts_.push_back(std::move(part));
                 break;

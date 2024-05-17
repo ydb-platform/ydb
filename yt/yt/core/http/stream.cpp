@@ -14,7 +14,7 @@ namespace NYT::NHttp {
 using namespace NConcurrency;
 using namespace NNet;
 
-static const auto& Logger = HttpLogger;
+static constexpr auto& Logger = HttpLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 

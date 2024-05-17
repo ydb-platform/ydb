@@ -832,9 +832,9 @@
     ],
     "test.test[in-in_noansi_join--Debug]": [
         {
-            "checksum": "3ad8ae57541786a7c9294cd74bdef7ca",
-            "size": 11257,
-            "uri": "https://{canondata_backend}/1942173/7c77a27f1a6a7f952a7fad5a820ff16b2b90fda4/resource.tar.gz#test.test_in-in_noansi_join--Debug_/opt.yql_patched"
+            "checksum": "95b4c7da90996f585c9887892c95c41e",
+            "size": 11150,
+            "uri": "https://{canondata_backend}/1942671/be7f67eafe3b77ee44554c88bdc45c83dc69e178/resource.tar.gz#test.test_in-in_noansi_join--Debug_/opt.yql_patched"
         }
     ],
     "test.test[in-in_noansi_join--Plan]": [

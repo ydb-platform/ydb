@@ -60,7 +60,7 @@ DECLARE_REFCOUNTED_STRUCT(IFairShareCallbackQueue)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline const NLogging::TLogger ConcurrencyLogger("Concurrency");
+YT_DEFINE_GLOBAL(const NLogging::TLogger, ConcurrencyLogger, "Concurrency");
 inline const NProfiling::TProfiler ConcurrencyProfiler("/concurrency");
 
 ////////////////////////////////////////////////////////////////////////////////

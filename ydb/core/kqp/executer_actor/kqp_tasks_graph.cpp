@@ -1141,6 +1141,7 @@ void SerializeTaskToProto(const TKqpTasksGraph& tasksGraph, const TTask& task, N
     result->SetId(task.Id);
     result->SetStageId(stageInfo.Id.StageId);
     result->SetUseLlvm(task.GetUseLlvm());
+    result->SetEnableSpilling(false); // TODO: enable spilling
     if (task.HasMetaId()) {
         result->SetMetaId(task.GetMetaIdUnsafe());
     }

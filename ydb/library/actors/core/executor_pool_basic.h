@@ -8,6 +8,7 @@
 #include "scheduler_queue.h"
 #include "executor_pool_base.h"
 #include "harmonizer.h"
+#include <memory>
 #include <ydb/library/actors/actor_type/indexes.h>
 #include <ydb/library/actors/util/unordered_cache.h>
 #include <ydb/library/actors/util/threadparkpad.h>
@@ -22,6 +23,7 @@
 namespace NActors {
 
     class TExecutorPoolJail;
+    class TBasicExecutorPoolSanitizer;
 
     struct TWaitingStatsConstants {
         static constexpr ui64 BucketCount = 128;
@@ -126,7 +128,11 @@ namespace NActors {
         }
     };
 
+
+
     class TBasicExecutorPool: public TExecutorPoolBase {
+        friend class TBasicExecutorPoolSanitizer;
+
         NThreading::TPadded<std::atomic_bool> AllThreadsSleep = true;
         const ui64 DefaultSpinThresholdCycles;
         std::atomic<ui64> SpinThresholdCycles;
@@ -175,6 +181,8 @@ namespace NActors {
         static constexpr ui64 MaxSharedThreadsForPool = 2;
         NThreading::TPadded<std::atomic_uint64_t> SharedThreadsCount = 0;
         NThreading::TPadded<std::atomic<TSharedExecutorThreadCtx*>> SharedThreads[MaxSharedThreadsForPool] = {nullptr, nullptr};
+
+        std::unique_ptr<TBasicExecutorPoolSanitizer> Sanitizer;
 
     public:
         struct TSemaphore {

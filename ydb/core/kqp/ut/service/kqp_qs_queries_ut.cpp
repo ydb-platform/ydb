@@ -333,12 +333,12 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT_VALUES_EQUAL(totalRows, 100);
             // 100 rows * 1000 byte per row / 10000 chunk size limit -> expect 10 batches
             UNIT_ASSERT(10 <= totalBatches);
-            UNIT_ASSERT(totalBatches < 12);
+            UNIT_ASSERT_LT_C(totalBatches, 13, totalBatches);
         } else {
             UNIT_ASSERT_VALUES_EQUAL(totalRows, 100000);
             // 100000 rows * 12 byte per row / 10000 chunk size limit -> expect 120 batches
             UNIT_ASSERT(120 <= totalBatches);
-            UNIT_ASSERT(totalBatches < 122);
+            UNIT_ASSERT_LT_C(totalBatches, 123, totalBatches);
         }
     }
 

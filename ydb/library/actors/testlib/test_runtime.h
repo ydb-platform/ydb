@@ -291,6 +291,7 @@ namespace NActors {
         TActorId GetInterconnectProxy(ui32 nodeIndexFrom, ui32 nodeIndexTo);
         void BlockOutputForActor(const TActorId& actorId);
         IActor* FindActor(const TActorId& actorId, ui32 nodeIndex = Max<ui32>()) const;
+        TStringBuf FindActorName(const TActorId& actorId, ui32 nodeIndex = Max<ui32>()) const;
         void EnableScheduleForActor(const TActorId& actorId, bool allow = true);
         bool IsScheduleForActorEnabled(const TActorId& actorId) const;
         TIntrusivePtr<NMonitoring::TDynamicCounters> GetDynamicCounters(ui32 nodeIndex = 0);

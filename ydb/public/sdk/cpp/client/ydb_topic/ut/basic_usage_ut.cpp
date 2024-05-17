@@ -794,6 +794,9 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                 [&](TReadSessionEvent::TStopPartitionSessionEvent& event) {
                     event.Confirm();
                 },
+                [&](TReadSessionEvent::TEndPartitionSessionEvent&) {
+                    // do nothing
+                },
                 [&](TReadSessionEvent::TPartitionSessionStatusEvent&) {
                     UNIT_FAIL("Test does not support lock sessions yet");
                 },

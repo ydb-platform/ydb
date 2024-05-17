@@ -29,23 +29,23 @@
 
 {% list tabs %}
 
-- Установка Ansible в систему (глобально)
+- Установка Ansible в систему (глобально, Ubuntu 22.04 LTS)
 
   * Обновите список пакетов apt репозитория – `sudo apt update`.
-  * Обновите пакеты – `sudo apt upgrade`.
+  * Обновите пакеты – `sudo apt-get upgrade`.
   * Установите пакет `software-properties-common` для управления источниками программного обеспечения вашего дистрибутива – `sudo apt install software-properties-common`.
   * Добавьте новый PPA в apt – `sudo add-apt-repository --yes --update ppa:ansible/ansible`.
-  * Установите Ansible – `sudo apt install ansible-core`.
+  * Установите Ansible – `sudo apt-get install ansible-core` (имейте ввиду, что установка просто `ansible` приведёт к неподходящей устаревшей версии).
   * Проверьте версию Ansible core – `ansible --version`
 
 - Установка Ansible в виртуальное окружение Python
 
-  * Обновите список пакетов apt репозитория – `sudo apt update`.
-  * Установите пакет `venv` для Python3 – `sudo apt install python3-venv`
-  * Создайте директорию, где будет создано виртуальное окружение и куда будут скачены плейбуки. Например, `mkdir ydb-install-ansible`.
-  * Перейдите в созданную директорию и создайте виртуальное окружение – `sudo python3 -m venv ydb-ansible`.
-  * Активируйте виртуальное окружение – `source venv/bin/activate`. В дальнейшем все действия по работе с Ansible выполняются внутри виртуального окружения. Выйти из него можно командой `deactivate`.
-  * Установите Ansible рекомендуемой версии с помощью команды `pip install -r requirements.txt`, находясь в корневой директории скаченного репозитория.
+  * Обновите список пакетов apt репозитория – `sudo apt-get update`.
+  * Установите пакет `venv` для Python3 – `sudo apt-get install python3-venv`
+  * Создайте директорию, где будет создано виртуальное окружение и куда будут скачаны плейбуки. Например, `mkdir venv-ansible`.
+  * Создайте виртуальное окружение – `python3 -m venv venv-ansible`.
+  * Активируйте виртуальное окружение – `source venv-ansible/bin/activate`. В дальнейшем все действия по работе с Ansible выполняются внутри виртуального окружения. Выйти из него можно командой `deactivate`.
+  * Установите Ansible рекомендуемой версии с помощью команды `pip3 install -r requirements.txt`, находясь в корневой директории скачанного репозитория.
   * Проверьте версию Ansible core – `ansible --version`
 
 {% endlist %}
@@ -53,7 +53,7 @@
 
 ## Настройка Ansible проекта { #ansible-project-setup } 
 
-Перейдите в корневую директорию скаченного репозитория и выполните команду `ansible-galaxy install -r requirements.yaml` – будут скачены Ansible коллекции `ydb_platform.ydb` и `community.general`, которые содержат роли и плагины для установки {{ ydb-short-name }}.
+Перейдите в корневую директорию скачанного репозитория и выполните команду `ansible-galaxy install -r requirements.yaml` – будут скачаны Ansible коллекции `ydb_platform.ydb` и `community.general`, которые содержат роли и плагины для установки {{ ydb-short-name }}.
 
 [Скачайте](../../downloads/index.md#ydb-server) архив актуальной версию {{ ydb-short-name }} в корневую директорию проекта. Например, с помощью wget: `wget https://binaries.ydb.tech/release/23.3.17/ydbd-23.3.17-linux-amd64.tar.gz` и скопируйте сюда же приватную часть SSH-ключа для доступа к серверам кластера {{ ydb-short-name }}. На SSH-ключе должны быть установлены следующие права:
 ```text
@@ -186,7 +186,7 @@ static-node-3 static-node-3.ydb-cluster.com
 2. Укажите FQDN серверов в файле `TLS/ydb-ca-nodes.txt` и выполните скрипт `ydb-ca-update.sh` для генерации наборов TLS сертификатов.
 3. Внесите изменения в инвентаризационные файлы шаблона в соответствии с [инструкцией](#inventory-edit).
 4. Внесите изменения в конфигурационный файл {{ ydb-short-name }} в соответствии с [инструкцией](#ydb-config-prepare).
-5. Выполните команду `ansible-playbook setup_playbook.yaml`, находясь в директории клонированного шаблона.
+5. Выполните команду `ansible-playbook ydb_platform.ydb.initial_setup`, находясь в директории клонированного шаблона.
 
 ## План выполнения сценария установки {{ ydb-short-name }} { #ydb-playbook-run }
 
@@ -228,7 +228,7 @@ static-node-3 static-node-3.ydb-cluster.com
 
 Протестировать кластер можно с помощью встроенных в YDB CLI нагрузочных тестов. Для этого скачайте на машину, на которой установлен Ansible, YDB CLI версии [2.5.0](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.5.0/linux/amd64/ydb). Например, с помощью wget: `wget https://storage.yandexcloud.net/yandexcloud-ydb/release/2.5.0/linux/amd64/ydb`. 
 
-Сделайте скаченный бинарный файл исполняемым – `chmod +x ydb` и создайте [профиль](../../reference/ydb-cli/profile/index.md) подключения к YDB:
+Сделайте скачанный бинарный файл исполняемым – `chmod +x ydb` и создайте [профиль](../../reference/ydb-cli/profile/index.md) подключения к YDB:
 ```shell
 ./ydb \
 config profile create <profile name> \
@@ -243,7 +243,7 @@ config profile create <profile name> \
 * `config profile create` – команда создания профиля подключения. Задаётся имя профиля. Более детальную информацию, о том как создавать и изменять профили можно найти в статье [{#T}](../../reference/ydb-cli/profile/create.md).
 * `-e` – эндпоинт (endpoint) - строка в формате `protocol://host:port`. Можно указать FQDN любой ноды кластера и не указывать порт. По умолчанию будет использован 2135 порт.
 * `--ca-file` – путь к корневому сертификату для подключения к базе по `grpcs`. Сертификат создаётся скриптом `ydb-ca-update.sh` в директории `TLS` и располагается по пути `TLS/CA/certs/` относительно корня репозитория `ydb-ansible-examples`.
-* `--user` – пользователь для подключения к БД. По умолчанию при выполнении `setup_playbook.yaml` плейбука создаётся пользователь root. 
+* `--user` – пользователь для подключения к БД. По умолчанию при выполнении `ydb_platform.ydb.initial_setup` плейбука создаётся пользователь root. 
 * `--password-file` – путь к файлу с паролем. В каждой папке с шаблоном развертывания YDB кластера находится файл `ansible_vault_password_file`, который содержит пароль пользователя `root`.
 
 Проверить создался ли профиль можно командой `./ydb config profile list` – будет выведен список профилей. После создания профиля, его нужно активировать командой `./ydb config profile activate <profile name>`. Проверить, что профиль был активирован можно повторным выполнением команды `./ydb config profile list` – активный профиль будет иметь отметку (active). 

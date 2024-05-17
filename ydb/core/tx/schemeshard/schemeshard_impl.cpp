@@ -1,6 +1,8 @@
 #include "schemeshard.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_svp_migration.h"
+#include "olap/bg_tasks/adapter/adapter.h"
+#include "olap/bg_tasks/events/global.h"
 
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
@@ -13,6 +15,7 @@
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/stat_service.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
 #include <ydb/core/tx/scheme_board/events_schemeshard.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
@@ -407,6 +410,8 @@ void TSchemeShard::Clear() {
     Views.clear();
 
     ColumnTables = { };
+    BackgroundSessionsManager = std::make_shared<NKikimr::NOlap::NBackground::TSessionsManager>(
+        std::make_shared<NSchemeShard::NBackground::TAdapter>(SelfId(), NKikimr::NOlap::TTabletId(TabletID()), *this));
 
     RevertedMigrations.clear();
 
@@ -4231,6 +4236,7 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
     TabletCounters = TabletCountersPtr.Get();
 
     SelfPinger = new TSelfPinger(SelfTabletId(), TabletCounters);
+    BackgroundSessionsManager = std::make_shared<NKikimr::NOlap::NBackground::TSessionsManager>(std::make_shared<NBackground::TAdapter>(tablet, NKikimr::NOlap::TTabletId(TabletID()), *this));
 }
 
 const TDomainsInfo::TDomain& TSchemeShard::GetDomainDescription(const TActorContext &ctx) const {
@@ -4320,16 +4326,6 @@ void TSchemeShard::OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActor
     Die(ctx);
 }
 
-static TVector<ui64> CollectTxAllocators(const TAppData *appData) {
-    TVector<ui64> allocators;
-    if (const auto& domain = appData->DomainsInfo->Domain) {
-        for (auto tabletId: domain->TxAllocators) {
-            allocators.push_back(tabletId);
-        }
-    }
-    return allocators;
-}
-
 void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     const TTabletId selfTabletId = SelfTabletId();
 
@@ -4377,7 +4373,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     AllowServerlessStorageBilling = appData->FeatureFlags.GetAllowServerlessStorageBillingForSchemeShard();
     appData->Icb->RegisterSharedControl(AllowServerlessStorageBilling, "SchemeShard_AllowServerlessStorageBilling");
 
-    TxAllocatorClient = RegisterWithSameMailbox(CreateTxAllocatorClient(CollectTxAllocators(appData)));
+    TxAllocatorClient = RegisterWithSameMailbox(CreateTxAllocatorClient(appData));
 
     SysPartitionStatsCollector = Register(NSysView::CreatePartitionStatsCollector().Release());
 
@@ -4428,6 +4424,7 @@ void TSchemeShard::StateConfigure(STFUNC_SIG) {
     switch (ev->GetTypeRewrite()) {
         HFuncTraced(TEvents::TEvUndelivered, Handle);
 
+        HFuncTraced(NKikimr::NOlap::NBackground::TEvExecuteGeneralLocalTransaction, Handle);
         HFuncTraced(TEvSchemeShard::TEvInitRootShard, Handle);
         HFuncTraced(TEvSchemeShard::TEvInitTenantSchemeShard, Handle);
         HFuncTraced(TEvSchemeShard::TEvMigrateSchemeShard, Handle);
@@ -4470,6 +4467,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
     switch (ev->GetTypeRewrite()) {
         HFuncTraced(TEvents::TEvUndelivered, Handle);
         HFuncTraced(TEvSchemeShard::TEvInitRootShard, Handle);
+        HFuncTraced(NKikimr::NOlap::NBackground::TEvExecuteGeneralLocalTransaction, Handle);
 
         HFuncTraced(TEvSchemeShard::TEvMeasureSelfResponseTime, SelfPinger->Handle);
         HFuncTraced(TEvSchemeShard::TEvWakeupToMeasureSelfResponseTime, SelfPinger->Handle);
@@ -4572,6 +4570,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvExport::TEvForgetExportRequest, Handle);
         HFuncTraced(TEvExport::TEvListExportsRequest, Handle);
         // } // NExport
+        HFuncTraced(NBackground::TEvListRequest, Handle);
 
         // namespace NImport {
         HFuncTraced(TEvImport::TEvCreateImportRequest, Handle);
@@ -5158,8 +5157,12 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvNotifyTxCompletion::TPtr &ev, const
     Execute(CreateTxNotifyTxCompletion(ev), ctx);
 }
 
-void TSchemeShard::Handle(TEvSchemeShard::TEvInitRootShard::TPtr &ev, const TActorContext &ctx) {
+void TSchemeShard::Handle(TEvSchemeShard::TEvInitRootShard::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxInitRootCompatibility(ev), ctx);
+}
+
+void TSchemeShard::Handle(NKikimr::NOlap::NBackground::TEvExecuteGeneralLocalTransaction::TPtr& ev, const TActorContext& ctx) {
+    Execute(ev->Get()->ExtractTransaction().release(), ctx);
 }
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvInitTenantSchemeShard::TPtr &ev, const TActorContext &ctx) {

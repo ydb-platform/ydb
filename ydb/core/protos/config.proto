@@ -1744,6 +1744,7 @@ message TKafkaProxyConfig {
     }
 
     optional TProxy Proxy = 7;
+    optional bool MeteringV2Enabled = 10 [default = false];
 }
 
 message TAwsCompatibilityConfig {

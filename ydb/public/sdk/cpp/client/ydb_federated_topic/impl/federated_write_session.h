@@ -2,8 +2,6 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_federated_topic/impl/federated_topic_impl.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/include/write_session.h>
-
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/write_session.h>
 
 #include <deque>

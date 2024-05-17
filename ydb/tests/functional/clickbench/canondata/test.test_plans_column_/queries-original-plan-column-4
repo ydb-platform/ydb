@@ -89,7 +89,7 @@
                                                                 "Operators": [
                                                                     {
                                                                         "Aggregation": "state",
-                                                                        "GroupBy": "row.UserID",
+                                                                        "GroupBy": "item.UserID",
                                                                         "Inputs": [
                                                                             {
                                                                                 "InternalOperatorId": 1
@@ -188,7 +188,7 @@
                                                         "Operators": [
                                                             {
                                                                 "Aggregation": "state",
-                                                                "GroupBy": "row.UserID",
+                                                                "GroupBy": "item.UserID",
                                                                 "Name": "Aggregate"
                                                             }
                                                         ],

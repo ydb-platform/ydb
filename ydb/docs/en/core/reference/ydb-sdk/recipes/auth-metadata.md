@@ -92,15 +92,15 @@ Below are examples of the code for authentication using environment variables in
 
 - Node.js
 
-  {% include [auth-metadata](../../../../_includes/nodejs/auth-metadata.md) %}
+  {% include [auth-metadata](../../../_includes/nodejs/auth-metadata.md) %}
 
 - Python
 
-  {% include [auth-metadata](../../../../_includes/python/auth-metadata.md) %}
+  {% include [auth-metadata](../../../_includes/python/auth-metadata.md) %}
 
 - Python (asyncio)
 
-  {% include [auth-metadata](../../../../_includes/python/async/auth-metadata.md) %}
+  {% include [auth-metadata](../../../_includes/python/async/auth-metadata.md) %}
 
 - C# (.NET)
 

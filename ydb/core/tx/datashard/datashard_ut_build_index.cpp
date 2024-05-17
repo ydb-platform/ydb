@@ -168,9 +168,8 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
         CreateShardedTableForIndex(server, sender, "/Root", "table-2", 1, false);
 
         auto observer = runtime.AddObserver<TEvDataShard::TEvCompactBorrowed>([&](TEvDataShard::TEvCompactBorrowed::TPtr& event) {
-            IActor *actor = runtime.FindActor(event->Sender);
-            if (actor && actor->GetActivityType() == 186) {
-                Cerr << "Ignore SchemeShard TEvCompactBorrowed from " << event->Sender << "(" << actor->GetActivityType() << ")" << " to " << event->Recipient << Endl;
+            Cerr << "Captured TEvDataShard::TEvCompactBorrowed from " << runtime.FindActorName(event->Sender) << " to " << runtime.FindActorName(event->GetRecipientRewrite()) << Endl;
+            if (runtime.FindActorName(event->Sender) == "FLAT_SCHEMESHARD_ACTOR") {
                 event.Reset();
             }
         });
@@ -203,12 +202,9 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
 
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), shardIndex == 0 ? 2 : 3);
 
-            const auto& ownersProto = stats.GetUserTablePartOwners();
-            THashSet<ui64> owners(ownersProto.begin(), ownersProto.end());
+            THashSet<ui64> owners(stats.GetUserTablePartOwners().begin(), stats.GetUserTablePartOwners().end());
             // Note: datashard always adds current shard to part owners, even if there are no parts
-            UNIT_ASSERT_VALUES_EQUAL(owners.size(), 2u);
-            UNIT_ASSERT(owners.contains(shards1.at(0)));
-            UNIT_ASSERT(owners.contains(shards2.at(shardIndex)));
+            UNIT_ASSERT_VALUES_EQUAL(owners, (THashSet<ui64>{shards1.at(0), shards2.at(shardIndex)}));
             
             auto tableId = ResolveTableId(server, sender, "/Root/table-2");
             auto result = CompactBorrowed(runtime, shards2.at(shardIndex), tableId);
@@ -217,23 +213,12 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetPathId().GetOwnerId(), tableId.PathId.OwnerId);
             UNIT_ASSERT_VALUES_EQUAL(result.GetPathId().GetLocalId(), tableId.PathId.LocalPathId);
 
-            for (int i = 0; i < 5; ++i) {
+            for (int i = 0; i < 5 && (owners.size() > 1 || owners.contains(shards1.at(0))); ++i) {
                 auto stats = WaitTableStats(runtime, shards2.at(shardIndex));
-                // Cerr << "Received shard stats:" << Endl << stats.DebugString() << Endl;
-                const auto& ownersProto = stats.GetUserTablePartOwners();
-                THashSet<ui64> owners(ownersProto.begin(), ownersProto.end());
-                if (i < 4) {
-                    if (owners.size() > 1) {
-                        continue;
-                    }
-                    if (owners.contains(shards1.at(0))) {
-                        continue;
-                    }
-                }
-                UNIT_ASSERT_VALUES_EQUAL(owners.size(), 1u);
-                UNIT_ASSERT(owners.contains(shards2.at(shardIndex)));
-                Cerr << "OK " << shards2.at(shardIndex) << Endl;
+                owners = THashSet<ui64>(stats.GetUserTablePartOwners().begin(), stats.GetUserTablePartOwners().end());
             }
+
+            UNIT_ASSERT_VALUES_EQUAL(owners, (THashSet<ui64>{shards2.at(shardIndex)}));
         }
 
         // Alter table: disable shadow data and change compaction policy

@@ -74,6 +74,7 @@ enum EServiceKikimr {
     BLOB_CACHE = 333;
     TX_COLUMNSHARD_SCAN = 334;
     TX_COLUMNSHARD_SCAN_MEMORY = 335;
+    TX_BACKGROUND = 336;
 
     // BLOBSTORAGE again
     BS_HANDOFF = 298;

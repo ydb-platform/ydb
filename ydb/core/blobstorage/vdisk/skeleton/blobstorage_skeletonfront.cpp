@@ -713,8 +713,8 @@ namespace NKikimr {
 
                 const auto &bi = Config->BaseInfo;
                 TString path = Sprintf("vdisk%09" PRIu32 "_%09" PRIu32, bi.PDiskId, bi.VDiskSlotId);
-                TString name = Sprintf("%s VDisk%09" PRIu32 "_%09" PRIu32,
-                                      VCtx->VDiskLogPrefix.data(), bi.PDiskId, bi.VDiskSlotId);
+                TString name = Sprintf("%s VDisk%09" PRIu32 "_%09" PRIu32 " (%" PRIu32 ")",
+                                      VCtx->VDiskLogPrefix.data(), bi.PDiskId, bi.VDiskSlotId, GInfo->GroupID);
                 mon->RegisterActorPage(vdisksMonPage, path, name, false, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
             }
         }

@@ -214,12 +214,8 @@ public:
 
     static void ResetGlobalsUT();
 
-    void EnableMemoryYellowZone() noexcept {
-        IsMemoryYellowZoneReached = true;
-    }
-
-    void DisableMemoryYellowZone() noexcept {
-        IsMemoryYellowZoneReached = false;
+    void SetMaximumLimitValueReached(bool isReached) noexcept {
+        IsMaximumLimitValueReached = isReached;
     }
 
     bool IsMemoryYellowZoneEnabled() const noexcept {
@@ -277,6 +273,10 @@ protected:
     // The yellow zone turns on when memory consumption reaches 80% and turns off when consumption drops below 50%.
     const ui8 EnableMemoryYellowZoneThreshold = 80;
     const ui8 DisableMemoryYellowZoneThreshold = 50;
+
+    // This flag indicates that value of memory limit reached it's maximum.
+    // Next TryIncreaseLimit call most likely will return false.
+    bool IsMaximumLimitValueReached = false;
 };
 
 using TAlignedPagePool = TAlignedPagePoolImpl<>;

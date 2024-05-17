@@ -351,9 +351,9 @@
     ],
     "test.test[aggr_factory-bitxor-default.txt-Debug]": [
         {
-            "checksum": "b7e6ce2cf26fb92d69b1b41131dec6a7",
-            "size": 6664,
-            "uri": "https://{canondata_backend}/1937492/7ae37c32b42bb57d4df171a62ced7ab76867a8ea/resource.tar.gz#test.test_aggr_factory-bitxor-default.txt-Debug_/opt.yql_patched"
+            "checksum": "1f7058898a9050a65766e7394a5d7c8a",
+            "size": 6632,
+            "uri": "https://{canondata_backend}/1942671/bd60b99dd88b56e4393d96a9767150c5edda50e8/resource.tar.gz#test.test_aggr_factory-bitxor-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[aggr_factory-bitxor-default.txt-Plan]": [

@@ -646,8 +646,8 @@ public:
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 28)
 class IFunctionTypeInfoBuilder15: public IFunctionTypeInfoBuilder14 {
 public:
-    virtual IFunctionTypeInfoBuilder15& SupportsBlocks() = 0;
-    virtual IFunctionTypeInfoBuilder15& IsStrict() = 0;
+    virtual IFunctionTypeInfoBuilder15& SupportsBlocksImpl() = 0;
+    virtual IFunctionTypeInfoBuilder15& IsStrictImpl() = 0;
 };
 #endif
 
@@ -708,6 +708,18 @@ public:
         OptionalArgsImpl(optionalArgs);
         return *this;
     }
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 28)
+    IFunctionTypeInfoBuilder& SupportsBlocks() {
+        SupportsBlocksImpl();
+        return *this;
+    }
+
+    IFunctionTypeInfoBuilder& IsStrict() {
+        IsStrictImpl();
+        return *this;
+    }
+#endif
 
     IFunctionTypeInfoBuilder& Returns(TDataTypeId type) {
         ReturnsImpl(type);

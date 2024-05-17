@@ -34,6 +34,10 @@ public:
     void ApplyOnComplete(const TNormalizationController& /* normController */) const override {
         RemovingAction->OnCompleteTxAfterRemoving(true);
     }
+
+    ui64 GetSize() const override {
+        return Portions.size();
+    }
 };
 
 class TBlobsRemovingTask : public INormalizerTask {
@@ -51,13 +55,13 @@ public:
         for (auto&& blobId : Blobs) {
             removeAction->DeclareSelfRemove(blobId);
         }
-        TActorContext::AsActorContext().Send(nCtx.GetColumnshardActor(), std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(std::make_shared<TBlobsRemovingResult>(removeAction, std::move(Portions))));
+        TActorContext::AsActorContext().Send(nCtx.GetShardActor(), std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(std::make_shared<TBlobsRemovingResult>(removeAction, std::move(Portions))));
     }
 };
 
 
 bool TCleanPortionsNormalizer::CheckPortion(const NColumnShard::TTablesManager& tablesManager, const TPortionInfo& portionInfo) const {
-    return tablesManager.HasTable(portionInfo.GetAddress().GetPathId());
+    return tablesManager.HasTable(portionInfo.GetAddress().GetPathId(), true);
 }
 
 INormalizerTask::TPtr TCleanPortionsNormalizer::BuildTask(std::vector<std::shared_ptr<TPortionInfo>>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas) const {
@@ -79,7 +83,7 @@ INormalizerTask::TPtr TCleanPortionsNormalizer::BuildTask(std::vector<std::share
     return std::make_shared<TBlobsRemovingTask>(std::move(blobIds), std::move(portions));
 }
 
- TConclusion<bool> TCleanPortionsNormalizer::DoInit(const TNormalizationController&, NTabletFlatExecutor::TTransactionContext&) {
+ TConclusion<bool> TCleanPortionsNormalizer::DoInitImpl(const TNormalizationController&, NTabletFlatExecutor::TTransactionContext&) {
     return true;
 }
 

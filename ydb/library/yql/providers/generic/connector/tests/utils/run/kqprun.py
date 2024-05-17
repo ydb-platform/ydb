@@ -191,7 +191,7 @@ class KqpRunner(Runner):
         result_path = artifacts.make_path(test_name=test_name, artifact_name='result.json')
 
         # For debug add option --trace-opt to args
-        cmd = f'{self.kqprun_path} -s {scheme_path} -p {script_path} --app-config={app_conf_path} --result-file={result_path} --result-format=full'
+        cmd = f'{self.kqprun_path} -s {scheme_path} -p {script_path} --app-config={app_conf_path} --result-file={result_path} --result-format=full-json'
 
         output = None
         data_out = None

@@ -31,23 +31,23 @@ To work with the project on a local (intermediate or installation) machine, you 
 
 {% list tabs %}
 
-- Installing Ansible globally (in the system)
+- Installing Ansible globally (Ubuntu 22.04 LTS)
 
-  * Update the apt package list with `sudo apt update`.
-  * Upgrade packages with `sudo apt upgrade`.
+  * Update the apt package list with `sudo apt-get update`.
+  * Upgrade packages with `sudo apt-get upgrade`.
   * Install the `software-properties-common` package to manage your distribution's software sources – `sudo apt install software-properties-common`.
   * Add a new PPA to apt – `sudo add-apt-repository --yes --update ppa:ansible/ansible`.
-  * Install Ansible – `sudo apt install ansible-core`.
+  * Install Ansible – `sudo apt-get install ansible-core` (note that installing just `ansible` will lead to an unsuitable outdated version).
   * Check the Ansible core version – `ansible --version`
 
 - Installing Ansible in a Python virtual environment
 
-  * Update the apt package list – `sudo apt update`.
-  * Install the `venv` package for Python3 – `sudo apt install python3-venv`
-  * Create a directory where the virtual environment will be created and where the playbooks will be downloaded. For example, `mkdir ydb-install-ansible`.
-  * Go to the created directory and create a virtual environment – `python3 -m venv ydb-ansible`.
-  * Activate the virtual environment – `source venv/bin/activate`. All further actions with Ansible are performed inside the virtual environment. You can exit it with the command `deactivate`.
-  * Install the recommended version of Ansible using the command `pip install -r requirements.txt`, while in the root directory of the downloaded repository.
+  * Update the apt package list – `sudo apt-get update`.
+  * Install the `venv` package for Python3 – `sudo apt-get install python3-venv`
+  * Create a directory where the virtual environment will be created and where the playbooks will be downloaded. For example, `mkdir venv-ansible`.
+  * Create a Python virtual environment – `python3 -m venv venv-ansible`.
+  * Activate the virtual environment – `source venv-ansible/bin/activate`. All further actions with Ansible are performed inside the virtual environment. You can exit it with the command `deactivate`.
+  * Install the recommended version of Ansible using the command `pip3 install -r requirements.txt`, while in the root directory of the downloaded repository.
   * Check the Ansible core version – `ansible --version`
 
 {% endlist %}
@@ -189,7 +189,7 @@ To prepare your template, you can follow the instructions below:
 2. Specify the FQDNs of the servers in the file `TLS/ydb-ca-nodes.txt` and execute the script `ydb-ca-update.sh` to generate sets of TLS certificates.
 3. Change the template's inventory files according to the [instructions](#inventory-edit).
 4. Make changes to the {{ ydb-short-name }} configuration file according to the [instructions](#ydb-config-prepare).
-5. In the directory of the cloned template, execute the command `ansible-playbook setup_playbook.yaml`.
+5. In the directory of the cloned template, execute the command `ansible-playbook ydb_platform.ydb.initial_setup`.
 
 
 ## Installation script execution plan for {{ ydb-short-name }} {#ydb-playbook-run}
@@ -248,7 +248,7 @@ Command parameters and their values:
 * `config profile create` – This command is used to create a connection profile. You specify the profile name. More detailed information on how to create and modify profiles can be found in the article [{#T}](../../reference/ydb-cli/profile/create.md).
 * `-e` – Endpoint, a string in the format `protocol://host:port`. You can specify the FQDN of any cluster node and omit the port. By default, port 2135 is used.
 * `--ca-file` – Path to the root certificate for connections to the database using `grpcs`. The certificate is created by the `ydb-ca-update.sh` script in the `TLS` directory and is located at the path `TLS/CA/certs/` relative to the root of the `ydb-ansible-examples` repository.
-* `--user` – The user for connecting to the database. By default, the user `root` is created when executing the `setup_playbook.yaml` playbook.
+* `--user` – The user for connecting to the database. By default, the user `root` is created when executing the `ydb_platform.ydb.initial_setup` playbook.
 * `--password-file` – Path to the password file. In each folder with a YDB cluster deployment template, there is an `ansible_vault_password_file` that contains the password for the user `root`.
 
 You can check if the profile has been created using the command `./ydb config profile list`, which will display a list of profiles. After creating a profile, you need to activate it with the command `./ydb config profile activate <profile name>`. To verify that the profile has been activated, you can rerun the command `./ydb config profile list` – the active profile will have an (active) mark.

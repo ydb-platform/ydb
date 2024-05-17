@@ -1041,6 +1041,16 @@ void TBooleanFormula::Load(TStreamLoadContext& context)
     Impl_ = MakeGenericFormulaImpl(formula, EEvaluationContext::Boolean);
 }
 
+TString ToString(const TBooleanFormula& booleanFormula)
+{
+    return ToStringViaBuilder(booleanFormula);
+}
+
+void FormatValue(TStringBuilderBase* builder, const TBooleanFormula& booleanFormula, TStringBuf /*format*/)
+{
+    builder->AppendFormat("%v", booleanFormula.GetFormula());
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TTimeFormula::TTimeFormula() = default;

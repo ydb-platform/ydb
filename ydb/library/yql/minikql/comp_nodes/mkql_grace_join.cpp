@@ -566,6 +566,104 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
 
 }
 
+class TGraceJoinSpillingSupportState : public TComputationValue<TGraceJoinSpillingSupportState> {
+    using TBase = TComputationValue<TGraceJoinSpillingSupportState>;
+    enum class EOperatingMode {
+        InMemory,
+        Spilling,
+        ProcessSpilled
+    };
+public:
+
+    TGraceJoinSpillingSupportState(TMemoryUsageInfo* memInfo,
+        IComputationWideFlowNode* flowLeft, IComputationWideFlowNode* flowRight,
+        EJoinKind joinKind,  EAnyJoinSettings anyJoinSettings, const std::vector<ui32>& leftKeyColumns, const std::vector<ui32>& rightKeyColumns,
+        const std::vector<ui32>& leftRenames, const std::vector<ui32>& rightRenames,
+        const std::vector<TType*>& leftColumnsTypes, const std::vector<TType*>& rightColumnsTypes, const THolderFactory & holderFactory,
+        const bool isSelfJoin)
+    :  TBase(memInfo)
+    ,   FlowLeft(flowLeft)
+    ,   FlowRight(flowRight)
+    ,   JoinKind(joinKind)
+    ,   LeftKeyColumns(leftKeyColumns)
+    ,   RightKeyColumns(rightKeyColumns)
+    ,   LeftRenames(leftRenames)
+    ,   RightRenames(rightRenames)    ,   LeftPacker(std::make_unique<TGraceJoinPacker>(leftColumnsTypes, leftKeyColumns, holderFactory, (anyJoinSettings == EAnyJoinSettings::Left || anyJoinSettings == EAnyJoinSettings::Both)))
+    ,   RightPacker(std::make_unique<TGraceJoinPacker>(rightColumnsTypes, rightKeyColumns, holderFactory, (anyJoinSettings == EAnyJoinSettings::Right || anyJoinSettings == EAnyJoinSettings::Both)))
+    ,   JoinedTablePtr(std::make_unique<GraceJoin::TTable>())
+    ,   JoinCompleted(std::make_unique<bool>(false))
+    ,   PartialJoinCompleted(std::make_unique<bool>(false))
+    ,   HaveMoreLeftRows(std::make_unique<bool>(true))
+    ,   HaveMoreRightRows(std::make_unique<bool>(true))
+    ,   JoinedTuple(std::make_unique<std::vector<NUdf::TUnboxedValue*>>() )
+    ,   IsSelfJoin_(isSelfJoin)
+    ,   SelfJoinSameKeys_(isSelfJoin && (leftKeyColumns == rightKeyColumns))
+    {
+        if (JoinKind == EJoinKind::Full || JoinKind == EJoinKind::Exclusion || IsSelfJoin_) {
+            LeftPacker->BatchSize = std::numeric_limits<ui64>::max();
+            RightPacker->BatchSize = std::numeric_limits<ui64>::max();
+        }
+    }
+
+    EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
+        while (true) {
+            ui64 used = TlsAllocState->GetUsed();
+            ui64 limit = TlsAllocState->GetLimit();
+            std::cerr << std::format("[MISHA] MEM USAGE: {}/{}({}%), LEFT: {}, RIGHT: {}\n", used, limit, used * 100 / limit, LeftPacker->TablePtr->GetAllBucketsSize(), RightPacker->TablePtr->GetAllBucketsSize());
+            switch(GetMode()) {
+                case EOperatingMode::InMemory: {
+                    auto r = DoCalculateInMemory(ctx, output);
+                    if (GetMode() == EOperatingMode::InMemory) {
+                        return r;
+                    }
+                    break;
+                }
+                case EOperatingMode::Spilling: {
+                    DoCalculateWithSpilling(ctx);
+                    if (GetMode() == EOperatingMode::Spilling) {
+                        return EFetchResult::Yield;
+                    }
+                    break;
+                }
+                case EOperatingMode::ProcessSpilled: {
+                    return ProcessSpilledData(ctx, output);
+                }
+
+            }
+        }
+        Y_UNREACHABLE();
+    }
+
+private:
+    EOperatingMode GetMode() const {
+        return Mode;
+    }
+
+private:
+    EOperatingMode Mode = EOperatingMode::InMemory;
+
+    IComputationWideFlowNode* const FlowLeft;
+    IComputationWideFlowNode* const FlowRight;
+
+    const EJoinKind JoinKind;
+    const std::vector<ui32> LeftKeyColumns;
+    const std::vector<ui32> RightKeyColumns;
+    const std::vector<ui32> LeftRenames;
+    const std::vector<ui32> RightRenames;
+    const std::vector<TType *> LeftColumnsTypes;
+    const std::vector<TType *> RightColumnsTypes;
+    const std::unique_ptr<TGraceJoinPacker> LeftPacker;
+    const std::unique_ptr<TGraceJoinPacker> RightPacker;
+    const std::unique_ptr<GraceJoin::TTable> JoinedTablePtr;
+    const std::unique_ptr<bool> JoinCompleted;
+    const std::unique_ptr<bool> PartialJoinCompleted;
+    const std::unique_ptr<bool> HaveMoreLeftRows;
+    const std::unique_ptr<bool> HaveMoreRightRows;
+    const std::unique_ptr<std::vector<NUdf::TUnboxedValue*>> JoinedTuple;
+    const bool IsSelfJoin_;
+    const bool SelfJoinSameKeys_;
+};
+
 class TGraceJoinState : public TComputationValue<TGraceJoinState> {
 using TBase = TComputationValue<TGraceJoinState>;
 public:

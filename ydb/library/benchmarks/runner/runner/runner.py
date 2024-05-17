@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 import re
 import datetime
+import json
 
 try:
     from time import clock_gettime_ns, CLOCK_MONOTONIC
@@ -42,8 +43,15 @@ def main():
     assert len(argv)
     querydir = Path(qdir)
     os.makedirs(outdir + '/' + qdir, exist_ok=True)
-    with open(outdir + '/' + qdir + "/summary.tsv", "w") as outf:
+    with open(outdir + '/' + qdir + "/summary.tsv", "w") as outf, \
+         open(outdir + '/' + qdir + "/summary.json", "w") as outj:
         print(' '.join(argv + ['-p', qdir, '--bindings-file', bindings]), file=outf)
+        print(json.dumps({
+            'cmdline': argv,
+            'query_dir': qdir,
+            'bindings_file': bindings,
+            'version': 100
+        }), file=outj)
         for query in sorted(querydir.glob('**/*.sql'), key=lambda x: tuple(map(lambda y: int(y) if re.match(RE_DIGITS, y) else y, re.split(RE_DIGITS, str(x))))):
             q = str(query)
             print(q, end='\t', file=outf)
@@ -79,6 +87,23 @@ def main():
             # )
             print(file=outf)
             outf.flush()
+            print(json.dumps({
+                'q': q, 'exitcode': exitcode,
+                'elapsed': elapsed,
+                'rusage': {
+                    'utime': rusage.ru_utime,
+                    'stime': rusage.ru_stime,
+                    'maxrss': rusage.ru_maxrss,
+                    'minflt': rusage.ru_minflt,
+                    'majflt': rusage.ru_majflt,
+                    'inblock': rusage.ru_inblock,
+                    'oublock': rusage.ru_oublock,
+                    'nvcsw': rusage.ru_nvcsw,
+                    'nivcsw': rusage.ru_nivcsw,
+                    'nswap': rusage.ru_nswap,
+                }
+            }), file=outj)
+            outj.flush()
 
 
 if __name__ == "__main__":

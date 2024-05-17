@@ -86,6 +86,7 @@ def main():
                         assert ncols == len(refType[1][1]), 'Column number mismatch {} != {}'.format(ncols, len(refstypes))
                         nrows = len(valData)
                         assert nrows == len(refData), 'Row number mismatch {} != {}'.format(nrows, len(refData))
+                        mismatches = []
                         for col in range(ncols):
                             stype = stypes[col][1]
                             isOptional = False
@@ -99,21 +100,36 @@ def main():
                                 ref = refData[row][col]
                                 if isOptional:
                                     if ref is None:
-                                        assert val is None, 'NULL != NOT NULL at {}, {}'.format(row, col)
+                                        if val is not None:
+                                            mismatches += ['{} != NULL at {}, {}'.format(val, row, col)]
+                                        # assert val is None, '{} != NULL at {}, {}'.format(val, row, col)
                                         continue
-                                    assert val is not None, 'NOT NULL != NULL at {}, {}'.format(row, col)
+                                    # assert val is not None, 'NULL != {} at {}, {}'.format(ref, row, col)
+                                    if val is None:
+                                        mismatches += ['NULL != {} at {}, {}'.format(ref, row, col)]
+                                        continue
                                     ref = ref[0]
                                     val = val[0]
                                 if isDouble:
                                     val = float(val)
                                     ref = float(ref)
                                     if math.isnan(val):
-                                        assert math.isnan(ref), '{} != {} at {}, {}'.format(val, ref, row, col)
+                                        if not math.isnan(ref):
+                                            mismatches += ['{} != {} at {}, {}'.format(val, ref, row, col)]
+                                        # assert math.isnan(ref), '{} != {} at {}, {}'.format(val, ref, row, col)
                                         continue
-                                    assert not math.isnan(ref), '{} != {} at {}, {}'.format(val, ref, row, col)
-                                    assert abs(val - ref) <= 1e-5*max(abs(val), abs(ref), 1), 'abs({} - {}) >= eps at {}, {}'.format(val, ref, row, col)
+                                    # assert not math.isnan(ref), '{} != {} at {}, {}'.format(val, ref, row, col)
+                                    if math.isnan(ref):
+                                        mismatches += '{} != {} at {}, {}'.format(val, ref, row, col)
+                                        continue
+                                    # assert abs(val - ref) <= 1e-5*max(abs(val), abs(ref), 1), 'abs({} - {}) >= eps at {}, {}'.format(val, ref, row, col)
+                                    if abs(val - ref) > 1e-5*max(abs(val), abs(ref), 1):
+                                        mismatches += ['abs({} - {}) >= eps at {}, {}'.format(val, ref, row, col)]
                                 else:
-                                    assert val == ref, '{} != {} type {} at {}, {}'.format(val, ref, stypes[col][1][1], row, col)
+                                    if val != ref:
+                                        mismatches += ['{} != {} type {} at {}, {}'.format(val, ref, stypes[col][1][1], row, col)]
+                                    # assert val == ref, '{} != {} type {} at {}, {}'.format(val, ref, stypes[col][1][1], row, col)
+                        assert len(mismatches) == 0, str(mismatches)
                         print('<td class="ok">MATCH</td>')
                 except Exception:
                     print('<td class="errcode">Comparison failed: ', traceback.format_exc())

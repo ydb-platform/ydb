@@ -36,6 +36,7 @@ namespace NYql {
         TStage Stage;
 
         TString RemoteId;
+        THashMap<TString, TString> RemoteData;
 
         struct TCounters {
             ui64 Completed = 0ULL;

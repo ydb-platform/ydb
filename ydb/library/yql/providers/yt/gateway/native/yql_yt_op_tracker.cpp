@@ -98,7 +98,7 @@ TFuture<void> TOperationTracker::MakeOperationWaiter(const NYT::IOperationPtr& o
     auto filter = NYT::TOperationAttributeFilter();
     filter.Add(NYT::EOperationAttribute::State);
 
-    auto checker = [future, operation, ytServer, progress, progressWriter, filter] () mutable {
+    auto checker = [future, operation, ytServer, progress, progressWriter, filter, ytClusterName] () mutable {
         bool done = future.Wait(TDuration::Zero());
 
         if (!done) {
@@ -108,6 +108,7 @@ TFuture<void> TOperationTracker::MakeOperationWaiter(const NYT::IOperationPtr& o
                 if (!progress.RemoteId) {
                     progress.RemoteId = ytServer + "/" + GetGuidAsString(operation->GetId());
                 }
+                progress.RemoteData["cluster_name"] = ytClusterName;
                 if (auto briefProgress = operation->GetBriefProgress()) {
                     progress.Counters.ConstructInPlace();
                     progress.Counters->Completed = briefProgress->Completed;

@@ -78,7 +78,7 @@
   - inttypes.h:    contrib/libs/libx264/extras/inttypes.h
   - stdint.h:      contrib/libs/libx264/extras/stdint.h
 
-- source_filter: "^contrib/tools/bison"
+- source_filter: "^contrib/tools/(bison|m4)"
   includes:
   - alloca.h:      contrib/tools/bison/gnulib/platform/win64/alloca.h
   - getopt.h:      contrib/tools/bison/gnulib/platform/win64/getopt.h

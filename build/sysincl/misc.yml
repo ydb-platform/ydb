@@ -45,7 +45,7 @@
     - complex.h:     contrib/libs/libm/include/complex.h
     - math.h:        contrib/libs/libm/include/math.h
 
-- source_filter: "^contrib/tools/bison/"
+- source_filter: "^contrib/tools/(bison|m4)/"
   includes:
     - error.h:       contrib/tools/bison/gnulib/src/error.h
     - fcntl.h:       contrib/tools/bison/gnulib/platform/posix/fcntl.h

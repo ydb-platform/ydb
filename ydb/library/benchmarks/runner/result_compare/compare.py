@@ -114,7 +114,7 @@ def main():
                                 stype = stype[1]
                                 isOptional = True
                             assert stype[0] == b'DataType'
-                            isDouble = stype[1] == b'Double'
+                            isDouble = stype[1] == b'Double' or stype[1] == b'Decimal'
                             for row in range(nrows):
                                 val = valData[row][col]
                                 ref = refData[row][col]

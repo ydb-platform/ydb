@@ -2597,7 +2597,16 @@ void TServiceBase::DoConfigure(
 
         // Validate configuration.
         for (const auto& [methodName, _] : config->Methods) {
-            GetMethodInfoOrThrow(methodName);
+            auto* method = FindMethodInfo(methodName);
+
+            if (!method) {
+                // TODO(don-dron): Split service configs by realmid, for example for DataNodeService and ProxyDataNodeService.
+                YT_LOG_WARNING(
+                    "Method is not registered (Service:%v, RealmId:%v, Method: %v)",
+                    ServiceId_.ServiceName,
+                    ServiceId_.RealmId,
+                    methodName);
+            }
         }
 
         EnablePerUserProfiling_.store(config->EnablePerUserProfiling.value_or(configDefaults->EnablePerUserProfiling));

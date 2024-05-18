@@ -41,7 +41,7 @@ CREATE TABLE `fluent-bit/log` (
     `message`           Text NULL,
     `other`             JsonDocument NULL,
     PRIMARY KEY (
-         `timestamp`, `hostname`, `input`, `datahash`
+         `datahash`, `timestamp`, `hostname`, `input`
     )
 );
 ```
@@ -64,7 +64,10 @@ CREATE TABLE `fluent-bit/log` (
   WITH (STORE = COLUMN);
 ```
 
-The command that creates the columnar table differs in just two last lines, which specify the table's partitioning key and columnar storage type.
+The command that creates the columnar table differs in the following details:
+
+* it specifies the columnar storage type and the table's partitioning key in the last two lines;
+* the `timestamp` column is the first column of the primary key, which is optimal and recommended for columnar, but not for row-based tables. See the specific guidelines for choosing the primary key [for columnar tables](../dev/primary-key/column-oriented.md) and [for row-based tables](../dev/primary-key/row-oriented.md).
 
 [TTL configuration](../concepts/ttl.md) can be optionally applied to the table, limiting the data storage period and enabling the automatic removal of obsolete data. Enabling TTL requires an extra setting in the `WITH` section of the table creation command. For example, `TTL = Interval(P14D) ON timestamp` sets the storage period to 14 days, based on the `timestamp` field's value.
 
@@ -163,15 +166,15 @@ Columns purpose:
 * `file` – the name of the source from which the log was read. In the case of Kubernetes, this will be the name of the file on the worker node in which the logs of a specific pod are written;
 * `pipe` – stdout or stderr stream where application-level writing was done;
 * `datahash` – hash code computed over the log record;
-* `message` – the log message;
-* `message_parsed` – a structured log message, if it could be parsed using the fluent-bit parsers
-* `kubernetes` – information about the pod, including name, namespace, logs, and annotations.
+* `message` – the textual part of the log record;
+* `message_parsed` – log record fields in the structured form, if it could be parsed using the configured FluentBit parsers from the textual part;
+* `kubernetes` – information about the pod, including name, namespace, and annotations.
 
 Optionally, TTL can be configured for the table, as shown in the example.
 
 ### FluentBit configuration
 
-In order to deploy FluentBit in the Kubernetes environment, a configuration file with the log collection and processing parameters must be prepared (typical file name: `values.yaml`).
+In order to deploy FluentBit in the Kubernetes environment, a configuration file with the log collection and processing parameters must be prepared (typical file name: `values.yaml`). This section provides the necessary comments on this file's content with the examples.
 
 It is necessary to replace the repository and image version of the FluentBit container:
 

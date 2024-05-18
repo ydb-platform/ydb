@@ -94,7 +94,13 @@ namespace NKikimr {
                 ui64 wId, const TActorContext& ctx, const TActorId& hugeKeeperId, const TActorId& skeletonId,
                 const TPDiskCtxPtr& pdiskCtx, const TVDiskContextPtr& vctx) {
             Y_ABORT_UNLESS(recordLsn > LastDeletionLsn);
+            Y_ABORT_UNLESS(!removedHugeBlobs.Empty());
             LastDeletionLsn = recordLsn;
+            LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, vctx->VDiskLogPrefix
+                << "TDelayedCompactionDeleter: Update recordLsn# " << recordLsn << " removedHugeBlobs.size# "
+                << removedHugeBlobs.Size() << " CurrentSnapshots.size# " << CurrentSnapshots.size()
+                << " CurrentSnapshots.front# " << (CurrentSnapshots.empty() ? 0 : CurrentSnapshots.begin()->first)
+                << " CurrentSnapshots.back# " << (CurrentSnapshots.empty() ? 0 : (--CurrentSnapshots.end())->first));
             ReleaseQueue.emplace_back(recordLsn, std::move(removedHugeBlobs), std::move(chunksToForget), signature, wId);
             ProcessReleaseQueue(ctx, hugeKeeperId, skeletonId, pdiskCtx, vctx);
         }

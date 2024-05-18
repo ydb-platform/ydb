@@ -69,7 +69,7 @@ The command that creates the columnar table differs in the following details:
 * it specifies the columnar storage type and the table's partitioning key in the last two lines;
 * the `timestamp` column is the first column of the primary key, which is optimal and recommended for columnar, but not for row-based tables. See the specific guidelines for choosing the primary key [for columnar tables](../dev/primary-key/column-oriented.md) and [for row-based tables](../dev/primary-key/row-oriented.md).
 
-[TTL configuration](../concepts/ttl.md) can be optionally applied to the table, limiting the data storage period and enabling the automatic removal of obsolete data. Enabling TTL requires an extra setting in the `WITH` section of the table creation command. For example, `TTL = Interval(P14D) ON timestamp` sets the storage period to 14 days, based on the `timestamp` field's value.
+[TTL configuration](../concepts/ttl.md) can be optionally applied to the table, limiting the data storage period and enabling the automatic removal of obsolete data. Enabling TTL requires an extra setting in the `WITH` section of the table creation command. For example, `TTL = Interval("P14D") ON timestamp` sets the storage period to 14 days, based on the `timestamp` field's value.
 
 
 ## FluentBit deployment and configuration

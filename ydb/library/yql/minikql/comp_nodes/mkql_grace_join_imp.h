@@ -53,7 +53,6 @@ struct KeysHashTable {
 };
 
 struct TTableBucket {
-    ui64 TuplesNum = 0;  // Total number of tuples in bucket
     std::vector<ui64, TMKQLAllocator<ui64>> KeyIntVals;  // Vector to store table key values
     std::vector<ui64, TMKQLAllocator<ui64>> DataIntVals; // Vector to store data values in bucket
     std::vector<char, TMKQLAllocator<char>> StringsValues; // Vector to store data strings values
@@ -69,6 +68,12 @@ struct TTableBucket {
     std::set<ui32> AllRightMatchedIds; // All row ids of right join table which matching rows in left table. To process streaming join mode. 
     KeysHashTable AnyHashTable; // Hash table to process join only for unique keys (any join attribute)
 
+ };
+
+ struct TTableBucketStats {
+    ui64 TuplesNum = 0;             // Total number of tuples in bucket
+    ui64 StringValuesTotalSize = 0; // Total size of StringsValues. Used to correctly calculate StringsOffsets.
+    ui64 KeyIntValsTotalSize = 0;   // Total size of KeyIntVals. Used to correctly calculate StringsOffsets.
  };
 
 struct TupleData {
@@ -118,6 +123,8 @@ class TTable {
     
     // Table data is partitioned in buckets based on key value
     std::vector<TTableBucket> TableBuckets;
+    // Statistics for buckets. Total number of tuples inside a single bucket and offsets.
+    std::vector<TTableBucketStats> TableBucketsStats;
 
     // Temporary vector for tuples manipulation;
     std::vector<ui64> TempTuple;

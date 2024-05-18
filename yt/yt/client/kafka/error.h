@@ -1,0 +1,16 @@
+#pragma once
+
+#include "public.h"
+
+namespace NYT::NKafka {
+
+////////////////////////////////////////////////////////////////////////////////
+
+DEFINE_ENUM_WITH_UNDERLYING_TYPE(EErrorCode, int16_t,
+    ((None)                         (0))
+    ((UnsupportedSaslMechanism)     (33))
+);
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT::NKafka

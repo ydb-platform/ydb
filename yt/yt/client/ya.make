@@ -181,6 +181,10 @@ SRCS(
     zookeeper/packet.cpp
     zookeeper/protocol.cpp
     zookeeper/requests.cpp
+
+    kafka/packet.cpp
+    kafka/protocol.cpp
+    kafka/requests.cpp
 )
 
 SRCS(

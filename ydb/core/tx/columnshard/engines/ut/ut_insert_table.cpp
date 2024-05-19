@@ -1,8 +1,8 @@
 #include "helper.h"
-#include <ydb/core/tx/columnshard/engines/db_wrapper.h>
-#include <ydb/core/tx/columnshard/engines/insert_table/insert_table.h>
 
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/engines/db_wrapper.h>
+#include <ydb/core/tx/columnshard/engines/insert_table/insert_table.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/printf.h>
@@ -14,43 +14,62 @@ using namespace NKikimr::NOlap::NEngines::NTest;
 
 namespace {
 
-class TTestInsertTableDB: public IDbWrapper {
+class TTestInsertTableDB : public IDbWrapper {
 public:
-    void Insert(const TInsertedData&) override {}
-    void Commit(const TInsertedData&) override {}
-    void Abort(const TInsertedData&) override {}
-    void EraseInserted(const TInsertedData&) override {}
-    void EraseCommitted(const TInsertedData&) override {}
-    void EraseAborted(const TInsertedData&) override {}
+    void Insert(const TInsertedData&) override {
+    }
+    void Commit(const TInsertedData&) override {
+    }
+    void Abort(const TInsertedData&) override {
+    }
+    void EraseInserted(const TInsertedData&) override {
+    }
+    void EraseCommitted(const TInsertedData&) override {
+    }
+    void EraseAborted(const TInsertedData&) override {
+    }
 
-    bool Load(TInsertTableAccessor&,
-        const TInstant&) override {
+    virtual TConclusion<THashMap<ui64, std::map<TSnapshot, TGranuleShardingInfo>>> LoadGranulesShardingInfo() override {
+        THashMap<ui64, std::map<TSnapshot, TGranuleShardingInfo>> result;
+        return result;
+    }
+
+    bool Load(TInsertTableAccessor&, const TInstant&) override {
         return true;
     }
 
     virtual void WritePortion(const NOlap::TPortionInfo& /*portion*/) override {
-
     }
     virtual void ErasePortion(const NOlap::TPortionInfo& /*portion*/) override {
-
     }
     virtual bool LoadPortions(const std::function<void(NOlap::TPortionInfoConstructor&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& /*callback*/) override {
         return true;
     }
 
-    void WriteColumn(const TPortionInfo&, const TColumnRecord&, const ui32 /*firstPKColumnId*/) override {}
-    void EraseColumn(const TPortionInfo&, const TColumnRecord&) override {}
-    bool LoadColumns(const std::function<void(NOlap::TPortionInfoConstructor&&, const TColumnChunkLoadContext&)>&) override { return true; }
+    void WriteColumn(const TPortionInfo&, const TColumnRecord&, const ui32 /*firstPKColumnId*/) override {
+    }
+    void EraseColumn(const TPortionInfo&, const TColumnRecord&) override {
+    }
+    bool LoadColumns(const std::function<void(NOlap::TPortionInfoConstructor&&, const TColumnChunkLoadContext&)>&) override {
+        return true;
+    }
 
-    virtual void WriteIndex(const TPortionInfo& /*portion*/, const TIndexChunk& /*row*/) override {}
-    virtual void EraseIndex(const TPortionInfo& /*portion*/, const TIndexChunk& /*row*/) override {}
-    virtual bool LoadIndexes(const std::function<void(const ui64 /*pathId*/, const ui64 /*portionId*/, const TIndexChunkLoadContext&)>& /*callback*/) override { return true; }
+    virtual void WriteIndex(const TPortionInfo& /*portion*/, const TIndexChunk& /*row*/) override {
+    }
+    virtual void EraseIndex(const TPortionInfo& /*portion*/, const TIndexChunk& /*row*/) override {
+    }
+    virtual bool LoadIndexes(const std::function<void(const ui64 /*pathId*/, const ui64 /*portionId*/, const TIndexChunkLoadContext&)>& /*callback*/) override {
+        return true;
+    }
 
-    void WriteCounter(ui32, ui64) override {}
-    bool LoadCounters(const std::function<void(ui32 id, ui64 value)>&) override { return true; }
+    void WriteCounter(ui32, ui64) override {
+    }
+    bool LoadCounters(const std::function<void(ui32 id, ui64 value)>&) override {
+        return true;
+    }
 };
 
-}
+}   // namespace
 
 Y_UNIT_TEST_SUITE(TColumnEngineTestInsertTable) {
     Y_UNIT_TEST(TestInsertCommit) {
@@ -79,13 +98,15 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestInsertTable) {
         // read nothing
         auto blobs = insertTable.Read(tableId, TSnapshot::Zero(), nullptr);
         UNIT_ASSERT_EQUAL(blobs.size(), 0);
-        blobs = insertTable.Read(tableId+1, TSnapshot::Zero(), nullptr);
+        blobs = insertTable.Read(tableId + 1, TSnapshot::Zero(), nullptr);
         UNIT_ASSERT_EQUAL(blobs.size(), 0);
 
         // commit
         ui64 planStep = 100;
         ui64 txId = 42;
-        insertTable.Commit(dbTable, planStep, txId, {TWriteId{writeId}}, [](ui64){ return true; });
+        insertTable.Commit(dbTable, planStep, txId, {TWriteId{writeId}}, [](ui64) {
+            return true;
+        });
 
         UNIT_ASSERT_EQUAL(insertTable.GetPathPriorities().size(), 1);
         UNIT_ASSERT_EQUAL(insertTable.GetPathPriorities().begin()->second.size(), 1);
@@ -94,15 +115,15 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestInsertTable) {
         // read old snapshot
         blobs = insertTable.Read(tableId, TSnapshot::Zero(), nullptr);
         UNIT_ASSERT_EQUAL(blobs.size(), 0);
-        blobs = insertTable.Read(tableId+1, TSnapshot::Zero(), nullptr);
+        blobs = insertTable.Read(tableId + 1, TSnapshot::Zero(), nullptr);
         UNIT_ASSERT_EQUAL(blobs.size(), 0);
 
         // read new snapshot
         blobs = insertTable.Read(tableId, TSnapshot(planStep, txId), nullptr);
         UNIT_ASSERT_EQUAL(blobs.size(), 1);
-        blobs = insertTable.Read(tableId+1, TSnapshot::Zero(), nullptr);
+        blobs = insertTable.Read(tableId + 1, TSnapshot::Zero(), nullptr);
         UNIT_ASSERT_EQUAL(blobs.size(), 0);
     }
 }
 
-}
+}   // namespace NKikimr

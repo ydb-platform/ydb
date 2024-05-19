@@ -69,23 +69,16 @@ public:
 
     void Start();
 
-    void Cancel() {
+    void Cancel();
 
-    }
+    void AddPartitionSession(TPartitionSessionId id, TGeneration generation);
 
-    bool AddPartitionSession(TPartitionSessionId id, TGeneration generation) {
-        PartitionSessionGenerations[id] = generation;
-        return true;
-    }
-
-    // bool DeletePartitionSession(TPartitionStreamImpl<false>::TPtr partitionSession) {
-    //     PartitionSessions.erase(partitionSession->GetPartitionSessionId());
-    // }
+    void DeletePartitionSession(TPartitionSessionId id);
 
 private:
 
     bool Reconnect(
-        const TPlainStatus& status,
+        const TPlainStatus& status
         // [[maybe_unused]] TGeneration generation
     );
 

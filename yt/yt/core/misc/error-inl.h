@@ -128,6 +128,14 @@ TError TError::operator << (TValue&& rhs) const &
     return TError(*this) << std::forward<TValue>(rhs);
 }
 
+template <class... TArgs>
+void TError::ThrowOnError(TArgs&&... args) const
+{
+    if (!IsOK()) {
+        THROW_ERROR std::move(*this).Wrap(std::forward<TArgs>(args)...);
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>

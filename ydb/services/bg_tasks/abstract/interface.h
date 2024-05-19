@@ -381,6 +381,21 @@ public:
         Object->SerializeToProto(result);
         TOperatorPolicy::SetClassName(result, Object->GetClassName());
     }
+
+    TString SerializeToString() const {
+        return SerializeToProto().SerializeAsString();
+    }
+
+    TConclusionStatus DeserializeFromString(const TString& data) {
+        TProto proto;
+        if (!proto.ParseFromArray(data.data(), data.size())) {
+            return TConclusionStatus::Fail("cannot parse string as proto");
+        }
+        if (!DeserializeFromProto(proto)) {
+            return TConclusionStatus::Fail("cannot parse proto in container");
+        }
+        return TConclusionStatus::Success();
+    }
 };
 
 }

@@ -17,7 +17,22 @@ TVector<ISubOperation::TPtr> CreateAlterContinuousBackup(TOperationId opId, cons
     const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
     const auto& cbOp = tx.GetAlterContinuousBackup();
     const auto& tableName = cbOp.GetTableName();
-    const auto tablePath = workingDirPath.Child(tableName);
+
+    const auto checksResult = NCdc::DoAlterStreamPathChecks(opId, workingDirPath, tableName, NBackup::CB_CDC_STREAM_NAME);
+    if (std::holds_alternative<ISubOperation::TPtr>(checksResult)) {
+        return {std::get<ISubOperation::TPtr>(checksResult)};
+    }
+
+    const auto [tablePath, streamPath] = std::get<NCdc::TStreamPaths>(checksResult);
+
+    TString errStr;
+    if (!context.SS->CheckApplyIf(tx, errStr)) {
+        return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, errStr)};
+    }
+
+    if (!context.SS->CheckLocks(tablePath.Base()->PathId, tx, errStr)) {
+        return {CreateReject(opId, NKikimrScheme::StatusMultipleModifications, errStr)};
+    }
 
     NKikimrSchemeOp::TAlterCdcStream alterCdcStreamOp;
     alterCdcStreamOp.SetTableName(tableName);

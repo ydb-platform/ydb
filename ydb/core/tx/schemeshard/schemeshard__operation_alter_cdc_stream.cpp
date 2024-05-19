@@ -475,6 +475,51 @@ private:
 
 namespace NCdc {
 
+std::variant<TStreamPaths, ISubOperation::TPtr> DoAlterStreamPathChecks(
+    const TOperationId& opId,
+    const TPath& workingDirPath,
+    const TString& tableName,
+    const TString& streamName)
+{
+    const auto tablePath = workingDirPath.Child(tableName);
+    {
+        const auto checks = tablePath.Check();
+        checks
+            .NotEmpty()
+            .NotUnderDomainUpgrade()
+            .IsAtLocalSchemeShard()
+            .IsResolved()
+            .NotDeleted()
+            .IsTable()
+            .NotAsyncReplicaTable()
+            .IsCommonSensePath()
+            .NotUnderOperation();
+
+        if (!checks) {
+            return CreateReject(opId, checks.GetStatus(), checks.GetError());
+        }
+    }
+
+    const auto streamPath = tablePath.Child(streamName);
+    {
+        const auto checks = streamPath.Check();
+        checks
+            .NotEmpty()
+            .NotUnderDomainUpgrade()
+            .IsAtLocalSchemeShard()
+            .IsResolved()
+            .NotDeleted()
+            .IsCdcStream()
+            .NotUnderOperation();
+
+        if (!checks) {
+            return CreateReject(opId, checks.GetStatus(), checks.GetError());
+        }
+    }
+
+    return TStreamPaths{tablePath, streamPath};
+}
+
 void DoAlterStream(
     const NKikimrSchemeOp::TAlterCdcStream& op,
     const TOperationId& opId,
@@ -536,41 +581,12 @@ TVector<ISubOperation::TPtr> CreateAlterCdcStream(TOperationId opId, const TTxTr
 
     const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
 
-    const auto tablePath = workingDirPath.Child(tableName);
-    {
-        const auto checks = tablePath.Check();
-        checks
-            .NotEmpty()
-            .NotUnderDomainUpgrade()
-            .IsAtLocalSchemeShard()
-            .IsResolved()
-            .NotDeleted()
-            .IsTable()
-            .NotAsyncReplicaTable()
-            .IsCommonSensePath()
-            .NotUnderOperation();
-
-        if (!checks) {
-            return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
-        }
+    const auto checksResult = NCdc::DoAlterStreamPathChecks(opId, workingDirPath, tableName, streamName);
+    if (std::holds_alternative<ISubOperation::TPtr>(checksResult)) {
+        return {std::get<ISubOperation::TPtr>(checksResult)};
     }
 
-    const auto streamPath = tablePath.Child(streamName);
-    {
-        const auto checks = streamPath.Check();
-        checks
-            .NotEmpty()
-            .NotUnderDomainUpgrade()
-            .IsAtLocalSchemeShard()
-            .IsResolved()
-            .NotDeleted()
-            .IsCdcStream()
-            .NotUnderOperation();
-
-        if (!checks) {
-            return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
-        }
-    }
+    const auto [tablePath, streamPath] = std::get<NCdc::TStreamPaths>(checksResult);
 
     TString errStr;
     if (!context.SS->CheckApplyIf(tx, errStr)) {

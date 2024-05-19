@@ -1064,7 +1064,7 @@ public:
     using IProcessor = typename IReadSessionConnectionProcessorFactory<UseMigrationProtocol>::IProcessor;
 
     friend class TPartitionStreamImpl<UseMigrationProtocol>;
-    friend class TDirectReadConnection;
+    friend class TDirectReadSession;
 
     TSingleClusterReadSessionImpl(
         const TAReadSessionSettings<UseMigrationProtocol>& settings,
@@ -1318,7 +1318,7 @@ private:
     bool WaitingReadResponse = false;
     std::shared_ptr<TServerMessage<UseMigrationProtocol>> ServerMessage; // Server message to write server response to.
     THashMap<ui64, TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>>> PartitionStreams; // assignId -> Partition stream.
-    std::shared_ptr<TDirectReadConnectionManager> DirectReadConnectionManager; // Only for ydb_topic
+    std::shared_ptr<TDirectReadSessionManager> DirectReadConnectionManager; // Only for ydb_topic
     TPartitionCookieMapping CookieMapping;  // Only for ydb_persqueue?
     std::deque<TDecompressionQueueItem> DecompressionQueue;
     bool DataReadingSuspended = false;

@@ -12,7 +12,7 @@ namespace NPackedTuple {
 template<typename TTraits, ui32 Size> ui32 CalculateCRC32(const ui8 * data, ui32 initHash = 0) {
     static_assert(Size <= 16, "Size for template CRC32 calculation should be <= 16 !");
 
-    using TSimdI8 = TTraits::TSimdI8;
+    using TSimdI8 = typename TTraits::TSimdI8;
 
     ui32 hash = initHash;
 
@@ -107,7 +107,7 @@ template<typename TTraits, ui32 Size> ui32 CalculateCRC32(const ui8 * data, ui32
 template <typename TTraits>
 inline ui32 CalculateCRC32(const ui8 * data, ui32 size, ui32 hash = 0 ) {
 
-    using TSimdI8 = TTraits::TSimdI8;
+    using TSimdI8 = typename TTraits::TSimdI8;
 
     while (size >= 8) {
         hash = TSimdI8::CRC32u64(hash, ReadUnaligned<ui64>(data));

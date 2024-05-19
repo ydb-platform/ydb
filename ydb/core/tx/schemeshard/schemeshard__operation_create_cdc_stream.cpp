@@ -700,6 +700,26 @@ ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPat
 
 namespace NCdc {
 
+std::variant<TStreamPaths, ISubOperation::TPtr> DoNewStreamPathChecks(
+    const TOperationId& opId,
+    const TPath& workingDirPath,
+    const TString& tableName,
+    const TString& streamName,
+    bool acceptExisted)
+{
+    const auto tablePath = workingDirPath.Child(tableName);
+    if (auto reject = RejectOnTablePathChecks(opId, tablePath)) {
+        return reject;
+    }
+
+    const auto streamPath = tablePath.Child(streamName);
+    if (auto reject = RejectOnCdcChecks(opId, streamPath, acceptExisted)) {
+        return reject;
+    }
+
+    return TStreamPaths{tablePath, streamPath};
+}
+
 void DoCreateStream(const NKikimrSchemeOp::TCreateCdcStream& op, const TOperationId& opId, const TPath& workingDirPath, const TPath& tablePath,
     const bool acceptExisted, const bool initialScan, TVector<ISubOperation::TPtr>& result)
 {
@@ -816,15 +836,12 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
 
     const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
 
-    const auto tablePath = workingDirPath.Child(tableName);
-    if (auto reject = RejectOnTablePathChecks(opId, tablePath)) {
-        return {reject};
+    const auto checksResult = NCdc::DoNewStreamPathChecks(opId, workingDirPath, tableName, streamName, acceptExisted);
+    if (std::holds_alternative<ISubOperation::TPtr>(checksResult)) {
+        return {std::get<ISubOperation::TPtr>(checksResult)};
     }
 
-    const auto streamPath = tablePath.Child(streamName);
-    if (auto reject = RejectOnCdcChecks(opId, streamPath, acceptExisted)) {
-        return {reject};
-    }
+    const auto [tablePath, streamPath] = std::get<NCdc::TStreamPaths>(checksResult);
 
     switch (streamDesc.GetMode()) {
     case NKikimrSchemeOp::ECdcStreamModeKeysOnly:

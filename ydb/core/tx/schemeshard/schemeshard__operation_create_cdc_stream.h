@@ -9,6 +9,18 @@
 
 namespace NKikimr::NSchemeShard::NCdc {
 
+struct TStreamPaths {
+    TPath TablePath;
+    TPath StreamPath;
+};
+
+std::variant<TStreamPaths, ISubOperation::TPtr> DoNewStreamPathChecks(
+    const TOperationId& opId,
+    const TPath& workingDirPath,
+    const TString& tableName,
+    const TString& streamName,
+    bool acceptExisted);
+
 void DoCreateStream(
     const NKikimrSchemeOp::TCreateCdcStream& op,
     const TOperationId& opId,

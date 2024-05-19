@@ -473,6 +473,8 @@ private:
 
 } // anonymous
 
+namespace NCdc {
+
 void DoAlterStream(
     const NKikimrSchemeOp::TAlterCdcStream& op,
     const TOperationId& opId,
@@ -502,6 +504,8 @@ void DoAlterStream(
         result.push_back(CreateAlterCdcStreamAtTable(NextPartId(opId, result), outTx, op.HasGetReady()));
     }
 }
+
+} // namespace NCdc
 
 ISubOperation::TPtr CreateAlterCdcStreamImpl(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TAlterCdcStream>(id, tx);
@@ -579,7 +583,7 @@ TVector<ISubOperation::TPtr> CreateAlterCdcStream(TOperationId opId, const TTxTr
 
     TVector<ISubOperation::TPtr> result;
 
-    DoAlterStream(op, opId, workingDirPath, tablePath, result);
+    NCdc::DoAlterStream(op, opId, workingDirPath, tablePath, result);
 
     if (op.HasGetReady()) {
         auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropLock);

@@ -7,7 +7,7 @@
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
-namespace NKikimr::NSchemeShard {
+namespace NKikimr::NSchemeShard::NCdc {
 
 void DoDropStream(
     const NKikimrSchemeOp::TDropCdcStream& op,
@@ -19,4 +19,4 @@ void DoDropStream(
     TOperationContext& context,
     TVector<ISubOperation::TPtr>& result);
 
-} // namespace NKikimr::NSchemesShard
+} // namespace NKikimr::NSchemesShard::NCdc

@@ -4,14 +4,10 @@
 
 #include "schemeshard__operation_create_cdc_stream.h"
 
+#include <ydb/core/tx/schemeshard/backup/constants.h>
+
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
-
-namespace {
-
-constexpr static char const* cbCdcStreamName = "continuousBackupImpl";
-
-}
 
 namespace NKikimr::NSchemeShard {
 
@@ -27,13 +23,13 @@ TVector<ISubOperation::TPtr> CreateNewContinuousBackup(TOperationId opId, const 
     NKikimrSchemeOp::TCreateCdcStream createCdcStreamOp;
     createCdcStreamOp.SetTableName(tableName);
     auto& streamDescription = *createCdcStreamOp.MutableStreamDescription();
-    streamDescription.SetName(cbCdcStreamName);
+    streamDescription.SetName(NBackup::CB_CDC_STREAM_NAME);
     streamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
     streamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
 
     auto table = context.SS->Tables.at(tablePath.Base()->PathId);
 
-    const auto streamPath = tablePath.Child(cbCdcStreamName);
+    const auto streamPath = tablePath.Child(NBackup::CB_CDC_STREAM_NAME);
 
     TVector<TString> boundaries;
     const auto& partitions = table->GetPartitions();
@@ -48,8 +44,8 @@ TVector<ISubOperation::TPtr> CreateNewContinuousBackup(TOperationId opId, const 
 
     TVector<ISubOperation::TPtr> result;
 
-    DoCreateStream(createCdcStreamOp, opId, workingDirPath, tablePath, acceptExisted, false, result);
-    DoCreatePqPart(opId, streamPath, cbCdcStreamName, table, createCdcStreamOp, boundaries, acceptExisted, result);
+    NCdc::DoCreateStream(createCdcStreamOp, opId, workingDirPath, tablePath, acceptExisted, false, result);
+    NCdc::DoCreatePqPart(opId, streamPath, NBackup::CB_CDC_STREAM_NAME, table, createCdcStreamOp, boundaries, acceptExisted, result);
 
     return result;
 }

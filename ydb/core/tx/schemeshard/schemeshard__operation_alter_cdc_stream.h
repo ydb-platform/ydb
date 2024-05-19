@@ -7,7 +7,7 @@
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
-namespace NKikimr::NSchemeShard {
+namespace NKikimr::NSchemeShard::NCdc {
 
 void DoAlterStream(
     const NKikimrSchemeOp::TAlterCdcStream& op,
@@ -16,4 +16,4 @@ void DoAlterStream(
     const TPath& tablePath,
     TVector<ISubOperation::TPtr>& result);
 
-} // namespace NKikimr::NSchemesShard
+} // namespace NKikimr::NSchemesShard::NCdc

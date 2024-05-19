@@ -4,14 +4,10 @@
 
 #include "schemeshard__operation_alter_cdc_stream.h"
 
+#include <ydb/core/tx/schemeshard/backup/constants.h>
+
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
-
-namespace {
-
-constexpr static char const* cbCdcStreamName = "continuousBackupImpl";
-
-}
 
 namespace NKikimr::NSchemeShard {
 
@@ -25,12 +21,12 @@ TVector<ISubOperation::TPtr> CreateAlterContinuousBackup(TOperationId opId, cons
 
     NKikimrSchemeOp::TAlterCdcStream alterCdcStreamOp;
     alterCdcStreamOp.SetTableName(tableName);
-    alterCdcStreamOp.SetStreamName(cbCdcStreamName);
+    alterCdcStreamOp.SetStreamName(NBackup::CB_CDC_STREAM_NAME);
     alterCdcStreamOp.MutableDisable();
 
     TVector<ISubOperation::TPtr> result;
 
-    DoAlterStream(alterCdcStreamOp, opId, workingDirPath, tablePath, result);
+    NCdc::DoAlterStream(alterCdcStreamOp, opId, workingDirPath, tablePath, result);
 
     return result;
 }

@@ -698,6 +698,8 @@ ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPat
 
 } // anonymous
 
+namespace NCdc {
+
 void DoCreateStream(const NKikimrSchemeOp::TCreateCdcStream& op, const TOperationId& opId, const TPath& workingDirPath, const TPath& tablePath,
     const bool acceptExisted, const bool initialScan, TVector<ISubOperation::TPtr>& result)
 {
@@ -780,6 +782,8 @@ void DoCreatePqPart(const TOperationId& opId, const TPath& streamPath, const TSt
 
     result.push_back(CreateNewPQ(NextPartId(opId, result), outTx));
 }
+
+} // namespace NCdc
 
 ISubOperation::TPtr CreateNewCdcStreamImpl(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TNewCdcStream>(id, tx);
@@ -899,8 +903,8 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
         DoCreateLock(opId, workingDirPath, tablePath, result);
     }
 
-    DoCreateStream(op, opId, workingDirPath, tablePath, acceptExisted, initialScan, result);
-    DoCreatePqPart(opId, streamPath, streamName, table, op, boundaries, acceptExisted, result);
+    NCdc::DoCreateStream(op, opId, workingDirPath, tablePath, acceptExisted, initialScan, result);
+    NCdc::DoCreatePqPart(opId, streamPath, streamName, table, op, boundaries, acceptExisted, result);
 
     return result;
 }

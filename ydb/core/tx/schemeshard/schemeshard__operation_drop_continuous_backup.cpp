@@ -4,14 +4,10 @@
 
 #include "schemeshard__operation_drop_cdc_stream.h"
 
+#include <ydb/core/tx/schemeshard/backup/constants.h>
+
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
-
-namespace {
-
-constexpr static char const* cbCdcStreamName = "continuousBackupImpl";
-
-}
 
 namespace NKikimr::NSchemeShard {
 
@@ -25,13 +21,13 @@ TVector<ISubOperation::TPtr> CreateDropContinuousBackup(TOperationId opId, const
 
     NKikimrSchemeOp::TDropCdcStream dropCdcStreamOp;
     dropCdcStreamOp.SetTableName(tableName);
-    dropCdcStreamOp.SetStreamName(cbCdcStreamName);
+    dropCdcStreamOp.SetStreamName(NBackup::CB_CDC_STREAM_NAME);
 
-    const auto streamPath = tablePath.Child(cbCdcStreamName);
+    const auto streamPath = tablePath.Child(NBackup::CB_CDC_STREAM_NAME);
 
     TVector<ISubOperation::TPtr> result;
 
-    DoDropStream(dropCdcStreamOp, opId, workingDirPath, tablePath, streamPath, InvalidTxId, context, result);
+    NCdc::DoDropStream(dropCdcStreamOp, opId, workingDirPath, tablePath, streamPath, InvalidTxId, context, result);
 
     return result;
 }

@@ -266,6 +266,7 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/tx
     ydb/core/tx/datashard
+    ydb/core/tx/schemeshard/backup
     ydb/core/tx/schemeshard/common
     ydb/core/tx/schemeshard/olap
     ydb/core/tx/scheme_board

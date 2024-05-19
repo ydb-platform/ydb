@@ -435,6 +435,8 @@ private:
 
 } // anonymous
 
+namespace NCdc {
+
 void DoDropStream(
     const NKikimrSchemeOp::TDropCdcStream& op,
     const TOperationId& opId,
@@ -494,6 +496,8 @@ void DoDropStream(
         result.push_back(CreateDropPQ(NextPartId(opId, result), outTx));
     }
 }
+
+} // namespace NCdc
 
 ISubOperation::TPtr CreateDropCdcStreamImpl(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TDropCdcStream>(id, tx);
@@ -579,7 +583,7 @@ TVector<ISubOperation::TPtr> CreateDropCdcStream(TOperationId opId, const TTxTra
 
     TVector<ISubOperation::TPtr> result;
 
-    DoDropStream(op, opId, workingDirPath, tablePath, streamPath, lockTxId, context, result);
+    NCdc::DoDropStream(op, opId, workingDirPath, tablePath, streamPath, lockTxId, context, result);
 
     return result;
 }

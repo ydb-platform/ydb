@@ -852,25 +852,11 @@ message TDropCdcStream {
 }
 
 message TContinuousBackupDescription {
-    // optional string Name = 1;
-    // optional EContinuousBackupMode Mode = 2;
-    // optional EContinuousBackupFormat Format = 6;
-    optional bool VirtualTimestamps = 7;
-    optional NKikimrProto.TPathID PathId = 3;
-    // optional EContinuousBackupState State = 4;
-    optional uint64 SchemaVersion = 5;
-    repeated TUserAttribute UserAttributes = 8;
-    // AwsRegion used to mark records in DynamoDB-compatible mode (FormatDynamoDBStreamsJson)
-    optional string AwsRegion = 9;
-    // Set to '0' to disable resolved timestamps
-    optional uint64 ResolvedTimestampsIntervalMs = 10;
 }
 
 message TCreateContinuousBackup {
     optional string TableName = 1;
     optional TContinuousBackupDescription ContinuousBackupDescription = 2;
-    optional uint64 RetentionPeriodSeconds = 3 [default = 86400]; // 1d by default
-    optional uint32 TopicPartitions = 4;
 }
 
 message TAlterContinuousBackup {
@@ -1497,19 +1483,13 @@ enum EOperationType {
 
     ESchemeOpDropReplication = 96;
 
-    /// CDC
+    /// ContinuousBackup
     // Create
     ESchemeOpCreateContinuousBackup = 97;
-    ESchemeOpCreateContinuousBackupImpl = 98;
-    ESchemeOpCreateContinuousBackupAtTable = 99;
     // Alter
-    ESchemeOpAlterContinuousBackup = 100;
-    ESchemeOpAlterContinuousBackupImpl = 101;
-    ESchemeOpAlterContinuousBackupAtTable = 102;
+    ESchemeOpAlterContinuousBackup = 98;
     // Drop
-    ESchemeOpDropContinuousBackup = 103;
-    ESchemeOpDropContinuousBackupImpl = 104;
-    ESchemeOpDropContinuousBackupAtTable = 105;
+    ESchemeOpDropContinuousBackup = 99;
 }
 
 message TApplyIf {

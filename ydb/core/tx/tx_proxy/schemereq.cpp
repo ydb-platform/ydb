@@ -350,28 +350,10 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateContinuousBackup:
             return *modifyScheme.MutableCreateContinuousBackup()->MutableTableName();
 
-        case NKikimrSchemeOp::ESchemeOpCreateContinuousBackupImpl:
-            Y_ABORT("no implementation for ESchemeOpCreateContinuousBackupImpl");
-
-        case NKikimrSchemeOp::ESchemeOpCreateContinuousBackupAtTable:
-            return *modifyScheme.MutableCreateContinuousBackup()->MutableTableName();
-
         case NKikimrSchemeOp::ESchemeOpAlterContinuousBackup:
             return *modifyScheme.MutableAlterContinuousBackup()->MutableTableName();
 
-        case NKikimrSchemeOp::ESchemeOpAlterContinuousBackupImpl:
-            Y_ABORT("no implementation for ESchemeOpAlterContinuousBackupImpl");
-
-        case NKikimrSchemeOp::ESchemeOpAlterContinuousBackupAtTable:
-            return *modifyScheme.MutableAlterContinuousBackup()->MutableTableName();
-
         case NKikimrSchemeOp::ESchemeOpDropContinuousBackup:
-            return *modifyScheme.MutableDropContinuousBackup()->MutableTableName();
-
-        case NKikimrSchemeOp::ESchemeOpDropContinuousBackupImpl:
-            Y_ABORT("no implementation for ESchemeOpDropContinuousBackupImpl");
-
-        case NKikimrSchemeOp::ESchemeOpDropContinuousBackupAtTable:
             return *modifyScheme.MutableDropContinuousBackup()->MutableTableName();
         }
     }
@@ -814,12 +796,6 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpAlterCdcStreamAtTable:
         case NKikimrSchemeOp::ESchemeOpDropCdcStreamImpl:
         case NKikimrSchemeOp::ESchemeOpDropCdcStreamAtTable:
-        case NKikimrSchemeOp::ESchemeOpCreateContinuousBackupImpl:
-        case NKikimrSchemeOp::ESchemeOpCreateContinuousBackupAtTable:
-        case NKikimrSchemeOp::ESchemeOpAlterContinuousBackupImpl:
-        case NKikimrSchemeOp::ESchemeOpAlterContinuousBackupAtTable:
-        case NKikimrSchemeOp::ESchemeOpDropContinuousBackupImpl:
-        case NKikimrSchemeOp::ESchemeOpDropContinuousBackupAtTable:
         case NKikimrSchemeOp::ESchemeOpMoveTableIndex:
         case NKikimrSchemeOp::ESchemeOpAlterExtSubDomainCreateHive:
         case NKikimrSchemeOp::ESchemeOpAlterView:

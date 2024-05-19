@@ -234,16 +234,10 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "DROP VIEW";
     // continuous backup
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateContinuousBackup:
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateContinuousBackupImpl:
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateContinuousBackupAtTable:
         return "ALTER TABLE ADD CONTINUOUS BACKUP";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterContinuousBackup:
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterContinuousBackupImpl:
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterContinuousBackupAtTable:
         return "ALTER TABLE ALTER CONTINUOUS BACKUP";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropContinuousBackup:
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropContinuousBackupImpl:
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropContinuousBackupAtTable:
         return "ALTER TABLE DROP CONTINUOUS BACKUP";
     }
     Y_ABORT("switch should cover all operation types");
@@ -539,28 +533,10 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateContinuousBackup:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateContinuousBackup().GetTableName()}));
         break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateContinuousBackupImpl:
-        result.emplace_back(tx.GetWorkingDir());
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateContinuousBackupAtTable:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateContinuousBackup().GetTableName()}));
-        break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterContinuousBackup:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetAlterContinuousBackup().GetTableName()}));
         break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterContinuousBackupImpl:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterContinuousBackupAtTable:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetAlterContinuousBackup().GetTableName()}));
-        break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropContinuousBackup:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDropContinuousBackup().GetTableName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropContinuousBackupImpl:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropContinuousBackupAtTable:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDropContinuousBackup().GetTableName()}));
         break;
     }

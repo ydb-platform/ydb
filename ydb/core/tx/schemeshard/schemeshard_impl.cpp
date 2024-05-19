@@ -1487,12 +1487,6 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxAlterExternalDataSource:
     case TTxState::TxAlterView:
     case TTxState::TxAlterContinuousBackup:
-    case TTxState::TxAlterContinuousBackupAtTable:
-    case TTxState::TxAlterContinuousBackupAtTableDropSnapshot:
-    case TTxState::TxCreateContinuousBackupAtTable:
-    case TTxState::TxCreateContinuousBackupAtTableWithInitialScan:
-    case TTxState::TxDropContinuousBackupAtTable:
-    case TTxState::TxDropContinuousBackupAtTableDropSnapshot:
         return TPathElement::EPathState::EPathStateAlter;
     case TTxState::TxDropTable:
     case TTxState::TxDropPQGroup:

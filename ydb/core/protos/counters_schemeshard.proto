@@ -203,14 +203,8 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxDropReplication = 161         [(CounterOpts) = {Name: "InFlightOps/DropReplication"}];
 
     COUNTER_IN_FLIGHT_OPS_TxCreateContinuousBackup = 162          [(CounterOpts) = {Name: "InFlightOps/CreateContinuousBackup"}];
-    COUNTER_IN_FLIGHT_OPS_TxCreateContinuousBackupAtTable = 163   [(CounterOpts) = {Name: "InFlightOps/CreateContinuousBackupAtTable"}];
-    COUNTER_IN_FLIGHT_OPS_TxAlterContinuousBackup = 164          [(CounterOpts) = {Name: "InFlightOps/AlterContinuousBackup"}];
-    COUNTER_IN_FLIGHT_OPS_TxAlterContinuousBackupAtTable = 165   [(CounterOpts) = {Name: "InFlightOps/AlterContinuousBackupAtTable"}];
-    COUNTER_IN_FLIGHT_OPS_TxDropContinuousBackup = 166           [(CounterOpts) = {Name: "InFlightOps/DropContinuousBackup"}];
-    COUNTER_IN_FLIGHT_OPS_TxDropContinuousBackupAtTable = 167    [(CounterOpts) = {Name: "InFlightOps/DropContinuousBackupAtTable"}];
-    COUNTER_IN_FLIGHT_OPS_TxCreateContinuousBackupAtTableWithInitialScan = 168 [(CounterOpts) = {Name: "InFlightOps/CreateContinuousBackupAtTableWithInitialScan"}];
-    COUNTER_IN_FLIGHT_OPS_TxAlterContinuousBackupAtTableDropSnapshot = 169 [(CounterOpts) = {Name: "InFlightOps/AlterContinuousBackupAtTableDropSnapshot"}];
-    COUNTER_IN_FLIGHT_OPS_TxDropContinuousBackupAtTableDropSnapshot = 170 [(CounterOpts) = {Name: "InFlightOps/DropContinuousBackupAtTableDropSnapshot"}];
+    COUNTER_IN_FLIGHT_OPS_TxAlterContinuousBackup = 163          [(CounterOpts) = {Name: "InFlightOps/AlterContinuousBackup"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropContinuousBackup = 164           [(CounterOpts) = {Name: "InFlightOps/DropContinuousBackup"}];
 }
 
 enum ECumulativeCounters {
@@ -336,14 +330,8 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxDropReplication = 99           [(CounterOpts) = {Name: "FinishedOps/DropReplication"}];
 
     COUNTER_FINISHED_OPS_TxCreateContinuousBackup = 100           [(CounterOpts) = {Name: "FinishedOps/CreateContinuousBackup"}];
-    COUNTER_FINISHED_OPS_TxCreateContinuousBackupAtTable = 101    [(CounterOpts) = {Name: "FinishedOps/CreateContinuousBackupAtTable"}];
-    COUNTER_FINISHED_OPS_TxAlterContinuousBackup = 102            [(CounterOpts) = {Name: "FinishedOps/AlterContinuousBackup"}];
-    COUNTER_FINISHED_OPS_TxAlterContinuousBackupAtTable = 103     [(CounterOpts) = {Name: "FinishedOps/AlterContinuousBackupAtTable"}];
-    COUNTER_FINISHED_OPS_TxDropContinuousBackup = 104             [(CounterOpts) = {Name: "FinishedOps/DropContinuousBackup"}];
-    COUNTER_FINISHED_OPS_TxDropContinuousBackupAtTable = 105      [(CounterOpts) = {Name: "FinishedOps/DropContinuousBackupAtTable"}];
-    COUNTER_FINISHED_OPS_TxCreateContinuousBackupAtTableWithInitialScan = 106 [(CounterOpts) = {Name: "FinishedOps/CreateContinuousBackupAtTableWithInitialScan"}];
-    COUNTER_FINISHED_OPS_TxAlterContinuousBackupAtTableDropSnapshot = 107 [(CounterOpts) = {Name: "FinishedOps/AlterContinuousBackupAtTableDropSnapshot"}];
-    COUNTER_FINISHED_OPS_TxDropContinuousBackupAtTableDropSnapshot = 108 [(CounterOpts) = {Name: "FinishedOps/DropContinuousBackupAtTableDropSnapshot"}];
+    COUNTER_FINISHED_OPS_TxAlterContinuousBackup = 101            [(CounterOpts) = {Name: "FinishedOps/AlterContinuousBackup"}];
+    COUNTER_FINISHED_OPS_TxDropContinuousBackup = 102             [(CounterOpts) = {Name: "FinishedOps/DropContinuousBackup"}];
 }
 
 enum EPercentileCounters {

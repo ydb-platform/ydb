@@ -18,6 +18,7 @@ END()
 RECURSE(
     llvm14
     no_llvm
+    packed_tuple
 )
 
 RECURSE_FOR_TESTS(

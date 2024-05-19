@@ -66,6 +66,14 @@ void TDirectReadConnection::Start()  {
     }
 }
 
+void TDirectReadConnection::AddPartitionSession(TPartitionSessionId id, TGeneration generation) {
+    PartitionSessionGenerations[id] = generation;
+}
+
+void TDirectReadConnection::DeletePartitionSession(TPartitionSessionId id) {
+    PartitionSessionGenerations.erase(id);
+}
+
 void TDirectReadConnection::OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t connectionGeneration) {
     TPlainStatus errorStatus;
     if (!grpcStatus.Ok()) {

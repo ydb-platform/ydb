@@ -660,6 +660,35 @@ message TModuloShardingTablet {
     repeated uint32 AppropriateMods = 2;
 }
 
+message THashShardingInfo {
+    repeated string ColumnNames = 1;
+}
+
+message TGranuleConsistencyShardingInfo {
+    optional THashShardingInfo Hashing = 1;
+    optional TConsistencyShardingTablet ShardInfo = 2;
+}
+
+message TGranuleModuloShardingInfo {
+    optional THashShardingInfo Hashing = 1;
+    optional TModuloShardingTablet ShardInfo = 2;
+    optional uint64 ModuloPartsCount = 3;
+}
+
+message TGranuleShardingLogicContainer {
+    optional string ClassName = 1;
+    oneof Implementation {
+        TGranuleConsistencyShardingInfo Consistency = 20;
+        TGranuleModuloShardingInfo Modulo = 21;
+    }
+}
+
+message TGranuleShardingInfo {
+    optional uint64 PathId = 1;
+    optional uint64 VersionId = 2;
+    optional TGranuleShardingLogicContainer Container = 3;
+}
+
 message TColumnTableSharding {
     // Version is incremented each time table sharding is changed
     // This field is managed by the system.

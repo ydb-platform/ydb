@@ -276,6 +276,8 @@ private:
         return false;
     }
 
+    virtual std::shared_ptr<IGranuleShardingLogic> DoGetTabletShardingInfoOptional(const ui64 tabletId) const override;
+
     virtual TConclusionStatus DoOnBeforeModification() override {
         if (!SpecialShardingInfo) {
             AFL_VERIFY(!HasReadClosedShards() && !HasWriteClosedShards());
@@ -296,6 +298,13 @@ private:
 
     virtual TConclusionStatus DoOnAfterModification() override;
 
+    virtual std::set<ui64> DoGetModifiedShardIds(const NKikimrSchemeOp::TShardingModification& proto) const override {
+        std::set<ui64> result;
+        for (auto&& i : proto.GetConsistency().GetShards()) {
+            result.emplace(i.GetTabletId());
+        }
+        return result;
+    }
 public:
     using TBase::TBase;
 
@@ -307,6 +316,61 @@ public:
 
     virtual THashMap<ui64, std::vector<ui32>> MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch) const override;
 
+};
+
+class TGranuleSharding: public THashGranuleSharding {
+public:
+    static TString GetClassNameStatic() {
+        return "CONSISTENCY";
+    }
+private:
+    using TBase = THashGranuleSharding;
+    TSpecificShardingInfo::TConsistencyShardingTablet Interval;
+    static const inline TFactory::TRegistrator<TGranuleSharding> Registrator = TFactory::TRegistrator<TGranuleSharding>(GetClassNameStatic());
+protected:
+    virtual NArrow::TColumnFilter DoGetFilter(const std::shared_ptr<arrow::Table>& table) const override {
+        const std::vector<ui64> hashes = CalcHashes(table);
+        NArrow::TColumnFilter result = NArrow::TColumnFilter::BuildAllowFilter();
+        const auto getter = [&](const ui64 index) {
+            const ui64 hash = hashes[index];
+            return Interval.GetHashIntervalLeftClosed() <= hash && hash < Interval.GetHashIntervalRightOpened();
+        };
+        result.ResetWithLambda(hashes.size(), getter);
+        return result;
+
+    }
+    virtual void DoSerializeToProto(TProto& proto) const override {
+        *proto.MutableConsistency()->MutableHashing() = TBase::SerializeHashingToProto();
+        *proto.MutableConsistency()->MutableShardInfo() = Interval.SerializeToProto();
+    }
+    virtual TConclusionStatus DoDeserializeFromProto(const TProto& proto) override {
+        {
+            auto conclusion = TBase::DeserializeHashingFromProto(proto.GetConsistency().GetHashing());
+            if (conclusion.IsFail()) {
+                return conclusion;
+            }
+        }
+        {
+            auto conclusion = Interval.DeserializeFromProto(proto.GetConsistency().GetShardInfo());
+            if (conclusion.IsFail()) {
+                return conclusion;
+            }
+        }
+
+        return TConclusionStatus::Success();
+    }
+public:
+    TGranuleSharding() = default;
+
+    TGranuleSharding(const std::vector<TString>& columnNames, const TSpecificShardingInfo::TConsistencyShardingTablet& interval)
+        : TBase(columnNames)
+        , Interval(interval) {
+
+    }
+
+    virtual TString GetClassName() const override {
+        return GetClassNameStatic();
+    }
 };
 
 }

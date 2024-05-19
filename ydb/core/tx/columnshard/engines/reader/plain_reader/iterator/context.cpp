@@ -1,4 +1,5 @@
 #include "context.h"
+
 #include "source.h"
 
 namespace NKikimr::NOlap::NReader::NPlain {
@@ -24,7 +25,7 @@ ui64 TSpecialReadContext::GetMemoryForSources(const THashMap<ui32, std::shared_p
         result += ReadSequentiallyBufferSize;
     } else {
         if (!isExclusive && !CommonContext->IsReverse()) {
-            result = 2 * result; // due to in time we will have data in original portion + data in merged(or reversed) interval
+            result = 2 * result;   // due to in time we will have data in original portion + data in merged(or reversed) interval
         }
     }
     return result;
@@ -35,8 +36,16 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::GetColumnsFetchingPlan(con
     const bool partialUsageByPK = ReadMetadata->GetPKRangesFilter().IsPortionInPartialUsage(source->GetStartReplaceKey(), source->GetFinishReplaceKey(), ReadMetadata->GetIndexInfo());
     const bool useIndexes = (IndexChecker ? source->HasIndexes(IndexChecker->GetIndexIds()) : false);
     const bool isWholeExclusiveSource = source->GetExclusiveIntervalOnly() && source->IsSourceInMemory();
-    if (auto result = CacheFetchingScripts[needSnapshots ? 1 : 0][isWholeExclusiveSource ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0]) {
-//        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("SS", needSnapshots)("PK", partialUsageByPK)("IDX", useIndexes)("EXCL", source->GetExclusiveIntervalOnly())("MEM", source->IsSourceInMemory())("result", result->DebugString());
+    bool needShardingFilter = false;
+    if (!!ReadMetadata->GetRequestShardingInfo() && source->GetRecordSnapshotMin() <= ReadMetadata->GetRequestShardingInfo()->GetSinceSnapshot()) {
+        auto ver = source->GetShardingVersionOptional();
+        if (!ver || *ver < ReadMetadata->GetRequestShardingInfo()->GetSnapshotVersion()) {
+            needShardingFilter = true;
+        }
+    }
+    if (auto result = CacheFetchingScripts[needSnapshots ? 1 : 0][isWholeExclusiveSource ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0][needShardingFilter ? 1 : 0]) {
+//        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("SS", needSnapshots)("PK", partialUsageByPK)("IDX", useIndexes)("SHARDING", needShardingFilter)
+//            ("EXCL", source->GetExclusiveIntervalOnly())("MEM", source->IsSourceInMemory())("result", result->DebugString());
         return result;
     }
     {
@@ -47,28 +56,35 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::GetColumnsFetchingPlan(con
     }
 }
 
-std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(const bool needSnapshots, const bool exclusiveSource,
-    const bool partialUsageByPredicateExt, const bool useIndexes) const {
+std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(const bool needSnapshots, const bool exclusiveSource, const bool partialUsageByPredicateExt, const bool useIndexes,
+                                                                               const bool needFilterSharding) const {
     std::shared_ptr<TFetchingScript> result = std::make_shared<TFetchingScript>();
     const bool partialUsageByPredicate = partialUsageByPredicateExt && PredicateColumns->GetColumnsCount();
     if (!!IndexChecker && useIndexes && exclusiveSource) {
         result->AddStep(std::make_shared<TIndexBlobsFetchingStep>(std::make_shared<TIndexesSet>(IndexChecker->GetIndexIds())));
         result->AddStep(std::make_shared<TApplyIndexStep>(IndexChecker));
     }
+    bool hasFilterSharding = false;
+    if (needFilterSharding && !ShardingColumns->IsEmpty()) {
+        hasFilterSharding = true;
+        result->AddStep(std::make_shared<TColumnBlobsFetchingStep>(ShardingColumns));
+        result->AddStep(std::make_shared<TAssemblerStep>(ShardingColumns, "SPEC_SHARDING"));
+        result->AddStep(std::make_shared<TShardingFilter>());
+    }
     if (!EFColumns->GetColumnsCount() && !partialUsageByPredicate) {
         result->SetBranchName("simple");
-        TColumnsSet columnsFetch = *FFColumns;
+        TColumnsSet columnsFetch = *FFColumns - *ShardingColumns;
         if (needSnapshots) {
             columnsFetch = columnsFetch + *SpecColumns;
         }
         if (!exclusiveSource) {
             columnsFetch = columnsFetch + *PKColumns + *SpecColumns;
         } else {
-            if (columnsFetch.GetColumnsCount() == 1 && SpecColumns->Contains(columnsFetch)) {
+            if (columnsFetch.GetColumnsCount() == 1 && SpecColumns->Contains(columnsFetch) && !hasFilterSharding) {
                 return nullptr;
             }
         }
-        if (columnsFetch.GetColumnsCount()) {
+        if (columnsFetch.GetColumnsCount() || hasFilterSharding) {
             result->AddStep(std::make_shared<TColumnBlobsFetchingStep>(std::make_shared<TColumnsSet>(columnsFetch)));
             if (!exclusiveSource) {
                 result->AddStep(std::make_shared<TAssemblerStep>(std::make_shared<TColumnsSet>(*PKColumns + *SpecColumns), "LAST"));
@@ -84,7 +100,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
         }
     } else if (exclusiveSource) {
         result->SetBranchName("exclusive");
-        TColumnsSet columnsFetch = *EFColumns;
+        TColumnsSet columnsFetch = *EFColumns - *ShardingColumns;
         if (needSnapshots || FFColumns->Cross(*SpecColumns)) {
             columnsFetch = columnsFetch + *SpecColumns;
         }
@@ -120,7 +136,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
             result->AddStep(std::make_shared<TFilterProgramStep>(i));
         }
         AFL_VERIFY(columnsFetch.IsEmpty());
-        TColumnsSet columnsAdditionalFetch = *FFColumns - *EFColumns - *SpecColumns;
+        TColumnsSet columnsAdditionalFetch = *FFColumns - *EFColumns - *SpecColumns - *ShardingColumns;
         if (partialUsageByPredicate) {
             columnsAdditionalFetch = columnsAdditionalFetch - *PredicateColumns;
         }
@@ -130,7 +146,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
         }
     } else {
         result->SetBranchName("merge");
-        TColumnsSet columnsFetch = *MergeColumns + *EFColumns;
+        TColumnsSet columnsFetch = *MergeColumns + *EFColumns - *ShardingColumns;
         AFL_VERIFY(columnsFetch.GetColumnsCount());
         result->AddStep(std::make_shared<TColumnBlobsFetchingStep>(std::make_shared<TColumnsSet>(columnsFetch)));
         result->AddStep(std::make_shared<TAssemblerStep>(SpecColumns, "SPEC"));
@@ -158,7 +174,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
             result->AddStep(std::make_shared<TFilterProgramStep>(i));
         }
         AFL_VERIFY(columnsFetchEF.IsEmpty());
-        const TColumnsSet columnsAdditionalFetch = *FFColumns - *EFColumns - *SpecColumns - *PKColumns - *PredicateColumns;
+        const TColumnsSet columnsAdditionalFetch = *FFColumns - *EFColumns - *SpecColumns - *PKColumns - *PredicateColumns - *ShardingColumns;
         if (columnsAdditionalFetch.GetColumnsCount()) {
             result->AddStep(std::make_shared<TColumnBlobsFetchingStep>(std::make_shared<TColumnsSet>(columnsAdditionalFetch)));
             result->AddStep(std::make_shared<TOptionalAssemblerStep>(std::make_shared<TColumnsSet>(columnsAdditionalFetch), "LAST"));
@@ -168,8 +184,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
 }
 
 TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext)
-    : CommonContext(commonContext)
-{
+    : CommonContext(commonContext) {
     ReadMetadata = dynamic_pointer_cast<const TReadMetadata>(CommonContext->GetReadMetadata());
     Y_ABORT_UNLESS(ReadMetadata);
     Y_ABORT_UNLESS(ReadMetadata->SelectInfo);
@@ -184,6 +199,12 @@ TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& co
         } else {
             PredicateColumns = std::make_shared<TColumnsSet>();
         }
+    }
+    if (!!ReadMetadata->GetRequestShardingInfo()) {
+        auto shardingColumnIds = ReadMetadata->GetIndexInfo().GetColumnIdsVerified(ReadMetadata->GetRequestShardingInfo()->GetShardingInfo()->GetColumnNames());
+        ShardingColumns = std::make_shared<TColumnsSet>(shardingColumnIds, ReadMetadata->GetIndexInfo(), ReadMetadata->GetResultSchema());
+    } else {
+        ShardingColumns = std::make_shared<TColumnsSet>();
     }
     {
         auto efColumns = ReadMetadata->GetEarlyFilterColumnIds();
@@ -214,24 +235,14 @@ TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& co
     PKColumns = std::make_shared<TColumnsSet>(ReadMetadata->GetPKColumnIds(), ReadMetadata->GetIndexInfo(), readSchema);
     MergeColumns = std::make_shared<TColumnsSet>(*PKColumns + *SpecColumns);
 
+    const auto GetBit = [](const ui32 val, const ui32 pos) -> ui32 {
+        return (val & (1 << pos)) ? 1 : 0;
+    };
+
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("columns_context_info", DebugString());
-    CacheFetchingScripts[0][0][0][0] = BuildColumnsFetchingPlan(false, false, false, false);
-    CacheFetchingScripts[0][1][0][0] = BuildColumnsFetchingPlan(false, true, false, false);
-    CacheFetchingScripts[1][0][0][0] = BuildColumnsFetchingPlan(true, false, false, false);
-    CacheFetchingScripts[1][1][0][0] = BuildColumnsFetchingPlan(true, true, false, false);
-    CacheFetchingScripts[0][0][1][0] = BuildColumnsFetchingPlan(false, false, true, false);
-    CacheFetchingScripts[0][1][1][0] = BuildColumnsFetchingPlan(false, true, true, false);
-    CacheFetchingScripts[1][0][1][0] = BuildColumnsFetchingPlan(true, false, true, false);
-    CacheFetchingScripts[1][1][1][0] = BuildColumnsFetchingPlan(true, true, true, false);
-
-    CacheFetchingScripts[0][0][0][1] = BuildColumnsFetchingPlan(false, false, false, true);
-    CacheFetchingScripts[0][1][0][1] = BuildColumnsFetchingPlan(false, true, false, true);
-    CacheFetchingScripts[1][0][0][1] = BuildColumnsFetchingPlan(true, false, false, true);
-    CacheFetchingScripts[1][1][0][1] = BuildColumnsFetchingPlan(true, true, false, true);
-    CacheFetchingScripts[0][0][1][1] = BuildColumnsFetchingPlan(false, false, true, true);
-    CacheFetchingScripts[0][1][1][1] = BuildColumnsFetchingPlan(false, true, true, true);
-    CacheFetchingScripts[1][0][1][1] = BuildColumnsFetchingPlan(true, false, true, true);
-    CacheFetchingScripts[1][1][1][1] = BuildColumnsFetchingPlan(true, true, true, true);
+    for (ui32 i = 0; i < (1 << 6); ++i) {
+        CacheFetchingScripts[GetBit(i, 0)][GetBit(i, 1)][GetBit(i, 2)][GetBit(i, 3)][GetBit(i, 4)] = BuildColumnsFetchingPlan(GetBit(i, 0), GetBit(i, 1), GetBit(i, 2), GetBit(i, 3), GetBit(i, 4));
+    }
 }
 
-}
+}   // namespace NKikimr::NOlap::NReader::NPlain

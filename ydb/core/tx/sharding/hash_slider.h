@@ -19,12 +19,20 @@ private:
         proto.MutableHashSharding()->SetActiveShardsCount(NumActive);
     }
 
+    virtual std::shared_ptr<IGranuleShardingLogic> DoGetTabletShardingInfoOptional(const ui64 /*tabletId*/) const override {
+        return nullptr;
+    }
+
     virtual TConclusionStatus DoDeserializeFromProto(const NKikimrSchemeOp::TColumnTableSharding& proto) override;
     virtual TConclusionStatus DoOnAfterModification() override {
         return TConclusionStatus::Success();
     }
     virtual TConclusionStatus DoOnBeforeModification() override {
         return TConclusionStatus::Success();
+    }
+
+    virtual std::set<ui64> DoGetModifiedShardIds(const NKikimrSchemeOp::TShardingModification& /*proto*/) const override {
+        return {};
     }
 
     virtual TConclusionStatus DoApplyModification(const NKikimrSchemeOp::TShardingModification& /*proto*/) override {

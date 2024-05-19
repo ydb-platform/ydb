@@ -30,7 +30,7 @@ TConclusionStatus TInStoreShardingUpdate::DoInitialize(const TUpdateInitializati
     if (layoutConclusion.IsFail()) {
         return layoutConclusion;
     }
-    std::shared_ptr<NSharding::TShardingBase> sharding = inStoreTable.GetTableInfoPtrVerified()->GetShardingVerified(inStoreTable.GetTableSchemaVerified());
+    std::shared_ptr<NSharding::IShardingBase> sharding = inStoreTable.GetTableInfoPtrVerified()->GetShardingVerified(inStoreTable.GetTableSchemaVerified());
     TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> alters = sharding->BuildAddShardsModifiers(layoutConclusion->GetTabletIds());
     if (alters.IsFail()) {
         return alters;

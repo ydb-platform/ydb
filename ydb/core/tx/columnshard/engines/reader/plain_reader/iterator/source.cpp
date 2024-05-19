@@ -1,13 +1,15 @@
 #include "source.h"
-#include "interval.h"
-#include "fetched_data.h"
-#include "plain_read_data.h"
+
 #include "constructor.h"
+#include "fetched_data.h"
+#include "interval.h"
+#include "plain_read_data.h"
+
+#include <ydb/core/formats/arrow/simple_arrays_cache.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/blobs_reader/events.h>
-#include <ydb/core/tx/conveyor/usage/service.h>
-#include <ydb/core/formats/arrow/simple_arrays_cache.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <ydb/core/tx/conveyor/usage/service.h>
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
@@ -50,9 +52,8 @@ void IDataSource::OnInitResourcesGuard(const std::shared_ptr<IDataSource>& sourc
     }
 }
 
-void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds,
-    TBlobsAction& blobsAction, THashMap<TChunkAddress, ui32>& nullBlocks,
-    const std::shared_ptr<NArrow::TColumnFilter>& filter) {
+void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlobsAction& blobsAction,
+    THashMap<TChunkAddress, ui32>& nullBlocks, const std::shared_ptr<NArrow::TColumnFilter>& filter) {
     const NArrow::TColumnFilter& cFilter = filter ? *filter : NArrow::TColumnFilter::BuildAllowFilter();
     ui32 fetchedChunks = 0;
     ui32 nullChunks = 0;
@@ -78,7 +79,8 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds,
         }
         AFL_VERIFY(itFinished)("filter", itFilter.DebugString())("count", Portion->NumRows(i));
     }
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "chunks_stats")("fetch", fetchedChunks)("null", nullChunks)("reading_actions", blobsAction.GetStorageIds())("columns", columnIds.size());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "chunks_stats")("fetch", fetchedChunks)("null", nullChunks)
+        ("reading_actions", blobsAction.GetStorageIds())("columns", columnIds.size());
 }
 
 bool TPortionDataSource::DoStartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TColumnsSet>& columns) {
@@ -143,7 +145,7 @@ void TPortionDataSource::DoAbort() {
 void TPortionDataSource::DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexChecker) {
     THashMap<ui32, std::vector<TString>> indexBlobs;
     std::set<ui32> indexIds = indexChecker->GetIndexIds();
-//    NActors::TLogContextGuard gLog = NActors::TLogContextBuilder::Build()("records_count", GetRecordsCount())("portion_id", Portion->GetAddress().DebugString());
+    //    NActors::TLogContextGuard gLog = NActors::TLogContextBuilder::Build()("records_count", GetRecordsCount())("portion_id", Portion->GetAddress().DebugString());
     std::vector<TPortionInfo::TPage> pages = Portion->BuildPages();
     NArrow::TColumnFilter constructor = NArrow::TColumnFilter::BuildAllowFilter();
     for (auto&& p : pages) {
@@ -238,4 +240,4 @@ void TCommittedDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>&
     MutableStageData().SyncTableColumns(columns->GetSchema()->fields());
 }
 
-}
+}   // namespace NKikimr::NOlap::NReader::NPlain

@@ -54,7 +54,8 @@ struct Schema : NIceDb::Schema {
         BackupIdsDeprecated,
         ExportSessionsId,
         PortionsTableId,
-        BackgroundSessionsTableId
+        BackgroundSessionsTableId,
+        ShardingInfoTabletId
     };
 
     enum class ETierTables: ui32 {
@@ -470,6 +471,16 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<ClassName, Identifier, StatusChannel, LogicDescription, Progress, State>;
     };
 
+    struct ShardingInfo : Table<ShardingInfoTabletId> {
+        struct PathId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct VersionId : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct Snapshot : Column<3, NScheme::NTypeIds::String> {};
+        struct Logic : Column<4, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<PathId, VersionId>;
+        using TColumns = TableColumns<PathId, VersionId, Snapshot, Logic>;
+    };
+
     using TTables = SchemaTables<
         Value,
         TxInfo,
@@ -500,7 +511,8 @@ struct Schema : NIceDb::Schema {
         DestinationSessions,
         OperationTxIds,
         IndexPortions,
-        BackgroundSessions
+        BackgroundSessions,
+        ShardingInfo
         >;
 
     //

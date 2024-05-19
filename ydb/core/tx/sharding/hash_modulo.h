@@ -37,10 +37,11 @@ public:
     };
 private:
     bool IndexConstructed = false;
-    ui32 PartsCount = 0;
+    YDB_READONLY(ui32, PartsCount, 0);
     std::vector<TModuloShardingTablet> SpecialSharding;
     std::vector<TModuloShardingTablet*> ActiveWriteSpecialSharding;
     std::vector<TModuloShardingTablet*> ActiveReadSpecialSharding;
+
 public:
     TSpecificShardingInfo() = default;
     TSpecificShardingInfo(const std::vector<ui64>& shardIds)
@@ -232,10 +233,6 @@ public:
 private:
     std::optional<TSpecificShardingInfo> SpecialShardingInfo;
 
-    std::optional<ui32> PartsCount;
-    ui32 GetPartsCount() const {
-        return PartsCount.value_or(GetShardsCount());
-    }
     bool UpdateShardInfo(const TSpecificShardingInfo::TModuloShardingTablet& info) {
         AFL_VERIFY(SpecialShardingInfo);
         if (SpecialShardingInfo->UpdateShardInfo(info)) {
@@ -250,13 +247,14 @@ private:
         AFL_VERIFY(false);
         return false;
     }
+    virtual std::shared_ptr<IGranuleShardingLogic> DoGetTabletShardingInfoOptional(const ui64 tabletId) const override;
+
 protected:
     virtual TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> DoBuildSplitShardsModifiers(const std::vector<ui64>& newTabletIds) const override;
 
     virtual TConclusionStatus DoOnAfterModification() override;
     virtual TConclusionStatus DoOnBeforeModification() override {
         if (!SpecialShardingInfo) {
-            AFL_VERIFY(GetPartsCount() == GetShardsCount());
             SpecialShardingInfo = TSpecificShardingInfo(GetShardIds());
         }
         return TConclusionStatus::Success();
@@ -273,6 +271,14 @@ protected:
 
 
     virtual TConclusionStatus DoDeserializeFromProto(const NKikimrSchemeOp::TColumnTableSharding& proto) override;
+
+    virtual std::set<ui64> DoGetModifiedShardIds(const NKikimrSchemeOp::TShardingModification& proto) const override {
+        std::set<ui64> result;
+        for (auto&& i : proto.GetModulo().GetShards()) {
+            result.emplace(i.GetTabletId());
+        }
+        return result;
+    }
 public:
     using TBase::TBase;
 
@@ -283,6 +289,69 @@ public:
     {}
 
     virtual THashMap<ui64, std::vector<ui32>> MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch) const override;
+};
+
+class TGranuleSharding: public THashGranuleSharding {
+public:
+    static TString GetClassNameStatic() {
+        return "MODULO";
+    }
+private:
+    using TBase = THashGranuleSharding;
+    ui64 PartsCount = 0;
+    TSpecificShardingInfo::TModuloShardingTablet Interval;
+    static const inline TFactory::TRegistrator<TGranuleSharding> Registrator = TFactory::TRegistrator<TGranuleSharding>(GetClassNameStatic());
+
+protected:
+    virtual NArrow::TColumnFilter DoGetFilter(const std::shared_ptr<arrow::Table>& table) const override {
+        const std::vector<ui64> hashes = CalcHashes(table);
+        NArrow::TColumnFilter result = NArrow::TColumnFilter::BuildAllowFilter();
+        const auto getter = [&](const ui32 index) {
+            return Interval.GetAppropriateMods().contains(hashes[index] % PartsCount);
+        };
+        result.ResetWithLambda(hashes.size(), getter);
+        return result;
+
+    }
+    virtual void DoSerializeToProto(TProto& proto) const override {
+        AFL_VERIFY(PartsCount);
+        proto.MutableModulo()->SetModuloPartsCount(PartsCount);
+        *proto.MutableModulo()->MutableHashing() = TBase::SerializeHashingToProto();
+        *proto.MutableModulo()->MutableShardInfo() = Interval.SerializeToProto();
+    }
+    virtual TConclusionStatus DoDeserializeFromProto(const TProto& proto) override {
+        PartsCount = proto.GetModulo().GetModuloPartsCount();
+        if (!PartsCount) {
+            return TConclusionStatus::Fail("incorrect parts count for modulo info");
+        }
+        {
+            auto conclusion = TBase::DeserializeHashingFromProto(proto.GetModulo().GetHashing());
+            if (conclusion.IsFail()) {
+                return conclusion;
+            }
+        }
+        {
+            auto conclusion = Interval.DeserializeFromProto(proto.GetModulo().GetShardInfo());
+            if (conclusion.IsFail()) {
+                return conclusion;
+            }
+        }
+
+        return TConclusionStatus::Success();
+    }
+public:
+    TGranuleSharding() = default;
+
+    TGranuleSharding(const std::vector<TString>& columnNames, const TSpecificShardingInfo::TModuloShardingTablet& interval, const ui64 partsCount)
+        : TBase(columnNames)
+        , PartsCount(partsCount)
+        , Interval(interval) {
+        AFL_VERIFY(PartsCount);
+    }
+
+    virtual TString GetClassName() const override {
+        return GetClassNameStatic();
+    }
 };
 
 }

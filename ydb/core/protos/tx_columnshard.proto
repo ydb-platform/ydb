@@ -284,6 +284,8 @@ message TSchemaTxBody {
         TAlterTable AlterTable = 5;
         TAlterStore AlterStore = 6;
     }
+
+    optional NKikimrSchemeOp.TGranuleShardingInfo GranuleShardingInfo = 20;
 }
 
 message TTtlTxBody {

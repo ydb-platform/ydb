@@ -9,7 +9,7 @@
 
 namespace NKikimr::NSharding {
 
-TConclusionStatus TShardingBase::ValidateBehaviour(const NSchemeShard::TOlapSchema& schema, const NKikimrSchemeOp::TColumnTableSharding& shardingInfo) {
+TConclusionStatus IShardingBase::ValidateBehaviour(const NSchemeShard::TOlapSchema& schema, const NKikimrSchemeOp::TColumnTableSharding& shardingInfo) {
     auto copy = shardingInfo;
     if (copy.GetColumnShards().size() == 0) {
         copy.AddColumnShards(1);
@@ -21,11 +21,11 @@ TConclusionStatus TShardingBase::ValidateBehaviour(const NSchemeShard::TOlapSche
     return TConclusionStatus::Success();
 }
 
-TConclusion<std::unique_ptr<TShardingBase>> TShardingBase::BuildFromProto(const NSchemeShard::TOlapSchema* schema, const NKikimrSchemeOp::TColumnTableSharding& shardingProto) {
+TConclusion<std::unique_ptr<IShardingBase>> IShardingBase::BuildFromProto(const NSchemeShard::TOlapSchema* schema, const NKikimrSchemeOp::TColumnTableSharding& shardingProto) {
     if (!shardingProto.GetColumnShards().size()) {
         return TConclusionStatus::Fail("config is incorrect for construct sharding behaviour");
     }
-    std::unique_ptr<TShardingBase> result;
+    std::unique_ptr<IShardingBase> result;
     if (shardingProto.HasRandomSharding()) {
         result = std::make_unique<TRandomSharding>();
     } else if (shardingProto.HasHashSharding()) {
@@ -66,11 +66,11 @@ TConclusion<std::unique_ptr<TShardingBase>> TShardingBase::BuildFromProto(const 
     }
 }
 
-TString TShardingBase::DebugString() const {
+TString IShardingBase::DebugString() const {
     return "SHARDING";
 }
 
-NKikimr::TConclusionStatus TShardingBase::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSharding& proto) {
+NKikimr::TConclusionStatus IShardingBase::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSharding& proto) {
     std::set<ui64> shardIdsSetOriginal;
     {
         AFL_VERIFY(ShardIds.empty());
@@ -106,7 +106,7 @@ NKikimr::TConclusionStatus TShardingBase::DeserializeFromProto(const NKikimrSche
     return TConclusionStatus::Success();
 }
 
-NKikimr::TConclusionStatus TShardingBase::ApplyModification(const NKikimrSchemeOp::TShardingModification& proto) {
+NKikimr::TConclusionStatus IShardingBase::ApplyModification(const NKikimrSchemeOp::TShardingModification& proto) {
     {
         auto conclusion = OnBeforeModification();
         if (conclusion.IsFail()) {
@@ -158,7 +158,7 @@ NKikimr::TConclusionStatus TShardingBase::ApplyModification(const NKikimrSchemeO
     return TConclusionStatus::Success();
 }
 
-NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> TShardingBase::BuildAddShardsModifiers(const std::vector<ui64>& newTabletIds) const {
+NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> IShardingBase::BuildAddShardsModifiers(const std::vector<ui64>& newTabletIds) const {
     NKikimrSchemeOp::TShardingModification startModification;
     for (auto&& i : newTabletIds) {
         startModification.AddNewShardIds(i);
@@ -182,7 +182,7 @@ NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> TShardingBase::
     return result;
 }
 
-NKikimrSchemeOp::TColumnTableSharding TShardingBase::SerializeToProto() const {
+NKikimrSchemeOp::TColumnTableSharding IShardingBase::SerializeToProto() const {
     NKikimrSchemeOp::TColumnTableSharding result;
     result.SetVersion(1);
     AFL_VERIFY(ShardIds.size());
@@ -201,7 +201,7 @@ NKikimrSchemeOp::TColumnTableSharding TShardingBase::SerializeToProto() const {
     return result;
 }
 
-NKikimr::TConclusion<THashMap<ui64, std::vector<NKikimr::NArrow::TSerializedBatch>>> TShardingBase::SplitByShards(const std::shared_ptr<arrow::RecordBatch>& batch, const ui64 chunkBytesLimit) {
+NKikimr::TConclusion<THashMap<ui64, std::vector<NKikimr::NArrow::TSerializedBatch>>> IShardingBase::SplitByShards(const std::shared_ptr<arrow::RecordBatch>& batch, const ui64 chunkBytesLimit) {
     THashMap<ui64, std::vector<ui32>> sharding = MakeSharding(batch);
     THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> chunks;
     if (sharding.size() == 1) {

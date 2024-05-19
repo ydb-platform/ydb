@@ -38,6 +38,8 @@ private:
     TProgramContainer Program;
     std::shared_ptr<TVersionedIndex> IndexVersionsPointer;
     TSnapshot RequestSnapshot;
+    std::optional<TGranuleShardingInfo> RequestShardingInfo;
+
 protected:
     std::shared_ptr<ISnapshotSchema> ResultIndexSchema;
     const TVersionedIndex& GetIndexVersions() const {
@@ -46,6 +48,10 @@ protected:
     }
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadataBase>;
+
+    const std::optional<TGranuleShardingInfo>& GetRequestShardingInfo() const {
+        return RequestShardingInfo;
+    }
 
     void SetPKRangesFilter(const TPKRangesFilter& value) {
         Y_ABORT_UNLESS(IsSorted() && value.IsReverse() == IsDescSorted());
@@ -77,6 +83,11 @@ public:
             return GetIndexVersions().GetSchema(*version)->GetIndexInfo();
         }
         return ResultIndexSchema->GetIndexInfo();
+    }
+
+    void InitShardingInfo(const ui64 pathId) {
+        AFL_VERIFY(!RequestShardingInfo);
+        RequestShardingInfo = IndexVersionsPointer->GetShardingInfoOptional(pathId, RequestSnapshot);
     }
 
     TReadMetadataBase(const std::shared_ptr<TVersionedIndex> index, const ESorting sorting, const TProgramContainer& ssaProgram, const std::shared_ptr<ISnapshotSchema>& schema, const TSnapshot& requestSnapshot)

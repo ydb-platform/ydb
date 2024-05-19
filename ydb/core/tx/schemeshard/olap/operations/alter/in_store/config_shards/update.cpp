@@ -13,16 +13,21 @@ TConclusionStatus TInStoreShardsUpdate::DoInitializeImpl(const TUpdateInitializa
     AFL_VERIFY(Alter.HasModification());
 
     for (auto&& i : Alter.GetModification().GetNewShardIds()) {
-        ShardIds.emplace(i);
+        AFL_VERIFY(ShardIds.emplace(i).second);
+        AFL_VERIFY(NewShardIds.emplace(i).second);
     }
 
     auto tableInfo = original.GetTableInfoPtrVerified();
 
     auto description = tableInfo->Description;
 
-    auto sharding = tableInfo->GetShardingVerified(original.GetTableSchemaVerified());
-    sharding->ApplyModification(Alter.GetModification()).Validate();
-    *description.MutableSharding() = sharding->SerializeToProto();
+    Sharding = tableInfo->GetShardingVerified(original.GetTableSchemaVerified());
+    Sharding->ApplyModification(Alter.GetModification()).Validate();
+    *description.MutableSharding() = Sharding->SerializeToProto();
+    for (auto&& i : Sharding->GetModifiedShardIds(Alter.GetModification())) {
+        ShardIds.emplace(i);
+        AFL_VERIFY(ModifiedShardIds.emplace(i).second);
+    }
 
     auto targetInfo = std::make_shared<TColumnTableInfo>(tableInfo->AlterVersion + 1, std::move(description),
         TMaybe<NKikimrSchemeOp::TColumnStoreSharding>(), context.GetModification()->GetAlterColumnTable());

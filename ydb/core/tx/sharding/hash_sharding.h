@@ -4,9 +4,53 @@
 
 namespace NKikimr::NSharding {
 
-class THashShardingImpl: public TShardingBase {
+class THashGranuleSharding: public IGranuleShardingLogic {
 private:
-    using TBase = TShardingBase;
+    std::optional<NArrow::NHash::TXX64> HashCalcer;
+protected:
+    std::vector<ui64> CalcHashes(const std::shared_ptr<arrow::Table>& table) const {
+        AFL_VERIFY(!!HashCalcer);
+        return HashCalcer->ExecuteToVector(table);
+    }
+
+    virtual std::set<TString> DoGetColumnNames() const final {
+        AFL_VERIFY(!!HashCalcer);
+        auto columnsVector = HashCalcer->GetColumnNames();
+        return std::set<TString>(columnsVector.begin(), columnsVector.end());
+    }
+    NKikimrSchemeOp::THashShardingInfo SerializeHashingToProto() const {
+        NKikimrSchemeOp::THashShardingInfo proto;
+        AFL_VERIFY(!!HashCalcer);
+        for (auto&& i : HashCalcer->GetColumnNames()) {
+            proto.AddColumnNames(i);
+        }
+        return proto;
+    }
+    TConclusionStatus DeserializeHashingFromProto(const NKikimrSchemeOp::THashShardingInfo& proto) {
+        AFL_VERIFY(!HashCalcer);
+        if (proto.GetColumnNames().empty()) {
+            return TConclusionStatus::Fail("no column names for THashGranuleSharding in proto");
+        }
+        std::vector<TString> columnNames;
+        for (auto&& i : proto.GetColumnNames()) {
+            columnNames.emplace_back(i);
+        }
+        HashCalcer.emplace(columnNames, NArrow::NHash::TXX64::ENoColumnPolicy::Verify, 0);
+        return TConclusionStatus::Success();
+    }
+public:
+    THashGranuleSharding() = default;
+
+    THashGranuleSharding(const std::vector<TString>& columnNames)
+        : HashCalcer(NArrow::NHash::TXX64(columnNames, NArrow::NHash::TXX64::ENoColumnPolicy::Verify, 0))
+    {
+
+    }
+};
+
+class THashShardingImpl: public IShardingBase {
+private:
+    using TBase = IShardingBase;
     ui64 Seed = 0;
     std::optional<NArrow::NHash::TXX64> HashCalcer;
     YDB_READONLY_DEF(std::vector<TString>, ShardingColumns);

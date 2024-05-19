@@ -71,7 +71,7 @@ public:
             }
         }
         tableInfo->AlterVersion = 1;
-        auto shardingValidation = NSharding::TShardingBase::ValidateBehaviour(GetSchema(), tableInfo->Description.GetSharding());
+        auto shardingValidation = NSharding::IShardingBase::ValidateBehaviour(GetSchema(), tableInfo->Description.GetSharding());
         if (shardingValidation.IsFail()) {
             errors.AddError(shardingValidation.GetErrorMessage());
             return nullptr;
@@ -170,7 +170,7 @@ private:
         for (auto&& i : layoutConclusion->MutableTabletIds()) {
             description.MutableSharding()->AddColumnShards(i);
         }
-        auto shardingObject = NSharding::TShardingBase::BuildFromProto(GetSchema(), description.GetSharding());
+        auto shardingObject = NSharding::IShardingBase::BuildFromProto(GetSchema(), description.GetSharding());
         if (shardingObject.IsFail()) {
             return shardingObject;
         }

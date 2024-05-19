@@ -25,8 +25,8 @@ public:
         return PathIdFromPathId(Description.GetColumnStorePathId());
     }
 
-    std::shared_ptr<NSharding::TShardingBase> GetShardingVerified(const TOlapSchema& olapSchema) const {
-        return NSharding::TShardingBase::BuildFromProto(olapSchema, Description.GetSharding()).DetachResult();
+    std::shared_ptr<NSharding::IShardingBase> GetShardingVerified(const TOlapSchema& olapSchema) const {
+        return NSharding::IShardingBase::BuildFromProto(olapSchema, Description.GetSharding()).DetachResult();
     }
 
     std::set<ui64> GetShardIdsSet() const {

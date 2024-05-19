@@ -17,8 +17,8 @@ SRCS(
     hash.cpp
     unboxed_reader.cpp
     hash_slider.cpp
-    hash_modulo.cpp
-    hash_intervals.cpp
+    GLOBAL hash_modulo.cpp
+    GLOBAL hash_intervals.cpp
     random.cpp
 )
 

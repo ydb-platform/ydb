@@ -117,7 +117,7 @@ NKikimr::TConclusionStatus THashShardingModuloN::DoOnAfterModification() {
     }
 
     std::vector<ui64> shardIdsOrdered;
-    if (SpecialShardingInfo->CheckUnifiedDistribution(GetPartsCount(), shardIdsOrdered)) {
+    if (SpecialShardingInfo->CheckUnifiedDistribution(GetShardIds().size(), shardIdsOrdered)) {
         SetShardIds(shardIdsOrdered);
         SpecialShardingInfo.reset();
     }
@@ -145,6 +145,15 @@ NKikimr::TConclusionStatus THashShardingModuloN::DoDeserializeFromProto(const NK
         }
     }
     return TConclusionStatus::Success();
+}
+
+std::shared_ptr<NKikimr::NSharding::IGranuleShardingLogic> THashShardingModuloN::DoGetTabletShardingInfoOptional(const ui64 tabletId) const {
+    if (SpecialShardingInfo) {
+        return std::make_shared<TGranuleSharding>(GetShardingColumns(), SpecialShardingInfo->GetShardingTabletVerified(tabletId), SpecialShardingInfo->GetPartsCount());
+    } else {
+        TSpecificShardingInfo info(GetShardIds());
+        return std::make_shared<TGranuleSharding>(GetShardingColumns(), info.GetShardingTabletVerified(tabletId), info.GetPartsCount());
+    }
 }
 
 }

@@ -14,4 +14,16 @@ NKikimrColumnShardProto::TSnapshot TSnapshot::SerializeToProto() const {
     return result;
 }
 
+TConclusionStatus TSnapshot::DeserializeFromString(const TString& data) {
+    NKikimrColumnShardProto::TSnapshot proto;
+    if (!proto.ParseFromArray(data.data(), data.size())) {
+        return TConclusionStatus::Fail("cannot parse string as snapshot proto");
+    }
+    return DeserializeFromProto(proto);
+}
+
+TString TSnapshot::SerializeToString() const {
+    return SerializeToProto().SerializeAsString();
+}
+
 };

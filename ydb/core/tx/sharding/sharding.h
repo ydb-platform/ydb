@@ -5,13 +5,54 @@
 
 namespace NKikimrSchemeOp {
 class TColumnTableSharding;
+class TGranuleShardingLogicContainer;
 }
 
 namespace NKikimr::NSharding {
 
 struct TExternalTableColumn;
 
-class TShardingBase {
+class IGranuleShardingLogic {
+public:
+    using TProto = NKikimrSchemeOp::TGranuleShardingLogicContainer;
+    using TFactory = NObjectFactory::TObjectFactory<IGranuleShardingLogic, TString>;
+
+private:
+    virtual NArrow::TColumnFilter DoGetFilter(const std::shared_ptr<arrow::Table>& table) const = 0;
+    virtual std::set<TString> DoGetColumnNames() const = 0;
+    virtual void DoSerializeToProto(TProto& proto) const = 0;
+    virtual TConclusionStatus DoDeserializeFromProto(const TProto& proto) = 0;
+
+public:
+    IGranuleShardingLogic() = default;
+    virtual ~IGranuleShardingLogic() = default;
+
+    NArrow::TColumnFilter GetFilter(const std::shared_ptr<arrow::Table>& table) const {
+        return DoGetFilter(table);
+    }
+    std::set<TString> GetColumnNames() const {
+        return DoGetColumnNames();
+    }
+
+    virtual TString GetClassName() const = 0;
+
+    void SerializeToProto(TProto& proto) const {
+        DoSerializeToProto(proto);
+    }
+    TConclusionStatus DeserializeFromProto(const TProto& proto) {
+        return DoDeserializeFromProto(proto);
+    }
+};
+
+class TGranuleShardingLogicContainer: public NBackgroundTasks::TInterfaceProtoContainer<IGranuleShardingLogic> {
+private:
+    using TBase = NBackgroundTasks::TInterfaceProtoContainer<IGranuleShardingLogic>;
+    using TProto = IGranuleShardingLogic::TProto;
+public:
+    using TBase::TBase;
+};
+
+class IShardingBase {
 private:
     mutable std::vector<ui64> ShardIds;
     YDB_READONLY_DEF(std::set<ui64>, ClosedWritingShardIds);
@@ -44,13 +85,16 @@ protected:
     virtual void DoSerializeToProto(NKikimrSchemeOp::TColumnTableSharding& proto) const = 0;
     virtual TConclusionStatus DoDeserializeFromProto(const NKikimrSchemeOp::TColumnTableSharding& proto) = 0;
     virtual TConclusionStatus DoApplyModification(const NKikimrSchemeOp::TShardingModification& proto) = 0;
+    virtual std::set<ui64> DoGetModifiedShardIds(const NKikimrSchemeOp::TShardingModification& proto) const = 0;
     virtual TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> DoBuildSplitShardsModifiers(const std::vector<ui64>& newTabletIds) const = 0;
     virtual TConclusionStatus DoOnAfterModification() = 0;
     virtual TConclusionStatus DoOnBeforeModification() = 0;
+    virtual std::shared_ptr<IGranuleShardingLogic> DoGetTabletShardingInfoOptional(const ui64 tabletId) const = 0;
+
 public:
     using TColumn = TExternalTableColumn;
 public:
-    TShardingBase() = default;
+    IShardingBase() = default;
 
     TConclusionStatus OnAfterModification() {
         return DoOnAfterModification();
@@ -60,7 +104,17 @@ public:
         return DoOnBeforeModification();
     }
 
+    TGranuleShardingLogicContainer GetTabletShardingInfoOptional(const ui64 tabletId) const {
+        if (IsShardClosedForWrite(tabletId)) {
+            return TGranuleShardingLogicContainer();
+        }
+        return TGranuleShardingLogicContainer(DoGetTabletShardingInfoOptional(tabletId));
+    }
+
     TConclusionStatus ApplyModification(const NKikimrSchemeOp::TShardingModification& proto);
+    std::set<ui64> GetModifiedShardIds(const NKikimrSchemeOp::TShardingModification& proto) const {
+        return DoGetModifiedShardIds(proto);
+    }
 
     TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> BuildSplitShardsModifiers(const std::vector<ui64>& newTabletIds) const {
         return DoBuildSplitShardsModifiers(newTabletIds);
@@ -116,15 +170,15 @@ public:
     }
 
     static TConclusionStatus ValidateBehaviour(const NSchemeShard::TOlapSchema& schema, const NKikimrSchemeOp::TColumnTableSharding& shardingInfo);
-    static TConclusion<std::unique_ptr<TShardingBase>> BuildFromProto(const NSchemeShard::TOlapSchema& schema, const NKikimrSchemeOp::TColumnTableSharding& shardingInfo) {
+    static TConclusion<std::unique_ptr<IShardingBase>> BuildFromProto(const NSchemeShard::TOlapSchema& schema, const NKikimrSchemeOp::TColumnTableSharding& shardingInfo) {
         return BuildFromProto(&schema, shardingInfo);
     }
-    static TConclusion<std::unique_ptr<TShardingBase>> BuildFromProto(const NSchemeShard::TOlapSchema* schema, const NKikimrSchemeOp::TColumnTableSharding& shardingInfo);
-    static TConclusion<std::unique_ptr<TShardingBase>> BuildFromProto(const NKikimrSchemeOp::TColumnTableSharding& shardingInfo) {
+    static TConclusion<std::unique_ptr<IShardingBase>> BuildFromProto(const NSchemeShard::TOlapSchema* schema, const NKikimrSchemeOp::TColumnTableSharding& shardingInfo);
+    static TConclusion<std::unique_ptr<IShardingBase>> BuildFromProto(const NKikimrSchemeOp::TColumnTableSharding& shardingInfo) {
         return BuildFromProto(nullptr, shardingInfo);
     }
 
-    TShardingBase(const std::vector<ui64>& shardIds)
+    IShardingBase(const std::vector<ui64>& shardIds)
         : ShardIds(shardIds) {
 
     }
@@ -141,7 +195,7 @@ public:
 
     virtual TString DebugString() const;
 
-    virtual ~TShardingBase() = default;
+    virtual ~IShardingBase() = default;
 };
 
 }

@@ -154,6 +154,27 @@ public:
         Add(currentValue, sameValueCount);
     }
 
+    template <class TGetterLambda>
+    struct TAdapterLambda {
+    private:
+        TGetterLambda Getter;
+    public:
+        TAdapterLambda(const TGetterLambda& getter)
+            : Getter(getter)
+        {
+
+        }
+
+        bool operator[](const ui32 index) const {
+            return Getter(index);
+        }
+    };
+
+    template <class TGetterLambda>
+    void ResetWithLambda(const ui32 count, const TGetterLambda getter) {
+        return Reset(count, TAdapterLambda<TGetterLambda>(getter));
+    }
+
     ui32 Size() const {
         return Count;
     }

@@ -79,6 +79,10 @@ public:
         return TConclusionStatus::Success();
     }
 
+    TConclusionStatus DeserializeFromString(const TString& data);
+
+    TString SerializeToString() const;
+
     TString DebugString() const;
 };
 

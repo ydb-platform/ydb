@@ -128,4 +128,13 @@ THashMap<ui64, std::vector<ui32>> TConsistencySharding64::MakeSharding(const std
     }
 }
 
+std::shared_ptr<NKikimr::NSharding::IGranuleShardingLogic> TConsistencySharding64::DoGetTabletShardingInfoOptional(const ui64 tabletId) const {
+    if (SpecialShardingInfo) {
+        return std::make_shared<TGranuleSharding>(GetShardingColumns(), SpecialShardingInfo->GetShardingTabletVerified(tabletId));
+    } else {
+        TSpecificShardingInfo info(GetShardIds());
+        return std::make_shared<TGranuleSharding>(GetShardingColumns(), info.GetShardingTabletVerified(tabletId));
+    }
+}
+
 }

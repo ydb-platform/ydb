@@ -12,6 +12,9 @@ private:
     NKikimrSchemeOp::TAlterShards Alter;
     std::shared_ptr<TInStoreTable> TargetInStoreTable;
     std::set<ui64> ShardIds;
+    std::set<ui64> NewShardIds;
+    std::set<ui64> ModifiedShardIds;
+    std::shared_ptr<NSharding::IShardingBase> Sharding;
     virtual TConclusionStatus DoInitializeImpl(const TUpdateInitializationContext& context) override;
     void FillToShardTx(NKikimrTxColumnShard::TCreateTable& shardAlter) const;
 
@@ -22,14 +25,25 @@ private:
         return TargetInStoreTable;
     }
 
-    virtual TString DoGetShardTxBodyString(const ui64 /*tabletId*/, const TMessageSeqNo& seqNo) const override {
+    virtual TString DoGetShardTxBodyString(const ui64 tabletId, const TMessageSeqNo& seqNo) const override {
         NKikimrTxColumnShard::TSchemaTxBody result;
         result.MutableSeqNo()->SetGeneration(seqNo.Generation);
         result.MutableSeqNo()->SetRound(seqNo.Round);
-        auto& alter = *result.MutableEnsureTables();
-        auto& create = *alter.AddTables();
-        FillToShardTx(create);
-        create.SetPathId(TargetInStoreTable->GetPathId().LocalPathId);
+        AFL_VERIFY(NewShardIds.contains(tabletId) || ModifiedShardIds.contains(tabletId));
+        if (NewShardIds.contains(tabletId)) {
+            auto& alter = *result.MutableEnsureTables();
+            auto& create = *alter.AddTables();
+            FillToShardTx(create);
+            create.SetPathId(TargetInStoreTable->GetPathId().LocalPathId);
+        }
+        auto container = Sharding->GetTabletShardingInfoOptional(tabletId);
+        if (!!container) {
+            auto& shardingInfo = *result.MutableGranuleShardingInfo();
+            shardingInfo.SetPathId(TargetInStoreTable->GetPathId().LocalPathId);
+            shardingInfo.SetVersionId(TargetInStoreTable->GetTableInfoVerified().AlterVersion);
+            *shardingInfo.MutableContainer() = container.SerializeToProto();
+            AFL_VERIFY(ModifiedShardIds.contains(tabletId));
+        }
         return result.SerializeAsString();
     }
 

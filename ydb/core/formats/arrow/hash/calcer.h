@@ -61,16 +61,20 @@ public:
     TXX64(const std::vector<TString>& columnNames, const ENoColumnPolicy noColumnPolicy, const ui64 seed = 0);
     TXX64(const std::vector<std::string>& columnNames, const ENoColumnPolicy noColumnPolicy, const ui64 seed = 0);
 
+    const std::vector<TString>& GetColumnNames() const {
+        return ColumnNames;
+    }
+
     static void AppendField(const std::shared_ptr<arrow::Array>& array, const int row, NXX64::TStreamStringHashCalcer& hashCalcer);
     static void AppendField(const std::shared_ptr<arrow::Scalar>& scalar, NXX64::TStreamStringHashCalcer& hashCalcer);
     static ui64 CalcHash(const std::shared_ptr<arrow::Scalar>& scalar);
     std::optional<std::vector<ui64>> Execute(const std::shared_ptr<arrow::RecordBatch>& batch) const;
 
-    template <class TDataContainer>
-    std::shared_ptr<arrow::Array> ExecuteToArray(const std::shared_ptr<TDataContainer>& batch) const {
+    template <class TDataContainer, class TAcceptor>
+    [[nodiscard]] bool ExecuteToArrayImpl(const std::shared_ptr<TDataContainer>& batch, const TAcceptor& acceptor) const {
         std::vector<std::shared_ptr<typename NAdapter::TDataBuilderPolicy<TDataContainer>::TColumn>> columns = GetColumns(batch);
         if (columns.empty()) {
-            return nullptr;
+            return false;
         }
 
         std::vector<NAccessor::IChunkedArray::TReader> columnScanners;
@@ -79,9 +83,6 @@ public:
         }
 
 
-        auto builder = NArrow::MakeBuilder(arrow::TypeTraits<arrow::UInt64Type>::type_singleton());
-        auto& intBuilder = static_cast<arrow::UInt64Builder&>(*builder);
-        TStatusValidator::Validate(intBuilder.Reserve(batch->num_rows()));
         {
             NXX64::TStreamStringHashCalcer hashCalcer(Seed);
             for (int row = 0; row < batch->num_rows(); ++row) {
@@ -90,10 +91,40 @@ public:
                     auto address = column.GetReadChunk(row);
                     AppendField(address.GetArray(), address.GetPosition(), hashCalcer);
                 }
-                intBuilder.UnsafeAppend(hashCalcer.Finish());
+                acceptor(hashCalcer.Finish());
             }
         }
+        return true;
+    }
+
+    template <class TDataContainer>
+    std::shared_ptr<arrow::Array> ExecuteToArray(const std::shared_ptr<TDataContainer>& batch) const {
+        auto builder = NArrow::MakeBuilder(arrow::TypeTraits<arrow::UInt64Type>::type_singleton());
+        auto& intBuilder = static_cast<arrow::UInt64Builder&>(*builder);
+        TStatusValidator::Validate(intBuilder.Reserve(batch->num_rows()));
+
+        const auto acceptor = [&](const ui64 hash) {
+            intBuilder.UnsafeAppend(hash);
+        };
+
+        if (!ExecuteToArrayImpl(batch, acceptor)) {
+            return nullptr;
+        }
+
         return NArrow::TStatusValidator::GetValid(builder->Finish());
+    }
+
+    template <class TDataContainer>
+    std::vector<ui64> ExecuteToVector(const std::shared_ptr<TDataContainer>& batch) const {
+        std::vector<ui64> result;
+        result.reserve(batch->num_rows());
+
+        const auto acceptor = [&](const ui64 hash) {
+            result.emplace_back(hash);
+        };
+
+        AFL_VERIFY(ExecuteToArrayImpl(batch, acceptor));
+        return result;
     }
 
 };

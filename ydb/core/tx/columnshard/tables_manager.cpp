@@ -1,14 +1,15 @@
 #include "tables_manager.h"
+
 #include "columnshard_schema.h"
 #include "engines/column_engine_logs.h"
-#include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
+#include "transactions/transactions/tx_add_sharding_info.h"
+
 #include <ydb/core/scheme/scheme_types_proto.h>
-#include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
+#include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
+#include <ydb/core/tx/tiering/manager.h>
 
 #include <library/cpp/protobuf/json/proto2json.h>
-#include <ydb/core/tablet_flat/tablet_flat_executor.h>
-
 
 namespace NKikimr::NColumnShard {
 
@@ -293,6 +294,10 @@ void TTablesManager::AddSchemaVersion(const ui32 presetId, const NOlap::TSnapsho
     }
 }
 
+std::unique_ptr<NTabletFlatExecutor::ITransaction> TTablesManager::AddShardingInfoTx(TColumnShard& owner, const ui64 pathId, const ui64 versionId, const NSharding::TGranuleShardingLogicContainer& tabletShardingLogic) const {
+    return std::make_unique<TTxAddShardingInfo>(owner, tabletShardingLogic, pathId, versionId);
+}
+
 void TTablesManager::AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& version, const NKikimrTxColumnShard::TTableVersionInfo& versionInfo, NIceDb::TNiceDb& db, std::shared_ptr<TTiersManager>& manager) {
     auto it = Tables.find(pathId);
     AFL_VERIFY(it != Tables.end());
@@ -329,8 +334,7 @@ void TTablesManager::AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& 
 
 TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const ui64 tabletId)
     : StoragesManager(storagesManager)
-    , TabletId(tabletId)
-{
+    , TabletId(tabletId) {
 }
 
 bool TTablesManager::TryFinalizeDropPathOnExecute(NTable::TDatabase& dbTable, const ui64 pathId) const {
@@ -358,4 +362,4 @@ bool TTablesManager::TryFinalizeDropPathOnComplete(const ui64 pathId) {
     return true;
 }
 
-}
+}   // namespace NKikimr::NColumnShard

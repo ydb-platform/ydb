@@ -3,12 +3,16 @@
 
 namespace NKikimr::NSharding {
 
-class TRandomSharding: public TShardingBase {
+class TRandomSharding: public IShardingBase {
 private:
-    using TBase = TShardingBase;
+    using TBase = IShardingBase;
 protected:
     virtual TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> DoBuildSplitShardsModifiers(const std::vector<ui64>& /*newTabletIds*/) const override {
         return TConclusionStatus::Fail("cannot split shards for random sharding");
+    }
+
+    virtual std::shared_ptr<IGranuleShardingLogic> DoGetTabletShardingInfoOptional(const ui64 /*tabletId*/) const override {
+        return nullptr;
     }
 
     virtual TConclusionStatus DoOnAfterModification() override {
@@ -16,6 +20,10 @@ protected:
     }
     virtual TConclusionStatus DoOnBeforeModification() override {
         return TConclusionStatus::Success();
+    }
+
+    virtual std::set<ui64> DoGetModifiedShardIds(const NKikimrSchemeOp::TShardingModification& /*proto*/) const override {
+        return {};
     }
 
     virtual TConclusionStatus DoApplyModification(const NKikimrSchemeOp::TShardingModification& /*proto*/) override {

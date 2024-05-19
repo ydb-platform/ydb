@@ -3,34 +3,19 @@
 #include "common.h"
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/include/read_session.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/include/read_session.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/common/callback_context.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/common/log_lazy.h>
-#define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>
-#undef INCLUDE_YDB_INTERNAL_H
-
-#include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
-#include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
-
-#include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
-
-#include <util/digest/numeric.h>
-#include <util/generic/hash.h>
-#include <util/generic/hash_multi_map.h>
-#include <util/generic/guid.h>
-#include <util/generic/size_literals.h>
-#include <util/generic/utility.h>
-#include <util/generic/yexception.h>
-#include <util/stream/mem.h>
-#include <util/system/env.h>
-#include <util/system/condvar.h>
-
-#include <google/protobuf/util/time_util.h>
-
+namespace Ydb::Topic {
+    class UpdateTokenResponse;
+    class StreamDirectReadMessage;
+    class StreamDirectReadMessage_FromServer;
+    class StreamDirectReadMessage_FromClient;
+    class StreamDirectReadMessage_InitDirectReadResponse;
+    class StreamDirectReadMessage_StartDirectReadPartitionSessionResponse;
+    class StreamDirectReadMessage_DirectReadResponse;
+    class StreamDirectReadMessage_StopDirectReadPartitionSession;
+}
 
 namespace NYdb::NTopic {
 
@@ -41,59 +26,67 @@ template <bool UseMigrationProtocol>
 class TSingleClusterReadSessionImpl;
 
 template <bool UseMigrationProtocol>
-using TCallbackContextPtr = std::shared_ptr<TCallbackContext<TSingleClusterReadSessionImpl<UseMigrationProtocol>>>;
+using TSingleClusterReadSessionPtr = std::shared_ptr<TCallbackContext<TSingleClusterReadSessionImpl<UseMigrationProtocol>>>;
 
 using TNodeId = i32;
 using TGeneration = i64;
 using TPartitionSessionId = ui64;
+using TServerSessionId = TString;
 
-using TDirectReadServerMessage = Ydb::Topic::StreamDirectReadMessage::FromServer;
-using TDirectReadClientMessage = Ydb::Topic::StreamDirectReadMessage::FromClient;
+using TDirectReadServerMessage = Ydb::Topic::StreamDirectReadMessage_FromServer;
+using TDirectReadClientMessage = Ydb::Topic::StreamDirectReadMessage_FromClient;
 using IDirectReadConnectionFactory = ISessionConnectionProcessorFactory<TDirectReadClientMessage, TDirectReadServerMessage>;
 using IDirectReadConnectionFactoryPtr = std::shared_ptr<IDirectReadConnectionFactory>;
 using IDirectReadConnection = IDirectReadConnectionFactory::IProcessor;
+class TDirectReadSession;
+using TDirectReadSessionPtr = std::shared_ptr<TCallbackContext<TDirectReadSession>>;
 
-class TDirectReadConnection : public TEnableSelfContext<TDirectReadConnection> {
+struct TDirectPartitionSession {
+    TPartitionSessionId Id;
+    TGeneration Generation;
+    IRetryPolicy::IRetryState::TPtr RetryState = {};
+
+    // min read id, partition id, done read id?
+};
+
+class TDirectReadSession : public TEnableSelfContext<TDirectReadSession> {
 public:
-    using TSelf = TDirectReadConnection;
+    using TSelf = TDirectReadSession;
     using TPtr = std::shared_ptr<TSelf>;
 
-    TDirectReadConnection(
+    TDirectReadSession(
         TString serverSessionId,
         const NYdb::NTopic::TReadSessionSettings settings,
-        TCallbackContextPtr<false> singleClusterReadSession,
+        TSingleClusterReadSessionPtr<false> singleClusterReadSession,
         NYdbGrpc::IQueueClientContextPtr clientContext,
         IDirectReadConnectionFactoryPtr connectionFactory,
-        TNodeId nodeId
+        TNodeId node
     );
 
     void Start();
-
     void Cancel();
-
-    void AddPartitionSession(TPartitionSessionId id, TGeneration generation);
-
-    void DeletePartitionSession(TPartitionSessionId id);
+    void AddPartitionSession(TDirectPartitionSession&&);
+    void DeletePartitionSession(TPartitionSessionId);
+    bool Empty() const;
 
 private:
 
     bool Reconnect(
         const TPlainStatus& status
-        // [[maybe_unused]] TGeneration generation
+        // TGeneration generation
     );
 
-    void InitImpl(TDeferredActions<false>& deferred);
+    void InitImpl(TDeferredActions<false>&);
 
     void WriteToProcessorImpl(TDirectReadClientMessage&& req);
-    void ReadFromProcessorImpl(TDeferredActions<false>& deferred);
-    void OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t connectionGeneration);
+    void ReadFromProcessorImpl(TDeferredActions<false>&);
+    void OnReadDone(NYdbGrpc::TGrpcStatus&&, size_t connectionGeneration);
 
-    void OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::InitDirectReadResponse&& msg, TDeferredActions<false>& deferred);
-    void OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::StartDirectReadPartitionSessionResponse&& msg, TDeferredActions<false>& deferred);
-    void OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&& msg, TDeferredActions<false>& deferred);
-    void OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::StopDirectReadPartitionSession&& msg, TDeferredActions<false>& deferred);
-    void OnReadDoneImpl(Ydb::Topic::UpdateTokenResponse&& msg, TDeferredActions<false>& deferred);
-
+    void OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage_InitDirectReadResponse&&, TDeferredActions<false>&);
+    void OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage_StartDirectReadPartitionSessionResponse&&, TDeferredActions<false>&);
+    void OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage_DirectReadResponse&&, TDeferredActions<false>&);
+    void OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage_StopDirectReadPartitionSession&&, TDeferredActions<false>&);
+    void OnReadDoneImpl(Ydb::Topic::UpdateTokenResponse&&, TDeferredActions<false>&);
 
     void OnConnect(
         TPlainStatus&& st,
@@ -125,55 +118,49 @@ private:
     size_t ConnectionGeneration = 0;
 
     const NYdb::NTopic::TReadSessionSettings ReadSessionSettings;
-    TCallbackContextPtr<false> SingleClusterReadSession;
-    TString ServerSessionId;
+    TSingleClusterReadSessionPtr<false> SingleClusterReadSession;
+    TServerSessionId ServerSessionId;
     IDirectReadConnection::TPtr Connection;
     IDirectReadConnectionFactoryPtr ConnectionFactory;
     std::shared_ptr<TDirectReadServerMessage> ServerMessage;
 
     // PartitionSessionId/AssignId -> TPartitionSessionImpl
     // THashMap<TPartitionSessionId, TPartitionStreamImpl<false>::TPtr> PartitionSessions;
-    THashMap<TPartitionSessionId, TGeneration> PartitionSessionGenerations;
+    THashMap<TPartitionSessionId, TDirectPartitionSession> PartitionSessions;
 
     EState State;
-    [[maybe_unused]] TNodeId NodeId;
+    TNodeId NodeId;
 };
 
-class TDirectReadConnectionManager {
+
+class TDirectReadSessionManager {
 public:
-    TDirectReadConnectionManager(
-        const NYdb::NTopic::TReadSessionSettings settings,
-        TCallbackContextPtr<false> singleClusterReadSession,
+    TDirectReadSessionManager(
+        const NYdb::NTopic::TReadSessionSettings,
+        TSingleClusterReadSessionPtr<false> singleClusterReadSession,
         NYdbGrpc::IQueueClientContextPtr clientContext,
         IDirectReadConnectionFactoryPtr connectionFactory
-    )
-        : ReadSessionSettings(settings)
-        , SingleClusterReadSession(singleClusterReadSession)
-        , ClientContext(clientContext)
-        , ConnectionFactory(connectionFactory)
-        {}
+    );
 
-    void StartPartitionSession(TNodeId nodeId, [[maybe_unused]] TGeneration generation, TPartitionSessionId partitionSessionId);
+    void StartPartitionSession(TNodeId, TDirectPartitionSession&&);
 
-    void StopPartitionSession(TNodeId nodeId, TPartitionSessionId partitionSessionId);
+    void StopPartitionSession(TPartitionSessionId);
 
-    void SetServerSessionId(TString id) {
-        ServerSessionId = id;
-    }
+    void SetServerSessionId(TServerSessionId);
 
 private:
 
-    std::shared_ptr<TCallbackContext<TDirectReadConnection>> CreateConnection(TNodeId nodeId);
+    TDirectReadSessionPtr CreateConnection(TNodeId);
 
 private:
     TMutex Lock;
     const NYdb::NTopic::TReadSessionSettings ReadSessionSettings;
-    TString ServerSessionId;
-    TCallbackContextPtr<false> SingleClusterReadSession;
+    TServerSessionId ServerSessionId;
+    TSingleClusterReadSessionPtr<false> SingleClusterReadSession;
     NYdbGrpc::IQueueClientContextPtr ClientContext;
     IDirectReadConnectionFactoryPtr ConnectionFactory;
-    std::unordered_map<TNodeId, std::shared_ptr<TCallbackContext<TDirectReadConnection>>> Connections;
-    std::unordered_map<TNodeId, std::unordered_set<TPartitionSessionId>> NodePartitionSessions;
+    TMap<TNodeId, TDirectReadSessionPtr> Connections;
+    TMap<TPartitionSessionId, TNodeId> Locations;
 };
 
 }

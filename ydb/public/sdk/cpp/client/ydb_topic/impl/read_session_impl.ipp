@@ -275,7 +275,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::Start() {
         AbortSession(EStatus::ABORTED, "Driver is stopping");
     }
     if constexpr (!UseMigrationProtocol) {
-        DirectReadConnectionManager = std::make_shared<TDirectReadConnectionManager>(
+        DirectReadConnectionManager = std::make_shared<TDirectReadSessionManager>(
             Settings,
             this->SelfContext,
             ClientContext->CreateContext(),
@@ -1370,9 +1370,12 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     }
 
     if (Settings.DirectRead_) {
-        auto nodeId [[maybe_unused]] = msg.partition_location().node_id();
-        auto generation [[maybe_unused]] = msg.partition_location().generation();
-        DirectReadConnectionManager->StartPartitionSession(nodeId, generation, partitionSessionId);
+        auto nodeId = msg.partition_location().node_id();
+        auto generation = msg.partition_location().generation();
+        DirectReadConnectionManager->StartPartitionSession(
+            nodeId,
+            { .Id = static_cast<TPartitionSessionId>(partitionSessionId), .Generation = generation }
+        );
     }
 
     partitionSession = MakeIntrusive<TPartitionStreamImpl<false>>(

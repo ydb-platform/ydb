@@ -437,6 +437,67 @@ private:
 
 namespace NCdc {
 
+std::variant<TStreamPaths, ISubOperation::TPtr> DoDropStreamPathChecks(
+    const TOperationId& opId,
+    const TPath& workingDirPath,
+    const TString& tableName,
+    const TString& streamName)
+{
+    const auto tablePath = workingDirPath.Child(tableName);
+    {
+        const auto checks = tablePath.Check();
+        checks
+            .NotEmpty()
+            .NotUnderDomainUpgrade()
+            .IsAtLocalSchemeShard()
+            .IsResolved()
+            .NotDeleted()
+            .IsTable()
+            .NotAsyncReplicaTable()
+            .IsCommonSensePath()
+            .NotUnderDeleting()
+            .NotUnderOperation();
+
+        if (!checks) {
+            return CreateReject(opId, checks.GetStatus(), checks.GetError());
+        }
+    }
+
+    const auto streamPath = tablePath.Child(streamName);
+    {
+        const auto checks = streamPath.Check();
+        checks
+            .NotEmpty()
+            .NotUnderDomainUpgrade()
+            .IsAtLocalSchemeShard()
+            .IsResolved()
+            .NotDeleted()
+            .IsCdcStream()
+            .NotUnderDeleting()
+            .NotUnderOperation();
+
+        if (!checks) {
+            return CreateReject(opId, checks.GetStatus(), checks.GetError());
+        }
+    }
+
+    return TStreamPaths{tablePath, streamPath};
+}
+
+ISubOperation::TPtr DoDropStreamChecks(
+    const TOperationId& opId,
+    const TPath& tablePath,
+    const TTxId lockTxId,
+    TOperationContext& context) {
+
+    TString errStr;
+    if (!context.SS->CheckLocks(tablePath.Base()->PathId, lockTxId, errStr)) {
+        return CreateReject(opId, NKikimrScheme::StatusMultipleModifications, errStr);
+    }
+
+    return nullptr;
+}
+
 void DoDropStream(
     const NKikimrSchemeOp::TDropCdcStream& op,
     const TOperationId& opId,
@@ -528,43 +589,12 @@ TVector<ISubOperation::TPtr> CreateDropCdcStream(TOperationId opId, const TTxTra
 
     const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
 
-    const auto tablePath = workingDirPath.Child(tableName);
-    {
-        const auto checks = tablePath.Check();
-        checks
-            .NotEmpty()
-            .NotUnderDomainUpgrade()
-            .IsAtLocalSchemeShard()
-            .IsResolved()
-            .NotDeleted()
-            .IsTable()
-            .NotAsyncReplicaTable()
-            .IsCommonSensePath()
-            .NotUnderDeleting()
-            .NotUnderOperation();
-
-        if (!checks) {
-            return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
-        }
+    const auto checksResult = NCdc::DoDropStreamPathChecks(opId, workingDirPath, tableName, streamName);
+    if (std::holds_alternative<ISubOperation::TPtr>(checksResult)) {
+        return {std::get<ISubOperation::TPtr>(checksResult)};
     }
 
-    const auto streamPath = tablePath.Child(streamName);
-    {
-        const auto checks = streamPath.Check();
-        checks
-            .NotEmpty()
-            .NotUnderDomainUpgrade()
-            .IsAtLocalSchemeShard()
-            .IsResolved()
-            .NotDeleted()
-            .IsCdcStream()
-            .NotUnderDeleting()
-            .NotUnderOperation();
-
-        if (!checks) {
-            return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
-        }
-    }
+    const auto [tablePath, streamPath] = std::get<NCdc::TStreamPaths>(checksResult);
 
     TString errStr;
     if (!context.SS->CheckApplyIf(tx, errStr)) {
@@ -577,8 +607,8 @@ TVector<ISubOperation::TPtr> CreateDropCdcStream(TOperationId opId, const TTxTra
     const auto lockTxId = stream->State == TCdcStreamInfo::EState::ECdcStreamStateScan
         ? streamPath.Base()->CreateTxId
         : InvalidTxId;
-    if (!context.SS->CheckLocks(tablePath.Base()->PathId, lockTxId, errStr)) {
-        return {CreateReject(opId, NKikimrScheme::StatusMultipleModifications, errStr)};
+    if (const auto reject = NCdc::DoDropStreamChecks(opId, tablePath, lockTxId, context); reject) {
+        return {reject};
     }
 
     TVector<ISubOperation::TPtr> result;

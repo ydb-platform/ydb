@@ -17,13 +17,26 @@ TVector<ISubOperation::TPtr> CreateDropContinuousBackup(TOperationId opId, const
     const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
     const auto& cbOp = tx.GetDropContinuousBackup();
     const auto& tableName = cbOp.GetTableName();
-    const auto tablePath = workingDirPath.Child(tableName);
+
+    const auto checksResult = NCdc::DoDropStreamPathChecks(opId, workingDirPath, tableName, NBackup::CB_CDC_STREAM_NAME);
+    if (std::holds_alternative<ISubOperation::TPtr>(checksResult)) {
+        return {std::get<ISubOperation::TPtr>(checksResult)};
+    }
+
+    const auto [tablePath, streamPath] = std::get<NCdc::TStreamPaths>(checksResult);
+
+    TString errStr;
+    if (!context.SS->CheckApplyIf(tx, errStr)) {
+        return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, errStr)};
+    }
+
+    if (const auto reject = NCdc::DoDropStreamChecks(opId, tablePath, InvalidTxId, context); reject) {
+        return {reject};
+    }
 
     NKikimrSchemeOp::TDropCdcStream dropCdcStreamOp;
     dropCdcStreamOp.SetTableName(tableName);
     dropCdcStreamOp.SetStreamName(NBackup::CB_CDC_STREAM_NAME);
-
-    const auto streamPath = tablePath.Child(NBackup::CB_CDC_STREAM_NAME);
 
     TVector<ISubOperation::TPtr> result;
 

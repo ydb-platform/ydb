@@ -60,6 +60,12 @@ TDirectReadConnection::TDirectReadConnection(
     {
     }
 
+void TDirectReadConnection::Start()  {
+    if (State == EState::CREATED) {
+        Reconnect(TPlainStatus());
+    }
+}
+
 void TDirectReadConnection::OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t connectionGeneration) {
     TPlainStatus errorStatus;
     if (!grpcStatus.Ok()) {

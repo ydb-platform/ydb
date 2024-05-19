@@ -6,6 +6,7 @@
 
 #include "common.h"
 #include "counters_logger.h"
+#include "direct_reader.h"
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/include/read_session.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/include/read_session.h>
@@ -117,12 +118,6 @@ using TDataDecompressionInfoPtr = typename TDataDecompressionInfo<UseMigrationPr
 
 template <bool UseMigrationProtocol>
 using TCallbackContextPtr = std::shared_ptr<TCallbackContext<TSingleClusterReadSessionImpl<UseMigrationProtocol>>>;
-
-using TDirectReadServerMessage = Ydb::Topic::StreamDirectReadMessage::FromServer;
-using TDirectReadClientMessage = Ydb::Topic::StreamDirectReadMessage::FromClient;
-using IDirectReadConnectionFactory = ISessionConnectionProcessorFactory<TDirectReadClientMessage, TDirectReadServerMessage>;
-using IDirectReadConnectionFactoryPtr = std::shared_ptr<IDirectReadConnectionFactory>;
-using IDirectReadConnection = IDirectReadConnectionFactory::IProcessor;
 
 template <bool UseMigrationProtocol>
 class TUserRetrievedEventsInfoAccumulator {
@@ -1056,151 +1051,6 @@ struct THash<NYdb::NTopic::TPartitionStreamImpl<true>::TKey> {
 
 namespace NYdb::NTopic {
 
-using TNodeId = i32;
-using TGeneration = i64;
-using TPartitionSessionId = ui64;
-
-template <bool UseMigrationProtocol>
-class TDirectReadConnection : public TEnableSelfContext<TDirectReadConnection<UseMigrationProtocol>> {
-public:
-    using TSelf = TDirectReadConnection<UseMigrationProtocol>;
-    using TPtr = std::shared_ptr<TSelf>;
-
-    TDirectReadConnection(
-        TString serverSessionId,
-        const NYdb::NTopic::TReadSessionSettings settings,
-        TCallbackContextPtr<UseMigrationProtocol> singleClusterReadSession,
-        NYdbGrpc::IQueueClientContextPtr clientContext,
-        IDirectReadConnectionFactoryPtr connectionFactory,
-        TNodeId nodeId
-    )
-        : ClientContext(clientContext)
-        , ReadSessionSettings(settings)
-        , SingleClusterReadSession(singleClusterReadSession)
-        , ServerSessionId(serverSessionId)
-        , ConnectionFactory(connectionFactory)
-        , State(EState::CREATED)
-        , NodeId(nodeId)
-        {
-        }
-
-    void Start() {
-        if (State == EState::CREATED) {
-            Reconnect(TPlainStatus(), NodeId);
-        }
-    }
-
-    void Cancel() {
-
-    }
-
-    bool AddPartitionSession(TPartitionSessionId id, TGeneration generation) {
-        PartitionSessionGenerations[id] = generation;
-        return true;
-    }
-
-    // bool DeletePartitionSession(TPartitionStreamImpl<false>::TPtr partitionSession) {
-    //     PartitionSessions.erase(partitionSession->GetPartitionSessionId());
-    // }
-
-private:
-
-    bool Reconnect(
-        const TPlainStatus& status,
-        TNodeId nodeId
-        // [[maybe_unused]] TGeneration generation
-    );
-
-    void InitImpl(TDeferredActions<UseMigrationProtocol>& deferred);
-
-    void WriteToProcessorImpl(TDirectReadClientMessage&& req);
-    void ReadFromProcessorImpl(TDeferredActions<UseMigrationProtocol>& deferred);
-    void OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t connectionGeneration);
-    template<typename TMessage>
-    inline void OnReadDoneImpl(TMessage&& msg, TDeferredActions<UseMigrationProtocol>& deferred);
-
-    void OnConnect(
-        TPlainStatus&& st,
-        IDirectReadConnection::TPtr&& processor,
-        const NYdbGrpc::IQueueClientContextPtr& connectContext
-    );
-
-    void OnConnectTimeout(
-        const NYdbGrpc::IQueueClientContextPtr& connectTimeoutContext
-    );
-
-private:
-
-    enum class EState {
-        CREATED,
-        CONNECTING,
-        CONNECTED,
-        CLOSING,
-        CLOSED
-    };
-
-private:
-    TMutex Lock;
-
-    NYdbGrpc::IQueueClientContextPtr ClientContext;
-    NYdbGrpc::IQueueClientContextPtr ConnectContext;
-    NYdbGrpc::IQueueClientContextPtr ConnectTimeoutContext;
-    NYdbGrpc::IQueueClientContextPtr ConnectDelayContext;
-    size_t ConnectionGeneration = 0;
-
-    const NYdb::NTopic::TReadSessionSettings ReadSessionSettings;
-    TCallbackContextPtr<UseMigrationProtocol> SingleClusterReadSession;
-    TString ServerSessionId;
-    IDirectReadConnection::TPtr Connection;
-    IDirectReadConnectionFactoryPtr ConnectionFactory;
-    std::shared_ptr<TDirectReadServerMessage> ServerMessage;
-
-    // PartitionSessionId/AssignId -> TPartitionSessionImpl
-    // THashMap<TPartitionSessionId, TPartitionStreamImpl<UseMigrationProtocol>::TPtr> PartitionSessions;
-    THashMap<TPartitionSessionId, TGeneration> PartitionSessionGenerations;
-
-    EState State;
-    [[maybe_unused]] TNodeId NodeId;
-};
-
-template <bool UseMigrationProtocol>
-class TDirectReadConnectionManager {
-public:
-    TDirectReadConnectionManager(
-        const NYdb::NTopic::TReadSessionSettings settings,
-        TCallbackContextPtr<UseMigrationProtocol> singleClusterReadSession,
-        NYdbGrpc::IQueueClientContextPtr clientContext,
-        IDirectReadConnectionFactoryPtr connectionFactory
-    )
-        : ReadSessionSettings(settings)
-        , SingleClusterReadSession(singleClusterReadSession)
-        , ClientContext(clientContext)
-        , ConnectionFactory(connectionFactory)
-        {}
-
-    void StartPartitionSession(TNodeId nodeId, [[maybe_unused]] TGeneration generation, TPartitionSessionId partitionSessionId);
-
-    void StopPartitionSession(TNodeId nodeId, TPartitionSessionId partitionSessionId);
-
-    void SetServerSessionId(TString id) {
-        ServerSessionId = id;
-    }
-
-private:
-
-    std::shared_ptr<TCallbackContext<TDirectReadConnection<UseMigrationProtocol>>> CreateConnection(TNodeId nodeId);
-
-private:
-    TMutex Lock;
-    const NYdb::NTopic::TReadSessionSettings ReadSessionSettings;
-    TString ServerSessionId;
-    TCallbackContextPtr<UseMigrationProtocol> SingleClusterReadSession;
-    NYdbGrpc::IQueueClientContextPtr ClientContext;
-    IDirectReadConnectionFactoryPtr ConnectionFactory;
-    std::unordered_map<TNodeId, std::shared_ptr<TCallbackContext<TDirectReadConnection<UseMigrationProtocol>>>> Connections;
-    std::unordered_map<TNodeId, std::unordered_set<TPartitionSessionId>> NodePartitionSessions;
-};
-
 // Read session for single cluster.
 // This class holds only read session logic.
 // It is parametrized with output queue for client events
@@ -1214,7 +1064,7 @@ public:
     using IProcessor = typename IReadSessionConnectionProcessorFactory<UseMigrationProtocol>::IProcessor;
 
     friend class TPartitionStreamImpl<UseMigrationProtocol>;
-    friend class TDirectReadConnection<UseMigrationProtocol>;
+    friend class TDirectReadConnection;
 
     TSingleClusterReadSessionImpl(
         const TAReadSessionSettings<UseMigrationProtocol>& settings,
@@ -1468,7 +1318,7 @@ private:
     bool WaitingReadResponse = false;
     std::shared_ptr<TServerMessage<UseMigrationProtocol>> ServerMessage; // Server message to write server response to.
     THashMap<ui64, TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>>> PartitionStreams; // assignId -> Partition stream.
-    std::shared_ptr<TDirectReadConnectionManager<UseMigrationProtocol>> DirectReadConnectionManager; // Only for ydb_topic
+    std::shared_ptr<TDirectReadConnectionManager> DirectReadConnectionManager; // Only for ydb_topic
     TPartitionCookieMapping CookieMapping;  // Only for ydb_persqueue?
     std::deque<TDecompressionQueueItem> DecompressionQueue;
     bool DataReadingSuspended = false;

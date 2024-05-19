@@ -67,11 +67,7 @@ public:
         TNodeId nodeId
     );
 
-    void Start() {
-        if (State == EState::CREATED) {
-            Reconnect(TPlainStatus(), NodeId);
-        }
-    }
+    void Start();
 
     void Cancel() {
 
@@ -90,7 +86,6 @@ private:
 
     bool Reconnect(
         const TPlainStatus& status,
-        TNodeId nodeId
         // [[maybe_unused]] TGeneration generation
     );
 

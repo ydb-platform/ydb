@@ -4,9 +4,7 @@
 #include <ydb/library/yql/utils/log/log.h>
 
 #include <contrib/libs/xxhash/xxhash.h>
-#include <chrono>
 #include <string_view>
-#include <format>
 
 
 namespace NKikimr {
@@ -65,16 +63,12 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
             std::memcpy(currStrPtr, IColumnsVals[i].data(), IColumnsVals[i].size() );
             currStrPtr+=IColumnsVals[i].size();
         }
-
-
     }
-
 
     TempTuple[0] &= ui64(0x1); // Setting only nulls in key bit, all other bits are ignored for key hash
     for (ui32 i = 1; i < NullsBitmapSize_; i ++) {
         TempTuple[i] = 0;
     }
-
 
     XXH64_hash_t hash = XXH64(TempTuple.data() + NullsBitmapSize_, (TempTuple.size() - NullsBitmapSize_) * sizeof(ui64), 0);
 
@@ -82,21 +76,17 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
 
     ui64 bucket = hash & BucketsMask;
 
-    
-
     std::vector<ui64, TMKQLAllocator<ui64>> & keyIntVals = TableBuckets[bucket].KeyIntVals;
     std::vector<ui32, TMKQLAllocator<ui32>> & stringsOffsets = TableBuckets[bucket].StringsOffsets;
     std::vector<ui64, TMKQLAllocator<ui64>> & dataIntVals = TableBuckets[bucket].DataIntVals;
     std::vector<char, TMKQLAllocator<char>> & stringVals = TableBuckets[bucket].StringsValues;
     KeysHashTable & kh = TableBuckets[bucket].AnyHashTable;
 
-    ui32 offset = keyIntVals.size(); // Offset of tuple inside the keyIntVals vector
+    ui32 offset = keyIntVals.size();  // Offset of tuple inside the keyIntVals vector
 
     keyIntVals.push_back(hash);
     keyIntVals.insert(keyIntVals.end(), intColumns, intColumns + NullsBitmapSize_);
     keyIntVals.insert(keyIntVals.end(), TempTuple.begin() + NullsBitmapSize_, TempTuple.end());
-
-
 
     if (IsAny_) {
         if ( !AddKeysToHashTable(kh, keyIntVals.begin() + offset) ) {
@@ -105,12 +95,11 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
         }
     }
 
-
-    TableBuckets[bucket].TuplesNum++;
+    TableBucketsStats[bucket].TuplesNum++;
 
     if (NumberOfStringColumns || NumberOfIColumns ) {
-        stringsOffsets.push_back(offset); // Adding offset to tuple in keyIntVals vector
-        stringsOffsets.push_back(stringVals.size());  // Adding offset to string values
+        stringsOffsets.push_back(TableBucketsStats[bucket].KeyIntValsTotalSize); // Adding offset to tuple in keyIntVals vector
+        stringsOffsets.push_back(TableBucketsStats[bucket].StringValuesTotalSize);  // Adding offset to string values
 
 
         // Adding strings sizes for keys and data
@@ -128,9 +117,7 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
                 stringsOffsets.push_back(IColumnsVals[i].size());
             }
         }
-
     }
-
 
     // Adding data values
     ui64 * dataColumns = intColumns + NullsBitmapSize_ + NumberOfKeyIntColumns;
@@ -140,6 +127,7 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
     char ** dataStringsColumns = stringColumns + NumberOfKeyStringColumns;
     ui32 * dataStringsSizes = stringsSizes + NumberOfKeyStringColumns;
 
+    ui64 initialStringsSize = stringVals.size();
     for( ui64 i = 0; i < NumberOfDataStringColumns; i++) {
         ui32 currStringSize = *(dataStringsSizes + i);
         stringVals.insert(stringVals.end(), *(dataStringsColumns + i), *(dataStringsColumns + i) + currStringSize);
@@ -147,10 +135,10 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
 
     for ( ui64 i = 0; i < NumberOfDataIColumns; i++) {
         stringVals.insert( stringVals.end(), IColumnsVals[NumberOfKeyIColumns + i].begin(), IColumnsVals[NumberOfKeyIColumns + i].end());
-
     }
 
-
+    TableBucketsStats[bucket].KeyIntValsTotalSize += keyIntVals.size() - offset;
+    TableBucketsStats[bucket].StringValuesTotalSize += stringVals.size() - initialStringsSize;
 }
 
 void TTable::ResetIterator() {
@@ -166,21 +154,21 @@ void TTable::ResetIterator() {
 }
 
 // Checks if there are more tuples and sets bucketId and tupleId to next valid.
-inline bool HasMoreTuples(std::vector<TTableBucket> & tableBuckets, ui64 & bucketId, ui64 & tupleId ) {
+inline bool HasMoreTuples(std::vector<TTableBucketStats> & tableBucketsStats, ui64 & bucketId, ui64 & tupleId ) {
 
-    if (bucketId >= tableBuckets.size()) return false;
+    if (bucketId >= tableBucketsStats.size()) return false;
 
-    if ( tupleId >= tableBuckets[bucketId].TuplesNum ) {
+    if ( tupleId >= tableBucketsStats[bucketId].TuplesNum ) {
         tupleId = 0;
         bucketId ++;
 
-        if (bucketId == tableBuckets.size()) {
+        if (bucketId == tableBucketsStats.size()) {
             return false;
         }
 
-        while( tableBuckets[bucketId].TuplesNum == 0 ) {
+        while( tableBucketsStats[bucketId].TuplesNum == 0 ) {
            bucketId ++;
-            if (bucketId == tableBuckets.size()) {
+            if (bucketId == tableBucketsStats.size()) {
                 return false;
             }
         }
@@ -193,7 +181,7 @@ inline bool HasMoreTuples(std::vector<TTableBucket> & tableBuckets, ui64 & bucke
 
 // Returns value of next tuple. Returs true if there are more tuples
 bool TTable::NextTuple(TupleData & td){
-    if (HasMoreTuples(TableBuckets, CurrIterBucket, CurrIterIndex )) {
+    if (HasMoreTuples(TableBucketsStats, CurrIterBucket, CurrIterIndex )) {
         GetTupleData(CurrIterBucket, CurrIterIndex, td);
         CurrIterIndex++;
         return true;
@@ -316,6 +304,9 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
         TTableBucket * bucket1 = &JoinTable1->TableBuckets[bucket];
         TTableBucket * bucket2 = &JoinTable2->TableBuckets[bucket];
 
+        ui64 tuplesNum1 = JoinTable1->TableBucketsStats[bucket].TuplesNum;
+        ui64 tuplesNum2 = JoinTable2->TableBucketsStats[bucket].TuplesNum;
+
         ui64 headerSize1 = JoinTable1->HeaderSize;
         ui64 headerSize2 = JoinTable2->HeaderSize;
         ui64 nullsSize1 = JoinTable1->NullsBitmapSize_;
@@ -328,27 +319,28 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
         bool table2HasKeyIColumns = (JoinTable2->NumberOfKeyIColumns != 0);
 
 
-        if ( bucket2->TuplesNum > bucket1->TuplesNum ) {
+        if (tuplesNum2 > tuplesNum1) {
             std::swap(bucket1, bucket2);
             std::swap(headerSize1, headerSize2);
             std::swap(nullsSize1, nullsSize2);
             std::swap(keyIntOffset1, keyIntOffset2);
             std::swap(table1HasKeyStringColumns, table2HasKeyStringColumns);
             std::swap(table1HasKeyIColumns, table2HasKeyIColumns);
+            std::swap(tuplesNum1, tuplesNum2);
        }
 
-        joinResults.reserve(3 * bucket1->TuplesNum );
+        joinResults.reserve(3 * tuplesNum1 );
 
         ui64 slotSize = headerSize2;
 
-        ui64 avgStringsSize = ( 3 * (bucket2->KeyIntVals.size() - bucket2->TuplesNum * headerSize2) ) / ( 2 * bucket2->TuplesNum + 1)  + 1;
+        ui64 avgStringsSize = ( 3 * (bucket2->KeyIntVals.size() - tuplesNum2 * headerSize2) ) / ( 2 * tuplesNum2 + 1)  + 1;
 
         if (table2HasKeyStringColumns || table2HasKeyIColumns ) {
             slotSize = slotSize + avgStringsSize;
         }
 
         
-        ui64 nSlots = 3 * bucket2->TuplesNum + 1;
+        ui64 nSlots = 3 * tuplesNum2 + 1;
         joinSlots.clear();
         spillSlots.clear();
         slotToIdx.clear();
@@ -501,7 +493,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
                     JoinTuplesIds joinIds;
                     joinIds.id1 = tuple1Idx;
                     joinIds.id2 = slotToIdx[(slotIt - joinSlots.begin()) / slotSize];
-                    if (JoinTable2->TableBuckets[bucket].TuplesNum > JoinTable1->TableBuckets[bucket].TuplesNum)
+                    if (JoinTable2->TableBucketsStats[bucket].TuplesNum > JoinTable1->TableBucketsStats[bucket].TuplesNum)
                     {
                         std::swap(joinIds.id1, joinIds.id2);
                     }
@@ -783,11 +775,11 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
 
     if (JoinKind == EJoinKind::Cross) {
 
-        if (HasMoreTuples(JoinTable1->TableBuckets, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex))
+        if (HasMoreTuples(JoinTable1->TableBucketsStats, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex))
         {
             JoinTable1->GetTupleData(JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex, td1);
 
-            if (HasMoreTuples(JoinTable2->TableBuckets, JoinTable2->CurrIterBucket, JoinTable2->CurrIterIndex))
+            if (HasMoreTuples(JoinTable2->TableBucketsStats, JoinTable2->CurrIterBucket, JoinTable2->CurrIterIndex))
             {
                 JoinTable2->GetTupleData(JoinTable2->CurrIterBucket, JoinTable2->CurrIterIndex, td2);
                 JoinTable2->CurrIterIndex++;
@@ -806,7 +798,7 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
     }
 
     if ( JoinKind == EJoinKind::Inner ) {
-        while(HasMoreTuples(JoinTable1->TableBuckets, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex)) {
+        while(HasMoreTuples(JoinTable1->TableBucketsStats, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex)) {
             ui32 tupleId2;
             if (HasJoinedTupleId(JoinTable1, tupleId2))
             {
@@ -822,7 +814,7 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
     }
 
     if ( JoinKind == EJoinKind::Left ) {
-        while (HasMoreTuples(JoinTable1->TableBuckets, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex)) {
+        while (HasMoreTuples(JoinTable1->TableBucketsStats, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex)) {
             ui32 tupleId2;
             if (HasJoinedTupleId(JoinTable1, tupleId2))
             {
@@ -857,7 +849,7 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
     }
 
     if (  JoinKind == EJoinKind::Right ) {
-        while(HasMoreTuples(JoinTable1->TableBuckets, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex)) {
+        while(HasMoreTuples(JoinTable1->TableBucketsStats, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex)) {
             ui32 tupleId2;
             if (HasJoinedTupleId(JoinTable1, tupleId2))
             {
@@ -898,7 +890,7 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
         if ( RightTableBatch_ && HasMoreRightTuples_ )
             return false;
 
-        while(HasMoreTuples(JoinTable1->TableBuckets, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex)) {
+        while(HasMoreTuples(JoinTable1->TableBucketsStats, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex)) {
             ui32 tupleId2;
 
             bool globalMatchedId = false;
@@ -929,7 +921,7 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
         if (LeftTableBatch_ && HasMoreLeftTuples_ )
             return false;
 
-        while(HasMoreTuples(JoinTable1->TableBuckets, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex)) {
+        while(HasMoreTuples(JoinTable1->TableBucketsStats, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex)) {
             ui32 tupleId2;
 
             bool globalMatchedId = false;
@@ -961,7 +953,7 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
         if (RightTableBatch_ && HasMoreRightTuples_ )
             return false;
 
-        while(HasMoreTuples(JoinTable1->TableBuckets, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex)) {
+        while(HasMoreTuples(JoinTable1->TableBucketsStats, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex)) {
             ui32 tupleId2;
 
             if ( !RightTableBatch_  && HasJoinedTupleId(JoinTable1, tupleId2))
@@ -995,7 +987,7 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
         if (LeftTableBatch_ && HasMoreLeftTuples_ )
             return false;
 
-        while(HasMoreTuples(JoinTable1->TableBuckets, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex)) {
+        while(HasMoreTuples(JoinTable1->TableBucketsStats, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex)) {
             ui32 tupleId2;
             if ( !LeftTableBatch_ && HasJoinedTupleId(JoinTable1, tupleId2))
             {
@@ -1022,7 +1014,7 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
     }
 
     if ( JoinKind == EJoinKind::Full ) {
-        if(HasMoreTuples(JoinTable1->TableBuckets, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex)) {
+        if(HasMoreTuples(JoinTable1->TableBucketsStats, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex)) {
             ui32 tupleId2;
             if (HasJoinedTupleId(JoinTable1, tupleId2))
             {
@@ -1048,7 +1040,7 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
             Table2Initialized_ = true;
         }
 
-        while (HasMoreTuples(JoinTable2->TableBuckets, JoinTable2->CurrIterBucket, JoinTable2->CurrIterIndex)) {
+        while (HasMoreTuples(JoinTable2->TableBucketsStats, JoinTable2->CurrIterBucket, JoinTable2->CurrIterIndex)) {
 
             if (CurrIterBucket != JoinTable2->CurrIterBucket) {
                 CurrIterBucket = JoinTable2->CurrIterBucket;
@@ -1072,7 +1064,7 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
     }
 
     if ( JoinKind == EJoinKind::Exclusion ) {
-        while (HasMoreTuples(JoinTable1->TableBuckets, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex)) {
+        while (HasMoreTuples(JoinTable1->TableBucketsStats, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex)) {
             ui32 tupleId2;
             if (HasJoinedTupleId(JoinTable1, tupleId2))
             {
@@ -1090,7 +1082,7 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
 
         td1.AllNulls = true;
 
-        while (HasMoreTuples(JoinTable2->TableBuckets, JoinTable2->CurrIterBucket, JoinTable2->CurrIterIndex)) {
+        while (HasMoreTuples(JoinTable2->TableBucketsStats, JoinTable2->CurrIterBucket, JoinTable2->CurrIterIndex)) {
 
             if (CurrIterBucket != JoinTable2->CurrIterBucket) {
                 CurrIterBucket = JoinTable2->CurrIterBucket;
@@ -1121,7 +1113,6 @@ void TTable::Clear() {
 
         for (ui64 bucket = 0; bucket < NumberOfBuckets; bucket++) {
             TTableBucket & tb = TableBuckets[bucket];
-            tb.TuplesNum = 0;
             tb.KeyIntVals.clear();
             tb.DataIntVals.clear();
             tb.StringsOffsets.clear();
@@ -1130,6 +1121,11 @@ void TTable::Clear() {
             tb.InterfaceOffsets.clear();
             tb.JoinIds.clear();
             tb.RightIds.clear();
+
+            TTableBucketStats & tbs = TableBucketsStats[bucket];
+            tbs.TuplesNum = 0;
+            tbs.KeyIntValsTotalSize = 0;
+            tbs.StringValuesTotalSize = 0;
         }
 
 
@@ -1165,6 +1161,7 @@ TTable::TTable( ui64 numberOfKeyIntColumns, ui64 numberOfKeyStringColumns,
     HeaderSize = HashSize + NullsBitmapSize_ + NumberOfKeyIntColumns + NumberOfKeyIColumns + TotalStringsSize;
 
     TableBuckets.resize(NumberOfBuckets);
+    TableBucketsStats.resize(NumberOfBuckets);
 
     const ui64 reservedSizePerTuple = (2 * DefaultTupleBytes) / sizeof(ui64);
 
@@ -1188,6 +1185,202 @@ TTable::TTable( ui64 numberOfKeyIntColumns, ui64 numberOfKeyStringColumns,
 
 TTable::~TTable() {
 };
+
+TTableBucketSpiller::TTableBucketSpiller(ISpiller::TPtr spiller, size_t sizeLimit)
+        : StateUi64Adapter(spiller, sizeLimit)
+        , StateUi32Adapter(spiller, sizeLimit)
+        , StateCharAdapter(spiller, sizeLimit)
+    {
+    }
+
+void TTableBucketSpiller::Update() {
+    StateUi64Adapter.Update();
+    StateUi32Adapter.Update();
+    StateCharAdapter.Update();
+
+    if (State == EState::Spilling) {
+        ProcessBucketSpilling();
+    } else if (State == EState::Restoring) {
+        ProcessBucketRestoration();
+    }
+}
+
+void TTableBucketSpiller::Finalize() {
+    IsFinalizing = true;
+}
+
+void TTableBucketSpiller::SpillBucket(TTableBucket&& bucket) {
+    MKQL_ENSURE(NextVectorToProcess == ENextVectorToProcess::None, "Internal logic error");
+    State = EState::Spilling;
+
+    CurrentBucket = std::move(bucket);
+    NextVectorToProcess = ENextVectorToProcess::KeyAndVals;
+
+    ProcessBucketSpilling();
+}
+
+TTableBucket&& TTableBucketSpiller::ExtractBucket() {
+    MKQL_ENSURE(State == EState::InMemory, "Internal logic error");
+    MKQL_ENSURE(SpilledBucketsCount == 0, "Internal logic error");
+    return std::move(CurrentBucket);
+}
+
+bool TTableBucketSpiller::HasRunningAsyncIoOperation() const {
+    return StateUi64Adapter.HasRunningAsyncIoOperation()
+        || StateUi32Adapter.HasRunningAsyncIoOperation()
+        || StateCharAdapter.HasRunningAsyncIoOperation();
+}
+
+void TTableBucketSpiller::StartBucketRestoration() {
+    MKQL_ENSURE(State == EState::Restoring, "Internal logic error");
+    MKQL_ENSURE(NextVectorToProcess == ENextVectorToProcess::None, "Internal logic error");
+
+    NextVectorToProcess = ENextVectorToProcess::KeyAndVals;
+    ProcessBucketRestoration();
+}
+
+void TTableBucketSpiller::ProcessBucketSpilling() {
+    while (NextVectorToProcess != ENextVectorToProcess::None) {
+        switch (NextVectorToProcess) {
+            case ENextVectorToProcess::KeyAndVals:
+                if (StateUi64Adapter.HasRunningAsyncIoOperation() || !StateUi64Adapter.IsAcceptingData()) return;
+
+                StateUi64Adapter.AddData(std::move(CurrentBucket.KeyIntVals));
+                NextVectorToProcess = ENextVectorToProcess::DataIntVals;
+                break;
+            case ENextVectorToProcess::DataIntVals:
+                if (StateUi64Adapter.HasRunningAsyncIoOperation() || !StateUi64Adapter.IsAcceptingData()) return;
+
+                StateUi64Adapter.AddData(std::move(CurrentBucket.DataIntVals));
+                NextVectorToProcess = ENextVectorToProcess::StringsValues;
+                break;
+            case ENextVectorToProcess::StringsValues:
+                if (StateCharAdapter.HasRunningAsyncIoOperation() || !StateCharAdapter.IsAcceptingData()) return;
+
+                StateCharAdapter.AddData(std::move(CurrentBucket.StringsValues));
+                NextVectorToProcess = ENextVectorToProcess::StringsOffsets;
+                break;
+            case ENextVectorToProcess::StringsOffsets:
+                if (StateUi32Adapter.HasRunningAsyncIoOperation() || !StateUi32Adapter.IsAcceptingData()) return;
+
+                StateUi32Adapter.AddData(std::move(CurrentBucket.StringsOffsets));
+                NextVectorToProcess = ENextVectorToProcess::InterfaceValues;
+                break;
+            case ENextVectorToProcess::InterfaceValues:
+                if (StateCharAdapter.HasRunningAsyncIoOperation() || !StateCharAdapter.IsAcceptingData()) return;
+
+                StateCharAdapter.AddData(std::move(CurrentBucket.InterfaceValues));
+                NextVectorToProcess = ENextVectorToProcess::InterfaceOffsets;
+                break;
+            case ENextVectorToProcess::InterfaceOffsets:
+                if (StateUi32Adapter.HasRunningAsyncIoOperation() || !StateUi32Adapter.IsAcceptingData()) return;
+
+                StateUi32Adapter.AddData(std::move(CurrentBucket.InterfaceOffsets));
+                NextVectorToProcess = ENextVectorToProcess::None;
+                SpilledBucketsCount++;
+
+                break;
+            default:
+                return;
+        }
+    }
+    if (!HasRunningAsyncIoOperation() && IsFinalizing) {
+
+        StateUi64Adapter.Finalize();
+        StateUi32Adapter.Finalize();
+        StateCharAdapter.Finalize();
+
+        if (StateCharAdapter.IsAcceptingDataRequests() && StateUi32Adapter.IsAcceptingDataRequests() && StateUi64Adapter.IsAcceptingDataRequests()) {
+            State = EState::Restoring;
+        }
+    }
+}
+
+template <class T>
+void TTableBucketSpiller::AppendVector(std::vector<T, TMKQLAllocator<T>>& first, std::vector<T, TMKQLAllocator<T>>&& second) const {
+    if (first.empty()) {
+        first = std::move(second);
+        return;
+    }
+    first.insert(first.end(), second.begin(), second.end());
+    second.clear();
+}
+
+void TTableBucketSpiller::ProcessBucketRestoration() {
+    while (NextVectorToProcess != ENextVectorToProcess::None) {
+        switch (NextVectorToProcess) {
+            case ENextVectorToProcess::KeyAndVals:
+                if (StateUi64Adapter.HasRunningAsyncIoOperation()) return;
+
+                if (!StateUi64Adapter.IsDataReady()) {
+                    StateUi64Adapter.RequestNextVector();
+                    if (StateUi64Adapter.HasRunningAsyncIoOperation()) return;
+                }
+                AppendVector(CurrentBucket.KeyIntVals, StateUi64Adapter.ExtractVector());
+                NextVectorToProcess = ENextVectorToProcess::DataIntVals;
+                break;
+            case ENextVectorToProcess::DataIntVals:
+                if (StateUi64Adapter.HasRunningAsyncIoOperation()) return;
+
+                if (!StateUi64Adapter.IsDataReady()) {
+                    StateUi64Adapter.RequestNextVector();
+                    if (StateUi64Adapter.HasRunningAsyncIoOperation()) return;
+                }
+                AppendVector(CurrentBucket.DataIntVals, StateUi64Adapter.ExtractVector());
+                NextVectorToProcess = ENextVectorToProcess::StringsValues;
+                break;
+            case ENextVectorToProcess::StringsValues:
+                if (StateCharAdapter.HasRunningAsyncIoOperation()) return;
+
+                if (!StateCharAdapter.IsDataReady()) {
+                    StateCharAdapter.RequestNextVector();
+                    if (StateCharAdapter.HasRunningAsyncIoOperation()) return;
+                }
+                AppendVector(CurrentBucket.StringsValues, StateCharAdapter.ExtractVector());
+                NextVectorToProcess = ENextVectorToProcess::StringsOffsets;
+                break;
+            case ENextVectorToProcess::StringsOffsets:
+                if (StateUi32Adapter.HasRunningAsyncIoOperation()) return;
+
+                if (!StateUi32Adapter.IsDataReady()) {
+                    StateUi32Adapter.RequestNextVector();
+                    if (StateUi32Adapter.HasRunningAsyncIoOperation()) return;
+                }
+                AppendVector(CurrentBucket.StringsOffsets, StateUi32Adapter.ExtractVector());
+                NextVectorToProcess = ENextVectorToProcess::InterfaceValues;
+                break;
+            case ENextVectorToProcess::InterfaceValues:
+                if (StateCharAdapter.HasRunningAsyncIoOperation()) return;
+
+                if (!StateCharAdapter.IsDataReady()) {
+                    StateCharAdapter.RequestNextVector();
+                    if (StateCharAdapter.HasRunningAsyncIoOperation()) return;
+                }
+                AppendVector(CurrentBucket.InterfaceValues, StateCharAdapter.ExtractVector());
+                NextVectorToProcess = ENextVectorToProcess::InterfaceOffsets;
+                break;
+            case ENextVectorToProcess::InterfaceOffsets:
+                if (StateUi32Adapter.HasRunningAsyncIoOperation()) return;
+
+                if (!StateUi32Adapter.IsDataReady()) {
+                    StateUi32Adapter.RequestNextVector();
+                    if (StateUi32Adapter.HasRunningAsyncIoOperation()) return;
+                }
+                AppendVector(CurrentBucket.InterfaceOffsets, StateUi32Adapter.ExtractVector());
+                SpilledBucketsCount--;
+                if (SpilledBucketsCount == 0) {
+                    NextVectorToProcess = ENextVectorToProcess::None;
+                    State = EState::InMemory;
+                } else {
+                    NextVectorToProcess = ENextVectorToProcess::KeyAndVals;
+                }
+                break;
+            default:
+                return;
+
+        }
+    }
+}
 
 }
 

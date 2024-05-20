@@ -17,4 +17,5 @@ enum ETxTypes {
     TXTYPE_SCAN_RESPONSE = 7       [(TxTypeOpts) = {Name: "TxScanResponse"}];
     TXTYPE_SAVE_QUERY_RESPONSE = 8 [(TxTypeOpts) = {Name: "TxSaveQueryResponse"}];
     TXTYPE_SCHEDULE_SCAN = 9       [(TxTypeOpts) = {Name: "TxScheduleScan"}];
+    TXTYPE_DELETE_QUERY_RESPONSE = 10 [(TxTypeOpts) = {Name: "TxDeleteQueryResponse"}];
 }

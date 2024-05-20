@@ -1445,15 +1445,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvReleasePar
         }
     };
 
-    std::unordered_set<ui32> partitionsForRealese;
-    for (ui32 p : record.GetPartition()) {
-        partitionsForRealese.insert(p);
-    }
-    if (group) {
-        partitionsForRealese.insert(group - 1);
-    }
-
-    if (partitionsForRealese.empty()) {
+    if (!group) {
         // Release partitions by count
         for (ui32 c = 0; c < record.GetCount(); ++c) {
             if (Partitions.empty()) {
@@ -1484,32 +1476,28 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvReleasePar
             doRelease(jt);
         }
     } else {
+        ui32 partitionId = group - 1;
+        bool found = false;
+
         // Release partitions by partition id
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " gone release"
-            << ": partitions# " << JoinRange(", ", partitionsForRealese.begin(), partitionsForRealese.end()));
+            << ": partition# " << partitionId);
 
         for (auto it = Partitions.begin(); it != Partitions.end(); ++it) {
             auto& partitionInfo = it->second;
-            if (partitionInfo.Topic->GetInternalName() == converter->GetInternalName()) {
-                auto pt = partitionsForRealese.find(partitionInfo.Partition.Partition);
-                if (pt == partitionsForRealese.end()) {
-                    continue;
-                }
-
+            if (partitionInfo.Topic->GetInternalName() == converter->GetInternalName() && partitionId == partitionInfo.Partition.Partition) {
                 if (!partitionInfo.Releasing) {
                     doRelease(it);
                 }
 
-                partitionsForRealese.erase(pt);
-                if (partitionsForRealese.empty()) {
-                    break;
-                }
+                found = true;
+                break;
             }
         }
 
-        if (!partitionsForRealese.empty()) {
+        if (!found) {
             return CloseSession(PersQueue::ErrorCode::ErrorCode::ERROR,
-                                TStringBuilder() << "internal error: releasing unknown partitions " << JoinRange(", ", partitionsForRealese.begin(), partitionsForRealese.end()),
+                                TStringBuilder() << "internal error: releasing unknown partition " << partitionId,
                                 ctx);
         }
     }

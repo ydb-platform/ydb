@@ -138,6 +138,7 @@ namespace NLs {
     TCheckFunc IndexKeys(const TVector<TString>& keyNames);
     TCheckFunc IndexDataColumns(const TVector<TString>& dataColumnNames);
 
+    TCheckFunc SequenceName(const TString& name);
     TCheckFunc SequenceIncrement(i64 increment);
     TCheckFunc SequenceMaxValue(i64 maxValue);
     TCheckFunc SequenceMinValue(i64 minValue);

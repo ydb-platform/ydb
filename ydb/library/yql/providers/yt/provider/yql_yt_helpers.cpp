@@ -1089,12 +1089,13 @@ TExprNode::TPtr ResetOutTableMeta(const TExprNode::TPtr& tableNode, TExprContext
     return ctx.ChangeChildren(*tableNode, std::move(children));
 }
 
-TExprNode::TPtr ResetTablesMeta(const TExprNode::TPtr& input, TExprContext& ctx, bool resetTmpOnly) {
+TExprNode::TPtr ResetTablesMeta(const TExprNode::TPtr& input, TExprContext& ctx, bool resetTmpOnly, bool isEvaluationInProgress) {
     TNodeSet tables;
     TNodeSet outTables;
     VisitExpr(input, [&](const TExprNode::TPtr& node) {
         if (auto maybeTable = TMaybeNode<TYtTable>(node)) {
-            if (!resetTmpOnly) {
+            const bool isAnonymous = NYql::HasSetting(maybeTable.Cast().Settings().Ref(), EYtSettingType::Anonymous);
+            if (!resetTmpOnly && !(isEvaluationInProgress && isAnonymous)) {
                 if (!TCoVoid::Match(maybeTable.Stat().Raw()) || !TCoVoid::Match(maybeTable.Meta().Raw()) || !TCoVoid::Match(maybeTable.RowSpec().Raw())) {
                     tables.insert(maybeTable.Raw());
                 }
@@ -1102,8 +1103,10 @@ TExprNode::TPtr ResetTablesMeta(const TExprNode::TPtr& input, TExprContext& ctx,
             return false;
         }
         else if (auto maybeTable = TMaybeNode<TYtOutTable>(node)) {
-            if (!TCoVoid::Match(maybeTable.Stat().Raw()) || maybeTable.Cast().Name().Value()) {
-                outTables.insert(maybeTable.Raw());
+            if (!isEvaluationInProgress) {
+                if (!TCoVoid::Match(maybeTable.Stat().Raw()) || maybeTable.Cast().Name().Value()) {
+                    outTables.insert(maybeTable.Raw());
+                }
             }
             return false;
         }

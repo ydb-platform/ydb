@@ -443,7 +443,7 @@ private:
             switch (InputStatus = Flow->FetchValues(ctx, GetFields())) {
                 case EFetchResult::One:
                     if (Put()) {
-                        if (!HasMemoryForProcessing()) {
+                        if (ctx.SpillerFactory && !HasMemoryForProcessing()) {
                             SwitchMode(EOperatingMode::Spilling, ctx);
                             return EFetchResult::Yield;
                         }
@@ -562,9 +562,7 @@ private:
     EOperatingMode GetMode() const { return Mode; }
 
     bool HasMemoryForProcessing() const {
-        // TODO: Change to enable spilling
-        // return !TlsAllocState->IsMemoryYellowZoneEnabled();
-        return true;
+        return !TlsAllocState->IsMemoryYellowZoneEnabled();
     }
 
     bool IsReadFromChannelFinished() const {

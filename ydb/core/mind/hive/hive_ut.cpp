@@ -3937,7 +3937,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         //
         static const int NUM_NODES = 4;
         static const int NUM_TABLETS = 3;
-        static const ui64 SINGLE_TABLET_NETWORK_USAGE = 5000000;
+        static const ui64 SINGLE_TABLET_NETWORK_USAGE = 15'000'000;
 
         TTestBasicRuntime runtime(NUM_NODES, false);
 

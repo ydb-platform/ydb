@@ -34,6 +34,10 @@ public:
         }
         return true;
     }
+
+    ui64 GetSize() const override {
+        return Chunks.size();
+    }
 };
 
 class TRowsAndBytesChangesTask: public NConveyor::ITask {
@@ -131,7 +135,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TChunksNormalizer::DoInit(const 
 
     TTablesManager tablesManager(controller.GetStoragesManager(), 0);
     if (!tablesManager.InitFromDB(db)) {
-        ACFL_ERROR("normalizer", "TChunksNormalizer")("error", "can't initialize tables manager");
+        ACFL_TRACE("normalizer", "TChunksNormalizer")("error", "can't initialize tables manager");
         return TConclusionStatus::Fail("Can't load index");
     }
 

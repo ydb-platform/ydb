@@ -199,11 +199,11 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), count);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetDataSize(), 30100);
-            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetIndexSize(), bTreeIndex ? 193u : 138);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetIndexSize(), bTreeIndex ? 233 : 138);
 
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetChannel(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetDataSize(), 30100);
-            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetIndexSize(), bTreeIndex ? 193u : 138);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetIndexSize(), bTreeIndex ? 233 : 138);
         }
 
         {
@@ -435,11 +435,8 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         
         bool captured = false;
         auto observer = runtime.AddObserver<NSharedCache::TEvResult>([&](NSharedCache::TEvResult::TPtr& event) {
-            IActor *actor = runtime.FindActor(event->Recipient);
-            
-            Cerr << "Got SchemeShard NSharedCache::TEvResult from " << event->Sender << " to " << event->Recipient << "(" << actor->GetActivityType() << ")"<< Endl;
-            
-            if (actor && actor->GetActivityType() == 288) {
+            Cerr << "Captured NSharedCache::TEvResult from " << runtime.FindActorName(event->Sender) << " to " << runtime.FindActorName(event->GetRecipientRewrite()) << Endl;
+            if (runtime.FindActorName(event->GetRecipientRewrite()) == "DATASHARD_STATS_BUILDER") {
                 auto& message = *event->Get();
                 event.Reset(static_cast<TEventHandle<NSharedCache::TEvResult> *>(
                     new IEventHandle(event->Recipient, event->Sender, 
@@ -455,6 +452,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
             options.CustomFinalCondition = [&]() { return captured; };
             runtime.DispatchEvents(options, TDuration::Seconds(5));
         }
+        UNIT_ASSERT(captured);
         observer.Remove();
 
         {

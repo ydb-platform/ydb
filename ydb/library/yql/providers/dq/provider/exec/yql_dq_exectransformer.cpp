@@ -125,8 +125,8 @@ public:
             : State->RandomProvider;
 
         TScopedAlloc alloc(
-            __LOCATION__, 
-            NKikimr::TAlignedPagePoolCounters(), 
+            __LOCATION__,
+            NKikimr::TAlignedPagePoolCounters(),
             State->FunctionRegistry->SupportsSizedAllocators(),
             false);
         NDq::TDqTaskRunnerContext executionContext;
@@ -287,7 +287,7 @@ private:
         }
         NDq::EChannelMode mode = GetConfiguredChannelMode(State_, typesCtx);
         pipeline->Add(
-            NDq::CreateDqBuildPhyStagesTransformer(!State_->Settings->SplitStageOnDqReplicate.Get().GetOrElse(true), typesCtx, mode),
+            NDq::CreateDqBuildPhyStagesTransformer(!State_->Settings->SplitStageOnDqReplicate.Get().GetOrElse(TDqSettings::TDefault::SplitStageOnDqReplicate), typesCtx, mode),
             "BuildPhy");
         pipeline->Add(NDqs::CreateDqsRewritePhyCallablesTransformer(*pipeline->GetTypeAnnotationContext()), "RewritePhyCallables");
     }

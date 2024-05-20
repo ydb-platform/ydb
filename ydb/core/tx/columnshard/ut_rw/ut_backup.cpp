@@ -101,13 +101,12 @@ Y_UNIT_TEST_SUITE(Backup) {
         txBody.MutableBackupTask()->SetSnapshotTxId(backupSnapshot.GetTxId());
         txBody.MutableBackupTask()->MutableS3Settings()->SetEndpoint("fake");
         txBody.MutableBackupTask()->MutableS3Settings()->SetSecretKey("fakeSecret");
-        UNIT_ASSERT(ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, txBody.SerializeAsString(), ++txId));
         AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 0);
-        PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(++planStep, txId));
+        UNIT_ASSERT(ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, txBody.SerializeAsString(), ++txId));
+        AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 1);
+        PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(++planStep, txId), false);
         TestWaitCondition(runtime, "export",
             []() {return Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize(); });
-        TestWaitCondition(runtime, "finish",
-            [&]() {return csControllerGuard->GetFinishedExportsCount() == 1; });
     }
 }
 

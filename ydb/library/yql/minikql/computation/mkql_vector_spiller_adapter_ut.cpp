@@ -8,8 +8,8 @@ namespace NKikimr::NMiniKQL {
 namespace {
 
     template <typename T>
-    std::vector<T> CreateSimpleVectorOfSize(size_t size) {
-        std::vector<T> v;
+    std::vector<T, TMKQLAllocator<T>> CreateSimpleVectorOfSize(size_t size) {
+        std::vector<T, TMKQLAllocator<T>> v;
         v.reserve(size);
 
         for (size_t i = 0; i < size; ++i) {
@@ -20,11 +20,11 @@ namespace {
     }
 
     template <typename T>
-    void SaveRestoreAndCompareVectors(const std::vector<std::vector<T>>& vectors, size_t spillerChunkSizeInBytes) {
-        auto spiller = TVectorSpillerAdapter<T>(CreateMockSpiller(), spillerChunkSizeInBytes);
+    void SaveRestoreAndCompareVectors(const std::vector<std::vector<T, TMKQLAllocator<T>>>& vectors, size_t spillerChunkSizeInBytes) {
+        auto spiller = TVectorSpillerAdapter<T, TMKQLAllocator<T>>(CreateMockSpiller(), spillerChunkSizeInBytes);
 
         for (const auto& vec : vectors) {
-            std::vector<T> copiedVector = vec;
+            auto copiedVector = vec;
             spiller.AddData(std::move(copiedVector));
 
             while (!spiller.IsAcceptingData()) {
@@ -45,7 +45,7 @@ namespace {
                 spiller.Update();
             }
 
-            std::vector<T> extractedVector = spiller.ExtractVector();
+            auto extractedVector = spiller.ExtractVector();
 
             UNIT_ASSERT_VALUES_EQUAL(vec, extractedVector);
         }   
@@ -62,6 +62,7 @@ namespace {
 
 Y_UNIT_TEST_SUITE(TVectorSpillerAdapterTest_SingleVector) {
     Y_UNIT_TEST(VectorOfExactChunkSize) {
+        TScopedAlloc Alloc(__LOCATION__);
         size_t vectorSize = 5;
 
         RunTestForSingleVector<int>(vectorSize, vectorSize, false);
@@ -69,6 +70,7 @@ Y_UNIT_TEST_SUITE(TVectorSpillerAdapterTest_SingleVector) {
     }
 
     Y_UNIT_TEST(VectorLargerThanChunkSize) {
+        TScopedAlloc Alloc(__LOCATION__);
         size_t vectorSize = 10;
         size_t chunkSize = 3;
 
@@ -77,6 +79,7 @@ Y_UNIT_TEST_SUITE(TVectorSpillerAdapterTest_SingleVector) {
     }
 
     Y_UNIT_TEST(VectorLargerThanChunkSizePrime) {
+        TScopedAlloc Alloc(__LOCATION__);
         size_t vectorSize = 10;
         size_t chunkSizeBytes = 7;
 
@@ -85,6 +88,7 @@ Y_UNIT_TEST_SUITE(TVectorSpillerAdapterTest_SingleVector) {
     }
 
     Y_UNIT_TEST(VectorLessThanChunkSize) {
+        TScopedAlloc Alloc(__LOCATION__);
         size_t vectorSize = 5;
         size_t chunkSize = 10;
 
@@ -97,7 +101,7 @@ Y_UNIT_TEST_SUITE(TVectorSpillerAdapterTest_MultipleVectors) {
 
     template <typename T>
     void ManyDifferentSizes_TestRunner() {
-        std::vector<std::vector<T>> vectors;
+        std::vector<std::vector<T, TMKQLAllocator<T>>> vectors;
         
         for (int vectorSize = 0; vectorSize <= 100; ++vectorSize) {
             vectors.push_back(CreateSimpleVectorOfSize<T>(vectorSize));
@@ -107,13 +111,14 @@ Y_UNIT_TEST_SUITE(TVectorSpillerAdapterTest_MultipleVectors) {
     }
 
     Y_UNIT_TEST(ManyDifferentSizes) {
+        TScopedAlloc Alloc(__LOCATION__);
         ManyDifferentSizes_TestRunner<int>();
         ManyDifferentSizes_TestRunner<char>();
     }
 
     template <typename T>
     void ManyDifferentSizesReversed_TestRunner() {
-        std::vector<std::vector<T>> vectors;
+        std::vector<std::vector<T, TMKQLAllocator<T>>> vectors;
         
         for (int vectorSize = 100; vectorSize >= 0; --vectorSize) {
             vectors.push_back(CreateSimpleVectorOfSize<T>(vectorSize));
@@ -123,13 +128,14 @@ Y_UNIT_TEST_SUITE(TVectorSpillerAdapterTest_MultipleVectors) {
     }
 
     Y_UNIT_TEST(ManyDifferentSizesReversed) {
+        TScopedAlloc Alloc(__LOCATION__);
         ManyDifferentSizesReversed_TestRunner<int>();
         ManyDifferentSizesReversed_TestRunner<char>();
     }
 
     template <typename T>
     void VectorsInOneChunk_TestRunner() {
-        std::vector<std::vector<T>> vectors;
+        std::vector<std::vector<T, TMKQLAllocator<T>>> vectors;
         
         size_t totalSize = 0;
 
@@ -143,13 +149,14 @@ Y_UNIT_TEST_SUITE(TVectorSpillerAdapterTest_MultipleVectors) {
     }
 
     Y_UNIT_TEST(VectorsInOneChunk) {
+        TScopedAlloc Alloc(__LOCATION__);
         VectorsInOneChunk_TestRunner<int>();
         VectorsInOneChunk_TestRunner<char>();
     }
 
     template <typename T>
     void EmptyVectorsInTheMiddle_TestRunner() {
-        std::vector<std::vector<T>> vectors;
+        std::vector<std::vector<T,TMKQLAllocator<T>>> vectors;
         
         size_t totalSize = 0;
 
@@ -171,15 +178,16 @@ Y_UNIT_TEST_SUITE(TVectorSpillerAdapterTest_MultipleVectors) {
     }
 
     Y_UNIT_TEST(EmptyVectorsInTheMiddle) {
+        TScopedAlloc Alloc(__LOCATION__);
         EmptyVectorsInTheMiddle_TestRunner<int>();
         EmptyVectorsInTheMiddle_TestRunner<char>();
     }
 
     template <typename T>
     void RequestedVectorPartlyInMemory_TestRunner() {
-        std::vector<std::vector<T>> vectors;
-        std::vector<T> small = CreateSimpleVectorOfSize<T>(1);
-        std::vector<T> big = CreateSimpleVectorOfSize<T>(10);
+        std::vector<std::vector<T, TMKQLAllocator<T>>> vectors;
+        std::vector<T, TMKQLAllocator<T>> small = CreateSimpleVectorOfSize<T>(1);
+        std::vector<T, TMKQLAllocator<T>> big = CreateSimpleVectorOfSize<T>(10);
 
         vectors.push_back(small);
         vectors.push_back(big);
@@ -191,6 +199,7 @@ Y_UNIT_TEST_SUITE(TVectorSpillerAdapterTest_MultipleVectors) {
     }
 
     Y_UNIT_TEST(RequestedVectorPartlyInMemory) {
+        TScopedAlloc Alloc(__LOCATION__);
         RequestedVectorPartlyInMemory_TestRunner<int>();
         RequestedVectorPartlyInMemory_TestRunner<char>();
     }

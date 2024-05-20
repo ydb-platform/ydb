@@ -598,6 +598,11 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
         leftJoinKeys.emplace(leftKey);
     }
 
+    const bool useStreamIndexLookupJoin = (kqpCtx.IsDataQuery() || kqpCtx.IsGenericQuery())
+        && kqpCtx.Config->EnableKqpDataQueryStreamIdxLookupJoin
+        && supportedStreamJoinKinds.contains(join.JoinType().Value())
+        && !indexName;
+
     auto leftRowArg = Build<TCoArgument>(ctx, join.Pos())
         .Name("leftRowArg")
         .Done();
@@ -677,10 +682,19 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
                     }
                     if (canCast) {
                         DBG("------ cast " << leftDataType->GetName() << " to " << rightDataType->GetName());
-                        member = Build<TCoConvert>(ctx, join.Pos())
-                            .Input(member)
-                            .Type().Build(rightDataType->GetName())
-                            .Done().Ptr();
+
+                        if (useStreamIndexLookupJoin) {
+                            // For stream lookup join we should cast keys before join
+                            member = Build<TCoSafeCast>(ctx, join.Pos())
+                                .Value(member)
+                                .Type(ExpandType(join.Pos(), *rightType, ctx))
+                                .Done().Ptr();
+                        } else {
+                            member = Build<TCoConvert>(ctx, join.Pos())
+                                .Input(member)
+                                .Type().Build(rightDataType->GetName())
+                                .Done().Ptr();
+                        }
                     } else {
                         DBG("------ can not cast " << leftDataType->GetName() << " to " << rightDataType->GetName());
                         return {};
@@ -703,11 +717,6 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
     if (lookupMembers.size() <= fixedPrefix) {
         return {};
     }
-
-    const bool useStreamIndexLookupJoin = (kqpCtx.IsDataQuery() || kqpCtx.IsGenericQuery())
-        && kqpCtx.Config->EnableKqpDataQueryStreamIdxLookupJoin
-        && supportedStreamJoinKinds.contains(join.JoinType().Value())
-        && !indexName;
 
     bool needPrecomputeLeft = (kqpCtx.IsDataQuery() || kqpCtx.IsGenericQuery())
         && !join.LeftInput().Maybe<TCoParameter>()

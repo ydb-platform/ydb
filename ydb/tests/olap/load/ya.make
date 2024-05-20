@@ -30,6 +30,7 @@ PY3TEST()
 
     DEPENDS (
         ydb/apps/ydb
+        sbr://6332216525
     )
 
 END()

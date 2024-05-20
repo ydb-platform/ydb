@@ -41,7 +41,7 @@ bool IsSuperUser(const NACLib::TUserToken* userToken) {
 }
 
 TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table, const NKikimrSchemeOp::TTableDescription& alter,
-                                      const bool shadowDataAllowed,
+                                      const bool shadowDataAllowed, const THashSet<TString>& localSequences,
                                       TString& errStr, NKikimrScheme::EStatus& status, TOperationContext& context) {
     const TAppData* appData = AppData(context.Ctx);
 
@@ -132,7 +132,11 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
 
     const TSubDomainInfo& subDomain = *path.DomainInfo();
     const TSchemeLimits& limits = subDomain.GetSchemeLimits();
-    TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(table, copyAlter, *appData->TypeRegistry, limits, subDomain, context.SS->EnableTablePgTypes, errStr);
+
+
+    TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(
+        table, copyAlter, *appData->TypeRegistry, limits, subDomain,
+        context.SS->EnableTablePgTypes, errStr, localSequences);
     if (!alterData) {
         status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;
@@ -517,6 +521,40 @@ public:
             }
         }
 
+        THashSet<TString> localSequences;
+
+        std::optional<TString> defaultFromSequence;
+        for (const auto& column: alter.GetColumns()) {
+            if (column.HasDefaultFromSequence()) {
+                defaultFromSequence = column.GetDefaultFromSequence();
+            }
+        }
+
+        if (defaultFromSequence.has_value()) {
+            Y_ABORT_UNLESS(alter.GetColumns().size() == 1);
+
+            const auto sequencePath = TPath::Resolve(*defaultFromSequence, context.SS);
+            {
+                const auto checks = sequencePath.Check();
+                checks
+                    .NotEmpty()
+                    .NotUnderDomainUpgrade()
+                    .IsAtLocalSchemeShard()
+                    .IsResolved()
+                    .NotDeleted()
+                    .IsSequence()
+                    .NotUnderDeleting()
+                    .NotUnderOperation();
+
+                if (!checks) {
+                    result->SetError(checks.GetStatus(), checks.GetError());
+                    return result;
+                }
+            }
+
+            localSequences.insert(sequencePath.PathString());
+        }
+
         TString errStr;
 
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
@@ -560,7 +598,8 @@ public:
         }
 
         NKikimrScheme::EStatus status;
-        TTableInfo::TAlterDataPtr alterData = ParseParams(path, table, alter, IsShadowDataAllowed(), errStr, status, context);
+        TTableInfo::TAlterDataPtr alterData = ParseParams(
+            path, table, alter, IsShadowDataAllowed(), localSequences, errStr, status, context);
         if (!alterData) {
             result->SetError(status, errStr);
             return result;

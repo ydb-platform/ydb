@@ -407,6 +407,10 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvStatTableCreationResponse::
         PendingSaveStatistics = false;
         SaveStatisticsToTable();
     }
+    if (PendingDeleteStatistics) {
+        PendingDeleteStatistics = false;
+        DeleteStatisticsFromTable();
+    }
 }
 
 void TStatisticsAggregator::Initialize() {
@@ -484,6 +488,17 @@ void TStatisticsAggregator::SaveStatisticsToTable() {
         std::move(columnNames), std::move(data)));
 }
 
+void TStatisticsAggregator::DeleteStatisticsFromTable() {
+    if (!IsStatisticsTableCreated) {
+        PendingDeleteStatistics = true;
+        return;
+    }
+
+    PendingDeleteStatistics = false;
+
+    Register(CreateDeleteStatisticsQuery(ScanTableId.PathId));
+}
+
 void TStatisticsAggregator::ScheduleNextScan() {
     while (!ScanTablesByTime.empty()) {
         auto& topTable = ScanTablesByTime.top();
@@ -537,6 +552,38 @@ void TStatisticsAggregator::ResetScanState(NIceDb::TNiceDb& db) {
     KeyColumnTypes.clear();
     Columns.clear();
     ColumnNames.clear();
+}
+
+void TStatisticsAggregator::RescheduleScanTable(NIceDb::TNiceDb& db) {
+    if (ScanTablesByTime.empty()) {
+        return;
+    }
+    auto& topTable = ScanTablesByTime.top();
+    auto pathId = topTable.PathId;
+    if (pathId == ScanTableId.PathId) {
+        TScanTable scanTable;
+        scanTable.PathId = pathId;
+        scanTable.SchemeShardId = topTable.SchemeShardId;
+        scanTable.LastUpdateTime = ScanStartTime;
+
+        ScanTablesByTime.pop();
+        ScanTablesByTime.push(scanTable);
+
+        db.Table<Schema::ScanTables>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+            NIceDb::TUpdate<Schema::ScanTables::LastUpdateTime>(ScanStartTime.MicroSeconds()));
+    }
+}
+
+void TStatisticsAggregator::DropScanTable(NIceDb::TNiceDb& db) {
+    if (ScanTablesByTime.empty()) {
+        return;
+    }
+    auto& topTable = ScanTablesByTime.top();
+    auto pathId = topTable.PathId;
+    if (pathId == ScanTableId.PathId) {
+        ScanTablesByTime.pop();
+        db.Table<Schema::ScanTables>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
+    }
 }
 
 template <typename T, typename S>

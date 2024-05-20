@@ -11,31 +11,6 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         // THullHugeRecoveryLogPos
         ////////////////////////////////////////////////////////////////////////////
-        ui64 THullHugeRecoveryLogPos::FirstLsnToKeep() const {
-            return Min(LogoBlobsDbSlotDelLsn, BlocksDbSlotDelLsn, BarriersDbSlotDelLsn,
-                EntryPointLsn, HugeBlobLoggedLsn);
-
-            // NOTE: we do use HugeBlobLoggedLsn for LastKeepLsn calculation, because in
-            //       run time we may have some in-fly messages to log, that are not reflected
-            //       in HugeBlobLoggedLsn yet
-
-            // NOTE: LogoBlobsDbSlotDelLsn, BlocksDbSlotDelLsn and BarriersDbSlotDelLsn are
-            //       continiously increasing even if nobody writes to the database, because
-            //       the hull component regularly writes its state into the log. This allows us
-            //       to calculate LastKeepLsn based on these values and also progress continiously.
-        }
-
-        TString THullHugeRecoveryLogPos::FirstLsnToKeepDecomposed() const {
-            TStringStream str;
-            str << "{LogoBlobsDbSlotDelLsn# " << LogoBlobsDbSlotDelLsn
-                << " BlocksDbSlotDelLsn# " << BlocksDbSlotDelLsn
-                << " BarriersDbSlotDelLsn# " << BarriersDbSlotDelLsn
-                << " EntryPointLsn# " << EntryPointLsn
-                << " HugeBlobLoggedLsn# " << HugeBlobLoggedLsn
-                << "}";
-            return str.Str();
-        }
-
         TString THullHugeRecoveryLogPos::ToString() const {
             TStringStream str;
             str << "{ChunkAllocationLsn# " << ChunkAllocationLsn
@@ -80,76 +55,6 @@ namespace NKikimr {
             return serialized.size() == SerializedSize;
         }
 
-
-        ////////////////////////////////////////////////////////////////////////////
-        // TLogTracker
-        ////////////////////////////////////////////////////////////////////////////
-        TLogTracker::TPosition::TPosition(const THullHugeRecoveryLogPos &logPos)
-            : EntryPointLsn(logPos.EntryPointLsn)
-            , HugeBlobLoggedLsn(logPos.HugeBlobLoggedLsn)
-        {}
-
-        void TLogTracker::TPosition::Output(IOutputStream &str) const {
-            str << "{EntryPointLsn# " << EntryPointLsn << " HugeBlobLoggedLsn# " << HugeBlobLoggedLsn << "}";
-        }
-
-        TString TLogTracker::TPosition::ToString() const {
-            TStringStream str;
-            Output(str);
-            return str.Str();
-        }
-
-        void TLogTracker::EntryPointFromRecoveryLog(TPosition pos) {
-            PrivateNewLsn(pos);
-        }
-
-        void TLogTracker::FinishRecovery(ui64 entryPointLsn) {
-            Y_ABORT_UNLESS(entryPointLsn == 0 || Cur->EntryPointLsn == entryPointLsn);
-        }
-
-        // Prepare to commit
-        void TLogTracker::InitiateNewEntryPointCommit(TPosition pos) {
-            Y_ABORT_UNLESS(InProgress.Empty());
-            InProgress = pos;
-        }
-
-        // Committed
-        void TLogTracker::EntryPointCommitted(ui64 lsn) {
-            Y_ABORT_UNLESS(InProgress.Defined() && InProgress->EntryPointLsn == lsn);
-            Prev = Cur;
-            Cur = InProgress;
-            InProgress.Clear();
-        }
-
-        ui64 TLogTracker::FirstLsnToKeep() const {
-            return Prev.Empty() ? 0 : Min(Prev->EntryPointLsn, Prev->HugeBlobLoggedLsn);
-        }
-
-        TString TLogTracker::FirstLsnToKeepDecomposed() const {
-            TStringStream str;
-            str << "{Prev# " << Prev << " Cur# " << Cur << "}";
-            return str.Str();
-        }
-
-        bool TLogTracker::WouldNewEntryPointAdvanceLog(ui64 freeUpToLsn, bool inFlightWrites) const {
-            Y_UNUSED(inFlightWrites);
-            Y_ABORT_UNLESS(InProgress.Empty());
-            return FirstLsnToKeep() < freeUpToLsn;
-        }
-
-        void TLogTracker::PrivateNewLsn(TPosition pos) {
-            Y_ABORT_UNLESS(pos.EntryPointLsn != 0 &&
-                    ((Prev.Empty() && Cur.Empty()) ||
-                     (Prev.Empty() && Cur.Defined()) ||
-                     (Prev.Defined() && Cur.Defined() &&
-                      Prev->EntryPointLsn < Cur->EntryPointLsn)) &&
-                    (Cur.Empty() || pos.EntryPointLsn > Cur->EntryPointLsn));
-
-            Prev = Cur;
-            Cur = pos;
-        }
-
-
         ////////////////////////////////////////////////////////////////////////////
         // THullHugeKeeperPersState
         ////////////////////////////////////////////////////////////////////////////
@@ -167,7 +72,6 @@ namespace NKikimr {
                                                            std::function<void(const TString&)> logFunc)
             : VCtx(std::move(vctx))
             , LogPos(THullHugeRecoveryLogPos::Default())
-            , CommittedLogPos(LogPos)
             , Heap(new NHuge::THeap(VCtx->VDiskLogPrefix, chunkSize, appendBlockSize,
                                     minHugeBlobInBytes, oldMinHugeBlobInBytes, milestoneHugeBlobInBytes,
                                     maxBlobInBytes, overhead, freeChunksReservation))
@@ -193,7 +97,6 @@ namespace NKikimr {
                                                            std::function<void(const TString&)> logFunc)
             : VCtx(std::move(vctx))
             , LogPos(THullHugeRecoveryLogPos::Default())
-            , CommittedLogPos(LogPos)
             , Heap(new NHuge::THeap(VCtx->VDiskLogPrefix, chunkSize, appendBlockSize,
                                     minHugeBlobInBytes, oldMinHugeBlobInBytes, milestoneHugeBlobInBytes,
                                     maxBlobInBytes, overhead, freeChunksReservation))
@@ -205,7 +108,6 @@ namespace NKikimr {
             logFunc(VDISKP(VCtx->VDiskLogPrefix,
                 "Recovery started (guid# %" PRIu64 " entryLsn# %" PRIu64 "): State# %s",
                 Guid, entryPointLsn, ToString().data()));
-            CommittedLogPos = LogPos;
         }
 
         THullHugeKeeperPersState::THullHugeKeeperPersState(TIntrusivePtr<TVDiskContext> vctx,
@@ -222,7 +124,6 @@ namespace NKikimr {
                                                            std::function<void(const TString&)> logFunc)
             : VCtx(std::move(vctx))
             , LogPos(THullHugeRecoveryLogPos::Default())
-            , CommittedLogPos(LogPos)
             , Heap(new NHuge::THeap(VCtx->VDiskLogPrefix, chunkSize, appendBlockSize,
                                     minHugeBlobInBytes, oldMinHugeBlobInBytes, milestoneHugeBlobInBytes,
                                     maxBlobInBytes, overhead, freeChunksReservation))
@@ -234,7 +135,6 @@ namespace NKikimr {
             logFunc(VDISKP(VCtx->VDiskLogPrefix,
                 "Recovery started (guid# %" PRIu64 " entryLsn# %" PRIu64 "): State# %s",
                 Guid, entryPointLsn, ToString().data()));
-            CommittedLogPos = LogPos;
         }
 
         THullHugeKeeperPersState::~THullHugeKeeperPersState() {
@@ -391,7 +291,7 @@ namespace NKikimr {
         }
 
         void THullHugeKeeperPersState::RenderHtml(IOutputStream &str) const {
-            str << "LogPos: " << LogPos.ToString() << "<br>";
+            str << "LogPos: " << LogPos.ToString() << "<br/>";
             str << "AllocatedSlots:";
             if (!AllocatedSlots.empty()) {
                 for (const auto &x : AllocatedSlots) {
@@ -403,49 +303,36 @@ namespace NKikimr {
             Heap->RenderHtml(str);
         }
 
-        ui64 THullHugeKeeperPersState::FirstLsnToKeep() const {
-            return Min(LogPos.FirstLsnToKeep(), LogTracker.FirstLsnToKeep(),
-                // special case if these LSM tree entrypoints with deletions would be applied by the recovery code
-                CommittedLogPos.LogoBlobsDbSlotDelLsn,
-                CommittedLogPos.BlocksDbSlotDelLsn,
-                CommittedLogPos.BarriersDbSlotDelLsn);
+        ui64 THullHugeKeeperPersState::FirstLsnToKeep(ui64 minInFlightLsn) const {
+            const ui64 res = Min(minInFlightLsn, LogPos.EntryPointLsn);
+
+            Y_VERIFY_S(FirstLsnToKeepReported <= res, "FirstLsnToKeepReported# " << FirstLsnToKeepReported
+                << " res# " << res << " state# " << FirstLsnToKeepDecomposed() << " minInFlightLsn# " << minInFlightLsn);
+            FirstLsnToKeepReported = res;
+
+            return res;
         }
 
         TString THullHugeKeeperPersState::FirstLsnToKeepDecomposed() const {
             TStringStream str;
-            str << "{LogPos# " << LogPos.FirstLsnToKeepDecomposed()
-                << " CommittedLogPos# " << CommittedLogPos.FirstLsnToKeepDecomposed()
-                << " LogTracker# " << LogTracker.FirstLsnToKeepDecomposed()
-                << "}";
+            str << "{LogPos# " << LogPos.EntryPointLsn << "}";
             return str.Str();
         }
 
-        bool THullHugeKeeperPersState::WouldNewEntryPointAdvanceLog(ui64 freeUpToLsn, bool inFlightWrites) const {
-            return LogTracker.WouldNewEntryPointAdvanceLog(freeUpToLsn, inFlightWrites);
+        bool THullHugeKeeperPersState::WouldNewEntryPointAdvanceLog(ui64 freeUpToLsn, ui64 minInFlightLsn,
+                ui32 itemsAfterCommit) const {
+            return freeUpToLsn < minInFlightLsn && (LogPos.EntryPointLsn <= freeUpToLsn || itemsAfterCommit > 10000);
         }
 
         // initiate commit
-        void THullHugeKeeperPersState::InitiateNewEntryPointCommit(ui64 lsn, bool inFlightWrites) {
+        void THullHugeKeeperPersState::InitiateNewEntryPointCommit(ui64 lsn) {
             Y_ABORT_UNLESS(lsn > LogPos.EntryPointLsn);
-            // set up previous entry point position to prevent log from being occasionally cut and update new entry
-            // point position in persistent state
             LogPos.EntryPointLsn = lsn;
-            if (!inFlightWrites) {
-                // no active writes are going on, we can promote HugeBlobLoggedLsn
-                LogPos.HugeBlobLoggedLsn = lsn;
-            }
-
-            TLogTracker::TPosition pos;
-            pos.EntryPointLsn = LogPos.EntryPointLsn;
-            pos.HugeBlobLoggedLsn = LogPos.HugeBlobLoggedLsn;
-            LogTracker.InitiateNewEntryPointCommit(pos);
-            CommittedLogPos = LogPos;
         }
 
         // finish commit
         void THullHugeKeeperPersState::EntryPointCommitted(ui64 entryPointLsn) {
             Y_ABORT_UNLESS(entryPointLsn == LogPos.EntryPointLsn);
-            LogTracker.EntryPointCommitted(entryPointLsn);
         }
 
         // chunk allocation
@@ -606,7 +493,6 @@ namespace NKikimr {
             auto logPos = THullHugeRecoveryLogPos::Default();
             logPos.ParseFromString(logPosSerialized);
             Y_ABORT_UNLESS(logPos.EntryPointLsn == lsn);
-            LogTracker.EntryPointFromRecoveryLog(logPos);
 
             LOG_DEBUG(ctx, BS_HULLHUGE,
                     VDISKP(VCtx->VDiskLogPrefix,
@@ -630,7 +516,6 @@ namespace NKikimr {
             auto logPos = THullHugeRecoveryLogPos::Default();
             logPos.ParseFromArray(logPosSerialized.GetData(), logPosSerialized.GetSize());
             Y_ABORT_UNLESS(logPos.EntryPointLsn == lsn);
-            LogTracker.EntryPointFromRecoveryLog(logPos);
 
             LOG_DEBUG(ctx, BS_HULLHUGE,
                     VDISKP(VCtx->VDiskLogPrefix,
@@ -651,7 +536,6 @@ namespace NKikimr {
                 AllocatedSlots.clear();
             }
 
-            LogTracker.FinishRecovery(LogPos.EntryPointLsn);
             Recovered = true;
             LOG_DEBUG(ctx, BS_HULLHUGE,
                 VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 ") finished", Guid));
@@ -663,7 +547,3 @@ namespace NKikimr {
 
     } // NHuge
 } // NKikimr
-
-Y_DECLARE_OUT_SPEC(, NKikimr::NHuge::TLogTracker::TPosition, stream, value) {
-    value.Output(stream);
-}

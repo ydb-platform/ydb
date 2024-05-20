@@ -302,7 +302,6 @@ void SwitchFromFiber(TFiber* targetFiber, TAfterSwitch afterSwitch)
     auto* targetContext = targetFiber->GetMachineContext();
 
     auto currentFiber = SwapCurrentFiber(targetFiber);
-    YT_VERIFY(currentFiber->GetState() != EFiberState::Waiting);
     auto* currentContext = currentFiber->GetMachineContext();
 
     SetAfterSwitch(afterSwitch);
@@ -310,6 +309,41 @@ void SwitchFromFiber(TFiber* targetFiber, TAfterSwitch afterSwitch)
 
     YT_VERIFY(TryGetCurrentFiber() == currentFiber);
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TFiberIdGenerator
+{
+public:
+    static TFiberIdGenerator* Get()
+    {
+        return LeakySingleton<TFiberIdGenerator>();
+    }
+
+    TFiberId Generate()
+    {
+        const TFiberId Factor = std::numeric_limits<TFiberId>::max() - 173864;
+        YT_ASSERT(Factor % 2 == 1); // Factor must be coprime with 2^n.
+
+        while (true) {
+            auto seed = Seed_++;
+            auto id = seed * Factor;
+            if (id != InvalidFiberId) {
+                return id;
+            }
+        }
+    }
+
+private:
+    std::atomic<TFiberId> Seed_;
+
+    DECLARE_LEAKY_SINGLETON_FRIEND()
+
+    TFiberIdGenerator()
+    {
+        Seed_.store(static_cast<TFiberId>(::time(nullptr)));
+    }
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -714,11 +748,14 @@ public:
     // On start fiber running.
     explicit TFiberSwitchHandler(TFiber* fiber)
         : Fiber_(fiber)
+        , FiberId_(TFiberIdGenerator::Get()->Generate())
     {
         SavedThis_ = std::exchange(CurrentFiberSwitchHandler(), this);
 
-        YT_VERIFY(SwapCurrentFiberId(fiber->GetFiberId()) == InvalidFiberId);
-        YT_VERIFY(!SwapCurrentFls(fiber->GetFls()));
+        Fiber_->OnCallbackExecutionStarted(FiberId_, &Fls_);
+
+        YT_VERIFY(SwapCurrentFiberId(FiberId_) == InvalidFiberId);
+        YT_VERIFY(!SwapCurrentFls(&Fls_));
     }
 
     // On finish fiber running.
@@ -727,8 +764,10 @@ public:
         YT_VERIFY(CurrentFiberSwitchHandler() == this);
         YT_VERIFY(UserHandlers_.empty());
 
-        YT_VERIFY(SwapCurrentFiberId(InvalidFiberId) == Fiber_->GetFiberId());
-        YT_VERIFY(SwapCurrentFls(nullptr) == Fiber_->GetFls());
+        Fiber_->OnCallbackExecutionFinished();
+
+        YT_VERIFY(SwapCurrentFiberId(InvalidFiberId) == FiberId_);
+        YT_VERIFY(SwapCurrentFls(nullptr) == &Fls_);
 
         // Support case when current fiber has been resumed, but finished without WaitFor.
         // There is preserved context of resumer fiber saved in switchHandler. Restore it.
@@ -769,7 +808,9 @@ public:
 private:
     friend TContextSwitchGuard;
 
-    const TFiber* const Fiber_;
+    TFiber* const Fiber_;
+    const TFiberId FiberId_;
+    TFls Fls_;
 
     TFiberSwitchHandler* SavedThis_;
 
@@ -834,7 +875,6 @@ TFiberSwitchHandler* GetFiberSwitchHandler()
 // See devtools/gdb/yt_fibers_printer.py.
 Y_NO_INLINE void RunInFiberContext(TFiber* fiber, TClosure callback)
 {
-    fiber->Recreate();
     TFiberSwitchHandler switchHandler(fiber);
     TNullPropagatingStorageGuard nullPropagatingStorageGuard;
     callback();

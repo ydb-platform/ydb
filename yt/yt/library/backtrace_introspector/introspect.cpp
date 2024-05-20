@@ -58,11 +58,12 @@ std::vector<TFiberIntrospectionInfo> IntrospectFibers()
             EmplaceOrCrash(fiberStates, fiberId, EFiberState::Introspecting);
 
             EFiberState state;
-            if (!fiber->TryIntrospectWaiting(state, [&] {
+
+            auto onIntrospectionLockAcquired = [&] {
                 YT_LOG_DEBUG("Waiting fiber is successfully locked for introspection (FiberId: %x)",
                     fiberId);
 
-                const auto& propagatingStorage = fiber->GetPropagatingStorage();
+                const auto& propagatingStorage = NConcurrency::GetPropagatingStorage(*fiber->GetFls());
                 const auto* traceContext = TryGetTraceContextFromPropagatingStorage(propagatingStorage);
 
                 TFiberIntrospectionInfo info{
@@ -91,7 +92,8 @@ std::vector<TFiberIntrospectionInfo> IntrospectFibers()
 
                 YT_LOG_DEBUG("Fiber introspection completed (FiberId: %x)",
                     info.FiberId);
-            })) {
+            };
+            if (!fiber->TryLockForIntrospection(&state, onIntrospectionLockAcquired)) {
                 YT_LOG_DEBUG("Failed to lock fiber for introspection (FiberId: %x, State: %v)",
                     fiberId,
                     state);

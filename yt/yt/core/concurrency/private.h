@@ -51,6 +51,7 @@ using TMpscSuspendableSingleQueueSchedulerThreadPtr = TIntrusivePtr<TMpscSuspend
 ////////////////////////////////////////////////////////////////////////////////
 
 class TFiber;
+class TFls;
 
 DECLARE_REFCOUNTED_CLASS(TSchedulerThread)
 

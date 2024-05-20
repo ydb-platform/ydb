@@ -431,10 +431,6 @@ public:
                     .NotResolved();
             }
 
-            if (!Transaction.GetTemporary()) {
-                checks.NotTemporary();
-            }
-
             if (checks) {
                 if (!parent.Base()->IsTableIndex() && !isBackup) {
                     checks.DepthLimit();
@@ -444,7 +440,8 @@ public:
                     .IsValidLeafName()
                     .IsTheSameDomain(srcPath)
                     .PathShardsLimit(maxShardsToCreate)
-                    .IsValidACL(acl);
+                    .IsValidACL(acl)
+                    .NotTemporary(Transaction.GetAllowCreateInTempDir());
             }
 
             if (checks && !isBackup) {
@@ -725,10 +722,6 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             .IsTable()
             .NotUnderOperation()
             .IsCommonSensePath(); //forbid copy impl index tables directly
-
-        if (!tx.GetTemporary()) {
-            checks.NotTemporary();
-        }
 
         if (!checks) {
             return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};

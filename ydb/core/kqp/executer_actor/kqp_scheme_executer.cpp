@@ -96,7 +96,7 @@ public:
         auto* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
         modifyScheme->SetWorkingDir(GetSessionDirsBasePath(Database));
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMkDir);
-        modifyScheme->SetTemporary(true);
+        modifyScheme->SetAllowCreateInTempDir(true);
         auto* makeDir = modifyScheme->MutableMkDir();
         makeDir->SetName(SessionId);
         ActorIdToProto(KqpTempTablesAgentActor, modifyScheme->MutableTempDirOwnerActorId());
@@ -150,7 +150,7 @@ public:
                     YQL_ENSURE(fullPath.size() > 1);
                     tableDesc->SetName(GetCreateTempTablePath(Database, SessionId, fullPath));
                     tableDesc->SetPath(Database);
-                    modifyScheme.SetTemporary(true);
+                    modifyScheme.SetAllowCreateInTempDir(true);
                 }
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;

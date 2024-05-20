@@ -260,10 +260,6 @@ public:
                 .IsCommonSensePath()
                 .IsLikeDirectory();
 
-            if (!Transaction.GetTemporary()) {
-                checks.NotTemporary();
-            }
-
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
@@ -275,10 +271,6 @@ public:
             const auto checks = path.Check();
             checks
                 .IsAtLocalSchemeShard();
-
-            if (!Transaction.GetTemporary()) {
-                checks.NotTemporary();
-            }
 
             if (path.IsResolved()) {
                 checks
@@ -298,7 +290,8 @@ public:
                     .PathsLimit()
                     .DirChildrenLimit()
                     .ShardsLimit(1)
-                    .IsValidACL(acl);
+                    .IsValidACL(acl)
+                    .NotTemporary(Transaction.GetAllowCreateInTempDir());
             }
 
             if (!checks) {

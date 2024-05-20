@@ -443,10 +443,6 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting();
-            
-            if (!Transaction.GetTemporary()) {
-                checks.NotTemporary();
-            }
 
             if (checks) {
                 if (parentPath.Base()->IsTableIndex()) {
@@ -483,10 +479,6 @@ public:
                     .NotResolved();
             }
 
-            if (!Transaction.GetTemporary()) {
-                checks.NotTemporary();
-            }
-
             if (checks) {
                 if (!parentPath.Base()->IsTableIndex()) {
                     checks.DepthLimit();
@@ -498,7 +490,8 @@ public:
                     .DirChildrenLimit()
                     .ShardsLimit(shardsToCreate)
                     .PathShardsLimit(shardsToCreate)
-                    .IsValidACL(acl);
+                    .IsValidACL(acl)
+                    .NotTemporary(Transaction.GetAllowCreateInTempDir());
             }
 
             if (!checks) {

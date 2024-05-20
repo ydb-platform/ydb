@@ -142,17 +142,14 @@ private:
                 .NotResolved();
         }
 
-        if (!tx.GetTemporary()) {
-            checks.NotTemporary();
-        }
-
         if (checks) {
             checks
                 .IsValidLeafName()
                 .DepthLimit()
                 .PathsLimit()
                 .DirChildrenLimit()
-                .IsValidACL(acl);
+                .IsValidACL(acl)
+                .NotTemporary(tx.GetAllowCreateInTempDir());
         }
 
         if (!checks) {
@@ -166,7 +163,7 @@ private:
         return static_cast<bool>(checks);
     }
 
-    static bool IsDataSourcePathValid(const THolder<TProposeResponse>& result, const TPath& dataSourcePath, const TTxTransaction& tx) {
+    static bool IsDataSourcePathValid(const THolder<TProposeResponse>& result, const TPath& dataSourcePath) {
         const auto checks = dataSourcePath.Check();
         checks
             .NotUnderDomainUpgrade()
@@ -177,10 +174,6 @@ private:
             .IsCommonSensePath()
             .IsExternalDataSource()
             .NotUnderOperation();
-
-        if (!tx.GetTemporary()) {
-            checks.NotTemporary();
-        }
 
         if (!checks) {
             result->SetError(checks.GetStatus(), checks.GetError());
@@ -327,7 +320,7 @@ public:
 
         const auto dataSourcePath =
             TPath::Resolve(externalTableDescription.GetDataSourcePath(), context.SS);
-        RETURN_RESULT_UNLESS(IsDataSourcePathValid(result, dataSourcePath, Transaction));
+        RETURN_RESULT_UNLESS(IsDataSourcePathValid(result, dataSourcePath));
 
         const auto externalDataSource =
             context.SS->ExternalDataSources.Value(dataSourcePath->PathId, nullptr);

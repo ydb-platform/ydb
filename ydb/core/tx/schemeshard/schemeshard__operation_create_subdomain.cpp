@@ -118,10 +118,6 @@ public:
                 .IsCommonSensePath()
                 .IsLikeDirectory();
 
-            if (!Transaction.GetTemporary()) {
-                checks.NotTemporary();
-            }
-
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
@@ -153,7 +149,8 @@ public:
                     .DirChildrenLimit()
                     .PathShardsLimit(shardsToCreate)
                     .ShardsLimit(shardsToCreate) //check capacity on root Domain
-                    .IsValidACL(acl);
+                    .IsValidACL(acl)
+                    .NotTemporary(Transaction.GetAllowCreateInTempDir());
             }
 
             if (!checks) {

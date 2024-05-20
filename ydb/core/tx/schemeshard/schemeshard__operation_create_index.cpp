@@ -141,10 +141,6 @@ public:
                 .IsTable()
                 .NotAsyncReplicaTable();
 
-            if (!Transaction.GetTemporary()) {
-                checks.NotTemporary();
-            }
-
             if (tableIndexCreation.GetState() == NKikimrSchemeOp::EIndexState::EIndexStateReady) {
                 checks
                     .IsUnderCreating(NKikimrScheme::StatusNameConflict)
@@ -173,15 +169,12 @@ public:
                     .NotResolved();
             }
 
-            if (!Transaction.GetTemporary()) {
-                checks.NotTemporary();
-            }
-
             if (checks) {
                 checks
                     .PathsLimit()
                     .IsValidLeafName()
-                    .IsValidACL(acl);
+                    .IsValidACL(acl)
+                    .NotTemporary(Transaction.GetAllowCreateInTempDir());
             }
 
             if (!checks) {

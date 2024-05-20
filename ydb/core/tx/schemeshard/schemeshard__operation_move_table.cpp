@@ -584,10 +584,6 @@ public:
                 .NotUnderTheSameOperation(OperationId.GetTxId())
                 .NotUnderOperation();
 
-            if (!Transaction.GetTemporary()) {
-                checks.NotTemporary();
-            }
-
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
@@ -602,11 +598,8 @@ public:
             checks
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
-                .IsResolved();
-
-                if (!Transaction.GetTemporary()) {
-                    checks.NotTemporary();
-                }
+                .IsResolved()
+                .NotTemporary(Transaction.GetAllowCreateInTempDir());
 
                 if (dstParent.IsUnderDeleting()) {
                     checks
@@ -663,14 +656,11 @@ public:
                     .NotResolved();
             }
 
-            if (!Transaction.GetTemporary()) {
-                checks.NotTemporary();
-            }
-
             if (checks) {
                 checks
                     .DepthLimit()
-                    .IsValidLeafName();
+                    .IsValidLeafName()
+                    .NotTemporary(Transaction.GetAllowCreateInTempDir());
             }
 
             if (!checks) {

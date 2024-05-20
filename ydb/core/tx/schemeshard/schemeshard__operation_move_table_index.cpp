@@ -367,10 +367,6 @@ public:
                 .NotDeleted()
                 .IsTableIndex();
 
-            if (!Transaction.GetTemporary()) {
-                checks.NotTemporary();
-            }
-
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
@@ -392,10 +388,6 @@ public:
                 .NotAsyncReplicaTable()
                 .IsUnderTheSameOperation(OperationId.GetTxId());
 
-            if (!Transaction.GetTemporary()) {
-                checks.NotTemporary();
-            }
-
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
@@ -411,10 +403,6 @@ public:
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved();
-
-            if (!Transaction.GetTemporary()) {
-                checks.NotTemporary();
-            }
 
             if (dstParentPath.IsUnderOperation()) {
                 checks
@@ -464,14 +452,11 @@ public:
                     .NotResolved();
             }
 
-            if (!Transaction.GetTemporary()) {
-                checks.NotTemporary();
-            }
-
             if (checks) {
                 checks
                     .DepthLimit()
-                    .IsValidLeafName();
+                    .IsValidLeafName()
+                    .NotTemporary(Transaction.GetAllowCreateInTempDir());
             }
 
             if (!checks) {

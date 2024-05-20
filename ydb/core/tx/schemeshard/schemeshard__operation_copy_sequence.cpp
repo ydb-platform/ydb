@@ -623,10 +623,6 @@ public:
                     .NotResolved();
             }
 
-            if (!Transaction.GetTemporary()) {
-                checks.NotTemporary();
-            }
-
             if (checks) {
                 checks.IsValidLeafName();
 
@@ -638,7 +634,8 @@ public:
                     .PathsLimit()
                     .DirChildrenLimit()
                     .IsTheSameDomain(srcPath)
-                    .IsValidACL(acl);
+                    .IsValidACL(acl)
+                    .NotTemporary(Transaction.GetAllowCreateInTempDir());
             }
 
             if (!checks) {

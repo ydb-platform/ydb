@@ -111,17 +111,14 @@ class TCreateExternalDataSource : public TSubOperation {
                 .NotResolved();
         }
 
-        if (!tx.GetTemporary()) {
-            checks.NotTemporary();
-        }
-
         if (checks) {
             checks
                 .IsValidLeafName()
                 .DepthLimit()
                 .PathsLimit()
                 .DirChildrenLimit()
-                .IsValidACL(acl);
+                .IsValidACL(acl)
+                .NotTemporary(tx.GetAllowCreateInTempDir());
         }
 
         if (!checks) {

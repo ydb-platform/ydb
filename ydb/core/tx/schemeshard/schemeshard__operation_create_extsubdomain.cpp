@@ -86,10 +86,6 @@ public:
                 .IsCommonSensePath()
                 .IsLikeDirectory();
 
-            if (!Transaction.GetTemporary()) {
-                checks.NotTemporary();
-            }
-
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
@@ -113,17 +109,14 @@ public:
                     .NotResolved();
             }
 
-            if (!Transaction.GetTemporary()) {
-                checks.NotTemporary();
-            }
-
             if (checks) {
                 checks
                     .IsValidLeafName()
                     .DepthLimit()
                     .PathsLimit() //check capacity on root Domain
                     .DirChildrenLimit()
-                    .IsValidACL(acl);
+                    .IsValidACL(acl)
+                    .NotTemporary(Transaction.GetAllowCreateInTempDir());
             }
 
             if (!checks) {

@@ -132,7 +132,7 @@ public:
                 .NotUnderDeleting()
                 .IsCommonSensePath()
                 .IsLikeDirectory()
-                .NotTemporary(Transaction.GetTemporary());
+                .NotTemporary(Transaction.GetAllowCreateInTempDir());
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());

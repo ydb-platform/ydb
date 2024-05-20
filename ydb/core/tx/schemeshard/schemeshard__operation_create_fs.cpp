@@ -307,10 +307,6 @@ THolder<TProposeResponse> TCreateFileStore::Propose(
             .IsCommonSensePath()
             .IsLikeDirectory();
 
-        if (!Transaction.GetTemporary()) {
-            checks.NotTemporary();
-        }
-
         if (!checks) {
             result->SetError(checks.GetStatus(), checks.GetError());
             return result;
@@ -334,10 +330,6 @@ THolder<TProposeResponse> TCreateFileStore::Propose(
                 .NotResolved();
         }
 
-        if (!Transaction.GetTemporary()) {
-            checks.NotTemporary();
-        }
-
         if (checks) {
             checks
                 .IsValidLeafName()
@@ -346,7 +338,8 @@ THolder<TProposeResponse> TCreateFileStore::Propose(
                 .DirChildrenLimit()
                 .ShardsLimit(shardsToCreate)
                 .PathShardsLimit(shardsToCreate)
-                .IsValidACL(acl);
+                .IsValidACL(acl)
+                .NotTemporary(Transaction.GetAllowCreateInTempDir());
         }
 
         if (!checks) {

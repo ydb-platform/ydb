@@ -240,10 +240,6 @@ public:
                     .NotResolved();
             }
 
-            if (!Transaction.GetTemporary()) {
-                checks.NotTemporary();
-            }
-
             if (checks) {
                 checks
                     .IsValidLeafName()
@@ -252,7 +248,8 @@ public:
                     .DirChildrenLimit()
                     .ShardsLimit(shardsToCreate)
                     .PathShardsLimit(shardsToCreate)
-                    .IsValidACL(acl);
+                    .IsValidACL(acl)
+                    .NotTemporary(Transaction.GetAllowCreateInTempDir());
             }
 
             if (!checks) {

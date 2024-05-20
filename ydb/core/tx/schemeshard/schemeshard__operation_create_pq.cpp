@@ -314,10 +314,6 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting();
 
-            if (!Transaction.GetTemporary()) {
-                checks.NotTemporary();
-            }
-
             if (checks) {
                 if (parentPath.Base()->IsCdcStream()) {
                     checks
@@ -353,17 +349,14 @@ public:
                     .NotResolved();
             }
 
-            if (!Transaction.GetTemporary()) {
-                checks.NotTemporary();
-            }
-
             if (checks) {
                 checks
                     .IsValidLeafName()
                     .DepthLimit()
                     .PathsLimit()
                     .DirChildrenLimit()
-                    .IsValidACL(acl);
+                    .IsValidACL(acl)
+                    .NotTemporary(Transaction.GetAllowCreateInTempDir());
             }
 
             if (!checks) {

@@ -51,21 +51,21 @@ void SetBackgroundCleaning(TTestActorRuntime &runtime, TTestEnv& env, ui64 schem
 void AsyncCreateTempTable(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& ownerActorId, ui32 nodeIdx) {
     auto ev = CreateIndexedTableRequest(txId, workingDir, scheme);
     auto* tx = ev->Record.MutableTransaction(0);
-    tx->SetTemporary(true);
+    tx->SetAllowCreateInTempDir(true);
     AsyncSend(runtime, schemeShardId, ev, nodeIdx, ownerActorId);
 }
 
 void AsyncMkDir(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& ownerActorId, ui32 nodeIdx) {
     auto ev = MkDirRequest(txId, workingDir, scheme);
     auto* tx = ev->Record.MutableTransaction(0);
-    tx->SetTemporary(true);
+    tx->SetAllowCreateInTempDir(true);
     AsyncSend(runtime, schemeShardId, ev, nodeIdx, ownerActorId);
 }
 
 void AsyncMkTempDir(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& ownerActorId, ui32 nodeIdx) {
     auto ev = MkDirRequest(txId, workingDir, scheme);
     auto* tx = ev->Record.MutableTransaction(0);
-    tx->SetTemporary(true);
+    tx->SetAllowCreateInTempDir(true);
     ActorIdToProto(ownerActorId, tx->MutableTempDirOwnerActorId());
     AsyncSend(runtime, schemeShardId, ev, nodeIdx, ownerActorId);
 }

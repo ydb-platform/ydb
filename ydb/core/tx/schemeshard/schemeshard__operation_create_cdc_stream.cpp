@@ -180,15 +180,12 @@ public:
                     .NotResolved();
             }
 
-            if (!Transaction.GetTemporary()) {
-                checks.NotTemporary();
-            }
-
             if (checks) {
                 checks
                     .IsValidLeafName()
                     .PathsLimit()
-                    .DirChildrenLimit();
+                    .DirChildrenLimit()
+                    .NotTemporary(Transaction.GetAllowCreateInTempDir());
             }
 
             if (!checks) {
@@ -598,10 +595,6 @@ public:
                 .NotAsyncReplicaTable()
                 .NotUnderDeleting();
 
-            if (!Transaction.GetTemporary()) {
-                checks.NotTemporary();
-            }
-
             if (checks) {
                 if (!isIndexTable) {
                     checks.IsCommonSensePath();
@@ -810,15 +803,12 @@ ISubOperation::TPtr RejectOnCdcChecks(const TOperationId& opId, const TPath& str
             .NotResolved();
     }
 
-    if (!tx.GetTemporary()) {
-        checks.NotTemporary();
-    }
-
     if (checks) {
         checks
             .IsValidLeafName()
             .PathsLimit()
-            .DirChildrenLimit();
+            .DirChildrenLimit()
+            .NotTemporary(tx.GetAllowCreateInTempDir());
     }
 
     if (!checks) {
@@ -828,7 +818,7 @@ ISubOperation::TPtr RejectOnCdcChecks(const TOperationId& opId, const TPath& str
     return nullptr;
 }
 
-ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPath& tablePath, const TTxTransaction& tx) {
+ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPath& tablePath) {
     const auto checks = tablePath.Check();
     checks
         .NotEmpty()
@@ -841,10 +831,6 @@ ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPat
         .IsCommonSensePath()
         .NotUnderDeleting()
         .NotUnderOperation();
-
-    if (!tx.GetTemporary()) {
-        checks.NotTemporary();
-    }
 
     if (!checks) {
         return CreateReject(opId, checks.GetStatus(), checks.GetError());

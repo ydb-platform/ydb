@@ -1,5 +1,6 @@
 #include "update.h"
 #include <ydb/core/tx/schemeshard/olap/operations/alter/abstract/converter.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
@@ -56,6 +57,19 @@ void TInStoreShardsUpdate::FillToShardTx(NKikimrTxColumnShard::TCreateTable& inf
     if (alterBody.Description.HasTtlSettings()) {
         *info.MutableTtlSettings() = alterBody.Description.GetTtlSettings();
     }
+}
+
+NKikimr::TConclusionStatus TInStoreShardsUpdate::DoFinishImpl(const TUpdateFinishContext& context) {
+    auto conclusion = TBase::DoFinishImpl(context);
+    if (conclusion.IsFail()) {
+        return conclusion;
+    }
+    for (auto&& i : Alter.GetModification().GetOpenWriteIds()) {
+        auto alter = context.GetSSOperationContext()->SS->ColumnTables.GetVerifiedPtr(TargetInStoreTable->GetPathId())->AlterData;
+        AFL_VERIFY(!!alter);
+        alter->SetShardingOpenSnapshotVerified(i, context.GetSnapshotVerified());
+    }
+    return TConclusionStatus::Success();
 }
 
 }

@@ -19,10 +19,12 @@ NKikimr::TConclusionStatus TInStoreShardsTransfer::DoInitializeImpl(const TUpdat
             pathIdRemap.SetSourcePathId(context.GetOriginalEntity().GetPathId().LocalPathId);
             pathIdRemap.SetDestPathId(context.GetOriginalEntity().GetPathId().LocalPathId);
         }
+        auto& table = context.GetOriginalEntityAsVerified<TInStoreTable>();
+        ::NKikimr::NOlap::TSnapshot ssOpen = table.GetTableInfo()->GetShardingOpenSnapshotVerified(alter.GetDestinationTabletId());
 
         destinationSession.MutableTransferContext()->SetDestinationTabletId(alter.GetDestinationTabletId());
         destinationSession.MutableTransferContext()->SetTxId(context.GetTxId());
-        *destinationSession.MutableTransferContext()->MutableSnapshotBarrier() = NKikimr::NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1).SerializeToProto();
+        *destinationSession.MutableTransferContext()->MutableSnapshotBarrier() = ssOpen.SerializeToProto();
         for (auto&& i : alter.GetSourceTabletIds()) {
             destinationSession.MutableTransferContext()->AddSourceTabletIds(i);
         }

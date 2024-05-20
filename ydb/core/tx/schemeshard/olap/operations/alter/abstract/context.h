@@ -3,6 +3,7 @@
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard_path.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h>
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
@@ -110,6 +111,22 @@ public:
     }
 };
 
-using TUpdateFinishContext = TUpdateStartContext;
+class TUpdateFinishContext: public TUpdateStartContext {
+private:
+    using TBase = TUpdateStartContext;
+    YDB_READONLY_DEF(std::optional<NKikimr::NOlap::TSnapshot>, Snapshot);
+public:
+
+    const NKikimr::NOlap::TSnapshot& GetSnapshotVerified() const {
+        AFL_VERIFY(Snapshot);
+        return *Snapshot;
+    }
+
+    TUpdateFinishContext(const TPath* objectPath, TOperationContext* ssOperationContext, NIceDb::TNiceDb* db, const std::optional<NKikimr::NOlap::TSnapshot>& ss)
+        : TBase(objectPath, ssOperationContext, db)
+        , Snapshot(ss)
+    {
+    }
+};
 
 }

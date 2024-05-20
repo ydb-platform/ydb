@@ -18,6 +18,7 @@ import "ydb/library/actors/protos/actors.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/core/protos/index_builder.proto";
 import "ydb/core/tx/columnshard/engines/scheme/statistics/protos/data.proto";
+import "ydb/core/tx/columnshard/common/protos/snapshot.proto";
 
 import "google/protobuf/empty.proto";
 
@@ -689,6 +690,15 @@ message TGranuleShardingInfo {
     optional TGranuleShardingLogicContainer Container = 3;
 }
 
+message TRuntimeShardInfo {
+    optional uint64 TabletId = 1;
+    optional NKikimrColumnShardProto.TSnapshot OpenSnapshot = 2;
+}
+
+message TRuntimeShardingInfo {
+    repeated TRuntimeShardInfo Shards = 1;
+}
+
 message TColumnTableSharding {
     // Version is incremented each time table sharding is changed
     // This field is managed by the system.
@@ -733,6 +743,8 @@ message TColumnTableSharding {
 
     repeated uint64 ClosedReadingShardIds = 7;
     repeated uint64 ClosedWritingShardIds = 8;
+
+    optional TRuntimeShardingInfo RuntimeInfo = 9;
 }
 
 message TColumnTableDescription {

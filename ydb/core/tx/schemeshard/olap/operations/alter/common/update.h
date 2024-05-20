@@ -9,13 +9,6 @@ class TColumnTableUpdate: public ISSEntityUpdate {
 private:
     using TBase = ISSEntityUpdate;
 
-    virtual TConclusionStatus DoStartImpl(const TUpdateStartContext& /*context*/) {
-        return TConclusionStatus::Success();
-    }
-    virtual TConclusionStatus DoFinishImpl(const TUpdateFinishContext& /*context*/) {
-        return TConclusionStatus::Success();
-    }
-
     virtual std::shared_ptr<TColumnTableInfo> GetTargetTableInfo() const = 0;
     virtual std::shared_ptr<ISSEntity> GetTargetSSEntity() const = 0;
 
@@ -27,6 +20,12 @@ private:
     }
     virtual TConclusionStatus DoInitializeImpl(const TUpdateInitializationContext& context) = 0;
 protected:
+    virtual TConclusionStatus DoStartImpl(const TUpdateStartContext& /*context*/) {
+        return TConclusionStatus::Success();
+    }
+    virtual TConclusionStatus DoFinishImpl(const TUpdateFinishContext& /*context*/) {
+        return TConclusionStatus::Success();
+    }
     virtual TConclusionStatus DoInitialize(const TUpdateInitializationContext& context) override final {
         if (!context.GetModification()->HasAlterColumnTable() && !context.GetModification()->HasAlterTable()) {
             return TConclusionStatus::Fail("no update data");

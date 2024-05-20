@@ -18,6 +18,7 @@ private:
     virtual TConclusionStatus DoInitializeImpl(const TUpdateInitializationContext& context) override;
     void FillToShardTx(NKikimrTxColumnShard::TCreateTable& shardAlter) const;
 
+    virtual TConclusionStatus DoFinishImpl(const TUpdateFinishContext& context) override;
     virtual std::shared_ptr<TColumnTableInfo> GetTargetTableInfo() const override {
         return TargetInStoreTable->GetTableInfoPtrVerified();
     }

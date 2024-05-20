@@ -3,6 +3,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_identificators.h>
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include <ydb/core/tx/sharding/sharding.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h>
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 class ISSEntity;
@@ -24,6 +25,10 @@ public:
         AFL_VERIFY(!IsStandalone());
         return PathIdFromPathId(Description.GetColumnStorePathId());
     }
+
+    NKikimr::NOlap::TSnapshot GetShardingOpenSnapshotVerified(const ui64 tabletId) const;
+
+    void SetShardingOpenSnapshotVerified(const ui64 tabletId, const NKikimr::NOlap::TSnapshot& ss);
 
     std::shared_ptr<NSharding::IShardingBase> GetShardingVerified(const TOlapSchema& olapSchema) const {
         return NSharding::IShardingBase::BuildFromProto(olapSchema, Description.GetSharding()).DetachResult();

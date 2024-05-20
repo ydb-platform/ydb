@@ -14,7 +14,7 @@ private:
 protected:
     virtual TConclusionStatus DoInitialize(const TUpdateInitializationContext& context) = 0;
     virtual TConclusionStatus DoStart(const TUpdateStartContext& context) = 0;
-    virtual TConclusionStatus DoFinish(const TUpdateStartContext& context) = 0;
+    virtual TConclusionStatus DoFinish(const TUpdateFinishContext& context) = 0;
     virtual TString DoGetShardTxBodyString(const ui64 tabletId, const TMessageSeqNo& seqNo) const = 0;
     virtual std::set<ui64> DoGetShardIds() const = 0;
 public:

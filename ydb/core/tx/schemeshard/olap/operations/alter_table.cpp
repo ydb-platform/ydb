@@ -118,7 +118,7 @@ public:
         TUpdateRestoreContext urContext(originalEntity.get(), &context, (ui64)OperationId.GetTxId());
         std::shared_ptr<ISSEntityUpdate> update = originalEntity->RestoreUpdateVerified(urContext);
 
-        TUpdateFinishContext fContext(&objPath, &context, &db);
+        TUpdateFinishContext fContext(&objPath, &context, &db, NKikimr::NOlap::TSnapshot(ev->Get()->StepId, ev->Get()->TxId));
         update->Finish(fContext).Validate();
 
         auto parentDir = context.SS->PathsById.at(path->ParentPathId);
@@ -357,7 +357,7 @@ public:
                     }
                 }
                 {
-                    TUpdateFinishContext fContext(&path, &context, &db);
+                    TUpdateFinishContext fContext(&path, &context, &db, {});
                     auto status = update->Finish(fContext);
                     if (status.IsFail()) {
                         errors.AddError(status.GetErrorMessage());

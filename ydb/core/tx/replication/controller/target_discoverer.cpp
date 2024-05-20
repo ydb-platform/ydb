@@ -66,7 +66,9 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             }
         } else {
             LOG_E("Describe failed"
-                << ": path# " << path.first);
+                << ": path# " << path.first
+                << ", status# " << result.GetStatus()
+                << ", issues# " << result.GetIssues().ToOneLineString());
 
             if (IsRetryableError(result)) {
                 return RetryDescribe(*it);
@@ -153,7 +155,9 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             }
         } else {
             LOG_E("Listing failed"
-                << ": path# " << path.first);
+                << ": path# " << path.first
+                << ", status# " << result.GetStatus()
+                << ", issues# " << result.GetIssues().ToOneLineString());
 
             if (IsRetryableError(result)) {
                 return RetryListing(it->first);

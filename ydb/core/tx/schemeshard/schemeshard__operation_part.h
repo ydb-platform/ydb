@@ -420,6 +420,12 @@ ISubOperation::TPtr CreateDropCdcStreamImpl(TOperationId id, TTxState::ETxState 
 ISubOperation::TPtr CreateDropCdcStreamAtTable(TOperationId id, const TTxTransaction& tx, bool dropSnapshot);
 ISubOperation::TPtr CreateDropCdcStreamAtTable(TOperationId id, TTxState::ETxState state, bool dropSnapshot);
 
+/// Continuous Backup
+// Create
+TVector<ISubOperation::TPtr> CreateNewContinuousBackup(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
+TVector<ISubOperation::TPtr> CreateAlterContinuousBackup(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
+TVector<ISubOperation::TPtr> CreateDropContinuousBackup(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
+
 ISubOperation::TPtr CreateBackup(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateBackup(TOperationId id, TTxState::ETxState state);
 

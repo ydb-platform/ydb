@@ -167,6 +167,7 @@
 - source_filter: "^contrib/libs/libgit2"
   includes:
     - alloc.h:       contrib/libs/libgit2/src/util/alloc.h
+    - process.h:     contrib/libs/libgit2/src/util/process.h
     - thread.h:      contrib/libs/libgit2/src/util/thread.h
     - regexp.h:      contrib/libs/libgit2/src/util/regexp.h
     - util.h:        contrib/libs/libgit2/src/util/util.h

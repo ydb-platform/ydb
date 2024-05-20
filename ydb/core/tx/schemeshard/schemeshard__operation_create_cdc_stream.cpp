@@ -842,12 +842,12 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
 
     const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
 
-    const auto checksResult = NCdc::DoNewStreamPathChecks(opId, workingDirPath, tableName, streamName, acceptExisted);
+    const auto checksResult = DoNewStreamPathChecks(opId, workingDirPath, tableName, streamName, acceptExisted);
     if (std::holds_alternative<ISubOperation::TPtr>(checksResult)) {
         return {std::get<ISubOperation::TPtr>(checksResult)};
     }
 
-    const auto [tablePath, streamPath] = std::get<NCdc::TStreamPaths>(checksResult);
+    const auto [tablePath, streamPath] = std::get<TStreamPaths>(checksResult);
 
     switch (streamDesc.GetMode()) {
     case NKikimrSchemeOp::ECdcStreamModeKeysOnly:
@@ -926,8 +926,8 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
         DoCreateLock(opId, workingDirPath, tablePath, result);
     }
 
-    NCdc::DoCreateStream(op, opId, workingDirPath, tablePath, acceptExisted, initialScan, result);
-    NCdc::DoCreatePqPart(opId, streamPath, streamName, table, op, boundaries, acceptExisted, result);
+    DoCreateStream(op, opId, workingDirPath, tablePath, acceptExisted, initialScan, result);
+    DoCreatePqPart(opId, streamPath, streamName, table, op, boundaries, acceptExisted, result);
 
     return result;
 }

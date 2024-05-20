@@ -10,6 +10,8 @@
 
 namespace NKikimr::NSchemeShard {
 
+namespace NCdc {
+
 namespace {
 
 class TPropose: public TSubOperationState {
@@ -473,8 +475,6 @@ private:
 
 } // anonymous
 
-namespace NCdc {
-
 std::variant<TStreamPaths, ISubOperation::TPtr> DoAlterStreamPathChecks(
     const TOperationId& opId,
     const TPath& workingDirPath,
@@ -552,6 +552,8 @@ void DoAlterStream(
 
 } // namespace NCdc
 
+using namespace NCdc;
+
 ISubOperation::TPtr CreateAlterCdcStreamImpl(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TAlterCdcStream>(id, tx);
 }
@@ -581,12 +583,12 @@ TVector<ISubOperation::TPtr> CreateAlterCdcStream(TOperationId opId, const TTxTr
 
     const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
 
-    const auto checksResult = NCdc::DoAlterStreamPathChecks(opId, workingDirPath, tableName, streamName);
+    const auto checksResult = DoAlterStreamPathChecks(opId, workingDirPath, tableName, streamName);
     if (std::holds_alternative<ISubOperation::TPtr>(checksResult)) {
         return {std::get<ISubOperation::TPtr>(checksResult)};
     }
 
-    const auto [tablePath, streamPath] = std::get<NCdc::TStreamPaths>(checksResult);
+    const auto [tablePath, streamPath] = std::get<TStreamPaths>(checksResult);
 
     TString errStr;
     if (!context.SS->CheckApplyIf(tx, errStr)) {
@@ -599,7 +601,7 @@ TVector<ISubOperation::TPtr> CreateAlterCdcStream(TOperationId opId, const TTxTr
 
     TVector<ISubOperation::TPtr> result;
 
-    NCdc::DoAlterStream(op, opId, workingDirPath, tablePath, result);
+    DoAlterStream(op, opId, workingDirPath, tablePath, result);
 
     if (op.HasGetReady()) {
         auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropLock);

@@ -10,6 +10,8 @@
 
 namespace NKikimr::NSchemeShard {
 
+namespace NCdc {
+
 namespace {
 
 class TPropose: public TSubOperationState {
@@ -435,8 +437,6 @@ private:
 
 } // anonymous
 
-namespace NCdc {
-
 std::variant<TStreamPaths, ISubOperation::TPtr> DoDropStreamPathChecks(
     const TOperationId& opId,
     const TPath& workingDirPath,
@@ -560,6 +560,8 @@ void DoDropStream(
 
 } // namespace NCdc
 
+using namespace NCdc;
+
 ISubOperation::TPtr CreateDropCdcStreamImpl(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TDropCdcStream>(id, tx);
 }
@@ -589,12 +591,12 @@ TVector<ISubOperation::TPtr> CreateDropCdcStream(TOperationId opId, const TTxTra
 
     const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
 
-    const auto checksResult = NCdc::DoDropStreamPathChecks(opId, workingDirPath, tableName, streamName);
+    const auto checksResult = DoDropStreamPathChecks(opId, workingDirPath, tableName, streamName);
     if (std::holds_alternative<ISubOperation::TPtr>(checksResult)) {
         return {std::get<ISubOperation::TPtr>(checksResult)};
     }
 
-    const auto [tablePath, streamPath] = std::get<NCdc::TStreamPaths>(checksResult);
+    const auto [tablePath, streamPath] = std::get<TStreamPaths>(checksResult);
 
     TString errStr;
     if (!context.SS->CheckApplyIf(tx, errStr)) {
@@ -607,13 +609,13 @@ TVector<ISubOperation::TPtr> CreateDropCdcStream(TOperationId opId, const TTxTra
     const auto lockTxId = stream->State == TCdcStreamInfo::EState::ECdcStreamStateScan
         ? streamPath.Base()->CreateTxId
         : InvalidTxId;
-    if (const auto reject = NCdc::DoDropStreamChecks(opId, tablePath, lockTxId, context); reject) {
+    if (const auto reject = DoDropStreamChecks(opId, tablePath, lockTxId, context); reject) {
         return {reject};
     }
 
     TVector<ISubOperation::TPtr> result;
 
-    NCdc::DoDropStream(op, opId, workingDirPath, tablePath, streamPath, lockTxId, context, result);
+    DoDropStream(op, opId, workingDirPath, tablePath, streamPath, lockTxId, context, result);
 
     return result;
 }

@@ -88,6 +88,7 @@ message ExecuteGraphRequest {
     string RateLimiterResource = 15;
     map<string, bytes> CommonTaskParams = 16; // to be merged into each task TTaskMeta.TaskParams
     NYql.NDqProto.EDqStatsMode StatsMode = 17;
+    uint64 ExecutionTimeout = 18; // in milliseconds
 }
 
 message ExecuteGraphResponse {

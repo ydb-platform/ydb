@@ -875,6 +875,7 @@ private:
         }
 
         TInstant startTime = TInstant::Now();
+        ui64 executionTimeout = State->Settings->_LiteralTimeout.Get().GetOrElse(TDqSettings::TDefault::LiteralTimeout);
 
         try {
             auto result = TMaybeNode<TResult>(input).Cast();
@@ -888,7 +889,7 @@ private:
 
             auto precomputes = FindIndependentPrecomputes(result.Input().Ptr());
             if (!precomputes.empty()) {
-                auto status = HandlePrecomputes(precomputes, ctx, resSettings);
+                auto status = HandlePrecomputes(precomputes, ctx, resSettings, executionTimeout);
                 if (status.Level != TStatus::Ok) {
                     if (status == TStatus::Async) {
                         return std::make_pair(status, ExecState->Promise.GetFuture().Apply([execState = ExecState](const TFuture<void>& completedFuture) {
@@ -1017,7 +1018,7 @@ private:
                     graphParams["Evaluation"] = ToString(!ctx.Step.IsDone(TExprStep::ExprEval));
                     future = State->ExecutePlan(
                         State->SessionId, executionPlanner->GetPlan(), columns, secureParams, graphParams,
-                        settings, progressWriter, ModulesMapping, fillSettings.Discard);
+                        settings, progressWriter, ModulesMapping, fillSettings.Discard, executionTimeout);
                 }
             }
 
@@ -1264,6 +1265,7 @@ private:
         YQL_CLOG(TRACE, ProviderDq) << "HandlePull " << NCommon::ExprToPrettyString(ctx, *input);
 
         TInstant startTime = TInstant::Now();
+        ui64 executionTimeout = State->Settings->_TableTimeout.Get().GetOrElse(TDqSettings::TDefault::TableTimeout);
         auto pull = TPull(input);
 
         THashMap<TString, TString> pullSettings;
@@ -1282,7 +1284,7 @@ private:
 
         auto precomputes = FindIndependentPrecomputes(pull.Input().Ptr());
         if (!precomputes.empty()) {
-            auto status = HandlePrecomputes(precomputes, ctx, pullSettings);
+            auto status = HandlePrecomputes(precomputes, ctx, pullSettings, executionTimeout);
             if (status.Level != TStatus::Ok) {
                 if (status == TStatus::Async) {
                     return std::make_pair(status, ExecState->Promise.GetFuture().Apply([execState = ExecState](const TFuture<void>& completedFuture) {
@@ -1463,7 +1465,7 @@ private:
         IDqGateway::TDqProgressWriter progressWriter = MakeDqProgressWriter(publicIds);
 
         auto future = State->ExecutePlan(State->SessionId, executionPlanner->GetPlan(), columns, secureParams, graphParams,
-            settings, progressWriter, ModulesMapping, fillSettings.Discard);
+            settings, progressWriter, ModulesMapping, fillSettings.Discard, executionTimeout);
 
         future.Subscribe([publicIds, progressWriter = State->ProgressWriter](const NThreading::TFuture<IDqGateway::TResult>& completedFuture) {
             YQL_ENSURE(!completedFuture.HasException());
@@ -1809,7 +1811,7 @@ private:
         });
     }
 
-    IGraphTransformer::TStatus HandlePrecomputes(const TNodeOnNodeOwnedMap& precomputes, TExprContext& ctx, const THashMap<TString, TString>& providerParams) {
+    IGraphTransformer::TStatus HandlePrecomputes(const TNodeOnNodeOwnedMap& precomputes, TExprContext& ctx, const THashMap<TString, TString>& providerParams, ui64 executionTimeout) {
 
         IDataProvider::TFillSettings fillSettings;
         fillSettings.AllResultsBytesLimit.Clear();
@@ -1977,7 +1979,7 @@ private:
             IDqGateway::TDqProgressWriter progressWriter = MakeDqProgressWriter(publicIds);
 
             auto future = State->ExecutePlan(State->SessionId, executionPlanner->GetPlan(), {}, secureParams, graphParams,
-                settings, progressWriter, ModulesMapping, false);
+                settings, progressWriter, ModulesMapping, false, executionTimeout);
 
             executionPlanner.Destroy();
 

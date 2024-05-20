@@ -841,18 +841,13 @@ void DoCalculateWithSpilling(TComputationContext& ctx) {
     UpdateSpilling();
 
     if (InputFetchResultLeft == EFetchResult::Finish && InputFetchResultRight == EFetchResult::Finish) {
-        if (!WasFinalizing) {
-            std::cerr << std::format("[MISHA] finalizing\n");
+        if (LeftPacker->TablePtr->HasRunningAsyncIoOperation() || RightPacker->TablePtr->HasRunningAsyncIoOperation()) return;
+        if (!IsSpillingFinalized) {
             LeftPacker->TablePtr->FinalizeSpilling();
             RightPacker->TablePtr->FinalizeSpilling();
-            WasFinalizing = true;
+            IsSpillingFinalized = true;
 
-            bool leftBusy = LeftPacker->TablePtr->UpdateAndCheckIfBusy();
-            bool rightBusy = RightPacker->TablePtr->UpdateAndCheckIfBusy();
-
-            if (rightBusy || leftBusy) {
-                return;
-            }
+            if (LeftPacker->TablePtr->HasRunningAsyncIoOperation() || RightPacker->TablePtr->HasRunningAsyncIoOperation()) return;
         }
         SwitchMode(EOperatingMode::ProcessSpilled, ctx);
         return;
@@ -928,6 +923,7 @@ private:
 
     EFetchResult InputFetchResultLeft = EFetchResult::One;
     EFetchResult InputFetchResultRight = EFetchResult::One;
+    bool IsSpillingFinalized = false;
 };
 
 class TGraceJoinState : public TComputationValue<TGraceJoinState> {

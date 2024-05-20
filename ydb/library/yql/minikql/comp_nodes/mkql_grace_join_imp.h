@@ -116,6 +116,8 @@ public:
     // Checks if spillers are waiting for any running async operation. No calls other than update are allowed when the method returns true.
     bool HasRunningAsyncIoOperation() const;
 
+    bool IsInMemory() const;
+
 private:
     void ProcessBucketSpilling();
     template <class T>
@@ -303,6 +305,25 @@ public:
         for (ui64 i = 0; i < NumberOfBuckets; ++i) {
             TableBucketsSpillers[i].Update();
         }
+    }
+
+    void FinalizeSpilling() {
+        MKQL_ENSURE(!HasRunningAsyncIoOperation(), "Internal logic error");
+
+        for (ui32 bucket = 0; bucket < NumberOfBuckets; ++bucket) {
+            if (!TableBucketsSpillers[bucket].IsInMemory()) {
+                TableBucketsSpillers[bucket].SpillBucket(std::move(TableBuckets[bucket]));
+                TableBuckets[bucket] = TTableBucket{};
+            }
+            TableBucketsSpillers[bucket].Finalize();
+        }
+    }
+
+    bool HasRunningAsyncIoOperation() {
+        for (ui32 bucket = 0; bucket < NumberOfBuckets; ++bucket) {
+            if (TableBucketsSpillers[bucket].HasRunningAsyncIoOperation()) return true;
+        }
+        return false;
     }
 
     // Clears table content

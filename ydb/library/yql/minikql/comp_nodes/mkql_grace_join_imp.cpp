@@ -1231,6 +1231,10 @@ bool TTableBucketSpiller::HasRunningAsyncIoOperation() const {
         || StateCharAdapter.HasRunningAsyncIoOperation();
 }
 
+bool TTableBucketSpiller::IsInMemory() const {
+    return State == EState::InMemory;
+}
+
 void TTableBucketSpiller::StartBucketRestoration() {
     MKQL_ENSURE(State == EState::Restoring, "Internal logic error");
     MKQL_ENSURE(NextVectorToProcess == ENextVectorToProcess::None, "Internal logic error");

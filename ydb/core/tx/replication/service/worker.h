@@ -36,10 +36,11 @@ struct TEvWorker {
             void Out(IOutputStream& out) const;
         };
 
+        TString Source;
         TVector<TRecord> Records;
 
-        explicit TEvData(const TVector<TRecord>& records);
-        explicit TEvData(TVector<TRecord>&& records);
+        explicit TEvData(const TString& source, const TVector<TRecord>& records);
+        explicit TEvData(const TString& source, TVector<TRecord>&& records);
         TString ToString() const override;
     };
 

@@ -114,6 +114,9 @@ class ModulePrinter:
         file = inspect.getsourcefile(obj)
         if file is None:
             return text
+        contrib_prefix = 'contrib/'
+        if file.startswith(f'{contrib_prefix}ydb'):
+            file = file[len(contrib_prefix):]
         _, line = inspect.findsource(obj)
         size = 27 - 3 * header_level
         return f'[![Code on Github](../_assets/github_icon.png "Github" ={size}x) {text}](https://github.com/ydb-platform/ydb/blob/main/{file}?#L{line + 1})'

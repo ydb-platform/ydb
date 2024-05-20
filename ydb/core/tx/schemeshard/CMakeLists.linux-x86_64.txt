@@ -12,6 +12,7 @@
 # by maintainers. Any complex modifications which can't be easily ported back to the ya build
 # system may be rejected.
 
+add_subdirectory(backup)
 add_subdirectory(common)
 add_subdirectory(olap)
 add_subdirectory(ut_auditsettings)
@@ -25,6 +26,7 @@ add_subdirectory(ut_cdc_stream)
 add_subdirectory(ut_cdc_stream_reboots)
 add_subdirectory(ut_column_build)
 add_subdirectory(ut_compaction)
+add_subdirectory(ut_continuous_backup)
 add_subdirectory(ut_export)
 add_subdirectory(ut_export_reboots_s3)
 add_subdirectory(ut_external_data_source)
@@ -125,6 +127,7 @@ target_link_libraries(core-tx-schemeshard PUBLIC
   ydb-core-tablet_flat
   ydb-core-tx
   core-tx-datashard
+  tx-schemeshard-backup
   tx-schemeshard-common
   tx-schemeshard-olap
   core-tx-scheme_board
@@ -265,6 +268,9 @@ target_sources(core-tx-schemeshard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_cdc_stream.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_alter_cdc_stream.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_drop_cdc_stream.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_continuous_backup.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_alter_continuous_backup.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_drop_continuous_backup.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_allocate_pq.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_deallocate_pq.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__pq_stats.cpp

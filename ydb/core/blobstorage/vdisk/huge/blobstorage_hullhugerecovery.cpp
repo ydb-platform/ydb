@@ -328,6 +328,10 @@ namespace NKikimr {
         void THullHugeKeeperPersState::InitiateNewEntryPointCommit(ui64 lsn) {
             Y_ABORT_UNLESS(lsn > LogPos.EntryPointLsn);
             LogPos.EntryPointLsn = lsn;
+
+            // these metabases never have huge blobs and we never care about them actually
+            LogPos.BlocksDbSlotDelLsn = lsn;
+            LogPos.BarriersDbSlotDelLsn = lsn;
         }
 
         // finish commit
@@ -485,7 +489,6 @@ namespace NKikimr {
                 ui64 lsn,
                 const TString &data)
         {
-
             if (!CheckEntryPoint(data))
                 return TRlas(false, true);
 
@@ -508,7 +511,6 @@ namespace NKikimr {
                 ui64 lsn,
                 const TContiguousSpan &data)
         {
-
             if (!CheckEntryPoint(data))
                 return TRlas(false, true);
 
@@ -525,7 +527,6 @@ namespace NKikimr {
 
             return TRlas(true, false);
         }
-
 
         void THullHugeKeeperPersState::FinishRecovery(const TActorContext &ctx) {
             // handle AllocatedSlots

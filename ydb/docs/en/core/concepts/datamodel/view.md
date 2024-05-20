@@ -1,6 +1,6 @@
 # View
 
-A view is a query which is treated as if it was a table storing the results of a given query. The view itself contains no data. The content of a view is generated every time you `SELECT` from it. Thus, any changes in the underlying tables are reflected immediately in the view.
+A view is a query that is treated as if it were a table storing the results of a given query. The view itself contains no data. The content of a view is generated every time you `SELECT` from it. Thus, any changes in the underlying tables are reflected immediately in the view.
 
 Views are often used to:
 
@@ -45,17 +45,21 @@ compilation results will be cached on the {{ ydb-short-name }} server side, and 
 
 ## View redefinition lag
 
+{% note warning %}
+
+Execution plans of queries containing views are currently cached. It might lead to the usage of an old query plan for a short while after a given view has been redefined. This is going to be fixed in future releases. See below for a more detailed explanation.
+
+{% endnote %}
+
 ### Query compilation cache
 
 {{ ydb-short-name }} caches query compilation results on the server side for efficiency. For small queries like `SELECT 1;` compilation can take up to a hundred times more CPU time than the execution. The cache entry is searched by the text of the query and some additional information, such as a user SID.
 
 The cache is automatically updated by {{ ydb-short-name }} to stay on track with the changes made to the objects the query references. However, in the case of views, the cache is not updated in the same transaction in which the object's definition changes. It happens with a little delay.
 
-### Problem statement
+### Example of the problem
 
-Imagine the following situation.
-
-Alice continuously executes the following query:
+Let's consider the following situation. Alice repeatedly executes the following query:
 ```sql
 -- Alice's session
 SELECT * FROM some_view_which_is_going_to_be_redefined;

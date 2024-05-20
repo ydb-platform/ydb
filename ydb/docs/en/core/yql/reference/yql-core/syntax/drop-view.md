@@ -1,6 +1,6 @@
 # DROP VIEW
 
-`DROP VIEW` drops an existing view.
+`DROP VIEW` deletes an existing view.
 
 ## Syntax
 

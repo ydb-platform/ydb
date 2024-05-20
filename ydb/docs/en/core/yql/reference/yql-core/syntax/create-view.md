@@ -1,6 +1,6 @@
 # CREATE VIEW
 
-`CREATE VIEW` defines a view of a query.
+`CREATE VIEW` defines a view with a given query.
 
 A view logically represents a table formed by a given query. The view does not physically store the table but executes the query to produce the data whenever the view is accessed.
 

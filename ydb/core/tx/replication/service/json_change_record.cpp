@@ -67,11 +67,10 @@ static bool ParseValue(TVector<NTable::TTag>& tags, TVector<TCell>& cells,
     return true;
 }
 
-void TChangeRecord::Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& record) const {
+void TChangeRecord::Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& record, TMemoryPool& pool) const {
     record.SetSourceOffset(GetOrder());
     // TODO: fill WriteTxId
 
-    TMemoryPool pool(256);
     TString error;
 
     if (JsonBody.Has("key") && JsonBody["key"].IsArray()) {
@@ -104,9 +103,13 @@ void TChangeRecord::Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges::TC
     }
 }
 
-TConstArrayRef<TCell> TChangeRecord::GetKey() const {
+void TChangeRecord::Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& record) const {
+    TMemoryPool pool(256);
+    Serialize(record, pool);
+}
+
+TConstArrayRef<TCell> TChangeRecord::GetKey(TMemoryPool& pool) const {
     if (!Key) {
-        TMemoryPool pool(256);
         TString error;
 
         if (JsonBody.Has("key") && JsonBody["key"].IsArray()) {
@@ -124,6 +127,11 @@ TConstArrayRef<TCell> TChangeRecord::GetKey() const {
 
     Y_ABORT_UNLESS(Key);
     return *Key;
+}
+
+TConstArrayRef<TCell> TChangeRecord::GetKey() const {
+    TMemoryPool pool(256);
+    return GetKey(pool);
 }
 
 }

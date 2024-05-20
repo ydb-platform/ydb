@@ -10,6 +10,20 @@ from pathlib import Path
 import cyson as yson
 
 
+def fmtchange(cur, ref, plus='bad', minus='good', threshold=10):
+    ret = '{:.1f}'.format(cur)
+    if ref == 0:
+        return ret + ' N/A%'
+    change = int((cur/ref - 1)*100)
+    cls = ''
+    if change > threshold:
+        cls = ' class="{}"'.format(plus)
+    elif change < -threshold:
+        cls = ' class="{}"'.format(minus)
+
+    return ret + '<span{}>{:+3}%</span>'.format(cls, change)
+
+
 def main():
 
     parser = argparse.ArgumentParser()
@@ -28,7 +42,15 @@ def main():
     data = []
 
     print('''
-<html><head><style>.signal { color: blue; } .errcode { color: red; } .ok { color: green; } .mismatch { color: yellow; } .tabnum { text-align: right; } </style></head>
+<html><head><style>
+.signal { color: blue; }
+.errcode { color: red; }
+.ok { color: green; }
+.mismatch { color: yellow; }
+.tabnum { text-align: right; }
+.good { color: green; }
+.bad { color: red; }
+</style></head>
 ''')
     print('<table border="1">')
     print('<tr><th>' + ''.join(map(lambda x: '<th colspan="5">' + html.escape(rdirs[x]), range(len(rdirs)))))
@@ -62,6 +84,8 @@ def main():
         print('<tr><td>{}'.format(html.escape(q)), end='')
         for c in range(len(data)):
             (dirname, q, elapsed, utime, stime, maxrss, exitcode) = data[c][i]
+            if c == 0:
+                (refDirname, refQ, refElapsed, refUtime, refStime, refMaxrss, refExitcode) = data[c][i]
             outname = dirname + '/' + q + '-result.yson'
             if exitcode < 0:
                 print('<td><span class="signal" title="{}">SIG</span>'.format(html.escape(signal.strsignal(-exitcode), quote=True)))
@@ -69,7 +93,10 @@ def main():
                 print('<td><span class="errcode" title="{}">ERR</span>'.format(exitcode))
             else:
                 print('<td><span class="ok">OK</span>')
-            print('<td class="tabnum">{:.1f}<td class="tabnum">{:.1f}<td class="tabnum">{:.1f}'.format(elapsed, utime, maxrss/1024))
+            if c == 0:
+                print('<td class="tabnum">{:.1f}<td class="tabnum">{:.1f}<td class="tabnum">{:.1f}'.format(elapsed, utime, maxrss/1024))
+            else:
+                print('<td class="tabnum">{}<td class="tabnum">{}<td class="tabnum">{}'.format(fmtchange(elapsed, refElapsed), fmtchange(utime, refUtime), fmtchange(maxrss/1024, refMaxrss/1024)))
 
             skip = False
             for blacklisted in blacklists:

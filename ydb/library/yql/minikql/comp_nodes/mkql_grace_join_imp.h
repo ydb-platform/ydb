@@ -243,8 +243,6 @@ class TTable {
 
     ui64 TuplesFound_ = 0; // Total number of matching keys found during join
 
-    ui32 NextBucketToSpill = NumberOfBuckets - 1;
-
 public:
 
     // Adds new tuple to the table.  intColumns, stringColumns - data of columns, 

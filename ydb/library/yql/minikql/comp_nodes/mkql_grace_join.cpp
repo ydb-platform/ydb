@@ -605,7 +605,7 @@ public:
         }
     }
 
-    EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
+    EFetchResult FetchValues(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
         while (true) {
             /* 
             ui64 used = TlsAllocState->GetUsed();
@@ -1102,10 +1102,12 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
                     MakeState(ctx, state);
                 }
             }
+            
+            if (ctx.ExecuteLLVM) {
+                return static_cast<TGraceJoinState*>(state.AsBoxed().Get())->FetchValues(ctx, output);
+            }
 
-
-
-            return static_cast<TGraceJoinState*>(state.AsBoxed().Get())->FetchValues(ctx, output);
+            return static_cast<TGraceJoinSpillingSupportState*>(state.AsBoxed().Get())->FetchValues(ctx, output);
         }
 #ifndef MKQL_DISABLE_CODEGEN
     ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {

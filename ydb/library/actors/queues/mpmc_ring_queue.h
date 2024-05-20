@@ -246,8 +246,8 @@ struct TMPMCRingQueue {
 
         // TODO(kruall): mesure it's impact in bechmark
         TMPMCRingQueueStats::IncrementChangesFastPushToSlowPush();
-        currentTail++;
-        Tail.compare_exchange_weak(currentTail, currentTail - 1, std::memory_order_relaxed);
+        //currentTail++;
+        //Tail.compare_exchange_weak(currentTail, currentTail - 1, std::memory_order_relaxed);
         return TryPushSlow(val);
     }
 
@@ -468,11 +468,11 @@ struct TMPMCRingQueue {
             }
 
             while (currentTail <= currentHead) {
-                ui64 newHead = Head.load(std::memory_order_acquire);
-                if (newHead > currentHead + 1) {
-                    TMPMCRingQueueStats::IncrementFailedFastPops();
-                    return std::nullopt;
-                }
+                //ui64 newHead = Head.load(std::memory_order_acquire);
+                //if (newHead > currentHead + 1) {
+                //    TMPMCRingQueueStats::IncrementFailedFastPops();
+                //    return std::nullopt;
+                //}
                 if (Tail.compare_exchange_weak(currentTail, currentHead + 1)) {
                     TMPMCRingQueueStats::IncrementFailedFastPops();
                     return std::nullopt;
@@ -538,11 +538,11 @@ struct TMPMCRingQueue {
 
             ui64 currentTail = Tail.load(std::memory_order_acquire);
             while (currentTail <= currentHead) {
-                ui64 newHead = Head.load(std::memory_order_acquire);
-                if (newHead > currentHead + 1) {
-                    TMPMCRingQueueStats::IncrementFailedReallyFastPops();
-                    return std::nullopt;
-                }
+                //ui64 newHead = Head.load(std::memory_order_acquire);
+                //if (newHead > currentHead + 1) {
+                //    TMPMCRingQueueStats::IncrementFailedReallyFastPops();
+                //    return std::nullopt;
+                //}
                 if (Tail.compare_exchange_weak(currentTail, currentHead + 1)) {
                     TMPMCRingQueueStats::IncrementFailedReallyFastPops();
                     return std::nullopt;

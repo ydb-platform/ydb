@@ -42,7 +42,7 @@ using IDirectReadConnection = IDirectReadConnectionFactory::IProcessor;
 class TDirectReadSession;
 using TDirectReadSessionPtr = std::shared_ptr<TCallbackContext<TDirectReadSession>>;
 
-struct TDirectPartitionSession {
+struct TDirectReadPartitionSession {
     TPartitionSessionId Id;
     TPartitionLocation Location;
     IRetryPolicy::IRetryState::TPtr RetryState = {};
@@ -50,6 +50,8 @@ struct TDirectPartitionSession {
     // min read id, partition id, done read id?
 };
 
+// One TDirectReadSession instance comprises multiple TDirectReadPartitionSessions.
+// It wraps a gRPC connection to a particular node, where the partition sessions live.
 class TDirectReadSession : public TEnableSelfContext<TDirectReadSession> {
 public:
     using TSelf = TDirectReadSession;
@@ -66,7 +68,7 @@ public:
 
     void Start();
     void Cancel();
-    void AddPartitionSession(TDirectPartitionSession&&);
+    void AddPartitionSession(TDirectReadPartitionSession&&);
     void DeletePartitionSession(TPartitionSessionId);
     bool Empty() const;
 
@@ -127,7 +129,7 @@ private:
 
     // PartitionSessionId/AssignId -> TPartitionSessionImpl
     // THashMap<TPartitionSessionId, TPartitionStreamImpl<false>::TPtr> PartitionSessions;
-    THashMap<TPartitionSessionId, TDirectPartitionSession> PartitionSessions;
+    THashMap<TPartitionSessionId, TDirectReadPartitionSession> PartitionSessions;
 
     EState State;
     TNodeId NodeId;
@@ -143,7 +145,7 @@ public:
         IDirectReadConnectionFactoryPtr connectionFactory
     );
 
-    void StartPartitionSession(TDirectPartitionSession&&);
+    void StartPartitionSession(TDirectReadPartitionSession&&);
 
     void UpdatePartitionSession(TPartitionSessionId, TPartitionLocation);
 
@@ -162,7 +164,7 @@ private:
     TSingleClusterReadSessionPtr<false> SingleClusterReadSession;
     NYdbGrpc::IQueueClientContextPtr ClientContext;
     IDirectReadConnectionFactoryPtr ConnectionFactory;
-    TMap<TNodeId, TDirectReadSessionPtr> Connections;
+    TMap<TNodeId, TDirectReadSessionPtr> Sessions;
     TMap<TPartitionSessionId, TNodeId> Locations;
 };
 

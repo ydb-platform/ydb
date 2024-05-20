@@ -29,11 +29,11 @@ void TDirectReadSessionManager::SetServerSessionId(TServerSessionId id) {
     ServerSessionId = id;
 }
 
-void TDirectReadSessionManager::StartPartitionSession(TDirectPartitionSession&& session) {
+void TDirectReadSessionManager::StartPartitionSession(TDirectReadPartitionSession&& session) {
     TDirectReadSessionPtr connection;
     auto nodeId = session.Location.GetNodeId();
     with_lock (Lock) {
-        connection = Connections[nodeId];
+        connection = Sessions[nodeId];
         if (!connection) {
             connection = CreateConnection(nodeId);
             if (auto c = connection->LockShared()) {
@@ -51,15 +51,15 @@ void TDirectReadSessionManager::UpdatePartitionSession(TPartitionSessionId, TPar
 void TDirectReadSessionManager::StopPartitionSession(TPartitionSessionId id) {
     with_lock (Lock) {
         auto nodeId = Locations[id];
-        auto it = Connections.find(nodeId);
-        if (it == Connections.end()) {
+        auto it = Sessions.find(nodeId);
+        if (it == Sessions.end()) {
             return;
         }
         if (auto session = it->second->LockShared()) {
             session->DeletePartitionSession(id);
             if (session->Empty()) {
                 session->Cancel();
-                Connections.erase(it);
+                Sessions.erase(it);
             }
         }
     }
@@ -100,7 +100,7 @@ bool TDirectReadSession::Empty() const {
     return PartitionSessions.empty();
 }
 
-void TDirectReadSession::AddPartitionSession(TDirectPartitionSession&& session) {
+void TDirectReadSession::AddPartitionSession(TDirectReadPartitionSession&& session) {
     PartitionSessions.emplace(session.Id, std::move(session));
 }
 

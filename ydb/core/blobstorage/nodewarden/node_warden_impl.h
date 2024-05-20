@@ -5,6 +5,7 @@
 #include "node_warden_events.h"
 
 #include <ydb/core/base/statestorage.h>
+#include <ydb/core/base/id_wrapper.h>
 #include <ydb/core/blobstorage/dsproxy/group_sessions.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 

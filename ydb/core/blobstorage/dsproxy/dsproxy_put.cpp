@@ -245,7 +245,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
         }
 
         LWPROBE(DSProxyVDiskRequestDuration, TEvBlobStorage::EvVPut, blobId.BlobSize(), blobId.TabletID(),
-                Info->GroupID, blobId.Channel(), Info->GetFailDomainOrderNumber(shortId),
+                Info->GroupID.GetRawId(), blobId.Channel(), Info->GetFailDomainOrderNumber(shortId),
                 GetStartTime(record.GetTimestamps()),
                 GetTotalTimeMs(record.GetTimestamps()),
                 GetVDiskTimeMs(record.GetTimestamps()),
@@ -319,7 +319,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
                 TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(item.GetBlobID());
                 NKikimrProto::EReplyStatus itemStatus = item.GetStatus();
                 LWPROBE(DSProxyVDiskRequestDuration, TEvBlobStorage::EvVMultiPut, blobId.BlobSize(), blobId.TabletID(),
-                        Info->GroupID, blobId.Channel(), Info->GetFailDomainOrderNumber(shortId),
+                        Info->GroupID.GetRawId(), blobId.Channel(), Info->GetFailDomainOrderNumber(shortId),
                         GetStartTime(record.GetTimestamps()),
                         GetTotalTimeMs(record.GetTimestamps()),
                         GetVDiskTimeMs(record.GetTimestamps()),
@@ -419,7 +419,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
         LWPROBE(DSProxyRequestDuration, TEvBlobStorage::EvPut,
                 blobId.BlobSize(),
                 duration.SecondsFloat() * 1000.0,
-                blobId.TabletID(), Info->GroupID, blobId.Channel(),
+                blobId.TabletID(), Info->GroupID.GetRawId(), blobId.Channel(),
                 NKikimrBlobStorage::EPutHandleClass_Name(HandleClass), success);
         ResponsesSent++;
         Y_ABORT_UNLESS(ResponsesSent <= PutImpl.Blobs.size());

@@ -6,6 +6,7 @@
 
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h>
 #include <ydb/core/util/stlog.h>
+#include <ydb/core/base/id_wrapper.h>
 
 #include <cstring>
 
@@ -297,8 +298,9 @@ void ConductGet(TTestBasicRuntime &runtime, const TTestArgs &args, ENaivePatchCa
     UNIT_ASSERT_VALUES_EQUAL(handle->Cookie, args.PatchedId.Hash());
 
     std::unique_ptr<TEvBlobStorage::TEvGetResult> getResult;
+    using TGroupId = TIdWrapper<ui32, TGroupIdTag>;
     if (resultStatus == NKikimrProto::OK) {
-        getResult = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::OK, 1, args.CurrentGroupId);
+        getResult = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::OK, 1, TGroupId::FromValue(args.CurrentGroupId));
         if (naiveCase == ENaivePatchCase::ErrorOnGetItem) {
             getResult->Responses[0].Id = args.OriginalId;
             getResult->Responses[0].Status = NKikimrProto::ERROR;
@@ -308,7 +310,7 @@ void ConductGet(TTestBasicRuntime &runtime, const TTestArgs &args, ENaivePatchCa
             getResult->Responses[0].Status = NKikimrProto::OK;
         }
     } else {
-        getResult = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::ERROR, 0, args.CurrentGroupId);
+        getResult = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::ERROR, 0, TGroupId::FromValue(args.CurrentGroupId));
     }
 
     SendByHandle(runtime, handle, std::move(getResult));
@@ -339,7 +341,7 @@ void ConductPut(TTestBasicRuntime &runtime, const TTestArgs &args, ENaivePatchCa
     UNIT_ASSERT_VALUES_EQUAL(put->Buffer.ExtractUnderlyingContainerOrCopy<TString>(), patchedBuffer);
 
     std::unique_ptr<TEvBlobStorage::TEvPutResult> putResult = std::make_unique<TEvBlobStorage::TEvPutResult>(
-            resultStatus, args.PatchedId, args.StatusFlags, args.CurrentGroupId, args.ApproximateFreeSpaceShare);
+            resultStatus, args.PatchedId, args.StatusFlags, TIdWrapper<ui32, TGroupIdTag>::FromValue(args.CurrentGroupId), args.ApproximateFreeSpaceShare);
     SendByHandle(runtime, handle, std::move(putResult));
     CTEST << "ConductPut: Finish\n";
 }

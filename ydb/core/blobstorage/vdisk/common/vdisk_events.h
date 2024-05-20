@@ -13,6 +13,7 @@
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress_matrix.h>
 #include <ydb/core/blobstorage/vdisk/protos/events.pb.h>
 #include <ydb/core/blobstorage/storagepoolmon/storagepool_counters.h>
+#include <ydb/core/base/id_wrapper.h>
 
 #include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/base/event_filter.h>
@@ -43,6 +44,7 @@
 namespace NKikimr {
 
     namespace NBackpressure {
+
 
         enum class EQueueClientType : ui32 {
             None,
@@ -2934,7 +2936,7 @@ namespace NKikimr {
 
     struct TEvBlobStorage::TEvConfigureProxy
         : public TEventLocal<TEvBlobStorage::TEvConfigureProxy, TEvBlobStorage::EvConfigureProxy>
-    {
+    {   
         TIntrusivePtr<TBlobStorageGroupInfo> Info;
         TIntrusivePtr<TStoragePoolCounters> StoragePoolCounters;
 
@@ -2963,11 +2965,12 @@ namespace NKikimr {
     };
 
     struct TEvBlobStorage::TEvUpdateGroupInfo : TEventLocal<TEvUpdateGroupInfo, EvUpdateGroupInfo> {
-        const ui32 GroupId;
+        using TGroupId = TIdWrapper<ui32, TGroupIdTag>;
+        const TGroupId GroupId;
         const ui32 GroupGeneration;
         std::optional<NKikimrBlobStorage::TGroupInfo> GroupInfo;
 
-        TEvUpdateGroupInfo(ui32 groupId, ui32 groupGeneration, std::optional<NKikimrBlobStorage::TGroupInfo> groupInfo)
+        TEvUpdateGroupInfo(TGroupId groupId, ui32 groupGeneration, std::optional<NKikimrBlobStorage::TGroupInfo> groupInfo)
             : GroupId(groupId)
             , GroupGeneration(groupGeneration)
             , GroupInfo(std::move(groupInfo))

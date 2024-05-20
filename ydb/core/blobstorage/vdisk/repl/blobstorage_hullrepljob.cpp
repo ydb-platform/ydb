@@ -699,7 +699,7 @@ namespace NKikimr {
                 auto ev = std::make_unique<TEvBlobStorage::TEvGet>(queries, numItems, TInstant::Max(),
                     NKikimrBlobStorage::EGetHandleClass::AsyncRead);
                 ev->PhantomCheck = true;
-                SendToBSProxy(SelfId(), GInfo->GroupID, ev.release(), cookie);
+                SendToBSProxy(SelfId(), GInfo->GroupID.GetRawId(), ev.release(), cookie);
             }
         }
 

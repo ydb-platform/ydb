@@ -20,7 +20,7 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
         const TString buffer = "hello, world!";
         TLogoBlobID id(1, 1, 1, 0, buffer.size(), 0);
         runtime->WrapInActorContext(edge, [&] {
-            SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvPut(id, buffer, TInstant::Max()));
+            SendToBSProxy(edge, info->GroupID.GetRawId(), new TEvBlobStorage::TEvPut(id, buffer, TInstant::Max()));
         });
         auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false);
         UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
@@ -71,7 +71,7 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
         auto blobsInitial = collectBlobInfo();
 
         runtime->WrapInActorContext(edge, [&] {
-            SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), id.Generation(),
+            SendToBSProxy(edge, info->GroupID.GetRawId(), new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), id.Generation(),
                 0, id.Channel(), true, id.Generation(), id.Step(), new TVector<TLogoBlobID>(1, id), nullptr, TInstant::Max(),
                 false));
         });
@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
 
         runtime->WrapInActorContext(edge, [&] {
             // send the sole do not keep flag
-            SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 0, 0, 0, false, 0,
+            SendToBSProxy(edge, info->GroupID.GetRawId(), new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 0, 0, 0, false, 0,
                 0, nullptr, new TVector<TLogoBlobID>(1, id), TInstant::Max(), false));
         });
         res1 = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(edge, false);

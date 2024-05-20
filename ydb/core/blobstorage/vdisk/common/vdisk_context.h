@@ -9,6 +9,7 @@
 #include "vdisk_outofspace.h"
 #include "vdisk_histograms.h"
 #include "vdisk_mongroups.h"
+#include <ydb/core/base/id_wrapper.h>
 #include <ydb/core/blobstorage/base/ptr.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
@@ -34,6 +35,7 @@ namespace NKikimr {
     /////////////////////////////////////////////////////////////////////////////////////////
     class TVDiskContext : public TBSProxyContext {
     public:
+        using TGroupId = TIdWrapper<ui32, TGroupIdTag>;
         // ActorId of the main VDisk actor (currently ActorId of SkeletonFront)
         const TActorId VDiskActorId;
         const std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
@@ -43,7 +45,7 @@ namespace NKikimr {
         NVDiskMon::THistograms Histograms;
         std::shared_ptr<NMonGroup::TVDiskIFaceGroup> IFaceMonGroup;
         // Self VDisk related info
-        const ui32 GroupId;
+        const TGroupId GroupId;
         const TVDiskIdShort ShortSelfVDisk;
         const TString VDiskLogPrefix;
         const ui32 NodeId;

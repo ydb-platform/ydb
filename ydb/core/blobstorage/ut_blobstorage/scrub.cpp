@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
             TLogoBlobID id(1, 1, i, 0, data.size(), 0);
             auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, data, TInstant::Max());
             env.Runtime->WrapInActorContext(sender, [&] {
-                SendToBSProxy(sender, vdiskId.GroupID, ev.release());
+                SendToBSProxy(sender, vdiskId.GroupID.GetRawId(), ev.release());
             });
             auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(sender, false);
             UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);

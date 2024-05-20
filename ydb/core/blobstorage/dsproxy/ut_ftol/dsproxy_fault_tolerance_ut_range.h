@@ -117,7 +117,7 @@ public:
             auto query = std::make_unique<TEvBlobStorage::TEvRange>(tabletId, TLogoBlobID(tabletId, generation, 0, 0, 0, 0),
                     TLogoBlobID(tabletId, generation, Max<ui32>(), 0, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie),
                     false, TInstant::Max());
-            SendToBSProxy(GetActorContext(), Info->GroupID, query.release());
+            SendToBSProxy(GetActorContext(), Info->GroupID.GetRawId(), query.release());
             auto resp = WaitForSpecificEvent<TEvBlobStorage::TEvRangeResult>(&TRangeFaultToleranceTest::ProcessUnexpectedEvent);
             CTEST << resp->Get()->ToString() << Endl;
             UNIT_ASSERT_VALUES_EQUAL(resp->Get()->Status, expectedStatus);

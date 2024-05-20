@@ -625,12 +625,12 @@ void TNodeWarden::Handle(TEvStatusUpdate::TPtr ev) {
             const auto& r = vdisk.RuntimeData;
             const auto& info = r->GroupInfo;
 
-            if (const ui32 groupId = info->GroupID; TGroupID(groupId).ConfigurationType() == EGroupConfigurationType::Static) {
+            if (const ui32 groupId = info->GroupID.GetRawId(); TGroupID(groupId).ConfigurationType() == EGroupConfigurationType::Static) {
                 for (const auto& item : StorageConfig.GetBlobStorageConfig().GetServiceSet().GetVDisks()) {
                     const TVDiskID vdiskId = VDiskIDFromVDiskID(item.GetVDiskID());
-                    if (vdiskId.GroupID == groupId && info->GetTopology().GetOrderNumber(vdiskId) == r->OrderNumber &&
+                    if (vdiskId.GroupID.GetRawId() == groupId && info->GetTopology().GetOrderNumber(vdiskId) == r->OrderNumber &&
                             item.HasDonorMode() && item.GetEntityStatus() != NKikimrBlobStorage::EEntityStatus::DESTROY) {
-                        SendDropDonorQuery(vslotId.NodeId, vslotId.PDiskId, vslotId.VDiskSlotId, TVDiskID(groupId, 0,
+                        SendDropDonorQuery(vslotId.NodeId, vslotId.PDiskId, vslotId.VDiskSlotId, TVDiskID(TIdWrapper<ui32, TGroupIdTag>::FromValue(groupId), 0,
                             info->GetVDiskId(r->OrderNumber)));
                         break;
                     }

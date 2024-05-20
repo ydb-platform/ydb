@@ -1,7 +1,7 @@
 #pragma once
 
 #include "defs.h"
-
+#include <ydb/core/base/id_wrapper.h>
 namespace NKikimr {
 
     namespace NFake {
@@ -9,6 +9,6 @@ namespace NKikimr {
     } // NFake
 
     IActor *CreateBlobStorageGroupProxyMockActor(TIntrusivePtr<NFake::TProxyDS> model);
-    IActor *CreateBlobStorageGroupProxyMockActor(ui32 groupId);
+    IActor *CreateBlobStorageGroupProxyMockActor(TIdWrapper<ui32, TGroupIdTag> groupId);
 
 } // NKikimr

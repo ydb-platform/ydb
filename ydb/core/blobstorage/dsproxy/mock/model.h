@@ -8,6 +8,7 @@ namespace NKikimr {
 namespace NFake {
 
     class TProxyDS : public TThrRefBase {
+        using TGroupId = TIdWrapper<ui32, TGroupIdTag>;
         using TTabletId = ui64;
         using TChannel = ui8;
         using TGeneration = ui32;
@@ -56,10 +57,10 @@ namespace NFake {
         TMap<TLogoBlobID, TBlob> Blobs;
         // By default only NKikimrBlobStorage::StatusIsValid is set
         TStorageStatusFlags StorageStatusFlags = TStorageStatusFlags(NKikimrBlobStorage::StatusIsValid);
-        const ui32 GroupId;
+        const TGroupId GroupId;
 
     public:
-        TProxyDS(ui32 groupId = 0)
+        TProxyDS(TGroupId groupId = TGroupId::Zero())
             : GroupId(groupId)
         {}
 
@@ -265,8 +266,7 @@ namespace NFake {
 
             Y_ABORT_UNLESS(from.TabletID() == to.TabletID());
             Y_ABORT_UNLESS(from.Channel() == to.Channel());
-            Y_ABORT_UNLESS(from.TabletID() == msg->TabletId);
-
+            Y_ABORT_UNLESS(from.TabletID() == msg->TabletId); 
             auto result = std::make_unique<TEvBlobStorage::TEvRangeResult>(NKikimrProto::OK, from, to, GroupId);
 
             auto process = [&](const TLogoBlobID& id, const TString& buffer) {

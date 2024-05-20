@@ -34,8 +34,9 @@ class TBlobStorageGroupPatchRequest : public TBlobStorageGroupRequestActor<TBlob
     static constexpr ui32 TypicalMaxPartsCount = TypicalPartPlacementCount * TypicalPartsInBlob;
 
     TString Buffer;
-
-    ui32 OriginalGroupId;
+    
+    using TGroupId = TIdWrapper<ui32, TGroupIdTag>;
+    TGroupId OriginalGroupId;
     TLogoBlobID OriginalId;
     TLogoBlobID PatchedId;
     ui32 MaskForCookieBruteForcing;
@@ -110,7 +111,7 @@ public:
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
                 NKikimrServices::BS_PROXY_PATCH, false, {}, now, storagePoolCounters,
                 ev->RestartCounter, std::move(span), std::move(ev->ExecutionRelay))
-        , OriginalGroupId(ev->OriginalGroupId)
+        , OriginalGroupId(TGroupId::FromValue(ev->OriginalGroupId))
         , OriginalId(ev->OriginalId)
         , PatchedId(ev->PatchedId)
         , MaskForCookieBruteForcing(ev->MaskForCookieBruteForcing)
@@ -139,7 +140,7 @@ public:
     std::unique_ptr<IEventBase> RestartQuery(ui32 counter) {
         ++*Mon->NodeMon->RestartPatch;
         TEvBlobStorage::TEvPatch *patch;
-        std::unique_ptr<IEventBase> ev(patch = new TEvBlobStorage::TEvPatch(OriginalGroupId, OriginalId, PatchedId,
+        std::unique_ptr<IEventBase> ev(patch = new TEvBlobStorage::TEvPatch(OriginalGroupId.GetRawId(), OriginalId, PatchedId,
                 MaskForCookieBruteForcing, std::move(Diffs), DiffCount, Deadline));
         patch->RestartCounter = counter;
         patch->Orbit = std::move(Orbit);
@@ -549,7 +550,7 @@ public:
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVMovedPatch>> events;
 
         ui64 cookie = ((ui64)OriginalId.Hash() << 32) | PatchedId.Hash();
-        events.emplace_back(new TEvBlobStorage::TEvVMovedPatch(OriginalGroupId, Info->GroupID,
+        events.emplace_back(new TEvBlobStorage::TEvVMovedPatch(OriginalGroupId.GetRawId(), Info->GroupID.GetRawId(),
                 OriginalId, PatchedId, vDisk, false, cookie, Deadline));
         events.back()->Orbit = std::move(Orbit);
         for (ui64 diffIdx = 0; diffIdx < DiffCount; ++diffIdx) {
@@ -568,7 +569,7 @@ public:
         if (OriginalGroupId == Info->GroupID) {
             SendToProxy(std::move(get), PatchedId.Hash(), Span.GetTraceId());
         } else {
-            SendToBSProxy(SelfId(), OriginalGroupId, get.release(), PatchedId.Hash(), Span.GetTraceId());
+            SendToBSProxy(SelfId(), OriginalGroupId.GetRawId(), get.release(), PatchedId.Hash(), Span.GetTraceId());
         }
     }
 
@@ -788,7 +789,7 @@ public:
         bool result = true;
         if (Info->Type.ErasureFamily() == TErasureType::ErasureParityBlock) {
             result = TEvBlobStorage::TEvPatch::GetBlobIdWithSamePlacement(OriginalId, &truePatchedBlobId,
-                    MaskForCookieBruteForcing, OriginalGroupId, Info->GroupID);
+                    MaskForCookieBruteForcing, OriginalGroupId.GetRawId(), Info->GroupID.GetRawId());
             if (result && PatchedId != truePatchedBlobId) {
                 TStringBuilder str;
                 str << "PatchedId wasn't from TEvBlobStorage::TEvPatch::GetBlobIdWithSamePlacement;";

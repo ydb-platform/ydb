@@ -301,7 +301,7 @@ namespace NKikimr {
             bool limited = IsLimitedKeyless || !fullIfPossible;
             IsFullMonitoring = IsLimitedKeyless || fullIfPossible;
 
-            TString name = Sprintf("%09" PRIu32, GroupId);
+            TString name = Sprintf("%09" PRIu32, GroupId.GetRawId());
             TIntrusivePtr<::NMonitoring::TDynamicCounters> group = GetServiceCounters(
                     AppData()->Counters, "dsproxy")->GetSubgroup("blobstorageproxy", name);
             TIntrusivePtr<::NMonitoring::TDynamicCounters> percentileGroup = GetServiceCounters(
@@ -311,7 +311,7 @@ namespace NKikimr {
 
             Mon.Reset(new TBlobStorageGroupProxyMon(group, percentileGroup, overviewGroup, Info, NodeMon, limited));
             BSProxyCtx.Reset(new TBSProxyContext(group->GetSubgroup("subsystem", "memproxy")));
-            MonActor = RegisterWithSameMailbox(CreateBlobStorageGroupProxyMon(Mon, GroupId, Info, SelfId()));
+            MonActor = RegisterWithSameMailbox(CreateBlobStorageGroupProxyMon(Mon, GroupId.GetRawId(), Info, SelfId()));
         }
     }
 

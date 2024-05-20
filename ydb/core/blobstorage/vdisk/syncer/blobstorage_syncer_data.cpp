@@ -412,7 +412,8 @@ namespace NKikimr {
                 TSyncNeighbors::TOldDes des(str);
                 n.GenericParse(des);
                 // recover groupId and groupGen for further conversion
-                ui32 groupId = des.GetGroupId();
+                using TGroupId = TIdWrapper<ui32, TGroupIdTag>;
+                TGroupId groupId = des.GetGroupId();
                 ui32 groupGen = des.GetGroupGeneration();
                 // serialize into current format
                 TStringStream output;
@@ -450,7 +451,8 @@ namespace NKikimr {
                 TSyncNeighbors::TOldDes des(str);
                 n.GenericParse(des);
                 // recover groupId and groupGen for further conversion
-                ui32 groupId = des.GetGroupId();
+                using TGroupId = TIdWrapper<ui32, TGroupIdTag>;
+                TGroupId groupId = des.GetGroupId();
                 ui32 groupGen = des.GetGroupGeneration();
                 // serialize into current format
                 TStringStream output;

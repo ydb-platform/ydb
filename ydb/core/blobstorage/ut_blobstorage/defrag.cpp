@@ -52,7 +52,7 @@ static TIntrusivePtr<TBlobStorageGroupInfo> PrepareEnv(TEnvironmentSetup& env, T
     {
         const TActorId& sender = env.Runtime->AllocateEdgeActor(1);
         env.Runtime->WrapInActorContext(sender, [&] {
-            SendToBSProxy(sender, info->GroupID, new TEvBlobStorage::TEvCollectGarbage(1, 1, 1, 0, true, 1, Max<ui32>(),
+            SendToBSProxy(sender, info->GroupID.GetRawId(), new TEvBlobStorage::TEvCollectGarbage(1, 1, 1, 0, true, 1, Max<ui32>(),
                 new TVector<TLogoBlobID>(*keep), nullptr, TInstant::Max(), true));
         });
         const auto& res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(sender);
@@ -170,7 +170,7 @@ Y_UNIT_TEST_SUITE(Defragmentation) {
         {
             const TActorId& sender = env.Runtime->AllocateEdgeActor(1);
             env.Runtime->WrapInActorContext(sender, [&] {
-                SendToBSProxy(sender, info->GroupID, new TEvBlobStorage::TEvCollectGarbage(1, 1, 2, 0, false, 0, 0,
+                SendToBSProxy(sender, info->GroupID.GetRawId(), new TEvBlobStorage::TEvCollectGarbage(1, 1, 2, 0, false, 0, 0,
                     nullptr, new TVector<TLogoBlobID>(keep), TInstant::Max(), true));
             });
             const auto& res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(sender);
@@ -196,7 +196,7 @@ Y_UNIT_TEST_SUITE(Defragmentation) {
         {
             const TActorId& sender = env.Runtime->AllocateEdgeActor(1);
             env.Runtime->WrapInActorContext(sender, [&] {
-                SendToBSProxy(sender, info->GroupID, new TEvBlobStorage::TEvCollectGarbage(1, 1, 3, 0, false, 0, 0,
+                SendToBSProxy(sender, info->GroupID.GetRawId(), new TEvBlobStorage::TEvCollectGarbage(1, 1, 3, 0, false, 0, 0,
                     new TVector<TLogoBlobID>(keep), nullptr, TInstant::Max(), true));
             });
             const auto& res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(sender);

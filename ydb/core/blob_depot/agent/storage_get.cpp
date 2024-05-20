@@ -31,7 +31,7 @@ namespace NKikimr::NBlobDepot {
                 }
 
                 Response = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::OK, Request.QuerySize,
-                    Agent.VirtualGroupId);
+                    TIdWrapper<ui32, TGroupIdTag>::FromValue(Agent.VirtualGroupId));
                 AnswersRemain = Request.QuerySize;
 
                 if (Request.ReaderTabletData) {

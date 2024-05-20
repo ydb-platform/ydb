@@ -66,7 +66,7 @@ struct TTestEnv {
         const TActorId sender = Env.Runtime->AllocateEdgeActor(GroupInfo->GetActorId(*RunningNodes.begin()).NodeId(), __FILE__, __LINE__);
         auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, data, TInstant::Max());
         Env.Runtime->WrapInActorContext(sender, [&] {
-            SendToBSProxy(sender, GroupInfo->GroupID, ev.release());
+            SendToBSProxy(sender, GroupInfo->GroupID.GetRawId(), ev.release());
         });
         auto res = Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(sender, false);
         Cerr << "TEvPutResult: " << res->Get()->ToString() << Endl;
@@ -90,7 +90,7 @@ struct TTestEnv {
             mustRestoreFirst
         );
         Env.Runtime->WrapInActorContext(sender, [&] () {
-            SendToBSProxy(sender, GroupInfo->GroupID, ev.release());
+            SendToBSProxy(sender, GroupInfo->GroupID.GetRawId(), ev.release());
         });
         TInstant getDeadline = Env.Now() + TDuration::Seconds(30);
         auto res = Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(sender, /* termOnCapture */ false, getDeadline);

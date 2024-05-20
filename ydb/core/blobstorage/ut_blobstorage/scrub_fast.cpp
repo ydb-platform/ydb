@@ -23,7 +23,7 @@ void Test() {
         { // write data to group
             TActorId sender = runtime->AllocateEdgeActor(1);
             runtime->WrapInActorContext(sender, [&] {
-                SendToBSProxy(sender, info->GroupID, new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+                SendToBSProxy(sender, info->GroupID.GetRawId(), new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
             });
             auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(sender);
             UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
@@ -32,7 +32,7 @@ void Test() {
         auto checkReadable = [&] {
             TActorId sender = runtime->AllocateEdgeActor(1);
             runtime->WrapInActorContext(sender, [&] {
-                SendToBSProxy(sender, info->GroupID, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
+                SendToBSProxy(sender, info->GroupID.GetRawId(), new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
                     NKikimrBlobStorage::EGetHandleClass::FastRead));
             });
             auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(sender);

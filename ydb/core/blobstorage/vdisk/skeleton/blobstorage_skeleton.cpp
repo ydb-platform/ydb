@@ -520,7 +520,7 @@ namespace NKikimr {
             }
 
             TLogoBlobID firstBlobId = LogoBlobIDFromLogoBlobID(record.GetItems(0).GetBlobID());
-            LWTRACK(VDiskSkeletonVMultiPutRecieved, ev->Get()->Orbit, VCtx->NodeId, VCtx->GroupId,
+            LWTRACK(VDiskSkeletonVMultiPutRecieved, ev->Get()->Orbit, VCtx->NodeId, VCtx->GroupId.GetRawId(),
                     VCtx->Top->GetFailDomainOrderNumber(VCtx->ShortSelfVDisk),
                     firstBlobId.TabletID(), ev->Get()->GetSumBlobSize());
 
@@ -686,7 +686,7 @@ namespace NKikimr {
             TInstant now = TAppData::TimeProvider->Now();
             NKikimrBlobStorage::TEvVPut &record = ev->Get()->Record;
             const TLogoBlobID id = LogoBlobIDFromLogoBlobID(record.GetBlobID());
-            LWTRACK(VDiskSkeletonVPutRecieved, ev->Get()->Orbit, VCtx->NodeId, VCtx->GroupId,
+            LWTRACK(VDiskSkeletonVPutRecieved, ev->Get()->Orbit, VCtx->NodeId, VCtx->GroupId.GetRawId(),
                    VCtx->Top->GetFailDomainOrderNumber(VCtx->ShortSelfVDisk), id.TabletID(), id.BlobSize());
             TVPutInfo info(id, ev->Get()->GetBuffer(), record.MutableExtraBlockChecks(), std::move(ev->TraceId));
             const ui64 bufSize = info.Buffer.GetSize();

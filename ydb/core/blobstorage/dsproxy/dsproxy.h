@@ -188,7 +188,7 @@ public:
     {
         TDerived::ActiveCounter(Mon)->Inc();
         Span
-            .Attribute("GroupId", Info->GroupID)
+            .Attribute("GroupId", Info->GroupID.GetRawId())
             .Attribute("RestartCounter", RestartCounter);
 
         Y_ABORT_UNLESS(CostModel);
@@ -296,7 +296,7 @@ public:
             std::optional<NKikimrBlobStorage::TGroupInfo> group;
             if (record.HasRecentGroup()) {
                 group = record.GetRecentGroup();
-                if (group->GetGroupID() != Info->GroupID || group->GetGroupGeneration() != vdiskId.GroupGeneration) {
+                if (group->GetGroupID() != Info->GroupID.GetRawId() || group->GetGroupGeneration() != vdiskId.GroupGeneration) {
                     return done(NKikimrProto::ERROR, "incorrect RecentGroup for RACE response");
                 }
             }
@@ -311,7 +311,7 @@ public:
             SetExecutionRelay(*q, std::exchange(ExecutionRelay, {}));
         }
         ++*Mon->NodeMon->RestartHisto[Min<size_t>(Mon->NodeMon->RestartHisto.size() - 1, RestartCounter)];
-        const TActorId& proxyId = MakeBlobStorageProxyID(Info->GroupID);
+        const TActorId& proxyId = MakeBlobStorageProxyID(Info->GroupID.GetRawId());
         TActivationContext::Send(new IEventHandle(nodeWardenId, Source, q.release(), 0, Cookie, &proxyId, Span.GetTraceId()));
         PassAway();
         return true;
@@ -448,7 +448,7 @@ public:
             TLogoBlobID id = GetBlobId(request);
             TVDiskID vDiskId = VDiskIDFromVDiskID(request->Record.GetVDiskID());
             LWTRACK(DSProxyPutVPutIsSent, request->Orbit, Info->GetFailDomainOrderNumber(vDiskId),
-                    Info->GroupID, id.Channel(), id.PartId(), id.ToString(), id.BlobSize());
+                    Info->GroupID.GetRawId(), id.Channel(), id.PartId(), id.ToString(), id.BlobSize());
             SendToQueue(std::move(request), messageCookie, timeStatsEnabled);
         }
     }

@@ -1,4 +1,5 @@
 #include <ydb/core/base/tablet.h>
+#include <ydb/core/base/id_wrapper.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
@@ -233,7 +234,7 @@ struct TEnvironmentSetup {
 
     void SetupStorage() {
         const TActorId proxyId = MakeBlobStorageProxyID(GroupId);
-        Runtime->RegisterService(proxyId, Runtime->Register(CreateBlobStorageGroupProxyMockActor(GroupId), NodeId), NodeId);
+        Runtime->RegisterService(proxyId, Runtime->Register(CreateBlobStorageGroupProxyMockActor(TIdWrapper<ui32, TGroupIdTag>::FromValue(GroupId)), NodeId), NodeId);
 
         class TMock : public TActor<TMock> {
         public:

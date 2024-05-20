@@ -70,6 +70,7 @@ public:
     void Start();
     void Close();
     void AddPartitionSession(TDirectReadPartitionSession&&);
+    void UpdatePartitionSessionGeneration(TPartitionSessionId, TPartitionLocation);
     void DeletePartitionSession(TPartitionSessionId);
     bool Empty() const;
 
@@ -157,9 +158,16 @@ public:
 
     void SetServerSessionId(TServerSessionId);
 
+    void Close();
+
 private:
 
+    using TNodeSessionsMap = TMap<TNodeId, TDirectReadSessionPtr>;
+
     TDirectReadSessionPtr CreateDirectReadSession(TNodeId);
+    void DeletePartitionSession(TPartitionSessionId id, TNodeSessionsMap::iterator it);
+
+    TStringBuilder GetLogPrefix() const;
 
 private:
     TMutex Lock;
@@ -168,7 +176,7 @@ private:
     TSingleClusterReadSessionPtr<false> SingleClusterReadSession;
     NYdbGrpc::IQueueClientContextPtr ClientContext;
     IDirectReadConnectionFactoryPtr ConnectionFactory;
-    TMap<TNodeId, TDirectReadSessionPtr> Sessions;
+    TNodeSessionsMap NodeSessions;
     TMap<TPartitionSessionId, TPartitionLocation> Locations;
     TLog Log;
 };

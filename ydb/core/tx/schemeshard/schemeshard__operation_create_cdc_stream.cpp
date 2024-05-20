@@ -649,34 +649,6 @@ void DoCreateLock(const TOperationId& opId, const TPath& workingDirPath, const T
 
 } // anonymous
 
-void DoCreateStream(const NKikimrSchemeOp::TCreateCdcStream& op, const TOperationId& opId, const TPath& workingDirPath, const TPath& tablePath,
-    const bool acceptExisted, const bool initialScan, TVector<ISubOperation::TPtr>& result)
-{
-    {
-        auto outTx = TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamImpl);
-        outTx.SetFailOnExist(!acceptExisted);
-        outTx.MutableCreateCdcStream()->CopyFrom(op);
-
-        if (initialScan) {
-            outTx.MutableLockGuard()->SetOwnerTxId(ui64(opId.GetTxId()));
-        }
-
-        result.push_back(CreateNewCdcStreamImpl(NextPartId(opId, result), outTx));
-    }
-
-    {
-        auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamAtTable);
-        outTx.SetFailOnExist(!acceptExisted);
-        outTx.MutableCreateCdcStream()->CopyFrom(op);
-
-        if (initialScan) {
-            outTx.MutableLockGuard()->SetOwnerTxId(ui64(opId.GetTxId()));
-        }
-
-        result.push_back(CreateNewCdcStreamAtTable(NextPartId(opId, result), outTx, initialScan));
-    }
-}
-
 void DoCreatePqPart(const TOperationId& opId, const TPath& streamPath, const TString& streamName,
     const TIntrusivePtr<TTableInfo> table, const NKikimrSchemeOp::TCreateCdcStream& op,
     const TVector<TString>& boundaries, const bool acceptExisted, TVector<ISubOperation::TPtr>& result)
@@ -730,6 +702,34 @@ void DoCreatePqPart(const TOperationId& opId, const TPath& streamPath, const TSt
     }
 
     result.push_back(CreateNewPQ(NextPartId(opId, result), outTx));
+}
+
+void DoCreateStream(const NKikimrSchemeOp::TCreateCdcStream& op, const TOperationId& opId, const TPath& workingDirPath, const TPath& tablePath,
+    const bool acceptExisted, const bool initialScan, TVector<ISubOperation::TPtr>& result)
+{
+    {
+        auto outTx = TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamImpl);
+        outTx.SetFailOnExist(!acceptExisted);
+        outTx.MutableCreateCdcStream()->CopyFrom(op);
+
+        if (initialScan) {
+            outTx.MutableLockGuard()->SetOwnerTxId(ui64(opId.GetTxId()));
+        }
+
+        result.push_back(CreateNewCdcStreamImpl(NextPartId(opId, result), outTx));
+    }
+
+    {
+        auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamAtTable);
+        outTx.SetFailOnExist(!acceptExisted);
+        outTx.MutableCreateCdcStream()->CopyFrom(op);
+
+        if (initialScan) {
+            outTx.MutableLockGuard()->SetOwnerTxId(ui64(opId.GetTxId()));
+        }
+
+        result.push_back(CreateNewCdcStreamAtTable(NextPartId(opId, result), outTx, initialScan));
+    }
 }
 
 namespace {

@@ -16,30 +16,42 @@ namespace NKikimr::NColumnShard {
 template<class TVersionData>
 class TVersionedSchema {
 private:
-    TMap<NOlap::TSnapshot, TVersionData> Versions;
+    TMap<NOlap::TSnapshot, ui64> Versions;
+    TMap<ui64, TVersionData> VersionsById;
+    TMap<ui64, NOlap::TSnapshot> MinVersionById;
 public:
     bool IsEmpty() const {
-        return Versions.empty();
+        return VersionsById.empty();
     }
 
-    const TMap<NOlap::TSnapshot, TVersionData>& GetVersions() const {
-        return Versions;
+    const TMap<ui64, TVersionData>& GetVersionsById() const {
+        return VersionsById;
     }
 
-    const TVersionData& GetVersion(const NOlap::TSnapshot& version) const {
-        const TVersionData* result = nullptr;
-        for (auto ver : Versions) {
-            if (ver.first > version) {
-                break;
-            }
-            result = &ver.second;
+    NOlap::TSnapshot GetMinVersionForId(const ui64 sVersion) const {
+        auto it = MinVersionById.find(sVersion);
+        Y_ABORT_UNLESS(it != MinVersionById.end());
+        return it->second;
+    }
+
+    void AddVersion(const NOlap::TSnapshot& snapshot, const TVersionData& versionInfo) {
+        ui64 ssVersion = 0;
+        if (versionInfo.HasSchema()) {
+            ssVersion = versionInfo.GetSchema().GetVersion();
         }
-        Y_ABORT_UNLESS(!!result);
-        return *result;
-    }
+        auto insertIt = VersionsById.emplace(ssVersion, versionInfo);
+        if (!insertIt.second) {
+            if (versionInfo.HasSchema()) {
+                Y_ABORT_UNLESS(versionInfo.GetSchema().DebugString()== insertIt.first->second.GetSchema().DebugString());
+            }
+        };
+        Y_ABORT_UNLESS(Versions.emplace(snapshot, ssVersion).second);
 
-    void AddVersion(const NOlap::TSnapshot& version, const TVersionData& versionInfo) {
-        Versions[version] = versionInfo;
+        if (MinVersionById.contains(ssVersion)) {
+            MinVersionById.emplace(ssVersion, std::min(snapshot, MinVersionById.at(ssVersion)));
+        } else {
+            MinVersionById.emplace(ssVersion, snapshot);
+        }
     }
 };
 
@@ -74,11 +86,12 @@ public:
     }
 };
 
-class TTableInfo : public TVersionedSchema<ui32> {
+class TTableInfo {
 public:
     ui64 PathId;
     TString TieringUsage;
     std::optional<NOlap::TSnapshot> DropVersion;
+    YDB_READONLY_DEF(TSet<NOlap::TSnapshot>, Versions);
 
 public:
     const TString& GetTieringUsage() const {
@@ -90,12 +103,20 @@ public:
         return *this;
     }
 
+    bool IsEmpty() const {
+        return Versions.empty();
+    }
+
     ui64 GetPathId() const {
         return PathId;
     }
 
     void SetDropVersion(const NOlap::TSnapshot& version) {
         DropVersion = version;
+    }
+
+    void AddVersion(const NOlap::TSnapshot& snapshot) {
+        Versions.insert(snapshot);
     }
 
     bool IsDropped() const {

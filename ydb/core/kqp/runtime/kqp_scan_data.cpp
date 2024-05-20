@@ -286,6 +286,23 @@ public:
     }
 };
 
+template <class TArrayTypeExt, class TValueType = typename TArrayTypeExt::value_type>
+class TPgByValElementAccessor {
+public:
+    using TArrayType = TArrayTypeExt;
+    static NYql::NUdf::TUnboxedValue ExtractValue(const TArrayType& array, const ui32 rowIndex) {
+        return NYql::NUdf::TUnboxedValuePod((ui64)(static_cast<TValueType>(array.Value(rowIndex))));
+    }
+
+    static void Validate(const TArrayType& /*array*/) {
+
+    }
+
+    static TFixedWidthStatAccumulator BuildStatAccumulator(const NScheme::TTypeInfo& typeInfo) {
+        return TFixedWidthStatAccumulator(typeInfo);
+    }
+};
+
 }
 
 template <class TElementAccessor, class TAccessor>
@@ -439,15 +456,15 @@ TBytesStatistics WriteColumnValuesFromArrowImpl(TAccessor editAccessor,
         case NTypeIds::Pg:
             switch (NPg::PgTypeIdFromTypeDesc(columnType.GetTypeDesc())) {
                 case INT2OID:
-                    return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::Int16Array>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+                    return WriteColumnValuesFromArrowSpecImpl<TPgByValElementAccessor<arrow::Int16Array>>(editAccessor, batch, columnIndex, columnPtr, columnType);
                 case INT4OID:
-                    return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::Int32Array>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+                    return WriteColumnValuesFromArrowSpecImpl<TPgByValElementAccessor<arrow::Int32Array>>(editAccessor, batch, columnIndex, columnPtr, columnType);
                 case INT8OID:
-                    return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::Int64Array, i64>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+                    return WriteColumnValuesFromArrowSpecImpl<TPgByValElementAccessor<arrow::Int64Array, i64>>(editAccessor, batch, columnIndex, columnPtr, columnType);
                 case FLOAT4OID:
-                    return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::FloatArray>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+                    return WriteColumnValuesFromArrowSpecImpl<TPgByValElementAccessor<arrow::FloatArray>>(editAccessor, batch, columnIndex, columnPtr, columnType);
                 case FLOAT8OID:
-                    return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::DoubleArray>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+                    return WriteColumnValuesFromArrowSpecImpl<TPgByValElementAccessor<arrow::DoubleArray>>(editAccessor, batch, columnIndex, columnPtr, columnType);
                 default:
                     break;
             }
@@ -463,15 +480,6 @@ TBytesStatistics WriteColumnValuesFromArrow(NUdf::TUnboxedValue* editAccessors,
 {
     const auto accessor = [editAccessors, columnsCount](const ui32 rowIndex, const ui32 colIndex) -> NUdf::TUnboxedValue& {
         return editAccessors[rowIndex * columnsCount + colIndex];
-    };
-    return WriteColumnValuesFromArrowImpl(accessor, batch, columnIndex, columnType);
-}
-
-TBytesStatistics WriteColumnValuesFromArrow(const TVector<NUdf::TUnboxedValue*>& editAccessors,
-    const TBatchDataAccessor& batch, i64 columnIndex, NScheme::TTypeInfo columnType)
-{
-    const auto accessor = [&editAccessors](const ui32 rowIndex, const ui32 colIndex) -> NUdf::TUnboxedValue& {
-        return editAccessors[rowIndex][colIndex];
     };
     return WriteColumnValuesFromArrowImpl(accessor, batch, columnIndex, columnType);
 }
@@ -679,7 +687,7 @@ TBytesStatistics TKqpScanComputeContext::TScanData::TBlockBatchReader::AddData(c
         for (int i = 0; i < filtered->num_columns(); ++i) {
             const auto col = filtered->column(i);
             if (initConverters) {
-                if (const auto tid = NPg::PgTypeIdFromTypeDesc(Columns[i].Type.GetTypeDesc())) {
+                if (const auto tid = NPg::PgTypeIdFromTypeDesc(ResultColumns[i].Type.GetTypeDesc())) {
                     Converters[i] = NYql::BuildPgColumnConverter(col->type(), TPgType::Create(tid, env));
                 }
             }

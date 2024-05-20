@@ -149,7 +149,6 @@ bool TResourceMetricsSendState::FillChanged(TResourceMetricsValues& src, NKikimr
     } else if (force && src.CPU.IsValueObsolete(now)) {
         src.CPU.Set(0, now);
         metrics.SetCPU(0);
-        LevelCPU = 0;
         have = true;
     }
 
@@ -164,7 +163,6 @@ bool TResourceMetricsSendState::FillChanged(TResourceMetricsValues& src, NKikimr
     } else if (force && src.Memory.IsValueObsolete(now)) {
         src.Memory.Set(0);
         metrics.SetMemory(0);
-        LevelMemory = 0;
         have = true;
     }
 
@@ -179,7 +177,6 @@ bool TResourceMetricsSendState::FillChanged(TResourceMetricsValues& src, NKikimr
     } else if (force && src.Network.IsValueObsolete(now)) {
         src.Network.Set(0, now);
         metrics.SetNetwork(0);
-        LevelNetwork = 0;
         have = true;
     }
 
@@ -266,17 +263,15 @@ bool TResourceMetricsSendState::FillChanged(TResourceMetricsValues& src, NKikimr
 
 bool TResourceMetricsSendState::TryUpdate(TResourceMetricsValues& src, const TActorContext& ctx) {
     TInstant now = ctx.Now();
-    if (LastAnyUpdate + TDuration::Seconds(1) < now) {
+    TDuration past = now - LastUpdate;
+    if (past < TDuration::Seconds(1)) {
         return false; // too soon
     }
     NKikimrTabletBase::TMetrics values;
-    bool force = LastAllUpdate + TDuration::Seconds(60) < now;
-    bool updated = FillChanged(src, values, now, force);
+    bool updated = FillChanged(src, values, now, past > TDuration::Seconds(60));
     if (updated) {
-        if (force) {
-            LastAllUpdate = now;
-        }
         ctx.Send(Launcher, new TEvLocal::TEvTabletMetrics(TabletId, FollowerId, values));
+        LastUpdate = now;
     }
     return updated;
 }

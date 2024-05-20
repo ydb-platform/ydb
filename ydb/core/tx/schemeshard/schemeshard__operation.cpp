@@ -1083,6 +1083,14 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
         return CreateDropView(NextPartId(), txState);
     case TTxState::ETxType::TxAlterView:
         Y_ABORT("TODO: implement");
+    // Continuous Backup
+    // Now these functions won't be called because we presist only cdc function internally
+    case TTxState::ETxType::TxCreateContinuousBackup:
+        Y_ABORT("TODO: implement");
+    case TTxState::ETxType::TxAlterContinuousBackup:
+        Y_ABORT("TODO: implement");
+    case TTxState::ETxType::TxDropContinuousBackup:
+        Y_ABORT("TODO: implement");
 
     case TTxState::ETxType::TxInvalid:
         Y_UNREACHABLE();
@@ -1311,6 +1319,15 @@ ISubOperation::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationType op
         return CreateDropView(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterView:
         Y_ABORT("TODO: implement");
+
+    // CDC
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateContinuousBackup:
+        Y_ABORT("multipart operations are handled before, also they require transaction details");
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterContinuousBackup:
+        Y_ABORT("multipart operations are handled before, also they require transaction details");
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropContinuousBackup:
+        Y_ABORT("multipart operations are handled before, also they require transaction details");
+
     }
 
     Y_UNREACHABLE();
@@ -1363,6 +1380,12 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
         return CreateNewExternalDataSource(NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalTable:
         return CreateNewExternalTable(NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateContinuousBackup:
+        return  CreateNewContinuousBackup(NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterContinuousBackup:
+        return  CreateAlterContinuousBackup(NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropContinuousBackup:
+        return  CreateDropContinuousBackup(NextPartId(), tx, context);
     default:
         return {ConstructPart(opType, tx)};
     }

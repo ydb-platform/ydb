@@ -1452,6 +1452,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxCreateExternalTable:
     case TTxState::TxCreateExternalDataSource:
     case TTxState::TxCreateView:
+    case TTxState::TxCreateContinuousBackup:
         return TPathElement::EPathState::EPathStateCreate;
     case TTxState::TxAlterPQGroup:
     case TTxState::TxAlterTable:
@@ -1485,6 +1486,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxAlterExternalTable:
     case TTxState::TxAlterExternalDataSource:
     case TTxState::TxAlterView:
+    case TTxState::TxAlterContinuousBackup:
         return TPathElement::EPathState::EPathStateAlter;
     case TTxState::TxDropTable:
     case TTxState::TxDropPQGroup:
@@ -1507,6 +1509,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxDropExternalTable:
     case TTxState::TxDropExternalDataSource:
     case TTxState::TxDropView:
+    case TTxState::TxDropContinuousBackup:
         return TPathElement::EPathState::EPathStateDrop;
     case TTxState::TxBackup:
         return TPathElement::EPathState::EPathStateBackup;

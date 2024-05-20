@@ -262,6 +262,7 @@ namespace NSQLTranslationV1 {
         bool PragmaYsonStrict = true;
         bool PragmaRegexUseRe2 = true;
         bool PragmaPullUpFlatMapOverJoin = true;
+        bool FilterPushdownOverJoinOptionalSide = false;
         bool WarnUnnamedColumns = false;
         bool DiscoveryMode = false;
         bool EnableSystemColumns = true;

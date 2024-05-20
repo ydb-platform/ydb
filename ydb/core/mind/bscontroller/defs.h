@@ -59,3 +59,4 @@
 #include <util/string/builder.h>
 #include <util/string/strip.h>
 #include <util/system/hp_timer.h>
+#include <id_wrapper.h>

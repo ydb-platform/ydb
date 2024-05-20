@@ -24,7 +24,7 @@ namespace NKikimr {
     namespace NBsController {
 
         using TNodeId = Schema::Node::TKey::Type;
-        using TGroupId = Schema::Group::TKey::Type;
+        using TGroupId = TIdWrapper<Schema::Group::TKey::Type, TGroupIdTag>;
 
         using TBoxId = ui64;
         using TBoxStoragePoolId = std::tuple<ui64, ui64>;

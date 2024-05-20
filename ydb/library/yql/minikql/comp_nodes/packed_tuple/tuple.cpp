@@ -275,7 +275,7 @@ namespace NPackedTuple {
                     }
 
                     if (anyOverflow && col.Role == EColumnRole::Key) {
-                        hash = CalculateCRC32<TTraits, sizeof(ui32)>((ui8 *)&size, hash);
+                        hash = TSimdI8::CRC32u32(hash, size);
                         hash = CalculateCRC32<TTraits>(data, size, hash);
                     }
             }

@@ -17,23 +17,23 @@ struct TSimd8 {
 
     static const int SIZE = 32;
 
-    inline TSimd8()
+    Y_FORCE_INLINE TSimd8()
         : Value{__m256i()} {
     }
 
-    inline TSimd8(const __m256i& value)
+    Y_FORCE_INLINE TSimd8(const __m256i& value)
         : Value(value) {
     }
 
-    inline TSimd8(T value) {
+    Y_FORCE_INLINE TSimd8(T value) {
         this->Value = _mm256_set1_epi8(value);
     }
 
-    inline TSimd8(const T values[32]) {
+    Y_FORCE_INLINE TSimd8(const T values[32]) {
         this->Value = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(values));
     };
 
-    inline TSimd8(
+    Y_FORCE_INLINE TSimd8(
         T v0,  T v1,  T v2,  T v3,  T v4,  T v5,  T v6,  T v7,
         T v8,  T v9,  T v10, T v11, T v12, T v13, T v14, T v15,
         T v16, T v17, T v18, T v19, T v20, T v21, T v22, T v23,
@@ -47,30 +47,30 @@ struct TSimd8 {
     {
     }
 
-    explicit inline operator const __m256i&() const {
+    explicit Y_FORCE_INLINE operator const __m256i&() const {
         return this->Value;
     }
-    explicit inline operator __m256i&() {
+    explicit Y_FORCE_INLINE operator __m256i&() {
         return this->Value;
     }
 
-    static inline ui32 CRC32u8(ui32 crc, ui32 data) {
+    static Y_FORCE_INLINE ui32 CRC32u8(ui32 crc, ui32 data) {
         return _mm_crc32_u8(crc, data);
     }
 
-    static inline ui32 CRC32u16(ui32 crc, ui32 data) {
+    static Y_FORCE_INLINE ui32 CRC32u16(ui32 crc, ui32 data) {
         return _mm_crc32_u16(crc, data);
     }
 
-    static inline ui32 CRC32u32(ui32 crc, ui32 data) {
+    static Y_FORCE_INLINE ui32 CRC32u32(ui32 crc, ui32 data) {
         return _mm_crc32_u32(crc, data);
     }
 
-    static inline ui64 CRC32u64(ui64 crc, ui64 data) {
+    static Y_FORCE_INLINE ui64 CRC32u64(ui64 crc, ui64 data) {
         return _mm_crc32_u64(crc, data);
     }
 
-    inline ui32 CRC32(ui32 crc) {
+    Y_FORCE_INLINE ui32 CRC32(ui32 crc) {
         crc = _mm_crc32_u64(crc, *((ui64*) &this->Value));
         crc = _mm_crc32_u64(crc, *((ui64*) &this->Value + 1));
         crc = _mm_crc32_u64(crc, *((ui64*) &this->Value + 2));
@@ -78,61 +78,61 @@ struct TSimd8 {
         return crc;
     }
     
-    inline void Add64(const TSimd8<T>& another) {
+    Y_FORCE_INLINE void Add64(const TSimd8<T>& another) {
         Value = _mm256_add_epi64(Value, another.Value);
     }
 
-    inline int ToBitMask() const {
+    Y_FORCE_INLINE int ToBitMask() const {
         return _mm256_movemask_epi8(this->Value);
     }
 
-    inline bool Any() const {
+    Y_FORCE_INLINE bool Any() const {
         return !_mm256_testz_si256(this->Value, this->Value);
     }
 
-    inline bool All() const {
+    Y_FORCE_INLINE bool All() const {
         return this->ToBitMask() == i32(0xFFFFFFFF);
     }
 
-    static inline TSimd8<T> Set(T value) {
+    static Y_FORCE_INLINE TSimd8<T> Set(T value) {
         return TSimd8<T>(value);
     }
 
-    static inline TSimd8<T> Zero() {
+    static Y_FORCE_INLINE TSimd8<T> Zero() {
         return _mm256_setzero_si256();
     }
 
-    static inline TSimd8<T> Load(const T values[32]) {
+    static Y_FORCE_INLINE TSimd8<T> Load(const T values[32]) {
         return TSimd8<T>(values);
     }
 
-    static inline TSimd8<T> LoadAligned(const T values[32]) {
+    static Y_FORCE_INLINE TSimd8<T> LoadAligned(const T values[32]) {
         return _mm256_load_si256(reinterpret_cast<const __m256i *>(values));
     }
 
-    static inline TSimd8<T> LoadStream(const T values[32]) {
+    static Y_FORCE_INLINE TSimd8<T> LoadStream(const T values[32]) {
         return _mm256_stream_load_si256(reinterpret_cast<__m256i *>(values));
     }
 
-    inline void Store(T dst[32]) const {
+    Y_FORCE_INLINE void Store(T dst[32]) const {
         return _mm256_storeu_si256(reinterpret_cast<__m256i *>(dst), this->Value);
     }
 
-    inline void StoreAligned(T dst[32]) const {
+    Y_FORCE_INLINE void StoreAligned(T dst[32]) const {
         return _mm256_store_si256(reinterpret_cast<__m256i *>(dst), this->Value);
     }
 
-    inline void StoreStream(T dst[32]) const {
+    Y_FORCE_INLINE void StoreStream(T dst[32]) const {
         return _mm256_stream_si256(reinterpret_cast<__m256i *>(dst), this->Value);
     }
 
-    inline void StoreMasked(void* dst, const TSimd8<T>& mask) const {
+    Y_FORCE_INLINE void StoreMasked(void* dst, const TSimd8<T>& mask) const {
         _mm_maskmoveu_si128(_mm256_castsi256_si128(this->Value), _mm256_castsi256_si128(mask.Value), dst);
         _mm_maskmoveu_si128(_mm256_extracti128_si256(this->Value, 1), _mm256_extracti128_si256(mask.Value, 1), (char*) dst);
     }
 
     template<bool CanBeNegative = true>
-    inline TSimd8<T> Shuffle(const TSimd8<T>& other) const {
+    Y_FORCE_INLINE TSimd8<T> Shuffle(const TSimd8<T>& other) const {
         const TSimd8<T> mask0(0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70,
                               0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0);
         const TSimd8<T> mask1(0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0,
@@ -147,26 +147,26 @@ struct TSimd8 {
         }
     }
 
-    inline TSimd8<T> Shuffle128(const TSimd8<T>& other) const {
+    Y_FORCE_INLINE TSimd8<T> Shuffle128(const TSimd8<T>& other) const {
         return _mm256_shuffle_epi8(this->Value, other.Value);
     }
 
     template<int N>
-    inline TSimd8<T> Blend16(const TSimd8<T>& other) const {
+    Y_FORCE_INLINE TSimd8<T> Blend16(const TSimd8<T>& other) const {
         return _mm256_blend_epi16(this->Value, other.Value, N);
     }
 
     template<int N>
-    inline TSimd8<T> Blend32(const TSimd8<T>& other) const {
+    Y_FORCE_INLINE TSimd8<T> Blend32(const TSimd8<T>& other) const {
         return _mm256_blend_epi32(this->Value, other.Value, N);
     }
 
-    inline TSimd8<T> BlendVar(const TSimd8<T>& other, const TSimd8<T>& mask) const {
+    Y_FORCE_INLINE TSimd8<T> BlendVar(const TSimd8<T>& other, const TSimd8<T>& mask) const {
         return _mm256_blendv_epi8(this->Value, other.Value, mask.Value);
     }
 
     template<int N>
-    inline TSimd8<T> ByteShift128() const {
+    Y_FORCE_INLINE TSimd8<T> ByteShift128() const {
         if constexpr (N < 0) {
             return _mm256_bsrli_epi128(this->Value, -N);
         } else {
@@ -175,7 +175,7 @@ struct TSimd8 {
     }
 
     template<int N>
-    inline TSimd8<T> ByteShift() const {
+    Y_FORCE_INLINE TSimd8<T> ByteShift() const {
         constexpr T A0 = N > 0 ? -(0 < N) : -(0 >= 32 + N);
         constexpr T A1 = N > 0 ? -(1 < N) : -(1 >= 32 + N);
         constexpr T A2 = N > 0 ? -(2 < N) : -(2 >= 32 + N);
@@ -214,12 +214,12 @@ struct TSimd8 {
     }
 
     template<int N>
-    inline TSimd8<T> ByteShiftWithCarry(const TSimd8<T>& other) const {
+    Y_FORCE_INLINE TSimd8<T> ByteShiftWithCarry(const TSimd8<T>& other) const {
         return Rotate<N>().BlendVar(other.Rotate<N>(), ~TSimd8<T>(T(-1)).ByteShift<N>());
     }
 
     template<int N>
-    inline TSimd8<T> Rotate128() const {
+    Y_FORCE_INLINE TSimd8<T> Rotate128() const {
         if constexpr (N % 16 == 0) {
             return *this;
         } else {
@@ -244,7 +244,7 @@ struct TSimd8 {
     }
 
     template<int N>
-    inline TSimd8<T> Rotate() const {
+    Y_FORCE_INLINE TSimd8<T> Rotate() const {
         if constexpr (N % 32 == 0) {
             return *this;
         } else {
@@ -285,7 +285,7 @@ struct TSimd8 {
         }
     }
 
-    static inline TSimd8<T> Repeat16(
+    static Y_FORCE_INLINE TSimd8<T> Repeat16(
         T v0,  T v1,  T v2,  T v3,  T v4,  T v5,  T v6,  T v7,
         T v8,  T v9,  T v10, T v11, T v12, T v13, T v14, T v15
     ) {
@@ -320,150 +320,150 @@ struct TSimd8 {
         out << end;
     }
 
-    inline TSimd8<T> MaxValue(const TSimd8<T>& other) const {
+    Y_FORCE_INLINE TSimd8<T> MaxValue(const TSimd8<T>& other) const {
         return _mm256_max_epu8(this->Value, other.Value);
     }
-    inline TSimd8<T> MinValue(const TSimd8<T>& other) const {
+    Y_FORCE_INLINE TSimd8<T> MinValue(const TSimd8<T>& other) const {
         return _mm256_min_epu8(this->Value, other.Value);
     }
 
-    inline TSimd8<bool> BitsNotSet() const {
+    Y_FORCE_INLINE TSimd8<bool> BitsNotSet() const {
         return *this == ui8(0);
     }
-    inline TSimd8<bool> AnyBitsSet() const {
+    Y_FORCE_INLINE TSimd8<bool> AnyBitsSet() const {
         return ~this->BitsNotSet();
     }
-    inline bool BitsNotSetAnywhere() const {
+    Y_FORCE_INLINE bool BitsNotSetAnywhere() const {
         return _mm256_testz_si256(this->Value, this->Value);
     }
-    inline bool AnyBitsSetAnywhere() const {
+    Y_FORCE_INLINE bool AnyBitsSetAnywhere() const {
         return !BitsNotSetAnywhere();
     }
-    inline bool BitsNotSetAnywhere(const TSimd8<T>& bits) const {
+    Y_FORCE_INLINE bool BitsNotSetAnywhere(const TSimd8<T>& bits) const {
         return _mm256_testz_si256(this->Value, bits.Value);
     }
-    inline bool AnyBitsSetAnywhere(const TSimd8<T>& bits) const {
+    Y_FORCE_INLINE bool AnyBitsSetAnywhere(const TSimd8<T>& bits) const {
         return !BitsNotSetAnywhere(bits);
     }
 
     template<int N>
-    inline TSimd8<T> Shr() const {
+    Y_FORCE_INLINE TSimd8<T> Shr() const {
         return TSimd8<T>(_mm256_srli_epi16(this->Value, N)) & T(0xFFu >> N);
     }
     template<int N>
-    inline TSimd8<T> Shl() const {
+    Y_FORCE_INLINE TSimd8<T> Shl() const {
         return TSimd8<T>(_mm256_slli_epi16(this->Value, N)) & T(0xFFu << N);
     }
 
     template<int N>
-    inline int GetBit() const {
+    Y_FORCE_INLINE int GetBit() const {
         return _mm256_movemask_epi8(_mm256_slli_epi16(this->Value, 7-N));
     }
 
-    friend inline TSimd8<bool> operator==(const TSimd8<T> &lhs, const TSimd8<T> &rhs) {
+    friend Y_FORCE_INLINE TSimd8<bool> operator==(const TSimd8<T> &lhs, const TSimd8<T> &rhs) {
         return _mm256_cmpeq_epi8(lhs.Value, rhs.Value);
     }
 
-    inline TSimd8<bool> operator<=(const TSimd8<T> &other) {
+    Y_FORCE_INLINE TSimd8<bool> operator<=(const TSimd8<T> &other) {
         return other.MaxValue(*this) == other;
     }
 
-    inline TSimd8<bool> operator>=(const TSimd8<T> &other) {
+    Y_FORCE_INLINE TSimd8<bool> operator>=(const TSimd8<T> &other) {
         return other.MinValue(*this) == other;
     }
 
-    inline TSimd8<bool> operator>(const TSimd8<T> &other) {
+    Y_FORCE_INLINE TSimd8<bool> operator>(const TSimd8<T> &other) {
         return _mm256_cmpgt_epi8(*this, other);
     }
 
-    inline TSimd8<bool> operator<(const TSimd8<T> &other) {
+    Y_FORCE_INLINE TSimd8<bool> operator<(const TSimd8<T> &other) {
         return _mm256_cmpgt_epi8(other, *this);
     }
 
-    inline TSimd8<T> operator|(const TSimd8<T>& other) const {
+    Y_FORCE_INLINE TSimd8<T> operator|(const TSimd8<T>& other) const {
         return _mm256_or_si256(this->Value, other.Value);
     }
-    inline TSimd8<T> operator&(const TSimd8<T>& other) const {
+    Y_FORCE_INLINE TSimd8<T> operator&(const TSimd8<T>& other) const {
         return _mm256_and_si256(this->Value, other.Value);
     }
-    inline TSimd8<T> operator^(const TSimd8<T>& other) const {
+    Y_FORCE_INLINE TSimd8<T> operator^(const TSimd8<T>& other) const {
         return _mm256_xor_si256(this->Value, other.Value);
     }
-    inline TSimd8<T> BitAndNot(const TSimd8<T>& other) const {
+    Y_FORCE_INLINE TSimd8<T> BitAndNot(const TSimd8<T>& other) const {
         return _mm256_andnot_si256(this->Value, other.Value);
     };
-    inline TSimd8<T>& operator|=(const TSimd8<T>& other) {
+    Y_FORCE_INLINE TSimd8<T>& operator|=(const TSimd8<T>& other) {
         *this = *this | other;
         return *this;
     }
-    inline TSimd8<T>& operator&=(const TSimd8<T>& other) {
+    Y_FORCE_INLINE TSimd8<T>& operator&=(const TSimd8<T>& other) {
         *this = *this & other;
         return *this;
     };
-    inline TSimd8<T>& operator^=(const TSimd8<T>& other) {
+    Y_FORCE_INLINE TSimd8<T>& operator^=(const TSimd8<T>& other) {
         *this = *this ^ other;
         return *this;
     };
 
-    inline TSimd8<T> operator+(const TSimd8<T>& other) const {
+    Y_FORCE_INLINE TSimd8<T> operator+(const TSimd8<T>& other) const {
         return _mm256_add_epi8(this->Value, other.Value);
     }
-    inline TSimd8<T> operator-(const TSimd8<T>& other) const {
+    Y_FORCE_INLINE TSimd8<T> operator-(const TSimd8<T>& other) const {
         return _mm256_sub_epi8(this->Value, other.Value);
     }
-    inline TSimd8<T>& operator+=(const TSimd8<T>& other) {
+    Y_FORCE_INLINE TSimd8<T>& operator+=(const TSimd8<T>& other) {
         *this = *this + other;
         return *static_cast<TSimd8<T>*>(this);
     }
-    inline TSimd8<T>& operator-=(const TSimd8<T>& other) {
+    Y_FORCE_INLINE TSimd8<T>& operator-=(const TSimd8<T>& other) {
         *this = *this - other;
         return *static_cast<TSimd8<T>*>(this);
     }
 
     // 0xFFu = 11111111 = 2^8 - 1
-    inline TSimd8<T> operator~() const {
+    Y_FORCE_INLINE TSimd8<T> operator~() const {
         return *this ^ 0xFFu;
     }
 };
 
 template<>
-inline TSimd8<ui64> TSimd8<ui64>::operator+(const TSimd8<ui64>& other) const {
+Y_FORCE_INLINE TSimd8<ui64> TSimd8<ui64>::operator+(const TSimd8<ui64>& other) const {
     return _mm256_add_epi64(Value, other.Value);
 }
 
 template<>
-inline TSimd8<ui64>& TSimd8<ui64>::operator+=(const TSimd8<ui64>& other) {
+Y_FORCE_INLINE TSimd8<ui64>& TSimd8<ui64>::operator+=(const TSimd8<ui64>& other) {
     *this = *this + other.Value;
     return *this;
 }
 
 template<>
-inline TSimd8<bool> TSimd8<bool>::Set(bool value) {
+Y_FORCE_INLINE TSimd8<bool> TSimd8<bool>::Set(bool value) {
     return _mm256_set1_epi8(ui8(-value));
 }
 
 template<>
-inline TSimd8<bool>::TSimd8(bool value) {
+Y_FORCE_INLINE TSimd8<bool>::TSimd8(bool value) {
     this->Value = _mm256_set1_epi8(ui8(-value));
 }
 
 template<>
-inline TSimd8<i8> TSimd8<i8>::MaxValue(const TSimd8<i8>& other) const {
+Y_FORCE_INLINE TSimd8<i8> TSimd8<i8>::MaxValue(const TSimd8<i8>& other) const {
     return _mm256_max_epi8(this->Value, other.Value);
 }
 
 template<>
-inline TSimd8<i8> TSimd8<i8>::MinValue(const TSimd8<i8>& other) const {
+Y_FORCE_INLINE TSimd8<i8> TSimd8<i8>::MinValue(const TSimd8<i8>& other) const {
     return _mm256_min_epi8(this->Value, other.Value);
 }
 
 template<>
-inline TSimd8<bool> TSimd8<ui8>::operator>(const TSimd8<ui8> &other) {
+Y_FORCE_INLINE TSimd8<bool> TSimd8<ui8>::operator>(const TSimd8<ui8> &other) {
     return TSimd8<ui8>(_mm256_subs_epu8(this->Value, other.Value)).AnyBitsSet();
 }
 
 template<>
-inline TSimd8<bool> TSimd8<ui8>::operator<(const TSimd8<ui8> &other) {
+Y_FORCE_INLINE TSimd8<bool> TSimd8<ui8>::operator<(const TSimd8<ui8> &other) {
     return TSimd8<ui8>(_mm256_subs_epu8(other.Value, this->Value)).AnyBitsSet();
 }
 

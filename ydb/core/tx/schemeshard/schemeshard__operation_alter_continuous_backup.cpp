@@ -37,7 +37,14 @@ TVector<ISubOperation::TPtr> CreateAlterContinuousBackup(TOperationId opId, cons
     NKikimrSchemeOp::TAlterCdcStream alterCdcStreamOp;
     alterCdcStreamOp.SetTableName(tableName);
     alterCdcStreamOp.SetStreamName(NBackup::CB_CDC_STREAM_NAME);
-    alterCdcStreamOp.MutableDisable();
+
+    switch (cbOp.GetActionCase()) {
+    case NKikimrSchemeOp::TAlterContinuousBackup::kStop:
+        alterCdcStreamOp.MutableDisable();
+    default:
+        return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, TStringBuilder()
+            << "Unknown action: " << static_cast<ui32>(cbOp.GetActionCase()))};
+    }
 
     TVector<ISubOperation::TPtr> result;
 

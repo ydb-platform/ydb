@@ -13,6 +13,8 @@
 
 namespace NKikimr::NSchemeShard {
 
+namespace NCdc {
+
 namespace {
 
 class TPropose: public TSubOperationState {
@@ -633,92 +635,7 @@ private:
 
 }; // TNewCdcStreamAtTable
 
-void DoCreateLock(const TOperationId& opId, const TPath& workingDirPath, const TPath& tablePath,
-    TVector<ISubOperation::TPtr>& result)
-{
-    auto outTx = TransactionTemplate(workingDirPath.PathString(),
-        NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock);
-    outTx.SetFailOnExist(false);
-    outTx.SetInternal(true);
-    outTx.MutableLockConfig()->SetName(tablePath.LeafName());
-
-    result.push_back(CreateLock(NextPartId(opId, result), outTx));
-}
-
-ISubOperation::TPtr RejectOnCdcChecks(const TOperationId& opId, const TPath& streamPath, const bool acceptExisted) {
-    const auto checks = streamPath.Check();
-    checks
-        .IsAtLocalSchemeShard();
-
-    if (streamPath.IsResolved()) {
-        checks
-            .IsResolved()
-            .NotUnderDeleting()
-            .FailOnExist(TPathElement::EPathType::EPathTypeCdcStream, acceptExisted);
-    } else {
-        checks
-            .NotEmpty()
-            .NotResolved();
-    }
-
-    if (checks) {
-        checks
-            .IsValidLeafName()
-            .PathsLimit()
-            .DirChildrenLimit();
-    }
-
-    if (!checks) {
-        return CreateReject(opId, checks.GetStatus(), checks.GetError());
-    }
-
-    return nullptr;
-}
-
-ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPath& tablePath) {
-    const auto checks = tablePath.Check();
-    checks
-        .NotEmpty()
-        .NotUnderDomainUpgrade()
-        .IsAtLocalSchemeShard()
-        .IsResolved()
-        .NotDeleted()
-        .IsTable()
-        .NotAsyncReplicaTable()
-        .IsCommonSensePath()
-        .NotUnderDeleting()
-        .NotUnderOperation();
-
-    if (!checks) {
-        return CreateReject(opId, checks.GetStatus(), checks.GetError());
-    }
-
-    return nullptr;
-}
-
 } // anonymous
-
-namespace NCdc {
-
-std::variant<TStreamPaths, ISubOperation::TPtr> DoNewStreamPathChecks(
-    const TOperationId& opId,
-    const TPath& workingDirPath,
-    const TString& tableName,
-    const TString& streamName,
-    bool acceptExisted)
-{
-    const auto tablePath = workingDirPath.Child(tableName);
-    if (auto reject = RejectOnTablePathChecks(opId, tablePath)) {
-        return reject;
-    }
-
-    const auto streamPath = tablePath.Child(streamName);
-    if (auto reject = RejectOnCdcChecks(opId, streamPath, acceptExisted)) {
-        return reject;
-    }
-
-    return TStreamPaths{tablePath, streamPath};
-}
 
 void DoCreateStream(const NKikimrSchemeOp::TCreateCdcStream& op, const TOperationId& opId, const TPath& workingDirPath, const TPath& tablePath,
     const bool acceptExisted, const bool initialScan, TVector<ISubOperation::TPtr>& result)
@@ -803,7 +720,96 @@ void DoCreatePqPart(const TOperationId& opId, const TPath& streamPath, const TSt
     result.push_back(CreateNewPQ(NextPartId(opId, result), outTx));
 }
 
+namespace {
+
+void DoCreateLock(const TOperationId& opId, const TPath& workingDirPath, const TPath& tablePath,
+    TVector<ISubOperation::TPtr>& result)
+{
+    auto outTx = TransactionTemplate(workingDirPath.PathString(),
+        NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock);
+    outTx.SetFailOnExist(false);
+    outTx.SetInternal(true);
+    outTx.MutableLockConfig()->SetName(tablePath.LeafName());
+
+    result.push_back(CreateLock(NextPartId(opId, result), outTx));
+}
+
+ISubOperation::TPtr RejectOnCdcChecks(const TOperationId& opId, const TPath& streamPath, const bool acceptExisted) {
+    const auto checks = streamPath.Check();
+    checks
+        .IsAtLocalSchemeShard();
+
+    if (streamPath.IsResolved()) {
+        checks
+            .IsResolved()
+            .NotUnderDeleting()
+            .FailOnExist(TPathElement::EPathType::EPathTypeCdcStream, acceptExisted);
+    } else {
+        checks
+            .NotEmpty()
+            .NotResolved();
+    }
+
+    if (checks) {
+        checks
+            .IsValidLeafName()
+            .PathsLimit()
+            .DirChildrenLimit();
+    }
+
+    if (!checks) {
+        return CreateReject(opId, checks.GetStatus(), checks.GetError());
+    }
+
+    return nullptr;
+}
+
+ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPath& tablePath) {
+    const auto checks = tablePath.Check();
+    checks
+        .NotEmpty()
+        .NotUnderDomainUpgrade()
+        .IsAtLocalSchemeShard()
+        .IsResolved()
+        .NotDeleted()
+        .IsTable()
+        .NotAsyncReplicaTable()
+        .IsCommonSensePath()
+        .NotUnderDeleting()
+        .NotUnderOperation();
+
+    if (!checks) {
+        return CreateReject(opId, checks.GetStatus(), checks.GetError());
+    }
+
+    return nullptr;
+}
+
+} // anonymous
+
+std::variant<TStreamPaths, ISubOperation::TPtr> DoNewStreamPathChecks(
+    const TOperationId& opId,
+    const TPath& workingDirPath,
+    const TString& tableName,
+    const TString& streamName,
+    bool acceptExisted)
+{
+    const auto tablePath = workingDirPath.Child(tableName);
+    if (auto reject = RejectOnTablePathChecks(opId, tablePath)) {
+        return reject;
+    }
+
+    const auto streamPath = tablePath.Child(streamName);
+    if (auto reject = RejectOnCdcChecks(opId, streamPath, acceptExisted)) {
+        return reject;
+    }
+
+    return TStreamPaths{tablePath, streamPath};
+}
+
 } // namespace NCdc
+
+using namespace NCdc;
 
 ISubOperation::TPtr CreateNewCdcStreamImpl(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TNewCdcStream>(id, tx);

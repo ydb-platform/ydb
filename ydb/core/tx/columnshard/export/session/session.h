@@ -77,6 +77,9 @@ private:
     }
     static const inline TFactory::TRegistrator<TSession> Registrator = TFactory::TRegistrator<TSession>(GetClassNameStatic());
 public:
+    std::optional<ui64> GetTxId() const {
+        return Task->GetTxId();
+    }
     virtual bool IsReadyForStart() const override {
         return Status == EStatus::Confirmed;
     }

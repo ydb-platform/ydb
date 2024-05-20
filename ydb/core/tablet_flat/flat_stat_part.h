@@ -190,17 +190,12 @@ private:
         if (!IsValid())
             return;
 
-        ui32 keyIdx = 0;
         // Add columns that are present in the part
-        if (ui32 keyCellsCount = Groups[0]->GetKeyCellsCount()) {
-            for (;keyIdx < keyCellsCount; ++keyIdx) {
-                CurrentKey.push_back(Groups[0]->GetKeyCell(keyIdx));
-            }
-        }
+        Groups[0]->GetKeyCells(CurrentKey);
 
         // Extend with default values if needed
-        for (;keyIdx < KeyDefaults->Defs.size(); ++keyIdx) {
-            CurrentKey.push_back(KeyDefaults->Defs[keyIdx]);
+        for (ui32 index = CurrentKey.size(); index < KeyDefaults->Defs.size(); ++index) {
+            CurrentKey.push_back(KeyDefaults->Defs[index]);
         }
     }
 

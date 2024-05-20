@@ -185,9 +185,8 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
 
         auto scheduledEvs = [&](TTestActorRuntimeBase& run, TAutoPtr<IEventHandle> &event, TDuration delay, TInstant &deadline) {
             if (event->GetTypeRewrite() == TEvents::TSystem::Wakeup) {
-                TActorId actorId = event->GetRecipientRewrite();
-                IActor *actor = runtime->FindActor(actorId);
-                if (actor && actor->GetActivityType() == NKikimrServices::TActivity::KQP_COMPILE_ACTOR) {
+                Cerr << "Captured TEvents::TSystem::Wakeup to " << runtime->FindActorName(event->GetRecipientRewrite()) << Endl;
+                if (runtime->FindActorName(event->GetRecipientRewrite()) == "KQP_COMPILE_ACTOR") {
                     Cerr << "Captured scheduled event for compile actor " << event->Recipient << Endl;
                     scheduled.push_back(event.Release());
                     return true;

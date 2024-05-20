@@ -87,6 +87,10 @@ protected:
         return result;
     }
 public:
+    void SetBarrierSnapshot(const TSnapshot& value) {
+        TransferContext.SetSnapshotBarrier(value);
+    }
+
     TSourceCursorForDestination& GetCursorVerified(const TTabletId& tabletId) {
         auto it = Cursors.find(tabletId);
         AFL_VERIFY(it != Cursors.end());
@@ -114,7 +118,8 @@ public:
 
     [[nodiscard]] TConclusionStatus DataReceived(THashMap<ui64, NEvents::TPathIdData>&& data, TColumnEngineForLogs& index, const std::shared_ptr<IStoragesManager>& manager);
 
-    void SendCurrentCursorAck(const NColumnShard::TColumnShard& shard, const std::optional<TTabletId> tabletId);
+    ui32 GetSourcesInProgressCount() const;
+    void SendCurrentCursorAck(const NColumnShard::TColumnShard & shard, const std::optional<TTabletId> tabletId);
 
     NKikimrColumnShardDataSharingProto::TDestinationSession SerializeDataToProto() const;
 

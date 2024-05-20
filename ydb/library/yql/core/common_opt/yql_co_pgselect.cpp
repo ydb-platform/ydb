@@ -4115,7 +4115,7 @@ TExprNode::TPtr ExpandPgGrouping(const TExprNode::TPtr& node, TExprContext& ctx,
         auto child = node->Child(i);
         YQL_ENSURE(child->IsCallable("PgGroupRef"));
         auto row = child->HeadPtr();
-        auto index = child->Tail().Content();
+        auto index = child->Child(2)->Content();
         auto value = ctx.Builder(node->Pos())
             .Callable("Coalesce")
                 .Callable(0, "TryMember")

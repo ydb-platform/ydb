@@ -55,3 +55,18 @@ class TestBindings(TestYdsBase):
         assert result_set.rows[0].items[1].text_value == 'xxx'
         assert result_set.rows[1].items[0].int32_value == 456
         assert result_set.rows[1].items[1].text_value == 'yyy'
+
+    @yq_v1
+    def test_raw_empty_schema_binding(self, kikimr, client, yq_version):
+        self.init_topics(f"pq_test_raw_empty_schema_binding_{yq_version}")
+        connection_response = client.create_yds_connection("myyds2", os.getenv("YDB_DATABASE"),
+                                                           os.getenv("YDB_ENDPOINT"))
+        assert not connection_response.issues, str(connection_response.issues)
+        binding_response = client.create_yds_binding(name="my_binding",
+                                                     stream=self.input_topic,
+                                                     format="raw",
+                                                     connection_id=connection_response.result.connection_id,
+                                                     columns=[],
+                                                     check_issues=False)
+        assert "Only one column in schema supported in raw format" in str(binding_response.issues), str(
+            binding_response.issues)

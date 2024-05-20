@@ -50,7 +50,7 @@ namespace NTest {
             } else if (cache == EWreck::Forward) {
                 Y_ABORT_UNLESS(Direction == EDirection::Forward, "ForwardEnv may only be used with forward iteration");
 
-                TWrap wrap(eggs, { nullptr, 4 /* worst case: main, next, groups, blobs */, false }, std::forward<TArgs>(args)...);
+                TWrap wrap(eggs, { nullptr, 10 /* worst case: main, next, groups, blobs, plus b-tree index */, false }, std::forward<TArgs>(args)...);
 
                 auto make = []() { return new TForwardEnv(512, 1024); };
 

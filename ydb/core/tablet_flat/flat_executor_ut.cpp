@@ -5197,7 +5197,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
         }
 
         for (ui64 leadKey = 1; ; leadKey += rowsCount / 10) {
-            ui64 expectedRowsCount = rowsCount > leadKey ? rowsCount - leadKey + 1 : 0;
+            ui64 expectedRowsCount = rowsCount >= leadKey ? rowsCount - leadKey + 1 : 0;
             auto queueScan = new TEvTestFlatTablet::TEvQueueScan(expectedRowsCount);
             queueScan->ReadAhead = {5*10*1024, 10*10*1024};
             TVector<TCell> leadKey_ = {TCell::Make(leadKey)};
@@ -5264,7 +5264,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
         }
 
         for (ui64 leadKey = 1; ; leadKey += rowsCount / 10) {
-            ui64 expectedRowsCount = rowsCount > leadKey ? rowsCount - leadKey + 1 : 0;
+            ui64 expectedRowsCount = rowsCount >= leadKey ? rowsCount - leadKey + 1 : 0;
             auto queueScan = new TEvTestFlatTablet::TEvQueueScan(expectedRowsCount);
             queueScan->ReadAhead = {5*10*1024, 10*10*1024};
             TVector<TCell> leadKey_ = {TCell::Make(leadKey)};
@@ -5330,7 +5330,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
         }
 
         for (ui64 leadKey = 1; ; leadKey += rowsCount / 10) {
-            ui64 expectedRowsCount = rowsCount > leadKey ? rowsCount - leadKey + 1 : 0;
+            ui64 expectedRowsCount = rowsCount >= leadKey ? rowsCount - leadKey + 1 : 0;
             auto queueScan = new TEvTestFlatTablet::TEvQueueScan(expectedRowsCount, TRowVersion(2, 0));
             queueScan->ReadAhead = {5*10*1024, 10*10*1024};
             TVector<TCell> leadKey_ = {TCell::Make(leadKey)};
@@ -5398,7 +5398,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
         }
 
         for (ui64 leadKey = 1; ; leadKey += rowsCount / 10) {
-            ui64 expectedRowsCount = rowsCount > leadKey ? rowsCount - leadKey + 1 : 0;
+            ui64 expectedRowsCount = rowsCount >= leadKey ? rowsCount - leadKey + 1 : 0;
             auto queueScan = new TEvTestFlatTablet::TEvQueueScan(expectedRowsCount, TRowVersion(2, 0));
             queueScan->ReadAhead = {5*10*1024, 10*10*1024};
             TVector<TCell> leadKey_ = {TCell::Make(leadKey)};
@@ -5463,7 +5463,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
         }
 
         for (ui64 leadKey = 1; ; leadKey += rowsCount / 10) {
-            ui64 expectedRowsCount = rowsCount > leadKey ? rowsCount - leadKey + 1 : 0;
+            ui64 expectedRowsCount = rowsCount >= leadKey ? rowsCount - leadKey + 1 : 0;
             auto queueScan = new TEvTestFlatTablet::TEvQueueScan(expectedRowsCount);
             queueScan->ReadAhead = {5*10*1024, 10*10*1024};
             TVector<TCell> leadKey_ = {TCell::Make(leadKey)};
@@ -5498,7 +5498,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
 
         auto policy = MakeIntrusive<TCompactionPolicy>();
         policy->MinBTreeIndexNodeSize = 128;
-        env.SendSync(rows.MakeScheme(std::move(policy)));
+        env.SendSync(rows.MakeScheme(std::move(policy), true));
 
         env.SendSync(rows.MakeRows(rowsCount, 10*1024));
         
@@ -5508,7 +5508,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
         { // no read ahead
             auto queueScan = new TEvTestFlatTablet::TEvQueueScan(rowsCount);
             queueScan->ReadAhead = {1, 1};
-            queueScan->ExpectedPageFaults = 1028;
+            queueScan->ExpectedPageFaults = 1032;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
         }
@@ -5516,7 +5516,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
         { // small read ahead
             auto queueScan = new TEvTestFlatTablet::TEvQueueScan(rowsCount);
             queueScan->ReadAhead = {5*10*1024, 10*10*1024};
-            queueScan->ExpectedPageFaults = 189;
+            queueScan->ExpectedPageFaults = 191;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
         }
@@ -5524,17 +5524,75 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
         { // infinite read ahead
             auto queueScan = new TEvTestFlatTablet::TEvQueueScan(rowsCount);
             queueScan->ReadAhead = {Max<ui64>(), Max<ui64>()};
-            queueScan->ExpectedPageFaults = 5;
+            queueScan->ExpectedPageFaults = 7;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
         }
 
         for (ui64 leadKey = 1; ; leadKey += rowsCount / 10) {
-            ui64 expectedRowsCount = rowsCount > leadKey ? rowsCount - leadKey + 1 : 0;
+            ui64 expectedRowsCount = rowsCount >= leadKey ? rowsCount - leadKey + 1 : 0;
             auto queueScan = new TEvTestFlatTablet::TEvQueueScan(expectedRowsCount);
             queueScan->ReadAhead = {5*10*1024, 10*10*1024};
             TVector<TCell> leadKey_ = {TCell::Make(leadKey)};
             queueScan->LeadKey = leadKey_;
+            env.SendAsync(std::move(queueScan));
+            env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+            if (!expectedRowsCount) {
+                break;
+            }
+        }
+
+        // If we didn't crash, then assume the test succeeded
+        env.SendSync(new TEvents::TEvPoison, false, true);
+    }
+
+    Y_UNIT_TEST(Scan_Groups_BTreeIndex_Empty) {
+        TMyEnvBase env;
+        TRowsModel rows;
+        const ui32 rowsCount = 10;
+
+        auto &appData = env->GetAppData();
+        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(true);
+        appData.FeatureFlags.SetEnableLocalDBFlatIndex(false);
+
+        env->SetLogPriority(NKikimrServices::TABLET_OPS_HOST, NActors::NLog::PRI_DEBUG);
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+        ZeroSharedCache(env);
+
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy(), true));
+
+        env.SendSync(rows.MakeRows(rowsCount, 10));
+        
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        { // no read ahead
+            auto queueScan = new TEvTestFlatTablet::TEvQueueScan(rowsCount);
+            queueScan->ReadAhead = {1, 1};
+            queueScan->ExpectedPageFaults = 2;
+            env.SendAsync(std::move(queueScan));
+            env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+        }
+
+        { // read ahead
+            auto queueScan = new TEvTestFlatTablet::TEvQueueScan(rowsCount);
+            queueScan->ReadAhead = {5*10*1024, 10*10*1024};
+            queueScan->ExpectedPageFaults = 2;
+            env.SendAsync(std::move(queueScan));
+            env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+        }
+
+        for (ui64 leadKey = 1; ; leadKey++) {
+            ui64 expectedRowsCount = rowsCount >= leadKey ? rowsCount - leadKey + 1 : 0;
+            auto queueScan = new TEvTestFlatTablet::TEvQueueScan(expectedRowsCount);
+            queueScan->ReadAhead = {5*10*1024, 10*10*1024};
+            TVector<TCell> leadKey_ = {TCell::Make(leadKey)};
+            queueScan->LeadKey = leadKey_;
+            queueScan->ExpectedPageFaults = expectedRowsCount ? 2 : 0;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
             if (!expectedRowsCount) {
@@ -6064,7 +6122,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorBTreeIndex) {
         }
     };
 
-    Y_UNIT_TEST(EnableLocalDBBtreeIndex_Default) { // uses flat index
+    Y_UNIT_TEST(EnableLocalDBBtreeIndex_Default) { // uses b-tree index
         TMyEnvBase env;
         TRowsModel rows;
 
@@ -6086,8 +6144,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorBTreeIndex) {
         env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
         env.WaitFor<NFake::TEvCompacted>();
 
-        // all pages are always kept in shared cache
-        UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 290);
+        // all pages are always kept in shared cache (except flat index)
+        UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 334);
 
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) });
         UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
@@ -6100,7 +6158,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorBTreeIndex) {
         // after restart we have no pages in private cache
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) }, true);
         UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
-        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 288);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 332);
     }
 
     Y_UNIT_TEST(EnableLocalDBBtreeIndex_True) { // uses b-tree index

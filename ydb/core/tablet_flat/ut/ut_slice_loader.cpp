@@ -234,7 +234,7 @@ Y_UNIT_TEST_SUITE(TPartSliceLoader) {
             screen = new TScreen(std::move(holes));
         }
         auto result = RunLoaderTest(Part0(), screen);
-        UNIT_ASSERT_VALUES_EQUAL_C(result.Pages, (IsBTreeIndex() ? 70 : 1) + IndexTools::CountMainPages(*Part0()), // index + all data pages
+        UNIT_ASSERT_VALUES_EQUAL_C(result.Pages, (IsBTreeIndex() ? 84 : 1) + IndexTools::CountMainPages(*Part0()), // index + all data pages
             "Restoring slice bounds needed " << result.Pages << " extra pages");
     }
 
@@ -261,7 +261,7 @@ Y_UNIT_TEST_SUITE(TPartSliceLoader) {
             screen = new TScreen(std::move(holes));
         }
         auto result = RunLoaderTest(Part0(), screen);
-        UNIT_ASSERT_VALUES_EQUAL_C(result.Pages, (IsBTreeIndex() ? 70 : 1) + IndexTools::CountMainPages(*Part0()), // index + all data pages
+        UNIT_ASSERT_VALUES_EQUAL_C(result.Pages, (IsBTreeIndex() ? 84 : 1) + IndexTools::CountMainPages(*Part0()), // index + all data pages
             "Restoring slice bounds needed " << result.Pages << " extra pages");
     }
 
@@ -290,7 +290,7 @@ Y_UNIT_TEST_SUITE(TPartSliceLoader) {
             screen = new TScreen(std::move(holes));
         }
         auto result = RunLoaderTest(Part0(), screen);
-        UNIT_ASSERT_VALUES_EQUAL_C(result.Pages, (IsBTreeIndex() ? 70 : 1) + screen->Size(), // index + data pages
+        UNIT_ASSERT_VALUES_EQUAL_C(result.Pages, (IsBTreeIndex() ? 84  : 1) + screen->Size(), // index + data pages
             "Restoring slice bounds needed " << result.Pages <<
             " extra pages, expected " << screen->Size());
     }

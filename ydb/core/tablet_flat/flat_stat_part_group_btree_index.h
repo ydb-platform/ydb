@@ -156,6 +156,16 @@ public:
         return GetCurrentNode().BeginKey.Iter().At(index);
     }
 
+    void GetKeyCells(TSmallVec<TCell>& keyCells) const override {
+        keyCells.clear();
+
+        auto iter = GetCurrentNode().BeginKey.Iter();
+        for (TPos pos : xrange(iter.Count())) {
+            Y_UNUSED(pos);
+            keyCells.push_back(iter.Next());
+        }
+    }
+
 private:
     EReady DataOrGone() const {
         return IsValid() ? EReady::Data : EReady::Gone;

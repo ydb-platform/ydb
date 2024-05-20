@@ -53,6 +53,10 @@ public:
         , TransferContext(transferContext) {
     }
 
+    const TTransferContext& GetTransferContext() const {
+        return TransferContext;
+    }
+
     bool IsFinished() const {
         return IsFinishedFlag;
     }
@@ -73,7 +77,7 @@ public:
     void Finish(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager);
 
     const TSnapshot& GetSnapshotBarrier() const {
-        return TransferContext.GetSnapshotBarrier();
+        return TransferContext.GetSnapshotBarrierVerified();
     }
 
     TString DebugString() const;

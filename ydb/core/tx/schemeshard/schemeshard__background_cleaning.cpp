@@ -76,12 +76,24 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCleaning(const TPathI
         TBackgroundCleaningState {
             {},
             std::move(traverseResult.Dirs),
-            std::move(traverseResult.Objects)
+            0,
+            0,
+            false
         });
     auto& state = stateIter->second;
 
-    for (const auto& tablePathId : state.ObjectsToDrop) {
+    for (const auto& tablePathId : traverseResult.Objects) {
         const auto txId = GetCachedTxId(ctx);
+        if (txId == InvalidTxId) {
+            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Out of txIds "
+                    "for temp dir# " << JoinPath({info->WorkingDir, info->Name})
+                    << ". Only " << state.ObjectsToDrop << " objects"
+                    << " will be removed during current iteration."
+                    << " Background cleaning will be finished later." );
+            state.NeedToRetryLater = true;
+            break;
+        }
+
         BackgroundCleaningTxToDirPathId[txId] = pathId;
         state.TxIds.insert(txId);
 
@@ -201,10 +213,12 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCleaning(const TPathI
         auto& drop = *modifyScheme.MutableDrop();
         drop.SetName(tablePath.LeafName());
 
+        ++state.ObjectsToDrop;
+
         Send(SelfId(), std::move(propose));
     }
 
-    if (state.ObjectsToDrop.empty()) {
+    if (state.ObjectsToDrop == 0) {
         ContinueBackgroundCleaning(pathId);
     }
 
@@ -218,6 +232,16 @@ bool TSchemeShard::ContinueBackgroundCleaning(const TPathId& pathId) {
         auto ctx = ActorContext();
 
         const auto txId = GetCachedTxId(ctx);
+        if (txId == InvalidTxId) {
+            auto info = ResolveTempDirInfo(pathId);
+            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Out of txIds "
+                    "for temp dir# " << (info
+                        ? JoinPath({info->WorkingDir, info->Name})
+                        : TString("not found"))
+                    << ". Background cleaning will be finished later." );
+            return false;
+        }
+
         BackgroundCleaningTxToDirPathId[txId] = pathId;
         state.TxIds.insert(txId);
 
@@ -238,18 +262,26 @@ bool TSchemeShard::ContinueBackgroundCleaning(const TPathId& pathId) {
         drop.SetName(dirPath.LeafName());
 
         Send(SelfId(), std::move(propose));
+
+        return true;
     };
 
-    if (state.ObjectsToDrop.empty() && state.DirsToRemove.empty()) {
+    if (state.ObjectsToDrop == state.ObjectsDropped && state.DirsToRemove.empty()) {
         CleanBackgroundCleaningState(pathId);
         BackgroundCleaningQueue->OnDone(pathId);
         return false;
-    } else if (state.ObjectsToDrop.empty()) {
-        processNextDir();
+    } else if (state.ObjectsToDrop == state.ObjectsDropped) {
+        if (state.NeedToRetryLater || !processNextDir()) {
+            CleanBackgroundCleaningState(pathId);
+            EnqueueBackgroundCleaning(pathId);
+            return false;
+        }
     } else {
-        state.ObjectsToDrop.pop_back();
-        if (state.ObjectsToDrop.empty()) {
-            processNextDir();
+        ++state.ObjectsDropped;
+        if (state.ObjectsToDrop == state.ObjectsDropped && (state.NeedToRetryLater || !processNextDir())) {
+            CleanBackgroundCleaningState(pathId);
+            EnqueueBackgroundCleaning(pathId);
+            return false;
         }
     }
 
@@ -394,9 +426,9 @@ bool TSchemeShard::CheckOwnerUndelivered(TEvents::TEvUndelivered::TPtr& ev) {
         return false;
     }
 
-    auto& currentTempTables = it->second;
+    auto& currentTempDirs = it->second;
 
-    for (auto& pathId: currentTempTables) {
+    for (auto& pathId: currentTempDirs) {
         EnqueueBackgroundCleaning(pathId);
     }
     tempDirsByOwner.erase(it);

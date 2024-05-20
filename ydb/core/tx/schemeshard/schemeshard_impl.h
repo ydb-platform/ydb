@@ -297,7 +297,11 @@ public:
     struct TBackgroundCleaningState {
         THashSet<TTxId> TxIds;
         TVector<NKikimr::TPathId> DirsToRemove;
-        TVector<NKikimr::TPathId> ObjectsToDrop;
+
+        size_t ObjectsToDrop = 0;
+        size_t ObjectsDropped = 0;
+
+        bool NeedToRetryLater = false;
     };
     THashMap<TPathId, TBackgroundCleaningState> BackgroundCleaningState;
     THashMap<TTxId, TPathId> BackgroundCleaningTxToDirPathId;

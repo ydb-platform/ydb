@@ -121,12 +121,6 @@ public:
             return result;
         }
 
-        if (Transaction.HasTempDirOwnerActorId() && !Transaction.GetTemporary()) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                TStringBuilder() << "It is not allowed to create temporary objects without temporary flag: " << name);
-            return result;
-        }
-
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {
             NSchemeShard::TPath::TChecker checks = parentPath.Check();
@@ -137,11 +131,8 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsCommonSensePath()
-                .IsLikeDirectory();
-            
-            if (!Transaction.GetTemporary()) {
-                checks.NotTemporary();
-            }
+                .IsLikeDirectory()
+                .NotTemporary(Transaction.GetTemporary());
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -169,10 +160,6 @@ public:
                 checks
                     .NotEmpty()
                     .NotResolved();
-            }
-
-            if (!Transaction.GetTemporary()) {
-                checks.NotTemporary();
             }
 
             if (checks) {
@@ -235,8 +222,6 @@ public:
         newDir->PathType = TPathElement::EPathType::EPathTypeDir;
         newDir->UserAttrs->AlterData = userAttrs;
         newDir->DirAlterVersion = 1;
-        newDir->Temporary = Transaction.GetTemporary()
-            || parentPath.Base()->IsTemporary();
 
         if (Transaction.HasTempDirOwnerActorId()) {
             newDir->TempDirOwnerActorId = ActorIdFromProto(Transaction.GetTempDirOwnerActorId());

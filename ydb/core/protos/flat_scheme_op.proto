@@ -1750,6 +1750,8 @@ message TModifyScheme {
     optional TAlterContinuousBackup AlterContinuousBackup = 69;
     optional TDropContinuousBackup DropContinuousBackup = 70;
 
+    // Without Temporary flag TModifyScheme can't create any new objects inside 
+    // temporary directory. Reads/Updates can be executed without this flag.
     optional bool Temporary = 71 [default = false];
 }
 

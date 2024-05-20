@@ -220,7 +220,7 @@ bool TPathElement::IsView() const {
 }
 
 bool TPathElement::IsTemporary() const {
-    return Temporary;
+    return !!TempDirOwnerActorId;
 }
 
 void TPathElement::SetDropped(TStepId step, TTxId txId) {

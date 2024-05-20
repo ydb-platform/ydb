@@ -39,14 +39,14 @@ class TKqpSchemeExecuter : public TActorBootstrapped<TKqpSchemeExecuter> {
     struct TEvPrivate {
         enum EEv {
             EvResult = EventSpaceBegin(TEvents::ES_PRIVATE),
-            EvMakeDirResult,
+            EvMakeTempDirResult,
         };
 
         struct TEvResult : public TEventLocal<TEvResult, EEv::EvResult> {
             IKqpGateway::TGenericResult Result;
         };
 
-        struct TEvMakeTempDirResult : public TEventLocal<TEvMakeTempDirResult, EEv::EvMakeDirResult> {
+        struct TEvMakeTempDirResult : public TEventLocal<TEvMakeTempDirResult, EEv::EvMakeTempDirResult> {
             IKqpGateway::TGenericResult Result;
         };
     };
@@ -146,7 +146,9 @@ public:
                         default:
                             YQL_ENSURE(false, "Unexpected operation type");
                     }
-                    tableDesc->SetName(GetCreateTempTablePath(Database, SessionId, JoinPath({tableDesc->GetPath(), tableDesc->GetName()})));
+                    const auto fullPath = JoinPath({tableDesc->GetPath(), tableDesc->GetName()});
+                    YQL_ENSURE(fullPath.size() > 1);
+                    tableDesc->SetName(GetCreateTempTablePath(Database, SessionId, fullPath));
                     tableDesc->SetPath(Database);
                     modifyScheme.SetTemporary(true);
                 }

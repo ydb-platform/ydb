@@ -89,7 +89,6 @@ struct TPathElement : TSimpleRefCount<TPathElement> {
     TActorId TempDirOwnerActorId; // Only for EPathType::EPathTypeDir.
                                   // Not empty if dir must be deleted after loosing connection with TempDirOwnerActorId actor.
                                   // See schemeshard__background_cleaning.cpp.
-    bool Temporary = false;
 
 private:
     ui64 AliveChildrenCount = 0;

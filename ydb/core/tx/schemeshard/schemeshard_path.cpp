@@ -850,8 +850,12 @@ const TPath::TChecker& TPath::TChecker::IsView(EStatus status) const {
     );
 }
 
-const TPath::TChecker& TPath::TChecker::NotTemporary(EStatus status) const {
+const TPath::TChecker& TPath::TChecker::NotTemporary(bool allowCreateInTemporaryDir, EStatus status) const {
     if (Failed) {
+        return *this;
+    }
+
+    if (allowCreateInTemporaryDir) {
         return *this;
     }
 

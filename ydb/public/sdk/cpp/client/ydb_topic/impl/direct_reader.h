@@ -2,7 +2,7 @@
 
 #include "common.h"
 
-#include "ydb/public/sdk/cpp/client/ydb_topic/include/control_plane.h"
+#include <ydb/public/sdk/cpp/client/ydb_topic/include/control_plane.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/include/read_session.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/common/callback_context.h>
 
@@ -58,16 +58,17 @@ public:
     using TPtr = std::shared_ptr<TSelf>;
 
     TDirectReadSession(
+        TNodeId node,
         TString serverSessionId,
         const NYdb::NTopic::TReadSessionSettings settings,
         TSingleClusterReadSessionPtr<false> singleClusterReadSession,
         NYdbGrpc::IQueueClientContextPtr clientContext,
         IDirectReadConnectionFactoryPtr connectionFactory,
-        TNodeId node
+        TLog log
     );
 
     void Start();
-    void Cancel();
+    void Close();
     void AddPartitionSession(TDirectReadPartitionSession&&);
     void DeletePartitionSession(TPartitionSessionId);
     bool Empty() const;
@@ -101,6 +102,10 @@ private:
         const NYdbGrpc::IQueueClientContextPtr& connectTimeoutContext
     );
 
+    void SendStartDirectReadPartitionSessionImpl(const TDirectReadPartitionSession&);
+
+    TStringBuilder GetLogPrefix() const;
+
 private:
 
     enum class EState {
@@ -112,7 +117,7 @@ private:
     };
 
 private:
-    TMutex Lock;
+    TAdaptiveLock Lock;
 
     NYdbGrpc::IQueueClientContextPtr ClientContext;
     NYdbGrpc::IQueueClientContextPtr ConnectContext;
@@ -133,6 +138,8 @@ private:
 
     EState State;
     TNodeId NodeId;
+
+    TLog Log;
 };
 
 
@@ -142,7 +149,8 @@ public:
         const NYdb::NTopic::TReadSessionSettings,
         TSingleClusterReadSessionPtr<false> singleClusterReadSession,
         NYdbGrpc::IQueueClientContextPtr clientContext,
-        IDirectReadConnectionFactoryPtr connectionFactory
+        IDirectReadConnectionFactoryPtr connectionFactory,
+        TLog log
     );
 
     void StartPartitionSession(TDirectReadPartitionSession&&);
@@ -155,7 +163,7 @@ public:
 
 private:
 
-    TDirectReadSessionPtr CreateConnection(TNodeId);
+    TDirectReadSessionPtr CreateDirectReadSession(TNodeId);
 
 private:
     TMutex Lock;
@@ -165,7 +173,8 @@ private:
     NYdbGrpc::IQueueClientContextPtr ClientContext;
     IDirectReadConnectionFactoryPtr ConnectionFactory;
     TMap<TNodeId, TDirectReadSessionPtr> Sessions;
-    TMap<TPartitionSessionId, TNodeId> Locations;
+    TMap<TPartitionSessionId, TPartitionLocation> Locations;
+    TLog Log;
 };
 
 }

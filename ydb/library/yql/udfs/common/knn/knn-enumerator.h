@@ -10,12 +10,11 @@ using namespace NYql::NUdf;
 
 template <typename TCallback>
 void EnumerateVector(const TUnboxedValuePod vector, TCallback&& callback) {
-    const auto elements = vector.GetElements();
+    const auto* elements = vector.GetElements();
     if (elements) {
-        const auto size = vector.GetListLength();
-        
-        for (ui32 i = 0; i < size; ++i) {
-            callback(elements[i].Get<float>());
+        const auto* end = elements + vector.GetListLength();
+        while (elements != end) {
+            callback(elements++->Get<float>());
         }
     } else {
         TUnboxedValue value;
@@ -28,64 +27,56 @@ void EnumerateVector(const TUnboxedValuePod vector, TCallback&& callback) {
 
 template <typename TCallback>
 bool EnumerateVectors(const TUnboxedValuePod vector1, const TUnboxedValuePod vector2, TCallback&& callback) {
-    
-    auto enumerateBothSized = [&callback] (const TUnboxedValuePod vector1, const TUnboxedValue* elements1, const TUnboxedValuePod vector2, const TUnboxedValue* elements2) {
-        const auto size1 = vector1.GetListLength();
-        const auto size2 = vector2.GetListLength();
-        
+    TUnboxedValue value1, value2;
+    const auto* elements1 = vector1.GetElements();
+    const auto* elements2 = vector2.GetElements();
+
+    auto enumerateBothSized = [&] {
+        const auto size = vector1.GetListLength();
         // Length mismatch
-        if (size1 != size2)
+        if (size != vector2.GetListLength())
             return false;
 
-        for (ui32 i = 0; i < size1; ++i) {
+        for (ui64 i = 0; i != size; ++i) {
             callback(elements1[i].Get<float>(), elements2[i].Get<float>());
         }
-        
         return true;
     };
-    
-    auto enumerateOneSized = [&callback] (const TUnboxedValuePod vector1, const TUnboxedValue* elements1, const TUnboxedValuePod vector2) {
-        const auto size = vector1.GetListLength();
-        ui32 idx = 0;
-        TUnboxedValue value;
-        const auto it = vector2.GetListIterator();          
 
-        while (it.Next(value)) {
-            callback(elements1[idx++].Get<float>(), value.Get<float>());
+    auto enumerateOneSized = [&]<bool Invert>(const TUnboxedValue* elements, size_t size, const TUnboxedValuePod vector, std::bool_constant<Invert>) {
+        const auto* end = elements + size;
+        const auto it = vector.GetListIterator();
+        while (elements != end && it.Next(value1)) {
+            if constexpr (Invert) {
+                callback(value1.Get<float>(), elements++->Get<float>());
+            } else {
+                callback(elements++->Get<float>(), value1.Get<float>());
+            }
         }
 
         // Length mismatch
-        if (it.Next(value) || idx != size)
-            return false;
-
-        return true;
+        return elements == end && !it.Next(value1);
     };
 
-    auto enumerateNoSized = [&callback] (const TUnboxedValuePod vector1, const TUnboxedValuePod vector2) {
-        TUnboxedValue value1, value2;
+    auto enumerateNoSized = [&](const TUnboxedValuePod vector1, const TUnboxedValuePod vector2) {
         const auto it1 = vector1.GetListIterator();
-        const auto it2 = vector2.GetListIterator();    
-        for (; it1.Next(value1) && it2.Next(value2);) {
+        const auto it2 = vector2.GetListIterator();
+        while (it1.Next(value1) && it2.Next(value2)) {
             callback(value1.Get<float>(), value2.Get<float>());
         }
 
         // Length mismatch
-        if (it1.Next(value1) || it2.Next(value2))
-            return false;
-
-        return true;
+        return !it1.Next(value1) && !it2.Next(value2);
     };
 
-    const auto elements1 = vector1.GetElements();
-    const auto elements2 = vector2.GetElements();
     if (elements1 && elements2) {
-        if (!enumerateBothSized(vector1, elements1, vector2, elements2))
+        if (!enumerateBothSized())
             return false;
     } else if (elements1) {
-        if (!enumerateOneSized(vector1, elements1, vector2))
+        if (!enumerateOneSized(elements1, vector1.GetListLength(), vector2, std::false_type{}))
             return false;
     } else if (elements2) {
-        if (!enumerateOneSized(vector2, elements2, vector1))
+        if (!enumerateOneSized(elements2, vector2.GetListLength(), vector1, std::true_type{}))
             return false;
     } else {
         if (!enumerateNoSized(vector1, vector2))

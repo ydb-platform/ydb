@@ -9519,6 +9519,13 @@
             "uri": "https://{canondata_backend}/1784117/d56ae82ad9d30397a41490647be1bd2124718f98/resource.tar.gz#test_sql2yql.test_key_filter-is_null_with_condition_/sql.yql"
         }
     ],
+    "test_sql2yql.test[key_filter-key_double_opt_suffix]": [
+        {
+            "checksum": "a37693a33249e3e71f0dca0b90fa1e58",
+            "size": 4260,
+            "uri": "https://{canondata_backend}/1916746/17fe8719a985017b6f021f4d7e436be1be861474/resource.tar.gz#test_sql2yql.test_key_filter-key_double_opt_suffix_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[key_filter-lambda_with_null_filter]": [
         {
             "checksum": "5af5b86eb0daa7a21836079f9208f80e",
@@ -28067,6 +28074,13 @@
             "checksum": "e4c93b8e54ba2b68a91a4067d36691c3",
             "size": 85,
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_key_filter-is_null_with_condition_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[key_filter-key_double_opt_suffix]": [
+        {
+            "checksum": "759108acc28c6746b6c850347a72e37c",
+            "size": 297,
+            "uri": "https://{canondata_backend}/1916746/17fe8719a985017b6f021f4d7e436be1be861474/resource.tar.gz#test_sql_format.test_key_filter-key_double_opt_suffix_/formatted.sql"
         }
     ],
     "test_sql_format.test[key_filter-lambda_with_null_filter]": [

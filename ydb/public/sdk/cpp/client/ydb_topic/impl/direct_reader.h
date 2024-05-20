@@ -145,6 +145,7 @@ private:
 class TDirectReadSessionManager {
 public:
     TDirectReadSessionManager(
+        TServerSessionId serverSessionId,
         const NYdb::NTopic::TReadSessionSettings,
         TSingleClusterReadSessionPtr<false> singleClusterReadSession,
         NYdbGrpc::IQueueClientContextPtr clientContext,
@@ -155,9 +156,6 @@ public:
     void StartPartitionSession(TDirectReadPartitionSession&&);
     void UpdatePartitionSession(TPartitionSessionId, TPartitionLocation);
     void StopPartitionSession(TPartitionSessionId);
-
-    void SetServerSessionId(TServerSessionId);
-
     void Close();
 
 private:

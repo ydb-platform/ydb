@@ -9,6 +9,7 @@ namespace NYdb::NTopic {
 // TDirectReadConnectionManager
 
 TDirectReadSessionManager::TDirectReadSessionManager(
+    TServerSessionId serverSessionId,
     const NYdb::NTopic::TReadSessionSettings settings,
     TSingleClusterReadSessionPtr<false> singleClusterReadSession,
     NYdbGrpc::IQueueClientContextPtr clientContext,
@@ -16,6 +17,7 @@ TDirectReadSessionManager::TDirectReadSessionManager(
     TLog log
 )
     : ReadSessionSettings(settings)
+    , ServerSessionId(serverSessionId)
     , SingleClusterReadSession(singleClusterReadSession)
     , ClientContext(clientContext)
     , ConnectionFactory(connectionFactory)
@@ -29,10 +31,6 @@ TStringBuilder TDirectReadSessionManager::GetLogPrefix() const {
 TDirectReadSessionPtr TDirectReadSessionManager::CreateDirectReadSession(TNodeId nodeId) {
     return MakeWithCallbackContext<TDirectReadSession>(
         nodeId, ServerSessionId, ReadSessionSettings, SingleClusterReadSession, ClientContext->CreateContext(), ConnectionFactory, Log);
-}
-
-void TDirectReadSessionManager::SetServerSessionId(TServerSessionId id) {
-    ServerSessionId = id;
 }
 
 void TDirectReadSessionManager::Close() {

@@ -386,25 +386,8 @@ private:
         resourcePath->set_type(type);
     }
 
-    template <>
-    static void AddResourcePath<nebius::iam::v1::AuthorizeCheck*>(nebius::iam::v1::AuthorizeCheck* pathsContainer, const TString& id, const TString& type) {
-        auto resourcePath = pathsContainer->mutable_resource_path()->add_path();
-        resourcePath->set_id(id);
-        Y_UNUSED(type);
-    }
-
-    template <typename TPathsContainerPtr>
-    static void AddContainerId(TPathsContainerPtr pathsContainer, const TString& id) {
-        Y_UNUSED(pathsContainer, id);
-    }
-
-    template <>
-    static void AddContainerId<nebius::iam::v1::AuthorizeCheck*>(nebius::iam::v1::AuthorizeCheck* pathsContainer, const TString& id) {
-        pathsContainer->set_container_id(id);
-    }
-
     template <typename TTokenRecord, typename TPathsContainerPtr>
-    void addResourcePaths(const TTokenRecord& record, const TString& permission, TPathsContainerPtr pathsContainer) const {
+    void AddResourcePaths(const TTokenRecord& record, const TString& permission, TPathsContainerPtr pathsContainer) const {
         if (const auto databaseId = record.GetAttributeValue(permission, "database_id"); databaseId) {
             AddResourcePath(pathsContainer, databaseId, "ydb.database");
         } else if (const auto serviceAccountId = record.GetAttributeValue(permission, "service_account_id"); serviceAccountId) {
@@ -422,9 +405,28 @@ private:
         if (const TString gizmoId = record.GetAttributeValue(permission, "gizmo_id"); gizmoId) {
             AddResourcePath(pathsContainer, gizmoId, "iam.gizmo");
         }
+    }
 
-        if (const TString containerId = record.GetAttributeValue(permission, "container_id"); containerId) {
-            AddContainerId(pathsContainer, containerId);
+    static void AddNebiusResourcePath(nebius::iam::v1::AuthorizeCheck* pathsContainer, const TString& id) {
+        pathsContainer->mutable_resource_path()->add_path()->set_id(id);
+    }
+
+    static void AddNebiusContainerId(nebius::iam::v1::AuthorizeCheck* pathsContainer, const TString& id) {
+        pathsContainer->set_container_id(id);
+    }
+
+    template <typename TTokenRecord>
+    void AddNebiusResourcePaths(const TTokenRecord& record, const TString& permission, nebius::iam::v1::AuthorizeCheck* pathsContainer) const {
+        // Use attribute "database_id" as our resource id
+        // IAM can link roles for resource
+        if (const auto databaseId = record.GetAttributeValue(permission, "database_id"); databaseId) {
+            AddNebiusResourcePath(pathsContainer, databaseId);
+        }
+
+        // Use attribute "folder_id" as container id that contains our database
+        // IAM can link roles for containers hierarchy
+        if (const auto folderId = record.GetAttributeValue(permission, "folder_id"); folderId) {
+            AddNebiusContainerId(pathsContainer, folderId);
         }
     }
 
@@ -435,7 +437,7 @@ private:
 
             auto request = CreateAccessServiceRequest<TEvAccessServiceAuthorizeRequest>(key, record);
             request->Request.set_permission(permissionName);
-            addResourcePaths(record, permissionName, &request->Request);
+            AddResourcePaths(record, permissionName, &request->Request);
             record.ResponsesLeft++;
             Send(AccessServiceValidatorV1, request.Release());
         }
@@ -447,7 +449,7 @@ private:
         TStringBuilder requestForPermissions;
         for (const auto& [permissionName, permissionRecord] : record.Permissions) {
             auto action = request->Request.mutable_actions()->add_items();
-            addResourcePaths(record, permissionName, action);
+            AddResourcePaths(record, permissionName, action);
             action->set_permission(permissionName);
             requestForPermissions << " " << permissionName;
         }
@@ -466,7 +468,7 @@ private:
             auto& check = (*request->Request.mutable_checks())[i];
             check.set_iam_token(record.Ticket);
             check.mutable_permission()->set_name(permissionName);
-            addResourcePaths(record, permissionName, &check);
+            AddNebiusResourcePaths(record, permissionName, &check);
             requestForPermissions << " " << permissionName;
             ++i;
         }
@@ -1082,6 +1084,9 @@ private:
                                 if (permissionRecord.IsRequired()) {
                                     hasRequiredPermissionFailed = true;
                                     errorMessage << permissionIt->first << " for";
+                                    if (check.container_id()) {
+                                        errorMessage << ' ' << check.container_id();
+                                    }
                                     for (const auto& resourcePath : check.resource_path().path()) {
                                         errorMessage << ' ' << resourcePath.id();
                                     }

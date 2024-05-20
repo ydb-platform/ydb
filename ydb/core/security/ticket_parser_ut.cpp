@@ -1668,8 +1668,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         TVector<std::pair<TString, TString>> attrs = {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}};
         if constexpr (IsNebiusAccessService<TAccessServiceMock>()) {
-            accessServiceMock.ContainerId = "my_container";
-            attrs.emplace_back("container_id", "my_container");
+            accessServiceMock.ContainerId = "aaaa1234";
         }
 
         // Authorization successful.
@@ -1771,7 +1770,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT(!result->Error.Retryable);
         UNIT_ASSERT_VALUES_EQUAL(result->Error.Message, "Access Denied");
 
-        // Authorization successful with right folder_id.
+        if constexpr (IsNebiusAccessService<TAccessServiceMock>()) {
+            accessServiceMock.ContainerId = "aaaa1234";
+        }
+        accessServiceMock.AllowedResourceIds.clear();
         accessServiceMock.AllowedResourceIds.emplace("aaaa1234");
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
                                            userToken,
@@ -1781,8 +1783,13 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT_C(result->Error.empty(), result->Error);
         UNIT_ASSERT_C(result->Token->IsExist("something.read-XXXXXXXX@as"), result->Token->ShortDebugString());
 
+        if constexpr (IsNebiusAccessService<TAccessServiceMock>()) {
+            accessServiceMock.ContainerId = "";
+        } else {
+            accessServiceMock.AllowedResourceIds.clear();
+        }
+
         // Authorization successful with right database_id.
-        accessServiceMock.AllowedResourceIds.clear();
         accessServiceMock.AllowedResourceIds.emplace("bbbb4554");
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
                                            userToken,
@@ -1792,17 +1799,19 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT_C(result->Error.empty(), result->Error);
         UNIT_ASSERT_C(result->Token->IsExist("something.read-bbbb4554@as"), result->Token->ShortDebugString());
 
-        // Authorization successful for gizmo resource
-        accessServiceMock.AllowedResourceIds.clear();
-        accessServiceMock.AllowedResourceIds.emplace("gizmo");
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
-                                           userToken,
-                                           {{"gizmo_id", "gizmo"}, },
-                                           {"monitoring.view"})), 0);
-        result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-        UNIT_ASSERT_C(result->Error.empty(), result->Error);
-        UNIT_ASSERT_C(result->Token->IsExist("monitoring.view@as"), result->Token->ShortDebugString());
-        UNIT_ASSERT_C(result->Token->IsExist("monitoring.view-gizmo@as"), result->Token->ShortDebugString());
+        if constexpr (!IsNebiusAccessService<TAccessServiceMock>()) {
+            // Authorization successful for gizmo resource
+            accessServiceMock.AllowedResourceIds.clear();
+            accessServiceMock.AllowedResourceIds.emplace("gizmo");
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
+                                            userToken,
+                                            {{"gizmo_id", "gizmo"}, },
+                                            {"monitoring.view"})), 0);
+            result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+            UNIT_ASSERT_C(result->Error.empty(), result->Error);
+            UNIT_ASSERT_C(result->Token->IsExist("monitoring.view@as"), result->Token->ShortDebugString());
+            UNIT_ASSERT_C(result->Token->IsExist("monitoring.view-gizmo@as"), result->Token->ShortDebugString());
+        }
     }
 
     Y_UNIT_TEST(Authorization) {
@@ -1848,6 +1857,9 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         // Access Server Mock
         TAccessServiceMock accessServiceMock;
+        if constexpr (IsNebiusAccessService<TAccessServiceMock>()) {
+            accessServiceMock.ContainerId = "aaaa1234";
+        }
         grpc::ServerBuilder builder;
         builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
         std::unique_ptr<grpc::Server> accessServer(builder.BuildAndStart());

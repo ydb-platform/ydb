@@ -56,6 +56,11 @@ def main():
     # So, set up it locally
     os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]
 
+    if not os.path.exists(YDBD_PATH):
+        # can be possible due to incremental builds and ydbd itself is not affected by changes
+        print("{} not exists, skipping".format(YDBD_PATH))
+        return 1
+
     with ydb.Driver(
         endpoint="grpcs://ydb.serverless.yandexcloud.net:2135",
         database="/ru-central1/b1ggceeul2pkher8vhb6/etn6d1qbals0c29ho4lf",

@@ -209,6 +209,8 @@ TTestReadSession::TTestReadSession(const TString& name, TTopicClient& client, si
                 auto partitionId = ev.GetPartitionSession()->GetPartitionId();
                 impl->EndedPartitions.insert(partitionId);
                 impl->EndedPartitionEvents.push_back(ev);
+
+                ev.Confirm();
     });
 
 

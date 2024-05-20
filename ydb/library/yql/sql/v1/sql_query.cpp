@@ -2192,6 +2192,12 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disablepullupflatmapoverjoin") {
             Ctx.PragmaPullUpFlatMapOverJoin = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisablePullUpFlatMapOverJoin");
+        } else if (normalizedPragma == "filterpushdownoverjoinoptionalside") {
+            Ctx.FilterPushdownOverJoinOptionalSide = true;
+            Ctx.IncrementMonCounter("sql_pragma", "FilterPushdownOverJoinOptionalSide");
+        } else if (normalizedPragma == "disablefilterpushdownoverjoinoptionalside") {
+            Ctx.FilterPushdownOverJoinOptionalSide = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableFilterPushdownOverJoinOptionalSide");
         } else if (normalizedPragma == "allowunnamedcolumns") {
             Ctx.WarnUnnamedColumns = false;
             Ctx.IncrementMonCounter("sql_pragma", "AllowUnnamedColumns");

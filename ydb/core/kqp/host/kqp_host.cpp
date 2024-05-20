@@ -1814,6 +1814,8 @@ private:
                 || settingName == "Warning"
                 || settingName == "UseBlocks"
                 || settingName == "BlockEngine"
+                || settingName == "FilterPushdownOverJoinOptionalSide"
+                || settingName == "DisableFilterPushdownOverJoinOptionalSide"
                 ;
         };
         auto configProvider = CreateConfigProvider(*TypesCtx, gatewaysConfig, {}, allowSettings);

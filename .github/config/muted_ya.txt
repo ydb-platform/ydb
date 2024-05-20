@@ -31,7 +31,6 @@ ydb/core/persqueue/ut TPQTest.*DirectRead*
 ydb/core/persqueue/ut TopicAutoscaling.PartitionSplit_ManySession_NewSDK
 ydb/core/tx/coordinator/ut Coordinator.RestoreTenantConfiguration
 ydb/core/tx/datashard/ut_change_exchange Cdc.InitialScanDebezium
-ydb/core/tx/datashard/ut_build_index TTxDataShardBuildIndexScan.ShadowBorrowCompaction
 ydb/core/tx/schemeshard/ut_restore TImportTests.ShouldSucceedOnManyTables
 ydb/core/tx/schemeshard/ut_split_merge TSchemeShardSplitBySizeTest.Merge1KShards
 ydb/core/tx/tx_proxy/ut_ext_tenant TExtSubDomainTest.CreateTableInsideAndAlterDomainAndTable-AlterDatabaseCreateHiveFirst*
@@ -77,6 +76,7 @@ ydb/tests/fq/mem_alloc *
 ydb/tests/fq/multi_plane *
 ydb/tests/fq/plans test_stats_mode.py.TestStatsMode.test_mode[v1-STATS_MODE_FULL-client0]
 ydb/tests/fq/yds *
+ydb/tests/fq/control_plane_storage *
 ydb/tests/functional/audit *
 ydb/tests/functional/blobstorage test_replication.py.TestReplicationAfterNodesRestart.test_replication*
 ydb/tests/functional/kqp/kqp_indexes ConsistentIndexRead.InteractiveTx

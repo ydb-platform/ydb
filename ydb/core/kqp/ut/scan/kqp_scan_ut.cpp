@@ -2364,9 +2364,9 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         bool firstAttemptToGetData = false;
 
         auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::TEvNavigateKeySetResult::EventType) {
-                IActor* actor = runtime->FindActor(ev->GetRecipientRewrite());
-                if (actor && actor->GetActivityType() == NKikimrServices::TActivity::KQP_STREAM_LOOKUP_ACTOR) {
+            if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::TEvResolveKeySetResult::EventType) {
+                Cerr << "Captured TEvTxProxySchemeCache::TEvResolveKeySetResult from " << runtime->FindActorName(ev->Sender) << " to " << runtime->FindActorName(ev->GetRecipientRewrite()) << Endl;
+                if (runtime->FindActorName(ev->GetRecipientRewrite()) == "KQP_STREAM_LOOKUP_ACTOR") {
                     if (!firstAttemptToGetData) {
                         // capture response from scheme cache until CA calls GetAsyncInputData()
                         captured.push_back(ev.Release());
@@ -2428,13 +2428,13 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         createTable(createSession(), R"(
             --!syntax_v1
-            CREATE TABLE `/Root/Table` (Key int32, Value int32, PRIMARY KEY(Key));
+            CREATE TABLE `/Root/Table` (Key int32, Fk int32, Value int32, PRIMARY KEY(Key), INDEX Index GLOBAL ON (Fk));
         )");
 
         server->GetRuntime()->SetEventFilter(captureEvents);
 
         sendQuery(R"(
-            SELECT Value FROM `/Root/Table` WHERE Key IN AsList(1, 2, 3);
+            SELECT Value FROM `/Root/Table` VIEW Index WHERE Fk IN AsList(1, 2, 3);
         )");
     }
 

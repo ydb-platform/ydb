@@ -526,16 +526,6 @@ inline void TSingleClusterReadSessionImpl<false>::InitImpl(TDeferredActions<fals
     Y_ABORT_UNLESS(Lock.IsLocked());
     LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Successfully connected. Initializing session");
 
-    if (Settings.DirectRead_) {
-        DirectReadSessionManager = std::make_shared<TDirectReadSessionManager>(
-            Settings,
-            this->SelfContext,
-            ClientContext->CreateContext(),
-            DirectConnectionFactory,
-            Log
-        );
-    }
-
     TClientMessage<false> req;
     auto& init = *req.mutable_init_request();
 
@@ -1267,7 +1257,14 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
 
     ServerSessionId = msg.session_id();
     if (Settings.DirectRead_) {
-        DirectReadSessionManager->SetServerSessionId(ServerSessionId);
+        DirectReadSessionManager = std::make_shared<TDirectReadSessionManager>(
+            ServerSessionId,
+            Settings,
+            this->SelfContext,
+            ClientContext->CreateContext(),
+            DirectConnectionFactory,
+            Log
+        );
     }
     LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Server session id: " << ServerSessionId);
 

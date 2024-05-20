@@ -79,7 +79,6 @@ public:
 
 // Encode all positive floats as bit 1, negative floats as bit 0.
 // So 1024 float vector is serialized in 1024/8=128 bytes.
-// Place all bits in ui64. So, only vector sizes divisible by 64 are supported.
 class TKnnBitVectorSerializer {
 public:
     static TUnboxedValue Serialize(const IValueBuilder* valueBuilder, const TUnboxedValue x) {
@@ -89,28 +88,43 @@ public:
 
             EnumerateVector(x, [&](float element) {
                 if (element > 0)
-                    accumulator |= 1ll << filledBits;
-                
-                ++filledBits;
-                if (filledBits == 64) {
+                    accumulator |= 1;
+
+                if (++filledBits == 64) {
                     outStream.Write(&accumulator, sizeof(ui64));
                     accumulator = 0;
                     filledBits = 0;
                 }
+                accumulator <<= 1;
             });
+            accumulator >>= 1;
 
-            // only vector sizes divisible by 64 are supported
-            if (Y_UNLIKELY(filledBits))
-                return false;
+            auto write = [&](auto v) {
+                outStream.Write(&v, sizeof(v));
+            };
+            auto tailWriteIf = [&]<typename T>() {
+                if (filledBits >= sizeof(T) * 8) {
+                    write(static_cast<T>(accumulator));
+                    accumulator >>= sizeof(T) * 8;
+                    filledBits -= sizeof(T) * 8;
+                }
+            };
+            tailWriteIf.operator()<ui32>();
+            tailWriteIf.operator()<ui16>();
+            tailWriteIf.operator()<ui8>();
+            if (filledBits > 0) {
+                Y_ASSERT(filledBits < 8);
+                write(static_cast<ui8>(accumulator));
+            }
 
-            const EFormat format = EFormat::BitVector;
-            outStream.Write(&format, HeaderLen);
+            write(filledBits);
+            write(EFormat::BitVector);
 
             return true;
         };
 
         if (x.HasFastListLength()) {
-            auto str = valueBuilder->NewStringNotFilled(HeaderLen + x.GetListLength() / 8);
+            auto str = valueBuilder->NewStringNotFilled((x.GetListLength() + 7) / 8 + 1 + HeaderLen);
             auto strRef = str.AsStringRef();
             TMemoryOutput memoryOutput(strRef.Data(), strRef.Size());
 
@@ -129,11 +143,11 @@ public:
         }
     }
 
-    static const TArrayRef<const ui64> GetArray64(const TStringRef& str) {
+    static std::pair<const ui64*, ui64> GetArray(TStringRef str) {
         const char* buf = str.Data();
-        const size_t len = (str.Size() - HeaderLen) / sizeof(ui64);
-
-        return MakeArrayRef(reinterpret_cast<const ui64*>(buf), len);
+        Y_ASSERT(str.Size() >= 2);
+        const ui64 len = 8 * (str.Size() - HeaderLen - 1) + buf[str.Size() - HeaderLen - 1];
+        return {reinterpret_cast<const ui64*>(buf), len};
     }
 };
 

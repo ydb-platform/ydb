@@ -17,6 +17,33 @@
 using namespace NYql;
 using namespace NYql::NUdf;
 
+inline void BitVectorHandleTail(ui64 bitLen, const ui64* v1, const ui64* v2, auto&& op) {
+    if (Y_LIKELY(bitLen == 0)) // fast-path for aligned case
+        return;
+    const auto unneededBytes = sizeof(ui64) - bitLen / 8;
+    const auto* r1 = reinterpret_cast<const ui8*>(v1) - unneededBytes;
+    const auto* r2 = reinterpret_cast<const ui8*>(v2) - unneededBytes;
+    ui64 d1, d2; // unligned loads
+    std::memcpy(&d1, r1, sizeof(ui64));
+    std::memcpy(&d2, r2, sizeof(ui64));
+    ui64 mask = ((1 << (unneededBytes * 8)) - 1);
+    // big    endian: 0 1 2 3 4 5 6 7 | 0 1 2 3 | 0 1 | 0 | 0 => needs to zero high bits
+    // little endian: 7 6 5 4 3 2 1 0 | 3 2 1 0 | 1 0 | 0 | 0 => needs to zero low  bits
+    if constexpr (std::endian::native == std::endian::little) {
+        mask = ~mask;
+    }
+    op(d1 & mask, d2 & mask);
+}
+
+inline void BitVectorHandleOp(ui64 bitLen, const ui64* v1, const ui64* v2, auto&& op) {
+    const auto wordLen = bitLen / 64;
+    bitLen %= 64;
+    for (const auto* end = v1 + wordLen; v1 != end; ++v1, ++v2) {
+        op(*v1, *v2);
+    }
+    BitVectorHandleTail(bitLen, v1, v2, op);
+}
+
 inline std::optional<float> KnnManhattanDistance(const TStringRef& str1, const TStringRef& str2) {
     const ui8 format1 = str1.Data()[str1.Size() - HeaderLen];
     const ui8 format2 = str2.Data()[str2.Size() - HeaderLen];
@@ -44,15 +71,16 @@ inline std::optional<float> KnnManhattanDistance(const TStringRef& str1, const T
             return ::L1Distance(vector1.data(), vector2.data(), vector1.size());
         }
         case EFormat::BitVector: {
-            const TArrayRef<const ui64> vector1 = TKnnBitVectorSerializer::GetArray64(str1);
-            const TArrayRef<const ui64> vector2 = TKnnBitVectorSerializer::GetArray64(str2);
+            auto [v1, len1] = TKnnBitVectorSerializer::GetArray(str1);
+            auto [v2, len2] = TKnnBitVectorSerializer::GetArray(str2);
 
-            if (Y_UNLIKELY(vector1.size() != vector2.size() || vector1.empty() || vector1.size() > UINT16_MAX))
+            if (Y_UNLIKELY(len1 != len2 || len1 == 0))
                 return {};
 
             ui64 ret = 0;
-            for (size_t i = 0; i < vector1.size(); ++i)
-                ret += std::popcount(vector1[i] ^ vector2[i]);
+            BitVectorHandleOp(len1, v1, v2, [&](ui64 d1, ui64 d2) {
+                ret += std::popcount(d1 ^ d2);
+            });
             return ret;
         }
         default:
@@ -87,15 +115,16 @@ inline std::optional<float> KnnEuclideanDistance(const TStringRef& str1, const T
             return ::L2Distance(vector1.data(), vector2.data(), vector1.size());
         }
         case EFormat::BitVector: {
-            const TArrayRef<const ui64> vector1 = TKnnBitVectorSerializer::GetArray64(str1);
-            const TArrayRef<const ui64> vector2 = TKnnBitVectorSerializer::GetArray64(str2);
+            auto [v1, len1] = TKnnBitVectorSerializer::GetArray(str1);
+            auto [v2, len2] = TKnnBitVectorSerializer::GetArray(str2);
 
-            if (Y_UNLIKELY(vector1.size() != vector2.size() || vector1.empty() || vector1.size() > UINT16_MAX))
+            if (Y_UNLIKELY(len1 != len2 || len1 == 0))
                 return {};
 
             ui64 ret = 0;
-            for (size_t i = 0; i < vector1.size(); ++i)
-                ret += std::popcount(vector1[i] ^ vector2[i]);
+            BitVectorHandleOp(len1, v1, v2, [&](ui64 d1, ui64 d2) {
+                ret += std::popcount(d1 ^ d2);
+            });
             return NPrivate::NL2Distance::L2DistanceSqrt(ret);
         }
         default:
@@ -130,15 +159,16 @@ inline std::optional<float> KnnDotProduct(const TStringRef& str1, const TStringR
             return ::DotProduct(vector1.data(), vector2.data(), vector1.size());
         }
         case EFormat::BitVector: {
-            const TArrayRef<const ui64> vector1 = TKnnBitVectorSerializer::GetArray64(str1);
-            const TArrayRef<const ui64> vector2 = TKnnBitVectorSerializer::GetArray64(str2);
+            auto [v1, len1] = TKnnBitVectorSerializer::GetArray(str1);
+            auto [v2, len2] = TKnnBitVectorSerializer::GetArray(str2);
 
-            if (Y_UNLIKELY(vector1.size() != vector2.size() || vector1.empty() || vector1.size() > UINT16_MAX))
+            if (Y_UNLIKELY(len1 != len2 || len1 == 0))
                 return {};
 
             ui64 ret = 0;
-            for (size_t i = 0; i < vector1.size(); ++i)
-                ret += std::popcount(vector1[i] & vector2[i]);
+            BitVectorHandleOp(len1, v1, v2, [&](ui64 d1, ui64 d2) {
+                ret += std::popcount(d1 & d2);
+            });
             return ret;
         }
         default:
@@ -177,22 +207,20 @@ inline std::optional<TTriWayDotProduct<float>> KnnTriWayDotProduct(const TString
             return result;
         }
         case EFormat::BitVector: {
-            const TArrayRef<const ui64> vector1 = TKnnBitVectorSerializer::GetArray64(str1);
-            const TArrayRef<const ui64> vector2 = TKnnBitVectorSerializer::GetArray64(str2);
+            auto [v1, len1] = TKnnBitVectorSerializer::GetArray(str1);
+            auto [v2, len2] = TKnnBitVectorSerializer::GetArray(str2);
 
-            if (Y_UNLIKELY(vector1.size() != vector2.size() || vector1.empty() || vector1.size() > UINT16_MAX))
+            if (Y_UNLIKELY(len1 != len2 || len1 == 0))
                 return {};
 
             ui64 ll = 0;
             ui64 rr = 0;
             ui64 lr = 0;
-            const auto* v1 = vector1.data();
-            const auto* v2 = vector2.data();
-            for (const auto* end = v1 + vector1.size(); v1 != end; ++v1, ++v2) {
-                ll += std::popcount(*v1);
-                rr += std::popcount(*v2);
-                lr += std::popcount(*v1 & *v2);
-            }
+            BitVectorHandleOp(len1, v1, v2, [&](ui64 d1, ui64 d2) {
+                ll += std::popcount(d1);
+                rr += std::popcount(d2);
+                lr += std::popcount(d1 & d2);
+            });
 
             TTriWayDotProduct<float> result;
             result.LL = ll;

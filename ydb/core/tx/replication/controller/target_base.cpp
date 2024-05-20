@@ -1,3 +1,4 @@
+#include "dst_alterer.h"
 #include "dst_creator.h"
 #include "dst_remover.h"
 #include "target_base.h"
@@ -90,6 +91,13 @@ void TTargetBase::Progress(TReplication::TPtr replication, const TActorContext& 
             WorkerRegistar = ctx.Register(CreateWorkerRegistar(replication, ctx));
         }
         break;
+    case EDstState::Alter:
+        if (!DstAlterer) {
+            DstAlterer = ctx.Register(CreateDstAlterer(replication, Id, ctx));
+        }
+        break;
+    case EDstState::Done:
+        break;
     case EDstState::Removing:
         if (!DstRemover) {
             DstRemover = ctx.Register(CreateDstRemover(replication, Id, ctx));
@@ -101,7 +109,14 @@ void TTargetBase::Progress(TReplication::TPtr replication, const TActorContext& 
 }
 
 void TTargetBase::Shutdown(const TActorContext& ctx) {
-    for (auto* x : TVector<TActorId*>{&DstCreator, &DstRemover, &WorkerRegistar}) {
+    TVector<TActorId*> toShutdown = {
+        &DstCreator,
+        &DstAlterer,
+        &DstRemover,
+        &WorkerRegistar,
+    };
+
+    for (auto* x : toShutdown) {
         if (auto actorId = std::exchange(*x, {})) {
             ctx.Send(actorId, new TEvents::TEvPoison());
         }

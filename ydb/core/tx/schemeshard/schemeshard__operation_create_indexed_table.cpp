@@ -77,7 +77,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         .PathShardsLimit(baseShards)
         .PathsLimit(pathToCreate)
         .ShardsLimit(shardsToCreate)
-        .NotTemporary(tx.GetAllowCreateInTempDir());
+        .FailOnRestrictedCreateInTempZone(tx.GetAllowCreateInTempDir());
 
     if (!checks) {
         return {CreateReject(nextId, NKikimrScheme::EStatus::StatusResourceExhausted, checks.GetError())};

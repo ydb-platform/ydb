@@ -1750,8 +1750,9 @@ message TModifyScheme {
     optional TAlterContinuousBackup AlterContinuousBackup = 69;
     optional TDropContinuousBackup DropContinuousBackup = 70;
 
-    // This flag is required for TModifyScheme to create any new objects inside 
-    // temporary directory. Reads/Updates can be executed without flag.
+    // This flag is required for TModifyScheme to create any new objects inside temporary zone.
+    // Reads/Updates can be executed without flag.
+    // Object is in temporary zone if there is a directory with nonempty OwnerActorId on it's path.
     optional bool AllowCreateInTempDir = 71 [default = false];
 }
 

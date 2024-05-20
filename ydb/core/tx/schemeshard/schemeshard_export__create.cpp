@@ -209,7 +209,7 @@ private:
                     .NotDeleted()
                     .NotUnderDeleting()
                     .IsTable()
-                    .NotTemporary();
+                    .FailOnRestrictedCreateInTempZone();
 
                 if (!checks) {
                     explain = checks.GetError();

@@ -116,7 +116,7 @@ public:
                     .PathsLimit() //check capacity on root Domain
                     .DirChildrenLimit()
                     .IsValidACL(acl)
-                    .NotTemporary(Transaction.GetAllowCreateInTempDir());
+                    .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
             }
 
             if (!checks) {

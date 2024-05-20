@@ -635,7 +635,7 @@ public:
                     .DirChildrenLimit()
                     .IsTheSameDomain(srcPath)
                     .IsValidACL(acl)
-                    .NotTemporary(Transaction.GetAllowCreateInTempDir());
+                    .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
             }
 
             if (!checks) {

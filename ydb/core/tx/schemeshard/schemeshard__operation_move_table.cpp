@@ -599,7 +599,7 @@ public:
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
-                .NotTemporary(Transaction.GetAllowCreateInTempDir());
+                .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
 
                 if (dstParent.IsUnderDeleting()) {
                     checks
@@ -660,7 +660,7 @@ public:
                 checks
                     .DepthLimit()
                     .IsValidLeafName()
-                    .NotTemporary(Transaction.GetAllowCreateInTempDir());
+                    .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
             }
 
             if (!checks) {

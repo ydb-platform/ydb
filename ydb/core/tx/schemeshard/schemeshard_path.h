@@ -97,7 +97,7 @@ public:
         // Check there are no uncles or cousins with same name
         const TChecker& IsNameUniqGrandParentLevel(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsView(EStatus status = EStatus::StatusNameConflict) const;
-        const TChecker& NotTemporary(bool allowCreateInTemporaryDir = false, EStatus status = EStatus::StatusNameConflict) const; // TODO: allowCreateInTemporaryDir
+        const TChecker& FailOnRestrictedCreateInTempZone(bool allowCreateInTemporaryDir = false, EStatus status = EStatus::StatusNameConflict) const; // TODO: allowCreateInTemporaryDir
     };
 
 public:

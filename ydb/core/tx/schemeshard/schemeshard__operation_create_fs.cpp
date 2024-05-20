@@ -339,7 +339,7 @@ THolder<TProposeResponse> TCreateFileStore::Propose(
                 .ShardsLimit(shardsToCreate)
                 .PathShardsLimit(shardsToCreate)
                 .IsValidACL(acl)
-                .NotTemporary(Transaction.GetAllowCreateInTempDir());
+                .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
         }
 
         if (!checks) {

@@ -456,7 +456,7 @@ public:
                 checks
                     .DepthLimit()
                     .IsValidLeafName()
-                    .NotTemporary(Transaction.GetAllowCreateInTempDir());
+                    .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
             }
 
             if (!checks) {

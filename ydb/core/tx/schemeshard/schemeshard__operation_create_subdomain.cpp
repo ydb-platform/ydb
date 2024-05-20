@@ -150,7 +150,7 @@ public:
                     .PathShardsLimit(shardsToCreate)
                     .ShardsLimit(shardsToCreate) //check capacity on root Domain
                     .IsValidACL(acl)
-                    .NotTemporary(Transaction.GetAllowCreateInTempDir());
+                    .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
             }
 
             if (!checks) {

@@ -291,7 +291,7 @@ public:
                     .DirChildrenLimit()
                     .ShardsLimit(1)
                     .IsValidACL(acl)
-                    .NotTemporary(Transaction.GetAllowCreateInTempDir());
+                    .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
             }
 
             if (!checks) {

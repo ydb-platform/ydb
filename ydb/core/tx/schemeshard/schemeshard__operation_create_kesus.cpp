@@ -354,7 +354,7 @@ public:
                     .ShardsLimit()
                     .PathShardsLimit()
                     .IsValidACL(acl)
-                    .NotTemporary(Transaction.GetAllowCreateInTempDir());
+                    .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
             }
 
             if (!checks) {

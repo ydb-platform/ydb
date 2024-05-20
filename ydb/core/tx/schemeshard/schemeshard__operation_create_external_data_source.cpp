@@ -118,7 +118,7 @@ class TCreateExternalDataSource : public TSubOperation {
                 .PathsLimit()
                 .DirChildrenLimit()
                 .IsValidACL(acl)
-                .NotTemporary(tx.GetAllowCreateInTempDir());
+                .FailOnRestrictedCreateInTempZone(tx.GetAllowCreateInTempDir());
         }
 
         if (!checks) {

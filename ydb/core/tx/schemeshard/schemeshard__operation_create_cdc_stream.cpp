@@ -185,7 +185,7 @@ public:
                     .IsValidLeafName()
                     .PathsLimit()
                     .DirChildrenLimit()
-                    .NotTemporary(Transaction.GetAllowCreateInTempDir());
+                    .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
             }
 
             if (!checks) {
@@ -808,7 +808,7 @@ ISubOperation::TPtr RejectOnCdcChecks(const TOperationId& opId, const TPath& str
             .IsValidLeafName()
             .PathsLimit()
             .DirChildrenLimit()
-            .NotTemporary(tx.GetAllowCreateInTempDir());
+            .FailOnRestrictedCreateInTempZone(tx.GetAllowCreateInTempDir());
     }
 
     if (!checks) {

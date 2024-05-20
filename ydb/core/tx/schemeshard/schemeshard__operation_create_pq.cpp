@@ -356,7 +356,7 @@ public:
                     .PathsLimit()
                     .DirChildrenLimit()
                     .IsValidACL(acl)
-                    .NotTemporary(Transaction.GetAllowCreateInTempDir());
+                    .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
             }
 
             if (!checks) {

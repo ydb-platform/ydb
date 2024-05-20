@@ -132,7 +132,7 @@ public:
                 .NotUnderDeleting()
                 .IsCommonSensePath()
                 .IsLikeDirectory()
-                .NotTemporary(Transaction.GetAllowCreateInTempDir());
+                .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());

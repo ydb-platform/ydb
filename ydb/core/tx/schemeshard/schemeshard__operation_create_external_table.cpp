@@ -149,7 +149,7 @@ private:
                 .PathsLimit()
                 .DirChildrenLimit()
                 .IsValidACL(acl)
-                .NotTemporary(tx.GetAllowCreateInTempDir());
+                .FailOnRestrictedCreateInTempZone(tx.GetAllowCreateInTempDir());
         }
 
         if (!checks) {

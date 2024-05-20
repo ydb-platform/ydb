@@ -441,7 +441,7 @@ public:
                     .IsTheSameDomain(srcPath)
                     .PathShardsLimit(maxShardsToCreate)
                     .IsValidACL(acl)
-                    .NotTemporary(Transaction.GetAllowCreateInTempDir());
+                    .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
             }
 
             if (checks && !isBackup) {

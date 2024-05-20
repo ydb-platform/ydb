@@ -8063,6 +8063,41 @@
             "uri": "https://{canondata_backend}/1924537/1ab444909086b08bd4fe21c5a43f5e183c647e0a/resource.tar.gz#test_sql2yql.test_join-left_join_null_column_/sql.yql"
         }
     ],
+    "test_sql2yql.test[join-left_join_right_pushdown_nested_left]": [
+        {
+            "checksum": "469debe145964a01898be300d70ed85e",
+            "size": 2858,
+            "uri": "https://{canondata_backend}/1942415/c55dba912834dcbf5fba9b2e00273cf3e18db77a/resource.tar.gz#test_sql2yql.test_join-left_join_right_pushdown_nested_left_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[join-left_join_right_pushdown_nested_right]": [
+        {
+            "checksum": "8cd6ad5bcca532b8e70b63e0d27d993d",
+            "size": 2834,
+            "uri": "https://{canondata_backend}/1942415/c55dba912834dcbf5fba9b2e00273cf3e18db77a/resource.tar.gz#test_sql2yql.test_join-left_join_right_pushdown_nested_right_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[join-left_join_right_pushdown_no_opt]": [
+        {
+            "checksum": "94826bac701dae8632d31948ca6cf76f",
+            "size": 2586,
+            "uri": "https://{canondata_backend}/1942415/c55dba912834dcbf5fba9b2e00273cf3e18db77a/resource.tar.gz#test_sql2yql.test_join-left_join_right_pushdown_no_opt_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[join-left_join_right_pushdown_null]": [
+        {
+            "checksum": "8da95818d3fe5667e6021b84de184e1b",
+            "size": 2580,
+            "uri": "https://{canondata_backend}/1942415/c55dba912834dcbf5fba9b2e00273cf3e18db77a/resource.tar.gz#test_sql2yql.test_join-left_join_right_pushdown_null_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[join-left_join_right_pushdown_simple]": [
+        {
+            "checksum": "71f0484c045f69fe61bfccfa88538f46",
+            "size": 1628,
+            "uri": "https://{canondata_backend}/1942415/c55dba912834dcbf5fba9b2e00273cf3e18db77a/resource.tar.gz#test_sql2yql.test_join-left_join_right_pushdown_simple_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[join-left_join_with_self_aggr]": [
         {
             "checksum": "d724581f1ce71d5523e1df50c8883073",
@@ -26569,6 +26604,41 @@
             "checksum": "b0ee37f1a914791e6ef49a571ea619c0",
             "size": 240,
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_join-left_join_null_column_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[join-left_join_right_pushdown_nested_left]": [
+        {
+            "checksum": "776b40301cb4655b410722d76bbdc773",
+            "size": 298,
+            "uri": "https://{canondata_backend}/1942415/c55dba912834dcbf5fba9b2e00273cf3e18db77a/resource.tar.gz#test_sql_format.test_join-left_join_right_pushdown_nested_left_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[join-left_join_right_pushdown_nested_right]": [
+        {
+            "checksum": "541e77738ddb1f1ce9fbe7775ebd4c8d",
+            "size": 279,
+            "uri": "https://{canondata_backend}/1942415/c55dba912834dcbf5fba9b2e00273cf3e18db77a/resource.tar.gz#test_sql_format.test_join-left_join_right_pushdown_nested_right_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[join-left_join_right_pushdown_no_opt]": [
+        {
+            "checksum": "04db1a41e025750e06f939339c021c47",
+            "size": 264,
+            "uri": "https://{canondata_backend}/1942415/c55dba912834dcbf5fba9b2e00273cf3e18db77a/resource.tar.gz#test_sql_format.test_join-left_join_right_pushdown_no_opt_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[join-left_join_right_pushdown_null]": [
+        {
+            "checksum": "13b54d7aeb77ba7eb6f043304269a5a5",
+            "size": 266,
+            "uri": "https://{canondata_backend}/1942415/c55dba912834dcbf5fba9b2e00273cf3e18db77a/resource.tar.gz#test_sql_format.test_join-left_join_right_pushdown_null_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[join-left_join_right_pushdown_simple]": [
+        {
+            "checksum": "bc6735e207c21ee82676c81d631bdb7a",
+            "size": 190,
+            "uri": "https://{canondata_backend}/1942415/c55dba912834dcbf5fba9b2e00273cf3e18db77a/resource.tar.gz#test_sql_format.test_join-left_join_right_pushdown_simple_/formatted.sql"
         }
     ],
     "test_sql_format.test[join-left_join_with_self_aggr]": [

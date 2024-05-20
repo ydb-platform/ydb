@@ -87,10 +87,10 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         auto [runtime, server, sender] = TestCreateServer();
 
         CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
-
+    
         TFakeWilsonUploader *uploader = new TFakeWilsonUploader();
         TActorId uploaderId = runtime.Register(uploader, 0);
-        runtime.RegisterService(NWilson::MakeWilsonUploaderId(), uploaderId, 0);
+        runtime.RegisterService(NWilson::MakeWilsonUploaderId(), uploaderId, 0); 
         runtime.SimulateSleep(TDuration::Seconds(10));
 
         const bool usesVolatileTxs = runtime.GetAppData(0).FeatureFlags.GetEnableDataShardVolatileTransactions();
@@ -129,7 +129,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
             CheckTxHasDatashardUnits(propose, 3);
 
             auto progress = tabletTxs[1];
-            CheckTxHasWriteLog(progress);
+            CheckTxHasWriteLog(progress); 
             CheckTxHasDatashardUnits(progress, usesVolatileTxs ? 6 : 11);
         }
 
@@ -166,12 +166,12 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
     Y_UNIT_TEST(TestTraceDistributedSelect) {
         auto [runtime, server, sender] = TestCreateServer();
         bool bTreeIndex = runtime.GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex();
-
+        
         CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
-
+    
         TFakeWilsonUploader *uploader = new TFakeWilsonUploader();
         TActorId uploaderId = runtime.Register(uploader, 0);
-        runtime.RegisterService(NWilson::MakeWilsonUploaderId(), uploaderId, 0);
+        runtime.RegisterService(NWilson::MakeWilsonUploaderId(), uploaderId, 0); 
         runtime.SimulateSleep(TDuration::Seconds(10));
 
         SplitTable(runtime, server, 5);
@@ -230,7 +230,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
             UNIT_ASSERT_VALUES_EQUAL(dsReads.size(), 2);
 
             canon = "(Session.query.QUERY_ACTION_EXECUTE -> [(CompileService -> [(CompileActor)]) , (LiteralExecuter) "
-                ", (DataExecuter -> [(WaitForTableResolve) , (WaitForShardsResolve) , (WaitForSnapshot) "
+                ", (DataExecuter -> [(WaitForTableResolve) , (WaitForShardsResolve) , (WaitForSnapshot) , (ComputeActor) "
                 ", (RunTasks) , (KqpNode.SendTasks) , (ComputeActor -> [(ReadActor -> [(WaitForShardsResolve) , (Datashard.Read "
                 "-> [(Tablet.Transaction -> [(Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) "
                 ", (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) , (Tablet.Transaction.Execute -> [(Datashard.Unit)]) "
@@ -239,18 +239,18 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
                 "-> [(Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.Transaction.Wait) "
                 ", (Tablet.Transaction.Enqueued) , (Tablet.Transaction.Execute -> [(Datashard.Unit)]) , (Tablet.Transaction.Wait) "
                 ", (Tablet.Transaction.Enqueued) , (Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog "
-                "-> [(Tablet.WriteLog.LogEntry)])])])])]) , (ComputeActor)])])";
+                "-> [(Tablet.WriteLog.LogEntry)])])])])])])])";
 
             if (bTreeIndex) { // no index nodes (levels = 0)
                 canon = "(Session.query.QUERY_ACTION_EXECUTE -> [(CompileService -> [(CompileActor)]) , (LiteralExecuter) "
-                ", (DataExecuter -> [(WaitForTableResolve) , (WaitForShardsResolve) , (WaitForSnapshot) "
+                ", (DataExecuter -> [(WaitForTableResolve) , (WaitForShardsResolve) , (WaitForSnapshot) , (ComputeActor) "
                 ", (RunTasks) , (KqpNode.SendTasks) , (ComputeActor -> [(ReadActor -> [(WaitForShardsResolve) , (Datashard.Read "
                 "-> [(Tablet.Transaction -> [(Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) "
                 ", (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) , (Tablet.Transaction.Execute -> [(Datashard.Unit) "
                 ", (Datashard.Unit)]) , (Tablet.WriteLog -> [(Tablet.WriteLog.LogEntry)])])]) , (Datashard.Read -> [(Tablet.Transaction "
                 "-> [(Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.Transaction.Wait) "
                 ", (Tablet.Transaction.Enqueued) , (Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog "
-                "-> [(Tablet.WriteLog.LogEntry)])])])])]) , (ComputeActor)])])";
+                "-> [(Tablet.WriteLog.LogEntry)])])])])])])])";
             }
 
         } else {
@@ -281,7 +281,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
             }
 
             canon = "(Session.query.QUERY_ACTION_EXECUTE -> [(CompileService -> [(CompileActor)]) "
-                ", (LiteralExecuter) , (DataExecuter -> [(WaitForTableResolve) , (WaitForSnapshot) , (RunTasks) , "
+                ", (LiteralExecuter) , (DataExecuter -> [(WaitForTableResolve) , (WaitForSnapshot) , (ComputeActor) , (RunTasks) , "
                 "(Datashard.Transaction -> [(Tablet.Transaction -> [(Tablet.Transaction.Execute -> [(Datashard.Unit) , "
                 "(Datashard.Unit) , (Datashard.Unit)]) , (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) , "
                 "(Tablet.Transaction.Execute -> [(Datashard.Unit)]) , (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) , "
@@ -290,10 +290,10 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
                 "[(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) , "
                 "(Tablet.Transaction.Execute -> [(Datashard.Unit)]) , (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) , "
                 "(Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog -> "
-                "[(Tablet.WriteLog.LogEntry)])])]) , (ComputeActor)])])";
+                "[(Tablet.WriteLog.LogEntry)])])])])])";
         }
-
-
+        
+        
         UNIT_ASSERT_VALUES_EQUAL(canon, trace.ToString());
     }
 
@@ -345,13 +345,13 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         UNIT_ASSERT_VALUES_EQUAL(dsReads.size(), 2);
 
         std::string canon = "(Session.query.QUERY_ACTION_EXECUTE -> [(CompileService -> [(CompileActor)]) , "
-            "(DataExecuter -> [(WaitForTableResolve) , (WaitForShardsResolve) , (WaitForSnapshot) , "
+            "(DataExecuter -> [(WaitForTableResolve) , (WaitForShardsResolve) , (WaitForSnapshot) , (ComputeActor) , "
             "(RunTasks) , (KqpNode.SendTasks) , (ComputeActor -> [(ReadActor -> [(WaitForShardsResolve) , "
             "(Datashard.Read -> [(Tablet.Transaction -> [(Tablet.Transaction.Execute -> [(Datashard.Unit) , "
             "(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog -> [(Tablet.WriteLog.LogEntry)])])"
             "]) , (Datashard.Read -> [(Tablet.Transaction -> [(Tablet.Transaction.Execute -> "
             "[(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog -> "
-            "[(Tablet.WriteLog.LogEntry)])])])])]) , (ComputeActor)])])";
+            "[(Tablet.WriteLog.LogEntry)])])])])])])])";
         UNIT_ASSERT_VALUES_EQUAL(canon, trace.ToString());
     }
 
@@ -363,7 +363,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
 
         TFakeWilsonUploader *uploader = new TFakeWilsonUploader();
         TActorId uploaderId = runtime.Register(uploader, 0);
-        runtime.RegisterService(NWilson::MakeWilsonUploaderId(), uploaderId, 0);
+        runtime.RegisterService(NWilson::MakeWilsonUploaderId(), uploaderId, 0); 
         runtime.SimulateSleep(TDuration::Seconds(10));
 
         NWilson::TTraceId traceId = NWilson::TTraceId::NewTraceId(15, 4095);
@@ -380,16 +380,16 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         UNIT_ASSERT_VALUES_EQUAL(1, uploader->Traces.size());
 
         TFakeWilsonUploader::Trace &trace = uploader->Traces.begin()->second;
-
+        
         auto wtSpan = trace.Root.BFSFindOne("Datashard.WriteTransaction");
         UNIT_ASSERT(wtSpan);
-
+        
         auto tabletTxs = wtSpan->get().FindAll("Tablet.Transaction");
         UNIT_ASSERT_VALUES_EQUAL(1, tabletTxs.size());
         auto writeTx = tabletTxs[0];
 
-        CheckTxHasWriteLog(writeTx);
-        CheckTxHasDatashardUnits(writeTx, 5);
+        CheckTxHasWriteLog(writeTx); 
+        CheckTxHasDatashardUnits(writeTx, 5); 
 
         std::string canon = "(Datashard.WriteTransaction -> [(Tablet.Transaction -> [(Tablet.Transaction.Execute -> "
         "[(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog -> "

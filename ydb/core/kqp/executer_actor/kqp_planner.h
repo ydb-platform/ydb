@@ -104,7 +104,7 @@ private:
     const bool WithSpilling;
     const TMaybe<NKikimrKqp::TRlPath> RlPath;
     THashSet<ui32> TrackingNodes;
-    TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;
+    const TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;
     NWilson::TSpan& ExecuterSpan;
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& ExecuterRetriesConfig;
     ui64 LocalRunMemoryEst = 0;

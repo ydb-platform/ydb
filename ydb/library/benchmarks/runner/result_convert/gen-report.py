@@ -23,7 +23,7 @@ def main():
     if len(sys.argv) < 2:
         print('Usage: {} resultdir... >report.htm'.format(sys.argv[0]), file=sys.stderr)
         sys.exit(1)
-    args = sys.argv[1:]
+    rdirs = sys.argv[1:]
     print('''
 <html><head><style>
 .signal { color: blue; }
@@ -36,15 +36,16 @@ def main():
 </style></head>
 ''')
     print('<table border="1">')
-    print('<tr><th>Testcase' + '<th>Status<th>Real time, s<th>User time, s<th>RSS, MB'*len(args) + '</tr>')
     data = []
+    filelists = [sorted(map(str, Path(dirname).glob('**/summary.tsv'))) for dirname in rdirs]
+    print('<tr><th>' + ''.join('<th colspan="{}">'.format(4*len(filelist)) + html.escape(dirname) for dirname, filelist in zip(rdirs, filelists)))
     print('<tr><th>')
-    for dirname in args:
-        for name in sorted(map(str, Path(dirname).glob('**/summary.tsv'))):
+    for dirname, filelist in zip(rdirs, filelists):
+        for name in filelist:
             name = str(name)
             with open(name) as f:
                 cmdline = f.readline()
-                print('<th colspan="4"><span title="{}">{}</span>'.format(html.escape(cmdline, quote=True), html.escape(name)))
+                print('<th colspan="4"><span title="{}">{}</span>'.format(html.escape(cmdline, quote=True), html.escape(name[len(dirname)+1:])))
                 coldata = []
                 for line in f:
                     line = line.strip().split('\t')
@@ -56,6 +57,8 @@ def main():
                     exitcode = int(exitcode)
                     coldata += [(q, elapsed, utime, stime, maxrss, exitcode)]
                 data += [coldata]
+
+    print('<tr><th>Testcase' + '<th>Status<th>Real time, s<th>User time, s<th>RSS, MB'*len(data) + '</tr>')
 
     for i in range(len(data[0])):
         q = data[0][i][0]

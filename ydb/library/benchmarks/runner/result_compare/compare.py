@@ -53,15 +53,16 @@ def main():
 </style></head>
 ''')
     print('<table border="1">')
-    print('<tr><th>' + ''.join(map(lambda x: '<th colspan="5">' + html.escape(rdirs[x]), range(len(rdirs)))))
-    print('<tr><th>')
 
-    for dirname in rdirs:
-        for name in sorted(map(str, Path(dirname).glob('**/summary.tsv'))):
+    filelists = [sorted(map(str, Path(dirname).glob('**/summary.tsv'))) for dirname in rdirs]
+    print('<tr><th>' + ''.join('<th colspan="{}">'.format(5*len(filelist)) + html.escape(dirname) for dirname, filelist in zip(rdirs, filelists)))
+    print('<tr><th>')
+    for dirname, filelist in zip(rdirs, filelists):
+        for name in filelist:
             with open(name) as f:
                 coldata = []
                 cmdline = f.readline()
-                print('<th colspan="4"><span title="{}">{}</span><th>'.format(html.escape(cmdline, quote=True), html.escape(name)))
+                print('<th colspan="5"><span title="{}">{}</span>'.format(html.escape(cmdline, quote=True), html.escape(name)))
                 for line in f:
                     line = line.split('\t')
                     (q, utime, stime, maxrss, exitcode, elapsed) = line[:6]

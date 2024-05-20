@@ -12,6 +12,7 @@
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
+#include <util/memory/pool.h>
 
 namespace NKikimr::NReplication::NService {
 
@@ -26,6 +27,7 @@ struct TLightweightSchema: public TThrRefBase {
 
     TVector<NScheme::TTypeInfo> KeyColumns;
     THashMap<TString, TColumn> ValueColumns;
+    ui64 Version = 0;
 };
 
 class TChangeRecordBuilder;
@@ -39,8 +41,10 @@ public:
     ui64 GetTxId() const override;
     EKind GetKind() const override;
 
+    void Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& record, TMemoryPool& pool) const;
     void Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& record) const;
 
+    TConstArrayRef<TCell> GetKey(TMemoryPool& pool) const;
     TConstArrayRef<TCell> GetKey() const;
 
 private:

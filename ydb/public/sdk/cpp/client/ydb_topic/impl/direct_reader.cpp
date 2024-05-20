@@ -31,16 +31,21 @@ void TDirectReadSessionManager::SetServerSessionId(TServerSessionId id) {
 
 void TDirectReadSessionManager::StartPartitionSession(TDirectPartitionSession&& session) {
     TDirectReadSessionPtr connection;
+    auto nodeId = session.Location.GetNodeId();
     with_lock (Lock) {
-        connection = Connections[session.NodeId];
+        connection = Connections[nodeId];
         if (!connection) {
-            connection = CreateConnection(session.NodeId);
+            connection = CreateConnection(nodeId);
             if (auto c = connection->LockShared()) {
                 c->Start();
                 c->AddPartitionSession(std::move(session));
             }
         }
     }
+}
+
+void TDirectReadSessionManager::UpdatePartitionSession(TPartitionSessionId, TPartitionLocation) {
+
 }
 
 void TDirectReadSessionManager::StopPartitionSession(TPartitionSessionId id) {
@@ -96,7 +101,7 @@ bool TDirectReadSession::Empty() const {
 }
 
 void TDirectReadSession::AddPartitionSession(TDirectPartitionSession&& session) {
-    PartitionSessions[session.Id] = std::move(session);
+    PartitionSessions.emplace(session.Id, std::move(session));
 }
 
 void TDirectReadSession::DeletePartitionSession(TPartitionSessionId id) {
@@ -175,7 +180,7 @@ void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::Ini
         auto& start = *req.mutable_start_direct_read_partition_session_request();
         start.set_partition_session_id(session.Id);
         // TODO(qyryq) start.set_last_direct_read_id();
-        start.set_generation(session.Generation);
+        start.set_generation(session.Location.GetGeneration());
         WriteToProcessorImpl(std::move(req));
     }
 

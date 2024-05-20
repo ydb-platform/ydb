@@ -6,6 +6,8 @@
 
 #include "direct_reader.h"
 
+#include "ydb/public/sdk/cpp/client/ydb_topic/include/control_plane.h"
+
 #include <ydb/public/sdk/cpp/client/ydb_topic/common/log_lazy.h>
 
 #define INCLUDE_YDB_INTERNAL_H
@@ -1370,12 +1372,9 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     }
 
     if (Settings.DirectRead_) {
-        auto nodeId = msg.partition_location().node_id();
-        auto generation = msg.partition_location().generation();
         DirectReadConnectionManager->StartPartitionSession({
             .Id = static_cast<TPartitionSessionId>(partitionSessionId),
-            .NodeId = nodeId,
-            .Generation = generation
+            .Location = TPartitionLocation(msg.partition_location())
         });
     }
 
@@ -1416,9 +1415,9 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     }
 
     //TODO: update generation/nodeid info
-
+    auto id = it->second->GetPartitionSessionId();
     if (Settings.DirectRead_) {
-        // DirectReadConnectionManager.
+        DirectReadConnectionManager->UpdatePartitionSession(id, TPartitionLocation(msg.partition_location()));
     }
 }
 

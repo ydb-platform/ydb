@@ -43,6 +43,7 @@ using TDirectReadSessionPtr = std::shared_ptr<TCallbackContext<TDirectReadSessio
 
 struct TDirectPartitionSession {
     TPartitionSessionId Id;
+    TNodeId NodeId;
     TGeneration Generation;
     IRetryPolicy::IRetryState::TPtr RetryState = {};
 
@@ -142,7 +143,7 @@ public:
         IDirectReadConnectionFactoryPtr connectionFactory
     );
 
-    void StartPartitionSession(TNodeId, TDirectPartitionSession&&);
+    void StartPartitionSession(TDirectPartitionSession&&);
 
     void StopPartitionSession(TPartitionSessionId);
 

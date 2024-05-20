@@ -1372,10 +1372,11 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     if (Settings.DirectRead_) {
         auto nodeId = msg.partition_location().node_id();
         auto generation = msg.partition_location().generation();
-        DirectReadConnectionManager->StartPartitionSession(
-            nodeId,
-            { .Id = static_cast<TPartitionSessionId>(partitionSessionId), .Generation = generation }
-        );
+        DirectReadConnectionManager->StartPartitionSession({
+            .Id = static_cast<TPartitionSessionId>(partitionSessionId),
+            .NodeId = nodeId,
+            .Generation = generation
+        });
     }
 
     partitionSession = MakeIntrusive<TPartitionStreamImpl<false>>(
@@ -1409,11 +1410,16 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     Y_ABORT_UNLESS(Lock.IsLocked());
     Y_UNUSED(deferred);
 
-    auto partitionStreamIt = PartitionStreams.find(msg.partition_session_id());
-    if (partitionStreamIt == PartitionStreams.end()) {
+    auto it = PartitionStreams.find(msg.partition_session_id());
+    if (it == PartitionStreams.end()) {
         return;
     }
+
     //TODO: update generation/nodeid info
+
+    if (Settings.DirectRead_) {
+        // DirectReadConnectionManager.
+    }
 }
 
 template <>

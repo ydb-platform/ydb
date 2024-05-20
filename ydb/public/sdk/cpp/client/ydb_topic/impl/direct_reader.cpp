@@ -29,12 +29,12 @@ void TDirectReadSessionManager::SetServerSessionId(TServerSessionId id) {
     ServerSessionId = id;
 }
 
-void TDirectReadSessionManager::StartPartitionSession(TNodeId nodeId, TDirectPartitionSession&& session) {
+void TDirectReadSessionManager::StartPartitionSession(TDirectPartitionSession&& session) {
     TDirectReadSessionPtr connection;
     with_lock (Lock) {
-        connection = Connections[nodeId];
+        connection = Connections[session.NodeId];
         if (!connection) {
-            connection = CreateConnection(nodeId);
+            connection = CreateConnection(session.NodeId);
             if (auto c = connection->LockShared()) {
                 c->Start();
                 c->AddPartitionSession(std::move(session));

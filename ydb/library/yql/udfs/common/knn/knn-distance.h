@@ -17,6 +17,15 @@
 using namespace NYql;
 using namespace NYql::NUdf;
 
+inline void BitVectorHandleShort(ui64 bitLen, const ui64* v1, const ui64* v2, auto&& op) {
+    ui64 d1 = 0;
+    ui64 d2 = 0;
+    const auto byteLen = bitLen / 8; // TODO manual switch for [1..7]?
+    std::memcpy(&d1, v1, byteLen);
+    std::memcpy(&d2, v2, byteLen);
+    op(d1, d2);
+}
+
 inline void BitVectorHandleTail(ui64 bitLen, const ui64* v1, const ui64* v2, auto&& op) {
     if (Y_LIKELY(bitLen == 0)) // fast-path for aligned case
         return;
@@ -37,6 +46,9 @@ inline void BitVectorHandleTail(ui64 bitLen, const ui64* v1, const ui64* v2, aut
 
 inline void BitVectorHandleOp(ui64 bitLen, const ui64* v1, const ui64* v2, auto&& op) {
     const auto wordLen = bitLen / 64;
+    if (Y_LIKELY(wordLen == 0)) // fast-path for short case
+        return BitVectorHandleShort(bitLen, v1, v2, op);
+
     bitLen %= 64;
     for (const auto* end = v1 + wordLen; v1 != end; ++v1, ++v2) {
         op(*v1, *v2);

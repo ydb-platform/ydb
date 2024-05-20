@@ -132,8 +132,6 @@ private:
     IDirectReadConnectionFactoryPtr ConnectionFactory;
     std::shared_ptr<TDirectReadServerMessage> ServerMessage;
 
-    // PartitionSessionId/AssignId -> TPartitionSessionImpl
-    // THashMap<TPartitionSessionId, TPartitionStreamImpl<false>::TPtr> PartitionSessions;
     THashMap<TPartitionSessionId, TDirectReadPartitionSession> PartitionSessions;
 
     EState State;
@@ -154,9 +152,7 @@ public:
     );
 
     void StartPartitionSession(TDirectReadPartitionSession&&);
-
     void UpdatePartitionSession(TPartitionSessionId, TPartitionLocation);
-
     void StopPartitionSession(TPartitionSessionId);
 
     void SetServerSessionId(TServerSessionId);

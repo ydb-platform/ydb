@@ -33,6 +33,10 @@ NChangeExchange::IChangeRecord::EKind TChangeRecord::GetKind() const {
         : EKind::CdcDataChange;
 }
 
+TString TChangeRecord::GetSourceId() const {
+    return SourceId;
+}
+
 static bool ParseKey(TVector<TCell>& cells,
         const NJson::TJsonValue::TArray& key, TLightweightSchema::TCPtr schema, TMemoryPool& pool, TString& error)
 {

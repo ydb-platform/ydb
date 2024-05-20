@@ -23,13 +23,15 @@ TEvWorker::TEvData::TRecord::TRecord(ui64 offset, TString&& data)
 {
 }
 
-TEvWorker::TEvData::TEvData(const TVector<TRecord>& records)
-    : Records(records)
+TEvWorker::TEvData::TEvData(const TString& source, const TVector<TRecord>& records)
+    : Source(source)
+    , Records(records)
 {
 }
 
-TEvWorker::TEvData::TEvData(TVector<TRecord>&& records)
-    : Records(std::move(records))
+TEvWorker::TEvData::TEvData(const TString& source, TVector<TRecord>&& records)
+    : Source(source)
+    , Records(std::move(records))
 {
 }
 
@@ -42,6 +44,7 @@ void TEvWorker::TEvData::TRecord::Out(IOutputStream& out) const {
 
 TString TEvWorker::TEvData::ToString() const {
     return TStringBuilder() << ToStringHeader() << " {"
+        << " Source: " << Source
         << " Records [" << JoinSeq(",", Records) << "]"
     << " }";
 }
@@ -115,7 +118,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
                 << ": sender# " << ev->Sender);
 
             Reader.Registered();
-            if (!InFlightRecords) {
+            if (!InFlightData) {
                 Send(Reader, new TEvWorker::TEvPoll());
             }
         } else if (ev->Sender == Writer) {
@@ -123,8 +126,8 @@ class TWorker: public TActorBootstrapped<TWorker> {
                 << ": sender# " << ev->Sender);
 
             Writer.Registered();
-            if (InFlightRecords) {
-                Send(Writer, new TEvWorker::TEvData(InFlightRecords));
+            if (InFlightData) {
+                Send(Writer, new TEvWorker::TEvData(InFlightData->Source, InFlightData->Records));
             }
         } else {
             LOG_W("Handshake from unknown actor"
@@ -142,7 +145,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
             return;
         }
 
-        InFlightRecords.clear();
+        InFlightData.Reset();
         if (Reader) {
             Send(ev->Forward(Reader));
         }
@@ -157,8 +160,8 @@ class TWorker: public TActorBootstrapped<TWorker> {
             return;
         }
 
-        Y_ABORT_UNLESS(InFlightRecords.empty());
-        InFlightRecords = ev->Get()->Records;
+        Y_ABORT_UNLESS(!InFlightData);
+        InFlightData = MakeHolder<TEvWorker::TEvData>(ev->Get()->Source, ev->Get()->Records);
 
         if (Writer) {
             Send(ev->Forward(Writer));
@@ -239,7 +242,7 @@ private:
     mutable TMaybe<TString> LogPrefix;
     TActorInfo Reader;
     TActorInfo Writer;
-    TVector<TEvWorker::TEvData::TRecord> InFlightRecords;
+    THolder<TEvWorker::TEvData> InFlightData;
 };
 
 IActor* CreateWorker(std::function<IActor*(void)>&& createReaderFn, std::function<IActor*(void)>&& createWriterFn) {

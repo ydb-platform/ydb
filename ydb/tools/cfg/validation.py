@@ -970,9 +970,6 @@ TEMPLATE_SCHEMA = {
         "nw_cache_file_path": {
             "type": "string",
         },
-        "enable_cms_config_cache": {
-            "type": "boolean",
-        },
         "hosts": {
             "type": "array",
             "items": copy.deepcopy(HOST_SCHEMA),

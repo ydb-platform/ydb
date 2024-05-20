@@ -537,7 +537,7 @@ TExprNode::TPtr ExpandEquiJoinImpl(const TExprNode& node, TExprContext& ctx) {
     const auto& renames = GetRenames(node, ctx);
     const auto& joinKind = node.Child(2)->Head().Content();
     if (joinKind == "Cross") {
-        return ctx.Builder(node.Pos())
+        auto result = ctx.Builder(node.Pos())
             .Callable("FlatMap")
                 .Add(0, std::move(list1))
                 .Lambda(1)
@@ -565,6 +565,33 @@ TExprNode::TPtr ExpandEquiJoinImpl(const TExprNode& node, TExprContext& ctx) {
                     .Seal()
                 .Seal()
             .Seal().Build();
+
+        if (const auto iterators = FindNodes(result->Tail().Tail().HeadPtr(),
+            [] (const TExprNode::TPtr& node) { return node->IsCallable("Iterator"); });
+            !iterators.empty()) {
+            TNodeOnNodeOwnedMap replaces(iterators.size());
+            const auto upperArg = result->Tail().Head().HeadPtr();
+            for (const auto& iter : iterators) {
+                auto children = iter->ChildrenList();
+                switch (children.size()) {
+                    case 1U: {
+                        children.emplace_back(ctx.NewCallable(iter->Pos(), "DependsOn", {upperArg}));
+                        break;
+                    }
+                    case 2U: {
+                        auto deps = children.back()->ChildrenList();
+                        deps.emplace_back(upperArg);
+                        children.back() = ctx.ChangeChildren(*children.back(), std::move(deps));
+;                       break;
+                    }
+                    default:
+                        break;
+                }
+                replaces.emplace(iter.Get(), ctx.ChangeChildren(*iter, std::move(children)));
+            }
+            result = ctx.ReplaceNodes(std::move(result), replaces);
+        }
+        return result;
     }
 
     const auto list1type = list1->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();

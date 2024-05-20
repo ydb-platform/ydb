@@ -12,4 +12,6 @@ PEERDIR(
     library/cpp/string_utils/base64
 )
 
+GENERATE_ENUM_SERIALIZATION(descriptor.h)
+
 END()

@@ -117,10 +117,12 @@ TDirectReadSession::TDirectReadSession(
 
 void TDirectReadSession::Start()  {
     with_lock (Lock) {
-        if (State == EState::CREATED) {
-            Reconnect(TPlainStatus());
+        if (State != EState::CREATED) {
+            return;
         }
+        State = EState::CONNECTING;
     }
+    Reconnect(TPlainStatus());
 }
 
 void TDirectReadSession::Close() {

@@ -837,17 +837,21 @@ private:
         RightPacker->TablePtr->UpdateSpilling();
     }
 
+    bool HasRunningAsyncOperation() const {
+        return LeftPacker->TablePtr->HasRunningAsyncIoOperation() || RightPacker->TablePtr->HasRunningAsyncIoOperation();
+    }
+
 void DoCalculateWithSpilling(TComputationContext& ctx) {
     UpdateSpilling();
 
     if (InputFetchResultLeft == EFetchResult::Finish && InputFetchResultRight == EFetchResult::Finish) {
-        if (LeftPacker->TablePtr->HasRunningAsyncIoOperation() || RightPacker->TablePtr->HasRunningAsyncIoOperation()) return;
+        if (HasRunningAsyncOperation()) return;
         if (!IsSpillingFinalized) {
             LeftPacker->TablePtr->FinalizeSpilling();
             RightPacker->TablePtr->FinalizeSpilling();
             IsSpillingFinalized = true;
 
-            if (LeftPacker->TablePtr->HasRunningAsyncIoOperation() || RightPacker->TablePtr->HasRunningAsyncIoOperation()) return;
+            if (HasRunningAsyncOperation()) return;
         }
         SwitchMode(EOperatingMode::ProcessSpilled, ctx);
         return;
@@ -897,6 +901,87 @@ void DoCalculateWithSpilling(TComputationContext& ctx) {
     }
 }
 
+EFetchResult ProcessSpilledData(TComputationContext&, NUdf::TUnboxedValue*const* output) {
+    while (NextBucketToJoin != GraceJoin::NumberOfBuckets) {
+
+        UpdateSpilling();
+
+        if (HasRunningAsyncOperation()) return EFetchResult::Yield;
+
+        if (!LeftPacker->TablePtr->IsBucketInMemory(NextBucketToJoin)) {
+            LeftPacker->TablePtr->StartLoadingBucket(NextBucketToJoin);
+            std::cerr << std::format("[MISHA] LEFT started loading bucket {}\n", NextBucketToJoin);
+        }
+
+        if (!RightPacker->TablePtr->IsBucketInMemory(NextBucketToJoin)) {
+            RightPacker->TablePtr->StartLoadingBucket(NextBucketToJoin);
+            std::cerr << std::format("[MISHA] RIGHT started loading bucket {}\n", NextBucketToJoin);
+        } 
+
+        if (LeftPacker->TablePtr->IsBucketInMemory(NextBucketToJoin) && RightPacker->TablePtr->IsBucketInMemory(NextBucketToJoin)) {
+            if (*PartialJoinCompleted) {
+                while (JoinedTablePtr->NextJoinedData(LeftPacker->JoinTupleData, RightPacker->JoinTupleData)) {
+                    LeftPacker->UnPack();
+                    RightPacker->UnPack();
+
+                    auto &valsLeft = LeftPacker->TupleHolder;
+                    auto &valsRight = RightPacker->TupleHolder;
+
+
+                    for (size_t i = 0; i < LeftRenames.size() / 2; i++)
+                    {
+                        auto & valPtr = output[LeftRenames[2 * i + 1]];
+                        if ( valPtr ) {
+                            *valPtr = valsLeft[LeftRenames[2 * i]];
+                        }
+                    }
+
+                    for (size_t i = 0; i < RightRenames.size() / 2; i++)
+                    {
+                        auto & valPtr = output[RightRenames[2 * i + 1]];
+                        if ( valPtr ) {
+                            *valPtr = valsRight[RightRenames[2 * i]];
+                        }
+                    }
+
+                    std::cerr << std::format("[MISHA] RETURN ONE\n");
+                    return EFetchResult::One;
+
+                }
+
+                std::cerr << std::format("[MISHA] JOIN FINISHED\n");
+                LeftPacker->TuplesBatchPacked = 0;
+                LeftPacker->TablePtr->Clear(); // Clear table content, ready to collect data for next batch
+
+                RightPacker->TuplesBatchPacked = 0;
+                RightPacker->TablePtr->Clear(); // Clear table content, ready to collect data for next batch
+
+                JoinedTablePtr->Clear();
+                JoinedTablePtr->ResetIterator();
+                *PartialJoinCompleted = false;
+
+                NextBucketToJoin++;
+            } else {
+                LeftPacker->TablePtr->ExtractBucket(NextBucketToJoin);
+                RightPacker->TablePtr->ExtractBucket(NextBucketToJoin);
+                *PartialJoinCompleted = true;
+                LeftPacker->StartTime = std::chrono::system_clock::now();
+                RightPacker->StartTime = std::chrono::system_clock::now();
+                if ( SelfJoinSameKeys_ ) {
+                    JoinedTablePtr->Join(*LeftPacker->TablePtr, *LeftPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
+                } else {
+                    JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
+                }
+                JoinedTablePtr->ResetIterator();
+                LeftPacker->EndTime = std::chrono::system_clock::now();
+                RightPacker->EndTime = std::chrono::system_clock::now();
+            }
+
+        }
+    }
+    return EFetchResult::Finish;
+}
+
 private:
     EOperatingMode Mode = EOperatingMode::InMemory;
 
@@ -924,6 +1009,8 @@ private:
     EFetchResult InputFetchResultLeft = EFetchResult::One;
     EFetchResult InputFetchResultRight = EFetchResult::One;
     bool IsSpillingFinalized = false;
+
+    ui32 NextBucketToJoin = 0;
 };
 
 class TGraceJoinState : public TComputationValue<TGraceJoinState> {

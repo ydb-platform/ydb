@@ -326,6 +326,20 @@ public:
         return false;
     }
 
+    bool IsBucketInMemory(ui32 bucket) const {
+        return TableBucketsSpillers[bucket].IsInMemory();
+    }
+
+    void StartLoadingBucket(ui32 bucket) {
+        MKQL_ENSURE(!TableBucketsSpillers[bucket].IsInMemory(), "Internal logic error");
+
+        TableBucketsSpillers[bucket].StartBucketRestoration();
+    }
+
+    void ExtractBucket(ui64 bucket) {
+        TableBuckets[bucket] = std::move(TableBucketsSpillers[bucket].ExtractBucket());
+    }
+
     // Clears table content
     void Clear();
 

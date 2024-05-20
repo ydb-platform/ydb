@@ -62,7 +62,7 @@ def main():
             with open(name) as f:
                 coldata = []
                 cmdline = f.readline()
-                print('<th colspan="5"><span title="{}">{}</span>'.format(html.escape(cmdline, quote=True), html.escape(name)))
+                print('<th colspan="5"><span title="{}">{}</span>'.format(html.escape(cmdline, quote=True), html.escape(name[len(dirname) + 1:])))
                 for line in f:
                     line = line.split('\t')
                     (q, utime, stime, maxrss, exitcode, elapsed) = line[:6]

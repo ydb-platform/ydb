@@ -24011,9 +24011,9 @@
     ],
     "test_sql_format.test[expr-list_top_sort]": [
         {
-            "checksum": "daf4da8a0205ff29d72c09d4c7708208",
-            "size": 1587,
-            "uri": "https://{canondata_backend}/995452/0828572c263b2cebd15b1dcd234d39fd5315b924/resource.tar.gz#test_sql_format.test_expr-list_top_sort_/formatted.sql"
+            "checksum": "a0af54a6ec4d671db9f8a91cc09877bf",
+            "size": 1594,
+            "uri": "https://{canondata_backend}/1689644/47813afec92f7bbc83af4667f9074aac865e7ffe/resource.tar.gz#test_sql_format.test_expr-list_top_sort_/formatted.sql"
         }
     ],
     "test_sql_format.test[expr-list_uniq]": [

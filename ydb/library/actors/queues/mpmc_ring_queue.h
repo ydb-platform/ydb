@@ -422,7 +422,7 @@ struct TMPMCRingQueue {
 
     std::optional<ui32> TryPopFast() {
         ui64 currentHead = 0;
-        for (;;) {
+        for (ui32 try_it = 0; try_it < 3; ++try_it) {
             ui64 currentHead = Head.fetch_add(1, std::memory_order_relaxed);
             ui32 generation = currentHead / MaxSize;
 
@@ -479,20 +479,19 @@ struct TMPMCRingQueue {
                 }
             }
             
-            if (currentTail == currentHead + 1) {
-                TMPMCRingQueueStats::IncrementFailedFastPops();
-                return std::nullopt;
-            }
-            break;
+            //if (currentTail == currentHead + 1) {
+            //    TMPMCRingQueueStats::IncrementFailedFastPops();
+            //    return std::nullopt;
+            //}
+            SpinLockPause();
         }
 
         TMPMCRingQueueStats::IncrementFailedFastPopAttempts();
-        SpinLockPause();
         return TryPopSlow(currentHead);
     }
 
     std::optional<ui32> TryPopReallyFast() {
-        for (;;) {
+        for (ui32 try_it = 0; try_it < 2; ++try_it) {
             ui64 currentHead = Head.fetch_add(1, std::memory_order_relaxed);
             ui32 generation = currentHead / MaxSize;
 
@@ -549,15 +548,14 @@ struct TMPMCRingQueue {
                 }
             }
             
-            if (currentTail == currentHead + 1) {
-                TMPMCRingQueueStats::IncrementFailedReallyFastPops();
-                return std::nullopt;
-            }
-            break;
+            //if (currentTail == currentHead + 1) {
+            //    TMPMCRingQueueStats::IncrementFailedReallyFastPops();
+            //    return std::nullopt;
+            //}
+            SpinLockPause();
         }
 
         TMPMCRingQueueStats::IncrementFailedReallyFastPopAttempts();
-        SpinLockPause();
         return TryPopFast();
     }
 };

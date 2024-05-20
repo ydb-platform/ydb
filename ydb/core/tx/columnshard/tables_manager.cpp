@@ -130,7 +130,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
                     }
                 }
             }
-            table.AddVersion(version, 0); // Fake value
+            table.AddVersion(version);
             versionsInfo.AddVersion(version, versionInfo);
             if (!rowset.Next()) {
                 return false;
@@ -170,13 +170,13 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
         } else {
             Y_ABORT_UNLESS(id > 0);
         }
-        for (const auto& [version, schemaInfo] : preset.GetVersions()) {
+        for (const auto& [version, schemaInfo] : preset.GetVersionsById()) {
             if (schemaInfo.HasSchema()) {
                 AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "index_schema")("preset_id", id)("snapshot", version)("version", schemaInfo.GetSchema().GetVersion());
                 if (!PrimaryIndex) {
-                    PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, StoragesManager, version, schemaInfo.GetSchema());
+                    PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, StoragesManager, preset.GetMinVersionForId(schemaInfo.GetSchema().GetVersion()), schemaInfo.GetSchema());
                 } else {
-                    PrimaryIndex->RegisterSchemaVersion(version, schemaInfo.GetSchema());
+                    PrimaryIndex->RegisterSchemaVersion(preset.GetMinVersionForId(schemaInfo.GetSchema().GetVersion()),  schemaInfo.GetSchema());
                 }
             }
         }
@@ -322,7 +322,7 @@ void TTablesManager::AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& 
         }
     }
     Schema::SaveTableVersionInfo(db, pathId, version, versionInfo);
-    table.AddVersion(version, 0);
+    table.AddVersion(version);
 }
 
 TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const ui64 tabletId)
@@ -340,7 +340,7 @@ bool TTablesManager::TryFinalizeDropPathOnExecute(NTable::TDatabase& dbTable, co
     const auto& itTable = Tables.find(pathId);
     AFL_VERIFY(itTable != Tables.end())("problem", "No schema for path")("path_id", pathId);
     for (auto&& tableVersion : itTable->second.GetVersions()) {
-        NColumnShard::Schema::EraseTableVersionInfo(db, pathId, tableVersion.first);
+        NColumnShard::Schema::EraseTableVersionInfo(db, pathId, tableVersion);
     }
     return true;
 }

@@ -186,6 +186,7 @@ struct TEvYdbProxy {
         };
 
         explicit TReadTopicResult(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
+            PartitionId = event.GetPartitionSession()->GetPartitionId();
             Messages.reserve(event.GetMessagesCount());
             if (event.HasCompressedMessages()) {
                 for (const auto& msg : event.GetCompressedMessages()) {
@@ -200,6 +201,7 @@ struct TEvYdbProxy {
 
         void Out(IOutputStream& out) const;
 
+        ui64 PartitionId;
         TVector<TMessage> Messages;
     };
 

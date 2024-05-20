@@ -38,12 +38,14 @@ public:
     ui64 GetStep() const override;
     ui64 GetTxId() const override;
     EKind GetKind() const override;
+    TString GetSourceId() const;
 
     void Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& record) const;
 
     TConstArrayRef<TCell> GetKey() const;
 
 private:
+    TString SourceId;
     NJson::TJsonValue JsonBody;
     TLightweightSchema::TCPtr Schema;
 
@@ -54,6 +56,11 @@ private:
 class TChangeRecordBuilder: public NChangeExchange::TChangeRecordBuilder<TChangeRecord, TChangeRecordBuilder> {
 public:
     using TBase::TBase;
+
+    TSelf& WithSourceId(const TString& sourceId) {
+        GetRecord()->SourceId = sourceId;
+        return static_cast<TSelf&>(*this);
+    }
 
     template <typename T>
     TSelf& WithBody(T&& body) {

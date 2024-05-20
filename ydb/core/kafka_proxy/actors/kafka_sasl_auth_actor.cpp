@@ -98,6 +98,7 @@ void TKafkaSaslAuthActor::SendResponseAndDie(EKafkaErrors errorCode, const TStri
                                       << "FolderId='" << FolderId << "', "
                                       << "ServiceAccountId='" << ServiceAccountId << "', "
                                       << "DatabaseId='" << DatabaseId << "', "
+                                      << "ContainerId='" << ContainerId << "', "
                                       << "Coordinator='" << Coordinator << "', "
                                       << "ResourcePath='" << ResourcePath << "'");
         responseToClient->ErrorMessage = "";
@@ -173,7 +174,7 @@ void TKafkaSaslAuthActor::SendLoginRequest(TKafkaSaslAuthActor::TAuthData authDa
 }
 
 void TKafkaSaslAuthActor::SendApiKeyRequest() {
-    auto entries = NKikimr::NGRpcProxy::V1::GetTicketParserEntries(DatabaseId, FolderId, true);
+    auto entries = NKikimr::NGRpcProxy::V1::GetTicketParserEntries(DatabaseId, FolderId, ContainerId, true);
 
     Send(NKikimr::MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
         .Database = DatabasePath,
@@ -206,6 +207,7 @@ void TKafkaSaslAuthActor::Handle(NKikimr::TEvTxProxySchemeCache::TEvNavigateKeyS
         if (attr.first == "folder_id") FolderId = attr.second;
         else if (attr.first == "cloud_id") CloudId = attr.second;
         else if (attr.first == "database_id") DatabaseId = attr.second;
+        else if (attr.first == "container_id") ContainerId = attr.second;
         else if (attr.first == "service_account_id") ServiceAccountId = attr.second;
         else if (attr.first == "serverless_rt_coordination_node_path") Coordinator = attr.second;
         else if (attr.first == "serverless_rt_base_resource_ru") ResourcePath = attr.second;

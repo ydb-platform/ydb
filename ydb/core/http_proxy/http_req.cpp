@@ -975,6 +975,7 @@ namespace NKikimr::NHttpProxy {
                 if (attr.first == "folder_id") FolderId = attr.second;
                 if (attr.first == "cloud_id") CloudId = attr.second;
                 if (attr.first == "database_id") DatabaseId = attr.second;
+                if (attr.first == "container_id") ContainerId = attr.second;
             }
             SendAuthenticationRequest(ctx);
         }
@@ -1036,7 +1037,7 @@ namespace NKikimr::NHttpProxy {
 
 
             if (Authorize) {
-                auto entries = NKikimr::NGRpcProxy::V1::GetTicketParserEntries(DatabaseId, FolderId);
+                auto entries = NKikimr::NGRpcProxy::V1::GetTicketParserEntries(DatabaseId, FolderId, ContainerId);
                 if (Signature.Get()) {
                     TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature signature;
                     signature.AccessKeyId = Signature->GetAccessKeyId();
@@ -1184,6 +1185,7 @@ namespace NKikimr::NHttpProxy {
         TString FolderId;
         TString CloudId;
         TString DatabaseId;
+        TString ContainerId;
         TString DatabasePath;
         TString StreamName;
     };

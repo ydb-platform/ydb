@@ -635,6 +635,18 @@ private:
 
 }; // TNewCdcStreamAtTable
 
+void DoCreateLock(const TOperationId& opId, const TPath& workingDirPath, const TPath& tablePath,
+    TVector<ISubOperation::TPtr>& result)
+{
+    auto outTx = TransactionTemplate(workingDirPath.PathString(),
+        NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock);
+    outTx.SetFailOnExist(false);
+    outTx.SetInternal(true);
+    outTx.MutableLockConfig()->SetName(tablePath.LeafName());
+
+    result.push_back(CreateLock(NextPartId(opId, result), outTx));
+}
+
 } // anonymous
 
 void DoCreateStream(const NKikimrSchemeOp::TCreateCdcStream& op, const TOperationId& opId, const TPath& workingDirPath, const TPath& tablePath,
@@ -721,18 +733,6 @@ void DoCreatePqPart(const TOperationId& opId, const TPath& streamPath, const TSt
 }
 
 namespace {
-
-void DoCreateLock(const TOperationId& opId, const TPath& workingDirPath, const TPath& tablePath,
-    TVector<ISubOperation::TPtr>& result)
-{
-    auto outTx = TransactionTemplate(workingDirPath.PathString(),
-        NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock);
-    outTx.SetFailOnExist(false);
-    outTx.SetInternal(true);
-    outTx.MutableLockConfig()->SetName(tablePath.LeafName());
-
-    result.push_back(CreateLock(NextPartId(opId, result), outTx));
-}
 
 ISubOperation::TPtr RejectOnCdcChecks(const TOperationId& opId, const TPath& streamPath, const bool acceptExisted) {
     const auto checks = streamPath.Check();

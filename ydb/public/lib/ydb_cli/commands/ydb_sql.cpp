@@ -3,10 +3,11 @@
 #include <library/cpp/json/json_reader.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/operation_id/operation_id.h>
+#include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/query_stats.h>
-#include <ydb/public/lib/ydb_cli/common/interactive.h>
+#include <ydb/public/lib/ydb_cli/common/waiting_bar.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <util/generic/queue.h>
 #include <google/protobuf/text_format.h>
@@ -377,30 +378,48 @@ int TCommandSql::FetchResults(TDriver& driver, NQuery::TQueryClient& client) {
     }
 
     NOperation::TOperationClient operationClient(driver);
-    auto execScriptOperation = operationClient.Get<NQuery::TScriptExecutionOperation>(operationId).GetValueSync();
-    TResultSetPrinter printer(OutputFormat, &IsInterrupted);
+    TWaitingBar waitingBar("Waiting for qeury execution to finish... ");
+    while (!IsInterrupted()) {
+        NQuery::TScriptExecutionOperation execScriptOperation = operationClient
+            .Get<NQuery::TScriptExecutionOperation>(operationId)
+            .GetValueSync();
+        if (!execScriptOperation.Ready()) {
+            waitingBar.Render();
+            Sleep(TDuration::Seconds(1));
+            continue;
+        }
+        waitingBar.Finish(false);
+        TResultSetPrinter printer(OutputFormat, &IsInterrupted);
 
-    for (size_t resultSetIndex = 0; resultSetIndex < execScriptOperation.Metadata().ResultSetsMeta.size(); ++resultSetIndex) {
-        TString const* nextFetchToken = nullptr;
-        while (!IsInterrupted()) {
-            NYdb::NQuery::TFetchScriptResultsSettings settings;
-            if (nextFetchToken != nullptr) {
-                settings.FetchToken(*nextFetchToken);
-            }
+        for (size_t resultSetIndex = 0; resultSetIndex < execScriptOperation.Metadata().ResultSetsMeta.size(); ++resultSetIndex) {
+            TString const* nextFetchToken = nullptr;
+            while (!IsInterrupted()) {
+                NYdb::NQuery::TFetchScriptResultsSettings settings;
+                if (nextFetchToken != nullptr) {
+                    settings.FetchToken(*nextFetchToken);
+                }
 
-            auto asyncResult = client.FetchScriptResults(operationId, resultSetIndex, settings);
-            auto result = asyncResult.GetValueSync();
+                auto asyncResult = client.FetchScriptResults(operationId, resultSetIndex, settings);
+                auto result = asyncResult.GetValueSync();
 
-            if (result.HasResultSet() && !ExplainAnalyzeMode) {
-                printer.Print(result.ExtractResultSet());
-            }
+                if (result.HasResultSet() && !ExplainAnalyzeMode) {
+                    printer.Print(result.ExtractResultSet());
+                }
 
-            if (result.GetNextFetchToken()) {
-                nextFetchToken = &result.GetNextFetchToken();
-            } else {
-                break;
+                if (result.GetNextFetchToken()) {
+                    nextFetchToken = &result.GetNextFetchToken();
+                } else {
+                    break;
+                }
             }
         }
+        break;
+    }
+    waitingBar.Finish(false);
+
+    if (IsInterrupted()) {
+        Cerr << "<INTERRUPTED>" << Endl;
+        return false;
     }
     return EXIT_SUCCESS;
 }

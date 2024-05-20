@@ -94,11 +94,12 @@ struct TPerfomancer {
                         << " MB/sec" << Endl;
                 Cerr << Endl;
             }
+            delete [] buf;
             return is_ok;
         }
 
-        ui8* ShuffleMask(ui32 v[8]) {
-            ui8* det = new ui8[32];
+        TSimd<ui8> ShuffleMask(ui32 v[8]) {
+            ui8 det[32];
             for (size_t i = 0; i < 32; i += 1) {
                 det[i] = v[i / 4] + i % 4;
             }

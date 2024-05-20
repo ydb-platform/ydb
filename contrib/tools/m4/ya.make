@@ -30,7 +30,7 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/tools/bison/lib
+    contrib/tools/m4/lib
 )
 
 END()

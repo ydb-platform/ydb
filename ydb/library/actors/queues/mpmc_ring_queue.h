@@ -421,6 +421,7 @@ struct TMPMCRingQueue {
     }
 
     std::optional<ui32> TryPopFast() {
+        ui64 currentHead = 0;
         for (;;) {
             ui64 currentHead = Head.fetch_add(1, std::memory_order_relaxed);
             ui32 generation = currentHead / MaxSize;
@@ -482,12 +483,12 @@ struct TMPMCRingQueue {
                 TMPMCRingQueueStats::IncrementFailedFastPops();
                 return std::nullopt;
             }
-
-            TMPMCRingQueueStats::IncrementFailedFastPopAttempts();
-            SpinLockPause();
+            break;
         }
-        TMPMCRingQueueStats::IncrementFailedFastPops();
-        return std::nullopt;
+
+        TMPMCRingQueueStats::IncrementFailedFastPopAttempts();
+        SpinLockPause();
+        return TryPopSlow(currentHead);
     }
 
     std::optional<ui32> TryPopReallyFast() {
@@ -552,10 +553,12 @@ struct TMPMCRingQueue {
                 TMPMCRingQueueStats::IncrementFailedReallyFastPops();
                 return std::nullopt;
             }
-
-            TMPMCRingQueueStats::IncrementFailedReallyFastPopAttempts();
-            SpinLockPause();
+            break;
         }
+
+        TMPMCRingQueueStats::IncrementFailedReallyFastPopAttempts();
+        SpinLockPause();
+        return TryPopFast();
     }
 };
 

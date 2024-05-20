@@ -22,6 +22,10 @@ TDirectReadSessionManager::TDirectReadSessionManager(
     , Log(log)
     {}
 
+TStringBuilder TDirectReadSessionManager::GetLogPrefix() const {
+    return TStringBuilder() << "TDirectReadSessionManager ServerSessionId=" << ServerSessionId << " ";
+}
+
 TDirectReadSessionPtr TDirectReadSessionManager::CreateDirectReadSession(TNodeId nodeId) {
     return MakeWithCallbackContext<TDirectReadSession>(
         nodeId, ServerSessionId, ReadSessionSettings, SingleClusterReadSession, ClientContext->CreateContext(), ConnectionFactory, Log);
@@ -31,11 +35,15 @@ void TDirectReadSessionManager::SetServerSessionId(TServerSessionId id) {
     ServerSessionId = id;
 }
 
+void TDirectReadSessionManager::Close() {
+    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Close");
+}
+
 void TDirectReadSessionManager::StartPartitionSession(TDirectReadPartitionSession&& partitionSession) {
     TDirectReadSessionPtr session;
     auto nodeId = partitionSession.Location.GetNodeId();
 
-    session = Sessions[nodeId];
+    session = NodeSessions[nodeId];
     if (!session) {
         session = CreateDirectReadSession(nodeId);
     }
@@ -45,29 +53,43 @@ void TDirectReadSessionManager::StartPartitionSession(TDirectReadPartitionSessio
     }
 }
 
-void TDirectReadSessionManager::UpdatePartitionSession(TPartitionSessionId id, TPartitionLocation location) {
-    auto it = Locations.find(id);
-    Y_ABORT_UNLESS(it != Locations.end());  // TODO(qyryq) What is the proper reaction here?
+void TDirectReadSessionManager::DeletePartitionSession(TPartitionSessionId id, TNodeSessionsMap::iterator it) {
+    if (auto session = it->second->LockShared()) {
+        session->DeletePartitionSession(id);
+        if (session->Empty()) {
+            session->Close();
+            NodeSessions.erase(it);
+        }
+    }
+}
 
-    if (it->second.GetNodeId() == location.GetNodeId()) {
-        //
+void TDirectReadSessionManager::UpdatePartitionSession(TPartitionSessionId id, TPartitionLocation location) {
+    auto locIt = Locations.find(id);
+    Y_ABORT_UNLESS(locIt != Locations.end());
+
+    auto sessionIt = NodeSessions.find(locIt->second.GetNodeId());
+    Y_ABORT_UNLESS(sessionIt != NodeSessions.end());
+
+    if (locIt->second.GetNodeId() == location.GetNodeId()) {
+        if (auto session = sessionIt->second->LockShared()) {
+            session->UpdatePartitionSessionGeneration(id, location);
+        }
+    } else {
+        DeletePartitionSession(id, sessionIt);
+
+        // TODO(qyryq) std::move an old RetryState?
+        StartPartitionSession({ .Id = id, .Location = location });
     }
 }
 
 void TDirectReadSessionManager::StopPartitionSession(TPartitionSessionId id) {
     auto locIt = Locations.find(id);
-    Y_ABORT_UNLESS(locIt != Locations.end());  // TODO(qyryq) What is the proper reaction here?
-    auto nodeId = locIt->second.GetNodeId();
+    Y_ABORT_UNLESS(locIt != Locations.end());
 
-    auto sessionIt = Sessions.find(nodeId);
-    Y_ABORT_UNLESS(sessionIt != Sessions.end());  // TODO(qyryq) What is the proper reaction here?
-    if (auto session = sessionIt->second->LockShared()) {
-        session->DeletePartitionSession(id);
-        if (session->Empty()) {
-            session->Close();
-            Sessions.erase(sessionIt);
-        }
-    }
+    auto sessionIt = NodeSessions.find(locIt->second.GetNodeId());
+    Y_ABORT_UNLESS(sessionIt != NodeSessions.end());
+
+    DeletePartitionSession(id, sessionIt);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -115,19 +137,28 @@ bool TDirectReadSession::Empty() const {
 
 void TDirectReadSession::AddPartitionSession(TDirectReadPartitionSession&& session) {
     with_lock (Lock) {
-        if (State >= EState::CLOSING) {
-            return;
-        }
+        Y_ABORT_UNLESS(State < EState::CLOSING);
 
         auto [it, inserted] = PartitionSessions.emplace(session.Id, std::move(session));
-        Y_ABORT_UNLESS(inserted);  // TODO(qyryq) What is the proper reaction here?
+        Y_ABORT_UNLESS(inserted);
 
-        // Send StartDirectReadPartitionSession request only if we're already connected.
-        // In other cases adding the session to PartitionSessions is enough,
-        // the request will be sent from OnReadDoneImpl(InitDirectReadResponse).
-        if (State == EState::CONNECTED) {
-            SendStartDirectReadPartitionSessionImpl(it->second);
-        }
+        SendStartDirectReadPartitionSessionImpl(it->second);
+    }
+}
+
+void TDirectReadSession::UpdatePartitionSessionGeneration(TPartitionSessionId id, TPartitionLocation location) {
+    with_lock (Lock) {
+        auto it = PartitionSessions.find(id);
+        Y_ABORT_UNLESS(it != PartitionSessions.end());
+
+        // TODO(qyryq) Add TPartitionLocation::SetGeneration method?
+        it->second = {
+            .Id = id,
+            .Location = location,
+            .RetryState = std::move(it->second.RetryState),
+        };
+
+        SendStartDirectReadPartitionSessionImpl(it->second);
     }
 }
 
@@ -200,6 +231,13 @@ void TDirectReadSession::OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t c
 void TDirectReadSession::SendStartDirectReadPartitionSessionImpl(const TDirectReadPartitionSession& session) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
+    // Send the StartDirectReadPartitionSession request only if we're already connected.
+    // In other cases adding the session to PartitionSessions is enough,
+    // the request will be sent from OnReadDoneImpl(InitDirectReadResponse).
+    if (State != EState::CONNECTED) {
+        return;
+    }
+
     TDirectReadClientMessage req;
     auto& start = *req.mutable_start_direct_read_partition_session_request();
     start.set_partition_session_id(session.Id);
@@ -225,24 +263,26 @@ void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::Ini
 
 void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::StartDirectReadPartitionSessionResponse&& response, TDeferredActions<false>&) {
     Y_ABORT_UNLESS(Lock.IsLocked());
+    Cerr << response.DebugString() << Endl;
 
     LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Start partition_session_id=" << response.partition_session_id());
-
     // RetryState = nullptr;
-
-    Cerr << response.DebugString() << Endl;
 }
 
 void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::StopDirectReadPartitionSession&& response, TDeferredActions<false>&) {
     Y_ABORT_UNLESS(Lock.IsLocked());
-
     Cerr << response.DebugString() << Endl;
+
+    // TODO(qyryq) Call manager's DeletePartitionSession through deferred?
+    // deferred.DeferDeleteDirectPartitionSession(response.partition_session_id());
+
+    // TODO(qyryq) Send status/issues to the control session?
 }
 
 void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&& response, TDeferredActions<false>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
-
     Cerr << response.DebugString() << Endl;
+
     Ydb::Topic::StreamReadMessage::ReadResponse r;
     r.set_bytes_size(response.ByteSizeLong());
     auto* data = r.add_partition_data();
@@ -293,7 +333,7 @@ void TDirectReadSession::ReadFromProcessorImpl(TDeferredActions<false>& deferred
 }
 
 TStringBuilder TDirectReadSession::GetLogPrefix() const {
-    return TStringBuilder() << "NodeId=" << NodeId << " ServerSessionId=" << ServerSessionId << " ";
+    return TStringBuilder() << "TDirectReadSession ServerSessionId=" << ServerSessionId << " NodeId=" << NodeId << " ";
 }
 
 void TDirectReadSession::InitImpl(TDeferredActions<false>& deferred) {

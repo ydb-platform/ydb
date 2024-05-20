@@ -30,6 +30,11 @@ void TClientCommandRoot::SetCredentialsGetter(TConfig& config) {
                 return CreateLoginCredentialsProviderFactory(config.StaticCredentials);
             }
         }
+        if (config.UseOauth2TokenExchange) {
+            if (config.Oauth2TokenExchangeParams) {
+                return CreateOauth2TokenExchangeCredentialsProviderFactory(config.BuildOauth2TokenExchangeParams());
+            }
+        }
         if (config.UseIamAuth) {
             if (config.YCToken) {
                 return CreateIamOAuthCredentialsProviderFactory(
@@ -99,6 +104,7 @@ int NewYCloudClient(int argc, char** argv) {
     settings.UseDefaultTokenFile = false;
     settings.UseIamAuth = true;
     settings.UseStaticCredentials = true;
+    settings.UseOauth2TokenExchange = true;
     settings.UseExportToYt = false;
     settings.MentionUserAccount = false;
     settings.YdbDir = "ydb";

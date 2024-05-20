@@ -17,6 +17,8 @@ struct TClientSettings {
     TMaybe<bool> UseIamAuth;
     // Whether to use static credentials (user/password) or not
     TMaybe<bool> UseStaticCredentials;
+    // Whether to use OAuth 2.0 token exchange credentials or not
+    TMaybe<bool> UseOauth2TokenExchange;
     // Whether to use export to YT command or not
     TMaybe<bool> UseExportToYt;
     // Whether to mention user account in --help command or not
@@ -75,6 +77,9 @@ private:
     TString IamEndpoint;
     const TClientSettings& Settings;
     TVector<TString> MisuseErrors;
+
+    TMaybe<TOauth2TokenExchangeParams> Oauth2TokenExchangeParams;
+    TString Oauth2TokenExchangeParamsJson;
 
     bool IsAddressSet = false;
     bool IsDatabaseSet = false;

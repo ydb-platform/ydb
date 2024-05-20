@@ -23,6 +23,8 @@
 #include <util/string/builder.h>
 #include <util/system/env.h>
 
+#include <contrib/libs/jwt-cpp/include/jwt-cpp/jwt.h>
+
 namespace NYdb {
 namespace NConsoleClient {
 
@@ -64,6 +66,8 @@ void TClientCommandRootCommon::ValidateSettings() {
         Cerr << "Missing static credentials usage flag in client settings" << Endl;
     } else if (!Settings.MentionUserAccount.Defined()) {
         Cerr << "Missing user account mentioning flag in client settings" << Endl;
+    } else if (!Settings.UseOauth2TokenExchange.Defined()) {
+        Cerr << "Missing oauth 2.0 token exchange credentials usage flag in client settings" << Endl;
     } else if (!Settings.YdbDir) {
         Cerr << "Missing YDB directory in client settings" << Endl;
     } else {
@@ -76,6 +80,7 @@ void TClientCommandRootCommon::FillConfig(TConfig& config) {
     config.UseOAuthToken = Settings.UseOAuthToken.GetRef();
     config.UseIamAuth = Settings.UseIamAuth.GetRef();
     config.UseStaticCredentials = Settings.UseStaticCredentials.GetRef();
+    config.UseOauth2TokenExchange = Settings.UseOauth2TokenExchange.GetRef();
     config.UseExportToYt = Settings.UseExportToYt.GetRef();
     SetCredentialsGetter(config);
 }
@@ -93,9 +98,42 @@ void TClientCommandRootCommon::SetCredentialsGetter(TConfig& config) {
             }
         }
 
+        if (config.UseOauth2TokenExchange) {
+            if (config.Oauth2TokenExchangeParams) {
+                return CreateOauth2TokenExchangeCredentialsProviderFactory(config.BuildOauth2TokenExchangeParams());
+            }
+        }
+
         return CreateInsecureCredentialsProviderFactory();
     };
 }
+
+template <class TAlg>
+void ApplyAsymmetricAlg(TJwtTokenSourceParams* params, const TString& privateKey) {
+    // Alg with first param as public key, second param as private key
+    params->SigningAlgorithm<TAlg>(std::string{}, privateKey);
+}
+
+template <class TAlg>
+void ApplyHmacAlg(TJwtTokenSourceParams* params, const TString& key) {
+    // Alg with first param as key
+    params->SigningAlgorithm<TAlg>(key);
+}
+
+const TMap<TString, void(*)(TJwtTokenSourceParams*, const TString& privateKey)> JwtAlgorithmsFactory = {
+    {"RS256", &ApplyAsymmetricAlg<jwt::algorithm::rs256>},
+    {"RS384", &ApplyAsymmetricAlg<jwt::algorithm::rs384>},
+    {"RS512", &ApplyAsymmetricAlg<jwt::algorithm::rs512>},
+    {"ES256", &ApplyAsymmetricAlg<jwt::algorithm::es256>},
+    {"ES384", &ApplyAsymmetricAlg<jwt::algorithm::es384>},
+    {"ES512", &ApplyAsymmetricAlg<jwt::algorithm::es512>},
+    {"PS256", &ApplyAsymmetricAlg<jwt::algorithm::ps256>},
+    {"PS384", &ApplyAsymmetricAlg<jwt::algorithm::ps384>},
+    {"PS512", &ApplyAsymmetricAlg<jwt::algorithm::ps512>},
+    {"HS256", &ApplyHmacAlg<jwt::algorithm::hs256>},
+    {"HS384", &ApplyHmacAlg<jwt::algorithm::hs384>},
+    {"HS512", &ApplyHmacAlg<jwt::algorithm::hs512>},
+};
 
 void TClientCommandRootCommon::Config(TConfig& config) {
     FillConfig(config);
@@ -211,6 +249,70 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         opts.AddLongOption("no-password", "Do not ask for user password (if empty)").Optional().StoreTrue(&DoNotAskForPassword);
     }
 
+    if (config.UseOauth2TokenExchange) {
+        TOauth2TokenExchangeParams defaultParams;
+        TJwtTokenSourceParams defaultJwtParams;
+        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+
+        TStringBuilder supportedJwtAlgorithms;
+        for (const auto& [alg, _] : JwtAlgorithmsFactory) {
+            if (supportedJwtAlgorithms) {
+                supportedJwtAlgorithms << ", ";
+            }
+            supportedJwtAlgorithms << colors.BoldColor() << alg << colors.OldColor();
+        }
+
+#define FIELD(name) "    " << colors.BoldColor() << name << colors.OldColor() << ": "
+#define TYPE(type) "[" << colors.YellowColor() << type << colors.OldColor() << "] "
+#define TYPE2(type1, type2) "[" << colors.YellowColor() << type1 << colors.OldColor() << " | " << colors.YellowColor() << type2 << colors.OldColor() << "] "
+#define DEFAULT(value) " (default: " << colors.CyanColor() << value << colors.OldColor() << ")"
+
+        TStringBuilder oauth2TokenExchangeHelp;
+        oauth2TokenExchangeHelp << "OAuth 2.0 token exchange credentials parameters (json)" << Endl
+            << "  Parameters search order:" << Endl
+            << "    1. This option" << Endl
+            << "    2. Profile specified with --profile option" << Endl
+            << "    3. \"YDB_OAUTH2_TOKEN_EXCHANGE\" environment variable" << Endl
+            << "    4. Active configuration profile" << Endl << Endl
+            << "  You can read detaled information about OAuth 2.0 token exchange protocol and its options" << Endl
+            << "    in the page: https://www.rfc-editor.org/rfc/rfc8693" << Endl
+            << Endl
+            << "  Value for this option must have json format with the following fields:" << Endl
+            << FIELD("grant-type") "          " TYPE("string") "Grant type option" DEFAULT(defaultParams.GrantType_) << Endl
+            << FIELD("resource") "            " TYPE("string") "Resource option" << Endl
+            << FIELD("audience") "            " TYPE2("string", "list of strings") "Audience option for token exchange request" << Endl
+            << FIELD("scope") "               " TYPE2("string", "list of strings") "Scope option" << Endl
+            << FIELD("requested-token-type") "" TYPE("string") "Requested token type option" DEFAULT(defaultParams.RequestedTokenType_) << Endl
+            << FIELD("subject-token") "       " TYPE("token_source_json") "Subject token options (optional)" << Endl
+            << FIELD("actor-token") "         " TYPE("token_source_json") "Actor token options (optional)" << Endl
+            << Endl
+            << "  Fields of " << colors.BoldColor() << "token_source_json" << colors.OldColor() << " (JWT):" << Endl
+            << FIELD("type") "                " TYPE("string") "Token source type. Set " << colors.BoldColor() << "JWT" << colors.OldColor() << Endl
+            << FIELD("alg") "                 " TYPE("string") "Algorithm for JWT signature. Supported algorithms: " << supportedJwtAlgorithms << Endl
+            << FIELD("private-key-file") "    " TYPE("string") "Path of (private) key file in PEM format for JWT signature ('~' is supported)" << Endl
+            << FIELD("kid") "                 " TYPE("string") "Key id JWT standard claim" << Endl
+            << FIELD("iss") "                 " TYPE("string") "Issuer JWT standard claim" << Endl
+            << FIELD("sub") "                 " TYPE("string") "Subject JWT standard claim" << Endl
+            << FIELD("aud") "                 " TYPE2("string", "list of strings") "Audience JWT standard claim" << Endl
+            << FIELD("jti") "                 " TYPE("string") "JWT ID JWT standard claim" << Endl
+            << FIELD("ttl") "                 " TYPE("string") "Token TTL" DEFAULT(defaultJwtParams.TokenTtl_) << Endl
+            << Endl
+            << "  Fields of " << colors.BoldColor() << "token_source_json" << colors.OldColor() << " (Fixed):" << Endl
+            << FIELD("type") "                " TYPE("string") "Token source type. Set " << colors.BoldColor() << "FIXED" << colors.OldColor() << Endl
+            << FIELD("token") "               " TYPE("string") "Token value" << Endl
+            << FIELD("token-type") "          " TYPE("string") "Token type value. It will become subject_token_type/actor_token_type parameter in token exchange request (https://www.rfc-editor.org/rfc/rfc8693)" << Endl
+            << Endl
+            << "  Note that additionally you need to set " << colors.BoldColor() << "--iam-endpoint" << colors.OldColor() << " option" << Endl
+            << "    in url format (SCHEMA://HOST:PORT/PATH) to configure endpoint.";
+
+        opts.AddLongOption("oauth2-token-exchange", oauth2TokenExchangeHelp).RequiredArgument("JSON").StoreResult(&Oauth2TokenExchangeParamsJson);
+
+#undef DEFAULT
+#undef TYPE2
+#undef TYPE
+#undef FIELD
+    }
+
     if (config.UseIamAuth) {
         TStringBuilder iamEndpointHelp;
         NColorizer::TColors colors = NColorizer::AutoColors(Cout);
@@ -272,7 +374,7 @@ namespace {
     }
 }
 
-bool TClientCommandRootCommon::TryGetParamFromProfile(const TString& name, std::shared_ptr<IProfile> profile, bool explicitOption, 
+bool TClientCommandRootCommon::TryGetParamFromProfile(const TString& name, std::shared_ptr<IProfile> profile, bool explicitOption,
                                                       std::function<bool(const TString&, const TString&, bool)> callback) {
     if (profile && profile->Has(name)) {
         return callback(profile->GetValue(name).as<TString>(), GetProfileSource(profile, explicitOption), explicitOption);
@@ -525,7 +627,7 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
     }
     auto authValue = profile->GetValue("authentication");
     if (!authValue["method"]) {
-        MisuseErrors.push_back("Configuration profile has \"authentication\" but does not has \"method\" in it");
+        MisuseErrors.push_back("Configuration profile has \"authentication\" but does not have \"method\" in it");
         return false;
     }
     TString authMethod = authValue["method"].as<TString>();

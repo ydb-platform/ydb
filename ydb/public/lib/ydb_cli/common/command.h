@@ -3,6 +3,8 @@
 #include "common.h"
 
 #include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/credentials/oauth2_token_exchange/credentials.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/credentials/oauth2_token_exchange/jwt_token_source.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/colorizer/colors.h>
@@ -103,6 +105,8 @@ public:
         TMap<TString, TVector<TConnectionParam>> ConnectionParams;
         bool EnableSsl = false;
         bool IsNetworkIntensive = false;
+        TMaybe<TOauth2TokenExchangeParams> Oauth2TokenExchangeParams;
+        TOauth2TokenExchangeParams BuildOauth2TokenExchangeParams() const; // Builds final TOauth2TokenExchangeParams from Oauth2TokenExchangeParams and IamEndpoint
 
         EVerbosityLevel VerbosityLevel = EVerbosityLevel::NONE;
 
@@ -127,6 +131,7 @@ public:
         bool UseOAuthToken = true;
         bool UseIamAuth = false;
         bool UseStaticCredentials = false;
+        bool UseOauth2TokenExchange = false;
         bool UseExportToYt = true;
         // Whether a command needs a connection to YDB
         bool NeedToConnect = true;
@@ -147,6 +152,11 @@ public:
             CredentialsGetter = [](const TClientCommand::TConfig& config) {
                 if (config.SecurityToken) {
                     return CreateOAuthCredentialsProviderFactory(config.SecurityToken);
+                }
+                if (config.UseOauth2TokenExchange) {
+                    if (config.Oauth2TokenExchangeParams) {
+                        return CreateOauth2TokenExchangeCredentialsProviderFactory(config.BuildOauth2TokenExchangeParams());
+                    }
                 }
                 return CreateInsecureCredentialsProviderFactory();
             };

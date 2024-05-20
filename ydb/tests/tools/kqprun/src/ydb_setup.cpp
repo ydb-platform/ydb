@@ -190,7 +190,7 @@ public:
         FillQueryRequest(query, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, action, traceId, event->Record);
 
         if (auto progressStatsPeriodMs = Settings_.AppConfig.GetQueryServiceConfig().GetProgressStatsPeriodMs()) {
-            event->SetProgressStatsPeriod(TDuration::MilliSeconds(Settings_.AppConfig.GetQueryServiceConfig().GetProgressStatsPeriodMs()));
+            event->SetProgressStatsPeriod(TDuration::MilliSeconds(progressStatsPeriodMs));
         }
 
         auto promise = NThreading::NewPromise<NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr>();

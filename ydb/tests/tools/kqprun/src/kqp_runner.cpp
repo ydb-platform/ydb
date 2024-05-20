@@ -132,6 +132,12 @@ public:
 private:
     bool WaitScriptExecutionOperation() {
         ExecutionMeta_ = TExecutionMeta();
+
+        TDuration getOperationPeriod = TDuration::Seconds(1);
+        if (auto progressStatsPeriodMs = Options_.YdbSettings.AppConfig.GetQueryServiceConfig().GetProgressStatsPeriodMs()) {
+            getOperationPeriod = TDuration::MilliSeconds(progressStatsPeriodMs);
+        }
+
         TRequestResult status;
         while (true) {
             status = YdbSetup_.GetScriptExecutionOperationRequest(ExecutionOperation_, ExecutionMeta_);
@@ -146,7 +152,7 @@ private:
                 return false;
             }
 
-            Sleep(TDuration::Seconds(1));
+            Sleep(getOperationPeriod);
         }
 
         PrintScriptAst(ExecutionMeta_.Ast);
@@ -213,6 +219,23 @@ private:
         }
     }
 
+    void PrintScriptProgress(const TString& plan) const {
+        if (Options_.InProgressStatisticOutputFile) {
+            TFileOutput outputStream(*Options_.InProgressStatisticOutputFile);
+            outputStream << TInstant::Now().ToIsoStringLocal() << " Script in progress statistic:" << Endl;
+            PrintPlan(plan, &outputStream);
+            outputStream.Finish();
+        }
+    }
+
+    TProgressCallback GetProgressCallback() {
+        return [this](const NKikimrKqp::TEvExecuterProgress& executerProgress) mutable {
+            const TString& plan = executerProgress.GetQueryPlan();
+            ExecutionMeta_.Plan = plan;
+            PrintScriptProgress(plan);
+        };
+    }
+
     void PrintScriptResult(const Ydb::ResultSet& resultSet) const {
         switch (Options_.ResultOutputFormat) {
         case TRunnerOptions::EResultOutputFormat::RowsJson: {
@@ -241,23 +264,6 @@ private:
             *Options_.ResultOutput << resultSetString;
             break;
         }
-    }
-
-    void PrintScriptProgress(const TString& plan) const {
-        if (Options_.InProgressStatisticOutputFile) {
-            TFileOutput outputStream(*Options_.InProgressStatisticOutputFile);
-            outputStream << TInstant::Now().ToIsoStringLocal() << " Script in progress statistic:" << Endl;
-            PrintPlan(plan, &outputStream);
-            outputStream.Finish();
-        }
-    }
-
-    TProgressCallback GetProgressCallback() {
-        return [this](const NKikimrKqp::TEvExecuterProgress& executerProgress) mutable {
-            const TString& plan = executerProgress.GetQueryPlan();
-            ExecutionMeta_.Plan = plan;
-            PrintScriptProgress(plan);
-        };
     }
 
 private:

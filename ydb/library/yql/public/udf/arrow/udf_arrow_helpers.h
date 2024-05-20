@@ -27,12 +27,12 @@ using TExec = arrow::Status(*)(arrow::compute::KernelContext*, const arrow::comp
 
 class TUdfKernelState : public arrow::compute::KernelState {
 public:
-    TUdfKernelState(const TVector<const TType*>& argTypes, const TType* outputType, bool onlyScalars, const ITypeInfoHelper* typeInfoHelper, const IPgBuilder& pgBuilder)
+    TUdfKernelState(const TVector<const TType*>& argTypes, const TType* outputType, bool onlyScalars, const ITypeInfoHelper* typeInfoHelper, const IValueBuilder* valueBuilder)
         : ArgTypes_(argTypes)
         , OutputType_(outputType)
         , OnlyScalars_(onlyScalars)
         , TypeInfoHelper_(typeInfoHelper)
-        , PgBuilder_(pgBuilder)
+        , ValueBuilder_(valueBuilder)
     {
         Readers_.resize(ArgTypes_.size());
     }
@@ -48,7 +48,7 @@ public:
     IArrayBuilder& GetArrayBuilder() {
         Y_ENSURE(!OnlyScalars_);
         if (!ArrayBuilder_) {
-            ArrayBuilder_ = MakeArrayBuilder(*TypeInfoHelper_, OutputType_, *GetYqlMemoryPool(), TypeInfoHelper_->GetMaxBlockLength(OutputType_), &PgBuilder_);
+            ArrayBuilder_ = MakeArrayBuilder(*TypeInfoHelper_, OutputType_, *GetYqlMemoryPool(), TypeInfoHelper_->GetMaxBlockLength(OutputType_), &ValueBuilder_->GetPgBuilder());
         }
 
         return *ArrayBuilder_;
@@ -62,13 +62,18 @@ public:
 
         return *ScalarBuilder_;
     }
+    
+    const IValueBuilder& GetValueBuilder() {
+        Y_ENSURE(ValueBuilder_);
+        return *ValueBuilder_;
+    }
 
 private:
     const TVector<const TType*> ArgTypes_;
     const TType* OutputType_;
     const bool OnlyScalars_;
     const ITypeInfoHelper* TypeInfoHelper_;
-    const IPgBuilder& PgBuilder_;  
+    const IValueBuilder* ValueBuilder_;
     TVector<std::unique_ptr<IBlockReader>> Readers_;
     std::unique_ptr<IArrayBuilder> ArrayBuilder_;
     std::unique_ptr<IScalarBuilder> ScalarBuilder_;
@@ -157,7 +162,7 @@ public:
                 }
             }
 
-            TUdfKernelState kernelState(ArgTypes_, OutputType_, OnlyScalars_, TypeInfoHelper_.Get(), valueBuilder->GetPgBuilder());
+            TUdfKernelState kernelState(ArgTypes_, OutputType_, OnlyScalars_, TypeInfoHelper_.Get(), valueBuilder);
             arrow::compute::ExecContext execContext(GetYqlMemoryPool());
             arrow::compute::KernelContext kernelContext(&execContext);
             kernelContext.SetState(&kernelState);
@@ -351,7 +356,17 @@ TReader* CastToBlockReaderImpl(IBlockReader& reader) {
 
 template <typename TDerived, typename TReader = IBlockReader, typename TArrayBuilderImpl = IArrayBuilder, typename TScalarBuilderImpl = IScalarBuilder>
 struct TUnaryKernelExec {
-    static arrow::Status Do(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+
+template<typename TSink>
+static void Process(const TBlockItem& arg, TUdfKernelState& state, const TSink& sink) {
+    if constexpr (std::is_invocable_v<decltype(&TDerived::template Process<TSink>), TBlockItem, TUdfKernelState&, TSink&>) {
+        TDerived::Process(arg, state, sink);
+    } else {
+        TDerived::Process(arg, sink);
+    }
+}
+
+static arrow::Status Do(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         auto& state = dynamic_cast<TUdfKernelState&>(*ctx->state());
         auto& reader = state.GetReader(0);
         auto* readerImpl = CastToBlockReaderImpl<TReader>(reader);
@@ -394,6 +409,15 @@ struct TUnaryKernelExec {
 
 template <typename TDerived, typename TReader1 = IBlockReader, typename TReader2 = IBlockReader, typename TArrayBuilderImpl = IArrayBuilder, typename TScalarBuilderImpl = IScalarBuilder>
 struct TBinaryKernelExec {
+    template<typename TSink>
+    static void Process(const TBlockItem& arg1, const TBlockItem& arg2, TUdfKernelState& state, const TSink& sink) {
+        if constexpr (std::is_invocable_v<decltype(&TDerived::template Process<TSink>), TBlockItem, TBlockItem, TUdfKernelState&, TSink&>) {
+            TDerived::Process(arg1, arg2, state, sink);
+        } else {
+            TDerived::Process(arg1, arg2, sink);
+        }
+    }
+
     static arrow::Status Do(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         auto& state = dynamic_cast<TUdfKernelState&>(*ctx->state());
 

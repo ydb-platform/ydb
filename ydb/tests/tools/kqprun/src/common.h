@@ -46,6 +46,7 @@ struct TRunnerOptions {
     IOutputStream* SchemeQueryAstOutput = nullptr;
     IOutputStream* ScriptQueryAstOutput = nullptr;
     IOutputStream* ScriptQueryPlanOutput = nullptr;
+    TMaybe<TString> InProgressStatisticOutputFile = nullptr;
 
     EResultOutputFormat ResultOutputFormat = EResultOutputFormat::RowsJson;
     NYdb::NConsoleClient::EOutputFormat PlanOutputFormat = NYdb::NConsoleClient::EOutputFormat::Default;

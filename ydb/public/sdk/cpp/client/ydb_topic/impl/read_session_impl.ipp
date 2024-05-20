@@ -275,15 +275,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::Start() {
     Settings.EventHandlers_.HandlersExecutor_->Start();
     if (!Reconnect(TPlainStatus())) {
         AbortSession(EStatus::ABORTED, "Driver is stopping");
-    }
-    if constexpr (!UseMigrationProtocol) {
-        DirectReadConnectionManager = std::make_shared<TDirectReadSessionManager>(
-            Settings,
-            this->SelfContext,
-            ClientContext->CreateContext(),
-            DirectConnectionFactory,
-            Log
-        );
+        return;
     }
 }
 
@@ -329,6 +321,13 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::Reconnect(const TPlain
         WaitingReadResponse = false;
         ServerMessage = std::make_shared<TServerMessage<UseMigrationProtocol>>();
         ++ConnectionGeneration;
+
+        if constexpr (!UseMigrationProtocol) {
+            if (Settings.DirectRead_) {
+                DirectReadSessionManager->Close();
+                DirectReadSessionManager = nullptr;
+            }
+        }
 
         LOG_LAZY(Log, TLOG_DEBUG,
                  GetLogPrefix() << "In Reconnect, ReadSizeBudget = " << ReadSizeBudget
@@ -526,6 +525,17 @@ template<>
 inline void TSingleClusterReadSessionImpl<false>::InitImpl(TDeferredActions<false>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
     LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Successfully connected. Initializing session");
+
+    if (Settings.DirectRead_) {
+        DirectReadSessionManager = std::make_shared<TDirectReadSessionManager>(
+            Settings,
+            this->SelfContext,
+            ClientContext->CreateContext(),
+            DirectConnectionFactory,
+            Log
+        );
+    }
+
     TClientMessage<false> req;
     auto& init = *req.mutable_init_request();
 
@@ -1256,7 +1266,9 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     RetryState = nullptr;
 
     ServerSessionId = msg.session_id();
-    DirectReadConnectionManager->SetServerSessionId(ServerSessionId);
+    if (Settings.DirectRead_) {
+        DirectReadSessionManager->SetServerSessionId(ServerSessionId);
+    }
     LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Server session id: " << ServerSessionId);
 
     // Successful init. Do nothing.
@@ -1373,7 +1385,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     }
 
     if (Settings.DirectRead_) {
-        DirectReadConnectionManager->StartPartitionSession({
+        DirectReadSessionManager->StartPartitionSession({
             .Id = static_cast<TPartitionSessionId>(partitionSessionId),
             .Location = TPartitionLocation(msg.partition_location())
         });
@@ -1415,10 +1427,10 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
         return;
     }
 
-    //TODO: update generation/nodeid info
+    // TODO(qyryq) Do we need to store generation/nodeid info in TSingleClusterReadSessionImpl?
     auto id = it->second->GetPartitionSessionId();
     if (Settings.DirectRead_) {
-        DirectReadConnectionManager->UpdatePartitionSession(id, TPartitionLocation(msg.partition_location()));
+        DirectReadSessionManager->UpdatePartitionSession(id, TPartitionLocation(msg.partition_location()));
     }
 }
 
@@ -1426,21 +1438,26 @@ template <>
 template <>
 inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     Ydb::Topic::StreamReadMessage::StopPartitionSessionRequest&& msg,
-    TDeferredActions<false>& deferred) {
+    TDeferredActions<false>& deferred
+) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     auto partitionStreamIt = PartitionStreams.find(msg.partition_session_id());
     if (partitionStreamIt == PartitionStreams.end()) {
         return;
     }
+
     TIntrusivePtr<TPartitionStreamImpl<false>> partitionStream = partitionStreamIt->second;
     bool pushRes = true;
     if (!msg.graceful()) {
+        if (Settings.DirectRead_) {
+            DirectReadSessionManager->StopPartitionSession(msg.partition_session_id());
+        }
         PartitionStreams.erase(msg.partition_session_id());
-        pushRes = EventsQueue->PushEvent(partitionStream,
-                                TReadSessionEvent::TPartitionSessionClosedEvent(
-                                    partitionStream, TReadSessionEvent::TPartitionSessionClosedEvent::EReason::Lost),
-                               deferred);
+        pushRes = EventsQueue->PushEvent(
+            partitionStream,
+            TReadSessionEvent::TPartitionSessionClosedEvent(partitionStream, TReadSessionEvent::TPartitionSessionClosedEvent::EReason::Lost),
+            deferred);
     } else {
         pushRes = EventsQueue->PushEvent(
             partitionStream,
@@ -1457,7 +1474,8 @@ template <>
 template <>
 inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     Ydb::Topic::StreamReadMessage::EndPartitionSession&& msg,
-    TDeferredActions<false>& deferred) {
+    TDeferredActions<false>& deferred
+) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     auto partitionStreamIt = PartitionStreams.find(msg.partition_session_id());
@@ -1478,6 +1496,10 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
         RegisterParentPartition(child,
                                 partitionStream->GetPartitionId(),
                                 partitionStream->GetPartitionSessionId());
+    }
+
+    if (Settings.DirectRead_) {
+        DirectReadSessionManager->StopPartitionSession(msg.partition_session_id());
     }
 
     bool pushRes = EventsQueue->PushEvent(

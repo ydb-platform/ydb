@@ -2,25 +2,6 @@
 
 namespace NKikimr::NExternalSource {
 
-namespace {
-
-template<typename TFunc>
-class TFuncTask : public IObjectInQueue {
-private:
-    TFunc Func;
-
-public:
-    TFuncTask(TFunc&& func)
-        : Func(std::move(func)) { 
-    }
-
-    void Process(void*) override {
-        Func();
-    }
-};
-
-}
-
 THiveMetastoreClient::THiveMetastoreClient(const TString& host, int32_t port) 
     : Socket(new apache::thrift::transport::TSocket(host, port))
     , Transport(new apache::thrift::transport::TBufferedTransport(Socket))
@@ -34,9 +15,9 @@ THiveMetastoreClient::THiveMetastoreClient(const TString& host, int32_t port)
 template<typename TResultValue>
 NThreading::TFuture<TResultValue> THiveMetastoreClient::RunOperation(const std::function<TResultValue()>& function) {
     NThreading::TPromise<TResultValue> promise = NThreading::NewPromise<TResultValue>();
-    Y_ABORT_UNLESS(ThreadPool.AddAndOwn(THolder(new TFuncTask([promise, function, transport=Transport]() mutable {
+    Y_ABORT_UNLESS(ThreadPool.Add(MakeThrFuncObj([promise, function, transport=Transport]() mutable {
         try {
-            if constexpr (std::is_same<TResultValue, void>::value) {
+            if constexpr (std::is_void_v<TResultValue>) {
                 function();
                 promise.SetValue();
             } else {
@@ -49,7 +30,7 @@ NThreading::TFuture<TResultValue> THiveMetastoreClient::RunOperation(const std::
         } catch (...) {
             promise.SetException(std::current_exception());
         }
-    }))));
+    })));
     return promise.GetFuture();
 }
 
@@ -73,11 +54,27 @@ NThreading::TFuture<void> THiveMetastoreClient::CreateTable(const Apache::Hadoop
     });
 }
 
+NThreading::TFuture<std::vector<std::string>> THiveMetastoreClient::GetAllDatabases() {
+    return RunOperation<std::vector<std::string>>([client=Client]() {
+        std::vector<std::string> databases;
+        client->get_all_databases(databases);
+        return databases;
+    });
+}
+
 NThreading::TFuture<Apache::Hadoop::Hive::Table> THiveMetastoreClient::GetTable(const TString& databaseName, const TString& tableName) {
     return RunOperation<Apache::Hadoop::Hive::Table>([client=Client, databaseName, tableName]()  {
         Apache::Hadoop::Hive::Table table;
         client->get_table(table, databaseName, tableName);
         return table;
+    });
+}
+
+NThreading::TFuture<std::vector<std::string>> THiveMetastoreClient::GetAllTables(const TString& databaseName) {
+    return RunOperation<std::vector<std::string>>([client=Client, databaseName]()  {
+        std::vector<std::string> tables;
+        client->get_all_tables(tables, databaseName);
+        return tables;
     });
 }
 

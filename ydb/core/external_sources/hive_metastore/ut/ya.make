@@ -46,12 +46,20 @@ IF (OPENSOURCE)
 ENDIF()
 
 SRCS(
+    common.cpp
     hive_metastore_client_ut.cpp
+    hive_metastore_fetcher_ut.cpp
 )
 
 PEERDIR(
-    library/cpp/testing/unittest
     library/cpp/testing/common
+    library/cpp/testing/unittest
+    ydb/core/testlib
+    ydb/core/testlib/actors
+    ydb/core/testlib/basics
+    ydb/library/yql/minikql/comp_nodes
+    ydb/library/yql/minikql/comp_nodes/llvm14
+    ydb/library/yql/sql/pg_dummy
 )
 
 DEPENDS(

@@ -3,8 +3,21 @@ services:
   trino:
     hostname: trino
     image: 'trinodb/trino@sha256:49aa7230aaa00b92d54842b2f0cafc1f5ec5f228e77b4bc45b3d65f9fa94c45f'
+    volumes:
+      - ./trino/catalog:/etc/trino/catalog:ro
     ports:
       - '8080'
+
+  # This job creates the "datalake" bucket on Minio
+  trino-job:
+    image: 'trinodb/trino@sha256:49aa7230aaa00b92d54842b2f0cafc1f5ec5f228e77b4bc45b3d65f9fa94c45f'
+    container_name: trino-job
+    volumes:
+    - ./scripts:/scripts
+    command: |
+      /bin/bash /scripts/bootstrap.bash
+    depends_on:
+      - trino
 
   # HMS backend database
   metastore_db:

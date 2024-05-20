@@ -17,9 +17,11 @@ public:
 
     NThreading::TFuture<void> CreateDatabase(const Apache::Hadoop::Hive::Database& database);
     NThreading::TFuture<Apache::Hadoop::Hive::Database> GetDatabase(const TString& name);
+    NThreading::TFuture<std::vector<std::string>> GetAllDatabases();
 
     NThreading::TFuture<void> CreateTable(const Apache::Hadoop::Hive::Table& table);
     NThreading::TFuture<Apache::Hadoop::Hive::Table> GetTable(const TString& databaseName, const TString& tableName);
+    NThreading::TFuture<std::vector<std::string>> GetAllTables(const TString& databaseName);
 
     NThreading::TFuture<void> UpdateTableColumnStatistics(const Apache::Hadoop::Hive::ColumnStatistics& columnStatistics);
     NThreading::TFuture<Apache::Hadoop::Hive::TableStatsResult> GetTableStatistics(const Apache::Hadoop::Hive::TableStatsRequest& request);

@@ -2,6 +2,7 @@
 
 #include "common.h"
 
+#include "ydb/public/sdk/cpp/client/ydb_topic/include/control_plane.h"
 #include <ydb/public/sdk/cpp/client/ydb_topic/include/read_session.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/common/callback_context.h>
 
@@ -43,8 +44,7 @@ using TDirectReadSessionPtr = std::shared_ptr<TCallbackContext<TDirectReadSessio
 
 struct TDirectPartitionSession {
     TPartitionSessionId Id;
-    TNodeId NodeId;
-    TGeneration Generation;
+    TPartitionLocation Location;
     IRetryPolicy::IRetryState::TPtr RetryState = {};
 
     // min read id, partition id, done read id?
@@ -144,6 +144,8 @@ public:
     );
 
     void StartPartitionSession(TDirectPartitionSession&&);
+
+    void UpdatePartitionSession(TPartitionSessionId, TPartitionLocation);
 
     void StopPartitionSession(TPartitionSessionId);
 

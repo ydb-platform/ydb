@@ -10,7 +10,7 @@ using namespace NActors::NTests;
 
 
 struct THeavyActorBenchmarkSettings : TActorBenchmarkSettings {
-    static constexpr ui32 TotalEventsAmountPerThread = 1'000;
+    static constexpr ui32 TotalEventsAmountPerThread = 1'000'000;
 
     static constexpr auto MailboxTypes = {
         TMailboxType::HTSwap,
@@ -26,16 +26,16 @@ Y_UNIT_TEST_SUITE(HeavyActorBenchmark) {
 
     Y_UNIT_TEST(SendActivateReceiveCSV) {
         std::vector<ui32> threadsList;
-        for (ui32 threads = 1; threads <= 28; threads++) {
+        for (ui32 threads = 1; threads <= 52; threads++) {
             threadsList.push_back(threads);
         }
-        std::vector<ui32> actorPairsList = {128};
-        TActorBenchmark::RunSendActivateReceiveCSV(threadsList, actorPairsList, {1, 100}, TDuration::Seconds(1));
+        std::vector<ui32> actorPairsList = {512};
+        TActorBenchmark::RunSendActivateReceiveCSV(threadsList, actorPairsList, {1}, TDuration::Seconds(1));
     }
 
     Y_UNIT_TEST(StarSendActivateReceiveCSV) {
         std::vector<ui32> threadsList;
-        for (ui32 threads = 1; threads <= 28; threads++) {
+        for (ui32 threads = 1; threads <= 52; threads++) {
             threadsList.push_back(threads);
         }
         std::vector<ui32> actorPairsList = {512};

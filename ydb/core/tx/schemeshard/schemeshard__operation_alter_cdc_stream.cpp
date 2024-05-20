@@ -1,3 +1,5 @@
+#include "schemeshard__operation_alter_cdc_stream.h"
+
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
@@ -7,6 +9,8 @@
 #define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 
 namespace NKikimr::NSchemeShard {
+
+namespace NCdc {
 
 namespace {
 
@@ -471,6 +475,85 @@ private:
 
 } // anonymous
 
+std::variant<TStreamPaths, ISubOperation::TPtr> DoAlterStreamPathChecks(
+    const TOperationId& opId,
+    const TPath& workingDirPath,
+    const TString& tableName,
+    const TString& streamName)
+{
+    const auto tablePath = workingDirPath.Child(tableName);
+    {
+        const auto checks = tablePath.Check();
+        checks
+            .NotEmpty()
+            .NotUnderDomainUpgrade()
+            .IsAtLocalSchemeShard()
+            .IsResolved()
+            .NotDeleted()
+            .IsTable()
+            .NotAsyncReplicaTable()
+            .IsCommonSensePath()
+            .NotUnderOperation();
+
+        if (!checks) {
+            return CreateReject(opId, checks.GetStatus(), checks.GetError());
+        }
+    }
+
+    const auto streamPath = tablePath.Child(streamName);
+    {
+        const auto checks = streamPath.Check();
+        checks
+            .NotEmpty()
+            .NotUnderDomainUpgrade()
+            .IsAtLocalSchemeShard()
+            .IsResolved()
+            .NotDeleted()
+            .IsCdcStream()
+            .NotUnderOperation();
+
+        if (!checks) {
+            return CreateReject(opId, checks.GetStatus(), checks.GetError());
+        }
+    }
+
+    return TStreamPaths{tablePath, streamPath};
+}
+
+void DoAlterStream(
+    const NKikimrSchemeOp::TAlterCdcStream& op,
+    const TOperationId& opId,
+    const TPath& workingDirPath,
+    const TPath& tablePath,
+    TVector<ISubOperation::TPtr>& result)
+{
+    {
+        auto outTx = TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStreamImpl);
+        outTx.MutableAlterCdcStream()->CopyFrom(op);
+
+        if (op.HasGetReady()) {
+            outTx.MutableLockGuard()->SetOwnerTxId(op.GetGetReady().GetLockTxId());
+        }
+
+        result.push_back(CreateAlterCdcStreamImpl(NextPartId(opId, result), outTx));
+    }
+
+    {
+        auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStreamAtTable);
+        outTx.MutableAlterCdcStream()->CopyFrom(op);
+
+        if (op.HasGetReady()) {
+            outTx.MutableLockGuard()->SetOwnerTxId(op.GetGetReady().GetLockTxId());
+        }
+
+        result.push_back(CreateAlterCdcStreamAtTable(NextPartId(opId, result), outTx, op.HasGetReady()));
+    }
+}
+
+} // namespace NCdc
+
+using namespace NCdc;
+
 ISubOperation::TPtr CreateAlterCdcStreamImpl(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TAlterCdcStream>(id, tx);
 }
@@ -500,41 +583,12 @@ TVector<ISubOperation::TPtr> CreateAlterCdcStream(TOperationId opId, const TTxTr
 
     const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
 
-    const auto tablePath = workingDirPath.Child(tableName);
-    {
-        const auto checks = tablePath.Check();
-        checks
-            .NotEmpty()
-            .NotUnderDomainUpgrade()
-            .IsAtLocalSchemeShard()
-            .IsResolved()
-            .NotDeleted()
-            .IsTable()
-            .NotAsyncReplicaTable()
-            .IsCommonSensePath()
-            .NotUnderOperation();
-
-        if (!checks) {
-            return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
-        }
+    const auto checksResult = DoAlterStreamPathChecks(opId, workingDirPath, tableName, streamName);
+    if (std::holds_alternative<ISubOperation::TPtr>(checksResult)) {
+        return {std::get<ISubOperation::TPtr>(checksResult)};
     }
 
-    const auto streamPath = tablePath.Child(streamName);
-    {
-        const auto checks = streamPath.Check();
-        checks
-            .NotEmpty()
-            .NotUnderDomainUpgrade()
-            .IsAtLocalSchemeShard()
-            .IsResolved()
-            .NotDeleted()
-            .IsCdcStream()
-            .NotUnderOperation();
-
-        if (!checks) {
-            return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
-        }
-    }
+    const auto [tablePath, streamPath] = std::get<TStreamPaths>(checksResult);
 
     TString errStr;
     if (!context.SS->CheckApplyIf(tx, errStr)) {
@@ -547,27 +601,7 @@ TVector<ISubOperation::TPtr> CreateAlterCdcStream(TOperationId opId, const TTxTr
 
     TVector<ISubOperation::TPtr> result;
 
-    {
-        auto outTx = TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStreamImpl);
-        outTx.MutableAlterCdcStream()->CopyFrom(op);
-
-        if (op.HasGetReady()) {
-            outTx.MutableLockGuard()->SetOwnerTxId(op.GetGetReady().GetLockTxId());
-        }
-
-        result.push_back(CreateAlterCdcStreamImpl(NextPartId(opId, result), outTx));
-    }
-
-    {
-        auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStreamAtTable);
-        outTx.MutableAlterCdcStream()->CopyFrom(op);
-
-        if (op.HasGetReady()) {
-            outTx.MutableLockGuard()->SetOwnerTxId(op.GetGetReady().GetLockTxId());
-        }
-
-        result.push_back(CreateAlterCdcStreamAtTable(NextPartId(opId, result), outTx, op.HasGetReady()));
-    }
+    DoAlterStream(op, opId, workingDirPath, tablePath, result);
 
     if (op.HasGetReady()) {
         auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropLock);

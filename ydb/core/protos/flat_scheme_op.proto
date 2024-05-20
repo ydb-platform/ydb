@@ -851,6 +851,30 @@ message TDropCdcStream {
     optional string StreamName = 2;
 }
 
+message TContinuousBackupDescription {
+}
+
+message TCreateContinuousBackup {
+    optional string TableName = 1;
+    optional TContinuousBackupDescription ContinuousBackupDescription = 2;
+}
+
+message TAlterContinuousBackup {
+    optional string TableName = 1;
+
+    message TStop {
+    }
+
+    oneof Action {
+        TStop Stop = 2;
+        // TODO(innokentii): something like TakeIncremental
+    }
+}
+
+message TDropContinuousBackup {
+    optional string TableName = 1;
+}
+
 enum EIndexType {
     EIndexTypeInvalid = 0;
     EIndexTypeGlobal = 1;
@@ -1458,6 +1482,14 @@ enum EOperationType {
     ESchemeOpDropView = 95;
 
     ESchemeOpDropReplication = 96;
+
+    /// ContinuousBackup
+    // Create
+    ESchemeOpCreateContinuousBackup = 97;
+    // Alter
+    ESchemeOpAlterContinuousBackup = 98;
+    // Drop
+    ESchemeOpDropContinuousBackup = 99;
 }
 
 message TApplyIf {
@@ -1585,6 +1617,10 @@ message TModifyScheme {
 
     optional TCopySequence CopySequence = 66;
     optional TReplicationDescription AlterReplication = 67;
+
+    optional TCreateContinuousBackup CreateContinuousBackup = 68;
+    optional TAlterContinuousBackup AlterContinuousBackup = 69;
+    optional TDropContinuousBackup DropContinuousBackup = 70;
 }
 
 message TCopySequence {

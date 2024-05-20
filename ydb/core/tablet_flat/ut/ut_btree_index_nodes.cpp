@@ -670,8 +670,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
     Y_UNIT_TEST(Conf) {
         NPage::TConf conf;
 
-        // do not accidentally turn this setting on in trunk
-        UNIT_ASSERT_VALUES_EQUAL(conf.WriteBTreeIndex, false);
+        UNIT_ASSERT_VALUES_EQUAL(conf.WriteBTreeIndex, true);
         UNIT_ASSERT_VALUES_EQUAL(conf.WriteFlatIndex, true);
     }
 

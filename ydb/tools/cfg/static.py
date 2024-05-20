@@ -50,7 +50,6 @@ class StaticConfigGenerator(object):
         cfg_home="/Berkanavt/kikimr",
         sqs_port=8771,
         enable_cores=False,
-        enable_cms_config_cache=False,
         local_binary_path=None,
         skip_location=False,
         schema_validator=None,
@@ -113,7 +112,6 @@ class StaticConfigGenerator(object):
                 "pdisk_key.txt",
             )
         )
-        self._enable_cms_config_cache = template.get("enable_cms_config_cache", enable_cms_config_cache)
         tracing = template.get("tracing_config")
         if tracing is not None:
             self.__tracing = (
@@ -294,7 +292,6 @@ class StaticConfigGenerator(object):
                 self.__cluster_details.default_log_level,
                 mon_address=self.__cluster_details.monitor_address,
                 cert_params=self.__cluster_details.ic_cert_params,
-                enable_cms_config_cache=self._enable_cms_config_cache,
                 rb_txt_enabled=self.rb_txt_enabled,
                 metering_txt_enabled=self.metering_txt_enabled,
                 audit_txt_enabled=self.audit_txt_enabled,
@@ -1340,5 +1337,5 @@ class StaticConfigGenerator(object):
         if self.__cluster_details.use_new_style_kikimr_cfg:
             return dynamic_cfg_new_style(self._enable_cores)
         return kikimr_cfg_for_dynamic_slot(
-            self._enable_cores, self._enable_cms_config_cache, cert_params=self.__cluster_details.ic_cert_params
+            self._enable_cores, cert_params=self.__cluster_details.ic_cert_params
         )

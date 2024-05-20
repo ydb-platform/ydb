@@ -340,22 +340,6 @@ def yql_arguments(yql_txt_enabled=False):
     )
 
 
-def cms_config_cache_argument_for_dynamic_nodes(enable_cms_config_cache=False):
-    return (
-        ''
-        if not enable_cms_config_cache
-        else 'kikimr_arg="${kikimr_arg} --cms-config-cache-file ${kikimr_home}_${kikimr_ic_port}/cache/cached_cfg.txt"'
-    )
-
-
-def cms_config_cache_argument_for_static_nodes(enable_cms_config_cache=False):
-    return (
-        ''
-        if not enable_cms_config_cache
-        else 'kikimr_arg="${kikimr_arg} --cms-config-cache-file ${kikimr_home}/cache/cached_cfg.txt"'
-    )
-
-
 def mbus_arguments(enable_mbus=False):
     return (
         []
@@ -426,7 +410,6 @@ def kikimr_cfg_for_static_node(
     kikimr_binaries_base_path='/Berkanavt/kikimr',
     mon_address="",
     cert_params=None,
-    enable_cms_config_cache=False,
     rb_txt_enabled=False,
     metering_txt_enabled=False,
     audit_txt_enabled=False,
@@ -466,7 +449,6 @@ def kikimr_cfg_for_static_node(
         + metering_arguments(metering_txt_enabled)
         + audit_arguments(audit_txt_enabled)
         + yql_arguments(yql_txt_enabled)
-        + ([cms_config_cache_argument_for_static_nodes(enable_cms_config_cache)] if enable_cms_config_cache else [])
         + mbus_arguments(mbus_enabled)
     )
 
@@ -484,7 +466,6 @@ def kikimr_cfg_for_dynamic_node(
     kikimr_binaries_base_path='/Berkanavt/kikimr',
     mon_address="",
     cert_params=None,
-    enable_cms_config_cache=False,
     rb_txt_enabled=False,
     metering_txt_enabled=False,
     audit_txt_enabled=False,
@@ -522,7 +503,6 @@ def kikimr_cfg_for_dynamic_node(
         + rb_arguments(rb_txt_enabled)
         + metering_arguments(metering_txt_enabled)
         + audit_arguments(audit_txt_enabled)
-        + ([cms_config_cache_argument_for_dynamic_nodes(enable_cms_config_cache)] if enable_cms_config_cache else [])
     )
 
 
@@ -544,7 +524,6 @@ def expected_vars(**kwargs):
 
 def kikimr_cfg_for_dynamic_slot(
     enable_cores=False,
-    enable_cms_config_cache=False,
     cert_params=None,
     rb_txt_enabled=False,
     metering_txt_enabled=False,
@@ -583,5 +562,4 @@ def kikimr_cfg_for_dynamic_slot(
         + metering_arguments(metering_txt_enabled)
         + audit_arguments(audit_txt_enabled)
         + yql_arguments(yql_txt_enabled)
-        + ([cms_config_cache_argument_for_dynamic_nodes(enable_cms_config_cache)] if enable_cms_config_cache else [])
     )

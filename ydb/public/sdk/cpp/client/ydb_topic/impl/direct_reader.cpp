@@ -38,10 +38,10 @@ void TDirectReadSessionManager::StartPartitionSession(TDirectReadPartitionSessio
     session = Sessions[nodeId];
     if (!session) {
         session = CreateDirectReadSession(nodeId);
-        if (auto c = session->LockShared()) {
-            c->Start();
-            c->AddPartitionSession(std::move(partitionSession));
-        }
+    }
+    if (auto s = session->LockShared()) {
+        s->Start();
+        s->AddPartitionSession(std::move(partitionSession));
     }
 }
 
@@ -122,9 +122,9 @@ void TDirectReadSession::AddPartitionSession(TDirectReadPartitionSession&& sessi
         auto [it, inserted] = PartitionSessions.emplace(session.Id, std::move(session));
         Y_ABORT_UNLESS(inserted);  // TODO(qyryq) What is the proper reaction here?
 
-        // Send the StartDirectReadPartitionSession request only if we're already connected.
-        // In other cases it's enough that we added the session to PartitionSessions,
-        // the request will be send from OnReadDoneImpl(InitDirectReadResponse).
+        // Send StartDirectReadPartitionSession request only if we're already connected.
+        // In other cases adding the session to PartitionSessions is enough,
+        // the request will be sent from OnReadDoneImpl(InitDirectReadResponse).
         if (State == EState::CONNECTED) {
             SendStartDirectReadPartitionSessionImpl(it->second);
         }

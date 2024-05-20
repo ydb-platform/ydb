@@ -1,10 +1,12 @@
+import "ydb/public/api/protos/annotations/sensitive.proto";
+
 package NKikimrProto;
 option java_package = "ru.yandex.kikimr.proto";
 
 message TAuthConfig {
     optional TUserRegistryConfig UserRegistryConfig = 1;
     optional TTVMConfig TVMConfig = 2;
-    optional string StaffApiUserToken = 3;
+    optional string StaffApiUserToken = 3 [(Ydb.sensitive) = true];
     optional string BlackBoxEndpoint = 4 [default = "blackbox.yandex-team.ru"];
     optional string AccessServiceEndpoint = 5 [default = "as.private-api.cloud.yandex.net:4286"];
     optional string UserAccountServiceEndpoint = 6 [default = "api-adapter.private-api.cloud.yandex.net:8443"];
@@ -73,7 +75,7 @@ message TStaffApiTvmSettings {
     optional uint32 StaffAppId = 5;
     oneof Secret {
         string SecretEnvironmentVariable = 6;
-        string PlainTextSecret = 7;
+        string PlainTextSecret = 7 [(Ydb.sensitive) = true];
     }
 }
 
@@ -103,7 +105,7 @@ message TLdapAuthentication {
     optional uint32 Port = 2;
     optional string BaseDn = 3;
     optional string BindDn = 4;
-    optional string BindPassword = 5;
+    optional string BindPassword = 5 [(Ydb.sensitive) = true];
     optional string SearchFilter = 6;
     optional string SearchAttribute = 7;
     optional TUseTls UseTls = 8;

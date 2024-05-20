@@ -378,7 +378,7 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
         << " ttl settings: " << tableProto.GetTtlSettings()
         << " at tablet " << TabletID());
 
-    TTableInfo::TTableVersionInfo tableVerProto;
+    NKikimrTxColumnShard::TTableVersionInfo tableVerProto;
     tableVerProto.SetPathId(pathId);
 
     // check schema changed
@@ -439,7 +439,7 @@ void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterP
         << " ttl settings: " << alterProto.GetTtlSettings()
         << " at tablet " << TabletID());
 
-    TTableInfo::TTableVersionInfo tableVerProto;
+    NKikimrTxColumnShard::TTableVersionInfo tableVerProto;
     if (alterProto.HasSchemaPreset()) {
         tableVerProto.SetSchemaPresetId(alterProto.GetSchemaPreset().GetId());
         TablesManager.AddSchemaVersion(alterProto.GetSchemaPreset().GetId(), version, alterProto.GetSchemaPreset().GetSchema(), db);

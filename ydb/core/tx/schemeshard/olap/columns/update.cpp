@@ -196,6 +196,7 @@ namespace NKikimr::NSchemeShard {
             case NYql::NProto::Datetime64:
             case NYql::NProto::Timestamp64:
             case NYql::NProto::Interval64:
+            case NYql::NProto::Decimal:
                 return true;
             default:
                 return false;

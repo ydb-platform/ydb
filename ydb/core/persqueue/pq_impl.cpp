@@ -2001,7 +2001,8 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
                     "Tablet " << TabletID() <<
                     " Write in transaction." <<
                     " Partition: " << req.GetPartition() <<
-                    ", WriteId: " << req.GetWriteId());
+                    ", WriteId: " << req.GetWriteId() <<
+                    ", FirstWrite: " << req.GetFirstWrite());
     }
 
     for (ui32 i = 0; i < req.CmdWriteSize(); ++i) {
@@ -2198,7 +2199,8 @@ void TPersQueue::HandleReserveBytesRequest(const ui64 responseCookie, const TAct
                     "Tablet " << TabletID() <<
                     " Reserve bytes in transaction." <<
                     " Partition: " << req.GetPartition() <<
-                    ", WriteId: " << req.GetWriteId());
+                    ", WriteId: " << req.GetWriteId() <<
+                    ", FirstWrite: " << req.GetFirstWrite());
     }
 
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_RESERVE_BYTES);
@@ -2226,6 +2228,15 @@ void TPersQueue::HandleGetOwnershipRequest(const ui64 responseCookie, const TAct
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
             TStringBuilder() << "request via dead pipe");
         return;
+    }
+
+    if (req.HasWriteId()) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                    "Tablet " << TabletID() <<
+                    " Get ownership for partition in transaction." <<
+                    " Partition: " << req.GetPartition() <<
+                    ", WriteId: " << req.GetWriteId() <<
+                    ", FirstWrite: " << req.GetFirstWrite());
     }
 
     it->second = TPipeInfo::ForOwner(partActor, owner, it->second.ServerActors);
@@ -2574,6 +2585,8 @@ void TPersQueue::HandleWriteRequestForSupportivePartition(const ui64 responseCoo
                                                           const NKikimrClient::TPersQueuePartitionRequest& req,
                                                           const TActorContext& ctx)
 {
+    Y_ABORT_UNLESS(req.HasWriteId());
+
     const TPartitionInfo& partition = GetPartitionInfo(req);
     const TActorId& actorId = partition.Actor;
 
@@ -2618,6 +2631,12 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
 
     ui64 writeId = req.GetWriteId();
     ui32 originalPartitionId = req.GetPartition();
+    bool firstWrite = req.GetFirstWrite();
+
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " Got message for supportive partition." <<
+                " WriteId " << writeId <<
+                ", Partiton " << originalPartitionId <<
+                ", FirstWrite " << firstWrite);
 
     if (TxWrites.contains(writeId) && TxWrites.at(writeId).Partitions.contains(originalPartitionId)) {
         //
@@ -2648,6 +2667,14 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
                                                    sender);
         }
     } else {
+        if (!firstWrite) {
+            ReplyError(ctx,
+                       responseCookie,
+                       NPersQueue::NErrorCode::BAD_REQUEST,
+                       "lost messages");
+            return;
+        }
+
         //
         // этап 1:
         // - создать запись в TxWrites

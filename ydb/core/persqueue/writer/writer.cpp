@@ -29,14 +29,14 @@ namespace NKikimr::NPQ {
 #endif
 
 
-#define LOG_PREFIX "TPartitionWriter " << TabletId << " (partition=" << PartitionId << ") "
+#define LOG_PREFIX "TPartitionWriter (this=" << (void*)this << ") " << TabletId << " (partition=" << PartitionId << ") "
 #define TRACE(message) LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, LOG_PREFIX << message);
 #define DEBUG(message) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, LOG_PREFIX << message);
 #define INFO(message)  LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, LOG_PREFIX << message);
 #define ERROR(message) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, LOG_PREFIX << message);
 
 static const ui64 WRITE_BLOCK_SIZE = 4_KB;
-static const ui32 INVALID_PARTITION_ID = Max<ui32>();
+//static const ui32 INVALID_PARTITION_ID = Max<ui32>();
 
 TString TEvPartitionWriter::TEvInitResult::TSuccess::ToString() const {
     auto out = TStringBuilder() << "Success {"
@@ -319,6 +319,17 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         cmd.SetForce(true);
 
         SetWriteId(request);
+        // While waiting for a response from KQP, the recording session could
+        // send the following messages. They are in the "Pending" queue and 
+        // the FirstWrite flag will be reset
+        if (Pending) {
+            request.SetFirstWrite(Pending.begin()->second.GetPartitionRequest().GetFirstWrite());
+        } else {
+            request.SetFirstWrite(FirstWrite);
+        }
+
+        DEBUG("Send message 'GetOwnership'. WriteId " << request.GetWriteId() <<
+              ", FirstWrite " << request.GetFirstWrite());
 
         NTabletPipe::SendData(SelfId(), PipeClient, ev.Release());
         Become(&TThis::StateGetOwnership);
@@ -495,7 +506,16 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
             return false;
         }
 
-        Pending.emplace(cookie, std::move(ev->Get()->Record));
+        auto& request = *record.MutablePartitionRequest();
+        SetWriteId(request);
+        request.SetFirstWrite(FirstWrite);
+        FirstWrite = false;
+
+        DEBUG("Hold TEvWriteRequest. WriteId " << record.MutablePartitionRequest()->GetWriteId() <<
+              ", FirstWrite " << record.MutablePartitionRequest()->GetFirstWrite());
+
+        Pending.emplace(cookie, std::move(record));
+
         return true;
     }
 
@@ -525,6 +545,10 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
             request.SetMessageNo(MessageNo++);
 
             SetWriteId(request);
+            request.SetFirstWrite(it->second.MutablePartitionRequest()->GetFirstWrite());
+
+            DEBUG("Send message 'ReserveBytes'. WriteId " << request.GetWriteId() <<
+                  ", FirstWrite " << request.GetFirstWrite());
 
             auto& cmd = *request.MutableCmdReserveBytes();
             cmd.SetSize(it->second.ByteSize());
@@ -703,29 +727,29 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
                 return WriteResult(EErrorCode::InternalError, error, std::move(record));
             }
 
-            if (HasWriteId() && FirstWriteResponse) {
-                auto& reply = response.GetCmdWriteResult(0);
-                ui64 seqNo = reply.GetSeqNo();
-                ui64 minSeqNo = reply.GetMinSeqNo();
-                ui32 supportivePartition = reply.GetSupportivePartition();
-
-                if (seqNo < minSeqNo) {
-                    supportivePartition = INVALID_PARTITION_ID;
-                }
-
-                DEBUG("Update tx in KQP." <<
-                      " Topic: " << Opts.TopicPath <<
-                      ", Partition: " << PartitionId <<
-                      ", SupportivePartition: " << supportivePartition <<
-                      ", MinSeqNo: " << minSeqNo <<
-                      ", SeqNo: " << seqNo);
-
-                const TActorContext& ctx = ActorContext();
-                auto ev = MakeWriteIdRequest(supportivePartition);
-                ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
-
-                FirstWriteResponse = false;
-            }
+//            if (HasWriteId() && FirstWriteResponse) {
+//                auto& reply = response.GetCmdWriteResult(0);
+//                ui64 seqNo = reply.GetSeqNo();
+//                ui64 minSeqNo = reply.GetMinSeqNo();
+//                ui32 supportivePartition = reply.GetSupportivePartition();
+//
+//                if (seqNo < minSeqNo) {
+//                    supportivePartition = INVALID_PARTITION_ID;
+//                }
+//
+//                DEBUG("Update tx in KQP." <<
+//                      " Topic: " << Opts.TopicPath <<
+//                      ", Partition: " << PartitionId <<
+//                      ", SupportivePartition: " << supportivePartition <<
+//                      ", MinSeqNo: " << minSeqNo <<
+//                      ", SeqNo: " << seqNo);
+//
+//                const TActorContext& ctx = ActorContext();
+//                auto ev = MakeWriteIdRequest(supportivePartition);
+//                ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
+//
+//                FirstWriteResponse = false;
+//            }
 
             WriteResult(std::move(record));
         }
@@ -898,7 +922,7 @@ private:
     EErrorCode ErrorCode = EErrorCode::InternalError;
 
     ui64 WriteId = INVALID_WRITE_ID;
-    bool FirstWriteResponse = true;
+    bool FirstWrite = true;
 
     using IRetryPolicy = IRetryPolicy<Ydb::StatusIds::StatusCode>;
     using IRetryState = IRetryPolicy::IRetryState;

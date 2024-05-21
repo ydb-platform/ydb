@@ -388,7 +388,7 @@ int TCommandSql::FetchResults(TDriver& driver, NQuery::TQueryClient& client) {
             Sleep(TDuration::Seconds(1));
             continue;
         }
-        waitingBar.Finish(false);
+        waitingBar.Finish(true);
         TResultSetPrinter printer(OutputFormat, &IsInterrupted);
 
         for (size_t resultSetIndex = 0; resultSetIndex < execScriptOperation.Metadata().ResultSetsMeta.size(); ++resultSetIndex) {

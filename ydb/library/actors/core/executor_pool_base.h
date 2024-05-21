@@ -9,7 +9,7 @@
 #include <ydb/library/actors/util/unordered_cache.h>
 #include <ydb/library/actors/util/threadparkpad.h>
 
-#define RING_ACTIVATION_QUEUE 
+// #define RING_ACTIVATION_QUEUE 
 
 namespace NActors {
     class TActorSystem;

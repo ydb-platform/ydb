@@ -248,5 +248,9 @@ platforms=[
 copy=["cmake/conan-profiles/linux.ppc64le.profile"]
 
 [[rules]]
+platforms=["darwin-x86_64"]
+copy=["cmake/conan-profiles/macos.x86_64.profile"]
+
+[[rules]]
 platforms=["darwin-arm64"]
 copy=["cmake/conan-profiles/macos.arm64.profile"]

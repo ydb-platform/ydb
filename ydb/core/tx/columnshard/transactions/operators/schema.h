@@ -37,7 +37,7 @@ namespace NKikimr::NColumnShard {
                     AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "cannot parse incoming tx message");
                     return false;
                 }
-                TxAddSharding = owner.TablesManager.AddShardingInfoTx(owner, SchemaTxBody.GetGranuleShardingInfo().GetPathId(),
+                TxAddSharding = owner.TablesManager.CreateAddShardingInfoTx(owner, SchemaTxBody.GetGranuleShardingInfo().GetPathId(),
                     SchemaTxBody.GetGranuleShardingInfo().GetVersionId(), infoContainer);
             }
             return true;

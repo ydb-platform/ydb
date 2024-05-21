@@ -26,7 +26,7 @@ TLongTxTransactionOperator::TProposeResult TLongTxTransactionOperator::DoStartPr
         auto granuleShardingInfo = owner.GetIndexAs<NOlap::TColumnEngineForLogs>().GetVersionedIndex().GetShardingInfoActual(it->second.PathId);
         if (granuleShardingInfo && lw.GranuleShardingVersionId && *lw.GranuleShardingVersionId != granuleShardingInfo->GetSnapshotVersion()) {
             return TProposeResult(NKikimrTxColumnShard::EResultStatus::ERROR,
-                TStringBuilder() << "Commit TxId# " << GetTxId() << " references WriteId# " << (ui64)writeId << " that is already locked by TxId# " << lw.PreparedTxId);
+                TStringBuilder() << "Commit TxId# " << GetTxId() << " references WriteId# " << (ui64)writeId << " declined through sharding deprecated");
         }
     }
 

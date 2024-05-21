@@ -66,10 +66,10 @@ namespace NKikimr::NColumnShard {
         Y_ABORT_UNLESS(proto.SerializeToString(&metadata));
 
         db.Table<Schema::Operations>().Key((ui64)WriteId).Update(
-            NIceDb::TUpdate<Schema::Operations::Status>((ui32)Status), 
-            NIceDb::TUpdate<Schema::Operations::CreatedAt>(CreatedAt.Seconds()), 
-            NIceDb::TUpdate<Schema::Operations::Metadata>(metadata), 
-            NIceDb::TUpdate<Schema::Operations::LockId>(LockId), 
+            NIceDb::TUpdate<Schema::Operations::Status>((ui32)Status),
+            NIceDb::TUpdate<Schema::Operations::CreatedAt>(CreatedAt.Seconds()),
+            NIceDb::TUpdate<Schema::Operations::Metadata>(metadata),
+            NIceDb::TUpdate<Schema::Operations::LockId>(LockId),
             NIceDb::TUpdate<Schema::Operations::Cookie>(Cookie),
             NIceDb::TUpdate<Schema::Operations::GranuleShardingVersionId>(GranuleShardingVersionId.value_or(0)));
     }

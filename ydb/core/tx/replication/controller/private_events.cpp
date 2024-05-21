@@ -43,95 +43,30 @@ TString TEvPrivate::TEvAssignStreamName::ToString() const {
     << " }";
 }
 
-TEvPrivate::TEvCreateStreamResult::TEvCreateStreamResult(ui64 rid, ui64 tid, NYdb::TStatus&& status)
-    : ReplicationId(rid)
-    , TargetId(tid)
-    , Status(std::move(status))
-{
-}
-
-TString TEvPrivate::TEvCreateStreamResult::ToString() const {
-    return TStringBuilder() << ToStringHeader() << " {"
-        << " ReplicationId: " << ReplicationId
-        << " TargetId: " << TargetId
-        << " Status: " << Status.GetStatus()
-        << " Issues: " << Status.GetIssues().ToOneLineString()
-    << " }";
-}
-
-bool TEvPrivate::TEvCreateStreamResult::IsSuccess() const {
-    return Status.IsSuccess();
-}
-
 TEvPrivate::TEvCreateDstResult::TEvCreateDstResult(ui64 rid, ui64 tid, const TPathId& dstPathId)
-    : ReplicationId(rid)
-    , TargetId(tid)
+    : TBase(rid, tid, NKikimrScheme::StatusSuccess)
     , DstPathId(dstPathId)
-    , Status(NKikimrScheme::StatusSuccess)
 {
 }
 
 TEvPrivate::TEvCreateDstResult::TEvCreateDstResult(ui64 rid, ui64 tid, NKikimrScheme::EStatus status, const TString& error)
-    : ReplicationId(rid)
-    , TargetId(tid)
-    , Status(status)
-    , Error(error)
+    : TBase(rid, tid, status, error)
 {
 }
 
 TString TEvPrivate::TEvCreateDstResult::ToString() const {
-    return TStringBuilder() << ToStringHeader() << " {"
-        << " ReplicationId: " << ReplicationId
-        << " TargetId: " << TargetId
+    return TStringBuilder() << ToStringHeader() << " {" << ToStringBody()
         << " DstPathId: " << DstPathId
-        << " Status: " << NKikimrScheme::EStatus_Name(Status)
-        << " Error: " << Error
     << " }";
-}
-
-bool TEvPrivate::TEvCreateDstResult::IsSuccess() const {
-    return Status == NKikimrScheme::StatusSuccess;
-}
-
-TEvPrivate::TEvDropStreamResult::TEvDropStreamResult(ui64 rid, ui64 tid, NYdb::TStatus&& status)
-    : ReplicationId(rid)
-    , TargetId(tid)
-    , Status(std::move(status))
-{
-}
-
-TString TEvPrivate::TEvDropStreamResult::ToString() const {
-    return TStringBuilder() << ToStringHeader() << " {"
-        << " ReplicationId: " << ReplicationId
-        << " TargetId: " << TargetId
-        << " Status: " << Status.GetStatus()
-        << " Issues: " << Status.GetIssues().ToOneLineString()
-    << " }";
-}
-
-bool TEvPrivate::TEvDropStreamResult::IsSuccess() const {
-    return Status.IsSuccess();
 }
 
 TEvPrivate::TEvDropDstResult::TEvDropDstResult(ui64 rid, ui64 tid, NKikimrScheme::EStatus status, const TString& error)
-    : ReplicationId(rid)
-    , TargetId(tid)
-    , Status(status)
-    , Error(error)
+    : TBase(rid, tid, status, error)
 {
 }
 
 TString TEvPrivate::TEvDropDstResult::ToString() const {
-    return TStringBuilder() << ToStringHeader() << " {"
-        << " ReplicationId: " << ReplicationId
-        << " TargetId: " << TargetId
-        << " Status: " << NKikimrScheme::EStatus_Name(Status)
-        << " Error: " << Error
-    << " }";
-}
-
-bool TEvPrivate::TEvDropDstResult::IsSuccess() const {
-    return Status == NKikimrScheme::StatusSuccess;
+    return TStringBuilder() << ToStringHeader() << " {" << ToStringBody() << " }";
 }
 
 TEvPrivate::TEvDropReplication::TEvDropReplication(ui64 rid)
@@ -206,6 +141,15 @@ TString TEvPrivate::TEvResolveSecretResult::ToString() const {
 
 bool TEvPrivate::TEvResolveSecretResult::IsSuccess() const {
     return Success;
+}
+
+TEvPrivate::TEvAlterDstResult::TEvAlterDstResult(ui64 rid, ui64 tid, NKikimrScheme::EStatus status, const TString& error)
+    : TBase(rid, tid, status, error)
+{
+}
+
+TString TEvPrivate::TEvAlterDstResult::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {" << ToStringBody() << " }";
 }
 
 }

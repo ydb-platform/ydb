@@ -33,6 +33,7 @@ void TEvYdbProxy::TReadTopicResult::TMessage::Out(IOutputStream& out) const {
 
 void TEvYdbProxy::TReadTopicResult::Out(IOutputStream& out) const {
     out << "{"
+        << " PartitionId: " << PartitionId
         << " Messages [" << JoinSeq(",", Messages) << "]"
     << " }";
 }

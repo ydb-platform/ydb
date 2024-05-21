@@ -86,6 +86,7 @@ namespace NKikimr {
             const ui64 Guid;
             // last reported FirstLsnToKeep; can't decrease
             mutable ui64 FirstLsnToKeepReported = 0;
+            ui64 PersistentLsn = 0;
 
             THullHugeKeeperPersState(TIntrusivePtr<TVDiskContext> vctx,
                                      const ui32 chunkSize,
@@ -138,7 +139,7 @@ namespace NKikimr {
             bool WouldNewEntryPointAdvanceLog(ui64 freeUpToLsn, ui64 minInFlightLsn, ui32 itemsAfterCommit) const;
 
             // initiate commit
-            void InitiateNewEntryPointCommit(ui64 lsn);
+            void InitiateNewEntryPointCommit(ui64 lsn, ui64 minInFlightLsn);
             // finish commit
             void EntryPointCommitted(ui64 lsn);
 

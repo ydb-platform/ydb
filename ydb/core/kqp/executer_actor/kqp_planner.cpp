@@ -255,10 +255,6 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
         return nullptr;
     }
 
-    if (ResourcesSnapshot.empty()) {
-        ResourcesSnapshot = std::move(GetKqpResourceManager()->GetClusterResources());
-    }
-
     if (ResourcesSnapshot.empty() || (ResourcesSnapshot.size() == 1 && ResourcesSnapshot[0].GetNodeId() == ExecuterId.NodeId())) {
         // try to run without memory overflow settings
         if (LocalRunMemoryEst <= localResources.Memory[NRm::EKqpMemoryPool::ScanQuery] &&
@@ -411,8 +407,6 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
 
     nComputeTasks = ComputeTasks.size();
 
-    // explicit requirement to execute task on the same node because it has dependencies
-    // on datashard tx.
     if (LocalComputeTasks) {
         bool shareMailbox = (ComputeTasks.size() <= 1);
         for (ui64 taskId : ComputeTasks) {

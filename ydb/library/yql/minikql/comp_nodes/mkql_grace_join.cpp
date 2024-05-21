@@ -607,11 +607,6 @@ public:
 
     EFetchResult FetchValues(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
         while (true) {
-            /* 
-            ui64 used = TlsAllocState->GetUsed();
-            ui64 limit = TlsAllocState->GetLimit();
-            std::cerr << std::format("[MISHA] MEM USAGE: {}/{}({}%), LEFT: {}, RIGHT: {}\n", used, limit, used * 100 / limit, LeftPacker->TablePtr->GetAllBucketsSize(), RightPacker->TablePtr->GetAllBucketsSize());
-            */
             switch(GetMode()) {
                 case EOperatingMode::InMemory: {
                     auto r = DoCalculateInMemory(ctx, output);
@@ -653,7 +648,6 @@ private:
 
 
     void SwitchMode(EOperatingMode mode, TComputationContext& ctx) {
-        std::cerr << std::format("[MISHA] switching mode from {} to {}\n", (int)Mode, (int)mode);
         switch(mode) {
             case EOperatingMode::InMemory: {
                 MKQL_ENSURE(false, "Internal logic error");
@@ -910,12 +904,10 @@ EFetchResult ProcessSpilledData(TComputationContext&, NUdf::TUnboxedValue*const*
 
         if (!LeftPacker->TablePtr->IsBucketInMemory(NextBucketToJoin)) {
             LeftPacker->TablePtr->StartLoadingBucket(NextBucketToJoin);
-            std::cerr << std::format("[MISHA] LEFT started loading bucket {}\n", NextBucketToJoin);
         }
 
         if (!RightPacker->TablePtr->IsBucketInMemory(NextBucketToJoin)) {
             RightPacker->TablePtr->StartLoadingBucket(NextBucketToJoin);
-            std::cerr << std::format("[MISHA] RIGHT started loading bucket {}\n", NextBucketToJoin);
         } 
 
         if (LeftPacker->TablePtr->IsBucketInMemory(NextBucketToJoin) && RightPacker->TablePtr->IsBucketInMemory(NextBucketToJoin)) {
@@ -944,12 +936,10 @@ EFetchResult ProcessSpilledData(TComputationContext&, NUdf::TUnboxedValue*const*
                         }
                     }
 
-                    std::cerr << std::format("[MISHA] RETURN ONE\n");
                     return EFetchResult::One;
 
                 }
 
-                std::cerr << std::format("[MISHA] JOIN FINISHED\n");
                 LeftPacker->TuplesBatchPacked = 0;
                 LeftPacker->TablePtr->Clear(); // Clear table content, ready to collect data for next batch
 

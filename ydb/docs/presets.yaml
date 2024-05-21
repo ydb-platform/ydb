@@ -21,6 +21,8 @@ default:
 #  feature_logbroker: true
   ydb-full-name: YDB
   ydb-short-name: YDB
+  ydb-serverless: Managed Service for YDB
+
   yandex-cloud: Yandex.Cloud
   ydb-name: YDB
   objstorage-full-name: Yandex Object Storage

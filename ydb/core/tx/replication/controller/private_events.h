@@ -22,6 +22,7 @@ struct TEvPrivate {
         EvUpdateTenantNodes,
         EvRunWorkers,
         EvResolveSecretResult,
+        EvAlterDstResult,
 
         EvEnd,
     };
@@ -173,6 +174,12 @@ struct TEvPrivate {
         TString ToString() const override;
 
         bool IsSuccess() const;
+    };
+
+    struct TEvAlterDstResult: public TGenericSchemeResult<TEvAlterDstResult, EvAlterDstResult> {
+        explicit TEvAlterDstResult(ui64 rid, ui64 tid,
+            NKikimrScheme::EStatus status = NKikimrScheme::StatusSuccess, const TString& error = {});
+        TString ToString() const override;
     };
 
 }; // TEvPrivate

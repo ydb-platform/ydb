@@ -675,24 +675,27 @@ private:
 
     void SwitchMode(EOperatingMode mode, TComputationContext& ctx) {
         switch(mode) {
-            case EOperatingMode::InMemory:
+            case EOperatingMode::InMemory: {
                 MKQL_ENSURE(false, "Internal logic error");
                 break;
-            case EOperatingMode::Spilling:
+            }
+            case EOperatingMode::Spilling: {
                 MKQL_ENSURE(EOperatingMode::InMemory == Mode, "Internal logic error");
                 SpilledBuckets.resize(SpilledBucketCount);
+                auto spiller = ctx.SpillerFactory->CreateSpiller();
                 for (auto &b: SpilledBuckets) {
-                    auto spiller = ctx.SpillerFactory->CreateSpiller();
                     b.SpilledState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, KeyAndStateType, 5_MB);
                     b.SpilledData = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, UsedInputItemType, 5_MB);
                     b.InMemoryProcessingState = std::make_unique<TState>(MemInfo, KeyWidth, KeyAndStateType->GetElementsCount() - KeyWidth, Hasher, Equal);
                 }
                 SplitStateIntoBuckets();
                 break;
-            case EOperatingMode::ProcessSpilled:
+            }
+            case EOperatingMode::ProcessSpilled: {
                 MKQL_ENSURE(EOperatingMode::Spilling == Mode, "Internal logic error");
                 MKQL_ENSURE(SpilledBuckets.size() == SpilledBucketCount, "Internal logic error");
                 break;
+            }
 
         }
         Mode = mode;

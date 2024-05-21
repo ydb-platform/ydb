@@ -11,7 +11,6 @@ OWNER(
 
 SRCS(
     meta.cpp
-    meta.h
     meta_cache.cpp
     meta_cache.h
     meta_cloud.h

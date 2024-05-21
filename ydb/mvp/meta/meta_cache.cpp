@@ -7,9 +7,31 @@
 #include <util/digest/multi.h>
 #include <util/generic/queue.h>
 #include <util/string/cast.h>
+#include <ydb/mvp/core/core_ydb.h>
 #include "meta_cache.h"
 
-namespace NHttp {
+namespace NMeta {
+
+using namespace NHttp;
+
+struct TEvPrivate {
+    enum EEv {
+        EvUpdateUrlState = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+        EvEnd
+    };
+
+    static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
+
+    struct TEvUpdateUrlState : NActors::TEventLocal<TEvUpdateUrlState, EvUpdateUrlState> {
+        TString Id;
+        TCacheOwnership CacheOwnership;
+
+        TEvUpdateUrlState(const TString& id, const TCacheOwnership& cacheOwnership)
+            : Id(id)
+            , CacheOwnership(cacheOwnership)
+        {}
+    };
+};
 
 class THttpIncomingDistributedCacheActor : public NActors::TActorBootstrapped<THttpIncomingDistributedCacheActor>, THttpConfig {
 public:
@@ -24,6 +46,7 @@ public:
         TCachePolicy CachePolicy;
         TCacheOwnership CacheOwnership;
         TDuration Timeout = TDuration::Seconds(30);
+        std::deque<TEvHttpProxy::TEvHttpIncomingRequest::TPtr> Waiters;
 
         TCacheRecord(const TCachePolicy cachePolicy)
             : CachePolicy(cachePolicy)
@@ -33,13 +56,13 @@ public:
             return CacheOwnership.GetForwardUrlForDebug();
         }
 
-        bool IsExpired(TInstant now) const {
-            return CacheOwnership.Deadline < now;
-        }
-
         TInstant GetRefreshTime(TInstant now) const {
             if (now < CacheOwnership.Deadline) {
-                return now + ((CacheOwnership.Deadline - now) / 2);
+                if (CacheOwnership.ForwardUrl.empty()) {
+                    return now + ((CacheOwnership.Deadline - now) / 2);
+                } else {
+                    return CacheOwnership.Deadline;
+                }
             } else {
                 return now + CachePolicy.TimeToRefresh;
             }
@@ -73,7 +96,7 @@ public:
 
     static TString GetCacheKey(const THttpIncomingRequest* request, const TCachePolicy& policy) {
         TStringBuilder key;
-        key << request->GetURL();
+        key << request->URL.Before('?');
         if (!policy.HeadersToCacheKey.empty()) {
             THeaders headers(request->Headers);
             bool wasHeader = false;
@@ -148,7 +171,6 @@ public:
     }
 
     void Handle(TEvHttpProxy::TEvHttpIncomingRequest::TPtr event) {
-        TInstant now = NActors::TActivationContext::Now();
         const THttpIncomingRequest* request = event->Get()->Request.Get();
         TCachePolicy policy = GetCachePolicy(request);
         if (policy.TimeToExpire == TDuration() && policy.RetriesCount == 0) {
@@ -161,14 +183,16 @@ public:
         auto key = GetCacheKey(request, policy);
         auto it = Cache.find(key);
         if (it != Cache.end()) {
-            if (it->second.CacheOwnership.ForwardUrl.empty() || it->second.IsExpired(now)) {
-                ALOG_DEBUG(HttpLog, "IncomingForward " << request->URL << " locally (expired=" << it->second.IsExpired(now) << ")");
+            if (!it->second.Waiters.empty()) {
+                ALOG_DEBUG(HttpLog, "IncomingForward " << request->URL << " keep waiting (waiters=" << it->second.Waiters.size() << ")");
+                it->second.Waiters.emplace_back(std::move(event));
+                return;
+            }
+            if (it->second.CacheOwnership.ForwardUrl.empty()) {
+                ALOG_DEBUG(HttpLog, "IncomingForward " << request->URL << " locally");
                 TActorId handler = GetRequestHandler(event->Get()->Request);
                 if (handler) {
                     Send(event->Forward(handler));
-                }
-                if (it->second.IsExpired(now)) {
-                    Cache.erase(it);
                 }
             } else {
                 ALOG_DEBUG(HttpLog, "IncomingForward " << request->URL << " to " << it->second.GetForwardUrlForDebug() << " timeout " << it->second.Timeout);
@@ -177,24 +201,48 @@ public:
                 Send(HttpProxyId, new TEvHttpProxy::TEvHttpOutgoingRequest(newRequest, it->second.Timeout));
             }
         } else {
-            auto callback = [this, event, key, policy](TCacheOwnership ownership) {
-                TInstant now = NActors::TActivationContext::Now();
-                ALOG_DEBUG(HttpLog, "ReceivedOwnership " << ownership.GetForwardUrlForDebug() << " with deadline " << ownership.Deadline);
-                auto [it, emplaced] = Cache.emplace(key, policy);
-                it->second.CacheOwnership = ownership;
-                Send(event->Forward(SelfId())); // retry request
-                if (emplaced) {
-                    RefreshQueue.push({key, it->second.GetRefreshTime(now)});
-                }
+            auto it = Cache.emplace(key, policy).first;
+            it->second.Waiters.emplace_back(std::move(event));
+            NActors::TActorSystem* actorSystem = NActors::TlsActivationContext->ActorSystem();
+            NActors::TActorIdentity actorId = SelfId();
+            auto callback = [actorSystem, actorId, key](TCacheOwnership ownership) {
+                actorSystem->Send(actorId, new TEvPrivate::TEvUpdateUrlState(key, ownership));
             };
             if (!GetCacheOwnership(key, std::move(callback))) {
-                ALOG_WARN(HttpLog, "GetCacheOwnership failed for " << request->URL << " - retrying locally");
-                TActorId handler = GetRequestHandler(event->Get()->Request);
-                if (handler) {
-                    Send(event->Forward(handler));
-                }
+                ALOG_WARN(HttpLog, "RefreshGetCacheOwnership failed");
             }
         }
+    }
+
+    void Handle(TEvPrivate::TEvUpdateUrlState::TPtr ev) {
+        TInstant now = NActors::TActivationContext::Now();
+        auto id(ev->Get()->Id);
+        const auto& ownership(ev->Get()->CacheOwnership);
+        auto it = Cache.find(id);
+        if (it == Cache.end()) {
+            ALOG_WARN(HttpLog, "Cache record not found");
+            return;
+        }
+        if (!ownership.ForwardUrl.empty() || ownership.Deadline > it->second.CacheOwnership.Deadline || it->second.CacheOwnership.Deadline < now) {
+            it->second.CacheOwnership = ownership;
+            if (it->second.CacheOwnership.ForwardUrl.empty() && it->second.CacheOwnership.Deadline == TInstant()) {
+                it->second.CacheOwnership.Deadline = now + TDuration::Seconds(60);
+            }
+            ALOG_DEBUG(HttpLog, "Updating ownership " << it->second.CacheOwnership.GetForwardUrlForDebug() << " with deadline " << it->second.CacheOwnership.Deadline);
+        } else {
+            ALOG_DEBUG(HttpLog, "Keeping ownership " << it->second.CacheOwnership.GetForwardUrlForDebug() << " with deadline " << it->second.CacheOwnership.Deadline);
+
+        }
+        auto refreshTime = std::max(now + TDuration::Seconds(10), it->second.GetRefreshTime(now));
+        ALOG_DEBUG(HttpLog, "SetRefreshTime \"" << id << "\" to " << refreshTime << " (+" << refreshTime - now << ")");
+        RefreshQueue.push({
+            .Key = id,
+            .RefreshTime = refreshTime,
+        });
+        for (auto& event : it->second.Waiters) {
+            Send(event->Forward(SelfId()));
+        }
+        it->second.Waiters.clear();
     }
 
     void HandleRefresh() {
@@ -206,18 +254,16 @@ public:
             auto it = Cache.find(key);
             if (it != Cache.end()) {
                 ALOG_DEBUG(HttpLog, "Refresh with deadline " << it->second.CacheOwnership.Deadline);
-                auto callback = [this, key](TCacheOwnership ownership) {
-                    TInstant now = NActors::TActivationContext::Now();
-                    ALOG_DEBUG(HttpLog, "RefreshedOwnership " << ownership.GetForwardUrlForDebug() << " with deadline " << ownership.Deadline);
-                    auto it = Cache.find(key);
-                    if (it != Cache.end()) {
-                        it->second.CacheOwnership = ownership;
-                        RefreshQueue.push({key, it->second.GetRefreshTime(now)});
-                    }
+                NActors::TActorSystem* actorSystem = NActors::TlsActivationContext->ActorSystem();
+                NActors::TActorIdentity actorId = SelfId();
+                auto callback = [actorSystem, actorId, key](TCacheOwnership ownership) {
+                    actorSystem->Send(actorId, new TEvPrivate::TEvUpdateUrlState(key, ownership));
                 };
                 if (!GetCacheOwnership(key, std::move(callback))) {
                     ALOG_WARN(HttpLog, "RefreshGetCacheOwnership failed");
                 }
+            } else {
+                ALOG_WARN(HttpLog, "Refresh key \"" << key << "\"not found");
             }
         }
         Schedule(RefreshPeriod, new NActors::TEvents::TEvWakeup());
@@ -230,6 +276,7 @@ public:
             hFunc(TEvHttpProxy::TEvAddListeningPort, Handle);
             hFunc(TEvHttpProxy::TEvRegisterHandler, Handle);
             hFunc(TEvHttpProxy::TEvHttpIncomingRequest, Handle);
+            hFunc(TEvPrivate::TEvUpdateUrlState, Handle);
             cFunc(NActors::TEvents::TSystem::Wakeup, HandleRefresh);
         }
     }

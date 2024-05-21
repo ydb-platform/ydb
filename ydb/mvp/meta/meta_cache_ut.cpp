@@ -56,7 +56,7 @@ Y_UNIT_TEST_SUITE(MetaCache) {
         actorSystem.Send(new NActors::IEventHandle(proxyId1, actorSystem.AllocateEdgeActor(), new NHttp::TEvHttpProxy::TEvAddListeningPort(port1)), 0, true);
         actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
 
-        TActorId cacheProxyId1 = actorSystem.Register(NHttp::CreateHttpMetaCache(proxyId1, GetCachePolicy, [=](const TString& id, NHttp::TGetCacheOwnershipCallback cb) {
+        TActorId cacheProxyId1 = actorSystem.Register(NMeta::CreateHttpMetaCache(proxyId1, GetCachePolicy, [=](const TString& id, NMeta::TGetCacheOwnershipCallback cb) {
             Y_UNUSED(id);
             cb({
                 .ForwardUrl = TStringBuilder() << LocalEndpoint << ":" << port2,
@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(MetaCache) {
         actorSystem.Send(new NActors::IEventHandle(proxyId1, actorSystem.AllocateEdgeActor(), new NHttp::TEvHttpProxy::TEvAddListeningPort(port1)), 0, true);
         actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
 
-        TActorId cacheProxyId1 = actorSystem.Register(NHttp::CreateHttpMetaCache(proxyId1, GetCachePolicy, [=](const TString& id, NHttp::TGetCacheOwnershipCallback cb) {
+        TActorId cacheProxyId1 = actorSystem.Register(NMeta::CreateHttpMetaCache(proxyId1, GetCachePolicy, [=](const TString& id, NMeta::TGetCacheOwnershipCallback cb) {
             Y_UNUSED(id);
             cb({
                 .ForwardUrl = TStringBuilder() << LocalEndpoint << ":" << port2,

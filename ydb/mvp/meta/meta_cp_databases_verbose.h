@@ -41,9 +41,9 @@ public:
         TString clusterName(Request.Parameters["cluster_name"]);
         NHttp::THttpOutgoingRequestPtr httpRequests[] = {
             NHttp::THttpOutgoingRequest::CreateRequestGet(
-                TMVP::GetAppropriateEndpoint(Request.Request) + "/meta/cp_databases?cluster_name=" + clusterName),
+                InstanceMVP->GetAppropriateEndpoint(Request.Request) + "/meta/cp_databases?cluster_name=" + clusterName),
             NHttp::THttpOutgoingRequest::CreateRequestGet(
-                TMVP::GetAppropriateEndpoint(Request.Request) + "/meta/cluster?name=" + clusterName)
+                InstanceMVP->GetAppropriateEndpoint(Request.Request) + "/meta/cluster?name=" + clusterName)
         };
         for (const auto & httpRequest: httpRequests) {
             if (TYdbLocation::GetUserToken()) {
@@ -131,7 +131,7 @@ public:
                                     TJsonMergePeer& peer = peers.emplace_back();
                                     TString cloudId = jsonCloudId->GetString();
 
-                                    peer.URL = TMVP::GetAppropriateEndpoint(Request.Request) +
+                                    peer.URL = InstanceMVP->GetAppropriateEndpoint(Request.Request) +
                                                 "/meta/cloud" + "?location=" + clusterLocation + "&cloud_id=" + cloudId;
                                     if (TYdbLocation::GetUserToken()) {
                                         peer.Headers.Set("Authorization", TYdbLocation::GetUserToken());

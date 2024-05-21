@@ -280,13 +280,15 @@ runs:
         
         cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))' >> $GITHUB_STEP_SUMMARY
 
-        teststatus=$(.github/scripts/tests/generate-summary.py \
+        .github/scripts/tests/generate-summary.py \
           --summary-out-path $ARTIFACTS_DIR/summary/ \
           --summary-url-prefix $S3_URL_PREFIX/summary/ \
           --test-history-url $TEST_HISTORY_URL \
           --build-preset "$BUILD_PRESET" \
-          "Tests" ya-test.html "$JUNIT_REPORT_XML")
+          --status-report-file statusrep.txt
+          "Tests" ya-test.html "$JUNIT_REPORT_XML"
 
+        teststatus=$(cat statusrep.txt)
         curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} -d '{"state":"'$teststatus'","description":"Tests '$teststatus'","context":"test_${{inputs.build_preset}}"}'
 

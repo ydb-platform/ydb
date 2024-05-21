@@ -157,8 +157,18 @@ bool IsOverflow(ui64 a, ui64 b) {
     return b > diff;
 }
 
+ui64 AbsToUi64(i64 value) {
+    if (value >= 0) {
+        return value;
+    }
+    if (value == std::numeric_limits<i64>::min()) {
+        return (ui64)std::numeric_limits<i64>::max() + 1;
+    }
+    return -value;
+}
+
 bool IsOverflow(ui64 a, i64 b) {
-    return b > 0 ? IsOverflow(a, (ui64)b) : a < (ui64)-b;
+    return b > 0 ? IsOverflow(a, (ui64)b) : a < AbsToUi64(b);
 }
 
 TDuration FromUnit(int64_t interval, IPathGenerator::EIntervalUnit unit) {

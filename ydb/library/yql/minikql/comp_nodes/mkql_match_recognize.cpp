@@ -289,7 +289,7 @@ public:
         return out.MakeState();
     }
 
-    void LoadState(NUdf::TUnboxedValue& state) override {
+    void Load2(NUdf::TUnboxedValue& state) override {
         TMrInputSerializer in(SerializerContext, state);
 
         const auto loadStateVersion = in.GetStateVersion();
@@ -436,7 +436,7 @@ public:
         return serializer.MakeState();
     }
 
-    void LoadState(NUdf::TUnboxedValue& state) override {
+    void Load2(NUdf::TUnboxedValue& state) override {
         TMrInputSerializer in(SerializerContext, state);
         
         const auto loadStateVersion = in.GetStateVersion();
@@ -592,7 +592,7 @@ public:
                     RowType,
                     RowPacker
                 );
-                state.LoadState(stateValue);
+                state.Load2(stateValue);
                 stateValue = state;
             }
         }

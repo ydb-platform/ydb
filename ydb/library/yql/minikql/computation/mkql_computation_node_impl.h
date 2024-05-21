@@ -1013,7 +1013,7 @@ private:
         ThrowNotSupported(__func__);
     }
 
-    void LoadState(NUdf::TUnboxedValue& state) override {
+    void Load2(NUdf::TUnboxedValue& state) override {
         Y_UNUSED(state);
         ThrowNotSupported(__func__);
     }

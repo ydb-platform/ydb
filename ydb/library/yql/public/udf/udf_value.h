@@ -185,7 +185,7 @@ private:
 class IBoxedValue7 : public IBoxedValue6 {
 friend struct TBoxedValueAccessor;
 private:
-    virtual void LoadState(TUnboxedValue& state) = 0;
+    virtual void Load2(TUnboxedValue& state) = 0;
 };
 #endif
 
@@ -280,7 +280,7 @@ struct TBoxedValueAccessor
     xx(Unused5) \
     xx(Unused6) \
     xx(WideFetch) \
-    xx(LoadState)
+    xx(Load2)
 
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 30)
 
@@ -617,7 +617,7 @@ struct TBoxedValueAccessor
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 36)
-    static inline void LoadState(IBoxedValue& value, TUnboxedValue& data);
+    static inline void Load2(IBoxedValue& value, TUnboxedValue& data);
 #endif
 };
 
@@ -709,7 +709,7 @@ private:
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 36)
-    void LoadState(TUnboxedValue& value) override;
+    void Load2(TUnboxedValue& value) override;
 #endif
 };
 
@@ -910,7 +910,7 @@ public:
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 36)
-    inline void LoadState(TUnboxedValue& value);
+    inline void Load2(TUnboxedValue& value);
 #endif
 
     inline bool TryMakeVariant(ui32 index);
@@ -1305,7 +1305,7 @@ inline EFetchStatus TBoxedValueBase::WideFetch(TUnboxedValue *result, ui32 width
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 36)
-inline void TBoxedValueBase::LoadState(TUnboxedValue& value) {
+inline void TBoxedValueBase::Load2(TUnboxedValue& value) {
     Y_UNUSED(value);
     Y_ABORT("Not implemented");
 }

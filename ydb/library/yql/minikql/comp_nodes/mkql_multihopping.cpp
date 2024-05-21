@@ -129,9 +129,9 @@ public:
             LoadStateImpl(in);
         }
 
-        void LoadState(NUdf::TUnboxedValue& state) override {
+        void Load2(NUdf::TUnboxedValue& state) override {
             TInputSerializer in(state, EMkqlStateType::SIMPLE_BLOB);
-             LoadStateImpl(in);
+            LoadStateImpl(in);
         }
 
         void LoadStateImpl(TInputSerializer& in) {
@@ -518,7 +518,7 @@ public:
             if (isStateToLoad) {
                 // Load from saved state.
                 NUdf::TUnboxedValue stream = CreateStream(compCtx);
-                stream.LoadState(valueRef);
+                stream.Load2(valueRef);
                 valueRef = stream;
             }
         }

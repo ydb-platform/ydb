@@ -284,9 +284,9 @@ inline EFetchStatus TBoxedValueAccessor::WideFetch(IBoxedValue& value, TUnboxedV
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 36)
-inline void TBoxedValueAccessor::LoadState(IBoxedValue& value, TUnboxedValue& data) {
+inline void TBoxedValueAccessor::Load2(IBoxedValue& value, TUnboxedValue& data) {
     Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 36)));
-    value.LoadState(data);
+    value.Load2(data);
 }
 #endif
 
@@ -623,9 +623,9 @@ inline EFetchStatus TUnboxedValuePod::WideFetch(TUnboxedValue* result, ui32 widt
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 36)
-inline void TUnboxedValuePod::LoadState(TUnboxedValue& value) {
+inline void TUnboxedValuePod::Load2(TUnboxedValue& value) {
     UDF_VERIFY(IsBoxed(), "Value is not boxed");
-    TBoxedValueAccessor::LoadState(*Raw.Boxed.Value, value);
+    TBoxedValueAccessor::Load2(*Raw.Boxed.Value, value);
 }
 #endif
 

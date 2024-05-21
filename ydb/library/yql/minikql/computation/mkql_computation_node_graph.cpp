@@ -742,21 +742,31 @@ public:
                         taskState.back().AppendNoAlias(strRef.Data(), strRef.Size());
                     }
                 };
-                bool isList= mutableValue.HasListItems();
+                bool isList = mutableValue.HasListItems();
                 NUdf::TUnboxedValue list;
-                if (isList) {   // No load was done during previous runs 
+                if (isList) {   // No load was done during previous runs.
                     saveList(mutableValue);
                 } else {
-                    NUdf::TUnboxedValue list = mutableValue.Save();
-                    saveList(list);
+                    NUdf::TUnboxedValue saved = mutableValue.Save();
+                    if (saved.IsString() || saved.IsEmbedded()) {  // Old version.
+                        const TStringBuf savedBuf = saved.AsStringRef();
+                        taskState.push_back({});
+                        taskState.back().AppendNoAlias(savedBuf.Data(), savedBuf.Size());
+                        taskStateSize = savedBuf.Size();
+                    } else {
+                        saveList(saved);
+                    }
                 }
                 WriteUi64(result, taskStateSize);
                 for (auto it = taskState.begin(); it != taskState.end();) {
                     result.AppendNoAlias(it->Data(), it->Size());
                     it = taskState.erase(it);
                 }
-            } else {
-                MKQL_ENSURE(false, "State is expected to have data or invalid value");
+            } else { // No load was done during previous runs (if any).
+                MKQL_ENSURE(mutableValue.HasValue() && (mutableValue.IsString() || mutableValue.IsEmbedded()), "State is expected to have data or invalid value");
+                const NUdf::TStringRef savedRef = mutableValue.AsStringRef();
+                WriteUi64(result, savedRef.Size());
+                result.AppendNoAlias(savedRef.Data(), savedRef.Size());
             }
         }
         return result;
@@ -769,7 +779,7 @@ public:
             if (const ui64 size = ReadUi64(state); size != std::numeric_limits<ui64>::max()) {
                 MKQL_ENSURE(state.Size() >= size, "Serialized state is corrupted - buffer is too short (" << state.Size() << ") for specified size: " << size);
                 TStringBuf savedRef(state.Data(), size);
-                Ctx->MutableValues[i] = HolderFactory->Create<NKikimr::NMiniKQL::TSaveLoadList>(*Ctx, savedRef);
+                Ctx->MutableValues[i] = NKikimr::NMiniKQL::TOutputSerializer::MakeArray(*Ctx, savedRef);
                 state.Skip(size);
             } // else leave it Invalid()
         }

@@ -105,7 +105,7 @@ public:
             return false;
         }
 
-        void LoadState(NUdf::TUnboxedValue& state) override {
+        void Load2(NUdf::TUnboxedValue& state) override {
             TInputSerializer in(state, EMkqlStateType::SIMPLE_BLOB);
 
             const auto loadStateVersion = in.GetStateVersion();
@@ -199,7 +199,7 @@ public:
                     Ahead->GetValue(ctx).Get<i64>(),
                     RowLimit->GetValue(ctx).Get<ui32>(),
                     ctx);
-                state.LoadState(stateValue);
+                state.Load2(stateValue);
                 stateValue = state;
             }
         }

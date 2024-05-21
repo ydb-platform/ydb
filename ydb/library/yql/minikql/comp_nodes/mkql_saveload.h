@@ -83,64 +83,6 @@ enum class EMkqlStateType {
     INCREMENT
 };
 
-class TSaveLoadList: public TComputationValue<TSaveLoadList> {
-
-    class TIterator : public TComputationValue<TIterator> {
-        const size_t MaxValueLen = 10000;
-
-    public:
-        TIterator(TMemoryUsageInfo* memInfo, const TString& buf)
-            : TComputationValue<TIterator>(memInfo)
-            , Buf(buf)
-            , Index(0)
-        {}
-
-    private:
-        bool Next(NUdf::TUnboxedValue& value) override {
-            if (Buf.size() == Index) {
-                return false;
-            }
-            size_t nextSize = std::min(Buf.size() - Index, MaxValueLen);
-            NUdf::TStringValue str(nextSize);
-            std::memcpy(str.Data(), Buf.Data() + Index, nextSize);
-            Index += nextSize;
-            value = NUdf::TUnboxedValuePod(std::move(str));
-            return true;
-        }
-        const TString& Buf;
-        size_t Index;
-    };
-
-public:
-    TSaveLoadList(TMemoryUsageInfo* memInfo, TComputationContext& ctx, TString&& buf)
-        : TComputationValue<TSaveLoadList>(memInfo)
-        , Ctx(ctx)
-        , Buf(buf)
-    {}
-
-    TSaveLoadList(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TStringBuf& buf)
-        : TComputationValue<TSaveLoadList>(memInfo)
-        , Ctx(ctx)
-        , Buf(buf)
-    {}
-
-    ui64 GetListLength() const override {
-        ThrowNotSupported(__func__);
-        return 0;
-    }
-
-    bool HasListItems() const override {
-        return !Buf.empty();
-    }
-
-    NUdf::TUnboxedValue GetListIterator() const override {
-        return Ctx.HolderFactory.Create<TIterator>(Buf);
-    }
-private:
-    TComputationContext& Ctx;
-    TString Buf;
-};
-
 struct TOutputSerializer {
 public:
     static NUdf::TUnboxedValue MakeSimpleBlobState(const TString& blob, ui32 stateVersion) {
@@ -237,8 +179,26 @@ public:
         Buf.AppendNoAlias(state.data(), state.size());
     }
 
+    static NUdf::TUnboxedValue MakeArray(TComputationContext& ctx, const TStringBuf& buf) {
+        const size_t MaxItemLen = 1048576;
+        
+        size_t count = buf.size() / MaxItemLen + (buf.size() % MaxItemLen ? 1 : 0);
+        NUdf::TUnboxedValue *items = nullptr;
+        auto array = ctx.HolderFactory.CreateDirectArrayHolder(count, items);
+
+        size_t pos = 0;
+        for (size_t index = 0; index < count; ++index) {
+            size_t itemSize = std::min(buf.size() - pos, MaxItemLen);
+            NUdf::TStringValue str(itemSize);
+            std::memcpy(str.Data(), buf.Data() + pos, itemSize);
+            items[index] = NUdf::TUnboxedValuePod(std::move(str));;
+            pos += itemSize;
+        }
+        return array;
+    }
+
     NUdf::TUnboxedValue MakeState() {
-        return Ctx.HolderFactory.Create<TSaveLoadList>(Ctx, std::move(Buf));
+        return MakeArray(Ctx, Buf);
     }
 protected:
     TString Buf;

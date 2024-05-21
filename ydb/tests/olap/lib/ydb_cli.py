@@ -28,11 +28,12 @@ class YdbCliHelper:
     def get_cli_command() -> list[str]:
         cli = get_external_param('ydb-cli', 'git')
         if cli == 'git':
-            return [yatest.common.binary_path('ydb/apps/ydb/ydb')]
+            return [yatest.common.work_path('ydb')]
+        elif cli == 'main':
+            path = os.path.join(yatest.common.context.project_path, '../../../apps/ydb/ydb')
+            return [yatest.common.binary_path(path)]
         elif cli == 'ya':
             return [yatest.common.source_path('ya'), 'ydb']
-        elif cli == 'olap':
-            return [yatest.common.binary_path('kikimr/tests/acceptance/olap/cli/ydb_olap')]
         else:
             return [cli]
 

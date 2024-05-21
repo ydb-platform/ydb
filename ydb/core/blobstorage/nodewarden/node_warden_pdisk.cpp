@@ -326,6 +326,12 @@ namespace NKikimr::NStorage {
             const TPDiskKey key(pdisk);
 
             switch (entityStatus) {
+                case NKikimrBlobStorage::RESTART:
+                    if (auto it = LocalPDisks.find({pdisk.GetNodeID(), pdisk.GetPDiskID()}); it != LocalPDisks.end()) {
+                        it->second.Record = pdisk;
+                    }
+                    DoRestartLocalPDisk(pdisk);
+                    [[fallthrough]];
                 case NKikimrBlobStorage::INITIAL:
                 case NKikimrBlobStorage::CREATE: {
                     const auto [it, inserted] = pdiskMap.try_emplace(key, nullptr);
@@ -336,22 +342,8 @@ namespace NKikimr::NStorage {
                     it->second->ClearEntityStatus();
                     break;
                 }
-
                 case NKikimrBlobStorage::DESTROY:
-                    if (const auto it = pdiskMap.find(key); it != pdiskMap.end()) {
-                        pdiskMap.erase(it);
-                    }
-                    break;
-
-                case NKikimrBlobStorage::RESTART:
-                    if (auto it = LocalPDisks.find({pdisk.GetNodeID(), pdisk.GetPDiskID()}); it != LocalPDisks.end()) {
-                        it->second.Record = pdisk;
-                    }
-                    if (auto it = pdiskMap.find(key); it != pdiskMap.end()) {
-                        it->second->CopyFrom(pdisk);
-                        it->second->ClearEntityStatus();
-                    }
-                    DoRestartLocalPDisk(pdisk);
+                    pdiskMap.erase(key);
                     break;
             }
         }

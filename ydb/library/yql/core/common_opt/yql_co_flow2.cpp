@@ -1111,7 +1111,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
         TCoFlatMapBase self(node);
         if (optCtx.IsSingleUsage(self.Input().Ref())) {
             if (self.Input().Ref().IsCallable("EquiJoin")) {
-                auto ret = FlatMapOverEquiJoin(self, ctx, *optCtx.ParentsMap, false);
+                auto ret = FlatMapOverEquiJoin(self, ctx, *optCtx.ParentsMap, false, optCtx.Types->FilterPushdownOverJoinOptionalSide);
                 if (!ret.Raw()) {
                     return nullptr;
                 }

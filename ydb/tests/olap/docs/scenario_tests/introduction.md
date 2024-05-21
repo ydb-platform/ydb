@@ -1,42 +1,42 @@
-# Цели и задачи
+# Goals and objectives
 
-Исполнение на произвольном кластере произвольных сценариев
-Составление отчетов о результатах запусков
-Генерация разнопрофильной нагрузки на кластер
-Выявление ошибок и проблем
+Execution of arbitrary scenarios on an arbitrary cluster
+Compiling reports on launch results
+Generating a multi-profile load on a cluster
+Identifying errors and problems
 
-# Технологии
+# Technologies
 
-* Система регулярного запуска задач
-  `Arcadia Ci + Sandbox`
-* Среда для написания тестов
-  `Pytest + ya make`
-* Инструмент для построения визуальных отчетов
-  `Allure + ya make`
-* Система хранения и представления данных
-  `YDB + DataLens`
+* Regular task launch system
+   `Arcadia Ci + Sandbox`
+* Environment for writing tests
+   `Pytest + ya make`
+* Tool for creating visual reports
+   `Allure + ya make`
+* Data storage and presentation system
+   `YDB+DataLens`
 
-# Запуски
+# Launches
 
-Запускается на регулярной основе в [Arcadia CI](https://a.yandex-team.ru/projects/kikimr/ci/actions/launches?dir=kikimr%2Ftests%2Facceptance%2Folap%2Fyatests&id=run_scenario_tests_auto).
-Описание запусков в [a.yaml](https://a.yandex-team.ru/arcadia/kikimr/tests/acceptance/olap/yatests/a.yaml?rev=r13836177#L102).
+Runs on a regular basis in [Arcadia CI](https://a.yandex-team.ru/projects/kikimr/ci/actions/launches?dir=kikimr%2Ftests%2Facceptance%2Folap%2Fyatests&id=run_scenario_tests_auto).
+Description of launches in [a.yaml](https://a.yandex-team.ru/arcadia/kikimr/tests/acceptance/olap/yatests/a.yaml?rev=r13836177#L102).
 
-# Написание сценариев
+# Scenarios writing
 
-## Общий подход
+## General approach
 
-Код лежит в [Аркадии](https://a.yandex-team.ru/arcadia/kikimr/tests/acceptance/olap/yatests/scenario)
-Сценарии пишутся на языке `Python 3` в файлах, имена которых начинаются с префикса `test_`. Файлы нужно прописать в [ya.make](https://a.yandex-team.ru/arcadia/kikimr/tests/acceptance/olap/yatests/scenario/ya.make) в секции `TEST_SRCS`.
+The code is in [Github](https://github.com/ydb-platform/ydb/tree/main/ydb/tests/olap/scenario)
+Scenarios are written in `Python 3` in files whose names begin with the `test_` prefix. The files need to be registered in [ya.make](https://github.com/ydb-platform/ydb/tree/main/ydb/tests/olap/scenario/ya.make) in the `TEST_SRCS` section.
 
-В качестве **наборов сценариев** принимаются классы с именами, начинающимися с `Test`.
+Classes with names starting with `Test` are accepted as **sets of scenarios**.
 
-В качестве сценариев воспринимаются функции-члены классов-наборов сценариев, имена которых начинаются на `scenario_`.
+Scenarios are considered to be member functions of scenario classes whose names begin with `scenario_`.
 
-В классе-наборе сценариев можно определить методы `setup_class` и `teardown_class`, которые будут выполняться соответственно перед и после исполнения набора сценариев.
+In a scenario set class, you can define `setup_class` and `teardown_class` methods that will be executed before and after the scenario set execution, respectively.
 
-Для написания сценариев используются [Хелперы](./scenario.helpers.md)
+To write scenarios, use [Helpers](./scenario.helpers.md)
 
-{% cut "Пример сценария" %}
+{% cut "Sample scenario" %}
 
 ```python
 class TestSchenarioSimple(BaseTestSet):

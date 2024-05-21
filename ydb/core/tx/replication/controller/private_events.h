@@ -22,6 +22,7 @@ struct TEvPrivate {
         EvUpdateTenantNodes,
         EvRunWorkers,
         EvResolveSecretResult,
+        EvAlterDstResult,
 
         EvEnd,
     };
@@ -52,53 +53,85 @@ struct TEvPrivate {
         TString ToString() const override;
     };
 
-    struct TEvCreateStreamResult: public TEventLocal<TEvCreateStreamResult, EvCreateStreamResult> {
+    template <typename TDerived, ui32 EventType>
+    struct TGenericYdbProxyResult: public TEventLocal<TDerived, EventType> {
+        using TBase = TGenericYdbProxyResult<TDerived, EventType>;
+
         const ui64 ReplicationId;
         const ui64 TargetId;
         const NYdb::TStatus Status;
 
-        explicit TEvCreateStreamResult(ui64 rid, ui64 tid, NYdb::TStatus&& status);
-        TString ToString() const override;
+        explicit TGenericYdbProxyResult(ui64 rid, ui64 tid, NYdb::TStatus&& status)
+            : ReplicationId(rid)
+            , TargetId(tid)
+            , Status(std::move(status))
+        {
+        }
 
-        bool IsSuccess() const;
+        TString ToString() const override {
+            return TStringBuilder() << this->ToStringHeader() << " {"
+                << " ReplicationId: " << ReplicationId
+                << " TargetId: " << TargetId
+                << " Status: " << Status.GetStatus()
+                << " Issues: " << Status.GetIssues().ToOneLineString()
+            << " }";
+        }
+
+        bool IsSuccess() const {
+            return Status.IsSuccess();
+        }
     };
 
-    struct TEvCreateDstResult: public TEventLocal<TEvCreateDstResult, EvCreateDstResult> {
+    struct TEvCreateStreamResult: public TGenericYdbProxyResult<TEvCreateStreamResult, EvCreateStreamResult> {
+        using TBase::TBase;
+    };
+
+    struct TEvDropStreamResult: public TGenericYdbProxyResult<TEvDropStreamResult, EvDropStreamResult> {
+        using TBase::TBase;
+    };
+
+    template <typename TDerived, ui32 EventType>
+    struct TGenericSchemeResult: public TEventLocal<TDerived, EventType> {
+        using TBase = TGenericSchemeResult<TDerived, EventType>;
+
         const ui64 ReplicationId;
         const ui64 TargetId;
-        const TPathId DstPathId;
         const NKikimrScheme::EStatus Status;
         const TString Error;
+
+        explicit TGenericSchemeResult(ui64 rid, ui64 tid, NKikimrScheme::EStatus status, const TString& error = {})
+            : ReplicationId(rid)
+            , TargetId(tid)
+            , Status(status)
+            , Error(error)
+        {
+        }
+
+        TString ToStringBody() const {
+            return TStringBuilder()
+                << " ReplicationId: " << ReplicationId
+                << " TargetId: " << TargetId
+                << " Status: " << NKikimrScheme::EStatus_Name(Status)
+                << " Error: " << Error;
+        }
+
+        bool IsSuccess() const {
+            return Status == NKikimrScheme::StatusSuccess;
+        }
+    };
+
+    struct TEvCreateDstResult: public TGenericSchemeResult<TEvCreateDstResult, EvCreateDstResult> {
+        const TPathId DstPathId;
 
         explicit TEvCreateDstResult(ui64 rid, ui64 tid, const TPathId& dstPathId);
         explicit TEvCreateDstResult(ui64 rid, ui64 tid, NKikimrScheme::EStatus status, const TString& error);
         TString ToString() const override;
-
-        bool IsSuccess() const;
     };
 
-    struct TEvDropStreamResult: public TEventLocal<TEvDropStreamResult, EvDropStreamResult> {
-        const ui64 ReplicationId;
-        const ui64 TargetId;
-        const NYdb::TStatus Status;
-
-        explicit TEvDropStreamResult(ui64 rid, ui64 tid, NYdb::TStatus&& status);
-        TString ToString() const override;
-
-        bool IsSuccess() const;
-    };
-
-    struct TEvDropDstResult: public TEventLocal<TEvDropDstResult, EvDropDstResult> {
-        const ui64 ReplicationId;
-        const ui64 TargetId;
-        const NKikimrScheme::EStatus Status;
-        const TString Error;
-
+    struct TEvDropDstResult: public TGenericSchemeResult<TEvDropDstResult, EvDropDstResult> {
         explicit TEvDropDstResult(ui64 rid, ui64 tid,
             NKikimrScheme::EStatus status = NKikimrScheme::StatusSuccess, const TString& error = {});
         TString ToString() const override;
-
-        bool IsSuccess() const;
     };
 
     struct TEvDropReplication: public TEventLocal<TEvDropReplication, EvDropReplication> {
@@ -141,6 +174,12 @@ struct TEvPrivate {
         TString ToString() const override;
 
         bool IsSuccess() const;
+    };
+
+    struct TEvAlterDstResult: public TGenericSchemeResult<TEvAlterDstResult, EvAlterDstResult> {
+        explicit TEvAlterDstResult(ui64 rid, ui64 tid,
+            NKikimrScheme::EStatus status = NKikimrScheme::StatusSuccess, const TString& error = {});
+        TString ToString() const override;
     };
 
 }; // TEvPrivate

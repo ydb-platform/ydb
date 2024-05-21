@@ -68,7 +68,8 @@ NKikimr::TConclusionStatus TSchemaTransactionOperator::ValidateTableSchema(const
         //NTypeIds::Float,
         //NTypeIds::Double,
         NTypeIds::String,
-        NTypeIds::Utf8
+        NTypeIds::Utf8,
+        NTypeIds::Decimal
     };
     if (!schema.HasEngine() ||
         schema.GetEngine() != NKikimrSchemeOp::EColumnTableEngine::COLUMN_ENGINE_REPLACING_TIMESERIES) {

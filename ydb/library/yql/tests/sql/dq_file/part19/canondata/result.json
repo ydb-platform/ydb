@@ -165,6 +165,28 @@
             "uri": "file://test.test_action-mixed_eval_typeof_world1--Results_/extracted"
         }
     ],
+    "test.test[action-nested_rewrite_io-default.txt-Analyze]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1936947/2bc1f88e24977d85753d38b3cac45a372d34ec2f/resource.tar.gz#test.test_action-nested_rewrite_io-default.txt-Analyze_/plan.txt"
+        }
+    ],
+    "test.test[action-nested_rewrite_io-default.txt-Debug]": [
+        {
+            "checksum": "8c6f0a05c5d553b7c480078d0251525a",
+            "size": 328,
+            "uri": "https://{canondata_backend}/1936947/2bc1f88e24977d85753d38b3cac45a372d34ec2f/resource.tar.gz#test.test_action-nested_rewrite_io-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[action-nested_rewrite_io-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1936947/2bc1f88e24977d85753d38b3cac45a372d34ec2f/resource.tar.gz#test.test_action-nested_rewrite_io-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[action-nested_rewrite_io-default.txt-Results]": [],
     "test.test[action-runtime_make_code-default.txt-Analyze]": [
         {
             "checksum": "b4dd508a329723c74293d80f0278c705",

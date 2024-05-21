@@ -302,7 +302,9 @@ namespace NFwd {
             auto& meta = Part->IndexPages.GetBTree(groupId);
             Levels.resize(meta.LevelCount + 1);
             Levels[0].Queue.push_back({meta.PageId, meta.DataSize});
-            IndexPageLocator.Add(meta.PageId, GroupId, 0);
+            if (meta.LevelCount) {
+                IndexPageLocator.Add(meta.PageId, GroupId, 0);
+            }
         }
 
         ~TBTreeIndexCache()

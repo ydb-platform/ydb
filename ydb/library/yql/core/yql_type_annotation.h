@@ -252,6 +252,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     ui32 EvaluateParallelForLimit = 5000;
     ui32 EvaluateOrderByColumnLimit = 100;
     bool PullUpFlatMapOverJoin = true;
+    bool FilterPushdownOverJoinOptionalSide = false;
     bool DeprecatedSQL = false;
     THashMap<std::tuple<TString, TString, const TTypeAnnotationNode*>, TUdfCachedInfo> UdfTypeCache; // (name,typecfg,type)->info
     bool UseTableMetaFromGraph = false;

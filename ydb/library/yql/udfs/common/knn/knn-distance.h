@@ -89,14 +89,14 @@ inline std::optional<float> KnnManhattanDistance(const TStringRef& str1, const T
             return ::L1Distance(vector1.data(), vector2.data(), vector1.size());
         }
         case EFormat::BitVector: {
-            auto [v1, len1] = TKnnBitVectorSerializer::GetArray(str1);
-            auto [v2, len2] = TKnnBitVectorSerializer::GetArray(str2);
+            auto [v1, bitLen1] = TKnnBitVectorSerializer::GetArray(str1);
+            auto [v2, bitLen2] = TKnnBitVectorSerializer::GetArray(str2);
 
-            if (Y_UNLIKELY(len1 != len2 || len1 == 0))
+            if (Y_UNLIKELY(bitLen1 != bitLen2 || bitLen1 == 0))
                 return {};
 
             ui64 ret = 0;
-            BitVectorHandleOp(len1, v1, v2, [&](ui64 d1, ui64 d2) {
+            BitVectorHandleOp(bitLen1, v1, v2, [&](ui64 d1, ui64 d2) {
                 ret += std::popcount(d1 ^ d2);
             });
             return ret;
@@ -133,14 +133,14 @@ inline std::optional<float> KnnEuclideanDistance(const TStringRef& str1, const T
             return ::L2Distance(vector1.data(), vector2.data(), vector1.size());
         }
         case EFormat::BitVector: {
-            auto [v1, len1] = TKnnBitVectorSerializer::GetArray(str1);
-            auto [v2, len2] = TKnnBitVectorSerializer::GetArray(str2);
+            auto [v1, bitLen1] = TKnnBitVectorSerializer::GetArray(str1);
+            auto [v2, bitLen2] = TKnnBitVectorSerializer::GetArray(str2);
 
-            if (Y_UNLIKELY(len1 != len2 || len1 == 0))
+            if (Y_UNLIKELY(bitLen1 != bitLen2 || bitLen1 == 0))
                 return {};
 
             ui64 ret = 0;
-            BitVectorHandleOp(len1, v1, v2, [&](ui64 d1, ui64 d2) {
+            BitVectorHandleOp(bitLen1, v1, v2, [&](ui64 d1, ui64 d2) {
                 ret += std::popcount(d1 ^ d2);
             });
             return NPrivate::NL2Distance::L2DistanceSqrt(ret);
@@ -177,14 +177,14 @@ inline std::optional<float> KnnDotProduct(const TStringRef& str1, const TStringR
             return ::DotProduct(vector1.data(), vector2.data(), vector1.size());
         }
         case EFormat::BitVector: {
-            auto [v1, len1] = TKnnBitVectorSerializer::GetArray(str1);
-            auto [v2, len2] = TKnnBitVectorSerializer::GetArray(str2);
+            auto [v1, bitLen1] = TKnnBitVectorSerializer::GetArray(str1);
+            auto [v2, bitLen2] = TKnnBitVectorSerializer::GetArray(str2);
 
-            if (Y_UNLIKELY(len1 != len2 || len1 == 0))
+            if (Y_UNLIKELY(bitLen1 != bitLen2 || bitLen1 == 0))
                 return {};
 
             ui64 ret = 0;
-            BitVectorHandleOp(len1, v1, v2, [&](ui64 d1, ui64 d2) {
+            BitVectorHandleOp(bitLen1, v1, v2, [&](ui64 d1, ui64 d2) {
                 ret += std::popcount(d1 & d2);
             });
             return ret;
@@ -225,16 +225,16 @@ inline std::optional<TTriWayDotProduct<float>> KnnTriWayDotProduct(const TString
             return result;
         }
         case EFormat::BitVector: {
-            auto [v1, len1] = TKnnBitVectorSerializer::GetArray(str1);
-            auto [v2, len2] = TKnnBitVectorSerializer::GetArray(str2);
+            auto [v1, bitLen1] = TKnnBitVectorSerializer::GetArray(str1);
+            auto [v2, bitLen2] = TKnnBitVectorSerializer::GetArray(str2);
 
-            if (Y_UNLIKELY(len1 != len2 || len1 == 0))
+            if (Y_UNLIKELY(bitLen1 != bitLen2 || bitLen1 == 0))
                 return {};
 
             ui64 ll = 0;
             ui64 rr = 0;
             ui64 lr = 0;
-            BitVectorHandleOp(len1, v1, v2, [&](ui64 d1, ui64 d2) {
+            BitVectorHandleOp(bitLen1, v1, v2, [&](ui64 d1, ui64 d2) {
                 ll += std::popcount(d1);
                 rr += std::popcount(d2);
                 lr += std::popcount(d1 & d2);

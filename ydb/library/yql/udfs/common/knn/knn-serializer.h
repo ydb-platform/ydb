@@ -143,12 +143,12 @@ public:
         }
     }
 
-    struct Array {
+    struct TArray {
         const ui64* data = nullptr;
         ui64 bitLen = 0;
     };
 
-    static Array GetArray(const TStringRef& str) {
+    static TArray GetArray(const TStringRef& str) {
         if (Y_UNLIKELY(str.Size() < 2))
             return {};
         const char* buf = str.Data();

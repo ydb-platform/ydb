@@ -1604,15 +1604,16 @@ message TModuloShardsModification {
 
 message TShardingModification {
     repeated uint64 NewShardIds = 1;
+    repeated uint64 DeleteShardIds = 2;
 
-    repeated uint64 CloseWriteIds = 2;
-    repeated uint64 CloseReadIds = 3;
-    repeated uint64 OpenWriteIds = 4;
-    repeated uint64 OpenReadIds = 5;
+    repeated uint64 CloseWriteIds = 3;
+    repeated uint64 CloseReadIds = 4;
+    repeated uint64 OpenWriteIds = 5;
+    repeated uint64 OpenReadIds = 6;
 
     oneof Implementation {
-        TConsistencyShardsModification Consistency = 10;
-        TModuloShardsModification Modulo = 11;
+        TConsistencyShardsModification Consistency = 20;
+        TModuloShardsModification Modulo = 21;
     }
 }
 

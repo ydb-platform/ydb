@@ -285,7 +285,7 @@ runs:
           --summary-url-prefix $S3_URL_PREFIX/summary/ \
           --test-history-url $TEST_HISTORY_URL \
           --build-preset "$BUILD_PRESET" \
-          --status-report-file statusrep.txt
+          --status-report-file statusrep.txt \
           "Tests" ya-test.html "$JUNIT_REPORT_XML"
 
         teststatus=$(cat statusrep.txt)

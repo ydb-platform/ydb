@@ -393,16 +393,14 @@ Y_UNIT_TEST_SUITE(RetryPolicy) {
         TString message = "1234567890";
         ui64 seqNo = 0;
         setup->KickTablets();
+        setup->WaitForTabletsDown();
+
         writer->Write(std::move(continueToken), message, ++seqNo);
         retryPolicy->ExpectBreakDown();
         retryPolicy->WaitForRetriesSync(3);
         while (seqNo < 10) {
             auto event = *writer->GetEvent(true);
             Cerr << NYdb::NPersQueue::DebugString(event) << "\n";
-            if (std::holds_alternative<TWriteSessionEvent::TAcksEvent>(event)) {
-                // The writer might receive an ack right before kicking the tablets. Ignore this event.
-                continue;
-            }
             UNIT_ASSERT(std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event));
             writer->Write(
                     std::move(std::get<TWriteSessionEvent::TReadyToAcceptEvent>(event).ContinuationToken),

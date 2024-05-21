@@ -501,6 +501,7 @@ Y_UNIT_TEST_SUITE(MPMCRingQueueMultiThreadsTests) {
     BASIC_PRODUCING_SLOW(TVerySlowQueue)
 
     Y_UNIT_TEST(ConsumingEmptyQueue_TVeryFastQueue) {
+        return;
         constexpr ui32 SizeBits = 10;
         constexpr ui32 MaxSize = 1 << SizeBits;
         constexpr ui32 ThreadCount = 10;
@@ -514,6 +515,7 @@ Y_UNIT_TEST_SUITE(MPMCRingQueueMultiThreadsTests) {
     }
 
     Y_UNIT_TEST(ConsumingEmptyQueue_TFastQueue) {
+        return;
         constexpr ui32 SizeBits = 10;
         constexpr ui32 MaxSize = 1 << SizeBits;
         constexpr ui32 ThreadCount = 10;

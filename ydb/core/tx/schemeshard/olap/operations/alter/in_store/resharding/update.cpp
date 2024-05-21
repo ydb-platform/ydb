@@ -20,18 +20,31 @@ TConclusionStatus TInStoreShardingUpdate::DoStart(const TUpdateStartContext& con
 TConclusionStatus TInStoreShardingUpdate::DoInitialize(const TUpdateInitializationContext& context) {
     auto& inStoreTable = context.GetOriginalEntityAsVerified<TInStoreTable>();
     AFL_VERIFY(context.GetModification()->GetAlterColumnTable().HasReshardColumnTable());
-    const ui32 shardsCount = inStoreTable.GetTableInfoPtrVerified()->GetColumnShards().size();
+    std::shared_ptr<NSharding::IShardingBase> sharding = inStoreTable.GetTableInfoPtrVerified()->GetShardingVerified(inStoreTable.GetTableSchemaVerified());
+    TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> alters = std::vector<NKikimrSchemeOp::TAlterShards>();
     auto& storeInfo = *inStoreTable.GetStoreInfo();
     auto layoutPolicy = storeInfo.GetTablesLayoutPolicy();
     auto currentLayout = context.GetSSOperationContext()->SS->ColumnTables.GetTablesLayout(TColumnTablesLayout::ShardIdxToTabletId(
         storeInfo.GetColumnShards(), *context.GetSSOperationContext()->SS));
     auto tablePtr = context.GetSSOperationContext()->SS->ColumnTables.GetVerifiedPtr(context.GetOriginalEntity().GetPathId());
-    auto layoutConclusion = layoutPolicy->Layout(currentLayout, shardsCount);
-    if (layoutConclusion.IsFail()) {
-        return layoutConclusion;
+    if (context.GetModification()->GetAlterColumnTable().GetReshardColumnTable().GetIncrease()) {
+        const ui32 shardsCount = inStoreTable.GetTableInfoPtrVerified()->GetColumnShards().size();
+        auto layoutConclusion = layoutPolicy->Layout(currentLayout, shardsCount);
+        if (layoutConclusion.IsFail()) {
+            return layoutConclusion;
+        }
+        alters = sharding->BuildAddShardsModifiers(layoutConclusion->GetTabletIds());
+    } else {
+        if (inStoreTable.GetTableInfoPtrVerified()->GetColumnShards().size() % 2) {
+            return TConclusionStatus::Fail("cannot reduce shards count (possible for even shards count only)");
+        }
+        const ui32 newShardsCount = inStoreTable.GetTableInfoPtrVerified()->GetColumnShards().size() / 2;
+        auto layoutConclusion = layoutPolicy->Layout(currentLayout, newShardsCount);
+        if (layoutConclusion.IsFail()) {
+            return layoutConclusion;
+        }
+        alters = sharding->BuildReduceShardsModifiers(layoutConclusion->GetTabletIds());
     }
-    std::shared_ptr<NSharding::IShardingBase> sharding = inStoreTable.GetTableInfoPtrVerified()->GetShardingVerified(inStoreTable.GetTableSchemaVerified());
-    TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> alters = sharding->BuildAddShardsModifiers(layoutConclusion->GetTabletIds());
     if (alters.IsFail()) {
         return alters;
     }

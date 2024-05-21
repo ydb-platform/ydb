@@ -13,6 +13,7 @@ private:
     std::shared_ptr<TInStoreTable> TargetInStoreTable;
     std::set<ui64> ShardIds;
     std::set<ui64> NewShardIds;
+    std::set<ui64> DeleteShardIds;
     std::set<ui64> ModifiedShardIds;
     std::shared_ptr<NSharding::IShardingBase> Sharding;
     virtual TConclusionStatus DoInitializeImpl(const TUpdateInitializationContext& context) override;
@@ -30,12 +31,15 @@ private:
         NKikimrTxColumnShard::TSchemaTxBody result;
         result.MutableSeqNo()->SetGeneration(seqNo.Generation);
         result.MutableSeqNo()->SetRound(seqNo.Round);
-        AFL_VERIFY(NewShardIds.contains(tabletId) || ModifiedShardIds.contains(tabletId));
+        AFL_VERIFY(NewShardIds.contains(tabletId) || ModifiedShardIds.contains(tabletId) || DeleteShardIds.contains(tabletId));
         if (NewShardIds.contains(tabletId)) {
             auto& alter = *result.MutableEnsureTables();
             auto& create = *alter.AddTables();
             FillToShardTx(create);
             create.SetPathId(TargetInStoreTable->GetPathId().LocalPathId);
+        }
+        if (DeleteShardIds.contains(tabletId)) {
+            result.MutableDropTable()->SetPathId(TargetInStoreTable->GetPathId().LocalPathId);
         }
         auto container = Sharding->GetTabletShardingInfoOptional(tabletId);
         if (!!container) {

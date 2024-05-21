@@ -23,7 +23,7 @@ private:
         return TConclusionStatus::Success();
     }
 
-    virtual TConclusionStatus DoInitialize(const TUpdateInitializationContext& /*context*/) override;
+    virtual TConclusionStatus DoInitialize(const TUpdateInitializationContext& context) override;
     virtual TConclusionStatus DoStart(const TUpdateStartContext& context) override;
 
     virtual std::set<ui64> DoGetShardIds() const override {

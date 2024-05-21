@@ -18,6 +18,11 @@ TConclusionStatus TInStoreShardsUpdate::DoInitializeImpl(const TUpdateInitializa
         AFL_VERIFY(NewShardIds.emplace(i).second);
     }
 
+    for (auto&& i : Alter.GetModification().GetDeleteShardIds()) {
+        AFL_VERIFY(ShardIds.emplace(i).second);
+        AFL_VERIFY(DeleteShardIds.emplace(i).second);
+    }
+
     auto tableInfo = original.GetTableInfoPtrVerified();
 
     auto description = tableInfo->Description;

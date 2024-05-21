@@ -2,8 +2,7 @@
 
 #include <ydb/library/yql/public/udf/udf_helpers.h>
 
-#include <util/generic/buffer.h>
-#include <util/stream/format.h>
+#include <util/generic/array_ref.h>
 
 using namespace NYql;
 using namespace NYql::NUdf;
@@ -12,9 +11,8 @@ template <typename TCallback>
 void EnumerateVector(const TUnboxedValuePod vector, TCallback&& callback) {
     const auto* elements = vector.GetElements();
     if (elements) {
-        const auto* end = elements + vector.GetListLength();
-        while (elements != end) {
-            callback(elements++->Get<float>());
+        for (auto& value : TArrayRef{elements, vector.GetListLength()}) {
+            callback(value.Get<float>());
         }
     } else {
         TUnboxedValue value;

@@ -74,7 +74,7 @@ namespace NPage {
         BTreeIndex = 13,
     };
 
-    constexpr static bool NeedInLoader(EPage page) noexcept
+    constexpr bool NeedInLoader(EPage page) noexcept
     {
         return
             page == EPage::Scheme

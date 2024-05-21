@@ -191,7 +191,7 @@ public:
             size_t itemSize = std::min(buf.size() - pos, MaxItemLen);
             NUdf::TStringValue str(itemSize);
             std::memcpy(str.Data(), buf.Data() + pos, itemSize);
-            items[index] = NUdf::TUnboxedValuePod(std::move(str));;
+            items[index] = NUdf::TUnboxedValuePod(std::move(str));
             pos += itemSize;
         }
         return array;

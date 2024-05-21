@@ -172,6 +172,13 @@ SRCS(
 
     profiling/timing.cpp
 
+    phoenix/context.cpp
+    phoenix/descriptors.cpp
+    phoenix/load.cpp
+    phoenix/schemas.cpp
+    phoenix/type_def.cpp
+    phoenix/type_registry.cpp
+
     rpc/authentication_identity.cpp
     rpc/authenticator.cpp
     rpc/balancing_channel.cpp
@@ -399,6 +406,7 @@ IF (NOT OS_WINDOWS)
         crypto/unittests
         json/unittests
         logging/unittests
+        phoenix/unittests
         profiling/unittests
         rpc/unittests
         ypath/unittests

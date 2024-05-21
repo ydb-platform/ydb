@@ -609,23 +609,6 @@ public:
         FireResourcesPublishing();
     }
 
-    TVector<NKikimrKqp::TKqpNodeResources> GetClusterResources() const override {
-        TVector<NKikimrKqp::TKqpNodeResources> resources;
-        Y_ABORT_UNLESS(PublishResourcesByExchanger);
-
-        if (PublishResourcesByExchanger) {
-            std::shared_ptr<TVector<NKikimrKqp::TKqpNodeResources>> infos;
-            with_lock (ResourceSnapshotState->Lock) {
-                infos = ResourceSnapshotState->Snapshot;
-            }
-            if (infos != nullptr) {
-                resources = *infos;
-            }
-        }
-
-        return resources;
-    }
-
     void RequestClusterResourcesInfo(TOnResourcesSnapshotCallback&& callback) override {
         LOG_AS_D("Schedule Snapshot request");
         if (PublishResourcesByExchanger) {

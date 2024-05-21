@@ -6664,7 +6664,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
         };
 
         TTestHelper::TColumnTable testTable;
-        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id", "dec"}).SetSharding({"id", "dec"}).SetSchema(schema);
         testHelper.CreateTable(testTable);
 
         {
@@ -6690,6 +6690,30 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
                 .AddMember("id").Int64(5)
                 .AddMember("dec").Decimal(TString("-nan"))
             .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(6)
+                .AddMember("dec").Decimal(TString("1.1"))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(7)
+                .AddMember("dec").Decimal(TString("12.1"))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(8)
+                .AddMember("dec").Decimal(TString("inf"))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(9)
+                .AddMember("dec").Decimal(TString("-inf"))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(10)
+                .AddMember("dec").Decimal(TString("2.1"))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(11)
+                .AddMember("dec").Decimal(TString("15.1"))
+            .EndStruct();
             builder.EndList();
             const auto result = testHelper.GetKikimr().GetTableClient().BulkUpsert(testTable.GetName(), builder.Build()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess() , result.GetIssues().ToString());
@@ -6699,6 +6723,13 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
         testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id=3", "[[\"-inf\"]]");
         testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id=4", "[[\"nan\"]]");
         testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id=5", "[[\"-nan\"]]");
+        testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"10.1\" As Decimal(22,9))", "[[1]]");
+        testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"inf\" As Decimal(22,9)) ORDER BY id", "[[2];[8]]");
+        testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"-inf\" As Decimal(22,9)) ORDER BY id", "[[3];[9]]");
+        // Nan cannot by find.
+        testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"nan\" As Decimal(22,9))", "[]");
+        testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"-nan\" As Decimal(22,9))", "[]");
+        testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id > 5 ORDER BY dec", "[[\"-inf\"];[\"1.1\"];[\"2.1\"];[\"12.1\"];[\"15.1\"];[\"inf\"]]");
     }
 
     Y_UNIT_TEST(TimestampCmpErr) {

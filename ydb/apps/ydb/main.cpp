@@ -9,6 +9,8 @@ TVector<NYdb::NTopic::ECodec> NYdb::NConsoleClient::InitAllowedCodecs() {
     };
 }
 
+// sample
+
 int main(int argc, char **argv) {
     try {
         return NYdb::NConsoleClient::NewYCloudClient(argc, argv);

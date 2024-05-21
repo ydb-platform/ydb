@@ -155,12 +155,19 @@ private:
         NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev,
         const TRequestMap::const_iterator& requestIter,
         TMaybe<TDatabaseDescription>& result)
-    {
+    { 
         TString errorMessage;
-        if (ev->Get()->Error.empty() && (ev->Get()->Response && ev->Get()->Response->Status == "200")) {
-            errorMessage = HandleSuccessfulResponse(ev, requestIter, result);
+
+        if (requestIter == Requests.end()) {
+            // Requests are guaranteed to be kept in within TResponseProcessor until the response arrives.
+            // If there is no appropriate request, it's a fatal error.
+            errorMessage = "Invariant violation: unknown request";
         } else {
-            errorMessage = HandleFailedResponse(ev, requestIter);
+            if (ev->Get()->Error.empty() && (ev->Get()->Response && ev->Get()->Response->Status == "200")) {
+                errorMessage = HandleSuccessfulResponse(ev, *requestIter, result);
+            } else {
+                errorMessage = HandleFailedResponse(ev, *requestIter);
+            }
         }
 
         if (errorMessage) {
@@ -185,17 +192,13 @@ private:
 
     TString HandleSuccessfulResponse(
         NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev,
-        const TRequestMap::const_iterator& requestIter,
+        const TRequestMap::value_type& requestWithParams,
         TMaybe<TDatabaseDescription>& result
     ) {
-        if (requestIter == Requests.end()) {
-            return "unknown request";
-        }
-
         NJson::TJsonReaderConfig jsonConfig;
         NJson::TJsonValue databaseInfo;
 
-        const auto& params = requestIter->second;
+        const auto& params = requestWithParams.second;
         const bool parseJsonOk = NJson::ReadJsonTree(ev->Get()->Response->Body, &jsonConfig, &databaseInfo);
         TParsers::const_iterator parserIt;
         if (parseJsonOk && (parserIt = Parsers.find(params.DatabaseType)) != Parsers.end()) {
@@ -226,37 +229,37 @@ private:
 
     TString HandleFailedResponse(
         NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev,
-        const TRequestMap::const_iterator& requestIter
+        const TRequestMap::value_type& requestWithParams
     ) const {
-        if (requestIter == Requests.end()) {
-            return "unknown request";
-        } 
+        auto sb = TStringBuilder() 
+            << "Error while trying to resolve managed " << ToString(requestWithParams.second.DatabaseType)
+            << " database with id " << requestWithParams.second.Id << " via HTTP request to"
+            << ": endpoint '" << requestWithParams.first->Host << "'"
+            << ", url '" << requestWithParams.first->URL << "'"
+            << ": ";
 
+        // Handle network error (when the response is empty)
+        if (!ev->Get()->Response) {
+            return sb << ev->Get()->Error;
+        }
+
+        // Handle unauthenticated error
         const auto& status = ev->Get()->Response->Status;
-
         if (status == "403") {
-            return TStringBuilder() << "You have no permission to resolve database id into database endpoint. " + DetailedPermissionsError(requestIter->second);
+            return sb << "you have no permission to resolve database id into database endpoint." + DetailedPermissionsError(requestWithParams.second);
         }
 
-        auto errorMessage = ev->Get()->Error;
-
-        const TString error = TStringBuilder()
-            << "Cannot resolve database id (status = " << status << "). "
-            << "Response body from " << ev->Get()->Request->URL << ": " << (ev->Get()->Response ? ev->Get()->Response->Body : "empty");
-        if (!errorMessage.empty()) {
-            errorMessage += '\n';
-        }
-        errorMessage += error;
-
-        return errorMessage;
+        // Unexpected error. Add response body for debug
+        return sb << Endl
+                  << "Status: " << status << Endl
+                  << "Response body: " << ev->Get()->Response->Body;
     }
 
 
     TString DetailedPermissionsError(const TResolveParams& params) const {
- 
         if (params.DatabaseType == EDatabaseType::ClickHouse || params.DatabaseType == EDatabaseType::PostgreSQL) {
                 auto mdbTypeStr = NYql::DatabaseTypeLowercase(params.DatabaseType);
-                return TStringBuilder() << "Please check that your service account has role "  << 
+                return TStringBuilder() << " Please check that your service account has role "  << 
                                        "`managed-" << mdbTypeStr << ".viewer`.";
         }
         return {};
@@ -308,10 +311,20 @@ public:
             Y_ENSURE(endpoint);
 
             TVector<TString> split = StringSplitter(endpoint).Split(':');
-
             Y_ENSURE(split.size() == 2);
 
-            return TDatabaseDescription{endpoint, split[0], FromString(split[1]), database, secure};
+            TString host = std::move(split[0]);
+            ui32 port = FromString(split[1]);
+
+            // There are two kinds of managed YDBs: serverless and dedicated.
+            // While working with dedicated databases, we have to use underlay network.
+            // That's why we add `u-` prefix to database fqdn.
+            if (databaseInfo.GetMap().contains("dedicatedDatabase")) {
+                endpoint = "u-" + endpoint;
+                host = "u-" + host;
+            }
+
+            return TDatabaseDescription{endpoint, std::move(host), port, database, secure};
         };
         Parsers[NYql::EDatabaseType::Ydb] = ydbParser;
         Parsers[NYql::EDatabaseType::DataStreams] = [ydbParser](
@@ -320,17 +333,13 @@ public:
             bool useTls,
             NConnector::NApi::EProtocol protocol)
         {
-            bool isDedicatedDb  = databaseInfo.GetMap().contains("storageConfig");
             auto ret = ydbParser(databaseInfo, mdbEndpointGenerator, useTls, protocol);
             // TODO: Take explicit field from MVP
+            bool isDedicatedDb  = databaseInfo.GetMap().contains("dedicatedDatabase");
             if (!isDedicatedDb && ret.Endpoint.StartsWith("ydb.")) {
                 // Replace "ydb." -> "yds."
                 ret.Endpoint[2] = 's';
                 ret.Host[2] = 's';
-            }
-            if (isDedicatedDb) {
-                ret.Endpoint = "u-" + ret.Endpoint;
-                ret.Host = "u-" + ret.Host;
             }
             return ret;
         };

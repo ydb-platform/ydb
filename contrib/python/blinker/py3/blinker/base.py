@@ -16,18 +16,7 @@ from ._utilities import make_ref
 from ._utilities import Symbol
 
 if t.TYPE_CHECKING:
-    import typing_extensions as te
-
     F = t.TypeVar("F", bound=c.Callable[..., t.Any])
-    T = t.TypeVar("T")
-    P = te.ParamSpec("P")
-
-    class PAsyncWrapper(t.Protocol):
-        def __call__(self, f: c.Callable[P, c.Awaitable[T]]) -> c.Callable[P, T]: ...
-
-    class PSyncWrapper(t.Protocol):
-        def __call__(self, f: c.Callable[P, T]) -> c.Callable[P, c.Awaitable[T]]: ...
-
 
 ANY = Symbol("ANY")
 """Symbol for "any sender"."""
@@ -247,7 +236,10 @@ class Signal:
         sender: t.Any | None = None,
         /,
         *,
-        _async_wrapper: PAsyncWrapper | None = None,
+        _async_wrapper: c.Callable[
+            [c.Callable[..., c.Coroutine[t.Any, t.Any, t.Any]]], c.Callable[..., t.Any]
+        ]
+        | None = None,
         **kwargs: t.Any,
     ) -> list[tuple[c.Callable[..., t.Any], t.Any]]:
         """Call all receivers that are connected to the given ``sender``
@@ -295,7 +287,10 @@ class Signal:
         sender: t.Any | None = None,
         /,
         *,
-        _sync_wrapper: PSyncWrapper | None = None,
+        _sync_wrapper: c.Callable[
+            [c.Callable[..., t.Any]], c.Callable[..., c.Coroutine[t.Any, t.Any, t.Any]]
+        ]
+        | None = None,
         **kwargs: t.Any,
     ) -> list[tuple[c.Callable[..., t.Any], t.Any]]:
         """Await all receivers that are connected to the given ``sender``

@@ -122,6 +122,8 @@ public:
         };
 
         if (x.HasFastListLength()) {
+            // We expect byte lenght of the result is (bit-length / 8 + bit-length % 8 != 0) + bits-count (1 byte) + HeaderLen
+            // First part can be optimized to (bit-length + 7) / 8
             auto str = valueBuilder->NewStringNotFilled((x.GetListLength() + 7) / 8 + 1 + HeaderLen);
             auto strRef = str.AsStringRef();
             TMemoryOutput memoryOutput(strRef.Data(), strRef.Size());
@@ -141,9 +143,14 @@ public:
         }
     }
 
-    static std::pair<const ui64*, ui64> GetArray(TStringRef str) {
+    struct Array {
+        const ui64* data = nullptr;
+        ui64 bitLen = 0;
+    };
+
+    static Array GetArray(const TStringRef& str) {
         if (Y_UNLIKELY(str.Size() < 2))
-            return {nullptr, 0};
+            return {};
         const char* buf = str.Data();
         const ui64 len = 8 * (str.Size() - HeaderLen - 1) - static_cast<ui8>(buf[str.Size() - HeaderLen - 1]);
         return {reinterpret_cast<const ui64*>(buf), len};

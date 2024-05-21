@@ -1,0 +1,20 @@
+SET_RESOURCE_URI_FROM_JSON(SANDBOX_RESOURCE_URI resources.json)
+
+IF (SANDBOX_RESOURCE_URI != "")
+    ENABLE(PREBUILT)
+
+    PREBUILT_PROGRAM()
+
+    DECLARE_EXTERNAL_RESOURCE(PROTOC ${SANDBOX_RESOURCE_URI})
+
+    PRIMARY_OUTPUT(${PROTOC_RESOURCE_GLOBAL}/protoc${MODULE_SUFFIX})
+
+    INCLUDE(ya.make.induced_deps)
+
+    END()
+ELSE()
+    PROGRAM(protoc)
+    SRCS(main.c)
+    INCLUDE(ya.make.induced_deps)
+    END()
+ENDIF()

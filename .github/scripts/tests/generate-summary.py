@@ -361,7 +361,7 @@ def main():
 
         if args.status_report_file:
             with open(args.status_report_file,'w') as fo:
-                print( overall_status, fo)
+                fo.write( overall_status )
 
 if __name__ == "__main__":
     main()

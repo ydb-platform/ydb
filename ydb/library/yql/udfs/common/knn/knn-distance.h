@@ -17,43 +17,49 @@
 using namespace NYql;
 using namespace NYql::NUdf;
 
-inline void BitVectorHandleShort(ui64 bitLen, const ui64* v1, const ui64* v2, auto&& op) {
+inline void BitVectorHandleShort(ui64 byteLen, const ui64* v1, const ui64* v2, auto&& op) {
+    Y_ASSERT(0 < byteLen);
+    Y_ASSERT(byteLen < sizeof(ui64));
     ui64 d1 = 0;
     ui64 d2 = 0;
-    const auto byteLen = bitLen / 8; // TODO manual switch for [1..7]?
+    // TODO manual switch for [1..7]?
     std::memcpy(&d1, v1, byteLen);
     std::memcpy(&d2, v2, byteLen);
     op(d1, d2);
 }
 
-inline void BitVectorHandleTail(ui64 bitLen, const ui64* v1, const ui64* v2, auto&& op) {
-    if (Y_LIKELY(bitLen == 0)) // fast-path for aligned case
+inline void BitVectorHandleTail(ui64 byteLen, const ui64* v1, const ui64* v2, auto&& op) {
+    if (Y_LIKELY(byteLen == 0)) // fast-path for aligned case
         return;
-    const auto unneededBytes = sizeof(ui64) - bitLen / 8;
-    const auto* r1 = reinterpret_cast<const ui8*>(v1) - unneededBytes;
-    const auto* r2 = reinterpret_cast<const ui8*>(v2) - unneededBytes;
-    ui64 d1, d2; // unligned loads
+    Y_ASSERT(byteLen < sizeof(ui64));
+    const auto unneededBytes = sizeof(ui64) - byteLen;
+    const auto* r1 = reinterpret_cast<const char*>(v1) - unneededBytes;
+    const auto* r2 = reinterpret_cast<const char*>(v2) - unneededBytes;
+    ui64 d1, d2; // unaligned loads
     std::memcpy(&d1, r1, sizeof(ui64));
     std::memcpy(&d2, r2, sizeof(ui64));
-    ui64 mask = ((1 << (unneededBytes * 8)) - 1);
+    ui64 mask = 0;
     // big    endian: 0 1 2 3 4 5 6 7 | 0 1 2 3 | 0 1 | 0 | 0 => needs to zero high bits
     // little endian: 7 6 5 4 3 2 1 0 | 3 2 1 0 | 1 0 | 0 | 0 => needs to zero low  bits
-    if constexpr (std::endian::native == std::endian::little) {
-        mask = ~mask;
+    if constexpr (std::endian::native == std::endian::big) {
+        mask = (ui64{1} << (byteLen * 8)) - 1;
+    } else {
+        mask = ~((ui64{1} << (unneededBytes * 8)) - 1);
     }
     op(d1 & mask, d2 & mask);
 }
 
 inline void BitVectorHandleOp(ui64 bitLen, const ui64* v1, const ui64* v2, auto&& op) {
-    const auto wordLen = bitLen / 64;
+    Y_ASSERT(0 < bitLen);
+    auto byteLen = (bitLen + 7) / 8;
+    const auto wordLen = byteLen / sizeof(ui64);
     if (Y_LIKELY(wordLen == 0)) // fast-path for short case
-        return BitVectorHandleShort(bitLen, v1, v2, op);
-
-    bitLen %= 64;
+        return BitVectorHandleShort(byteLen, v1, v2, op);
+    byteLen %= sizeof(ui64);
     for (const auto* end = v1 + wordLen; v1 != end; ++v1, ++v2) {
         op(*v1, *v2);
     }
-    BitVectorHandleTail(bitLen, v1, v2, op);
+    BitVectorHandleTail(byteLen, v1, v2, op);
 }
 
 inline std::optional<float> KnnManhattanDistance(const TStringRef& str1, const TStringRef& str2) {

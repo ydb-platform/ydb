@@ -42,22 +42,14 @@ public:
     }
 
     static TUnboxedValue Deserialize(const IValueBuilder* valueBuilder, const TStringRef& str) {
-        const char* buf = str.Data();
-        const size_t len = str.Size() - HeaderLen;
-
-        if (Y_UNLIKELY(len % sizeof(T) != 0))
+        auto vector = GetArray(str);
+        if (Y_UNLIKELY(vector.empty()))
             return {};
 
-        const ui32 count = len / sizeof(T);
-
         TUnboxedValue* items = nullptr;
-        auto res = valueBuilder->NewArray(count, items);
+        auto res = valueBuilder->NewArray(vector.size(), items);
 
-        TMemoryInput inStr(buf, len);
-        for (ui32 i = 0; i < count; ++i) {
-            T element;
-            if (Y_UNLIKELY(inStr.Read(&element, sizeof(T)) != sizeof(T)))
-                return {};
+        for (auto element : vector) {
             *items++ = TUnboxedValuePod{static_cast<float>(element)};
         }
 
@@ -78,7 +70,10 @@ public:
 };
 
 // Encode all positive floats as bit 1, negative floats as bit 0.
-// So 1024 float vector is serialized in 1024/8=128 bytes.
+// Bits serialized to ui64, from high to low bit and written in native endianess.
+// The tail encoded as ui64 or ui32, ui16, ui8 respectively.
+// After these we write count of not written bits in last byte that we need to respect.
+// So length of vector in bits is 8 * ((count of written bytes) - 1 (format) - 1 (for x)) - x (count of bits not written in last byte).
 class TKnnBitVectorSerializer {
 public:
     static TUnboxedValue Serialize(const IValueBuilder* valueBuilder, const TUnboxedValue x) {
@@ -98,26 +93,29 @@ public:
                 accumulator <<= 1;
             });
             accumulator >>= 1;
+            Y_ASSERT(filledBits < 64);
+            filledBits += 7;
 
             auto write = [&](auto v) {
                 outStream.Write(&v, sizeof(v));
             };
             auto tailWriteIf = [&]<typename T>() {
-                if (filledBits >= sizeof(T) * 8) {
-                    write(static_cast<T>(accumulator));
-                    accumulator >>= sizeof(T) * 8;
-                    filledBits -= sizeof(T) * 8;
+                if (filledBits < sizeof(T) * 8) {
+                    return;
                 }
+                write(static_cast<T>(accumulator));
+                if constexpr (sizeof(T) < sizeof(accumulator)) {
+                    accumulator >>= sizeof(T) * 8;
+                }
+                filledBits -= sizeof(T) * 8;
             };
+            tailWriteIf.operator()<ui64>();
             tailWriteIf.operator()<ui32>();
             tailWriteIf.operator()<ui16>();
             tailWriteIf.operator()<ui8>();
-            if (filledBits > 0) {
-                Y_ASSERT(filledBits < 8);
-                write(static_cast<ui8>(accumulator));
-            }
 
-            write(filledBits);
+            Y_ASSERT(filledBits < 8);
+            write(static_cast<ui8>(7 - filledBits));
             write(EFormat::BitVector);
 
             return true;
@@ -144,9 +142,10 @@ public:
     }
 
     static std::pair<const ui64*, ui64> GetArray(TStringRef str) {
+        if (Y_UNLIKELY(str.Size() < 2))
+            return {nullptr, 0};
         const char* buf = str.Data();
-        Y_ASSERT(str.Size() >= 2);
-        const ui64 len = 8 * (str.Size() - HeaderLen - 1) + buf[str.Size() - HeaderLen - 1];
+        const ui64 len = 8 * (str.Size() - HeaderLen - 1) - static_cast<ui8>(buf[str.Size() - HeaderLen - 1]);
         return {reinterpret_cast<const ui64*>(buf), len};
     }
 };
@@ -167,7 +166,7 @@ public:
     }
 
     static TUnboxedValue Deserialize(const IValueBuilder* valueBuilder, const TStringRef& str) {
-        if (str.Size() == 0)
+        if (Y_UNLIKELY(str.Size() == 0))
             return {};
 
         const ui8 format = str.Data()[str.Size() - HeaderLen];
@@ -177,7 +176,6 @@ public:
             case EFormat::Uint8Vector:
                 return TKnnVectorSerializer<ui8, EFormat::Uint8Vector>::Deserialize(valueBuilder, str);
             case EFormat::BitVector:
-                return {};
             default:
                 return {};
         }
@@ -195,7 +193,6 @@ public:
             case EFormat::Uint8Vector:
                 return TKnnVectorSerializer<T, EFormat::Uint8Vector>::GetArray(str);
             case EFormat::BitVector:
-                return {};
             default:
                 return {};
         }

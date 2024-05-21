@@ -58,7 +58,7 @@ export YDB_CONNECTION_STRING="grpc://localhost:2136/local?go_query_mode=scriptin
 
 Строка подключения к {{ ydb-serverless }} имеет следующий вид:
 ```
-grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/<cloud-id>/<ydb-base-id>&go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric&token=<iam_token>
+grpcs://ydb.serverless.yandexcloud.net:2135/ru-central1/<cloud-id>/<ydb-base-id>&go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric&token=<iam_token>
 ```
 
 Аргументы строки подключения:

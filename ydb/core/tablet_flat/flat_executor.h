@@ -121,8 +121,8 @@ struct TPendingPartSwitch {
         NTable::TLoader Loader;
         const NPageCollection::IPageCollection* Fetching = nullptr;
 
-        explicit TLoaderStage(NTable::TPartComponents&& pc)
-            : Loader(std::move(pc))
+        explicit TLoaderStage(NTable::TPartComponents&& pc, bool stickyFlatIndex)
+            : Loader(std::move(pc), stickyFlatIndex)
         { }
     };
 

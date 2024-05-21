@@ -41,7 +41,7 @@ void TPageCollectionProtoHelper::Do(TBundle *bundle, const TPartComponents &pc)
     bundle->MutablePageCollections()->Reserve(pc.PageCollectionComponents.size());
 
     for (auto &one : pc.PageCollectionComponents)
-        Bundle(bundle->AddPageCollections(), one.LargeGlobId, one.Packet.Get(), one.Sticky);
+        Bundle(bundle->AddPageCollections(), one.LargeGlobId, one.Packet.Get(), one.Pages);
 
     if (auto &legacy = pc.Legacy)
         bundle->SetLegacy(legacy);
@@ -113,13 +113,11 @@ void TPageCollectionProtoHelper::Bundle(NKikimrExecutorFlat::TPageCollection *pa
         for (ui32 pageId : xrange(pack->Meta.TotalPages())) {
             auto type = NTable::EPage(pack->Meta.GetPageType(pageId));
 
-            if (NTable::TLoader::NeedIn(type) || StickyFlatIndex && type == NTable::EPage::FlatIndex) {
+            if (NTable::NPage::NeedInLoader(type) || StickyFlatIndex && type == NTable::EPage::FlatIndex || type == NTable::EPage::BTreeIndex) {
                 if (auto* body = cache.Lookup(pageId)) {
-                    // Note: all passed here pages will stick on follower
-                    // may badly work if StickyFlatIndex is different on different nodes
                     pages.emplace_back(pageId, *body);
                 } else {
-                    Y_ABORT_IF(NTable::TLoader::NeedIn(type), "Needed pages must be kept in memory");
+                    Y_ABORT_IF(NTable::NPage::NeedInLoader(type), "Needed pages must be kept in memory");
                 }
             } 
         }
@@ -163,7 +161,7 @@ NTable::TPartComponents TPageCollectionProtoHelper::MakePageCollectionComponents
 
         auto& item = components.emplace_back();
         item.LargeGlobId = TLargeGlobIdProto::Get(pageCollection.GetLargeGlobId());
-        item.Sticky = std::move(pages);
+        item.Pages = std::move(pages);
         if (pageCollection.HasMeta()) {
             item.ParsePacket(TSharedData::Copy(pageCollection.GetMeta()));
         }

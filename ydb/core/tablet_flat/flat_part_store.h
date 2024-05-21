@@ -141,15 +141,18 @@ public:
         return new NPageCollection::TFetch{ 0, PageCollections[room]->PageCollection, std::move(pages) };
     }
 
-    static TVector<TIntrusivePtr<TCache>> Construct(TVector<TPageCollectionComponents> components) noexcept
+    static TVector<TIntrusivePtr<TCache>> Construct(TVector<TPageCollectionComponents> components, bool stickyFlatIndex) noexcept
     {
         TVector<TIntrusivePtr<TCache>> caches;
 
         for (auto &one: components) {
             caches.emplace_back(new TCache(std::move(one.Packet)));
 
-            for (auto &page: one.Sticky)
-                caches.back()->Fill(page, true);
+            for (auto &page: one.Pages) {
+                auto type = EPage(caches.back()->PageCollection->Page(page.PageId).Type);
+                auto sticky = NTable::NPage::NeedInLoader(type) || stickyFlatIndex && type == EPage::FlatIndex;
+                caches.back()->Fill(page, sticky);
+            }
         }
 
         return caches;

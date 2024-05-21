@@ -12,7 +12,7 @@ namespace NTable {
         NPageCollection::TLargeGlobId LargeGlobId;
         // loaded meta page
         TIntrusiveConstPtr<NPageCollection::TPageCollection> Packet;
-        TVector<NPageCollection::TLoadedPage> Sticky;
+        TVector<NPageCollection::TLoadedPage> Pages;
 
         void ParsePacket(TSharedData meta);
     };

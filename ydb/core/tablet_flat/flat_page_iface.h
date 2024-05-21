@@ -74,6 +74,16 @@ namespace NPage {
         BTreeIndex = 13,
     };
 
+    constexpr static bool NeedInLoader(EPage page) noexcept
+    {
+        return
+            page == EPage::Scheme
+            || page == EPage::Frames || page == EPage::Globs
+            || page == EPage::Schem2 || page == EPage::Bloom
+            || page == EPage::GarbageStats
+            || page == EPage::TxIdStats;
+    }
+
     enum class ECodec : ui8 {
         Plain   = 0,    /* Keep data in page as-is  */
         LZ4     = 1,    /* Use lz4fast compressor   */

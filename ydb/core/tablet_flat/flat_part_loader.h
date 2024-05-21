@@ -27,8 +27,8 @@ namespace NTable {
 
         using TCache = NTabletFlatExecutor::TPrivatePageCache::TInfo;
 
-        TLoader(TPartComponents ou)
-            : TLoader(TPartStore::Construct(std::move(ou.PageCollectionComponents)),
+        TLoader(TPartComponents ou, bool stickyFlatIndex)
+            : TLoader(TPartStore::Construct(std::move(ou.PageCollectionComponents), stickyFlatIndex),
                     std::move(ou.Legacy),
                     std::move(ou.Opaque),
                     /* no deltas */ { },
@@ -78,16 +78,6 @@ namespace NTable {
         }
 
         void Save(ui64 cookie, TArrayRef<NSharedCache::TEvResult::TLoaded>) noexcept;
-
-        constexpr static bool NeedIn(EPage page) noexcept
-        {
-            return
-                page == EPage::Scheme
-                || page == EPage::Frames || page == EPage::Globs
-                || page == EPage::Schem2 || page == EPage::Bloom
-                || page == EPage::GarbageStats
-                || page == EPage::TxIdStats;
-        }
 
         TPartView Result() noexcept
         {

@@ -1187,7 +1187,7 @@ bool TExecutor::PrepareExternalPart(TPendingPartSwitch &partSwitch, TPendingPart
         }
 
         auto pc = std::move(stage->PartComponents);
-        bundle.Stage.emplace<TPendingPartSwitch::TLoaderStage>(std::move(pc));
+        bundle.Stage.emplace<TPendingPartSwitch::TLoaderStage>(std::move(pc), !AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex());
     }
 
     if (auto* stage = bundle.GetStage<TPendingPartSwitch::TLoaderStage>()) {

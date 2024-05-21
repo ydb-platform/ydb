@@ -137,12 +137,12 @@ private:
         if (killPq)
         {
             THashSet<ui64> restartedTablets;
-            for (const auto& p : persQueueGroup.GetPartitions())
-                if (restartedTablets.insert(p.GetTabletId()).second)
-                {
+            for (const auto& p : persQueueGroup.GetPartitions()) {
+                if (restartedTablets.insert(p.GetTabletId()).second) {
                     Log << TLOG_INFO << "Kill PQ tablet " << p.GetTabletId();
                     AnnoyingClient->KillTablet(*CleverServer, p.GetTabletId());
                 }
+            }
         }
 
         CleverServer->GetRuntime()->DispatchEvents();

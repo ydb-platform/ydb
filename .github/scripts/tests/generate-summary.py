@@ -349,13 +349,16 @@ def main():
 
         if summary.is_empty | summary.is_failed:
             color = 'red'
+            result_code = 1
         else:
             color = 'green'
+            result_code = 0
 
         run_number = int(os.environ.get("GITHUB_RUN_NUMBER"))
 
         update_pr_comment_text(pr, args.build_preset, run_number, color, text='\n'.join(text), rewrite=False)
 
+        return result_code
 
 if __name__ == "__main__":
-    main()
+    return main()

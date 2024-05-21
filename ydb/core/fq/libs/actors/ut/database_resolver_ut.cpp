@@ -286,7 +286,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
             R"(
                 {
                     "endpoint":"grpcs://lb.etn021us5r9rhld1vgbh.ydb.mdb.yandexcloud.net:2135/?database=/ru-central1/b1g7jdjqd07qg43c4fmp/etn021us5r9rhld1vgbh",
-                    "dedicatedDatabase":{"resuorcePresetId": "medium"}
+                    "dedicatedDatabase":{"resourcePresetId": "medium"}
                 })",
             NYql::TDatabaseResolverResponse::TDatabaseDescription{
                 TString{"u-lb.etn021us5r9rhld1vgbh.ydb.mdb.yandexcloud.net:2135"},

@@ -331,7 +331,9 @@ extern int	gettimeofday(struct timeval *tp, struct timezone *tzp);
  *	Win32 requires a special close for sockets and pipes, while on Unix
  *	close() does them all.
  */
+#ifndef closesocket
 #define closesocket close
+#endif
 #endif							/* WIN32 */
 
 /*

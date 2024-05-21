@@ -39,12 +39,7 @@ public:
         if (versionInfo.HasSchema()) {
             ssVersion = versionInfo.GetSchema().GetVersion();
         }
-        auto insertIt = VersionsById.emplace(ssVersion, versionInfo);
-        if (!insertIt.second) {
-            if (versionInfo.HasSchema()) {
-                Y_ABORT_UNLESS(versionInfo.GetSchema().DebugString()== insertIt.first->second.GetSchema().DebugString());
-            }
-        };
+        VersionsById.emplace(ssVersion, versionInfo);
         Y_ABORT_UNLESS(Versions.emplace(snapshot, ssVersion).second);
 
         if (MinVersionById.contains(ssVersion)) {

@@ -121,6 +121,13 @@ public:
             return result;
         }
 
+        if (Transaction.HasTempDirOwnerActorId() && Transaction.GetAllowCreateInTempDir()) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                TStringBuilder() << "Can't create temporary directory while flag AllowCreateInTempDir is set." <<
+                    << " Temporary directory can't be created in another temporary directory.");
+            return result;
+        }
+
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {
             NSchemeShard::TPath::TChecker checks = parentPath.Check();

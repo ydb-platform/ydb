@@ -787,6 +787,7 @@ message TAlterColumnTable {
 }
 
 message TReshardColumnTable {
+    optional bool Increase = 1;
 }
 
 message TLoginCreateUser {

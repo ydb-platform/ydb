@@ -566,31 +566,18 @@ TExprNode::TPtr ExpandEquiJoinImpl(const TExprNode& node, TExprContext& ctx) {
                 .Seal()
             .Seal().Build();
 
-        if (const auto iterators = FindNodes(result->Tail().Tail().HeadPtr(),
-            [] (const TExprNode::TPtr& node) { return node->IsCallable("Iterator"); });
-            !iterators.empty()) {
-            TNodeOnNodeOwnedMap replaces(iterators.size());
-            const auto upperArg = result->Tail().Head().HeadPtr();
-            for (const auto& iter : iterators) {
-                auto children = iter->ChildrenList();
-                switch (children.size()) {
-                    case 1U: {
-                        children.emplace_back(ctx.NewCallable(iter->Pos(), "DependsOn", {upperArg}));
-                        break;
-                    }
-                    case 2U: {
-                        auto deps = children.back()->ChildrenList();
-                        deps.emplace_back(upperArg);
-                        children.back() = ctx.ChangeChildren(*children.back(), std::move(deps));
-                       break;
-                    }
-                    default:
-                        break;
-                }
-                replaces.emplace(iter.Get(), ctx.ChangeChildren(*iter, std::move(children)));
-            }
-            result = ctx.ReplaceNodes(std::move(result), replaces);
+        if (const auto iterator = FindNode(result->Tail().Tail().HeadPtr(),
+            [] (const TExprNode::TPtr& node) { return node->IsCallable("Iterator"); })) {
+            auto children = iterator->ChildrenList();
+            children.emplace_back(ctx.NewCallable(iterator->Pos(), "DependsOn", {result->Tail().Head().HeadPtr()}));
+            result = ctx.ReplaceNode(std::move(result), *iterator, ctx.ChangeChildren(*iterator, std::move(children)));
         }
+
+        if (const auto forward = FindNode(result->Tail().Tail().HeadPtr(),
+            [] (const TExprNode::TPtr& node) { return node->IsCallable("ForwardList"); })) {
+            result = ctx.ReplaceNode(std::move(result), *forward, ctx.RenameNode(*forward, "Collect"));
+        }
+
         return result;
     }
 

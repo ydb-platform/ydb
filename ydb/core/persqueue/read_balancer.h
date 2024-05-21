@@ -112,7 +112,10 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     void RequestTabletIfNeeded(const ui64 tabletId, const TActorContext&, bool pipeReconnected = false);
     void ClosePipe(const ui64 tabletId, const TActorContext&);
     void CheckStat(const TActorContext&);
+
+    void InitCounters(const TActorContext&);
     void UpdateCounters(const TActorContext&);
+    void UpdateConfigCounters();
 
     void RespondWithACL(
         const TEvPersQueue::TEvCheckACL::TPtr &request,
@@ -216,6 +219,10 @@ private:
     bool WaitingForACL;
 
     std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedCounters;
+
+    NMonitoring::TDynamicCounterPtr DynamicCounters;
+    NMonitoring::TDynamicCounters::TCounterPtr ActivePartitionCountCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr InactivePartitionCountCounter;
 
     TString DatabasePath;
     TString DatabaseId;

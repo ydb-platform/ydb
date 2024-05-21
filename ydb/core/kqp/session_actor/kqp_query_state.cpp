@@ -14,6 +14,34 @@ using namespace NSchemeCache;
 #define LOG_D(msg) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, msg)
 #define LOG_T(msg) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, msg)
 
+
+TKqpQueryState::TQueryTxId::TQueryTxId(const TQueryTxId& other) {
+    YQL_ENSURE(!IsValueSet);
+    Id = other.Id;
+    IsValueSet = true;
+}
+
+TKqpQueryState::TQueryTxId& TKqpQueryState::TQueryTxId::operator=(const TQueryTxId& id) {
+    YQL_ENSURE(!IsValueSet);
+    Id = id.Id;
+    IsValueSet = true;
+    return *this;
+}
+
+void TKqpQueryState::TQueryTxId::SetValue(const TTxId& id) {
+    YQL_ENSURE(!IsValueSet);
+    Id = id.Id;
+    IsValueSet = true;
+}
+
+TTxId TKqpQueryState::TQueryTxId::GetValue() {
+    return Id;
+}
+
+void TKqpQueryState::TQueryTxId::Reset() {
+    Id = TTxId();
+}
+
 bool TKqpQueryState::EnsureTableVersions(const TEvTxProxySchemeCache::TEvNavigateKeySetResult& response) {
     Y_ENSURE(response.Request);
     const auto& navigate = *response.Request;

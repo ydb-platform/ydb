@@ -284,7 +284,7 @@ public:
         }
         QueryState->TxCtx = std::move(txCtx);
         QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
-        QueryState->TxId = txId;
+        QueryState->TxId.SetValue(txId);
         if (!CheckTransactionLocks(/*tx*/ nullptr)) {
             return;
         }
@@ -540,6 +540,10 @@ public:
 
     void Handle(TEvKqp::TEvParseResponse::TPtr& ev) {
         QueryState->SaveAndCheckParseResult(std::move(*ev->Get()));
+        Ydb::Table::TransactionSettings settings;
+        settings.mutable_serializable_read_write();
+        BeginTx(settings);
+        QueryState->ImpliedTxId = QueryState->TxId;
         CompileStatement();
     }
 
@@ -680,8 +684,7 @@ public:
     }
 
     void BeginTx(const Ydb::Table::TransactionSettings& settings) {
-        QueryState->Begin = true;
-        QueryState->TxId = UlidGen.Next();
+        QueryState->TxId.SetValue(UlidGen.Next());
         QueryState->TxCtx = MakeIntrusive<TKqpTransactionContext>(false, AppData()->FunctionRegistry,
             AppData()->TimeProvider, AppData()->RandomProvider, Config->EnableKqpImmediateEffects);
 
@@ -705,7 +708,7 @@ public:
         QueryState->TxCtx->SetIsolationLevel(settings);
         QueryState->TxCtx->OnBeginQuery();
 
-        if (!Transactions.CreateNew(QueryState->TxId, QueryState->TxCtx)) {
+        if (!Transactions.CreateNew(QueryState->TxId.GetValue(), QueryState->TxCtx)) {
             std::vector<TIssue> issues{
                 YqlIssue({}, TIssuesIds::KIKIMR_TOO_MANY_TRANSACTIONS)};
             ythrow TRequestFail(Ydb::StatusIds::BAD_SESSION,
@@ -718,14 +721,14 @@ public:
         Counters->ReportBeginTransaction(Settings.DbCounters, Transactions.EvictedTx, Transactions.Size(), Transactions.ToBeAbortedSize());
     }
 
-    static const Ydb::Table::TransactionControl& GetImpliedTxControl() {
-        auto create = []() -> Ydb::Table::TransactionControl {
-            Ydb::Table::TransactionControl control;
+    Ydb::Table::TransactionControl GetImpliedTxControl() {
+        Ydb::Table::TransactionControl control;
+        control.set_commit_tx(QueryState->ProcessingLastStatement());
+        if (QueryState->ImpliedTxId) {
+            control.set_tx_id(QueryState->ImpliedTxId->GetValue().GetHumanStr());
+        } else {
             control.mutable_begin_tx()->mutable_serializable_read_write();
-            control.set_commit_tx(true);
-            return control;
-        };
-        static const Ydb::Table::TransactionControl control = create();
+        }
         return control;
     }
 
@@ -734,7 +737,7 @@ public:
         if (hasTxControl || QueryState->HasImpliedTx()) {
             const auto& txControl = hasTxControl ? QueryState->GetTxControl() : GetImpliedTxControl();
 
-            QueryState->Commit = txControl.commit_tx() && QueryState->ProcessingLastStatement();
+            QueryState->Commit = txControl.commit_tx();
             switch (txControl.tx_selector_case()) {
                 case Ydb::Table::TransactionControl::kTxId: {
                     auto txId = TTxId::FromString(txControl.tx_id());
@@ -745,13 +748,13 @@ public:
                     }
                     QueryState->TxCtx = txCtx;
                     QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
-                    QueryState->TxId = txId;
+                    if (QueryState->TxId.GetValue() != txId) {
+                        QueryState->TxId.SetValue(txId);
+                    }
                     break;
                 }
                 case Ydb::Table::TransactionControl::kBeginTx: {
-                    if (!QueryState->Begin) {
-                        BeginTx(txControl.begin_tx());
-                    }
+                    BeginTx(txControl.begin_tx());
                     break;
                 }
                 case Ydb::Table::TransactionControl::TX_SELECTOR_NOT_SET:
@@ -759,7 +762,7 @@ public:
                         << "wrong TxControl: tx_selector must be set";
                     break;
             }
-        } else if (QueryState->CurrentStatementId == 0) {
+        } else {
             QueryState->TxCtx = MakeIntrusive<TKqpTransactionContext>(false, AppData()->FunctionRegistry,
                 AppData()->TimeProvider, AppData()->RandomProvider, Config->EnableKqpImmediateEffects);
             QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
@@ -1542,7 +1545,7 @@ public:
 
     void FillTxInfo(NKikimrKqp::TQueryResponse* response) {
         YQL_ENSURE(QueryState);
-        response->MutableTxMeta()->set_id(QueryState->TxId.GetHumanStr());
+        response->MutableTxMeta()->set_id(QueryState->TxId.GetValue().GetHumanStr());
 
         if (QueryState->TxCtx) {
             auto txInfo = QueryState->TxCtx->GetInfo();
@@ -1615,8 +1618,8 @@ public:
 
         if (QueryState->Commit) {
             ResetTxState();
-            Transactions.ReleaseTransaction(QueryState->TxId);
-            QueryState->TxId = TTxId();
+            Transactions.ReleaseTransaction(QueryState->TxId.GetValue());
+            QueryState->TxId.Reset();
         }
 
         FillTxInfo(response);
@@ -1961,7 +1964,7 @@ public:
             auto& txCtx = QueryState->TxCtx;
             if (txCtx->IsInvalidated()) {
                 Transactions.AddToBeAborted(txCtx);
-                Transactions.ReleaseTransaction(QueryState->TxId);
+                Transactions.ReleaseTransaction(QueryState->TxId.GetValue());
             }
             DiscardPersistentSnapshot(txCtx->SnapshotHandle);
         }

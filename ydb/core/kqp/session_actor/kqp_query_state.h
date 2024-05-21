@@ -33,6 +33,22 @@ namespace NKikimr::NKqp {
 // common case).
 class TKqpQueryState : public TNonCopyable {
 public:
+    class TQueryTxId {
+    public:
+        TQueryTxId() = default;
+        TQueryTxId(const TQueryTxId& other);
+        TQueryTxId& operator=(const TQueryTxId& id);
+
+        void SetValue(const TTxId& id);
+        TTxId GetValue();
+
+        void Reset();
+
+    private:
+        TTxId Id;
+        bool IsValueSet = false;
+    };
+
     TKqpQueryState(TEvKqp::TEvQueryRequest::TPtr& ev, ui64 queryId, const TString& database, const TMaybe<TString>& applicationName,
         const TString& cluster, TKqpDbCountersPtr dbCounters, bool longSession, const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
         const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, const TString& sessionId, TMonotonic startedAt)
@@ -110,10 +126,9 @@ public:
     NWilson::TSpan KqpSessionSpan;
     ETableReadType MaxReadType = ETableReadType::Other;
 
-    TTxId TxId; // User tx
+    TQueryTxId TxId; // User tx
     bool Commit = false;
     bool Commited = false;
-    bool Begin = false;
 
     NTopic::TTopicOperations TopicOperations;
     TDuration CpuTime;
@@ -133,6 +148,7 @@ public:
     NYql::TIssues Issues;
 
     TVector<TQueryAst> Statements;
+    TMaybe<TQueryTxId> ImpliedTxId = {}; // Implied tx
     ui32 CurrentStatementId = 0;
     ui32 StatementResultIndex = 0;
     ui32 StatementResultSize = 0;

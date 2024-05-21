@@ -1136,7 +1136,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
                 req->StatusChangeAttempt = SentinelState->StatusChangeAttempt;
             }
 
-            Y_ABORT_UNLESS(SentinelState->ChangeRequests.size() <= response.StatusSize());
+            Y_ABORT_UNLESS(SentinelState->ChangeRequests.size() >= response.StatusSize());
             auto it = SentinelState->ChangeRequests.begin();
             for (const auto& status : response.GetStatus()) {
                 if (!status.GetSuccess()) {

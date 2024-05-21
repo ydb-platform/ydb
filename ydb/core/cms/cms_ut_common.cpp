@@ -83,6 +83,9 @@ void TFakeNodeWhiteboardService::Handle(TEvBlobStorage::TEvControllerConfigReque
                 success = success && pattern[0];
                 resp->Record.MutableResponse()->AddStatus()->SetSuccess(pattern[0]);
                 pattern.erase(pattern.begin());
+                if (!success) {
+                    break;
+                }
             } else {
                 resp->Record.MutableResponse()->AddStatus()->SetSuccess(true);
             }

@@ -1591,6 +1591,78 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             UNIT_ASSERT_STRING_CONTAINS(queryExecutionOperation.GetIssues().ToString(), "\"/Root/external_table\" is expected to be external data source");
         }
     }
+
+    Y_UNIT_TEST(QueryWithNoDataInS3) {
+        const TString externalDataSourceName = "tpc_h_s3_storage_connection";
+        const TString bucket = "test_bucket_no_data";
+
+        Aws::S3::S3Client s3Client = MakeS3Client();
+        CreateBucket(bucket, s3Client);
+        // Uncomment if you want to compare with query with data
+        //UploadObject(bucket, "l/l", R"json({"l_extendedprice": 0.0, "l_discount": 1.0, "l_partkey": 1})json", s3Client);
+        //UploadObject(bucket, "p/p", R"json({"p_partkey": 1, "p_type": "t"})json", s3Client);
+
+        auto kikimr = MakeKikimrRunner(NYql::IHTTPGateway::Make());
+        auto client = kikimr->GetQueryClient();
+
+        {
+            const TString query = fmt::format(R"sql(
+                CREATE EXTERNAL DATA SOURCE `{external_source}` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{location}",
+                    AUTH_METHOD="NONE"
+                );
+                )sql",
+                "external_source"_a = externalDataSourceName,
+                "location"_a = GetBucketLocation(bucket)
+                );
+            auto result = client.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            // YQ-2750
+            const TString query = fmt::format(R"sql(
+                $border = Date("1994-08-01");
+                select
+                    100.00 * sum(case
+                        when StartsWith(p.p_type, 'PROMO')
+                            then l.l_extendedprice * (1 - l.l_discount)
+                        else 0
+                    end) / sum(l.l_extendedprice * (1 - l.l_discount)) as promo_revenue
+                from
+                    {external_source}.`l/` with ( schema (
+                        l_extendedprice double,
+                        l_discount double,
+                        l_partkey int64,
+                        l_shipdate date
+                    ),
+                    format = "json_each_row"
+                    ) as l
+                join
+                    {external_source}.`p/` with ( schema (
+                        p_partkey int64,
+                        p_type string
+                    ),
+                    format = "json_each_row"
+                    ) as p
+                on
+                    l.l_partkey = p.p_partkey
+                where
+                    cast(l.l_shipdate as timestamp) >= $border
+                    and cast(l.l_shipdate as timestamp) < ($border + Interval("P31D"));
+                )sql",
+                "external_source"_a = externalDataSourceName
+                );
+            auto result = client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            auto rs = result.GetResultSetParser(0);
+            UNIT_ASSERT_VALUES_EQUAL(rs.RowsCount(), 1);
+            rs.TryNextRow();
+            TMaybe<double> sum = rs.ColumnParser(0).GetOptionalDouble();
+            UNIT_ASSERT(!sum);
+        }
+    }
 }
 
 } // namespace NKikimr::NKqp

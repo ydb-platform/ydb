@@ -62,6 +62,23 @@ inline void AssertNoTopSort(TDebugInfoPtr debugInfo) {
     }
 }
 
+namespace {
+
+TString Exec(const TString& cmd) {
+    std::array<char, 128> buffer;
+    TString result;
+    std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd.c_str(), "r"), pclose);
+    if (!pipe) {
+        throw std::runtime_error("popen() failed!");
+    }
+    while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe.get()) != nullptr) {
+        result += buffer.data();
+    }
+    return result;
+}
+
+}
+
 struct TTestBootstrap {
     NConfig::TControlPlaneStorageConfig Config;
     NFq::TYqSharedResources::TPtr YqSharedResources;
@@ -79,6 +96,9 @@ struct TTestBootstrap {
     TTestBootstrap(std::string tablePrefix, const NConfig::TControlPlaneStorageConfig& config = {})
         : Config(config)
     {
+        Cerr << "Netstat: " << Exec("netstat --all --program") << Endl;
+        Cerr << "Process stat: " << Exec("ps aux") << Endl;
+        Cerr << "YDB receipt endpoint: " << GetEnv("YDB_ENDPOINT") << ", database: " << GetEnv("YDB_DATABASE") << Endl;
         tablePrefix.erase(std::remove_if(tablePrefix.begin(), tablePrefix.end(), isspace), tablePrefix.end());
         TablePrefix = tablePrefix;
         auto& storageConfig = *Config.MutableStorage();

@@ -50,6 +50,7 @@ private:
     TString Issue;
 
     TActorId DstCreator;
+    TActorId DstAlterer;
     TActorId DstRemover;
     TActorId WorkerRegistar;
 

@@ -1,0 +1,8 @@
+{"Key1"=101;"Key2"="One";"Fk1"=#;"Value"="no_right_key_1"};
+{"Key1"=102;"Key2"="Two";"Fk1"=#;"Value"="no_right_key_2"};
+{"Key1"=103;"Key2"="Three";"Fk1"="Name1";"Value"="Value1"};
+{"Key1"=104;"Key2"="One";"Fk1"="Name2";"Value"="Value2"};
+{"Key1"=104;"Key2"="Two";"Fk1"="Name2";"Value"="Value3"};
+{"Key1"=105;"Key2"="One";"Fk1"="Name3";"Value"="no_right_key_3"};
+{"Key1"=106;"Key2"="One";"Fk1"="Name4";"Value"=#};
+{"Key1"=106;"Key2"="Two";"Fk1"="Name4";"Value"="Value4"};

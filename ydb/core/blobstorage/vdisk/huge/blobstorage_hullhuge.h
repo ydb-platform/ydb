@@ -209,13 +209,10 @@ namespace NKikimr {
         NHuge::THeapStat Stat;
     };
 
-    struct TEvHugePreCompact : TEventLocal<TEvHugePreCompact, TEvBlobStorage::EvHugePreCompact> {
-        ui64 LsnInfimum; // the resulting LSN of the operation MUST be not less that the provided value
-        TEvHugePreCompact(ui64 lsnInfimum) : LsnInfimum(lsnInfimum) {}
-    };
+    struct TEvHugePreCompact : TEventLocal<TEvHugePreCompact, TEvBlobStorage::EvHugePreCompact> {};
 
     struct TEvHugePreCompactResult : TEventLocal<TEvHugePreCompactResult, TEvBlobStorage::EvHugePreCompactResult> {
-        ui64 WId; // this is going to be provided in free slots operation
+        const ui64 WId; // this is going to be provided in free slots operation
         TEvHugePreCompactResult(ui64 wId) : WId(wId) {}
     };
 

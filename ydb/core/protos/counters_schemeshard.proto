@@ -201,6 +201,10 @@ enum ESimpleCounters {
     COUNTER_BACKUP_CONTROLLER_TABLET_COUNT = 160 [(CounterOpts) = {Name: "BackupControllers"}];
 
     COUNTER_IN_FLIGHT_OPS_TxDropReplication = 161         [(CounterOpts) = {Name: "InFlightOps/DropReplication"}];
+
+    COUNTER_IN_FLIGHT_OPS_TxCreateContinuousBackup = 162          [(CounterOpts) = {Name: "InFlightOps/CreateContinuousBackup"}];
+    COUNTER_IN_FLIGHT_OPS_TxAlterContinuousBackup = 163          [(CounterOpts) = {Name: "InFlightOps/AlterContinuousBackup"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropContinuousBackup = 164           [(CounterOpts) = {Name: "InFlightOps/DropContinuousBackup"}];
 }
 
 enum ECumulativeCounters {
@@ -324,6 +328,10 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxCopySequence = 98              [(CounterOpts) = {Name: "FinishedOps/TxCopySequence"}];
 
     COUNTER_FINISHED_OPS_TxDropReplication = 99           [(CounterOpts) = {Name: "FinishedOps/DropReplication"}];
+
+    COUNTER_FINISHED_OPS_TxCreateContinuousBackup = 100           [(CounterOpts) = {Name: "FinishedOps/CreateContinuousBackup"}];
+    COUNTER_FINISHED_OPS_TxAlterContinuousBackup = 101            [(CounterOpts) = {Name: "FinishedOps/AlterContinuousBackup"}];
+    COUNTER_FINISHED_OPS_TxDropContinuousBackup = 102             [(CounterOpts) = {Name: "FinishedOps/DropContinuousBackup"}];
 }
 
 enum EPercentileCounters {

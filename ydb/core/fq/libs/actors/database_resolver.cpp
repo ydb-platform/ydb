@@ -311,10 +311,20 @@ public:
             Y_ENSURE(endpoint);
 
             TVector<TString> split = StringSplitter(endpoint).Split(':');
-
             Y_ENSURE(split.size() == 2);
 
-            return TDatabaseDescription{endpoint, split[0], FromString(split[1]), database, secure};
+            TString host = std::move(split[0]);
+            ui32 port = FromString(split[1]);
+
+            // There are two kinds of managed YDBs: serverless and dedicated.
+            // While working with dedicated databases, we have to use underlay network.
+            // That's why we add `u-` prefix to database fqdn.
+            if (databaseInfo.GetMap().contains("dedicatedDatabase")) {
+                endpoint = "u-" + endpoint;
+                host = "u-" + host;
+            }
+
+            return TDatabaseDescription{endpoint, std::move(host), port, database, secure};
         };
         Parsers[NYql::EDatabaseType::Ydb] = ydbParser;
         Parsers[NYql::EDatabaseType::DataStreams] = [ydbParser](
@@ -323,17 +333,13 @@ public:
             bool useTls,
             NConnector::NApi::EProtocol protocol)
         {
-            bool isDedicatedDb  = databaseInfo.GetMap().contains("storageConfig");
             auto ret = ydbParser(databaseInfo, mdbEndpointGenerator, useTls, protocol);
             // TODO: Take explicit field from MVP
+            bool isDedicatedDb  = databaseInfo.GetMap().contains("dedicatedDatabase");
             if (!isDedicatedDb && ret.Endpoint.StartsWith("ydb.")) {
                 // Replace "ydb." -> "yds."
                 ret.Endpoint[2] = 's';
                 ret.Host[2] = 's';
-            }
-            if (isDedicatedDb) {
-                ret.Endpoint = "u-" + ret.Endpoint;
-                ret.Host = "u-" + ret.Host;
             }
             return ret;
         };

@@ -10,12 +10,11 @@
 
 namespace NKikimr {
 
-template<typename TMsg>
-class TSecurityTextFormatPrinter : public google::protobuf::TextFormat::Printer {
+class TSecurityTextFormatPrinterBase : public google::protobuf::TextFormat::Printer {
 public:
-    TSecurityTextFormatPrinter() {
+    TSecurityTextFormatPrinterBase(const google::protobuf::Descriptor* desc) {
         TSet<std::pair<TString, int>> visited;
-        Walk(TMsg::descriptor(), visited);
+        Walk(desc, visited);
     }
 
     void Walk(const google::protobuf::Descriptor* desc, TSet<std::pair<TString, int>>& visited) {
@@ -32,6 +31,14 @@ public:
             Walk(field->message_type(), visited);
         }
     }
+};
+
+template<typename TMsg>
+class TSecurityTextFormatPrinter : public TSecurityTextFormatPrinterBase {
+public:
+    TSecurityTextFormatPrinter()
+        : TSecurityTextFormatPrinterBase(TMsg::descriptor())
+    {}
 };
 
 template <typename TMsg>

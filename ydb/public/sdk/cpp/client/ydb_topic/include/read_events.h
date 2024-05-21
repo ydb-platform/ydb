@@ -298,6 +298,10 @@ struct TReadSessionEvent {
             return ChildPartitionIds;
         }
 
+        //! Confirm partition session destruction.
+        //! Confirm has no effect if TPartitionSessionClosedEvent for same partition session with is received.
+        void Confirm();
+
     private:
         std::vector<ui32> AdjacentPartitionIds;
         std::vector<ui32> ChildPartitionIds;

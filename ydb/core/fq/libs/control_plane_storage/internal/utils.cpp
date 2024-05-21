@@ -360,4 +360,13 @@ TStringBuilder& operator<<(TStringBuilder& builder, const Statistics& statistics
     return builder;
 }
 
+void AddTransientIssues(::google::protobuf::RepeatedPtrField< ::Ydb::Issue::IssueMessage>* protoIssues, NYql::TIssues&& issues) {
+    for (const auto& issue: *protoIssues) {
+        issues.AddIssue(NYql::IssueFromMessage(issue));
+    }
+    NYql::TIssues newIssues;
+    std::for_each_n(issues.begin(), std::min(static_cast<unsigned long long>(issues.Size()), 20ULL), [&](auto& issue){ newIssues.AddIssue(issue); });
+    NYql::IssuesToMessage(newIssues, protoIssues);
+}
+
 };

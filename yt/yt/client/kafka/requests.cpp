@@ -149,7 +149,7 @@ void TRspMetadataBroker::Serialize(IKafkaProtocolWriter* writer, int apiVersion)
 
 void TRspMetadataTopicPartition::Serialize(IKafkaProtocolWriter* writer, int /*apiVersion*/) const
 {
-    writer->WriteInt16(ErrorCode);
+    writer->WriteErrorCode(ErrorCode);
     writer->WriteInt32(PartitionIndex);
     writer->WriteInt32(LeaderId);
     writer->WriteInt32(ReplicaNodes.size());
@@ -164,7 +164,7 @@ void TRspMetadataTopicPartition::Serialize(IKafkaProtocolWriter* writer, int /*a
 
 void TRspMetadataTopic::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
 {
-    writer->WriteInt16(ErrorCode);
+    writer->WriteErrorCode(ErrorCode);
     writer->WriteString(Name);
     if (apiVersion >= 1) {
         writer->WriteBool(IsInternal);
@@ -327,7 +327,7 @@ void TRspOffsetFetchTopicPartition::Serialize(IKafkaProtocolWriter* writer, int 
     writer->WriteInt32(PartitionIndex);
     writer->WriteInt64(CommittedOffset);
     writer->WriteNullableString(Metadata);
-    writer->WriteInt16(ErrorCode);
+    writer->WriteErrorCode(ErrorCode);
 }
 
 void TRspOffsetFetchTopic::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
@@ -396,7 +396,7 @@ void TRecord::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
 void TRspFetchResponsePartition::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
 {
     writer->WriteInt32(PartitionIndex);
-    writer->WriteInt16(ErrorCode);
+    writer->WriteErrorCode(ErrorCode);
     writer->WriteInt64(HighWatermark);
 
     if (!Records) {

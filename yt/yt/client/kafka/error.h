@@ -8,6 +8,9 @@ namespace NYT::NKafka {
 
 DEFINE_ENUM_WITH_UNDERLYING_TYPE(EErrorCode, int16_t,
     ((None)                         (0))
+    ((TopicAuthorizationFailed)     (29))
+    ((GroupAuthorizationFailed)     (30))
+    ((SaslAuthenticationFailed)     (31))
     ((UnsupportedSaslMechanism)     (33))
 );
 

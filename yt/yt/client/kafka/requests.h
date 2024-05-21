@@ -120,7 +120,7 @@ struct TRspMetadataBroker
 
 struct TRspMetadataTopicPartition
 {
-    int16_t ErrorCode = 0;
+    EErrorCode ErrorCode = EErrorCode::None;
 
     int32_t PartitionIndex = 0;
     int32_t LeaderId = 0;
@@ -134,7 +134,7 @@ struct TRspMetadataTopicPartition
 
 struct TRspMetadataTopic
 {
-    int16_t ErrorCode = 0;
+    EErrorCode ErrorCode = EErrorCode::None;
     TString Name;
     TGUID TopicId;
     bool IsInternal = false;
@@ -317,7 +317,7 @@ struct TRspOffsetFetchTopicPartition
     int32_t PartitionIndex = 0;
     int64_t CommittedOffset = 0;
     std::optional<TString> Metadata;
-    int16_t ErrorCode;
+    EErrorCode ErrorCode = EErrorCode::None;
 
     void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
 };
@@ -394,7 +394,7 @@ struct TRecord
 struct TRspFetchResponsePartition
 {
     int32_t PartitionIndex = 0;
-    int16_t ErrorCode = 0;
+    EErrorCode ErrorCode = EErrorCode::None;
     int64_t HighWatermark = 0;
     std::optional<std::vector<TRecord>> Records;
 

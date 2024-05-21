@@ -637,7 +637,7 @@ private:
     }
 
     bool HasMemoryForProcessing() const {
-        return true;
+        return false;
         // return !TlsAllocState->IsMemoryYellowZoneEnabled();
     }
 
@@ -847,12 +847,12 @@ private:
     }
 
 void DoCalculateWithSpilling(TComputationContext& ctx) {
-    // UpdateSpilling();
+    UpdateSpilling();
 
-    /* while (!HasMemoryForProcessing()) {
+    if (!HasMemoryForProcessing()) {
         bool isWaitingForReduce = TryToReduceMemory();
         if (isWaitingForReduce) return;
-    }*/ 
+    }
 
     while (InputFetchResultLeft != EFetchResult::Finish || InputFetchResultRight != EFetchResult::Finish) {
 
@@ -914,12 +914,14 @@ void DoCalculateWithSpilling(TComputationContext& ctx) {
     }
 
     if (InputFetchResultLeft == EFetchResult::Finish && InputFetchResultRight == EFetchResult::Finish) {
+        UpdateSpilling();
         if (HasRunningAsyncOperation()) return;
         if (!IsSpillingFinalized) {
             LeftPacker->TablePtr->FinalizeSpilling();
             RightPacker->TablePtr->FinalizeSpilling();
             IsSpillingFinalized = true;
 
+            UpdateSpilling();
             if (HasRunningAsyncOperation()) return;
         }
         SwitchMode(EOperatingMode::ProcessSpilled, ctx);

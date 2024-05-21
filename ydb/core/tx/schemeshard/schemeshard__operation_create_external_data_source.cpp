@@ -96,8 +96,7 @@ class TCreateExternalDataSource : public TSubOperation {
     static bool IsDestinationPathValid(const THolder<TProposeResponse>& result,
                                 const TPath& dstPath,
                                 const TString& acl,
-                                bool acceptExisted,
-                                const TTxTransaction& tx) {
+                                bool acceptExisted) {
         const auto checks = dstPath.Check();
         checks.IsAtLocalSchemeShard();
         if (dstPath.IsResolved()) {
@@ -117,8 +116,7 @@ class TCreateExternalDataSource : public TSubOperation {
                 .DepthLimit()
                 .PathsLimit()
                 .DirChildrenLimit()
-                .IsValidACL(acl)
-                .FailOnRestrictedCreateInTempZone(tx.GetAllowCreateInTempDir());
+                .IsValidACL(acl);
         }
 
         if (!checks) {
@@ -242,12 +240,13 @@ public:
                                                    static_cast<ui64>(ssId));
 
         const TPath parentPath = TPath::Resolve(parentPathStr, context.SS);
-        RETURN_RESULT_UNLESS(NExternalDataSource::IsParentPathValid(result, parentPath));
+        RETURN_RESULT_UNLESS(NExternalDataSource::IsParentPathValid(
+            result, parentPath, Transaction, /* isCreate */ true));
 
         const TString acl = Transaction.GetModifyACL().GetDiffACL();
         TPath dstPath     = parentPath.Child(name);
 
-        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath, acl, acceptExisted, Transaction));
+        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath, acl, acceptExisted));
         RETURN_RESULT_UNLESS(IsApplyIfChecksPassed(result, context));
         RETURN_RESULT_UNLESS(IsDescriptionValid(result,
                                                 externalDataSourceDescription,
@@ -324,7 +323,7 @@ TVector<ISubOperation::TPtr> CreateNewExternalDataSource(TOperationId id,
     const TPath parentPath = TPath::Resolve(parentPathStr, context.SS);
 
     {
-        const auto checks = NExternalDataSource::IsParentPathValid(parentPath);
+        const auto checks = NExternalDataSource::IsParentPathValid(parentPath, tx, /* isCreate */ true);
         if (!checks) {
             return errorResult(checks.GetStatus(), checks.GetError());
         }

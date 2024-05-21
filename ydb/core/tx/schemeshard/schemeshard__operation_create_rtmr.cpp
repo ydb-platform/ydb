@@ -236,7 +236,8 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsCommonSensePath()
-                .IsLikeDirectory();
+                .IsLikeDirectory()
+                .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -269,8 +270,7 @@ public:
                     .DirChildrenLimit()
                     .ShardsLimit(shardsToCreate)
                     .PathShardsLimit(shardsToCreate)
-                    .IsValidACL(acl)
-                    .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
+                    .IsValidACL(acl);
             }
 
             if (!checks) {

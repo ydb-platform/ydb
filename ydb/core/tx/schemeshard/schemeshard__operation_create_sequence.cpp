@@ -371,7 +371,8 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
-                .IsCommonSensePath();
+                .IsCommonSensePath()
+                .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
 
             if (checks) {
                 if (parentPath->IsTable()) {
@@ -432,8 +433,7 @@ public:
                     .DirChildrenLimit()
                     .ShardsLimit(shardsToCreate)
                     //.PathShardsLimit(shardsToCreate)
-                    .IsValidACL(acl)
-                    .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
+                    .IsValidACL(acl);
             }
 
             if (!checks) {

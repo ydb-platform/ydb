@@ -116,7 +116,8 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsCommonSensePath()
-                .IsLikeDirectory();
+                .IsLikeDirectory()
+                .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -149,8 +150,7 @@ public:
                     .DirChildrenLimit()
                     .PathShardsLimit(shardsToCreate)
                     .ShardsLimit(shardsToCreate) //check capacity on root Domain
-                    .IsValidACL(acl)
-                    .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
+                    .IsValidACL(acl);
             }
 
             if (!checks) {

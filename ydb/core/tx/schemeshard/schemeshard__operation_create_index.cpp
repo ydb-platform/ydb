@@ -173,8 +173,7 @@ public:
                 checks
                     .PathsLimit()
                     .IsValidLeafName()
-                    .IsValidACL(acl)
-                    .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
+                    .IsValidACL(acl);
             }
 
             if (!checks) {

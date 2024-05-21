@@ -127,8 +127,7 @@ private:
     static bool IsDestinationPathValid(const THolder<TProposeResponse>& result,
                                        const TPath& dstPath,
                                        const TString& acl,
-                                       bool acceptExisted,
-                                       const TTxTransaction& tx) {
+                                       bool acceptExisted) {
         const auto checks = dstPath.Check();
         checks.IsAtLocalSchemeShard();
         if (dstPath.IsResolved()) {
@@ -148,8 +147,7 @@ private:
                 .DepthLimit()
                 .PathsLimit()
                 .DirChildrenLimit()
-                .IsValidACL(acl)
-                .FailOnRestrictedCreateInTempZone(tx.GetAllowCreateInTempDir());
+                .IsValidACL(acl);
         }
 
         if (!checks) {
@@ -316,7 +314,7 @@ public:
         const TString acl = Transaction.GetModifyACL().GetDiffACL();
         TPath dstPath     = parentPath.Child(name);
         RETURN_RESULT_UNLESS(IsDestinationPathValid(
-            result, dstPath, acl, acceptExisted, Transaction));
+            result, dstPath, acl, acceptExisted));
 
         const auto dataSourcePath =
             TPath::Resolve(externalTableDescription.GetDataSourcePath(), context.SS);

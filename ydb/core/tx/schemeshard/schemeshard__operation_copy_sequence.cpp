@@ -551,7 +551,8 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
-                .IsCommonSensePath();
+                .IsCommonSensePath()
+                .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
 
             if (checks) {
                 if (parentPath->IsTable()) {
@@ -634,8 +635,7 @@ public:
                     .PathsLimit()
                     .DirChildrenLimit()
                     .IsTheSameDomain(srcPath)
-                    .IsValidACL(acl)
-                    .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
+                    .IsValidACL(acl);
             }
 
             if (!checks) {

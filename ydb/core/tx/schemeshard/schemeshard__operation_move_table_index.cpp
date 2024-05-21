@@ -402,7 +402,8 @@ public:
             checks
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
-                .IsResolved();
+                .IsResolved()
+                .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
 
             if (dstParentPath.IsUnderOperation()) {
                 checks
@@ -455,8 +456,7 @@ public:
             if (checks) {
                 checks
                     .DepthLimit()
-                    .IsValidLeafName()
-                    .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
+                    .IsValidLeafName();
             }
 
             if (!checks) {

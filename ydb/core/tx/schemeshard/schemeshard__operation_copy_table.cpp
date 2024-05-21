@@ -361,7 +361,8 @@ public:
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
-                .NotUnderDeleting();
+                .NotUnderDeleting()
+                .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
 
             if (checks) {
                 if (parent.Base()->IsTableIndex()) {
@@ -440,8 +441,7 @@ public:
                     .IsValidLeafName()
                     .IsTheSameDomain(srcPath)
                     .PathShardsLimit(maxShardsToCreate)
-                    .IsValidACL(acl)
-                    .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
+                    .IsValidACL(acl);
             }
 
             if (checks && !isBackup) {

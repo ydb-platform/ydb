@@ -442,7 +442,8 @@ public:
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
-                .NotUnderDeleting();
+                .NotUnderDeleting()
+                .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
 
             if (checks) {
                 if (parentPath.Base()->IsTableIndex()) {
@@ -490,8 +491,7 @@ public:
                     .DirChildrenLimit()
                     .ShardsLimit(shardsToCreate)
                     .PathShardsLimit(shardsToCreate)
-                    .IsValidACL(acl)
-                    .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
+                    .IsValidACL(acl);
             }
 
             if (!checks) {

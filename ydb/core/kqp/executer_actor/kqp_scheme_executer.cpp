@@ -96,7 +96,7 @@ public:
         auto* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
         modifyScheme->SetWorkingDir(GetSessionDirsBasePath(Database));
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMkDir);
-        modifyScheme->SetAllowCreateInTempDir(true);
+        modifyScheme->SetAllowCreateInTempDir(false);
         auto* makeDir = modifyScheme->MutableMkDir();
         makeDir->SetName(SessionId);
         ActorIdToProto(KqpTempTablesAgentActor, modifyScheme->MutableTempDirOwnerActorId());

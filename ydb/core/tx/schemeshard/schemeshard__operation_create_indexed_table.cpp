@@ -38,6 +38,17 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPathDoesNotExist, msg)};
     }
 
+    {
+        auto checks = workingDir.Check();
+        checks
+            .IsResolved()
+            .FailOnRestrictedCreateInTempZone(tx.GetAllowCreateInTempDir());
+
+        if (!checks) {
+            return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
+        }
+    }
+
     TPath baseTablePath = workingDir.Child(baseTableDescription.GetName());
     {
         TString msg = "invalid table name: ";
@@ -72,15 +83,16 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         return {CreateReject(nextId, NKikimrScheme::EStatus::StatusResourceExhausted, msg)};
     }
 
-    auto checks = baseTablePath.Check();
-    checks
-        .PathShardsLimit(baseShards)
-        .PathsLimit(pathToCreate)
-        .ShardsLimit(shardsToCreate)
-        .FailOnRestrictedCreateInTempZone(tx.GetAllowCreateInTempDir());
+    {
+        auto checks = baseTablePath.Check();
+        checks
+            .PathShardsLimit(baseShards)
+            .PathsLimit(pathToCreate)
+            .ShardsLimit(shardsToCreate);
 
-    if (!checks) {
-        return {CreateReject(nextId, NKikimrScheme::EStatus::StatusResourceExhausted, checks.GetError())};
+        if (!checks) {
+            return {CreateReject(nextId, NKikimrScheme::EStatus::StatusResourceExhausted, checks.GetError())};
+        }
     }
 
     THashMap<TString, TTableColumns> indexes;

@@ -2,20 +2,27 @@
 
 -- NB: Subquerys
 -- start query 1 in stream 0 using template query17.tpl and seed 1819994127
+$nantonull = ($n) -> {
+    return case when Math::IsNaN($n)
+        then null
+        else $n
+        end;
+};
+
 select  item.i_item_id
        ,item.i_item_desc
        ,store.s_state
        ,count(ss_quantity) as store_sales_quantitycount
        ,avg(ss_quantity) as store_sales_quantityave
-       ,stddev_samp(ss_quantity) as store_sales_quantitystdev
-       ,stddev_samp(ss_quantity)/avg(ss_quantity) as store_sales_quantitycov
+       ,$nantonull(stddev_samp(ss_quantity)) as store_sales_quantitystdev
+       ,$nantonull(stddev_samp(ss_quantity)/avg(ss_quantity)) as store_sales_quantitycov
        ,count(sr_return_quantity) as store_returns_quantitycount
        ,avg(sr_return_quantity) as store_returns_quantityave
-       ,stddev_samp(sr_return_quantity) as store_returns_quantitystdev
-       ,stddev_samp(sr_return_quantity)/avg(sr_return_quantity) as store_returns_quantitycov
+       ,$nantonull(stddev_samp(sr_return_quantity)) as store_returns_quantitystdev
+       ,$nantonull(stddev_samp(sr_return_quantity)/avg(sr_return_quantity)) as store_returns_quantitycov
        ,count(cs_quantity) as catalog_sales_quantitycount ,avg(cs_quantity) as catalog_sales_quantityave
-       ,stddev_samp(cs_quantity) as catalog_sales_quantitystdev
-       ,stddev_samp(cs_quantity)/avg(cs_quantity) as catalog_sales_quantitycov
+       ,$nantonull(stddev_samp(cs_quantity)) as catalog_sales_quantitystdev
+       ,$nantonull(stddev_samp(cs_quantity)/avg(cs_quantity)) as catalog_sales_quantitycov
  from {{store_sales}} as store_sales
      cross join {{store_returns}} as store_returns
      cross join {{catalog_sales}} as catalog_sales

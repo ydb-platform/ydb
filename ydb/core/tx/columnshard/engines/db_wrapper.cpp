@@ -70,6 +70,7 @@ void TDbWrapper::WritePortion(const NOlap::TPortionInfo& portion) {
     auto removeSnapshot = portion.GetRemoveSnapshotOptional();
     db.Table<IndexPortions>().Key(portion.GetPathId(), portion.GetPortion()).Update(
         NIceDb::TUpdate<IndexPortions::SchemaVersion>(portion.GetSchemaVersionVerified()),
+        NIceDb::TUpdate<IndexPortions::ShardingVersion>(portion.GetShardingVersionDef(0)),
         NIceDb::TUpdate<IndexPortions::XPlanStep>(removeSnapshot ? removeSnapshot->GetPlanStep() : 0),
         NIceDb::TUpdate<IndexPortions::XTxId>(removeSnapshot ? removeSnapshot->GetTxId() : 0),
         NIceDb::TUpdate<IndexPortions::Metadata>(metaProto.SerializeAsString()));
@@ -125,6 +126,9 @@ bool TDbWrapper::LoadPortions(const std::function<void(NOlap::TPortionInfoConstr
     while (!rowset.EndOfSet()) {
         NOlap::TPortionInfoConstructor portion(rowset.GetValue<IndexPortions::PathId>(), rowset.GetValue<IndexPortions::PortionId>());
         portion.SetSchemaVersion(rowset.GetValue<IndexPortions::SchemaVersion>());
+        if (rowset.HaveValue<IndexPortions::ShardingVersion>() && rowset.GetValue<IndexPortions::ShardingVersion>()) {
+            portion.SetShardingVersion(rowset.GetValue<IndexPortions::ShardingVersion>());
+        }
         portion.SetRemoveSnapshot(rowset.GetValue<IndexPortions::XPlanStep>(), rowset.GetValue<IndexPortions::XTxId>());
 
         NKikimrTxColumnShard::TIndexPortionMeta metaProto;

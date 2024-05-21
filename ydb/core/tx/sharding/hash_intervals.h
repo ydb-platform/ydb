@@ -263,11 +263,12 @@ private:
     virtual TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> DoBuildSplitShardsModifiers(const std::vector<ui64>& newTabletIds) const override;
 
     bool UpdateShardInfo(const TSpecificShardingInfo::TConsistencyShardingTablet& info) {
+        GetShardInfoVerified(info.GetTabletId()).IncrementVersion();
         AFL_VERIFY(!!SpecialShardingInfo);
         if (SpecialShardingInfo->UpdateShardInfo(info)) {
             return true;
         }
-        for (auto&& i : GetShardIds()) {
+        for (auto&& i : GetOrderedShardIds()) {
             if (i == info.GetTabletId()) {
                 SpecialShardingInfo->AddShardInfo(info);
                 return true;
@@ -281,7 +282,7 @@ private:
     virtual TConclusionStatus DoOnBeforeModification() override {
         if (!SpecialShardingInfo) {
             AFL_VERIFY(!HasReadClosedShards() && !HasWriteClosedShards());
-            SpecialShardingInfo = TSpecificShardingInfo(GetShardIds());
+            SpecialShardingInfo = TSpecificShardingInfo(GetOrderedShardIds());
         }
         return TConclusionStatus::Success();
     }
@@ -328,14 +329,14 @@ private:
     TSpecificShardingInfo::TConsistencyShardingTablet Interval;
     static const inline TFactory::TRegistrator<TGranuleSharding> Registrator = TFactory::TRegistrator<TGranuleSharding>(GetClassNameStatic());
 protected:
-    virtual NArrow::TColumnFilter DoGetFilter(const std::shared_ptr<arrow::Table>& table) const override {
+    virtual std::shared_ptr<NArrow::TColumnFilter> DoGetFilter(const std::shared_ptr<arrow::Table>& table) const override {
         const std::vector<ui64> hashes = CalcHashes(table);
-        NArrow::TColumnFilter result = NArrow::TColumnFilter::BuildAllowFilter();
+        auto result = std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildAllowFilter());
         const auto getter = [&](const ui64 index) {
             const ui64 hash = hashes[index];
             return Interval.GetHashIntervalLeftClosed() <= hash && hash < Interval.GetHashIntervalRightOpened();
         };
-        result.ResetWithLambda(hashes.size(), getter);
+        result->ResetWithLambda(hashes.size(), getter);
         return result;
 
     }

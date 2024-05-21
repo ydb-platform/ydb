@@ -9,6 +9,8 @@ NKikimr::TConclusionStatus TInStoreShardsTransfer::DoInitializeImpl(const TUpdat
     if (!context.GetModification()->GetAlterColumnTable().GetAlterShards().GetTransfer().GetTransfers().size()) {
         return TConclusionStatus::Fail("hasn't data about shards transfer");
     }
+    auto& table = context.GetOriginalEntityAsVerified<TInStoreTable>();
+    auto sharding = table.GetTableInfo()->GetShardingVerified(table.GetTableSchemaVerified());
     for (auto&& alter : context.GetModification()->GetAlterColumnTable().GetAlterShards().GetTransfer().GetTransfers()) {
         NKikimrColumnShardDataSharingProto::TDestinationSession destinationSession;
         destinationSession.SetSessionId("SHARE_TO_SHARD::" + ::ToString(alter.GetDestinationTabletId()));
@@ -19,8 +21,7 @@ NKikimr::TConclusionStatus TInStoreShardsTransfer::DoInitializeImpl(const TUpdat
             pathIdRemap.SetSourcePathId(context.GetOriginalEntity().GetPathId().LocalPathId);
             pathIdRemap.SetDestPathId(context.GetOriginalEntity().GetPathId().LocalPathId);
         }
-        auto& table = context.GetOriginalEntityAsVerified<TInStoreTable>();
-        ::NKikimr::NOlap::TSnapshot ssOpen = table.GetTableInfo()->GetShardingOpenSnapshotVerified(alter.GetDestinationTabletId());
+        ::NKikimr::NOlap::TSnapshot ssOpen = sharding->GetShardingOpenSnapshotVerified(alter.GetDestinationTabletId());
 
         destinationSession.MutableTransferContext()->SetDestinationTabletId(alter.GetDestinationTabletId());
         destinationSession.MutableTransferContext()->SetTxId(context.GetTxId());

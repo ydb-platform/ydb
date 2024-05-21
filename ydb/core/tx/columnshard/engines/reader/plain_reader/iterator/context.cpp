@@ -1,5 +1,4 @@
 #include "context.h"
-
 #include "source.h"
 
 namespace NKikimr::NOlap::NReader::NPlain {
@@ -37,7 +36,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::GetColumnsFetchingPlan(con
     const bool useIndexes = (IndexChecker ? source->HasIndexes(IndexChecker->GetIndexIds()) : false);
     const bool isWholeExclusiveSource = source->GetExclusiveIntervalOnly() && source->IsSourceInMemory();
     bool needShardingFilter = false;
-    if (!!ReadMetadata->GetRequestShardingInfo() && source->GetRecordSnapshotMin() <= ReadMetadata->GetRequestShardingInfo()->GetSinceSnapshot()) {
+    if (!!ReadMetadata->GetRequestShardingInfo()) {
         auto ver = source->GetShardingVersionOptional();
         if (!ver || *ver < ReadMetadata->GetRequestShardingInfo()->GetSnapshotVersion()) {
             needShardingFilter = true;

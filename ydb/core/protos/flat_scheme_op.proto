@@ -690,20 +690,16 @@ message TGranuleShardingInfo {
     optional TGranuleShardingLogicContainer Container = 3;
 }
 
-message TRuntimeShardInfo {
+message TGranuleShardInfo {
     optional uint64 TabletId = 1;
-    optional NKikimrColumnShardProto.TSnapshot OpenSnapshot = 2;
-}
-
-message TRuntimeShardingInfo {
-    repeated TRuntimeShardInfo Shards = 1;
+    optional uint32 SequenceIdx = 2;
+    optional bool IsOpenForRead = 3;
+    optional bool IsOpenForWrite = 4;
+    optional NKikimrColumnShardProto.TSnapshot OpenForWriteSnapshot = 5;
+    optional uint64 ShardingVersion = 6;
 }
 
 message TColumnTableSharding {
-    // Version is incremented each time table sharding is changed
-    // This field is managed by the system.
-    optional uint64 Version = 1;
-
     // An ordered list of currently used column shards
     // This field is managed by the system.
     repeated uint64 ColumnShards = 2;
@@ -741,10 +737,7 @@ message TColumnTableSharding {
         THashSharding HashSharding = 6;
     }
 
-    repeated uint64 ClosedReadingShardIds = 7;
-    repeated uint64 ClosedWritingShardIds = 8;
-
-    optional TRuntimeShardingInfo RuntimeInfo = 9;
+    repeated TGranuleShardInfo ShardsInfo = 7;
 }
 
 message TColumnTableDescription {
@@ -1830,7 +1823,6 @@ message TPathVersion {
     optional uint64 FileStoreVersion = 15;
     optional uint64 ColumnStoreVersion = 16;
     optional uint64 ColumnTableVersion = 17;
-    optional uint64 ColumnTableShardingVersion = 18;
     optional uint64 SubDomainStateVersion = 19;
     optional uint64 ColumnTableSchemaVersion = 20;
     optional uint64 ColumnTableTtlSettingsVersion = 21;

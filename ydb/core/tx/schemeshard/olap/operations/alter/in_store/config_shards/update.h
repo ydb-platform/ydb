@@ -41,7 +41,7 @@ private:
         if (!!container) {
             auto& shardingInfo = *result.MutableGranuleShardingInfo();
             shardingInfo.SetPathId(TargetInStoreTable->GetPathId().LocalPathId);
-            shardingInfo.SetVersionId(TargetInStoreTable->GetTableInfoVerified().AlterVersion);
+            shardingInfo.SetVersionId(Sharding->GetShardInfoVerified(tabletId).GetShardingVersion());
             *shardingInfo.MutableContainer() = container.SerializeToProto();
             AFL_VERIFY(ModifiedShardIds.contains(tabletId));
         }

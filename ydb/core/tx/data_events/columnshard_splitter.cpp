@@ -68,7 +68,7 @@ NKikimr::NEvWrite::IShardsSplitter::TYdbConclusionStatus TColumnShardShardsSplit
     TFullSplitData result(sharding->GetShardsCount());
     for (auto&& [shardId, chunks] : split.GetResult()) {
         for (auto&& c : chunks) {
-            result.AddShardInfo(shardId, std::make_shared<TShardInfo>(c.GetSchemaData(), c.GetData(), c.GetRowsCount()));
+            result.AddShardInfo(shardId, std::make_shared<TShardInfo>(c.GetSchemaData(), c.GetData(), c.GetRowsCount(), sharding->GetShardInfoVerified(shardId).GetShardingVersion()));
         }
     }
 

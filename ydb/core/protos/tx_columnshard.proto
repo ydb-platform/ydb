@@ -79,6 +79,7 @@ message TEvWrite {
     optional TMetadata Meta = 7;
     optional NKikimrLongTxService.TLongTxId LongTxId = 8;
     optional uint32 WritePartId = 9 [default = 0];
+    optional uint32 GranuleShardingVersion = 10;
 }
 
 message TEvWriteResult {

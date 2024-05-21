@@ -38,4 +38,13 @@ bool TVersionedIndex::LoadShardingInfo(IDbWrapper& db) {
     return true;
 }
 
+std::optional<NKikimr::NOlap::TGranuleShardingInfo> TVersionedIndex::GetShardingInfoActual(const ui64 pathId) const {
+    auto it = ShardingInfo.find(pathId);
+    if (it == ShardingInfo.end() || it->second.empty()) {
+        return std::nullopt;
+    } else {
+        return it->second.rbegin()->second;
+    }
+}
+
 }

@@ -59,6 +59,8 @@ public:
         }
     }
 
+    std::optional<TGranuleShardingInfo> GetShardingInfoActual(const ui64 pathId) const;
+
     void AddShardingInfo(const TGranuleShardingInfo& shardingInfo) {
         AFL_VERIFY(ShardingInfo[shardingInfo.GetPathId()].emplace(shardingInfo.GetSinceSnapshot(), shardingInfo).second);
     }

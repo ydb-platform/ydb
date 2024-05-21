@@ -102,6 +102,7 @@ TConclusion<bool> TSnapshotFilter::DoExecuteInplace(const std::shared_ptr<IDataS
 }
 
 TConclusion<bool> TShardingFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    NYDBTest::TControllers::GetColumnShardController()->OnSelectShardingFilter();
     auto filter = source->GetContext()->GetReadMetadata()->GetRequestShardingInfo()->GetShardingInfo()->GetFilter(source->GetStageData().GetTable()->BuildTable());
     source->MutableStageData().AddFilter(filter);
     return true;

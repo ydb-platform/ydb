@@ -672,6 +672,13 @@ TPortionInfo::TPreparedBatchData TPortionInfo::PrepareForAssemble(const ISnapsho
     return PrepareForAssembleImpl(*this, dataSchema, resultSchema, blobsData);
 }
 
+bool TPortionInfo::NeedShardingFilter(const TGranuleShardingInfo& shardingInfo) const {
+    if (ShardingVersion && shardingInfo.GetSnapshotVersion() <= *ShardingVersion) {
+        return false;
+    }
+    return true;
+}
+
 std::shared_ptr<TDeserializeChunkedArray> TPortionInfo::TPreparedColumn::AssembleForSeqAccess() const {
     Y_ABORT_UNLESS(!Blobs.empty());
 

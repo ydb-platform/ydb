@@ -20,7 +20,7 @@ THashMap<ui64, std::vector<ui32>> TLogsSharding::MakeSharding(const std::shared_
     auto tsColumn = std::static_pointer_cast<arrow::TimestampArray>(tsArray);
 
     std::vector<std::vector<ui32>> result;
-    result.resize(GetShardIds().size());
+    result.resize(GetOrderedShardIds().size());
     for (auto&& i : result) {
         i.reserve(hashes.size());
     }
@@ -32,7 +32,7 @@ THashMap<ui64, std::vector<ui32>> TLogsSharding::MakeSharding(const std::shared_
     THashMap<ui64, std::vector<ui32>> resultHash;
     for (ui32 i = 0; i < result.size(); ++i) {
         if (result[i].size()) {
-            resultHash.emplace(GetShardId(i), std::move(result[i]));
+            resultHash.emplace(GetShardIdByOrderIdx(i), std::move(result[i]));
         }
     }
 

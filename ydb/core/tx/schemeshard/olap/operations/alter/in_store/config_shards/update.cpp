@@ -64,11 +64,13 @@ NKikimr::TConclusionStatus TInStoreShardsUpdate::DoFinishImpl(const TUpdateFinis
     if (conclusion.IsFail()) {
         return conclusion;
     }
+    auto alter = context.GetSSOperationContext()->SS->ColumnTables.GetVerifiedPtr(TargetInStoreTable->GetPathId())->AlterData;
     for (auto&& i : Alter.GetModification().GetOpenWriteIds()) {
-        auto alter = context.GetSSOperationContext()->SS->ColumnTables.GetVerifiedPtr(TargetInStoreTable->GetPathId())->AlterData;
         AFL_VERIFY(!!alter);
-        alter->SetShardingOpenSnapshotVerified(i, context.GetSnapshotVerified());
+        Sharding->SetShardingOpenSnapshotVerified(i, context.GetSnapshotVerified());
     }
+    AFL_VERIFY(!!alter->AlterBody);
+    *alter->Description.MutableSharding() = Sharding->SerializeToProto();
     return TConclusionStatus::Success();
 }
 

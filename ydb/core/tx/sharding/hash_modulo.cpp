@@ -17,7 +17,7 @@ THashMap<ui64, std::vector<ui32>> THashShardingModuloN::MakeSharding(const std::
         }
         for (ui32 i = 0; i < result.size(); ++i) {
             if (result[i].size()) {
-                resultHash[GetShardIds()[i]] = std::move(result[i]);
+                resultHash[GetOrderedShardIds()[i]] = std::move(result[i]);
             }
         }
         return resultHash;
@@ -27,21 +27,21 @@ THashMap<ui64, std::vector<ui32>> THashShardingModuloN::MakeSharding(const std::
 }
 
 NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> THashShardingModuloN::DoBuildSplitShardsModifiers(const std::vector<ui64>& newTabletIds) const {
-    if (newTabletIds.size() != GetShardIds().size()) {
+    if (newTabletIds.size() != GetOrderedShardIds().size()) {
         return TConclusionStatus::Fail("can multiple 2 only for add shards count");
     }
     if (!!SpecialShardingInfo) {
         return TConclusionStatus::Fail("not unified shards distribution for module");
     }
-    TSpecificShardingInfo info(GetShardIds());
+    TSpecificShardingInfo info(GetOrderedShardIds());
     std::vector<NKikimrSchemeOp::TAlterShards> result;
     {
         NKikimrSchemeOp::TAlterShards alter;
-        alter.MutableModification()->MutableModulo()->SetPartsCount(2 * GetShardIds().size());
-        for (auto&& i : GetShardIds()) {
+        alter.MutableModification()->MutableModulo()->SetPartsCount(2 * GetOrderedShardIds().size());
+        for (auto&& i : GetOrderedShardIds()) {
             auto specSharding = info.GetShardingTabletVerified(i);
             AFL_VERIFY(specSharding.MutableAppropriateMods().size() == 1);
-            AFL_VERIFY(specSharding.MutableAppropriateMods().emplace(*specSharding.MutableAppropriateMods().begin() + GetShardIds().size()).second);
+            AFL_VERIFY(specSharding.MutableAppropriateMods().emplace(*specSharding.MutableAppropriateMods().begin() + GetOrderedShardIds().size()).second);
             *alter.MutableModification()->MutableModulo()->AddShards() = specSharding.SerializeToProto();
         }
 
@@ -49,7 +49,7 @@ NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> THashShardingMo
     }
     {
         ui32 idx = 0;
-        for (auto&& i : GetShardIds()) {
+        for (auto&& i : GetOrderedShardIds()) {
             {
                 NKikimrSchemeOp::TAlterShards alter;
                 alter.MutableModification()->AddOpenWriteIds(newTabletIds[idx]);
@@ -73,7 +73,7 @@ NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> THashShardingMo
                 AFL_VERIFY(specSharding.MutableAppropriateMods().size() == 1);
                 const ui32 original = *specSharding.MutableAppropriateMods().begin();
                 specSharding.MutableAppropriateMods().erase(original);
-                specSharding.MutableAppropriateMods().emplace(original + GetShardIds().size());
+                specSharding.MutableAppropriateMods().emplace(original + GetOrderedShardIds().size());
                 *alter.MutableModification()->MutableModulo()->AddShards() = specSharding.SerializeToProto();
                 result.emplace_back(alter);
             }
@@ -117,8 +117,8 @@ NKikimr::TConclusionStatus THashShardingModuloN::DoOnAfterModification() {
     }
 
     std::vector<ui64> shardIdsOrdered;
-    if (SpecialShardingInfo->CheckUnifiedDistribution(GetShardIds().size(), shardIdsOrdered)) {
-        SetShardIds(shardIdsOrdered);
+    if (SpecialShardingInfo->CheckUnifiedDistribution(GetOrderedShardIds().size(), shardIdsOrdered)) {
+        SetOrderedShardIds(shardIdsOrdered);
         SpecialShardingInfo.reset();
     }
 
@@ -151,7 +151,7 @@ std::shared_ptr<NKikimr::NSharding::IGranuleShardingLogic> THashShardingModuloN:
     if (SpecialShardingInfo) {
         return std::make_shared<TGranuleSharding>(GetShardingColumns(), SpecialShardingInfo->GetShardingTabletVerified(tabletId), SpecialShardingInfo->GetPartsCount());
     } else {
-        TSpecificShardingInfo info(GetShardIds());
+        TSpecificShardingInfo info(GetOrderedShardIds());
         return std::make_shared<TGranuleSharding>(GetShardingColumns(), info.GetShardingTabletVerified(tabletId), info.GetPartsCount());
     }
 }

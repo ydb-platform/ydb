@@ -88,6 +88,10 @@ public:
     using TPtr = std::shared_ptr<ICSController>;
     virtual ~ICSController() = default;
 
+    virtual void OnSelectShardingFilter() {
+    
+    }
+
     virtual TDuration GetCompactionActualizationLag(const TDuration def) const {
         return def;
     }

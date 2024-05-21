@@ -2,6 +2,7 @@
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h>
 
 namespace NKikimrSchemeOp {
 class TColumnTableSharding;
@@ -18,7 +19,7 @@ public:
     using TFactory = NObjectFactory::TObjectFactory<IGranuleShardingLogic, TString>;
 
 private:
-    virtual NArrow::TColumnFilter DoGetFilter(const std::shared_ptr<arrow::Table>& table) const = 0;
+    virtual std::shared_ptr<NArrow::TColumnFilter> DoGetFilter(const std::shared_ptr<arrow::Table>& table) const = 0;
     virtual std::set<TString> DoGetColumnNames() const = 0;
     virtual void DoSerializeToProto(TProto& proto) const = 0;
     virtual TConclusionStatus DoDeserializeFromProto(const TProto& proto) = 0;
@@ -27,8 +28,12 @@ public:
     IGranuleShardingLogic() = default;
     virtual ~IGranuleShardingLogic() = default;
 
-    NArrow::TColumnFilter GetFilter(const std::shared_ptr<arrow::Table>& table) const {
+    std::shared_ptr<NArrow::TColumnFilter> GetFilter(const std::shared_ptr<arrow::Table>& table) const {
         return DoGetFilter(table);
+    }
+
+    std::shared_ptr<NArrow::TColumnFilter> GetFilter(const std::shared_ptr<arrow::RecordBatch>& rb) const {
+        return DoGetFilter(NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches({ rb })));
     }
     std::set<TString> GetColumnNames() const {
         return DoGetColumnNames();
@@ -52,34 +57,107 @@ public:
     using TBase::TBase;
 };
 
-class IShardingBase {
+class TShardInfo {
 private:
-    mutable std::vector<ui64> ShardIds;
-    YDB_READONLY_DEF(std::set<ui64>, ClosedWritingShardIds);
-    YDB_READONLY_DEF(std::set<ui64>, ClosedReadingShardIds);
-    YDB_READONLY(ui64, Version, 1);
-    TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSharding& proto);
+    YDB_READONLY(ui64, TabletId, 0);
+    YDB_ACCESSOR(ui32, SequenceIdx, 0);
+    YDB_ACCESSOR(bool, IsOpenForRead, true);
+    YDB_ACCESSOR(bool, IsOpenForWrite, true);
+    YDB_ACCESSOR_DEF(std::optional<NKikimr::NOlap::TSnapshot>, OpenForWriteSnapshot);
+    YDB_READONLY(ui32, ShardingVersion, 0);
 
-protected:
-    void SetShardIds(const std::vector<ui64>& ids) const {
-        ShardIds = ids;
+    TShardInfo() = default;
+
+    TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TGranuleShardInfo& proto);
+public:
+    TShardInfo(const ui64 tabletId, const ui32 seqIdx)
+        : TabletId(tabletId)
+        , SequenceIdx(seqIdx)
+    {
+
     }
 
-    const std::vector<ui64>& GetShardIds() const {
-        return ShardIds;
+    const NKikimr::NOlap::TSnapshot& GetOpenForWriteSnapshotVerified() const {
+        AFL_VERIFY(OpenForWriteSnapshot);
+        return *OpenForWriteSnapshot;
+    }
+
+    void IncrementVersion() {
+        ++ShardingVersion;
+    }
+
+    NKikimrSchemeOp::TGranuleShardInfo SerializeToProto() const;
+
+    static TConclusion<TShardInfo> BuildFromProto(const NKikimrSchemeOp::TGranuleShardInfo& proto) {
+        TShardInfo result;
+        auto conclusion = result.DeserializeFromProto(proto);
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
+        return result;
+    }
+};
+
+class IShardingBase {
+private:
+    std::vector<ui64> OrderedShardIds;
+    THashMap<ui64, TShardInfo> Shards;
+    TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSharding& proto);
+
+    void InitializeFromOrdered(const std::vector<ui64>& orderedIds);
+
+protected:
+    std::set<ui64> GetClosedWritingShardIds() const {
+        std::set<ui64> result;
+        for (auto&& i : Shards) {
+            if (!i.second.GetIsOpenForWrite()) {
+                result.emplace(i.first);
+            }
+        }
+        return result;
+    }
+
+    std::set<ui64> GetClosedReadingShardIds() const {
+        std::set<ui64> result;
+        for (auto&& i : Shards) {
+            if (!i.second.GetIsOpenForRead()) {
+                result.emplace(i.first);
+            }
+        }
+        return result;
+    }
+
+    void SetOrderedShardIds(const std::vector<ui64>& ids) {
+        ui32 idx = 0;
+        for (auto&& i : ids) {
+            auto* shardInfo = GetShardInfo(i);
+            AFL_VERIFY(shardInfo);
+            shardInfo->SetSequenceIdx(idx++);
+        }
+        OrderedShardIds = ids;
+        AFL_VERIFY(OrderedShardIds.size() == Shards.size());
+    }
+
+    const std::vector<ui64>& GetOrderedShardIds() const {
+        return OrderedShardIds;
     }
 
     bool HasReadClosedShards() const {
-        return ClosedReadingShardIds.size();
+        for (auto&& [_, i] : Shards) {
+            if (!i.GetIsOpenForRead()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     bool HasWriteClosedShards() const {
-        return ClosedWritingShardIds.size();
-    }
-
-    ui64 GetShardId(const ui32 i) const {
-        AFL_VERIFY(i < ShardIds.size());
-        return ShardIds[i];
+        for (auto&& [_, i] : Shards) {
+            if (!i.GetIsOpenForWrite()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     virtual void DoSerializeToProto(NKikimrSchemeOp::TColumnTableSharding& proto) const = 0;
@@ -95,6 +173,42 @@ public:
     using TColumn = TExternalTableColumn;
 public:
     IShardingBase() = default;
+
+    TShardInfo& GetShardInfoVerified(const ui64 tabletId) {
+        auto it = Shards.find(tabletId);
+        AFL_VERIFY(it != Shards.end());
+        return it->second;
+    }
+
+    const TShardInfo& GetShardInfoVerified(const ui64 tabletId) const {
+        auto it = Shards.find(tabletId);
+        AFL_VERIFY(it != Shards.end());
+        return it->second;
+    }
+
+    TShardInfo* GetShardInfo(const ui64 tabletId) {
+        auto it = Shards.find(tabletId);
+        if (it == Shards.end()) {
+            return nullptr;
+        }
+        return &it->second;
+    }
+
+    const TShardInfo* GetShardInfo(const ui64 tabletId) const {
+        auto it = Shards.find(tabletId);
+        if (it == Shards.end()) {
+            return nullptr;
+        }
+        return &it->second;
+    }
+
+    void SetShardingOpenSnapshotVerified(const ui64 tabletId, const NKikimr::NOlap::TSnapshot& ss) {
+        GetShardInfoVerified(tabletId).SetOpenForWriteSnapshot(ss);
+    }
+
+    NKikimr::NOlap::TSnapshot GetShardingOpenSnapshotVerified(const ui64 tabletId) const {
+        return GetShardInfoVerified(tabletId).GetOpenForWriteSnapshotVerified();
+    }
 
     TConclusionStatus OnAfterModification() {
         return DoOnAfterModification();
@@ -123,50 +237,46 @@ public:
     TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> BuildAddShardsModifiers(const std::vector<ui64>& newTabletIds) const;
 
     void CloseShardWriting(const ui64 shardId) {
-        AFL_VERIFY(IsShardExists(shardId));
-        ClosedWritingShardIds.emplace(shardId);
+        GetShardInfoVerified(shardId).SetIsOpenForWrite(false);
     }
 
     void CloseShardReading(const ui64 shardId) {
-        AFL_VERIFY(IsShardExists(shardId));
-        ClosedReadingShardIds.emplace(shardId);
+        GetShardInfoVerified(shardId).SetIsOpenForRead(false);
     }
 
     bool IsActiveForWrite(const ui64 tabletId) const {
-        AFL_VERIFY(IsShardExists(tabletId));
-        return !ClosedWritingShardIds.contains(tabletId);
+        return GetShardInfoVerified(tabletId).GetIsOpenForWrite();
     }
 
     bool IsActiveForRead(const ui64 tabletId) const {
-        AFL_VERIFY(IsShardExists(tabletId));
-        return !ClosedReadingShardIds.contains(tabletId);
+        return GetShardInfoVerified(tabletId).GetIsOpenForRead();
     }
 
     std::vector<ui64> GetActiveReadShardIds() const {
         std::vector<ui64> result;
-        for (auto&& i : ShardIds) {
-            if (IsActiveForRead(i)) {
-                result.emplace_back(i);
+        for (auto&& [_, i] : Shards) {
+            if (i.GetIsOpenForRead()) {
+                result.emplace_back(i.GetTabletId());
             }
         }
         return result;
     }
 
+    ui64 GetShardIdByOrderIdx(const ui32 shardIdx) const {
+        AFL_VERIFY(shardIdx < OrderedShardIds.size());
+        return OrderedShardIds[shardIdx];
+    }
+
     bool IsShardExists(const ui64 shardId) const {
-        for (auto&& i : ShardIds) {
-            if (i == shardId) {
-                return true;
-            }
-        }
-        return false;
+        return Shards.contains(shardId);
     }
 
     bool IsShardClosedForRead(const ui64 shardId) const {
-        return ClosedReadingShardIds.contains(shardId);
+        return !IsActiveForRead(shardId);
     }
 
     bool IsShardClosedForWrite(const ui64 shardId) const {
-        return ClosedWritingShardIds.contains(shardId);
+        return !IsActiveForWrite(shardId);
     }
 
     static TConclusionStatus ValidateBehaviour(const NSchemeShard::TOlapSchema& schema, const NKikimrSchemeOp::TColumnTableSharding& shardingInfo);
@@ -178,13 +288,12 @@ public:
         return BuildFromProto(nullptr, shardingInfo);
     }
 
-    IShardingBase(const std::vector<ui64>& shardIds)
-        : ShardIds(shardIds) {
-
+    IShardingBase(const std::vector<ui64>& shardIds) {
+        InitializeFromOrdered(shardIds);
     }
 
     ui32 GetShardsCount() const {
-        return ShardIds.size();
+        return Shards.size();
     }
 
     NKikimrSchemeOp::TColumnTableSharding SerializeToProto() const;

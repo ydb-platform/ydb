@@ -23,7 +23,6 @@ TConclusionStatus TColumnTableUpdate::DoFinish(const TUpdateFinishContext& conte
 
     const auto pathId = context.GetObjectPath()->Base()->PathId;
     auto tableInfo = context.GetSSOperationContext()->SS->ColumnTables.TakeAlterVerified(pathId);
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("debug", tableInfo->Description.GetSharding().GetRuntimeInfo().DebugString());
     context.GetSSOperationContext()->SS->PersistColumnTableAlterRemove(*context.GetDB(), pathId);
     context.GetSSOperationContext()->SS->PersistColumnTable(*context.GetDB(), pathId, *tableInfo);
     return TConclusionStatus::Success();

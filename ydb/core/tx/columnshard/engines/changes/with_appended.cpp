@@ -135,8 +135,6 @@ std::vector<TWritePortionInfoWithBlobs> TChangesWithAppend::MakeAppendedPortions
             auto b = batch->Slice(recordIdx, slice.GetRecordsCount());
             out.emplace_back(TWritePortionInfoWithBlobs::BuildByBlobs(slice.GroupChunksByBlobs(groups), pathId, resultSchema->GetVersion(), snapshot, SaverContext.GetStoragesManager()));
             out.back().FillStatistics(resultSchema->GetIndexInfo());
-            NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(resultSchema->GetIndexInfo().GetReplaceKey()));
-            NArrow::TMinMaxSpecialKeys snapshotKeys(b, TIndexInfo::ArrowSchemaSnapshot());
             out.back().GetPortionConstructor().AddMetadata(*resultSchema, b);
             out.back().GetPortionConstructor().MutableMeta().SetTierName(IStoragesManager::DefaultStorageId);
             recordIdx += slice.GetRecordsCount();

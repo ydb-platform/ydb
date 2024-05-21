@@ -101,6 +101,7 @@ public:
 };
 
 class TPortionInfoConstructor;
+class TGranuleShardingInfo;
 
 class TPortionInfo {
 public:
@@ -173,8 +174,14 @@ private:
 public:
     ui64 GetMinMemoryForReadColumns(const std::optional<std::set<ui32>>& columnIds) const;
 
+    bool NeedShardingFilter(const TGranuleShardingInfo& shardingInfo) const;
+
     const std::optional<ui64>& GetShardingVersionOptional() const {
         return ShardingVersion;
+    }
+
+    ui64 GetShardingVersionDef(const ui64 verDefault) const {
+        return ShardingVersion.value_or(verDefault);
     }
 
     void SetRemoveSnapshot(const TSnapshot& snap) {

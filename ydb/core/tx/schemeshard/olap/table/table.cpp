@@ -39,28 +39,4 @@ TConclusion<std::shared_ptr<NOlap::NAlter::ISSEntity>> TColumnTableInfo::BuildEn
     return result;
 }
 
-NKikimr::NOlap::TSnapshot TColumnTableInfo::GetShardingOpenSnapshotVerified(const ui64 tabletId) const {
-    for (auto&& i : Description.GetSharding().GetRuntimeInfo().GetShards()) {
-        if (i.GetTabletId() == tabletId) {
-            NKikimr::NOlap::TSnapshot result = NKikimr::NOlap::TSnapshot::Zero();
-            result.DeserializeFromProto(i.GetOpenSnapshot()).Validate();
-            return result;
-        }
-    }
-    AFL_VERIFY(false);
-    return NKikimr::NOlap::TSnapshot::Zero();
-}
-
-void TColumnTableInfo::SetShardingOpenSnapshotVerified(const ui64 tabletId, const NKikimr::NOlap::TSnapshot& ss) {
-    for (auto&& i : *Description.MutableSharding()->MutableRuntimeInfo()->MutableShards()) {
-        if (i.GetTabletId() == tabletId) {
-            *i.MutableOpenSnapshot() = ss.SerializeToProto();
-            return;
-        }
-    }
-    auto& shard = *Description.MutableSharding()->MutableRuntimeInfo()->AddShards();
-    shard.SetTabletId(tabletId);
-    *shard.MutableOpenSnapshot() = ss.SerializeToProto();
-}
-
 }

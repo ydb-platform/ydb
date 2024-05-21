@@ -1,6 +1,7 @@
 #include "sharding.h"
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/library/yql/utils/yql_panic.h>
+#include <ydb/core/tx/columnshard/common/protos/snapshot.pb.h>
 #include <util/string/join.h>
 #include "hash_intervals.h"
 #include "hash_modulo.h"
@@ -72,30 +73,25 @@ TString IShardingBase::DebugString() const {
 
 NKikimr::TConclusionStatus IShardingBase::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSharding& proto) {
     std::set<ui64> shardIdsSetOriginal;
-    {
-        AFL_VERIFY(ShardIds.empty());
-        for (auto&& i : proto.GetColumnShards()) {
-            AFL_VERIFY(shardIdsSetOriginal.emplace(i).second);
-            ShardIds.emplace_back(i);
+    if (proto.GetShardsInfo().empty()) {
+        std::vector<ui64> orderedTabletIds(proto.GetColumnShards().begin(), proto.GetColumnShards().end());
+        InitializeFromOrdered(orderedTabletIds);
+    } else {
+        std::map<ui32, ui64> sortedTabletIds;
+        for (auto&& i : proto.GetShardsInfo()) {
+            TConclusion<TShardInfo> shardInfo = TShardInfo::BuildFromProto(i);
+            if (shardInfo.IsFail()) {
+                return shardInfo;
+            }
+            AFL_VERIFY(sortedTabletIds.emplace(shardInfo->GetSequenceIdx(), shardInfo->GetTabletId()).second);
+            AFL_VERIFY(Shards.emplace(shardInfo->GetTabletId(), shardInfo.GetResult()).second);
+        }
+        for (auto&& i : sortedTabletIds) {
+            OrderedShardIds.emplace_back(i.second);
         }
     }
-    if (proto.GetClosedWritingShardIds().size()) {
-        std::set<ui64> shardIdsSet = shardIdsSetOriginal;
-        for (auto&& i : proto.GetClosedWritingShardIds()) {
-            if (!shardIdsSet.erase(i)) {
-                return TConclusionStatus::Fail("incorrect shardIds in ClosedWritingShardIds");
-            }
-            ClosedWritingShardIds.emplace(i);
-        }
-    }
-    if (proto.GetClosedReadingShardIds().size()) {
-        std::set<ui64> shardIdsSet = shardIdsSetOriginal;
-        for (auto&& i : proto.GetClosedReadingShardIds()) {
-            if (!shardIdsSet.erase(i)) {
-                return TConclusionStatus::Fail("incorrect shardIds in ClosedReadingShardIds");
-            }
-            ClosedReadingShardIds.emplace(i);
-        }
+    if (shardIdsSetOriginal.size()) {
+        return TConclusionStatus::Fail("not for all shard in sequence we have info");
     }
     {
         auto conclusion = DoDeserializeFromProto(proto);
@@ -114,34 +110,38 @@ NKikimr::TConclusionStatus IShardingBase::ApplyModification(const NKikimrSchemeO
         }
     }
     for (auto&& i : proto.GetNewShardIds()) {
-        if (IsShardExists(i)) {
+        if (!Shards.emplace(i, TShardInfo(i, OrderedShardIds.size())).second) {
             return TConclusionStatus::Fail("shard id from NewShardIds duplication with current full shardIds list");
         }
-        ShardIds.emplace_back(i);
+        OrderedShardIds.emplace_back(i);
     }
     for (auto&& i : proto.GetCloseWriteIds()) {
-        if (!IsShardExists(i)) {
+        auto* shardInfo = GetShardInfo(i);
+        if (!shardInfo) {
             return TConclusionStatus::Fail("incorrect shard id from CloseWriteIds - not exists in full scope");
         }
-        ClosedWritingShardIds.emplace(i);
+        shardInfo->SetIsOpenForWrite(false);
     }
     for (auto&& i : proto.GetCloseReadIds()) {
-        if (!IsShardExists(i)) {
+        auto* shardInfo = GetShardInfo(i);
+        if (!shardInfo) {
             return TConclusionStatus::Fail("incorrect shard id from CloseReadIds - not exists in full scope");
         }
-        ClosedReadingShardIds.emplace(i);
+        shardInfo->SetIsOpenForRead(false);
     }
     for (auto&& i : proto.GetOpenWriteIds()) {
-        if (!IsShardExists(i)) {
+        auto* shardInfo = GetShardInfo(i);
+        if (!shardInfo) {
             return TConclusionStatus::Fail("incorrect shard id from OpenWriteIds - not exists in full scope");
         }
-        ClosedWritingShardIds.erase(i);
+        shardInfo->SetIsOpenForWrite(true);
     }
     for (auto&& i : proto.GetOpenReadIds()) {
-        if (!IsShardExists(i)) {
+        auto* shardInfo = GetShardInfo(i);
+        if (!shardInfo) {
             return TConclusionStatus::Fail("incorrect shard id from OpenReadIds - not exists in full scope");
         }
-        ClosedReadingShardIds.erase(i);
+        shardInfo->SetIsOpenForRead(true);
     }
     {
         auto conclusion = DoApplyModification(proto);
@@ -184,18 +184,11 @@ NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> IShardingBase::
 
 NKikimrSchemeOp::TColumnTableSharding IShardingBase::SerializeToProto() const {
     NKikimrSchemeOp::TColumnTableSharding result;
-    result.SetVersion(1);
-    AFL_VERIFY(ShardIds.size());
-    for (auto&& i : ShardIds) {
+    AFL_VERIFY(Shards.size() == OrderedShardIds.size());
+    AFL_VERIFY(OrderedShardIds.size());
+    for (auto&& i : OrderedShardIds) {
+        *result.AddShardsInfo() = GetShardInfoVerified(i).SerializeToProto();
         result.AddColumnShards(i);
-    }
-    for (auto&& i : ClosedReadingShardIds) {
-        AFL_VERIFY(IsShardExists(i));
-        result.AddClosedReadingShardIds(i);
-    }
-    for (auto&& i : ClosedWritingShardIds) {
-        AFL_VERIFY(IsShardExists(i));
-        result.AddClosedWritingShardIds(i);
     }
     DoSerializeToProto(result);
     return result;
@@ -223,6 +216,52 @@ NKikimr::TConclusion<THashMap<ui64, std::vector<NKikimr::NArrow::TSerializedBatc
         result.emplace(tabletId, blobsSplittedConclusion.DetachResult());
     }
     return result;
+}
+
+void IShardingBase::InitializeFromOrdered(const std::vector<ui64>& orderedIds) {
+    AFL_VERIFY(orderedIds.size());
+    std::set<ui64> shardIdsSetOriginal;
+    OrderedShardIds.clear();
+    Shards.clear();
+    for (auto&& i : orderedIds) {
+        AFL_VERIFY(shardIdsSetOriginal.emplace(i).second);
+        Shards.emplace(i, TShardInfo(i, OrderedShardIds.size()));
+        OrderedShardIds.emplace_back(i);
+    }
+}
+
+NKikimrSchemeOp::TGranuleShardInfo TShardInfo::SerializeToProto() const {
+    NKikimrSchemeOp::TGranuleShardInfo result;
+    result.SetTabletId(TabletId);
+    result.SetSequenceIdx(SequenceIdx);
+    result.SetIsOpenForWrite(IsOpenForWrite);
+    result.SetIsOpenForRead(IsOpenForRead);
+    if (OpenForWriteSnapshot) {
+        *result.MutableOpenForWriteSnapshot() = OpenForWriteSnapshot->SerializeToProto();
+    }
+    result.SetShardingVersion(ShardingVersion);
+    return result;
+}
+
+NKikimr::TConclusionStatus TShardInfo::DeserializeFromProto(const NKikimrSchemeOp::TGranuleShardInfo& proto) {
+    TabletId = proto.GetTabletId();
+    SequenceIdx = proto.GetSequenceIdx();
+    IsOpenForRead = proto.GetIsOpenForRead();
+    IsOpenForWrite = proto.GetIsOpenForWrite();
+    if (proto.HasOpenForWriteSnapshot()) {
+        NKikimr::NOlap::TSnapshot ss = NKikimr::NOlap::TSnapshot::Zero();
+        auto conclusion = ss.DeserializeFromProto(proto.GetOpenForWriteSnapshot());
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
+        OpenForWriteSnapshot = ss;
+    }
+    AFL_VERIFY(proto.HasShardingVersion());
+    ShardingVersion = proto.GetShardingVersion();
+    if (!TabletId) {
+        return TConclusionStatus::Fail("incorrect TabletId for TShardInfo proto");
+    }
+    return TConclusionStatus::Success();
 }
 
 }

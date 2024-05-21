@@ -3,17 +3,17 @@
 namespace NKikimr::NSharding::NConsistency {
 
 NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> TConsistencySharding64::DoBuildSplitShardsModifiers(const std::vector<ui64>& newTabletIds) const {
-    if (newTabletIds.size() != GetShardIds().size()) {
+    if (newTabletIds.size() != GetOrderedShardIds().size()) {
         return TConclusionStatus::Fail("can multiple 2 only for add shards count");
     }
     if (!!SpecialShardingInfo) {
         return TConclusionStatus::Fail("not unified shards distribution for consistency intervals modification");
     }
-    const TSpecificShardingInfo shardingInfo = SpecialShardingInfo ? *SpecialShardingInfo : TSpecificShardingInfo(GetShardIds());
+    const TSpecificShardingInfo shardingInfo = SpecialShardingInfo ? *SpecialShardingInfo : TSpecificShardingInfo(GetOrderedShardIds());
     std::vector<NKikimrSchemeOp::TAlterShards> result;
     {
         ui32 idx = 0;
-        for (auto&& i : GetShardIds()) {
+        for (auto&& i : GetOrderedShardIds()) {
             {
                 NKikimrSchemeOp::TAlterShards alter;
                 auto specSharding = shardingInfo.GetShardingTabletVerified(i);
@@ -94,8 +94,8 @@ NKikimr::TConclusionStatus TConsistencySharding64::DoOnAfterModification() {
     }
 
     std::vector<ui64> shardIds;
-    if (SpecialShardingInfo->CheckUnifiedDistribution(GetShardIds().size(), shardIds)) {
-        SetShardIds(shardIds);
+    if (SpecialShardingInfo->CheckUnifiedDistribution(GetOrderedShardIds().size(), shardIds)) {
+        SetOrderedShardIds(shardIds);
         SpecialShardingInfo.reset();
     }
 
@@ -119,7 +119,7 @@ THashMap<ui64, std::vector<ui32>> TConsistencySharding64::MakeSharding(const std
         THashMap<ui64, std::vector<ui32>> resultHash;
         for (ui32 i = 0; i < result.size(); ++i) {
             if (result[i].size()) {
-                resultHash.emplace(GetShardId(i), std::move(result[i]));
+                resultHash.emplace(GetShardIdByOrderIdx(i), std::move(result[i]));
             }
         }
         return resultHash;
@@ -132,7 +132,7 @@ std::shared_ptr<NKikimr::NSharding::IGranuleShardingLogic> TConsistencySharding6
     if (SpecialShardingInfo) {
         return std::make_shared<TGranuleSharding>(GetShardingColumns(), SpecialShardingInfo->GetShardingTabletVerified(tabletId));
     } else {
-        TSpecificShardingInfo info(GetShardIds());
+        TSpecificShardingInfo info(GetOrderedShardIds());
         return std::make_shared<TGranuleSharding>(GetShardingColumns(), info.GetShardingTabletVerified(tabletId));
     }
 }

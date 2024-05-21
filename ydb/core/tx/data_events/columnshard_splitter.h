@@ -17,11 +17,13 @@ class TColumnShardShardsSplitter : public IShardsSplitter {
         const TString SchemaData;
         const TString Data;
         const ui32 RowsCount;
+        const ui32 GranuleShardingVersion;
     public:
-        TShardInfo(const TString& schemaData, const TString& data, const ui32 rowsCount)
+        TShardInfo(const TString& schemaData, const TString& data, const ui32 rowsCount, const ui32 granuleShardingVersion)
             : SchemaData(schemaData)
             , Data(data)
             , RowsCount(rowsCount)
+            , GranuleShardingVersion(granuleShardingVersion)
         {}
 
         ui64 GetBytes() const override {
@@ -38,6 +40,7 @@ class TColumnShardShardsSplitter : public IShardsSplitter {
 
         void Serialize(TEvWrite& evWrite) const override {
             evWrite.SetArrowData(SchemaData, Data);
+            evWrite.Record.SetGranuleShardingVersion(GranuleShardingVersion);
         }
     };
 

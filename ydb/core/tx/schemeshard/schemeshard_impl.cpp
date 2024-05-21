@@ -4067,9 +4067,6 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
                 result.SetColumnTableVersion(tableInfo->AlterVersion);
                 generalVersion += result.GetColumnTableVersion();
 
-                result.SetColumnTableShardingVersion(tableInfo->Description.GetSharding().GetVersion());
-                generalVersion += result.GetColumnTableShardingVersion();
-
                 if (tableInfo->Description.HasSchema()) {
                     result.SetColumnTableSchemaVersion(tableInfo->Description.GetSchema().GetVersion());
                 } else if (tableInfo->Description.HasSchemaPresetId() && tableInfo->GetOlapStorePathIdVerified()) {

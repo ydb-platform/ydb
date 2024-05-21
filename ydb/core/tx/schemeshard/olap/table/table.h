@@ -26,10 +26,6 @@ public:
         return PathIdFromPathId(Description.GetColumnStorePathId());
     }
 
-    NKikimr::NOlap::TSnapshot GetShardingOpenSnapshotVerified(const ui64 tabletId) const;
-
-    void SetShardingOpenSnapshotVerified(const ui64 tabletId, const NKikimr::NOlap::TSnapshot& ss);
-
     std::shared_ptr<NSharding::IShardingBase> GetShardingVerified(const TOlapSchema& olapSchema) const {
         return NSharding::IShardingBase::BuildFromProto(olapSchema, Description.GetSharding()).DetachResult();
     }
@@ -45,7 +41,6 @@ public:
     void SetColumnShards(const std::vector<ui64>& columnShards) {
         AFL_VERIFY(GetColumnShards().empty())("original", Description.DebugString());
         AFL_VERIFY(columnShards.size());
-        Description.MutableSharding()->SetVersion(1);
 
         Description.MutableSharding()->MutableColumnShards()->Clear();
         Description.MutableSharding()->MutableColumnShards()->Reserve(columnShards.size());

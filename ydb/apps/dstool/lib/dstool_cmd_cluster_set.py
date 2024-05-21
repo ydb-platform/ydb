@@ -26,7 +26,7 @@ def add_options(p):
     g.add_argument('--disk-management-mode', type=str, choices=choices, help='Disk management mode')
     g.add_argument('--enable-self-heal-local-policy', action='store_const', const=True, dest='self_heal_local_policy', help='Enable SelfHeal local policy for cluster')
     g.add_argument('--disable-self-heal-local-policy', action='store_const', const=False, dest='self_heal_local_policy', help='Disable SelfHeal local policy for cluster')
-    
+
     common.add_basic_format_options(p)
 
 

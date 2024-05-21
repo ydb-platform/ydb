@@ -76,7 +76,8 @@ public:
         }
     }
 
-    void OnEndPartitionStream(TReadSessionEvent::TEndPartitionSessionEvent&) {
+    void OnEndPartitionStream(TReadSessionEvent::TEndPartitionSessionEvent& event) {
+        event.Confirm();
     }
 
     void OnPartitionStreamClosed(TReadSessionEvent::TPartitionSessionClosedEvent& event) {
@@ -139,7 +140,8 @@ TReadSessionSettings::TEventHandlers& TReadSessionSettings::TEventHandlers::Simp
         StopPartitionSessionHandler([](TReadSessionEvent::TStopPartitionSessionEvent& event) {
             event.Confirm();
         });
-        EndPartitionSessionHandler([](TReadSessionEvent::TEndPartitionSessionEvent&) {
+        EndPartitionSessionHandler([](TReadSessionEvent::TEndPartitionSessionEvent& event) {
+            event.Confirm();
         });
         CommitOffsetAcknowledgementHandler([](TReadSessionEvent::TCommitOffsetAcknowledgementEvent&){});
         PartitionSessionClosedHandler([](TReadSessionEvent::TPartitionSessionClosedEvent&){});

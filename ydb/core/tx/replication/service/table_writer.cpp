@@ -5,6 +5,7 @@
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/change_exchange/change_sender_common_ops.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tablet_flat/flat_row_eggs.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_cache/helpers.h>
@@ -25,7 +26,7 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
         if (!LogPrefix) {
             LogPrefix = TStringBuilder()
                 << "[TablePartitionWriter]"
-                << TablePathId
+                << TableId
                 << "[" << TabletId << "]"
                 << SelfId() << " ";
         }
@@ -71,14 +72,25 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
 
         auto event = MakeHolder<TEvDataShard::TEvApplyReplicationChanges>();
         auto& tableId = *event->Record.MutableTableId();
-        tableId.SetOwnerId(TablePathId.OwnerId);
-        tableId.SetTableId(TablePathId.LocalPathId);
-        // TODO: SetSchemaVersion?
+        tableId.SetOwnerId(TableId.PathId.OwnerId);
+        tableId.SetTableId(TableId.PathId.LocalPathId);
+        tableId.SetSchemaVersion(TableId.SchemaVersion);
 
+        TString source;
         for (auto recordPtr : ev->Get()->Records) {
+            MemoryPool.Clear();
             const auto& record = *recordPtr->Get<TChangeRecord>();
-            record.Serialize(*event->Record.AddChanges());
-            // TODO: set WriteTxId, Source
+            record.Serialize(*event->Record.AddChanges(), MemoryPool);
+
+            if (!source) {
+                source = record.GetSourceId();
+            } else {
+                Y_ABORT_UNLESS(source == record.GetSourceId());
+            }
+        }
+
+        if (source) {
+            event->Record.SetSource(source);
         }
 
         Send(LeaderPipeCache, new TEvPipeCache::TEvForward(event.Release(), TabletId, false));
@@ -147,10 +159,11 @@ public:
         return NKikimrServices::TActivity::REPLICATION_TABLE_PARTITION_WRITER;
     }
 
-    explicit TTablePartitionWriter(const TActorId& parent, ui64 tabletId, const TPathId& tablePathId)
+    explicit TTablePartitionWriter(const TActorId& parent, ui64 tabletId, const TTableId& tableId)
         : Parent(parent)
         , TabletId(tabletId)
-        , TablePathId(tablePathId)
+        , TableId(tableId)
+        , MemoryPool(256)
     {
     }
 
@@ -168,10 +181,11 @@ public:
 private:
     const TActorId Parent;
     const ui64 TabletId;
-    const TPathId TablePathId;
+    const TTableId TableId;
     mutable TMaybe<TString> LogPrefix;
 
     TActorId LeaderPipeCache;
+    TMemoryPool MemoryPool;
 
 }; // TTablePartitionWriter
 
@@ -309,6 +323,10 @@ class TLocalTableWriter
         }
 
         auto schema = MakeIntrusive<TLightweightSchema>();
+        if (entry.Self && entry.Self->Info.HasVersion()) {
+            schema->Version = entry.Self->Info.GetVersion().GetTableSchemaVersion();
+        }
+
         for (const auto& [_, column] : entry.Columns) {
             if (column.KeyOrder >= 0) {
                 if (schema->KeyColumns.size() <= static_cast<ui32>(column.KeyOrder)) {
@@ -382,14 +400,15 @@ class TLocalTableWriter
     }
 
     IActor* CreateSender(ui64 partitionId) override {
-        return new TTablePartitionWriter(SelfId(), partitionId, PathId);
+        return new TTablePartitionWriter(SelfId(), partitionId, TTableId(PathId, Schema->Version));
     }
 
     ui64 GetPartitionId(NChangeExchange::IChangeRecord::TPtr record) const override {
         Y_ABORT_UNLESS(KeyDesc);
         Y_ABORT_UNLESS(KeyDesc->GetPartitions());
 
-        const auto range = TTableRange(record->Get<TChangeRecord>()->GetKey());
+        MemoryPool.Clear();
+        const auto range = TTableRange(record->Get<TChangeRecord>()->GetKey(MemoryPool));
         Y_ABORT_UNLESS(range.Point);
 
         TVector<TKeyDesc::TPartitionInfo>::const_iterator it = LowerBound(
@@ -418,6 +437,7 @@ class TLocalTableWriter
         for (auto& record : ev->Get()->Records) {
             records.emplace_back(record.Offset, PathId, record.Data.size());
             auto res = PendingRecords.emplace(record.Offset, TChangeRecordBuilder()
+                .WithSourceId(ev->Get()->Source)
                 .WithOrder(record.Offset)
                 .WithBody(std::move(record.Data))
                 .WithSchema(Schema)
@@ -492,6 +512,7 @@ public:
     explicit TLocalTableWriter(const TPathId& tablePathId)
         : TActor(&TThis::StateWork)
         , TBaseChangeSender(this, this, tablePathId)
+        , MemoryPool(256)
     {
     }
 
@@ -512,6 +533,7 @@ public:
 
 private:
     mutable TMaybe<TString> LogPrefix;
+    mutable TMemoryPool MemoryPool;
 
     TActorId Worker;
     ui64 TableVersion = 0;

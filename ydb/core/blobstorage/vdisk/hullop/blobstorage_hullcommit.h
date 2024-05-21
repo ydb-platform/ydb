@@ -137,14 +137,16 @@ namespace NKikimr {
         void Handle(NPDisk::TEvLogResult::TPtr& ev, const TActorContext& ctx) {
             CHECK_PDISK_RESPONSE(Ctx->HullCtx->VCtx, ev, ctx);
 
-            Y_VERIFY_S(!WId == Metadata.RemovedHugeBlobs.Empty(), "WId# " << WId << " RemovedHugeBlobs# " << Metadata.RemovedHugeBlobs.Size());
-
             // notify delayed deleter when log record is actually written; we MUST ensure that updates are coming in
             // order of increasing LSN's; this is achieved automatically as all actors reside on the same mailbox
-            LevelIndex->DelayedCompactionDeleterInfo->Update(LsnSeg.Last, std::move(Metadata.RemovedHugeBlobs),
-                CommitRecord.DeleteToDecommitted ? CommitRecord.DeleteChunks : TVector<TChunkIdx>(),
-                PDiskSignatureForHullDbKey<TKey>(), WId, ctx, Ctx->HugeKeeperId, Ctx->SkeletonId, Ctx->PDiskCtx,
-                Ctx->HullCtx->VCtx);
+            if (WId) {
+                LevelIndex->DelayedCompactionDeleterInfo->Update(LsnSeg.Last, std::move(Metadata.RemovedHugeBlobs),
+                    CommitRecord.DeleteToDecommitted ? CommitRecord.DeleteChunks : TVector<TChunkIdx>(),
+                    PDiskSignatureForHullDbKey<TKey>(), WId, ctx, Ctx->HugeKeeperId, Ctx->SkeletonId, Ctx->PDiskCtx,
+                    Ctx->HullCtx->VCtx);
+            } else {
+                Y_ABORT_UNLESS(Metadata.RemovedHugeBlobs.Empty());
+            }
 
             NPDisk::TEvLogResult* msg = ev->Get();
 
@@ -156,8 +158,8 @@ namespace NKikimr {
             Y_DEBUG_ABORT_UNLESS(results.size() == 1 && results.front().Lsn == LsnSeg.Last);
 
             LOG_INFO(ctx, NKikimrServices::BS_HULLCOMP,
-                     VDISKP(HullLogCtx->VCtx->VDiskLogPrefix, "%s lsn# %s done",
-                        THullCommitFinished::TypeToString(NotifyType), LsnSeg.ToString().data()));
+                     VDISKP(HullLogCtx->VCtx->VDiskLogPrefix, "%s lsn# %s done wId# %" PRIu64,
+                        THullCommitFinished::TypeToString(NotifyType), LsnSeg.ToString().data(), WId));
 
             LOG_INFO(ctx, NKikimrServices::BS_HULLRECS,
                     VDISKP(HullLogCtx->VCtx->VDiskLogPrefix, "%s", DebugMessage.Str().data()));

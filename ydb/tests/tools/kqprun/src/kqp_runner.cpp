@@ -4,11 +4,77 @@
 #include <library/cpp/colorizer/colors.h>
 #include <library/cpp/json/json_reader.h>
 
+#include <ydb/core/blob_depot/mon_main.h>
+#include <ydb/core/fq/libs/compute/common/utils.h>
+
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 
 
 namespace NKqpRun {
+
+namespace {
+
+TString FormatNumber(i64 number) {
+    if (number < 0) {
+        return TStringBuilder() << "-" << FormatNumber(-number);
+    }
+
+    if (number < 1000) {
+        return ToString(number);
+    }
+
+    return TStringBuilder() << FormatNumber(number / 1000) << "'" << (number % 1000) / 100 << (number % 100) / 10 << number % 10;
+}
+
+void PrintStatistic(const TString& fullStatistic, const THashMap<TString, i64>& flatStatistic, const NFq::TPublicStat& publicStatistic, IOutputStream& output) {
+    output << "\nFlat statistic:" << Endl;
+    for (const auto& [propery, value] : flatStatistic) {
+        TString valueString = ToString(value);
+        if (propery.find("Bytes") != TString::npos || propery.find("Source") != TString::npos) {
+            valueString = NKikimr::NBlobDepot::FormatByteSize(value);
+        } else if (propery.find("TimeUs") != TString::npos) {
+            valueString = NFq::FormatDurationUs(value);
+        } else if (propery.find("TimeMs") != TString::npos) {
+            valueString = NFq::FormatDurationMs(value);
+        } else {
+            valueString = FormatNumber(value);
+        }
+        output << propery << " = " << valueString << Endl;
+    }
+
+    output << "\nPublic statistic:" << Endl;
+    if (auto memoryUsageBytes = publicStatistic.MemoryUsageBytes) {
+        output << "MemoryUsage = " << NKikimr::NBlobDepot::FormatByteSize(*memoryUsageBytes) << Endl;
+    }
+    if (auto cpuUsageUs = publicStatistic.CpuUsageUs) {
+        output << "CpuUsage = " << NFq::FormatDurationUs(*cpuUsageUs) << Endl;
+    }
+    if (auto inputBytes = publicStatistic.InputBytes) {
+        output << "InputSize = " << NKikimr::NBlobDepot::FormatByteSize(*inputBytes) << Endl;
+    }
+    if (auto outputBytes = publicStatistic.OutputBytes) {
+        output << "OutputSize = " << NKikimr::NBlobDepot::FormatByteSize(*outputBytes) << Endl;
+    }
+    if (auto sourceInputRecords = publicStatistic.SourceInputRecords) {
+        output << "SourceInputRecords = " << FormatNumber(*sourceInputRecords) << Endl;
+    }
+    if (auto sinkOutputRecords = publicStatistic.SinkOutputRecords) {
+        output << "SinkOutputRecords = " << FormatNumber(*sinkOutputRecords) << Endl;
+    }
+    if (auto runningTasks = publicStatistic.RunningTasks) {
+        output << "RunningTasks = " << FormatNumber(*runningTasks) << Endl;
+    }
+
+    output << "\nFull statistic:" << Endl;
+    NJson::TJsonValue statsJson;
+    NJson::ReadJsonTree(fullStatistic, &statsJson);
+    NJson::WriteJson(&output, &statsJson, true, true, true);
+    output << Endl;
+}
+
+}  // anonymous namespace
+
 
 //// TKqpRunner::TImpl
 
@@ -22,6 +88,7 @@ public:
     explicit TImpl(const TRunnerOptions& options)
         : Options_(options)
         , YdbSetup_(options.YdbSettings)
+        , StatProcessor_(NFq::CreateStatProcessor("stat_full"))
         , CerrColors_(NColorizer::AutoColors(Cerr))
         , CoutColors_(NColorizer::AutoColors(Cout))
     {}
@@ -222,8 +289,31 @@ private:
     void PrintScriptProgress(const TString& plan) const {
         if (Options_.InProgressStatisticOutputFile) {
             TFileOutput outputStream(*Options_.InProgressStatisticOutputFile);
-            outputStream << TInstant::Now().ToIsoStringLocal() << " Script in progress statistic:" << Endl;
-            PrintPlan(plan, &outputStream);
+            outputStream << TInstant::Now().ToIsoStringLocal() << " Script in progress statistic" << Endl;
+
+            auto convertedPlan = plan;
+            try {
+                convertedPlan = StatProcessor_->ConvertPlan(plan);
+            } catch(const NJson::TJsonException& ex) {
+                outputStream << "Error plan conversion: " << ex.what() << Endl;
+            }
+
+            try {
+                double cpuUsage = 0.0;
+                auto stat = StatProcessor_->GetQueryStat(convertedPlan, cpuUsage);
+                outputStream << "\nCPU usage: " << cpuUsage << Endl;
+
+                auto flatStat = StatProcessor_->GetFlatStat(convertedPlan);
+                auto publicStat = StatProcessor_->GetPublicStat(stat);
+
+                PrintStatistic(stat, flatStat, publicStat, outputStream);
+            } catch(const NJson::TJsonException& ex) {
+                outputStream << "Error stat conversion: " << ex.what() << Endl;
+            }
+
+            outputStream << "\nPlan visualization:" << Endl;
+            PrintPlan(convertedPlan, &outputStream);
+
             outputStream.Finish();
         }
     }
@@ -270,6 +360,7 @@ private:
     TRunnerOptions Options_;
 
     TYdbSetup YdbSetup_;
+    std::unique_ptr<NFq::IPlanStatProcessor> StatProcessor_;
     NColorizer::TColors CerrColors_;
     NColorizer::TColors CoutColors_;
 

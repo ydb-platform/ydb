@@ -91,6 +91,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
                 isFakePresetOnly = false;
             }
             AFL_VERIFY(schemaPresets.emplace(preset.GetId(), preset).second);
+            AFL_VERIFY(SchemaPresetsIds.emplace(preset.GetId()).second);
             if (!rowset.Next()) {
                 return false;
             }
@@ -242,6 +243,7 @@ void TTablesManager::DropTable(const ui64 pathId, const NOlap::TSnapshot& versio
 
 void TTablesManager::DropPreset(const ui32 presetId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db) {
     AFL_VERIFY(SchemaPresetsIds.contains(presetId));
+    SchemaPresetsIds.erase(presetId);
     Schema::SaveSchemaPresetDropVersion(db, presetId, version);
 }
 

@@ -93,7 +93,6 @@ SRCS(
     malloca.c
     mbswidth.c
     mbrtowc.c
-    memchr2.c
     mkstemp-safer.c
     nl_langinfo.c
     pipe-safer.c
@@ -107,8 +106,6 @@ SRCS(
     raise.c
     rawmemchr.c
     readlink.c
-    realloc.c
-    regex.c
     rename.c
     rmdir.c
     secure_getenv.c
@@ -121,11 +118,9 @@ SRCS(
     stripslash.c
     tempname.c
     timevar.c
-    tmpdir.c
     unistd.c
     vasnprintf.c
     vbitset.c
-    verror.c
     wait-process.c
     wctype-h.c
     xalloc-die.c
@@ -169,7 +164,6 @@ IF (OS_WINDOWS)
         fseeko.c
         fopen.c
         ftello.c
-        gettimeofday.c
         localeconv.c
         msvc-inval.c
         msvc-nothrow.c
@@ -177,8 +171,6 @@ IF (OS_WINDOWS)
         sigaction.c
         sigprocmask.c
         snprintf.c
-        spawni.c
-        spawnp.c
         strndup.c
         waitpid.c
         wcwidth.c

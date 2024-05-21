@@ -582,7 +582,7 @@ TExprNode::TPtr ExpandEquiJoinImpl(const TExprNode& node, TExprContext& ctx) {
                         auto deps = children.back()->ChildrenList();
                         deps.emplace_back(upperArg);
                         children.back() = ctx.ChangeChildren(*children.back(), std::move(deps));
-;                       break;
+                       break;
                     }
                     default:
                         break;

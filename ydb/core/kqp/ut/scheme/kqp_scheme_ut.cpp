@@ -5869,6 +5869,55 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
         testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", TStringBuilder() << "[[1;" << ts.MicroSeconds() << "u;" << ts.MicroSeconds() << "u]]");
     }
 
+    Y_UNIT_TEST(Decimal) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("dec").SetType(NScheme::NTypeIds::Decimal).SetNullable(false),
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        {
+            TValueBuilder builder;
+            builder.BeginList();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(1)
+                .AddMember("dec").Decimal(TString("10.1"))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(2)
+                .AddMember("dec").Decimal(TString("inf"))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(3)
+                .AddMember("dec").Decimal(TString("-inf"))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(4)
+                .AddMember("dec").Decimal(TString("nan"))
+            .EndStruct();
+            builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(5)
+                .AddMember("dec").Decimal(TString("-nan"))
+            .EndStruct();
+            builder.EndList();
+            const auto result = testHelper.GetKikimr().GetTableClient().BulkUpsert(testTable.GetName(), builder.Build()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess() , result.GetIssues().ToString());
+        }
+        testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id=1", "[[\"10.1\"]]");
+        testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id=2", "[[\"inf\"]]");
+        testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id=3", "[[\"-inf\"]]");
+        testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id=4", "[[\"nan\"]]");
+        testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id=5", "[[\"-nan\"]]");
+    }
+
     Y_UNIT_TEST(TimestampCmpErr) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;

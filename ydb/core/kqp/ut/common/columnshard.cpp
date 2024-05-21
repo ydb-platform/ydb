@@ -68,7 +68,17 @@ namespace NKqp {
 
 
     TString TTestHelper::TColumnSchema::BuildQuery() const {
-        auto str = TStringBuilder() << Name << " " << NScheme::GetTypeName(Type);
+        auto str = TStringBuilder() << Name << " ";
+        switch (Type) {
+        case NScheme::NTypeIds::Decimal: {
+            TTypeBuilder builder;
+            builder.Decimal(TDecimalType(22, 9));
+            str << builder.Build();
+            break;
+        }
+        default:
+            str << NScheme::GetTypeName(Type);
+        }
         if (!NullableFlag) {
             str << " NOT NULL";
         }

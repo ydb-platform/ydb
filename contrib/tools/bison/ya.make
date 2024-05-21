@@ -4,7 +4,8 @@ VERSION(3.0)
 
 LICENSE(
     GPL-3.0-only AND
-    GPL-3.0-or-later
+    GPL-3.0-or-later AND
+    GPL-3.0-or-later WITH Bison-exception-2.2
 )
 
 ORIGINAL_SOURCE(git://git.sv.gnu.org/bison)

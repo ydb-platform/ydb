@@ -2,8 +2,7 @@ LIBRARY()
 
 LICENSE(
     BSD-3-Clause AND
-    GPL-3.0-or-later AND
-    LGPL-2.0-or-later
+    GPL-3.0-or-later
 )
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)

@@ -2342,7 +2342,7 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
                 auto *bySwitchAux = aux.AddBySwitchAux();
 
                 TPageCollectionProtoHelper::Snap(snap, loaned->PartComponents, partSwitch.TableId, CompactionLogic->BorrowedPartLevel());
-                TPageCollectionProtoHelper(true, false).Do(bySwitchAux->AddHotBundles(), loaned->PartComponents);
+                TPageCollectionProtoHelper(true, false, false).Do(bySwitchAux->AddHotBundles(), loaned->PartComponents);
 
                 auto body = proto.SerializeAsString();
                 auto glob = CommitManager->Turns.One(commit->Refs, std::move(body), true);
@@ -3462,7 +3462,8 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
             const auto &newPart = result.Part;
 
             TPageCollectionProtoHelper::Snap(snap, newPart, tableId, logicResult.Changes.NewPartsLevel);
-            TPageCollectionProtoHelper(true, true).Do(bySwitchAux->AddHotBundles(), newPart);
+            TPageCollectionProtoHelper(true, true, !AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex())
+                .Do(bySwitchAux->AddHotBundles(), newPart);
         }
     }
 
@@ -3760,14 +3761,14 @@ TString TExecutor::BorrowSnapshot(ui32 table, const TTableSnapshotContext &snap,
     for (const auto &partView : subset->Flatten) {
         auto *x = proto.AddParts();
 
-        TPageCollectionProtoHelper(includeMeta, false).Do(x->MutableBundle(), partView);
+        TPageCollectionProtoHelper(includeMeta, false, false).Do(x->MutableBundle(), partView);
         snap.Impl->Borrowed(Step(), table, partView->Label, loaner);
     }
 
     for (const auto &part : subset->ColdParts) {
         auto *x = proto.AddParts();
 
-        TPageCollectionProtoHelper(false, false).Do(x->MutableBundle(), part);
+        TPageCollectionProtoHelper(false, false, false).Do(x->MutableBundle(), part);
         snap.Impl->Borrowed(Step(), table, part->Label, loaner);
     }
 

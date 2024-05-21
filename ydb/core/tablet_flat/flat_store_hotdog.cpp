@@ -17,7 +17,7 @@ void TPageCollectionProtoHelper::Snap(NKikimrExecutorFlat::TLogTableSnap *snap, 
     snap->SetTable(table);
     snap->SetCompactionLevel(level);
 
-    TPageCollectionProtoHelper(false, false).Do(snap->AddBundles(), partView);
+    TPageCollectionProtoHelper(false, false, false).Do(snap->AddBundles(), partView);
 }
 
 void TPageCollectionProtoHelper::Snap(NKikimrExecutorFlat::TLogTableSnap *snap, const TIntrusiveConstPtr<TColdPart> &part, ui32 table, ui32 level)
@@ -25,7 +25,7 @@ void TPageCollectionProtoHelper::Snap(NKikimrExecutorFlat::TLogTableSnap *snap, 
     snap->SetTable(table);
     snap->SetCompactionLevel(level);
 
-    TPageCollectionProtoHelper(false, false).Do(snap->AddBundles(), part);
+    TPageCollectionProtoHelper(false, false, false).Do(snap->AddBundles(), part);
 }
 
 void TPageCollectionProtoHelper::Snap(NKikimrExecutorFlat::TLogTableSnap *snap, const TPartComponents &pc, ui32 table, ui32 level)
@@ -33,7 +33,7 @@ void TPageCollectionProtoHelper::Snap(NKikimrExecutorFlat::TLogTableSnap *snap, 
     snap->SetTable(table);
     snap->SetCompactionLevel(level);
 
-    TPageCollectionProtoHelper(false, false).Do(snap->AddBundles(), pc);
+    TPageCollectionProtoHelper(false, false, false).Do(snap->AddBundles(), pc);
 }
 
 void TPageCollectionProtoHelper::Do(TBundle *bundle, const TPartComponents &pc)
@@ -113,13 +113,15 @@ void TPageCollectionProtoHelper::Bundle(NKikimrExecutorFlat::TPageCollection *pa
         for (ui32 pageId : xrange(pack->Meta.TotalPages())) {
             auto type = NTable::EPage(pack->Meta.GetPageType(pageId));
 
-            if (!NTable::TLoader::NeedIn(type)) {
-
-            } else if (auto* body = cache.Lookup(pageId)) {
-                pages.emplace_back(pageId, *body);
-            } else {
-                Y_ABORT("index and page collection pages must be kept inmemory");
-            }
+            if (NTable::TLoader::NeedIn(type) || StickyFlatIndex && type == NTable::EPage::FlatIndex) {
+                if (auto* body = cache.Lookup(pageId)) {
+                    // Note: all passed here pages will stick on follower
+                    // may badly work if StickyFlatIndex is different on different nodes
+                    pages.emplace_back(pageId, *body);
+                } else {
+                    Y_ABORT_IF(NTable::TLoader::NeedIn(type), "Needed pages must be kept in memory");
+                }
+            } 
         }
     }
 

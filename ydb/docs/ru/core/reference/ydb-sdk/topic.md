@@ -1168,7 +1168,7 @@
 
 - C++
 
-  Работа пользователя с объектом `IReadSession` в общем устроена как обработка цикла событий со следующими типами событий: `TDataReceivedEvent`, `TCommitOffsetAcknowledgementEvent`, `TStartPartitionSessionEvent`, `TStopPartitionSessionEvent`, `TPartitionSessionStatusEvent`, `TPartitionSessionClosedEvent` и `TSessionClosedEvent`.
+  Работа пользователя с объектом `IReadSession` в общем устроена как обработка цикла событий со следующими типами событий: `TDataReceivedEvent`, `TCommitOffsetAcknowledgementEvent`, `TStartPartitionSessionEvent`, `TEndPartitionSessionEvent`, `TStopPartitionSessionEvent`, `TPartitionSessionStatusEvent`, `TPartitionSessionClosedEvent` и `TSessionClosedEvent`.
 
   Для каждого из типов событий можно установить обработчик этого события, а также можно установить общий обработчик. Обработчики устанавливаются в настройках сессии записи перед её созданием.
 
@@ -1841,5 +1841,39 @@
       logger.info("Partition session {} is closed.", event.getPartitionSession().getPartitionId());
   }
   ```
+
+{% endlist %}
+
+### Поддержка автомасштабирования топиков {#autoscaling}
+
+{% list tabs %}
+
+- C++
+
+  SDK поддерживает два режима чтения топиков с включенным автомасштабированием: режим полной поддержки и режим совместимости.
+
+  В режиме полной поддержки, когда все сообщения из партиции будут прочитаны, будет приходить событие `TEndPartitionSessionEvent`. После получения этого события в партиции не появится новых сообщений для чтения. Для того, что бы продолжить чтение из дочерних партиции необходимо вызвать Confirm(), тем самым подтвердив, что приложение готово принимать сообщения из дочерних партиции. Если сообщения из всех партиции обрабатываются в одном потоке, то Confirm() можно вызвать сразу как получили `TEndPartitionSessionEvent`. Если обработка сообщений из разных партиции обрабатывается в разных потоках, то следует закончить обрабатывать сообщения, например, выполнить накопившийся батч, подтвердить их обработку (коммит) или сохранить позицию чтения в своей базе, и только после этого позвать Confirm().
+
+  Мы рекомендуем после получения `TEndPartitionSessionEvent` и обработки всех сообщений всегда сразу подтверждать обработку сообщений (коммит). Это позволит балансировать чтение дочерних партиции по разным сессиям чтения, что приведет к равномерному распределению нагрузки по всем читателям.
+
+  Фрагмент цикла событий может выглядеть так:
+
+  ```cpp
+  auto settings = TReadSessionSettings()
+      .SetAutoscalingSupport(true);
+
+  auto readSession = topicClient.CreateReadSession(settings);
+
+  auto event = readSession->GetEvent(/*block=*/true);
+  if (auto* endPartitionSessionEvent = std::get_if<TReadSessionEvent::TEndPartitionSessionEvent>(&*event)) {
+      endPartitionSessionEvent->Confirm();
+  } else {
+    // other event types
+  }
+  ```
+
+  В режиме совместимости, когда будет вычитано последнее сообщение из партиции, сервер перебалансирует сессию чтения. Чтение из дочерних партиции начнется только в том случае, если после перебалансировки чтение начнется с конца партиции.
+
+  Мы рекомендуем проверить правильность обработки мягкого прерывании чтения: клиент должен обработать полученные сообщения, подтвердить обработку сообщений (коммит) или сохранить позицию чтения в своей базе, и только после этого вызывать Confirm() у `TStopPartitionSessionEvent`.
 
 {% endlist %}

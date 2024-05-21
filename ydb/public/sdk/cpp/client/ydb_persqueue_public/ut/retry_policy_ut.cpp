@@ -379,11 +379,11 @@ Y_UNIT_TEST_SUITE(RetryPolicy) {
     }
     Y_UNIT_TEST(RetryWithBatching) {
         auto setup = std::make_shared<TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
-        auto settings = setup->GetWriteSessionSettings();
         auto retryPolicy = std::make_shared<TYdbPqTestRetryPolicy>();
-        settings.BatchFlushInterval(TDuration::Seconds(1000)); // Batch on size, not on time.
-        settings.BatchFlushSizeBytes(100);
-        settings.RetryPolicy(retryPolicy);
+        auto settings = setup->GetWriteSessionSettings()
+            .BatchFlushInterval(TDuration::Seconds(1000)) // Batch on size, not on time.
+            .BatchFlushSizeBytes(100)
+            .RetryPolicy(retryPolicy);
         auto& client = setup->GetPersQueueClient();
         auto writer = client.CreateWriteSession(settings);
         auto event = *writer->GetEvent(true);
@@ -399,6 +399,10 @@ Y_UNIT_TEST_SUITE(RetryPolicy) {
         while (seqNo < 10) {
             auto event = *writer->GetEvent(true);
             Cerr << NYdb::NPersQueue::DebugString(event) << "\n";
+            if (std::holds_alternative<TWriteSessionEvent::TAcksEvent>(event)) {
+                // The writer might receive an ack right before kicking the tablets. Ignore this event.
+                continue;
+            }
             UNIT_ASSERT(std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event));
             writer->Write(
                     std::move(std::get<TWriteSessionEvent::TReadyToAcceptEvent>(event).ContinuationToken),

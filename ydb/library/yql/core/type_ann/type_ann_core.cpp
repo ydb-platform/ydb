@@ -12321,6 +12321,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["OrderedSqlProject"] = &SqlProjectWrapper;
         Functions["SqlProjectItem"] = &SqlProjectItemWrapper;
         Functions["SqlProjectStarItem"] = &SqlProjectItemWrapper;
+        Functions["PgSelf"] = &PgSelfWrapper;
         Functions["PgStar"] = &PgStarWrapper;
         Functions["PgQualifiedStar"] = &PgQualifiedStarWrapper;
         Functions["PgColumnRef"] = &PgColumnRefWrapper;

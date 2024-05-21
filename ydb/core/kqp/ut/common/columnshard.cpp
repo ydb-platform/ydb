@@ -133,9 +133,17 @@ namespace NKqp {
     TString TTestHelper::TColumnSchema::BuildQuery() const {
         TStringBuilder str;
         str << Name << ' ';
-        if (NScheme::NTypeIds::Pg == Type) {
+        switch (Type) {
+        case NScheme::NTypeIds::Pg:
             str << NPg::PgTypeNameFromTypeDesc(TypeDesc);
-        } else {
+            break;
+        case NScheme::NTypeIds::Decimal: {
+            TTypeBuilder builder;
+            builder.Decimal(TDecimalType(22, 9));
+            str << builder.Build();
+            break;
+        }
+        default:
             str << NScheme::GetTypeName(Type);
         }
         if (!NullableFlag) {

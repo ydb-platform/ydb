@@ -288,9 +288,13 @@ namespace NKikimr {
                         ApplyCompactionResult(ctx, {}, {}, 0);
                     } else {
                         const ui64 cookie = NextPreCompactCookie++;
-                        ctx.Send(HullLogCtx->HugeKeeperId, new TEvHugePreCompact(RTCtx->LsnMngr->GetLsn()), 0, cookie);
+                        LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, HullDs->HullCtx->VCtx->VDiskLogPrefix
+                            << "requesting PreCompact for ActDeleteSsts");
+                        ctx.Send(HullLogCtx->HugeKeeperId, new TEvHugePreCompact, 0, cookie);
                         PreCompactCallbacks.emplace(cookie, [this, ev](ui64 wId, const TActorContext& ctx) mutable {
                             Y_ABORT_UNLESS(wId);
+                            LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, HullDs->HullCtx->VCtx->VDiskLogPrefix
+                                << "got PreCompactResult for ActDeleteSsts, wId# " << wId);
                             ApplyCompactionResult(ctx, {}, {}, wId);
                             RTCtx->LevelIndex->UpdateLevelStat(LevelStat);
                         });
@@ -439,9 +443,13 @@ namespace NKikimr {
 
             if (!msg->FreedHugeBlobs.Empty() && !wId && !msg->Aborted) {
                 const ui64 cookie = NextPreCompactCookie++;
-                ctx.Send(HullLogCtx->HugeKeeperId, new TEvHugePreCompact(RTCtx->LsnMngr->GetLsn()), 0, cookie);
+                LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, HullDs->HullCtx->VCtx->VDiskLogPrefix
+                    << "requesting PreCompact for THullChange");
+                ctx.Send(HullLogCtx->HugeKeeperId, new TEvHugePreCompact, 0, cookie);
                 PreCompactCallbacks.emplace(cookie, [this, ev](ui64 wId, const TActorContext& ctx) mutable {
                     Y_ABORT_UNLESS(wId);
+                    LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, HullDs->HullCtx->VCtx->VDiskLogPrefix
+                        << "got PreCompactResult for THullChange, wId# " << wId);
                     Handle(ev, ctx, wId);
                 });
                 return;
@@ -455,7 +463,7 @@ namespace NKikimr {
             if (msg->FreshSegment) {
                 TStringStream dbg;
                 dbg << "{commiter# fresh"
-                    << " firtsLsn# "<< msg->FreshSegment->GetFirstLsn()
+                    << " firstLsn# "<< msg->FreshSegment->GetFirstLsn()
                     << " lastLsn# " << msg->FreshSegment->GetLastLsn()
                     << "}";
 
@@ -514,6 +522,7 @@ namespace NKikimr {
             const auto it = PreCompactCallbacks.find(ev->Cookie);
             Y_ABORT_UNLESS(it != PreCompactCallbacks.end());
             it->second(ev->Get()->WId, ctx);
+            PreCompactCallbacks.erase(it);
         }
 
         void Handle(typename TFreshAppendixCompactionDone::TPtr& ev, const TActorContext& ctx) {

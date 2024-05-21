@@ -836,6 +836,11 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(AlterCdcStream, NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStream, &NKikimrSchemeOp::TModifyScheme::MutableAlterCdcStream)
     GENERIC_HELPERS(DropCdcStream, NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStream, &NKikimrSchemeOp::TModifyScheme::MutableDropCdcStream)
 
+    // continuous backup
+    GENERIC_HELPERS(CreateContinuousBackup, NKikimrSchemeOp::EOperationType::ESchemeOpCreateContinuousBackup, &NKikimrSchemeOp::TModifyScheme::MutableCreateContinuousBackup)
+    GENERIC_HELPERS(AlterContinuousBackup, NKikimrSchemeOp::EOperationType::ESchemeOpAlterContinuousBackup, &NKikimrSchemeOp::TModifyScheme::MutableAlterContinuousBackup)
+    GENERIC_HELPERS(DropContinuousBackup, NKikimrSchemeOp::EOperationType::ESchemeOpDropContinuousBackup, &NKikimrSchemeOp::TModifyScheme::MutableDropContinuousBackup)
+
     // olap store
     GENERIC_HELPERS(CreateOlapStore, NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore, &NKikimrSchemeOp::TModifyScheme::MutableCreateColumnStore)
     GENERIC_HELPERS(AlterOlapStore, NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnStore, &NKikimrSchemeOp::TModifyScheme::MutableAlterColumnStore)

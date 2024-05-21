@@ -243,7 +243,7 @@ def do(args):
                     if not args.disable_wipes:
                         wipes.append(('wipe vslot id: %s, vdisk id: %s' % (vslot_id, vdisk_id), (do_wipe, vslot)))
                     if not args.disable_readonly:
-                        readolies.append(('readonly vslot id: %s, vdisk id: %s' % (vslot_id, vdisk_id), (do_readonly, vslot, True)))
+                        readonlies.append(('readonly vslot id: %s, vdisk id: %s' % (vslot_id, vdisk_id), (do_readonly, vslot, True)))
 
         def pick(v):
             action_name, action = random.choice(v)

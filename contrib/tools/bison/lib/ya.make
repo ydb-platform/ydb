@@ -46,7 +46,6 @@ ENDIF()
 SRCS(
     abitset.c
     argmatch.c
-    asnprintf.c
     basename-lgpl.c
     basename.c
     binary-io.c
@@ -56,15 +55,11 @@ SRCS(
     bitsetv-print.c
     bitsetv.c
     c-ctype.c
-    c-stack.c
     c-strcasecmp.c
     c-strncasecmp.c
-    calloc.c
-    clean-temp.c
     cloexec.c
-    close-stream.c
     close.c
-    closein.c
+    close-stream.c
     closeout.c
     concat-filename.c
     dirname-lgpl.c
@@ -74,45 +69,30 @@ SRCS(
     dup2.c
     ebitset.c
     error.c
-    execute.c
     exitfail.c
     fatal-signal.c
-    fclose.c
     fcntl.c
     fd-hook.c
     fd-safer-flag.c
     fd-safer.c
-    fflush.c
-    filenamecat-lgpl.c
-    filenamecat.c
-    float.c
     fopen-safer.c
-    fpurge.c
-    freading.c
     fstat.c
     get-errno.c
     getdtablesize.c
     getopt.c
     getopt1.c
-    gl_avltree_oset.c
-    gl_linkedhash_list.c
-    gl_list.c
-    gl_oset.c
-    gl_xlist.c
-    gl_xoset.c
     hash.c
-    isnand.c
-    isnanf.c
-    isnanl.c
     itold.c
+    isnanl.c
+    isnand.c
     lbitset.c
     localcharset.c
     lseek.c
     lstat.c
     malloc.c
     malloca.c
-    mbrtowc.c
     mbswidth.c
+    mbrtowc.c
     memchr2.c
     mkstemp-safer.c
     nl_langinfo.c
@@ -133,9 +113,6 @@ SRCS(
     rmdir.c
     secure_getenv.c
     sig-handler.c
-    signbitd.c
-    signbitf.c
-    signbitl.c
     spawn-pipe.c
     stat.c
     stpcpy.c
@@ -146,21 +123,16 @@ SRCS(
     timevar.c
     tmpdir.c
     unistd.c
-    unsetenv.c
     vasnprintf.c
     vbitset.c
     verror.c
-    version-etc-fsf.c
-    version-etc.c
     wait-process.c
     wctype-h.c
     xalloc-die.c
-    xasprintf.c
     xconcat-filename.c
     xmalloc.c
     xmalloca.c
     xmemdup0.c
-    xprintf.c
     xsize.c
     xstrndup.c
     xvasprintf.c
@@ -168,9 +140,7 @@ SRCS(
 
 IF (NOT MUSL)
     SRCS(
-        freadahead.c
         fseterr.c
-        #        fseek.c
     )
 ENDIF()
 
@@ -194,7 +164,6 @@ IF (OS_WINDOWS)
         perror.c
         strstr.c
         mkstemp.c
-        vasprintf.c
         strsignal.c
         mkdtemp.c
         fseeko.c
@@ -208,15 +177,6 @@ IF (OS_WINDOWS)
         sigaction.c
         sigprocmask.c
         snprintf.c
-        spawn_faction_addclose.c
-        spawn_faction_adddup2.c
-        spawn_faction_addopen.c
-        spawn_faction_destroy.c
-        spawn_faction_init.c
-        spawnattr_destroy.c
-        spawnattr_init.c
-        spawnattr_setflags.c
-        spawnattr_setsigmask.c
         spawni.c
         spawnp.c
         strndup.c

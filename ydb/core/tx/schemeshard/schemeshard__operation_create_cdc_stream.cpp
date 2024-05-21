@@ -988,7 +988,7 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
         auto it = tablePath->GetChildren().find(op.GetIndexName());
         if (it == tablePath->GetChildren().end()) {
             return {CreateReject(opId, NKikimrScheme::StatusSchemeError,
-            "requested particular path hasn't been found")}; 
+                "requested particular path hasn't been found")};
         }
         candidates.emplace_back(it->first);
     }

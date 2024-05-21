@@ -61,6 +61,26 @@ namespace NKikimr {
     };
 
     ////////////////////////////////////////////////////////////////////////////
+    // TEvHullHugeSlotsAllocate
+    ////////////////////////////////////////////////////////////////////////////
+    class TEvHullHugeSlotsAllocate : public TEventLocal<TEvHullHugeSlotsAllocate, TEvBlobStorage::EvHullHugeSlotsAllocate> {
+        using TSlotSize = size_t;
+    public:
+        const std::map<TSlotSize, int> SlotSizes;
+
+        TEvHullHugeSlotsAllocate(const std::map<TSlotSize, int> &slotSizes)
+            : SlotSizes(slotSizes) {}
+    };
+
+    class TEvHullHugeSlotsAllocated : public TEventLocal<TEvHullHugeSlotsAllocated, TEvBlobStorage::EvHullHugeSlotsAllocated> {
+    public:
+        const std::vector<NHuge::THugeSlot> Slots;
+
+        TEvHullHugeSlotsAllocated(const std::vector<NHuge::THugeSlot>&& slots)
+            : Slots(std::move(slots)) {}
+    };
+
+    ////////////////////////////////////////////////////////////////////////////
     // TEvHullLogHugeBlob
     ////////////////////////////////////////////////////////////////////////////
     class TEvHullLogHugeBlob : public TEventLocal<TEvHullLogHugeBlob, TEvBlobStorage::EvHullLogHugeBlob> {
@@ -123,6 +143,28 @@ namespace NKikimr {
                 << " Lsn# " << RecLsn << " Used# " << SlotIsUsed << "}";
             return str.Str();
         }
+    };
+
+    ////////////////////////////////////////////////////////////////////////////
+    // TEvHullHugeSlotsUsed
+    ////////////////////////////////////////////////////////////////////////////
+    class TEvHullHugeSlotsUsed : public TEventLocal<TEvHullHugeSlotsUsed, TEvBlobStorage::EvHullHugeSlotsUsed> {
+    public:
+        const std::vector<NHuge::THugeSlot> UsedSlots;
+        const std::vector<NHuge::THugeSlot> UnusedSlots;
+
+        const ui64 RecLsn;
+        const ui64 WriteId;
+
+        TEvHullHugeSlotsUsed(const std::vector<NHuge::THugeSlot>& UsedSlots, 
+                             const std::vector<NHuge::THugeSlot>& UnusedSlots, 
+                             ui64 recLsn, 
+                             ui64 writeId)
+            : UsedSlots(UsedSlots)
+            , UnusedSlots(UnusedSlots)
+            , RecLsn(recLsn)
+            , WriteId(writeId)
+        {}
     };
 
     ////////////////////////////////////////////////////////////////////////////

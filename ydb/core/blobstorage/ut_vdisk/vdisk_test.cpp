@@ -431,6 +431,11 @@ Y_UNIT_TEST_SUITE(TBsHuge) {
                                                            DefDisksInDomain,
                                                            NKikimr::TErasureType::ErasureNone);
     }
+
+    Y_UNIT_TEST(AllocateHugeSlots) {
+        THugeAllocTest test;
+        TestRun<THugeAllocTest, TFastVDiskSetupCompacted>(&test, TIMEOUT);
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////

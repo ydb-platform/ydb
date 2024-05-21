@@ -182,6 +182,39 @@ NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> IShardingBase::
     return result;
 }
 
+NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> IShardingBase::BuildReduceShardsModifiers(const std::vector<ui64>& newTabletIds) const {
+    NKikimrSchemeOp::TShardingModification startModification;
+    for (auto&& i : newTabletIds) {
+        startModification.AddNewShardIds(i);
+        startModification.AddCloseReadIds(i);
+        startModification.AddCloseWriteIds(i);
+    }
+
+    TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> infosConclusion = BuildMergeShardsModifiers(newTabletIds);
+    if (infosConclusion.IsFail()) {
+        return infosConclusion;
+    }
+    std::vector<NKikimrSchemeOp::TAlterShards> result;
+    {
+        NKikimrSchemeOp::TAlterShards startAlter;
+        *startAlter.MutableModification() = std::move(startModification);
+        result.emplace_back(std::move(startAlter));
+    }
+    for (auto&& i : *infosConclusion) {
+        result.emplace_back(std::move(i));
+    }
+    {
+        NKikimrSchemeOp::TShardingModification finishModification;
+        for (auto&& i : GetOrderedShardIds()) {
+            finishModification.AddDeleteShardIds(i);
+        }
+        NKikimrSchemeOp::TAlterShards finishAlter;
+        *finishAlter.MutableModification() = std::move(finishModification);
+        result.emplace_back(std::move(finishAlter));
+    }
+    return result;
+}
+
 NKikimrSchemeOp::TColumnTableSharding IShardingBase::SerializeToProto() const {
     NKikimrSchemeOp::TColumnTableSharding result;
     AFL_VERIFY(Shards.size() == OrderedShardIds.size());

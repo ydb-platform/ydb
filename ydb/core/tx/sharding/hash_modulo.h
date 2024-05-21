@@ -227,9 +227,12 @@ public:
 };
 
 class THashShardingModuloN : public THashShardingImpl {
+public:
+    static TString GetClassNameStatic() {
+        return "MODULO";
+    }
 private:
     using TBase = THashShardingImpl;
-public:
 private:
     std::optional<TSpecificShardingInfo> SpecialShardingInfo;
 
@@ -252,6 +255,8 @@ private:
 
 protected:
     virtual TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> DoBuildSplitShardsModifiers(const std::vector<ui64>& newTabletIds) const override;
+
+    virtual TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> DoBuildMergeShardsModifiers(const std::vector<ui64>& newTabletIds) const override;
 
     virtual TConclusionStatus DoOnAfterModification() override;
     virtual TConclusionStatus DoOnBeforeModification() override {
@@ -288,6 +293,10 @@ public:
     THashShardingModuloN(const std::vector<ui64>& shardIds, const std::vector<TString>& columnNames, ui64 seed = 0)
         : TBase(shardIds, columnNames, seed)
     {}
+
+    virtual TString GetClassName() const override {
+        return GetClassNameStatic();
+    }
 
     virtual THashMap<ui64, std::vector<ui32>> MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch) const override;
 };

@@ -20,7 +20,7 @@ namespace NKikimr::NOlap::NDataSharing::NEvents {
 class TPathIdData {
 private:
     YDB_READONLY(ui64, PathId, 0);
-    YDB_READONLY_DEF(std::vector<TPortionInfo>, Portions);
+    YDB_ACCESSOR_DEF(std::vector<TPortionInfo>, Portions);
 
     TPathIdData() = default;
 

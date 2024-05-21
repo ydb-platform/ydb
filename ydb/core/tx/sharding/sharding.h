@@ -159,12 +159,17 @@ protected:
         }
         return false;
     }
-
+    virtual TString GetClassName() const = 0;
     virtual void DoSerializeToProto(NKikimrSchemeOp::TColumnTableSharding& proto) const = 0;
     virtual TConclusionStatus DoDeserializeFromProto(const NKikimrSchemeOp::TColumnTableSharding& proto) = 0;
     virtual TConclusionStatus DoApplyModification(const NKikimrSchemeOp::TShardingModification& proto) = 0;
     virtual std::set<ui64> DoGetModifiedShardIds(const NKikimrSchemeOp::TShardingModification& proto) const = 0;
-    virtual TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> DoBuildSplitShardsModifiers(const std::vector<ui64>& newTabletIds) const = 0;
+    virtual TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> DoBuildSplitShardsModifiers(const std::vector<ui64>& /*newTabletIds*/) const {
+        return TConclusionStatus::Fail("shards splitting not implemented for " + GetClassName());
+    }
+    virtual TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> DoBuildMergeShardsModifiers(const std::vector<ui64>& /*newTabletIds*/) const {
+        return TConclusionStatus::Fail("shards merging not implemented for " + GetClassName());
+    }
     virtual TConclusionStatus DoOnAfterModification() = 0;
     virtual TConclusionStatus DoOnBeforeModification() = 0;
     virtual std::shared_ptr<IGranuleShardingLogic> DoGetTabletShardingInfoOptional(const ui64 tabletId) const = 0;
@@ -234,7 +239,12 @@ public:
         return DoBuildSplitShardsModifiers(newTabletIds);
     }
 
+    TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> BuildMergeShardsModifiers(const std::vector<ui64>& newTabletIds) const {
+        return DoBuildMergeShardsModifiers(newTabletIds);
+    }
+
     TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> BuildAddShardsModifiers(const std::vector<ui64>& newTabletIds) const;
+    TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> BuildReduceShardsModifiers(const std::vector<ui64>& newTabletIds) const;
 
     void CloseShardWriting(const ui64 shardId) {
         GetShardInfoVerified(shardId).SetIsOpenForWrite(false);

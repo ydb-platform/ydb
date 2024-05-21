@@ -156,4 +156,53 @@ std::shared_ptr<NKikimr::NSharding::IGranuleShardingLogic> THashShardingModuloN:
     }
 }
 
+NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> THashShardingModuloN::DoBuildMergeShardsModifiers(const std::vector<ui64>& newTabletIds) const {
+    if (newTabletIds.size() * 2 != GetOrderedShardIds().size()) {
+        return TConclusionStatus::Fail("can div 2 only for reduce shards count");
+    }
+    if (!!SpecialShardingInfo) {
+        return TConclusionStatus::Fail("not unified shards distribution for consistency intervals modification");
+    }
+    const TSpecificShardingInfo shardingInfo = SpecialShardingInfo ? *SpecialShardingInfo : TSpecificShardingInfo(GetOrderedShardIds());
+    std::vector<NKikimrSchemeOp::TAlterShards> result;
+    {
+        ui32 idx = 0;
+        for (auto&& i : newTabletIds) {
+            const ui64 from1 = GetOrderedShardIds()[2 * idx];
+            const ui64 from2 = GetOrderedShardIds()[2 * idx + 1];
+            auto source1 = shardingInfo.GetShardingTabletVerified(from1);
+            auto source2 = shardingInfo.GetShardingTabletVerified(from2);
+            AFL_VERIFY(source1.GetAppropriateMods().size() == 1);
+            AFL_VERIFY(source2.GetAppropriateMods().size() == 1);
+            AFL_VERIFY(*source1.GetAppropriateMods().begin() + 1 == *source2.GetAppropriateMods().begin());
+            {
+                NKikimrSchemeOp::TAlterShards alter;
+                TSpecificShardingInfo::TModuloShardingTablet newInterval(i, { *source1.GetAppropriateMods().begin() ,*source2.GetAppropriateMods().begin() });
+                alter.MutableModification()->AddOpenWriteIds(i);
+                *alter.MutableModification()->MutableModulo()->AddShards() = newInterval.SerializeToProto();
+                result.emplace_back(alter);
+            }
+            {
+                NKikimrSchemeOp::TAlterShards alter;
+                auto& transfer = *alter.MutableTransfer()->AddTransfers();
+                transfer.SetDestinationTabletId(newTabletIds[idx]);
+                transfer.AddSourceTabletIds(from1);
+                transfer.AddSourceTabletIds(from2);
+                result.emplace_back(alter);
+            }
+            {
+                NKikimrSchemeOp::TAlterShards alter;
+                alter.MutableModification()->AddOpenReadIds(i);
+                alter.MutableModification()->AddCloseWriteIds(from1);
+                alter.MutableModification()->AddCloseWriteIds(from2);
+                alter.MutableModification()->AddCloseReadIds(from1);
+                alter.MutableModification()->AddCloseReadIds(from2);
+                result.emplace_back(alter);
+            }
+            ++idx;
+        }
+    }
+    return result;
+}
+
 }

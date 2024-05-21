@@ -450,6 +450,10 @@ public:
         return TPortionAddress(PathId, Portion);
     }
 
+    void ResetShardingVersion() {
+        ShardingVersion.reset();
+    }
+
     void SetPathId(const ui64 pathId) {
         PathId = pathId;
     }

@@ -7,6 +7,9 @@ class TLogsSharding : public THashShardingImpl {
 public:
     static constexpr ui32 DEFAULT_ACITVE_SHARDS = 10;
     static constexpr TDuration DEFAULT_CHANGE_PERIOD = TDuration::Minutes(5);
+    static TString GetClassNameStatic() {
+        return "LOGS_SHARDING";
+    }
 private:
     using TBase = THashShardingImpl;
     ui32 NumActive = DEFAULT_ACITVE_SHARDS;
@@ -38,8 +41,9 @@ private:
     virtual TConclusionStatus DoApplyModification(const NKikimrSchemeOp::TShardingModification& /*proto*/) override {
         return TConclusionStatus::Fail("its impossible to modify logs sharding");
     }
-    virtual TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> DoBuildSplitShardsModifiers(const std::vector<ui64>& /*newTabletIds*/) const override {
-        return TConclusionStatus::Fail("cannot split logs sharding");
+
+    virtual TString GetClassName() const override {
+        return GetClassNameStatic();
     }
 public:
     TLogsSharding() = default;

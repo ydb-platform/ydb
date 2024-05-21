@@ -255,12 +255,17 @@ public:
 };
 
 class TConsistencySharding64: public THashShardingImpl {
+public:
+    static TString GetClassNameStatic() {
+        return "CONSISTENCY";
+    }
 private:
     using TBase = THashShardingImpl;
 
     std::optional<TSpecificShardingInfo> SpecialShardingInfo;
 
     virtual TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> DoBuildSplitShardsModifiers(const std::vector<ui64>& newTabletIds) const override;
+    virtual TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> DoBuildMergeShardsModifiers(const std::vector<ui64>& newTabletIds) const override;
 
     bool UpdateShardInfo(const TSpecificShardingInfo::TConsistencyShardingTablet& info) {
         GetShardInfoVerified(info.GetTabletId()).IncrementVersion();
@@ -312,11 +317,14 @@ public:
     TConsistencySharding64() = default;
 
     TConsistencySharding64(const std::vector<ui64>& shardIds, const std::vector<TString>& columnNames, ui64 seed = 0)
-        : TBase(shardIds, columnNames, seed){
+        : TBase(shardIds, columnNames, seed) {
     }
 
     virtual THashMap<ui64, std::vector<ui32>> MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch) const override;
 
+    virtual TString GetClassName() const override {
+        return GetClassNameStatic();
+    }
 };
 
 class TGranuleSharding: public THashGranuleSharding {

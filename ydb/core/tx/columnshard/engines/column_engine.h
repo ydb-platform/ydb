@@ -301,9 +301,6 @@ public:
         return TSnapshot::Zero();
     }
     virtual void OnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& manager, const NColumnShard::TTtl& ttl, const std::optional<ui64> pathId) = 0;
-
-    void AddGranuleShardingInfoOnExecute(class TGranuleShardingInfoContainer& shardingInfo, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) = 0;
-    void AddGranuleShardingInfoOnComplete(class TGranuleShardingInfoContainer& shardingInfo, const NOlap::TSnapshot& version) = 0;
 };
 
 }   // namespace NKikimr::NOlap

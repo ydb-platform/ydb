@@ -289,7 +289,7 @@ public:
         return out.MakeState();
     }
 
-    void Load2(NUdf::TUnboxedValue& state) override {
+    bool Load2(NUdf::TUnboxedValue& state) override {
         TMrInputSerializer in(SerializerContext, state);
 
         const auto loadStateVersion = in.GetStateVersion();
@@ -317,6 +317,7 @@ public:
         restoredRowPatternConfiguration->Load(in);
         MKQL_ENSURE(*restoredRowPatternConfiguration == *RowPatternConfiguration, "Restored and current RowPatternConfiguration is different");
         MKQL_ENSURE(in.Empty(), "State is corrupted");
+        return true;
     }
 
     bool HasListItems() const override {
@@ -436,7 +437,7 @@ public:
         return serializer.MakeState();
     }
 
-    void Load2(NUdf::TUnboxedValue& state) override {
+    bool Load2(NUdf::TUnboxedValue& state) override {
         TMrInputSerializer in(SerializerContext, state);
         
         const auto loadStateVersion = in.GetStateVersion();
@@ -471,6 +472,7 @@ public:
         MKQL_ENSURE(NfaTransitionGraph, "Empty NfaTransitionGraph");
         MKQL_ENSURE(*restoredTransitionGraph == *NfaTransitionGraph, "Restored and current NfaTransitionGraph is different");
         MKQL_ENSURE(in.Empty(), "State is corrupted");
+        return true;
     }
 
     bool HasListItems() const override {

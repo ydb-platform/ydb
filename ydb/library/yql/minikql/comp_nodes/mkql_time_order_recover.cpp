@@ -105,7 +105,7 @@ public:
             return false;
         }
 
-        void Load2(NUdf::TUnboxedValue& state) override {
+        bool Load2(NUdf::TUnboxedValue& state) override {
             TInputSerializer in(state, EMkqlStateType::SIMPLE_BLOB);
 
             const auto loadStateVersion = in.GetStateVersion();
@@ -121,6 +121,7 @@ public:
                 Heap.emplace(THeapKey(t, MonotonicCounter), std::move(row));
             }
             in(Latest, Terminating);
+            return true;
         }
 
         NUdf::TUnboxedValue Save() const override {

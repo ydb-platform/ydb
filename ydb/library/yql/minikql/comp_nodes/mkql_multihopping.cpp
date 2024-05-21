@@ -129,9 +129,10 @@ public:
             LoadStateImpl(in);
         }
 
-        void Load2(NUdf::TUnboxedValue& state) override {
+        bool Load2(NUdf::TUnboxedValue& state) override {
             TInputSerializer in(state, EMkqlStateType::SIMPLE_BLOB);
             LoadStateImpl(in);
+            return true;
         }
 
         void LoadStateImpl(TInputSerializer& in) {

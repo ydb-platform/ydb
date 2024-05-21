@@ -1013,9 +1013,10 @@ private:
         ThrowNotSupported(__func__);
     }
 
-    void Load2(NUdf::TUnboxedValue& state) override {
+    bool Load2(NUdf::TUnboxedValue& state) override {
         Y_UNUSED(state);
         ThrowNotSupported(__func__);
+        return false;
     }
 
     void Push(const NUdf::TUnboxedValuePod& value) override {

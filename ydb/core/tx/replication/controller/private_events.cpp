@@ -143,6 +143,15 @@ bool TEvPrivate::TEvResolveSecretResult::IsSuccess() const {
     return Success;
 }
 
+TEvPrivate::TEvAlterDstResult::TEvAlterDstResult(ui64 rid, ui64 tid, NKikimrScheme::EStatus status, const TString& error)
+    : TBase(rid, tid, status, error)
+{
+}
+
+TString TEvPrivate::TEvAlterDstResult::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {" << ToStringBody() << " }";
+}
+
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::NController::TEvPrivate::TEvDiscoveryTargetsResult::TAddEntry, stream, value) {

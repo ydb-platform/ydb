@@ -29,7 +29,7 @@ namespace NYT::NFormats {
 using namespace NTableClient;
 using namespace NComplexTypes;
 
-static const auto& Logger = FormatsLogger;
+static constexpr auto& Logger = FormatsLogger;
 
 using TBodyWriter = std::function<void(TMutableRef)>;
 using TBatchColumn = IUnversionedColumnarRowBatch::TColumn;

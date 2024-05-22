@@ -78,7 +78,7 @@ TClient::TClient(
         &CreateTableMountCache,
         Connection_->GetConfig()->TableMountCache,
         RetryingChannel_,
-        RpcProxyClientLogger,
+        RpcProxyClientLogger(),
         Connection_->GetConfig()->RpcTimeout))
     , TimestampProvider_(BIND(&TClient::CreateTimestampProvider, Unretained(this)))
 { }

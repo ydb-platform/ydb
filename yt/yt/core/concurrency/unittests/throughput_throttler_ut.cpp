@@ -18,7 +18,7 @@ using namespace testing;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const TLogger Logger("Test");
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Test");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -324,7 +324,7 @@ public:
         Config_->MaxPrefetchAmount = 1 << 30;
         Config_->Window = TDuration::MilliSeconds(100);
 
-        Throttler_ = CreatePrefetchingThrottler(Config_, Underlying_, Logger);
+        Throttler_ = CreatePrefetchingThrottler(Config_, Underlying_, Logger());
     }
 
 protected:
@@ -459,7 +459,7 @@ public:
         Config_->MaxPrefetchAmount = 1 << 30;
         Config_->Window = TDuration::Seconds(1);
 
-        Throttler_ = CreatePrefetchingThrottler(Config_, Underlying_, Logger);
+        Throttler_ = CreatePrefetchingThrottler(Config_, Underlying_, Logger());
     }
 
 protected:

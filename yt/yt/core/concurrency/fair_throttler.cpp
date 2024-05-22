@@ -657,7 +657,7 @@ IThroughputThrottlerPtr TFairThrottler::CreateBucketThrottler(
     }
 
     auto throttler = New<TBucketThrottler>(
-        Logger.WithTag("Bucket: %v", name),
+        Logger().WithTag("Bucket: %v", name),
         Profiler_.WithTag("bucket", name),
         SharedBucket_,
         Config_);

@@ -35,7 +35,7 @@ public:
         , Client_(std::move(client))
         , ConsumerPath_(std::move(consumerPath))
         , PartitionIndex_(partitionIndex)
-        , Logger(QueueClientLogger.WithTag("Consumer: %v, Partition: %v", ConsumerPath_, PartitionIndex_))
+        , Logger(QueueClientLogger().WithTag("Consumer: %v, Partition: %v", ConsumerPath_, PartitionIndex_))
         , RowBatchReadOptions_({Config_->MaxRowCount, Config_->MaxDataWeight, Config_->DataWeightPerRowHint})
         , PullQueueOptions_({.UseNativeTabletNodeApi = Config_->UseNativeTabletNodeApi})
     { }
@@ -271,7 +271,7 @@ public:
         , QueuePath_(std::move(queuePath))
         , PartitionIndex_(partitionIndex)
         , RowBatchReadOptions_({Config_->MaxRowCount, Config_->MaxDataWeight, Config_->DataWeightPerRowHint})
-        , Logger(QueueClientLogger.WithTag("Consumer: %v, Queue: %v, Partition: %v", ConsumerPath_, QueuePath_, PartitionIndex_))
+        , Logger(QueueClientLogger().WithTag("Consumer: %v, Queue: %v, Partition: %v", ConsumerPath_, QueuePath_, PartitionIndex_))
     {
         PullConsumerOptions_.UseNativeTabletNodeApi = Config_->UseNativeTabletNodeApi;
     }

@@ -58,7 +58,7 @@ using namespace NTracing;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto& Logger = DriverLogger;
+static constexpr auto& Logger = DriverLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -125,7 +125,7 @@ public:
         , ProxyDiscoveryCache_(CreateProxyDiscoveryCache(
             Config_->ProxyDiscoveryCache,
             RootClient_))
-        , StickyTransactionPool_(CreateStickyTransactionPool(Logger))
+        , StickyTransactionPool_(CreateStickyTransactionPool(Logger()))
     {
         // Register all commands.
 #define REGISTER(command, name, inDataType, outDataType, isVolatile, isHeavy, version) \
@@ -528,9 +528,8 @@ private:
     {
         const auto& request = context->Request();
 
-        auto Logger = DriverLogger;
         if (request.LoggingTags) {
-            Logger.WithRawTag(*request.LoggingTags);
+            Logger().WithRawTag(*request.LoggingTags);
         }
 
         NTracing::TChildTraceContextGuard commandSpan(ConcatToString(TStringBuf("Driver:"), request.CommandName));

@@ -6,6 +6,7 @@ SRCS(
     fixed_growth_string_output.cpp
     test_memory_tracker.cpp
     test_server_host.cpp
+    test_proxy_service.cpp
     GLOBAL framework.cpp
 )
 

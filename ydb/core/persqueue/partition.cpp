@@ -3040,13 +3040,19 @@ void TPartition::Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const T
     Send(ev->Sender, response.Release());
 }
 
-void TPartition::HandleOnInit(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorContext&)
+void TPartition::HandleOnInit(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorContext& ctx)
 {
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                "Delete supportive partition " << Partition);
+    Y_ABORT_UNLESS(IsSupportive());
+
     PendingEvents.emplace_back(ev->ReleaseBase().Release());
 }
 
 void TPartition::Handle(TEvPQ::TEvDeletePartition::TPtr&, const TActorContext& ctx)
 {
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                "Delete supportive partition " << Partition);
     Y_ABORT_UNLESS(IsSupportive());
     Y_ABORT_UNLESS(DeletePartitionState == DELETION_NOT_INITED);
 

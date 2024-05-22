@@ -2692,6 +2692,7 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
         TPartitionId partitionId(originalPartitionId, writeId, NextSupportivePartitionId++);
 
         writeInfo.Partitions.emplace(originalPartitionId, partitionId);
+        TxWritesChanged = true;
         AddSupportivePartition(partitionId);
 
         Y_ABORT_UNLESS(Partitions.contains(partitionId));
@@ -3434,6 +3435,9 @@ void TPersQueue::CreateSupportivePartitionActors(const TActorContext& ctx)
 
 void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
 {
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                "Tablet " << TabletID() <<
+                ". The writing of transaction information begins");
     Y_ABORT_UNLESS(!WriteTxsInProgress);
 
     bool canProcess =
@@ -3441,9 +3445,13 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
         CanProcessPlanStepQueue() ||
         CanProcessWriteTxs() ||
         CanProcessDeleteTxs() ||
-        CanProcessTxWrites()
+        CanProcessTxWrites() ||
+        TxWritesChanged
         ;
     if (!canProcess) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                    "Tablet " << TabletID() <<
+                    ". Skip");
         return;
     }
 
@@ -3489,6 +3497,8 @@ void TPersQueue::EndWriteTxs(const NKikimrClient::TResponse& resp,
         ctx.Send(ctx.SelfID, new TEvents::TEvPoisonPill());
         return;
     }
+
+    TxWritesChanged = false;
 
     SendReplies(ctx);
     CheckChangedTxStates(ctx);
@@ -4460,13 +4470,21 @@ void TPersQueue::ProcessCheckPartitionStatusRequests(const TPartitionId& partiti
     }
 }
 
-void TPersQueue::Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext&)
+void TPersQueue::Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx)
 {
     auto& record = ev->Get()->Record;
     ui64 writeId = record.GetLockId();
 
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                "Tablet " << TabletID() <<
+                " Handle 'TEvLongTxService::TEvLockStatus'." <<
+                " WriteId: " << writeId);
+
     if (!TxWrites.contains(writeId)) {
         // the transaction has already been completed
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                    "Tablet " << TabletID() <<
+                    ". Unknown WriteId");
         return;
     }
 
@@ -4474,11 +4492,17 @@ void TPersQueue::Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& e
     writeInfo.LongTxSubscriptionStatus = record.GetStatus();
 
     if (writeInfo.LongTxSubscriptionStatus == NKikimrLongTxService::TEvLockStatus::STATUS_SUBSCRIBED) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                    "Tablet " << TabletID() <<
+                    ". Subscribed for WriteId");
         return;
     }
 
     if (!writeInfo.TxId.Defined()) {
         // the message TEvProposeTransaction will not come anymore
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                    "Tablet " << TabletID() <<
+                    ". The message TEvProposeTransaction will not come anymore");
         BeginDeletePartitions(writeInfo);
     }
 }
@@ -4499,9 +4523,15 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const T
 
 void TPersQueue::Handle(TEvPQ::TEvDeletePartitionDone::TPtr& ev, const TActorContext& ctx)
 {
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                "Tablet " << TabletID() <<
+                ". Handle TEvDeletePartitionDone");
     auto* event = ev->Get();
     Y_ABORT_UNLESS(event->PartitionId.WriteId.Defined());
     const ui64 writeId = *event->PartitionId.WriteId;
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                "Tablet " << TabletID() <<
+                ". WriteId: " << writeId << ", PartitionId: " << event->PartitionId);
     Y_ABORT_UNLESS(TxWrites.contains(writeId));
     TTxWriteInfo& writeInfo = TxWrites.at(writeId);
     Y_ABORT_UNLESS(writeInfo.Partitions.contains(event->PartitionId.OriginalPartitionId));
@@ -4512,8 +4542,14 @@ void TPersQueue::Handle(TEvPQ::TEvDeletePartitionDone::TPtr& ev, const TActorCon
 
     Partitions.erase(partitionId);
 
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                " Tablet " << TabletID() <<
+                ". Delete original partition from WriteInfo");
     writeInfo.Partitions.erase(partitionId.OriginalPartitionId);
     if (writeInfo.Partitions.empty()) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                    " Tablet " << TabletID() <<
+                    ". Empty partition list for WriteInfo");
         UnsubscribeWriteId(writeId, ctx);
         if (writeInfo.TxId.Defined()) {
             if (auto tx = GetTransaction(ctx, *writeInfo.TxId); tx) {
@@ -4522,6 +4558,7 @@ void TPersQueue::Handle(TEvPQ::TEvDeletePartitionDone::TPtr& ev, const TActorCon
         }
         TxWrites.erase(writeId);
     }
+    TxWritesChanged = true;
 
     TryWriteTxs(ctx);
 }

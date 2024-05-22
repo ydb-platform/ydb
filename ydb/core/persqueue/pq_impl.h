@@ -205,6 +205,7 @@ private:
     };
 
     THashMap<ui64, TTxWriteInfo> TxWrites;
+    bool TxWritesChanged = false;
     ui32 NextSupportivePartitionId = 100'000;
 
     TActorId CacheActor;

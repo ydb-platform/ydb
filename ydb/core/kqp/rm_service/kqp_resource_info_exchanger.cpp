@@ -76,7 +76,7 @@ class TKqpResourceInfoExchangerActor : public TActorBootstrapped<TKqpResourceInf
 
     struct TDelaySettings {
         TDuration StartDelayMs = TDuration::MilliSeconds(500);
-        TDuration MaxDelayMs = TDuration::MilliSeconds(2000);
+        TDuration MaxDelayMs = TDuration::MilliSeconds(10000);
     };
 
     struct TNodeState {
@@ -481,6 +481,8 @@ private:
         auto [nodeIds, isChanged] = UpdateBoardInfo(ev->Get()->InfoEntries);
 
         if (!nodeIds.empty()) {
+            UpdateCurrentNodesDelay();
+
             SendInfos({SelfId().NodeId()}, true, std::move(nodeIds));
         }
 
@@ -503,6 +505,8 @@ private:
         auto [nodeIds, isChanged] = UpdateBoardInfo(ev->Get()->Updates);
 
         if (!nodeIds.empty()) {
+            UpdateCurrentNodesDelay();
+
             SendInfos({SelfId().NodeId()}, true, std::move(nodeIds));
         }
 
@@ -624,6 +628,17 @@ private:
 
 private:
 
+    void UpdateCurrentNodesDelay() {
+        ui64 nodesCount = NodesState.size();
+        if (nodesCount >= 1000) {
+            ui64 nodesCount = NodesState.size();
+            if (nodesCount >= 1000) {
+                ui64 newCurrentDelay = nodesCount * nodesCount / 2000;
+                CurrentNodesDelay = std::max(CurentNodesDelay, TDuration::Milliseconds(newCurrentDelay));
+            }
+        }
+    }
+
     void PassAway() override {
         Send(BoardState.Publisher, new TEvents::TEvPoison);
         Send(BoardState.Subscriber, new TEvents::TEvPoison);
@@ -635,6 +650,7 @@ private:
         if (state.CurrentDelay == TDuration::Zero()) {
             state.CurrentDelay = ExchangerSettings.StartDelayMs;
         }
+        state.CurrentDelay = std::max(CurentNodesDelay, state.CurrentDelay);
         return state.CurrentDelay;
     }
 
@@ -762,6 +778,8 @@ private:
 
     TIntrusivePtr<TKqpCounters> Counters;
     NKikimrConfig::TTableServiceConfig::TResourceManager::TInfoExchangerSettings Settings;
+
+    TDuration CurrentNodesDelay = TDuration::Milliseconds(500);
 };
 
 NActors::IActor* CreateKqpResourceInfoExchangerActor(TIntrusivePtr<TKqpCounters> counters,

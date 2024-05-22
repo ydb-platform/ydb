@@ -558,7 +558,7 @@ struct TCreateTopicSettings : public TOperationRequestSettings<TCreateTopicSetti
         return *this;
     }
 
-    TCreateTopicSettings& PartitioningSettings(ui64 minActivePartitions, ui64 /*partitionCountLimit*/, ui64 maxActivePartitions = 0, TAutoscalingSettings autoscalingSettings = {}) {
+    TCreateTopicSettings& PartitioningSettings(ui64 minActivePartitions, ui64 maxActivePartitions, TAutoscalingSettings autoscalingSettings = {}) {
         PartitioningSettings_ = TPartitioningSettings(minActivePartitions, maxActivePartitions, autoscalingSettings);
         return *this;
     }

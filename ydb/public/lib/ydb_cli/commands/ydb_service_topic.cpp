@@ -305,8 +305,14 @@ namespace {
         NYdb::NTopic::TTopicClient topicClient(driver);
 
         auto settings = NYdb::NTopic::TCreateTopicSettings();
-        Y_ABORT_UNLESS(GetAutoscalingStrategy() || GetScaleThresholdTime() || GetScaleUpThresholdPercent() || GetScaleDownThresholdPercent(), "Autoscaling parameters for TCommandTopicCreate can not be empty");
-        auto autoscaleSettings = NTopic::TAutoscalingSettings(*GetAutoscalingStrategy(), TDuration::Seconds(*GetScaleThresholdTime()), *GetScaleUpThresholdPercent(), *GetScaleDownThresholdPercent());
+
+        auto autoscaleSettings = NTopic::TAutoscalingSettings(
+        GetAutoscalingStrategy() ? *GetAutoscalingStrategy() : NTopic::EAutoscalingStrategy::Disabled,
+        GetScaleThresholdTime() ? TDuration::Seconds(*GetScaleThresholdTime()) : TDuration::Seconds(0),
+        GetScaleUpThresholdPercent() ? *GetScaleUpThresholdPercent() : 0,
+        GetScaleDownThresholdPercent() ? *GetScaleDownThresholdPercent() : 0);
+
+        settings.PartitioningSettings(MinActivePartitions_, MaxActivePartitions_, autoscaleSettings);
         settings.PartitionWriteBurstBytes(PartitionWriteSpeedKbps_ * 1_KB);
         settings.PartitionWriteSpeedBytesPerSecond(PartitionWriteSpeedKbps_ * 1_KB);
 

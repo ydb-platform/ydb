@@ -84,6 +84,8 @@ protected:
     void WaitForSessionClose(const TString& topicPath,
                              const TString& messageGroupId,
                              NYdb::EStatus status);
+    void CloseTopicWriteSession(const TString& topicPath,
+                                const TString& messageGroupId);
 
     enum EEndOfTransaction {
         Commit,
@@ -542,6 +544,20 @@ void TFixture::TTopicWriteSessionContext::Write(const TString& message, NTable::
 
     ++WriteCount;
     ContinuationToken = Nothing();
+}
+
+void TFixture::CloseTopicWriteSession(const TString& topicPath,
+                                      const TString& messageGroupId)
+{
+    std::pair<TString, TString> key(topicPath, messageGroupId);
+    auto i = TopicWriteSessions.find(key);
+
+    UNIT_ASSERT(i != TopicWriteSessions.end());
+
+    TTopicWriteSessionContext& context = i->second;
+
+    context.Session->Close();
+    TopicWriteSessions.erase(key);
 }
 
 void TFixture::WriteToTopic(const TString& topicPath,
@@ -1317,6 +1333,41 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_12, TFixture)
 
     WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #2", &tx);
     WaitForSessionClose("topic_A", TEST_MESSAGE_GROUP_ID, NYdb::EStatus::BAD_REQUEST);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_13, TFixture)
+{
+    CreateTopic("topic_A");
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message", &tx);
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+
+    DeleteSupportivePartition("topic_A", 0);
+
+    CommitTx(tx, EStatus::ABORTED);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_14, TFixture)
+{
+    CreateTopic("topic_A");
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", &tx);
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+
+    DeleteSupportivePartition("topic_A", 0);
+
+    CloseTopicWriteSession("topic_A", TEST_MESSAGE_GROUP_ID);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #2", &tx);
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+
+    CommitTx(tx, EStatus::ABORTED);
 }
 
 }

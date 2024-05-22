@@ -52,10 +52,10 @@ EDiskUsageStatus CheckStoragePoolsQuotas(const THashMap<TString, TStoragePoolUsa
 }
 
 EUserFacingStorageType GetUserFacingStorageType(const TString& poolKind) {
-    if (poolKind.StartsWith("ssd")) {
+    if (poolKind.StartsWith("ssd") || poolKind.StartsWith("nvme")) {
         return EUserFacingStorageType::Ssd;
     }
-    if (poolKind.StartsWith("hdd")) {
+    if (poolKind.StartsWith("hdd") || poolKind.StartsWith("rot")) {
         return EUserFacingStorageType::Hdd;
     }
     return EUserFacingStorageType::Ignored;

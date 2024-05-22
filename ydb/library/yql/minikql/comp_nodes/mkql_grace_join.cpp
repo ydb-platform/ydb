@@ -636,16 +636,14 @@ private:
     }
 
     bool HasMemoryForProcessing() const {
-        return false;
-        // return !TlsAllocState->IsMemoryYellowZoneEnabled();
+        return !TlsAllocState->IsMemoryYellowZoneEnabled();
     }
 
     bool IsSwitchToSpillingModeCondition() const {
-        return true;
+        return false;
         // TODO: YQL-18033
         // return !HasMemoryForProcessing();
     }
-
 
     void SwitchMode(EOperatingMode mode, TComputationContext& ctx) {
         switch(mode) {

@@ -979,7 +979,7 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
 
     std::vector<TString> candidates;
 
-    if (op.GetIndexModeCase() == NKikimrSchemeOp::TCreateCdcStream::kAllIndexes && op.GetAllIndexes()) {
+    if (op.GetIndexModeCase() == NKikimrSchemeOp::TCreateCdcStream::kAllIndexes) {
         candidates.reserve(tablePath->GetChildren().size());
         for (const auto& child : tablePath->GetChildren()) {
             candidates.emplace_back(child.first);

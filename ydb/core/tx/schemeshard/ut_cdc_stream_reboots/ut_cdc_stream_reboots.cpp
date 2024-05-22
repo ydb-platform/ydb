@@ -61,7 +61,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
             TestCreateCdcStream(runtime, ++t.TxId, "/MyRoot", Sprintf(R"(
                 TableName: "Table"
                 StreamDescription { %s }
-                AllIndexes: true
+                AllIndexes {}
             )", strDesc.c_str()));
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 

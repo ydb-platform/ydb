@@ -828,7 +828,7 @@ message TCreateCdcStream {
     optional uint64 RetentionPeriodSeconds = 3 [default = 86400]; // 1d by default
     optional uint32 TopicPartitions = 4;
     oneof IndexMode {
-        bool AllIndexes = 5; // Create topic per each index
+        google.protobuf.Empty AllIndexes = 5; // Create topic per each index
         string IndexName = 6;
     }
 }

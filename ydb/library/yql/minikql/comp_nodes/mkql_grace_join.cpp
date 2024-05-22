@@ -735,28 +735,29 @@ private:
             }
 
 
-            InputFetchResultLeft = FlowLeft->FetchValues(ctx, LeftPacker->TuplePtrs.data());
+            const NKikimr::NMiniKQL::EFetchResult resultLeft = FlowLeft->FetchValues(ctx, LeftPacker->TuplePtrs.data());
+            NKikimr::NMiniKQL::EFetchResult resultRight;
 
             if (IsSelfJoin_) {
-                InputFetchResultRight = InputFetchResultLeft;
+                resultRight = resultLeft;
                 if (!SelfJoinSameKeys_) {
                     std::copy_n(LeftPacker->TupleHolder.begin(), LeftPacker->TotalColumnsNum, RightPacker->TupleHolder.begin());
                 }
             } else {
-                InputFetchResultRight = FlowRight->FetchValues(ctx, RightPacker->TuplePtrs.data());
+                resultRight = FlowRight->FetchValues(ctx, RightPacker->TuplePtrs.data());
             }
 
-            if (InputFetchResultLeft == EFetchResult::One) {
+            if (resultRight == EFetchResult::One) {
                 MISHANumberofLeftFetches++;
             }
 
-            if (InputFetchResultRight == EFetchResult::One) {
+            if (resultRight == EFetchResult::One) {
                 MISHANumberofRightFetches++;
             }
 
-            std::cerr << std::format("[MISHA] LEFT: {} RIGHT: {}. [{}][{}]\n", (int)InputFetchResultLeft, (int)InputFetchResultRight, MISHANumberofLeftFetches, MISHANumberofRightFetches);
+            std::cerr << std::format("[MISHA] LEFT: {} RIGHT: {}. [{}][{}]\n", (int)resultLeft, (int)resultRight, MISHANumberofLeftFetches, MISHANumberofRightFetches);
 
-            if (InputFetchResultLeft == EFetchResult::One) {
+            if (resultLeft == EFetchResult::One) {
                 if (LeftPacker->TuplesPacked == 0) {
                     LeftPacker->StartTime = std::chrono::system_clock::now();
                 }
@@ -764,7 +765,7 @@ private:
                 LeftPacker->TablePtr->AddTuple(LeftPacker->TupleIntVals.data(), LeftPacker->TupleStrings.data(), LeftPacker->TupleStrSizes.data(), LeftPacker->IColumnsHolder.data());
             }
 
-            if (InputFetchResultRight == EFetchResult::One) {
+            if (resultRight == EFetchResult::One) {
                 if (RightPacker->TuplesPacked == 0) {
                     RightPacker->StartTime = std::chrono::system_clock::now();
                 }
@@ -780,17 +781,17 @@ private:
                 return EFetchResult::Yield;
             }
 
-            if (InputFetchResultLeft == EFetchResult::Finish ) {
+            if (resultLeft == EFetchResult::Finish ) {
                 *HaveMoreLeftRows = false;
             }
 
 
-            if (InputFetchResultRight == EFetchResult::Finish ) {
+            if (resultRight == EFetchResult::Finish ) {
                 *HaveMoreRightRows = false;
             }
 
-            if ((InputFetchResultLeft == EFetchResult::Yield && (!*HaveMoreRightRows || InputFetchResultRight == EFetchResult::Yield)) ||
-                (InputFetchResultRight == EFetchResult::Yield && !*HaveMoreLeftRows))
+            if ((resultLeft == EFetchResult::Yield && (!*HaveMoreRightRows || resultRight == EFetchResult::Yield)) ||
+                (resultRight == EFetchResult::Yield && !*HaveMoreLeftRows))
             {
                 return EFetchResult::Yield;
             }
@@ -854,30 +855,30 @@ void DoCalculateWithSpilling(TComputationContext& ctx) {
         if (isWaitingForReduce) return;
     }
 
-    while (InputFetchResultLeft != EFetchResult::Finish || InputFetchResultRight != EFetchResult::Finish) {
-
-        InputFetchResultLeft = FlowLeft->FetchValues(ctx, LeftPacker->TuplePtrs.data());
+    while (*HaveMoreLeftRows || *HaveMoreRightRows) {
+        const NKikimr::NMiniKQL::EFetchResult resultLeft = FlowLeft->FetchValues(ctx, LeftPacker->TuplePtrs.data());
+        NKikimr::NMiniKQL::EFetchResult resultRight;
 
         if (IsSelfJoin_) {
-            InputFetchResultRight = InputFetchResultLeft;
+            resultRight = resultLeft;
             if (!SelfJoinSameKeys_) {
                 std::copy_n(LeftPacker->TupleHolder.begin(), LeftPacker->TotalColumnsNum, RightPacker->TupleHolder.begin());
             }
         } else {
-            InputFetchResultRight = FlowRight->FetchValues(ctx, RightPacker->TuplePtrs.data());
+            resultRight = FlowRight->FetchValues(ctx, RightPacker->TuplePtrs.data());
         }
 
-        if (InputFetchResultLeft == EFetchResult::One) {
+        if (resultLeft == EFetchResult::One) {
             MISHANumberofLeftFetches++;
         }
 
-        if (InputFetchResultRight == EFetchResult::One) {
+        if (resultRight == EFetchResult::One) {
             MISHANumberofRightFetches++;
         }
 
-        std::cerr << std::format("[MISHA] LEFT: {} RIGHT: {}. [{}][{}]\n", (int)InputFetchResultLeft, (int)InputFetchResultRight, MISHANumberofLeftFetches, MISHANumberofRightFetches);
+        std::cerr << std::format("[MISHA] LEFT: {} RIGHT: {}. [{}][{}]\n", (int)resultLeft, (int)resultRight, MISHANumberofLeftFetches, MISHANumberofRightFetches);
 
-        if (InputFetchResultLeft == EFetchResult::One) {
+        if (resultLeft == EFetchResult::One) {
             if (LeftPacker->TuplesPacked == 0) {
                 LeftPacker->StartTime = std::chrono::system_clock::now();
             }
@@ -885,7 +886,7 @@ void DoCalculateWithSpilling(TComputationContext& ctx) {
             LeftPacker->TablePtr->AddTuple(LeftPacker->TupleIntVals.data(), LeftPacker->TupleStrings.data(), LeftPacker->TupleStrSizes.data(), LeftPacker->IColumnsHolder.data());
         }
 
-        if (InputFetchResultRight == EFetchResult::One) {
+        if (resultRight == EFetchResult::One) {
             if (RightPacker->TuplesPacked == 0) {
                 RightPacker->StartTime = std::chrono::system_clock::now();
             }
@@ -897,23 +898,23 @@ void DoCalculateWithSpilling(TComputationContext& ctx) {
         }
 
 
-        if (InputFetchResultLeft == EFetchResult::Finish ) {
+        if (resultLeft == EFetchResult::Finish ) {
             *HaveMoreLeftRows = false;
         }
 
 
-        if (InputFetchResultRight == EFetchResult::Finish ) {
+        if (resultRight == EFetchResult::Finish ) {
             *HaveMoreRightRows = false;
         }
 
-        if ((InputFetchResultLeft == EFetchResult::Yield && (!*HaveMoreRightRows || InputFetchResultRight == EFetchResult::Yield)) ||
-            (InputFetchResultRight == EFetchResult::Yield && !*HaveMoreLeftRows))
+        if ((resultLeft == EFetchResult::Yield && (!*HaveMoreRightRows || resultRight == EFetchResult::Yield)) ||
+            (resultRight == EFetchResult::Yield && !*HaveMoreLeftRows))
         {
             return;
         }
     }
 
-    if (InputFetchResultLeft == EFetchResult::Finish && InputFetchResultRight == EFetchResult::Finish) {
+    if (!*HaveMoreLeftRows && !*HaveMoreRightRows) {
         UpdateSpilling();
         if (HasRunningAsyncOperation()) return;
         if (!IsSpillingFinalized) {
@@ -1030,9 +1031,6 @@ private:
     const std::unique_ptr<std::vector<NUdf::TUnboxedValue*>> JoinedTuple;
     const bool IsSelfJoin_;
     const bool SelfJoinSameKeys_;
-
-    EFetchResult InputFetchResultLeft = EFetchResult::One;
-    EFetchResult InputFetchResultRight = EFetchResult::One;
 
     ui64 MISHANumberofLeftFetches = 0;
     ui64 MISHANumberofRightFetches = 0;

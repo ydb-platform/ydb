@@ -201,6 +201,7 @@ private:
         THashMap<ui32, TPartitionId> Partitions;
         TMaybe<ui64> TxId;
         NKikimrLongTxService::TEvLockStatus::EStatus LongTxSubscriptionStatus = NKikimrLongTxService::TEvLockStatus::STATUS_UNSPECIFIED;
+        bool Deleting = false;
     };
 
     THashMap<ui64, TTxWriteInfo> TxWrites;
@@ -483,10 +484,16 @@ private:
     void CreateSupportivePartitionActor(const TPartitionId& shadowPartitionId, const TActorContext& ctx);
     NKikimrPQ::TPQTabletConfig MakeSupportivePartitionConfig() const;
     void SubscribeWriteId(ui64 writeId, const TActorContext& ctx);
+    void UnsubscribeWriteId(ui64 writeId, const TActorContext& ctx);
 
     bool AllOriginalPartitionsInited() const;
 
     void Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvDeletePartitionDone::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvTransactionCompleted::TPtr& ev, const TActorContext& ctx);
+
+    void BeginDeleteTx(const TDistributedTransaction& tx);
+    void BeginDeletePartitions(TTxWriteInfo& writeInfo);
 };
 
 

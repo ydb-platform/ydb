@@ -36,7 +36,7 @@ select  item.i_item_id,
  order by customer_address.ca_country,
         customer_address.ca_state,
         customer_address.ca_county,
-	item.i_item_id
+	item.i_item_id, agg6
  limit 100;
 
 -- end query 1 in stream 0 using template query18.tpl

@@ -47,8 +47,8 @@ std::vector<TFiberIntrospectionInfo> IntrospectFibers()
     THashMap<TFiberId, EFiberState> fiberStates;
 
     auto introspectionAction = [&] (NYT::NConcurrency::TFiber::TFiberList& fibers) {
-        for (auto* iter = fibers.Begin(); iter != fibers.End(); iter = iter->Next) {
-            auto* fiber = iter->AsItem();
+        for (auto& fiberRef : fibers) {
+            auto* fiber = &fiberRef;
 
             auto fiberId = fiber->GetFiberId();
             if (fiberId == InvalidFiberId) {

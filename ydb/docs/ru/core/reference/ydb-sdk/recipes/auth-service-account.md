@@ -98,19 +98,19 @@
 
   Загрузка данных сервисного аккаунта из файла:
 
-  {% include [auth-sa-file](../../../../_includes/nodejs/auth-sa-file.md) %}
+  {% include [auth-sa-file](../../../_includes/nodejs/auth-sa-file.md) %}
 
   Загрузка данных сервисного аккаунта из стороннего источника (например, из хранилища секретов):
 
-  {% include [auth-sa-data](../../../../_includes/nodejs/auth-sa-data.md) %}
+  {% include [auth-sa-data](../../../_includes/nodejs/auth-sa-data.md) %}
 
 - Python
 
-  {% include [auth-sa-data](../../../../_includes/python/auth-service-account.md) %}
+  {% include [auth-sa-data](../../../_includes/python/auth-service-account.md) %}
 
 - Python (asyncio)
 
-  {% include [auth-sa-data](../../../../_includes/python/async/auth-service-account.md) %}
+  {% include [auth-sa-data](../../../_includes/python/async/auth-service-account.md) %}
 
 - C# (.NET)
 

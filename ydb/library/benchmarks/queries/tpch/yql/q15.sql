@@ -13,8 +13,8 @@ $revenue0 = (
     from
         {{lineitem}}
     where
-        cast(l_shipdate as timestamp) >= $border
-        and cast(l_shipdate as timestamp) < ($border + Interval("P92D"))
+        l_shipdate  >= $border
+        and l_shipdate < ($border + Interval("P92D"))
     group by
         l_suppkey
 );

@@ -243,6 +243,8 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
 
         LWTRACK(ProposeTransactionKqpDataExecute, op->Orbit);
 
+        const bool isArbiter = op->HasVolatilePrepareFlag() && KqpLocksIsArbiter(tabletId, kqpLocks);
+
         KqpCommitLocks(tabletId, kqpLocks, sysLocks, writeVersion, tx->GetDataTx()->GetUserDb());
 
         auto& computeCtx = tx->GetDataTx()->GetKqpComputeCtx();
@@ -353,6 +355,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
                 participants,
                 dataTx->GetVolatileChangeGroup(),
                 dataTx->GetVolatileCommitOrdered(),
+                isArbiter,
                 txc);
         }
 

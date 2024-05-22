@@ -532,6 +532,7 @@ message TSchemeCacheRequest {
     string Database = 1;
     repeated string Tables = 2;
     string Prefix = 3;
+    uint32 Limit = 4;
 }
 
 message TEvViewerRequest {

@@ -25,6 +25,8 @@ public:
     //! This simplifies correlating requests with responses within a batch.
     DEFINE_BYREF_RW_PROPERTY(std::any, Tag);
 
+    DEFINE_BYREF_RW_PROPERTY(std::vector<TSharedRef>, Attachments);
+
 public:
     NRpc::TRequestId GetRequestId() const override;
     NRpc::TRealmId GetRealmId() const override;
@@ -81,7 +83,6 @@ protected:
         bool mutating);
 
     NRpc::NProto::TRequestHeader Header_;
-    std::vector<TSharedRef> Attachments_;
 
     virtual TSharedRef SerializeBody() const = 0;
 };

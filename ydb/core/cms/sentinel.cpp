@@ -1115,6 +1115,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         }
 
         auto onPDiskStatusChanged = [&](const TPDiskID& id, TPDiskInfo& info) {
+            info.LastStatusChangeFailed = false;
             info.StatusChangeFailed = false;
             info.PrevStatus = info.ActualStatus;
             info.ActualStatus = info.GetStatus();
@@ -1128,21 +1129,22 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             (*Counters->PDisksChanged)++;
         };
 
-        if (!response.GetSuccess() || !response.StatusSize() || !response.GetStatus(0).GetSuccess()) {
-            Y_ABORT_UNLESS(SentinelState->ChangeRequests.size() == response.StatusSize());
+        if (!response.GetSuccess() || !response.StatusSize()) {
+            for (auto& [key, req] : SentinelState->ChangeRequests) {
+                req->LastStatusChangeFailed = false;
+                req->StatusChangeFailed = true;
+                req->StatusChangeAttempt = SentinelState->StatusChangeAttempt;
+            }
+
+            Y_ABORT_UNLESS(SentinelState->ChangeRequests.size() >= response.StatusSize());
             auto it = SentinelState->ChangeRequests.begin();
             for (const auto& status : response.GetStatus()) {
                 if (!status.GetSuccess()) {
+                    it->second->LastStatusChangeFailed = true;
                     LOG_E("Unsuccesful response from BSC"
                         << ": error# " << status.GetErrorDescription());
-
-                    it->second->StatusChangeFailed = true;
-                    it->second->StatusChangeAttempt = SentinelState->StatusChangeAttempt;
-                    ++it;
-                } else {
-                    onPDiskStatusChanged(it->first, *(it->second));
-                    it = SentinelState->ChangeRequests.erase(it);
                 }
+                ++it;
             }
 
             MaybeRetry();

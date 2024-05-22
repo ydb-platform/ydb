@@ -102,6 +102,9 @@ private:
                     TIndexInfo indexInfo{
                         .TableId = FromProto<NObjectClient::TObjectId>(protoIndexInfo.index_table_id()),
                         .Kind = FromProto<ESecondaryIndexKind>(protoIndexInfo.index_kind()),
+                        .Predicate = protoIndexInfo.has_predicate()
+                            ? std::make_optional(FromProto<TString>(protoIndexInfo.predicate()))
+                            : std::nullopt,
                     };
                     THROW_ERROR_EXCEPTION_UNLESS(TEnumTraits<ESecondaryIndexKind>::FindLiteralByValue(indexInfo.Kind).has_value(),
                         "Unsupported secondary index kind %Qlv (client not up-to-date)",

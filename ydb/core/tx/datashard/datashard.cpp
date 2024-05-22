@@ -443,6 +443,29 @@ void TDataShard::SendRegistrationRequestTimeCast(const TActorContext &ctx) {
     }
 }
 
+class TDataShard::TSendArbiterReadSets final : public IVolatileTxCallback {
+public:
+    TSendArbiterReadSets(TDataShard* self, TVector<THolder<TEvTxProcessing::TEvReadSet>>&& readSets)
+        : Self(self)
+        , ReadSets(std::move(readSets))
+    {}
+
+    void OnCommit(ui64) override {
+        // The transaction is persistent and committed
+        // Arbiter must now send its outgoing readsets
+        Self->SendReadSets(TActivationContext::ActorContextFor(Self->SelfId()), std::move(ReadSets));
+    }
+
+    void OnAbort(ui64) override {
+        // ReadSets are persistently replaced on abort and sent by volatile tx manager
+        // Previously generated readsets must be ignored
+    }
+
+private:
+    TDataShard* Self;
+    TVector<THolder<TEvTxProcessing::TEvReadSet>> ReadSets;
+};
+
 void TDataShard::PrepareAndSaveOutReadSets(ui64 step,
                                                   ui64 txId,
                                                   const TMap<std::pair<ui64, ui64>, TString>& txOutReadSets,
@@ -455,6 +478,11 @@ void TDataShard::PrepareAndSaveOutReadSets(ui64 step,
     if (txOutReadSets.empty())
         return;
 
+    auto* info = VolatileTxManager.FindByTxId(txId);
+    if (info && !(info->IsArbiter && info->State != EVolatileTxState::Committed)) {
+        info = nullptr;
+    }
+
     ui64 prevSeqno = NextSeqno;
     for (auto& kv : txOutReadSets) {
         ui64 source = kv.first.first;
@@ -464,11 +492,20 @@ void TDataShard::PrepareAndSaveOutReadSets(ui64 step,
             ui64 seqno = NextSeqno++;
             OutReadSets.SaveReadSet(db, seqno, step, rsKey, kv.second);
             preparedRS.push_back(PrepareReadSet(step, txId, source, target, kv.second, seqno));
+            if (info) {
+                // ReadSet seqnos that must be replaced on abort
+                info->ArbiterReadSets.push_back(seqno);
+            }
         }
     }
 
     if (NextSeqno != prevSeqno) {
         PersistSys(db, Schema::Sys_NextSeqno, NextSeqno);
+    }
+
+    if (info) {
+        VolatileTxManager.AttachVolatileTxCallback(txId, new TSendArbiterReadSets(this, std::move(preparedRS)));
+        preparedRS.clear();
     }
 }
 

@@ -279,7 +279,7 @@ public:
 
     TKqpSessionInfo* PickSessionToShutdown(bool force, ui32 minReasonableToKick) {
         auto& sessions = force ? ReadySessions.at(0) : ReadySessions.at(1);
-        if (sessions.size() >= minReasonableToKick) {
+        if (!sessions.empty() && sessions.size() >= minReasonableToKick) {
             ui64 idx = RandomProvider->GenRand() % sessions.size();
             return StartShutdownSession(sessions[idx]);
         }

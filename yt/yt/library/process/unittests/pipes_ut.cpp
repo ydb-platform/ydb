@@ -180,7 +180,7 @@ protected:
     {
         auto pipe = TNamedPipe::Create("./namedpipewcap", 0660);
         Reader = pipe->CreateAsyncReader();
-        Writer = pipe->CreateDeliveryFencedAsyncWriter();
+        Writer = pipe->CreateAsyncWriter(/*useDeliveryFence*/ true);
     }
 
     IConnectionReaderPtr Reader;

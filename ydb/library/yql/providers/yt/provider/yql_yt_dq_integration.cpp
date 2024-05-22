@@ -118,7 +118,7 @@ public:
         }
 
         if (auto maxChunks = State_->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ); canFallback && chunksCount > maxChunks) {
-            throw TFallbackError() << "DQ cannot execute the query. Cause: table with too many chunks";
+            throw TFallbackError() << DqFallbackErrorMessageWrap("table with too many chunks");
         }
 
         if (hasErasure) {
@@ -162,7 +162,7 @@ public:
                 .Config(State_->Configuration->Snapshot())
                 .Paths(std::move(paths)));
             if (!res.Success()) {
-                const auto message = TStringBuilder() << "DQ cannot execute the query. Cause: failed to partition table";
+                const auto message = DqFallbackErrorMessageWrap("failed to partition table");
                 YQL_CLOG(ERROR, ProviderDq) << message;
                 auto issue = YqlIssue(TPosition(), TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, message);
                 for (auto& subIssue: res.Issues()) {
@@ -193,7 +193,7 @@ public:
             TVector<TVector<ui64>> groupIdColumnarStats = EstimateColumnStats(ctx, cluster, {groupIdPathInfos}, sumAllTableSizes);
             ui64 parts = (sumAllTableSizes + dataSizePerJob - 1) / dataSizePerJob;
             if (canFallback && hasErasure && parts > maxTasks) {
-                std::string_view message = "DQ cannot execute the query. Cause: too big table with erasure codec";
+                auto message = DqFallbackErrorMessageWrap("too big table with erasure codec");
                 YQL_CLOG(INFO, ProviderDq) << message;
                 throw TFallbackError() << message;
             }
@@ -242,13 +242,24 @@ public:
         return maxDataSizePerJob;
     }
 
-    void AddInfo(TExprContext& ctx, const TString& message, bool skipIssues) {
-        if (!skipIssues) {
-            YQL_CLOG(INFO, ProviderDq) << message;
-            TIssue info("DQ cannot execute the query. Cause: " + message);
-            info.Severity = TSeverityIds::S_INFO;
-            ctx.IssueManager.RaiseIssue(info);
+    void AddMessage(TExprContext& ctx, const TString& message, bool skipIssues, bool riseError) {
+        if (skipIssues && !riseError) {
+            return;
         }
+
+        TIssue issue(DqFallbackErrorMessageWrap(message));
+        if (riseError) {
+            YQL_CLOG(ERROR, ProviderDq) << message;
+            issue.Severity = TSeverityIds::S_ERROR;
+        } else {
+            YQL_CLOG(INFO, ProviderDq) << message;
+            issue.Severity = TSeverityIds::S_INFO;
+        }
+        ctx.IssueManager.RaiseIssue(issue);
+    }
+
+    void AddInfo(TExprContext& ctx, const TString& message, bool skipIssues) {
+        AddMessage(ctx, message, skipIssues, false);
     }
 
     bool CheckPragmas(const TExprNode& node, TExprContext& ctx, bool skipIssues) override {
@@ -293,7 +304,7 @@ public:
         } else if (auto maybeRead = TMaybeNode<TYtReadTable>(&node)) {
             auto cluster = maybeRead.Cast().DataSource().Cluster().StringValue();
             if (!State_->Configuration->_EnableDq.Get(cluster).GetOrElse(true)) {
-                AddInfo(ctx, TStringBuilder() << "disabled for cluster " << cluster, skipIssues);
+                AddMessage(ctx, TStringBuilder() << "disabled for cluster " << cluster, skipIssues, State_->PassiveExecution);
                 return false;
             }
             const auto canUseYtPartitioningApi = State_->Configuration->_EnableYtPartitioning.Get(cluster).GetOrElse(false);
@@ -309,45 +320,45 @@ public:
                             }
                         }
                     }
-                    AddInfo(ctx, info, skipIssues);
+                    AddMessage(ctx, info, skipIssues, State_->PassiveExecution);
                     return false;
                 }
                 auto sampleSetting = GetSetting(section.Settings().Ref(), EYtSettingType::Sample);
                 if (sampleSetting && sampleSetting->Child(1)->Child(0)->Content() == "system") {
-                    AddInfo(ctx, "system sampling", skipIssues);
+                    AddMessage(ctx, "system sampling", skipIssues, State_->PassiveExecution);
                     return false;
                 }
                 for (auto path: section.Paths()) {
                     if (!path.Table().Maybe<TYtTable>()) {
-                        AddInfo(ctx, "non-table path", skipIssues);
+                        AddMessage(ctx, "non-table path", skipIssues, State_->PassiveExecution);
                         return false;
                     } else {
                         auto pathInfo = TYtPathInfo(path);
                         auto tableInfo = pathInfo.Table;
                         auto epoch = TEpochInfo::Parse(path.Table().Maybe<TYtTable>().CommitEpoch().Ref());
                         if (!tableInfo->Stat) {
-                            AddInfo(ctx, "table without statistics", skipIssues);
+                            AddMessage(ctx, "table without statistics", skipIssues, State_->PassiveExecution);
                             return false;
                         } else if (!tableInfo->RowSpec) {
-                            AddInfo(ctx, "table without row spec", skipIssues);
+                            AddMessage(ctx, "table without row spec", skipIssues, State_->PassiveExecution);
                             return false;
                         } else if (!tableInfo->Meta) {
-                            AddInfo(ctx, "table without meta", skipIssues);
+                            AddMessage(ctx, "table without meta", skipIssues, State_->PassiveExecution);
                             return false;
                         } else if (tableInfo->IsAnonymous) {
-                            AddInfo(ctx, "anonymous table", skipIssues);
+                            AddMessage(ctx, "anonymous table", skipIssues, State_->PassiveExecution);
                             return false;
                         } else if ((!epoch.Empty() && *epoch.Get() > 0)) {
-                            AddInfo(ctx, "table with non-empty epoch", skipIssues);
+                            AddMessage(ctx, "table with non-empty epoch", skipIssues, State_->PassiveExecution);
                             return false;
                         } else if (NYql::HasSetting(tableInfo->Settings.Ref(), EYtSettingType::WithQB)) {
-                            AddInfo(ctx, "table with QB2 premapper", skipIssues);
+                            AddMessage(ctx, "table with QB2 premapper", skipIssues, State_->PassiveExecution);
                             return false;
                         } else if (pathInfo.Ranges && !canUseYtPartitioningApi) {
-                            AddInfo(ctx, "table with ranges", skipIssues);
+                            AddMessage(ctx, "table with ranges", skipIssues, State_->PassiveExecution);
                             return false;
                         } else if (tableInfo->Meta->IsDynamic && !canUseYtPartitioningApi) {
-                            AddInfo(ctx, "dynamic table", skipIssues);
+                            AddMessage(ctx, "dynamic table", skipIssues, State_->PassiveExecution);
                             return false;
                         }
 
@@ -356,7 +367,7 @@ public:
                 }
             }
             if (auto maxChunks = State_->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ); chunksCount > maxChunks) {
-                AddInfo(ctx, "table with too many chunks", skipIssues);
+                AddMessage(ctx, "table with too many chunks", skipIssues, State_->PassiveExecution);
                 return false;
             }
             return true;
@@ -505,7 +516,7 @@ public:
     }
 
     void AddErrorWrap(TExprContext& ctx, const NYql::TPositionHandle& where, const TString& cause) {
-        ctx.AddError(YqlIssue(ctx.GetPosition(where), TIssuesIds::DQ_OPTIMIZE_ERROR, TStringBuilder() << "DQ cannot execute the query. Cause: " << cause));
+        ctx.AddError(YqlIssue(ctx.GetPosition(where), TIssuesIds::DQ_OPTIMIZE_ERROR, DqFallbackErrorMessageWrap(cause)));
     }
 
     TExprNode::TPtr WrapRead(const TDqSettings&, const TExprNode::TPtr& read, TExprContext& ctx) override {
@@ -708,6 +719,10 @@ public:
         }), "YtSubstTables", TIssuesIds::DEFAULT_ERROR);
 
         pipeline->Add(CreateYtPeepholeTransformer(TYtState::TPtr(State_), providerParams), "YtPeepHole", TIssuesIds::DEFAULT_ERROR);
+    }
+
+    static TString DqFallbackErrorMessageWrap(const TString& message) {
+        return "DQ cannot execute the query. Cause: " + message;
     }
 
 private:

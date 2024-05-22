@@ -330,9 +330,9 @@ class TDeliveryFencedWriteOperation
     : public TWriteOperation
 {
 public:
-    TDeliveryFencedWriteOperation(const TSharedRef& buffer, const TString& pipePath)
+    TDeliveryFencedWriteOperation(const TSharedRef& buffer, TString pipePath)
         : TWriteOperation(buffer)
-        , PipePath_(pipePath)
+        , PipePath_(std::move(pipePath))
     { }
 
     TErrorOr<TIOResult> PerformIO(TFileDescriptor fd) override
@@ -352,7 +352,7 @@ public:
     }
 
 private:
-    TString PipePath_;
+    const TString PipePath_;
 
     bool IsWriteComplete(const TErrorOr<TIOResult>& result)
     {
@@ -482,11 +482,11 @@ class TFDConnectionImpl
 public:
     static TFDConnectionImplPtr Create(
         TFileDescriptor fd,
-        const TString& filePath,
-        const IPollerPtr& poller,
+        TString filePath,
+        IPollerPtr poller,
         bool useDeliveryFence)
     {
-        auto impl = New<TFDConnectionImpl>(fd, filePath, poller, useDeliveryFence);
+        auto impl = New<TFDConnectionImpl>(fd, std::move(filePath), std::move(poller), useDeliveryFence);
         impl->Init();
         return impl;
     }
@@ -495,9 +495,9 @@ public:
         TFileDescriptor fd,
         const TNetworkAddress& localAddress,
         const TNetworkAddress& remoteAddress,
-        const IPollerPtr& poller)
+        IPollerPtr poller)
     {
-        auto impl = New<TFDConnectionImpl>(fd, localAddress, remoteAddress, poller);
+        auto impl = New<TFDConnectionImpl>(fd, localAddress, remoteAddress, std::move(poller));
         impl->Init();
         return impl;
     }
@@ -623,22 +623,6 @@ public:
         }
 
         return DoWrite(data);
-    }
-
-    TFuture<void> DoWrite(const TSharedRef& data)
-    {
-        auto write = std::make_unique<TWriteOperation>(data);
-        auto future = write->ToFuture();
-        StartIO(&WriteDirection_, std::move(write));
-        return future;
-    }
-
-    TFuture<void> DoDeliveryFencedWrite(const TSharedRef& data)
-    {
-        auto syncWrite = std::make_unique<TDeliveryFencedWriteOperation>(data, PipePath_);
-        auto future = syncWrite->ToFuture();
-        StartIO(&WriteDirection_, std::move(syncWrite));
-        return future;
     }
 
     TFuture<void> WriteV(const TSharedRefArray& data)
@@ -783,32 +767,32 @@ private:
     // which future is set only
     // after data from pipe has been read.
     const bool UseDeliveryFence_ = false;
-    const TString PipePath_ = {};
+    const TString PipePath_;
 
 
     TFDConnectionImpl(
         TFileDescriptor fd,
-        const TString& filePath,
+        TString filePath,
         const IPollerPtr& poller,
         bool useDeliveryFence)
         : Name_(Format("File{%v}", filePath))
         , FD_(fd)
-        , Poller_(poller)
+        , Poller_(std::move(poller))
         , UseDeliveryFence_(useDeliveryFence)
-        , PipePath_(filePath)
+        , PipePath_(std::move(filePath))
     { }
 
     TFDConnectionImpl(
         TFileDescriptor fd,
         const TNetworkAddress& localAddress,
         const TNetworkAddress& remoteAddress,
-        const IPollerPtr& poller)
+        IPollerPtr poller)
         : Name_(Format("FD{%v<->%v}", localAddress, remoteAddress))
         , LoggingTag_(Format("ConnectionId: %v", Name_))
         , LocalAddress_(localAddress)
         , RemoteAddress_(remoteAddress)
         , FD_(fd)
-        , Poller_(poller)
+        , Poller_(std::move(poller))
     { }
 
     DECLARE_NEW_FRIEND()
@@ -916,6 +900,22 @@ private:
 
     TDelayedExecutorCookie ReadTimeoutCookie_;
     TDelayedExecutorCookie WriteTimeoutCookie_;
+
+    TFuture<void> DoWrite(const TSharedRef& data)
+    {
+        auto write = std::make_unique<TWriteOperation>(data);
+        auto future = write->ToFuture();
+        StartIO(&WriteDirection_, std::move(write));
+        return future;
+    }
+
+    TFuture<void> DoDeliveryFencedWrite(const TSharedRef& data)
+    {
+        auto syncWrite = std::make_unique<TDeliveryFencedWriteOperation>(data, PipePath_);
+        auto future = syncWrite->ToFuture();
+        StartIO(&WriteDirection_, std::move(syncWrite));
+        return future;
+    }
 
     void Init()
     {
@@ -1127,11 +1127,11 @@ class TFDConnection
 public:
     TFDConnection(
         TFileDescriptor fd,
-        const TString& pipePath,
-        const IPollerPtr& poller,
+        TString pipePath,
+        IPollerPtr poller,
         TRefCountedPtr pipeHolder = nullptr,
         bool useDeliveryFence = false)
-        : Impl_(TFDConnectionImpl::Create(fd, pipePath, poller, useDeliveryFence))
+        : Impl_(TFDConnectionImpl::Create(fd, std::move(pipePath), std::move(poller), useDeliveryFence))
         , PipeHolder_(std::move(pipeHolder))
     { }
 
@@ -1139,8 +1139,8 @@ public:
         TFileDescriptor fd,
         const TNetworkAddress& localAddress,
         const TNetworkAddress& remoteAddress,
-        const IPollerPtr& poller)
-        : Impl_(TFDConnectionImpl::Create(fd, localAddress, remoteAddress, poller))
+        IPollerPtr poller)
+        : Impl_(TFDConnectionImpl::Create(fd, localAddress, remoteAddress, std::move(poller)))
     { }
 
     ~TFDConnection()
@@ -1290,7 +1290,7 @@ TFileDescriptor CreateWriteFDForConnection(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::pair<IConnectionPtr, IConnectionPtr> CreateConnectionPair(const IPollerPtr& poller)
+std::pair<IConnectionPtr, IConnectionPtr> CreateConnectionPair(IPollerPtr poller)
 {
     SOCKET fds[2];
 
@@ -1320,7 +1320,7 @@ std::pair<IConnectionPtr, IConnectionPtr> CreateConnectionPair(const IPollerPtr&
         auto address1 = GetSocketName(fds[1]);
 
         auto first = New<TFDConnection>(fds[0], address0, address1, poller);
-        auto second = New<TFDConnection>(fds[1], address1, address0, poller);
+        auto second = New<TFDConnection>(fds[1], address1, address0, std::move(poller));
         return std::pair(std::move(first), std::move(second));
     } catch (...) {
         YT_VERIFY(TryClose(fds[0], false));
@@ -1333,23 +1333,23 @@ IConnectionPtr CreateConnectionFromFD(
     TFileDescriptor fd,
     const TNetworkAddress& localAddress,
     const TNetworkAddress& remoteAddress,
-    const IPollerPtr& poller)
+    IPollerPtr poller)
 {
-    return New<TFDConnection>(fd, localAddress, remoteAddress, poller);
+    return New<TFDConnection>(fd, localAddress, remoteAddress, std::move(poller));
 }
 
 IConnectionReaderPtr CreateInputConnectionFromFD(
     TFileDescriptor fd,
-    const TString& pipePath,
-    const IPollerPtr& poller,
+    TString pipePath,
+    IPollerPtr poller,
     const TRefCountedPtr& pipeHolder)
 {
-    return New<TFDConnection>(fd, pipePath, poller, pipeHolder);
+    return New<TFDConnection>(fd, std::move(pipePath), std::move(poller), pipeHolder);
 }
 
 IConnectionReaderPtr CreateInputConnectionFromPath(
-    const TString& pipePath,
-    const IPollerPtr& poller,
+    TString pipePath,
+    IPollerPtr poller,
     const TRefCountedPtr& pipeHolder)
 {
 #ifdef _unix_
@@ -1361,37 +1361,25 @@ IConnectionReaderPtr CreateInputConnectionFromPath(
             << TErrorAttribute("path", pipePath);
     }
 
-    return New<TFDConnection>(fd, pipePath, poller, pipeHolder);
+    return New<TFDConnection>(fd, std::move(pipePath), std::move(poller), pipeHolder);
 #else
     THROW_ERROR_EXCEPTION("Unsupported platform");
 #endif
 }
 
 IConnectionWriterPtr CreateOutputConnectionFromPath(
-    const TString& pipePath,
-    const IPollerPtr& poller,
+    TString pipePath,
+    IPollerPtr poller,
     const TRefCountedPtr& pipeHolder,
-    std::optional<int> capacity)
+    std::optional<int> capacity,
+    bool useDeliveryFence)
 {
     return New<TFDConnection>(
         CreateWriteFDForConnection(pipePath, capacity),
-        pipePath,
-        poller,
-        pipeHolder);
-}
-
-IConnectionWriterPtr CreateDeliveryFencedOutputConnectionFromPath(
-    const TString& pipePath,
-    const NConcurrency::IPollerPtr& poller,
-    const TRefCountedPtr& pipeHolder,
-    std::optional<int> capacity)
-{
-    return New<TFDConnection>(
-        CreateWriteFDForConnection(pipePath, capacity),
-        pipePath,
-        poller,
+        std::move(pipePath),
+        std::move(poller),
         pipeHolder,
-        /*useDeliveryFence*/ true);
+        useDeliveryFence);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1403,8 +1391,8 @@ public:
     TPacketConnection(
         TFileDescriptor fd,
         const TNetworkAddress& localAddress,
-        const IPollerPtr& poller)
-        : Impl_(TFDConnectionImpl::Create(fd, localAddress, TNetworkAddress{}, poller))
+        IPollerPtr poller)
+        : Impl_(TFDConnectionImpl::Create(fd, localAddress, TNetworkAddress{}, std::move(poller)))
     { }
 
     ~TPacketConnection()
@@ -1434,7 +1422,7 @@ private:
 
 IPacketConnectionPtr CreatePacketConnection(
     const TNetworkAddress& at,
-    const NConcurrency::IPollerPtr& poller)
+    NConcurrency::IPollerPtr poller)
 {
     auto fd = CreateUdpSocket();
     try {
@@ -1445,7 +1433,7 @@ IPacketConnectionPtr CreatePacketConnection(
         throw;
     }
 
-    return New<TPacketConnection>(fd, at, poller);
+    return New<TPacketConnection>(fd, at, std::move(poller));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

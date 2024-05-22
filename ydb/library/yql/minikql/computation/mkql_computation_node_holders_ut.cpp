@@ -75,7 +75,7 @@ Y_UNIT_TEST_SUITE(TKeyTypeContanerHelper) {
         TTestedSets sets{setup.TypeBuilder.NewDataType(NUdf::EDataSlot::String)};
         const size_t N = 100; //be aware of O(n^2) complexity in data generation
         for (size_t i = 0; i != N; ++i) {
-            sets.HashSet.insert(NMiniKQL::MakeString(std::string("x", i)));
+            sets.HashSet.insert(NMiniKQL::MakeString(std::string(i, 'x')));
         }
         UNIT_ASSERT_EQUAL(N, sets.HashSet.size());
         sets.MoveFromHashToCmpSet();
@@ -97,7 +97,7 @@ Y_UNIT_TEST_SUITE(TKeyTypeContanerHelper) {
             NUdf::TUnboxedValue* items;
             NUdf::TUnboxedValue v = setup.HolderFactory.CreateDirectArrayHolder(2, items);
             items[0] = NUdf::TUnboxedValuePod{(ui32)i};
-            items[1] = NMiniKQL::MakeString(std::string("x", i));
+            items[1] = NMiniKQL::MakeString(std::string(i, 'x'));
             sets.HashSet.insert(std::move(v));
         }
         UNIT_ASSERT_EQUAL(N, sets.HashSet.size());
@@ -122,7 +122,7 @@ Y_UNIT_TEST_SUITE(TKeyTypeContanerHelper) {
             NUdf::TUnboxedValue* items;
             NUdf::TUnboxedValue v = setup.HolderFactory.CreateDirectArrayHolder(2, items);
             items[0] = NUdf::TUnboxedValuePod{(ui32)i};
-            items[1] = NMiniKQL::MakeString(std::string("x", i));
+            items[1] = NMiniKQL::MakeString(std::string(i, 'x'));
             sets.HashSet.insert(std::move(v));
         }
         UNIT_ASSERT_EQUAL(N, sets.HashSet.size());
@@ -162,8 +162,6 @@ Y_UNIT_TEST_SUITE(TKeyTypeContanerHelper) {
 
         guard.Release();
         setup.reset();
-
-
     }
 }
 

@@ -836,6 +836,11 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(AlterCdcStream, NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStream, &NKikimrSchemeOp::TModifyScheme::MutableAlterCdcStream)
     GENERIC_HELPERS(DropCdcStream, NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStream, &NKikimrSchemeOp::TModifyScheme::MutableDropCdcStream)
 
+    // continuous backup
+    GENERIC_HELPERS(CreateContinuousBackup, NKikimrSchemeOp::EOperationType::ESchemeOpCreateContinuousBackup, &NKikimrSchemeOp::TModifyScheme::MutableCreateContinuousBackup)
+    GENERIC_HELPERS(AlterContinuousBackup, NKikimrSchemeOp::EOperationType::ESchemeOpAlterContinuousBackup, &NKikimrSchemeOp::TModifyScheme::MutableAlterContinuousBackup)
+    GENERIC_HELPERS(DropContinuousBackup, NKikimrSchemeOp::EOperationType::ESchemeOpDropContinuousBackup, &NKikimrSchemeOp::TModifyScheme::MutableDropContinuousBackup)
+
     // olap store
     GENERIC_HELPERS(CreateOlapStore, NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore, &NKikimrSchemeOp::TModifyScheme::MutableCreateColumnStore)
     GENERIC_HELPERS(AlterOlapStore, NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnStore, &NKikimrSchemeOp::TModifyScheme::MutableAlterColumnStore)
@@ -859,6 +864,8 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(AlterReplication, NKikimrSchemeOp::EOperationType::ESchemeOpAlterReplication, &NKikimrSchemeOp::TModifyScheme::MutableAlterReplication)
     GENERIC_HELPERS(DropReplication, NKikimrSchemeOp::EOperationType::ESchemeOpDropReplication, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
     DROP_BY_PATH_ID_HELPERS(DropReplication, NKikimrSchemeOp::EOperationType::ESchemeOpDropReplication)
+    GENERIC_HELPERS(DropReplicationCascade, NKikimrSchemeOp::EOperationType::ESchemeOpDropReplicationCascade, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
+    DROP_BY_PATH_ID_HELPERS(DropReplicationCascade, NKikimrSchemeOp::EOperationType::ESchemeOpDropReplicationCascade)
 
     // pq
     GENERIC_HELPERS(CreatePQGroup, NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup, &NKikimrSchemeOp::TModifyScheme::MutableCreatePersQueueGroup)
@@ -2192,6 +2199,14 @@ namespace NSchemeShardUT_Private {
         } else {
             ForwardToTablet(runtime, targetTabletId, sender, ev, nodeIndex);
         }
+    }
+
+    TEvTx* InternalTransaction(TEvTx* tx) {
+        for (auto& x : *tx->Record.MutableTransaction()) {
+            x.SetInternal(true);
+        }
+
+        return tx;
     }
 
     TTestActorRuntimeBase::TEventObserver SetSuppressObserver(TTestActorRuntime &runtime, TVector<THolder<IEventHandle> > &suppressed, ui32 type) {

@@ -1648,12 +1648,12 @@ void TFunctionTypeInfoBuilder::Unused2() {
 void TFunctionTypeInfoBuilder::Unused3() {
 }
 
-NUdf::IFunctionTypeInfoBuilder15& TFunctionTypeInfoBuilder::SupportsBlocks() {
+NUdf::IFunctionTypeInfoBuilder15& TFunctionTypeInfoBuilder::SupportsBlocksImpl() {
     SupportsBlocks_ = true;
     return *this;
 }
 
-NUdf::IFunctionTypeInfoBuilder15& TFunctionTypeInfoBuilder::IsStrict() {
+NUdf::IFunctionTypeInfoBuilder15& TFunctionTypeInfoBuilder::IsStrictImpl() {
     IsStrict_ = true;
     return *this;
 }

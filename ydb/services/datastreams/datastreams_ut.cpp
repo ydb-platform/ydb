@@ -54,7 +54,7 @@ public:
 
 
         appConfig.MutablePQConfig()->MutableQuotingConfig()->SetEnableQuoting(true);
-        appConfig.MutablePQConfig()->MutableQuotingConfig()->SetQuotaWaitDurationMs(300);
+        appConfig.MutablePQConfig()->MutableQuotingConfig()->SetQuotaWaitDurationMs(100);
         appConfig.MutablePQConfig()->MutableQuotingConfig()->SetPartitionReadQuotaIsTwiceWriteQuota(true);
         appConfig.MutablePQConfig()->MutableBillingMeteringConfig()->SetEnabled(true);
         appConfig.MutablePQConfig()->MutableBillingMeteringConfig()->SetFlushIntervalSec(1);

@@ -9,6 +9,7 @@
 #include "tables_manager.h"
 
 #include "blobs_action/events/delete_blobs.h"
+#include "bg_tasks/events/local.h"
 #include "transactions/tx_controller.h"
 #include "inflight_request_tracker.h"
 #include "counters/columnshard.h"
@@ -63,8 +64,8 @@ class TTxFinishAckToSource;
 class TTxFinishAckFromInitiator;
 }
 
-namespace NExport {
-class TExportsManager;
+namespace NBackground {
+class TSessionsManager;
 }
 
 namespace NBlobOperations {
@@ -182,6 +183,9 @@ class TColumnShard
     friend class TLongTxTransactionOperator;
     friend class TEvWriteTransactionOperator;
     friend class TBackupTransactionOperator;
+    friend class IProposeTxOperator;
+    friend class TSharingTransactionOperator;
+
 
     class TTxProgressTx;
     class TTxProposeCancel;
@@ -214,6 +218,7 @@ class TColumnShard
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TActorContext&);
 
     void Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs::TPtr& ev, const TActorContext& ctx);
+    void Handle(NOlap::NBackground::TEvExecuteGeneralLocalTransaction::TPtr& ev, const TActorContext& ctx);
 
     void Handle(NOlap::NDataSharing::NEvents::TEvApplyLinksModification::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NDataSharing::NEvents::TEvApplyLinksModificationFinished::TPtr& ev, const TActorContext& ctx);
@@ -226,8 +231,6 @@ class TColumnShard
     void Handle(NOlap::NDataSharing::NEvents::TEvFinishedFromSource::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NDataSharing::NEvents::TEvAckFinishToSource::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator::TPtr& ev, const TActorContext& ctx);
-
-    void Handle(NOlap::NExport::NEvents::TEvExportSaveCursor::TPtr& ev, const TActorContext& ctx);
 
     ITransaction* CreateTxInitSchema();
 
@@ -368,6 +371,7 @@ protected:
             HFunc(NActors::TEvents::TEvUndelivered, Handle);
 
             HFunc(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs, Handle);
+            HFunc(NOlap::NBackground::TEvExecuteGeneralLocalTransaction, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvApplyLinksModification, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvApplyLinksModificationFinished, Handle);
 
@@ -379,8 +383,6 @@ protected:
             HFunc(NOlap::NDataSharing::NEvents::TEvFinishedFromSource, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvAckFinishToSource, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator, Handle);
-
-            HFunc(NOlap::NExport::NEvents::TEvExportSaveCursor, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 LOG_S_WARN("TColumnShard.StateWork at " << TabletID()
@@ -396,7 +398,7 @@ private:
     std::unique_ptr<TOperationsManager> OperationsManager;
     std::shared_ptr<NOlap::NDataSharing::TSessionsManager> SharingSessionsManager;
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
-    std::shared_ptr<NOlap::NExport::TExportsManager> ExportsManager;
+    std::shared_ptr<NOlap::NBackground::TSessionsManager> BackgroundSessionsManager;
     std::shared_ptr<NOlap::NDataLocks::TManager> DataLocksManager;
 
     using TSchemaPreset = TSchemaPreset;
@@ -576,6 +578,10 @@ private:
 public:
     ui64 TabletTxCounter = 0;
 
+    const std::shared_ptr<NOlap::NDataSharing::TSessionsManager>& GetSharingSessionsManager() const {
+        return SharingSessionsManager;
+    }
+
     template <class T>
     const T& GetIndexAs() const {
         return TablesManager.GetPrimaryIndexAsVerified<T>();
@@ -607,8 +613,8 @@ public:
         return LastCompletedTx;
     }
 
-    const std::shared_ptr<NOlap::NExport::TExportsManager>& GetExportsManager() const {
-        return ExportsManager;
+    const std::shared_ptr<NOlap::NBackground::TSessionsManager>& GetBackgroundSessionsManager() const {
+        return BackgroundSessionsManager;
     }
 
     const std::shared_ptr<NOlap::IStoragesManager>& GetStoragesManager() const {

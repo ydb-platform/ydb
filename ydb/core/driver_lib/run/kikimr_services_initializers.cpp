@@ -236,8 +236,6 @@
 
 #include <util/system/hostname.h>
 
-#include <thread>
-
 namespace NKikimr {
 
 namespace NKikimrServicesInitializers {

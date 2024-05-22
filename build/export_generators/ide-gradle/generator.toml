@@ -1,4 +1,5 @@
 use_managed_peers_closure = true
+ignore_platforms = true
 
 [root]
 template="settings.gradle.kts.jinja"

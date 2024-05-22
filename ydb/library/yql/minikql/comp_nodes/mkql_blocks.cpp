@@ -722,7 +722,7 @@ private:
         NUdf::TUnboxedValuePod Get(const THolderFactory& holderFactory, size_t idx) const {
             TBlockItem item;
             const auto& datum = TArrowBlock::From(Values_[idx]).GetDatum();
-            Y_DEBUG_ABORT_UNLESS(ValuesDescr_[idx] == datum.descr());
+            ARROW_DEBUG_CHECK_DATUM_TYPES(ValuesDescr_[idx], datum.descr());
             if (datum.is_scalar()) {
                 item = Readers_[idx]->GetScalarItem(*datum.scalar());
             } else {

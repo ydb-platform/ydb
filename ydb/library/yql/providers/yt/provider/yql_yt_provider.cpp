@@ -307,6 +307,7 @@ void TYtState::Reset() {
     AnonymousLabels.clear();
     NodeHash.clear();
     Checkpoints.clear();
+    WalkFoldersState.clear();
     NextEpochId = 1;
 }
 

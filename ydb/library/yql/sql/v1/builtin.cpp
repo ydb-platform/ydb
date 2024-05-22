@@ -112,7 +112,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TGroupingNode(Pos, Args);
+        return new TGroupingNode(Pos, CloneContainer(Args));
     }
 
 private:
@@ -295,7 +295,7 @@ public:
             return false;
         }
 
-        Atom = MakeAtomFromExpression(ctx, Node, Prefix).Build();
+        Atom = MakeAtomFromExpression(Pos, ctx, Node, Prefix).Build();
         return true;
     }
 
@@ -316,7 +316,7 @@ public:
     }
 
     TPtr DoClone() const final {
-        return {};
+        return new TLiteralStringAtom(GetPos(), SafeClone(Node), Info, Prefix);
     }
 
     void DoUpdateState() const override {
@@ -564,7 +564,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlParseType(Pos, Args);
+        return new TYqlParseType(Pos, CloneContainer(Args));
     }
 
     void DoUpdateState() const final {
@@ -655,7 +655,7 @@ public:
         if (Args[0]->IsLiteral()) {
             Args[0] = BuildQuotedAtom(Args[0]->GetPos(), Args[0]->GetLiteralValue());
         } else {
-            auto value = MakeAtomFromExpression(ctx, Args[0]).Build();
+            auto value = MakeAtomFromExpression(Pos, ctx, Args[0]).Build();
             Args[0] = value;
         }
 
@@ -799,7 +799,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlSubqueryFor<Name>(Pos, Args);
+        return new TYqlSubqueryFor<Name>(Pos, CloneContainer(Args));
     }
 };
 
@@ -821,7 +821,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlSubqueryOrderBy<Name>(Pos, Args);
+        return new TYqlSubqueryOrderBy<Name>(Pos, CloneContainer(Args));
     }
 };
 
@@ -847,7 +847,7 @@ public:
                 return false;
             }
 
-            auto message = MakeAtomFromExpression(ctx, Args[2]).Build();
+            auto message = MakeAtomFromExpression(Pos, ctx, Args[2]).Build();
             Args[2] = message;
         }
 
@@ -855,7 +855,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlTypeAssert<Strict>(Pos, Args);
+        return new TYqlTypeAssert<Strict>(Pos, CloneContainer(Args));
     }
 };
 
@@ -873,13 +873,13 @@ public:
         if (!Args[1]->Init(ctx, src)) {
             return false;
         }
-        Args[1] = MakeAtomFromExpression(ctx, Y("FormatType", Args[1])).Build();
+        Args[1] = MakeAtomFromExpression(Pos, ctx, Y("FormatType", Args[1])).Build();
 
         return TCallNode::DoInit(ctx, src);
     }
 
     TNodePtr DoClone() const final {
-        return new TFromBytes(Pos, Args);
+        return new TFromBytes(Pos, CloneContainer(Args));
     }
 };
 
@@ -898,7 +898,7 @@ public:
             return false;
         }
 
-        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
+        Args[1] = MakeAtomFromExpression(Pos, ctx, Args[1]).Build();
         return TCallNode::DoInit(ctx, src);
     }
 };
@@ -910,7 +910,7 @@ public:
     {}
 
     TNodePtr DoClone() const final {
-        return new TYqlAsTagged(Pos, Args);
+        return new TYqlAsTagged(Pos, CloneContainer(Args));
     }
 };
 
@@ -921,7 +921,7 @@ public:
     {}
 
     TNodePtr DoClone() const final {
-        return new TYqlUntag(Pos, Args);
+        return new TYqlUntag(Pos, CloneContainer(Args));
     }
 };
 
@@ -940,12 +940,12 @@ public:
             return false;
         }
 
-        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
+        Args[1] = MakeAtomFromExpression(Pos, ctx, Args[1]).Build();
         return TCallNode::DoInit(ctx, src);
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlVariant(Pos, Args);
+        return new TYqlVariant(Pos, CloneContainer(Args));
     }
 };
 
@@ -964,12 +964,12 @@ public:
             return false;
         }
 
-        Args[0] = MakeAtomFromExpression(ctx, Args[0]).Build();
+        Args[0] = MakeAtomFromExpression(Pos, ctx, Args[0]).Build();
         return TCallNode::DoInit(ctx, src);
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlEnum(Pos, Args);
+        return new TYqlEnum(Pos, CloneContainer(Args));
     }
 };
 
@@ -988,12 +988,12 @@ public:
             return false;
         }
 
-        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
+        Args[1] = MakeAtomFromExpression(Pos, ctx, Args[1]).Build();
         return TCallNode::DoInit(ctx, src);
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlAsVariant(Pos, Args);
+        return new TYqlAsVariant(Pos, CloneContainer(Args));
     }
 };
 
@@ -1012,12 +1012,12 @@ public:
             return false;
         }
 
-        Args[0] = MakeAtomFromExpression(ctx, Args[0]).Build();
+        Args[0] = MakeAtomFromExpression(Pos, ctx, Args[0]).Build();
         return TCallNode::DoInit(ctx, src);
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlAsEnum(Pos, Args);
+        return new TYqlAsEnum(Pos, CloneContainer(Args));
     }
 };
 
@@ -1034,13 +1034,13 @@ public:
 
     bool DoInit(TContext& ctx, ISource* src) override {
         if (!Args.empty()) {
-            Args[0] = BuildFileNameArgument(ctx.Pos(), Args[0], IsFile ? ctx.Settings.FileAliasPrefix : TString());
+            Args[0] = BuildFileNameArgument(Pos, Args[0], IsFile ? ctx.Settings.FileAliasPrefix : TString());
         }
         return TCallNode::DoInit(ctx, src);
     }
 
     TNodePtr DoClone() const final {
-        return new TDerived(Pos, OpName, Args);
+        return new TDerived(Pos, OpName, CloneContainer(Args));
     }
 
     bool IsLiteral() const override {
@@ -1084,12 +1084,12 @@ public:
                 return false;
             }
         }
-        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
+        Args[1] = MakeAtomFromExpression(Pos, ctx, Args[1]).Build();
         return TCallNode::DoInit(ctx, src);
     }
 
     TNodePtr DoClone() const final {
-        return new TTryMember(Pos, OpName, Args);
+        return new TTryMember(Pos, OpName, CloneContainer(Args));
     }
 };
 
@@ -1136,12 +1136,12 @@ public:
                 return false;
             }
         }
-        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
+        Args[1] = MakeAtomFromExpression(Pos, ctx, Args[1]).Build();
         return TCallNode::DoInit(ctx, src);
     }
 
     TNodePtr DoClone() const final {
-        return new TAddMember(Pos, OpName, Args);
+        return new TAddMember(Pos, OpName, CloneContainer(Args));
     }
 };
 
@@ -1161,12 +1161,12 @@ public:
                 return false;
             }
         }
-        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
+        Args[1] = MakeAtomFromExpression(Pos, ctx, Args[1]).Build();
         return TCallNode::DoInit(ctx, src);
     }
 
     TNodePtr DoClone() const final {
-        return new TRemoveMember(Pos, OpName, Args);
+        return new TRemoveMember(Pos, OpName, CloneContainer(Args));
     }
 };
 
@@ -1188,7 +1188,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TCombineMembers(Pos, OpName, Args);
+        return new TCombineMembers(Pos, OpName, CloneContainer(Args));
     }
 };
 
@@ -1210,7 +1210,7 @@ public:
             if (Args[i]->GetTupleSize() == 2) {
                 // flatten with prefix
                 Args[i] = Q(Y(
-                    MakeAtomFromExpression(ctx, Args[i]->GetTupleElement(0)).Build(),
+                    MakeAtomFromExpression(Pos, ctx, Args[i]->GetTupleElement(0)).Build(),
                     Args[i]->GetTupleElement(1)
                 ));
             } else {
@@ -1222,7 +1222,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TFlattenMembers(Pos, OpName, Args);
+        return new TFlattenMembers(Pos, OpName, CloneContainer(Args));
     }
 };
 
@@ -1304,7 +1304,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlParseFileOp(Pos, Args);
+        return new TYqlParseFileOp(Pos, CloneContainer(Args));
     }
 };
 
@@ -1326,14 +1326,14 @@ public:
                return false;
             }
 
-            Args[i] = MakeAtomFromExpression(ctx, Args[i]).Build();
+            Args[i] = MakeAtomFromExpression(Pos, ctx, Args[i]).Build();
         }
 
         return TCallNode::DoInit(ctx, src);
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlDataType(Pos, Args);
+        return new TYqlDataType(Pos, CloneContainer(Args));
     }
 
 private:
@@ -1355,12 +1355,12 @@ public:
             return false;
         }
 
-        Args[0] = MakeAtomFromExpression(ctx, Args[0]).Build();
+        Args[0] = MakeAtomFromExpression(Pos, ctx, Args[0]).Build();
         return TCallNode::DoInit(ctx, src);
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlResourceType(Pos, Args);
+        return new TYqlResourceType(Pos, CloneContainer(Args));
     }
 };
 
@@ -1379,12 +1379,12 @@ public:
             return false;
         }
 
-        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
+        Args[1] = MakeAtomFromExpression(Pos, ctx, Args[1]).Build();
         return TCallNode::DoInit(ctx, src);
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlTaggedType(Pos, Args);
+        return new TYqlTaggedType(Pos, CloneContainer(Args));
     }
 };
 
@@ -1423,7 +1423,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlCallableType(Pos, Args);
+        return new TYqlCallableType(Pos, CloneContainer(Args));
     }
 };
 
@@ -1442,12 +1442,12 @@ public:
             return false;
         }
 
-        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
+        Args[1] = MakeAtomFromExpression(Pos, ctx, Args[1]).Build();
         return TCallNode::DoInit(ctx, src);
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlTupleElementType(Pos, Args);
+        return new TYqlTupleElementType(Pos, CloneContainer(Args));
     }
 };
 
@@ -1466,12 +1466,12 @@ public:
             return false;
         }
 
-        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
+        Args[1] = MakeAtomFromExpression(Pos, ctx, Args[1]).Build();
         return TCallNode::DoInit(ctx, src);
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlStructMemberType(Pos, Args);
+        return new TYqlStructMemberType(Pos, CloneContainer(Args));
     }
 };
 
@@ -1497,7 +1497,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlCallableArgumentType(Pos, Args);
+        return new TYqlCallableArgumentType(Pos, CloneContainer(Args));
     }
 };
 
@@ -1733,7 +1733,7 @@ private:
             return false;
         }
 
-        Args[3] = MakeAtomFromExpression(ctx, Args[3]).Build();
+        Args[3] = MakeAtomFromExpression(Pos, ctx, Args[3]).Build();
         return TYqlUdfBase::DoInit(ctx, src);
     }
 
@@ -1820,7 +1820,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TWeakFieldOp(Pos, Args);
+        return new TWeakFieldOp(Pos, CloneContainer(Args));
     }
 };
 
@@ -2421,7 +2421,7 @@ public:
     }
 
     TNodePtr DoClone() const override {
-        return new TCallableNode(Pos, Module, Name, Args, ForReduce);
+        return new TCallableNode(Pos, Module, Name, CloneContainer(Args), ForReduce);
     }
 
     void DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const final {
@@ -2629,7 +2629,7 @@ public:
     }
 
     TPtr DoClone() const override {
-        return {};
+        return new TInvalidBuiltin(GetPos(), Info);
     }
 private:
     TString Info;
@@ -3070,6 +3070,10 @@ struct TBuiltinFuncData {
             {"flattenmembers", BuildNamedBuiltinFactoryCallback<TFlattenMembers>("FlattenMembers")},
             {"staticmap", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StaticMap", 2, 2) },
             {"staticzip", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StaticZip", 1, -1) },
+            {"structunion", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StructUnion", 2, 3)},
+            {"structintersection", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StructIntersection", 2, 3)},
+            {"structdifference", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StructDifference", 2, 2)},
+            {"structsymmetricdifference", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StructSymmetricDifference", 2, 2)},
             {"staticfold", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StaticFold", 3, 3)},
             {"staticfold1", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StaticFold1", 3, 3)},
 
@@ -3525,7 +3529,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
                     if (auto literal = arg->GetLiteral("Int32")) {
                         dataTypeArgs.push_back(BuildQuotedAtom(pos, *literal, TNodeFlags::Default));
                     } else {
-                        dataTypeArgs.push_back(MakeAtomFromExpression(ctx, arg).Build());
+                        dataTypeArgs.push_back(MakeAtomFromExpression(ctx.Pos(), ctx, arg).Build());
                     }
                 }
                 return new TCallNodeImpl(pos, "DataType", dataTypeArgs);

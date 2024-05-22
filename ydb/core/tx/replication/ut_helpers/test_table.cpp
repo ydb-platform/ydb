@@ -22,6 +22,9 @@ void TTestTableDescription::TReplicationConfig::SerializeTo(NKikimrSchemeOp::TTa
     }
 
     switch (Consistency) {
+    case CONSISTENCY_UNKNOWN:
+        proto.SetConsistency(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_UNKNOWN);
+        break;
     case CONSISTENCY_STRONG:
         proto.SetConsistency(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_STRONG);
         break;

@@ -3542,6 +3542,7 @@ Y_UNIT_TEST_SUITE(TStoragePoolsQuotasTest) {
         opts.EnablePersistentPartitionStats(true);
         opts.EnableBackgroundCompaction(false);
         TTestEnv env(runtime, opts);
+        bool bTreeIndex = runtime.GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex();
         
         NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
         NDataShard::gDbStatsDataSizeResolution = 1;
@@ -3669,7 +3670,7 @@ Y_UNIT_TEST_SUITE(TStoragePoolsQuotasTest) {
         // The logic of the test expects:
         // batchSizes[0] <= batchSizes[1] <= batchSizes[2],
         // because rows are never deleted, only updated.
-        constexpr std::array<ui32, 3> batchSizes = {25, 35, 50};
+        const std::array<ui32, 3> batchSizes = {25, 35, bTreeIndex ? 60u : 50u};
 
         constexpr const char* longText = "this_text_is_very_long_and_takes_a_lot_of_disk_space";
         constexpr const char* middleLengthText = "this_text_is_significantly_shorter";

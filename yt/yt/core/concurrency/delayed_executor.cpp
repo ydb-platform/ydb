@@ -17,7 +17,7 @@ namespace NYT::NConcurrency {
 static constexpr auto CoalescingInterval = TDuration::MicroSeconds(100);
 static constexpr auto LateWarningThreshold = TDuration::Seconds(1);
 
-static const auto& Logger = ConcurrencyLogger;
+static constexpr auto& Logger = ConcurrencyLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 

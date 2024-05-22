@@ -1,0 +1,10 @@
+<tmp_path>/program.sql:<main>: Error: Expression evaluation
+
+    <tmp_path>/program.sql:<main>:6:15: Error: At function: EvaluateAtom
+    	select * from $n;
+	              ^
+        <tmp_path>/program.sql:<main>: Error: Ensure type of expression is correct
+        
+            <tmp_path>/program.sql:<main>:4:7: Error: Expected data or optional of data, but got: List<String>
+            	$n = ["foo"];
+	      ^

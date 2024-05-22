@@ -51,8 +51,10 @@ static bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
         {"endpoint", false},
         {"database", false},
         {"token", false},
+        {"token_secret_name", false},
         {"user", false},
         {"password", false},
+        {"password_secret_name", false},
         {"state", true},
         {"failover_mode", true},
     };
@@ -1301,7 +1303,7 @@ bool TSqlQuery::DeclareStatement(const TRule_declare_stmt& stmt) {
         Ctx.Warning(varPos, TIssuesIds::YQL_DUPLICATE_DECLARE) << "Duplicate declaration of '" << varName << "' will be ignored";
     } else {
         PushNamedAtom(varPos, varName);
-        Ctx.DeclareVariable(varName, typeNode);
+        Ctx.DeclareVariable(varName, varPos, typeNode);
     }
     return true;
 }
@@ -1780,7 +1782,7 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
             }
 
             TDeferredAtom atom;
-            MakeTableFromExpression(Ctx, namedNode, atom, prefix);
+            MakeTableFromExpression(Ctx.Pos(), Ctx, namedNode, atom, prefix);
             values.push_back(atom);
         } else {
             Error() << "Expected string" << (withConfigure ? ", named parameter" : "") << " or 'default' keyword as pragma value for pragma: " << pragma;
@@ -2190,6 +2192,12 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disablepullupflatmapoverjoin") {
             Ctx.PragmaPullUpFlatMapOverJoin = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisablePullUpFlatMapOverJoin");
+        } else if (normalizedPragma == "filterpushdownoverjoinoptionalside") {
+            Ctx.FilterPushdownOverJoinOptionalSide = true;
+            Ctx.IncrementMonCounter("sql_pragma", "FilterPushdownOverJoinOptionalSide");
+        } else if (normalizedPragma == "disablefilterpushdownoverjoinoptionalside") {
+            Ctx.FilterPushdownOverJoinOptionalSide = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableFilterPushdownOverJoinOptionalSide");
         } else if (normalizedPragma == "allowunnamedcolumns") {
             Ctx.WarnUnnamedColumns = false;
             Ctx.IncrementMonCounter("sql_pragma", "AllowUnnamedColumns");
@@ -2713,7 +2721,7 @@ TNodePtr TSqlQuery::Build(const TSQLv1ParserAST& ast) {
             PushNamedAtom(Ctx.Pos(), varName);
             // no duplicates are possible at this stage
             bool isWeak = true;
-            Ctx.DeclareVariable(varName, typeNode, isWeak);
+            Ctx.DeclareVariable(varName, {}, typeNode, isWeak);
             // avoid 'Symbol is not used' warning for externally declared expression
             YQL_ENSURE(GetNamedNode(varName));
         }
@@ -2790,7 +2798,7 @@ TNodePtr TSqlQuery::Build(const std::vector<::NSQLv1Generated::TRule_sql_stmt_co
             PushNamedAtom(Ctx.Pos(), varName);
             // no duplicates are possible at this stage
             bool isWeak = true;
-            Ctx.DeclareVariable(varName, typeNode, isWeak);
+            Ctx.DeclareVariable(varName, {}, typeNode, isWeak);
             // avoid 'Symbol is not used' warning for externally declared expression
             YQL_ENSURE(GetNamedNode(varName));
         }

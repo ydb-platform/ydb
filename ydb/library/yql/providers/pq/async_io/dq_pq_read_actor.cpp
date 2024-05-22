@@ -526,6 +526,12 @@ private:
             event.Confirm();
         }
 
+        void operator()(NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent& event) {
+            const auto partitionKey = MakePartitionKey(event.GetPartitionSession());
+            const auto partitionKeyStr = ToString(partitionKey);
+            SRC_LOG_D("SessionId: " << Self.GetSessionId() << " Key: " << partitionKeyStr << " EndPartitionSessionEvent received");
+        }
+
         void operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent&) { }
 
         void operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionClosedEvent& event) {

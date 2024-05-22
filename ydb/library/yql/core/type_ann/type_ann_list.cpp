@@ -568,16 +568,11 @@ namespace {
                 if (calcSpec->IsCallable("WindowTraits")) {
                     auto finishType = calcSpec->Child(4)->GetTypeAnn();
                     if (frameCanBeEmpty) {
-                        bool isOptional = finishType->IsOptionalOrNull();
-
                         auto defVal = calcSpec->Child(5);
-                        if (defVal->IsCallable("Null") && !isOptional) {
+                        if (!defVal->IsCallable("Null")) {
+                            finishType = defVal->GetTypeAnn();
+                        } else if (!finishType->IsOptionalOrNull()) {
                             finishType = ctx.MakeType<TOptionalExprType>(finishType);
-                        }
-
-                        if (!defVal->IsCallable("Null") && defVal->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional
-                            && finishType->GetKind() == ETypeAnnotationKind::Optional) {
-                            finishType = finishType->Cast<TOptionalExprType>()->GetItemType();
                         }
                     }
                     outputStructType.push_back(ctx.MakeType<TItemExprType>(paramName, finishType));

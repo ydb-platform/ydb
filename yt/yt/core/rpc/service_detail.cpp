@@ -1453,17 +1453,17 @@ void TRequestQueue::OnRequestFinished(i64 requestTotalSize)
 // Prevents reentrant invocations.
 // One case is: RunRequest calling the handler synchronously, which replies the
 // context, which calls context->Finish, and we're back here again.
-YT_THREAD_LOCAL(bool) ScheduleRequestsLatch = false;
+YT_DEFINE_THREAD_LOCAL(bool, ScheduleRequestsLatch, false);
 
 void TRequestQueue::ScheduleRequestsFromQueue()
 {
-    if (ScheduleRequestsLatch) {
+    if (ScheduleRequestsLatch()) {
         return;
     }
 
-    ScheduleRequestsLatch = true;
+    ScheduleRequestsLatch() = true;
     auto latchGuard = Finally([&] {
-        ScheduleRequestsLatch = false;
+        ScheduleRequestsLatch() = false;
     });
 
 #ifndef NDEBUG

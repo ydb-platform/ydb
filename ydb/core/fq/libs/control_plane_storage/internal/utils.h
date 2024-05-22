@@ -53,4 +53,6 @@ struct Statistics {
 
 TStringBuilder& operator<<(TStringBuilder& builder, const Statistics& statistics);
 
+void AddTransientIssues(::google::protobuf::RepeatedPtrField< ::Ydb::Issue::IssueMessage>* protoIssues, NYql::TIssues&& issues);
+
 };

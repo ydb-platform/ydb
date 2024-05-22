@@ -64,6 +64,11 @@ Y_FORCE_INLINE bool TLogger::IsLevelEnabled(ELogLevel level) const
     return IsLevelEnabledHeavy(level);
 }
 
+Y_FORCE_INLINE const TLogger& TLogger::operator()() const
+{
+    return *this;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace NDetail {
@@ -90,19 +95,7 @@ protected:
     void DoReserve(size_t newLength) override;
 
 private:
-    struct TPerThreadCache
-    {
-        ~TPerThreadCache();
-
-        TSharedMutableRef Chunk;
-        size_t ChunkOffset = 0;
-    };
-
     TSharedMutableRef Buffer_;
-
-    static YT_THREAD_LOCAL(TPerThreadCache*) Cache_;
-    static YT_THREAD_LOCAL(bool) CacheDestroyed_;
-    static TPerThreadCache* GetCache();
 
     static constexpr size_t ChunkSize = 128_KB - 64;
 };

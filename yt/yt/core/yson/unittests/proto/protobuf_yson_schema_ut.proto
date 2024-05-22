@@ -33,5 +33,5 @@ message TTestSchemaMessage
     repeated int32 repeated_int32_field = 18;
 
     map<string, int32> string_to_int32_map = 19[(NYT.NYson.NProto.yson_map) = true];
-    map<int32, string> int32_to_int32_map = 20[(NYT.NYson.NProto.yson_map) = true];
+    map<int32, string> int32_to_string_map = 20[(NYT.NYson.NProto.yson_map) = true];
 }

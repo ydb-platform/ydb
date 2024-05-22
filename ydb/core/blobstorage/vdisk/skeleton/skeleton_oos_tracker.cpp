@@ -86,7 +86,8 @@ namespace NKikimr {
 
             TotalChunks = msg->TotalChunks;
             FreeChunks = msg->FreeChunks;
-            VCtx->OutOfSpaceState.UpdateLocal(msg->StatusFlags);
+            VCtx->OutOfSpaceState.UpdateLocalChunk(msg->StatusFlags);
+            VCtx->OutOfSpaceState.UpdateLocalLog(msg->LogStatusFlags);
             VCtx->OutOfSpaceState.UpdateLocalFreeSpaceShare(ui64(1 << 24) * (1.0 - msg->Occupancy));
             VCtx->OutOfSpaceState.UpdateLocalUsedChunks(msg->UsedChunks);
             MonGroup.DskTotalBytes() = msg->TotalChunks * PDiskCtx->Dsk->ChunkSize;
@@ -124,6 +125,16 @@ namespace NKikimr {
                                 TABLER() {
                                     auto flags = VCtx->OutOfSpaceState.GetLocalStatusFlags();
                                     TABLED() {str << "Local Disk State";}
+                                    TABLED() {str << StatusFlagToSpaceColor(flags);}
+                                }
+                                TABLER() {
+                                    auto flags = VCtx->OutOfSpaceState.GetLocalChunkStatusFlags();
+                                    TABLED() {str << "Local Disk State (chunks)";}
+                                    TABLED() {str << StatusFlagToSpaceColor(flags);}
+                                }
+                                TABLER() {
+                                    auto flags = VCtx->OutOfSpaceState.GetLocalLogStatusFlags();
+                                    TABLED() {str << "Local Disk State (log)";}
                                     TABLED() {str << StatusFlagToSpaceColor(flags);}
                                 }
                                 TABLER() {

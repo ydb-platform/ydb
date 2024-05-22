@@ -22,7 +22,7 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto& Logger = BusLogger;
+static constexpr auto& Logger = BusLogger;
 
 static constexpr auto PeriodicCheckPeriod = TDuration::MilliSeconds(100);
 static constexpr auto PerConnectionPeriodicCheckPeriod = TDuration::Seconds(10);

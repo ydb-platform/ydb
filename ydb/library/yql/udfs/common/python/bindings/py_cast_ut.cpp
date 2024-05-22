@@ -54,4 +54,31 @@ Y_UNIT_TEST_SUITE(TPyCastTest) {
                 }),
             yexception, "None");
     }
+
+    Y_UNIT_TEST(BadFromPythonFloat) {
+        TPythonTestEngine engine;
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            engine.ToMiniKQL<float>(
+                "def Test():\n"
+                "    return '3 <dot> 1415926'",
+                [](const NUdf::TUnboxedValuePod& value) {
+                    Y_UNUSED(value);
+                    Y_UNREACHABLE();
+                }),
+            yexception, "Cast error object '3 <dot> 1415926' to Float");
+    }
+
+    Y_UNIT_TEST(BadFromPythonLong) {
+        TPythonTestEngine engine;
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            engine.ToMiniKQL<ui64>(
+                "def Test():\n"
+                "    return -1",
+                [](const NUdf::TUnboxedValuePod& value) {
+                    Y_UNUSED(value);
+                    Y_UNREACHABLE();
+                }),
+            yexception, "Cast error object -1 to Long");
+    }
+
 }

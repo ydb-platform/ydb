@@ -38,8 +38,8 @@ where
     (l_shipmode = 'MAIL' or l_shipmode = 'TRUCK')
     and l_commitdate < l_receiptdate
     and l_shipdate < l_commitdate
-    and cast(l_receiptdate as timestamp) >= $border
-    and cast(l_receiptdate as timestamp) < ($border + Interval("P365D"))
+    and l_receiptdate >= $border
+    and l_receiptdate < ($border + Interval("P365D"))
 group by
     l_shipmode
 order by

@@ -148,7 +148,7 @@ public:
             }
         }
 
-        output = ResetTablesMeta(input, ctx, State_->Types->UseTableMetaFromGraph);
+        output = ResetTablesMeta(input, ctx, State_->Types->UseTableMetaFromGraph, State_->Types->EvaluationInProgress > 0);
         if (!output) {
             return TStatus::Error;
         }
@@ -165,7 +165,7 @@ public:
             return TStatus::Error;
         }
 
-        output = ResetTablesMeta(input, ctx, State_->Types->UseTableMetaFromGraph);
+        output = ResetTablesMeta(input, ctx, State_->Types->UseTableMetaFromGraph, State_->Types->EvaluationInProgress > 0);
         if (!output) {
             return TStatus::Error;
         }
@@ -188,7 +188,7 @@ public:
             }
         }
 
-        output = ResetTablesMeta(input, ctx, State_->Types->UseTableMetaFromGraph);
+        output = ResetTablesMeta(input, ctx, State_->Types->UseTableMetaFromGraph, State_->Types->EvaluationInProgress > 0);
         if (!output) {
             return TStatus::Error;
         }
@@ -196,7 +196,7 @@ public:
     }
 
     TStatus HandleOutOperation(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-        output = ResetTablesMeta(input, ctx, State_->Types->UseTableMetaFromGraph);
+        output = ResetTablesMeta(input, ctx, State_->Types->UseTableMetaFromGraph, State_->Types->EvaluationInProgress > 0);
         if (!output) {
             return TStatus::Error;
         }
@@ -222,7 +222,7 @@ public:
 
         UpdateDescriptorMeta(tableDesc, tableInfo);
 
-        output = ResetTablesMeta(input, ctx, State_->Types->UseTableMetaFromGraph);
+        output = ResetTablesMeta(input, ctx, State_->Types->UseTableMetaFromGraph, State_->Types->EvaluationInProgress > 0);
         if (!output) {
             return TStatus::Error;
         }
@@ -278,7 +278,7 @@ public:
 
         UpdateDescriptorMeta(tableDesc, tableInfo);
 
-        output = ResetTablesMeta(input, ctx, State_->Types->UseTableMetaFromGraph);
+        output = ResetTablesMeta(input, ctx, State_->Types->UseTableMetaFromGraph, State_->Types->EvaluationInProgress > 0);
         if (!output) {
             return TStatus::Error;
         }

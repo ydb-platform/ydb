@@ -2,6 +2,7 @@ LIBRARY()
 
 PEERDIR(
     ydb/core/tx/schemeshard/olap/columns
+    ydb/core/tx/schemeshard/olap/bg_tasks
     ydb/core/tx/schemeshard/olap/indexes
     ydb/core/tx/schemeshard/olap/schema
     ydb/core/tx/schemeshard/olap/common

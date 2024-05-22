@@ -9,6 +9,7 @@
 #include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
+#include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -165,10 +166,15 @@ struct TEvDqCompute {
 
         using TBaseEventPB::TBaseEventPB;
 
-        TEvRestoreFromCheckpointResult(const NDqProto::TCheckpoint& checkpoint, ui64 taskId, NDqProto::TEvRestoreFromCheckpointResult::ERestoreStatus status) {
+        TEvRestoreFromCheckpointResult(
+            const NDqProto::TCheckpoint& checkpoint,
+            ui64 taskId,
+            NDqProto::TEvRestoreFromCheckpointResult::ERestoreStatus status,
+            const NYql::TIssues& issues) {
             Record.MutableCheckpoint()->CopyFrom(checkpoint);
             Record.SetTaskId(taskId);
             Record.SetStatus(status);
+            NYql::IssuesToMessage(issues, Record.MutableIssues());
         }
     };
 

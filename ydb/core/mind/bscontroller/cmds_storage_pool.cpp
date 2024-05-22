@@ -441,21 +441,7 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TReadSettings& /*cmd*/, TStatus& status) {
-        auto settings = status.MutableSettings();
-
-        settings->AddDefaultMaxSlots(Self.DefaultMaxSlots);
-        settings->AddEnableSelfHeal(Self.SelfHealEnable);
-        settings->AddEnableDonorMode(Self.DonorMode);
-        settings->AddScrubPeriodicitySeconds(Self.ScrubPeriodicity.Seconds());
-        settings->AddPDiskSpaceMarginPromille(Self.PDiskSpaceMarginPromille);
-        settings->AddGroupReserveMin(Self.GroupReserveMin);
-        settings->AddGroupReservePartPPM(Self.GroupReservePart);
-        settings->AddMaxScrubbedDisksAtOnce(Self.MaxScrubbedDisksAtOnce);
-        settings->AddPDiskSpaceColorBorder(Self.PDiskSpaceColorBorder);
-        settings->AddEnableGroupLayoutSanitizer(Self.GroupLayoutSanitizerEnabled);
-        // TODO:
-        // settings->AddSerialManagementStage(Self.SerialManagementStage);
-        settings->AddAllowMultipleRealmsOccupation(Self.AllowMultipleRealmsOccupation);
+        Self.SerializeSettings(status.MutableSettings());
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TQueryBaseConfig& cmd, TStatus& status) {
@@ -664,6 +650,7 @@ namespace NKikimr::NBsController {
         for (auto& [nodeId, node] : nodes) {
             pb->AddNode()->Swap(&node);
         }
+        Self.SerializeSettings(pb->MutableSettings());
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TDropDonorDisk& cmd, TStatus& /*status*/) {

@@ -5,7 +5,6 @@ import platform
 import re
 import sys
 import traceback
-import warnings
 from functools import update_wrapper
 from operator import attrgetter
 from threading import Lock
@@ -19,22 +18,12 @@ from .helpers import get_debug_flag
 from .helpers import get_env
 from .helpers import get_load_dotenv
 
-try:
-    import dotenv
-except ImportError:
-    dotenv = None
-
-try:
-    import ssl
-except ImportError:
-    ssl = None  # type: ignore
-
 
 class NoAppException(click.UsageError):
     """Raised if an application cannot be found or loaded."""
 
 
-def find_best_app(script_info, module):
+def find_best_app(module):
     """Given a module instance this tries to find the best possible
     application in the module or raises an exception.
     """
@@ -65,7 +54,7 @@ def find_best_app(script_info, module):
 
         if inspect.isfunction(app_factory):
             try:
-                app = call_factory(script_info, app_factory)
+                app = app_factory()
 
                 if isinstance(app, Flask):
                     return app
@@ -85,42 +74,6 @@ def find_best_app(script_info, module):
         f" {module.__name__!r}. Use 'FLASK_APP={module.__name__}:name'"
         " to specify one."
     )
-
-
-def call_factory(script_info, app_factory, args=None, kwargs=None):
-    """Takes an app factory, a ``script_info` object and  optionally a tuple
-    of arguments. Checks for the existence of a script_info argument and calls
-    the app_factory depending on that and the arguments provided.
-    """
-    sig = inspect.signature(app_factory)
-    args = [] if args is None else args
-    kwargs = {} if kwargs is None else kwargs
-
-    if "script_info" in sig.parameters:
-        warnings.warn(
-            "The 'script_info' argument is deprecated and will not be"
-            " passed to the app factory function in Flask 2.1.",
-            DeprecationWarning,
-        )
-        kwargs["script_info"] = script_info
-
-    if not args and len(sig.parameters) == 1:
-        first_parameter = next(iter(sig.parameters.values()))
-
-        if (
-            first_parameter.default is inspect.Parameter.empty
-            # **kwargs is reported as an empty default, ignore it
-            and first_parameter.kind is not inspect.Parameter.VAR_KEYWORD
-        ):
-            warnings.warn(
-                "Script info is deprecated and will not be passed as the"
-                " single argument to the app factory function in Flask"
-                " 2.1.",
-                DeprecationWarning,
-            )
-            args.append(script_info)
-
-    return app_factory(*args, **kwargs)
 
 
 def _called_with_wrong_args(f):
@@ -149,7 +102,7 @@ def _called_with_wrong_args(f):
         del tb
 
 
-def find_app_by_string(script_info, module, app_name):
+def find_app_by_string(module, app_name):
     """Check if the given string is a variable name or a function. Call
     a function to get the app instance, or return the variable directly.
     """
@@ -166,7 +119,8 @@ def find_app_by_string(script_info, module, app_name):
 
     if isinstance(expr, ast.Name):
         name = expr.id
-        args = kwargs = None
+        args = []
+        kwargs = {}
     elif isinstance(expr, ast.Call):
         # Ensure the function name is an attribute name only.
         if not isinstance(expr.func, ast.Name):
@@ -202,7 +156,7 @@ def find_app_by_string(script_info, module, app_name):
     # to get the real application.
     if inspect.isfunction(attr):
         try:
-            app = call_factory(script_info, attr, args, kwargs)
+            app = attr(*args, **kwargs)
         except TypeError as e:
             if not _called_with_wrong_args(attr):
                 raise
@@ -253,7 +207,7 @@ def prepare_import(path):
     return ".".join(module_name[::-1])
 
 
-def locate_app(script_info, module_name, app_name, raise_if_not_found=True):
+def locate_app(module_name, app_name, raise_if_not_found=True):
     __traceback_hide__ = True  # noqa: F841
 
     try:
@@ -274,9 +228,9 @@ def locate_app(script_info, module_name, app_name, raise_if_not_found=True):
     module = sys.modules[module_name]
 
     if app_name is None:
-        return find_best_app(script_info, module)
+        return find_best_app(module)
     else:
-        return find_app_by_string(script_info, module, app_name)
+        return find_app_by_string(module, app_name)
 
 
 def get_version(ctx, param, value):
@@ -327,9 +281,17 @@ class DispatchingApp:
             self._load_in_background()
 
     def _load_in_background(self):
+        # Store the Click context and push it in the loader thread so
+        # script_info is still available.
+        ctx = click.get_current_context(silent=True)
+
         def _load_app():
             __traceback_hide__ = True  # noqa: F841
+
             with self._lock:
+                if ctx is not None:
+                    click.globals.push_context(ctx)
+
                 try:
                     self._load_unlocked()
                 except Exception as e:
@@ -397,18 +359,18 @@ class ScriptInfo:
             return self._loaded_app
 
         if self.create_app is not None:
-            app = call_factory(self, self.create_app)
+            app = self.create_app()
         else:
             if self.app_import_path:
                 path, name = (
                     re.split(r":(?![\\/])", self.app_import_path, 1) + [None]
                 )[:2]
                 import_name = prepare_import(path)
-                app = locate_app(self, import_name, name)
+                app = locate_app(import_name, name)
             else:
                 for path in ("wsgi.py", "app.py"):
                     import_name = prepare_import(path)
-                    app = locate_app(self, import_name, None, raise_if_not_found=False)
+                    app = locate_app(import_name, None, raise_if_not_found=False)
 
                     if app:
                         break
@@ -530,14 +492,18 @@ class FlaskGroup(AppGroup):
     def _load_plugin_commands(self):
         if self._loaded_plugin_commands:
             return
-        try:
-            import pkg_resources
-        except ImportError:
-            self._loaded_plugin_commands = True
-            return
 
-        for ep in pkg_resources.iter_entry_points("flask.commands"):
+        if sys.version_info >= (3, 10):
+            from importlib import metadata
+        else:
+            # Use a backport on Python < 3.10. We technically have
+            # importlib.metadata on 3.8+, but the API changed in 3.10,
+            # so use the backport for consistency.
+            import importlib_metadata as metadata
+
+        for ep in metadata.entry_points(group="flask.commands"):
             self.add_command(ep.load(), ep.name)
+
         self._loaded_plugin_commands = True
 
     def get_command(self, ctx, name):
@@ -630,7 +596,9 @@ def load_dotenv(path=None):
 
     .. versionadded:: 1.0
     """
-    if dotenv is None:
+    try:
+        import dotenv
+    except ImportError:
         if path or os.path.isfile(".env") or os.path.isfile(".flaskenv"):
             click.secho(
                 " * Tip: There are .env or .flaskenv files present."
@@ -706,12 +674,14 @@ class CertParamType(click.ParamType):
         self.path_type = click.Path(exists=True, dir_okay=False, resolve_path=True)
 
     def convert(self, value, param, ctx):
-        if ssl is None:
+        try:
+            import ssl
+        except ImportError:
             raise click.BadParameter(
                 'Using "--cert" requires Python to be compiled with SSL support.',
                 ctx,
                 param,
-            )
+            ) from None
 
         try:
             return self.path_type(value, param, ctx)
@@ -744,7 +714,13 @@ def _validate_key(ctx, param, value):
     """
     cert = ctx.params.get("cert")
     is_adhoc = cert == "adhoc"
-    is_context = ssl and isinstance(cert, ssl.SSLContext)
+
+    try:
+        import ssl
+    except ImportError:
+        is_context = False
+    else:
+        is_context = isinstance(cert, ssl.SSLContext)
 
     if value is not None:
         if is_adhoc:
@@ -785,7 +761,10 @@ class SeparatedPathType(click.Path):
 @click.option("--host", "-h", default="127.0.0.1", help="The interface to bind to.")
 @click.option("--port", "-p", default=5000, help="The port to bind to.")
 @click.option(
-    "--cert", type=CertParamType(), help="Specify a certificate file to use HTTPS."
+    "--cert",
+    type=CertParamType(),
+    help="Specify a certificate file to use HTTPS.",
+    is_eager=True,
 )
 @click.option(
     "--key",
@@ -826,9 +805,28 @@ class SeparatedPathType(click.Path):
         f" are separated by {os.path.pathsep!r}."
     ),
 )
+@click.option(
+    "--exclude-patterns",
+    default=None,
+    type=SeparatedPathType(),
+    help=(
+        "Files matching these fnmatch patterns will not trigger a reload"
+        " on change. Multiple patterns are separated by"
+        f" {os.path.pathsep!r}."
+    ),
+)
 @pass_script_info
 def run_command(
-    info, host, port, reload, debugger, eager_loading, with_threads, cert, extra_files
+    info,
+    host,
+    port,
+    reload,
+    debugger,
+    eager_loading,
+    with_threads,
+    cert,
+    extra_files,
+    exclude_patterns,
 ):
     """Run a local development server.
 
@@ -860,6 +858,7 @@ def run_command(
         threaded=with_threads,
         ssl_context=cert,
         extra_files=extra_files,
+        exclude_patterns=exclude_patterns,
     )
 
 
@@ -984,15 +983,7 @@ debug mode.
 
 
 def main() -> None:
-    if int(click.__version__[0]) < 8:
-        warnings.warn(
-            "Using the `flask` cli with Click 7 is deprecated and"
-            " will not be supported starting with Flask 2.1."
-            " Please upgrade to Click 8 as soon as possible.",
-            DeprecationWarning,
-        )
-    # TODO omit sys.argv once https://github.com/pallets/click/issues/536 is fixed
-    cli.main(args=sys.argv[1:])
+    cli.main()
 
 
 if __name__ == "__main__":

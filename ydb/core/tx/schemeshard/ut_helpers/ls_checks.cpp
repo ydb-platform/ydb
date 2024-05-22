@@ -513,7 +513,7 @@ void CheckBoundaries(const NKikimrScheme::TEvDescribeSchemeResult &record) {
         const auto& b = descr.GetTable().GetSplitBoundary(i);
         TVector<TCell> cells;
         TVector<TString> memoryOwner;
-        NMiniKQL::CellsFromTuple(nullptr, b.GetKeyPrefix(), keyColTypes, false, cells, errStr, memoryOwner);
+        NMiniKQL::CellsFromTuple(nullptr, b.GetKeyPrefix(), keyColTypes, {}, false, cells, errStr, memoryOwner);
         UNIT_ASSERT_VALUES_EQUAL(errStr, "");
 
         TString serialized = TSerializedCellVec::Serialize(cells);
@@ -816,6 +816,12 @@ TCheckFunc IndexDataColumns(const TVector<TString>& dataColumnNames) {
         for (ui32 colId = 0; colId < dataColumnNames.size(); ++colId) {
             UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetTableIndex().GetDataColumnNames(colId), dataColumnNames.at(colId));
         }
+    };
+}
+
+TCheckFunc SequenceName(const TString& name) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetSequenceDescription().GetName(), name);
     };
 }
 

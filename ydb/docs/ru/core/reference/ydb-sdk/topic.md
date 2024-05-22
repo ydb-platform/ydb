@@ -21,6 +21,11 @@
 
   [Примеры на GitHub](https://github.com/ydb-platform/ydb-java-examples/tree/master/ydb-cookbook/src/main/java/tech/ydb/examples/topic)
 
+- {Python}
+
+  [Примеры на GitHub](https://github.com/ydb-platform/ydb-python-sdk/tree/main/examples/topic)
+
+
 {% endlist %}
 
 ## Инициализация соединения с топиками

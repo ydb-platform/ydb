@@ -59,6 +59,7 @@ struct TDqSettings {
         static constexpr ui32 CostBasedOptimizationLevel = 0;
         static constexpr ui32 MaxDPccpDPTableSize = 16400U;
         static constexpr ui64 MaxAttachmentsSize = 2_GB;
+        static constexpr bool SplitStageOnDqReplicate = true;
     };
 
     using TPtr = std::shared_ptr<TDqSettings>;

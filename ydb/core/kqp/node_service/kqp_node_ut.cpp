@@ -482,8 +482,8 @@ void KqpNode::NotEnoughMemory() {
         UNIT_ASSERT_VALUES_EQUAL(1, record.GetTxId());
         UNIT_ASSERT_VALUES_EQUAL(1, record.GetNotStartedTasks().size());
         auto& task = record.GetNotStartedTasks()[0];
-        UNIT_ASSERT_EQUAL(NKikimrKqp::TEvStartKqpTasksResponse::QUERY_MEMORY_LIMIT_EXCEEDED, task.GetReason());
-        UNIT_ASSERT_STRINGS_EQUAL("Required: 201000, limit: 30000", task.GetMessage());
+        UNIT_ASSERT_EQUAL(NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_MEMORY, task.GetReason());
+        UNIT_ASSERT_STRING_CONTAINS(task.GetMessage(), "Not enough memory for query, requested: 201000");
     }
 
     AssertResourceBrokerSensors(0, 0, 0, 0, 0);
@@ -670,6 +670,13 @@ void KqpNode::ExecuterLost() {
         UNIT_ASSERT_VALUES_EQUAL("executer lost", abortEvent->Get()->Record.GetLegacyMessage());
     }
 
+    {
+        NKikimr::TActorSystemStub stub;
+        TMap<ui64, TMockComputeActor> Task2ActorEmpty;
+        CompFactory->Task2Actor.swap(Task2ActorEmpty);
+        Task2ActorEmpty.clear();
+    }
+
     size_t iterations = 30;
     while (KqpCounters->RmComputeActors->Val() != 0 && iterations > 0) {
         Sleep(TDuration::MilliSeconds(300));
@@ -730,6 +737,13 @@ void KqpNode::TerminateTx() {
         for (auto&[taskId, computeActor] : CompFactory->Task2Actor) {
             auto abortEvent = Runtime->GrabEdgeEvent<TEvKqp::TEvAbortExecution>(computeActor.ActorId);
             UNIT_ASSERT_VALUES_EQUAL("terminate", abortEvent->Get()->Record.GetLegacyMessage());
+        }
+
+        {
+            NKikimr::TActorSystemStub stub;
+            TMap<ui64, TMockComputeActor> Task2ActorEmpty;
+            CompFactory->Task2Actor.swap(Task2ActorEmpty);
+            Task2ActorEmpty.clear();
         }
     }
 

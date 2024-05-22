@@ -34,6 +34,8 @@ public:
         Creating,
         Syncing,
         Ready,
+        Alter,
+        Done,
         Removing,
         Error = 255
     };
@@ -108,6 +110,8 @@ public:
 
     void SetNextTargetId(ui64 value);
     ui64 GetNextTargetId() const;
+
+    void UpdateSecret(const TString& secretValue);
 
     void SetTenant(const TString& value);
     const TString& GetTenant() const;

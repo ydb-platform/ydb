@@ -1528,6 +1528,28 @@
         }
     ],
     "test.test[join-left_join_null_column--Results]": [],
+    "test.test[join-left_join_right_pushdown_simple--Analyze]": [
+        {
+            "checksum": "60536b1d78bcc3f1bf330ec865bdc40e",
+            "size": 6469,
+            "uri": "https://{canondata_backend}/1784826/1d88e578beafe01d6bba5ff3a3b2fecf2c6033c8/resource.tar.gz#test.test_join-left_join_right_pushdown_simple--Analyze_/plan.txt"
+        }
+    ],
+    "test.test[join-left_join_right_pushdown_simple--Debug]": [
+        {
+            "checksum": "5a119c16914592c95e4956102e038bac",
+            "size": 2576,
+            "uri": "https://{canondata_backend}/1784826/1d88e578beafe01d6bba5ff3a3b2fecf2c6033c8/resource.tar.gz#test.test_join-left_join_right_pushdown_simple--Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[join-left_join_right_pushdown_simple--Plan]": [
+        {
+            "checksum": "60536b1d78bcc3f1bf330ec865bdc40e",
+            "size": 6469,
+            "uri": "https://{canondata_backend}/1784826/1d88e578beafe01d6bba5ff3a3b2fecf2c6033c8/resource.tar.gz#test.test_join-left_join_right_pushdown_simple--Plan_/plan.txt"
+        }
+    ],
+    "test.test[join-left_join_right_pushdown_simple--Results]": [],
     "test.test[join-lookupjoin_bug7646_subst--Analyze]": [
         {
             "checksum": "afa9c5bf748b3d380562ffc9ea2d42ae",
@@ -2934,9 +2956,9 @@
     ],
     "test.test[window-generic/aggregations_after_current--Debug]": [
         {
-            "checksum": "2e87e119d176d86d6373aee6b8515655",
-            "size": 7289,
-            "uri": "https://{canondata_backend}/1903280/0db3cff29ce26bdeebe43f7c9bad950e873a4e5d/resource.tar.gz#test.test_window-generic_aggregations_after_current--Debug_/opt.yql_patched"
+            "checksum": "0ee7d239db02fedf480a0e8ed9cbea89",
+            "size": 7226,
+            "uri": "https://{canondata_backend}/1937492/fae2471f79672290055b05939c32d42b13b0819b/resource.tar.gz#test.test_window-generic_aggregations_after_current--Debug_/opt.yql_patched"
         }
     ],
     "test.test[window-generic/aggregations_after_current--Plan]": [

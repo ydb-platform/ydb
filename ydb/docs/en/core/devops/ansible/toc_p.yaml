@@ -5,3 +5,7 @@ items:
   href: initial-deployment.md
 - name: Preparing VMs with Terraform
   href: preparing-vms-with-terraform.md
+- name: Observability
+  include:
+    mode: link
+    path: observability/toc_p.yaml

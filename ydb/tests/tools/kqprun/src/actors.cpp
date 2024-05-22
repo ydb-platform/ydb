@@ -11,12 +11,13 @@ class TRunScriptActorMock : public NActors::TActorBootstrapped<TRunScriptActorMo
 public:
     TRunScriptActorMock(THolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest> request,
         NThreading::TPromise<NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr> promise,
-        ui64 resultRowsLimit, ui64 resultSizeLimit, std::vector<Ydb::ResultSet>& resultSets)
+        ui64 resultRowsLimit, ui64 resultSizeLimit, std::vector<Ydb::ResultSet>& resultSets, TString& queryPlan)
         : Request_(std::move(request))
         , Promise_(promise)
         , ResultRowsLimit_(std::numeric_limits<ui64>::max())
         , ResultSizeLimit_(std::numeric_limits<i64>::max())
         , ResultSets_(resultSets)
+        , QueryPlan_(queryPlan)
     {
         if (resultRowsLimit) {
             ResultRowsLimit_ = resultRowsLimit;
@@ -36,6 +37,7 @@ public:
     STRICT_STFUNC(StateFunc,
         hFunc(NKikimr::NKqp::TEvKqpExecuter::TEvStreamData, Handle);
         hFunc(NKikimr::NKqp::TEvKqp::TEvQueryResponse, Handle);
+        hFunc(NKikimr::NKqp::TEvKqpExecuter::TEvExecuterProgress, Handle);
     )
     
     void Handle(NKikimr::NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev) {
@@ -73,20 +75,25 @@ public:
         PassAway();
     }
 
+    void Handle(NKikimr::NKqp::TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
+        QueryPlan_ = ev->Get()->Record.GetQueryPlan();
+    }
+
 private:
     THolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest> Request_;
     NThreading::TPromise<NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr> Promise_;
     ui64 ResultRowsLimit_;
     ui64 ResultSizeLimit_;
     std::vector<Ydb::ResultSet>& ResultSets_;
+    TString& QueryPlan_;
 };
 
 }  // anonymous namespace
 
 NActors::IActor* CreateRunScriptActorMock(THolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest> request,
     NThreading::TPromise<NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr> promise,
-    ui64 resultRowsLimit, ui64 resultSizeLimit, std::vector<Ydb::ResultSet>& resultSets) {
-    return new TRunScriptActorMock(std::move(request), promise, resultRowsLimit, resultSizeLimit, resultSets);
+    ui64 resultRowsLimit, ui64 resultSizeLimit, std::vector<Ydb::ResultSet>& resultSets, TString& queryPlan) {
+    return new TRunScriptActorMock(std::move(request), promise, resultRowsLimit, resultSizeLimit, resultSets, queryPlan);
 }
 
 }  // namespace NKqpRun

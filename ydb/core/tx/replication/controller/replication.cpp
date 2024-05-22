@@ -1,5 +1,6 @@
 #include "private_events.h"
 #include "replication.h"
+#include "secret_resolver.h"
 #include "target_discoverer.h"
 #include "target_table.h"
 #include "tenant_resolver.h"
@@ -17,6 +18,14 @@ namespace NKikimr::NReplication::NController {
 
 class TReplication::TImpl {
     friend class TReplication;
+
+    void ResolveSecret(const TString& secretName, const TActorContext& ctx) {
+        if (SecretResolver) {
+            return;
+        }
+
+        SecretResolver = ctx.Register(CreateSecretResolver(ctx.SelfID, ReplicationId, PathId, secretName));
+    }
 
     template <typename... Args>
     ITarget* CreateTarget(ui64 id, ETargetKind kind, Args&&... args) const {
@@ -95,13 +104,21 @@ public:
 
             switch (params.GetCredentialsCase()) {
             case NKikimrReplication::TConnectionParams::kStaticCredentials:
+                if (!params.GetStaticCredentials().HasPassword()) {
+                    return ResolveSecret(params.GetStaticCredentials().GetPasswordSecretName(), ctx);
+                }
                 ydbProxy.Reset(CreateYdbProxy(params.GetEndpoint(), params.GetDatabase(), params.GetStaticCredentials()));
                 break;
             case NKikimrReplication::TConnectionParams::kOAuthToken:
-                ydbProxy.Reset(CreateYdbProxy(params.GetEndpoint(), params.GetDatabase(), params.GetOAuthToken()));
+                if (!params.GetOAuthToken().HasToken()) {
+                    return ResolveSecret(params.GetOAuthToken().GetTokenSecretName(), ctx);
+                }
+                ydbProxy.Reset(CreateYdbProxy(params.GetEndpoint(), params.GetDatabase(), params.GetOAuthToken().GetToken()));
                 break;
             default:
-                ErrorState(TStringBuilder() << "Unexpected credentials: " << params.GetCredentialsCase());
+                if (!(State == EState::Removing && !Targets)) {
+                    ErrorState(TStringBuilder() << "Unexpected credentials: " << params.GetCredentialsCase());
+                }
                 break;
             }
 
@@ -137,7 +154,7 @@ public:
             target->Shutdown(ctx);
         }
 
-        for (auto* x : TVector<TActorId*>{&TargetDiscoverer, &TenantResolver, &YdbProxy}) {
+        for (auto* x : TVector<TActorId*>{&SecretResolver, &TargetDiscoverer, &TenantResolver, &YdbProxy}) {
             if (auto actorId = std::exchange(*x, {})) {
                 ctx.Send(actorId, new TEvents::TEvPoison());
             }
@@ -163,6 +180,7 @@ private:
     TString Issue;
     ui64 NextTargetId = 1;
     THashMap<ui64, THolder<ITarget>> Targets;
+    TActorId SecretResolver;
     TActorId YdbProxy;
     TActorId TenantResolver;
     TActorId TargetDiscoverer;
@@ -257,6 +275,20 @@ void TReplication::SetNextTargetId(ui64 value) {
 
 ui64 TReplication::GetNextTargetId() const {
     return Impl->NextTargetId;
+}
+
+void TReplication::UpdateSecret(const TString& secretValue) {
+    auto& params = *Impl->Config.MutableSrcConnectionParams();
+    switch (params.GetCredentialsCase()) {
+    case NKikimrReplication::TConnectionParams::kStaticCredentials:
+        params.MutableStaticCredentials()->SetPassword(secretValue);
+        break;
+    case NKikimrReplication::TConnectionParams::kOAuthToken:
+        params.MutableOAuthToken()->SetToken(secretValue);
+        break;
+    default:
+        Y_ABORT("unreachable");
+    }
 }
 
 void TReplication::SetTenant(const TString& value) {

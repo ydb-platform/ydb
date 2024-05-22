@@ -5153,13 +5153,13 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
         TVector<ui64> sizes;
         
         env.SendSync(new NFake::TEvExecute{ new TTxCalculateReadSize(sizes, 0, 1) });
-        UNIT_ASSERT_VALUES_EQUAL(sizes, (TVector<ui64>{102, 1090, 1784, 2478, 23044, 23044}));
+        UNIT_ASSERT_VALUES_EQUAL(sizes, (TVector<ui64>{0, 0, 0, 0, 20566, 20566}));
 
         env.SendSync(new NFake::TEvExecute{ new TTxCalculateReadSize(sizes, 100, 200) });
-        UNIT_ASSERT_VALUES_EQUAL(sizes, (TVector<ui64>{102, 1090, 2478, 8030, 1056896, 1056896}));
+        UNIT_ASSERT_VALUES_EQUAL(sizes, (TVector<ui64>{0, 0, 0, 0, 1048866, 1048866}));
 
         env.SendSync(new NFake::TEvExecute{ new TTxCalculateReadSize(sizes, 300, 700) });
-        UNIT_ASSERT_VALUES_EQUAL(sizes, (TVector<ui64>{102, 1090, 4560, 25033, 4158799, 4158799}));
+        UNIT_ASSERT_VALUES_EQUAL(sizes, (TVector<ui64>{0, 0, 0, 0, 4133766, 4133766}));
     }
 
     Y_UNIT_TEST(PrechargeAndSeek_FlatIndex) {

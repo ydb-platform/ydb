@@ -25,7 +25,7 @@ namespace NTable {
         {
             auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
 
-            Touch(partStore->Locate(lob, ref), ref);
+            AddPageSize(partStore->Locate(lob, ref), ref);
 
             return { true, nullptr };
         }
@@ -37,16 +37,17 @@ namespace NTable {
             auto info = partStore->PageCollections.at(groupId.Index).Get();
             auto type = EPage(info->PageCollection->Page(pageId).Type);
             
-            if (type != EPage::FlatIndex) { // do not count flat index pages
-                Touch(partStore->PageCollections.at(groupId.Index).Get(), pageId);
+            switch (type) {
+                case EPage::FlatIndex:
+                case EPage::BTreeIndex:
+                    // need index pages to continue counting
+                    // do not count index
+                    // if these pages are not in memory, data won't be counted in precharge
+                    return Env->TryGetPage(part, pageId, groupId);
+                default:
+                    AddPageSize(partStore->PageCollections.at(groupId.Index).Get(), pageId);
+                    return nullptr;
             }
-
-            if (type == EPage::FlatIndex || type == EPage::BTreeIndex) {
-                // need page data to continue counting
-                return Env->TryGetPage(part, pageId, groupId);
-            }
-
-            return nullptr;
         }
 
         ui64 GetSize() const {
@@ -54,7 +55,7 @@ namespace NTable {
         }
 
     private:
-        void Touch(TInfo *info, TPageId page) noexcept
+        void AddPageSize(TInfo *info, TPageId page) noexcept
         {
             if (Touched[info].insert(page).second) {
                 Pages++;

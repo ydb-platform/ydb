@@ -175,21 +175,24 @@ private:
     }
 
     void SaveNextPartOfVector() {
-        size_t maxFittingElemets = (SizeLimit - Buffer.size()) / sizeof(T);
-        size_t remainingElementsInVector = CurrentVector.size() - NextVectorPositionToSave;
-        size_t elementsToCopyFromVector = std::min(maxFittingElemets, remainingElementsInVector);
 
-        AddDataToRope(CurrentVector.data() + NextVectorPositionToSave, elementsToCopyFromVector);
+        while(!CurrentVector.empty()) {
+            size_t maxFittingElemets = (SizeLimit - Buffer.size()) / sizeof(T);
+            size_t remainingElementsInVector = CurrentVector.size() - NextVectorPositionToSave;
+            size_t elementsToCopyFromVector = std::min(maxFittingElemets, remainingElementsInVector);
 
-        NextVectorPositionToSave += elementsToCopyFromVector;
-        if (NextVectorPositionToSave >= CurrentVector.size()) {
-            CurrentVector.resize(0);
-            NextVectorPositionToSave = 0;
-        }
+            AddDataToRope(CurrentVector.data() + NextVectorPositionToSave, elementsToCopyFromVector);
 
-        if (SizeLimit - Buffer.size() < sizeof(T)) {
-            SaveBuffer();
-            return;
+            NextVectorPositionToSave += elementsToCopyFromVector;
+            if (NextVectorPositionToSave >= CurrentVector.size()) {
+                CurrentVector.resize(0);
+                NextVectorPositionToSave = 0;
+            }
+
+            if (SizeLimit - Buffer.size() < sizeof(T)) {
+                SaveBuffer();
+                return;
+            }
         }
 
         State = EState::AcceptingData;

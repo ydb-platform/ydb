@@ -298,6 +298,8 @@ public:
 
         std::cerr << std::format("[MISHA] Spilling bucket {}, of size {}\n", largestBucketIndex, largestBucketSize);
 
+        if (largestBucketSize) return false;
+
         TableBucketsSpillers[largestBucketIndex].SpillBucket(std::move(TableBuckets[largestBucketIndex]));
         TableBuckets[largestBucketIndex] = TTableBucket{};
 

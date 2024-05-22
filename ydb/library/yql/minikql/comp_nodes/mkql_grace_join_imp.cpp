@@ -1210,6 +1210,9 @@ void TTableBucketSpiller::Finalize() {
 }
 
 void TTableBucketSpiller::SpillBucket(TTableBucket&& bucket) {
+    if (NextVectorToProcess != ENextVectorToProcess::None) {
+        std::cerr << "MISHA ERROR!\n";
+    }
     MKQL_ENSURE(NextVectorToProcess == ENextVectorToProcess::None, "Internal logic error");
     State = EState::Spilling;
 

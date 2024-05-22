@@ -1070,8 +1070,8 @@ private:
 
                 auto flatMapLambdaInputs = Visit(flatMap.Lambda().Body().Ptr(), planNode);
                 inputIds.insert(inputIds.end(), flatMapLambdaInputs.begin(), flatMapLambdaInputs.end());
-            } else if (TMaybeNode<TCoMapBase>(node)) {
-                auto map = TExprBase(node).Cast<TCoMapBase>();
+            } else if (TMaybeNode<TCoMap>(node)) {
+                auto map = TExprBase(node).Cast<TCoMap>();
                 auto mapInputs = Visit(map, planNode);
 
                 auto mapLambdaInputs = Visit(map.Lambda().Body().Ptr(), planNode);
@@ -1100,7 +1100,7 @@ private:
         return inputIds;
     }
 
-    TVector<std::variant<ui32, TArgContext>> Visit(const TCoMapBase& map, TQueryPlanNode& planNode) {
+    TVector<std::variant<ui32, TArgContext>> Visit(const TCoMap& map, TQueryPlanNode& planNode) {
         auto mapInputs = Visit(map.Input().Ptr(), planNode);
 
         if (!mapInputs.empty() && map.Lambda().Args().Size() != 0) {

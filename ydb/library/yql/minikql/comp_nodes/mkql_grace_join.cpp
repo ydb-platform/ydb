@@ -871,7 +871,6 @@ void DoCalculateWithSpilling(TComputationContext& ctx) {
             RightPacker->TablePtr->FinalizeSpilling();
             IsSpillingFinalized = true;
 
-            UpdateSpilling();
             if (HasRunningAsyncOperation()) return;
         }
         SwitchMode(EOperatingMode::ProcessSpilled, ctx);
@@ -881,7 +880,6 @@ void DoCalculateWithSpilling(TComputationContext& ctx) {
 
 EFetchResult ProcessSpilledData(TComputationContext&, NUdf::TUnboxedValue*const* output) {
     while (NextBucketToJoin != GraceJoin::NumberOfBuckets) {
-
         UpdateSpilling();
 
         if (HasRunningAsyncOperation()) return EFetchResult::Yield;
@@ -897,28 +895,7 @@ EFetchResult ProcessSpilledData(TComputationContext&, NUdf::TUnboxedValue*const*
         if (LeftPacker->TablePtr->IsBucketInMemory(NextBucketToJoin) && RightPacker->TablePtr->IsBucketInMemory(NextBucketToJoin)) {
             if (*PartialJoinCompleted) {
                 while (JoinedTablePtr->NextJoinedData(LeftPacker->JoinTupleData, RightPacker->JoinTupleData)) {
-                    LeftPacker->UnPack();
-                    RightPacker->UnPack();
-
-                    auto &valsLeft = LeftPacker->TupleHolder;
-                    auto &valsRight = RightPacker->TupleHolder;
-
-
-                    for (size_t i = 0; i < LeftRenames.size() / 2; i++)
-                    {
-                        auto & valPtr = output[LeftRenames[2 * i + 1]];
-                        if ( valPtr ) {
-                            *valPtr = valsLeft[LeftRenames[2 * i]];
-                        }
-                    }
-
-                    for (size_t i = 0; i < RightRenames.size() / 2; i++)
-                    {
-                        auto & valPtr = output[RightRenames[2 * i + 1]];
-                        if ( valPtr ) {
-                            *valPtr = valsRight[RightRenames[2 * i]];
-                        }
-                    }
+                    UnpackJoinedData(output);
 
                     return EFetchResult::One;
 

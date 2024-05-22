@@ -191,6 +191,16 @@ IGraphTransformer::TStatus InferPgCommonType(TPositionHandle pos, const TExprNod
     return IGraphTransformer::TStatus::Ok;
 }
 
+IGraphTransformer::TStatus PgSelfWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 0, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    input->SetTypeAnn(ctx.Expr.MakeType<TUnitExprType>());
+    return IGraphTransformer::TStatus::Ok;
+}
+
 IGraphTransformer::TStatus PgStarWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     Y_UNUSED(output);
     if (!EnsureArgsCount(*input, 0, ctx.Expr)) {

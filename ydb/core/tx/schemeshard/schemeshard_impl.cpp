@@ -7250,6 +7250,14 @@ void TSchemeShard::ChangeDiskSpaceSoftQuotaBytes(i64 delta) {
     TabletCounters->Simple()[COUNTER_DISK_SPACE_SOFT_QUOTA_BYTES].Add(delta);
 }
 
+void TSchemeShard::ChangeDiskSpaceSoftQuotaBytes(EUserFacingStorageType storageType, i64 delta) {
+    if (storageType == EUserFacingStorageType::Ssd) {
+        TabletCounters->Simple()[COUNTER_DISK_SPACE_SOFT_QUOTA_BYTES_ON_SSD].Add(delta);
+    } else if (storageType == EUserFacingStorageType::Hdd) {
+        TabletCounters->Simple()[COUNTER_DISK_SPACE_SOFT_QUOTA_BYTES_ON_HDD].Add(delta);
+    }
+}
+
 void TSchemeShard::Handle(TEvSchemeShard::TEvLogin::TPtr &ev, const TActorContext &ctx) {
     Execute(CreateTxLogin(ev), ctx);
 }

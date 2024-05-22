@@ -181,6 +181,11 @@ void TSubDomainInfo::CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskS
     if (quotas.SoftQuota != 0) {
         counters->ChangeDiskSpaceSoftQuotaBytes(quotas.SoftQuota);
     }
+    for (const auto& [poolKind, poolQuotas] : quotas.StoragePoolsQuotas) {
+        if (poolQuotas.SoftQuota != 0) {
+            counters->ChangeDiskSpaceSoftQuotaBytes(GetUserFacingStorageType(poolKind), poolQuotas.SoftQuota);
+        }
+    }
 }
 
 void TSubDomainInfo::CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskSpaceQuotas& prev, const TDiskSpaceQuotas& next) {
@@ -191,6 +196,23 @@ void TSubDomainInfo::CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskS
     i64 softDelta = i64(next.SoftQuota) - i64(prev.SoftQuota);
     if (softDelta != 0) {
         counters->ChangeDiskSpaceSoftQuotaBytes(softDelta);
+    }
+    for (const auto& [poolKind, newPoolQuotas] : next.StoragePoolsQuotas) {
+        const auto* oldPoolQuotas = prev.StoragePoolsQuotas.FindPtr(poolKind);
+        i64 delta = i64(newPoolQuotas.SoftQuota) - (oldPoolQuotas ? i64(oldPoolQuotas->SoftQuota) : 0);
+        if (delta != 0) {
+            counters->ChangeDiskSpaceSoftQuotaBytes(GetUserFacingStorageType(poolKind), delta);
+        }
+    }
+    for (const auto& [poolKind, oldPoolQuotas] : prev.StoragePoolsQuotas) {
+        if (const auto* newPoolQuotas = next.StoragePoolsQuotas.FindPtr(poolKind);
+            !newPoolQuotas
+        ) {
+            i64 delta = -i64(oldPoolQuotas.SoftQuota);
+            if (delta != 0) {
+                counters->ChangeDiskSpaceSoftQuotaBytes(GetUserFacingStorageType(poolKind), delta);
+            }
+        }
     }
 }
 

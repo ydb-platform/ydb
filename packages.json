@@ -1,0 +1,17 @@
+[
+    {
+        "branch": "id_wrapper",
+        "package_name": "ydb",
+        "package_path": "ydb/tools/ydbd_slice/image/pkg.json",
+        "package_version": "mregrock-latest",
+        "revision": "77f6eea05b7d119eac86e0752886c5b682101aa5",
+        "sandbox_task_id": 0,
+        "svn_revision": "-1",
+        "package_full_name": "ydb.mregrock-latest",
+        "docker_image": "cr.yandex/crpbo4q9lbgkn85vr1rm/ydb:mregrock-latest",
+        "name": "ydb",
+        "version": "mregrock-latest",
+        "path": "/home/mregrock/my_ydb/ydb/ydb.mregrock-latest.tar.gz",
+        "debug_path": null
+    }
+]

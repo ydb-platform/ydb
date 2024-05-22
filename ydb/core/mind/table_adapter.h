@@ -2,7 +2,7 @@
 
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
-
+#include "ydb/core/mind/bscontroller/id_wrapper.h"
 namespace NKikimr {
 
     // inline table specifier
@@ -119,6 +119,11 @@ namespace NKikimr {
 
         inline void Cast(const TDuration& from, TMaybe<ui64>& to) {
             to.ConstructInPlace(from.GetValue());
+        }
+
+        template<typename T, typename Tag>
+        inline void Cast(const TIdWrapper<T, Tag>& from, TMaybe<T>& to){
+            to.ConstructInPlace(from.GetRawId());
         }
 
         template<typename TRow, typename TColumn>

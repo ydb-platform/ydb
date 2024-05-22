@@ -12,6 +12,8 @@ import _common
 import lib.test_const as consts
 import _requirements as reqs
 
+from collections.abc import Buffer
+
 try:
     from StringIO import StringIO
 except ImportError:
@@ -52,7 +54,7 @@ def format_recipes(data: str | None) -> str:
     return data
 
 
-def prepare_recipes(data: str | None) -> str:
+def prepare_recipes(data: str | None) -> Buffer:
     formatted = format_recipes(data)
     return base64.b64encode(six.ensure_binary(formatted))
 
@@ -398,7 +400,7 @@ def implies(a, b):
 def match_coverage_extractor_requirements(unit):
     # we shouldn't add test if
     return all(
-        [
+        (
             # tests are not requested
             unit.get("TESTS_REQUESTED") == "yes",
             # build doesn't imply clang coverage, which supports segment extraction from the binaries
@@ -407,7 +409,7 @@ def match_coverage_extractor_requirements(unit):
             implies(
                 _common.get_norm_unit_path(unit).startswith("contrib/"), unit.get("ENABLE_CONTRIB_COVERAGE") == "yes"
             ),
-        ]
+        )
     )
 
 
@@ -447,151 +449,6 @@ def get_project_tidy_config(unit):
             return config_path
     else:
         return get_default_tidy_config(unit)
-
-
-def onadd_ytest(unit, *args):
-    keywords = {
-        "DEPENDS": -1,
-        "DATA": -1,
-        "TIMEOUT": 1,
-        "FORK_MODE": 1,
-        "SPLIT_FACTOR": 1,
-        "FORK_SUBTESTS": 0,
-        "FORK_TESTS": 0,
-    }
-    flat_args, spec_args = _common.sort_by_keywords(keywords, args)
-
-    is_implicit_data_needed = flat_args[1] in (
-        "unittest.py",
-        "gunittest",
-        "g_benchmark",
-        "go.test",
-        "boost.test",
-        "fuzz.test",
-    )
-    if is_implicit_data_needed and unit.get('ADD_SRCDIR_TO_TEST_DATA') == "yes":
-        unit.ondata_files(_common.get_norm_unit_path(unit))
-
-    if flat_args[1] == "fuzz.test":
-        unit.ondata_files("fuzzing/{}/corpus.json".format(_common.get_norm_unit_path(unit)))
-
-    if not flat_args[1] in ("unittest.py", "gunittest", "g_benchmark"):
-        unit.ondata_files(get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE'))
-
-    test_data = sorted(
-        _common.filter_out_by_keyword(
-            spec_args.get('DATA', []) + get_norm_paths(unit, 'TEST_DATA_VALUE'), 'AUTOUPDATED'
-        )
-    )
-
-    if flat_args[1] == "go.test":
-        data, _ = get_canonical_test_resources(unit)
-        test_data += data
-    elif flat_args[1] == "coverage.extractor" and not match_coverage_extractor_requirements(unit):
-        # XXX
-        # Current ymake implementation doesn't allow to call macro inside the 'when' body
-        # that's why we add ADD_YTEST(coverage.extractor) to every PROGRAM entry and check requirements later
-        return
-    elif flat_args[1] == "clang_tidy" and unit.get("TIDY_ENABLED") != "yes":
-        # Graph is not prepared
-        return
-    elif unit.get("TIDY") == "yes" and unit.get("TIDY_ENABLED") != "yes":
-        # clang_tidy disabled for module
-        return
-    elif flat_args[1] == "no.test":
-        return
-    test_size = ''.join(spec_args.get('SIZE', [])) or unit.get('TEST_SIZE_NAME') or ''
-    test_tags = serialize_list(sorted(_get_test_tags(unit, spec_args)))
-    test_timeout = ''.join(spec_args.get('TIMEOUT', [])) or unit.get('TEST_TIMEOUT') or ''
-    test_requirements = spec_args.get('REQUIREMENTS', []) + get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')
-
-    if flat_args[1] != "clang_tidy" and unit.get("TIDY_ENABLED") == "yes":
-        # graph changed for clang_tidy tests
-        if flat_args[1] in ("unittest.py", "gunittest", "g_benchmark", "boost.test"):
-            flat_args[1] = "clang_tidy"
-            test_size = 'SMALL'
-            test_tags = ''
-            test_timeout = "60"
-            test_requirements = []
-            unit.set(["TEST_YT_SPEC_VALUE", ""])
-        else:
-            return
-
-    if flat_args[1] == "clang_tidy" and unit.get("TIDY_ENABLED") == "yes":
-        if unit.get("TIDY_CONFIG"):
-            default_config_path = unit.get("TIDY_CONFIG")
-            project_config_path = unit.get("TIDY_CONFIG")
-        else:
-            default_config_path = get_default_tidy_config(unit)
-            project_config_path = get_project_tidy_config(unit)
-
-        unit.set(["DEFAULT_TIDY_CONFIG", default_config_path])
-        unit.set(["PROJECT_TIDY_CONFIG", project_config_path])
-
-    fork_mode = []
-    if 'FORK_SUBTESTS' in spec_args:
-        fork_mode.append('subtests')
-    if 'FORK_TESTS' in spec_args:
-        fork_mode.append('tests')
-    fork_mode = fork_mode or spec_args.get('FORK_MODE', []) or unit.get('TEST_FORK_MODE').split()
-    fork_mode = ' '.join(fork_mode) if fork_mode else ''
-
-    unit_path = _common.get_norm_unit_path(unit)
-
-    test_record = {
-        'TEST-NAME': flat_args[0],
-        'SCRIPT-REL-PATH': flat_args[1],
-        'TESTED-PROJECT-NAME': unit.name(),
-        'TESTED-PROJECT-FILENAME': unit.filename(),
-        'SOURCE-FOLDER-PATH': unit_path,
-        # TODO get rid of BUILD-FOLDER-PATH
-        'BUILD-FOLDER-PATH': unit_path,
-        'BINARY-PATH': "{}/{}".format(unit_path, unit.filename()),
-        'GLOBAL-LIBRARY-PATH': unit.global_filename(),
-        'CUSTOM-DEPENDENCIES': ' '.join(spec_args.get('DEPENDS', []) + get_values_list(unit, 'TEST_DEPENDS_VALUE')),
-        'TEST-RECIPES': prepare_recipes(unit.get("TEST_RECIPES_VALUE")),
-        'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
-        #  'TEST-PRESERVE-ENV': 'da',
-        'TEST-DATA': serialize_list(sorted(test_data)),
-        'TEST-TIMEOUT': test_timeout,
-        'FORK-MODE': fork_mode,
-        'SPLIT-FACTOR': ''.join(spec_args.get('SPLIT_FACTOR', [])) or unit.get('TEST_SPLIT_FACTOR') or '',
-        'SIZE': test_size,
-        'TAG': test_tags,
-        'REQUIREMENTS': serialize_list(test_requirements),
-        'TEST-CWD': unit.get('TEST_CWD_VALUE') or '',
-        'FUZZ-DICTS': serialize_list(
-            spec_args.get('FUZZ_DICTS', []) + get_unit_list_variable(unit, 'FUZZ_DICTS_VALUE')
-        ),
-        'FUZZ-OPTS': serialize_list(spec_args.get('FUZZ_OPTS', []) + get_unit_list_variable(unit, 'FUZZ_OPTS_VALUE')),
-        'YT-SPEC': serialize_list(spec_args.get('YT_SPEC', []) + get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE')),
-        'BLOB': unit.get('TEST_BLOB_DATA') or '',
-        'SKIP_TEST': unit.get('SKIP_TEST_VALUE') or '',
-        'TEST_IOS_DEVICE_TYPE': unit.get('TEST_IOS_DEVICE_TYPE_VALUE') or '',
-        'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE') or '',
-        'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE') or '',
-        'TEST_PARTITION': unit.get("TEST_PARTITION") or 'SEQUENTIAL',
-        'GO_BENCH_TIMEOUT': unit.get('GO_BENCH_TIMEOUT') or '',
-    }
-
-    if flat_args[1] == "go.bench":
-        if "ya:run_go_benchmark" not in test_record["TAG"]:
-            return
-        else:
-            test_record["TEST-NAME"] += "_bench"
-    elif flat_args[1] in ("g_benchmark", "y_benchmark"):
-        benchmark_opts = get_unit_list_variable(unit, 'BENCHMARK_OPTS_VALUE')
-        test_record['BENCHMARK-OPTS'] = serialize_list(benchmark_opts)
-    elif flat_args[1] == 'fuzz.test' and unit.get('FUZZING') == 'yes':
-        test_record['FUZZING'] = '1'
-        # use all cores if fuzzing requested
-        test_record['REQUIREMENTS'] = serialize_list(
-            filter(None, deserialize_list(test_record['REQUIREMENTS']) + ["cpu:all", "ram:all"])
-        )
-
-    data = dump_test(unit, test_record)
-    if data:
-        unit.set_property(["DART_DATA", data])
 
 
 def java_srcdirs_to_data(unit, var):
@@ -1356,3 +1213,879 @@ def on_add_linter_check(unit, *args):
     data = dump_test(unit, test_record)
     if data:
         unit.set_property(["DART_DATA", data])
+
+
+def clang_tidy(unit, *args, from_other_type=False):
+    keywords = {
+        "DEPENDS": -1,
+        "DATA": -1,
+        "TIMEOUT": 1,
+        "FORK_MODE": 1,
+        "SPLIT_FACTOR": 1,
+        "FORK_SUBTESTS": 0,
+        "FORK_TESTS": 0,
+    }
+    flat_args, spec_args = _common.sort_by_keywords(keywords, args)
+
+    # TODO see if we can get rid of 'from_other_type' parameter
+    if from_other_type:
+        if unit.get('ADD_SRCDIR_TO_TEST_DATA') == "yes":
+            unit.ondata_files(_common.get_norm_unit_path(unit))
+
+        if flat_args[1] == "boost.test":
+            unit.ondata_files(get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE'))
+
+        flat_args[1] = "clang_tidy"
+        test_size = 'SMALL'
+        test_tags = ''
+        test_timeout = "60"
+        test_requirements = []
+        unit.set(["TEST_YT_SPEC_VALUE", ""])
+    else:
+        unit.ondata_files(get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE'))
+
+        test_size = ''.join(spec_args.get('SIZE', [])) or unit.get('TEST_SIZE_NAME') or ''
+        test_tags = serialize_list(sorted(_get_test_tags(unit, spec_args)))
+        test_timeout = ''.join(spec_args.get('TIMEOUT', [])) or unit.get('TEST_TIMEOUT') or ''
+        test_requirements = spec_args.get('REQUIREMENTS', []) + get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')
+
+    test_data = sorted(
+        _common.filter_out_by_keyword(
+            spec_args.get('DATA', []) + get_norm_paths(unit, 'TEST_DATA_VALUE'), 'AUTOUPDATED'
+        )
+    )
+
+    if unit.get("TIDY_CONFIG"):
+        default_config_path = unit.get("TIDY_CONFIG")
+        project_config_path = unit.get("TIDY_CONFIG")
+    else:
+        default_config_path = get_default_tidy_config(unit)
+        project_config_path = get_project_tidy_config(unit)
+
+    unit.set(["DEFAULT_TIDY_CONFIG", default_config_path])
+    unit.set(["PROJECT_TIDY_CONFIG", project_config_path])
+
+    fork_mode = []
+    if 'FORK_SUBTESTS' in spec_args:
+        fork_mode.append('subtests')
+    if 'FORK_TESTS' in spec_args:
+        fork_mode.append('tests')
+    fork_mode = fork_mode or spec_args.get('FORK_MODE', []) or unit.get('TEST_FORK_MODE').split()
+    fork_mode = ' '.join(fork_mode) if fork_mode else ''
+
+    unit_path = _common.get_norm_unit_path(unit)
+
+    test_record = {
+        'TEST-NAME': flat_args[0],
+        'SCRIPT-REL-PATH': flat_args[1],
+        'TESTED-PROJECT-NAME': unit.name(),
+        'TESTED-PROJECT-FILENAME': unit.filename(),
+        'SOURCE-FOLDER-PATH': unit_path,
+        # TODO get rid of BUILD-FOLDER-PATH
+        'BUILD-FOLDER-PATH': unit_path,
+        'BINARY-PATH': "{}/{}".format(unit_path, unit.filename()),
+        'GLOBAL-LIBRARY-PATH': unit.global_filename(),
+        'CUSTOM-DEPENDENCIES': ' '.join(spec_args.get('DEPENDS', []) + get_values_list(unit, 'TEST_DEPENDS_VALUE')),
+        'TEST-RECIPES': prepare_recipes(unit.get("TEST_RECIPES_VALUE")),
+        'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
+        #  'TEST-PRESERVE-ENV': 'da',
+        'TEST-DATA': serialize_list(sorted(test_data)),
+        'TEST-TIMEOUT': test_timeout,
+        'FORK-MODE': fork_mode,
+        'SPLIT-FACTOR': ''.join(spec_args.get('SPLIT_FACTOR', [])) or unit.get('TEST_SPLIT_FACTOR') or '',
+        'SIZE': test_size,
+        'TAG': test_tags,
+        'REQUIREMENTS': serialize_list(test_requirements),
+        'TEST-CWD': unit.get('TEST_CWD_VALUE') or '',
+        'FUZZ-DICTS': serialize_list(
+            spec_args.get('FUZZ_DICTS', []) + get_unit_list_variable(unit, 'FUZZ_DICTS_VALUE')
+        ),
+        'FUZZ-OPTS': serialize_list(spec_args.get('FUZZ_OPTS', []) + get_unit_list_variable(unit, 'FUZZ_OPTS_VALUE')),
+        'YT-SPEC': serialize_list(spec_args.get('YT_SPEC', []) + get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE')),
+        'BLOB': unit.get('TEST_BLOB_DATA') or '',
+        'SKIP_TEST': unit.get('SKIP_TEST_VALUE') or '',
+        'TEST_IOS_DEVICE_TYPE': unit.get('TEST_IOS_DEVICE_TYPE_VALUE') or '',
+        'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE') or '',
+        'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE') or '',
+        'TEST_PARTITION': unit.get("TEST_PARTITION") or 'SEQUENTIAL',
+        'GO_BENCH_TIMEOUT': unit.get('GO_BENCH_TIMEOUT') or '',
+    }
+
+    data = dump_test(unit, test_record)
+    if data:
+        unit.set_property(["DART_DATA", data])
+
+
+def unittest_py(unit, *args):
+    keywords = {
+        "DEPENDS": -1,
+        "DATA": -1,
+        "TIMEOUT": 1,
+        "FORK_MODE": 1,
+        "SPLIT_FACTOR": 1,
+        "FORK_SUBTESTS": 0,
+        "FORK_TESTS": 0,
+    }
+    flat_args, spec_args = _common.sort_by_keywords(keywords, args)
+
+    if unit.get('ADD_SRCDIR_TO_TEST_DATA') == "yes":
+        unit.ondata_files(_common.get_norm_unit_path(unit))
+
+    test_data = sorted(
+        _common.filter_out_by_keyword(
+            spec_args.get('DATA', []) + get_norm_paths(unit, 'TEST_DATA_VALUE'), 'AUTOUPDATED'
+        )
+    )
+
+    test_size = ''.join(spec_args.get('SIZE', [])) or unit.get('TEST_SIZE_NAME') or ''
+    test_tags = serialize_list(sorted(_get_test_tags(unit, spec_args)))
+    test_timeout = ''.join(spec_args.get('TIMEOUT', [])) or unit.get('TEST_TIMEOUT') or ''
+    test_requirements = spec_args.get('REQUIREMENTS', []) + get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')
+
+    fork_mode = []
+    if 'FORK_SUBTESTS' in spec_args:
+        fork_mode.append('subtests')
+    if 'FORK_TESTS' in spec_args:
+        fork_mode.append('tests')
+    fork_mode = fork_mode or spec_args.get('FORK_MODE', []) or unit.get('TEST_FORK_MODE').split()
+    fork_mode = ' '.join(fork_mode) if fork_mode else ''
+
+    unit_path = _common.get_norm_unit_path(unit)
+
+    test_record = {
+        'TEST-NAME': flat_args[0],
+        'SCRIPT-REL-PATH': flat_args[1],
+        'TESTED-PROJECT-NAME': unit.name(),
+        'TESTED-PROJECT-FILENAME': unit.filename(),
+        'SOURCE-FOLDER-PATH': unit_path,
+        # TODO get rid of BUILD-FOLDER-PATH
+        'BUILD-FOLDER-PATH': unit_path,
+        'BINARY-PATH': "{}/{}".format(unit_path, unit.filename()),
+        'GLOBAL-LIBRARY-PATH': unit.global_filename(),
+        'CUSTOM-DEPENDENCIES': ' '.join(spec_args.get('DEPENDS', []) + get_values_list(unit, 'TEST_DEPENDS_VALUE')),
+        'TEST-RECIPES': prepare_recipes(unit.get("TEST_RECIPES_VALUE")),
+        'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
+        #  'TEST-PRESERVE-ENV': 'da',
+        'TEST-DATA': serialize_list(sorted(test_data)),
+        'TEST-TIMEOUT': test_timeout,
+        'FORK-MODE': fork_mode,
+        'SPLIT-FACTOR': ''.join(spec_args.get('SPLIT_FACTOR', [])) or unit.get('TEST_SPLIT_FACTOR') or '',
+        'SIZE': test_size,
+        'TAG': test_tags,
+        'REQUIREMENTS': serialize_list(test_requirements),
+        'TEST-CWD': unit.get('TEST_CWD_VALUE') or '',
+        'FUZZ-DICTS': serialize_list(
+            spec_args.get('FUZZ_DICTS', []) + get_unit_list_variable(unit, 'FUZZ_DICTS_VALUE')
+        ),
+        'FUZZ-OPTS': serialize_list(spec_args.get('FUZZ_OPTS', []) + get_unit_list_variable(unit, 'FUZZ_OPTS_VALUE')),
+        'YT-SPEC': serialize_list(spec_args.get('YT_SPEC', []) + get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE')),
+        'BLOB': unit.get('TEST_BLOB_DATA') or '',
+        'SKIP_TEST': unit.get('SKIP_TEST_VALUE') or '',
+        'TEST_IOS_DEVICE_TYPE': unit.get('TEST_IOS_DEVICE_TYPE_VALUE') or '',
+        'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE') or '',
+        'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE') or '',
+        'TEST_PARTITION': unit.get("TEST_PARTITION") or 'SEQUENTIAL',
+        'GO_BENCH_TIMEOUT': unit.get('GO_BENCH_TIMEOUT') or '',
+    }
+
+    data = dump_test(unit, test_record)
+    if data:
+        unit.set_property(["DART_DATA", data])
+
+
+def gunittest(unit, *args):
+    keywords = {
+        "DEPENDS": -1,
+        "DATA": -1,
+        "TIMEOUT": 1,
+        "FORK_MODE": 1,
+        "SPLIT_FACTOR": 1,
+        "FORK_SUBTESTS": 0,
+        "FORK_TESTS": 0,
+    }
+    flat_args, spec_args = _common.sort_by_keywords(keywords, args)
+
+    if unit.get('ADD_SRCDIR_TO_TEST_DATA') == "yes":
+        unit.ondata_files(_common.get_norm_unit_path(unit))
+
+    test_data = sorted(
+        _common.filter_out_by_keyword(
+            spec_args.get('DATA', []) + get_norm_paths(unit, 'TEST_DATA_VALUE'), 'AUTOUPDATED'
+        )
+    )
+
+    test_size = ''.join(spec_args.get('SIZE', [])) or unit.get('TEST_SIZE_NAME') or ''
+    test_tags = serialize_list(sorted(_get_test_tags(unit, spec_args)))
+    test_timeout = ''.join(spec_args.get('TIMEOUT', [])) or unit.get('TEST_TIMEOUT') or ''
+    test_requirements = spec_args.get('REQUIREMENTS', []) + get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')
+
+    fork_mode = []
+    if 'FORK_SUBTESTS' in spec_args:
+        fork_mode.append('subtests')
+    if 'FORK_TESTS' in spec_args:
+        fork_mode.append('tests')
+    fork_mode = fork_mode or spec_args.get('FORK_MODE', []) or unit.get('TEST_FORK_MODE').split()
+    fork_mode = ' '.join(fork_mode) if fork_mode else ''
+
+    unit_path = _common.get_norm_unit_path(unit)
+
+    test_record = {
+        'TEST-NAME': flat_args[0],
+        'SCRIPT-REL-PATH': flat_args[1],
+        'TESTED-PROJECT-NAME': unit.name(),
+        'TESTED-PROJECT-FILENAME': unit.filename(),
+        'SOURCE-FOLDER-PATH': unit_path,
+        # TODO get rid of BUILD-FOLDER-PATH
+        'BUILD-FOLDER-PATH': unit_path,
+        'BINARY-PATH': "{}/{}".format(unit_path, unit.filename()),
+        'GLOBAL-LIBRARY-PATH': unit.global_filename(),
+        'CUSTOM-DEPENDENCIES': ' '.join(spec_args.get('DEPENDS', []) + get_values_list(unit, 'TEST_DEPENDS_VALUE')),
+        'TEST-RECIPES': prepare_recipes(unit.get("TEST_RECIPES_VALUE")),
+        'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
+        #  'TEST-PRESERVE-ENV': 'da',
+        'TEST-DATA': serialize_list(sorted(test_data)),
+        'TEST-TIMEOUT': test_timeout,
+        'FORK-MODE': fork_mode,
+        'SPLIT-FACTOR': ''.join(spec_args.get('SPLIT_FACTOR', [])) or unit.get('TEST_SPLIT_FACTOR') or '',
+        'SIZE': test_size,
+        'TAG': test_tags,
+        'REQUIREMENTS': serialize_list(test_requirements),
+        'TEST-CWD': unit.get('TEST_CWD_VALUE') or '',
+        'FUZZ-DICTS': serialize_list(
+            spec_args.get('FUZZ_DICTS', []) + get_unit_list_variable(unit, 'FUZZ_DICTS_VALUE')
+        ),
+        'FUZZ-OPTS': serialize_list(spec_args.get('FUZZ_OPTS', []) + get_unit_list_variable(unit, 'FUZZ_OPTS_VALUE')),
+        'YT-SPEC': serialize_list(spec_args.get('YT_SPEC', []) + get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE')),
+        'BLOB': unit.get('TEST_BLOB_DATA') or '',
+        'SKIP_TEST': unit.get('SKIP_TEST_VALUE') or '',
+        'TEST_IOS_DEVICE_TYPE': unit.get('TEST_IOS_DEVICE_TYPE_VALUE') or '',
+        'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE') or '',
+        'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE') or '',
+        'TEST_PARTITION': unit.get("TEST_PARTITION") or 'SEQUENTIAL',
+        'GO_BENCH_TIMEOUT': unit.get('GO_BENCH_TIMEOUT') or '',
+    }
+
+    data = dump_test(unit, test_record)
+    if data:
+        unit.set_property(["DART_DATA", data])
+
+
+def g_benchmark(unit, *args):
+    keywords = {
+        "DEPENDS": -1,
+        "DATA": -1,
+        "TIMEOUT": 1,
+        "FORK_MODE": 1,
+        "SPLIT_FACTOR": 1,
+        "FORK_SUBTESTS": 0,
+        "FORK_TESTS": 0,
+    }
+    flat_args, spec_args = _common.sort_by_keywords(keywords, args)
+
+    if unit.get('ADD_SRCDIR_TO_TEST_DATA') == "yes":
+        unit.ondata_files(_common.get_norm_unit_path(unit))
+
+    test_data = sorted(
+        _common.filter_out_by_keyword(
+            spec_args.get('DATA', []) + get_norm_paths(unit, 'TEST_DATA_VALUE'), 'AUTOUPDATED'
+        )
+    )
+
+    test_size = ''.join(spec_args.get('SIZE', [])) or unit.get('TEST_SIZE_NAME') or ''
+    test_tags = serialize_list(sorted(_get_test_tags(unit, spec_args)))
+    test_timeout = ''.join(spec_args.get('TIMEOUT', [])) or unit.get('TEST_TIMEOUT') or ''
+    test_requirements = spec_args.get('REQUIREMENTS', []) + get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')
+
+    fork_mode = []
+    if 'FORK_SUBTESTS' in spec_args:
+        fork_mode.append('subtests')
+    if 'FORK_TESTS' in spec_args:
+        fork_mode.append('tests')
+    fork_mode = fork_mode or spec_args.get('FORK_MODE', []) or unit.get('TEST_FORK_MODE').split()
+    fork_mode = ' '.join(fork_mode) if fork_mode else ''
+
+    unit_path = _common.get_norm_unit_path(unit)
+
+    test_record = {
+        'TEST-NAME': flat_args[0],
+        'SCRIPT-REL-PATH': flat_args[1],
+        'TESTED-PROJECT-NAME': unit.name(),
+        'TESTED-PROJECT-FILENAME': unit.filename(),
+        'SOURCE-FOLDER-PATH': unit_path,
+        # TODO get rid of BUILD-FOLDER-PATH
+        'BUILD-FOLDER-PATH': unit_path,
+        'BINARY-PATH': "{}/{}".format(unit_path, unit.filename()),
+        'GLOBAL-LIBRARY-PATH': unit.global_filename(),
+        'CUSTOM-DEPENDENCIES': ' '.join(spec_args.get('DEPENDS', []) + get_values_list(unit, 'TEST_DEPENDS_VALUE')),
+        'TEST-RECIPES': prepare_recipes(unit.get("TEST_RECIPES_VALUE")),
+        'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
+        #  'TEST-PRESERVE-ENV': 'da',
+        'TEST-DATA': serialize_list(sorted(test_data)),
+        'TEST-TIMEOUT': test_timeout,
+        'FORK-MODE': fork_mode,
+        'SPLIT-FACTOR': ''.join(spec_args.get('SPLIT_FACTOR', [])) or unit.get('TEST_SPLIT_FACTOR') or '',
+        'SIZE': test_size,
+        'TAG': test_tags,
+        'REQUIREMENTS': serialize_list(test_requirements),
+        'TEST-CWD': unit.get('TEST_CWD_VALUE') or '',
+        'FUZZ-DICTS': serialize_list(
+            spec_args.get('FUZZ_DICTS', []) + get_unit_list_variable(unit, 'FUZZ_DICTS_VALUE')
+        ),
+        'FUZZ-OPTS': serialize_list(spec_args.get('FUZZ_OPTS', []) + get_unit_list_variable(unit, 'FUZZ_OPTS_VALUE')),
+        'YT-SPEC': serialize_list(spec_args.get('YT_SPEC', []) + get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE')),
+        'BLOB': unit.get('TEST_BLOB_DATA') or '',
+        'SKIP_TEST': unit.get('SKIP_TEST_VALUE') or '',
+        'TEST_IOS_DEVICE_TYPE': unit.get('TEST_IOS_DEVICE_TYPE_VALUE') or '',
+        'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE') or '',
+        'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE') or '',
+        'TEST_PARTITION': unit.get("TEST_PARTITION") or 'SEQUENTIAL',
+        'GO_BENCH_TIMEOUT': unit.get('GO_BENCH_TIMEOUT') or '',
+    }
+
+    benchmark_opts = get_unit_list_variable(unit, 'BENCHMARK_OPTS_VALUE')
+    test_record['BENCHMARK-OPTS'] = serialize_list(benchmark_opts)
+
+    data = dump_test(unit, test_record)
+    if data:
+        unit.set_property(["DART_DATA", data])
+
+
+def go_test(unit, *args):
+    keywords = {
+        "DEPENDS": -1,
+        "DATA": -1,
+        "TIMEOUT": 1,
+        "FORK_MODE": 1,
+        "SPLIT_FACTOR": 1,
+        "FORK_SUBTESTS": 0,
+        "FORK_TESTS": 0,
+    }
+    flat_args, spec_args = _common.sort_by_keywords(keywords, args)
+
+    if unit.get('ADD_SRCDIR_TO_TEST_DATA') == "yes":
+        unit.ondata_files(_common.get_norm_unit_path(unit))
+
+    unit.ondata_files(get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE'))
+
+    test_data = sorted(
+        _common.filter_out_by_keyword(
+            spec_args.get('DATA', []) + get_norm_paths(unit, 'TEST_DATA_VALUE'), 'AUTOUPDATED'
+        )
+    )
+
+    data, _ = get_canonical_test_resources(unit)
+    test_data += data
+
+    test_size = ''.join(spec_args.get('SIZE', [])) or unit.get('TEST_SIZE_NAME') or ''
+    test_tags = serialize_list(sorted(_get_test_tags(unit, spec_args)))
+    test_timeout = ''.join(spec_args.get('TIMEOUT', [])) or unit.get('TEST_TIMEOUT') or ''
+    test_requirements = spec_args.get('REQUIREMENTS', []) + get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')
+
+    fork_mode = []
+    if 'FORK_SUBTESTS' in spec_args:
+        fork_mode.append('subtests')
+    if 'FORK_TESTS' in spec_args:
+        fork_mode.append('tests')
+    fork_mode = fork_mode or spec_args.get('FORK_MODE', []) or unit.get('TEST_FORK_MODE').split()
+    fork_mode = ' '.join(fork_mode) if fork_mode else ''
+
+    unit_path = _common.get_norm_unit_path(unit)
+
+    test_record = {
+        'TEST-NAME': flat_args[0],
+        'SCRIPT-REL-PATH': flat_args[1],
+        'TESTED-PROJECT-NAME': unit.name(),
+        'TESTED-PROJECT-FILENAME': unit.filename(),
+        'SOURCE-FOLDER-PATH': unit_path,
+        # TODO get rid of BUILD-FOLDER-PATH
+        'BUILD-FOLDER-PATH': unit_path,
+        'BINARY-PATH': "{}/{}".format(unit_path, unit.filename()),
+        'GLOBAL-LIBRARY-PATH': unit.global_filename(),
+        'CUSTOM-DEPENDENCIES': ' '.join(spec_args.get('DEPENDS', []) + get_values_list(unit, 'TEST_DEPENDS_VALUE')),
+        'TEST-RECIPES': prepare_recipes(unit.get("TEST_RECIPES_VALUE")),
+        'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
+        #  'TEST-PRESERVE-ENV': 'da',
+        'TEST-DATA': serialize_list(sorted(test_data)),
+        'TEST-TIMEOUT': test_timeout,
+        'FORK-MODE': fork_mode,
+        'SPLIT-FACTOR': ''.join(spec_args.get('SPLIT_FACTOR', [])) or unit.get('TEST_SPLIT_FACTOR') or '',
+        'SIZE': test_size,
+        'TAG': test_tags,
+        'REQUIREMENTS': serialize_list(test_requirements),
+        'TEST-CWD': unit.get('TEST_CWD_VALUE') or '',
+        'FUZZ-DICTS': serialize_list(
+            spec_args.get('FUZZ_DICTS', []) + get_unit_list_variable(unit, 'FUZZ_DICTS_VALUE')
+        ),
+        'FUZZ-OPTS': serialize_list(spec_args.get('FUZZ_OPTS', []) + get_unit_list_variable(unit, 'FUZZ_OPTS_VALUE')),
+        'YT-SPEC': serialize_list(spec_args.get('YT_SPEC', []) + get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE')),
+        'BLOB': unit.get('TEST_BLOB_DATA') or '',
+        'SKIP_TEST': unit.get('SKIP_TEST_VALUE') or '',
+        'TEST_IOS_DEVICE_TYPE': unit.get('TEST_IOS_DEVICE_TYPE_VALUE') or '',
+        'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE') or '',
+        'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE') or '',
+        'TEST_PARTITION': unit.get("TEST_PARTITION") or 'SEQUENTIAL',
+        'GO_BENCH_TIMEOUT': unit.get('GO_BENCH_TIMEOUT') or '',
+    }
+
+    data = dump_test(unit, test_record)
+    if data:
+        unit.set_property(["DART_DATA", data])
+
+
+def boost_test(unit, *args):
+    keywords = {
+        "DEPENDS": -1,
+        "DATA": -1,
+        "TIMEOUT": 1,
+        "FORK_MODE": 1,
+        "SPLIT_FACTOR": 1,
+        "FORK_SUBTESTS": 0,
+        "FORK_TESTS": 0,
+    }
+    flat_args, spec_args = _common.sort_by_keywords(keywords, args)
+
+    if unit.get('ADD_SRCDIR_TO_TEST_DATA') == "yes":
+        unit.ondata_files(_common.get_norm_unit_path(unit))
+
+    unit.ondata_files(get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE'))
+
+    test_data = sorted(
+        _common.filter_out_by_keyword(
+            spec_args.get('DATA', []) + get_norm_paths(unit, 'TEST_DATA_VALUE'), 'AUTOUPDATED'
+        )
+    )
+
+    test_size = ''.join(spec_args.get('SIZE', [])) or unit.get('TEST_SIZE_NAME') or ''
+    test_tags = serialize_list(sorted(_get_test_tags(unit, spec_args)))
+    test_timeout = ''.join(spec_args.get('TIMEOUT', [])) or unit.get('TEST_TIMEOUT') or ''
+    test_requirements = spec_args.get('REQUIREMENTS', []) + get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')
+
+    fork_mode = []
+    if 'FORK_SUBTESTS' in spec_args:
+        fork_mode.append('subtests')
+    if 'FORK_TESTS' in spec_args:
+        fork_mode.append('tests')
+    fork_mode = fork_mode or spec_args.get('FORK_MODE', []) or unit.get('TEST_FORK_MODE').split()
+    fork_mode = ' '.join(fork_mode) if fork_mode else ''
+
+    unit_path = _common.get_norm_unit_path(unit)
+
+    test_record = {
+        'TEST-NAME': flat_args[0],
+        'SCRIPT-REL-PATH': flat_args[1],
+        'TESTED-PROJECT-NAME': unit.name(),
+        'TESTED-PROJECT-FILENAME': unit.filename(),
+        'SOURCE-FOLDER-PATH': unit_path,
+        # TODO get rid of BUILD-FOLDER-PATH
+        'BUILD-FOLDER-PATH': unit_path,
+        'BINARY-PATH': "{}/{}".format(unit_path, unit.filename()),
+        'GLOBAL-LIBRARY-PATH': unit.global_filename(),
+        'CUSTOM-DEPENDENCIES': ' '.join(spec_args.get('DEPENDS', []) + get_values_list(unit, 'TEST_DEPENDS_VALUE')),
+        'TEST-RECIPES': prepare_recipes(unit.get("TEST_RECIPES_VALUE")),
+        'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
+        #  'TEST-PRESERVE-ENV': 'da',
+        'TEST-DATA': serialize_list(sorted(test_data)),
+        'TEST-TIMEOUT': test_timeout,
+        'FORK-MODE': fork_mode,
+        'SPLIT-FACTOR': ''.join(spec_args.get('SPLIT_FACTOR', [])) or unit.get('TEST_SPLIT_FACTOR') or '',
+        'SIZE': test_size,
+        'TAG': test_tags,
+        'REQUIREMENTS': serialize_list(test_requirements),
+        'TEST-CWD': unit.get('TEST_CWD_VALUE') or '',
+        'FUZZ-DICTS': serialize_list(
+            spec_args.get('FUZZ_DICTS', []) + get_unit_list_variable(unit, 'FUZZ_DICTS_VALUE')
+        ),
+        'FUZZ-OPTS': serialize_list(spec_args.get('FUZZ_OPTS', []) + get_unit_list_variable(unit, 'FUZZ_OPTS_VALUE')),
+        'YT-SPEC': serialize_list(spec_args.get('YT_SPEC', []) + get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE')),
+        'BLOB': unit.get('TEST_BLOB_DATA') or '',
+        'SKIP_TEST': unit.get('SKIP_TEST_VALUE') or '',
+        'TEST_IOS_DEVICE_TYPE': unit.get('TEST_IOS_DEVICE_TYPE_VALUE') or '',
+        'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE') or '',
+        'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE') or '',
+        'TEST_PARTITION': unit.get("TEST_PARTITION") or 'SEQUENTIAL',
+        'GO_BENCH_TIMEOUT': unit.get('GO_BENCH_TIMEOUT') or '',
+    }
+
+    data = dump_test(unit, test_record)
+    if data:
+        unit.set_property(["DART_DATA", data])
+
+
+def fuzz_test(unit, *args):
+    keywords = {
+        "DEPENDS": -1,
+        "DATA": -1,
+        "TIMEOUT": 1,
+        "FORK_MODE": 1,
+        "SPLIT_FACTOR": 1,
+        "FORK_SUBTESTS": 0,
+        "FORK_TESTS": 0,
+    }
+    flat_args, spec_args = _common.sort_by_keywords(keywords, args)
+
+    if unit.get('ADD_SRCDIR_TO_TEST_DATA') == "yes":
+        unit.ondata_files(_common.get_norm_unit_path(unit))
+
+    unit.ondata_files("fuzzing/{}/corpus.json".format(_common.get_norm_unit_path(unit)))
+
+    unit.ondata_files(get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE'))
+
+    test_data = sorted(
+        _common.filter_out_by_keyword(
+            spec_args.get('DATA', []) + get_norm_paths(unit, 'TEST_DATA_VALUE'), 'AUTOUPDATED'
+        )
+    )
+
+    test_size = ''.join(spec_args.get('SIZE', [])) or unit.get('TEST_SIZE_NAME') or ''
+    test_tags = serialize_list(sorted(_get_test_tags(unit, spec_args)))
+    test_timeout = ''.join(spec_args.get('TIMEOUT', [])) or unit.get('TEST_TIMEOUT') or ''
+    test_requirements = spec_args.get('REQUIREMENTS', []) + get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')
+
+    fork_mode = []
+    if 'FORK_SUBTESTS' in spec_args:
+        fork_mode.append('subtests')
+    if 'FORK_TESTS' in spec_args:
+        fork_mode.append('tests')
+    fork_mode = fork_mode or spec_args.get('FORK_MODE', []) or unit.get('TEST_FORK_MODE').split()
+    fork_mode = ' '.join(fork_mode) if fork_mode else ''
+
+    unit_path = _common.get_norm_unit_path(unit)
+
+    test_record = {
+        'TEST-NAME': flat_args[0],
+        'SCRIPT-REL-PATH': flat_args[1],
+        'TESTED-PROJECT-NAME': unit.name(),
+        'TESTED-PROJECT-FILENAME': unit.filename(),
+        'SOURCE-FOLDER-PATH': unit_path,
+        # TODO get rid of BUILD-FOLDER-PATH
+        'BUILD-FOLDER-PATH': unit_path,
+        'BINARY-PATH': "{}/{}".format(unit_path, unit.filename()),
+        'GLOBAL-LIBRARY-PATH': unit.global_filename(),
+        'CUSTOM-DEPENDENCIES': ' '.join(spec_args.get('DEPENDS', []) + get_values_list(unit, 'TEST_DEPENDS_VALUE')),
+        'TEST-RECIPES': prepare_recipes(unit.get("TEST_RECIPES_VALUE")),
+        'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
+        #  'TEST-PRESERVE-ENV': 'da',
+        'TEST-DATA': serialize_list(sorted(test_data)),
+        'TEST-TIMEOUT': test_timeout,
+        'FORK-MODE': fork_mode,
+        'SPLIT-FACTOR': ''.join(spec_args.get('SPLIT_FACTOR', [])) or unit.get('TEST_SPLIT_FACTOR') or '',
+        'SIZE': test_size,
+        'TAG': test_tags,
+        'REQUIREMENTS': serialize_list(test_requirements),
+        'TEST-CWD': unit.get('TEST_CWD_VALUE') or '',
+        'FUZZ-DICTS': serialize_list(
+            spec_args.get('FUZZ_DICTS', []) + get_unit_list_variable(unit, 'FUZZ_DICTS_VALUE')
+        ),
+        'FUZZ-OPTS': serialize_list(spec_args.get('FUZZ_OPTS', []) + get_unit_list_variable(unit, 'FUZZ_OPTS_VALUE')),
+        'YT-SPEC': serialize_list(spec_args.get('YT_SPEC', []) + get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE')),
+        'BLOB': unit.get('TEST_BLOB_DATA') or '',
+        'SKIP_TEST': unit.get('SKIP_TEST_VALUE') or '',
+        'TEST_IOS_DEVICE_TYPE': unit.get('TEST_IOS_DEVICE_TYPE_VALUE') or '',
+        'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE') or '',
+        'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE') or '',
+        'TEST_PARTITION': unit.get("TEST_PARTITION") or 'SEQUENTIAL',
+        'GO_BENCH_TIMEOUT': unit.get('GO_BENCH_TIMEOUT') or '',
+    }
+
+    if unit.get('FUZZING') == 'yes':
+        test_record['FUZZING'] = '1'
+        # use all cores if fuzzing requested
+        test_record['REQUIREMENTS'] = serialize_list(
+            filter(None, deserialize_list(test_record['REQUIREMENTS']) + ["cpu:all", "ram:all"])
+        )
+
+    data = dump_test(unit, test_record)
+    if data:
+        unit.set_property(["DART_DATA", data])
+
+
+def y_benchmark(unit, *args):
+    keywords = {
+        "DEPENDS": -1,
+        "DATA": -1,
+        "TIMEOUT": 1,
+        "FORK_MODE": 1,
+        "SPLIT_FACTOR": 1,
+        "FORK_SUBTESTS": 0,
+        "FORK_TESTS": 0,
+    }
+    flat_args, spec_args = _common.sort_by_keywords(keywords, args)
+
+    unit.ondata_files(get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE'))
+
+    test_data = sorted(
+        _common.filter_out_by_keyword(
+            spec_args.get('DATA', []) + get_norm_paths(unit, 'TEST_DATA_VALUE'), 'AUTOUPDATED'
+        )
+    )
+
+    test_size = ''.join(spec_args.get('SIZE', [])) or unit.get('TEST_SIZE_NAME') or ''
+    test_tags = serialize_list(sorted(_get_test_tags(unit, spec_args)))
+    test_timeout = ''.join(spec_args.get('TIMEOUT', [])) or unit.get('TEST_TIMEOUT') or ''
+    test_requirements = spec_args.get('REQUIREMENTS', []) + get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')
+
+    fork_mode = []
+    if 'FORK_SUBTESTS' in spec_args:
+        fork_mode.append('subtests')
+    if 'FORK_TESTS' in spec_args:
+        fork_mode.append('tests')
+    fork_mode = fork_mode or spec_args.get('FORK_MODE', []) or unit.get('TEST_FORK_MODE').split()
+    fork_mode = ' '.join(fork_mode) if fork_mode else ''
+
+    unit_path = _common.get_norm_unit_path(unit)
+
+    test_record = {
+        'TEST-NAME': flat_args[0],
+        'SCRIPT-REL-PATH': flat_args[1],
+        'TESTED-PROJECT-NAME': unit.name(),
+        'TESTED-PROJECT-FILENAME': unit.filename(),
+        'SOURCE-FOLDER-PATH': unit_path,
+        # TODO get rid of BUILD-FOLDER-PATH
+        'BUILD-FOLDER-PATH': unit_path,
+        'BINARY-PATH': "{}/{}".format(unit_path, unit.filename()),
+        'GLOBAL-LIBRARY-PATH': unit.global_filename(),
+        'CUSTOM-DEPENDENCIES': ' '.join(spec_args.get('DEPENDS', []) + get_values_list(unit, 'TEST_DEPENDS_VALUE')),
+        'TEST-RECIPES': prepare_recipes(unit.get("TEST_RECIPES_VALUE")),
+        'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
+        #  'TEST-PRESERVE-ENV': 'da',
+        'TEST-DATA': serialize_list(sorted(test_data)),
+        'TEST-TIMEOUT': test_timeout,
+        'FORK-MODE': fork_mode,
+        'SPLIT-FACTOR': ''.join(spec_args.get('SPLIT_FACTOR', [])) or unit.get('TEST_SPLIT_FACTOR') or '',
+        'SIZE': test_size,
+        'TAG': test_tags,
+        'REQUIREMENTS': serialize_list(test_requirements),
+        'TEST-CWD': unit.get('TEST_CWD_VALUE') or '',
+        'FUZZ-DICTS': serialize_list(
+            spec_args.get('FUZZ_DICTS', []) + get_unit_list_variable(unit, 'FUZZ_DICTS_VALUE')
+        ),
+        'FUZZ-OPTS': serialize_list(spec_args.get('FUZZ_OPTS', []) + get_unit_list_variable(unit, 'FUZZ_OPTS_VALUE')),
+        'YT-SPEC': serialize_list(spec_args.get('YT_SPEC', []) + get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE')),
+        'BLOB': unit.get('TEST_BLOB_DATA') or '',
+        'SKIP_TEST': unit.get('SKIP_TEST_VALUE') or '',
+        'TEST_IOS_DEVICE_TYPE': unit.get('TEST_IOS_DEVICE_TYPE_VALUE') or '',
+        'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE') or '',
+        'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE') or '',
+        'TEST_PARTITION': unit.get("TEST_PARTITION") or 'SEQUENTIAL',
+        'GO_BENCH_TIMEOUT': unit.get('GO_BENCH_TIMEOUT') or '',
+    }
+
+    benchmark_opts = get_unit_list_variable(unit, 'BENCHMARK_OPTS_VALUE')
+    test_record['BENCHMARK-OPTS'] = serialize_list(benchmark_opts)
+
+    data = dump_test(unit, test_record)
+    if data:
+        unit.set_property(["DART_DATA", data])
+
+
+def coverage_extractor(unit, *args):
+    keywords = {
+        "DEPENDS": -1,
+        "DATA": -1,
+        "TIMEOUT": 1,
+        "FORK_MODE": 1,
+        "SPLIT_FACTOR": 1,
+        "FORK_SUBTESTS": 0,
+        "FORK_TESTS": 0,
+    }
+    flat_args, spec_args = _common.sort_by_keywords(keywords, args)
+
+    unit.ondata_files(get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE'))
+
+    test_data = sorted(
+        _common.filter_out_by_keyword(
+            spec_args.get('DATA', []) + get_norm_paths(unit, 'TEST_DATA_VALUE'), 'AUTOUPDATED'
+        )
+    )
+
+    test_size = ''.join(spec_args.get('SIZE', [])) or unit.get('TEST_SIZE_NAME') or ''
+    test_tags = serialize_list(sorted(_get_test_tags(unit, spec_args)))
+    test_timeout = ''.join(spec_args.get('TIMEOUT', [])) or unit.get('TEST_TIMEOUT') or ''
+    test_requirements = spec_args.get('REQUIREMENTS', []) + get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')
+
+    fork_mode = []
+    if 'FORK_SUBTESTS' in spec_args:
+        fork_mode.append('subtests')
+    if 'FORK_TESTS' in spec_args:
+        fork_mode.append('tests')
+    fork_mode = fork_mode or spec_args.get('FORK_MODE', []) or unit.get('TEST_FORK_MODE').split()
+    fork_mode = ' '.join(fork_mode) if fork_mode else ''
+
+    unit_path = _common.get_norm_unit_path(unit)
+
+    test_record = {
+        'TEST-NAME': flat_args[0],
+        'SCRIPT-REL-PATH': flat_args[1],
+        'TESTED-PROJECT-NAME': unit.name(),
+        'TESTED-PROJECT-FILENAME': unit.filename(),
+        'SOURCE-FOLDER-PATH': unit_path,
+        # TODO get rid of BUILD-FOLDER-PATH
+        'BUILD-FOLDER-PATH': unit_path,
+        'BINARY-PATH': "{}/{}".format(unit_path, unit.filename()),
+        'GLOBAL-LIBRARY-PATH': unit.global_filename(),
+        'CUSTOM-DEPENDENCIES': ' '.join(spec_args.get('DEPENDS', []) + get_values_list(unit, 'TEST_DEPENDS_VALUE')),
+        'TEST-RECIPES': prepare_recipes(unit.get("TEST_RECIPES_VALUE")),
+        'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
+        #  'TEST-PRESERVE-ENV': 'da',
+        'TEST-DATA': serialize_list(sorted(test_data)),
+        'TEST-TIMEOUT': test_timeout,
+        'FORK-MODE': fork_mode,
+        'SPLIT-FACTOR': ''.join(spec_args.get('SPLIT_FACTOR', [])) or unit.get('TEST_SPLIT_FACTOR') or '',
+        'SIZE': test_size,
+        'TAG': test_tags,
+        'REQUIREMENTS': serialize_list(test_requirements),
+        'TEST-CWD': unit.get('TEST_CWD_VALUE') or '',
+        'FUZZ-DICTS': serialize_list(
+            spec_args.get('FUZZ_DICTS', []) + get_unit_list_variable(unit, 'FUZZ_DICTS_VALUE')
+        ),
+        'FUZZ-OPTS': serialize_list(spec_args.get('FUZZ_OPTS', []) + get_unit_list_variable(unit, 'FUZZ_OPTS_VALUE')),
+        'YT-SPEC': serialize_list(spec_args.get('YT_SPEC', []) + get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE')),
+        'BLOB': unit.get('TEST_BLOB_DATA') or '',
+        'SKIP_TEST': unit.get('SKIP_TEST_VALUE') or '',
+        'TEST_IOS_DEVICE_TYPE': unit.get('TEST_IOS_DEVICE_TYPE_VALUE') or '',
+        'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE') or '',
+        'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE') or '',
+        'TEST_PARTITION': unit.get("TEST_PARTITION") or 'SEQUENTIAL',
+        'GO_BENCH_TIMEOUT': unit.get('GO_BENCH_TIMEOUT') or '',
+    }
+
+    data = dump_test(unit, test_record)
+    if data:
+        unit.set_property(["DART_DATA", data])
+
+
+def go_bench(unit, *args):
+    keywords = {
+        "DEPENDS": -1,
+        "DATA": -1,
+        "TIMEOUT": 1,
+        "FORK_MODE": 1,
+        "SPLIT_FACTOR": 1,
+        "FORK_SUBTESTS": 0,
+        "FORK_TESTS": 0,
+    }
+    flat_args, spec_args = _common.sort_by_keywords(keywords, args)
+
+    unit.ondata_files(get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE'))
+
+    test_data = sorted(
+        _common.filter_out_by_keyword(
+            spec_args.get('DATA', []) + get_norm_paths(unit, 'TEST_DATA_VALUE'), 'AUTOUPDATED'
+        )
+    )
+
+    test_size = ''.join(spec_args.get('SIZE', [])) or unit.get('TEST_SIZE_NAME') or ''
+    test_tags = serialize_list(sorted(_get_test_tags(unit, spec_args)))
+    test_timeout = ''.join(spec_args.get('TIMEOUT', [])) or unit.get('TEST_TIMEOUT') or ''
+    test_requirements = spec_args.get('REQUIREMENTS', []) + get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')
+
+    fork_mode = []
+    if 'FORK_SUBTESTS' in spec_args:
+        fork_mode.append('subtests')
+    if 'FORK_TESTS' in spec_args:
+        fork_mode.append('tests')
+    fork_mode = fork_mode or spec_args.get('FORK_MODE', []) or unit.get('TEST_FORK_MODE').split()
+    fork_mode = ' '.join(fork_mode) if fork_mode else ''
+
+    unit_path = _common.get_norm_unit_path(unit)
+
+    test_record = {
+        'TEST-NAME': flat_args[0],
+        'SCRIPT-REL-PATH': flat_args[1],
+        'TESTED-PROJECT-NAME': unit.name(),
+        'TESTED-PROJECT-FILENAME': unit.filename(),
+        'SOURCE-FOLDER-PATH': unit_path,
+        # TODO get rid of BUILD-FOLDER-PATH
+        'BUILD-FOLDER-PATH': unit_path,
+        'BINARY-PATH': "{}/{}".format(unit_path, unit.filename()),
+        'GLOBAL-LIBRARY-PATH': unit.global_filename(),
+        'CUSTOM-DEPENDENCIES': ' '.join(spec_args.get('DEPENDS', []) + get_values_list(unit, 'TEST_DEPENDS_VALUE')),
+        'TEST-RECIPES': prepare_recipes(unit.get("TEST_RECIPES_VALUE")),
+        'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
+        #  'TEST-PRESERVE-ENV': 'da',
+        'TEST-DATA': serialize_list(sorted(test_data)),
+        'TEST-TIMEOUT': test_timeout,
+        'FORK-MODE': fork_mode,
+        'SPLIT-FACTOR': ''.join(spec_args.get('SPLIT_FACTOR', [])) or unit.get('TEST_SPLIT_FACTOR') or '',
+        'SIZE': test_size,
+        'TAG': test_tags,
+        'REQUIREMENTS': serialize_list(test_requirements),
+        'TEST-CWD': unit.get('TEST_CWD_VALUE') or '',
+        'FUZZ-DICTS': serialize_list(
+            spec_args.get('FUZZ_DICTS', []) + get_unit_list_variable(unit, 'FUZZ_DICTS_VALUE')
+        ),
+        'FUZZ-OPTS': serialize_list(spec_args.get('FUZZ_OPTS', []) + get_unit_list_variable(unit, 'FUZZ_OPTS_VALUE')),
+        'YT-SPEC': serialize_list(spec_args.get('YT_SPEC', []) + get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE')),
+        'BLOB': unit.get('TEST_BLOB_DATA') or '',
+        'SKIP_TEST': unit.get('SKIP_TEST_VALUE') or '',
+        'TEST_IOS_DEVICE_TYPE': unit.get('TEST_IOS_DEVICE_TYPE_VALUE') or '',
+        'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE') or '',
+        'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE') or '',
+        'TEST_PARTITION': unit.get("TEST_PARTITION") or 'SEQUENTIAL',
+        'GO_BENCH_TIMEOUT': unit.get('GO_BENCH_TIMEOUT') or '',
+    }
+
+    if "ya:run_go_benchmark" not in test_record["TAG"]:
+        return
+    else:
+        test_record["TEST-NAME"] += "_bench"
+
+    data = dump_test(unit, test_record)
+    if data:
+        unit.set_property(["DART_DATA", data])
+
+
+def onadd_ytest(unit, *args):
+    keywords = {
+        "DEPENDS": -1,
+        "DATA": -1,
+        "TIMEOUT": 1,
+        "FORK_MODE": 1,
+        "SPLIT_FACTOR": 1,
+        "FORK_SUBTESTS": 0,
+        "FORK_TESTS": 0,
+    }
+    flat_args, *_ = _common.sort_by_keywords(keywords, args)
+    test_type = flat_args[1]
+
+    if unit.get("TIDY_ENABLED") == "yes" and test_type in (
+        "unittest.py",
+        "gunittest",
+        "g_benchmark",
+        "boost.test",
+    ):
+        clang_tidy(unit, *args, from_other_type=True)
+    elif unit.get("TIDY_ENABLED") == "yes" and test_type not in (
+        "clang_tidy",
+        "unittest.py",
+        "gunittest",
+        "g_benchmark",
+        "boost.test",
+    ):
+        return
+    elif test_type == "clang_tidy" and unit.get("TIDY_ENABLED") != "yes":
+        return
+    elif unit.get("TIDY") == "yes" and unit.get("TIDY_ENABLED") != "yes":
+        return
+    elif test_type == "no.test":
+        return
+    elif test_type == "clang_tidy" and unit.get("TIDY_ENABLED") == "yes":
+        clang_tidy(unit, *args)
+    elif test_type == "unittest.py":
+        unittest_py(unit, *args)
+    elif test_type == "gunittest":
+        gunittest(unit, *args)
+    elif test_type == "g_benchmark":
+        g_benchmark(unit, *args)
+    elif test_type == "go.test":
+        go_test(unit, *args)
+    elif test_type == "boost.test":
+        boost_test(unit, *args)
+    elif test_type == "fuzz.test":
+        fuzz_test(unit, *args)
+    elif test_type == "y_benchmark":
+        y_benchmark(unit, *args)
+    elif test_type == "coverage.extractor" and match_coverage_extractor_requirements(unit):
+        coverage_extractor(unit, *args)
+    elif test_type == "go.bench":
+        go_bench(unit, *args)

@@ -12,14 +12,14 @@
 using namespace NYql;
 using namespace NYql::NUdf;
 
-template<typename T, EFormat Format>
+template <typename T, EFormat Format>
 class TKnnVectorSerializer {
 public:
     static TUnboxedValue Serialize(const IValueBuilder* valueBuilder, const TUnboxedValue x) {
-        auto serialize = [&x] (IOutputStream& outStream) {
-            EnumerateVector(x,  [&outStream] (float floatElement) { 
+        auto serialize = [&x](IOutputStream& outStream) {
+            EnumerateVector(x, [&outStream](float floatElement) {
                 T element = static_cast<T>(floatElement);
-                outStream.Write(&element, sizeof(T)); 
+                outStream.Write(&element, sizeof(T));
             });
             const EFormat format = Format;
             outStream.Write(&format, HeaderLen);
@@ -41,23 +41,15 @@ public:
         }
     }
 
-    static TUnboxedValue Deserialize(const IValueBuilder *valueBuilder, const TStringRef& str) {
-        const char* buf = str.Data();
-        const size_t len = str.Size() - HeaderLen;
-
-        if (Y_UNLIKELY(len % sizeof(T) != 0))
+    static TUnboxedValue Deserialize(const IValueBuilder* valueBuilder, const TStringRef& str) {
+        auto vector = GetArray(str);
+        if (Y_UNLIKELY(vector.empty()))
             return {};
-        
-        const ui32 count = len / sizeof(T);
 
         TUnboxedValue* items = nullptr;
-        auto res = valueBuilder->NewArray(count, items);
-        
-        TMemoryInput inStr(buf, len);
-        for (ui32 i = 0; i < count; ++i) {
-            T element;
-            if (Y_UNLIKELY(inStr.Read(&element, sizeof(T)) != sizeof(T)))
-                return {};
+        auto res = valueBuilder->NewArray(vector.size(), items);
+
+        for (auto element : vector) {
             *items++ = TUnboxedValuePod{static_cast<float>(element)};
         }
 
@@ -70,7 +62,7 @@ public:
 
         if (Y_UNLIKELY(len % sizeof(T) != 0))
             return {};
-        
+
         const ui32 count = len / sizeof(T);
 
         return MakeArrayRef(reinterpret_cast<const T*>(buf), count);
@@ -78,45 +70,67 @@ public:
 };
 
 // Encode all positive floats as bit 1, negative floats as bit 0.
-// So 1024 float vector is serialized in 1024/8=128 bytes.
-// Place all bits in ui64. So, only vector sizes divisible by 64 are supported.
+// Bits serialized to ui64, from high to low bit and written in native endianess.
+// The tail encoded as ui64 or ui32, ui16, ui8 respectively.
+// After these we write count of not written bits in last byte that we need to respect.
+// So length of vector in bits is 8 * ((count of written bytes) - 1 (format) - 1 (for x)) - x (count of bits not written in last byte).
 class TKnnBitVectorSerializer {
 public:
     static TUnboxedValue Serialize(const IValueBuilder* valueBuilder, const TUnboxedValue x) {
-        auto serialize = [&x] (IOutputStream& outStream) {
+        auto serialize = [&x](IOutputStream& outStream) {
             ui64 accumulator = 0;
             ui8 filledBits = 0;
 
-            EnumerateVector(x,  [&] (float element) { 
+            EnumerateVector(x, [&](float element) {
                 if (element > 0)
-                    accumulator |= 1ll << filledBits;
+                    accumulator |= 1;
 
-                ++filledBits;
-                if (filledBits == 64) {
+                if (++filledBits == 64) {
                     outStream.Write(&accumulator, sizeof(ui64));
                     accumulator = 0;
                     filledBits = 0;
                 }
+                accumulator <<= 1;
             });
+            accumulator >>= 1;
+            Y_ASSERT(filledBits < 64);
+            filledBits += 7;
 
-            // only vector sizes divisible by 64 are supported 
-            if (Y_UNLIKELY(filledBits))
-                return false;
-            
-            const EFormat format = EFormat::BitVector;
-            outStream.Write(&format, HeaderLen);
+            auto write = [&](auto v) {
+                outStream.Write(&v, sizeof(v));
+            };
+            auto tailWriteIf = [&]<typename T>() {
+                if (filledBits < sizeof(T) * 8) {
+                    return;
+                }
+                write(static_cast<T>(accumulator));
+                if constexpr (sizeof(T) < sizeof(accumulator)) {
+                    accumulator >>= sizeof(T) * 8;
+                }
+                filledBits -= sizeof(T) * 8;
+            };
+            tailWriteIf.operator()<ui64>();
+            tailWriteIf.operator()<ui32>();
+            tailWriteIf.operator()<ui16>();
+            tailWriteIf.operator()<ui8>();
+
+            Y_ASSERT(filledBits < 8);
+            write(static_cast<ui8>(7 - filledBits));
+            write(EFormat::BitVector);
 
             return true;
         };
 
         if (x.HasFastListLength()) {
-            auto str = valueBuilder->NewStringNotFilled(HeaderLen + x.GetListLength() / 8);
+            // We expect byte lenght of the result is (bit-length / 8 + bit-length % 8 != 0) + bits-count (1 byte) + HeaderLen
+            // First part can be optimized to (bit-length + 7) / 8
+            auto str = valueBuilder->NewStringNotFilled((x.GetListLength() + 7) / 8 + 1 + HeaderLen);
             auto strRef = str.AsStringRef();
             TMemoryOutput memoryOutput(strRef.Data(), strRef.Size());
 
             if (Y_UNLIKELY(!serialize(memoryOutput)))
                 return {};
-            
+
             return str;
         } else {
             TString str;
@@ -129,11 +143,17 @@ public:
         }
     }
 
-    static const TArrayRef<const ui64> GetArray64(const TStringRef& str) {
-        const char* buf = str.Data();
-        const size_t len = (str.Size() - HeaderLen) / sizeof(ui64);
+    struct TArray {
+        const ui64* data = nullptr;
+        ui64 bitLen = 0;
+    };
 
-        return MakeArrayRef(reinterpret_cast<const ui64*>(buf), len);
+    static TArray GetArray(const TStringRef& str) {
+        if (Y_UNLIKELY(str.Size() < 2))
+            return {};
+        const char* buf = str.Data();
+        const ui64 len = 8 * (str.Size() - HeaderLen - 1) - static_cast<ui8>(buf[str.Size() - HeaderLen - 1]);
+        return {reinterpret_cast<const ui64*>(buf), len};
     }
 };
 
@@ -152,8 +172,8 @@ public:
         }
     }
 
-    static TUnboxedValue Deserialize(const IValueBuilder *valueBuilder, const TStringRef& str) {
-        if (str.Size() == 0)
+    static TUnboxedValue Deserialize(const IValueBuilder* valueBuilder, const TStringRef& str) {
+        if (Y_UNLIKELY(str.Size() == 0))
             return {};
 
         const ui8 format = str.Data()[str.Size() - HeaderLen];
@@ -163,13 +183,12 @@ public:
             case EFormat::Uint8Vector:
                 return TKnnVectorSerializer<ui8, EFormat::Uint8Vector>::Deserialize(valueBuilder, str);
             case EFormat::BitVector:
-                return {};                
             default:
                 return {};
         }
     }
 
-    template<typename T>
+    template <typename T>
     static const TArrayRef<const T> GetArray(const TStringRef& str) {
         if (Y_UNLIKELY(str.Size() == 0))
             return {};
@@ -181,10 +200,8 @@ public:
             case EFormat::Uint8Vector:
                 return TKnnVectorSerializer<T, EFormat::Uint8Vector>::GetArray(str);
             case EFormat::BitVector:
-                return {};                
             default:
                 return {};
         }
     }
 };
-

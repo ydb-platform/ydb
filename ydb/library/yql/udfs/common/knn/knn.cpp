@@ -11,7 +11,6 @@
 using namespace NYql;
 using namespace NYql::NUdf;
 
-
 SIMPLE_STRICT_UDF_WITH_OPTIONAL_ARGS(TToBinaryString, TOptional<char*>(TAutoMap<TListType<float>>, TOptional<const char*>), 1) {
     const TUnboxedValuePod x = args[0];
 
@@ -27,7 +26,7 @@ SIMPLE_STRICT_UDF_WITH_OPTIONAL_ARGS(TToBinaryString, TOptional<char*>(TAutoMap<
         else
             return {};
     }
-    
+
     return TKnnSerializerFacade::Serialize(format, valueBuilder, x);
 }
 
@@ -71,8 +70,6 @@ SIMPLE_STRICT_UDF(TCosineDistance, TOptional<float>(TAutoMap<const char*>, TAuto
     return TUnboxedValuePod{1 - cosine};
 }
 
-
-
 SIMPLE_STRICT_UDF(TManhattanDistance, TOptional<float>(TAutoMap<const char*>, TAutoMap<const char*>)) {
     Y_UNUSED(valueBuilder);
 
@@ -94,14 +91,12 @@ SIMPLE_STRICT_UDF(TEuclideanDistance, TOptional<float>(TAutoMap<const char*>, TA
 }
 
 SIMPLE_MODULE(TKnnModule,
-    TFromBinaryString, 
-    TToBinaryString,
-    TInnerProductSimilarity,
-    TCosineSimilarity,
-    TCosineDistance,
-    TManhattanDistance,
-    TEuclideanDistance
-    )
+              TFromBinaryString,
+              TToBinaryString,
+              TInnerProductSimilarity,
+              TCosineSimilarity,
+              TCosineDistance,
+              TManhattanDistance,
+              TEuclideanDistance)
 
 REGISTER_MODULES(TKnnModule)
-

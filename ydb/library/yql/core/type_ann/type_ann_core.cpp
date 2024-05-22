@@ -12359,6 +12359,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["PgGrouping"] = &PgGroupingWrapper;
         Functions["PgGroupingSet"] = &PgGroupingSetWrapper;
         Functions["PgToRecord"] = &PgToRecordWrapper;
+        Functions["PgIterate"] = &PgIterateWrapper;
+        Functions["PgIterateAll"] = &PgIterateWrapper;
         Functions["StructUnion"] = &StructMergeWrapper;
         Functions["StructIntersection"] = &StructMergeWrapper;
         Functions["StructDifference"] = &StructMergeWrapper;

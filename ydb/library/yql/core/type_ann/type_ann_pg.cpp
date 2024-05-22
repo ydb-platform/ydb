@@ -5815,5 +5815,40 @@ IGraphTransformer::TStatus PgToRecordWrapper(const TExprNode::TPtr& input, TExpr
     return IGraphTransformer::TStatus::Ok;
 }
 
+IGraphTransformer::TStatus PgIterateWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!EnsureListType(input->Head(), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto& lambda = input->ChildRef(1);
+    const auto status = ConvertToLambda(lambda, ctx.Expr, 1);
+    if (status.Level != IGraphTransformer::TStatus::Ok) {
+        return status;
+    }
+
+    if (!UpdateLambdaAllArgumentsTypes(lambda, { input->Head().GetTypeAnn() }, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!lambda->GetTypeAnn()) {
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    if (!IsSameAnnotation(*lambda->GetTypeAnn(), *input->Head().GetTypeAnn())) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambda->Pos()), TStringBuilder() <<
+            "Mismatch of transform lambda return type and input type: " <<
+            *lambda->GetTypeAnn() << " != " << *input->Head().GetTypeAnn()));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    input->SetTypeAnn(input->Head().GetTypeAnn());
+    return IGraphTransformer::TStatus::Ok;
+}
+
 } // namespace NTypeAnnImpl
 }

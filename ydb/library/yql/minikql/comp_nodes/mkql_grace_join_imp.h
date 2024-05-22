@@ -6,9 +6,6 @@
 #include <ydb/library/yql/public/udf/udf_type_builder.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
 
-
-#include <format>
-
 namespace NKikimr {
 namespace NMiniKQL {
 namespace GraceJoin {
@@ -295,8 +292,6 @@ public:
                 largestBucketIndex = bucket;
             }
         }
-
-        std::cerr << std::format("[MISHA] Spilling bucket {}, of size {}\n", largestBucketIndex, largestBucketSize);
 
         if (largestBucketSize) return false;
 

@@ -263,9 +263,6 @@ void ResizeHashTable(KeysHashTable &t, ui64 newSlots){
 // Joins two tables and returns join result in joined table. Tuples of joined table could be received by
 // joined table iterator
 void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLeftTuples, bool hasMoreRightTuples, ui32 fromBucket, ui32 toBucket ) {
-
-    std::cerr << std::format("[MISHA] Joining from {} to {}\n", fromBucket, toBucket);
-
     if ( hasMoreLeftTuples )
         LeftTableBatch_ = true;
 
@@ -1210,9 +1207,6 @@ void TTableBucketSpiller::Finalize() {
 }
 
 void TTableBucketSpiller::SpillBucket(TTableBucket&& bucket) {
-    if (NextVectorToProcess != ENextVectorToProcess::None) {
-        std::cerr << "MISHA ERROR!\n";
-    }
     MKQL_ENSURE(NextVectorToProcess == ENextVectorToProcess::None, "Internal logic error");
     State = EState::Spilling;
 

@@ -20,7 +20,6 @@
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 
 #include <chrono>
-#include <format>
 #include <limits>
 
 namespace NKikimr {
@@ -649,8 +648,6 @@ private:
 
 
     void SwitchMode(EOperatingMode mode, TComputationContext& ctx) {
-
-        std::cerr << std::format("[MISHA]: changing state from {} to {}\n", (int)Mode, (int)mode);
         switch(mode) {
             case EOperatingMode::InMemory: {
                 MKQL_ENSURE(false, "Internal logic error");
@@ -684,16 +681,6 @@ private:
         } else {
             resultRight = FlowRight->FetchValues(ctx, RightPacker->TuplePtrs.data());
         }
-
-        if (resultRight == EFetchResult::One) {
-            MISHANumberofLeftFetches++;
-        }
-
-        if (resultRight == EFetchResult::One) {
-            MISHANumberofRightFetches++;
-        }
-
-        std::cerr << std::format("[MISHA] LEFT: {} RIGHT: {}. [{}][{}]\n", (int)resultLeft, (int)resultRight, MISHANumberofLeftFetches, MISHANumberofRightFetches);
 
         if (resultLeft == EFetchResult::One) {
             if (LeftPacker->TuplesPacked == 0) {
@@ -738,16 +725,14 @@ private:
         auto &valsLeft = LeftPacker->TupleHolder;
         auto &valsRight = RightPacker->TupleHolder;
 
-        for (size_t i = 0; i < LeftRenames.size() / 2; i++)
-        {
+        for (size_t i = 0; i < LeftRenames.size() / 2; i++) {
             auto & valPtr = output[LeftRenames[2 * i + 1]];
             if ( valPtr ) {
                 *valPtr = valsLeft[LeftRenames[2 * i]];
             }
         }
 
-        for (size_t i = 0; i < RightRenames.size() / 2; i++)
-        {
+        for (size_t i = 0; i < RightRenames.size() / 2; i++) {
             auto & valPtr = output[RightRenames[2 * i + 1]];
             if ( valPtr ) {
                 *valPtr = valsRight[RightRenames[2 * i]];
@@ -760,9 +745,7 @@ private:
         while (!*JoinCompleted ) {
 
             if ( *PartialJoinCompleted) {
-
                 // Returns join results (batch or full)
-
                 while (JoinedTablePtr->NextJoinedData(LeftPacker->JoinTupleData, RightPacker->JoinTupleData)) {
                     UnpackJoinedData(output);
                     return EFetchResult::One;
@@ -785,7 +768,6 @@ private:
                     JoinedTablePtr->Clear();
                     JoinedTablePtr->ResetIterator();
                 }
-
             }
 
             if (!*HaveMoreRightRows && !*HaveMoreLeftRows) {
@@ -804,9 +786,7 @@ private:
                 *PartialJoinCompleted = true;
                 JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
                 JoinedTablePtr->ResetIterator();
-
             }
-
 
             if (!*HaveMoreLeftRows && !*PartialJoinCompleted && RightPacker->TuplesBatchPacked >= RightPacker->BatchSize ) {
                 *PartialJoinCompleted = true;
@@ -958,8 +938,6 @@ private:
     const bool IsSelfJoin_;
     const bool SelfJoinSameKeys_;
 
-    ui64 MISHANumberofLeftFetches = 0;
-    ui64 MISHANumberofRightFetches = 0;
     bool IsSpillingFinalized = false;
 
     ui32 NextBucketToJoin = 0;

@@ -1,6 +1,6 @@
 # DROP VIEW
 
-`DROP VIEW` удаляет представление.
+`DROP VIEW` удаляет [представление](../../../../concepts/datamodel/view).
 
 ## Синтаксис
 

@@ -1,6 +1,6 @@
 # ALTER VIEW
 
-`ALTER VIEW` изменяет определение представления.
+`ALTER VIEW` изменяет определение [представления](../../../../concepts/datamodel/view).
 
 {% note warning %}
 

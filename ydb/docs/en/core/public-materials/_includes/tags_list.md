@@ -24,4 +24,8 @@
 
 <p> – performance testing cases of {{ ydb-short-name }} and comparisons with other similar-class DBMSs.</p>
 
+{% include notitle [general_tag](./tags.md#general) %} 
+
+<p>  – generic materials.</p>
+
 </div>

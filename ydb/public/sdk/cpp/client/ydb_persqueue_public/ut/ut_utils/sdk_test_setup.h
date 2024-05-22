@@ -224,7 +224,18 @@ public:
             Server.AnnoyingClient->KickNodeInHive(Server.CleverServer->GetRuntime(), i);
         }
     }
-   
+
+    void WaitForTabletsDown() {
+        // After calling KickTablets wait until the tablets are in fact dead.
+
+        auto describeResult = Server.AnnoyingClient->Ls(GetTestTopicPath());
+        UNIT_ASSERT_C(describeResult->Record.GetPathDescription().HasPersQueueGroup(), describeResult->Record);
+        auto persQueueGroup = describeResult->Record.GetPathDescription().GetPersQueueGroup();
+        for (const auto& p : persQueueGroup.GetPartitions()) {
+            Server.AnnoyingClient->WaitForTabletDown(Server.CleverServer->GetRuntime(), p.GetTabletId(), true, TDuration::Max());
+        }
+    }
+
     void AllowTablets() {
         for (ui32 i = 0; i < Server.CleverServer->StaticNodes() + Server.CleverServer->DynamicNodes(); i++) {
             Server.AnnoyingClient->MarkNodeInHive(Server.CleverServer->GetRuntime(), i, true);

@@ -23,11 +23,6 @@ public:
         return DoReadInt<char>();
     }
 
-    int ReadInt() override
-    {
-        return DoReadInt<int>();
-    }
-
     int16_t ReadInt16() override
     {
         return DoReadInt<int16_t>();
@@ -185,11 +180,6 @@ public:
         DoWriteInt(value);
     }
 
-    void WriteInt(int value) override
-    {
-        DoWriteInt(value);
-    }
-
     void WriteInt16(int16_t value) override
     {
         DoWriteInt(value);
@@ -201,11 +191,6 @@ public:
     }
 
     void WriteInt64(int64_t value) override
-    {
-        DoWriteInt(value);
-    }
-
-    void WriteLong(i64 value) override
     {
         DoWriteInt(value);
     }

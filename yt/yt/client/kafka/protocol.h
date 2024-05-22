@@ -15,7 +15,6 @@ struct IKafkaProtocolReader
     virtual ~IKafkaProtocolReader() = default;
 
     virtual char ReadByte() = 0;
-    virtual int ReadInt() = 0;
     virtual int16_t ReadInt16() = 0;
     virtual int32_t ReadInt32() = 0;
     virtual int64_t ReadInt64() = 0;
@@ -48,11 +47,9 @@ struct IKafkaProtocolWriter
     virtual ~IKafkaProtocolWriter() = default;
 
     virtual void WriteByte(char value) = 0;
-    virtual void WriteInt(int value) = 0;
     virtual void WriteInt16(int16_t value) = 0;
     virtual void WriteInt32(int32_t value) = 0;
     virtual void WriteInt64(int64_t value) = 0;
-    virtual void WriteLong(i64 value) = 0;
     virtual void WriteUnsignedVarInt(uint64_t value) = 0;
     virtual void WriteErrorCode(EErrorCode value) = 0;
 

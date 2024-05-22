@@ -12625,6 +12625,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["AggregateMergeManyFinalize"] = &AggregateWrapper;
 
         ColumnOrderFunctions["PgSetItem"] = &OrderForPgSetItem;
+        ColumnOrderFunctions["PgIterate"] = &OrderFromFirst;
+        ColumnOrderFunctions["PgIterateAll"] = &OrderFromFirst;
         ColumnOrderFunctions["AssumeColumnOrder"] = &OrderForAssumeColumnOrder;
 
         ColumnOrderFunctions["SqlProject"] = ColumnOrderFunctions["OrderedSqlProject"] = &OrderForSqlProject;

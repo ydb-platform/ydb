@@ -2373,7 +2373,7 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
             case EResourceToBalance::Network:
                 balancerType = EBalancerType::ScatterNetwork;
                 break;
-            case EResourceToBalance::Dominant:
+            case EResourceToBalance::ComputeResources:
                 balancerType = EBalancerType::Scatter;
                 break;
         }

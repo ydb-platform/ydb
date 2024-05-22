@@ -31,7 +31,7 @@ using namespace NYTProf;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constinit YT_THREAD_LOCAL(TCpuProfilerTagGuard) FairShareInvokerPoolProfilerTagGuard;
+YT_DEFINE_THREAD_LOCAL(TCpuProfilerTagGuard, FairShareInvokerPoolProfilerTagGuard);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -290,12 +290,12 @@ private:
             counters->WaitTimer.Record(waitTime);
         }
 
-        GetTlsRef(FairShareInvokerPoolProfilerTagGuard) = TCpuProfilerTagGuard(BucketProfilerTags_[index]);
+        FairShareInvokerPoolProfilerTagGuard() = TCpuProfilerTagGuard(BucketProfilerTags_[index]);
     }
 
     void ProfileExecutionFinish(int index, TDuration execTime, TDuration totalTime)
     {
-        GetTlsRef(FairShareInvokerPoolProfilerTagGuard) = TCpuProfilerTagGuard{};
+        FairShareInvokerPoolProfilerTagGuard() = TCpuProfilerTagGuard{};
 
         auto& counters = Counters_[index];
         if (counters) {
@@ -469,7 +469,7 @@ private:
         i64 DequeuedActionCount_ = 0;
         i64 ExecutedActionCount_ = 0;
 
-        NO_UNIQUE_ADDRESS THandle ProfilerHandle_;
+        YT_ATTRIBUTE_NO_UNIQUE_ADDRESS THandle ProfilerHandle_;
 
         TDuration GetTotalTimeEstimate(TInstant now) const
         {
@@ -496,7 +496,7 @@ private:
 
     IFairShareCallbackQueuePtr Queue_;
 
-    NO_UNIQUE_ADDRESS TPoolProfilerObject Profiler_;
+    YT_ATTRIBUTE_NO_UNIQUE_ADDRESS TPoolProfilerObject Profiler_;
 
     class TCpuTimeAccounter
     {

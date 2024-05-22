@@ -50,7 +50,7 @@ TConcurrentCache<T>::RenewTable(const TIntrusivePtr<TLookupTable>& head, size_t 
     newHead->Next = head;
 
     if (Head_.SwapIfCompare(head, newHead)) {
-        static const auto& Logger = LockFreePtrLogger;
+        constexpr auto& Logger = LockFreeLogger;
         YT_LOG_DEBUG("Concurrent cache lookup table rotated (LoadFactor: %v)",
             head->Size.load());
 
@@ -75,7 +75,7 @@ TConcurrentCache<T>::~TConcurrentCache()
 {
     auto head = Head_.Acquire();
 
-    static const auto& Logger = LockFreePtrLogger;
+    constexpr auto& Logger = LockFreeLogger;
     YT_LOG_DEBUG("Concurrent cache head statistics (ElementCount: %v)",
         head->Size.load());
 }

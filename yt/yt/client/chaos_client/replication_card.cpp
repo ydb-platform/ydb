@@ -61,6 +61,36 @@ void FormatProgressWithProjection(
     builder->AppendChar(']');
 }
 
+DEFINE_BIT_ENUM_WITH_UNDERLYING_TYPE(EReplicationCardOptionsBits, ui8,
+    ((None)(0))
+    ((IncludeCoordinators)(1 << 0))
+    ((IncludeProgress)(1 << 1))
+    ((IncludeHistory)(1 << 2))
+    ((IncludeReplicatedTableOptions)(1 << 3))
+);
+
+EReplicationCardOptionsBits ToBitMask(const TReplicationCardFetchOptions& options)
+{
+    auto mask = EReplicationCardOptionsBits::None;
+    if (options.IncludeCoordinators) {
+        mask |= EReplicationCardOptionsBits::IncludeCoordinators;
+    }
+
+    if (options.IncludeProgress) {
+        mask |= EReplicationCardOptionsBits::IncludeProgress;
+    }
+
+    if (options.IncludeHistory) {
+        mask |= EReplicationCardOptionsBits::IncludeHistory;
+    }
+
+    if (options.IncludeReplicatedTableOptions) {
+        mask |= EReplicationCardOptionsBits::IncludeReplicatedTableOptions;
+    }
+
+    return mask;
+}
+
 } // namespace NDetail
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -84,6 +114,12 @@ void FormatValue(TStringBuilderBase* builder, const TReplicationCardFetchOptions
 TString ToString(const TReplicationCardFetchOptions& options)
 {
     return ToStringViaBuilder(options);
+}
+
+bool TReplicationCardFetchOptions::Contains(const TReplicationCardFetchOptions& other) const
+{
+    auto selfMask = NDetail::ToBitMask(*this);
+    return (selfMask | NDetail::ToBitMask(other)) == selfMask;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -495,7 +495,6 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     // --test-param KQP_LOG_FLAT_TX_SCHEMESHARD=debug
     SetupLogLevelFromTestParam(NKikimrServices::FLAT_TX_SCHEMESHARD);
     SetupLogLevelFromTestParam(NKikimrServices::KQP_YQL);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_YQL);
     SetupLogLevelFromTestParam(NKikimrServices::TX_DATASHARD);
     SetupLogLevelFromTestParam(NKikimrServices::TX_COORDINATOR);
     SetupLogLevelFromTestParam(NKikimrServices::KQP_COMPUTE);

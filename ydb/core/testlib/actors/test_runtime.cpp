@@ -205,6 +205,10 @@ namespace NActors {
         return *node->GetAppData<NKikimr::TAppData>();
     }
 
+    ui32 TTestActorRuntime::GetFirstNodeId() {
+        return FirstNodeId;
+    }
+
     bool TTestActorRuntime::DefaultScheduledFilterFunc(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline) {
         Y_UNUSED(delay);
         Y_UNUSED(deadline);

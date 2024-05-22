@@ -252,6 +252,8 @@ protected:
         auto* detailedCounters = UserCounters_ ? UserCounters_->GetDetailedCounters() : nullptr;
         const size_t errors = ErrorsCount(Response_, detailedCounters ? &detailedCounters->APIStatuses : nullptr);
 
+        FinishTs_ = TActivationContext::Now();
+
         const TDuration duration = GetRequestDuration();
         const TDuration workingDuration = GetRequestWorkingDuration();
         if (QueueLeader_ && (IsActionForQueue(Action_) || IsActionForQueueYMQ(Action_))) {
@@ -287,7 +289,6 @@ protected:
             }
         }
 
-        FinishTs_ = TActivationContext::Now();
         if (IsRequestSlow()) {
             PrintSlowRequestWarning();
         }

@@ -492,7 +492,7 @@ protected:
         }
     }
 
-    NUdf::TUnboxedValue MakeTupleValue(TType*& tupleType) {
+    NUdf::TUnboxedValue MakeTupleValue(TType*& tupleType, bool forPerf = false) {
         std::vector<TType*> tupleElemenTypes;
         tupleElemenTypes.push_back(PgmBuilder.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id));
         tupleElemenTypes.push_back(PgmBuilder.NewOptionalType(tupleElemenTypes[0]));
@@ -500,7 +500,17 @@ protected:
         tupleElemenTypes.push_back(PgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id));
         tupleElemenTypes.push_back(PgmBuilder.NewOptionalType(tupleElemenTypes[3]));
         tupleElemenTypes.push_back(PgmBuilder.NewOptionalType(tupleElemenTypes[3]));
+        if (!forPerf) {
+            tupleElemenTypes.push_back(PgmBuilder.NewDecimalType(16, 8));
+            tupleElemenTypes.push_back(PgmBuilder.NewOptionalType(PgmBuilder.NewDecimalType(22, 3)));
+            tupleElemenTypes.push_back(PgmBuilder.NewOptionalType(PgmBuilder.NewDecimalType(35, 2)));
+            tupleElemenTypes.push_back(PgmBuilder.NewOptionalType(PgmBuilder.NewDecimalType(29, 0)));
+        }
         tupleType = PgmBuilder.NewTupleType(tupleElemenTypes);
+
+        auto inf = NYql::NDecimal::FromString("inf", 16, 8);
+        auto dec1 = NYql::NDecimal::FromString("12345.673", 22, 3);
+        auto dec2 = NYql::NDecimal::FromString("-9781555555.99", 35, 2);
 
         TUnboxedValueVector tupleElemens;
         tupleElemens.push_back(MakeString("01234567890123456789"));
@@ -509,11 +519,17 @@ protected:
         tupleElemens.push_back(NUdf::TUnboxedValuePod(ui64(12345)));
         tupleElemens.push_back(NUdf::TUnboxedValuePod());
         tupleElemens.push_back(NUdf::TUnboxedValuePod(ui64(12345)));
+        if (!forPerf) {
+            tupleElemens.push_back(NUdf::TUnboxedValuePod(inf));
+            tupleElemens.push_back(NUdf::TUnboxedValuePod(dec1));
+            tupleElemens.push_back(NUdf::TUnboxedValuePod(dec2));
+            tupleElemens.push_back(NUdf::TUnboxedValuePod());
+        }
 
         return HolderFactory.VectorAsArray(tupleElemens);
     }
 
-    void ValidateTupleValue(const NUdf::TUnboxedValue& value) {
+    void ValidateTupleValue(const NUdf::TUnboxedValue& value, bool forPerf = false) {
         using NYql::NUdf::TStringValue;
         UNIT_ASSERT(value.IsBoxed());
 
@@ -525,11 +541,17 @@ protected:
         UNIT_ASSERT_VALUES_EQUAL(value.GetElement(3).Get<ui64>(), 12345);
         UNIT_ASSERT(!value.GetElement(4).HasValue());
         UNIT_ASSERT_VALUES_EQUAL(value.GetElement(5).Get<ui64>(), 12345);
+        if (!forPerf) {
+            UNIT_ASSERT_VALUES_EQUAL(std::string_view(NYql::NDecimal::ToString(value.GetElement(6).GetInt128(), 16, 8)), "inf");
+            UNIT_ASSERT_VALUES_EQUAL(std::string_view(NYql::NDecimal::ToString(value.GetElement(7).GetInt128(), 22, 3)), "12345.673");
+            UNIT_ASSERT_VALUES_EQUAL(std::string_view(NYql::NDecimal::ToString(value.GetElement(8).GetInt128(), 35, 2)), "-9781555555.99");
+            UNIT_ASSERT(!value.GetElement(9).HasValue());
+        }
     }
 
     void TestTuplePackPerformance() {
         TType* tupleType;
-        const auto value = MakeTupleValue(tupleType);
+        const auto value = MakeTupleValue(tupleType, true);
         TestPackPerformance(tupleType, value);
     }
 
@@ -571,9 +593,9 @@ protected:
             TString packed = buffer.ConvertToString();
 
             if constexpr (Fast) {
-                UNIT_ASSERT_VALUES_EQUAL(packed.size(), 59);
+                UNIT_ASSERT_VALUES_EQUAL(packed.size(), 73);
             } else {
-                UNIT_ASSERT_VALUES_EQUAL(packed.size(), 43);
+                UNIT_ASSERT_VALUES_EQUAL(packed.size(), 54);
             }
 
             for (size_t chunk = 1; chunk < packed.size(); ++chunk) {

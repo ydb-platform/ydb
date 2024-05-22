@@ -1,6 +1,7 @@
 #include "kqp_script_executions.h"
 #include "kqp_script_executions_impl.h"
 
+#include <ydb/core/fq/libs/common/compression.h>
 #include <ydb/core/fq/libs/common/rows_proto_splitter.h>
 #include <ydb/core/grpc_services/rpc_kqp_base.h>
 #include <ydb/core/kqp/common/events/events.h>
@@ -135,6 +136,8 @@ private:
                     Col("query_text", NScheme::NTypeIds::Text),
                     Col("syntax", NScheme::NTypeIds::Int32),
                     Col("ast", NScheme::NTypeIds::Text),
+                    Col("ast_compressed", NScheme::NTypeIds::String),
+                    Col("ast_compression_method", NScheme::NTypeIds::Text),
                     Col("issues", NScheme::NTypeIds::JsonDocument),
                     Col("plan", NScheme::NTypeIds::JsonDocument),
                     Col("meta", NScheme::NTypeIds::JsonDocument),
@@ -1135,7 +1138,9 @@ public:
                 plan,
                 issues,
                 stats,
-                ast
+                ast,
+                ast_compressed,
+                ast_compression_method
             FROM `.metadata/script_executions`
             WHERE database = $database AND execution_id = $execution_id AND
                   (expire_at > CurrentUtcTimestamp() OR expire_at IS NULL);
@@ -1220,7 +1225,17 @@ public:
             Metadata.mutable_exec_stats()->set_query_plan(*plan);
         }
 
-        const TMaybe<TString> ast = result.ColumnParser("ast").GetOptionalUtf8();
+        TMaybe<TString> ast;
+        const TMaybe<TString> astCompressionMethod = result.ColumnParser("ast_compression_method").GetOptionalUtf8();
+        if (astCompressionMethod) {
+            const TMaybe<TString> astCompressed = result.ColumnParser("ast_compressed").GetOptionalString();
+            if (astCompressed) {
+                const NFq::TCompressor compressor(*astCompressionMethod);
+                ast = compressor.Decompress(*astCompressed);
+            }
+        } else {
+            ast = result.ColumnParser("ast").GetOptionalUtf8();
+        }
         if (ast) {
             Metadata.mutable_exec_stats()->set_query_ast(*ast);
         }
@@ -2457,7 +2472,9 @@ public:
             DECLARE $issues AS JsonDocument;
             DECLARE $plan AS JsonDocument;
             DECLARE $stats AS JsonDocument;
-            DECLARE $ast AS Text;
+            DECLARE $ast AS Optional<Text>;
+            DECLARE $ast_compressed AS Optional<String>;
+            DECLARE $ast_compression_method AS Optional<Text>;
             DECLARE $operation_ttl AS Interval;
             DECLARE $customer_supplied_id AS Text;
             DECLARE $user_token AS Text;
@@ -2475,6 +2492,8 @@ public:
                 end_ts = CurrentUtcTimestamp(),
                 stats = $stats,
                 ast = $ast,
+                ast_compressed = $ast_compressed,
+                ast_compression_method = $ast_compression_method,
                 expire_at = IF($operation_ttl > CAST(0 AS Interval), CurrentUtcTimestamp() + $operation_ttl, NULL),
                 customer_supplied_id = IF($applicate_script_external_effect_required, $customer_supplied_id, NULL),
                 user_token = IF($applicate_script_external_effect_required, $user_token, NULL),
@@ -2493,6 +2512,16 @@ public:
             NGRpcService::FillQueryStats(queryStats, *Request.QueryStats);
             NProtobufJson::Proto2Json(queryStats, statsJson, NProtobufJson::TProto2JsonConfig());
             serializedStats = NJson::WriteJson(statsJson);
+        }
+
+        TMaybe<TString> ast;
+        TMaybe<TString> astCompressed;
+        TMaybe<TString> astCompressionMethod;
+        if (Request.QueryAst && Request.QueryAstCompressionMethod) {
+            astCompressed = *Request.QueryAst;
+            astCompressionMethod = *Request.QueryAstCompressionMethod;
+        } else {
+            ast = Request.QueryAst.value_or("");
         }
 
         NYdb::TParamsBuilder params;
@@ -2522,7 +2551,13 @@ public:
                 .JsonDocument(serializedStats)
                 .Build()
             .AddParam("$ast")
-                .Utf8(Request.QueryAst.value_or(""))
+                .OptionalUtf8(ast)
+                .Build()
+            .AddParam("$ast_compressed")
+                .OptionalString(astCompressed)
+                .Build()
+            .AddParam("$ast_compression_method")
+                .OptionalUtf8(astCompressionMethod)
                 .Build()
             .AddParam("$operation_ttl")
                 .Interval(static_cast<i64>(OperationTtl.MicroSeconds()))

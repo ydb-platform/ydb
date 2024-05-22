@@ -30,20 +30,20 @@ const auto IntStringVariant = VariantStructLogicalType({
     {"string", SimpleLogicalType(ESimpleLogicalValueType::String)},
 });
 
-YT_THREAD_LOCAL(TYsonConverterConfig) PositionalToNamedConfigInstance;
+YT_DEFINE_THREAD_LOCAL(TYsonConverterConfig, PositionalToNamedConfigInstance);
 
 class TWithConfig
 {
 public:
     TWithConfig(const TYsonConverterConfig& config)
-        : OldConfig_(GetTlsRef(PositionalToNamedConfigInstance))
+        : OldConfig_(PositionalToNamedConfigInstance())
     {
-        GetTlsRef(PositionalToNamedConfigInstance) = config;
+        PositionalToNamedConfigInstance() = config;
     }
 
     ~TWithConfig()
     {
-        GetTlsRef(PositionalToNamedConfigInstance) = OldConfig_;
+        PositionalToNamedConfigInstance() = OldConfig_;
     }
 private:
     TYsonConverterConfig OldConfig_;
@@ -74,7 +74,7 @@ TString ConvertYson(
             };
             converter = CreateYsonClientToServerConverter(descriptor, config);
         } else {
-            converter = CreateYsonServerToClientConverter(descriptor, GetTlsRef(PositionalToNamedConfigInstance));
+            converter = CreateYsonServerToClientConverter(descriptor, PositionalToNamedConfigInstance());
         }
     } catch (const std::exception& ex) {
         ADD_FAILURE() << "cannot create converter: " << ex.what();

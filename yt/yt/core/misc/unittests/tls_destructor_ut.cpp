@@ -19,7 +19,7 @@ struct TTlsGuard
     }
 };
 
-YT_THREAD_LOCAL(TTlsGuard) TlsGuard;
+YT_DEFINE_THREAD_LOCAL(TTlsGuard, TlsGuard);
 
 TEST(TTlsDestructorTest, DestructorIsCalled)
 {
@@ -27,7 +27,7 @@ TEST(TTlsDestructorTest, DestructorIsCalled)
 
     std::thread thread{[] {
         // Important moment. TLS must be touched to be initialized and destructed later.
-        Y_UNUSED(TlsGuard);
+        Y_UNUSED(TlsGuard());
     }};
     thread.join();
 

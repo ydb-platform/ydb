@@ -23,8 +23,12 @@ cmake_policy(SET CMP0104 OLD)
 
 include(cmake/global_flags.cmake)
 include(cmake/global_vars.cmake)
-{% for path in includes %}include({{path}})
-{%endfor%}{% if use_conan %}
+{% if includes is defined -%}
+{%     for incl in includes -%}
+include({{ incl }})
+{%     endfor -%}
+{% endif -%}
+{% if use_conan %}
 if (CMAKE_CROSSCOMPILING)
   include(${PROJECT_BINARY_DIR}/conan_paths.cmake)
 else()
@@ -49,7 +53,7 @@ set(vanilla_protobuf "yes")
 {%  if platforms_count > 0 -%}
 {%      for i in range(platforms_count) -%}
 {%          if i != 0 %}else{% endif %}if ({{ platforms[platform_names[i]] }})
-  include({{ platform_cmakelists[i] }})
+  include(CMakeLists.{{ platform_names[i] }}.txt)
 {%      endfor -%}
 endif()
 {%  endif %}

@@ -247,6 +247,26 @@ Y_UNIT_TEST_SUITE(TKernelRegistryTest) {
         });
     }
 
+    Y_UNIT_TEST(TestScalarApply) {
+        TestOne([](auto& b,auto& ctx) {
+            const auto stringType = ctx.template MakeType<TDataExprType>(EDataSlot::String);
+            const auto uint32Type = ctx.template MakeType<TDataExprType>(EDataSlot::Uint32);
+            const auto blockStringType = ctx.template MakeType<TBlockExprType>(stringType);
+            const auto blockUint32Type = ctx.template MakeType<TBlockExprType>(uint32Type);
+            const TPositionHandle stub;
+            auto arg1 = ctx.NewArgument(stub, "str");
+            auto arg2 = ctx.NewArgument(stub, "pos");
+            auto size = ctx.NewCallable(stub, "Uint32", {ctx.NewAtom(stub, 42U)});
+            auto body = ctx.NewCallable(stub, "Substring", {arg1, arg2, size});
+            arg1->SetTypeAnn(stringType);
+            arg2->SetTypeAnn(uint32Type);
+            size->SetTypeAnn(uint32Type);
+            body->SetTypeAnn(stringType);
+            const auto lambda = ctx.NewLambda(stub, ctx.NewArguments(stub, {std::move(arg1), std::move(arg2)}), std::move(body));
+            return b.AddScalarApply(*lambda, { blockStringType, blockUint32Type }, ctx);
+        });
+    }
+
     Y_UNIT_TEST(TestJsonExists) {
         TestOne([](auto& b,auto& ctx) {
             auto blockOptJsonType = ctx.template MakeType<TBlockExprType>(

@@ -8,10 +8,36 @@ namespace NKikimr::NColumnShard {
         using TBase = TTxController::ITransactionOperator;
         using TProposeResult = TTxController::TProposeResult;
         static inline auto Registrator = TFactory::TRegistrator<TEvWriteTransactionOperator>(NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE);
-    public:
-        using TBase::TBase;
+    private:
+        virtual TProposeResult DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override {
+            owner.OperationsManager->LinkTransaction(LockId, GetTxId(), txc);
+            return TProposeResult();
+        }
+        virtual void DoStartProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
 
-        virtual bool Parse(TColumnShard& /*owner*/, const TString& data) override {
+        }
+        virtual void DoFinishProposeOnExecute(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) override {
+        }
+        virtual void DoFinishProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
+        }
+        virtual bool DoIsAsync() const override {
+            return false;
+        }
+        virtual bool DoCheckAllowUpdate(const TFullTxInfo& currentTxInfo) const override {
+            return (currentTxInfo.Source == GetTxInfo().Source && currentTxInfo.Cookie == GetTxInfo().Cookie);
+        }
+        virtual void DoSendReply(TColumnShard& owner, const TActorContext& ctx) override {
+            const auto& txInfo = GetTxInfo();
+            std::unique_ptr<NActors::IEventBase> evResult;
+            if (IsFail()) {
+                evResult = NEvents::TDataEvents::TEvWriteResult::BuildError(owner.TabletID(), txInfo.GetTxId(), NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, GetProposeStartInfoVerified().GetStatusMessage());
+            } else {
+                evResult = NEvents::TDataEvents::TEvWriteResult::BuildPrepared(owner.TabletID(), txInfo.GetTxId(), owner.GetProgressTxController().BuildCoordinatorInfo(txInfo));
+            }
+            ctx.Send(txInfo.Source, evResult.release(), 0, txInfo.Cookie);
+        }
+
+        virtual bool DoParse(TColumnShard& /*owner*/, const TString& data) override {
             NKikimrTxColumnShard::TCommitWriteTxBody commitTxBody;
             if (!commitTxBody.ParseFromString(data)) {
                 return false;
@@ -20,14 +46,8 @@ namespace NKikimr::NColumnShard {
             return !!LockId;
         }
 
-        TProposeResult ExecuteOnPropose(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) const override {
-            owner.OperationsManager->LinkTransaction(LockId, GetTxId(), txc);
-            return TProposeResult();
-        }
-
-        bool CompleteOnPropose(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) const override {
-            return true;
-        }
+    public:
+        using TBase::TBase;
 
         virtual bool ExecuteOnProgress(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override {
             return owner.OperationsManager->CommitTransaction(owner, GetTxId(), txc, version);

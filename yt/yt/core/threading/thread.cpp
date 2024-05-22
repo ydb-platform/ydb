@@ -20,10 +20,10 @@ namespace NYT::NThreading {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_THREAD_LOCAL(TThreadId) CurrentUniqueThreadId;
+YT_DEFINE_THREAD_LOCAL(TThreadId, CurrentUniqueThreadId) ;
 static std::atomic<TThreadId> UniqueThreadIdGenerator;
 
-static const auto& Logger = ThreadingLogger;
+static constexpr auto& Logger = ThreadingLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -110,7 +110,7 @@ bool TThread::StartSlow()
 bool TThread::CanWaitForThreadShutdown() const
 {
     return
-        CurrentUniqueThreadId != UniqueThreadId_ &&
+        CurrentUniqueThreadId() != UniqueThreadId_ &&
         GetShutdownThreadId() != ThreadId_;
 }
 
@@ -195,14 +195,14 @@ void* TThread::StaticThreadMainTrampoline(void* opaque)
     return nullptr;
 }
 
-void TThread::ThreadMainTrampoline()
+YT_PREVENT_TLS_CACHING void TThread::ThreadMainTrampoline()
 {
     auto this_ = MakeStrong(this);
 
     ::TThread::SetCurrentThreadName(ThreadName_.c_str());
 
     ThreadId_ = GetCurrentThreadId();
-    CurrentUniqueThreadId = UniqueThreadId_;
+    CurrentUniqueThreadId() = UniqueThreadId_;
 
     SetThreadPriority();
     ConfigureSignalHandlerStack();
@@ -233,7 +233,7 @@ void TThread::ThreadMainTrampoline()
         bool Armed_ = true;
     };
 
-    YT_THREAD_LOCAL(TExitInterceptor) Interceptor;
+    thread_local TExitInterceptor Interceptor;
 
     if (Options_.ThreadInitializer) {
         Options_.ThreadInitializer();
@@ -241,7 +241,7 @@ void TThread::ThreadMainTrampoline()
 
     ThreadMain();
 
-    GetTlsRef(Interceptor).Disarm();
+    Interceptor.Disarm();
 
     StoppedEvent_.NotifyAll();
 }
@@ -282,23 +282,23 @@ void TThread::SetThreadPriority()
 #endif
 }
 
-void TThread::ConfigureSignalHandlerStack()
+YT_PREVENT_TLS_CACHING void TThread::ConfigureSignalHandlerStack()
 {
 #if !defined(_asan_enabled_) && !defined(_msan_enabled_) && \
     (_XOPEN_SOURCE >= 500 || \
     /* Since glibc 2.12: */ _POSIX_C_SOURCE >= 200809L || \
     /* glibc <= 2.19: */ _BSD_SOURCE)
-    YT_THREAD_LOCAL(bool) Configured;
+    thread_local bool Configured;
     if (std::exchange(Configured, true)) {
         return;
     }
 
     // The size of of the custom stack to be provided for signal handlers.
     constexpr size_t SignalHandlerStackSize = 16_KB;
-    YT_THREAD_LOCAL(std::unique_ptr<char[]>) Stack = std::make_unique<char[]>(SignalHandlerStackSize);
+    thread_local std::unique_ptr<char[]> Stack = std::make_unique<char[]>(SignalHandlerStackSize);
 
     stack_t stack{
-        .ss_sp = GetTlsRef(Stack).get(),
+        .ss_sp = Stack.get(),
         .ss_flags = 0,
         .ss_size = SignalHandlerStackSize,
     };

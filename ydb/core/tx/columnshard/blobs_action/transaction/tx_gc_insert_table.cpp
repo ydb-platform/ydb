@@ -18,7 +18,7 @@ bool TTxInsertTableCleanup::Execute(TTransactionContext& txc, const TActorContex
     for (auto& [abortedWriteId, abortedData] : allAborted) {
         Self->InsertTable->EraseAbortedOnExecute(dbTable, abortedData, BlobsAction);
     }
-    BlobsAction->OnExecuteTxAfterRemoving(*Self, blobManagerDb, true);
+    BlobsAction->OnExecuteTxAfterRemoving(blobManagerDb, true);
     return true;
 }
 void TTxInsertTableCleanup::Complete(const TActorContext& /*ctx*/) {
@@ -29,7 +29,7 @@ void TTxInsertTableCleanup::Complete(const TActorContext& /*ctx*/) {
     }
 
     Y_ABORT_UNLESS(BlobsAction);
-    BlobsAction->OnCompleteTxAfterRemoving(*Self, true);
+    BlobsAction->OnCompleteTxAfterRemoving(true);
     Self->BackgroundController.FinishCleanupInsertTable();
     Self->EnqueueBackgroundActivities();
 }

@@ -125,8 +125,8 @@ public:
             : State->RandomProvider;
 
         TScopedAlloc alloc(
-            __LOCATION__, 
-            NKikimr::TAlignedPagePoolCounters(), 
+            __LOCATION__,
+            NKikimr::TAlignedPagePoolCounters(),
             State->FunctionRegistry->SupportsSizedAllocators(),
             false);
         NDq::TDqTaskRunnerContext executionContext;
@@ -266,18 +266,9 @@ public:
     TDqsPipelineConfigurator(const TDqStatePtr& state, const THashMap<TString, TString>& providerParams)
         : State_(state)
         , ProviderParams_(providerParams)
-    {
-        for (const auto& ds: State_->TypeCtx->DataSources) {
-            if (const auto dq = ds->GetDqIntegration()) {
-                UniqIntegrations_.emplace(dq);
-            }
-        }
-        for (const auto& ds: State_->TypeCtx->DataSinks) {
-            if (const auto dq = ds->GetDqIntegration()) {
-                UniqIntegrations_.emplace(dq);
-            }
-        }
-    }
+        , UniqIntegrations_(GetUniqueIntegrations(*State_->TypeCtx))
+    {}
+
 private:
     void AfterCreate(TTransformationPipeline*) const final {}
 
@@ -296,7 +287,7 @@ private:
         }
         NDq::EChannelMode mode = GetConfiguredChannelMode(State_, typesCtx);
         pipeline->Add(
-            NDq::CreateDqBuildPhyStagesTransformer(!State_->Settings->SplitStageOnDqReplicate.Get().GetOrElse(true), typesCtx, mode),
+            NDq::CreateDqBuildPhyStagesTransformer(!State_->Settings->SplitStageOnDqReplicate.Get().GetOrElse(TDqSettings::TDefault::SplitStageOnDqReplicate), typesCtx, mode),
             "BuildPhy");
         pipeline->Add(NDqs::CreateDqsRewritePhyCallablesTransformer(*pipeline->GetTypeAnnotationContext()), "RewritePhyCallables");
     }

@@ -49,7 +49,7 @@ using ::testing::ContainsRegex;
 
 constexpr auto SleepQuantum = TDuration::MilliSeconds(100);
 
-inline const NLogging::TLogger Logger("SchedulerTest");
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "SchedulerTest");
 
 ////////////////////////////////////////////////////////////////////////////////
 

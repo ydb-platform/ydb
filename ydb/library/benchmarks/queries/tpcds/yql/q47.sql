@@ -1,12 +1,16 @@
 {% include 'header.sql.jinja' %}
 
 -- NB: Subquerys
+$todecimal = ($x) -> {
+  return cast(cast($x as string?) as decimal(7,2))
+};
+
 $v1 = (
  select item.i_category i_category, item.i_brand i_brand,
         store.s_store_name s_store_name, store.s_company_name s_company_name,
         date_dim.d_year d_year, date_dim.d_moy d_moy,
-        sum(ss_sales_price) sum_sales,
-        avg(sum(ss_sales_price)) over
+        sum($todecimal(ss_sales_price)) sum_sales,
+        avg(sum($todecimal(ss_sales_price))) over
           (partition by item.i_category, item.i_brand,
                      store.s_store_name, store.s_company_name, date_dim.d_year)
           avg_monthly_sales,
@@ -53,7 +57,7 @@ select *
  from $v2
  where  d_year = 1999 and
         avg_monthly_sales > 0 and
-        case when avg_monthly_sales > 0 then abs(sum_sales - avg_monthly_sales) / avg_monthly_sales else null end > 0.1
+        case when avg_monthly_sales > 0 then abs(sum_sales - avg_monthly_sales) / avg_monthly_sales else null end > cast("0.1" as decimal(7,2))
  order by sum_sales - avg_monthly_sales, sum_sales
  limit 100;
 

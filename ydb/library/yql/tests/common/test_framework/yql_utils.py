@@ -488,6 +488,19 @@ def is_canonize_lineage(cfg):
     return False
 
 
+def is_canonize_yt(cfg):
+    for item in cfg:
+        if item[0] == 'canonize_yt':
+            return True
+    return False
+
+
+def skip_test_if_required(cfg):
+    for item in cfg:
+        if item[0] == 'skip_test':
+            pytest.skip(item[1])
+
+
 def get_pragmas(cfg):
     pragmas = []
     for item in cfg:

@@ -52,7 +52,7 @@ join
     `{path}orders` as o
 on
     o.o_orderkey = j.l_orderkey
-where cast(cast(o_orderdate as Timestamp) as Date) between Date('1995-01-01') and Date('1996-12-31')
+where o_orderdate between Date('1995-01-01') and Date('1996-12-31')
 );
 $join5 = (
 select

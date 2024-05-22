@@ -39,15 +39,15 @@ struct TFiberUnregisterTag
 // Do not change inheritence order or layout.
 // Some offsets are hardcoded at devtools/gdb/yt_fibers_printer.py.
 class TFiber
-    : public TIntrusiveNode<TFiber, NDetail::TFiberRegisterTag>
-    , public TIntrusiveNode<TFiber, NDetail::TFiberUnregisterTag>
+    : public TIntrusiveListItem<TFiber, NDetail::TFiberRegisterTag>
+    , public TIntrusiveListItem<TFiber, NDetail::TFiberUnregisterTag>
     , public ITrampoLine
 {
-    using TRegisterBase = TIntrusiveNode<TFiber, NDetail::TFiberRegisterTag>;
-    using TUnregisterBase = TIntrusiveNode<TFiber, NDetail::TFiberUnregisterTag>;
+    using TRegisterBase = TIntrusiveListItem<TFiber, NDetail::TFiberRegisterTag>;
+    using TUnregisterBase = TIntrusiveListItem<TFiber, NDetail::TFiberUnregisterTag>;
 
 public:
-    using TFiberList = TSimpleIntrusiveList<TFiber, NDetail::TFiberRegisterTag>;
+    using TFiberList = TIntrusiveList<TFiber, NDetail::TFiberRegisterTag>;
 
     static TFiber* CreateFiber(EExecutionStackKind stackKind = EExecutionStackKind::Small);
 

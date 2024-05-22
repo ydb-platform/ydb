@@ -42,14 +42,22 @@ NKikimr::TConclusionStatus TDestinationSession::DataReceived(THashMap<ui64, NEve
     return TConclusionStatus::Success();
 }
 
+ui32 TDestinationSession::GetSourcesInProgressCount() const {
+    AFL_VERIFY(IsStarted() || IsStarting());
+    AFL_VERIFY(Cursors.size());
+    ui32 result = 0;
+    for (auto&& [_, cursor] : Cursors) {
+        if (!cursor.GetDataFinished()) {
+            ++result;
+        }
+    }
+    return result;
+}
+
 void TDestinationSession::SendCurrentCursorAck(const NColumnShard::TColumnShard& shard, const std::optional<TTabletId> tabletId) {
     AFL_VERIFY(IsStarted() || IsStarting());
     bool found = false;
-    bool allTransfersFinished = true;
     for (auto&& [_, cursor] : Cursors) {
-        if (!cursor.GetDataFinished()) {
-            allTransfersFinished = false;
-        }
         if (tabletId && *tabletId != cursor.GetTabletId()) {
             continue;
         }
@@ -73,11 +81,6 @@ void TDestinationSession::SendCurrentCursorAck(const NColumnShard::TColumnShard&
                 new TEvPipeCache::TEvForward(ev.release(), (ui64)cursor.GetTabletId(), true), IEventHandle::FlagTrackDelivery, GetRuntimeId());
         }
     }
-    if (allTransfersFinished && !IsFinished()) {
-        NYDBTest::TControllers::GetColumnShardController()->OnDataSharingFinished(shard.TabletID(), GetSessionId());
-        Finish(shard.GetDataLocksManager());
-        InitiatorController.Finished(GetSessionId());
-    }
     AFL_VERIFY(found);
 }
 
@@ -92,9 +95,8 @@ NKikimr::TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TDestin
 }
 
 NKikimr::TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TDestinationSession::ReceiveFinished(NColumnShard::TColumnShard* self, const TTabletId sourceTabletId, const std::shared_ptr<TDestinationSession>& selfPtr) {
-    auto result = GetCursorVerified(sourceTabletId).ReceiveFinished();
-    if (!result) {
-        return result;
+    if (GetCursorVerified(sourceTabletId).GetDataFinished()) {
+        return TConclusionStatus::Fail("session finished already");
     }
     return std::unique_ptr<NTabletFlatExecutor::ITransaction>(new TTxFinishFromSource(self, sourceTabletId, selfPtr));
 }

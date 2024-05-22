@@ -4,11 +4,13 @@
 #include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <ydb/library/accessor/accessor.h>
 #include <library/cpp/getopt/last_getopt.h>
 
 #include <list>
-#include <map>
 #include <string>
+
+#define WORKLOAD_QUERY_GENERATOR_INTERFACE_VERSION 2
 
 namespace NYdbWorkload {
 
@@ -25,6 +27,7 @@ struct TQueryInfo {
     {}
 
     std::string Query;
+    std::string ExpectedResult;
     NYdb::TParams Params;
     bool UseReadRows = false;
     TString TablePath;
@@ -42,18 +45,48 @@ class IBulkDataGenerator {
 public:
     using TPtr = std::shared_ptr<IBulkDataGenerator>;
     virtual ~IBulkDataGenerator() = default;
-    IBulkDataGenerator(const std::string& table)
-        : Table(table)
+    IBulkDataGenerator(const std::string& name, ui64 size)
+        : Name(name)
+        , Size(size)
     {}
 
-    std::string GetTable() const {
-        return Table;
-    }
+    struct TDataPortion: public TAtomicRefCount<TDataPortion>, TMoveOnly {
+        struct TCsv {
+            TCsv(TString&& data, const TString& formatString = TString())
+                : Data(std::move(data))
+                , FormatString(formatString)
+            {}
+            TString Data;
+            TString FormatString;
+        };
 
-    virtual TMaybe<NYdb::TValue> GenerateDataPortion() = 0;
+        struct TArrow {
+            TArrow(TString&& data, TString&& schema)
+                : Data(std::move(data))
+                , Schema(schema)
+            {}
+            TString Data;
+            TString Schema;
+        };
 
-private:
-    std::string Table;
+        template<class T>
+        TDataPortion(const TString& table, T&& data, ui64 size)
+            : Table(table)
+            , Data(std::move(data))
+            , Size(size)
+        {}
+
+        TString Table;
+        std::variant<NYdb::TValue, TCsv, TArrow> Data;
+        ui64 Size;
+    };
+
+    using TDataPortionPtr = TIntrusivePtr<TDataPortion>;
+    using TDataPortions = TVector<TDataPortionPtr>;
+
+    virtual TDataPortions GenerateDataPortion() = 0;
+    YDB_READONLY_DEF(std::string, Name);
+    YDB_READONLY(ui64, Size, 0);
 };
 
 using TBulkDataGeneratorList = std::list<std::shared_ptr<IBulkDataGenerator>>;
@@ -61,14 +94,20 @@ using TBulkDataGeneratorList = std::list<std::shared_ptr<IBulkDataGenerator>>;
 class IWorkloadQueryGenerator {
 public:
     struct TWorkloadType {
-        explicit TWorkloadType(int type, const TString& commandName, const TString& description)
+        enum class EKind {
+            Workload,
+            Benchmark
+        };
+        explicit TWorkloadType(int type, const TString& commandName, const TString& description, EKind kind = EKind::Workload)
             : Type(type)
             , CommandName(commandName)
             , Description(description)
+            , Kind(kind)
         {}
         int Type = 0;
         TString CommandName;
         TString Description;
+        EKind Kind;
     };
 public:
     virtual ~IWorkloadQueryGenerator() = default;
@@ -113,6 +152,11 @@ public:
     TWorkloadQueryGeneratorBase(const TParams* params)
         : Params(*params)
     {}
+
+    const TParams& GetParams() const {
+        return Params;
+    }
+
 protected:
     const TParams& Params;
 };

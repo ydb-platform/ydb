@@ -145,8 +145,8 @@ protected:
     protected: \
         DECLARE_YPATH_SERVICE_METHOD(::NYT::NYTree::NProto, method); \
         virtual void method##Self(TReq##method* request, TRsp##method* response, const TCtx##method##Ptr& context); \
-        virtual void method##Recursive(const TYPath& path, TReq##method* request, TRsp##method* response, const TCtx##method##Ptr& context); \
-        virtual void method##Attribute(const TYPath& path, TReq##method* request, TRsp##method* response, const TCtx##method##Ptr& context); \
+        virtual void method##Recursive(const NYPath::TYPath& path, TReq##method* request, TRsp##method* response, const TCtx##method##Ptr& context); \
+        virtual void method##Attribute(const NYPath::TYPath& path, TReq##method* request, TRsp##method* response, const TCtx##method##Ptr& context); \
     }
 
 #define IMPLEMENT_SUPPORTS_METHOD_RESOLVE(method, onPathError) \
@@ -163,9 +163,9 @@ protected:
             return; \
         } \
         if (tokenizer.Advance() == NYPath::ETokenType::At) { \
-            method##Attribute(TYPath(tokenizer.GetSuffix()), request, response, context); \
+            method##Attribute(NYPath::TYPath(tokenizer.GetSuffix()), request, response, context); \
         } else { \
-            method##Recursive(TYPath(tokenizer.GetInput()), request, response, context); \
+            method##Recursive(NYPath::TYPath(tokenizer.GetInput()), request, response, context); \
         } \
     }
 
@@ -177,7 +177,7 @@ protected:
         } \
     ) \
     \
-    void TSupports##method::method##Attribute(const TYPath& /*path*/, TReq##method* /*request*/, TRsp##method* /*response*/, const TCtx##method##Ptr& context) \
+    void TSupports##method::method##Attribute(const NYPath::TYPath& /*path*/, TReq##method* /*request*/, TRsp##method* /*response*/, const TCtx##method##Ptr& context) \
     { \
         ThrowMethodNotSupported(context->GetMethod(), TString("attribute")); \
     } \
@@ -187,7 +187,7 @@ protected:
         ThrowMethodNotSupported(context->GetMethod(), TString("self")); \
     } \
     \
-    void TSupports##method::method##Recursive(const TYPath& /*path*/, TReq##method* /*request*/, TRsp##method* /*response*/, const TCtx##method##Ptr& context) \
+    void TSupports##method::method##Recursive(const NYPath::TYPath& /*path*/, TReq##method* /*request*/, TRsp##method* /*response*/, const TCtx##method##Ptr& context) \
     { \
         ThrowMethodNotSupported(context->GetMethod(), TString("recursive")); \
     }

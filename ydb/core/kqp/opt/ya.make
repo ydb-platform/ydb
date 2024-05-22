@@ -26,6 +26,7 @@ PEERDIR(
     ydb/library/yql/dq/type_ann
     ydb/library/yql/utils/plan
     ydb/core/kqp/provider
+    ydb/core/formats/arrow/protos
 )
 
 YQL_LAST_ABI_VERSION()

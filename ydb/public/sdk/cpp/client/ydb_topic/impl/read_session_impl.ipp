@@ -4,7 +4,7 @@
 #include "read_session_impl.h"
 #undef INCLUDE_READ_SESSION_IMPL_H
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/log_lazy.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/log_lazy.h>
 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>
@@ -24,17 +24,9 @@
 #include <utility>
 #include <variant>
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Templates definitions
-
 namespace NYdb::NTopic {
 
 static const bool RangesMode = !GetEnv("PQ_OFFSET_RANGES_MODE").empty();
-
-template <typename TReaderCounters>
-void MakeCountersNotNull(TReaderCounters& counters);
-template <typename TReaderCounters>
-bool HasNullCounters(TReaderCounters& counters);
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TPartitionStreamImpl
@@ -91,6 +83,13 @@ void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmDestroy() {
 }
 
 template<bool UseMigrationProtocol>
+void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmEnd(const std::vector<ui32>& childIds) {
+    if (auto sessionShared = CbContext->LockShared()) {
+        sessionShared->ConfirmPartitionStreamEnd(this, childIds);
+    }
+}
+
+template<bool UseMigrationProtocol>
 void TPartitionStreamImpl<UseMigrationProtocol>::StopReading() {
     Y_ABORT("Not implemented"); // TODO
 }
@@ -140,6 +139,14 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::SignalReadyEvents(TInt
                                                                             TReadSessionEventsQueue<UseMigrationProtocol>& queue,
                                                                             TDeferredActions<UseMigrationProtocol>& deferred)
 {
+    if constexpr (!UseMigrationProtocol) {
+        if (auto session = CbContext->LockShared()) {
+            if (!session->AllParentSessionsHasBeenRead(stream->GetPartitionId(), stream->GetPartitionSessionId())) {
+                return;
+            }
+        }
+    }
+
     auto moveToReadyQueue = [&](TRawPartitionStreamEvent<UseMigrationProtocol> &&event) {
         queue.SignalEventImpl(stream, deferred, event.IsDataEvent());
 
@@ -177,7 +184,7 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::SignalReadyEvents(TInt
                 moveToReadyQueue(std::move(front));
             }
         } else {
-            if (queue.TryApplyCallbackToEventImpl(front.GetEvent(), deferred)) {
+            if (queue.TryApplyCallbackToEventImpl(front.GetEvent(), deferred, CbContext)) {
                 NotReady.pop_front();
             } else {
                 moveToReadyQueue(std::move(front));
@@ -475,6 +482,7 @@ inline void TSingleClusterReadSessionImpl<false>::InitImpl(TDeferredActions<fals
     auto& init = *req.mutable_init_request();
 
     init.set_consumer(Settings.ConsumerName_);
+    init.set_autoscaling_support(Settings.AutoscalingSupport_);
 
     for (const TTopicReadSettings& topic : Settings.Topics_) {
         auto* topicSettings = init.add_topics_read_settings();
@@ -895,6 +903,9 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnReadDone(NYdbGrpc::T
 
                     case TServerMessage<false>::kStopPartitionSessionRequest:
                         OnReadDoneImpl(std::move(*ServerMessage->mutable_stop_partition_session_request()), deferred);
+                        break;
+                    case TServerMessage<false>::kEndPartitionSession:
+                        OnReadDoneImpl(std::move(*ServerMessage->mutable_end_partition_session()), deferred);
                         break;
                     case TServerMessage<false>::kCommitOffsetResponse:
                         OnReadDoneImpl(std::move(*ServerMessage->mutable_commit_offset_response()), deferred);
@@ -1370,6 +1381,43 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
 template <>
 template <>
 inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
+    Ydb::Topic::StreamReadMessage::EndPartitionSession&& msg,
+    TDeferredActions<false>& deferred) {
+    Y_ABORT_UNLESS(Lock.IsLocked());
+
+    auto partitionStreamIt = PartitionStreams.find(msg.partition_session_id());
+    if (partitionStreamIt == PartitionStreams.end()) {
+        return;
+    }
+    TIntrusivePtr<TPartitionStreamImpl<false>> partitionStream = partitionStreamIt->second;
+
+    std::vector<ui32> adjacentPartitionIds;
+    adjacentPartitionIds.reserve(msg.adjacent_partition_ids_size());
+    adjacentPartitionIds.insert(adjacentPartitionIds.end(), msg.adjacent_partition_ids().begin(), msg.adjacent_partition_ids().end());
+
+    std::vector<ui32> childPartitionIds;
+    childPartitionIds.reserve(msg.child_partition_ids_size());
+    childPartitionIds.insert(childPartitionIds.end(), msg.child_partition_ids().begin(), msg.child_partition_ids().end());
+
+    for (auto child : childPartitionIds) {
+        RegisterParentPartition(child,
+                                partitionStream->GetPartitionId(),
+                                partitionStream->GetPartitionSessionId());
+    }
+
+    bool pushRes = EventsQueue->PushEvent(
+            partitionStream,
+            TReadSessionEvent::TEndPartitionSessionEvent(std::move(partitionStream), std::move(adjacentPartitionIds), std::move(childPartitionIds)),
+            deferred);
+    if (!pushRes) {
+        AbortImpl();
+        return;
+    }
+}
+
+template <>
+template <>
+inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     Ydb::Topic::StreamReadMessage::CommitOffsetResponse&& msg,
     TDeferredActions<false>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
@@ -1703,11 +1751,11 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::TPartitionCookieMappin
         return false;
     }
     for (ui64 offset = cookie->OffsetRange.first; offset < cookie->OffsetRange.second; ++offset) {
-        if (!UncommittedOffsetToCookie.emplace(std::make_pair(cookie->PartitionStream->GetPartitionStreamId(), offset), cookie).second) {
+        if (!UncommittedOffsetToCookie.emplace(std::make_pair(GetPartitionStreamId(cookie->PartitionStream.Get()), offset), cookie).second) {
             return false;
         }
     }
-    PartitionStreamIdToCookie.emplace(cookie->PartitionStream->GetPartitionStreamId(), cookie);
+    PartitionStreamIdToCookie.emplace(GetPartitionStreamId(cookie->PartitionStream.Get()), cookie);
     return true;
 }
 
@@ -1739,7 +1787,7 @@ typename TSingleClusterReadSessionImpl<UseMigrationProtocol>::TPartitionCookieMa
         cookieInfo = cookieIt->second;
         Cookies.erase(cookieIt);
 
-        auto [rangeBegin, rangeEnd] = PartitionStreamIdToCookie.equal_range(cookieInfo->PartitionStream->GetPartitionStreamId());
+        auto [rangeBegin, rangeEnd] = PartitionStreamIdToCookie.equal_range(GetPartitionStreamId(cookieInfo->PartitionStream.Get()));
         for (auto i = rangeBegin; i != rangeEnd; ++i) {
             if (i->second == cookieInfo) {
                 PartitionStreamIdToCookie.erase(i);
@@ -1774,6 +1822,81 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::TPartitionCookieMappin
 template<bool UseMigrationProtocol>
 bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::TPartitionCookieMapping::HasUnacknowledgedCookies() const {
     return CommitInflight != 0;
+}
+
+template<bool UseMigrationProtocol>
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::RegisterParentPartition(ui32 partitionId, ui32 parentPartitionId, ui64 parentPartitionSessionId) {
+    auto& values = HierarchyData[partitionId];
+    values.push_back({parentPartitionId, parentPartitionSessionId});
+}
+
+template<bool UseMigrationProtocol>
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::UnregisterPartition(ui32 partitionId, ui64 partitionSessionId) {
+    for (auto it = HierarchyData.begin(); it != HierarchyData.end();) {
+        auto& values = it->second;
+        for (auto v = values.begin(); v != values.end();) {
+            if (v->PartitionId == partitionId && v->PartitionSessionId < partitionSessionId) {
+                v = values.erase(v);
+            } else {
+                ++v;
+            }
+        }
+        if (values.empty()) {
+            it = HierarchyData.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+template<bool UseMigrationProtocol>
+std::vector<ui64> TSingleClusterReadSessionImpl<UseMigrationProtocol>::GetParentPartitionSessions(ui32 partitionId, ui64 partitionSessionId) {
+    auto it = HierarchyData.find(partitionId);
+    if (it == HierarchyData.end()) {
+        return {};
+    }
+
+    auto& parents = it->second;
+
+    std::unordered_map<ui32, ui64> index;
+    for (auto& v : parents) {
+        if (v.PartitionSessionId > partitionSessionId) {
+            break;
+        }
+
+        index[v.PartitionId] = v.PartitionSessionId;
+    }
+
+    std::vector<ui64> result;
+    for (auto [_, v] : index) {
+        result.push_back(v);
+    }
+
+    return result;
+}
+
+template<bool UseMigrationProtocol>
+bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::AllParentSessionsHasBeenRead(ui32 partitionId, ui64 partitionSessionId) {
+    for (auto id : GetParentPartitionSessions(partitionId, partitionSessionId)) {
+        if (!ReadingFinishedData.contains(id)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+template<bool UseMigrationProtocol>
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStreamEnd(TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, const std::vector<ui32>& childIds) {
+    ReadingFinishedData.insert(partitionStream->GetPartitionSessionId());
+    for (auto& [_, s] : PartitionStreams) {
+        for (auto partitionId : childIds) {
+            if (s->GetPartitionId() == partitionId) {
+                EventsQueue->SignalReadyEvents(s);
+                break;
+            }
+        }
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1834,6 +1957,7 @@ TReadSessionEventsQueue<UseMigrationProtocol>::TReadSessionEventsQueue(
                              || h.CommitOffsetAcknowledgementHandler_
                              || h.StartPartitionSessionHandler_
                              || h.StopPartitionSessionHandler_
+                             || h.EndPartitionSessionHandler_
                              || h.PartitionSessionStatusHandler_
                              || h.PartitionSessionClosedHandler_
                              || h.SessionClosedHandler_);
@@ -2019,6 +2143,15 @@ TReadSessionEventsQueue<UseMigrationProtocol>::GetEventImpl(size_t& maxByteSize,
             partitionStream->PopEvent();
 
             TParent::Events.pop();
+
+            if constexpr (!UseMigrationProtocol) {
+                if (std::holds_alternative<TReadSessionEvent::TPartitionSessionClosedEvent>(*event)) {
+                     auto& e = std::get<TReadSessionEvent::TPartitionSessionClosedEvent>(*event);
+                     if (auto session = frontCbContext->LockShared()) {
+                        session->UnregisterPartition(e.GetPartitionSession()->GetPartitionId(), e.GetPartitionSession()->GetPartitionSessionId());
+                     }
+                }
+            }
         }
 
         TParent::RenewWaiterImpl();
@@ -2126,9 +2259,10 @@ void TReadSessionEventsQueue<UseMigrationProtocol>::SignalReadyEventsImpl(
 
 template <bool UseMigrationProtocol>
 bool TReadSessionEventsQueue<UseMigrationProtocol>::TryApplyCallbackToEventImpl(typename TParent::TEvent& event,
-                                                                                TDeferredActions<UseMigrationProtocol>& deferred)
+                                                                                TDeferredActions<UseMigrationProtocol>& deferred,
+                                                                                TCallbackContextPtr<UseMigrationProtocol>& cbContext)
 {
-    THandlersVisitor visitor(TParent::Settings, event, deferred);
+    THandlersVisitor visitor(TParent::Settings, event, deferred, cbContext);
     return visitor.Visit();
 }
 
@@ -2754,78 +2888,6 @@ void TDeferredActions<UseMigrationProtocol>::SignalWaiters() {
     for (auto& w : Waiters) {
         w.Signal();
     }
-}
-
-#define HISTOGRAM_SETUP ::NMonitoring::ExplicitHistogram({0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100})
-
-template <typename TReaderCounters>
-void MakeCountersNotNull(TReaderCounters& counters) {
-    if (!counters.Errors) {
-        counters.Errors = MakeIntrusive<::NMonitoring::TCounterForPtr>(true);
-    }
-
-    if (!counters.CurrentSessionLifetimeMs) {
-        counters.CurrentSessionLifetimeMs = MakeIntrusive<::NMonitoring::TCounterForPtr>(false);
-    }
-
-    if (!counters.BytesRead) {
-        counters.BytesRead = MakeIntrusive<::NMonitoring::TCounterForPtr>(true);
-    }
-
-    if (!counters.MessagesRead) {
-        counters.MessagesRead = MakeIntrusive<::NMonitoring::TCounterForPtr>(true);
-    }
-
-    if (!counters.BytesReadCompressed) {
-        counters.BytesReadCompressed = MakeIntrusive<::NMonitoring::TCounterForPtr>(true);
-    }
-
-    if (!counters.BytesInflightUncompressed) {
-        counters.BytesInflightUncompressed = MakeIntrusive<::NMonitoring::TCounterForPtr>(false);
-    }
-
-    if (!counters.BytesInflightCompressed) {
-        counters.BytesInflightCompressed = MakeIntrusive<::NMonitoring::TCounterForPtr>(false);
-    }
-
-    if (!counters.BytesInflightTotal) {
-        counters.BytesInflightTotal = MakeIntrusive<::NMonitoring::TCounterForPtr>(false);
-    }
-
-    if (!counters.MessagesInflight) {
-        counters.MessagesInflight = MakeIntrusive<::NMonitoring::TCounterForPtr>(false);
-    }
-
-
-    if (!counters.TotalBytesInflightUsageByTime) {
-        counters.TotalBytesInflightUsageByTime = MakeIntrusive<::NMonitoring::THistogramCounter>(HISTOGRAM_SETUP);
-    }
-
-    if (!counters.UncompressedBytesInflightUsageByTime) {
-        counters.UncompressedBytesInflightUsageByTime = MakeIntrusive<::NMonitoring::THistogramCounter>(HISTOGRAM_SETUP);
-    }
-
-    if (!counters.CompressedBytesInflightUsageByTime) {
-        counters.CompressedBytesInflightUsageByTime = MakeIntrusive<::NMonitoring::THistogramCounter>(HISTOGRAM_SETUP);
-    }
-}
-
-#undef HISTOGRAM_SETUP
-
-template <typename TReaderCounters>
-bool HasNullCounters(TReaderCounters& counters) {
-    return !counters.Errors
-        || !counters.CurrentSessionLifetimeMs
-        || !counters.BytesRead
-        || !counters.MessagesRead
-        || !counters.BytesReadCompressed
-        || !counters.BytesInflightUncompressed
-        || !counters.BytesInflightCompressed
-        || !counters.BytesInflightTotal
-        || !counters.MessagesInflight
-        || !counters.TotalBytesInflightUsageByTime
-        || !counters.UncompressedBytesInflightUsageByTime
-        || !counters.CompressedBytesInflightUsageByTime;
 }
 
 }  // namespace NYdb::NTopic

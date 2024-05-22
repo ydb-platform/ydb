@@ -33,6 +33,16 @@ struct TPortionRecord {
     ui32 Size = 0;
 };
 
+
+class TNormalizerChecker {
+public:
+    virtual ~TNormalizerChecker() {}
+
+    virtual ui64 RecordsCountAfterReboot(const ui64 initialRecodsCount) const {
+        return initialRecodsCount;
+    }
+};
+
 class TPathIdCleaner : public NYDBTest::ILocalDBModifier {
 public:
     virtual void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
@@ -175,6 +185,56 @@ public:
     }
 };
 
+class TTablesCleaner : public NYDBTest::ILocalDBModifier {
+public:
+    virtual void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
+        using namespace NColumnShard;
+        NIceDb::TNiceDb db(txc.DB);
+
+        std::vector<ui64> tables;
+        {
+            auto rowset = db.Table<Schema::TableInfo>().Select();
+            UNIT_ASSERT(rowset.IsReady());
+
+            while (!rowset.EndOfSet()) {
+                const auto pathId = rowset.GetValue<Schema::TableInfo::PathId>();
+                tables.emplace_back(pathId);
+                UNIT_ASSERT(rowset.Next());
+            }
+        }
+
+        for (auto&& key: tables) {
+            db.Table<Schema::TableInfo>().Key(key).Delete();
+        }
+
+        struct TKey {
+            ui64 PathId;
+            ui64 Step;
+            ui64 TxId;
+        };
+
+        std::vector<TKey> versions;
+        {
+            auto rowset = db.Table<Schema::TableVersionInfo>().Select();
+            UNIT_ASSERT(rowset.IsReady());
+
+            while (!rowset.EndOfSet()) {
+                TKey key;
+                key.PathId = rowset.GetValue<Schema::TableVersionInfo::PathId>();
+                key.Step = rowset.GetValue<Schema::TableVersionInfo::SinceStep>();
+                key.TxId = rowset.GetValue<Schema::TableVersionInfo::SinceTxId>();
+                versions.emplace_back(key);
+                UNIT_ASSERT(rowset.Next());
+            }
+        }
+
+        for (auto&& key: versions) {
+            db.Table<Schema::TableVersionInfo>().Key(key.PathId, key.Step, key.TxId).Delete();
+        }
+
+    }
+};
+
 template <class TLocalDBModifier>
 class TPrepareLocalDBController: public NKikimr::NYDBTest::NColumnShard::TController {
 private:
@@ -188,7 +248,7 @@ public:
 Y_UNIT_TEST_SUITE(Normalizers) {
 
     template <class TLocalDBModifier>
-    void TestNormalizerImpl() {
+    void TestNormalizerImpl(const TNormalizerChecker& checker = TNormalizerChecker()) {
         using namespace NArrow;
         auto csControllerGuard = NYDBTest::TControllers::RegisterCSControllerGuard<TPrepareLocalDBController<TLocalDBModifier>>();
 
@@ -244,7 +304,7 @@ Y_UNIT_TEST_SUITE(Normalizers) {
 
         {
             auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(11, txId), schema);
-            UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 20048);
+            UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), checker.RecordsCountAfterReboot(20048));
         }
     }
 
@@ -258,6 +318,17 @@ Y_UNIT_TEST_SUITE(Normalizers) {
 
     Y_UNIT_TEST(PortionsNormalizer) {
         TestNormalizerImpl<TPortinosCleaner>();
+    }
+
+    Y_UNIT_TEST(EmptyTablesNormalizer) {
+        class TLocalNormalizerChecker : public TNormalizerChecker {
+        public:
+            ui64 RecordsCountAfterReboot(const ui64) const override {
+                return 0;
+            }
+        };
+        TLocalNormalizerChecker checker;
+        TestNormalizerImpl<TTablesCleaner>(checker);
     }
 }
 

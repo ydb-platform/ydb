@@ -24,7 +24,8 @@ TDataProviderInitializer GetDqFunctionDataProviderInitializer(
                 TIntrusivePtr<TTypeAnnotationContext> typeCtx,
                 const TOperationProgressWriter& progressWriter,
                 const TYqlOperationOptions& operationOptions,
-                THiddenQueryAborter)
+                THiddenQueryAborter hiddenAborter,
+                const TQContext& qContext)
         {
 
             Y_UNUSED(userName);
@@ -33,6 +34,8 @@ TDataProviderInitializer GetDqFunctionDataProviderInitializer(
             Y_UNUSED(randomProvider);
             Y_UNUSED(progressWriter);
             Y_UNUSED(operationOptions);
+            Y_UNUSED(hiddenAborter);
+            Y_UNUSED(qContext);
 
             auto state = MakeIntrusive<TDqFunctionState>();
             state->SessionId = sessionId;

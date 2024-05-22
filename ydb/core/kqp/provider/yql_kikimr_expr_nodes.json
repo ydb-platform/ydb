@@ -446,6 +446,19 @@
             ]
         },
         {
+            "Name": "TKiAlterSequence",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KiAlterSequence!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
+                {"Index": 2, "Name": "Sequence", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "SequenceSettings", "Type": "TCoNameValueTupleList"},
+                {"Index": 4, "Name": "Settings", "Type": "TCoNameValueTupleList"},
+                {"Index": 5, "Name": "MissingOk", "Type": "TCoAtom"}
+            ]
+        },
+        {
             "Name": "TKiCreateReplication",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KiCreateReplication!"},

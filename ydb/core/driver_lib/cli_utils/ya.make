@@ -16,7 +16,6 @@ SRCS(
     cli_cmds_debug.cpp
     cli_cmds_disk.cpp
     cli_cmds_genconfig.cpp
-    cli_cmds_get.cpp
     cli_cmds_node.cpp
     cli_cmds_root.cpp
     cli_cmds_server.cpp
@@ -27,7 +26,6 @@ SRCS(
     cli_persqueue.cpp
     cli_persqueue_cluster_discovery.cpp
     cli_persqueue_stress.cpp
-    cli_load.cpp
     cli_minikql_compile_and_exec.cpp
     cli_scheme_cache_append.cpp
     cli_scheme_initroot.cpp

@@ -17,6 +17,7 @@ struct TKqpWorkerSettings {
     TString Cluster;
     TString Database;
     TMaybe<TString> ApplicationName;
+    TMaybe<TString> UserName;
     bool LongSession = false;
 
     NKikimrConfig::TTableServiceConfig TableService;
@@ -28,11 +29,12 @@ struct TKqpWorkerSettings {
     TKqpDbCountersPtr DbCounters;
 
     explicit TKqpWorkerSettings(const TString& cluster, const TString& database,
-            const TMaybe<TString>& applicationName, const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
+            const TMaybe<TString>& applicationName, const TMaybe<TString>& userName, const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
             const  NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TKqpDbCountersPtr dbCounters)
         : Cluster(cluster)
         , Database(database)
         , ApplicationName(applicationName)
+        , UserName(userName)
         , TableService(tableServiceConfig)
         , QueryService(queryServiceConfig)
         , MkqlInitialMemoryLimit(2097152, 1, Max<i64>())

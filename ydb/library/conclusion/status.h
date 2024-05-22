@@ -30,7 +30,7 @@ private:
         Y_ABORT_UNLESS(!!ErrorMessage);
     }
 public:
-    void Validate() const;
+    void Validate(const TString& processInfo = Default<TString>()) const;
 
     const TString& GetErrorMessage() const {
         return ErrorMessage ? *ErrorMessage : Default<TString>();

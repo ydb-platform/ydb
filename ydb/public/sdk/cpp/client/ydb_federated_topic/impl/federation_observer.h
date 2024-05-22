@@ -7,7 +7,7 @@
 
 #include <ydb/public/api/protos/ydb_federation_discovery.pb.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/callback_context.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/callback_context.h>
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_federated_topic/federated_topic.h>
 

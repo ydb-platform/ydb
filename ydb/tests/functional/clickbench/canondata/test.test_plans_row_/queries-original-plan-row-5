@@ -89,7 +89,7 @@
                                                                 "Operators": [
                                                                     {
                                                                         "Aggregation": "state",
-                                                                        "GroupBy": "row.SearchPhrase",
+                                                                        "GroupBy": "item.SearchPhrase",
                                                                         "Inputs": [
                                                                             {
                                                                                 "InternalOperatorId": 1
@@ -174,7 +174,7 @@
                                                         "Operators": [
                                                             {
                                                                 "Aggregation": "state",
-                                                                "GroupBy": "row.SearchPhrase",
+                                                                "GroupBy": "item.SearchPhrase",
                                                                 "Name": "Aggregate"
                                                             }
                                                         ],

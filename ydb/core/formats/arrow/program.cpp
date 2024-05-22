@@ -67,6 +67,9 @@ public:
             } else {
                 result = arrow::compute::CallFunction(funcName, *arguments, assign.GetOptions());
             }
+            if (result.ok() && funcName == "count"sv) {
+                result = result->scalar()->CastTo(std::make_shared<arrow::UInt64Type>());
+            }
             if (result.ok()) {
                 return PrepareResult(std::move(*result), assign);
             }

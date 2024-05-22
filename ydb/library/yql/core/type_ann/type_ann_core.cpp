@@ -1024,10 +1024,11 @@ namespace NTypeAnnImpl {
             sourceNameNode = input->ChildPtr(2);
         }
 
-        if (!EnsureStructOrOptionalStructType(*rowNode, ctx.Expr)) {
+        bool isOptionalStruct = false;
+        const TStructExprType* structType = nullptr;
+        if (!EnsureStructOrOptionalStructType(*rowNode, isOptionalStruct, structType, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
-        const TStructExprType* structType = RemoveAllOptionals(rowNode->GetTypeAnn())->Cast<TStructExprType>();
 
         if (!EnsureAtom(*columnNameNode, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -1109,7 +1110,9 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureStructOrOptionalStructType(input->Head(), ctx.Expr)) {
+        bool isOptional = false;
+        const TStructExprType* structType = nullptr;
+        if (!EnsureStructOrOptionalStructType(input->Head(), isOptional, structType, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -1123,15 +1126,12 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        bool isOptional = input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional;
-        const TStructExprType& structType = *RemoveAllOptionals(input->Head().GetTypeAnn())->Cast<TStructExprType>();
-
-        auto pos = FindOrReportMissingMember(columnNameNode->Content(), input->Pos(), structType, ctx.Expr);
+        auto pos = FindOrReportMissingMember(columnNameNode->Content(), input->Pos(), *structType, ctx.Expr);
         if (!pos) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        const TTypeAnnotationNode* resultType = structType.GetItems()[*pos]->GetItemType();
+        const TTypeAnnotationNode* resultType = structType->GetItems()[*pos]->GetItemType();
         if (isOptional && resultType->GetKind() != ETypeAnnotationKind::Optional && resultType->GetKind() != ETypeAnnotationKind::Null) {
             resultType = ctx.Expr.MakeType<TOptionalExprType>(input->GetTypeAnn());
         }
@@ -1150,23 +1150,10 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        const TStructExprType* structType;
-        bool isStructOptional;
-        if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
-            auto itemType = input->Head().GetTypeAnn()->Cast<TOptionalExprType>()->GetItemType();
-            if (!EnsureStructType(input->Head().Pos(), *itemType, ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            isStructOptional = true;
-            structType = itemType->Cast<TStructExprType>();
-        } else {
-            if (!EnsureStructType(input->Head(), ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            structType = input->Head().GetTypeAnn()->Cast<TStructExprType>();
-            isStructOptional = false;
+        const TStructExprType* structType = nullptr;
+        bool isStructOptional = false;
+        if (!EnsureStructOrOptionalStructType(input->Head(), isStructOptional, structType, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
         }
 
         if (!EnsureAtom(*input->Child(1), ctx.Expr)) {
@@ -1178,40 +1165,49 @@ namespace NTypeAnnImpl {
         }
 
         auto otherType = input->Child(2)->GetTypeAnn();
-        const bool isOptional = otherType->GetKind() == ETypeAnnotationKind::Optional;
+        const bool isOptional = otherType->IsOptionalOrNull();
         auto memberName = input->Child(1)->Content();
-        const TTypeAnnotationNode* foundFieldType = otherType;
-        bool fieldFound = false;
-        for (auto& field : structType->GetItems()) {
-            if (field->GetName() == memberName) {
-                fieldFound = true;
-                auto fieldType = field->GetItemType();
-                if (otherType->GetKind() == ETypeAnnotationKind::Null) {
-                    foundFieldType = fieldType;
-                    break;
-                }
 
-                if (IsSameAnnotation(*otherType, *fieldType) ||
-                    isOptional && IsSameAnnotation(*otherType, *ctx.Expr.MakeType<TOptionalExprType>(fieldType))) {
-                    break;
-                }
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Mismatch member '" << memberName
-                    << "' type, expected: " << *otherType << ", got: " << *fieldType));
-                return IGraphTransformer::TStatus::Error;
-            }
-        }
-
-        if (!fieldFound && otherType->GetKind() == ETypeAnnotationKind::Null) {
-            output = ctx.Expr.NewCallable(input->Pos(), "Null", {});
+        const TTypeAnnotationNode* fieldType = structType->FindItemType(memberName);
+        auto defaultNode = ctx.Expr.WrapByCallableIf(!isOptional && isStructOptional, "Just", input->ChildPtr(2));
+        if (!fieldType) {
+            output = defaultNode;
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        if (isStructOptional && foundFieldType->GetKind() != ETypeAnnotationKind::Optional) {
-            foundFieldType = ctx.Expr.MakeType<TOptionalExprType>(foundFieldType);
+        auto memberNode = ctx.Expr.NewCallable(input->Pos(), "Member", { input->HeadPtr(), input->ChildPtr(1) });
+        if (otherType->GetKind() == ETypeAnnotationKind::Null) {
+            output = memberNode;
+            return IGraphTransformer::TStatus::Repeat;
         }
 
-        input->SetTypeAnn(foundFieldType);
-        return IGraphTransformer::TStatus::Ok;
+        if (!(IsSameAnnotation(*otherType, *fieldType) ||
+                isOptional && IsSameAnnotation(*otherType, *ctx.Expr.MakeType<TOptionalExprType>(fieldType))))
+        {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Mismatch member '" << memberName
+                << "' type, expected: " << *otherType << ", got: " << *fieldType));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const TTypeAnnotationNode* memberType = (isStructOptional && !fieldType->IsOptionalOrNull()) ?
+            ctx.Expr.MakeType<TOptionalExprType>(fieldType) : fieldType;
+
+        const TTypeAnnotationNode* resultType = (isStructOptional && !isOptional) ?
+            ctx.Expr.MakeType<TOptionalExprType>(otherType) : otherType;
+
+        YQL_ENSURE(IsSameAnnotation(*memberType, *resultType) ||
+                   IsSameAnnotation(*ctx.Expr.MakeType<TOptionalExprType>(memberType), *resultType));
+        
+        output = ctx.Expr.Builder(input->Pos())
+            .Callable("IfStrict")
+                .Callable(0, "Exists")
+                    .Add(0, input->HeadPtr())
+                .Seal()
+                .Add(1, ctx.Expr.WrapByCallableIf(!IsSameAnnotation(*memberType, *resultType), "Just", std::move(memberNode)))
+                .Add(2, defaultNode)
+            .Seal()
+            .Build();
+        return IGraphTransformer::TStatus::Repeat;
     }
 
     IGraphTransformer::TStatus FlattenMembersWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
@@ -1228,16 +1224,13 @@ namespace NTypeAnnImpl {
             }
 
             auto structObj = child->Child(1);
-            if (!EnsureStructOrOptionalStructType(*structObj, ctx.Expr)) {
+            bool optional = false;
+            const TStructExprType* structType = nullptr;
+            if (!EnsureStructOrOptionalStructType(*structObj, optional, structType, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
 
-            auto type = structObj->GetTypeAnn();
-            const bool optional = type->GetKind() == ETypeAnnotationKind::Optional;
-            if (optional) {
-                type = type->Cast<TOptionalExprType>()->GetItemType();
-            }
-            for (auto& field: type->Cast<TStructExprType>()->GetItems()) {
+            for (auto& field: structType->GetItems()) {
                 auto itemType = field->GetItemType();
                 if (optional && !itemType->IsOptionalOrNull()) {
                     itemType = ctx.Expr.MakeType<TOptionalExprType>(itemType);
@@ -1348,7 +1341,9 @@ namespace NTypeAnnImpl {
         }
 
         auto structObj = input->Child(0);
-        if (!EnsureStructOrOptionalStructType(*structObj, ctx.Expr)) {
+        bool optional = false;
+        const TStructExprType* structExprType = nullptr;
+        if (!EnsureStructOrOptionalStructType(*structObj, optional, structExprType, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -1357,13 +1352,7 @@ namespace NTypeAnnImpl {
             return status;
         }
 
-        auto type = structObj->GetTypeAnn();
-        const bool optional = type->GetKind() == ETypeAnnotationKind::Optional;
-        if (optional) {
-            type = type->Cast<TOptionalExprType>()->GetItemType();
-        }
         TVector<const TItemExprType*> allItems;
-        auto structExprType = type->Cast<TStructExprType>();
         for (auto& field: structExprType->GetItems()) {
             const auto& fieldName = field->GetName();
             auto prefixes = input->Child(1);
@@ -1394,7 +1383,9 @@ namespace NTypeAnnImpl {
         }
 
         auto structObj = input->Child(0);
-        if (!EnsureStructOrOptionalStructType(*structObj, ctx.Expr)) {
+        bool optional = false;
+        const TStructExprType* structExprType = nullptr;
+        if (!EnsureStructOrOptionalStructType(*structObj, optional, structExprType, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -1403,13 +1394,7 @@ namespace NTypeAnnImpl {
             return status;
         }
 
-        auto type = structObj->GetTypeAnn();
-        const bool optional = type->GetKind() == ETypeAnnotationKind::Optional;
-        if (optional) {
-            type = type->Cast<TOptionalExprType>()->GetItemType();
-        }
         TVector<const TItemExprType*> allItems;
-        auto structExprType = type->Cast<TStructExprType>();
         for (auto& field: structExprType->GetItems()) {
             const auto& fieldName = field->GetName();
             auto prefixes = input->Child(1);
@@ -1457,7 +1442,9 @@ namespace NTypeAnnImpl {
         }
 
         auto structObj = *iter;
-        if (!EnsureStructOrOptionalStructType(*structObj, ctx.Expr)) {
+        bool isOptionalStruct = false;
+        const TStructExprType* structExprType = nullptr;
+        if (!EnsureStructOrOptionalStructType(*structObj, isOptionalStruct, structExprType, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
         TSet<TString> aliases;
@@ -6072,6 +6059,142 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         input->SetTypeAnn(thenType);
         return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus StructMergeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        auto maxArgc = (input->Content() == "StructDifference" || input->Content() == "StructSymmetricDifference") ? 2 : 3;
+        if (!EnsureMinMaxArgsCount(*input, 2, maxArgc, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto left = input->Child(0);
+        auto right = input->Child(1);
+
+        if (HasError(left->GetTypeAnn(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (HasError(right->GetTypeAnn(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureStructType(*left, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        auto leftType = left->GetTypeAnn()->Cast<TStructExprType>();
+
+        if (!EnsureStructType(*right, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        auto rightType = right->GetTypeAnn()->Cast<TStructExprType>();
+
+        TExprNode::TPtr mergeLambda = nullptr;
+        if (input->ChildrenSize() == 3) {
+            mergeLambda = input->ChildPtr(2);
+            auto status = ConvertToLambda(mergeLambda, ctx.Expr, 3);
+            if (status.Level != IGraphTransformer::TStatus::Ok) {
+                return status;
+            }
+        } else {
+            mergeLambda = ctx.Expr.Builder(input->Pos())
+                .Lambda()
+                    .Param("name")
+                    .Param("left")
+                    .Param("right")
+                    .Callable("Unwrap")
+                        .Callable(0, "Coalesce")
+                            .Arg(0, "left")
+                            .Arg(1, "right")
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Build();
+        }
+
+        auto buildJustMember = [&ctx, &input](const TExprNode::TPtr &st, const TStringBuf& name) -> TExprNode::TPtr {
+            return ctx.Expr.Builder(input->Pos())
+                .Callable("Just")
+                    .Callable(0, "Member")
+                        .Add(0, st)
+                        .Atom(1, name)
+                    .Seal()
+                .Seal()
+            .Build();
+        };
+
+        auto mergeMembers = [&ctx, &buildJustMember, &input, &left, &right, &mergeLambda](const TStringBuf& name, bool hasLeft, bool hasRight) -> TExprNode::TPtr {
+            auto leftMaybe = hasLeft ? 
+                buildJustMember(left, name) :
+                ctx.Expr.NewCallable(input->Pos(), "Nothing", {
+                    ExpandType(input->Pos(), *ctx.Expr.MakeType<TOptionalExprType>(right->GetTypeAnn()->Cast<TStructExprType>()->FindItemType(name)), ctx.Expr)
+                });
+            
+            auto rightMaybe = hasRight ? 
+                buildJustMember(right, name) :
+                ctx.Expr.NewCallable(input->Pos(), "Nothing", {
+                    ExpandType(input->Pos(), *ctx.Expr.MakeType<TOptionalExprType>(left->GetTypeAnn()->Cast<TStructExprType>()->FindItemType(name)), ctx.Expr)
+                });
+            
+            return ctx.Expr.Builder(input->Pos())
+                .List()
+                    .Atom(0, name)
+                    .Apply(1, mergeLambda)
+                        .With(0)
+                            .Callable("String")
+                                .Atom(0, name)
+                            .Seal()
+                        .Done()
+                        .With(1, leftMaybe)
+                        .With(2, rightMaybe)
+                    .Seal()
+                .Seal()
+            .Build();
+        };
+
+        TExprNode::TListType children;
+
+        bool isUnion = input->Content() == "StructUnion";
+        bool isIntersection = input->Content() == "StructIntersection";
+        bool isDifference = input->Content() == "StructDifference";
+        bool isSymmDifference = input->Content() == "StructSymmetricDifference";
+
+        for (const auto* leftItem : leftType->GetItems()) {
+            const auto& name = leftItem->GetName();
+            if (isUnion) {
+                if (rightType->FindItem(name)) {
+                    children.push_back(mergeMembers(name, true, true));
+                } else {
+                    children.push_back(mergeMembers(name, true, false));
+                }
+            }
+            if (isIntersection) {
+                if (rightType->FindItem(name)) {
+                    children.push_back(mergeMembers(name, true, true));
+                }
+            }
+            if (isDifference || isSymmDifference) {
+                if (!rightType->FindItem(name)) {
+                    children.push_back(mergeMembers(name, true, false));
+                }
+            }
+        }
+
+        for (const auto* rightItem : rightType->GetItems()) {
+            const auto& name = rightItem->GetName();
+            if (isUnion) {
+                if (!leftType->FindItem(name)) {
+                    children.push_back(mergeMembers(name, false, true));
+                }
+            }
+            if (isSymmDifference) {
+                if (!leftType->FindItem(name)) {
+                    children.push_back(mergeMembers(name, false, true));
+                }
+            }
+        }
+
+        output = ctx.Expr.NewCallable(input->Pos(), "AsStruct", std::move(children));
+        return IGraphTransformer::TStatus::Repeat;
     }
 
     IGraphTransformer::TStatus StaticMapWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
@@ -11738,16 +11861,13 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureStructOrOptionalStructType(input->Head(), ctx.Expr)) {
+        bool isOptional = false;
+        const TStructExprType* structType = nullptr;
+        if (!EnsureStructOrOptionalStructType(input->Head(), isOptional, structType, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        const TTypeAnnotationNode* itemType = input->Head().GetTypeAnn();
-        if (itemType->GetKind() == ETypeAnnotationKind::Optional) {
-            itemType = itemType->Cast<TOptionalExprType>()->GetItemType();
-        }
-
-        for (const auto& x : itemType->Cast<TStructExprType>()->GetItems()) {
+        for (const auto& x : structType->GetItems()) {
             if (!x->GetItemType()->IsOptionalOrNull()) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() << "Expected all columns to be optional. Non optional column: " << x->GetName()));
                 return IGraphTransformer::TStatus::Error;
@@ -12238,6 +12358,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["PgGrouping"] = &PgGroupingWrapper;
         Functions["PgGroupingSet"] = &PgGroupingSetWrapper;
         Functions["PgToRecord"] = &PgToRecordWrapper;
+        Functions["StructUnion"] = &StructMergeWrapper;
+        Functions["StructIntersection"] = &StructMergeWrapper;
+        Functions["StructDifference"] = &StructMergeWrapper;
+        Functions["StructSymmetricDifference"] = &StructMergeWrapper;
 
         Functions["AutoDemux"] = &AutoDemuxWrapper;
         Functions["AggrCountInit"] = &AggrCountInitWrapper;
@@ -12384,6 +12508,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["BlockNot"] = &BlockLogicalWrapper;
         Functions["BlockIf"] = &BlockIfWrapper;
         Functions["BlockJust"] = &BlockJustWrapper;
+        Functions["BlockAsStruct"] = &BlockAsStructWrapper;
         Functions["BlockAsTuple"] = &BlockAsTupleWrapper;
         Functions["BlockMember"] = &BlockMemberWrapper;
         Functions["BlockNth"] = &BlockNthWrapper;

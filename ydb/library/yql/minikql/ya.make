@@ -63,6 +63,7 @@ PEERDIR(
     library/cpp/yson
     ydb/library/binary_json
     ydb/library/dynumber
+    ydb/library/yql/core/pg_settings
     ydb/library/yql/minikql/dom
     ydb/library/yql/parser/pg_catalog
     ydb/library/yql/parser/pg_wrapper/interface

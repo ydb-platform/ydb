@@ -102,10 +102,6 @@ namespace NKikimr {
         const TMemRec &GetMemRec() const {
             return Merger.GetMemRec();
         }
-
-        ui32 GetMemRecsMerged() const {
-            return Merger.GetMemRecsMerged();
-        }
     };
 
     ////////////////////////////////////////////////////////////////////////////
@@ -154,10 +150,6 @@ namespace NKikimr {
 
         const TMemRec &GetMemRec() const {
             return Merger.GetMemRec();
-        }
-
-        ui32 GetMemRecsMerged() const {
-            return Merger.GetMemRecsMerged();
         }
     };
 } // NKikimr

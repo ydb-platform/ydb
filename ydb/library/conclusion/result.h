@@ -60,7 +60,7 @@ public:
 
     TResult&& DetachResult() {
         auto result = std::get_if<TResult>(&Result);
-        Y_ABORT_UNLESS(result, "incorrect object for result request");
+        Y_ABORT_UNLESS(result, "incorrect object for result request: %s", GetErrorMessage().data());
         return std::move(*result);
     }
 

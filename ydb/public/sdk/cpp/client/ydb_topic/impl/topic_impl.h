@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/common.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
@@ -11,8 +10,6 @@
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
-
-#include <unordered_map>
 
 namespace NYdb::NTopic {
 
@@ -104,42 +101,6 @@ public:
         }
 
         return request;
-    }
-
-    void ProvideCodec(ECodec codecId, THolder<ICodec>&& codecImpl) {
-        with_lock(Lock) {
-            if (ProvidedCodecs->contains(codecId)) {
-                throw yexception() << "codec with id " << ui32(codecId) << " already provided";
-            }
-            (*ProvidedCodecs)[codecId] = std::move(codecImpl);
-        }
-    }
-
-    void OverrideCodec(ECodec codecId, THolder<ICodec>&& codecImpl) {
-        with_lock(Lock) {
-            (*ProvidedCodecs)[codecId] = std::move(codecImpl);
-        }
-    }
-
-    const ICodec* GetCodecImplOrThrow(ECodec codecId) const {
-        with_lock(Lock) {
-            if (!ProvidedCodecs->contains(codecId)) {
-                throw yexception() << "codec with id " << ui32(codecId) << " not provided";
-            }
-            return ProvidedCodecs->at(codecId).Get();
-        }
-    }
-
-    std::shared_ptr<std::unordered_map<ECodec, THolder<ICodec>>> GetProvidedCodecs() const {
-        with_lock(Lock) {
-            return ProvidedCodecs;
-        }
-    }
-
-    void SetProvidedCodecs(std::shared_ptr<std::unordered_map<ECodec, THolder<ICodec>>> codecs) {
-        with_lock(Lock) {
-            ProvidedCodecs = std::move(codecs);
-        }
     }
 
     TAsyncStatus CreateTopic(const TString& path, const TCreateTopicSettings& settings) {
@@ -404,7 +365,6 @@ public:
 
 private:
     const TTopicClientSettings Settings;
-    std::shared_ptr<std::unordered_map<ECodec, THolder<ICodec>>> ProvidedCodecs = std::make_shared<std::unordered_map<ECodec, THolder<ICodec>>>();
     TAdaptiveLock Lock;
 };
 

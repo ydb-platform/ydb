@@ -133,9 +133,17 @@ namespace NKqp {
     TString TTestHelper::TColumnSchema::BuildQuery() const {
         TStringBuilder str;
         str << Name << ' ';
-        if (NScheme::NTypeIds::Pg == Type) {
+        switch (Type) {
+        case NScheme::NTypeIds::Pg:
             str << NPg::PgTypeNameFromTypeDesc(TypeDesc);
-        } else {
+            break;
+        case NScheme::NTypeIds::Decimal: {
+            TTypeBuilder builder;
+            builder.Decimal(TDecimalType(22, 9));
+            str << builder.Build();
+            break;
+        }
+        default:
             str << NScheme::GetTypeName(Type);
         }
         if (!NullableFlag) {
@@ -217,8 +225,10 @@ namespace NKqp {
             return arrow::field(name, arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), nullable);
         case NScheme::NTypeIds::Interval:
             return arrow::field(name, arrow::duration(arrow::TimeUnit::TimeUnit::MICRO), nullable);
+        case NScheme::NTypeIds::Date32:
+            return arrow::field(name, arrow::int32(), nullable);
+        case NScheme::NTypeIds::Datetime64:
         case NScheme::NTypeIds::Timestamp64:
-            return arrow::field(name, arrow::int64(), nullable);
         case NScheme::NTypeIds::Interval64:
             return arrow::field(name, arrow::int64(), nullable);
         case NScheme::NTypeIds::JsonDocument:

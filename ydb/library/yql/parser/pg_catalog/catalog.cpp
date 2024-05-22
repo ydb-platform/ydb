@@ -1613,6 +1613,29 @@ struct TCatalog {
         })
     {
         if ( GetEnv("YDB_EXPERIMENTAL_PG") == "1"){
+            // grafana migration_log
+            AllStaticTables.push_back(
+                {{"public", "migration_log"}, ERelKind::Relation, 100001}
+            );
+            AllStaticColumns.push_back(
+                {"public", "migration_log", "id", "int"}
+            );
+            AllStaticColumns.push_back(
+                {"public", "migration_log", "migration_id", "character varying(255)"}
+            );
+            AllStaticColumns.push_back(
+                {"public", "migration_log", "sql", "text"}
+            );
+            AllStaticColumns.push_back(
+                {"public", "migration_log", "success", "boolean"}
+            );
+            AllStaticColumns.push_back(
+                {"public", "migration_log", "error", "text"}
+            );
+            AllStaticColumns.push_back(
+                {"public", "migration_log", "timestamp", "timestamp without time zone"}
+            );
+
             // zabbix config
             AllStaticTables.push_back(
                 {{"public", "config"}, ERelKind::Relation, 100001}

@@ -42,6 +42,7 @@ std::pair<TString, NYdb::TParams> MakeSql(const TTaskInternal& taskInternal, con
             queryBuilder.AddString("query_id", task.QueryId);
             queryBuilder.AddInt64("query_type", task.Query.content().type());
             queryBuilder.AddString("query", task.Query.SerializeAsString());
+            queryBuilder.AddInt64("status", task.Query.meta().status());
             queryBuilder.AddString("internal", task.Internal.SerializeAsString());
             queryBuilder.AddTimestamp("now", nowTimestamp);
             queryBuilder.AddTimestamp("zero_timestamp", TInstant::Zero());
@@ -52,7 +53,7 @@ std::pair<TString, NYdb::TParams> MakeSql(const TTaskInternal& taskInternal, con
 
             // update queries
             queryBuilder.AddText(
-                "UPDATE `" QUERIES_TABLE_NAME "` SET `" GENERATION_COLUMN_NAME "` = $generation, `" QUERY_COLUMN_NAME "` = $query, `" INTERNAL_COLUMN_NAME "` = $internal, `" TENANT_COLUMN_NAME "` = $new_tenant\n"
+                "UPDATE `" QUERIES_TABLE_NAME "` SET `" GENERATION_COLUMN_NAME "` = $generation, `" QUERY_COLUMN_NAME "` = $query, `" STATUS_COLUMN_NAME "` = $status, `" INTERNAL_COLUMN_NAME "` = $internal, `" TENANT_COLUMN_NAME "` = $new_tenant\n"
                 "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
             );
 
@@ -178,10 +179,10 @@ std::tuple<TString, NYdb::TParams, std::function<std::pair<TString, NYdb::TParam
         }
 
         if (shouldAbortTask) {
-            Ydb::Issue::IssueMessage abortIssueMsg;
-            abortIssueMsg.set_message("Query was aborted by system due to high failure rate");
-            abortIssueMsg.set_severity(NYql::TSeverityIds::S_ERROR);
-            *task.Query.add_issue() = abortIssueMsg;
+            NYql::TIssue abortIssueMsg;
+            abortIssueMsg.SetMessage("Query was aborted by system due to high failure rate");
+            abortIssueMsg.SetCode(0, NYql::TSeverityIds::S_ERROR);
+            AddTransientIssues(task.Query.mutable_transient_issue(), NYql::TIssues{abortIssueMsg});
             task.Query.mutable_meta()->set_status(FederatedQuery::QueryMeta::ABORTING_BY_SYSTEM);
         }
 
@@ -455,7 +456,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
             for (const auto& connection: task.Internal.connection()) {
                 const auto serviceAccountId = ExtractServiceAccountId(connection);
                 if (!serviceAccountId) {
-                        continue;
+                    continue;
                 }
                 auto* account = newTask->add_service_accounts();
                 account->set_value(serviceAccountId);

@@ -57,17 +57,6 @@ public:
         TString Query;
         TString ExpectedResult;
 
-        template <class T>
-        bool CompareValueImpl(const T valResult, const TStringBuf vExpected) const {
-            T valExpected;
-            if (!TryFromString<T>(vExpected, valExpected)) {
-                Cerr << "cannot parse expected as " << typeid(valResult).name() << "(" << vExpected << ")" << Endl;
-                return false;
-            }
-            return valResult == valExpected;
-        }
-
-        bool CompareValue(const NYdb::TValue& v, const TStringBuf vExpected) const;
     public:
         TQueryFullInfo(const TString& query, const TString& expectedResult)
             : Query(query)

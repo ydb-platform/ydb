@@ -1,0 +1,61 @@
+{
+    "test.test[Annotations]": [
+        {
+            "checksum": "19c6d906cb8617cf9d2b5d484e09caf8",
+            "size": 7570,
+            "uri": "https://{canondata_backend}/212715/49b4751c22bd43fa7057cc92ae5cbedb40404f40/resource.tar.gz#test.test_Annotations_/results.txt"
+        }
+    ],
+    "test.test[BytesDecodeModeStrict]": [
+        {
+            "checksum": "f8534cff0843faaf876c41e0875dcf05",
+            "size": 3120,
+            "uri": "https://{canondata_backend}/1775319/4c4fed0942b33bcc70d44f7dd2972a8e05c6db97/resource.tar.gz#test.test_BytesDecodeModeStrict_/results.txt"
+        }
+    ],
+    "test.test[Cleanup]": [
+        {
+            "checksum": "036e77892757e48fa3fb319ed324b019",
+            "size": 954,
+            "uri": "https://{canondata_backend}/1871182/9909e0b25b15bb1f21d5def23fb072d64c82f07e/resource.tar.gz#test.test_Cleanup_/results.txt"
+        }
+    ],
+    "test.test[CustomYsonConverter]": [
+        {
+            "checksum": "7716204e544d2fcb9313412c3919e66d",
+            "size": 1625,
+            "uri": "https://{canondata_backend}/1130705/576535b56a4e74992911431865e5edd0f7d55520/resource.tar.gz#test.test_CustomYsonConverter_/results.txt"
+        }
+    ],
+    "test.test[Data]": [
+        {
+            "checksum": "f40e83806b294be420681fdfbf2133e8",
+            "size": 25268,
+            "uri": "https://{canondata_backend}/1031349/7065a0985fe0cd26a754a5bee7a4c808836a4692/resource.tar.gz#test.test_Data_/results.txt"
+        }
+    ],
+    "test.test[Excepthook]": [
+        {
+            "uri": "file://test.test_Excepthook_/extracted"
+        }
+    ],
+    "test.test[GreedyInputContainers]": [
+        {
+            "checksum": "02a619c86f180e8a4c536087d64bab6d",
+            "size": 1328,
+            "uri": "https://{canondata_backend}/995452/085d43bbd16f44afc51d6cafed42465a3d20215c/resource.tar.gz#test.test_GreedyInputContainers_/results.txt"
+        }
+    ],
+    "test.test[OptionalNested]": [
+        {
+            "uri": "file://test.test_OptionalNested_/extracted"
+        }
+    ],
+    "test.test[Switch]": [
+        {
+            "checksum": "e60320702512bdcecd5c663f387ee939",
+            "size": 9172,
+            "uri": "https://{canondata_backend}/1130705/493ee46b1e8f2e848ab928f97913d332cb4fffc7/resource.tar.gz#test.test_Switch_/results.txt"
+        }
+    ]
+}

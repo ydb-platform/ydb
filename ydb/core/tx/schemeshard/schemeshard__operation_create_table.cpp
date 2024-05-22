@@ -666,13 +666,12 @@ public:
         context.SS->ChangeTxState(db, OperationId, TTxState::CreateParts);
         context.OnComplete.ActivateTx(OperationId);
 
-        context.SS->PersistPath(db, newTable->PathId);
         context.SS->ApplyAndPersistUserAttrs(db, newTable->PathId);
 
         if (!acl.empty()) {
             newTable->ApplyACL(acl);
-            context.SS->PersistACL(db, newTable);
         }
+        context.SS->PersistPath(db, newTable->PathId);
         context.SS->PersistTable(db, newTable->PathId);
         context.SS->PersistTxState(db, OperationId);
 

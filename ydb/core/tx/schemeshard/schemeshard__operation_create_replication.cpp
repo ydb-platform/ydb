@@ -359,11 +359,10 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        context.SS->PersistPath(db, path->PathId);
         if (!acl.empty()) {
             path->ApplyACL(acl);
-            context.SS->PersistACL(db, path.Base());
         }
+        context.SS->PersistPath(db, path->PathId);
 
         context.SS->PersistReplication(db, path->PathId, *replication);
         context.SS->PersistReplicationAlter(db, path->PathId, *replication->AlterData);

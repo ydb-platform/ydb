@@ -6,6 +6,7 @@
 #include <ydb/library/yql/providers/dq/api/protos/dqs.pb.h>
 #include <ydb/library/yql/providers/dq/api/protos/task_command_executor.pb.h>
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
+#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
 
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
@@ -518,6 +519,14 @@ public:
                     throw yexception() << "DQ computation exceeds the memory limit " << DqConfiguration->MemoryLimit.Get().GetOrElse(0) << ". Try to increase the limit using PRAGMA dq.MemoryLimit";
                 }
 
+                break;
+            }
+            case NDqProto::TCommandHeader::CONFIGURE_FAILURE_INJECTOR: {
+                Y_ENSURE(header.GetVersion() <= CurrentProtocolVersion);
+                TFailureInjector::Activate();
+                NDqProto::TConfigureFailureInjectorRequest request;
+                request.Load(&input);
+                TFailureInjector::Set(request.name(), request.skip(), request.fail());
                 break;
             }
             case NDqProto::TCommandHeader::GET_FREE_SPACE: {

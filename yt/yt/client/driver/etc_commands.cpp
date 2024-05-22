@@ -75,6 +75,11 @@ void TGetVersionCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// These features are guaranteed to be deployed before or with this code.
+constexpr auto StaticFeatures = std::to_array<std::pair<TStringBuf, bool>>({
+    {"user_tokens_metadata", true},
+});
+
 void TGetSupportedFeaturesCommand::DoExecute(ICommandContextPtr context)
 {
     TGetClusterMetaOptions options;
@@ -87,9 +92,13 @@ void TGetSupportedFeaturesCommand::DoExecute(ICommandContextPtr context)
     if (!meta.Features) {
         THROW_ERROR_EXCEPTION("Feature querying is not supported by current master version");
     }
+    auto features = meta.Features;
+    for (auto staticFeature : StaticFeatures) {
+        features->AddChild(TString(staticFeature.first), BuildYsonNodeFluently().Value(staticFeature.second));
+    }
     context->ProduceOutputValue(BuildYsonStringFluently()
         .BeginMap()
-            .Item("features").Value(meta.Features)
+            .Item("features").Value(features)
         .EndMap());
 }
 

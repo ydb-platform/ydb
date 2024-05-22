@@ -318,6 +318,38 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
             }
         )", {"year"}), yexception, "Location path 1971/ is composed by different projection value sets { ${year} = 1971-01-01 } and { ${year} = 1971-01-02 }");;
     }
+
+    Y_UNIT_TEST(SuccessGenerateDateWithNegativeNow) {
+        auto generator = CreatePathGenerator(R"(
+            {
+                "projection.enabled" : true,
+                "projection.city.type" : "enum",
+                "projection.city.values" : "MSK,SPB",
+                "projection.code.type" : "date",
+                "projection.code.min" : "NOW - 3 DAYS",
+                "projection.code.max" : "NOW",
+                "projection.code.format" : "%F",
+                "projection.code.interval" : 1,
+                "projection.code.unit" : "DAYS",
+                "storage.location.template" : "/${city}/${code}/"
+            }
+        )", {"city", "code"});
+        auto nowBefore = TInstant::Now();
+        auto rules = generator->GetRules();
+        auto nowAfter = TInstant::Now();
+
+        TSet<TString> items;
+        for (auto from = std::min(nowBefore, nowAfter) - TDuration::Days(3); from <= std::max(nowBefore, nowAfter); from += TDuration::Days(1)) {
+            items.insert("MSK/" + from.FormatLocalTime("%F") + "/");
+            items.insert("SPB/" + from.FormatLocalTime("%F") + "/");
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(rules.size(), 8);
+        for (const auto& rule: rules) {
+            UNIT_ASSERT(items.contains(rule.Path));
+            UNIT_ASSERT_VALUES_EQUAL(rule.ColumnValues.size(), 2);
+        }
+    }
 }
 
 }

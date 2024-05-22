@@ -8,6 +8,13 @@ Full list of differences found in [this compare](https://github.com/open-telemet
 
 ### Changed
 
+## 1.3.0 - 2024-04-24
+
+### Added
+
+* Add new profile signal.
+  [#534](https://github.com/open-telemetry/opentelemetry-proto/pull/534)
+
 ## 1.2.0 - 2024-03-29
 
 ### Added

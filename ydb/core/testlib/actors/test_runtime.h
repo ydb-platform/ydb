@@ -96,6 +96,7 @@ namespace NActors {
         void ClosePipe(TActorId clientId, const TActorId& sender, ui32 nodeIndex);
         void DisconnectNodes(ui32 fromNodeIndex, ui32 toNodeIndex, bool async = true);
         NKikimr::TAppData& GetAppData(ui32 nodeIndex = 0);
+        ui32 GetFirstNodeId();
 
         TPortManager& GetPortManager() {
             return *this;

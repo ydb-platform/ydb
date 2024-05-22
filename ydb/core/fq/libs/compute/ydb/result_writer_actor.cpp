@@ -336,6 +336,7 @@ public:
         auto pingCounters = Counters.GetCounters(ERequestType::RT_PING);
         pingCounters->InFly->Inc();
         PingTaskRequest.set_result_set_count(PingTaskRequest.result_set_meta_size());
+        PingTaskRequest.mutable_result_id()->set_value(Params.ResultId);
         Send(Pinger, new TEvents::TEvForwardPingRequest(PingTaskRequest));
     }
 

@@ -65,6 +65,7 @@ struct TIndexInfo
 {
     NObjectClient::TObjectId TableId;
     ESecondaryIndexKind Kind;
+    std::optional<TString> Predicate;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

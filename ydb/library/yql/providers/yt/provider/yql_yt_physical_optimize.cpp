@@ -3487,7 +3487,7 @@ private:
             return node;
         }
 
-        auto count = CleanupWorld(countBase.Count(), ctx);
+        auto count = State_->PassiveExecution ? countBase.Count() : CleanupWorld(countBase.Count(), ctx);
         if (!count) {
             return {};
         }
@@ -4042,14 +4042,17 @@ private:
             if (tableInfo->RowSpec) {
                 auto rowSpec = tableInfo->RowSpec;
                 if (rowSpec->IsSorted()) {
-                    YQL_ENSURE(rowSpec->SortMembers.size() <= rowSpec->SortDirections.size());
                     TVector<TString> keyPrefix;
-                    for (size_t i = 0; i < rowSpec->SortMembers.size(); ++i) {
+                    for (size_t i = 0; i < rowSpec->SortedBy.size(); ++i) {
+                        if (!rowSpec->GetType()->FindItem(rowSpec->SortedBy[i])) {
+                            break;
+                        }
+                        YQL_ENSURE(i < rowSpec->SortDirections.size());
                         if (!rowSpec->SortDirections[i]) {
                             // TODO: allow native descending YT sort if UseYtKeyBounds is enabled
                             break;
                         }
-                        keyPrefix.push_back(rowSpec->SortMembers[i]);
+                        keyPrefix.push_back(rowSpec->SortedBy[i]);
                     }
                     if (!keyPrefix.empty()) {
                         tableIndexesBySortKey[keyPrefix].insert(tableIndex);
@@ -6061,6 +6064,7 @@ private:
                                 TCopyOrTrivialMapOpts()
                                     .SetTryKeepSortness(!NYql::HasSetting(section.Settings().Ref(), EYtSettingType::Unordered))
                                     .SetSectionUniq(section.Ref().GetConstraint<TDistinctConstraintNode>())
+                                    .SetConstraints(section.Ref().GetConstraintSet())
                                     .SetCombineChunks(true)
                                 );
 

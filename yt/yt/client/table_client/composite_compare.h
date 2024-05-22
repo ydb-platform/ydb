@@ -10,7 +10,7 @@ namespace NYT::NTableClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int CompareCompositeValues(NYson::TYsonStringBuf lhs, NYson::TYsonStringBuf rhs);
+int CompareYsonValues(NYson::TYsonStringBuf lhs, NYson::TYsonStringBuf rhs);
 TFingerprint CompositeFarmHash(NYson::TYsonStringBuf compositeValue);
 
 //! Returns a new yson value containing a truncated expression which can be compared with the original value

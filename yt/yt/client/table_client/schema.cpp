@@ -1642,6 +1642,7 @@ void ValidateColumnSchema(
         "xdelta",
         "_yt_stored_replica_set",
         "_yt_last_seen_replica_set",
+        "dict_sum",
     };
 
     try {
@@ -1761,13 +1762,13 @@ void ValidateDynamicTableConstraints(const TTableSchema& schema)
 
     for (const auto& column : schema.Columns()) {
         try {
-            if (column.SortOrder() && (
-                    column.GetWireType() == EValueType::Any ||
-                    column.GetWireType() == EValueType::Composite ||
-                    !column.IsOfV1Type()))
+            auto logical_type = column.LogicalType();
+            if (column.SortOrder() && !column.IsOfV1Type() &&
+                logical_type->GetMetatype() != ELogicalMetatype::List &&
+                logical_type->GetMetatype() != ELogicalMetatype::Tuple)
             {
                 THROW_ERROR_EXCEPTION("Dynamic table cannot have key column of type %Qv",
-                    *column.LogicalType());
+                    *logical_type);
             }
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION("Error validating column %v in dynamic table schema",

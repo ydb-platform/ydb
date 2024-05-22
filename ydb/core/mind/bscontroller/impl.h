@@ -471,8 +471,8 @@ public:
                 || Status == NKikimrBlobStorage::EDriveStatus::INACTIVE;
         }
 
-        std::tuple<bool, bool> GetSelfHealStatusTuple() const {
-            return {ShouldBeSettledBySelfHeal(), BadInTermsOfSelfHeal()};
+        auto GetSelfHealStatusTuple() const {
+            return std::make_tuple(ShouldBeSettledBySelfHeal(), BadInTermsOfSelfHeal(), Decommitted(), IsSelfHealReasonDecommit());
         }
 
         bool AcceptsNewSlots() const {
@@ -1581,6 +1581,7 @@ private:
 
     void InitializeSelfHealState();
     void FillInSelfHealGroups(TEvControllerUpdateSelfHealInfo& msg, TConfigState *state);
+    void PushStaticGroupsToSelfHeal();
     void ProcessVDiskStatus(const google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TVDiskStatus>& s);
 
     void UpdateSelfHealCounters();
@@ -2222,12 +2223,15 @@ public:
         const TMonotonic now = TActivationContext::Monotonic();
         THashSet<TGroupInfo*> groups;
 
-        auto sh = std::make_unique<TEvControllerUpdateSelfHealInfo>();
+        std::vector<TEvControllerUpdateSelfHealInfo::TVDiskStatusUpdate> updates;
         for (auto it = VSlotReadyTimestampQ.begin(); it != VSlotReadyTimestampQ.end() && it->first <= now;
                 it = VSlotReadyTimestampQ.erase(it)) {
             Y_DEBUG_ABORT_UNLESS(!it->second->IsReady);
             
-            sh->VDiskIsReadyUpdate.emplace_back(it->second->GetVDiskId(), true);
+            updates.push_back({
+                .VDiskId = it->second->GetVDiskId(),
+                .IsReady = true,
+            });
             it->second->IsReady = true;
             it->second->ResetVSlotReadyTimestampIter();
             if (const TGroupInfo *group = it->second->Group) {
@@ -2245,8 +2249,8 @@ public:
         if (!timingQ.empty()) {
             Execute(CreateTxUpdateLastSeenReady(std::move(timingQ)));
         }
-        if (sh->VDiskIsReadyUpdate) {
-            Send(SelfHealId, sh.release());
+        if (!updates.empty()) {
+            Send(SelfHealId, new TEvControllerUpdateSelfHealInfo(std::move(updates)));
         }
     }
 
@@ -2299,10 +2303,20 @@ public:
         NKikimrBlobStorage::EVDiskStatus VDiskStatus = NKikimrBlobStorage::EVDiskStatus::ERROR;
         TMonotonic ReadySince = TMonotonic::Max(); // when IsReady becomes true for this disk; Max() in non-READY state
 
-        TStaticVSlotInfo(const NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk& vdisk)
+        TStaticVSlotInfo(const NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk& vdisk,
+                std::map<TVSlotId, TStaticVSlotInfo>& prev)
             : VDiskId(VDiskIDFromVDiskID(vdisk.GetVDiskID()))
             , VDiskKind(vdisk.GetVDiskKind())
-        {}
+        {
+            const auto& loc = vdisk.GetVDiskLocation();
+            const TVSlotId vslotId(loc.GetNodeID(), loc.GetPDiskID(), loc.GetVDiskSlotID());
+            if (const auto it = prev.find(vslotId); it != prev.end()) {
+                TStaticVSlotInfo& item = it->second;
+                VDiskMetrics = std::move(item.VDiskMetrics);
+                VDiskStatus = item.VDiskStatus;
+                ReadySince = item.ReadySince;
+            }
+        }
     };
 
     std::map<TVSlotId, TStaticVSlotInfo> StaticVSlots;
@@ -2321,7 +2335,8 @@ public:
         ui32 StaticSlotUsage = 0;
         std::optional<NKikimrBlobStorage::TPDiskMetrics> PDiskMetrics;
 
-        TStaticPDiskInfo(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk)
+        TStaticPDiskInfo(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk,
+                std::map<TPDiskId, TStaticPDiskInfo>& prev)
             : NodeId(pdisk.GetNodeID())
             , PDiskId(pdisk.GetPDiskID())
             , Path(pdisk.GetPath())
@@ -2333,6 +2348,12 @@ public:
                 bool success = cfg.SerializeToString(&PDiskConfig);
                 Y_ABORT_UNLESS(success);
                 ExpectedSlotCount = cfg.GetExpectedSlotCount();
+            }
+
+            const TPDiskId pdiskId(NodeId, PDiskId);
+            if (const auto it = prev.find(pdiskId); it != prev.end()) {
+                TStaticPDiskInfo& item = it->second;
+                PDiskMetrics = std::move(item.PDiskMetrics);
             }
         }
     };
@@ -2369,6 +2390,8 @@ public:
         const TGroupInfo& group, const TVSlotFinder& finder);
     static void SerializeGroupInfo(NKikimrBlobStorage::TGroupInfo *group, const TGroupInfo& groupInfo,
         const TString& storagePoolName, const TMaybe<TKikimrScopeId>& scopeId);
+
+    void SerializeSettings(NKikimrBlobStorage::TUpdateSettings *settings);
 
     static NKikimrBlobStorage::TGroupStatus::E DeriveStatus(const TBlobStorageGroupInfo::TTopology *topology,
         const TBlobStorageGroupInfo::TGroupVDisks& failed);

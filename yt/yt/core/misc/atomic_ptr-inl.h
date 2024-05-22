@@ -5,6 +5,8 @@
 #endif
 #undef ATOMIC_PTR_INL_H_
 
+#include "private.h"
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -19,7 +21,7 @@ TIntrusivePtr<T> TryMakeStrongFromHazard(const THazardPtr<T>& ptr)
     }
 
     if (!GetRefCounter(ptr.Get())->TryRef()) {
-        static const auto& Logger = LockFreePtrLogger;
+        constexpr auto& Logger = LockFreeLogger;
         YT_LOG_TRACE("Failed to acquire intrusive ptr from hazard ptr (Ptr: %v)",
             ptr.Get());
         return nullptr;
@@ -158,7 +160,7 @@ TAtomicPtr<T, EnableAcquireHazard> TAtomicPtr<T, EnableAcquireHazard>::SwapIfCom
 template <class T, bool EnableAcquireHazard>
 bool TAtomicPtr<T, EnableAcquireHazard>::SwapIfCompare(T* comparePtr, TIntrusivePtr<T> target)
 {
-    static const auto& Logger = LockFreePtrLogger;
+    constexpr auto& Logger = LockFreeLogger;
 
     auto* targetPtr = target.Get();
     auto* savedPtr = comparePtr;

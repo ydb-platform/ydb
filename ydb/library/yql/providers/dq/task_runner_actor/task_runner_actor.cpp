@@ -255,11 +255,12 @@ private:
 
         bool fallback = false;
         bool retry = false;
+        bool rpcReaderFalledBack = false;
         for (TStringBuf line: StringSplitter(input).SplitByString("\n")) {
             if (line.Contains("mlockall failed")) {
                 // skip
             } else {
-                if (!fallback) {
+                if (!fallback || rpcReaderFalledBack) {
                     if (line.Contains("FindColumnInfo(): requirement memberType->GetKind() == TType::EKind::Data")) {
                     // YQL-14757: temporary workaround for part6/produce-reduce_lambda_list_table-default.txt
                         fallback = true;
@@ -272,6 +273,10 @@ private:
                     } else if (line.Contains("YT RPC Reader exception:")) {
                         // RPC reader fallback to YT
                         fallback = true;
+                        rpcReaderFalledBack = true;
+                    } else if (line.Contains("Attachments stream write timed out") || line.Contains("No alive peers found")) {
+                        // RPC reader DQ retry
+                        retry = true;
                     } else if (line.Contains("Transaction") && line.Contains("aborted")) {
                         // YQL-15542
                         fallback = true;

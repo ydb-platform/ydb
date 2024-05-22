@@ -40,6 +40,7 @@ SRCS(
     console_config.proto
     console_tenant.proto
     counters.proto
+    counters_backup.proto
     counters_blob_depot.proto
     counters_bs_controller.proto
     counters_cms.proto
@@ -115,7 +116,6 @@ SRCS(
     serverless_proxy_config.proto
     shared_cache.proto
     sqs.proto
-    ssa.proto
     statestorage.proto
     statistics.proto
     stream.proto
@@ -166,6 +166,8 @@ PEERDIR(
     ydb/library/services
     ydb/library/ydb_issue/proto
     ydb/core/tx/columnshard/engines/scheme/statistics/protos
+    ydb/core/tx/columnshard/engines/protos
+    ydb/core/formats/arrow/protos
 )
 
 CPP_PROTO_PLUGIN0(config_proto_plugin ydb/core/config/tools/protobuf_plugin)

@@ -645,3 +645,17 @@ Pear,15'''
 
         ast = client.describe_query(query_id).result.query.ast.data
         assert "(\'columns \'(\'\"some_unknown_column\"))" in ast, "Invalid query ast"
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_raw_empty_schema_binding(self, kikimr, client, unique_prefix):
+        kikimr.control_plane.wait_bootstrap(1)
+        connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
+        binding_response = client.create_object_storage_binding(name=unique_prefix + "my_binding",
+                                                                path="fruits.csv",
+                                                                format="raw",
+                                                                connection_id=connection_response.result.connection_id,
+                                                                columns=[],
+                                                                check_issues=False)
+        assert "Only one column in schema supported in raw format" in str(binding_response.issues), str(
+            binding_response.issues)

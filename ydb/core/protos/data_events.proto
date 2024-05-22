@@ -27,6 +27,16 @@ message TKqpLocks {
         Rollback = 3; // Rollback buffered changes and erase locks
     }
     optional ELocksOp Op = 4;
+
+    // An optional arbiter for readsets. When specified, all sending shards
+    // send the commit decision to a single arbiter shard, and all receiving
+    // shards wait for the commit decision from a single arbiter shard. The
+    // shard marked as the arbiter is responsible in aggregating all commit
+    // decisions from sending shards and sending the final commit decision to
+    // receiving shards.
+    // This may only be used with generic readsets without any other data and
+    // currently limited to volatile transactions.
+    optional uint64 ArbiterShard = 5;
 }
 
 message TTableId {

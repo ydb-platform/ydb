@@ -40,6 +40,7 @@ SRCS(
     flat_ut.cpp
     locks_ut.cpp
     query_stats_ut.cpp
+    object_storage_listing_ut.cpp
 )
 
 END()

@@ -16,5 +16,5 @@ join
 on
     l.l_partkey = p.p_partkey
 where
-    cast(l.l_shipdate as timestamp) >= $border
-    and cast(l.l_shipdate as timestamp) < ($border + Interval("P31D"));
+    l.l_shipdate >= $border
+    and l.l_shipdate < ($border + Interval("P31D"));

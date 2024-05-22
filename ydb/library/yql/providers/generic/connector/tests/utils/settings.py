@@ -129,6 +129,8 @@ class Settings:
                 return self.clickhouse.cluster_name
             case EDataSourceKind.POSTGRESQL:
                 return self.postgresql.cluster_name
+            case EDataSourceKind.YDB:
+                return self.ydb.cluster_name
             case _:
                 raise Exception(f'invalid data source: {EDataSourceKind.Name(data_source_kind)}')
 

@@ -18,7 +18,7 @@ TReplicationCardId MakeReplicationCardId(TObjectId randomId)
         EObjectType::ReplicationCard,
         CellTagFromId(randomId),
         CounterFromId(randomId),
-        HashFromId(randomId) & 0xffff0000);
+        EntropyFromId(randomId) & 0xffff0000);
 }
 
 TReplicaId MakeReplicaId(TReplicationCardId replicationCardId, TReplicaIdIndex index)
@@ -27,7 +27,7 @@ TReplicaId MakeReplicaId(TReplicationCardId replicationCardId, TReplicaIdIndex i
         EObjectType::ChaosTableReplica,
         CellTagFromId(replicationCardId),
         CounterFromId(replicationCardId),
-        HashFromId(replicationCardId) | index);
+        EntropyFromId(replicationCardId) | index);
 }
 
 TReplicationCardId ReplicationCardIdFromReplicaId(TReplicaId replicaId)
@@ -36,7 +36,7 @@ TReplicationCardId ReplicationCardIdFromReplicaId(TReplicaId replicaId)
         EObjectType::ReplicationCard,
         CellTagFromId(replicaId),
         CounterFromId(replicaId),
-        HashFromId(replicaId) & 0xffff0000);
+        EntropyFromId(replicaId) & 0xffff0000);
 }
 
 TReplicationCardId ReplicationCardIdFromUpstreamReplicaIdOrNull(TReplicaId upstreamReplicaId)
@@ -52,7 +52,7 @@ TReplicationCardId MakeReplicationCardCollocationId(TObjectId randomId)
         EObjectType::ReplicationCardCollocation,
         CellTagFromId(randomId),
         CounterFromId(randomId),
-        HashFromId(randomId) & 0xffff0000);
+        EntropyFromId(randomId) & 0xffff0000);
 }
 
 TCellTag GetSiblingChaosCellTag(TCellTag cellTag)

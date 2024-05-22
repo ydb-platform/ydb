@@ -1,6 +1,5 @@
 #pragma once
 #include "viewer.h"
-#include <unordered_map>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/mon.h>
@@ -12,7 +11,6 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/viewer/json/json.h>
-//#include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 #include "json_pipe_req.h"
@@ -102,17 +100,8 @@ public:
         }
     }
 
-    bool IsPostContent() {
-        if (Event->Get()->Request.GetMethod() == HTTP_METHOD_POST) {
-            const THttpHeaders& headers = Event->Get()->Request.GetHeaders();
-            auto itContentType = FindIf(headers, [](const auto& header) { return header.Name() == "Content-Type"; });
-            if (itContentType != headers.end()) {
-                TStringBuf contentTypeHeader = itContentType->Value();
-                TStringBuf contentType = contentTypeHeader.NextTok(';');
-                return contentType == "application/json";
-            }
-        }
-        return false;
+    bool IsPostContent() const {
+        return NViewer::IsPostContent(Event);
     }
 
     TJsonQuery(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)

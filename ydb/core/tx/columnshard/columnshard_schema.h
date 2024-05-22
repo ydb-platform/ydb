@@ -19,6 +19,7 @@ namespace NKikimr::NColumnShard {
 
 using NOlap::TWriteId;
 using NOlap::IBlobGroupSelector;
+struct TFullTxInfo;
 
 struct Schema : NIceDb::Schema {
     // These settings are persisted on each Init. So we use empty settings in order not to overwrite what
@@ -52,7 +53,8 @@ struct Schema : NIceDb::Schema {
         OperationTxIdsId,
         BackupIdsDeprecated,
         ExportSessionsId,
-        PortionsTableId
+        PortionsTableId,
+        BackgroundSessionsTableId
     };
 
     enum class ETierTables: ui32 {
@@ -77,6 +79,7 @@ struct Schema : NIceDb::Schema {
         OwnerPath = 12,
         LastCompletedStep = 13,
         LastCompletedTxId = 14,
+        LastNormalizerSequentialId = 15,
     };
 
     enum class EInsertTableIds : ui8 {
@@ -120,10 +123,11 @@ struct Schema : NIceDb::Schema {
         struct MaxStep : Column<4, NScheme::NTypeIds::Uint64> {};
         struct PlanStep : Column<5, NScheme::NTypeIds::Uint64> {};
         struct Source : Column<6, NScheme::NTypeIds::ActorId> {};
-        struct Cookie : Column<7, NScheme::NTypeIds::Uint64> {};
+        struct Cookie: Column<7, NScheme::NTypeIds::Uint64> {};
+        struct SeqNo: Column<8, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<TxId>;
-        using TColumns = TableColumns<TxId, TxKind, TxBody, MaxStep, PlanStep, Source, Cookie>;
+        using TColumns = TableColumns<TxId, TxKind, TxBody, MaxStep, PlanStep, Source, Cookie, SeqNo>;
     };
 
     struct SchemaPresetInfo : Table<(ui32)ECommonTables::SchemaPresetInfo> {
@@ -325,16 +329,6 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<TxId, LockId>;
     };
 
-    struct ExportPersistentSessions : NIceDb::Schema::Table<ExportSessionsId> {
-        struct Identifier : Column<1, NScheme::NTypeIds::String> {};
-        struct Status: Column<2, NScheme::NTypeIds::String> {};
-        struct Task: Column<3, NScheme::NTypeIds::String> {};
-        struct Cursor: Column<4, NScheme::NTypeIds::String> {};
-
-        using TKey = TableKey<Identifier>;
-        using TColumns = TableColumns<Identifier, Status, Task, Cursor>;
-    };
-
     struct TierBlobsDraft: NIceDb::Schema::Table<(ui32)ETierTables::TierBlobsDraft> {
         struct StorageId: Column<1, NScheme::NTypeIds::String> {};
         struct BlobId: Column<2, NScheme::NTypeIds::String> {};
@@ -464,6 +458,18 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<PathId, PortionId, SchemaVersion, XPlanStep, XTxId, Metadata>;
     };
 
+    struct BackgroundSessions: Table<BackgroundSessionsTableId> {
+        struct ClassName: Column<1, NScheme::NTypeIds::String> {};
+        struct Identifier: Column<2, NScheme::NTypeIds::String> {};
+        struct StatusChannel: Column<3, NScheme::NTypeIds::String> {};
+        struct LogicDescription: Column<4, NScheme::NTypeIds::String> {};
+        struct Progress: Column<5, NScheme::NTypeIds::String> {};
+        struct State: Column<6, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<ClassName, Identifier>;
+        using TColumns = TableColumns<ClassName, Identifier, StatusChannel, LogicDescription, Progress, State>;
+    };
+
     using TTables = SchemaTables<
         Value,
         TxInfo,
@@ -493,8 +499,8 @@ struct Schema : NIceDb::Schema {
         SourceSessions,
         DestinationSessions,
         OperationTxIds,
-        ExportPersistentSessions,
-        IndexPortions
+        IndexPortions,
+        BackgroundSessions
         >;
 
     //
@@ -515,8 +521,23 @@ struct Schema : NIceDb::Schema {
 
         auto rowset = db.Table<Value>().Key((ui32)key).Select<TSource>();
         if (rowset.IsReady()) {
-            if (rowset.IsValid())
+            if (rowset.IsValid()) {
                 value = T{rowset.template GetValue<TSource>()};
+                return true;
+            }
+        }
+        return false;
+    }
+
+    template <typename T>
+    static bool GetSpecialValueOpt(NIceDb::TNiceDb& db, EValueIds key, T& value) {
+        using TSource = std::conditional_t<std::is_integral_v<T> || std::is_enum_v<T>, Value::Digit, Value::Bytes>;
+
+        auto rowset = db.Table<Value>().Key((ui32)key).Select<TSource>();
+        if (rowset.IsReady()) {
+            if (rowset.IsValid()) {
+                value = T{rowset.template GetValue<TSource>()};
+            }
             return true;
         }
         return false;
@@ -549,13 +570,13 @@ struct Schema : NIceDb::Schema {
         SaveSpecialValue(db, key, serialized);
     }
 
-    static void SaveTxInfo(NIceDb::TNiceDb& db, ui64 txId, NKikimrTxColumnShard::ETransactionKind txKind,
-                           const TString& txBody, ui64 maxStep, const TActorId& source, ui64 cookie)
-    {
+    static void SaveTxInfo(NIceDb::TNiceDb& db, const TFullTxInfo& txInfo,
+                           const TString& txBody);
+
+    static void UpdateTxInfoSource(NIceDb::TNiceDb& db, const TFullTxInfo& txInfo);
+
+    static void UpdateTxInfoSource(NIceDb::TNiceDb& db, ui64 txId, const TActorId& source, ui64 cookie) {
         db.Table<TxInfo>().Key(txId).Update(
-            NIceDb::TUpdate<TxInfo::TxKind>(txKind),
-            NIceDb::TUpdate<TxInfo::TxBody>(txBody),
-            NIceDb::TUpdate<TxInfo::MaxStep>(maxStep),
             NIceDb::TUpdate<TxInfo::Source>(source),
             NIceDb::TUpdate<TxInfo::Cookie>(cookie));
     }

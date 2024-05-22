@@ -610,15 +610,20 @@ struct TEvPQProxy {
     };
 
     struct TEvReadingFinished : public TEventLocal<TEvReadingFinished, EvReadingFinished> {
-        TEvReadingFinished(const TString& topic, ui32 partitionId, bool first)
+        TEvReadingFinished(const TString& topic, ui32 partitionId, bool first, std::vector<ui32>&& adjacentPartitionIds, std::vector<ui32> childPartitionIds)
             : Topic(topic)
             , PartitionId(partitionId)
             , FirstMessage(first)
+            , AdjacentPartitionIds(std::move(adjacentPartitionIds))
+            , ChildPartitionIds(std::move(childPartitionIds))
         {}
 
         TString Topic;
         ui32 PartitionId;
         bool FirstMessage;
+
+        std::vector<ui32> AdjacentPartitionIds;
+        std::vector<ui32> ChildPartitionIds;
     };
 };
 

@@ -264,6 +264,8 @@ namespace NSQLTranslationV1 {
         return cloneArgs;
     }
 
+    TTableHints CloneContainer(const TTableHints& hints);
+
     class TAstAtomNode: public INode {
     public:
         TAstAtomNode(TPosition pos, const TString& content, ui32 flags, bool isOptionalArg);

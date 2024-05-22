@@ -7,14 +7,14 @@ bool TTxRemoveSharedBlobs::Execute(TTransactionContext& txc, const TActorContext
     TMemoryProfileGuard mpg("TTxRemoveSharedBlobs::Execute");
     NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("tx_state", "execute");
     NOlap::TBlobManagerDb blobManagerDb(txc.DB);
-    RemoveAction->OnExecuteTxAfterRemoving(*Self, blobManagerDb, true);
+    RemoveAction->OnExecuteTxAfterRemoving(blobManagerDb, true);
     return true;
 }
 
 void TTxRemoveSharedBlobs::Complete(const TActorContext& ctx) {
     TMemoryProfileGuard mpg("TTxRemoveSharedBlobs::Complete");
     NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("tx_state", "complete");
-    RemoveAction->OnCompleteTxAfterRemoving(*Self, true);
+    RemoveAction->OnCompleteTxAfterRemoving(true);
 
     ctx.Send(InitiatorActorId, new NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobsFinished((NOlap::TTabletId)Self->TabletID()));
 }

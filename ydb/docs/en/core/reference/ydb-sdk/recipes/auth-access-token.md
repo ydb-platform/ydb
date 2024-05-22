@@ -118,15 +118,15 @@ Below are examples of the code for authentication using a token in different {{ 
 
 - Node.js
 
-  {% include [auth-access-token](../../../../_includes/nodejs/auth-access-token.md) %}
+  {% include [auth-access-token](../../../_includes/nodejs/auth-access-token.md) %}
 
 - Python
 
-  {% include [auth-access-token](../../../../_includes/python/auth-access-token.md) %}
+  {% include [auth-access-token](../../../_includes/python/auth-access-token.md) %}
 
 - Python (asyncio)
 
-  {% include [auth-access-token](../../../../_includes/python/async/auth-access-token.md) %}
+  {% include [auth-access-token](../../../_includes/python/async/auth-access-token.md) %}
 
 - C# (.NET)
 

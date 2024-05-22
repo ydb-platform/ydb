@@ -101,7 +101,8 @@ class TDqPqWriteActor : public NActors::TActor<TDqPqWriteActor>, public IDqCompu
             LastAckLatency = task->GetCounter("LastAckLatencyMs");
             InFlyCheckpoints = task->GetCounter("InFlyCheckpoints");
             InFlyData = task->GetCounter("InFlyData");
-            AlreadyWritten = task->GetCounter("AlreadWritten");
+            AlreadyWritten = task->GetCounter("AlreadyWritten");
+            FirstContinuationTokenMs = task->GetCounter("FirstContinuationTokenMs");
         }
 
         ~TMetrics() {
@@ -115,6 +116,7 @@ class TDqPqWriteActor : public NActors::TActor<TDqPqWriteActor>, public IDqCompu
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlyCheckpoints;
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlyData;
         ::NMonitoring::TDynamicCounters::TCounterPtr AlreadyWritten;
+        ::NMonitoring::TDynamicCounters::TCounterPtr FirstContinuationTokenMs;
     };
 
     struct TAckInfo {
@@ -433,6 +435,10 @@ private:
         std::optional<TIssues> operator()(NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent& ev) {
             //Y_ABORT_UNLESS(!Self.ContinuationToken);
 
+            if (*Self.Metrics.FirstContinuationTokenMs == 0) {
+                Self.Metrics.FirstContinuationTokenMs->Set((TInstant::Now() - Self.StartTime).MilliSeconds());
+            }
+
             if (!Self.Buffer.empty()) {
                 Self.WriteNextMessage(std::move(ev.ContinuationToken));
                 return std::nullopt;
@@ -452,6 +458,7 @@ private:
     }
 
 private:
+    TInstant StartTime = TInstant::Now();
     const ui64 OutputIndex;
     TDqAsyncStats EgressStats;
     const TTxId TxId;

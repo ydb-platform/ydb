@@ -143,17 +143,19 @@ void TOlapSchema::ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& ta
     Statistics.Parse(tableSchema);
 }
 
-void TOlapSchema::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const {
-    tableSchema.SetNextColumnId(NextColumnId);
-    tableSchema.SetVersion(Version);
+void TOlapSchema::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchemaExt) const {
+    NKikimrSchemeOp::TColumnTableSchema resultLocal;
+    resultLocal.SetNextColumnId(NextColumnId);
+    resultLocal.SetVersion(Version);
 
     Y_ABORT_UNLESS(HasEngine());
-    tableSchema.SetEngine(GetEngineUnsafe());
+    resultLocal.SetEngine(GetEngineUnsafe());
 
-    Columns.Serialize(tableSchema);
-    Indexes.Serialize(tableSchema);
-    Options.Serialize(tableSchema);
-    Statistics.Serialize(tableSchema);
+    Columns.Serialize(resultLocal);
+    Indexes.Serialize(resultLocal);
+    Options.Serialize(resultLocal);
+    Statistics.Serialize(resultLocal);
+    std::swap(resultLocal, tableSchemaExt);
 }
 
 bool TOlapSchema::Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const {

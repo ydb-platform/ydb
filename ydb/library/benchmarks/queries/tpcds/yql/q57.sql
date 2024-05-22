@@ -44,8 +44,8 @@ $v2 = (
        v1.i_brand = v1_lead.i_brand and
        v1. cc_name = v1_lag. cc_name and
        v1. cc_name = v1_lead. cc_name and
-       v1.rn = v1_lag.rn + 1 and
-       v1.rn = v1_lead.rn - 1);
+       v1.rn = v1_lag.rn + 1U and
+       v1.rn = v1_lead.rn - 1U);
 -- start query 1 in stream 0 using template query57.tpl and seed 2031708268
   select  *
  from $v2

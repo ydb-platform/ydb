@@ -261,84 +261,35 @@ public:
     // hasMoreLeftTuples, hasMoreRightTuples is true if join is partial and more rows are coming.  For final batch hasMoreLeftTuples = false, hasMoreRightTuples = false
     void Join(TTable& t1, TTable& t2, EJoinKind joinKind = EJoinKind::Inner, bool hasMoreLeftTuples = false, bool hasMoreRightTuples = false, ui32 fromBucket = 0, ui32 toBucket = NumberOfBuckets);
 
-
     // Returns next jointed tuple data. Returs true if there are more tuples
     bool NextJoinedData(TupleData& td1, TupleData& td2);
 
-    void InitializeBucketSpillers(ISpiller::TPtr spiller) {
-        for (size_t i = 0; i < NumberOfBuckets; ++i) {
-            TableBucketsSpillers.emplace_back(spiller, 1_MB);
-        }
-    }
+    // Creates buckets that support spilling.
+    void InitializeBucketSpillers(ISpiller::TPtr spiller);
 
-    ui64 GetSizeOfBucket(ui64 bucket) const {
-        return TableBuckets[bucket].KeyIntVals.size() * sizeof(ui64)
-        + TableBuckets[bucket].DataIntVals.size() * sizeof(ui64)
-        + TableBuckets[bucket].StringsValues.size()
-        + TableBuckets[bucket].StringsOffsets.size() * sizeof(ui32)
-        + TableBuckets[bucket].InterfaceValues.size()
-        + TableBuckets[bucket].InterfaceOffsets.size() * sizeof(ui32);
-    }
+    // Calculate sapproximate size of a bucket. Used for spilling to determine largest bucket.
+    ui64 GetSizeOfBucket(ui64 bucket) const;
 
-    bool TryToReduceMemory() {
-        i32 largestBucketIndex = 0;
-        ui64 largestBucketSize = 0;
-        for (ui32 bucket = 0; bucket < NumberOfBuckets; ++bucket) {
-            if (TableBucketsSpillers[bucket].HasRunningAsyncIoOperation()) return true;
+    // This functions wind the largest bucket and spills it to the disk.
+    bool TryToReduceMemory();
 
-            ui64 bucketSize = GetSizeOfBucket(bucket);
-            if (bucketSize > largestBucketSize) {
-                largestBucketSize = bucketSize;
-                largestBucketIndex = bucket;
-            }
-        }
+    // Update state of spilling. Must be called during each DoCalculate.
+    void UpdateSpilling();
 
-        if (largestBucketSize) return false;
+    // Flushes all the spillers.
+    void FinalizeSpilling();
 
-        TableBucketsSpillers[largestBucketIndex].SpillBucket(std::move(TableBuckets[largestBucketIndex]));
-        TableBuckets[largestBucketIndex] = TTableBucket{};
+    // Checks if there any async operation running. If return value is true it's safe to return Yield.
+    bool HasRunningAsyncIoOperation() const;
 
-        return TableBucketsSpillers[largestBucketIndex].HasRunningAsyncIoOperation();
-    }
+    // Checks if bucket fully loaded to memory and may be joined.
+    bool IsBucketInMemory(ui32 bucket) const;
 
-    void UpdateSpilling() {
-        for (ui64 i = 0; i < NumberOfBuckets; ++i) {
-            TableBucketsSpillers[i].Update();
-        }
-    }
+    // Starts loading spilled bucket to memory.
+    void StartLoadingBucket(ui32 bucket);
 
-    void FinalizeSpilling() {
-        MKQL_ENSURE(!HasRunningAsyncIoOperation(), "Internal logic error");
-
-        for (ui32 bucket = 0; bucket < NumberOfBuckets; ++bucket) {
-            if (!TableBucketsSpillers[bucket].IsInMemory()) {
-                TableBucketsSpillers[bucket].SpillBucket(std::move(TableBuckets[bucket]));
-                TableBuckets[bucket] = TTableBucket{};
-            }
-            TableBucketsSpillers[bucket].Finalize();
-        }
-    }
-
-    bool HasRunningAsyncIoOperation() {
-        for (ui32 bucket = 0; bucket < NumberOfBuckets; ++bucket) {
-            if (TableBucketsSpillers[bucket].HasRunningAsyncIoOperation()) return true;
-        }
-        return false;
-    }
-
-    bool IsBucketInMemory(ui32 bucket) const {
-        return TableBucketsSpillers[bucket].IsInMemory();
-    }
-
-    void StartLoadingBucket(ui32 bucket) {
-        MKQL_ENSURE(!TableBucketsSpillers[bucket].IsInMemory(), "Internal logic error");
-
-        TableBucketsSpillers[bucket].StartBucketRestoration();
-    }
-
-    void ExtractBucket(ui64 bucket) {
-        TableBuckets[bucket] = std::move(TableBucketsSpillers[bucket].ExtractBucket());
-    }
+    // Extracts loaded bucket from spilling.
+    void ExtractBucket(ui64 bucket);
 
     // Clears table content
     void Clear();

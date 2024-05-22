@@ -71,18 +71,22 @@ namespace NPDisk {
     {
         TIntrusivePtr<TPipePeNodeCacheConfig> leaderPipeConfig = new TPipePeNodeCacheConfig();
         leaderPipeConfig->PipeRefreshTime = TDuration::Zero();
-        leaderPipeConfig->PipeConfig.RetryPolicy = {.RetryLimitCount = 3};
 
         TIntrusivePtr<TPipePeNodeCacheConfig> followerPipeConfig = new TPipePeNodeCacheConfig();
         followerPipeConfig->PipeRefreshTime = TDuration::Seconds(30);
         followerPipeConfig->PipeConfig.AllowFollower = true;
-        followerPipeConfig->PipeConfig.RetryPolicy = {.RetryLimitCount = 3};
         followerPipeConfig->PipeConfig.ForceFollower = forceFollowers;
+
+        TIntrusivePtr<TPipePeNodeCacheConfig> persistentPipeConfig = new TPipePeNodeCacheConfig();
+        persistentPipeConfig->PipeRefreshTime = TDuration::Zero();
+        persistentPipeConfig->PipeConfig = TPipePeNodeCacheConfig::DefaultPersistentPipeConfig();
 
         runtime.AddLocalService(MakePipePeNodeCacheID(false),
             TActorSetupCmd(CreatePipePeNodeCache(leaderPipeConfig), TMailboxType::Revolving, 0), nodeIndex);
         runtime.AddLocalService(MakePipePeNodeCacheID(true),
             TActorSetupCmd(CreatePipePeNodeCache(followerPipeConfig), TMailboxType::Revolving, 0), nodeIndex);
+        runtime.AddLocalService(MakePipePeNodeCacheID(EPipePeNodeCache::Persistent),
+            TActorSetupCmd(CreatePipePeNodeCache(persistentPipeConfig), TMailboxType::Revolving, 0), nodeIndex);
     }
 
     void SetupResourceBroker(TTestActorRuntime& runtime, ui32 nodeIndex)

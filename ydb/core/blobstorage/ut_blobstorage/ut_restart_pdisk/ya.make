@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
 
-    OWNER(g:kikimr)
-
     FORK_SUBTESTS()
 
     SIZE(MEDIUM)

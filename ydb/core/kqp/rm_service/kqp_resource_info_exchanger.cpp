@@ -633,8 +633,8 @@ private:
         if (nodesCount >= 1000) {
             ui64 nodesCount = NodesState.size();
             if (nodesCount >= 1000) {
-                ui64 newCurrentDelay = nodesCount * nodesCount / 2000;
-                CurrentNodesDelay = std::max(CurentNodesDelay, TDuration::Milliseconds(newCurrentDelay));
+                ui64 newCurrentDelay = (nodesCount * nodesCount) >> 11;
+                CurrentNodesDelay = std::max(CurrentNodesDelay, TDuration::MilliSeconds(newCurrentDelay));
             }
         }
     }
@@ -650,7 +650,7 @@ private:
         if (state.CurrentDelay == TDuration::Zero()) {
             state.CurrentDelay = ExchangerSettings.StartDelayMs;
         }
-        state.CurrentDelay = std::max(CurentNodesDelay, state.CurrentDelay);
+        state.CurrentDelay = std::max(CurrentNodesDelay, state.CurrentDelay);
         return state.CurrentDelay;
     }
 
@@ -779,7 +779,7 @@ private:
     TIntrusivePtr<TKqpCounters> Counters;
     NKikimrConfig::TTableServiceConfig::TResourceManager::TInfoExchangerSettings Settings;
 
-    TDuration CurrentNodesDelay = TDuration::Milliseconds(500);
+    TDuration CurrentNodesDelay = TDuration::MilliSeconds(500);
 };
 
 NActors::IActor* CreateKqpResourceInfoExchangerActor(TIntrusivePtr<TKqpCounters> counters,

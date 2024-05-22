@@ -800,41 +800,42 @@ private:
     }
 
     void Handle(TEvKqp::TEvCompileResponse::TPtr& ev, const TActorContext& ctx) {
-        auto compileActorId = ev->Sender;
         auto& compileResult = ev->Get()->CompileResult;
-        auto& compileStats = ev->Get()->Stats;
-
-        Y_ABORT_UNLESS(compileResult->Query);
-
-        auto compileRequest = RequestsQueue.FinishActiveRequest(*compileResult->Query);
-        Y_ABORT_UNLESS(compileRequest.CompileActor == compileActorId);
-        Y_ABORT_UNLESS(compileRequest.Uid == compileResult->Uid);
-
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Received response"
-            << ", sender: " << compileRequest.Sender
-            << ", status: " << compileResult->Status
-            << ", compileActor: " << ev->Sender);
-
-        if (compileResult->NeedToSplit) {
-            Reply(compileRequest.Sender, compileResult, compileStats, ctx,
-                compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan), (CollectDiagnostics ? ev->Get()->ReplayMessageUserView : std::nullopt));
-            return;
-        }
-
-        bool keepInCache = compileRequest.CompileSettings.KeepInCache && compileResult->AllowCache;
-        bool isPerStatementExecution = TableServiceConfig.GetEnableAstCache() && compileRequest.QueryAst;
-
-        bool hasTempTablesNameClashes = HasTempTablesNameClashes(compileResult, compileRequest.TempTablesState, true);
-
+        THolder<TKqpCompileRequest> compileRequest;
         try {
+            auto compileActorId = ev->Sender;
+            auto& compileStats = ev->Get()->Stats;
+
+            Y_ABORT_UNLESS(compileResult->Query);
+
+            compileRequest = MakeHolder<TKqpCompileRequest>(RequestsQueue.FinishActiveRequest(*compileResult->Query));
+            Y_ABORT_UNLESS(compileRequest->CompileActor == compileActorId);
+            Y_ABORT_UNLESS(compileRequest->Uid == compileResult->Uid);
+
+            LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Received response"
+                << ", sender: " << compileRequest->Sender
+                << ", status: " << compileResult->Status
+                << ", compileActor: " << ev->Sender);
+
+            if (compileResult->NeedToSplit) {
+                Reply(compileRequest->Sender, compileResult, compileStats, ctx,
+                    compileRequest->Cookie, std::move(compileRequest->Orbit), std::move(compileRequest->CompileServiceSpan), (CollectDiagnostics ? ev->Get()->ReplayMessageUserView : std::nullopt));
+                return;
+            }
+
+            bool keepInCache = compileRequest->CompileSettings.KeepInCache && compileResult->AllowCache;
+            bool isPerStatementExecution = TableServiceConfig.GetEnableAstCache() && compileRequest->QueryAst;
+
+            bool hasTempTablesNameClashes = HasTempTablesNameClashes(compileResult, compileRequest->TempTablesState, true);
+
             if (compileResult->Status == Ydb::StatusIds::SUCCESS) {
                 if (!hasTempTablesNameClashes) {
-                    UpdateQueryCache(compileResult, keepInCache, compileRequest.CompileSettings.IsQueryActionPrepare, isPerStatementExecution);
+                    UpdateQueryCache(compileResult, keepInCache, compileRequest->CompileSettings.IsQueryActionPrepare, isPerStatementExecution);
                 }
 
                 if (ev->Get()->ReplayMessage && !QueryReplayBackend->IsNull()) {
                     QueryReplayBackend->Collect(*ev->Get()->ReplayMessage);
-                    QueryCache.AttachReplayMessage(compileRequest.Uid, *ev->Get()->ReplayMessage);
+                    QueryCache.AttachReplayMessage(compileRequest->Uid, *ev->Get()->ReplayMessage);
                 }
 
                 auto requests = RequestsQueue.ExtractByQuery(*compileResult->Query);
@@ -851,14 +852,18 @@ private:
                 }
             }
 
-            LWTRACK(KqpCompileServiceGetCompilation, compileRequest.Orbit, compileRequest.Query.UserSid, compileActorId.ToString());
-            Reply(compileRequest.Sender, compileResult, compileStats, ctx,
-                compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan), (CollectDiagnostics ? ev->Get()->ReplayMessageUserView : std::nullopt));
+            LWTRACK(KqpCompileServiceGetCompilation, compileRequest->Orbit, compileRequest->Query.UserSid, compileActorId.ToString());
+            Reply(compileRequest->Sender, compileResult, compileStats, ctx,
+                compileRequest->Cookie, std::move(compileRequest->Orbit), std::move(compileRequest->CompileServiceSpan), (CollectDiagnostics ? ev->Get()->ReplayMessageUserView : std::nullopt));
         }
         catch (const std::exception& e) {
             LogException("TEvCompileResponse", ev->Sender, e, ctx);
-            ReplyInternalError(compileRequest.Sender, compileResult->Uid, e.what(), ctx,
-                compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan));
+            if(!!compileRequest) {
+                ReplyInternalError(compileRequest->Sender, compileResult->Uid, e.what(), ctx,
+                    compileRequest->Cookie, std::move(compileRequest->Orbit), std::move(compileRequest->CompileServiceSpan));
+            } else {
+                ReplyInternalError(ev->Sender, compileResult->Uid, e.what(), ctx, 0, NLWTrace::TOrbit(), NWilson::TSpan());
+            }
         }
 
         ProcessQueue(ctx);

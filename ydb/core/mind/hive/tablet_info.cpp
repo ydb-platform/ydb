@@ -426,14 +426,17 @@ TResourceRawValues TTabletInfo::GetResourceMaximumValues() const {
     }
 }
 
-i64 TTabletInfo::GetCounterValue(const NKikimrTabletBase::TMetrics& metrics, const TVector<i64>& allowedMetricIds) {
-    if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::CPU) && THive::IsValidMetricsCPU(metrics)) {
+i64 TTabletInfo::GetCounterValue(const TTabletMetricsAggregates& metrics, const TVector<i64>& allowedMetricIds) {
+    if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::CPU)
+        && THive::IsValidMetricsCPU(metrics.MaximumCPU.GetAllTimeMaximum())) {
         return 0;
     }
-    if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::Memory) && THive::IsValidMetricsMemory(metrics)) {
+    if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::Memory)
+        && THive::IsValidMetricsMemory(metrics.MaximumMemory.GetAllTimeMaximum() > 0)) {
         return 0;
     }
-    if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::Network) && THive::IsValidMetricsNetwork(metrics)) {
+    if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::Network)
+        && THive::IsValidMetricsNetwork(metrics.MaximumNetwork.GetAllTimeMaximum())) {
         return 0;
     }
     return 1;
@@ -445,13 +448,13 @@ void TTabletInfo::FilterRawValues(TResourceRawValues& values) const {
     if (metrics.GetCounter() == 0) {
         std::get<NMetrics::EResource::Counter>(values) = 0;
     }
-    if (!HasAllowedMetric(allowedMetricIds, EResourceToBalance::CPU) || !THive::IsValidMetricsCPU(metrics)) {
+    if (!HasAllowedMetric(allowedMetricIds, EResourceToBalance::CPU) || !THive::IsValidMetricsCPU(metrics.GetCPU())) {
         std::get<NMetrics::EResource::CPU>(values) = 0;
     }
-    if (!HasAllowedMetric(allowedMetricIds, EResourceToBalance::Memory) || !THive::IsValidMetricsMemory(metrics)) {
+    if (!HasAllowedMetric(allowedMetricIds, EResourceToBalance::Memory) || !THive::IsValidMetricsMemory(metrics.GetMemory())) {
         std::get<NMetrics::EResource::Memory>(values) = 0;
     }
-    if (!HasAllowedMetric(allowedMetricIds, EResourceToBalance::Network) || !THive::IsValidMetricsNetwork(metrics)) {
+    if (!HasAllowedMetric(allowedMetricIds, EResourceToBalance::Network) || !THive::IsValidMetricsNetwork(metrics.GetNetwork())) {
         std::get<NMetrics::EResource::Network>(values) = 0;
     }
 }
@@ -462,19 +465,19 @@ void TTabletInfo::FilterRawValues(TResourceNormalizedValues& values) const {
     if (metrics.GetCounter() == 0) {
         std::get<NMetrics::EResource::Counter>(values) = 0;
     }
-    if (!HasAllowedMetric(allowedMetricIds, EResourceToBalance::CPU) || !THive::IsValidMetricsCPU(metrics)) {
+    if (!HasAllowedMetric(allowedMetricIds, EResourceToBalance::CPU) || !THive::IsValidMetricsCPU(metrics.GetCPU())) {
         std::get<NMetrics::EResource::CPU>(values) = 0;
     }
-    if (!HasAllowedMetric(allowedMetricIds, EResourceToBalance::Memory) || !THive::IsValidMetricsMemory(metrics)) {
+    if (!HasAllowedMetric(allowedMetricIds, EResourceToBalance::Memory) || !THive::IsValidMetricsMemory(metrics.GetMemory())) {
         std::get<NMetrics::EResource::Memory>(values) = 0;
     }
-    if (!HasAllowedMetric(allowedMetricIds, EResourceToBalance::Network) || !THive::IsValidMetricsNetwork(metrics)) {
+    if (!HasAllowedMetric(allowedMetricIds, EResourceToBalance::Network) || !THive::IsValidMetricsNetwork(metrics.GetNetwork())) {
         std::get<NMetrics::EResource::Network>(values) = 0;
     }
 }
 
 void TTabletInfo::ActualizeCounter() {
-    auto value = GetCounterValue(ResourceValues, GetTabletAllowedMetricIds());
+    auto value = GetCounterValue(ResourceMetricsAggregates, GetTabletAllowedMetricIds());
     ResourceValues.SetCounter(value);
 }
 

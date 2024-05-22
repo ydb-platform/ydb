@@ -2494,19 +2494,19 @@ bool THive::StopSubActor(TSubActorId subActorId) {
 }
 
 bool THive::IsValidMetrics(const NKikimrTabletBase::TMetrics& metrics) {
-    return IsValidMetricsCPU(metrics) || IsValidMetricsMemory(metrics) || IsValidMetricsNetwork(metrics);
+    return IsValidMetricsCPU(metrics.GetCPU()) || IsValidMetricsMemory(metrics.GetMemory()) || IsValidMetricsNetwork(metrics.GetNetwork());
 }
 
-bool THive::IsValidMetricsCPU(const NKikimrTabletBase::TMetrics& metrics) {
-    return metrics.GetCPU() > 1'000/*1ms*/;
+bool THive::IsValidMetricsCPU(ui64 cpu) {
+    return cpu > 1'000/*1ms*/;
 }
 
-bool THive::IsValidMetricsMemory(const NKikimrTabletBase::TMetrics& metrics) {
-    return metrics.GetMemory() > 128'000/*128KB*/;
+bool THive::IsValidMetricsMemory(ui64 memory) {
+    return memory > 128'000/*128KB*/;
 }
 
-bool THive::IsValidMetricsNetwork(const NKikimrTabletBase::TMetrics& metrics) {
-    return metrics.GetNetwork() > 1024/*1KBps*/;
+bool THive::IsValidMetricsNetwork(ui64 network) {
+    return network > 1024/*1KBps*/;
 }
 
 TString THive::DebugDomainsActiveNodes() const {

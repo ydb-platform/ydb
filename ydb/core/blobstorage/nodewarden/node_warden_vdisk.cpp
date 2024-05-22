@@ -174,6 +174,16 @@ namespace NKikimr::NStorage {
         vdiskConfig->EnableVDiskCooldownTimeout = Cfg->EnableVDiskCooldownTimeout;
         vdiskConfig->ReplPausedAtStart = Cfg->VDiskReplPausedAtStart;
         vdiskConfig->EnableVPatch = EnableVPatch;
+
+        vdiskConfig->EnableLocalSyncLogDataCutting = EnableLocalSyncLogDataCutting;
+        if (deviceType == NPDisk::EDeviceType::DEVICE_TYPE_ROT) {
+            vdiskConfig->EnableSyncLogChunkCompression = EnableSyncLogChunkCompressionHDD;
+            vdiskConfig->MaxSyncLogChunksInFlight = MaxSyncLogChunksInFlightHDD;
+        } else {
+            vdiskConfig->EnableSyncLogChunkCompression = EnableSyncLogChunkCompressionSSD;
+            vdiskConfig->MaxSyncLogChunksInFlight = MaxSyncLogChunksInFlightSSD;
+        }
+
         vdiskConfig->FeatureFlags = Cfg->FeatureFlags;
 
         if (Cfg->BlobStorageConfig.HasCostMetricsSettings()) {

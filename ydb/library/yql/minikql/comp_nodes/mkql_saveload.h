@@ -323,7 +323,7 @@ private:
         while (listIt.Next(str)) {
             const TStringBuf strRef = str.AsStringRef();
             result.AppendNoAlias(strRef.Data(), strRef.Size());
-        }            
+        }
         return result;
     }
 

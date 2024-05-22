@@ -289,7 +289,6 @@ inline bool TBoxedValueAccessor::Load2(IBoxedValue& value, TUnboxedValue& data) 
         return false;
     }
 
-    Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 36)));
     return value.Load2(data);
 }
 #endif

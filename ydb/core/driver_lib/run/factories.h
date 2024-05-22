@@ -40,7 +40,7 @@ struct TModuleFactories {
     // Factory for Simple queue services implementation details
     std::shared_ptr<NSQS::IEventsWriterFactory> SqsEventsWriterFactory;
 
-    IActor*(*CreateTicketParser)(const NKikimrProto::TAuthConfig&);
+    IActor*(*CreateTicketParser)(const NKikimrProto::TAuthConfig&, const NKikimrConfig::TClientCertificateAuthorization&);
     IActor*(*FolderServiceFactory)(const NKikimrProto::NFolderService::TFolderServiceConfig&);
 
     // Factory for grpc services

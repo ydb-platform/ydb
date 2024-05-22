@@ -1,6 +1,7 @@
 #pragma once
 #include "ticket_parser_log.h"
 #include "ldap_auth_provider.h"
+#include "cert_auth_utils.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
@@ -255,6 +256,7 @@ protected:
     using IActorOps::Schedule;
 
     NKikimrProto::TAuthConfig Config;
+    const TDynamicNodeAuthorizationParams DynamicNodeAuthorizationParams;
     TDuration ExpireTime = TDuration::Hours(24); // after what time ticket will expired and removed from cache
 
     template <typename TTokenRecord>
@@ -325,8 +327,11 @@ private:
             const auto& sign = request->Signature;
             key << sign.AccessKeyId << "-" << sign.Signature << ":" << sign.StringToSign << ":"
                 << sign.Service << ":" << sign.Region << ":" << sign.SignedAt.NanoSeconds();
-        } else if (request->AuthInfo.Ticket) {
-            key << request->AuthInfo.Ticket;
+        } else {
+            if (request->AuthInfo.Ticket) {
+                key << request->AuthInfo.Ticket;
+            }
+            key << static_cast<int>(request->AuthInfo.IsCertificate);
         }
         key << ':';
         if (request->Database) {
@@ -671,12 +676,21 @@ private:
             return false;
         }
         TStringBuilder dn;
+        TMap<TString, TString> subjectDescription;
         for (const auto& [attribute, value] : X509CertificateReader::ReadAllSubjectTerms(x509cert)) {
             dn << attribute << "=" << value << ",";
+            subjectDescription[attribute] = value;
         }
         if (dn.empty()) {
             SetError(key, record, { .Message = "Cannot create token from certificate. Cannot extract subject from certificate", .Retryable = false });
             return false;
+        }
+        // Validate certificate
+        if (AppData()->FeatureFlags.GetEnableDynamicNodeAuthorization() && DynamicNodeAuthorizationParams) {
+            if (!DynamicNodeAuthorizationParams.IsSubjectDescriptionMatched(subjectDescription)) {
+                SetError(key, record, { .Message = "Cannot create token from certificate. Client certificate failed verification", .Retryable = false });
+                return false;
+            }
         }
         dn.remove(dn.size() - 1);
         dn << "@" << Config.GetCertificateAuthenticationDomain();
@@ -821,7 +835,7 @@ private:
         }
         if (ticket.empty() && !signature.AccessKeyId) {
             TEvTicketParser::TError error;
-            error.Message = "Ticket is empty";
+            error.Message = (ev->Get()->AuthInfo.IsCertificate ? "Certificate is empty" : "Ticket is empty");
             error.Retryable = false;
             BLOG_ERROR("Ticket " << MaskTicket(ticket) << ": " << error);
             Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->AuthInfo, error), 0, cookie);
@@ -2097,8 +2111,10 @@ public:
         }
     }
 
-    TTicketParserImpl(const NKikimrProto::TAuthConfig& authConfig)
-        : Config(authConfig) {}
+    TTicketParserImpl(const NKikimrProto::TAuthConfig& authConfig, const NKikimrConfig::TClientCertificateAuthorization& clientCertificateAuth = {})
+        : Config(authConfig)
+        , DynamicNodeAuthorizationParams(GetDynamicNodeAuthorizationParams(clientCertificateAuth))
+        {}
 };
 
 }

@@ -3,5 +3,5 @@
 #include <ydb/core/base/ticket_parser.h>
 
 namespace NKikimr {
-    IActor* CreateTicketParser(const NKikimrProto::TAuthConfig& authConfig);
+    IActor* CreateTicketParser(const NKikimrProto::TAuthConfig& authConfig, const NKikimrConfig::TClientCertificateAuthorization& clientCertificateAuth = {});
 }

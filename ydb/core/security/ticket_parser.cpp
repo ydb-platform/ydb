@@ -28,8 +28,8 @@ class TTicketParser : public TTicketParserImpl<TTicketParser> {
     }
 };
 
-IActor* CreateTicketParser(const NKikimrProto::TAuthConfig& authConfig) {
-    return new TTicketParser(authConfig);
+IActor* CreateTicketParser(const NKikimrProto::TAuthConfig& authConfig, const NKikimrConfig::TClientCertificateAuthorization& clientCertificateAuth) {
+    return new TTicketParser(authConfig, clientCertificateAuth);
 }
 
 }

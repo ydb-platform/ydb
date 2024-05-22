@@ -30,8 +30,6 @@ public:
     bool IncRequest();
     void DecRequest();
 
-    void SetDynamicNodeAuthParams(const TDynamicNodeAuthorizationParams& dynamicNodeAuthorizationParams);
-
 private:
     void SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger);
     void DoListEndpointsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& provider);
@@ -43,9 +41,6 @@ private:
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters_;
     NActors::TActorId GRpcRequestProxyId_;
     NYdbGrpc::TGlobalLimiter* Limiter_ = nullptr;
-
-    TDynamicNodeAuthorizationParams DynamicNodeAuthorizationParams = {};
-    std::function<void(std::unique_ptr<IRequestOpCtx>, const IFacilityProvider&)> NodeRegistrationRequest;
 };
 
 } // namespace NGRpcService

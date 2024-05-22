@@ -1,4 +1,4 @@
-#include "cert_auth_props.h"
+#include "cert_auth_utils.h"
 
 namespace NKikimr {
 

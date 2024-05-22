@@ -22,12 +22,8 @@ namespace NGRpcService {
   public:
      using TGrpcServiceBase<Ydb::Discovery::V1::DiscoveryService>::TGrpcServiceBase;
 
-     void SetDynamicNodeAuthParams(const TDynamicNodeAuthorizationParams& dynamicNodeAuthorizationParams);
-
   private:
      void SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger);
-     TDynamicNodeAuthorizationParams DynamicNodeAuthorizationParams = {};
-     std::function<void(std::unique_ptr<IRequestOpCtx>, const IFacilityProvider&)> NodeRegistrationRequest;
  };
 
 } // namespace NGRpcService

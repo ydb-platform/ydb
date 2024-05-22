@@ -103,6 +103,7 @@ bool TDynamicNodeAuthorizationParams::IsSubjectDescriptionMatched(const TMap<TSt
     for (const auto& description: CertSubjectsDescriptions) {
         bool isDescriptionMatched = false;
         for (const auto& name: description.RelativeDistinguishedNames) {
+            //Cerr << "+++ Check " << name.Attribute << Endl;
             isDescriptionMatched = false;
             auto fieldIt = subjectDescription.find(name.Attribute);
             if (fieldIt == subjectDescription.cend()) {
@@ -111,15 +112,19 @@ bool TDynamicNodeAuthorizationParams::IsSubjectDescriptionMatched(const TMap<TSt
 
             const auto& attributeValue = fieldIt->second;
             for (const auto& value: name.Values) {
+                //Cerr << value << " <-> " << attributeValue << Endl;
                 if (value == attributeValue) {
                     isDescriptionMatched = true;
                     break;
                 }
             }
-            for (const auto& suffix: name.Suffixes) {
-                if (attributeValue.EndsWith(suffix)) {
-                    isDescriptionMatched = true;
-                    break;
+            if (!isDescriptionMatched) {
+                for (const auto& suffix: name.Suffixes) {
+                    //Cerr << suffix << " <-> " << attributeValue << Endl;
+                    if (attributeValue.EndsWith(suffix)) {
+                        isDescriptionMatched = true;
+                        break;
+                    }
                 }
             }
             if (!isDescriptionMatched) {

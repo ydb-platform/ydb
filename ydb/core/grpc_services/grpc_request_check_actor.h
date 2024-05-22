@@ -118,15 +118,17 @@ public:
         , Span_(TWilsonGrpc::RequestCheckActor, GrpcRequestBaseCtx_->GetWilsonTraceId(), "RequestCheckActor")
     {
         typename TBase::TAuthInfo authInfo;
-        TMaybe<TString> authToken = GrpcRequestBaseCtx_->GetYdbToken();
-        if (authToken) {
-            authInfo.Token = authToken.GetRef();
-        }
-        auto& certAuth = authInfo.CertAuth;
-        certAuth.NeedAuthByCertificate = GrpcRequestBaseCtx_->NeedAuthByCertificate();
         const auto& clientCertificates = GrpcRequestBaseCtx_->FindClientCertPropertyValues();
         if (!clientCertificates.empty()) {
-            certAuth.ClientCertificate = TString(clientCertificates.front());
+            authInfo.Credentials = TString(clientCertificates.front());
+            authInfo.IsCertificate = true;
+        } else if (GrpcRequestBaseCtx_->NeedAuthByCertificate()) { // Предыдущие версии ydb при регистрации ноды посылают как сертификаты так и токены. Для таких запросов принимаем только токены.
+            authInfo.IsCertificate = true;
+        } else {
+            TMaybe<TString> authToken = GrpcRequestBaseCtx_->GetYdbToken();
+            if (authToken) {
+                authInfo.Credentials = authToken.GetRef();
+            }
         }
         TBase::SetAuthInfo(std::move(authInfo));
         Initialize(schemeData);

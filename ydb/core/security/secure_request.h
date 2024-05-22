@@ -9,16 +9,11 @@ template <typename TBase, typename TDerived, typename TBootstrap = TDerived>
 class TSecureRequestActor : public TBase {
 protected:
     struct TAuthInfo {
-        struct TCertAuth {
-            TString ClientCertificate;
-            bool NeedAuthByCertificate = false;
-        };
-
-        TCertAuth CertAuth;
-        TString Token;
+        TString Credentials;
+        bool IsCertificate = false;
 
         bool IsExists() const {
-            return (CertAuth.NeedAuthByCertificate && !CertAuth.ClientCertificate.empty()) || !Token.empty();
+            return !Credentials.empty();
         }
     };
 
@@ -55,15 +50,15 @@ private:
         const TEvTicketParser::TEvAuthorizeTicketResult& result(*ev->Get());
         if (!result.Error.empty()) {
             if (IsTokenRequired()) {
-                if (result.AuthInfo.IsCertificate) {
-                    ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
-                        .Database = Database,
-                        .AuthInfo = {.Ticket = AuthInfo.Token},
-                        .PeerName = PeerName,
-                        .Entries = Entries
-                    }));
-                    return;
-                }
+                // if (result.AuthInfo.IsCertificate) {
+                //     ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
+                //         .Database = Database,
+                //         .AuthInfo = {.Ticket = AuthInfo.Token},
+                //         .PeerName = PeerName,
+                //         .Entries = Entries
+                //     }));
+                //     return;
+                // }
                 return static_cast<TDerived*>(this)->OnAccessDenied(result.Error, ctx);
             }
         } else {
@@ -103,7 +98,8 @@ public:
     }
 
     void SetSecurityToken(const TString& securityToken) {
-        AuthInfo.Token = securityToken;
+        AuthInfo.Credentials = securityToken;
+        AuthInfo.IsCertificate = false;
     }
 
     void SetAuthInfo(const TAuthInfo& authInfo) {
@@ -206,16 +202,16 @@ public:
                 return static_cast<TBootstrap*>(this)->Bootstrap(ctx);
             }
         } else {
-            TEvTicketParser::TAuthInfo authInfo;
-            if (AuthInfo.CertAuth.NeedAuthByCertificate) {
-                authInfo.Ticket = AuthInfo.CertAuth.ClientCertificate;
-                authInfo.IsCertificate = true;
-            } else {
-                authInfo.Ticket = AuthInfo.Token;
-            }
+            // TEvTicketParser::TAuthInfo authInfo;
+            // if (AuthInfo.CertAuth.NeedAuthByCertificate) {
+            //     authInfo.Ticket = AuthInfo.CertAuth.ClientCertificate;
+            //     authInfo.IsCertificate = true;
+            // } else {
+            //     authInfo.Ticket = AuthInfo.Token;
+            // }
             ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
                 .Database = Database,
-                .AuthInfo = authInfo,
+                .AuthInfo = {.Ticket = AuthInfo.Credentials, .IsCertificate = AuthInfo.IsCertificate},
                 .PeerName = PeerName,
                 .Entries = Entries
             }));

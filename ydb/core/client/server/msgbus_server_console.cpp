@@ -31,15 +31,12 @@ public:
         , Request(request)
     {
         typename TBase::TAuthInfo authInfo;
-        const auto& token = request.GetSecurityToken();
-        if (!token.empty()) {
-            authInfo.Token = token;
-        }
-        auto& certAuth = authInfo.CertAuth;
-        certAuth.NeedAuthByCertificate = true;
-        const auto& clientCertificate = msg.FindClientCert();
-        if (!clientCertificate.empty()){
-            certAuth.ClientCertificate = TString(clientCertificate.front());
+        const auto& clientCertificates = msg.FindClientCert();
+        if (!clientCertificates.empty()) {
+            authInfo.Credentials = TString(clientCertificates.front());
+            authInfo.IsCertificate = true;
+        } else {
+            authInfo.Credentials = request.GetSecurityToken();
         }
         TBase::SetAuthInfo(std::move(authInfo));
         TBase::SetRequireAdminAccess(true);

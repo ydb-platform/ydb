@@ -1636,9 +1636,9 @@ void TSecurityServicesInitializer::InitializeServices(NActors::TActorSystemSetup
     if (!IsServiceInitialized(setup, MakeTicketParserID())) {
         IActor* ticketParser = nullptr;
         if (Factories && Factories->CreateTicketParser) {
-            ticketParser = Factories->CreateTicketParser(Config.GetAuthConfig());
+            ticketParser = Factories->CreateTicketParser(Config.GetAuthConfig(), Config.GetClientCertificateAuthorization());
         } else {
-            ticketParser = CreateTicketParser(Config.GetAuthConfig());
+            ticketParser = CreateTicketParser(Config.GetAuthConfig(), Config.GetClientCertificateAuthorization());
         }
         if (ticketParser) {
             setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeTicketParserID(),

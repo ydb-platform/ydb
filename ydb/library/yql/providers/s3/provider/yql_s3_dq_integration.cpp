@@ -15,6 +15,7 @@
 #include <ydb/library/yql/providers/s3/range_helpers/file_tree_builder.h>
 #include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
 #include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/actors/core/actorsystem.h>
 
 #include <library/cpp/json/writer/json_value.h>
 

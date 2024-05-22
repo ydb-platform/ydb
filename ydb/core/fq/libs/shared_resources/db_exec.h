@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/library/db_pool/db_pool.h>
+#include <ydb/library/actors/core/actorsystem.h>
 
 #include <ydb/core/fq/libs/common/debug_info.h>
 #include <ydb/core/fq/libs/config/yq_issue.h>

@@ -324,4 +324,50 @@ namespace NActors {
         CpuManager->Cleanup();
         Scheduler.Destroy();
     }
+
+    template <ESendingType SendingType>
+    TActorId TActorSystem::Register(IActor* actor, TMailboxType::EType mailboxType, ui32 executorPool,
+                        ui64 revolvingCounter, const TActorId& parentId) {
+        Y_ABORT_UNLESS(actor);
+        Y_ABORT_UNLESS(executorPool < ExecutorPoolCount, "executorPool# %" PRIu32 ", ExecutorPoolCount# %" PRIu32,
+                (ui32)executorPool, (ui32)ExecutorPoolCount);
+        if constexpr (SendingType == ESendingType::Common) {
+            return CpuManager->GetExecutorPool(executorPool)->Register(actor, mailboxType, revolvingCounter, parentId);
+        } else if (!TlsThreadContext) {
+            return CpuManager->GetExecutorPool(executorPool)->Register(actor, mailboxType, revolvingCounter, parentId);
+        } else {
+            ESendingType previousType = std::exchange(TlsThreadContext->SendingType, SendingType);
+            TActorId id = CpuManager->GetExecutorPool(executorPool)->Register(actor, mailboxType, revolvingCounter, parentId);
+            TlsThreadContext->SendingType = previousType;
+            return id;
+        }
+    }
+
+    template <ESendingType SendingType>
+    bool TActorSystem::Send(TAutoPtr<IEventHandle> ev) const {
+        if constexpr (SendingType == ESendingType::Common) {
+            return this->GenericSend< &IExecutorPool::Send>(ev);
+        } else {
+            return this->SpecificSend(ev, SendingType);
+        }
+    }
+
+    template
+    TActorId TActorSystem::Register<ESendingType::Common>(IActor* actor, TMailboxType::EType mailboxType, ui32 executorPool,
+        ui64 revolvingCounter, const TActorId& parentId);
+    template
+    bool TActorSystem::Send<ESendingType::Common>(TAutoPtr<IEventHandle> ev) const;
+
+    template
+    TActorId TActorSystem::Register<ESendingType::Lazy>(IActor* actor, TMailboxType::EType mailboxType, ui32 executorPool,
+        ui64 revolvingCounter, const TActorId& parentId);
+    template
+    bool TActorSystem::Send<ESendingType::Lazy>(TAutoPtr<IEventHandle> ev) const;
+
+    template
+    TActorId TActorSystem::Register<ESendingType::Tail>(IActor* actor, TMailboxType::EType mailboxType, ui32 executorPool,
+        ui64 revolvingCounter, const TActorId& parentId);
+    template
+    bool TActorSystem::Send<ESendingType::Tail>(TAutoPtr<IEventHandle> ev) const;
+
 }

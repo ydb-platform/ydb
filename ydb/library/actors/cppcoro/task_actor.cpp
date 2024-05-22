@@ -1,6 +1,7 @@
 #include "task_actor.h"
 #include "await_callback.h"
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/hfunc.h>
 
 namespace NActors {

@@ -1,7 +1,11 @@
 #include <ydb/library/yql/dq/runtime/dq_channel_storage.h>
 #include "ydb/library/yql/dq/common/dq_common.h"
 
-#include <ydb/library/actors/core/actor.h>
+#include <library/cpp/threading/future/future.h>
+
+namespace NActors {
+class TActorSystem;
+}
 
 namespace NYql::NDq {
 

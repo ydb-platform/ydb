@@ -1,6 +1,5 @@
 #pragma once
 
-#include "actorsystem.h"
 #include "event.h"
 #include "executor_thread.h"
 #include "monotonic.h"
@@ -834,60 +833,6 @@ namespace NActors {
         }
     };
 
-
-    template <ESendingType SendingType>
-    bool TGenericExecutorThread::Send(TAutoPtr<IEventHandle> ev) {
-#ifdef USE_ACTOR_CALLSTACK
-        do {
-            (ev)->Callstack = TCallstack::GetTlsCallstack();
-            (ev)->Callstack.Trace();
-        } while (false)
-#endif
-        Ctx.IncrementSentEvents();
-        return ActorSystem->Send<SendingType>(ev);
-    }
-
-    template <ESendingType SendingType>
-    TActorId TGenericExecutorThread::RegisterActor(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId,
-            TActorId parentId)
-    {
-        if (!parentId) {
-            parentId = CurrentRecipient;
-        }
-        if (poolId == Max<ui32>()) {
-            if constexpr (SendingType == ESendingType::Common) {
-                return Ctx.Executor->Register(actor, mailboxType, ++RevolvingWriteCounter, parentId);
-            } else if (!TlsThreadContext) {
-                return Ctx.Executor->Register(actor, mailboxType, ++RevolvingWriteCounter, parentId);
-            } else {
-                ESendingType previousType = std::exchange(TlsThreadContext->SendingType, SendingType);
-                TActorId id = Ctx.Executor->Register(actor, mailboxType, ++RevolvingWriteCounter, parentId);
-                TlsThreadContext->SendingType = previousType;
-                return id;
-            }
-        } else {
-            return ActorSystem->Register<SendingType>(actor, mailboxType, poolId, ++RevolvingWriteCounter, parentId);
-        }
-    }
-
-    template <ESendingType SendingType>
-    TActorId TGenericExecutorThread::RegisterActor(IActor* actor, TMailboxHeader* mailbox, ui32 hint, TActorId parentId) {
-        if (!parentId) {
-            parentId = CurrentRecipient;
-        }
-        if constexpr (SendingType == ESendingType::Common) {
-            return Ctx.Executor->Register(actor, mailbox, hint, parentId);
-        } else if (!TlsActivationContext) {
-            return Ctx.Executor->Register(actor, mailbox, hint, parentId);
-        } else {
-            ESendingType previousType = std::exchange(TlsThreadContext->SendingType, SendingType);
-            TActorId id = Ctx.Executor->Register(actor, mailbox, hint, parentId);
-            TlsThreadContext->SendingType = previousType;
-            return id;
-        }
-    }
-
-
     template <ESendingType SendingType>
     bool TActivationContext::Send(TAutoPtr<IEventHandle> ev) {
         return TlsActivationContext->ExecutorThread.Send<SendingType>(ev);
@@ -953,35 +898,6 @@ namespace NActors {
         Y_ABORT_UNLESS(actor);
         return TlsActivationContext->ExecutorThread.RegisterActor<SendingType>(actor, mailboxType, poolId, SelfActorId);
     }
-
-
-    template <ESendingType SendingType>
-    TActorId TActorSystem::Register(IActor* actor, TMailboxType::EType mailboxType, ui32 executorPool,
-                        ui64 revolvingCounter, const TActorId& parentId) {
-        Y_ABORT_UNLESS(actor);
-        Y_ABORT_UNLESS(executorPool < ExecutorPoolCount, "executorPool# %" PRIu32 ", ExecutorPoolCount# %" PRIu32,
-                (ui32)executorPool, (ui32)ExecutorPoolCount);
-        if constexpr (SendingType == ESendingType::Common) {
-            return CpuManager->GetExecutorPool(executorPool)->Register(actor, mailboxType, revolvingCounter, parentId);
-        } else if (!TlsThreadContext) {
-            return CpuManager->GetExecutorPool(executorPool)->Register(actor, mailboxType, revolvingCounter, parentId);
-        } else {
-            ESendingType previousType = std::exchange(TlsThreadContext->SendingType, SendingType);
-            TActorId id = CpuManager->GetExecutorPool(executorPool)->Register(actor, mailboxType, revolvingCounter, parentId);
-            TlsThreadContext->SendingType = previousType;
-            return id;
-        }
-    }
-
-    template <ESendingType SendingType>
-    bool TActorSystem::Send(TAutoPtr<IEventHandle> ev) const {
-        if constexpr (SendingType == ESendingType::Common) {
-            return this->GenericSend< &IExecutorPool::Send>(ev);
-        } else {
-            return this->SpecificSend(ev, SendingType);
-        }
-    }
-
 }
 
 template <>

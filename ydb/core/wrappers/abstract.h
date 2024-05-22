@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/core/base/events.h>
 #include <ydb/core/wrappers/events/abstract.h>
 #include <ydb/core/wrappers/events/common.h>

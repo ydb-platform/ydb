@@ -16,6 +16,7 @@ void OnTerminate(int) {
 }
 
 class TPingActor : public TActorBootstrapped<TPingActor> {
+
     const TActorId Target;
     ui64 HandledEvents;
     TInstant PeriodStart;

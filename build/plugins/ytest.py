@@ -470,10 +470,7 @@ def java_srcdirs_to_data(unit, var):
     return serialize_list(extra_data)
 
 
-def onadd_check(unit, *args):
-    if unit.get("TIDY") == "yes":
-        # graph changed for clang_tidy tests
-        return
+def check_data(unit, *args):
     flat_args, spec_args = _common.sort_by_keywords(
         {
             "DEPENDS": -1,
@@ -491,105 +488,169 @@ def onadd_check(unit, *args):
     )
     check_type = flat_args[0]
 
-    if check_type in ("check.data", "check.resource") and unit.get('VALIDATE_DATA') == "no":
-        return
-
     test_dir = _common.get_norm_unit_path(unit)
 
-    test_timeout = ''
-    fork_mode = ''
-    extra_test_data = ''
-    extra_test_dart_data = {}
-    ymake_java_test = unit.get('YMAKE_JAVA_TEST') == 'yes'
-    use_arcadia_python = unit.get('USE_ARCADIA_PYTHON')
-    uid_ext = ''
-    script_rel_path = check_type
     test_files = flat_args[1:]
 
-    if check_type in ["check.data", "check.resource"]:
-        uid_ext = unit.get("SBR_UID_EXT").split(" ", 1)[-1]  # strip variable name
+    uid_ext = unit.get("SBR_UID_EXT").split(" ", 1)[-1]  # strip variable name
 
-    if check_type in ["flake8.py2", "flake8.py3", "black"]:
-        fork_mode = unit.get('TEST_FORK_MODE') or ''
-    elif check_type == "ktlint":
-        test_timeout = '120'
-        if unit.get('_USE_KTLINT_OLD') == 'yes':
-            extra_test_data = serialize_list([KTLINT_OLD_EDITOR_CONFIG])
-            extra_test_dart_data['KTLINT_BINARY'] = '$(KTLINT_OLD)/run.bat'
-            extra_test_dart_data['USE_KTLINT_OLD'] = 'yes'
-        else:
-            data_list = [KTLINT_CURRENT_EDITOR_CONFIG]
-            baseline_path_relative = unit.get('_KTLINT_BASELINE_FILE')
-            if baseline_path_relative:
-                baseline_path = unit.resolve_arc_path(baseline_path_relative).replace('$S', 'arcadia')
-                data_list += [baseline_path]
-                extra_test_dart_data['KTLINT_BASELINE_FILE'] = baseline_path_relative
-            extra_test_data = serialize_list(data_list)
-            extra_test_dart_data['KTLINT_BINARY'] = '$(KTLINT)/run.bat'
-    elif check_type == "JAVA_STYLE":
-        if ymake_java_test and not unit.get('ALL_SRCDIRS'):
-            return
-        if len(flat_args) < 2:
-            raise Exception("Not enough arguments for JAVA_STYLE check")
-        check_level = flat_args[1]
-        allowed_levels = {
-            'base': '/yandex_checks.xml',
-            'strict': '/yandex_checks_strict.xml',
-            'extended': '/yandex_checks_extended.xml',
-            'library': '/yandex_checks_library.xml',
-        }
-        if check_level not in allowed_levels:
-            raise Exception("'{}' is not allowed in LINT(), use one of {}".format(check_level, allowed_levels.keys()))
-        test_files[0] = allowed_levels[check_level]  # replace check_level with path to config file
-        script_rel_path = "java.style"
-        test_timeout = '240'
-        fork_mode = unit.get('TEST_FORK_MODE') or ''
-        if ymake_java_test:
-            extra_test_data = java_srcdirs_to_data(unit, 'ALL_SRCDIRS')
-
-        # jstyle should use the latest jdk
-        unit.onpeerdir([unit.get('JDK_LATEST_PEERDIR')])
-        extra_test_dart_data['JDK_LATEST_VERSION'] = unit.get('JDK_LATEST_VERSION')
-        # TODO remove when ya-bin will be released (https://st.yandex-team.ru/DEVTOOLS-9611)
-        extra_test_dart_data['JDK_RESOURCE'] = 'JDK' + (
-            unit.get('JDK_VERSION') or unit.get('JDK_REAL_VERSION') or '_DEFAULT'
-        )
-    elif check_type == "gofmt":
-        if test_files:
-            test_dir = os.path.dirname(test_files[0]).lstrip("$S/")
-    elif check_type == "check.data":
-        data_re = re.compile(r"sbr:/?/?(\d+)=?.*")
-        data = flat_args[1:]
-        resources = []
-        for f in data:
-            matched = re.match(data_re, f)
-            if matched:
-                resources.append(matched.group(1))
-        if resources:
-            test_files = resources
-        else:
-            return
+    data_re = re.compile(r"sbr:/?/?(\d+)=?.*")
+    data = flat_args[1:]
+    resources = []
+    for f in data:
+        matched = re.match(data_re, f)
+        if matched:
+            resources.append(matched.group(1))
+    if resources:
+        test_files = resources
+    else:
+        return
 
     serialized_test_files = serialize_list(test_files)
 
     test_record = {
         'TEST-NAME': check_type.lower(),
-        'TEST-TIMEOUT': test_timeout,
-        'SCRIPT-REL-PATH': script_rel_path,
+        'TEST-TIMEOUT': '',
+        'SCRIPT-REL-PATH': 'check.data',
+        'TESTED-PROJECT-NAME': os.path.basename(test_dir),
+        'SOURCE-FOLDER-PATH': test_dir,
+        'CUSTOM-DEPENDENCIES': " ".join(spec_args.get('DEPENDS', [])),
+        'TEST-DATA': '',
+        'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
+        'SBR-UID-EXT': uid_ext,
+        'SPLIT-FACTOR': '',
+        'TEST_PARTITION': 'SEQUENTIAL',
+        'FORK-MODE': '',
+        'FORK-TEST-FILES': '',
+        'SIZE': 'SMALL',
+        'TAG': '',
+        'REQUIREMENTS': " ".join(spec_args.get('REQUIREMENTS', [])),
+        'USE_ARCADIA_PYTHON': unit.get('USE_ARCADIA_PYTHON') or '',
+        'OLD_PYTEST': 'no',
+        'PYTHON-PATHS': '',
+        # TODO remove FILES, see DEVTOOLS-7052
+        'FILES': serialized_test_files,
+        'TEST-FILES': serialized_test_files,
+    }
+
+    data = dump_test(unit, test_record)
+    if data:
+        unit.set_property(["DART_DATA", data])
+
+
+def check_resource(unit, *args):
+    flat_args, spec_args = _common.sort_by_keywords(
+        {
+            "DEPENDS": -1,
+            "TIMEOUT": 1,
+            "DATA": -1,
+            "TAG": -1,
+            "REQUIREMENTS": -1,
+            "FORK_MODE": 1,
+            "SPLIT_FACTOR": 1,
+            "FORK_SUBTESTS": 0,
+            "FORK_TESTS": 0,
+            "SIZE": 1,
+        },
+        args,
+    )
+    check_type = flat_args[0]
+
+    test_dir = _common.get_norm_unit_path(unit)
+
+    test_files = flat_args[1:]
+
+    uid_ext = unit.get("SBR_UID_EXT").split(" ", 1)[-1]  # strip variable name
+
+    serialized_test_files = serialize_list(test_files)
+
+    test_record = {
+        'TEST-NAME': check_type.lower(),
+        'TEST-TIMEOUT': '',
+        'SCRIPT-REL-PATH': 'check.resource',
+        'TESTED-PROJECT-NAME': os.path.basename(test_dir),
+        'SOURCE-FOLDER-PATH': test_dir,
+        'CUSTOM-DEPENDENCIES': " ".join(spec_args.get('DEPENDS', [])),
+        'TEST-DATA': '',
+        'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
+        'SBR-UID-EXT': uid_ext,
+        'SPLIT-FACTOR': '',
+        'TEST_PARTITION': 'SEQUENTIAL',
+        'FORK-MODE': '',
+        'FORK-TEST-FILES': '',
+        'SIZE': 'SMALL',
+        'TAG': '',
+        'REQUIREMENTS': " ".join(spec_args.get('REQUIREMENTS', [])),
+        'USE_ARCADIA_PYTHON': unit.get('USE_ARCADIA_PYTHON') or '',
+        'OLD_PYTEST': 'no',
+        'PYTHON-PATHS': '',
+        # TODO remove FILES, see DEVTOOLS-7052
+        'FILES': serialized_test_files,
+        'TEST-FILES': serialized_test_files,
+    }
+
+    data = dump_test(unit, test_record)
+    if data:
+        unit.set_property(["DART_DATA", data])
+
+
+def ktlint(unit, *args):
+    flat_args, spec_args = _common.sort_by_keywords(
+        {
+            "DEPENDS": -1,
+            "TIMEOUT": 1,
+            "DATA": -1,
+            "TAG": -1,
+            "REQUIREMENTS": -1,
+            "FORK_MODE": 1,
+            "SPLIT_FACTOR": 1,
+            "FORK_SUBTESTS": 0,
+            "FORK_TESTS": 0,
+            "SIZE": 1,
+        },
+        args,
+    )
+    check_type = flat_args[0]
+
+    test_dir = _common.get_norm_unit_path(unit)
+
+    extra_test_dart_data = {}
+    test_files = flat_args[1:]
+
+    if unit.get('_USE_KTLINT_OLD') == 'yes':
+        extra_test_data = serialize_list([KTLINT_OLD_EDITOR_CONFIG])
+        extra_test_dart_data['KTLINT_BINARY'] = '$(KTLINT_OLD)/run.bat'
+        extra_test_dart_data['USE_KTLINT_OLD'] = 'yes'
+    else:
+        data_list = [KTLINT_CURRENT_EDITOR_CONFIG]
+        baseline_path_relative = unit.get('_KTLINT_BASELINE_FILE')
+        if baseline_path_relative:
+            baseline_path = unit.resolve_arc_path(baseline_path_relative).replace('$S', 'arcadia')
+            data_list += [baseline_path]
+            extra_test_dart_data['KTLINT_BASELINE_FILE'] = baseline_path_relative
+        extra_test_data = serialize_list(data_list)
+        extra_test_dart_data['KTLINT_BINARY'] = '$(KTLINT)/run.bat'
+
+    serialized_test_files = serialize_list(test_files)
+
+    test_record = {
+        'TEST-NAME': check_type.lower(),
+        'TEST-TIMEOUT': '120',
+        'SCRIPT-REL-PATH': 'ktlint',
         'TESTED-PROJECT-NAME': os.path.basename(test_dir),
         'SOURCE-FOLDER-PATH': test_dir,
         'CUSTOM-DEPENDENCIES': " ".join(spec_args.get('DEPENDS', [])),
         'TEST-DATA': extra_test_data,
         'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
-        'SBR-UID-EXT': uid_ext,
+        'SBR-UID-EXT': '',
         'SPLIT-FACTOR': '',
         'TEST_PARTITION': 'SEQUENTIAL',
-        'FORK-MODE': fork_mode,
+        'FORK-MODE': '',
         'FORK-TEST-FILES': '',
         'SIZE': 'SMALL',
         'TAG': '',
         'REQUIREMENTS': " ".join(spec_args.get('REQUIREMENTS', [])),
-        'USE_ARCADIA_PYTHON': use_arcadia_python or '',
+        'USE_ARCADIA_PYTHON': unit.get('USE_ARCADIA_PYTHON') or '',
         'OLD_PYTEST': 'no',
         'PYTHON-PATHS': '',
         # TODO remove FILES, see DEVTOOLS-7052
@@ -601,6 +662,224 @@ def onadd_check(unit, *args):
     data = dump_test(unit, test_record)
     if data:
         unit.set_property(["DART_DATA", data])
+
+
+def java_style(unit, *args):
+    flat_args, spec_args = _common.sort_by_keywords(
+        {
+            "DEPENDS": -1,
+            "TIMEOUT": 1,
+            "DATA": -1,
+            "TAG": -1,
+            "REQUIREMENTS": -1,
+            "FORK_MODE": 1,
+            "SPLIT_FACTOR": 1,
+            "FORK_SUBTESTS": 0,
+            "FORK_TESTS": 0,
+            "SIZE": 1,
+        },
+        args,
+    )
+    check_type = flat_args[0]
+
+    test_dir = _common.get_norm_unit_path(unit)
+
+    ymake_java_test = unit.get('YMAKE_JAVA_TEST') == 'yes'
+    test_files = flat_args[1:]
+
+    if len(flat_args) < 2:
+        raise Exception("Not enough arguments for JAVA_STYLE check")
+    check_level = flat_args[1]
+    allowed_levels = {
+        'base': '/yandex_checks.xml',
+        'strict': '/yandex_checks_strict.xml',
+        'extended': '/yandex_checks_extended.xml',
+        'library': '/yandex_checks_library.xml',
+    }
+    if check_level not in allowed_levels:
+        raise Exception("'{}' is not allowed in LINT(), use one of {}".format(check_level, allowed_levels.keys()))
+    test_files[0] = allowed_levels[check_level]  # replace check_level with path to config file
+
+    # jstyle should use the latest jdk
+    unit.onpeerdir([unit.get('JDK_LATEST_PEERDIR')])
+
+    serialized_test_files = serialize_list(test_files)
+
+    test_record = {
+        'TEST-NAME': check_type.lower(),
+        'TEST-TIMEOUT': '240',
+        'SCRIPT-REL-PATH': "java.style",
+        'TESTED-PROJECT-NAME': os.path.basename(test_dir),
+        'SOURCE-FOLDER-PATH': test_dir,
+        'CUSTOM-DEPENDENCIES': " ".join(spec_args.get('DEPENDS', [])),
+        'TEST-DATA': java_srcdirs_to_data(unit, 'ALL_SRCDIRS') if ymake_java_test else '',
+        'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
+        'SBR-UID-EXT': '',
+        'SPLIT-FACTOR': '',
+        'TEST_PARTITION': 'SEQUENTIAL',
+        'FORK-MODE': unit.get('TEST_FORK_MODE') or '',
+        'FORK-TEST-FILES': '',
+        'SIZE': 'SMALL',
+        'TAG': '',
+        'REQUIREMENTS': " ".join(spec_args.get('REQUIREMENTS', [])),
+        'USE_ARCADIA_PYTHON': unit.get('USE_ARCADIA_PYTHON') or '',
+        'OLD_PYTEST': 'no',
+        'PYTHON-PATHS': '',
+        # TODO remove FILES, see DEVTOOLS-7052
+        'FILES': serialized_test_files,
+        'TEST-FILES': serialized_test_files,
+        'JDK_LATEST_VERSION': unit.get('JDK_LATEST_VERSION'),
+        'JDK_RESOURCE': 'JDK' + (unit.get('JDK_VERSION') or unit.get('JDK_REAL_VERSION') or '_DEFAULT'),
+    }
+
+    data = dump_test(unit, test_record)
+    if data:
+        unit.set_property(["DART_DATA", data])
+
+
+def gofmt(unit, *args):
+    flat_args, spec_args = _common.sort_by_keywords(
+        {
+            "DEPENDS": -1,
+            "TIMEOUT": 1,
+            "DATA": -1,
+            "TAG": -1,
+            "REQUIREMENTS": -1,
+            "FORK_MODE": 1,
+            "SPLIT_FACTOR": 1,
+            "FORK_SUBTESTS": 0,
+            "FORK_TESTS": 0,
+            "SIZE": 1,
+        },
+        args,
+    )
+    check_type = flat_args[0]
+
+    test_dir = _common.get_norm_unit_path(unit)
+
+    test_files = flat_args[1:]
+
+    if test_files:
+        test_dir = os.path.dirname(test_files[0]).lstrip("$S/")
+
+    serialized_test_files = serialize_list(test_files)
+
+    test_record = {
+        'TEST-NAME': check_type.lower(),
+        'TEST-TIMEOUT': '',
+        'SCRIPT-REL-PATH': 'gofmt',
+        'TESTED-PROJECT-NAME': os.path.basename(test_dir),
+        'SOURCE-FOLDER-PATH': test_dir,
+        'CUSTOM-DEPENDENCIES': " ".join(spec_args.get('DEPENDS', [])),
+        'TEST-DATA': '',
+        'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
+        'SBR-UID-EXT': '',
+        'SPLIT-FACTOR': '',
+        'TEST_PARTITION': 'SEQUENTIAL',
+        'FORK-MODE': '',
+        'FORK-TEST-FILES': '',
+        'SIZE': 'SMALL',
+        'TAG': '',
+        'REQUIREMENTS': " ".join(spec_args.get('REQUIREMENTS', [])),
+        'USE_ARCADIA_PYTHON': unit.get('USE_ARCADIA_PYTHON') or '',
+        'OLD_PYTEST': 'no',
+        'PYTHON-PATHS': '',
+        # TODO remove FILES, see DEVTOOLS-7052
+        'FILES': serialized_test_files,
+        'TEST-FILES': serialized_test_files,
+    }
+
+    data = dump_test(unit, test_record)
+    if data:
+        unit.set_property(["DART_DATA", data])
+
+
+def govet(unit, *args):
+    flat_args, spec_args = _common.sort_by_keywords(
+        {
+            "DEPENDS": -1,
+            "TIMEOUT": 1,
+            "DATA": -1,
+            "TAG": -1,
+            "REQUIREMENTS": -1,
+            "FORK_MODE": 1,
+            "SPLIT_FACTOR": 1,
+            "FORK_SUBTESTS": 0,
+            "FORK_TESTS": 0,
+            "SIZE": 1,
+        },
+        args,
+    )
+    check_type = flat_args[0]
+
+    test_dir = _common.get_norm_unit_path(unit)
+    test_files = flat_args[1:]
+    serialized_test_files = serialize_list(test_files)
+
+    test_record = {
+        'TEST-NAME': check_type.lower(),
+        'TEST-TIMEOUT': '',
+        'SCRIPT-REL-PATH': 'govet',
+        'TESTED-PROJECT-NAME': os.path.basename(test_dir),
+        'SOURCE-FOLDER-PATH': test_dir,
+        'CUSTOM-DEPENDENCIES': " ".join(spec_args.get('DEPENDS', [])),
+        'TEST-DATA': '',
+        'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
+        'SBR-UID-EXT': '',
+        'SPLIT-FACTOR': '',
+        'TEST_PARTITION': 'SEQUENTIAL',
+        'FORK-MODE': '',
+        'FORK-TEST-FILES': '',
+        'SIZE': 'SMALL',
+        'TAG': '',
+        'REQUIREMENTS': " ".join(spec_args.get('REQUIREMENTS', [])),
+        'USE_ARCADIA_PYTHON': unit.get('USE_ARCADIA_PYTHON') or '',
+        'OLD_PYTEST': 'no',
+        'PYTHON-PATHS': '',
+        # TODO remove FILES, see DEVTOOLS-7052
+        'FILES': serialized_test_files,
+        'TEST-FILES': serialized_test_files,
+    }
+
+    data = dump_test(unit, test_record)
+    if data:
+        unit.set_property(["DART_DATA", data])
+
+
+def onadd_check(unit, *args):
+    if unit.get("TIDY") == "yes":
+        # graph changed for clang_tidy tests
+        return
+
+    flat_args, *_ = _common.sort_by_keywords(
+        {
+            "DEPENDS": -1,
+            "TIMEOUT": 1,
+            "DATA": -1,
+            "TAG": -1,
+            "REQUIREMENTS": -1,
+            "FORK_MODE": 1,
+            "SPLIT_FACTOR": 1,
+            "FORK_SUBTESTS": 0,
+            "FORK_TESTS": 0,
+            "SIZE": 1,
+        },
+        args,
+    )
+    check_type = flat_args[0]
+
+    if check_type == "check.data" and unit.get('VALIDATE_DATA') != "no":
+        check_data(unit, *args)
+    elif check_type == "check.resource" and unit.get('VALIDATE_DATA') != "no":
+        check_resource(unit, *args)
+    elif check_type == "ktlint":
+        ktlint(unit, *args)
+    elif check_type == "JAVA_STYLE" and (unit.get('YMAKE_JAVA_TEST') != 'yes' or unit.get('ALL_SRCDIRS')):
+        java_style(unit, *args)
+    elif check_type == "gofmt":
+        gofmt(unit, *args)
+    elif check_type == "govet":
+        govet(unit, *args)
 
 
 def on_register_no_check_imports(unit):

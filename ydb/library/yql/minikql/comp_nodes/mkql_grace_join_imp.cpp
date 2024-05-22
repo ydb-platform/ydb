@@ -262,9 +262,9 @@ void ResizeHashTable(KeysHashTable &t, ui64 newSlots){
 
 // Joins two tables and returns join result in joined table. Tuples of joined table could be received by
 // joined table iterator
-void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLeftTuples, bool hasMoreRightTuples ) {
+void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLeftTuples, bool hasMoreRightTuples, ui32 fromBucket, ui32 toBucket ) {
 
-
+    std::cerr << std::format("[MISHA] Joining from {} to {}\n", fromBucket, toBucket);
 
     if ( hasMoreLeftTuples )
         LeftTableBatch_ = true;
@@ -298,7 +298,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
     std::vector<JoinTuplesIds, TMKQLAllocator<JoinTuplesIds, EMemorySubPool::Temporary>> joinResults;
 
 
-    for (ui64 bucket = 0; bucket < NumberOfBuckets; bucket++) {
+    for (ui64 bucket = fromBucket; bucket < toBucket; bucket++) {
 
         joinResults.clear();
         TTableBucket * bucket1 = &JoinTable1->TableBuckets[bucket];

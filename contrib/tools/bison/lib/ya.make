@@ -27,15 +27,8 @@ ELSE()
     )
 ENDIF()
 
-IF (OS_DARWIN)
-    CFLAGS(
-        -D_XOPEN_SOURCE=600
-    )
-ENDIF()
-
 IF (NOT OS_WINDOWS)
     CFLAGS(
-        GLOBAL -Dregcomp=gnu_regcomp
         GLOBAL -Dregerror=gnu_regerror
         GLOBAL -Dregfree=gnu_regfree
         GLOBAL -Dregexec=gnu_regexec
@@ -75,24 +68,19 @@ SRCS(
     fd-safer-flag.c
     fd-safer.c
     fopen-safer.c
-    fstat.c
     get-errno.c
     getdtablesize.c
     getopt.c
     getopt1.c
     hash.c
-    itold.c
     isnanl.c
     isnand.c
     lbitset.c
     localcharset.c
-    lseek.c
-    lstat.c
     malloc.c
     malloca.c
     mbswidth.c
     mbrtowc.c
-    mkstemp-safer.c
     nl_langinfo.c
     pipe-safer.c
     pipe2-safer.c
@@ -102,20 +90,10 @@ SRCS(
     printf-parse.c
     progname.c
     quotearg.c
-    raise.c
-    rawmemchr.c
-    readlink.c
-    rename.c
-    rmdir.c
-    secure_getenv.c
     sig-handler.c
     spawn-pipe.c
-    stat.c
     stpcpy.c
-    strchrnul.c
-    strdup.c
     stripslash.c
-    tempname.c
     timevar.c
     unistd.c
     vasnprintf.c
@@ -129,7 +107,6 @@ SRCS(
     xmemdup0.c
     xsize.c
     xstrndup.c
-    xvasprintf.c
 )
 
 IF (NOT MUSL)
@@ -155,18 +132,13 @@ IF (OS_WINDOWS)
     SRCS(
         frexp.c
         wcrtomb.c
-        perror.c
-        strstr.c
-        mkstemp.c
-        strsignal.c
-        mkdtemp.c
         fseeko.c
         fopen.c
         ftello.c
-        localeconv.c
         msvc-inval.c
         msvc-nothrow.c
         open.c
+        raise.c
         sigaction.c
         sigprocmask.c
         snprintf.c

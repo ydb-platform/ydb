@@ -2,13 +2,14 @@
 
 #include <deque>
 #include <vector>
-#include <util/generic/yexception.h>
-#include <ydb/core/formats/arrow/arrow_batch_builder.h>
-#include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/core/engine/mkql_keys.h>
 #include <util/generic/size_literals.h>
+#include <util/generic/yexception.h>
+#include <ydb/core/engine/mkql_keys.h>
+#include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 #include <ydb/core/tx/sharding/sharding.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_log.h>
+#include <ydb/library/yql/utils/yql_panic.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -179,6 +180,8 @@ class TColumnShardPayloadSerializer : public IPayloadSerializer {
         std::deque<TRecordBatchPtr> Batches; 
     };
 
+    const TString LogPrefix = "ColumnShardPayloadSerializer";
+
 public:
     TColumnShardPayloadSerializer(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
@@ -265,47 +268,54 @@ public:
 
     void FlushUnpreparedBatch(const ui64 shardId, TUnpreparedBatch& unpreparedBatch, bool force) {
         while (!unpreparedBatch.Batches.empty() && (unpreparedBatch.TotalDataSize >= MaxBatchBytes || force)) {
-            YQL_ENSURE(false, "shard and flush called");
             std::vector<TRecordBatchPtr> toPrepare;
             i64 toPrepareSize = 0;
             while (!unpreparedBatch.Batches.empty()) {
                 auto batch = unpreparedBatch.Batches.front();
                 unpreparedBatch.Batches.pop_front();
+                YQL_ENSURE(batch->num_rows() > 0);
+                const auto batchDataSize = NArrow::GetBatchDataSize(batch);
+                unpreparedBatch.TotalDataSize -= batchDataSize;
+                Memory -= batchDataSize;
 
                 NArrow::TRowSizeCalculator rowCalculator(8);
                 if (!rowCalculator.InitBatch(batch)) {
                     ythrow yexception() << "unexpected column type on batch initialization for row size calculator";
                 }
 
-                i64 nextRowSize = 0;
+                bool splitted = false;
                 for (i64 index = 0; index < batch->num_rows(); ++index) {
-                    nextRowSize = rowCalculator.GetRowBytesSize(index);
+                    i64 nextRowSize = rowCalculator.GetRowBytesSize(index);
 
                     if (toPrepareSize + nextRowSize >= (i64)MaxBatchBytes) {
-                        Memory -= NArrow::GetBatchDataSize(batch);
+                        YQL_ENSURE(index > 0);
 
                         toPrepare.push_back(batch->Slice(0, index));
                         unpreparedBatch.Batches.push_front(batch->Slice(index, batch->num_rows() - index));
 
-                        Memory += NArrow::GetBatchDataSize(unpreparedBatch.Batches.front());
+                        const auto newBatchDataSize = NArrow::GetBatchDataSize(unpreparedBatch.Batches.front());
+
+                        unpreparedBatch.TotalDataSize += batchDataSize;
+                        Memory += newBatchDataSize;
+
+                        splitted = true;
                         break;
                     } else {
                         toPrepareSize += nextRowSize;
                     }
                 }
 
-                if (toPrepareSize + nextRowSize >= (i64)MaxBatchBytes) {
+                if (splitted) {
                     break;
                 }
 
-                Memory -= NArrow::GetBatchDataSize(batch);
                 toPrepare.push_back(batch);
             }
 
-            auto& batch = Batches[shardId].emplace_back(
-                MakeIntrusive<TBatch>(NArrow::CombineBatches(toPrepare)));
+            auto batch = MakeIntrusive<TBatch>(NArrow::CombineBatches(toPrepare));
+            Batches[shardId].emplace_back(batch);
             Memory += batch->GetMemory();
-            YQL_ENSURE(batch->GetMemory() != 0);   
+            YQL_ENSURE(batch->GetMemory() != 0);
         }
     }
 
@@ -331,6 +341,7 @@ public:
         YQL_ENSURE(!Closed);
         Closed = true;
         FlushUnsharded(true);
+        FlushUnpreparedForce();
     }
 
     bool IsClosed() override {
@@ -363,14 +374,15 @@ public:
         if (!Batches.contains(shardId)) {
             return {};
         }
-        auto batches = Batches.at(shardId);
+        auto& batches = Batches.at(shardId);
         if (batches.empty()) {
             return {};
         }
 
-        const auto batch = std::move(batches.front());
+        auto batch = std::move(batches.front());
         batches.pop_front();
         Memory -= batch->GetMemory();
+
         return batch;
     }
 

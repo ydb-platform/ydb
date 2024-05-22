@@ -26,6 +26,6 @@
 
 {% include notitle [general_tag](./tags.md#general) %} 
 
-<p>  – materials of general direction.</p>
+<p>  – generic materials.</p>
 
 </div>

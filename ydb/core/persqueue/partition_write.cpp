@@ -41,13 +41,16 @@ void TPartition::ReplyOwnerOk(const TActorContext& ctx, const ui64 dst, const TS
     r->SetOwnerCookie(cookie);
     r->SetStatus(PartitionConfig ? PartitionConfig->GetStatus() : NKikimrPQ::ETopicPartitionStatus::Active);
     r->SetSeqNo(seqNo);
+    if (IsSupportive()) {
+        r->SetSupportivePartition(Partition.InternalPartitionId);
+    }
 
     ctx.Send(Tablet, response.Release());
 }
 
 void TPartition::ReplyWrite(
     const TActorContext& ctx, const ui64 dst, const TString& sourceId, const ui64 seqNo, const ui16 partNo, const ui16 totalParts,
-    const ui64 offset, const TInstant writeTimestamp, bool already, const ui64 minSeqNo, const ui64 maxSeqNo,
+    const ui64 offset, const TInstant writeTimestamp, bool already, const ui64 maxSeqNo,
     const TDuration partitionQuotedTime, const TDuration topicQuotedTime, const TDuration queueTime, const TDuration writeTime) {
 
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "TPartition::ReplyWrite. Partition: " << Partition);
@@ -74,11 +77,6 @@ void TPartition::ReplyWrite(
     write->SetTopicQuotedTimeMs(topicQuotedTime.MilliSeconds());
     write->SetTotalTimeInPartitionQueueMs(queueTime.MilliSeconds());
     write->SetWriteTimeMs(writeTime.MilliSeconds());
-
-    if (IsSupportive()) {
-        write->SetMinSeqNo(minSeqNo);
-        write->SetSupportivePartition(Partition.InternalPartitionId);
-    }
 
     ctx.Send(Tablet, response.Release());
 }
@@ -262,12 +260,10 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
 
             auto it = SourceIdStorage.GetInMemorySourceIds().find(s);
 
-            ui64 minSeqNo = 0;
             ui64 maxSeqNo = 0;
             ui64 maxOffset = 0;
 
             if (it != SourceIdStorage.GetInMemorySourceIds().end()) {
-                minSeqNo = it->second.MinSeqNo;
                 maxSeqNo = std::max(it->second.SeqNo, writeResponse.InitialSeqNo.value_or(0));
                 maxOffset = it->second.Offset;
                 if (maxSeqNo >= seqNo && !writeResponse.Msg.DisableDeduplication) {
@@ -275,7 +271,6 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                 }
             } else if (writeResponse.InitialSeqNo) {
                 maxSeqNo = writeResponse.InitialSeqNo.value();
-                minSeqNo = maxSeqNo;
                 if (maxSeqNo >= seqNo && !writeResponse.Msg.DisableDeduplication) {
                     already = true;
                 }
@@ -305,7 +300,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
             }
             ReplyWrite(
                 ctx, writeResponse.Cookie, s, seqNo, partNo, totalParts,
-                already ? maxOffset : offset, CurrentTimestamp, already, minSeqNo, maxSeqNo,
+                already ? maxOffset : offset, CurrentTimestamp, already, maxSeqNo,
                 PartitionQuotaWaitTimeForCurrentBlob, TopicQuotaWaitTimeForCurrentBlob, queueTime, writeTime
             );
             LOG_DEBUG_S(

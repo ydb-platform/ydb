@@ -36,7 +36,7 @@ namespace NKikimr::NPQ {
 #define ERROR(message) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, LOG_PREFIX << message);
 
 static const ui64 WRITE_BLOCK_SIZE = 4_KB;
-//static const ui32 INVALID_PARTITION_ID = Max<ui32>();
+static const ui32 INVALID_PARTITION_ID = Max<ui32>();
 
 TString TEvPartitionWriter::TEvInitResult::TSuccess::ToString() const {
     auto out = TStringBuilder() << "Success {"
@@ -263,7 +263,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         GetOwnership();
     }
 
-    THolder<NKqp::TEvKqp::TEvQueryRequest> MakeWriteIdRequest(TMaybe<ui32> supportivePartition = Nothing()) {
+    THolder<NKqp::TEvKqp::TEvQueryRequest> MakeWriteIdRequest() {
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
 
         if (Opts.Token) {
@@ -295,8 +295,8 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         auto* partitions = topics->add_partitions();
         partitions->set_partition_id(PartitionId);
 
-        if (supportivePartition) {
-            operations->SetSupportivePartition(*supportivePartition);
+        if (SupportivePartitionId != INVALID_PARTITION_ID) {
+            operations->SetSupportivePartition(SupportivePartitionId);
         }
 
         return ev;
@@ -339,6 +339,8 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPersQueue::TEvResponse, HandleOwnership);
             hFunc(TEvPartitionWriter::TEvWriteRequest, HoldPending);
+            HFunc(NKqp::TEvKqp::TEvQueryResponse, HandlePartitionIdSaved);
+            SFunc(TEvents::TEvWakeup, SavePartitionId);
         default:
             return StateBase(ev);
         }
@@ -361,7 +363,50 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
             return InitResult("Partition is inactive", std::move(record));
         }
 
-        OwnerCookie = response.GetCmdGetOwnershipResult().GetOwnerCookie();
+        auto& reply = response.GetCmdGetOwnershipResult();
+        OwnerCookie = reply.GetOwnerCookie();
+        if (reply.HasSupportivePartition()) {
+            SupportivePartitionId = reply.GetSupportivePartition();
+        }
+
+        if (WriteId != INVALID_WRITE_ID) {
+            SavePartitionId(ActorContext());
+        } else {
+            GetMaxSeqNo();
+        }
+    }
+
+    void SavePartitionId(const TActorContext& ctx) {
+        Y_ABORT_UNLESS(WriteId != INVALID_WRITE_ID);
+        Y_ABORT_UNLESS(SupportivePartitionId != INVALID_PARTITION_ID);
+
+        DEBUG("Update the transaction in KQP." <<
+              " Topic: " << Opts.TopicPath <<
+              ", Partition: " << PartitionId <<
+              ", WriteId: " << WriteId <<
+              ", SupportivePartition: " << SupportivePartitionId);
+
+        auto ev = MakeWriteIdRequest();
+        ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
+    }
+
+    void HandlePartitionIdSaved(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
+        auto& record = ev->Get()->Record.GetRef();
+        switch (record.GetYdbStatus()) {
+        case Ydb::StatusIds::SUCCESS:
+            break;
+        case Ydb::StatusIds::SESSION_BUSY:
+        case Ydb::StatusIds::PRECONDITION_FAILED: // see TKqpSessionActor::ReplyBusy
+            return Retry(record.GetYdbStatus());
+        default:
+            return InitResult("Invalid KQP session", record);
+        }
+
+        LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY,
+                    "Transaction in KQP has been updated." <<
+                    " WriteId: " << WriteId <<
+                    ", SupportivePartition: " << SupportivePartitionId);
+
         GetMaxSeqNo();
     }
 
@@ -922,6 +967,7 @@ private:
     EErrorCode ErrorCode = EErrorCode::InternalError;
 
     ui64 WriteId = INVALID_WRITE_ID;
+    ui32 SupportivePartitionId = INVALID_PARTITION_ID;
     bool FirstWrite = true;
 
     using IRetryPolicy = IRetryPolicy<Ydb::StatusIds::StatusCode>;

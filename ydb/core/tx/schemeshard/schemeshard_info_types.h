@@ -1300,6 +1300,7 @@ struct IQuotaCounters {
     virtual void ChangeDiskSpaceQuotaExceeded(i64 delta) = 0;
     virtual void ChangeDiskSpaceHardQuotaBytes(i64 delta) = 0;
     virtual void ChangeDiskSpaceSoftQuotaBytes(i64 delta) = 0;
+    virtual void ChangeDiskSpaceSoftQuotaBytes(EUserFacingStorageType storageType, i64 delta) = 0;
 };
 
 struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {

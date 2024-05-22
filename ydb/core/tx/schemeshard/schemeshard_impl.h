@@ -1385,6 +1385,7 @@ public:
     void ChangeDiskSpaceQuotaExceeded(i64 delta) override;
     void ChangeDiskSpaceHardQuotaBytes(i64 delta) override;
     void ChangeDiskSpaceSoftQuotaBytes(i64 delta) override;
+    void ChangeDiskSpaceSoftQuotaBytes(EUserFacingStorageType storageType, i64 delta) override;
 
     NLogin::TLoginProvider LoginProvider;
 

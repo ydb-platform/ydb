@@ -30,8 +30,6 @@ static const ui32 MAX_INLINE_SIZE = 1000;
 
 static constexpr NPersQueue::NErrorCode::EErrorCode InactivePartitionErrorCode = NPersQueue::NErrorCode::WRITE_ERROR_PARTITION_INACTIVE;
 
-void AddCmdDeleteRange(TEvKeyValue::TEvRequest& request, TKeyPrefix::EType c, const TPartitionId& partitionId);
-
 void TPartition::ReplyOwnerOk(const TActorContext& ctx, const ui64 dst, const TString& cookie, ui64 seqNo) {
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "TPartition::ReplyOwnerOk. Partition: " << Partition);
 
@@ -439,12 +437,22 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
     UpdateUserInfoEndOffset(ctx.Now());
 }
 
-void TPartition::Handle(TEvPQ::TEvHandleWriteResponse::TPtr&, const TActorContext& ctx) {
-    PQ_LOG_T("TPartition::HandleOnWrite TEvHandleWriteResponse.");
+void TPartition::OnHandleWriteResponse(const TActorContext& ctx)
+{
     KVWriteInProgress = false;
     OnProcessTxsAndUserActsWriteComplete(ctx);
     HandleWriteResponse(ctx);
     ProcessTxsAndUserActs(ctx);
+
+    if (DeletePartitionState == DELETION_IN_PROCESS) {
+        DestroyActor(ctx);
+    }
+}
+
+void TPartition::Handle(TEvPQ::TEvHandleWriteResponse::TPtr&, const TActorContext& ctx)
+{
+    PQ_LOG_T("TPartition::HandleOnWrite TEvHandleWriteResponse.");
+    OnHandleWriteResponse(ctx);
 }
 
 void TPartition::UpdateAfterWriteCounters(bool writeComplete) {

@@ -1017,7 +1017,9 @@ void AddCmdDeleteRange(TEvKeyValue::TEvRequest& request, TKeyPrefix::EType c, co
     auto range = del->MutableRange();
 
     range->SetFrom(from.Data(), from.Size());
+    range->SetIncludeFrom(true);
     range->SetTo(to.Data(), to.Size());
+    range->SetIncludeTo(false);
 }
 
 static void RequestRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition,

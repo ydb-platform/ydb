@@ -506,6 +506,8 @@ public:
             return ParseCreateSeqStmt(CAST_NODE(CreateSeqStmt, node)) != nullptr;
         case T_AlterSeqStmt:
             return ParseAlterSeqStmt(CAST_NODE(AlterSeqStmt, node)) != nullptr;
+        case T_AlterTableStmt:
+            return ParseAlterTableStmt(CAST_NODE(AlterTableStmt, node)) != nullptr;
         default:
             NodeNotImplemented(value, node);
             return false;

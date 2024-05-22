@@ -191,6 +191,9 @@ runs:
             ;;
         esac
         
+        # Also build targets which are not in tests' dependencies
+        params+=(--no-strip-idle-build-results)
+
         echo "::debug::get version"
         ./ya --version
         

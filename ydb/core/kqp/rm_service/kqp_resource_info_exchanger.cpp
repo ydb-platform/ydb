@@ -632,10 +632,8 @@ private:
         ui64 nodesCount = NodesState.size();
         if (nodesCount >= 1000) {
             ui64 nodesCount = NodesState.size();
-            if (nodesCount >= 1000) {
-                ui64 newCurrentDelay = (nodesCount * nodesCount) >> 11;
-                CurrentNodesDelay = std::max(CurrentNodesDelay, TDuration::MilliSeconds(newCurrentDelay));
-            }
+            ui64 newCurrentDelay = (nodesCount * nodesCount) >> 11;
+            CurrentNodesDelay = std::max(CurrentNodesDelay, TDuration::MilliSeconds(newCurrentDelay));
         }
     }
 
@@ -779,7 +777,7 @@ private:
     TIntrusivePtr<TKqpCounters> Counters;
     NKikimrConfig::TTableServiceConfig::TResourceManager::TInfoExchangerSettings Settings;
 
-    TDuration CurrentNodesDelay = TDuration::MilliSeconds(500);
+    TDuration CurrentNodesDelay = TDuration::Zero();
 };
 
 NActors::IActor* CreateKqpResourceInfoExchangerActor(TIntrusivePtr<TKqpCounters> counters,

@@ -931,54 +931,6 @@ def onadd_check_py_imports(unit, *args):
         unit.set_property(["DART_DATA", data])
 
 
-def onadd_pytest_script(unit, *args):
-    if unit.get("TIDY") == "yes":
-        # graph changed for clang_tidy tests
-        return
-    unit.set(["PYTEST_BIN", "no"])
-    custom_deps = get_values_list(unit, 'TEST_DEPENDS_VALUE')
-    timeout = list(filter(None, [unit.get(["TEST_TIMEOUT"])]))
-    if unit.get('ADD_SRCDIR_TO_TEST_DATA') == "yes":
-        unit.ondata_files(_common.get_norm_unit_path(unit))
-
-    if timeout:
-        timeout = timeout[0]
-    else:
-        timeout = '0'
-    test_type = args[0]
-    fork_mode = unit.get('TEST_FORK_MODE').split() or ''
-    split_factor = unit.get('TEST_SPLIT_FACTOR') or ''
-    test_size = unit.get('TEST_SIZE_NAME') or ''
-
-    test_files = get_values_list(unit, 'TEST_SRCS_VALUE')
-    tags = _get_test_tags(unit)
-    requirements = get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')
-    test_data = get_norm_paths(unit, 'TEST_DATA_VALUE')
-    data, data_files = get_canonical_test_resources(unit)
-    test_data += data
-    python_paths = get_values_list(unit, 'TEST_PYTHON_PATH_VALUE')
-    binary_path = os.path.join(_common.get_norm_unit_path(unit), unit.filename())
-    test_cwd = unit.get('TEST_CWD_VALUE') or ''
-    _dump_test(
-        unit,
-        test_type,
-        test_files,
-        timeout,
-        _common.get_norm_unit_path(unit),
-        custom_deps,
-        test_data,
-        python_paths,
-        split_factor,
-        fork_mode,
-        test_size,
-        tags,
-        requirements,
-        binary_path,
-        test_cwd=test_cwd,
-        data_files=data_files,
-    )
-
-
 def onadd_pytest_bin(unit, *args):
     if unit.get("TIDY") == "yes":
         # graph changed for clang_tidy tests
@@ -990,13 +942,6 @@ def onadd_pytest_bin(unit, *args):
     runner_bin = kws.get('RUNNER_BIN', [None])[0]
     test_type = 'py3test.bin' if (unit.get("PYTHON3") == 'yes') else "pytest.bin"
 
-    add_test_to_dart(unit, test_type, runner_bin=runner_bin)
-
-
-def add_test_to_dart(unit, test_type, binary_path=None, runner_bin=None):
-    if unit.get("TIDY") == "yes":
-        # graph changed for clang_tidy tests
-        return
     if unit.get('ADD_SRCDIR_TO_TEST_DATA') == "yes":
         unit.ondata_files(_common.get_norm_unit_path(unit))
     custom_deps = get_values_list(unit, 'TEST_DEPENDS_VALUE')
@@ -1017,31 +962,57 @@ def add_test_to_dart(unit, test_type, binary_path=None, runner_bin=None):
     tags = _get_test_tags(unit)
     requirements = get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')
     test_data = get_norm_paths(unit, 'TEST_DATA_VALUE')
-    data, data_files = get_canonical_test_resources(unit)
+    data, _ = get_canonical_test_resources(unit)
     test_data += data
     python_paths = get_values_list(unit, 'TEST_PYTHON_PATH_VALUE')
-    if not binary_path:
-        binary_path = os.path.join(unit_path, unit.filename())
-    _dump_test(
-        unit,
-        test_type,
-        test_files,
-        timeout,
-        _common.get_norm_unit_path(unit),
-        custom_deps,
-        test_data,
-        python_paths,
-        split_factor,
-        fork_mode,
-        test_size,
-        tags,
-        requirements,
-        binary_path,
-        test_cwd=test_cwd,
-        runner_bin=runner_bin,
-        yt_spec=yt_spec,
-        data_files=data_files,
-    )
+    binary_path = os.path.join(unit_path, unit.filename())
+
+    script_rel_path = test_type
+
+    unit_path = unit.path()
+    fork_test_files = unit.get('FORK_TEST_FILES_MODE')
+    fork_mode = ' '.join(fork_mode) if fork_mode else ''
+    use_arcadia_python = unit.get('USE_ARCADIA_PYTHON')
+    if test_cwd:
+        test_cwd = test_cwd.replace("$TEST_CWD_VALUE", "").replace('"MACRO_CALLS_DELIM"', "").strip()
+    test_name = os.path.basename(binary_path)
+    test_record = {
+        'TEST-NAME': os.path.splitext(test_name)[0],
+        'TEST-TIMEOUT': timeout,
+        'SCRIPT-REL-PATH': script_rel_path,
+        'TESTED-PROJECT-NAME': test_name,
+        'SOURCE-FOLDER-PATH': _common.get_norm_unit_path(unit),
+        'CUSTOM-DEPENDENCIES': " ".join(custom_deps),
+        'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
+        #  'TEST-PRESERVE-ENV': 'da',
+        'TEST-DATA': serialize_list(sorted(_common.filter_out_by_keyword(test_data, 'AUTOUPDATED'))),
+        'TEST-RECIPES': prepare_recipes(unit.get("TEST_RECIPES_VALUE")),
+        'SPLIT-FACTOR': split_factor,
+        'TEST_PARTITION': unit.get('TEST_PARTITION') or 'SEQUENTIAL',
+        'FORK-MODE': fork_mode,
+        'FORK-TEST-FILES': fork_test_files,
+        'TEST-FILES': serialize_list(test_files),
+        'SIZE': test_size,
+        'TAG': serialize_list(sorted(tags)),
+        'REQUIREMENTS': serialize_list(requirements),
+        'USE_ARCADIA_PYTHON': use_arcadia_python or '',
+        'OLD_PYTEST': 'no',
+        'PYTHON-PATHS': serialize_list(python_paths),
+        'TEST-CWD': test_cwd or '',
+        'SKIP_TEST': unit.get('SKIP_TEST_VALUE') or '',
+        'BUILD-FOLDER-PATH': _common.strip_roots(unit_path),
+        'BLOB': unit.get('TEST_BLOB_DATA') or '',
+        'CANONIZE_SUB_PATH': unit.get('CANONIZE_SUB_PATH') or '',
+    }
+    if binary_path:
+        test_record['BINARY-PATH'] = _common.strip_roots(binary_path)
+    if runner_bin:
+        test_record['TEST-RUNNER-BIN'] = runner_bin
+    if yt_spec:
+        test_record['YT-SPEC'] = serialize_list(yt_spec)
+    data = dump_test(unit, test_record)
+    if data:
+        unit.set_property(["DART_DATA", data])
 
 
 def extract_java_system_properties(unit, args):
@@ -1225,31 +1196,53 @@ def _get_test_tags(unit, spec_args=None):
     return tags
 
 
-def _dump_test(
-    unit,
-    test_type,
-    test_files,
-    timeout,
-    test_dir,
-    custom_deps,
-    test_data,
-    python_paths,
-    split_factor,
-    fork_mode,
-    test_size,
-    tags,
-    requirements,
-    binary_path='',
-    old_pytest=False,
-    test_cwd=None,
-    runner_bin=None,
-    yt_spec=None,
-    data_files=None,
-):
-    if test_type == "PY_TEST":
-        script_rel_path = "py.test"
+def onsetup_pytest_bin(unit, *args):
+    use_arcadia_python = unit.get('USE_ARCADIA_PYTHON') == "yes"
+    if use_arcadia_python:
+        unit.onresource(['-', 'PY_MAIN={}'.format("library.python.pytest.main:main")])  # XXX
+        unit.onadd_pytest_bin(list(args))
+
+
+def onrun(unit, *args):
+    exectest_cmd = unit.get(["EXECTEST_COMMAND_VALUE"]) or ''
+    exectest_cmd += "\n" + subprocess.list2cmdline(args)
+    unit.set(["EXECTEST_COMMAND_VALUE", exectest_cmd])
+
+
+def onsetup_exectest(unit, *args):
+    if unit.get("TIDY") == "yes":
+        # graph changed for clang_tidy tests
+        return
+    command = unit.get(["EXECTEST_COMMAND_VALUE"])
+    if command is None:
+        ymake.report_configure_error("EXECTEST must have at least one RUN macro")
+        return
+    command = command.replace("$EXECTEST_COMMAND_VALUE", "")
+    if "PYTHON_BIN" in command:
+        unit.ondepends('contrib/tools/python')
+    unit.set(["TEST_BLOB_DATA", base64.b64encode(six.ensure_binary(command))])
+    if unit.get('ADD_SRCDIR_TO_TEST_DATA') == "yes":
+        unit.ondata_files(_common.get_norm_unit_path(unit))
+    custom_deps = get_values_list(unit, 'TEST_DEPENDS_VALUE')
+    timeout = list(filter(None, [unit.get(["TEST_TIMEOUT"])]))
+    if timeout:
+        timeout = timeout[0]
     else:
-        script_rel_path = test_type
+        timeout = '0'
+    fork_mode = unit.get('TEST_FORK_MODE').split() or ''
+    split_factor = unit.get('TEST_SPLIT_FACTOR') or ''
+    test_size = unit.get('TEST_SIZE_NAME') or ''
+    test_cwd = unit.get('TEST_CWD_VALUE') or ''
+    yt_spec = get_values_list(unit, 'TEST_YT_SPEC_VALUE')
+    unit.ondata_files(yt_spec)
+
+    test_files = get_values_list(unit, 'TEST_SRCS_VALUE')
+    tags = _get_test_tags(unit)
+    requirements = get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')
+    test_data = get_norm_paths(unit, 'TEST_DATA_VALUE')
+    data, _ = get_canonical_test_resources(unit)
+    test_data += data
+    python_paths = get_values_list(unit, 'TEST_PYTHON_PATH_VALUE')
 
     unit_path = unit.path()
     fork_test_files = unit.get('FORK_TEST_FILES_MODE')
@@ -1257,13 +1250,13 @@ def _dump_test(
     use_arcadia_python = unit.get('USE_ARCADIA_PYTHON')
     if test_cwd:
         test_cwd = test_cwd.replace("$TEST_CWD_VALUE", "").replace('"MACRO_CALLS_DELIM"', "").strip()
-    test_name = os.path.basename(binary_path)
+    test_name = os.path.basename(os.path.join(unit.path(), unit.filename()).replace(".pkg", ""))
     test_record = {
         'TEST-NAME': os.path.splitext(test_name)[0],
         'TEST-TIMEOUT': timeout,
-        'SCRIPT-REL-PATH': script_rel_path,
+        'SCRIPT-REL-PATH': "exectest",
         'TESTED-PROJECT-NAME': test_name,
-        'SOURCE-FOLDER-PATH': test_dir,
+        'SOURCE-FOLDER-PATH': _common.get_norm_unit_path(unit),
         'CUSTOM-DEPENDENCIES': " ".join(custom_deps),
         'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
         #  'TEST-PRESERVE-ENV': 'da',
@@ -1278,7 +1271,7 @@ def _dump_test(
         'TAG': serialize_list(sorted(tags)),
         'REQUIREMENTS': serialize_list(requirements),
         'USE_ARCADIA_PYTHON': use_arcadia_python or '',
-        'OLD_PYTEST': 'yes' if old_pytest else 'no',
+        'OLD_PYTEST': 'no',
         'PYTHON-PATHS': serialize_list(python_paths),
         'TEST-CWD': test_cwd or '',
         'SKIP_TEST': unit.get('SKIP_TEST_VALUE') or '',
@@ -1286,43 +1279,12 @@ def _dump_test(
         'BLOB': unit.get('TEST_BLOB_DATA') or '',
         'CANONIZE_SUB_PATH': unit.get('CANONIZE_SUB_PATH') or '',
     }
-    if binary_path:
-        test_record['BINARY-PATH'] = _common.strip_roots(binary_path)
-    if runner_bin:
-        test_record['TEST-RUNNER-BIN'] = runner_bin
+    test_record['BINARY-PATH'] = _common.strip_roots(os.path.join(unit.path(), unit.filename()).replace(".pkg", ""))
     if yt_spec:
         test_record['YT-SPEC'] = serialize_list(yt_spec)
     data = dump_test(unit, test_record)
     if data:
         unit.set_property(["DART_DATA", data])
-
-
-def onsetup_pytest_bin(unit, *args):
-    use_arcadia_python = unit.get('USE_ARCADIA_PYTHON') == "yes"
-    if use_arcadia_python:
-        unit.onresource(['-', 'PY_MAIN={}'.format("library.python.pytest.main:main")])  # XXX
-        unit.onadd_pytest_bin(list(args))
-    else:
-        unit.onno_platform()
-        unit.onadd_pytest_script(["PY_TEST"])
-
-
-def onrun(unit, *args):
-    exectest_cmd = unit.get(["EXECTEST_COMMAND_VALUE"]) or ''
-    exectest_cmd += "\n" + subprocess.list2cmdline(args)
-    unit.set(["EXECTEST_COMMAND_VALUE", exectest_cmd])
-
-
-def onsetup_exectest(unit, *args):
-    command = unit.get(["EXECTEST_COMMAND_VALUE"])
-    if command is None:
-        ymake.report_configure_error("EXECTEST must have at least one RUN macro")
-        return
-    command = command.replace("$EXECTEST_COMMAND_VALUE", "")
-    if "PYTHON_BIN" in command:
-        unit.ondepends('contrib/tools/python')
-    unit.set(["TEST_BLOB_DATA", base64.b64encode(six.ensure_binary(command))])
-    add_test_to_dart(unit, "exectest", binary_path=os.path.join(unit.path(), unit.filename()).replace(".pkg", ""))
 
 
 def onsetup_run_python(unit):

@@ -13,7 +13,7 @@ Instead, you can redefine a view by dropping it and recreating it with a differe
 DROP VIEW redefined_view;
 CREATE VIEW redefined_view ...;
 ```
-Such a query would not be atomic, though.
+Please note that the two statements are executed separately, unlike a single `ALTER VIEW` statement. If a view is recreated in this way, it might be possible to observe the view in a deleted state for a brief moment.
 
 ## See also
 

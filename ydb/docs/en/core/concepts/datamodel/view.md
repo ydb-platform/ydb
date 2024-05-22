@@ -1,6 +1,6 @@
 # View
 
-A view is a query that is treated as if it were a table storing the results of a given query. The view itself contains no data. The content of a view is generated every time you `SELECT` from it. Thus, any changes in the underlying tables are reflected immediately in the view.
+A view logically represents a table formed by a given query. The view itself contains no data. The content of a view is generated every time you `SELECT` from it. Thus, any changes in the underlying tables are reflected immediately in the view.
 
 Views are often used to:
 
@@ -53,7 +53,9 @@ Execution plans of queries containing views are currently cached. It might lead 
 
 ### Query compilation cache
 
-{{ ydb-short-name }} caches query compilation results on the server side for efficiency. For small queries like `SELECT 1;` compilation can take up to a hundred times more CPU time than the execution. The cache entry is searched by the text of the query and some additional information, such as a user SID.
+{{ ydb-short-name }} caches query compilation results on the server side for efficiency. For small queries like `SELECT 1;` compilation can take significantly more time than the execution.
+
+The cache entry is searched by the text of the query and some additional information, such as a user SID.
 
 The cache is automatically updated by {{ ydb-short-name }} to stay on track with the changes made to the objects the query references. However, in the case of views, the cache is not updated in the same transaction in which the object's definition changes. It happens with a little delay.
 

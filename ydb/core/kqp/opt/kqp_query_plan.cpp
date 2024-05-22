@@ -344,7 +344,7 @@ private:
 
                 writer.WriteKey("Inputs");
                 writer.BeginList();
-
+                
                 for (const auto& input : op.Inputs) {
 
                     if (std::holds_alternative<ui32>(input)) {
@@ -1065,17 +1065,18 @@ private:
             }
         } else {
             if (TMaybeNode<TCoFlatMapBase>(node)) {
-
                 auto flatMap = TExprBase(node).Cast<TCoFlatMapBase>();
                 auto flatMapInputs = Visit(flatMap, planNode);
 
-                inputIds.insert(inputIds.end(), flatMapInputs.begin(), flatMapInputs.end());
-
                 auto flatMapLambdaInputs = Visit(flatMap.Lambda().Body().Ptr(), planNode);
                 inputIds.insert(inputIds.end(), flatMapLambdaInputs.begin(), flatMapLambdaInputs.end());
+            } else if (TMaybeNode<TCoMapBase>(node)) {
+                auto map = TExprBase(node).Cast<TCoMapBase>();
+                auto mapInputs = Visit(map, planNode);
 
-            }
-            else {
+                auto mapLambdaInputs = Visit(map.Lambda().Body().Ptr(), planNode);
+                inputIds.insert(inputIds.end(), mapLambdaInputs.begin(), mapLambdaInputs.end());
+            } else {
                 for (const auto& child : node->Children()) {
                     if(!child->IsLambda()) {
                         auto ids = Visit(child, planNode);
@@ -1099,10 +1100,30 @@ private:
         return inputIds;
     }
 
+    TVector<std::variant<ui32, TArgContext>> Visit(const TCoMapBase& map, TQueryPlanNode& planNode) {
+        auto mapInputs = Visit(map.Input().Ptr(), planNode);
+
+        if (!mapInputs.empty() && map.Lambda().Args().Size() != 0) {
+            auto input = mapInputs[0];
+            auto newContext = CurrentArgContext.AddArg(map.Lambda().Args().Arg(0).Ptr().Get());
+
+            if (std::holds_alternative<ui32>(input)) {
+                LambdaInputs[newContext] = std::get<ui32>(input);
+            } else {
+                auto context = std::get<TArgContext>(input);
+                if (LambdaInputs.contains(context)){
+                    LambdaInputs[newContext] = LambdaInputs.at(context);
+                }
+            }
+        }
+
+        return mapInputs;
+    }
+
     TVector<std::variant<ui32, TArgContext>> Visit(const TCoFlatMapBase& flatMap, TQueryPlanNode& planNode) {
         auto flatMapInputs = Visit(flatMap.Input().Ptr(), planNode);
 
-        if (flatMapInputs.size() >= 1) {
+        if (!flatMapInputs.empty() && flatMap.Lambda().Args().Size() != 0) {
             auto input = flatMapInputs[0];
             auto newContext = CurrentArgContext.AddArg(flatMap.Lambda().Args().Arg(0).Ptr().Get());
 
@@ -1946,7 +1967,7 @@ TVector<NJson::TJsonValue> RemoveRedundantNodes(NJson::TJsonValue& plan, const T
     }
 
     const auto typeName = planMap.at("Node Type").GetStringSafe();
-    if (redundantNodes.contains(typeName) || typeName.find("Precompute") != TString::npos || typeName.find("ConstantExpr") != TString::npos) {
+    if (redundantNodes.contains(typeName) || typeName.find("Precompute") != TString::npos) {
         return children;
     }
 
@@ -1963,10 +1984,6 @@ NJson::TJsonValue ReconstructQueryPlanRec(const NJson::TJsonValue& plan,
 
     NJson::TJsonValue result;
     result["PlanNodeId"] = currentNodeId;
-
-    //if (plan.GetMapSafe().contains("PlanNodeId")) {
-    //    YQL_CLOG(TRACE, CoreDq) << "Recursed into " << plan.GetMapSafe().at("PlanNodeId").GetIntegerSafe() << ", constructed: " << currentNodeId;
-    //}
 
     if (plan.GetMapSafe().contains("PlanNodeType")) {
         result["PlanNodeType"] = plan.GetMapSafe().at("PlanNodeType").GetStringSafe();
@@ -2022,11 +2039,8 @@ NJson::TJsonValue ReconstructQueryPlanRec(const NJson::TJsonValue& plan,
             if (!p.GetMapSafe().contains("Operators") && p.GetMapSafe().contains("CTE Name")) {
                 auto precompute = p.GetMapSafe().at("CTE Name").GetStringSafe();
                 if (precomputes.contains(precompute)) {
-                    //YQL_CLOG(TRACE, CoreDq) << "Following precompute: " << precompute ; 
                     planInputs.AppendValue(ReconstructQueryPlanRec(precomputes.at(precompute), 0, planIndex, precomputes, nodeCounter));
-                } //else {
-                //    YQL_CLOG(TRACE, CoreDq) << "Didn't find precompute: " << precompute ; 
-                //}
+                }
             } else if (p.GetMapSafe().at("Node Type").GetStringSafe().find("Precompute") == TString::npos) {
                 planInputs.AppendValue(ReconstructQueryPlanRec(p, 0, planIndex, precomputes, nodeCounter));
             }
@@ -2038,12 +2052,9 @@ NJson::TJsonValue ReconstructQueryPlanRec(const NJson::TJsonValue& plan,
     if (plan.GetMapSafe().contains("CTE Name") && plan.GetMapSafe().at("Node Type").GetStringSafe() == "ConstantExpr") {
         auto precompute = plan.GetMapSafe().at("CTE Name").GetStringSafe();
         if (!precomputes.contains(precompute)) {
-            //YQL_CLOG(TRACE, CoreDq) << "Didn't find precompute: " << precompute ; 
-
             result["Node Type"] = plan.GetMapSafe().at("Node Type");
             return result;
         }
-        //YQL_CLOG(TRACE, CoreDq) << "Following precompute: " << precompute ; 
 
         return ReconstructQueryPlanRec(precomputes.at(precompute), 0, planIndex, precomputes, nodeCounter);
     }
@@ -2055,18 +2066,28 @@ NJson::TJsonValue ReconstructQueryPlanRec(const NJson::TJsonValue& plan,
 
     auto opName = op.GetMapSafe().at("Name").GetStringSafe();
 
+    THashSet<ui32> processedExternalOperators;
+    THashSet<ui32> processedInternalOperators;
     for (auto opInput : op.GetMapSafe().at("Inputs").GetArraySafe()) {
-        // Sometimes we have inputs for these operators, don't process them
-        if (opName == "TablePointLookup") {
-            break;
-        }
-        
+
         if (opInput.GetMapSafe().contains("ExternalPlanNodeId")) {
             auto inputPlanKey = opInput.GetMapSafe().at("ExternalPlanNodeId").GetIntegerSafe();
+
+            if (processedExternalOperators.contains(inputPlanKey)) {
+                continue;
+            }
+            processedExternalOperators.insert(inputPlanKey);
+
             auto inputPlan = planIndex.at(inputPlanKey);
             planInputs.push_back( ReconstructQueryPlanRec(inputPlan, 0, planIndex, precomputes, nodeCounter));
         } else if (opInput.GetMapSafe().contains("InternalOperatorId")) {
             auto inputPlanId = opInput.GetMapSafe().at("InternalOperatorId").GetIntegerSafe();
+
+            if (processedInternalOperators.contains(inputPlanId)) {
+                continue;
+            }
+            processedInternalOperators.insert(inputPlanId);
+
             planInputs.push_back( ReconstructQueryPlanRec(plan, inputPlanId, planIndex, precomputes, nodeCounter));
         }
     }

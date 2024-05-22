@@ -6,6 +6,6 @@
 
 @[YouTube](https://youtu.be/ETEhq7RGBTk?si=MAUDwaXlzCl0IzH_)
 
-The presentation is suitable for DevOps (CI/CD).
+The presentation is suitable for DevOps engineers (CI/CD).
 
 [Slides](https://presentations.ydb.tech/2024/en/devworld/presentation.pdf)

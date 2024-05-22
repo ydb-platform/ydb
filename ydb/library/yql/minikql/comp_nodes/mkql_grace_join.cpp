@@ -645,6 +645,7 @@ private:
         // return !HasMemoryForProcessing();
     }
 
+
     void SwitchMode(EOperatingMode mode, TComputationContext& ctx) {
         switch(mode) {
             case EOperatingMode::InMemory: {

@@ -140,15 +140,17 @@ struct TYdbUnitResources {
     }
 };
 
+extern TMap<std::pair<TStringBuf, TStringBuf>, TYdbUnitResources> DefaultUnitResources;
+
 struct TYdbLocation {
     TString Name;
     TString Environment;
-    TVector<std::pair<TStringBuf, TStringBuf>> Endpoints;
-    const TString RootDomain;
+    TVector<std::pair<TString, TString>> Endpoints;
+    TString RootDomain;
     TVector<TStringBuf> DataCenters;
     const TMap<std::pair<TStringBuf, TStringBuf>, TYdbUnitResources>& UnitResources;
     ui32 NotificationsEnvironmentId;
-    bool Disabled;
+    bool Disabled = false;
     TAtomicSingleton<NYdb::TDriver> Driver;
     TAtomicSingleton<NYdbGrpc::TGRpcClientLow> GRpcClientLow;
     static TString UserToken;
@@ -159,19 +161,29 @@ struct TYdbLocation {
 
     TYdbLocation(const TString& name,
                  const TString& environment,
-                 const TVector<std::pair<TStringBuf, TStringBuf>>& endpoints,
+                 const TVector<std::pair<TString, TString>>& endpoints,
+                 const TString& rootDomain)
+        : Name(name)
+        , Environment(environment)
+        , Endpoints(endpoints)
+        , RootDomain(rootDomain)
+        , UnitResources(DefaultUnitResources)
+    {}
+
+    TYdbLocation(const TString& name,
+                 const TString& environment,
+                 const TVector<std::pair<TString, TString>>& endpoints,
                  const TString& rootDomain,
                  const TVector<TStringBuf>& dataCenters,
                  const TMap<std::pair<TStringBuf, TStringBuf>, TYdbUnitResources>& unitResources,
-                 ui32 notificationsEnvironmendId = 0)
+                 ui32 notificationsEnvironmentId = 0)
         : Name(name)
         , Environment(environment)
         , Endpoints(endpoints)
         , RootDomain(rootDomain)
         , DataCenters(dataCenters)
         , UnitResources(unitResources)
-        , NotificationsEnvironmentId(notificationsEnvironmendId)
-        , Disabled(false)
+        , NotificationsEnvironmentId(notificationsEnvironmentId)
     {}
 
     static TString GetUserToken() {

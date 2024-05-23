@@ -241,7 +241,7 @@ public:
                 const THashMap<TString, TString>& secureParams, const THashMap<TString, TString>& graphParams,
                 const TDqSettings::TPtr& settings,
                 const TDqProgressWriter& progressWriter, const THashMap<TString, TString>& modulesMapping,
-                bool discard)
+                bool discard, ui64 executionTimeout)
     {
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(SessionId);
 
@@ -257,6 +257,7 @@ public:
                 YQL_ENSURE(!file.GetObjectId().empty());
             }
         }
+        queryPB.SetExecutionTimeout(executionTimeout);
         queryPB.SetSession(SessionId);
         queryPB.SetResultType(plan.ResultType);
         queryPB.SetSourceId(plan.SourceID.NodeId()-1);
@@ -521,7 +522,7 @@ public:
         const THashMap<TString, TString>& secureParams, const THashMap<TString, TString>& graphParams,
         const TDqSettings::TPtr& settings,
         const TDqProgressWriter& progressWriter, const THashMap<TString, TString>& modulesMapping,
-        bool discard)
+        bool discard, ui64 executionTimeout)
     {
         std::shared_ptr<TDqGatewaySession> session;
         with_lock(Mutex) {
@@ -534,7 +535,7 @@ public:
             YQL_CLOG(ERROR, ProviderDq) << "Session was closed: " << sessionId;
             return MakeFuture(NCommon::ResultFromException<TResult>(yexception() << "Session was closed"));
         }
-        return session->ExecutePlan(std::move(plan), columns, secureParams, graphParams, settings, progressWriter, modulesMapping, discard)
+        return session->ExecutePlan(std::move(plan), columns, secureParams, graphParams, settings, progressWriter, modulesMapping, discard, executionTimeout)
             .Apply([](const TFuture<TResult>& f) {
                 try {
                     f.TryRethrow();
@@ -586,9 +587,9 @@ public:
         const THashMap<TString, TString>& secureParams, const THashMap<TString, TString>& graphParams,
         const TDqSettings::TPtr& settings,
         const TDqProgressWriter& progressWriter, const THashMap<TString, TString>& modulesMapping,
-        bool discard) override
+        bool discard, ui64 executionTimeout) override
     {
-        return Impl->ExecutePlan(sessionId, std::move(plan), columns, secureParams, graphParams, settings, progressWriter, modulesMapping, discard);
+        return Impl->ExecutePlan(sessionId, std::move(plan), columns, secureParams, graphParams, settings, progressWriter, modulesMapping, discard, executionTimeout);
     }
 
     TString GetVanillaJobPath() override {

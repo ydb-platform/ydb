@@ -2004,8 +2004,21 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             }
         )", {TEvSchemeShard::EStatus::StatusInvalidParameter});
 
-        //no key in index descr
+        //no directory
         TestCreateIndexedTable(runtime, txId++, "/MyRoot/USER_0", R"(
+                TableDescription {
+                  Name: "Table2"
+                  Columns { Name: "key"   Type: "Uint64" }
+                  Columns { Name: "value0" Type: "Utf8" }
+                  KeyColumnNames: ["key"]
+                }
+                IndexDescription {
+                  Name: "UserDefinedIndexByValue0"
+                }
+            )", {NKikimrScheme::StatusPathDoesNotExist});
+
+        //no key in index descr
+        TestCreateIndexedTable(runtime, txId++, "/MyRoot/DirA", R"(
                 TableDescription {
                   Name: "Table2"
                   Columns { Name: "key"   Type: "Uint64" }

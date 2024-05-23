@@ -90,11 +90,6 @@
                 "ColumnId": 17,
                 "ColumnName": "TempDirOwnerActorId",
                 "ColumnType": "String"
-            },
-            {
-                "ColumnId": 18,
-                "ColumnName": "Temporary",
-                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -117,8 +112,7 @@
                     14,
                     15,
                     16,
-                    17,
-                    18
+                    17
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -3297,11 +3291,6 @@
                 "ColumnId": 17,
                 "ColumnName": "TempDirOwnerActorId",
                 "ColumnType": "String"
-            },
-            {
-                "ColumnId": 18,
-                "ColumnName": "Temporary",
-                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -3324,8 +3313,7 @@
                     14,
                     15,
                     16,
-                    17,
-                    18
+                    17
                 ],
                 "RoomID": 0,
                 "Codec": 0,

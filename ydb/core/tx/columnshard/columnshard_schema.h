@@ -54,7 +54,8 @@ struct Schema : NIceDb::Schema {
         BackupIdsDeprecated,
         ExportSessionsId,
         PortionsTableId,
-        BackgroundSessionsTableId
+        BackgroundSessionsTableId,
+        ShardingInfoTabletId
     };
 
     enum class ETierTables: ui32 {
@@ -194,9 +195,10 @@ struct Schema : NIceDb::Schema {
         struct WriteId: Column<1, NScheme::NTypeIds::Uint64> {};
         struct LongTxId : Column<2, NScheme::NTypeIds::String> {};
         struct WritePartId: Column<3, NScheme::NTypeIds::Uint32> {};
+        struct GranuleShardingVersion: Column<4, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<WriteId>;
-        using TColumns = TableColumns<WriteId, LongTxId, WritePartId>;
+        using TColumns = TableColumns<WriteId, LongTxId, WritePartId, GranuleShardingVersion>;
     };
 
     struct BlobsToKeep : Table<(ui32)ECommonTables::BlobsToKeep> {
@@ -315,10 +317,11 @@ struct Schema : NIceDb::Schema {
         struct CreatedAt : Column<4, NScheme::NTypeIds::Uint64> {};
         struct GlobalWriteId : Column<5, NScheme::NTypeIds::Uint64> {};
         struct Metadata : Column<6, NScheme::NTypeIds::String> {};
-        struct Cookie : Column<7, NScheme::NTypeIds::Uint64> {};
+        struct Cookie: Column<7, NScheme::NTypeIds::Uint64> {};
+        struct GranuleShardingVersionId: Column<8, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<WriteId>;
-        using TColumns = TableColumns<LockId, WriteId, Status, CreatedAt, GlobalWriteId, Metadata, Cookie>;
+        using TColumns = TableColumns<LockId, WriteId, Status, CreatedAt, GlobalWriteId, Metadata, Cookie, GranuleShardingVersionId>;
     };
 
     struct OperationTxIds : NIceDb::Schema::Table<OperationTxIdsId> {
@@ -453,9 +456,10 @@ struct Schema : NIceDb::Schema {
         struct XPlanStep: Column<4, NScheme::NTypeIds::Uint64> {};
         struct XTxId: Column<5, NScheme::NTypeIds::Uint64> {};
         struct Metadata: Column<6, NScheme::NTypeIds::String> {}; // NKikimrTxColumnShard.TIndexColumnMeta
+        struct ShardingVersion: Column<7, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<PathId, PortionId>;
-        using TColumns = TableColumns<PathId, PortionId, SchemaVersion, XPlanStep, XTxId, Metadata>;
+        using TColumns = TableColumns<PathId, PortionId, SchemaVersion, XPlanStep, XTxId, Metadata, ShardingVersion>;
     };
 
     struct BackgroundSessions: Table<BackgroundSessionsTableId> {
@@ -468,6 +472,16 @@ struct Schema : NIceDb::Schema {
 
         using TKey = TableKey<ClassName, Identifier>;
         using TColumns = TableColumns<ClassName, Identifier, StatusChannel, LogicDescription, Progress, State>;
+    };
+
+    struct ShardingInfo : Table<ShardingInfoTabletId> {
+        struct PathId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct VersionId : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct Snapshot : Column<3, NScheme::NTypeIds::String> {};
+        struct Logic : Column<4, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<PathId, VersionId>;
+        using TColumns = TableColumns<PathId, VersionId, Snapshot, Logic>;
     };
 
     using TTables = SchemaTables<
@@ -500,7 +514,8 @@ struct Schema : NIceDb::Schema {
         DestinationSessions,
         OperationTxIds,
         IndexPortions,
-        BackgroundSessions
+        BackgroundSessions,
+        ShardingInfo
         >;
 
     //
@@ -654,14 +669,16 @@ struct Schema : NIceDb::Schema {
         db.Table<TableInfo>().Key(pathId).Delete();
     }
 
-    static void SaveLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId, const ui32 writePartId, const NLongTxService::TLongTxId& longTxId) {
+    static void SaveLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId, const ui32 writePartId, const NLongTxService::TLongTxId& longTxId, const std::optional<ui32> granuleShardingVersion) {
         NKikimrLongTxService::TLongTxId proto;
         longTxId.ToProto(&proto);
         TString serialized;
         Y_ABORT_UNLESS(proto.SerializeToString(&serialized));
         db.Table<LongTxWrites>().Key((ui64)writeId).Update(
-            NIceDb::TUpdate<LongTxWrites::LongTxId>(serialized),
-            NIceDb::TUpdate<LongTxWrites::WritePartId>(writePartId));
+            NIceDb::TUpdate<LongTxWrites::LongTxId>(serialized), 
+            NIceDb::TUpdate<LongTxWrites::WritePartId>(writePartId), 
+            NIceDb::TUpdate<LongTxWrites::GranuleShardingVersion>(granuleShardingVersion.value_or(0))
+            );
     }
 
     static void EraseLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId) {

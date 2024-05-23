@@ -2382,6 +2382,116 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         AlterTableAddIndex(EIndexTypeSql::GlobalAsync);
     }
 
+    Y_UNIT_TEST(AlterTableAlterIndex) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(session);
+
+        constexpr int minPartitionsCount = 10;
+        {
+            auto result = session.ExecuteSchemeQuery(Sprintf(R"(
+                        ALTER TABLE `/Root/SecondaryKeys` ALTER INDEX Index SET AUTO_PARTITIONING_MIN_PARTITIONS_COUNT %d;
+                    )", minPartitionsCount
+                )
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto describe = session.DescribeTable("/Root/SecondaryKeys/Index/indexImplTable").GetValueSync();
+            UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+            auto indexDesc = describe.GetTableDescription();
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetPartitioningSettings().GetMinPartitionsCount(), minPartitionsCount);
+        }
+    }
+
+    Y_UNIT_TEST(AlterIndexImplTable) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(session);
+
+        constexpr int minPartitionsCount = 10;
+        {
+            auto result = session.ExecuteSchemeQuery(Sprintf(R"(
+                        ALTER TABLE `/Root/SecondaryKeys/Index/indexImplTable` SET AUTO_PARTITIONING_MIN_PARTITIONS_COUNT %d;
+                    )", minPartitionsCount
+                )
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                "Error: Cannot find table 'db.[/Root/SecondaryKeys/Index/indexImplTable]' because it does not exist or you do not have access permissions."
+            );
+        }
+    }
+
+    Y_UNIT_TEST(AlterIndexImplTableUsingPublicAPI) {
+        TKikimrRunner kikimr;
+        auto adminSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(adminSession);
+
+        auto grantPermissions = [&adminSession](const char* permissions, const char* path, const char* user) {
+            auto grantQuery = Sprintf(R"(
+                    GRANT %s ON `%s` TO `%s`;
+                )",
+                permissions, path, user
+            );
+            auto result = adminSession.ExecuteSchemeQuery(grantQuery).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+
+        // a user which does not have any implicit permissions
+        auto userClient = NYdb::NTable::TTableClient(kikimr.GetDriver(), NYdb::NTable::TClientSettings()
+            .AuthToken("user@builtin")
+        );
+        auto userSession = userClient.CreateSession().GetValueSync().GetSession();
+
+        constexpr int minPartitionsCount = 10;
+        auto tableSettings = NYdb::NTable::TAlterTableSettings()
+            .BeginAlterPartitioningSettings()
+                .SetMinPartitionsCount(minPartitionsCount)
+            .EndAlterPartitioningSettings();
+
+        // try altering indexImplTable without ALTER SCHEMA permission
+        {
+            auto result = userSession.AlterTable("/Root/SecondaryKeys/Index/indexImplTable", tableSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAUTHORIZED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                "Error: Access denied for user@builtin to path Root/SecondaryKeys/Index/indexImplTable"
+            );
+        }
+        // grant necessary permission
+        {
+            grantPermissions("ALTER SCHEMA", "/Root/SecondaryKeys", "user@builtin");
+            auto result = userSession.AlterTable("/Root/SecondaryKeys/Index/indexImplTable", tableSettings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        // check result
+        {
+            grantPermissions("DESCRIBE SCHEMA", "/Root/SecondaryKeys", "user@builtin");
+            auto describe = userSession.DescribeTable("/Root/SecondaryKeys/Index/indexImplTable").ExtractValueSync();
+            UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+            auto indexDesc = describe.GetTableDescription();
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetPartitioningSettings().GetMinPartitionsCount(), minPartitionsCount);
+        }
+
+        // try altering non-partitioning setting of indexImplTable as non-superuser
+        auto forbiddenSettings = NYdb::NTable::TAlterTableSettings().SetCompactionPolicy("default");
+        {
+            auto result = userSession.AlterTable("/Root/SecondaryKeys/Index/indexImplTable", forbiddenSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                "Error: Check failed: path: '/Root/SecondaryKeys/Index/indexImplTable', error: path is not a common path"
+            );
+        }
+        // become superuser
+        {
+            kikimr.GetTestServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("user@builtin");
+            auto result = userSession.AlterTable("/Root/SecondaryKeys/Index/indexImplTable", forbiddenSettings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(AlterTableRenameIndex) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

@@ -191,13 +191,16 @@ runs:
             ;;
         esac
         
+        # Also build targets which are not in tests' dependencies
+        params+=(--no-strip-idle-build-results)
+
         echo "::debug::get version"
         ./ya --version
         
         echo "Tests are running..." | .github/scripts/tests/comment-pr.py
 
         ./ya test ${{ inputs.build_target }} "${params[@]}" \
-          --stat --log-file "$LOG_DIR/ya_log.txt" --evlog-file "$LOG_DIR/ya_evlog.jsonl" -DCONSISTENT_DEBUG \
+          --stat --log-file "$LOG_DIR/ya_log2.txt" --evlog-file "$LOG_DIR/ya_evlog2.jsonl" -DCONSISTENT_DEBUG \
           --no-dir-outputs \
           --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR" || (
             RC=$?

@@ -41,6 +41,11 @@ public:
         THashMap<ui32, ui64> Counters;
     };
 
+    virtual TConclusion<THashMap<ui64, std::map<TSnapshot, TGranuleShardingInfo>>> LoadGranulesShardingInfo() override {
+        THashMap<ui64, std::map<TSnapshot, TGranuleShardingInfo>> result;
+        return result;
+    }
+
     void Insert(const TInsertedData& data) override {
         Inserted.emplace(TWriteId{data.WriteTxId}, data);
     }

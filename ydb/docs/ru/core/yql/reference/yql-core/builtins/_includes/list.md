@@ -892,3 +892,23 @@ ListToTuple(List<T>, N)->Tuple<T,T,...T> -- ширина кортежа N
 ListToTuple(List<T>?, N)->Tuple<T,T,...T>? -- ширина кортежа N
 ```
 
+## ListTop, ListTopAsc, ListTopDesc, ListTopSort, ListTopSortAsc и ListTopSortDesc {#listtop}
+
+Выбрать топ значениий из списка (ListTopSort* - дополнительно отсортировать список). По умолчанию выбираются наименьшие значения (функции без суффикса - алиас к функциям *Asc; *Desc - выбор наибольших значений).
+
+
+Аргументы:
+
+1. Список;
+2. Размер выборки;
+3. Опциональное выражение для получения ключа сортировки из элемента списка (по умолчанию сам элемент).
+
+**Сигнатура**
+```
+ListTop(List<T>, N)->List<T>
+ListTop(List<T>?, N)->List<T>?
+
+ListTop(List<T>, N, (T)->U)->List<T>
+ListTop(List<T>?, N, (T)->U)->List<T>?
+```
+Сигнатуры остальных функций совпадают с ListTop.

@@ -27,10 +27,15 @@ private:
     YDB_READONLY(TAtomicCounter, ActualizationsCount, 0);
     YDB_READONLY(TAtomicCounter, ActualizationRefreshSchemeCount, 0);
     YDB_READONLY(TAtomicCounter, ActualizationRefreshTieringCount, 0);
+    YDB_READONLY(TAtomicCounter, ShardingFiltersCount, 0);
 
     YDB_ACCESSOR(TAtomicCounter, CompactionsLimit, 10000000);
 
 protected:
+    virtual void OnSelectShardingFilter() override {
+        ShardingFiltersCount.Inc();
+    }
+
     virtual void AddPortionForActualizer(const i32 portionsCount) override {
         NeedActualizationCount.Add(portionsCount);
     }

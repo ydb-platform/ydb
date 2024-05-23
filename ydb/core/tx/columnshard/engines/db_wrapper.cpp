@@ -1,7 +1,9 @@
 #include "defs.h"
 #include "db_wrapper.h"
 #include "portions/constructor.h"
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/sharding/sharding.h>
 
 namespace NKikimr::NOlap {
 
@@ -68,6 +70,7 @@ void TDbWrapper::WritePortion(const NOlap::TPortionInfo& portion) {
     auto removeSnapshot = portion.GetRemoveSnapshotOptional();
     db.Table<IndexPortions>().Key(portion.GetPathId(), portion.GetPortion()).Update(
         NIceDb::TUpdate<IndexPortions::SchemaVersion>(portion.GetSchemaVersionVerified()),
+        NIceDb::TUpdate<IndexPortions::ShardingVersion>(portion.GetShardingVersionDef(0)),
         NIceDb::TUpdate<IndexPortions::XPlanStep>(removeSnapshot ? removeSnapshot->GetPlanStep() : 0),
         NIceDb::TUpdate<IndexPortions::XTxId>(removeSnapshot ? removeSnapshot->GetTxId() : 0),
         NIceDb::TUpdate<IndexPortions::Metadata>(metaProto.SerializeAsString()));
@@ -123,6 +126,9 @@ bool TDbWrapper::LoadPortions(const std::function<void(NOlap::TPortionInfoConstr
     while (!rowset.EndOfSet()) {
         NOlap::TPortionInfoConstructor portion(rowset.GetValue<IndexPortions::PathId>(), rowset.GetValue<IndexPortions::PortionId>());
         portion.SetSchemaVersion(rowset.GetValue<IndexPortions::SchemaVersion>());
+        if (rowset.HaveValue<IndexPortions::ShardingVersion>() && rowset.GetValue<IndexPortions::ShardingVersion>()) {
+            portion.SetShardingVersion(rowset.GetValue<IndexPortions::ShardingVersion>());
+        }
         portion.SetRemoveSnapshot(rowset.GetValue<IndexPortions::XPlanStep>(), rowset.GetValue<IndexPortions::XTxId>());
 
         NKikimrTxColumnShard::TIndexPortionMeta metaProto;
@@ -183,6 +189,29 @@ void TDbWrapper::WriteCounter(ui32 counterId, ui64 value) {
 bool TDbWrapper::LoadCounters(const std::function<void(ui32 id, ui64 value)>& callback) {
     NIceDb::TNiceDb db(Database);
     return NColumnShard::Schema::IndexCounters_Load(db, callback);
+}
+
+TConclusion<THashMap<ui64, std::map<NOlap::TSnapshot, TGranuleShardingInfo>>> TDbWrapper::LoadGranulesShardingInfo() {
+    using Schema = NColumnShard::Schema;
+    NIceDb::TNiceDb db(Database);
+    auto rowset = db.Table<Schema::ShardingInfo>().Select();
+    if (!rowset.IsReady()) {
+        return TConclusionStatus::Fail("cannot read rowset");
+    }
+    THashMap<ui64, std::map<TSnapshot, TGranuleShardingInfo>> result;
+    while (!rowset.EndOfSet()) {
+        NOlap::TSnapshot snapshot = NOlap::TSnapshot::Zero();
+        snapshot.DeserializeFromString(rowset.GetValue<Schema::ShardingInfo::Snapshot>()).Validate();
+        NSharding::TGranuleShardingLogicContainer logic;
+        logic.DeserializeFromString(rowset.GetValue<Schema::ShardingInfo::Logic>()).Validate();
+        TGranuleShardingInfo gShardingInfo(logic, snapshot, rowset.GetValue<Schema::ShardingInfo::VersionId>(), rowset.GetValue<Schema::ShardingInfo::PathId>());
+        AFL_VERIFY(result[gShardingInfo.GetPathId()].emplace(gShardingInfo.GetSinceSnapshot(), gShardingInfo).second);
+
+        if (!rowset.Next()) {
+            return TConclusionStatus::Fail("cannot read rowset");
+        }
+    }
+    return result;
 }
 
 }

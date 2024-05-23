@@ -66,6 +66,7 @@ TColumnEngineChanges::~TColumnEngineChanges() {
 }
 
 void TColumnEngineChanges::Abort(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("problem", "changes_aborted")("reason", context.ErrorMessage);
     AFL_VERIFY(Stage != EStage::Finished && Stage != EStage::Created && Stage != EStage::Aborted)("stage", Stage)("reason", context.ErrorMessage);
     Stage = EStage::Aborted;
     OnFinish(self, context);

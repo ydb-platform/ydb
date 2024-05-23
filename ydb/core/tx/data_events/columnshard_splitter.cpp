@@ -47,7 +47,7 @@ NKikimr::NEvWrite::IShardsSplitter::TYdbConclusionStatus TColumnShardShardsSplit
 
     NSchemeShard::TOlapSchema olapSchema;
     olapSchema.ParseFromLocalDB(scheme);
-    auto shardingConclusion = NSharding::TShardingBase::BuildFromProto(olapSchema, sharding);
+    auto shardingConclusion = NSharding::IShardingBase::BuildFromProto(olapSchema, sharding);
     if (shardingConclusion.IsFail()) {
         return TYdbConclusionStatus::Fail(Ydb::StatusIds::SCHEME_ERROR, shardingConclusion.GetErrorMessage());
     }
@@ -56,7 +56,7 @@ NKikimr::NEvWrite::IShardsSplitter::TYdbConclusionStatus TColumnShardShardsSplit
 }
 
 NKikimr::NEvWrite::IShardsSplitter::TYdbConclusionStatus TColumnShardShardsSplitter::SplitImpl(const std::shared_ptr<arrow::RecordBatch>& batch,
-    const std::shared_ptr<NSharding::TShardingBase>& sharding)
+    const std::shared_ptr<NSharding::IShardingBase>& sharding)
 {
     Y_ABORT_UNLESS(batch);
 
@@ -68,7 +68,7 @@ NKikimr::NEvWrite::IShardsSplitter::TYdbConclusionStatus TColumnShardShardsSplit
     TFullSplitData result(sharding->GetShardsCount());
     for (auto&& [shardId, chunks] : split.GetResult()) {
         for (auto&& c : chunks) {
-            result.AddShardInfo(shardId, std::make_shared<TShardInfo>(c.GetSchemaData(), c.GetData(), c.GetRowsCount()));
+            result.AddShardInfo(shardId, std::make_shared<TShardInfo>(c.GetSchemaData(), c.GetData(), c.GetRowsCount(), sharding->GetShardInfoVerified(shardId).GetShardingVersion()));
         }
     }
 

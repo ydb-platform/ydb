@@ -7,27 +7,32 @@
 #include "compaction/merged_column.h"
 #include "counters/general.h"
 
+#include <ydb/core/formats/arrow/reader/merger.h>
 #include <ydb/core/formats/arrow/simple_builder/array.h>
 #include <ydb/core/formats/arrow/simple_builder/filler.h>
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/portions/read_with_blobs.h>
 #include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
-#include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/null_column.h>
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
 #include <ydb/core/tx/columnshard/splitter/settings.h>
-#include <ydb/core/formats/arrow/reader/merger.h>
 
 namespace NKikimr::NOlap::NCompaction {
 
 void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByFullBatches(TConstructionContext& context, std::vector<TReadPortionInfoWithBlobs>&& portions) noexcept {
     std::vector<std::shared_ptr<arrow::RecordBatch>> batchResults;
     auto resultSchema = context.SchemaVersions.GetLastSchema();
+    auto shardingActual = context.SchemaVersions.GetShardingInfoActual(GranuleMeta->GetPathId());
     {
         auto resultDataSchema = resultSchema->GetIndexInfo().ArrowSchemaWithSpecials();
         NArrow::NMerger::TMergePartialStream mergeStream(resultSchema->GetIndexInfo().GetReplaceKey(), resultDataSchema, false, IIndexInfo::GetSpecialColumnNames());
+
         for (auto&& i : portions) {
             auto dataSchema = i.GetPortionInfo().GetSchema(context.SchemaVersions);
             auto batch = i.GetBatch(dataSchema, *resultSchema);
+            if (shardingActual && i.GetPortionInfo().NeedShardingFilter(*shardingActual)) {
+                shardingActual->GetShardingInfo()->GetFilter(batch)->Apply(batch);
+            }
             batch = resultSchema->NormalizeBatch(*dataSchema, batch);
             Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(batch, resultSchema->GetIndexInfo().GetReplaceKey()));
             mergeStream.AddSource(batch, nullptr);
@@ -39,6 +44,9 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByFullBatches(TCon
         auto portions = MakeAppendedPortions(b, GranuleMeta->GetPathId(), resultSchema->GetSnapshot(), GranuleMeta.get(), context, {});
         Y_ABORT_UNLESS(portions.size());
         for (auto& portion : portions) {
+            if (shardingActual) {
+                portion.GetPortionConstructor().SetShardingVersion(shardingActual->GetSnapshotVersion());
+            }
             AppendedPortions.emplace_back(std::move(portion));
         }
     }
@@ -51,6 +59,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
     static const std::shared_ptr<arrow::Field> portionRecordIndexField = std::make_shared<arrow::Field>(portionRecordIndexFieldName, std::make_shared<arrow::UInt32Type>());
 
     auto resultSchema = context.SchemaVersions.GetLastSchema();
+    auto shardingActual = context.SchemaVersions.GetShardingInfoActual(GranuleMeta->GetPathId());
 
     std::vector<std::string> pkFieldNames = resultSchema->GetIndexInfo().GetReplaceKey()->field_names();
     std::set<std::string> pkFieldNamesSet(pkFieldNames.begin(), pkFieldNames.end());
@@ -81,7 +90,12 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
                 batch = NArrow::TStatusValidator::GetValid(batch->AddColumn(batch->num_columns(), portionRecordIndexField, column->BuildArray(batch->num_rows())));
             }
             Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(batch, resultSchema->GetIndexInfo().GetReplaceKey()));
-            mergeStream.AddSource(batch, nullptr);
+            std::shared_ptr<NArrow::TColumnFilter> filter;
+            if (shardingActual && i.GetPortionInfo().NeedShardingFilter(*shardingActual)) {
+                filter = shardingActual->GetShardingInfo()->GetFilter(batch);
+            }
+
+            mergeStream.AddSource(batch, filter);
         }
         batchResults = mergeStream.DrainAllParts(CheckPoints, indexFields);
     }
@@ -158,7 +172,6 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
             ++batchIdx;
         }
         AFL_VERIFY(columnRecordsCount == batchesRecordsCount)("mCount", columnRecordsCount)("bCount", batchesRecordsCount);
-
     }
     ui32 batchIdx = 0;
 
@@ -202,6 +215,9 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
             NArrow::TMinMaxSpecialKeys snapshotKeys(b, TIndexInfo::ArrowSchemaSnapshot());
             AppendedPortions.back().GetPortionConstructor().AddMetadata(*resultSchema, primaryKeys, snapshotKeys);
             AppendedPortions.back().GetPortionConstructor().MutableMeta().SetTierName(IStoragesManager::DefaultStorageId);
+            if (shardingActual) {
+                AppendedPortions.back().GetPortionConstructor().SetShardingVersion(shardingActual->GetSnapshotVersion());
+            }
             recordIdx += slice.GetRecordsCount();
         }
     }
@@ -312,4 +328,4 @@ ui64 TGeneralCompactColumnEngineChanges::TMemoryPredictorChunkedPolicy::AddPorti
     return SumMemoryFix + SumMemoryDelta;
 }
 
-}
+}   // namespace NKikimr::NOlap::NCompaction

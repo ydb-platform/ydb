@@ -1,8 +1,11 @@
 #include "constructor.h"
+
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 namespace NKikimr::NOlap {
 
@@ -20,6 +23,7 @@ TPortionInfo TPortionInfoConstructor::Build(const bool needChunksNormalization) 
         result.RemoveSnapshot = *RemoveSnapshot;
     }
     result.SchemaVersion = SchemaVersion;
+    result.ShardingVersion = ShardingVersion;
 
     if (needChunksNormalization) {
         ReorderChunks();
@@ -84,4 +88,4 @@ void TPortionInfoConstructor::AddMetadata(const ISnapshotSchema& snapshotSchema,
         NArrow::TMinMaxSpecialKeys(batch, TIndexInfo::ArrowSchemaSnapshot()), snapshotSchema.GetIndexInfo());
 }
 
-}
+}   // namespace NKikimr::NOlap

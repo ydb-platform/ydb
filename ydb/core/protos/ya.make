@@ -168,6 +168,7 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/scheme/statistics/protos
     ydb/core/tx/columnshard/engines/protos
     ydb/core/formats/arrow/protos
+    ydb/core/tx/columnshard/common/protos
 )
 
 CPP_PROTO_PLUGIN0(config_proto_plugin ydb/core/config/tools/protobuf_plugin)

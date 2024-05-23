@@ -174,6 +174,26 @@ bool TSubDomainInfo::CheckDiskSpaceQuotas(IQuotaCounters* counters) {
     return false;
 }
 
+void TSubDomainInfo::CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskSpaceQuotas& quotas) {
+    if (quotas.HardQuota != 0) {
+        counters->ChangeDiskSpaceHardQuotaBytes(quotas.HardQuota);
+    }
+    if (quotas.SoftQuota != 0) {
+        counters->ChangeDiskSpaceSoftQuotaBytes(quotas.SoftQuota);
+    }
+}
+
+void TSubDomainInfo::CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskSpaceQuotas& prev, const TDiskSpaceQuotas& next) {
+    i64 hardDelta = i64(next.HardQuota) - i64(prev.HardQuota);
+    if (hardDelta != 0) {
+        counters->ChangeDiskSpaceHardQuotaBytes(hardDelta);
+    }
+    i64 softDelta = i64(next.SoftQuota) - i64(prev.SoftQuota);
+    if (softDelta != 0) {
+        counters->ChangeDiskSpaceSoftQuotaBytes(softDelta);
+    }
+}
+
 void TSubDomainInfo::AggrDiskSpaceUsage(IQuotaCounters* counters, const TPartitionStats& newAggr, const TPartitionStats& oldAggr) {
     DiskSpaceUsage.Tables.DataSize += (newAggr.DataSize - oldAggr.DataSize);
     counters->ChangeDiskSpaceTablesDataBytes(newAggr.DataSize - oldAggr.DataSize);

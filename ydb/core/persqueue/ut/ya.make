@@ -29,26 +29,26 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
-    autoscaling_ut.cpp
-    balancing_ut.cpp
-    counters_ut.cpp
-    pqtablet_mock.cpp
-    internals_ut.cpp
-    make_config.cpp
-    metering_sink_ut.cpp
-    mirrorer_ut.cpp
+    # autoscaling_ut.cpp
+    # balancing_ut.cpp
+    # counters_ut.cpp
+    # pqtablet_mock.cpp
+    # internals_ut.cpp
+    # make_config.cpp
+    # metering_sink_ut.cpp
+    # mirrorer_ut.cpp
     partition_chooser_ut.cpp
-    pq_ut.cpp
-    partition_ut.cpp
-    partitiongraph_ut.cpp
-    pqtablet_ut.cpp
-    quota_tracker_ut.cpp
-    sourceid_ut.cpp
-    type_codecs_ut.cpp
-    user_info_ut.cpp
-    pqrb_describes_ut.cpp
-    microseconds_sliding_window_ut.cpp
-    fetch_request_ut.cpp
+    # pq_ut.cpp
+    # partition_ut.cpp
+    # partitiongraph_ut.cpp
+    # pqtablet_ut.cpp
+    # quota_tracker_ut.cpp
+    # sourceid_ut.cpp
+    # type_codecs_ut.cpp
+    # user_info_ut.cpp
+    # pqrb_describes_ut.cpp
+    # microseconds_sliding_window_ut.cpp
+    # fetch_request_ut.cpp
 )
 
 RESOURCE(

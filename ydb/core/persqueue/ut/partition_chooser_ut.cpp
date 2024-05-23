@@ -20,7 +20,7 @@ void AddPartition(NKikimrSchemeOp::TPersQueueGroupDescription& conf,
                   ui32 id,
                   const std::optional<TString>&& boundaryFrom = std::nullopt,
                   const std::optional<TString>&& boundaryTo = std::nullopt,
-                  std::vector<ui32> children = {}) { 
+                  std::vector<ui32> children = {}) {
     auto* p = conf.AddPartitions();
     p->SetPartitionId(id);
     p->SetTabletId(1000 + id);
@@ -36,7 +36,7 @@ void AddPartition(NKikimrSchemeOp::TPersQueueGroupDescription& conf,
     }
 }
 
-NKikimrSchemeOp::TPersQueueGroupDescription CreateConfig0(bool SplitMergeEnabled) {
+NKikimrSchemeOp::TPersQueueGroupDescription CreateConfig0(bool splitMergeEnabled) {
     NKikimrSchemeOp::TPersQueueGroupDescription result;
     NKikimrPQ::TPQTabletConfig* config =  result.MutablePQTabletConfig();
 
@@ -44,7 +44,13 @@ NKikimrSchemeOp::TPersQueueGroupDescription CreateConfig0(bool SplitMergeEnabled
 
     auto* partitionStrategy = config->MutablePartitionStrategy();
     partitionStrategy->SetMinPartitionCount(3);
-    partitionStrategy->SetMaxPartitionCount(SplitMergeEnabled ? 10 : 0);
+    partitionStrategy->SetMaxPartitionCount(10);
+    if (splitMergeEnabled) {
+        partitionStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
+    } else {
+        partitionStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED);
+    }
+
 
     config->SetTopicName("/Root/topic-1");
     config->SetTopicPath("/Root");
@@ -181,7 +187,7 @@ struct TWriteSessionMock: public NActors::TActorBootstrapped<TWriteSessionMock> 
             hFunc(TEvPartitionChooser::TEvChooseResult, Handle);
             hFunc(TEvPartitionChooser::TEvChooseError, Handle);
         }
-    }        
+    }
 };
 
 NPersQueue::TTopicConverterPtr CreateTopicConverter() {
@@ -197,7 +203,7 @@ TWriteSessionMock* ChoosePartition(NPersQueue::TTestServer& server,
     TWriteSessionMock* mock = new TWriteSessionMock();
 
     NActors::TActorId parentId = server.GetRuntime()->Register(mock);
-    server.GetRuntime()->Register(NKikimr::NPQ::CreatePartitionChooserActorM(parentId, 
+    server.GetRuntime()->Register(NKikimr::NPQ::CreatePartitionChooserActorM(parentId,
                                                                                    config,
                                                                                    fullConverter,
                                                                                    sourceId,
@@ -265,7 +271,7 @@ void WriteToTable(NPersQueue::TTestServer& server, const TString& sourceId, ui32
     if (pqConfig.GetTopicsAreFirstClassCitizen()) {
         query = TStringBuilder() << "--!syntax_v1\n"
             "UPSERT INTO `//Root/.metadata/TopicPartitionsMapping` (Hash, Topic, ProducerId, CreateTime, AccessTime, Partition, SeqNo) VALUES "
-                                              "(" << encoded.KeysHash << ", \"" << fullConverter->GetClientsideName() << "\", \"" 
+                                              "(" << encoded.KeysHash << ", \"" << fullConverter->GetClientsideName() << "\", \""
                                               << encoded.EscapedSourceId << "\", "<< TInstant::Now().MilliSeconds() << ", "
                                               << TInstant::Now().MilliSeconds() << ", " << partitionId << ", " << seqNo << ");";
     } else {
@@ -293,14 +299,14 @@ TMaybe<NYdb::TResultSet> SelectTable(NPersQueue::TTestServer& server, const TStr
         query = TStringBuilder() << "--!syntax_v1\n"
             "SELECT Partition, SeqNo "
             "FROM  `//Root/.metadata/TopicPartitionsMapping` "
-            "WHERE Hash = " << encoded.KeysHash << 
+            "WHERE Hash = " << encoded.KeysHash <<
             "  AND Topic = \"" << fullConverter->GetClientsideName() << "\"" <<
             "  AND ProducerId = \"" << encoded.EscapedSourceId << "\"";
     } else {
         query = TStringBuilder() << "--!syntax_v1\n"
             "SELECT Partition, SeqNo "
             "FROM  `/Root/PQ/SourceIdMeta2` "
-            "WHERE Hash = " << encoded.KeysHash << 
+            "WHERE Hash = " << encoded.KeysHash <<
             "  AND Topic = \"" << fullConverter->GetClientsideName() << "\"" <<
             "  AND SourceId = \"" << encoded.EscapedSourceId << "\"";
     }
@@ -320,7 +326,7 @@ void AssertTable(NPersQueue::TTestServer& server, const TString& sourceId, ui32 
 
     UNIT_ASSERT(result);
     UNIT_ASSERT_VALUES_EQUAL_C(result->RowsCount(), 1, "Table must contains SourceId='" << sourceId << "'");
-    
+
     NYdb::TResultSetParser parser(*result);
     UNIT_ASSERT(parser.TryNextRow());
     NYdb::TValueParser p(parser.GetValue(0));
@@ -407,7 +413,7 @@ Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_NewSourceId_Test) {
 }
 
 Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_SourceId_PartitionActive_BoundaryTrue_Test) {
-    // We check the partition selection scenario when we have already written with the 
+    // We check the partition selection scenario when we have already written with the
     // specified SourceID, the partition to which we wrote is active, and the partition
     // boundaries coincide with the distribution.
     NPersQueue::TTestServer server = CreateServer();
@@ -427,7 +433,7 @@ Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_SourceId_PartitionActive_Bo
 }
 
 Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_SourceId_PartitionActive_BoundaryFalse_Test) {
-    // We check the partition selection scenario when we have already written with the 
+    // We check the partition selection scenario when we have already written with the
     // specified SourceID, the partition to which we wrote is active, and the partition
     // boundaries is not coincide with the distribution.
     NPersQueue::TTestServer server = CreateServer();

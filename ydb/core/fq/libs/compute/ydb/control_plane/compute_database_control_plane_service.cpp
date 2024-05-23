@@ -349,7 +349,7 @@ public:
             if (monitoringEndpoint) {
                 clientActor = Register(CreateMonitoringRestClientActor(monitoringEndpoint, singleConfig.GetConnection().GetDatabase(), credentialsProvider).release());
             } else {
-                clientActor = Register(CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(singleConfig.GetConnection()), credentialsProvider).release());
+                clientActor = Register(CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(singleConfig.GetConnection()), singleConfig.GetConnection().GetDatabase(), credentialsProvider).release());
             }
             MonitoringActorId = Register(CreateDatabaseMonitoringActor(clientActor, globalLoadConfig, Counters).release());
         }
@@ -373,7 +373,7 @@ public:
                 if (monitoringEndpoint) {
                     clientActor = Register(CreateMonitoringRestClientActor(monitoringEndpoint, config.GetControlPlaneConnection().GetDatabase(), credentialsProvider).release());
                 } else {
-                    clientActor = Register(CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(config), credentialsProvider).release());
+                    clientActor = Register(CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(config), config.GetControlPlaneConnection().GetDatabase(), credentialsProvider).release());
                 }
                 databaseMonitoringActor = Register(CreateDatabaseMonitoringActor(clientActor, loadConfig, databaseCounters).release());
             }
@@ -397,7 +397,7 @@ public:
                 if (monitoringEndpoint) {
                     clientActor = Register(CreateMonitoringRestClientActor(monitoringEndpoint, config.GetControlPlaneConnection().GetDatabase(), credentialsProvider).release());
                 } else {
-                    clientActor = Register(CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(config), credentialsProvider).release());
+                    clientActor = Register(CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(config), config.GetControlPlaneConnection().GetDatabase(), credentialsProvider).release());
                 }
                 databaseMonitoringActor = Register(CreateDatabaseMonitoringActor(clientActor, loadConfig, databaseCounters).release());
             }

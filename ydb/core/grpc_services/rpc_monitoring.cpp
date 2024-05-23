@@ -5,6 +5,7 @@
 #include "rpc_request_base.h"
 
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/viewer/json_tenantinfo.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
@@ -119,6 +120,86 @@ public:
 
 void DoSelfCheckRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TSelfCheckRPC(p.release()));
+}
+
+struct TEvTenantInfo : public TEventLocal<TEvTenantInfo, EventSpaceBegin(NActors::TEvents::ES_PRIVATE)> {
+
+    explicit TEvTenantInfo(NKikimrViewer::TTenantInfo&& result) : Result(std::move(result)) {}
+
+    NKikimrViewer::TTenantInfo Result;
+};
+
+class TGrpcTenantInfo : public NKikimr::NViewer::TTenantInfo {
+
+    TActorId RpcActorId;
+
+public:
+    TGrpcTenantInfo(TActorId rpcActorId) : RpcActorId(rpcActorId) {
+        Metrics = true;
+    }
+
+    void SendResult() override {
+        Send(RpcActorId, new TEvTenantInfo(std::move(Result)));
+    }
+};
+
+using TEvTenantInfoRequest = TGrpcRequestOperationCall<Ydb::Monitoring::TenantInfoRequest, Ydb::Monitoring::TenantInfoResponse>;
+
+class TTenantInfoRPC : public TRpcRequestActor<TTenantInfoRPC, TEvTenantInfoRequest, true> {
+public:
+    using TRpcRequestActor::TRpcRequestActor;
+
+    std::optional<Ydb::Monitoring::TenantInfoResult> Result;
+    Ydb::StatusIds_StatusCode Status = Ydb::StatusIds::SUCCESS;
+
+    void Bootstrap() {
+        Become(&TThis::StatePending);
+        Register(new TGrpcTenantInfo(SelfId()));
+    }
+
+    STATEFN(StatePending) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTenantInfo, Handle);
+        }
+    }
+
+    void Handle(TEvTenantInfo::TPtr& ev) {
+        auto& viewerResult = ev->Get()->Result;
+
+        Status = Ydb::StatusIds::SUCCESS;
+
+        Ydb::Monitoring::TenantInfoResult result;
+Cerr << TStringBuilder() << "VIEWER: " << viewerResult.DebugString() << Endl;
+        for (const auto& viewerTenantInfo : viewerResult.GetTenantInfo()) {
+            auto& tenantInfo = *result.add_tenant_info();
+            tenantInfo.set_name(viewerTenantInfo.GetName());
+            for (const auto& viewerPoolStats : viewerTenantInfo.GetPoolStats()) {
+                auto& poolStats = *tenantInfo.add_pool_stats();
+                poolStats.set_name(viewerPoolStats.GetName());
+                poolStats.set_usage(viewerPoolStats.GetUsage());
+                poolStats.set_threads(viewerPoolStats.GetThreads());
+            }
+        }
+
+        Result = std::move(result);
+
+        ReplyAndPassAway();
+    }
+
+    void ReplyAndPassAway() {
+        TResponse response;
+        Ydb::Operations::Operation& operation = *response.mutable_operation();
+        operation.set_ready(true);
+        operation.set_status(Status);
+        if (Result) {
+            operation.mutable_result()->PackFrom(*Result);
+        }
+        return Reply(response);
+    }
+};
+
+void DoTenantInfoRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TTenantInfoRPC(p.release()));
 }
 
 class TNodeCheckRPC : public TRpcRequestActor<TNodeCheckRPC, TEvNodeCheckRequest, true> {

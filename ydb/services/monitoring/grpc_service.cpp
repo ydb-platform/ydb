@@ -36,6 +36,7 @@ void TGRpcMonitoringService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) 
             #NAME, logger, getCounterBlock("monitoring", #NAME))->Run();
 
     ADD_REQUEST_NEW(SelfCheck, DoSelfCheckRequest);
+    ADD_REQUEST_NEW(TenantInfo, DoTenantInfoRequest);
 
 #define ADD_REQUEST_OLD(NAME, IN, OUT, ACTION) \
     MakeIntrusive<TGRpcRequest<Ydb::Monitoring::IN, Ydb::Monitoring::OUT, TGRpcMonitoringService>>(this, &Service_, CQ_, \

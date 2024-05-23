@@ -204,3 +204,27 @@ message SelfCheckResult {
     repeated DatabaseStatus database_status = 3;
     LocationNode location = 4;
 }
+
+message PoolStats {
+    optional string name = 1;
+    optional double usage = 2;
+    optional uint32 threads = 3;
+}
+
+message TenantInfo {
+    string name = 1;
+    repeated PoolStats pool_stats = 13;
+}
+
+message TenantInfoResult {
+    repeated TenantInfo tenant_info = 1;
+}
+
+message TenantInfoRequest {
+    Ydb.Operations.OperationParams operation_params = 1; // basic operation params, including timeout
+}
+
+message TenantInfoResponse {
+    // After successfull completion must contain TenantInfoResult.
+    Ydb.Operations.Operation operation = 1;
+}

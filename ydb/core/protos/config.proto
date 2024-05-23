@@ -1256,6 +1256,14 @@ message TImmediateControlsConfig {
             DefaultValue: 10 }];
     }
 
+    message TTabletControls {
+        optional uint64 MaxCommitRedoMB = 1 [(ControlOptions) = {
+            Description: "Maximum redo size per commit in megabytes",
+            MinValue: 8,
+            MaxValue: 4096,
+            DefaultValue: 256 }];
+    }
+
     optional TDataShardControls DataShardControls = 1;
     optional TTxLimitControls TxLimitControls = 2;
     optional TCoordinatorControls CoordinatorControls = 3;
@@ -1263,6 +1271,7 @@ message TImmediateControlsConfig {
     optional TTCMallocControls TCMallocControls = 5;
     reserved 6;
     optional TVDiskControls VDiskControls = 7;
+    optional TTabletControls TabletControls = 8;
 };
 
 message TMeteringConfig {

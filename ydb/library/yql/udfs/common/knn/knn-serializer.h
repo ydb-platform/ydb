@@ -12,12 +12,12 @@
 using namespace NYql;
 using namespace NYql::NUdf;
 
-template <typename From, typename To, EFormat Format>
+template <typename To, EFormat Format>
 class TKnnVectorSerializer {
 public:
     static TUnboxedValue Serialize(const IValueBuilder* valueBuilder, const TUnboxedValue x) {
         auto serialize = [&](IOutputStream& outStream) {
-            EnumerateVector(x, [&](From from) {
+            EnumerateVector(x, [&](float from) {
                 To to = static_cast<To>(from);
                 outStream.Write(&to, sizeof(To));
             });
@@ -117,8 +117,6 @@ public:
             Y_ASSERT(filledBits < 8);
             write(static_cast<ui8>(7 - filledBits));
             write(EFormat::BitVector);
-
-            return true;
         };
 
         if (x.HasFastListLength()) {
@@ -128,17 +126,13 @@ public:
             auto strRef = str.AsStringRef();
             TMemoryOutput memoryOutput(strRef.Data(), strRef.Size());
 
-            if (Y_UNLIKELY(!serialize(memoryOutput)))
-                return {};
-
+            serialize(memoryOutput);
             return str;
         } else {
             TString str;
             TStringOutput stringOutput(str);
 
-            if (Y_UNLIKELY(!serialize(stringOutput)))
-                return {};
-
+            serialize(stringOutput);
             return valueBuilder->NewString(str);
         }
     }
@@ -166,9 +160,9 @@ public:
         const ui8 format = str.Data()[str.Size() - HeaderLen];
         switch (format) {
             case EFormat::FloatVector:
-                return TKnnVectorSerializer<float, float, EFormat::FloatVector>::Deserialize(valueBuilder, str);
+                return TKnnVectorSerializer<float, EFormat::FloatVector>::Deserialize(valueBuilder, str);
             case EFormat::Uint8Vector:
-                return TKnnVectorSerializer<float, ui8, EFormat::Uint8Vector>::Deserialize(valueBuilder, str);
+                return TKnnVectorSerializer<ui8, EFormat::Uint8Vector>::Deserialize(valueBuilder, str);
             case EFormat::BitVector:
             default:
                 return {};
@@ -183,9 +177,9 @@ public:
         const ui8 format = str.Data()[str.Size() - HeaderLen];
         switch (format) {
             case EFormat::FloatVector:
-                return TKnnVectorSerializer<float, T, EFormat::FloatVector>::GetArray(str);
+                return TKnnVectorSerializer<T, EFormat::FloatVector>::GetArray(str);
             case EFormat::Uint8Vector:
-                return TKnnVectorSerializer<float, T, EFormat::Uint8Vector>::GetArray(str);
+                return TKnnVectorSerializer<T, EFormat::Uint8Vector>::GetArray(str);
             case EFormat::BitVector:
             default:
                 return {};

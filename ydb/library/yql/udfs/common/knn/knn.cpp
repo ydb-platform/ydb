@@ -11,15 +11,15 @@
 using namespace NYql;
 using namespace NYql::NUdf;
 
-SIMPLE_STRICT_UDF(TToBinaryStringFloat, TOptional<const char*>(TAutoMap<TListType<float>>)) {
-    return TKnnVectorSerializer<float, float, EFormat::FloatVector>::Serialize(valueBuilder, args[0]);
+SIMPLE_STRICT_UDF(TToBinaryStringFloat, const char*(TAutoMap<TListType<float>>)) {
+    return TKnnVectorSerializer<float, EFormat::FloatVector>::Serialize(valueBuilder, args[0]);
 }
 
-SIMPLE_STRICT_UDF(TToBinaryStringByte, TOptional<const char*>(TAutoMap<TListType<float>>)) {
-    return TKnnVectorSerializer<float, ui8, EFormat::Uint8Vector>::Serialize(valueBuilder, args[0]);
+SIMPLE_STRICT_UDF(TToBinaryStringByte, const char*(TAutoMap<TListType<float>>)) {
+    return TKnnVectorSerializer<ui8, EFormat::Uint8Vector>::Serialize(valueBuilder, args[0]);
 }
 
-SIMPLE_STRICT_UDF(TToBinaryStringBit, TOptional<const char*>(TAutoMap<TListType<float>>)) {
+SIMPLE_STRICT_UDF(TToBinaryStringBit, const char*(TAutoMap<TListType<float>>)) {
     return TKnnBitVectorSerializer::Serialize(valueBuilder, args[0]);
 }
 

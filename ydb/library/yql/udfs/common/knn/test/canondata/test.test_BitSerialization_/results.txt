@@ -10,21 +10,15 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
+                                    "DataType";
+                                    "Bool"
                                 ]
                             ];
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
+                                    "DataType";
+                                    "String"
                                 ]
                             ]
                         ]
@@ -32,13 +26,9 @@
                 ];
                 "Data" = [
                     [
+                        %true;
                         [
-                            %true
-                        ];
-                        [
-                            [
-                                "//////////8ACg=="
-                            ]
+                            "//////////8ACg=="
                         ]
                     ]
                 ]
@@ -56,21 +46,15 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
+                                    "DataType";
+                                    "Bool"
                                 ]
                             ];
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
+                                    "DataType";
+                                    "String"
                                 ]
                             ]
                         ]
@@ -78,13 +62,9 @@
                 ];
                 "Data" = [
                     [
+                        %true;
                         [
-                            %true
-                        ];
-                        [
-                            [
-                                "//////////8PBAo="
-                            ]
+                            "//////////8PBAo="
                         ]
                     ]
                 ]
@@ -102,21 +82,15 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
+                                    "DataType";
+                                    "Bool"
                                 ]
                             ];
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
+                                    "DataType";
+                                    "String"
                                 ]
                             ]
                         ]
@@ -124,13 +98,9 @@
                 ];
                 "Data" = [
                     [
+                        %true;
                         [
-                            %true
-                        ];
-                        [
-                            [
-                                "////////////AAo="
-                            ]
+                            "////////////AAo="
                         ]
                     ]
                 ]
@@ -148,21 +118,15 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
+                                    "DataType";
+                                    "Bool"
                                 ]
                             ];
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
+                                    "DataType";
+                                    "String"
                                 ]
                             ]
                         ]
@@ -170,13 +134,9 @@
                 ];
                 "Data" = [
                     [
+                        %true;
                         [
-                            %true
-                        ];
-                        [
-                            [
-                                "/////////////wAK"
-                            ]
+                            "/////////////wAK"
                         ]
                     ]
                 ]
@@ -194,21 +154,15 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
+                                    "DataType";
+                                    "Bool"
                                 ]
                             ];
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
+                                    "DataType";
+                                    "String"
                                 ]
                             ]
                         ]
@@ -216,13 +170,9 @@
                 ];
                 "Data" = [
                     [
+                        %true;
                         [
-                            %true
-                        ];
-                        [
-                            [
-                                "//////////////8ACg=="
-                            ]
+                            "//////////////8ACg=="
                         ]
                     ]
                 ]
@@ -240,21 +190,15 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
+                                    "DataType";
+                                    "Bool"
                                 ]
                             ];
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
+                                    "DataType";
+                                    "String"
                                 ]
                             ]
                         ]
@@ -262,13 +206,9 @@
                 ];
                 "Data" = [
                     [
+                        %true;
                         [
-                            %true
-                        ];
-                        [
-                            [
-                                "////////////////AAo="
-                            ]
+                            "////////////////AAo="
                         ]
                     ]
                 ]
@@ -286,21 +226,15 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
+                                    "DataType";
+                                    "Bool"
                                 ]
                             ];
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
+                                    "DataType";
+                                    "String"
                                 ]
                             ]
                         ]
@@ -308,13 +242,9 @@
                 ];
                 "Data" = [
                     [
+                        %true;
                         [
-                            %true
-                        ];
-                        [
-                            [
-                                "/////////////////wAK"
-                            ]
+                            "/////////////////wAK"
                         ]
                     ]
                 ]
@@ -332,21 +262,15 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
+                                    "DataType";
+                                    "Bool"
                                 ]
                             ];
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
+                                    "DataType";
+                                    "String"
                                 ]
                             ]
                         ]
@@ -354,13 +278,9 @@
                 ];
                 "Data" = [
                     [
+                        %true;
                         [
-                            %true
-                        ];
-                        [
-                            [
-                                "//////////////////8ACg=="
-                            ]
+                            "//////////////////8ACg=="
                         ]
                     ]
                 ]
@@ -378,21 +298,15 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
+                                    "DataType";
+                                    "Bool"
                                 ]
                             ];
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
+                                    "DataType";
+                                    "String"
                                 ]
                             ]
                         ]
@@ -400,13 +314,9 @@
                 ];
                 "Data" = [
                     [
+                        %true;
                         [
-                            %true
-                        ];
-                        [
-                            [
-                                "////////////////////AAo="
-                            ]
+                            "////////////////////AAo="
                         ]
                     ]
                 ]
@@ -424,21 +334,15 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
+                                    "DataType";
+                                    "Bool"
                                 ]
                             ];
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
+                                    "DataType";
+                                    "String"
                                 ]
                             ]
                         ]
@@ -446,13 +350,9 @@
                 ];
                 "Data" = [
                     [
+                        %true;
                         [
-                            %true
-                        ];
-                        [
-                            [
-                                "////////////////////DwQK"
-                            ]
+                            "////////////////////DwQK"
                         ]
                     ]
                 ]
@@ -470,21 +370,15 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
+                                    "DataType";
+                                    "Bool"
                                 ]
                             ];
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
+                                    "DataType";
+                                    "String"
                                 ]
                             ]
                         ]
@@ -492,11 +386,383 @@
                 ];
                 "Data" = [
                     [
+                        %true;
+                        "\0\0\0\0\0\0\0\0\0\n"
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
                         [
-                            %true
-                        ];
+                            [
+                                "column0";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ];
+                            [
+                                "column1";
+                                [
+                                    "DataType";
+                                    "String"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        %true;
+                        "\0\0\0\0\0\0\0\0\0\4\n"
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
                         [
-                            "\0\0\0\0\0\0\0\0\0\n"
+                            [
+                                "column0";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ];
+                            [
+                                "column1";
+                                [
+                                    "DataType";
+                                    "String"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        %true;
+                        "\0\0\0\0\0\0\0\0\0\0\n"
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ];
+                            [
+                                "column1";
+                                [
+                                    "DataType";
+                                    "String"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        %true;
+                        "\0\0\0\0\0\0\0\0\0\0\0\n"
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ];
+                            [
+                                "column1";
+                                [
+                                    "DataType";
+                                    "String"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        %true;
+                        "\0\0\0\0\0\0\0\0\0\0\0\0\n"
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ];
+                            [
+                                "column1";
+                                [
+                                    "DataType";
+                                    "String"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        %true;
+                        "\0\0\0\0\0\0\0\0\0\0\0\0\0\n"
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ];
+                            [
+                                "column1";
+                                [
+                                    "DataType";
+                                    "String"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        %true;
+                        "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\n"
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ];
+                            [
+                                "column1";
+                                [
+                                    "DataType";
+                                    "String"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        %true;
+                        "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\n"
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ];
+                            [
+                                "column1";
+                                [
+                                    "DataType";
+                                    "String"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        %true;
+                        "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\n"
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ];
+                            [
+                                "column1";
+                                [
+                                    "DataType";
+                                    "String"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        %true;
+                        "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\4\n"
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ];
+                            [
+                                "column1";
+                                [
+                                    "DataType";
+                                    "String"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        %true;
+                        "\x0F\4\n"
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ];
+                            [
+                                "column1";
+                                [
+                                    "DataType";
+                                    "String"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        %true;
+                        [
+                            "/wAK"
                         ]
                     ]
                 ]
@@ -514,21 +780,15 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
+                                    "DataType";
+                                    "Bool"
                                 ]
                             ];
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
+                                    "DataType";
+                                    "String"
                                 ]
                             ]
                         ]
@@ -536,11 +796,9 @@
                 ];
                 "Data" = [
                     [
+                        %true;
                         [
-                            %true
-                        ];
-                        [
-                            "\0\0\0\0\0\0\0\0\0\4\n"
+                            "//8ACg=="
                         ]
                     ]
                 ]
@@ -558,21 +816,15 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
+                                    "DataType";
+                                    "Bool"
                                 ]
                             ];
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
+                                    "DataType";
+                                    "String"
                                 ]
                             ]
                         ]
@@ -580,11 +832,9 @@
                 ];
                 "Data" = [
                     [
+                        %true;
                         [
-                            %true
-                        ];
-                        [
-                            "\0\0\0\0\0\0\0\0\0\0\n"
+                            "////AAo="
                         ]
                     ]
                 ]
@@ -602,21 +852,15 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
+                                    "DataType";
+                                    "Bool"
                                 ]
                             ];
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
+                                    "DataType";
+                                    "String"
                                 ]
                             ]
                         ]
@@ -624,11 +868,9 @@
                 ];
                 "Data" = [
                     [
+                        %true;
                         [
-                            %true
-                        ];
-                        [
-                            "\0\0\0\0\0\0\0\0\0\0\0\n"
+                            "/////wAK"
                         ]
                     ]
                 ]
@@ -646,21 +888,15 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
+                                    "DataType";
+                                    "Bool"
                                 ]
                             ];
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
+                                    "DataType";
+                                    "String"
                                 ]
                             ]
                         ]
@@ -668,11 +904,9 @@
                 ];
                 "Data" = [
                     [
+                        %true;
                         [
-                            %true
-                        ];
-                        [
-                            "\0\0\0\0\0\0\0\0\0\0\0\0\n"
+                            "//////8ACg=="
                         ]
                     ]
                 ]
@@ -690,21 +924,15 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
+                                    "DataType";
+                                    "Bool"
                                 ]
                             ];
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
+                                    "DataType";
+                                    "String"
                                 ]
                             ]
                         ]
@@ -712,11 +940,9 @@
                 ];
                 "Data" = [
                     [
+                        %true;
                         [
-                            %true
-                        ];
-                        [
-                            "\0\0\0\0\0\0\0\0\0\0\0\0\0\n"
+                            "////////AAo="
                         ]
                     ]
                 ]
@@ -734,21 +960,15 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
+                                    "DataType";
+                                    "Bool"
                                 ]
                             ];
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
+                                    "DataType";
+                                    "String"
                                 ]
                             ]
                         ]
@@ -756,11 +976,9 @@
                 ];
                 "Data" = [
                     [
+                        %true;
                         [
-                            %true
-                        ];
-                        [
-                            "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\n"
+                            "/////////wAK"
                         ]
                     ]
                 ]
@@ -778,21 +996,15 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
+                                    "DataType";
+                                    "Bool"
                                 ]
                             ];
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
+                                    "DataType";
+                                    "String"
                                 ]
                             ]
                         ]
@@ -800,11 +1012,9 @@
                 ];
                 "Data" = [
                     [
+                        %true;
                         [
-                            %true
-                        ];
-                        [
-                            "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\n"
+                            "/////////w8ECg=="
                         ]
                     ]
                 ]
@@ -822,21 +1032,15 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
+                                    "DataType";
+                                    "Bool"
                                 ]
                             ];
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
+                                    "DataType";
+                                    "String"
                                 ]
                             ]
                         ]
@@ -844,12 +1048,8 @@
                 ];
                 "Data" = [
                     [
-                        [
-                            %true
-                        ];
-                        [
-                            "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\n"
-                        ]
+                        %true;
+                        "\0\4\n"
                     ]
                 ]
             }
@@ -866,21 +1066,15 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
+                                    "DataType";
+                                    "Bool"
                                 ]
                             ];
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
+                                    "DataType";
+                                    "String"
                                 ]
                             ]
                         ]
@@ -888,12 +1082,8 @@
                 ];
                 "Data" = [
                     [
-                        [
-                            %true
-                        ];
-                        [
-                            "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\4\n"
-                        ]
+                        %true;
+                        "\0\0\n"
                     ]
                 ]
             }
@@ -910,21 +1100,15 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
+                                    "DataType";
+                                    "Bool"
                                 ]
                             ];
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
+                                    "DataType";
+                                    "String"
                                 ]
                             ]
                         ]
@@ -932,12 +1116,8 @@
                 ];
                 "Data" = [
                     [
-                        [
-                            %true
-                        ];
-                        [
-                            "\x0F\4\n"
-                        ]
+                        %true;
+                        "\0\0\0\n"
                     ]
                 ]
             }
@@ -954,21 +1134,15 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
+                                    "DataType";
+                                    "Bool"
                                 ]
                             ];
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
+                                    "DataType";
+                                    "String"
                                 ]
                             ]
                         ]
@@ -976,14 +1150,8 @@
                 ];
                 "Data" = [
                     [
-                        [
-                            %true
-                        ];
-                        [
-                            [
-                                "/wAK"
-                            ]
-                        ]
+                        %true;
+                        "\0\0\0\0\n"
                     ]
                 ]
             }
@@ -1000,21 +1168,15 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
+                                    "DataType";
+                                    "Bool"
                                 ]
                             ];
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
+                                    "DataType";
+                                    "String"
                                 ]
                             ]
                         ]
@@ -1022,14 +1184,8 @@
                 ];
                 "Data" = [
                     [
-                        [
-                            %true
-                        ];
-                        [
-                            [
-                                "//8ACg=="
-                            ]
-                        ]
+                        %true;
+                        "\0\0\0\0\0\n"
                     ]
                 ]
             }
@@ -1046,21 +1202,15 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
+                                    "DataType";
+                                    "Bool"
                                 ]
                             ];
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
+                                    "DataType";
+                                    "String"
                                 ]
                             ]
                         ]
@@ -1068,14 +1218,8 @@
                 ];
                 "Data" = [
                     [
-                        [
-                            %true
-                        ];
-                        [
-                            [
-                                "////AAo="
-                            ]
-                        ]
+                        %true;
+                        "\0\0\0\0\0\0\n"
                     ]
                 ]
             }
@@ -1092,21 +1236,15 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
+                                    "DataType";
+                                    "Bool"
                                 ]
                             ];
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
+                                    "DataType";
+                                    "String"
                                 ]
                             ]
                         ]
@@ -1114,14 +1252,8 @@
                 ];
                 "Data" = [
                     [
-                        [
-                            %true
-                        ];
-                        [
-                            [
-                                "/////wAK"
-                            ]
-                        ]
+                        %true;
+                        "\0\0\0\0\0\0\0\n"
                     ]
                 ]
             }
@@ -1138,21 +1270,15 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
+                                    "DataType";
+                                    "Bool"
                                 ]
                             ];
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
+                                    "DataType";
+                                    "String"
                                 ]
                             ]
                         ]
@@ -1160,14 +1286,8 @@
                 ];
                 "Data" = [
                     [
-                        [
-                            %true
-                        ];
-                        [
-                            [
-                                "//////8ACg=="
-                            ]
-                        ]
+                        %true;
+                        "\0\0\0\0\0\0\0\0\n"
                     ]
                 ]
             }
@@ -1184,21 +1304,15 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
+                                    "DataType";
+                                    "Bool"
                                 ]
                             ];
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
+                                    "DataType";
+                                    "String"
                                 ]
                             ]
                         ]
@@ -1206,502 +1320,8 @@
                 ];
                 "Data" = [
                     [
-                        [
-                            %true
-                        ];
-                        [
-                            [
-                                "////////AAo="
-                            ]
-                        ]
-                    ]
-                ]
-            }
-        ]
-    };
-    {
-        "Write" = [
-            {
-                "Type" = [
-                    "ListType";
-                    [
-                        "StructType";
-                        [
-                            [
-                                "column0";
-                                [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
-                                ]
-                            ];
-                            [
-                                "column1";
-                                [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
-                                ]
-                            ]
-                        ]
-                    ]
-                ];
-                "Data" = [
-                    [
-                        [
-                            %true
-                        ];
-                        [
-                            [
-                                "/////////wAK"
-                            ]
-                        ]
-                    ]
-                ]
-            }
-        ]
-    };
-    {
-        "Write" = [
-            {
-                "Type" = [
-                    "ListType";
-                    [
-                        "StructType";
-                        [
-                            [
-                                "column0";
-                                [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
-                                ]
-                            ];
-                            [
-                                "column1";
-                                [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
-                                ]
-                            ]
-                        ]
-                    ]
-                ];
-                "Data" = [
-                    [
-                        [
-                            %true
-                        ];
-                        [
-                            [
-                                "/////////w8ECg=="
-                            ]
-                        ]
-                    ]
-                ]
-            }
-        ]
-    };
-    {
-        "Write" = [
-            {
-                "Type" = [
-                    "ListType";
-                    [
-                        "StructType";
-                        [
-                            [
-                                "column0";
-                                [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
-                                ]
-                            ];
-                            [
-                                "column1";
-                                [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
-                                ]
-                            ]
-                        ]
-                    ]
-                ];
-                "Data" = [
-                    [
-                        [
-                            %true
-                        ];
-                        [
-                            "\0\4\n"
-                        ]
-                    ]
-                ]
-            }
-        ]
-    };
-    {
-        "Write" = [
-            {
-                "Type" = [
-                    "ListType";
-                    [
-                        "StructType";
-                        [
-                            [
-                                "column0";
-                                [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
-                                ]
-                            ];
-                            [
-                                "column1";
-                                [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
-                                ]
-                            ]
-                        ]
-                    ]
-                ];
-                "Data" = [
-                    [
-                        [
-                            %true
-                        ];
-                        [
-                            "\0\0\n"
-                        ]
-                    ]
-                ]
-            }
-        ]
-    };
-    {
-        "Write" = [
-            {
-                "Type" = [
-                    "ListType";
-                    [
-                        "StructType";
-                        [
-                            [
-                                "column0";
-                                [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
-                                ]
-                            ];
-                            [
-                                "column1";
-                                [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
-                                ]
-                            ]
-                        ]
-                    ]
-                ];
-                "Data" = [
-                    [
-                        [
-                            %true
-                        ];
-                        [
-                            "\0\0\0\n"
-                        ]
-                    ]
-                ]
-            }
-        ]
-    };
-    {
-        "Write" = [
-            {
-                "Type" = [
-                    "ListType";
-                    [
-                        "StructType";
-                        [
-                            [
-                                "column0";
-                                [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
-                                ]
-                            ];
-                            [
-                                "column1";
-                                [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
-                                ]
-                            ]
-                        ]
-                    ]
-                ];
-                "Data" = [
-                    [
-                        [
-                            %true
-                        ];
-                        [
-                            "\0\0\0\0\n"
-                        ]
-                    ]
-                ]
-            }
-        ]
-    };
-    {
-        "Write" = [
-            {
-                "Type" = [
-                    "ListType";
-                    [
-                        "StructType";
-                        [
-                            [
-                                "column0";
-                                [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
-                                ]
-                            ];
-                            [
-                                "column1";
-                                [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
-                                ]
-                            ]
-                        ]
-                    ]
-                ];
-                "Data" = [
-                    [
-                        [
-                            %true
-                        ];
-                        [
-                            "\0\0\0\0\0\n"
-                        ]
-                    ]
-                ]
-            }
-        ]
-    };
-    {
-        "Write" = [
-            {
-                "Type" = [
-                    "ListType";
-                    [
-                        "StructType";
-                        [
-                            [
-                                "column0";
-                                [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
-                                ]
-                            ];
-                            [
-                                "column1";
-                                [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
-                                ]
-                            ]
-                        ]
-                    ]
-                ];
-                "Data" = [
-                    [
-                        [
-                            %true
-                        ];
-                        [
-                            "\0\0\0\0\0\0\n"
-                        ]
-                    ]
-                ]
-            }
-        ]
-    };
-    {
-        "Write" = [
-            {
-                "Type" = [
-                    "ListType";
-                    [
-                        "StructType";
-                        [
-                            [
-                                "column0";
-                                [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
-                                ]
-                            ];
-                            [
-                                "column1";
-                                [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
-                                ]
-                            ]
-                        ]
-                    ]
-                ];
-                "Data" = [
-                    [
-                        [
-                            %true
-                        ];
-                        [
-                            "\0\0\0\0\0\0\0\n"
-                        ]
-                    ]
-                ]
-            }
-        ]
-    };
-    {
-        "Write" = [
-            {
-                "Type" = [
-                    "ListType";
-                    [
-                        "StructType";
-                        [
-                            [
-                                "column0";
-                                [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
-                                ]
-                            ];
-                            [
-                                "column1";
-                                [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
-                                ]
-                            ]
-                        ]
-                    ]
-                ];
-                "Data" = [
-                    [
-                        [
-                            %true
-                        ];
-                        [
-                            "\0\0\0\0\0\0\0\0\n"
-                        ]
-                    ]
-                ]
-            }
-        ]
-    };
-    {
-        "Write" = [
-            {
-                "Type" = [
-                    "ListType";
-                    [
-                        "StructType";
-                        [
-                            [
-                                "column0";
-                                [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
-                                ]
-                            ];
-                            [
-                                "column1";
-                                [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
-                                ]
-                            ]
-                        ]
-                    ]
-                ];
-                "Data" = [
-                    [
-                        [
-                            %true
-                        ];
-                        [
-                            "\0\0\0\0\0\0\0\0\4\n"
-                        ]
+                        %true;
+                        "\0\0\0\0\0\0\0\0\4\n"
                     ]
                 ]
             }

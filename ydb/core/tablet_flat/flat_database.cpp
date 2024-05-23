@@ -14,10 +14,6 @@
 #include <ydb/core/scheme_types/scheme_type_registry.h>
 #include <util/generic/cast.h>
 
-
-#define MAX_REDO_BYTES_PER_COMMIT 268435456U // 256MB
-
-
 namespace NKikimr {
 namespace NTable {
 
@@ -643,18 +639,6 @@ size_t TDatabase::GetCommitRedoBytes() const
 {
     Y_ABORT_UNLESS(Redo, "Transaction is not in progress");
     return Redo->Bytes();
-}
-
-bool TDatabase::ValidateCommit(TString &err)
-{
-    if (*Redo && Redo->Bytes() > MAX_REDO_BYTES_PER_COMMIT) {
-        err = TStringBuilder()
-            << "Redo commit of " << Redo->Bytes()
-            << " bytes is more than the allowed limit";
-        return false;
-    }
-
-    return true;
 }
 
 bool TDatabase::HasChanges() const

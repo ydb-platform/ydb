@@ -889,7 +889,7 @@ private:
     }
 
     bool HasSupportivePartitionId() const {
-        SupportivePartitionId != INVALID_PARTITION_ID;
+        return SupportivePartitionId != INVALID_PARTITION_ID;
     }
 
     const TActorId Client;

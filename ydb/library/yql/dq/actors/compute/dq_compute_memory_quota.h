@@ -1,7 +1,6 @@
 
 #pragma once
 
-#include <format>
 #include <util/system/mem_info.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
@@ -61,17 +60,15 @@ namespace NYql::NDq {
         // Most likely this callback will be removed after KIKIMR-21481.
         void TrySetIncreaseMemoryLimitCallbackWithRSSControl(NKikimr::NMiniKQL::TScopedAlloc* alloc) {
             if (!CanAllocateExtraMemory) return;
-            const ui64 limitRSS = 3_GB;
+            const ui64 limitRSS = std::numeric_limits<ui64>::max();
             const ui64 criticalRSSValue = limitRSS / 100 * 80;
 
             alloc->Ref().SetIncreaseMemoryLimitCallback([this, alloc](ui64 limit, ui64 required) {
                 RequestExtraMemory(required - limit, alloc);
                 
                 ui64 currentRSS = NMemInfo::GetMemInfo().RSS;
-                std::cerr << std::format("[MISHA]: limit: {}MB required: {}MB, RSS: {}MB\n", limit / 1024 / 1024, required / 1024 / 1024, currentRSS / 1024 / 1024);
                 if (currentRSS > criticalRSSValue) {
                     alloc->SetMaximumLimitValueReached(true);
-                    std::cerr << std::format("[MISHA]: MAximum limit set up\n");
                 }
             });
         }

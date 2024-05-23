@@ -51,6 +51,7 @@ bool KqpLocksIsArbiter(ui64 tabletId, const NKikimrDataEvents::TKqpLocks* kqpLoc
 
 void KqpEraseLocks(ui64 tabletId, const NKikimrDataEvents::TKqpLocks* kqpLocks, TSysLocks& sysLocks);
 void KqpCommitLocks(ui64 tabletId, const NKikimrDataEvents::TKqpLocks* kqpLocks, TSysLocks& sysLocks, const TRowVersion& writeVersion, IDataShardUserDb& userDb);
+void KqpCommitLocks(ui64 tabletId, const NKikimrDataEvents::TKqpLocks* kqpLocks, TSysLocks& sysLocks, std::function<void(const NKikimrDataEvents::TLock&)> commitCb);
 
 void KqpUpdateDataShardStatCounters(TDataShard& dataShard, const NMiniKQL::TEngineHostCounters& counters);
 

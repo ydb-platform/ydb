@@ -21,7 +21,9 @@ namespace NKikimr::NColumnShard {
     }
 
     void TWriteOperation::Start(TColumnShard& owner, const ui64 tableId, const NEvWrite::IDataContainer::TPtr& data, const NActors::TActorId& source, const TActorContext& ctx) {
-        Y_ABORT_UNLESS(Status == EOperationStatus::Draft);
+        if (Status != EOperationStatus::Draft) {
+            return;
+        }
 
         NEvWrite::TWriteMeta writeMeta((ui64)WriteId, tableId, source, GranuleShardingVersionId);
         std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildSlicesTask>(owner.TabletID(), ctx.SelfID, owner.BufferizationWriteActorId,
@@ -249,8 +251,13 @@ namespace NKikimr::NColumnShard {
     TWriteOperation::TPtr TOperationsManager::RegisterOperation(const ui64 lockId, const ui64 cookie, const std::optional<ui32> granuleShardingVersionId) {
         auto writeId = BuildNextWriteId();
         auto operation = std::make_shared<TWriteOperation>(writeId, lockId, cookie, EOperationStatus::Draft, AppData()->TimeProvider->Now(), granuleShardingVersionId);
-        // TODO: check duplicates with the same cookies
-        Y_ABORT_UNLESS(Operations.emplace(operation->GetWriteId(), operation).second);
+        auto insertIt = Operations.emplace(operation->GetWriteId(), operation);
+        if (!insertIt.second) {
+            if (insertIt.first->second->GetCookie() == cookie) {
+                return insertIt.first->second;
+            }
+            return nullptr;
+        }
         Locks[operation->GetLockId()].push_back(operation->GetWriteId());
         return operation;
     }

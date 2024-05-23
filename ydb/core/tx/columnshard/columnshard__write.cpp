@@ -258,6 +258,7 @@ private:
     YDB_READONLY(ui64, TxId, 0);
     YDB_READONLY(NKikimrDataEvents::TKqpLocks::ELocksOp, LocksOp, NKikimrDataEvents::TKqpLocks::Unspecified);
 };
+
 class TProposeWriteTransaction : public NTabletFlatExecutor::TTransactionBase<TColumnShard> {
 private:
     using TBase = NTabletFlatExecutor::TTransactionBase<TColumnShard>;
@@ -281,8 +282,7 @@ private:
 
 bool TProposeWriteTransaction::Execute(TTransactionContext& txc, const TActorContext&) {
     if (WriteCommit->GetLocksOp() == NKikimrDataEvents::TKqpLocks::Rollback) {
-        // Do nothing because we not sarted distributed transaction yet
-        return true;
+        return false;
     }
     NKikimrTxColumnShard::TCommitWriteTxBody proto;
     proto.SetLockId(WriteCommit->GetLockId());
@@ -388,7 +388,11 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     }
 
     auto writeOperation = OperationsManager->RegisterOperation(lockId, cookie, granuleShardingVersionId);
-    Y_ABORT_UNLESS(writeOperation);
+    if (!writeOperation) {
+        IncCounter(COUNTER_WRITE_FAIL);
+        auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "invalid write operation");
+        ctx.Send(source, result.release(), 0, cookie);
+    }
     writeOperation->SetBehaviour(behaviour);
     writeOperation->Start(*this, tableId, arrowData, source, ctx);
 }

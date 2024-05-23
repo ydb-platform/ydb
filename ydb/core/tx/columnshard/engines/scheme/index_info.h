@@ -233,7 +233,17 @@ public:
     }
 
     /// Returns an id of the column located by name. The name should exists in the schema.
-    ui32 GetColumnId(const std::string& name) const;
+    ui32 GetColumnIdVerified(const std::string& name) const;
+    ui32 GetColumnId(const std::string& name) const {
+        return GetColumnIdVerified(name);
+    }
+    std::set<ui32> GetColumnIdsVerified(const std::set<TString>& names) const {
+        std::set<ui32> result;
+        for (auto&& i : names) {
+            AFL_VERIFY(result.emplace(GetColumnIdVerified(i)).second);
+        }
+        return result;
+    }
     std::optional<ui32> GetColumnIdOptional(const std::string& name) const;
 
     /// Returns a name of the column located by id.

@@ -200,7 +200,7 @@ ui64 TColumnShard::GetMinReadStep() const {
     return minReadStep;
 }
 
-TWriteId TColumnShard::HasLongTxWrite(const NLongTxService::TLongTxId& longTxId, const ui32 partId) {
+TWriteId TColumnShard::HasLongTxWrite(const NLongTxService::TLongTxId& longTxId, const ui32 partId) const {
     auto it = LongTxWritesByUniqueId.find(longTxId.UniqueId);
     if (it != LongTxWritesByUniqueId.end()) {
         auto itPart = it->second.find(partId);
@@ -211,7 +211,7 @@ TWriteId TColumnShard::HasLongTxWrite(const NLongTxService::TLongTxId& longTxId,
     return (TWriteId)0;
 }
 
-TWriteId TColumnShard::GetLongTxWrite(NIceDb::TNiceDb& db, const NLongTxService::TLongTxId& longTxId, const ui32 partId) {
+TWriteId TColumnShard::GetLongTxWrite(NIceDb::TNiceDb& db, const NLongTxService::TLongTxId& longTxId, const ui32 partId, const std::optional<ui32> granuleShardingVersionId) {
     auto it = LongTxWritesByUniqueId.find(longTxId.UniqueId);
     if (it != LongTxWritesByUniqueId.end()) {
         auto itPart = it->second.find(partId);
@@ -227,9 +227,10 @@ TWriteId TColumnShard::GetLongTxWrite(NIceDb::TNiceDb& db, const NLongTxService:
     lw.WriteId = (ui64)writeId;
     lw.WritePartId = partId;
     lw.LongTxId = longTxId;
+    lw.GranuleShardingVersionId = granuleShardingVersionId;
     it->second[partId] = &lw;
 
-    Schema::SaveLongTxWrite(db, writeId, partId, longTxId);
+    Schema::SaveLongTxWrite(db, writeId, partId, longTxId, granuleShardingVersionId);
     return writeId;
 }
 
@@ -249,11 +250,12 @@ void TColumnShard::AddLongTxWrite(TWriteId writeId, ui64 txId) {
     lw.PreparedTxId = txId;
 }
 
-void TColumnShard::LoadLongTxWrite(TWriteId writeId, const ui32 writePartId, const NLongTxService::TLongTxId& longTxId) {
+void TColumnShard::LoadLongTxWrite(TWriteId writeId, const ui32 writePartId, const NLongTxService::TLongTxId& longTxId, const std::optional<ui32> granuleShardingVersion) {
     auto& lw = LongTxWrites[writeId];
     lw.WritePartId = writePartId;
     lw.WriteId = (ui64)writeId;
     lw.LongTxId = longTxId;
+    lw.GranuleShardingVersionId = granuleShardingVersion;
     LongTxWritesByUniqueId[longTxId.UniqueId][writePartId] = &lw;
 }
 

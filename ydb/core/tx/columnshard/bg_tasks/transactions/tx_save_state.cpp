@@ -9,7 +9,7 @@ bool TTxSaveSessionState::Execute(NTabletFlatExecutor::TTransactionContext& txc,
 }
 
 void TTxSaveSessionState::DoComplete(const TActorContext& ctx) {
-    if (Session->GetLogicContainer()->IsReadyForRemove()) {
+    if (Session->GetLogicContainer()->IsFinished() && Session->GetLogicContainer()->IsReadyForRemoveOnFinished()) {
         ctx.Send(Adapter->GetTabletActorId(), new TEvRemoveSession(Session->GetLogicClassName(), Session->GetIdentifier()));
     } else if (!Session->IsRunning() && Session->GetLogicContainer()->IsReadyForStart()) {
         TStartContext context(Session, Adapter);

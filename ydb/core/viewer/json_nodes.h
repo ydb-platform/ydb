@@ -392,7 +392,7 @@ public:
             case TSchemeCacheNavigate::EKind::KindExtSubdomain:
                 return true;
             case TSchemeCacheNavigate::EKind::KindPath:
-                return entry.CreateStep == 0;
+                return entry.Self->Info.GetPathId() == NSchemeShard::RootPathId;
             default:
                 return false;
         }
@@ -416,7 +416,7 @@ public:
                 if (FilterTenant.empty()) {
                     RequestForTenant(path);
                 }
-                
+
                 if (entry.DomainInfo->ResourcesDomainKey && entry.DomainInfo->DomainKey != entry.DomainInfo->ResourcesDomainKey) {
                     TPathId resourceDomainKey(entry.DomainInfo->ResourcesDomainKey);
                     BLOG_TRACE("Requesting navigate for resource domain " << resourceDomainKey);

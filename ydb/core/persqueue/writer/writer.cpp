@@ -29,7 +29,7 @@ namespace NKikimr::NPQ {
 #endif
 
 
-#define LOG_PREFIX "TPartitionWriter (this=" << (void*)this << ") " << TabletId << " (partition=" << PartitionId << ") "
+#define LOG_PREFIX "TPartitionWriter " << TabletId << " (partition=" << PartitionId << ") "
 #define TRACE(message) LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, LOG_PREFIX << message);
 #define DEBUG(message) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, LOG_PREFIX << message);
 #define INFO(message)  LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, LOG_PREFIX << message);
@@ -295,7 +295,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         auto* partitions = topics->add_partitions();
         partitions->set_partition_id(PartitionId);
 
-        if (SupportivePartitionId != INVALID_PARTITION_ID) {
+        if (HasSupportivePartitionId()) {
             operations->SetSupportivePartition(SupportivePartitionId);
         }
 
@@ -327,9 +327,6 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         } else {
             request.SetFirstWrite(FirstWrite);
         }
-
-        DEBUG("Send message 'GetOwnership'. WriteId " << request.GetWriteId() <<
-              ", FirstWrite " << request.GetFirstWrite());
 
         NTabletPipe::SendData(SelfId(), PipeClient, ev.Release());
         Become(&TThis::StateGetOwnership);
@@ -369,7 +366,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
             SupportivePartitionId = reply.GetSupportivePartition();
         }
 
-        if (WriteId != INVALID_WRITE_ID) {
+        if (HasWriteId()) {
             SavePartitionId(ActorContext());
         } else {
             GetMaxSeqNo();
@@ -377,14 +374,8 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     }
 
     void SavePartitionId(const TActorContext& ctx) {
-        Y_ABORT_UNLESS(WriteId != INVALID_WRITE_ID);
-        Y_ABORT_UNLESS(SupportivePartitionId != INVALID_PARTITION_ID);
-
-        DEBUG("Update the transaction in KQP." <<
-              " Topic: " << Opts.TopicPath <<
-              ", Partition: " << PartitionId <<
-              ", WriteId: " << WriteId <<
-              ", SupportivePartition: " << SupportivePartitionId);
+        Y_ABORT_UNLESS(HasWriteId());
+        Y_ABORT_UNLESS(HasSupportivePartitionId());
 
         auto ev = MakeWriteIdRequest();
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
@@ -401,11 +392,6 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         default:
             return InitResult("Invalid KQP session", record);
         }
-
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY,
-                    "Transaction in KQP has been updated." <<
-                    " WriteId: " << WriteId <<
-                    ", SupportivePartition: " << SupportivePartitionId);
 
         GetMaxSeqNo();
     }
@@ -556,9 +542,6 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         request.SetFirstWrite(FirstWrite);
         FirstWrite = false;
 
-        DEBUG("Hold TEvWriteRequest. WriteId " << record.MutablePartitionRequest()->GetWriteId() <<
-              ", FirstWrite " << record.MutablePartitionRequest()->GetFirstWrite());
-
         Pending.emplace(cookie, std::move(record));
 
         return true;
@@ -591,9 +574,6 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
             SetWriteId(request);
             request.SetFirstWrite(it->second.MutablePartitionRequest()->GetFirstWrite());
-
-            DEBUG("Send message 'ReserveBytes'. WriteId " << request.GetWriteId() <<
-                  ", FirstWrite " << request.GetFirstWrite());
 
             auto& cmd = *request.MutableCmdReserveBytes();
             cmd.SetSize(it->second.ByteSize());
@@ -772,30 +752,6 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
                 return WriteResult(EErrorCode::InternalError, error, std::move(record));
             }
 
-//            if (HasWriteId() && FirstWriteResponse) {
-//                auto& reply = response.GetCmdWriteResult(0);
-//                ui64 seqNo = reply.GetSeqNo();
-//                ui64 minSeqNo = reply.GetMinSeqNo();
-//                ui32 supportivePartition = reply.GetSupportivePartition();
-//
-//                if (seqNo < minSeqNo) {
-//                    supportivePartition = INVALID_PARTITION_ID;
-//                }
-//
-//                DEBUG("Update tx in KQP." <<
-//                      " Topic: " << Opts.TopicPath <<
-//                      ", Partition: " << PartitionId <<
-//                      ", SupportivePartition: " << supportivePartition <<
-//                      ", MinSeqNo: " << minSeqNo <<
-//                      ", SeqNo: " << seqNo);
-//
-//                const TActorContext& ctx = ActorContext();
-//                auto ev = MakeWriteIdRequest(supportivePartition);
-//                ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
-//
-//                FirstWriteResponse = false;
-//            }
-
             WriteResult(std::move(record));
         }
     }
@@ -930,6 +886,10 @@ public:
 private:
     bool HasWriteId() const {
         return WriteId != INVALID_WRITE_ID;
+    }
+
+    bool HasSupportivePartitionId() const {
+        SupportivePartitionId != INVALID_PARTITION_ID;
     }
 
     const TActorId Client;

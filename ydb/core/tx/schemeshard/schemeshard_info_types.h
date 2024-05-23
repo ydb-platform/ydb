@@ -1632,25 +1632,9 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         return TDuration::Seconds(DatabaseQuotas->ttl_min_run_internal_seconds());
     }
 
-    static void CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskSpaceQuotas& quotas) {
-        if (quotas.HardQuota != 0) {
-            counters->ChangeDiskSpaceHardQuotaBytes(quotas.HardQuota);
-        }
-        if (quotas.SoftQuota != 0) {
-            counters->ChangeDiskSpaceSoftQuotaBytes(quotas.SoftQuota);
-        }
-    }
+    static void CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskSpaceQuotas& quotas);
 
-    static void CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskSpaceQuotas& prev, const TDiskSpaceQuotas& next) {
-        i64 hardDelta = i64(next.HardQuota) - i64(prev.HardQuota);
-        if (hardDelta != 0) {
-            counters->ChangeDiskSpaceHardQuotaBytes(hardDelta);
-        }
-        i64 softDelta = i64(next.SoftQuota) - i64(prev.SoftQuota);
-        if (softDelta != 0) {
-            counters->ChangeDiskSpaceSoftQuotaBytes(softDelta);
-        }
-    }
+    static void CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskSpaceQuotas& prev, const TDiskSpaceQuotas& next);
 
     static void CountStreamShardsQuota(IQuotaCounters* counters, const i64 delta) {
         counters->ChangeStreamShardsQuota(delta);

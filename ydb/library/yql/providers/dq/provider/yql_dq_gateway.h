@@ -75,7 +75,7 @@ public:
                 const THashMap<TString, TString>& secureParams, const THashMap<TString, TString>& graphParams,
                 const TDqSettings::TPtr& settings,
                 const TDqProgressWriter& progressWriter, const THashMap<TString, TString>& modulesMapping,
-                bool discard) = 0;
+                bool discard, ui64 executionTimeout) = 0;
 
     virtual TString GetVanillaJobPath() {
         return "";

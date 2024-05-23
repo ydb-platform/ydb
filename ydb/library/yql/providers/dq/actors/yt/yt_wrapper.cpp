@@ -22,6 +22,7 @@
 #include <yt/yt/client/api/file_reader.h>
 
 #include <yt/yt/core/ytree/convert.h>
+#include <ydb/library/actors/core/actorsystem.h>
 
 using namespace NYql;
 using namespace NYT;

@@ -95,7 +95,7 @@ public:
     )
 
     void Handle(const TEvYdbCompute::TEvFetchScriptResultResponse::TPtr& ev) {
-        auto& response = *ev.Get()->Get();
+        const auto& response = *ev.Get()->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
             LOG_E("ResultSetId: " << ResultSetId << " Can't fetch script result: " << ev->Get()->Issues.ToOneLineString());
             Send(Parent, new TEvYdbCompute::TEvResultSetWriterResponse(ResultSetId, ev->Get()->Issues, NYdb::EStatus::INTERNAL_ERROR));
@@ -107,7 +107,7 @@ public:
         Truncated |= response.ResultSet->Truncated();
         FetchToken = response.NextFetchToken;
         auto emptyResultSet = response.ResultSet->RowsCount() == 0;
-        auto resultSetProto = NYdb::TProtoAccessor::GetProto(std::move(*response.ResultSet));
+        auto resultSetProto = NYdb::TProtoAccessor::GetProto(*response.ResultSet);
 
         if (!emptyResultSet) {
             NFq::TRowsProtoSplitter rowsSplitter(std::move(resultSetProto), ProtoMessageLimit, BaseProtoByteSize, MaxRowsCountPerChunk);

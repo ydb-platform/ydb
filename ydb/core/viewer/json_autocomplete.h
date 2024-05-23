@@ -425,7 +425,12 @@ public:
     }
 
     void Handle(TEvViewer::TEvViewerResponse::TPtr& ev) {
-        ProxyResult = ev.Release()->Release();
+        if (ev.Get()->Get()->Record.HasAutocompleteResponse()) {
+            ProxyResult = ev.Release()->Release();
+        } else {
+            Direct = true;
+            SendSchemeCacheRequest(); // fallback
+        }
         RequestDone();
     }
 

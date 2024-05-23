@@ -420,7 +420,12 @@ private:
     }
 
     void HandleReply(TEvViewer::TEvViewerResponse::TPtr& ev) {
-        Handle(*(ev.Get()->Get()->Record.MutableQueryResponse()));
+        auto& record = ev.Get()->Get()->Record;
+        if (record.HasQueryResponse()) {
+            Handle(*(ev.Get()->Get()->Record.MutableQueryResponse()));
+        } else {
+            SendKpqProxyRequest(); // fallback
+        }
     }
 
     void HandleReply(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev) {

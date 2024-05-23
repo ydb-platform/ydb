@@ -23,8 +23,10 @@ public:
 
 private:
     int RunCommand(TConfig& config);
-    bool PrintResponse(NQuery::TExecuteQueryIterator& result);
-    bool PrintResponse(NQuery::TScriptExecutionOperation& result);
+    int PrintResponse(NQuery::TExecuteQueryIterator& result);
+    void PrintResponse(const NQuery::TScriptExecutionOperation& result);
+    int WaitForResultAndPrintResponse(TDriver& driver, NQuery::TQueryClient& client,
+        const NQuery::TScriptExecutionOperation& result);
     int FetchResults(TDriver& driver, NQuery::TQueryClient& client);
 
     TString CollectStatsMode;

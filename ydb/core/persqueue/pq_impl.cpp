@@ -4450,7 +4450,7 @@ void TPersQueue::ProcessCheckPartitionStatusRequests(const TPartitionId& partiti
     }
 }
 
-void TPersQueue::Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx)
+void TPersQueue::Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext&)
 {
     auto& record = ev->Get()->Record;
     ui64 writeId = record.GetLockId();

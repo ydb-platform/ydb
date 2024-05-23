@@ -381,7 +381,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
     }
 
-    void HandlePartitionIdSaved(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
+    void HandlePartitionIdSaved(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext&) {
         auto& record = ev->Get()->Record.GetRef();
         switch (record.GetYdbStatus()) {
         case Ydb::StatusIds::SUCCESS:

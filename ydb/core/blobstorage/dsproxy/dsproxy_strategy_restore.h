@@ -130,20 +130,20 @@ public:
         ui64 worstPredictedNs = 0;
         ui64 nextToWorstPredictedNs = 0;
         state.GetWorstPredictedDelaysNs(info, *blackboard.GroupQueues,
-                HandleClassToQueueId(blackboard.PutHandleClass),
+                HandleClassToQueueId(blackboard.PutHandleClass), 1,
                 &worstPredictedNs, &nextToWorstPredictedNs, &worstSubgroupIdx);
 
         // Check if the slowest disk exceptionally slow, or just not very fast
-        i32 slowDiskSubgroupIdx = -1;
+        TStackVec<ui32, 2> slowDiskSubgroupIdxs;
         if (nextToWorstPredictedNs > 0 && worstPredictedNs > nextToWorstPredictedNs * 2) {
-            slowDiskSubgroupIdx = worstSubgroupIdx;
+            slowDiskSubgroupIdxs.push_back(worstSubgroupIdx);
         }
 
         bool isDone = false;
-        if (slowDiskSubgroupIdx >= 0) {
+        if (!slowDiskSubgroupIdxs.empty()) {
             // If there is an exceptionally slow disk, try not touching it, mark isDone
             TBlobStorageGroupType::TPartLayout layout;
-            PreparePartLayout(state, info, &layout, slowDiskSubgroupIdx);
+            PreparePartLayout(state, info, &layout, slowDiskSubgroupIdxs);
 
             TBlobStorageGroupType::TPartPlacement partPlacement;
             bool isCorrectable = info.Type.CorrectLayout(layout, partPlacement);
@@ -157,7 +157,7 @@ public:
         if (!isDone) {
             // Fill in the part layout
             TBlobStorageGroupType::TPartLayout layout;
-            PreparePartLayout(state, info, &layout, InvalidVDiskIdx);
+            PreparePartLayout(state, info, &layout, {});
             TBlobStorageGroupType::TPartPlacement partPlacement;
             bool isCorrectable = info.Type.CorrectLayout(layout, partPlacement);
             Y_ABORT_UNLESS(isCorrectable);

@@ -77,7 +77,7 @@ namespace NKikimr {
                     ui64 worstPredictedNs = 0;
                     ui64 nextToWorstPredictedNs = 0;
                     state.GetWorstPredictedDelaysNs(info, *blackboard.GroupQueues,
-                            HandleClassToQueueId(blackboard.GetHandleClass),
+                            HandleClassToQueueId(blackboard.GetHandleClass), 1,
                             &worstPredictedNs, &nextToWorstPredictedNs, &worstSubgroupIdx);
 
                     // Check if the slowest disk exceptionally slow, or just not very fast

@@ -167,7 +167,7 @@ ui64 TGetImpl::GetTimeToAccelerateNs(TLogContext &logCtx, NKikimrBlobStorage::EV
     if (Blackboard.BlobStates.size() == 1) {
         i32 worstSubgroupIdx = -1;
         Blackboard.BlobStates.begin()->second.GetWorstPredictedDelaysNs(
-                *Info, *Blackboard.GroupQueues, queueId,
+                *Info, *Blackboard.GroupQueues, queueId, 1,
                 &worstPredictedNs, &nextToWorstPredictedNs, &worstSubgroupIdx);
     } else {
         i32 worstOrderNumber = -1;

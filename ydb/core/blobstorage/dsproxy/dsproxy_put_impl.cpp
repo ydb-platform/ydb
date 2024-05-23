@@ -82,20 +82,20 @@ void TPutImpl::PrepareReply(NKikimrProto::EReplyStatus status, TLogContext &logC
     }
 }
 
-ui64 TPutImpl::GetTimeToAccelerateNs(TLogContext &logCtx) {
+ui64 TPutImpl::GetTimeToAccelerateNs(TLogContext &logCtx, ui32 nthWorst) {
     Y_UNUSED(logCtx);
     Y_ABORT_UNLESS(!Blackboard.BlobStates.empty());
-    TBatchedVec<ui64> nextToWorstPredictedNsVec(Blackboard.BlobStates.size());
+    TBatchedVec<ui64> nthWorstPredictedNsVec(Blackboard.BlobStates.size());
     ui64 idx = 0;
     for (auto &[_, state] : Blackboard.BlobStates) {
         // Find the slowest disk
         i32 worstSubgroupIdx = -1;
         ui64 worstPredictedNs = 0;
-        state.GetWorstPredictedDelaysNs(*Info, *Blackboard.GroupQueues, HandleClassToQueueId(Blackboard.PutHandleClass),
-                &worstPredictedNs, &nextToWorstPredictedNsVec[idx], &worstSubgroupIdx);
+        state.GetWorstPredictedDelaysNs(*Info, *Blackboard.GroupQueues, HandleClassToQueueId(Blackboard.PutHandleClass), nthWorst,
+                &worstPredictedNs, &nthWorstPredictedNsVec[idx], &worstSubgroupIdx);
         idx++;
     }
-    return *MaxElement(nextToWorstPredictedNsVec.begin(), nextToWorstPredictedNsVec.end());
+    return *MaxElement(nthWorstPredictedNsVec.begin(), nthWorstPredictedNsVec.end());
 }
 
 TString TPutImpl::DumpFullState() const {

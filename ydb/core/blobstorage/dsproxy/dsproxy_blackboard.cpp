@@ -178,21 +178,21 @@ ui64 TBlobState::GetPredictedDelayNs(const TBlobStorageGroupInfo &info, TGroupQu
 }
 
 void TBlobState::GetWorstPredictedDelaysNs(const TBlobStorageGroupInfo &info, TGroupQueues &groupQueues,
-        NKikimrBlobStorage::EVDiskQueueId queueId,
-        ui64 *outWorstNs, ui64 *outNextToWorstNs, i32 *outWorstSubgroupIdx) const {
+        NKikimrBlobStorage::EVDiskQueueId queueId, ui32 nthWorst,
+        ui64 *outWorstNs, ui64 *outNthWorstNs, i32 *outWorstSubgroupIdx) const {
     *outWorstSubgroupIdx = -1;
     *outWorstNs = 0;
-    *outNextToWorstNs = 0;
+    TStackVec<ui32, 9> delayNs;
     for (ui32 diskIdx = 0; diskIdx < Disks.size(); ++diskIdx) {
         ui64 predictedNs = GetPredictedDelayNs(info, groupQueues, diskIdx, queueId);
+        delayNs.push_back(predictedNs);
         if (predictedNs > *outWorstNs) {
-            *outNextToWorstNs = *outWorstNs;
             *outWorstNs = predictedNs;
             *outWorstSubgroupIdx = diskIdx;
-        } else if (predictedNs > *outNextToWorstNs) {
-            *outNextToWorstNs = predictedNs;
         }
     }
+    std::nth_element(delayNs.begin(), delayNs.begin() + nthWorst, delayNs.end(), std::greater<ui32>{});
+    *outNthWorstNs = delayNs[nthWorst];
 }
 
 bool TBlobState::HasWrittenQuorum(const TBlobStorageGroupInfo& info, const TBlobStorageGroupInfo::TGroupVDisks& expired) const {

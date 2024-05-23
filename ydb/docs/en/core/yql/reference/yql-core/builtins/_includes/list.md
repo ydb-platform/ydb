@@ -595,3 +595,23 @@ FROM my_table;
 
 {% endif %}
 
+## ListTop, ListTopAsc, ListTopDesc, ListTopSort, ListTopSortAsc и ListTopSortDesc {#listtop}
+
+Select top values from the list (ListTopSort* - additionally sort the list). The smallest values are selected by default (the functions without a suffix are the aliases to *Asc functions; *Desc - selection of the biggest values).
+
+
+Arguments:
+
+1. List.
+2. Size of selection.
+3. An optional expression to get the sort key from a list element (it's the element itself by default).
+
+**Signature**
+```
+ListTop(List<T>, N)->List<T>
+ListTop(List<T>?, N)->List<T>?
+
+ListTop(List<T>, N, (T)->U)->List<T>
+ListTop(List<T>?, N, (T)->U)->List<T>?
+```
+The signatures of other functions are the same.

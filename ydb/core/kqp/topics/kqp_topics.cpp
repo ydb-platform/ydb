@@ -89,7 +89,7 @@ void TTopicPartitionOperations::AddOperation(const TString& topic, ui32 partitio
         Partition_ = partition;
     }
 
-    SupportivePartition_ = supportivePartition;
+    SupportivePartition_ = SupportivePartition_ ? Max<ui32>() : supportivePartition;
 
     HasWriteOperations_ = true;
 }
@@ -133,9 +133,7 @@ void TTopicPartitionOperations::Merge(const TTopicPartitionOperations& rhs)
         TabletId_ = rhs.TabletId_;
     }
 
-    if (!SupportivePartition_.Defined() || (*SupportivePartition_ != Max<ui32>())) {
-        SupportivePartition_ = rhs.SupportivePartition_;
-    }
+    SupportivePartition_ = SupportivePartition_ ? Max<ui32>() : rhs.SupportivePartition_;
 
     for (auto& [key, value] : rhs.Operations_) {
         Operations_[key].Merge(value);

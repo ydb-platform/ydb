@@ -1173,7 +1173,7 @@ private:
     void OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t connectionGeneration);
 
     // Direct Read
-    void OnDirectReadDone(Ydb::Topic::StreamReadMessage::ReadResponse&&, TDeferredActions<false>&);
+    void OnDirectReadDone(Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&&, TDeferredActions<false>&);
 
     // Assumes that we're under lock.
     template<typename TMessage>

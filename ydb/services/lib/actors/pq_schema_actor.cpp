@@ -688,7 +688,10 @@ namespace NKikimr::NGRpcProxy::V1 {
 
     }
 
-    std::optional<TYdbPqCodes> ValidatePartitionStrategy(const ::NKikimrPQ::TPQTabletConfig_TPartitionStrategy& strategy, TString& error) {
+    std::optional<TYdbPqCodes> ValidatePartitionStrategy(const ::NKikimrPQ::TPQTabletConfig& config, TString& error) {
+        if (!config.has_partitionstrategy())
+            return std::nullopt;
+        auto strategy = config.GetPartitionStrategy();
         if (strategy.GetMinPartitionCount() < 0) {
             error = TStringBuilder() << "Partitions count must be non-negative, provided " << strategy.GetMinPartitionCount();
             return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
@@ -761,7 +764,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                         pqTabletConfigPartStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED);
                         break;
                 }
-                if (auto code = ValidatePartitionStrategy(*pqTabletConfigPartStrategy, error); code) {
+                if (auto code = ValidatePartitionStrategy(*pqTabletConfig, error); code) {
                     return code->YdbCode;
                 }
             }
@@ -1098,7 +1101,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                         pqTabletConfigPartStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED);
                         break;
                 }
-                if (auto code = ValidatePartitionStrategy(*pqTabletConfigPartStrategy, error); code) {
+                if (auto code = ValidatePartitionStrategy(*pqTabletConfig, error); code) {
                     return *code;
                 }
             }
@@ -1236,47 +1239,47 @@ namespace NKikimr::NGRpcProxy::V1 {
         auto partConfig = pqTabletConfig->MutablePartitionConfig();
         if (request.has_alter_partitioning_settings()) {
             auto splitMergeFeatureEnabled = AppData(ctx)->FeatureFlags.GetEnableTopicSplitMerge();
-            auto pqTabletConfigPartStrategy = pqTabletConfig->MutablePartitionStrategy();
+
             const auto& settings = request.alter_partitioning_settings();
             if (settings.has_set_min_active_partitions()) {
                 auto minParts = IfEqualThenDefault(settings.set_min_active_partitions(), 0L, 1L);
                 pqDescr.SetTotalGroupCount(minParts);
                 if (splitMergeFeatureEnabled) {
-                    pqTabletConfigPartStrategy->SetMinPartitionCount(minParts);
+                    pqTabletConfig->MutablePartitionStrategy()->SetMinPartitionCount(minParts);
                 }
             }
             // savnik CHECK_CDC
             if (splitMergeFeatureEnabled) {
                 if (settings.has_set_max_active_partitions()) {
-                    pqTabletConfigPartStrategy->SetMaxPartitionCount(settings.set_max_active_partitions());
+                    pqTabletConfig->MutablePartitionStrategy()->SetMaxPartitionCount(settings.set_max_active_partitions());
                 }
                 if (settings.has_alter_autoscaling_settings()) {
                     if (settings.alter_autoscaling_settings().has_set_partition_write_speed()) {
                         if (settings.alter_autoscaling_settings().set_partition_write_speed().has_set_scale_up_threshold_percent()) {
-                            pqTabletConfigPartStrategy->SetScaleUpPartitionWriteSpeedThresholdPercent(settings.alter_autoscaling_settings().set_partition_write_speed().set_scale_up_threshold_percent());
+                            pqTabletConfig->MutablePartitionStrategy()->SetScaleUpPartitionWriteSpeedThresholdPercent(settings.alter_autoscaling_settings().set_partition_write_speed().set_scale_up_threshold_percent());
                         }
                         if (settings.alter_autoscaling_settings().set_partition_write_speed().has_set_scale_down_threshold_percent()) {
-                            pqTabletConfigPartStrategy->SetScaleDownPartitionWriteSpeedThresholdPercent(settings.alter_autoscaling_settings().set_partition_write_speed().set_scale_down_threshold_percent());
+                            pqTabletConfig->MutablePartitionStrategy()->SetScaleDownPartitionWriteSpeedThresholdPercent(settings.alter_autoscaling_settings().set_partition_write_speed().set_scale_down_threshold_percent());
                         }
                         if (settings.alter_autoscaling_settings().set_partition_write_speed().has_set_threshold_time()) {
-                            pqTabletConfigPartStrategy->SetScaleThresholdSeconds(settings.alter_autoscaling_settings().set_partition_write_speed().set_threshold_time().seconds());
+                            pqTabletConfig->MutablePartitionStrategy()->SetScaleThresholdSeconds(settings.alter_autoscaling_settings().set_partition_write_speed().set_threshold_time().seconds());
                         }
                     }
                     if (settings.alter_autoscaling_settings().has_set_strategy()) {
                         switch(settings.alter_autoscaling_settings().set_strategy()) {
                             case ::Ydb::Topic::AutoscalingStrategy::AUTOSCALING_STRATEGY_SCALE_UP:
-                                pqTabletConfigPartStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
+                                pqTabletConfig->MutablePartitionStrategy()->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
                                 break;
                             case ::Ydb::Topic::AutoscalingStrategy::AUTOSCALING_STRATEGY_SCALE_UP_AND_DOWN:
-                                pqTabletConfigPartStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE);
+                                pqTabletConfig->MutablePartitionStrategy()->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE);
                                 break;
                             default:
-                                pqTabletConfigPartStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED);
+                                pqTabletConfig->MutablePartitionStrategy()->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED);
                                 break;
                         }
                     }
                 }
-                if (auto code = ValidatePartitionStrategy(*pqTabletConfigPartStrategy, error); code) {
+                if (auto code = ValidatePartitionStrategy(*pqTabletConfig, error); code) {
                     return code->YdbCode;
                 }
             }

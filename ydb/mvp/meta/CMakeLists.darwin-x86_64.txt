@@ -13,6 +13,7 @@
 # system may be rejected.
 
 add_subdirectory(bin)
+add_subdirectory(ut)
 
 add_library(ydb-mvp-meta)
 
@@ -35,7 +36,7 @@ target_link_libraries(ydb-mvp-meta PUBLIC
 )
 
 target_sources(ydb-mvp-meta PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/mvp/meta/meta.h
+  ${PROJECT_SOURCE_DIR}/ydb/mvp/meta/meta_cache.h
   ${PROJECT_SOURCE_DIR}/ydb/mvp/meta/meta_cloud.h
   ${PROJECT_SOURCE_DIR}/ydb/mvp/meta/meta_cluster.h
   ${PROJECT_SOURCE_DIR}/ydb/mvp/meta/meta_clusters.h
@@ -45,6 +46,7 @@ target_sources(ydb-mvp-meta PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/mvp/meta/meta_versions.h
   ${PROJECT_SOURCE_DIR}/ydb/mvp/meta/mvp.h
   ${PROJECT_SOURCE_DIR}/ydb/mvp/meta/meta.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/mvp/meta/meta_cache.cpp
   ${PROJECT_SOURCE_DIR}/ydb/mvp/meta/meta_versions.cpp
   ${PROJECT_SOURCE_DIR}/ydb/mvp/meta/mvp.cpp
 )

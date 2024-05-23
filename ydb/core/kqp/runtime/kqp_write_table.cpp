@@ -180,8 +180,6 @@ class TColumnShardPayloadSerializer : public IPayloadSerializer {
         std::deque<TRecordBatchPtr> Batches; 
     };
 
-    const TString LogPrefix = "ColumnShardPayloadSerializer";
-
 public:
     TColumnShardPayloadSerializer(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
@@ -591,7 +589,6 @@ private:
     const NMiniKQL::TTypeEnvironment& TypeEnv;
     const NSchemeCache::TSchemeCacheNavigate::TEntry SchemeEntry;
     THolder<TKeyDesc> KeyDescription;
-    //const NSchemeCache::TSchemeCacheRequest::TEntry PartitionsEntry;
 
     const TVector<TSysTables::TTableColumnInfo> Columns;
     const std::vector<ui32> WriteIndex;
@@ -781,13 +778,16 @@ private:
     i64 Memory = 0;
 };
 
-/*class TShardedWriteController : public IShardedWriteController {
+class TShardedWriteController : public IShardedWriteController {
 public:
     void OnPartitioningChanged(const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry) override {
         if (Serializer) {
-            ForceFlush();
+            Flush(true);
         }
-        //Serializer = ...
+        Serializer = CreateColumnShardPayloadSerializer(
+            schemeEntry,
+            InputColumnsMetadata,
+            TypeEnv);
         ReshardData();
     }
 
@@ -795,18 +795,43 @@ public:
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
         NSchemeCache::TSchemeCacheRequest::TEntry&& partitionsEntry) override {
         if (Serializer) {
-            ForceFlush();
+            Flush(true);
         }
-        //Serializer = ...
+        Serializer = CreateDataShardPayloadSerializer(
+            schemeEntry,
+            partitionsEntry,
+            InputColumnsMetadata,
+            TypeEnv);
         ReshardData();
     }
 
     void AddData(NMiniKQL::TUnboxedValueBatch&& data) override {
+        YQL_ENSURE(!data.IsWide(), "Wide stream is not supported yet");
+        YQL_ENSURE(!Closed);
+
+        CA_LOG_D("New data: size=" << size << ", finished=" << finished << ".");
+
+        YQL_ENSURE(Serializer);
+        try {
+            Serializer->AddData(std::move(data));
+        } catch (...) {
+            RuntimeError(
+                CurrentExceptionMessage(),
+                NYql::NDqProto::StatusIds::INTERNAL_ERROR);
+        }
+
+        Flush(GetMemory() >= MemoryLimit);
     }
 
     void Close() override {
         Close = true;
+        Flush(true);
+        YQL_ENSURE(Serializer->IsFinished());
+        for (auto& [shardId, shardInfo] : ShardsInfo.GetShards()) {
+            shardInfo.Close();
+        }
 
+        ProcessData();
     }
 
     ui64 GetNextNewShardId() override {
@@ -825,6 +850,7 @@ public:
     }
 
     i64 GetMemory() override {
+        return Serializer->GetMemory() + ShardsInfo.GetMemory();
     }
 
     bool IsClosed() override {
@@ -839,11 +865,25 @@ public:
     }
 
 private:
+    void ForceFlush() {
+    }
+
+    void ProcessData() {        
+    }
+
+    void ReshardData() {
+    }
+
+    TString LogPrefix = "ShardedWriteController";
+
     TShardsInfo ShardsInfo;
     bool Closed = false;
 
+    TVector<NKikimrKqp::TKqpColumnMetadataProto> InputColumnsMetadata;
+    const NMiniKQL::TTypeEnvironment& TypeEnv;
+
     IPayloadSerializerPtr Serializer = nullptr;
-};*/
+};
 
 }
 

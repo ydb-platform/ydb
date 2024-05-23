@@ -45,6 +45,7 @@ public:
 
 using IPayloadSerializerPtr = TIntrusivePtr<IPayloadSerializer>;
 
+
 IPayloadSerializerPtr CreateColumnShardPayloadSerializer(
     const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
     const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
@@ -65,6 +66,7 @@ public:
         NSchemeCache::TSchemeCacheRequest::TEntry&& partitionsEntry) = 0;
 
     virtual void AddData(NMiniKQL::TUnboxedValueBatch&& data) = 0;
+    virtual void ProcessData(bool forceFlush) = 0;
     virtual void Close() = 0;
 
     virtual ui64 GetNextNewShardId() = 0;

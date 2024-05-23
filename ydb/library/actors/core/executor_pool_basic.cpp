@@ -474,6 +474,7 @@ namespace NActors {
             Threads[i].Thread->StopFlag.store(true, std::memory_order_release);
             Threads[i].Interrupt();
         }
+        Activations.Stop();
         if constexpr (DebugMode) {
             Sanitizer->Stop();
         }

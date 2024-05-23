@@ -9,7 +9,7 @@
 #include <ydb/library/actors/util/unordered_cache.h>
 #include <ydb/library/actors/util/threadparkpad.h>
 
-//#define RING_ACTIVATION_QUEUE 
+#define RING_ACTIVATION_QUEUE 
 
 namespace NActors {
     class TActorSystem;
@@ -49,7 +49,7 @@ namespace NActors {
     protected:
 
 #ifdef RING_ACTIVATION_QUEUE
-        using TActivationQueue = TRingActivationQueue;
+        using TActivationQueue = TBlockingActivationQueue;
 #else
         using TActivationQueue = TUnorderedCache<ui32, 512, 4>;
 #endif

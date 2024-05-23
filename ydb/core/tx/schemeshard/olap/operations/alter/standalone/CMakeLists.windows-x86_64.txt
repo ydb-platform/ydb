@@ -31,6 +31,5 @@ target_link_libraries(operations-alter-standalone PUBLIC
 target_sources(operations-alter-standalone PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/operations/alter/standalone/object.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/operations/alter/standalone/update.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/operations/alter/standalone/evolution.cpp
 )
 

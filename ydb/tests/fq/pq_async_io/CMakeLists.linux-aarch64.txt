@@ -7014,6 +7014,55 @@ get_built_tool_path(
 )
 
 get_built_tool_path(
+  TOOL_rescompiler_bin
+  TOOL_rescompiler_dependency
+  tools/rescompiler/bin
+  rescompiler
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_py3cc_bin
+  TOOL_py3cc_dependency
+  tools/py3cc
+  py3cc
+)
+
+get_built_tool_path(
+  TOOL_protoc-gen-mypy_bin
+  TOOL_protoc-gen-mypy_dependency
+  contrib/python/mypy-protobuf/bin/protoc-gen-mypy
+  protoc-gen-mypy
+)
+
+get_built_tool_path(
+  TOOL_protoc_bin
+  TOOL_protoc_dependency
+  contrib/tools/protoc
+  protoc
+)
+
+get_built_tool_path(
+  TOOL_protoc-gen-mypy_bin
+  TOOL_protoc-gen-mypy_dependency
+  contrib/python/mypy-protobuf/bin/protoc-gen-mypy
+  protoc-gen-mypy
+)
+
+get_built_tool_path(
+  TOOL_protoc_bin
+  TOOL_protoc_dependency
+  contrib/tools/protoc
+  protoc
+)
+
+get_built_tool_path(
   TOOL_protoc-gen-mypy_bin
   TOOL_protoc-gen-mypy_dependency
   contrib/python/mypy-protobuf/bin/protoc-gen-mypy
@@ -24033,6 +24082,11 @@ target_link_libraries(ydb-tests-fq-pq_async_io PUBLIC
   yutil
   library-cpp-resource
   library-cpp-resource
+  columnshard-common-protos
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-resource
   library-cpp-resource
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
@@ -24392,6 +24446,7 @@ target_sources(ydb-tests-fq-pq_async_io PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/core/tx/columnshard/engines/scheme/statistics/protos/8e751c83647582ca2c5598d37a6ae040.cpp
   ${PROJECT_BINARY_DIR}/ydb/core/formats/arrow/protos/438f310d315c18ce9692f2733a0cde4a.cpp
   ${PROJECT_BINARY_DIR}/ydb/core/tx/columnshard/engines/protos/6d44f11ac87b1be5191590fc40b62d11.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/tx/columnshard/common/protos/c6bac5fa80df2af4cb9ea846406fdad0.cpp
   ${PROJECT_BINARY_DIR}/ydb/core/protos/4452e29467c1f62b67d97e704e3c57ac.cpp
   ${PROJECT_BINARY_DIR}/ydb/tools/cfg/336d5ebc5436534e61d16e63ddfca327.cpp
   ${PROJECT_BINARY_DIR}/ydb/tools/cfg/f38df23c9466ea996dbed6d1ef054b0e.cpp
@@ -32985,6 +33040,28 @@ resources(ydb-tests-fq-pq_async_io
   resfs/file/py/ydb/core/tx/columnshard/engines/protos/portion_info_pb2.py
   resfs/src/resfs/file/py/ydb/core/tx/columnshard/engines/protos/portion_info_pb2.py.yapyc3=ydb/core/tx/columnshard/engines/protos/portion_info__intpy3___pb2.py.yp6e.yapyc3
   resfs/file/py/ydb/core/tx/columnshard/engines/protos/portion_info_pb2.py.yapyc3
+)
+
+resources(ydb-tests-fq-pq_async_io
+  ${PROJECT_BINARY_DIR}/ydb/core/tx/columnshard/common/protos/c6bac5fa80df2af4cb9ea846406fdad0.cpp
+  INPUTS
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/common/protos/-
+  ${PROJECT_BINARY_DIR}/ydb/core/tx/columnshard/common/protos/snapshot__intpy3___pb2.py
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/common/protos/-
+  ${PROJECT_BINARY_DIR}/ydb/core/tx/columnshard/common/protos/snapshot__intpy3___pb2.py.ihuq.yapyc3
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/common/protos/-
+  ${PROJECT_BINARY_DIR}/ydb/core/tx/columnshard/common/protos/blob_range__intpy3___pb2.py
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/common/protos/-
+  ${PROJECT_BINARY_DIR}/ydb/core/tx/columnshard/common/protos/blob_range__intpy3___pb2.py.ihuq.yapyc3
+  KEYS
+  resfs/src/resfs/file/py/ydb/core/tx/columnshard/common/protos/snapshot_pb2.py=ydb/core/tx/columnshard/common/protos/snapshot__intpy3___pb2.py
+  resfs/file/py/ydb/core/tx/columnshard/common/protos/snapshot_pb2.py
+  resfs/src/resfs/file/py/ydb/core/tx/columnshard/common/protos/snapshot_pb2.py.yapyc3=ydb/core/tx/columnshard/common/protos/snapshot__intpy3___pb2.py.ihuq.yapyc3
+  resfs/file/py/ydb/core/tx/columnshard/common/protos/snapshot_pb2.py.yapyc3
+  resfs/src/resfs/file/py/ydb/core/tx/columnshard/common/protos/blob_range_pb2.py=ydb/core/tx/columnshard/common/protos/blob_range__intpy3___pb2.py
+  resfs/file/py/ydb/core/tx/columnshard/common/protos/blob_range_pb2.py
+  resfs/src/resfs/file/py/ydb/core/tx/columnshard/common/protos/blob_range_pb2.py.yapyc3=ydb/core/tx/columnshard/common/protos/blob_range__intpy3___pb2.py.ihuq.yapyc3
+  resfs/file/py/ydb/core/tx/columnshard/common/protos/blob_range_pb2.py.yapyc3
 )
 
 resources(ydb-tests-fq-pq_async_io

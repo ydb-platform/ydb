@@ -31,7 +31,6 @@ target_link_libraries(operations-alter-abstract PUBLIC
 target_sources(operations-alter-abstract PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/operations/alter/abstract/object.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/operations/alter/abstract/update.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/operations/alter/abstract/evolution.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/operations/alter/abstract/converter.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/operations/alter/abstract/context.cpp
 )

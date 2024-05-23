@@ -1948,6 +1948,7 @@ target_link_libraries(ydb-core-protos PUBLIC
   scheme-statistics-protos
   columnshard-engines-protos
   formats-arrow-protos
+  columnshard-common-protos
   contrib-libs-protobuf
 )
 

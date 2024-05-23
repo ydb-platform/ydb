@@ -13,6 +13,7 @@
 # system may be rejected.
 
 add_subdirectory(abstract)
+add_subdirectory(common)
 add_subdirectory(in_store)
 add_subdirectory(standalone)
 
@@ -22,6 +23,7 @@ target_link_libraries(olap-operations-alter INTERFACE
   contrib-libs-cxxsupp
   yutil
   operations-alter-abstract
+  operations-alter-common
   operations-alter-in_store
   operations-alter-standalone
 )

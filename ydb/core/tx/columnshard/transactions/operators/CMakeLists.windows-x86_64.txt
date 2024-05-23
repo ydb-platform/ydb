@@ -18,7 +18,6 @@ add_library(columnshard-transactions-operators)
 target_link_libraries(columnshard-transactions-operators PUBLIC
   contrib-libs-cxxsupp
   yutil
-  tx-columnshard-transactions
   data_sharing-destination-events
   columnshard-export-session
 )
@@ -35,7 +34,6 @@ add_global_library_for(columnshard-transactions-operators.global
 target_link_libraries(columnshard-transactions-operators.global PUBLIC
   contrib-libs-cxxsupp
   yutil
-  tx-columnshard-transactions
   data_sharing-destination-events
   columnshard-export-session
 )

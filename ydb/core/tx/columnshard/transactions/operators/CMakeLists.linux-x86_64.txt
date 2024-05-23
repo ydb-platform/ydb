@@ -19,7 +19,6 @@ target_link_libraries(columnshard-transactions-operators PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  tx-columnshard-transactions
   data_sharing-destination-events
   columnshard-export-session
 )
@@ -37,7 +36,6 @@ target_link_libraries(columnshard-transactions-operators.global PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  tx-columnshard-transactions
   data_sharing-destination-events
   columnshard-export-session
 )

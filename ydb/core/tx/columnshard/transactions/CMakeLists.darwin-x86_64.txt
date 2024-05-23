@@ -13,6 +13,7 @@
 # system may be rejected.
 
 add_subdirectory(operators)
+add_subdirectory(transactions)
 
 get_built_tool_path(
   TOOL_enum_parser_bin
@@ -33,6 +34,8 @@ target_link_libraries(tx-columnshard-transactions PUBLIC
   ydb-core-tablet_flat
   core-tx-data_events
   data_sharing-destination-events
+  columnshard-transactions-operators
+  columnshard-transactions-transactions
   tools-enum_parser-enum_serialization_runtime
 )
 

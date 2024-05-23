@@ -53,7 +53,6 @@
     - obstack.h:     contrib/tools/bison/lib/obstack.h
     - regex.h:       contrib/tools/bison/lib/regex.h
     - system.h
-    - unlocked-io.h: contrib/tools/bison/lib/unlocked-io.h
     # ucrt headers are included by bison/lib in a very specific way
     - ../ucrt/fcntl.h
     - ../ucrt/locale.h
@@ -69,7 +68,6 @@
     - obstack.h:     contrib/tools/m4/lib/obstack.h
     - regex.h:       contrib/tools/m4/lib/regex.h
     - system.h
-    - unlocked-io.h: contrib/tools/m4/lib/unlocked-io.h
     # ucrt headers are included by m4/lib in a very specific way
     - ../ucrt/fcntl.h
     - ../ucrt/locale.h

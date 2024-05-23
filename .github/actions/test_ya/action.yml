@@ -194,6 +194,13 @@ runs:
         # Also build targets which are not in tests' dependencies
         params+=(--no-strip-idle-build-results)
 
+
+        # ya bloat support
+        extra_params+=(-DDUMP_LINKER_MAP)
+
+        # compiler profiling support
+        extra_params+=(-DCOMPILER_TIME_TRACE --add-result .json)
+
         echo "::debug::get version"
         ./ya --version
         

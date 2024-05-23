@@ -112,6 +112,12 @@ runs:
         
         echo "Build **{platform_name}-${BUILD_PRESET}** is running..." | .github/scripts/tests/comment-pr.py
         
+        # ya bloat support
+        extra_params+=(-DDUMP_LINKER_MAP)
+
+        # compiler profiling support
+        extra_params+=(-DCOMPILER_TIME_TRACE --add-result .json)
+
         # to be sure
         set -o pipefail
         

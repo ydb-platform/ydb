@@ -11,29 +11,20 @@
 using namespace NYql;
 using namespace NYql::NUdf;
 
-SIMPLE_STRICT_UDF_WITH_OPTIONAL_ARGS(TToBinaryString, TOptional<char*>(TAutoMap<TListType<float>>, TOptional<const char*>), 1) {
-    const TUnboxedValuePod x = args[0];
-
-    EFormat format = EFormat::FloatVector;
-    if (args[1]) {
-        const TStringRef formatStr = args[1].AsStringRef();
-        if (formatStr == "float")
-            format = EFormat::FloatVector;
-        else if (formatStr == "byte")
-            format = EFormat::Uint8Vector;
-        else if (formatStr == "bit")
-            format = EFormat::BitVector;
-        else
-            return {};
-    }
-
-    return TKnnSerializerFacade::Serialize(format, valueBuilder, x);
+SIMPLE_STRICT_UDF(TToBinaryStringFloat, TOptional<const char*>(TAutoMap<TListType<float>>)) {
+    return TKnnVectorSerializer<float, float, EFormat::FloatVector>::Serialize(valueBuilder, args[0]);
 }
 
-SIMPLE_STRICT_UDF(TFromBinaryString, TOptional<TListType<float>>(TAutoMap<const char*>)) {
-    TStringRef str = args[0].AsStringRef();
+SIMPLE_STRICT_UDF(TToBinaryStringByte, TOptional<const char*>(TAutoMap<TListType<float>>)) {
+    return TKnnVectorSerializer<float, ui8, EFormat::Uint8Vector>::Serialize(valueBuilder, args[0]);
+}
 
-    return TKnnSerializerFacade::Deserialize(valueBuilder, str);
+SIMPLE_STRICT_UDF(TToBinaryStringBit, TOptional<const char*>(TAutoMap<TListType<float>>)) {
+    return TKnnBitVectorSerializer::Serialize(valueBuilder, args[0]);
+}
+
+SIMPLE_STRICT_UDF(TFloatFromBinaryString, TOptional<TListType<float>>(TAutoMap<const char*>)) {
+    return TKnnSerializerFacade::Deserialize(valueBuilder, args[0].AsStringRef());
 }
 
 SIMPLE_STRICT_UDF(TInnerProductSimilarity, TOptional<float>(TAutoMap<const char*>, TAutoMap<const char*>)) {
@@ -91,8 +82,10 @@ SIMPLE_STRICT_UDF(TEuclideanDistance, TOptional<float>(TAutoMap<const char*>, TA
 }
 
 SIMPLE_MODULE(TKnnModule,
-              TFromBinaryString,
-              TToBinaryString,
+              TToBinaryStringFloat,
+              TToBinaryStringByte,
+              TToBinaryStringBit,
+              TFloatFromBinaryString,
               TInnerProductSimilarity,
               TCosineSimilarity,
               TCosineDistance,

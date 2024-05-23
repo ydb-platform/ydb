@@ -12,21 +12,21 @@
 using namespace NYql;
 using namespace NYql::NUdf;
 
-template <typename T, EFormat Format>
+template <typename From, typename To, EFormat Format>
 class TKnnVectorSerializer {
 public:
     static TUnboxedValue Serialize(const IValueBuilder* valueBuilder, const TUnboxedValue x) {
-        auto serialize = [&x](IOutputStream& outStream) {
-            EnumerateVector(x, [&outStream](float floatElement) {
-                T element = static_cast<T>(floatElement);
-                outStream.Write(&element, sizeof(T));
+        auto serialize = [&](IOutputStream& outStream) {
+            EnumerateVector(x, [&](From from) {
+                To to = static_cast<To>(from);
+                outStream.Write(&to, sizeof(To));
             });
             const EFormat format = Format;
             outStream.Write(&format, HeaderLen);
         };
 
         if (x.HasFastListLength()) {
-            auto str = valueBuilder->NewStringNotFilled(HeaderLen + x.GetListLength() * sizeof(T));
+            auto str = valueBuilder->NewStringNotFilled(x.GetListLength() * sizeof(To) + HeaderLen);
             auto strRef = str.AsStringRef();
             TMemoryOutput memoryOutput(strRef.Data(), strRef.Size());
 
@@ -56,16 +56,16 @@ public:
         return res.Release();
     }
 
-    static const TArrayRef<const T> GetArray(const TStringRef& str) {
-        const char* buf = str.Data();
-        const size_t len = str.Size() - HeaderLen;
+    static TArrayRef<const To> GetArray(const TStringRef& str) {
+        const auto* buf = str.Data();
+        const auto len = str.Size() - HeaderLen;
 
-        if (Y_UNLIKELY(len % sizeof(T) != 0))
+        if (Y_UNLIKELY(len % sizeof(To) != 0))
             return {};
 
-        const ui32 count = len / sizeof(T);
+        const ui32 count = len / sizeof(To);
 
-        return MakeArrayRef(reinterpret_cast<const T*>(buf), count);
+        return {reinterpret_cast<const To*>(buf), count};
     }
 };
 
@@ -159,19 +159,6 @@ public:
 
 class TKnnSerializerFacade {
 public:
-    static TUnboxedValue Serialize(EFormat format, const IValueBuilder* valueBuilder, const TUnboxedValue x) {
-        switch (format) {
-            case EFormat::FloatVector:
-                return TKnnVectorSerializer<float, EFormat::FloatVector>::Serialize(valueBuilder, x);
-            case EFormat::Uint8Vector:
-                return TKnnVectorSerializer<ui8, EFormat::Uint8Vector>::Serialize(valueBuilder, x);
-            case EFormat::BitVector:
-                return TKnnBitVectorSerializer::Serialize(valueBuilder, x);
-            default:
-                return {};
-        }
-    }
-
     static TUnboxedValue Deserialize(const IValueBuilder* valueBuilder, const TStringRef& str) {
         if (Y_UNLIKELY(str.Size() == 0))
             return {};
@@ -179,9 +166,9 @@ public:
         const ui8 format = str.Data()[str.Size() - HeaderLen];
         switch (format) {
             case EFormat::FloatVector:
-                return TKnnVectorSerializer<float, EFormat::FloatVector>::Deserialize(valueBuilder, str);
+                return TKnnVectorSerializer<float, float, EFormat::FloatVector>::Deserialize(valueBuilder, str);
             case EFormat::Uint8Vector:
-                return TKnnVectorSerializer<ui8, EFormat::Uint8Vector>::Deserialize(valueBuilder, str);
+                return TKnnVectorSerializer<float, ui8, EFormat::Uint8Vector>::Deserialize(valueBuilder, str);
             case EFormat::BitVector:
             default:
                 return {};
@@ -196,9 +183,9 @@ public:
         const ui8 format = str.Data()[str.Size() - HeaderLen];
         switch (format) {
             case EFormat::FloatVector:
-                return TKnnVectorSerializer<T, EFormat::FloatVector>::GetArray(str);
+                return TKnnVectorSerializer<float, T, EFormat::FloatVector>::GetArray(str);
             case EFormat::Uint8Vector:
-                return TKnnVectorSerializer<T, EFormat::Uint8Vector>::GetArray(str);
+                return TKnnVectorSerializer<float, T, EFormat::Uint8Vector>::GetArray(str);
             case EFormat::BitVector:
             default:
                 return {};

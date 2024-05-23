@@ -512,6 +512,10 @@ public:
                             ev->Get()->State->PartNumberMarker = root.Node("s3:NextPartNumberMarker", false, nss).Value<TString>();
                             PushListParts(ev->Get()->State);
                         } else {
+                            if (state->Tags.empty()) {
+                                LOG_W("ListParts returned empty parts list for " << ev->Get()->State->BuildUrl() << " (multipart upload may be completed already)");
+                                return;
+                            }
                             PushCommitMultipartUpload(state);
                         }
                     } else {

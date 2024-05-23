@@ -17,7 +17,6 @@ NKikimr::TConclusionStatus TDestinationSession::DataReceived(THashMap<ui64, NEve
         auto it = PathIds.find(i.first);
         AFL_VERIFY(it != PathIds.end())("path_id_undefined", i.first);
         for (auto&& portion : i.second.DetachPortions()) {
-            portion.ResetShardingVersion();
             portion.SetPathId(it->second);
             index.UpsertPortion(std::move(portion));
         }

@@ -1626,6 +1626,7 @@ message TShardingModification {
 message TShardingTransfer {
     optional uint64 DestinationTabletId = 1;
     repeated uint64 SourceTabletIds = 2;
+    optional bool Moving = 3 [default = false];
 }
 
 message TShardingTransfers {

@@ -355,6 +355,7 @@ bool TTablesManager::TryFinalizeDropPathOnComplete(const ui64 pathId) {
     auto itDrop = PathsToDrop.find(pathId);
     AFL_VERIFY(itDrop != PathsToDrop.end());
     AFL_VERIFY(!GetPrimaryIndexSafe().HasDataInPathId(pathId));
+    AFL_VERIFY(MutablePrimaryIndex().ErasePathId(pathId));
     PathsToDrop.erase(itDrop);
     const auto& itTable = Tables.find(pathId);
     AFL_VERIFY(itTable != Tables.end())("problem", "No schema for path")("path_id", pathId);

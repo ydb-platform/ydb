@@ -40,14 +40,15 @@ private:
         }
         if (DeleteShardIds.contains(tabletId)) {
             result.MutableDropTable()->SetPathId(TargetInStoreTable->GetPathId().LocalPathId);
-        }
-        auto container = Sharding->GetTabletShardingInfoOptional(tabletId);
-        if (!!container) {
-            auto& shardingInfo = *result.MutableGranuleShardingInfo();
-            shardingInfo.SetPathId(TargetInStoreTable->GetPathId().LocalPathId);
-            shardingInfo.SetVersionId(Sharding->GetShardInfoVerified(tabletId).GetShardingVersion());
-            *shardingInfo.MutableContainer() = container.SerializeToProto();
-            AFL_VERIFY(ModifiedShardIds.contains(tabletId));
+        } else {
+            auto container = Sharding->GetTabletShardingInfoOptional(tabletId);
+            if (!!container) {
+                auto& shardingInfo = *result.MutableGranuleShardingInfo();
+                shardingInfo.SetPathId(TargetInStoreTable->GetPathId().LocalPathId);
+                shardingInfo.SetVersionId(Sharding->GetShardInfoVerified(tabletId).GetShardingVersion());
+                *shardingInfo.MutableContainer() = container.SerializeToProto();
+                AFL_VERIFY(ModifiedShardIds.contains(tabletId));
+            }
         }
         return result.SerializeAsString();
     }

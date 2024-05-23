@@ -144,6 +144,20 @@ NKikimr::TConclusionStatus IShardingBase::ApplyModification(const NKikimrSchemeO
         shardInfo->SetIsOpenForRead(true);
     }
     {
+        std::set<ui64> deleteIds;
+        for (auto&& i : proto.GetDeleteShardIds()) {
+            if (!Shards.erase(i)) {
+                return TConclusionStatus::Fail("shard id from DeleteShardIds absent with current full shardIds list");
+            }
+            deleteIds.emplace(i);
+        }
+        const auto pred = [&deleteIds](const ui64 tabletId) {
+            return deleteIds.contains(tabletId);
+        };
+        OrderedShardIds.erase(std::remove_if(OrderedShardIds.begin(), OrderedShardIds.end(), pred), OrderedShardIds.end());
+    }
+    
+    {
         auto conclusion = DoApplyModification(proto);
         if (conclusion.IsFail()) {
             return conclusion;
@@ -164,11 +178,6 @@ NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> IShardingBase::
         startModification.AddNewShardIds(i);
         startModification.AddCloseReadIds(i);
         startModification.AddCloseWriteIds(i);
-    }
-
-    TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> infosConclusion = BuildSplitShardsModifiers(newTabletIds);
-    if (infosConclusion.IsFail()) {
-        return infosConclusion;
     }
     std::vector<NKikimrSchemeOp::TAlterShards> result;
     {

@@ -4672,6 +4672,16 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         auto newDistribution = getDistribution();
 
         UNIT_ASSERT_EQUAL(initialDistribution, newDistribution);
+
+        {
+            auto request = std::make_unique<TEvHive::TEvRequestHiveDomainStats>();
+            request->Record.SetReturnMetrics(true);
+            runtime.SendToPipe(hiveTablet, senderA, request.release());
+            TAutoPtr<IEventHandle> handle;
+            TEvHive::TEvResponseHiveDomainStats* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveDomainStats>(handle);
+            ui64 totalCounter = response->Record.GetDomainStats(0).GetMetrics().GetCounter();
+            UNIT_ASSERT_VALUES_EQUAL(totalCounter, 0);
+        }
     }
 
     Y_UNIT_TEST(TestHiveBalancerWithImmovableTablets) {

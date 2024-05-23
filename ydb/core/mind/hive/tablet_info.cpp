@@ -426,17 +426,21 @@ TResourceRawValues TTabletInfo::GetResourceMaximumValues() const {
     }
 }
 
-i64 TTabletInfo::GetCounterValue(const TTabletMetricsAggregates& metrics, const TVector<i64>& allowedMetricIds) {
+i64 TTabletInfo::GetCounterValue() const {
+    const auto& allowedMetricIds = GetTabletAllowedMetricIds();
     if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::CPU)
-        && THive::IsValidMetricsCPU(metrics.MaximumCPU.GetAllTimeMaximum())) {
+        && (ResourceMetricsAggregates.MaximumCPU.GetAllTimeMaximum() > 0
+        || ResourceValues.GetCPU() > 0)) {
         return 0;
     }
     if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::Memory)
-        && THive::IsValidMetricsMemory(metrics.MaximumMemory.GetAllTimeMaximum() > 0)) {
+        && (ResourceMetricsAggregates.MaximumMemory.GetAllTimeMaximum() > 0
+        || ResourceValues.GetMemory() > 0)) {
         return 0;
     }
     if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::Network)
-        && THive::IsValidMetricsNetwork(metrics.MaximumNetwork.GetAllTimeMaximum())) {
+        && (ResourceMetricsAggregates.MaximumNetwork.GetAllTimeMaximum() > 0
+        || ResourceValues.GetNetwork() > 0)) {
         return 0;
     }
     return 1;
@@ -448,13 +452,13 @@ void TTabletInfo::FilterRawValues(TResourceRawValues& values) const {
     if (metrics.GetCounter() == 0) {
         std::get<NMetrics::EResource::Counter>(values) = 0;
     }
-    if (!HasAllowedMetric(allowedMetricIds, EResourceToBalance::CPU) || !THive::IsValidMetricsCPU(metrics.GetCPU())) {
+    if (!HasAllowedMetric(allowedMetricIds, EResourceToBalance::CPU) || !THive::IsValidMetricsCPU(metrics)) {
         std::get<NMetrics::EResource::CPU>(values) = 0;
     }
-    if (!HasAllowedMetric(allowedMetricIds, EResourceToBalance::Memory) || !THive::IsValidMetricsMemory(metrics.GetMemory())) {
+    if (!HasAllowedMetric(allowedMetricIds, EResourceToBalance::Memory) || !THive::IsValidMetricsMemory(metrics)) {
         std::get<NMetrics::EResource::Memory>(values) = 0;
     }
-    if (!HasAllowedMetric(allowedMetricIds, EResourceToBalance::Network) || !THive::IsValidMetricsNetwork(metrics.GetNetwork())) {
+    if (!HasAllowedMetric(allowedMetricIds, EResourceToBalance::Network) || !THive::IsValidMetricsNetwork(metrics)) {
         std::get<NMetrics::EResource::Network>(values) = 0;
     }
 }
@@ -465,20 +469,19 @@ void TTabletInfo::FilterRawValues(TResourceNormalizedValues& values) const {
     if (metrics.GetCounter() == 0) {
         std::get<NMetrics::EResource::Counter>(values) = 0;
     }
-    if (!HasAllowedMetric(allowedMetricIds, EResourceToBalance::CPU) || !THive::IsValidMetricsCPU(metrics.GetCPU())) {
+    if (!HasAllowedMetric(allowedMetricIds, EResourceToBalance::CPU) || !THive::IsValidMetricsCPU(metrics)) {
         std::get<NMetrics::EResource::CPU>(values) = 0;
     }
-    if (!HasAllowedMetric(allowedMetricIds, EResourceToBalance::Memory) || !THive::IsValidMetricsMemory(metrics.GetMemory())) {
+    if (!HasAllowedMetric(allowedMetricIds, EResourceToBalance::Memory) || !THive::IsValidMetricsMemory(metrics)) {
         std::get<NMetrics::EResource::Memory>(values) = 0;
     }
-    if (!HasAllowedMetric(allowedMetricIds, EResourceToBalance::Network) || !THive::IsValidMetricsNetwork(metrics.GetNetwork())) {
+    if (!HasAllowedMetric(allowedMetricIds, EResourceToBalance::Network) || !THive::IsValidMetricsNetwork(metrics)) {
         std::get<NMetrics::EResource::Network>(values) = 0;
     }
 }
 
 void TTabletInfo::ActualizeCounter() {
-    auto value = GetCounterValue(ResourceMetricsAggregates, GetTabletAllowedMetricIds());
-    ResourceValues.SetCounter(value);
+    ResourceValues.SetCounter(GetCounterValue());
 }
 
 const TNodeFilter& TTabletInfo::GetNodeFilter() const {

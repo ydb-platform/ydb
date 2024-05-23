@@ -667,9 +667,9 @@ public:
     const TVector<i64>& GetTabletTypeAllowedMetricIds(TTabletTypes::EType type) const;
     static const TVector<i64>& GetDefaultAllowedMetricIdsForType(TTabletTypes::EType type);
     static bool IsValidMetrics(const NKikimrTabletBase::TMetrics& metrics);
-    static bool IsValidMetricsCPU(ui64 cpu);
-    static bool IsValidMetricsMemory(ui64 memory);
-    static bool IsValidMetricsNetwork(ui64 network);
+    static bool IsValidMetricsCPU(const NKikimrTabletBase::TMetrics& metrics);
+    static bool IsValidMetricsMemory(const NKikimrTabletBase::TMetrics& metrics);
+    static bool IsValidMetricsNetwork(const NKikimrTabletBase::TMetrics& metrics);
     void UpdateTotalResourceValues(
             const TNodeInfo* node,
             const TTabletInfo* tablet,

@@ -24,7 +24,7 @@ void KqpCommitLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, N
     }
 }
 
-TEvWriteTransactionOperator::TProposeResult TEvWriteTransactionOperator::ExecuteOnPropose(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) const {
+TEvWriteTransactionOperator::TProposeResult TEvWriteTransactionOperator::DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) {
     if (!owner.OperationsManager->LinkTransaction(LockId, GetTxId(), txc)) {
         return TProposeResult(NKikimrTxColumnShard::EResultStatus::ERROR, "unknown lockId");
     }
@@ -83,9 +83,9 @@ bool TEvWriteTransactionOperator::ExecuteOnProgress(TColumnShard& owner, const N
 
             KqpEraseLocks(tabletId, kqpLocks, owner.SysLocksTable());
             owner.SysLocksTable().ApplyLocks();
-        // DataShard.SubscribeNewLocks(ctx);
+            // SubscribeNewLocks(ctx);
             if (locksDb.HasChanges()) {
-        //     op->SetWaitCompletionFlag(true);
+                //  op->SetWaitCompletionFlag(true);
                 return false; // EExecutionStatus::ExecutedNoMoreRestarts;
             }
 

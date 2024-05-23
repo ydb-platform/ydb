@@ -11,10 +11,7 @@ namespace NKikimr::NColumnShard {
         using TInReadSets = TMap<std::pair<ui64, ui64>, TVector<NDataShard::TRSData>>;
         static inline auto Registrator = TFactory::TRegistrator<TEvWriteTransactionOperator>(NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE);
     private:
-        virtual TProposeResult DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override {
-            owner.OperationsManager->LinkTransaction(LockId, GetTxId(), txc);
-            return TProposeResult();
-        }
+        virtual TProposeResult DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override;
         virtual void DoStartProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
 
         }

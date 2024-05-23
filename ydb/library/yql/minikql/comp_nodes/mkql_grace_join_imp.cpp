@@ -1141,7 +1141,7 @@ ui64 TTable::GetSizeOfBucket(ui64 bucket) const {
     + TableBuckets[bucket].InterfaceOffsets.size() * sizeof(ui32);
 }
 
-bool TTable::TryToReduceMemory() {
+bool TTable::TryToReduceMemoryAndWait() {
     i32 largestBucketIndex = 0;
     ui64 largestBucketSize = 0;
     for (ui32 bucket = 0; bucket < NumberOfBuckets; ++bucket) {

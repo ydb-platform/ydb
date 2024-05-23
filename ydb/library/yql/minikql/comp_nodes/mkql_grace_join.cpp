@@ -587,7 +587,8 @@ public:
     ,   LeftKeyColumns(leftKeyColumns)
     ,   RightKeyColumns(rightKeyColumns)
     ,   LeftRenames(leftRenames)
-    ,   RightRenames(rightRenames)    ,   LeftPacker(std::make_unique<TGraceJoinPacker>(leftColumnsTypes, leftKeyColumns, holderFactory, (anyJoinSettings == EAnyJoinSettings::Left || anyJoinSettings == EAnyJoinSettings::Both)))
+    ,   RightRenames(rightRenames)
+    ,   LeftPacker(std::make_unique<TGraceJoinPacker>(leftColumnsTypes, leftKeyColumns, holderFactory, (anyJoinSettings == EAnyJoinSettings::Left || anyJoinSettings == EAnyJoinSettings::Both)))
     ,   RightPacker(std::make_unique<TGraceJoinPacker>(rightColumnsTypes, rightKeyColumns, holderFactory, (anyJoinSettings == EAnyJoinSettings::Right || anyJoinSettings == EAnyJoinSettings::Both)))
     ,   JoinedTablePtr(std::make_unique<GraceJoin::TTable>())
     ,   JoinCompleted(std::make_unique<bool>(false))
@@ -813,9 +814,9 @@ private:
         return EFetchResult::Finish;
     }
 
-    bool TryToReduceMemory() {
-        bool isWaitingLeftForReduce = LeftPacker->TablePtr->TryToReduceMemory();
-        bool isWaitingRightForReduce = RightPacker->TablePtr->TryToReduceMemory();
+    bool TryToReduceMemoryAndWait() {
+        bool isWaitingLeftForReduce = LeftPacker->TablePtr->TryToReduceMemoryAndWait();
+        bool isWaitingRightForReduce = RightPacker->TablePtr->TryToReduceMemoryAndWait();
 
         return isWaitingLeftForReduce || isWaitingRightForReduce;
     }
@@ -833,7 +834,7 @@ void DoCalculateWithSpilling(TComputationContext& ctx) {
     UpdateSpilling();
 
     if (!HasMemoryForProcessing()) {
-        bool isWaitingForReduce = TryToReduceMemory();
+        bool isWaitingForReduce = TryToReduceMemoryAndWait();
         if (isWaitingForReduce) return;
     }
 

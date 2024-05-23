@@ -267,11 +267,11 @@ public:
     // Creates buckets that support spilling.
     void InitializeBucketSpillers(ISpiller::TPtr spiller);
 
-    // Calculate sapproximate size of a bucket. Used for spilling to determine largest bucket.
+    // Calculates approximate size of a bucket. Used for spilling to determine the largest bucket.
     ui64 GetSizeOfBucket(ui64 bucket) const;
 
     // This functions wind the largest bucket and spills it to the disk.
-    bool TryToReduceMemory();
+    bool TryToReduceMemoryAndWait();
 
     // Update state of spilling. Must be called during each DoCalculate.
     void UpdateSpilling();

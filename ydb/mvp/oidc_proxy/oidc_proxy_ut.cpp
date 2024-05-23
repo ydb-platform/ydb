@@ -467,6 +467,62 @@ Y_UNIT_TEST_SUITE(Mvp) {
         OidcFullAuthorizationFlow(redirectStrategy);
     }
 
+    void OidcWrongStateAuthorizationFlow(TRedirectStrategyBase& redirectStrategy) {
+        TPortManager tp;
+        ui16 sessionServicePort = tp.GetPort(8655);
+        TMvpTestRuntime runtime;
+        runtime.Initialize();
+
+        TOpenIdConnectSettings settings {
+            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
+            .AuthorizationServerAddress = "https://auth.cloud.yandex.ru",
+            .ClientSecret = "0123456789abcdef"
+        };
+
+        const NActors::TActorId edge = runtime.AllocateEdgeActor();
+
+        TSessionServiceMock sessionServiceMock;
+        sessionServiceMock.AllowedAccessTokens.insert("valid_access_token");
+        grpc::ServerBuilder builder;
+        builder.AddListeningPort(settings.SessionServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&sessionServiceMock);
+        std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
+
+        const NActors::TActorId sessionCreator = runtime.Register(new NMVP::TSessionCreator(edge, settings));
+        const TString state = "test_state";
+        const TString wrongState = "wrong_state";
+        const TString hostProxy = "oidcproxy.yandex.net";
+        TStringBuilder request;
+        request << "GET /auth/callback?code=code_template&state=" << state << " HTTP/1.1\r\n";
+        request << "Host: " + hostProxy + "\r\n";
+        request << "Cookie: " << CreateNameYdbOidcCookie(settings.ClientSecret, wrongState) << "=" << GenerateCookie(wrongState, "/requested/page", settings.ClientSecret, redirectStrategy.IsAjaxRequest()) << "\r\n";
+        NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
+        EatWholeString(incomingRequest, redirectStrategy.CreateRequest(request));
+        incomingRequest->Endpoint->Secure = true;
+        runtime.Send(new IEventHandle(sessionCreator, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
+
+        TAutoPtr<IEventHandle> handle;
+        NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "302");
+        const NHttp::THeaders headers(outgoingResponseEv->Response->Headers);
+        UNIT_ASSERT(headers.Has("Location"));
+        TString location = TString(headers.Get("Location"));
+        UNIT_ASSERT_STRING_CONTAINS(location, "https://auth.cloud.yandex.ru/oauth/authorize");
+        UNIT_ASSERT_STRING_CONTAINS(location, "response_type=code");
+        UNIT_ASSERT_STRING_CONTAINS(location, "scope=openid");
+        UNIT_ASSERT_STRING_CONTAINS(location, "client_id=" + TOpenIdConnectSettings::CLIENT_ID);
+        UNIT_ASSERT_STRING_CONTAINS(location, "redirect_uri=https://" + hostProxy + "/auth/callback");
+    }
+
+    Y_UNIT_TEST(OpenIdConnectotWrongStateAuthorizationFlow) {
+        TRedirectStrategy redirectStrategy;
+        OidcWrongStateAuthorizationFlow(redirectStrategy);
+    }
+
+    Y_UNIT_TEST(OpenIdConnectotWrongStateAuthorizationFlowAjax) {
+        TAjaxRedirectStrategy redirectStrategy;
+        OidcWrongStateAuthorizationFlow(redirectStrategy);
+    }
+
     Y_UNIT_TEST(OpenIdConnectSessionServiceCreateAuthorizationFail) {
         TPortManager tp;
         ui16 sessionServicePort = tp.GetPort(8655);

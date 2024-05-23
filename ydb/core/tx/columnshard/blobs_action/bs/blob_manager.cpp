@@ -268,8 +268,10 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
             auto logoBlobId = unifiedBlobId.GetLogoBlobId();
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("to_delete_gc", logoBlobId);
             NBlobOperations::NBlobStorage::TGCTask::TGCLists& gl = perGroupGCListsInFlight[unifiedBlobId.GetDsGroup()];
-            BlobsManagerCounters.OnCollectDropExplicit(logoBlobId.BlobSize());
-            gl.DontKeepList.insert(logoBlobId);
+            if (!sharedBlobsInfo->BuildStoreCategories({ unifiedBlobId }).GetDirect().IsEmpty()) {
+                BlobsManagerCounters.OnCollectDropExplicit(logoBlobId.BlobSize());
+                gl.DontKeepList.insert(logoBlobId);
+            }
         }
         if (extractedToRemoveFromDB.GetSize() >= blobsGCCountLimit) {
             newCollectGenSteps.clear();
@@ -314,8 +316,8 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
                 auto logoBlobId = unifiedBlobId.GetLogoBlobId();
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("to_delete_gc", logoBlobId);
                 NBlobOperations::NBlobStorage::TGCTask::TGCLists& gl = perGroupGCListsInFlight[unifiedBlobId.GetDsGroup()];
-                bool skipDontKeep = false;
-                if (gl.KeepList.erase(logoBlobId)) {
+                bool skipDontKeep = sharedBlobsInfo->BuildStoreCategories({ unifiedBlobId }).GetDirect().IsEmpty();
+                if (!skipDontKeep && gl.KeepList.erase(logoBlobId)) {
                     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("to_keep_gc_remove", logoBlobId);
                     // Skipped blobs still need to be deleted from BlobsToKeep table
                     if (CurrentGen == logoBlobId.Generation()) {

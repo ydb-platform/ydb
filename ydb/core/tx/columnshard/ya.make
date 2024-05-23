@@ -24,6 +24,7 @@ SRCS(
     inflight_request_tracker.cpp
     write_actor.cpp
     tables_manager.cpp
+    remove_locks.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(columnshard.h)

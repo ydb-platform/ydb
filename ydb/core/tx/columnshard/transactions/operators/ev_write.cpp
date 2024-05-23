@@ -45,12 +45,17 @@ bool TEvWriteTransactionOperator::ExecuteOnProgress(TColumnShard& owner, const N
             switch (owner.SysLocksTable().EnsureCurrentLock()) {
                 case NDataShard::EEnsureCurrentLock::Success:
                     break;
-                case NDataShard::EEnsureCurrentLock::Broken:
-                    break;
                 case NDataShard::EEnsureCurrentLock::TooMany:
                     return false;
+                case NDataShard::EEnsureCurrentLock::Broken:
                 case NDataShard::EEnsureCurrentLock::Abort:
-                    return false;
+                {
+                    NKikimrDataEvents::TLock brokenLock;
+                    brokenLock.SetDataShard(owner.TabletID());
+                    brokenLock.SetLockId(LockId);
+                    BrokenLocks.push_back(std::move(brokenLock));
+                    return true;
+                }
             }
         }
 
@@ -62,11 +67,7 @@ bool TEvWriteTransactionOperator::ExecuteOnProgress(TColumnShard& owner, const N
         if (!validated) {
             NDataShard::KqpEraseLocks(tabletId, kqpLocks, owner.SysLocksTable());
             owner.SysLocksTable().ApplyLocks();
-            // SubscribeNewLocks(ctx);
-            if (locksDb.HasChanges()) {
-                //  op->SetWaitCompletionFlag(true);
-                return false;
-            }
+           // SubscribeNewLocks(owner, ctx);
             return true;
         }
 

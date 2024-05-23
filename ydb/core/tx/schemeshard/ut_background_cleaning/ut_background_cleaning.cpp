@@ -48,40 +48,40 @@ void SetBackgroundCleaning(TTestActorRuntime &runtime, TTestEnv& env, ui64 schem
     SetFeatures(runtime, env, schemeShard, features, withRetries);
 }
 
-void AsyncCreateTempTable(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& ownerActorId, ui32 nodeIdx) {
+void AsyncCreateTable(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& ownerActorId, ui32 nodeIdx, bool allowCreateInTempDir) {
     auto ev = CreateIndexedTableRequest(txId, workingDir, scheme);
     auto* tx = ev->Record.MutableTransaction(0);
-    tx->SetAllowCreateInTempDir(true);
+    tx->SetAllowCreateInTempDir(allowCreateInTempDir);
     AsyncSend(runtime, schemeShardId, ev, nodeIdx, ownerActorId);
 }
 
-void AsyncMkDir(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& ownerActorId, ui32 nodeIdx) {
+void AsyncMkDir(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& ownerActorId, ui32 nodeIdx, bool allowCreateInTempDir) {
     auto ev = MkDirRequest(txId, workingDir, scheme);
     auto* tx = ev->Record.MutableTransaction(0);
-    tx->SetAllowCreateInTempDir(true);
+    tx->SetAllowCreateInTempDir(allowCreateInTempDir);
     AsyncSend(runtime, schemeShardId, ev, nodeIdx, ownerActorId);
 }
 
-void AsyncMkTempDir(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& ownerActorId, ui32 nodeIdx) {
+void AsyncMkTempDir(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& ownerActorId, ui32 nodeIdx, bool allowCreateInTempDir) {
     auto ev = MkDirRequest(txId, workingDir, scheme);
     auto* tx = ev->Record.MutableTransaction(0);
-    tx->SetAllowCreateInTempDir(true);
+    tx->SetAllowCreateInTempDir(allowCreateInTempDir);
     ActorIdToProto(ownerActorId, tx->MutableTempDirOwnerActorId());
     AsyncSend(runtime, schemeShardId, ev, nodeIdx, ownerActorId);
 }
 
-void TestMkDir(TTestActorRuntime& runtime, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& ownerActorId, const TVector<TExpectedResult>& expectedResults, ui32 ownerNodeIdx) {
-    AsyncMkDir(runtime, TTestTxConfig::SchemeShard, txId, workingDir, scheme, ownerActorId, ownerNodeIdx);
+void TestMkDir(TTestActorRuntime& runtime, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& ownerActorId, const TVector<TExpectedResult>& expectedResults, ui32 ownerNodeIdx, bool allowCreateInTempDir) {
+    AsyncMkDir(runtime, TTestTxConfig::SchemeShard, txId, workingDir, scheme, ownerActorId, ownerNodeIdx, allowCreateInTempDir);
     TestModificationResults(runtime, txId, expectedResults);
 }
 
-void TestMkTempDir(TTestActorRuntime& runtime, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& ownerActorId, const TVector<TExpectedResult>& expectedResults, ui32 ownerNodeIdx) {
-    AsyncMkTempDir(runtime, TTestTxConfig::SchemeShard, txId, workingDir, scheme, ownerActorId, ownerNodeIdx);
+void TestMkTempDir(TTestActorRuntime& runtime, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& ownerActorId, const TVector<TExpectedResult>& expectedResults, ui32 ownerNodeIdx, bool allowCreateInTempDir) {
+    AsyncMkTempDir(runtime, TTestTxConfig::SchemeShard, txId, workingDir, scheme, ownerActorId, ownerNodeIdx, allowCreateInTempDir);
     TestModificationResults(runtime, txId, expectedResults);
 }
 
-void TestCreateTempTable(TTestActorRuntime& runtime, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& ownerActorId, const TVector<TExpectedResult>& expectedResults, ui32 ownerNodeIdx) {
-    AsyncCreateTempTable(runtime, TTestTxConfig::SchemeShard, txId, workingDir, scheme, ownerActorId, ownerNodeIdx);
+void TestCreateTable(TTestActorRuntime& runtime, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& ownerActorId, const TVector<TExpectedResult>& expectedResults, ui32 ownerNodeIdx, bool allowCreateInTempDir) {
+    AsyncCreateTable(runtime, TTestTxConfig::SchemeShard, txId, workingDir, scheme, ownerActorId, ownerNodeIdx, allowCreateInTempDir);
     TestModificationResults(runtime, txId, expectedResults);
 }
 
@@ -166,20 +166,24 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
 
         ui64 txId = 100;
 
-        TestMkTempDir(runtime, txId, "/MyRoot", "tmp", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
-        TestMkDir(runtime, txId, "/MyRoot/tmp", "a", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
-        TestMkDir(runtime, txId, "/MyRoot/tmp/a", "b", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
+        TestMkTempDir(runtime, txId, "/MyRoot", "tmp", ownerActorId, { NKikimrScheme::StatusAccepted }, 1, false);
+        env.TestWaitNotification(runtime, txId);
+        ++txId;
+        TestMkDir(runtime, txId, "/MyRoot/tmp", "a", ownerActorId, { NKikimrScheme::StatusAccepted }, 1, true);
+        env.TestWaitNotification(runtime, txId);
+        ++txId;
+        TestMkDir(runtime, txId, "/MyRoot/tmp/a", "b", ownerActorId, { NKikimrScheme::StatusAccepted }, 1, true);
         env.TestWaitNotification(runtime, txId);
         ++txId;
 
-        TestCreateTempTable(runtime, txId, "/MyRoot/tmp/a/b", R"(
+        TestCreateTable(runtime, txId, "/MyRoot/tmp/a/b", R"(
             TableDescription {
                 Name: "TempTable"
                 Columns { Name: "key"   Type: "Uint64" }
                 Columns { Name: "value" Type: "Utf8" }
                 KeyColumnNames: ["key"]
             }
-        )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
+        )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1, true);
 
         env.TestWaitNotification(runtime, txId);
 
@@ -216,18 +220,18 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
 
         ui64 txId = 100;
 
-        TestMkTempDir(runtime, txId, "/MyRoot", "tmp", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
+        TestMkTempDir(runtime, txId, "/MyRoot", "tmp", ownerActorId, { NKikimrScheme::StatusAccepted }, 1, false);
         env.TestWaitNotification(runtime, txId);
         ++txId;
 
-        TestCreateTempTable(runtime, txId, "/MyRoot/tmp", R"(
+        TestCreateTable(runtime, txId, "/MyRoot/tmp", R"(
             TableDescription {
                 Name: "TempTable"
                 Columns { Name: "key"   Type: "Uint64" }
                 Columns { Name: "value" Type: "Utf8" }
                 KeyColumnNames: ["key"]
             }
-        )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
+        )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1, true);
         env.TestWaitNotification(runtime, txId);
 
         CheckTable(runtime, "/MyRoot/tmp/TempTable");
@@ -261,29 +265,29 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         auto ownerActorId = runtime.AllocateEdgeActor(1);
         ui64 txId = 100;
 
-        TestMkTempDir(runtime, txId, "/MyRoot", "tmp", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
+        TestMkTempDir(runtime, txId, "/MyRoot", "tmp", ownerActorId, { NKikimrScheme::StatusAccepted }, 1, false);
         env.TestWaitNotification(runtime, txId);
 
         ++txId;
-        TestCreateTempTable(runtime, txId, "/MyRoot/tmp", R"(
+        TestCreateTable(runtime, txId, "/MyRoot/tmp", R"(
             TableDescription {
                 Name: "TempTable1"
                 Columns { Name: "key"   Type: "Uint64" }
                 Columns { Name: "value" Type: "Utf8" }
                 KeyColumnNames: ["key"]
             }
-        )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
+        )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1, true);
         env.TestWaitNotification(runtime, txId);
 
         ++txId;
-        TestCreateTempTable(runtime, txId, "/MyRoot/tmp", R"(
+        TestCreateTable(runtime, txId, "/MyRoot/tmp", R"(
             TableDescription {
                 Name: "TempTable2"
                 Columns { Name: "key"   Type: "Uint64" }
                 Columns { Name: "value" Type: "Utf8" }
                 KeyColumnNames: ["key"]
             }
-        )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
+        )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1, true);
         env.TestWaitNotification(runtime, txId);
 
         CheckTable(runtime, "/MyRoot/tmp/TempTable1");
@@ -321,35 +325,35 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         auto ownerActorId1 = runtime.AllocateEdgeActor(1);
 
         ui64 txId = 100;
-        TestMkTempDir(runtime, txId, "/MyRoot", "tmp1", ownerActorId1, { NKikimrScheme::StatusAccepted }, 1);
+        TestMkTempDir(runtime, txId, "/MyRoot", "tmp1", ownerActorId1, { NKikimrScheme::StatusAccepted }, 1, false);
         env.TestWaitNotification(runtime, txId);
 
         ui64 txId1 = ++txId;
-        TestCreateTempTable(runtime, txId1, "/MyRoot/tmp1", R"(
+        TestCreateTable(runtime, txId1, "/MyRoot/tmp1", R"(
             TableDescription {
                 Name: "TempTable1"
                 Columns { Name: "key"   Type: "Uint64" }
                 Columns { Name: "value" Type: "Utf8" }
                 KeyColumnNames: ["key"]
             }
-        )", ownerActorId1, { NKikimrScheme::StatusAccepted }, 1);
+        )", ownerActorId1, { NKikimrScheme::StatusAccepted }, 1, true);
         env.TestWaitNotification(runtime, txId1);
 
         auto ownerActorId2 = runtime.AllocateEdgeActor(2);
 
         ++txId;
-        TestMkTempDir(runtime, txId, "/MyRoot", "tmp2", ownerActorId2, { NKikimrScheme::StatusAccepted }, 2);
+        TestMkTempDir(runtime, txId, "/MyRoot", "tmp2", ownerActorId2, { NKikimrScheme::StatusAccepted }, 2, false);
         env.TestWaitNotification(runtime, txId);
 
         ui64 txId2 = ++txId;
-        TestCreateTempTable(runtime, txId2, "/MyRoot/tmp2", R"(
+        TestCreateTable(runtime, txId2, "/MyRoot/tmp2", R"(
             TableDescription {
                 Name: "TempTable2"
                 Columns { Name: "key"   Type: "Uint64" }
                 Columns { Name: "value" Type: "Utf8" }
                 KeyColumnNames: ["key"]
             }
-        )", ownerActorId2, { NKikimrScheme::StatusAccepted }, 2);
+        )", ownerActorId2, { NKikimrScheme::StatusAccepted }, 2, true);
         env.TestWaitNotification(runtime, txId2);
 
         CheckTable(runtime, "/MyRoot/tmp1/TempTable1");
@@ -393,18 +397,18 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         auto ownerActorId = runtime.AllocateEdgeActor(1);
 
         ui64 txId = 100;
-        TestMkTempDir(runtime, txId, "/MyRoot", "tmp", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
+        TestMkTempDir(runtime, txId, "/MyRoot", "tmp", ownerActorId, { NKikimrScheme::StatusAccepted }, 1, false);
         env.TestWaitNotification(runtime, txId);
         ++txId;
 
-        TestCreateTempTable(runtime, txId, "/MyRoot/tmp", R"(
+        TestCreateTable(runtime, txId, "/MyRoot/tmp", R"(
             TableDescription {
                 Name: "TempTable"
                 Columns { Name: "key"   Type: "Uint64" }
                 Columns { Name: "value" Type: "Utf8" }
                 KeyColumnNames: ["key"]
             }
-        )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
+        )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1, true);
 
         env.TestWaitNotification(runtime, txId);
 
@@ -433,11 +437,11 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         auto ownerActorId = runtime.AllocateEdgeActor(1);
 
         ui64 txId = 100;
-        TestMkTempDir(runtime, txId, "/MyRoot", "tmp", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
+        TestMkTempDir(runtime, txId, "/MyRoot", "tmp", ownerActorId, { NKikimrScheme::StatusAccepted }, 1, false);
         env.TestWaitNotification(runtime, txId);
         ++txId;
 
-        TestCreateTempTable(runtime, txId, "/MyRoot/tmp", R"(
+        TestCreateTable(runtime, txId, "/MyRoot/tmp", R"(
             TableDescription {
                 Name: "TempTable"
                 Columns { Name: "key"   Type: "Uint64" }
@@ -448,7 +452,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
                 Name: "ValueIndex"
                 KeyColumnNames: ["value"]
             }
-        )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
+        )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1, true);
 
         env.TestWaitNotification(runtime, txId);
 
@@ -480,11 +484,11 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         auto ownerActorId = runtime.AllocateEdgeActor(1);
 
         ui64 txId = 100;
-        TestMkTempDir(runtime, txId, "/MyRoot", "tmp", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
+        TestMkTempDir(runtime, txId, "/MyRoot", "tmp", ownerActorId, { NKikimrScheme::StatusAccepted }, 1, false);
         env.TestWaitNotification(runtime, txId);
         ++txId;
 
-        TestCreateTempTable(runtime, txId, "/MyRoot/tmp", R"(
+        TestCreateTable(runtime, txId, "/MyRoot/tmp", R"(
             TableDescription {
                 Name: "TempTable"
                 Columns { Name: "key"   Type: "Uint64" }
@@ -495,7 +499,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
                 Name: "ValueIndex"
                 KeyColumnNames: ["value"]
             }
-        )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
+        )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1, true);
 
         env.TestWaitNotification(runtime, txId);
 
@@ -516,5 +520,142 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         CheckPath(runtime, "/MyRoot/tmp", TTestTxConfig::SchemeShard, false);
 
         TestLs(runtime, "/MyRoot/tmp/TempTable/ValueIndex", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathNotExist);
+    }
+
+    Y_UNIT_TEST(TempInTemp) {
+        TTestBasicRuntime runtime(3);
+        TTestEnv env(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        SetBackgroundCleaning(runtime, env, TTestTxConfig::SchemeShard);
+        env.SimulateSleep(runtime, TDuration::Seconds(30));
+
+        auto ownerActorId = runtime.AllocateEdgeActor(1);
+
+        ui64 txId = 100;
+
+        TestMkDir(runtime, txId, "/MyRoot", "test", ownerActorId, { NKikimrScheme::StatusAccepted }, 1, false);
+        env.TestWaitNotification(runtime, txId);
+        ++txId;
+
+        // Can't create temp dir with flag
+        TestMkTempDir(runtime, txId, "/MyRoot/test", "tmp", ownerActorId, { NKikimrScheme::StatusPreconditionFailed }, 1, true);
+        env.TestWaitNotification(runtime, txId);
+        ++txId;
+        
+        TestMkTempDir(runtime, txId, "/MyRoot/test", "tmp", ownerActorId, { NKikimrScheme::StatusAccepted }, 1, false);
+        env.TestWaitNotification(runtime, txId);
+        ++txId;
+
+        // Can't create temp dir inside temp dir
+        TestMkTempDir(runtime, txId, "/MyRoot/test/tmp", "tmp2", ownerActorId, { NKikimrScheme::StatusPreconditionFailed }, 1, false);
+        env.TestWaitNotification(runtime, txId);
+        ++txId;
+        TestMkTempDir(runtime, txId, "/MyRoot/test/tmp", "tmp2", ownerActorId, { NKikimrScheme::StatusPreconditionFailed }, 1, true);
+        env.TestWaitNotification(runtime, txId);
+        ++txId;
+
+        TestMkDir(runtime, txId, "/MyRoot/test/tmp", "a", ownerActorId, { NKikimrScheme::StatusAccepted }, 1, true);
+        env.TestWaitNotification(runtime, txId);
+        ++txId;
+
+        TestMkDir(runtime, txId, "/MyRoot/test/tmp/a", "b", ownerActorId, { NKikimrScheme::StatusAccepted }, 1, true);
+        env.TestWaitNotification(runtime, txId);
+        ++txId;
+
+        // Can't create temp dir inside temp dir (with nested dirs)
+        TestMkTempDir(runtime, txId, "/MyRoot/test/tmp/a/b", "tmp2", ownerActorId, { NKikimrScheme::StatusPreconditionFailed }, 1, false);
+        env.TestWaitNotification(runtime, txId);
+        ++txId;
+        TestMkTempDir(runtime, txId, "/MyRoot/test/tmp/a/b", "tmp2", ownerActorId, { NKikimrScheme::StatusPreconditionFailed }, 1, true);
+        env.TestWaitNotification(runtime, txId);
+        ++txId;
+    }
+
+    Y_UNIT_TEST(CreateTableInTemp) {
+        TTestBasicRuntime runtime(3);
+        TTestEnv env(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        SetBackgroundCleaning(runtime, env, TTestTxConfig::SchemeShard);
+        env.SimulateSleep(runtime, TDuration::Seconds(30));
+
+        auto ownerActorId = runtime.AllocateEdgeActor(1);
+
+        ui64 txId = 100;
+
+        TestMkDir(runtime, txId, "/MyRoot", "nottmp", ownerActorId, { NKikimrScheme::StatusAccepted }, 1, false);
+        env.TestWaitNotification(runtime, txId);
+        ++txId;
+
+        TestMkTempDir(runtime, txId, "/MyRoot", "tmp", ownerActorId, { NKikimrScheme::StatusAccepted }, 1, false);
+        env.TestWaitNotification(runtime, txId);
+        ++txId;
+
+        TestCreateTable(runtime, txId, "/MyRoot/nottmp", R"(
+            TableDescription {
+                Name: "TempTable"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "ValueIndex"
+                KeyColumnNames: ["value"]
+            }
+        )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1, true);
+        env.TestWaitNotification(runtime, txId);
+        ++txId;
+
+        TestCreateTable(runtime, txId, "/MyRoot/tmp", R"(
+            TableDescription {
+                Name: "TempTable"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "ValueIndex"
+                KeyColumnNames: ["value"]
+            }
+        )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1, true);
+        env.TestWaitNotification(runtime, txId);
+        ++txId;
+
+        TestCreateTable(runtime, txId, "/MyRoot/nottmp", R"(
+            TableDescription {
+                Name: "NotTempTable"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "ValueIndex"
+                KeyColumnNames: ["value"]
+            }
+        )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1, false);
+        env.TestWaitNotification(runtime, txId);
+        ++txId;
+
+        TestCreateTable(runtime, txId, "/MyRoot/tmp", R"(
+            TableDescription {
+                Name: "NotTempTable"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "ValueIndex"
+                KeyColumnNames: ["value"]
+            }
+        )", ownerActorId, { NKikimrScheme::StatusPreconditionFailed }, 1, false);
+        env.TestWaitNotification(runtime, txId);
+        ++txId;
     }
 };

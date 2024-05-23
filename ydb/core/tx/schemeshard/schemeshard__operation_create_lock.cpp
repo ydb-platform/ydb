@@ -124,7 +124,6 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
-<<<<<<< HEAD
                 .IsLikeDirectory()
                 .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
 
@@ -133,11 +132,6 @@ public:
             } else {
                 checks.IsCommonSensePath();
             }
-=======
-                .IsCommonSensePath()
-                .IsLikeDirectory()
-                .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
->>>>>>> a189fc6ed3 (fix)
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -155,16 +149,11 @@ public:
                 .NotUnderDeleting()
                 .NotUnderOperation()
                 .IsTable()
-<<<<<<< HEAD
                 .NotAsyncReplicaTable();
 
             if (!op.GetAllowIndexImplLock()) {
                 checks.IsCommonSensePath();
             }
-=======
-                .NotAsyncReplicaTable()
-                .IsCommonSensePath();
->>>>>>> a189fc6ed3 (fix)
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());

@@ -235,6 +235,7 @@ jobs:
   update_integrated_status:
     runs-on: ubuntu-latest
     needs: build_and_test
+    if: always()
     steps:
       - name: Gather required checks results
         shell: bash

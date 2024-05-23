@@ -1587,11 +1587,10 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             auto it = session.ReadTable("Root/Test", settings).ExtractValueSync();
 
             TReadTableResultPart streamPart = it.ReadNext().GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(streamPart.GetStatus(), EStatus::INTERNAL_ERROR);
-/*
+            UNIT_ASSERT_VALUES_EQUAL(streamPart.GetStatus(), EStatus::SUCCESS);
+
             auto str = NYdb::FormatResultSetYson(streamPart.ExtractPart());
             UNIT_ASSERT_VALUES_EQUAL(str, "[[1u;[\"One\"];\"1.11\"]]");
-*/
         }
 
         {

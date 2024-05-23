@@ -179,6 +179,11 @@ NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> IShardingBase::
         startModification.AddCloseReadIds(i);
         startModification.AddCloseWriteIds(i);
     }
+
+    TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> infosConclusion = BuildSplitShardsModifiers(newTabletIds);
+    if (infosConclusion.IsFail()) {
+        return infosConclusion;
+    }
     std::vector<NKikimrSchemeOp::TAlterShards> result;
     {
         NKikimrSchemeOp::TAlterShards startAlter;

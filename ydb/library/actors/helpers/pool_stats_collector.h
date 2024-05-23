@@ -52,6 +52,7 @@ private:
         void Init(NMonitoring::TDynamicCounterPtr group) {
             Group = group;
 
+            CurrentLongActivationByActivityBuckets.resize(GetActivityTypeCount());
             ElapsedMicrosecByActivityBuckets.resize(GetActivityTypeCount());
             ReceivedEventsByActivityBuckets.resize(GetActivityTypeCount());
             ActorsAliveByActivityBuckets.resize(GetActivityTypeCount());
@@ -77,6 +78,7 @@ private:
                     }
                 }
 
+                *CurrentLongActivationByActivityBuckets[i] = 0;
                 *ElapsedMicrosecByActivityBuckets[i] = ::NHPTimer::GetSeconds(ticks)*1000000;
                 *ReceivedEventsByActivityBuckets[i] = events;
                 *ActorsAliveByActivityBuckets[i] = actors;
@@ -87,6 +89,13 @@ private:
                     *UsageByActivityBuckets[i][j] = stats.UsageByActivity[i][j];
                 }
             }
+
+            if (stats.CurrentLongActivationTimeUs) {
+                if (!ActorsAliveByActivityBuckets[stats.CurrentLongActivation]) {
+                    InitCountersForActivity(stats.CurrentLongActivation);
+                }
+                *CurrentLongActivationByActivityBuckets[stats.CurrentLongActivation] = stats.CurrentLongActivationTimeUs;
+            }
         }
 
     private:
@@ -95,6 +104,8 @@ private:
 
             auto bucketName = TString(GetActivityTypeName(activityType));
 
+            CurrentLongActivationByActivityBuckets[activityType] =
+                Group->GetSubgroup("sensor", "CurrentLongActivationByActivity")->GetNamedCounter("activity", bucketName, false);
             ElapsedMicrosecByActivityBuckets[activityType] =
                 Group->GetSubgroup("sensor", "ElapsedMicrosecByActivity")->GetNamedCounter("activity", bucketName, true);
             ReceivedEventsByActivityBuckets[activityType] =
@@ -114,6 +125,7 @@ private:
     private:
         NMonitoring::TDynamicCounterPtr Group;
 
+        TVector<NMonitoring::TDynamicCounters::TCounterPtr> CurrentLongActivationByActivityBuckets;
         TVector<NMonitoring::TDynamicCounters::TCounterPtr> ElapsedMicrosecByActivityBuckets;
         TVector<NMonitoring::TDynamicCounters::TCounterPtr> ReceivedEventsByActivityBuckets;
         TVector<NMonitoring::TDynamicCounters::TCounterPtr> ActorsAliveByActivityBuckets;

@@ -60,6 +60,11 @@ namespace NActors {
             statsCopy.Aggregate(*Stats);
         }
 
+        void SetCurrentLongActivation(ui32 activityType, i64 elapsed) {
+            RelaxedStore(&Stats->CurrentLongActivation, activityType);
+            RelaxedStore(&Stats->CurrentLongActivationTimeUs, elapsed);
+        }
+
         void AddElapsedCycles(ui32 activityType, i64 elapsed) {
             if (Y_LIKELY(elapsed > 0)) {
                 Y_DEBUG_ABORT_UNLESS(activityType < Stats->MaxActivityType());
@@ -163,6 +168,7 @@ namespace NActors {
         }
 #else
         void GetCurrentStats(TExecutorThreadStats&) const {}
+        void SetCurrentLongActivation(ui32, i64) {}
         inline void AddElapsedCycles(ui32, i64) {}
         inline void AddParkedCycles(i64) {}
         inline void AddBlockedCycles(i64) {}

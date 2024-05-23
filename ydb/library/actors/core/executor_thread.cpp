@@ -200,9 +200,10 @@ namespace NActors {
         bool preempted = false;
         bool wasWorking = false;
         NHPTimer::STime hpnow = Ctx.HPStart;
-        NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfElapsingTime(hpnow);
+        NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfProcessingEventTs(hpnow);
         Ctx.AddElapsedCycles(ActorSystemIndex, hpnow - hpprev);
         NHPTimer::STime eventStart = Ctx.HPStart;
+        TlsThreadContext->ActivationStartTS.store(Ctx.HPStart, std::memory_order_release);
 
         for (; Ctx.ExecutedEvents < Ctx.EventsPerMailbox; ++Ctx.ExecutedEvents) {
             if (TAutoPtr<IEventHandle> evExt = mailbox->Pop()) {
@@ -250,7 +251,8 @@ namespace NActors {
                     actor->Receive(ev);
 
                     hpnow = GetCycleCountFast();
-                    hpprev = TlsThreadContext->UpdateStartOfElapsingTime(hpnow);
+                    hpprev = TlsThreadContext->UpdateStartOfProcessingEventTs(hpnow);
+                    NanoSleep(50'000'000);
 
                     mailbox->ProcessEvents(mailbox);
                     actor->OnDequeueEvent();
@@ -287,7 +289,7 @@ namespace NActors {
                         Ctx.IncrementNonDeliveredEvents();
                     }
                     hpnow = GetCycleCountFast();
-                    hpprev = TlsThreadContext->UpdateStartOfElapsingTime(hpnow);
+                    hpprev = TlsThreadContext->UpdateStartOfProcessingEventTs(hpnow);
                     Ctx.AddElapsedCycles(ActorSystemIndex, hpnow - hpprev);
                 }
                 eventStart = hpnow;
@@ -510,7 +512,9 @@ namespace NActors {
         TlsThreadCtx.WorkerCtx = &Ctx;
         TlsThreadCtx.ActorSystemIndex = ActorSystemIndex;
         TlsThreadCtx.ElapsingActorActivity = ActorSystemIndex;
-        TlsThreadCtx.StartOfElapsingTime = GetCycleCountFast();
+        NHPTimer::STime now = GetCycleCountFast();
+        TlsThreadCtx.StartOfProcessingEventTs = now;
+        TlsThreadCtx.ActivationStartTS = now;
         TlsThreadContext = &TlsThreadCtx;
         if (ThreadName) {
             ::SetCurrentThreadName(ThreadName);
@@ -546,7 +550,9 @@ namespace NActors {
         TlsThreadCtx.WorkerCtx = &Ctx;
         TlsThreadCtx.ActorSystemIndex = ActorSystemIndex;
         TlsThreadCtx.ElapsingActorActivity = ActorSystemIndex;
-        TlsThreadCtx.StartOfElapsingTime = GetCycleCountFast();
+        NHPTimer::STime now = GetCycleCountFast();
+        TlsThreadCtx.StartOfProcessingEventTs = now;
+        TlsThreadCtx.ActivationStartTS = now;
         TlsThreadContext = &TlsThreadCtx;
         if (ThreadName) {
             ::SetCurrentThreadName(ThreadName);
@@ -776,27 +782,35 @@ namespace NActors {
         }
     }
 
-    void TGenericExecutorThread::GetCurrentStats(TExecutorThreadStats& statsCopy) const {
+    void TGenericExecutorThread::UpdateThreadStats() {
         NHPTimer::STime hpnow = GetCycleCountFast();
         ui64 activityType = TlsThreadCtx.ElapsingActorActivity.load(std::memory_order_acquire);
-        NHPTimer::STime hpprev = TlsThreadCtx.UpdateStartOfElapsingTime(hpnow);
+        NHPTimer::STime hpprev = TlsThreadCtx.UpdateStartOfProcessingEventTs(hpnow);
         if (activityType == Max<ui64>()) {
             Ctx.AddParkedCycles(hpnow - hpprev);
         } else {
             Ctx.AddElapsedCycles(activityType, hpnow - hpprev);
         }
+        if (activityType != Max<ui64>() && activityType != TlsThreadCtx.ActorSystemIndex) {
+            NHPTimer::STime activationStart = TlsThreadCtx.ActivationStartTS.load(std::memory_order_acquire);
+            NHPTimer::STime passedTime = hpnow - activationStart;
+            if (Ts2Us(passedTime) > DEFAULT_TIME_PER_MAILBOX.MicroSeconds() && activityType != Max<ui64>()) {
+                Ctx.SetCurrentLongActivation(activityType, passedTime);
+            } else {
+                Ctx.SetCurrentLongActivation(0, 0);
+            }
+        } else {
+            Ctx.SetCurrentLongActivation(0, 0);
+        }
+    }
+
+    void TGenericExecutorThread::GetCurrentStats(TExecutorThreadStats& statsCopy) {
+        UpdateThreadStats();
         Ctx.GetCurrentStats(statsCopy);
     }
 
-    void TGenericExecutorThread::GetSharedStats(i16 poolId, TExecutorThreadStats &statsCopy) const {
-        NHPTimer::STime hpnow = GetCycleCountFast();
-        ui64 activityType = TlsThreadCtx.ElapsingActorActivity.load(std::memory_order_acquire);
-        NHPTimer::STime hpprev = TlsThreadCtx.UpdateStartOfElapsingTime(hpnow);
-        if (activityType == Max<ui64>()) {
-            Ctx.AddParkedCycles(hpnow - hpprev);
-        } else {
-            Ctx.AddElapsedCycles(activityType, hpnow - hpprev);
-        }
+    void TGenericExecutorThread::GetSharedStats(i16 poolId, TExecutorThreadStats &statsCopy) {
+        UpdateThreadStats();
         statsCopy = TExecutorThreadStats();
         statsCopy.Aggregate(SharedStats[poolId]);
     }

@@ -209,7 +209,7 @@ public:
     void *Data;
     ui32 Size;
     ui64 Offset;
-    TCompletionAction *CompletionAction;
+    std::weak_ptr<TCompletionAction> CompletionAction;
     TReqId ReqId;
 
     TLogReadContinue(const NPDisk::TEvReadLogContinue::TPtr &ev, ui32 pdiskId, TAtomicBase /*reqIdx*/)

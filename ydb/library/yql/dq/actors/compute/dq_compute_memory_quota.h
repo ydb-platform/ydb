@@ -1,6 +1,7 @@
 
 #pragma once
 
+#include <util/system/mem_info.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/minikql/mkql_alloc.h>
@@ -51,6 +52,18 @@ namespace NYql::NDq {
             if (CanAllocateExtraMemory) {
                 alloc->Ref().SetIncreaseMemoryLimitCallback([this, alloc](ui64 limit, ui64 required) {
                     RequestExtraMemory(required - limit, alloc);
+                });
+            }
+        }
+
+        void TrySetIncreaseMemoryLimitCallbackWithRSSControl(NKikimr::NMiniKQL::TScopedAlloc* alloc) {
+            if (CanAllocateExtraMemory) {
+                alloc->Ref().SetIncreaseMemoryLimitCallback([this, alloc](ui64 limit, ui64 required) {
+                    RequestExtraMemory(required - limit, alloc);
+                    auto currentRSS = NMemInfo::GetMemInfo().RSS;
+                    if (currentRSS > 10_GB) {
+                        alloc->SetMaximumLimitValueReached(true);
+                    }
                 });
             }
         }
@@ -113,6 +126,7 @@ namespace NYql::NDq {
 
     private:
         void RequestExtraMemory(ui64 memory, NKikimr::NMiniKQL::TScopedAlloc* alloc) {
+            alloc->GetAllocated();
             memory = std::max(AlignMemorySizeToMbBoundary(memory), MemoryLimits.MinMemAllocSize);
 
             if (MemoryLimits.MkqlProgramHardMemoryLimit && MkqlMemoryLimit + memory > MemoryLimits.MkqlProgramHardMemoryLimit) {

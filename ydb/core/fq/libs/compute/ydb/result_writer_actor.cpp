@@ -115,7 +115,7 @@ public:
 
             if (!splittedResultSets.Success) {
                 LOG_E("ResultSetId: " << ResultSetId << " Can't split script result: " << splittedResultSets.Issues.ToOneLineString());
-                Send(Parent, new TEvYdbCompute::TEvResultSetWriterResponse(ResultSetId, splittedResultSets.Issues, NYdb::EStatus::BAD_REQUEST));
+                Send(Parent, new TEvYdbCompute::TEvResultSetWriterResponse(ResultSetId, splittedResultSets.Issues, NYdb::EStatus::INTERNAL_ERROR));
                 FailedAndPassAway();
                 return;
             }
@@ -132,7 +132,7 @@ public:
 
         if (WriterInflight.empty()) {
             SendReplyAndPassAway();
-        } else if (FetchToken && WriterInflight.size() < MAX_WRITER_INFLIGHT) {
+        } else if (FetchToken && (WriterInflight.size() + ResultChunks.size()) < 2 * MAX_WRITER_INFLIGHT) {
             SendFetchScriptResultRequest();
         }
     }
@@ -168,7 +168,7 @@ public:
         writeResultCounters->Ok->Inc();
         LOG_I("ResultSetId: " << ResultSetId << " Cookie: " << cookie << " Result successfully written for offset " << meta.Offset);
         if (FetchToken) {
-            if (FetchToken != LastProcessedToken && WriterInflight.size() < MAX_WRITER_INFLIGHT) {
+            if (FetchToken != LastProcessedToken && (WriterInflight.size() + ResultChunks.size()) < 2 * MAX_WRITER_INFLIGHT) {
                 SendFetchScriptResultRequest();
             }
         } else if (WriterInflight.empty()) {

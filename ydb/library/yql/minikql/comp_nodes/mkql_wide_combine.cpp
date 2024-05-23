@@ -1,6 +1,7 @@
 #include "mkql_wide_combine.h"
 #include "mkql_rh_hash.h"
 
+#include <format>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
 #include <ydb/library/yql/minikql/computation/mkql_llvm_base.h>  // Y_IGNORE
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
@@ -366,7 +367,13 @@ public:
     ~TSpillingSupportState() {
     }
 
+    bool WasLog = false;
+
     EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
+        if (!WasLog) {
+            std::cerr << "[MISHA] WIDE COMBINE\n";
+            WasLog = true;
+        }
         while (true) {
             switch(GetMode()) {
                 case EOperatingMode::InMemory: {
@@ -514,8 +521,10 @@ private:
 
         if (!HasMemoryForProcessing()) {
             bool isWaitingForReduce = TryToReduceMemory();
+            std::cerr << std::format("[MISHA] PROCESSING. is waiting: {}\n", isWaitingForReduce);
             if (isWaitingForReduce) return;
         }
+        std::cerr << "[MISHA] PROCESSING\n";
 
         if (BufferForUsedInputItems.size()) {
             auto& bucket = SpilledBuckets[BufferForUsedInputItemsBucketId];
@@ -680,6 +689,7 @@ private:
                 break;
             }
             case EOperatingMode::Spilling: {
+                std::cerr << "[MISHA] spilling enabled\n";
                 MKQL_ENSURE(EOperatingMode::InMemory == Mode, "Internal logic error");
                 SpilledBuckets.resize(SpilledBucketCount);
                 auto spiller = ctx.SpillerFactory->CreateSpiller();
@@ -706,9 +716,9 @@ private:
     }
 
     bool IsSwitchToSpillingModeCondition() const {
-        return false;
+        // return false;
         // TODO: YQL-18033
-        // return !HasMemoryForProcessing();
+        return !HasMemoryForProcessing();
     }
 
 private:

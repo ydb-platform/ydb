@@ -426,14 +426,21 @@ TResourceRawValues TTabletInfo::GetResourceMaximumValues() const {
     }
 }
 
-i64 TTabletInfo::GetCounterValue(const NKikimrTabletBase::TMetrics& metrics, const TVector<i64>& allowedMetricIds) {
-    if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::CPU) && THive::IsValidMetricsCPU(metrics)) {
+i64 TTabletInfo::GetCounterValue() const {
+    const auto& allowedMetricIds = GetTabletAllowedMetricIds();
+    if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::CPU)
+        && (ResourceMetricsAggregates.MaximumCPU.GetAllTimeMaximum() > 0
+        || ResourceValues.GetCPU() > 0)) {
         return 0;
     }
-    if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::Memory) && THive::IsValidMetricsMemory(metrics)) {
+    if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::Memory)
+        && (ResourceMetricsAggregates.MaximumMemory.GetAllTimeMaximum() > 0
+        || ResourceValues.GetMemory() > 0)) {
         return 0;
     }
-    if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::Network) && THive::IsValidMetricsNetwork(metrics)) {
+    if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::Network)
+        && (ResourceMetricsAggregates.MaximumNetwork.GetAllTimeMaximum() > 0
+        || ResourceValues.GetNetwork() > 0)) {
         return 0;
     }
     return 1;
@@ -474,8 +481,7 @@ void TTabletInfo::FilterRawValues(TResourceNormalizedValues& values) const {
 }
 
 void TTabletInfo::ActualizeCounter() {
-    auto value = GetCounterValue(ResourceValues, GetTabletAllowedMetricIds());
-    ResourceValues.SetCounter(value);
+    ResourceValues.SetCounter(GetCounterValue());
 }
 
 const TNodeFilter& TTabletInfo::GetNodeFilter() const {

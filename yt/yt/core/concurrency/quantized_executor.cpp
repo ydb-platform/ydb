@@ -25,7 +25,7 @@ public:
         : Name_(std::move(name))
         , CallbackProvider_(std::move(callbackProvider))
         , Options_(options)
-        , Logger(ConcurrencyLogger.WithTag("Executor: %v", Name_))
+        , Logger(ConcurrencyLogger().WithTag("Executor: %v", Name_))
         , ControlQueue_(New<TActionQueue>(Format("%vCtl", Name_)))
         , ControlInvoker_(ControlQueue_->GetInvoker())
         , DesiredWorkerCount_(options.WorkerCount)

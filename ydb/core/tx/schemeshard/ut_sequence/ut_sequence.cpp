@@ -470,4 +470,149 @@ Y_UNIT_TEST_SUITE(TSequence) {
         )", {NKikimrScheme::StatusInvalidParameter});
     }
 
+    Y_UNIT_TEST(AlterTableSetDefaultFromSequence) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Table1"
+                Columns { Name: "key"   Type: "Int64" }
+                Columns { Name: "value1" Type: "Int64" }
+                Columns { Name: "value2" Type: "Int32" }
+                KeyColumnNames: ["key"]
+            }
+        )");
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table2"
+            Columns { Name: "key"   Type: "Int64" }
+            Columns { Name: "value1" Type: "Int64" }
+            Columns { Name: "value2" Type: "Int64" }
+            KeyColumnNames: ["key"]
+        )");
+
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "seq1"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "seq2"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" DefaultFromSequence: "/MyRoot/seq1" }
+        )", {TEvSchemeShard::EStatus::StatusInvalidParameter});
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "value1" DefaultFromSequence: "/MyRoot/seq1" }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "value2" DefaultFromSequence: "/MyRoot/seq1" }
+        )", {TEvSchemeShard::EStatus::StatusInvalidParameter});
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table2"
+            Columns { Name: "value1" DefaultFromSequence: "/MyRoot/seq1" }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table2"
+            Columns { Name: "value2" DefaultFromSequence: "/MyRoot/seq1" }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table2"
+            Columns { Name: "value1" DefaultFromSequence: "/MyRoot/seq3" }
+        )", {TEvSchemeShard::EStatus::StatusPathDoesNotExist});
+
+        auto table1 = DescribePath(runtime, "/MyRoot/Table1")
+            .GetPathDescription()
+            .GetTable();
+
+        for (const auto& column: table1.GetColumns()) {
+            if (column.GetName() == "value1") {
+                UNIT_ASSERT(column.HasDefaultFromSequence());
+                UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromSequence(), "/MyRoot/seq1");
+
+                TestDescribeResult(DescribePath(runtime, column.GetDefaultFromSequence()),
+                    {
+                        NLs::SequenceName("seq1"),
+                    }
+                );
+                break;
+            }
+        }
+
+        auto table2 = DescribePath(runtime, "/MyRoot/Table2")
+            .GetPathDescription()
+            .GetTable();
+
+        for (const auto& column: table2.GetColumns()) {
+            if (column.GetName() == "key") {
+                continue;
+            }
+            UNIT_ASSERT(column.HasDefaultFromSequence());
+            UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromSequence(), "/MyRoot/seq1");
+
+            TestDescribeResult(DescribePath(runtime, column.GetDefaultFromSequence()),
+                {
+                    NLs::SequenceName("seq1"),
+                }
+            );
+        }
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table2"
+            Columns { Name: "value1" DefaultFromSequence: "/MyRoot/seq2" }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        table2 = DescribePath(runtime, "/MyRoot/Table2")
+            .GetPathDescription()
+            .GetTable();
+
+        for (const auto& column: table2.GetColumns()) {
+            if (column.GetName() == "key") {
+                continue;
+            }
+            if (column.GetName() == "value1") {
+                UNIT_ASSERT(column.HasDefaultFromSequence());
+                UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromSequence(), "/MyRoot/seq2");
+
+                TestDescribeResult(DescribePath(runtime, column.GetDefaultFromSequence()),
+                    {
+                        NLs::SequenceName("seq2"),
+                    }
+                );
+                break;
+            } else if (column.GetName() == "value2") {
+                UNIT_ASSERT(column.HasDefaultFromSequence());
+                UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromSequence(), "/MyRoot/seq1");
+
+                TestDescribeResult(DescribePath(runtime, column.GetDefaultFromSequence()),
+                    {
+                        NLs::SequenceName("seq1"),
+                    }
+                );
+                break;
+            }
+        }
+    }
+
 } // Y_UNIT_TEST_SUITE(TSequence)

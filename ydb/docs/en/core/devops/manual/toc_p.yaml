@@ -23,4 +23,6 @@ items:
   href: ../../maintenance/manual/cms.md
 - name: System views
   href: system-views.md
+- name: Maintenance without downtime
+  href: maintenance-without-downtime.md
 

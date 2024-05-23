@@ -19,16 +19,6 @@ public:
         Enabled_ = value;
     }
 
-    Y_FORCE_INLINE void SetLowerWriteCountDumpLimit(i64 lowerLimit)
-    {
-        LowerWriteCountDumpLimit_ = lowerLimit;
-    }
-
-    Y_FORCE_INLINE void SetUpperWriteCountDumpLimit(i64 upperLimit)
-    {
-        UpperWriteCountDumpLimit_ = upperLimit;
-    }
-
     Y_FORCE_INLINE void Indent()
     {
         ++IndentCount_;
@@ -65,15 +55,7 @@ public:
     template <class... TArgs>
     void Write(const char* format, const TArgs&... args)
     {
-        if (!IsActive())
-            return;
-
-        if (WriteCount_ < LowerWriteCountDumpLimit_) {
-            ++WriteCount_;
-            return;
-        }
-        if (WriteCount_ >= UpperWriteCountDumpLimit_) {
-            SetEnabled(false);
+        if (!IsActive()) {
             return;
         }
 
@@ -84,34 +66,12 @@ public:
         builder.AppendChar('\n');
         auto buffer = builder.GetBuffer();
         fwrite(buffer.begin(), buffer.length(), 1, stderr);
-
-        ++WriteCount_;
-    }
-
-    void IncrementWriteCountIfNotSuspended()
-    {
-        if (!IsSuspended()) {
-            ++WriteCount_;
-        }
-    }
-
-    void ReportWriteCount()
-    {
-        TStringBuilder builder;
-        builder.AppendFormat("%v\n", WriteCount_);
-        auto buffer = builder.GetBuffer();
-        fwrite(buffer.begin(), buffer.length(), 1, stdout);
-        fflush(stdout);
     }
 
 private:
     bool Enabled_ = false;
     int IndentCount_ = 0;
     int SuspendCount_ = 0;
-
-    i64 WriteCount_ = 0;
-    i64 LowerWriteCountDumpLimit_ = 0;
-    i64 UpperWriteCountDumpLimit_ = std::numeric_limits<i64>::max();
 };
 
 class TSerializeDumpIndentGuard
@@ -145,7 +105,6 @@ public:
 
 private:
     TSerializationDumper* Dumper_;
-
 };
 
 class TSerializeDumpSuspendGuard
@@ -179,27 +138,22 @@ public:
 
 private:
     TSerializationDumper* Dumper_;
-
 };
 
 #define SERIALIZATION_DUMP_WRITE(context, ...) \
-    if (Y_LIKELY(!(context).Dumper().IsActive())) \
-    { \
-        if ((context).GetEnableTotalWriteCountReport()) \
-            (context).Dumper().IncrementWriteCountIfNotSuspended(); \
-    } \
-    else \
+    if (Y_LIKELY(!(context).Dumper().IsActive())) { \
+    } else \
         (context).Dumper().Write(__VA_ARGS__)
 
 #define SERIALIZATION_DUMP_INDENT(context) \
-    if (auto SERIALIZATION_DUMP_INDENT__Guard = NYT::TSerializeDumpIndentGuard(&(context).Dumper())) \
-        { YT_ABORT(); } \
-    else
+    if (auto SERIALIZATION_DUMP_INDENT__Guard = NYT::TSerializeDumpIndentGuard(&(context).Dumper())) { \
+        Y_UNREACHABLE(); \
+    } else
 
 #define SERIALIZATION_DUMP_SUSPEND(context) \
-    if (auto SERIALIZATION_DUMP_SUSPEND__Guard = NYT::TSerializeDumpSuspendGuard(&(context).Dumper())) \
-        { YT_ABORT(); } \
-    else
+    if (auto SERIALIZATION_DUMP_SUSPEND__Guard = NYT::TSerializeDumpSuspendGuard(&(context).Dumper())) { \
+        Y_UNREACHABLE(); \
+    } else
 
 inline TString DumpRangeToHex(TRef data)
 {

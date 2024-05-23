@@ -688,7 +688,7 @@ namespace NYdb::NTopic::NTests {
 
             ReadSession.WaitAllMessages();
 
-            for (const auto& info : ReadSession.ReceivedMessages) {
+            for (const auto& info : ReadSession.Impl->ReceivedMessages) {
                 if (info.Data == "message_1.1") {
                     UNIT_ASSERT_EQUAL(0, info.PartitionId);
                     UNIT_ASSERT_EQUAL(2, info.SeqNo);

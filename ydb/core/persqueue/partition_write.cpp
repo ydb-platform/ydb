@@ -437,12 +437,22 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
     UpdateUserInfoEndOffset(ctx.Now());
 }
 
-void TPartition::Handle(TEvPQ::TEvHandleWriteResponse::TPtr&, const TActorContext& ctx) {
-    PQ_LOG_T("TPartition::HandleOnWrite TEvHandleWriteResponse.");
+void TPartition::OnHandleWriteResponse(const TActorContext& ctx)
+{
     KVWriteInProgress = false;
     OnProcessTxsAndUserActsWriteComplete(ctx);
     HandleWriteResponse(ctx);
     ProcessTxsAndUserActs(ctx);
+
+    if (DeletePartitionState == DELETION_IN_PROCESS) {
+        DestroyActor(ctx);
+    }
+}
+
+void TPartition::Handle(TEvPQ::TEvHandleWriteResponse::TPtr&, const TActorContext& ctx)
+{
+    PQ_LOG_T("TPartition::HandleOnWrite TEvHandleWriteResponse.");
+    OnHandleWriteResponse(ctx);
 }
 
 void TPartition::UpdateAfterWriteCounters(bool writeComplete) {
@@ -1005,12 +1015,8 @@ TPartition::EProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParam
             //there could be parts from previous owner, clear them
             if (!parameters.OldPartsCleared) {
                 parameters.OldPartsCleared = true;
-                auto del = request->Record.AddCmdDeleteRange();
-                auto range = del->MutableRange();
-                TKeyPrefix from(TKeyPrefix::TypeTmpData, Partition);
-                range->SetFrom(from.Data(), from.Size());
-                TKeyPrefix to(TKeyPrefix::TypeTmpData, TPartitionId(Partition.InternalPartitionId + 1));
-                range->SetTo(to.Data(), to.Size());
+
+                NPQ::AddCmdDeleteRange(*request, TKeyPrefix::TypeTmpData, Partition);
             }
 
             if (PartitionedBlob.HasFormedBlobs()) {

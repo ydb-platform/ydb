@@ -99,6 +99,20 @@ TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> TPartition::MakeHasDataInfoRespon
         res->Record.SetCookie(*cookie);
     }
     res->Record.SetReadingFinished(readingFinished);
+    if (readingFinished) {
+        ui32 partitionId = Partition.OriginalPartitionId;
+
+        auto* node = PartitionGraph.GetPartition(partitionId);
+        for (auto* child : node->Children) {
+            res->Record.AddChildPartitionIds(child->Id);
+
+            for (auto* p : child->Parents) {
+                if (p->Id != partitionId) {
+                    res->Record.AddAdjacentPartitionIds(p->Id);
+                }
+            }
+        }
+    }
 
     return res;
 }

@@ -355,7 +355,7 @@ TCpuInstant GetEventInstant(const TLoggerQueueItem& item)
 using TThreadLocalQueue = TSpscQueue<TLoggerQueueItem>;
 
 static constexpr uintptr_t ThreadQueueDestroyedSentinel = -1;
-YT_THREAD_LOCAL(TThreadLocalQueue*) PerThreadQueue;
+YT_DEFINE_THREAD_LOCAL(TThreadLocalQueue*, PerThreadQueue);
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -364,7 +364,7 @@ struct TLocalQueueReclaimer
     ~TLocalQueueReclaimer();
 };
 
-YT_THREAD_LOCAL(TLocalQueueReclaimer) LocalQueueReclaimer;
+YT_DEFINE_THREAD_LOCAL(TLocalQueueReclaimer, LocalQueueReclaimer);
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -1041,17 +1041,17 @@ private:
 
     void PushEvent(TLoggerQueueItem&& event)
     {
-        if (!PerThreadQueue) {
-            PerThreadQueue = new TThreadLocalQueue();
-            RegisteredLocalQueues_.Enqueue(GetTlsRef(PerThreadQueue));
-            Y_UNUSED(LocalQueueReclaimer); // Touch thread-local variable so that its destructor is called.
+        auto& perThreadQueue = PerThreadQueue();
+        if (!perThreadQueue) {
+            perThreadQueue = new TThreadLocalQueue();
+            RegisteredLocalQueues_.Enqueue(perThreadQueue);
         }
 
         ++EnqueuedEvents_;
-        if (PerThreadQueue == reinterpret_cast<TThreadLocalQueue*>(ThreadQueueDestroyedSentinel)) {
+        if (perThreadQueue == reinterpret_cast<TThreadLocalQueue*>(ThreadQueueDestroyedSentinel)) {
             GlobalQueue_.Enqueue(std::move(event));
         } else {
-            PerThreadQueue->Push(std::move(event));
+            perThreadQueue->Push(std::move(event));
         }
     }
 
@@ -1476,10 +1476,10 @@ private:
 
 TLocalQueueReclaimer::~TLocalQueueReclaimer()
 {
-    if (PerThreadQueue) {
+    if (auto& perThreadQueue = PerThreadQueue()) {
         auto logManager = TLogManager::Get()->Impl_;
-        logManager->UnregisteredLocalQueues_.Enqueue(GetTlsRef(PerThreadQueue));
-        PerThreadQueue = reinterpret_cast<TThreadLocalQueue*>(ThreadQueueDestroyedSentinel);
+        logManager->UnregisteredLocalQueues_.Enqueue(perThreadQueue);
+        perThreadQueue = reinterpret_cast<TThreadLocalQueue*>(ThreadQueueDestroyedSentinel);
     }
 }
 

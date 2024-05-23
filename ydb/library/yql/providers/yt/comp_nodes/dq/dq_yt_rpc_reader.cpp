@@ -130,7 +130,7 @@ namespace {
 
 void ReadCallback(NYT::TErrorOr<NYT::TSharedRef>&& res_, std::shared_ptr<TParallelFileInputState::TInnerState> state, size_t inputIdx) {
     TFailureInjector::Reach("dq_rpc_reader_read_err_when_empty", [&res_] {
-        res_ = NYT::TErrorOr<NYT::TSharedRef>(NYT::TError("failure injected"));
+        res_ = NYT::TErrorOr<NYT::TSharedRef>(NYT::TError("Failure_On_Read_Callback"));
     });
 
     if (!res_.IsOK()) {

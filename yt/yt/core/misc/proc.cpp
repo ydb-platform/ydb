@@ -1529,6 +1529,43 @@ THashMap<TString, TDiskStat> GetDiskStats()
 #endif
 }
 
+TBlockDeviceStat ParseBlockDeviceStat(const TString& statLine)
+{
+    auto buffer = SplitString(statLine, " ");
+    TBlockDeviceStat result;
+    TryParseField(buffer, 0, result.ReadsCompleted);
+    TryParseField(buffer, 1, result.ReadsMerged);
+    TryParseField(buffer, 2, result.SectorsRead);
+    TryParseField(buffer, 3, result.TimeSpentReading);
+    TryParseField(buffer, 4, result.WritesCompleted);
+    TryParseField(buffer, 5, result.WritesMerged);
+    TryParseField(buffer, 6, result.SectorsWritten);
+    TryParseField(buffer, 7, result.TimeSpentWriting);
+    TryParseField(buffer, 8, result.IOCurrentlyInProgress);
+    TryParseField(buffer, 9, result.TimeSpentDoingIO);
+    TryParseField(buffer, 10, result.WeightedTimeSpentDoingIO);
+    TryParseField(buffer, 11, result.DiscardsCompleted);
+    TryParseField(buffer, 12, result.DiscardsMerged);
+    TryParseField(buffer, 13, result.SectorsDiscarded);
+    TryParseField(buffer, 14, result.TimeSpentDiscarding);
+    TryParseField(buffer, 15, result.FlushesCompleted);
+    TryParseField(buffer, 16, result.TimeSpentFlushing);
+    return result;
+}
+
+std::optional<TBlockDeviceStat> GetBlockDeviceStat(const TString& deviceName)
+{
+#ifdef _linux_
+    const TString path = Format("/sys/block/%v/stat", deviceName);
+    TFileInput diskStatsFile(path);
+    auto data = diskStatsFile.ReadAll();
+    return ParseBlockDeviceStat(Strip(data));
+#else
+    Y_UNUSED(deviceName);
+    return std::nullopt;
+#endif
+}
+
 std::vector<TString> ListDisks()
 {
 #ifdef _linux_

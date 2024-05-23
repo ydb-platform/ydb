@@ -51,7 +51,9 @@ STFUNC(TController::StateWork) {
         HFunc(TEvPrivate::TEvCreateStreamResult, Handle);
         HFunc(TEvPrivate::TEvDropStreamResult, Handle);
         HFunc(TEvPrivate::TEvCreateDstResult, Handle);
+        HFunc(TEvPrivate::TEvAlterDstResult, Handle);
         HFunc(TEvPrivate::TEvDropDstResult, Handle);
+        HFunc(TEvPrivate::TEvResolveSecretResult, Handle);
         HFunc(TEvPrivate::TEvResolveTenantResult, Handle);
         HFunc(TEvPrivate::TEvUpdateTenantNodes, Handle);
         HFunc(TEvPrivate::TEvRunWorkers, Handle);
@@ -147,9 +149,19 @@ void TController::Handle(TEvPrivate::TEvCreateDstResult::TPtr& ev, const TActorC
     RunTxCreateDstResult(ev, ctx);
 }
 
+void TController::Handle(TEvPrivate::TEvAlterDstResult::TPtr& ev, const TActorContext& ctx) {
+    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    RunTxAlterDstResult(ev, ctx);
+}
+
 void TController::Handle(TEvPrivate::TEvDropDstResult::TPtr& ev, const TActorContext& ctx) {
     CLOG_T(ctx, "Handle " << ev->Get()->ToString());
     RunTxDropDstResult(ev, ctx);
+}
+
+void TController::Handle(TEvPrivate::TEvResolveSecretResult::TPtr& ev, const TActorContext& ctx) {
+    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    RunTxResolveSecretResult(ev, ctx);
 }
 
 void TController::Handle(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TActorContext& ctx) {
@@ -379,7 +391,7 @@ void TController::Handle(TEvPrivate::TEvRunWorkers::TPtr&, const TActorContext& 
         }
 
         const auto& tenant = replication->GetTenant();
-        if (!tenant || !NodesManager.HasTenant(tenant)) {
+        if (!tenant || !NodesManager.HasTenant(tenant) || !NodesManager.HasNodes(tenant)) {
             ++iter;
             continue;
         }

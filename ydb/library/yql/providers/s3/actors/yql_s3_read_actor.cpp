@@ -417,11 +417,14 @@ public:
             object.SetPath(paths[i].Path);
             object.SetPathIndex(paths[i].PathIndex);
             if (paths[i].IsDirectory) {
+                LOG_T("TS3FileQueueActor", "TS3FileQueueActor adding dir: " << paths[i].Path);
                 object.SetSize(0);
                 Directories.emplace_back(std::move(object));
             } else {
+                LOG_T("TS3FileQueueActor", "TS3FileQueueActor adding path: " << paths[i].Path << " of size " << paths[i].Size);
                 object.SetSize(paths[i].Size);
                 Objects.emplace_back(std::move(object));
+                ObjectsTotalSize += paths[i].Size;
             }
         }
     }
@@ -496,9 +499,9 @@ public:
     }
 
     bool SaveRetrievedResults(const NS3Lister::TListResult& listingResult) {
-        LOG_T("TS3FileQueueActor", "SaveRetrievedResults");
         if (std::holds_alternative<NS3Lister::TListError>(listingResult)) {
             MaybeIssues = std::get<NS3Lister::TListError>(listingResult).Issues;
+            LOG_E("TS3FileQueueActor", "SaveRetrievedResults error: [" << (MaybeIssues ? MaybeIssues->ToOneLineString() : "") << "]");
             return false;
         }
 
@@ -519,7 +522,7 @@ public:
                 MaybeIssues = TIssues{TIssue{errorMessage}};
                 return false;
             }
-            LOG_T("TS3FileQueueActor", "SaveRetrievedResults adding path: " << object.Path);
+            LOG_T("TS3FileQueueActor", "SaveRetrievedResults adding path: " << object.Path << " of size " << object.Size);
             TObjectPath objectPath;
             objectPath.SetPath(object.Path);
             objectPath.SetSize(object.Size);
@@ -577,7 +580,7 @@ public:
             switch (const auto etype = ev->GetTypeRewrite()) {
                 hFunc(TEvS3FileQueue::TEvUpdateConsumersCount, HandleUpdateConsumersCount);
                 hFunc(TEvS3FileQueue::TEvGetNextBatch, HandleGetNextBatchForErrorState);
-                cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleRoundRobinStageTimeout);
+                cFunc(TEvPrivatePrivate::TEvRoundRobinStageTimeout::EventType, HandleRoundRobinStageTimeout);
                 cFunc(TEvents::TSystem::Poison, HandlePoison);
                 default:
                     MaybeIssues = TIssues{TIssue{TStringBuilder() << "An event with unknown type has been received: '" << etype << "'"}};
@@ -598,17 +601,18 @@ public:
     
     void HandleUpdateConsumersCount(TEvS3FileQueue::TEvUpdateConsumersCount::TPtr& ev) {
         if (!UpdatedConsumers.contains(ev->Sender)) {
-            LOG_D(
-                "TS3FileQueueActor",
-                "HandleUpdateConsumersCount Reducing ConsumersCount by " << ev->Get()->Record.GetConsumersCountDelta() << ", recieved from " << ev->Sender);
             UpdatedConsumers.insert(ev->Sender);
             ConsumersCount -= ev->Get()->Record.GetConsumersCountDelta();
+            LOG_D(
+                "TS3FileQueueActor",
+                "HandleUpdateConsumersCount Reducing ConsumersCount by " << ev->Get()->Record.GetConsumersCountDelta() 
+                    << " to " << ConsumersCount << ", received from " << ev->Sender);
         }
         Send(ev->Sender, new TEvS3FileQueue::TEvAck(ev->Get()->Record.GetTransportMeta()));
     }
 
     void HandleRoundRobinStageTimeout() {
-        LOG_T("TS3FileQueueActor","Handle start stage timeout");
+        LOG_D("TS3FileQueueActor","Handle start stage timeout");
         if (!RoundRobinStageFinished) {
             RoundRobinStageFinished = true;
             AnswerPendingRequests();
@@ -647,7 +651,7 @@ private:
             ObjectsTotalSize -= totalSize;
         }
 
-        LOG_T("TS3FileQueueActor", "SendObjects Sending " << result.size() << " objects to consumer with id " << consumer);
+        LOG_D("TS3FileQueueActor", "SendObjects Sending " << result.size() << " objects to consumer with id " << consumer << ", " << ObjectsTotalSize << " bytes left");
         Send(consumer, new TEvS3FileQueue::TEvObjectPathBatch(std::move(result), HasNoMoreItems(), transportMeta));
         
         if (HasNoMoreItems()) {
@@ -3057,7 +3061,7 @@ private:
         LOG_T("TS3StreamReadActor", "Handle undelivered FileQueue ");
         if (!FileQueueEvents.HandleUndelivered(ev)) {
             TIssues issues{TIssue{TStringBuilder() << "FileQueue was lost"}};
-            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::INTERNAL_ERROR));
+            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::UNAVAILABLE));
         }
     }
     bool LastFileWasProcessed() const {

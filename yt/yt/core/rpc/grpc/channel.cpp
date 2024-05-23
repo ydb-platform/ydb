@@ -246,7 +246,6 @@ private:
             , Request_(std::move(request))
             , ResponseHandler_(std::move(responseHandler))
             , GuardedCompletionQueue_(TDispatcher::Get()->PickRandomGuardedCompletionQueue())
-            , Logger(GrpcLogger)
         {
             YT_LOG_DEBUG("Sending request (RequestId: %v, Method: %v.%v, Timeout: %v)",
                 Request_->GetRequestId(),
@@ -442,16 +441,15 @@ private:
         const TSendOptions Options_;
         const IClientRequestPtr Request_;
 
+        const NLogging::TLogger& Logger = GrpcLogger();
+
         YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ResponseHandlerLock_);
         IClientResponseHandlerPtr ResponseHandler_;
 
         // Completion queue must be accessed under read lock
         // in order to prohibit creating new requests after shutting completion queue down.
         TGuardedGrpcCompletionQueue* GuardedCompletionQueue_;
-        const NLogging::TLogger& Logger;
-
         NYT::NTracing::TTraceContextHandler TraceContext_;
-
         TGrpcCallPtr Call_;
         TGrpcCallTracerPtr Tracer_;
         TSharedRefArray RequestBody_;

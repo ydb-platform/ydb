@@ -423,7 +423,10 @@ Y_UNIT_TEST(PartitionFirstClass) {
             auto counters = tc.Runtime->GetAppData(0).Counters;
             auto dbGroup = GetServiceCounters(counters, "topics_serverless", false);
 
-            auto group = dbGroup->GetSubgroup("host", "")->GetSubgroup("database", "/Root")->GetSubgroup("cloud_id", "cloud_id")->GetSubgroup("folder_id", "folder_id")
+            auto group = dbGroup->GetSubgroup("host", "")
+                                ->GetSubgroup("database", "/Root")
+                                ->GetSubgroup("cloud_id", "cloud_id")
+                                ->GetSubgroup("folder_id", "folder_id")
                                 ->GetSubgroup("database_id", "database_id")->GetSubgroup("topic", "topic");
             group->GetNamedCounter("name", "topic.partition.uptime_milliseconds_min", false)->Set(30000);
             group->GetNamedCounter("name", "topic.partition.write.lag_milliseconds_max", false)->Set(600);

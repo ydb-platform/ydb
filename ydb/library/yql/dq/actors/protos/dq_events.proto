@@ -204,6 +204,7 @@ message TEvRestoreFromCheckpointResult {
     optional TCheckpoint Checkpoint = 1;
     optional uint64 TaskId = 2;
     optional ERestoreStatus Status = 3;
+    repeated Ydb.Issue.IssueMessage Issues = 4;
 
     optional TMessageTransportMeta TransportMeta = 100;
 }

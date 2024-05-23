@@ -74,6 +74,7 @@
     Type PyCast<Type>(PyObject* value) { \
         double result = PyFloat_AsDouble(value); \
         if (result == -1.0 && PyErr_Occurred()) { \
+            PyErr_Clear(); \
             ThrowCastException(value, "Float"); \
         } \
         return static_cast<Type>(result); \
@@ -85,6 +86,7 @@
         if (PyLong_Check(value)) { \
             auto result = YQL_PyLong_As##BigType(value); \
             if (result == static_cast<Type>(-1L) && PyErr_Occurred()) { \
+                PyErr_Clear(); \
                 ThrowCastException(value, "Long"); \
             } \
             if (result < Min<Type>() || result > Max<Type>()) { \
@@ -102,6 +104,7 @@
         if (PyInt_Check(value)) { \
             long result = PyInt_AsLong(value); \
             if (result == -1L && PyErr_Occurred()) { \
+                PyErr_Clear(); \
                 ThrowCastException(value, "Long"); \
             } \
             if ( \
@@ -115,6 +118,7 @@
         } else if (PyLong_Check(value)) { \
             auto result = YQL_PyLong_As##BigType(value); \
             if (result == static_cast<Type>(-1L) && PyErr_Occurred()) { \
+                PyErr_Clear(); \
                 ThrowCastException(value, "Long"); \
             } \
             if (result < Min<Type>() || result > Max<Type>()) { \

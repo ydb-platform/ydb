@@ -718,12 +718,22 @@ message TEvKqpOutputActorResultInfo {
     repeated NKikimrDataEvents.TLock Locks = 1;
 }
 
+message TKqpTableSinkLocks {
+    repeated NKikimrDataEvents.TLock Locks = 1;
+    repeated uint64 SendingShards = 2;
+    repeated uint64 ReceivingShards = 3;
+}
+
 message TKqpTableSinkSettings {
     optional NKqpProto.TKqpPhyTableId Table = 3;
     repeated TKqpColumnMetadataProto KeyColumns = 4;
     repeated TKqpColumnMetadataProto Columns = 5;
     optional uint64 LockTxId = 6;
     optional uint64 LockNodeId = 7;
+    optional bool FinalTx = 8; // If tx is immediate then commit, otherwise send prepare
+    optional bool ImmediateTx = 9; // Try to be immediate tx
+    optional bool InconsistentTx = 10; // Write each batch in it's own single immediate tx
+    optional TKqpTableSinkLocks Locks = 11;
 }
 
 message TKqpStreamLookupSettings {

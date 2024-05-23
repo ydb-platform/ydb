@@ -119,6 +119,7 @@ namespace NSchemeShardUT_Private {
     TEvTx* CombineSchemeTransactions(const TVector<TEvTx*>& transactions);
     void AsyncSend(TTestActorRuntime &runtime, ui64 targetTabletId,
         IEventBase *ev, ui32 nodeIndex = 0, TActorId sender = TActorId());
+    TEvTx* InternalTransaction(TEvTx* tx);
 
     ////////// generic
 
@@ -198,6 +199,11 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(AlterCdcStream);
     GENERIC_HELPERS(DropCdcStream);
 
+    // continuous backup
+    GENERIC_HELPERS(CreateContinuousBackup);
+    GENERIC_HELPERS(AlterContinuousBackup);
+    GENERIC_HELPERS(DropContinuousBackup);
+
     // olap store
     GENERIC_HELPERS(CreateOlapStore);
     GENERIC_HELPERS(AlterOlapStore);
@@ -221,6 +227,8 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(AlterReplication);
     GENERIC_HELPERS(DropReplication);
     DROP_BY_PATH_ID_HELPERS(DropReplication);
+    GENERIC_HELPERS(DropReplicationCascade);
+    DROP_BY_PATH_ID_HELPERS(DropReplicationCascade);
 
     // pq
     GENERIC_HELPERS(CreatePQGroup);

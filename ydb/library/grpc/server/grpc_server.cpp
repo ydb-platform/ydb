@@ -5,7 +5,7 @@
 #include <util/system/thread.h>
 #include <util/generic/map.h>
 
-#include <grpc++/resource_quota.h>
+#include <grpcpp/resource_quota.h>
 #include <contrib/libs/grpc/src/core/lib/iomgr/socket_mutator.h>
 
 #if !defined(_WIN32) && !defined(_WIN64)

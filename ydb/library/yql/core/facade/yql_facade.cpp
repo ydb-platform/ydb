@@ -323,6 +323,9 @@ TProgram::TProgram(
         modules->AttachUserData(UserDataStorage_);
         modules->SetUrlLoader(new TUrlLoader(FileStorage_));
         modules->SetCredentials(Credentials_);
+        if (QContext_) {
+            modules->SetQContext(QContext_);
+        }
     }
 
     if (UrlListerManager_) {
@@ -1685,6 +1688,7 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     }
     typeAnnotationContext->ArrowResolver = ArrowResolver_;
     typeAnnotationContext->FileStorage = FileStorage_;
+    typeAnnotationContext->QContext = QContext_;
     typeAnnotationContext->HiddenMode = HiddenMode_;
 
     if (UdfIndex_ && UdfIndexPackageSet_) {

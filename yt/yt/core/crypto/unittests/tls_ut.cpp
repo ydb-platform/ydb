@@ -67,7 +67,7 @@ TEST_F(TTlsTest, CreateDialer)
 {
     auto config = New<TDialerConfig>();
     config->SetDefaults();
-    auto dialer = Context->CreateDialer(config, Poller, NetLogger);
+    auto dialer = Context->CreateDialer(config, Poller, NetLogger());
 }
 
 TEST_F(TTlsTest, SimplePingPong)
@@ -77,7 +77,7 @@ TEST_F(TTlsTest, SimplePingPong)
 
     auto config = New<TDialerConfig>();
     config->SetDefaults();
-    auto dialer = Context->CreateDialer(config, Poller, NetLogger);
+    auto dialer = Context->CreateDialer(config, Poller, NetLogger());
 
     auto context = New<TDialerContext>();
     context->Host = "localhost";

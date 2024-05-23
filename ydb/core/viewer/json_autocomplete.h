@@ -80,6 +80,7 @@ public:
             Tables.emplace_back(table);
         }
         Prefix = request.GetPrefix();
+        Limit = request.GetLimit();
 
         Timeout = ViewerRequest->Get()->Record.GetTimeout();
         Direct = true;
@@ -112,6 +113,9 @@ public:
         } else {
             SearchWord = Prefix;
         }
+        if (Limit == 0) {
+            Limit = std::numeric_limits<ui32>::max();
+        }
     }
 
     void ParseCgiParameters(const TCgiParameters& params) {
@@ -137,6 +141,9 @@ public:
                 }
             }
             Prefix = Prefix.empty() ? requestData["prefix"].GetStringSafe({}) : Prefix;
+            if (requestData["limit"].IsDefined()) {
+                Limit = requestData["limit"].GetInteger();
+            }
         }
     }
 
@@ -234,6 +241,7 @@ public:
             autocompleteRequest->AddTables(path);
         }
         autocompleteRequest->SetPrefix(Prefix);
+        autocompleteRequest->SetLimit(Limit);
 
         ViewerWhiteboardCookie cookie(NKikimrViewer::TEvViewerRequest::kAutocompleteRequest, nodeId);
         SendRequest(viewerServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, cookie.ToUi64());

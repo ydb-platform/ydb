@@ -181,7 +181,7 @@ std::optional<TTag> TTraceContext::SetAllocationTag(const TString& key, TTag new
 
 namespace NDetail {
 
-extern YT_THREAD_LOCAL(TTraceContext*) CurrentTraceContext;
+YT_DECLARE_THREAD_LOCAL(TTraceContext*, CurrentTraceContext);
 
 TTraceContextPtr SwapTraceContext(TTraceContextPtr newContext);
 
@@ -322,13 +322,13 @@ inline void TTraceContextFinishGuard::Release()
 
 Y_FORCE_INLINE TTraceContext* TryGetCurrentTraceContext()
 {
-    return NDetail::CurrentTraceContext;
+    return NDetail::CurrentTraceContext();
 }
 
 Y_FORCE_INLINE TTraceContext* GetCurrentTraceContext()
 {
-    YT_ASSERT(NDetail::CurrentTraceContext);
-    return NDetail::CurrentTraceContext;
+    YT_ASSERT(NDetail::CurrentTraceContext());
+    return NDetail::CurrentTraceContext();
 }
 
 Y_FORCE_INLINE TTraceContextPtr CreateTraceContextFromCurrent(TString spanName)

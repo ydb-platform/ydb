@@ -121,7 +121,7 @@ message TFeatureFlags {
     optional bool EnableStatistics = 106 [default = false];
     optional bool EnableUuidAsPrimaryKey = 107 [default = false];
     optional bool EnableTablePgTypes = 108 [default = false];
-    optional bool EnableLocalDBBtreeIndex = 109 [default = false];
+    optional bool EnableLocalDBBtreeIndex = 109 [default = true];
     optional bool EnablePDiskHighHDDInFlight = 110 [default = false];
     optional bool UseVDisksBalancing = 111 [default = false];
     optional bool EnableViews = 112 [default = false];
@@ -136,4 +136,5 @@ message TFeatureFlags {
     optional bool ExtendedPDiskSensors = 121 [default = true];
     optional bool EnableDynamicNodeNameGeneration = 122 [default = false];
     optional bool EnableBackupService = 123 [default = false];
+    optional bool EnableVolatileTransactionArbiters = 124 [default = false];
 }

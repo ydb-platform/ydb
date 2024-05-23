@@ -3247,6 +3247,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         const ui64 nodeId = runtime->GetNodeId();
         ui64 minStep1, maxStep1;
         ui64 minStep2, maxStep2;
+        ui64 coordinator;
 
         // Upsert 3 rows to table 2
         helper.UpsertMany(1, 3);
@@ -3297,6 +3298,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
             UNIT_ASSERT_VALUES_EQUAL(writeResult.TxLocksSize(), 0);
             minStep1 = writeResult.GetMinStep();
             maxStep1 = writeResult.GetMaxStep();
+            coordinator = writeResult.GetDomainCoordinators(0);
         }
 
         Cerr << "===== Write and commit locks on table 2" << Endl;
@@ -3318,9 +3320,13 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         }
 
         Cerr << "========= Send propose to coordinator" << Endl;
-        {
-            SendProposeToCoordinator(helper.Server, {tabletId1, tabletId2}, Max(minStep1, minStep2), Min(maxStep1, maxStep2), helper.TxId);
-        }
+        SendProposeToCoordinator(
+            *runtime, helper.Sender, {tabletId1, tabletId2}, {
+                .TxId = helper.TxId,
+                .Coordinator = coordinator,
+                .MinStep = Max(minStep1, minStep2),
+                .MaxStep = Min(maxStep1, maxStep2),
+            });
 
         Cerr << "========= Wait for completed transactions" << Endl;
         for (ui8 i = 0; i < 1; ++i)

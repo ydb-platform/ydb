@@ -67,13 +67,14 @@ using IQIteratorPtr = std::shared_ptr<IQIterator>;
 
 struct TQWriterSettings {
     TMaybe<TInstant> WrittenAt;
+    TMaybe<ui64> ItemsLimit;
+    TMaybe<ui64> BytesLimit;
 };
 
 struct TQReaderSettings {
 };
 
 struct TQIteratorSettings {
-    bool DoNotLoadValue = false;
     TMaybe<ui64> ItemsLimit;
     TMaybe<ui64> BytesLimit;
     TMaybe<ui32> ConcurrencyLimit;
@@ -84,10 +85,10 @@ public:
     virtual ~IQStorage() = default;
 
     // it's an UB to open writer twice for the same operationId, implementations may check it
-    virtual IQWriterPtr MakeWriter(const TString& operationId, const TQWriterSettings& settings) const = 0;
+    virtual IQWriterPtr MakeWriter(const TString& operationId, const TQWriterSettings& writerSettings) const = 0;
     // readers & iterators may not see results of writer until commit
-    virtual IQReaderPtr MakeReader(const TString& operationId, const TQReaderSettings& settings) const = 0;
-    virtual IQIteratorPtr MakeIterator(const TString& operationId, const TQIteratorSettings& settings) const = 0;
+    virtual IQReaderPtr MakeReader(const TString& operationId, const TQReaderSettings& readerSettings) const = 0;
+    virtual IQIteratorPtr MakeIterator(const TString& operationId, const TQIteratorSettings& iteratorSettings) const = 0;
 };
 
 using IQStoragePtr = std::shared_ptr<IQStorage>;

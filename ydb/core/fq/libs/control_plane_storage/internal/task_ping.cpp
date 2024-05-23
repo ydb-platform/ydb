@@ -253,15 +253,7 @@ TPingTaskParams ConstructHardPingTask(
         }
 
         if (transientIssues) {
-            NYql::TIssues issues = *transientIssues;
-            for (const auto& issue: *query.mutable_transient_issue()) {
-                issues.AddIssue(NYql::IssueFromMessage(issue));
-            }
-
-            NYql::TIssues newIssues;
-            std::for_each_n(issues.begin(), std::min(static_cast<unsigned long long>(issues.Size()), 20ULL), [&](auto& issue){ newIssues.AddIssue(issue); });
-
-            NYql::IssuesToMessage(newIssues, query.mutable_transient_issue());
+            AddTransientIssues(query.mutable_transient_issue(), std::move(*transientIssues));
         }
 
         if (request.internal_issues().size()) {
@@ -492,9 +484,14 @@ TPingTaskParams ConstructHardPingTask(
             updateQueryTtl = "`" EXPIRE_AT_COLUMN_NAME "` = NULL";
         }
 
+        TString updateResultId;
+        if (request.has_result_id()) {
+            updateResultId = "`" RESULT_ID_COLUMN_NAME "` = $result_id, ";
+        }
+
         writeQueryBuilder.AddText(
             "UPSERT INTO `" JOBS_TABLE_NAME "` (`" SCOPE_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME "`, `" JOB_ID_COLUMN_NAME "`, `" JOB_COLUMN_NAME "`) VALUES($scope, $query_id, $job_id, $job);\n"
-            "UPDATE `" QUERIES_TABLE_NAME "` SET `" QUERY_COLUMN_NAME "` = $query, `" STATUS_COLUMN_NAME "` = $status, `" INTERNAL_COLUMN_NAME "` = $internal, `" RESULT_ID_COLUMN_NAME "` = $result_id, " + updateResultSetsExpire + ", " + updateQueryTtl + ", `" META_REVISION_COLUMN_NAME  "` = `" META_REVISION_COLUMN_NAME "` + 1\n"
+            "UPDATE `" QUERIES_TABLE_NAME "` SET `" QUERY_COLUMN_NAME "` = $query, `" STATUS_COLUMN_NAME "` = $status, `" INTERNAL_COLUMN_NAME "` = $internal, " + updateResultId + updateResultSetsExpire + ", " + updateQueryTtl + ", `" META_REVISION_COLUMN_NAME  "` = `" META_REVISION_COLUMN_NAME "` + 1\n"
             "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
         );
 

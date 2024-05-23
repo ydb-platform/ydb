@@ -1,0 +1,20 @@
+[requires]
+{% for package in conan_packages -%}
+{{ package }}
+{% endfor %}
+[tool_requires]
+{% for package in conan_tool_packages -%}
+{{ package }}
+{% endfor %}
+[options]
+{% for option in conan_options -%}
+{{ option }}
+{% endfor %}
+[imports]
+{% for imp in conan_imports -%}
+{{ imp }}
+{% endfor %}
+[generators]
+cmake_find_package
+cmake_paths
+

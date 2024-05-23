@@ -201,8 +201,8 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
     {
         TPortionInfo::TSchemaCursor schema(VersionedIndex);
         if (!db.LoadColumns([&](TPortionInfoConstructor&& portion, const TColumnChunkLoadContext& loadContext) {
-            auto* constructor = constructors.MergeConstructor(std::move(portion));
             auto currentSchema = schema.GetSchema(portion);
+            auto* constructor = constructors.MergeConstructor(std::move(portion));
             constructor->LoadRecord(currentSchema->GetIndexInfo(), loadContext);
         })) {
             return false;

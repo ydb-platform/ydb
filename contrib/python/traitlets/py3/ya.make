@@ -4,7 +4,7 @@ PY3_LIBRARY()
 
 PROVIDES(python_traitlets)
 
-VERSION(5.14.2)
+VERSION(5.14.3)
 
 LICENSE(BSD-3-Clause)
 

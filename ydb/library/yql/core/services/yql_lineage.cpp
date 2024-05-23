@@ -687,7 +687,6 @@ private:
             return;
         }
 
-        lineage.Fields = *innerLineage.Fields;
         TExprNode::TListType frameGroups;
         if (node.IsCallable("CalcOverWindowGroup")) {
             for (const auto& g : node.Child(1)->Children()) {
@@ -695,6 +694,22 @@ private:
             }
         } else {
             frameGroups.push_back(node.Child(3));
+        }
+
+        lineage.Fields = *innerLineage.Fields;
+        if (node.IsCallable("CalcOverSessionWindow")) {
+            if (node.Child(5)->ChildrenSize() && !node.Child(4)->IsCallable("SessionWindowTraits")) {
+                lineage.Fields.Clear();
+                return;
+            }
+
+            for (const auto& sessionColumn : node.Child(5)->Children()) {
+                auto& res = (*lineage.Fields)[sessionColumn->Content()];
+                const auto& initHandler = node.Child(4)->Child(2);
+                const auto& updateHandler = node.Child(4)->Child(2);
+                MergeLineageFromUsedFields(initHandler->Tail(), initHandler->Head().Head(), innerLineage, res, false);
+                MergeLineageFromUsedFields(updateHandler->Tail(), updateHandler->Head().Head(), innerLineage, res, false);
+            }
         }
 
         for (const auto& g : frameGroups) {

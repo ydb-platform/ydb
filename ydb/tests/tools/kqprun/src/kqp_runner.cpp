@@ -2,6 +2,7 @@
 #include "ydb_setup.h"
 
 #include <library/cpp/colorizer/colors.h>
+#include <library/cpp/json/json_reader.h>
 
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
@@ -74,6 +75,8 @@ public:
 
         PrintScriptAst(meta.Ast);
 
+        PrintScriptPlan(meta.Plan);
+
         if (!status.IsSuccess()) {
             Cerr << CerrColors_.Red() << "Failed to execute query, reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
             return false;
@@ -82,8 +85,6 @@ public:
         if (!status.Issues.Empty()) {
             Cerr << CerrColors_.Red() << "Request finished with issues:" << CerrColors_.Default() << Endl << status.Issues.ToString() << Endl;
         }
-
-        PrintScriptPlan(meta.Plan);
 
         return true;
     }
@@ -130,6 +131,7 @@ public:
 
 private:
     bool WaitScriptExecutionOperation() {
+        ExecutionMeta_ = TExecutionMeta();
         TRequestResult status;
         while (true) {
             status = YdbSetup_.GetScriptExecutionOperationRequest(ExecutionOperation_, ExecutionMeta_);
@@ -148,6 +150,8 @@ private:
 
         PrintScriptAst(ExecutionMeta_.Ast);
 
+        PrintScriptPlan(ExecutionMeta_.Plan);
+
         if (!status.IsSuccess() || ExecutionMeta_.ExecutionStatus != NYdb::NQuery::EExecStatus::Completed) {
             Cerr << CerrColors_.Red() << "Failed to execute script, invalid final status, reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
             return false;
@@ -156,8 +160,6 @@ private:
         if (!status.Issues.Empty()) {
             Cerr << CerrColors_.Red() << "Request finished with issues:" << CerrColors_.Default() << Endl << status.Issues.ToString() << Endl;
         }
-
-        PrintScriptPlan(ExecutionMeta_.Plan);
 
         return true;
     }
@@ -189,12 +191,20 @@ private:
     }
 
     void PrintScriptPlan(const TString& plan) const {
-        if (Options_.ScriptQueryPlanOutput) {
-            Cout << CoutColors_.Cyan() << "Writing script query plan" << CoutColors_.Default() << Endl;
-
-            NYdb::NConsoleClient::TQueryPlanPrinter printer(Options_.PlanOutputFormat, true, *Options_.ScriptQueryPlanOutput);
-            printer.Print(plan);
+        if (!Options_.ScriptQueryPlanOutput || !plan) {
+            return;
         }
+
+        NJson::TJsonValue planJson;
+        NJson::ReadJsonTree(plan, &planJson, true);
+        if (!planJson.GetMapSafe().contains("meta")) {
+            return;
+        }
+
+        Cout << CoutColors_.Cyan() << "Writing script query plan" << CoutColors_.Default() << Endl;
+
+        NYdb::NConsoleClient::TQueryPlanPrinter printer(Options_.PlanOutputFormat, true, *Options_.ScriptQueryPlanOutput);
+        printer.Print(plan);
     }
 
     void PrintScriptResult(const Ydb::ResultSet& resultSet) const {
@@ -213,6 +223,16 @@ private:
 
         case TRunnerOptions::EResultOutputFormat::FullJson:
             resultSet.PrintJSON(*Options_.ResultOutput);
+            *Options_.ResultOutput << Endl;
+            break;
+
+        case TRunnerOptions::EResultOutputFormat::FullProto:
+            TString resultSetString;
+            google::protobuf::TextFormat::Printer printer;
+            printer.SetSingleLineMode(false);
+            printer.SetUseUtf8StringEscaping(true);
+            printer.PrintToString(resultSet, &resultSetString);
+            *Options_.ResultOutput << resultSetString;
             break;
         }
     }

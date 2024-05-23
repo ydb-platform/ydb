@@ -323,6 +323,28 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
 
         TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "by_value", {"value"},
             Ydb::StatusIds::BAD_REQUEST);
+
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, InternalTransaction(AlterTableRequest(++txId, "/MyRoot", R"(
+            Name: "Table"
+            ReplicationConfig {
+              Mode: REPLICATION_MODE_NONE
+              Consistency: CONSISTENCY_WEAK
+            }
+        )")));
+        TestModificationResults(runtime, txId, {NKikimrScheme::StatusInvalidParameter});
+
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, InternalTransaction(AlterTableRequest(++txId, "/MyRoot", R"(
+            Name: "Table"
+            ReplicationConfig {
+              Mode: REPLICATION_MODE_NONE
+            }
+        )")));
+        TestModificationResults(runtime, txId, {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::ReplicationMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE),
+        });
     }
 
     Y_UNIT_TEST(CopyReplicatedTable) {
@@ -350,6 +372,32 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         const auto desc = DescribePath(runtime, "/MyRoot/CopyTable");
         const auto& table = desc.GetPathDescription().GetTable();
         UNIT_ASSERT(!table.HasReplicationConfig());
+    }
+
+    Y_UNIT_TEST(DropReplicationWithInvalidCredentials) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+
+        TestCreateReplication(runtime, ++txId, "/MyRoot", R"(
+            Name: "Replication"
+            Config {
+              Specific {
+                Targets {
+                  SrcPath: "/MyRoot1/Table"
+                  DstPath: "/MyRoot2/Table"
+                }
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication"), {NLs::PathExist});
+
+        TestDropReplication(runtime, ++txId, "/MyRoot", "Replication");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication"), {NLs::PathNotExist});
     }
 
 } // TReplicationTests

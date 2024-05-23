@@ -66,7 +66,7 @@ void TSpinlockProfiler::RecordEvent(const void* /*lock*/, int64_t waitCycles)
     RecordSample(&fpCursor, waitCycles);
 }
 
-YT_THREAD_LOCAL(int) SpinlockEventCount;
+YT_DEFINE_THREAD_LOCAL(int, SpinlockEventCount);
 
 void TSpinlockProfiler::OnEvent(const void* lock, int64_t waitCycles)
 {
@@ -75,12 +75,14 @@ void TSpinlockProfiler::OnEvent(const void* lock, int64_t waitCycles)
         return;
     }
 
-    if (SpinlockEventCount < samplingRate) {
-        SpinlockEventCount++;
+    auto& spinlockEventCount = SpinlockEventCount();
+
+    if (spinlockEventCount < samplingRate) {
+        spinlockEventCount++;
         return;
     }
 
-    SpinlockEventCount = 0;
+    spinlockEventCount = 0;
     while (HandlingEvent_.exchange(true)) {
         SchedYield();
     }
@@ -171,7 +173,7 @@ void TBlockingProfiler::RecordEvent(
     RecordSample(&fpCursor, cpuDelay);
 }
 
-YT_THREAD_LOCAL(int) YTSpinlockEventCount;
+YT_DEFINE_THREAD_LOCAL(int, YTSpinlockEventCount);
 
 void TBlockingProfiler::OnEvent(
     TCpuDuration cpuDelay,
@@ -183,12 +185,14 @@ void TBlockingProfiler::OnEvent(
         return;
     }
 
-    if (YTSpinlockEventCount < samplingRate) {
-        YTSpinlockEventCount++;
+    auto& ytSpinlockEventCount = YTSpinlockEventCount();
+
+    if (ytSpinlockEventCount < samplingRate) {
+        ytSpinlockEventCount++;
         return;
     }
 
-    YTSpinlockEventCount = 0;
+    ytSpinlockEventCount = 0;
     while (HandlingEvent_.exchange(true)) {
         SchedYield();
     }

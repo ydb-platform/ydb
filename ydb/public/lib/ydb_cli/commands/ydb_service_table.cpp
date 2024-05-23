@@ -355,7 +355,7 @@ void TCommandExecuteQuery::Config(TConfig& config) {
     config.Opts->AddLongOption("flame-graph", "Builds resource usage flame graph, based on statistics info")
             .RequiredArgument("PATH").StoreResult(&FlameGraphPath);
     config.Opts->AddCharOption('s', "Collect statistics in basic mode").StoreTrue(&BasicStats);
-    config.Opts->AddLongOption("tx-mode", "Transaction mode (for data queries only) [serializable-rw, online-ro, stale-ro]")
+    config.Opts->AddLongOption("tx-mode", "Transaction mode (for generic & data queries) [serializable-rw, online-ro, stale-ro, notx (generic queries only)]")
         .RequiredArgument("[String]").DefaultValue("serializable-rw").StoreResult(&TxMode);
     config.Opts->AddLongOption('q', "query", "Text of query to execute").RequiredArgument("[String]").StoreResult(&Query);
     config.Opts->AddLongOption('f', "file", "Path to file with query text to execute")
@@ -440,18 +440,15 @@ int TCommandExecuteQuery::ExecuteDataQuery(TConfig& config) {
     if (TxMode) {
         if (TxMode == "serializable-rw") {
             txSettings = NTable::TTxSettings::SerializableRW();
+        } else if (TxMode == "online-ro")  {
+            txSettings = NTable::TTxSettings::OnlineRO();
+        } else if (TxMode == "stale-ro") {
+            txSettings = NTable::TTxSettings::StaleRO();
         } else {
-            if (TxMode == "online-ro") {
-                txSettings = NTable::TTxSettings::OnlineRO();
-            } else {
-                if (TxMode == "stale-ro") {
-                    txSettings = NTable::TTxSettings::StaleRO();
-                } else {
-                    throw TMisuseException() << "Unknown transaction mode.";
-                }
-            }
+            throw TMisuseException() << "Unknown transaction mode.";
         }
     }
+
     NTable::TTableClient client(CreateDriver(config));
     NTable::TAsyncDataQueryResult asyncResult;
 
@@ -519,7 +516,7 @@ void TCommandExecuteQuery::PrintDataQueryResponse(NTable::TDataQueryResult& resu
         Cout << Endl << "Statistics:" << Endl << stats->ToString();
         PrintFlameGraph(stats->GetPlan());
     }
-    if( FlameGraphPath && !stats.Defined())
+    if (FlameGraphPath && !stats.Defined())
     {
         Cout << Endl << "Flame graph is available for full or profile stats only" << Endl;
     }
@@ -585,7 +582,22 @@ namespace {
         TClient client,
         const TString& query,
         const TSettings<TClient>& settings,
-        const std::optional<TParams>& params = std::nullopt) {
+        const TString& TxMode = "",
+        const std::optional<TParams>& params = std::nullopt
+    ) {
+        NQuery::TTxSettings txSettings;
+        if (TxMode) {
+            if (TxMode == "serializable-rw") {
+                txSettings = NQuery::TTxSettings::SerializableRW();
+            } else if (TxMode == "online-ro")  {
+                txSettings = NQuery::TTxSettings::OnlineRO();
+            } else if (TxMode == "stale-ro") {
+                txSettings = NQuery::TTxSettings::StaleRO();
+            } else if (TxMode != "notx") {
+                throw TMisuseException() << "Unknown transaction mode.";
+            }
+        }
+
         if constexpr (std::is_same_v<TClient, NTable::TTableClient>) {
             if (params) {
                 return client.StreamExecuteScanQuery(
@@ -603,14 +615,14 @@ namespace {
             if (params) {
                 return client.StreamExecuteQuery(
                     query,
-                    NQuery::TTxControl::BeginTx().CommitTx(),
+                    (TxMode == "notx" ? NQuery::TTxControl::NoTx() : NQuery::TTxControl::BeginTx(txSettings).CommitTx()),
                     *params,
                     settings
                 );
             } else {
                 return client.StreamExecuteQuery(
                     query,
-                    NQuery::TTxControl::BeginTx().CommitTx(),
+                    (TxMode == "notx" ? NQuery::TTxControl::NoTx() : NQuery::TTxControl::BeginTx(txSettings).CommitTx()),
                     settings
                 );
             }
@@ -681,6 +693,7 @@ int TCommandExecuteQuery::ExecuteQueryImpl(TConfig& config) {
                     client,
                     Query,
                     settings,
+                    TxMode,
                     paramBuilder->Build()
                 );
                 return result.Apply([promise](const auto& result) mutable {
@@ -702,7 +715,8 @@ int TCommandExecuteQuery::ExecuteQueryImpl(TConfig& config) {
             auto result = StreamExecuteQuery(
                 client,
                 Query,
-                settings
+                settings,
+                TxMode
             );
             return result.Apply([promise](const auto& result) mutable {
                 promise.SetValue(result.GetValue());

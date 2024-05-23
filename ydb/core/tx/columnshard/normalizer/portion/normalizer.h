@@ -79,17 +79,17 @@ public:
     }
 };
 
-class TPortionsNormalizerBase : public INormalizerComponent {
+class TPortionsNormalizerBase : public TNormalizationController::INormalizerComponent {
 public:
-    TPortionsNormalizerBase(TTabletStorageInfo* info)
-        : DsGroupSelector(info)
+    TPortionsNormalizerBase(const TNormalizationController::TInitContext& info)
+        : DsGroupSelector(info.GetStorageInfo())
     {}
 
-    virtual TConclusion<std::vector<INormalizerTask::TPtr>> Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override final;
+    virtual TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override final;
 
 protected:
     virtual INormalizerTask::TPtr BuildTask(std::vector<std::shared_ptr<TPortionInfo>>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas) const = 0;
-    virtual TConclusion<bool> DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc)  = 0;
+    virtual TConclusion<bool> DoInitImpl(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc)  = 0;
 
     virtual bool CheckPortion(const NColumnShard::TTablesManager& tablesManager, const TPortionInfo& /*portionInfo*/) const = 0;
 

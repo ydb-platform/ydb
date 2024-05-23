@@ -170,6 +170,10 @@ namespace NKikimr::NPublicHttp {
         return IdempotencyKey;
     }
 
+    TString THttpRequestContext::GetPeer() const {
+        return !ForwardedFor.empty() ? TString(ForwardedFor) : TString(Request->Host);
+    }
+
     void THttpRequestContext::ResponseBadRequest(Ydb::StatusIds::StatusCode status, const TString& errorText) const {
         DoResponseBadRequest(status, errorText);
     }

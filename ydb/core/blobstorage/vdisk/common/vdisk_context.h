@@ -119,12 +119,13 @@ namespace NKikimr {
                 case NKikimrProto::OK:
                     if constexpr (T::EventType != TEvBlobStorage::EvLogResult) {
                         // we have different semantics for TEvLogResult StatusFlags
-                        OutOfSpaceState.UpdateLocal(ev.StatusFlags);
+                        OutOfSpaceState.UpdateLocalChunk(ev.StatusFlags);
                     } else {
                         // update log space flags
                         OutOfSpaceState.UpdateLocalLog(ev.StatusFlags);
                     }
                     return true;
+                case NKikimrProto::ERROR:
                 case NKikimrProto::INVALID_OWNER:
                 case NKikimrProto::INVALID_ROUND:
                     // BlobStorage group reconfiguration, just return false and wait until

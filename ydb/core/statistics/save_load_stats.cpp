@@ -106,8 +106,6 @@ public:
             sql << (i == Data.size() - 1 ? ";" : ",");
         }
 
-        Y_UNUSED(StatType);
-        Y_UNUSED(PathId);
         NYdb::TParamsBuilder params;
         params
             .AddParam("$owner_id")
@@ -211,12 +209,12 @@ public:
 
     void OnQueryResult() override {
         if (ResultSets.size() != 1) {
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected read response");
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected read response", false);
             return;
         }
         NYdb::TResultSetParser result(ResultSets[0]);
         if (result.RowsCount() == 0) {
-            Finish(Ydb::StatusIds::BAD_REQUEST, "No data");
+            Finish(Ydb::StatusIds::BAD_REQUEST, "No data", false);
             return;
         }
         result.TryNextRow();
@@ -240,6 +238,58 @@ NActors::IActor* CreateLoadStatisticsQuery(const TPathId& pathId, ui64 statType,
     const TString& columnName, ui64 cookie)
 {
     return new TLoadStatisticsQuery(pathId, statType, columnName, cookie);
+}
+
+
+class TDeleteStatisticsQuery : public NKikimr::TQueryBase {
+private:
+    const TPathId PathId;
+
+public:
+    TDeleteStatisticsQuery(const TPathId& pathId)
+        : NKikimr::TQueryBase(NKikimrServices::STATISTICS, {})
+        , PathId(pathId)
+    {
+    }
+
+    void OnRunQuery() override {
+        TString sql = R"(
+            DECLARE $owner_id AS Uint64;
+            DECLARE $local_path_id AS Uint64;
+
+            DELETE FROM `.metadata/statistics`
+            WHERE
+                owner_id = $owner_id AND
+                local_path_id = $local_path_id;
+        )";
+
+        NYdb::TParamsBuilder params;
+        params
+            .AddParam("$owner_id")
+                .Uint64(PathId.OwnerId)
+                .Build()
+            .AddParam("$local_path_id")
+                .Uint64(PathId.LocalPathId)
+                .Build();
+
+        RunDataQuery(sql, &params);
+    }
+
+    void OnQueryResult() override {
+        Finish();
+    }
+
+    void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
+        Y_UNUSED(issues);
+        auto response = std::make_unique<TEvStatistics::TEvDeleteStatisticsQueryResponse>();
+        response->Success = (status == Ydb::StatusIds::SUCCESS);
+        Send(Owner, response.release());
+    }
+};
+
+NActors::IActor* CreateDeleteStatisticsQuery(const TPathId& pathId)
+{
+    return new TDeleteStatisticsQuery(pathId);
 }
 
 } // NKikimr::NStat

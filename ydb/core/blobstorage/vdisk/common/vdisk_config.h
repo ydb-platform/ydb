@@ -116,6 +116,7 @@ namespace NKikimr {
         ui32 HullSstSizeInChunksLevel;
         ui32 HugeBlobsFreeChunkReservation;
         ui32 MinHugeBlobInBytes;
+        ui32 OldMinHugeBlobInBytes;
         ui32 MilestoneHugeBlobInBytes;
         ui32 HugeBlobOverhead;
         ui32 HullCompLevel0MaxSstsAtOnce;
@@ -152,6 +153,11 @@ namespace NKikimr {
         ui64 SyncLogMaxEntryPointSize;
         ui32 SyncLogAdvisedIndexedBlockSize;
         ui64 SyncLogMaxMemAmount;
+
+        TControlWrapper EnableLocalSyncLogDataCutting;
+        TControlWrapper EnableSyncLogChunkCompression;
+        TControlWrapper MaxSyncLogChunksInFlight;
+        ui32 MaxSyncLogChunkSize;
 
         ///////////// REPL SETTINGS /////////////////////////
         TDuration ReplTimeInterval;

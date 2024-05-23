@@ -37,7 +37,7 @@ class PnpmPackageManager(BasePackageManager):
     def get_local_pnpm_store():
         return os.path.join(home_dir(), ".cache", "pnpm-store")
 
-    def create_node_modules(self, yatool_prebuilder_path=None, local_cli=False):
+    def create_node_modules(self, yatool_prebuilder_path=None, local_cli=False, bundle=True):
         """
         Creates node_modules directory according to the lockfile.
         """
@@ -77,7 +77,7 @@ class PnpmPackageManager(BasePackageManager):
         self._run_apply_addons_if_need(yatool_prebuilder_path, virtual_store_dir)
         self._replace_internal_lockfile_with_original(virtual_store_dir)
 
-        if not local_cli:
+        if not local_cli and bundle:
             bundle_node_modules(
                 build_root=self.build_root,
                 node_modules_path=self._nm_path(),

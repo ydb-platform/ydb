@@ -5,7 +5,7 @@ PEERDIR(
 )
 
 SRCS(
-    chunks.cpp
+    GLOBAL chunks.cpp
 )
 
 END()

@@ -44,7 +44,7 @@ public:
         : Settings_(settings)
         , FullOperationId_(settings.OperationIdPrefix + operationId)
         , Storage_(MakeMemoryQStorage())
-        , Writer_(Storage_->MakeWriter("", {}))
+        , Writer_(Storage_->MakeWriter("", writerSettings))
         , WrittenAt_(writerSettings.WrittenAt.GetOrElse(Now()))
     {}
 

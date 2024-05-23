@@ -1,6 +1,7 @@
 #include "config.h"
 
 #include "retrying_client.h"
+#include "http.h"
 #include "private.h"
 
 #include <yt/yt/core/http/client.h>
@@ -14,7 +15,7 @@ using namespace NNet;
 using namespace NYTree;
 using namespace NConcurrency;
 
-static const auto& Logger = HttpLogger;
+static constexpr auto& Logger = HttpLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 

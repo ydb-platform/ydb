@@ -972,6 +972,8 @@ public:
     }
 
     void Handle(TEvBlobStorage::TEvAskWardenRestartPDiskResult::TPtr &ev) {
+        bool restartAllowed = ev->Get()->RestartAllowed;
+
         bool isReadingLog = PDisk->InitPhase == EInitPhase::ReadingSysLog || PDisk->InitPhase == EInitPhase::ReadingLog;
 
         if ((isReadingLog && CurrentStateFunc() != &TPDiskActor::StateError) || IsFormattingNow) {
@@ -985,10 +987,11 @@ public:
                 PendingRestartResponse(false, s);
                 PendingRestartResponse = {};
             }
+
+            Send(ev->Sender, new TEvBlobStorage::TEvNotifyWardenPDiskRestarted(PDisk->PDiskId, NKikimrProto::EReplyStatus::NOTREADY));
+            
             return;
         }
-
-        bool restartAllowed = ev->Get()->RestartAllowed;
 
         if (restartAllowed) {
             MainKey = ev->Get()->MainKey;

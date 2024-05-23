@@ -5,7 +5,7 @@ import abc
 import enum
 import json
 from . import _utilities, _apis
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 import typing
 import uuid
 import struct
@@ -22,6 +22,7 @@ except ImportError:
 
 _SECONDS_IN_DAY = 60 * 60 * 24
 _EPOCH = datetime(1970, 1, 1)
+_EPOCH_UTC = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 
 def _from_date(x: ydb_value_pb2.Value, table_client_settings: table.TableClientSettings) -> typing.Union[date, int]:
@@ -89,7 +90,11 @@ def _from_timestamp(
 
 def _to_timestamp(pb: ydb_value_pb2.Value, value: typing.Union[datetime, int]):
     if isinstance(value, datetime):
-        pb.uint64_value = _timedelta_to_microseconds(value - _EPOCH)
+        if value.tzinfo:
+            epoch = _EPOCH_UTC
+        else:
+            epoch = _EPOCH
+        pb.uint64_value = _timedelta_to_microseconds(value - epoch)
     else:
         pb.uint64_value = value
 

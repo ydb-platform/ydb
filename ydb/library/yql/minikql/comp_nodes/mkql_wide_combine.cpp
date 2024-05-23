@@ -344,7 +344,7 @@ public:
         TMemoryUsageInfo* memInfo,
         const TCombinerNodes& nodes, IComputationWideFlowNode *const flow, size_t wideFieldsIndex,
         const TMultiType* usedInputItemType, const TMultiType* keyAndStateType, ui32 keyWidth,
-        const THashFunc& hash, const TEqualsFunc& equal
+        const THashFunc& hash, const TEqualsFunc& equal, bool allowSpilling
     )
         : TBase(memInfo)
         , InMemoryProcessingState(memInfo, keyWidth, keyAndStateType->GetElementsCount() - keyWidth, hash, equal)
@@ -358,6 +358,7 @@ public:
         , Mode(EOperatingMode::InMemory)
         , MemInfo(memInfo)
         , Equal(equal)
+        , AllowSpilling(allowSpilling)
     {
         BufferForUsedInputItems.reserve(usedInputItemType->GetElementsCount());
         BufferForKeyAnsState.reserve(keyAndStateType->GetElementsCount());
@@ -430,7 +431,7 @@ private:
                         isNew ? nullptr : static_cast<NUdf::TUnboxedValue *>(InMemoryProcessingState.Tongue),
                         static_cast<NUdf::TUnboxedValue *>(InMemoryProcessingState.Throat)
                     );
-                    if (ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
+                    if (AllowSpilling && ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
                         SwitchMode(EOperatingMode::Spilling, ctx);
                         return EFetchResult::Yield;
                     }
@@ -488,7 +489,7 @@ private:
                 } else {
                     bucket.SpilledData->AsyncWriteCompleted(bucket.AsyncWriteOperation->ExtractValue());
                     bucket.AsyncWriteOperation = std::nullopt;
-                }     
+                }
             }
         }
     }
@@ -536,7 +537,7 @@ private:
                     Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue *>(BufferForKeyAnsState.data()));
 
                     auto hash = Hasher(BufferForKeyAnsState.data());
-                    
+
                     auto bucketId = hash % SpilledBucketCount;
 
                     auto& bucket = SpilledBuckets[bucketId];
@@ -608,7 +609,7 @@ private:
             AsyncReadOperation = std::nullopt;
         }
         while(!SpilledBuckets.empty()){
-            
+
             auto& bucket = SpilledBuckets.front();
             //recover spilled state
             while(!bucket.SpilledState->Empty()) {
@@ -656,7 +657,7 @@ private:
                 );
                 BufferForUsedInputItems.resize(0);
             }
-            
+
             if (const auto values = static_cast<NUdf::TUnboxedValue*>(bucket.InMemoryProcessingState->Extract())) {
                 Nodes.FinishItem(ctx, values, output);
 
@@ -674,24 +675,27 @@ private:
 
     void SwitchMode(EOperatingMode mode, TComputationContext& ctx) {
         switch(mode) {
-            case EOperatingMode::InMemory:
+            case EOperatingMode::InMemory: {
                 MKQL_ENSURE(false, "Internal logic error");
                 break;
-            case EOperatingMode::Spilling:
+            }
+            case EOperatingMode::Spilling: {
                 MKQL_ENSURE(EOperatingMode::InMemory == Mode, "Internal logic error");
                 SpilledBuckets.resize(SpilledBucketCount);
+                auto spiller = ctx.SpillerFactory->CreateSpiller();
                 for (auto &b: SpilledBuckets) {
-                    auto spiller = ctx.SpillerFactory->CreateSpiller();
                     b.SpilledState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, KeyAndStateType, 5_MB);
                     b.SpilledData = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, UsedInputItemType, 5_MB);
                     b.InMemoryProcessingState = std::make_unique<TState>(MemInfo, KeyWidth, KeyAndStateType->GetElementsCount() - KeyWidth, Hasher, Equal);
                 }
                 SplitStateIntoBuckets();
                 break;
-            case EOperatingMode::ProcessSpilled:
+            }
+            case EOperatingMode::ProcessSpilled: {
                 MKQL_ENSURE(EOperatingMode::Spilling == Mode, "Internal logic error");
                 MKQL_ENSURE(SpilledBuckets.size() == SpilledBucketCount, "Internal logic error");
                 break;
+            }
 
         }
         Mode = mode;
@@ -732,6 +736,7 @@ private:
 
     TMemoryUsageInfo* MemInfo = nullptr;
     TEqualsFunc const Equal;
+    const bool AllowSpilling;
 };
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -1205,12 +1210,13 @@ class TWideLastCombinerWrapper: public TStatefulWideFlowCodegeneratorNode<TWideL
 using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideLastCombinerWrapper>;
 public:
     TWideLastCombinerWrapper(
-        TComputationMutables& mutables, 
-        IComputationWideFlowNode* flow, 
-        TCombinerNodes&& nodes, 
+        TComputationMutables& mutables,
+        IComputationWideFlowNode* flow,
+        TCombinerNodes&& nodes,
         const TMultiType* usedInputItemType,
         TKeyTypes&& keyTypes,
-        const TMultiType* keyAndStateType)
+        const TMultiType* keyAndStateType,
+        bool allowSpilling)
         : TBaseComputation(mutables, flow, EValueRepresentation::Boxed)
         , Flow(flow)
         , Nodes(std::move(nodes))
@@ -1218,11 +1224,12 @@ public:
         , UsedInputItemType(usedInputItemType)
         , KeyAndStateType(keyAndStateType)
         , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Nodes.ItemNodes.size()))
+        , AllowSpilling(allowSpilling)
     {}
 
 	EFetchResult DoCalculate(NUdf::TUnboxedValue& stateValue, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
         if (!stateValue.HasValue()) {
-            MakeSpillingSupportState(ctx, stateValue);
+            MakeSpillingSupportState(ctx, stateValue, AllowSpilling);
         }
         auto *const state = static_cast<TSpillingSupportState *>(stateValue.AsBoxed().Get());
         return state->DoCalculate(ctx, output);
@@ -1466,12 +1473,13 @@ private:
 #endif
     }
 
-    void MakeSpillingSupportState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
+    void MakeSpillingSupportState(TComputationContext& ctx, NUdf::TUnboxedValue& state, bool allowSpilling) const {
         state = ctx.HolderFactory.Create<TSpillingSupportState>(Nodes, Flow, WideFieldsIndex,
             UsedInputItemType, KeyAndStateType,
             Nodes.KeyNodes.size(),
             TMyValueHasher(KeyTypes),
-            TMyValueEqual(KeyTypes)
+            TMyValueEqual(KeyTypes),
+            allowSpilling
         );
     }
 
@@ -1492,6 +1500,8 @@ private:
     const TMultiType* const KeyAndStateType;
 
     const ui32 WideFieldsIndex;
+
+    const bool AllowSpilling;
 
 #ifndef MKQL_DISABLE_CODEGEN
     TEqualsPtr Equals = nullptr;
@@ -1523,6 +1533,11 @@ private:
 #endif
 };
 
+bool IsTypeSerializable(const TType* type) {
+    return ! (type->IsResource() || type->IsType() || type->IsStream() || type->IsCallable()
+        || type->IsAny() || type->IsFlow() || type->IsReservedKind());
+}
+
 }
 
 template<bool Last>
@@ -1542,13 +1557,17 @@ IComputationNode* WrapWideCombinerT(TCallable& callable, const TComputationNodeF
 
     ++index += inputWidth;
 
+    bool allowSpilling = true;
+
     std::vector<TType*> keyAndStateItemTypes;
     keyAndStateItemTypes.reserve(keysSize + stateSize);
 
     TKeyTypes keyTypes;
     keyTypes.reserve(keysSize);
     for (ui32 i = index; i < index + keysSize; ++i) {
-		keyAndStateItemTypes.push_back(callable.GetInput(i).GetStaticType());
+        TType *type = callable.GetInput(i).GetStaticType();
+        allowSpilling = allowSpilling && IsTypeSerializable(type);
+		keyAndStateItemTypes.push_back(type);
         bool optional;
         keyTypes.emplace_back(*UnpackOptionalData(callable.GetInput(i).GetStaticType(), optional)->GetDataSlot(), optional);
     }
@@ -1560,7 +1579,9 @@ IComputationNode* WrapWideCombinerT(TCallable& callable, const TComputationNodeF
     index += keysSize;
     nodes.InitResultNodes.reserve(stateSize);
     for (size_t i = 0; i != stateSize; ++i) {
-        keyAndStateItemTypes.push_back(callable.GetInput(index).GetStaticType());
+        TType *type = callable.GetInput(index).GetStaticType();
+        allowSpilling = allowSpilling && IsTypeSerializable(type);
+        keyAndStateItemTypes.push_back(type);
         nodes.InitResultNodes.push_back(LocateNode(ctx.NodeLocator, callable, index++));
     }
 
@@ -1597,13 +1618,15 @@ IComputationNode* WrapWideCombinerT(TCallable& callable, const TComputationNodeF
             usedInputItemTypes.reserve(inputItemTypes.size());
             for (size_t i = 0; i != inputItemTypes.size(); ++i) {
                 if (nodes.IsInputItemNodeUsed(i)) {
+                    allowSpilling = allowSpilling && IsTypeSerializable(inputItemTypes[i]);
                     usedInputItemTypes.push_back(inputItemTypes[i]);
                 }
             }
             return new TWideLastCombinerWrapper(ctx.Mutables, wide, std::move(nodes),
                 TMultiType::Create(usedInputItemTypes.size(), usedInputItemTypes.data(), ctx.Env),
                 std::move(keyTypes),
-                TMultiType::Create(keyAndStateItemTypes.size(),keyAndStateItemTypes.data(), ctx.Env)
+                TMultiType::Create(keyAndStateItemTypes.size(),keyAndStateItemTypes.data(), ctx.Env),
+                allowSpilling
             );
         } else {
             if constexpr (RuntimeVersion < 46U) {

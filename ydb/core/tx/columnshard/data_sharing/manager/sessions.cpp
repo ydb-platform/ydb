@@ -17,6 +17,9 @@ void TSessionsManager::Start(const NColumnShard::TColumnShard& shard) const {
     for (auto&& i : DestSessions) {
         if (!i.second->IsStarted() && i.second->IsConfirmed()) {
             i.second->Start(shard);
+            if (!i.second->GetSourcesInProgressCount()) {
+                i.second->Finish(shard.GetDataLocksManager());
+            }
         }
     }
     NYDBTest::TControllers::GetColumnShardController()->OnAfterSharingSessionsManagerStart(shard);

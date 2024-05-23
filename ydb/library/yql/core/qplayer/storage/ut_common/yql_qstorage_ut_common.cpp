@@ -23,6 +23,11 @@ void QStorageTestEmpty_Impl(const NYql::IQStoragePtr& storage) {
     UNIT_ASSERT(!iterator->Next().GetValueSync().Defined());
 }
 
+void QStorageTestNoCommit_Impl(const NYql::IQStoragePtr& storage) {
+    auto writer = storage->MakeWriter("foo", {});
+    writer->Put({"comp", "label"}, "value").GetValueSync();
+}
+
 void QStorageTestOne_Impl(const NYql::IQStoragePtr& storage) {
     auto writer = storage->MakeWriter("foo", {});
     writer->Put({"comp", "label"}, "value").GetValueSync();
@@ -39,23 +44,6 @@ void QStorageTestOne_Impl(const NYql::IQStoragePtr& storage) {
     UNIT_ASSERT_VALUES_EQUAL(value->Key.Component, "comp");
     UNIT_ASSERT_VALUES_EQUAL(value->Key.Label, "label");
     UNIT_ASSERT_VALUES_EQUAL(value->Value, "value");
-    value = iterator->Next().GetValueSync();
-    UNIT_ASSERT(!value.Defined());
-}
-
-void QStorageTestIterateWithoutValue_Impl(const NYql::IQStoragePtr& storage) {
-    auto writer = storage->MakeWriter("foo", {});
-    writer->Put({"comp", "label"}, "value").GetValueSync();
-    writer->Commit().GetValueSync();
-    auto reader = storage->MakeReader("foo", {});
-    auto settings = TQIteratorSettings{};
-    settings.DoNotLoadValue = true;
-    auto iterator = storage->MakeIterator("foo", settings);
-    auto value = iterator->Next().GetValueSync();
-    UNIT_ASSERT(value.Defined());
-    UNIT_ASSERT_VALUES_EQUAL(value->Key.Component, "comp");
-    UNIT_ASSERT_VALUES_EQUAL(value->Key.Label, "label");
-    UNIT_ASSERT_VALUES_EQUAL(value->Value, "");
     value = iterator->Next().GetValueSync();
     UNIT_ASSERT(!value.Defined());
 }
@@ -119,3 +107,22 @@ void QStorageTestInterleaveReadWrite_Impl(const NYql::IQStoragePtr& storage) {
     value = iterator2->Next().GetValueSync();
     UNIT_ASSERT(!value.Defined());
 }
+
+void QStorageTestLimitWriterItems_Impl(const NYql::IQStoragePtr& storage) {
+    TQWriterSettings settings;
+    settings.ItemsLimit = 1;
+    auto writer = storage->MakeWriter("foo", settings);
+    writer->Put({"comp", "label1"}, "value1").GetValueSync();
+    writer->Put({"comp", "label2"}, "value2").GetValueSync();
+    UNIT_ASSERT_EXCEPTION(writer->Commit().GetValueSync(), yexception);
+}
+
+void QStorageTestLimitWriterBytes_Impl(const NYql::IQStoragePtr& storage) {
+    TQWriterSettings settings;
+    settings.BytesLimit = 7;
+    auto writer = storage->MakeWriter("foo", settings);
+    writer->Put({"comp", "label1"}, "value1").GetValueSync();
+    writer->Put({"comp", "label2"}, "value2").GetValueSync();
+    UNIT_ASSERT_EXCEPTION(writer->Commit().GetValueSync(), yexception);
+}
+

@@ -133,7 +133,7 @@ public:
 
     ~TSmallArena()
     {
-        static const auto& Logger = LockFreePtrLogger;
+        constexpr auto& Logger = LockFreeLogger;
 
         FreeList_.ExtractAll();
 
@@ -225,7 +225,7 @@ private:
 
         auto segmentCount = SegmentCount_.load();
         auto refCount = GetRefCounter(this)->GetRefCount();
-        static const auto& Logger = LockFreePtrLogger;
+        constexpr auto& Logger = LockFreeLogger;
 
         YT_LOG_TRACE("Allocating segment (ObjectSize: %v, RefCount: %v, SegmentCount: %v, TotalObjectCapacity: %v, TotalSize: %v)",
             ObjectSize_,

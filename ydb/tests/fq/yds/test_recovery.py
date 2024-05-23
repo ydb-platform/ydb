@@ -387,3 +387,44 @@ class TestRecovery(TestYdsBase):
             time.sleep(yatest_common.plain_or_under_sanitizer(0.5, 2))
 
         close_ic_sessions_future.wait()
+
+    @yq_v1
+    def test_program_state_recovery_error_if_no_states(self, client, kikimr):
+        for node_index in kikimr.control_plane.kikimr_cluster.nodes:
+            kikimr.control_plane.wait_bootstrap(node_index)
+        for node_index in kikimr.control_plane.kikimr_cluster.nodes:
+            kikimr.control_plane.wait_discovery(node_index)
+        self.init_topics("error_if_no_states", partitions_count=1)
+
+        sql = R'''
+            INSERT INTO myyds.`{output_topic}`
+            SELECT STREAM * FROM myyds.`{input_topic}`;'''\
+            .format(
+            input_topic=self.input_topic,
+            output_topic=self.output_topic,
+        )
+        client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
+
+        query_id = client.create_query("error_if_no_states", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
+        kikimr.compute_plane.wait_zero_checkpoint(query_id)
+        kikimr.compute_plane.wait_completed_checkpoints(query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 1)
+
+        for node_index in kikimr.control_plane.kikimr_cluster.nodes:
+            kikimr.control_plane.kikimr_cluster.nodes[node_index].stop()
+
+        session = kikimr.driver.table_client.session().create()
+        checkpoint_table_prefix = "/local/CheckpointCoordinatorStorage_" + kikimr.uuid + '/states'
+        session.transaction().execute(f"DELETE FROM `{checkpoint_table_prefix}`", commit_tx=True)
+
+        for node_index in kikimr.control_plane.kikimr_cluster.nodes:
+            kikimr.control_plane.kikimr_cluster.nodes[node_index].start()
+        for node_index in kikimr.control_plane.kikimr_cluster.nodes:
+            kikimr.control_plane.wait_bootstrap(node_index)
+
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+        describe_result = client.describe_query(query_id).result
+        logging.debug("Describe result: {}".format(describe_result))
+        describe_string = "{}".format(describe_result)
+        assert r"Can\'t restore: STORAGE_ERROR" in describe_string
+        assert r"Checkpoint is not found" in describe_string

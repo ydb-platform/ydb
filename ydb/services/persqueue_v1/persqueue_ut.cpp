@@ -31,8 +31,8 @@
 #include <util/system/sanitizers.h>
 #include <util/generic/guid.h>
 
-#include <grpc++/client_context.h>
-#include <grpc++/create_channel.h>
+#include <grpcpp/client_context.h>
+#include <grpcpp/create_channel.h>
 
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
@@ -953,7 +953,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     }
 
     Y_UNIT_TEST(DirectReadPreCached) {
-        TPersQueueV1TestServer server{true};
+        TPersQueueV1TestServer server{{.CheckACL=true}};
         SET_LOCALS;
         TDirectReadTestSetup setup{server};
         setup.DoWrite(pqClient->GetDriver(), "acc/topic1", 1_MB, 30);
@@ -981,7 +981,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     }
 
     Y_UNIT_TEST(DirectReadNotCached) {
-        TPersQueueV1TestServer server{true};
+        TPersQueueV1TestServer server{{.CheckACL=true}};
         SET_LOCALS;
         TDirectReadTestSetup setup{server};
 
@@ -1013,7 +1013,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     }
 
     Y_UNIT_TEST(DirectReadBadCases) {
-        TPersQueueV1TestServer server{true};
+        TPersQueueV1TestServer server{{.CheckACL=true}};
         SET_LOCALS;
         TDirectReadTestSetup setup{server};
         setup.InitControlSession("acc/topic1");
@@ -1042,7 +1042,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     }
 
     Y_UNIT_TEST(DirectReadStop) {
-        TPersQueueV1TestServer server{true};
+        TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         SET_LOCALS;
 
         server.Server->AnnoyingClient->AlterTopicNoLegacy("Root/PQ/rt3.dc1--acc--topic1", 2);

@@ -1,3 +1,5 @@
+#include "schemeshard__operation_create_cdc_stream.h"
+
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
@@ -10,6 +12,8 @@
 #define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 
 namespace NKikimr::NSchemeShard {
+
+namespace NCdc {
 
 namespace {
 
@@ -101,21 +105,37 @@ class TNewCdcStream: public TSubOperation {
         }
     }
 
+    TString BuildWorkingDir() const {
+        if (Transaction.GetCreateCdcStream().HasIndexName()) {
+            return Transaction.GetWorkingDir() + "/"
+                + Transaction.GetCreateCdcStream().GetIndexName() + "/indexImplTable";
+        } else {
+            return Transaction.GetWorkingDir();
+        }
+    }
+
 public:
     using TSubOperation::TSubOperation;
 
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
-        const auto& workingDir = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetCreateCdcStream();
         const auto& streamDesc = op.GetStreamDescription();
         const auto& streamName = streamDesc.GetName();
         const auto acceptExisted = !Transaction.GetFailOnExist();
 
+        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
+
+        if (op.HasAllIndexes()) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "Illigal part operation with all indexes flag");
+            return result;
+        }
+
+        const auto& workingDir = BuildWorkingDir();
+
         LOG_N("TNewCdcStream Propose"
             << ": opId# " << OperationId
             << ", stream# " << workingDir << "/" << streamName);
-
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
 
         const auto tablePath = TPath::Resolve(workingDir, context.SS);
         {
@@ -126,10 +146,16 @@ public:
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
-                .IsTable()
                 .NotAsyncReplicaTable()
-                .IsCommonSensePath()
                 .NotUnderDeleting();
+
+            if (op.HasIndexName() && op.GetIndexName()) {
+                checks.IsInsideTableIndexPath();
+            } else {
+                checks
+                    .IsTable()
+                    .IsCommonSensePath();
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -503,16 +529,34 @@ public:
     }
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
-        const auto& workingDir = Transaction.GetWorkingDir();
+        auto workingDir = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetCreateCdcStream();
-        const auto& tableName = op.GetTableName();
+        auto tableName = op.GetTableName();
         const auto& streamName = op.GetStreamDescription().GetName();
+
+        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
+        bool isIndexTable = false;
+
+        if (op.HasAllIndexes()) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter,
+                "Illigal part operation with all indexes flag");
+            return result;
+        }
+
+        if (op.HasIndexName()) {
+            if (!op.GetIndexName()) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "Unexpected empty index name");
+                return result;
+            }
+            isIndexTable = true;
+            workingDir += ("/" + tableName + "/" + op.GetIndexName());
+            tableName = "indexImplTable";
+        }
 
         LOG_N("TNewCdcStreamAtTable Propose"
             << ": opId# " << OperationId
             << ", stream# " << workingDir << "/" << tableName << "/" << streamName);
-
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
 
         const auto workingDirPath = TPath::Resolve(workingDir, context.SS);
         {
@@ -522,9 +566,14 @@ public:
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
-                .IsCommonSensePath()
                 .IsLikeDirectory()
                 .NotUnderDeleting();
+
+            if (isIndexTable) {
+                checks.IsInsideTableIndexPath();
+            } else {
+                checks.IsCommonSensePath();
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -543,10 +592,12 @@ public:
                 .NotDeleted()
                 .IsTable()
                 .NotAsyncReplicaTable()
-                .IsCommonSensePath()
                 .NotUnderDeleting();
 
             if (checks) {
+                if (!isIndexTable) {
+                    checks.IsCommonSensePath();
+                }
                 if (InitialScan) {
                     checks.IsUnderTheSameOperation(OperationId.GetTxId()); // lock op
                 } else {
@@ -628,20 +679,23 @@ public:
 
 private:
     const bool InitialScan;
-
 }; // TNewCdcStreamAtTable
 
-void DoCreateLock(const TOperationId& opId, const TPath& workingDirPath, const TPath& tablePath,
+void DoCreateLock(const TOperationId opId, const TPath& workingDirPath, const TPath& tablePath, bool allowIndexImplLock,
     TVector<ISubOperation::TPtr>& result)
 {
     auto outTx = TransactionTemplate(workingDirPath.PathString(),
         NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock);
     outTx.SetFailOnExist(false);
     outTx.SetInternal(true);
-    outTx.MutableLockConfig()->SetName(tablePath.LeafName());
+    auto cfg = outTx.MutableLockConfig();
+    cfg->SetName(tablePath.LeafName());
+    cfg->SetAllowIndexImplLock(allowIndexImplLock);
 
     result.push_back(CreateLock(NextPartId(opId, result), outTx));
 }
+
+} // anonymous
 
 void DoCreatePqPart(const TOperationId& opId, const TPath& streamPath, const TString& streamName,
     const TIntrusivePtr<TTableInfo> table, const NKikimrSchemeOp::TCreateCdcStream& op,
@@ -698,33 +752,39 @@ void DoCreatePqPart(const TOperationId& opId, const TPath& streamPath, const TSt
     result.push_back(CreateNewPQ(NextPartId(opId, result), outTx));
 }
 
+void FillModifySchemaForCdc(NKikimrSchemeOp::TModifyScheme& outTx, const NKikimrSchemeOp::TCreateCdcStream& op,
+    const TOperationId& opId, const TString& indexName, bool acceptExisted, bool initialScan)
+{
+    outTx.SetFailOnExist(!acceptExisted);
+    outTx.MutableCreateCdcStream()->CopyFrom(op);
+    if (indexName) {
+        outTx.MutableCreateCdcStream()->SetIndexName(indexName);
+    } else {
+        outTx.MutableCreateCdcStream()->ClearIndexMode();
+    }
+
+    if (initialScan) {
+        outTx.MutableLockGuard()->SetOwnerTxId(ui64(opId.GetTxId()));
+    }
+}
+
 void DoCreateStream(const NKikimrSchemeOp::TCreateCdcStream& op, const TOperationId& opId, const TPath& workingDirPath, const TPath& tablePath,
-    const bool acceptExisted, const bool initialScan, TVector<ISubOperation::TPtr>& result)
+    const bool acceptExisted, const bool initialScan, const TString& indexName, TVector<ISubOperation::TPtr>& result)
 {
     {
         auto outTx = TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamImpl);
-        outTx.SetFailOnExist(!acceptExisted);
-        outTx.MutableCreateCdcStream()->CopyFrom(op);
-
-        if (initialScan) {
-            outTx.MutableLockGuard()->SetOwnerTxId(ui64(opId.GetTxId()));
-        }
-
+        FillModifySchemaForCdc(outTx, op, opId, indexName, acceptExisted, initialScan);
         result.push_back(CreateNewCdcStreamImpl(NextPartId(opId, result), outTx));
     }
 
     {
         auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamAtTable);
-        outTx.SetFailOnExist(!acceptExisted);
-        outTx.MutableCreateCdcStream()->CopyFrom(op);
-
-        if (initialScan) {
-            outTx.MutableLockGuard()->SetOwnerTxId(ui64(opId.GetTxId()));
-        }
-
+        FillModifySchemaForCdc(outTx, op, opId, indexName, acceptExisted, initialScan);
         result.push_back(CreateNewCdcStreamAtTable(NextPartId(opId, result), outTx, initialScan));
     }
 }
+
+namespace {
 
 ISubOperation::TPtr RejectOnCdcChecks(const TOperationId& opId, const TPath& streamPath, const bool acceptExisted) {
     const auto checks = streamPath.Check();
@@ -777,7 +837,61 @@ ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPat
     return nullptr;
 }
 
+void CalcBoundaries(const TTableInfo& table, TVector<TString>& boundaries) {
+    const auto& partitions = table.GetPartitions();
+    boundaries.reserve(partitions.size() - 1);
+
+    for (ui32 i = 0; i < partitions.size(); ++i) {
+        const auto& partition = partitions.at(i);
+        if (i != partitions.size() - 1) {
+            boundaries.push_back(partition.EndOfRange);
+        }
+    }
+}
+
+bool FillBoundaries(const TTableInfo& table, const ::NKikimrSchemeOp::TCreateCdcStream& op, TVector<TString>& boundaries, TString& errStr) {
+    if (op.HasTopicPartitions()) {
+        const auto& keyColumns = table.KeyColumnIds;
+        const auto& columns = table.Columns;
+
+        Y_ABORT_UNLESS(!keyColumns.empty());
+        Y_ABORT_UNLESS(columns.contains(keyColumns.at(0)));
+        const auto firstKeyColumnType = columns.at(keyColumns.at(0)).PType;
+
+        if (!TSchemeShard::FillUniformPartitioning(boundaries, keyColumns.size(), firstKeyColumnType, op.GetTopicPartitions(), AppData()->TypeRegistry, errStr)) {
+            return false;
+        }
+    } else {
+        CalcBoundaries(table, boundaries);
+    }
+    return true;
+}
+
 } // anonymous
+
+std::variant<TStreamPaths, ISubOperation::TPtr> DoNewStreamPathChecks(
+    const TOperationId& opId,
+    const TPath& workingDirPath,
+    const TString& tableName,
+    const TString& streamName,
+    bool acceptExisted)
+{
+    const auto tablePath = workingDirPath.Child(tableName);
+    if (auto reject = RejectOnTablePathChecks(opId, tablePath)) {
+        return reject;
+    }
+
+    const auto streamPath = tablePath.Child(streamName);
+    if (auto reject = RejectOnCdcChecks(opId, streamPath, acceptExisted)) {
+        return reject;
+    }
+
+    return TStreamPaths{tablePath, streamPath};
+}
+
+} // namespace NCdc
+
+using namespace NCdc;
 
 ISubOperation::TPtr CreateNewCdcStreamImpl(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TNewCdcStream>(id, tx);
@@ -810,15 +924,12 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
 
     const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
 
-    const auto tablePath = workingDirPath.Child(tableName);
-    if (auto reject = RejectOnTablePathChecks(opId, tablePath)) {
-        return {reject};
+    const auto checksResult = DoNewStreamPathChecks(opId, workingDirPath, tableName, streamName, acceptExisted);
+    if (std::holds_alternative<ISubOperation::TPtr>(checksResult)) {
+        return {std::get<ISubOperation::TPtr>(checksResult)};
     }
 
-    const auto streamPath = tablePath.Child(streamName);
-    if (auto reject = RejectOnCdcChecks(opId, streamPath, acceptExisted)) {
-        return {reject};
-    }
+    const auto [tablePath, streamPath] = std::get<TStreamPaths>(checksResult);
 
     switch (streamDesc.GetMode()) {
     case NKikimrSchemeOp::ECdcStreamModeKeysOnly:
@@ -860,46 +971,76 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
             << "Initial scan is not supported yet")};
     }
 
-    Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
-    auto table = context.SS->Tables.at(tablePath.Base()->PathId);
-
-    TVector<TString> boundaries;
     if (op.HasTopicPartitions()) {
         if (op.GetTopicPartitions() <= 0) {
             return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, "Topic partitions count must be greater than 0")};
         }
+    }
 
-        const auto& keyColumns = table->KeyColumnIds;
-        const auto& columns = table->Columns;
+    std::vector<TString> candidates;
 
-        Y_ABORT_UNLESS(!keyColumns.empty());
-        Y_ABORT_UNLESS(columns.contains(keyColumns.at(0)));
-        const auto firstKeyColumnType = columns.at(keyColumns.at(0)).PType;
-
-        if (!TSchemeShard::FillUniformPartitioning(boundaries, keyColumns.size(), firstKeyColumnType, op.GetTopicPartitions(), AppData()->TypeRegistry, errStr)) {
-            return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, errStr)};
+    if (op.GetIndexModeCase() == NKikimrSchemeOp::TCreateCdcStream::kAllIndexes) {
+        candidates.reserve(tablePath->GetChildren().size());
+        for (const auto& child : tablePath->GetChildren()) {
+            candidates.emplace_back(child.first);
         }
-    } else {
-        const auto& partitions = table->GetPartitions();
-        boundaries.reserve(partitions.size() - 1);
-
-        for (ui32 i = 0; i < partitions.size(); ++i) {
-            const auto& partition = partitions.at(i);
-            if (i != partitions.size() - 1) {
-                boundaries.push_back(partition.EndOfRange);
-            }
+    } else if (op.GetIndexModeCase() == NKikimrSchemeOp::TCreateCdcStream::kIndexName) {
+        auto it = tablePath->GetChildren().find(op.GetIndexName());
+        if (it == tablePath->GetChildren().end()) {
+            return {CreateReject(opId, NKikimrScheme::StatusSchemeError,
+                "requested particular path hasn't been found")};
         }
+        candidates.emplace_back(it->first);
     }
 
     TVector<ISubOperation::TPtr> result;
 
-    if (initialScan) {
-        DoCreateLock(opId, workingDirPath, tablePath, result);
+    for (const auto& name : candidates) {
+        const TPath indexPath = tablePath.Child(name);
+        if (!indexPath.IsTableIndex() || indexPath.IsDeleted()) {
+            continue;
+        }
+
+        const TPath indexImplPath = indexPath.Child("indexImplTable");
+        if (!indexImplPath) {
+            return {CreateReject(opId, NKikimrScheme::StatusSchemeError,
+                "indexImplTable hasn't been found")}; 
+        }
+
+        Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
+        auto indexImplTable = context.SS->Tables.at(indexImplPath.Base()->PathId);
+
+        const TPath indexStreamPath = indexImplPath.Child(streamName);
+        if (auto reject = RejectOnCdcChecks(opId, indexStreamPath, acceptExisted)) {
+            return {reject};
+        }
+
+        if (initialScan) {
+            DoCreateLock(opId, indexPath, indexImplPath, true, result);
+        }
+
+        TVector<TString> boundaries;
+        if (!FillBoundaries(*indexImplTable, op, boundaries, errStr)) {
+            return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, errStr)};
+        }
+
+        DoCreateStream(op, opId, workingDirPath, tablePath, acceptExisted, initialScan, name, result);
+        DoCreatePqPart(opId, indexStreamPath, streamName, indexImplTable, op, boundaries, acceptExisted, result);
     }
 
-    DoCreateStream(op, opId, workingDirPath, tablePath, acceptExisted, initialScan, result);
-    DoCreatePqPart(opId, streamPath, streamName, table, op, boundaries, acceptExisted, result);
+    if (initialScan) {
+        DoCreateLock(opId, workingDirPath, tablePath, false, result);
+    }
 
+    Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
+    auto table = context.SS->Tables.at(tablePath.Base()->PathId);
+    TVector<TString> boundaries;
+    if (!FillBoundaries(*table, op, boundaries, errStr)) {
+        return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, errStr)};
+    }
+
+    DoCreateStream(op, opId, workingDirPath, tablePath, acceptExisted, initialScan, {}, result);
+    DoCreatePqPart(opId, streamPath, streamName, table, op, boundaries, acceptExisted, result);
     return result;
 }
 

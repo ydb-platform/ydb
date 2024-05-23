@@ -10,8 +10,8 @@ bool TBlobManagerDb::LoadLastGcBarrier(TGenStep& lastCollectedGenStep) {
     NIceDb::TNiceDb db(Database);
     ui64 gen = 0;
     ui64 step = 0;
-    if (!Schema::GetSpecialValue(db, Schema::EValueIds::LastGcBarrierGen, gen) ||
-        !Schema::GetSpecialValue(db, Schema::EValueIds::LastGcBarrierStep, step))
+    if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastGcBarrierGen, gen) ||
+        !Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastGcBarrierStep, step))
     {
         return false;
     }

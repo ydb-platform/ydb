@@ -112,14 +112,17 @@ input {
 ```
 После изменения данного файла `Logstash` нужно перезапустить.
 
-#### Отправка и проверка тестового сообщения
+#### Отправка тестовых сообщений
 Затем можно отправить несколько тестовых сообщений
 ```bash
 curl -H "content-type: application/json" -XPUT 'http://127.0.0.1:9876/http/ping' -d '{ "user" : "demo_user", "message" : "demo message", "level": 4}'
 curl -H "content-type: application/json" -XPUT 'http://127.0.0.1:9876/http/ping' -d '{ "user" : "test1", "level": 1}'
 curl -H "content-type: application/json" -XPUT 'http://127.0.0.1:9876/http/ping' -d '{ "message" : "error", "level": -3}'
 ```
-и убедиться что данное сообщение записано в таблицу (не забывая что чтение из колоночной таблицы возможно только в [режиме ScanQuery](../reference/ydb-cli/commands/scan-query.md))
+Все команды должны возвращать `ok` в случае успешного выполнения.
+
+#### Проверка наличия записанных сообщений в {{ ydb-short-name }} 
+Теперь можно убедиться что все отправленные сообщения записаны в таблице. Выполним запрос (не забывая что чтение из колоночной таблицы возможно только в [режиме ScanQuery](../reference/ydb-cli/commands/scan-query.md))
 ```sql
 SELECT * FROM `logstash_demo`;
 ```
@@ -135,17 +138,127 @@ SELECT * FROM `logstash_demo`;
 ```
 
 
-## Использование плагина Input Topic
-{% note info %}
+## Плагин {{ ydb-short-name }} Topic Input
 
-Материал дополняется
+Данный плагин позволяет читать из {{ ydb-short-name }} [топика](../concepts/topic.md) и преобразовывать их в события `Logstash` для дальнейшей обработки.
 
-{% endnote %}
+### Конфигурация плагина
 
-## Использование плагина Output Topic
-{% note info %}
+Для настройки плагина мы должны добавить секцию `ydb_topic` в раздел `input` файла конфигурации [Logstash](https://www.elastic.co/guide/en/logstash/current/configuration.html). Плагин поддерживает стандартный набор опций для [подключения плагинов {{ ydb-short-name }}](#konfiguraciya-podklyucheniya-plaginov-k-ydb), плюс несколько специфичных для него опций
 
-Материал дополняется
+* `topic_path` - обязательный параметр с полным путем топика для чтения
+* `consumer_name` - обязательный параметр с именем [читателя](../concepts/topic.md#consumer) топика
+* `schema` - необязательный параметр с вариантам обработки сообщений {{ ydb-short-name }}. По умолчанию плагин читает и отправляет сообщения топика в бинарном виде, но если указать режим `JSON`, то каждое сообщение из топика будет трактоваться как JSON объект
 
-{% endnote %}
+### Пример использования
 
+#### Создание топика
+В выбранной базе данных {{ ydb-short-name }} мы должны заранее создать топик и читателя, из которого будет производиться чтение. 
+
+```bash
+ydb -e grpc://localhost:2136 -d /local topic create /local/logstash_demo_topic
+ydb -e grpc://localhost:2136 -d /local topic consumer add --consumer logstash-consumer /local/logstash_demo_topic
+```
+
+#### Настройка плагина в Logstash
+
+Добавим секцию плагина `ydb_topic` в раздел `input` файла конфигурации [Logstash](https://www.elastic.co/guide/en/logstash/current/configuration.html). Дополнительно для проверки работоспособности также добавим плагин `stdout` в секцию `output`, что позволит отслеживать все события в логе выполнения `Logstash`.
+
+```ruby
+input {
+  ydb_topic {
+    connection_string => "grpc://localhost:2136/local" # Адрес подключения к {{ ydb-short-name }}
+    topic_path => "/local/logstash_demo_topic"         # Имя топика
+    consumer_name => "logstash-consumer"               # Имя читателя
+    schema => "JSON"                                   # Используем JSON в качестве формата сообщений топика
+  }
+}
+
+output {
+  stdout {
+    codec => rubydebug
+  }
+}
+```
+После изменения данного файла `Logstash` нужно перезапустить.
+
+#### Тестовая запись сообщение в топик
+Затем можно отправить несколько тестовых сообщений
+```bash
+echo '{"message":"test"}' | ydb -e grpc://localhost:2136 -d /local topic write /local/logstash_demo_topic
+echo '{"user":123}' | ydb -e grpc://localhost:2136 -d /local topic write /local/logstash_demo_topic
+```
+
+#### Проверка обработки сообщений в Logstash
+
+Благодаря включенному плагину `stdout` в конфигурации Logstash мы можем найти прочитанные из топика сообщения в логе
+```
+{
+       "message" => "test",
+    "@timestamp" => 2024-05-23T10:31:47.712896899Z,
+      "@version" => "1"
+}
+{
+          "user" => 123.0,
+    "@timestamp" => 2024-05-23T10:34:08.574599108Z,
+      "@version" => "1"
+}
+```
+
+
+## Плагин {{ ydb-short-name }} Topic Output
+
+Данный плагин позволяет записывать события  `Logstash` в {{ ydb-short-name }} [топик](../concepts/topic.md)
+
+### Конфигурация плагина
+
+Для настройки плагина мы должны добавить секцию `ydb_topic` в раздел `output` файла конфигурации [Logstash](https://www.elastic.co/guide/en/logstash/current/configuration.html). Плагин поддерживает стандартный набор опций для [подключения плагинов {{ ydb-short-name }}](#konfiguraciya-podklyucheniya-plaginov-k-ydb), плюс дополнительные опции
+
+* `topic_path` - обязательный параметр с полным путем топика для записи
+
+### Пример использования
+
+#### Создание топика
+В выбранной базе данных {{ ydb-short-name }} мы должны заранее создать топик, в который будет производиться запись.
+
+```bash
+ydb -e grpc://localhost:2136 -d /local topic create /local/logstash_demo_topic
+```
+
+#### Настройка плагина в Logstash
+
+Добавим секцию плагина `ydb_topic` в раздел `output` файла конфигурации [Logstash](https://www.elastic.co/guide/en/logstash/current/configuration.html).. Дополнительно для проверки работоспособности также добавим плагин `http` в секцию `input`, что позволит создавать события в `Logstash` с помощью http запросов.
+
+```ruby
+output {
+  ydb_topic {
+    connection_string => "grpc://localhost:2136/local" # Адрес подключения к  {{ ydb-short-name }}
+    topic_path => "/local/logstash_demo_topic"         # Имя топика для записи
+  }
+}
+
+input {
+  http {
+    port => 9876 # Можно указать любой порт
+  }
+}
+```
+После изменения данного файла `Logstash` нужно перезапустить.
+
+#### Отправка тестового сообщения
+С помощью плагина `http` мы можем отправить тестовое сообщение
+```bash
+curl -H "content-type: application/json" -XPUT 'http://127.0.0.1:9876/http/ping' -d '{ "user" : "demo_user", "message" : "demo message", "level": 4}'
+```
+Команда должна вернуть `ok` в случае успешного выполнения.
+
+#### Контрольное чтение сообщения из топика
+Для проверки успешности записи в топик мы можем создать нового читателя и прочитать из него одно сообщение
+```bash
+ydb -e grpc://localhost:2136 -d /local topic consumer add --consumer logstash-consumer /local/logstash_demo_topic
+ydb -e grpc://localhost:2136 -d /local topic read /local/logstash_demo_topic --consumer logstash-consumer --commit true
+```
+При этом мы получим содержимое отправленного сообщения
+```json
+{"level":4,"message":"demo message","timestamp":1716470292640,"user":"demo_user"}
+```

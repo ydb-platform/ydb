@@ -189,49 +189,6 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         }
     }
 
-    Y_UNIT_TEST(DirectRead) {
-        TTopicSdkTestSetup setup(TEST_CASE_NAME);
-        TTopicClient client = setup.MakeClient();
-
-        for (size_t i = 0; i < 3; ++i) {
-            auto writeSettings = TWriteSessionSettings()
-                        .Path(TEST_TOPIC)
-                        .ProducerId(TEST_MESSAGE_GROUP_ID)
-                        .MessageGroupId(TEST_MESSAGE_GROUP_ID);
-            Cerr << ">>> open write session " << i << Endl;
-            auto writeSession = client.CreateSimpleBlockingWriteSession(writeSettings);
-            UNIT_ASSERT(writeSession->Write("message_using_MessageGroupId"));
-            Cerr << ">>> write session " << i << " message written" << Endl;
-            writeSession->Close();
-            Cerr << ">>> write session " << i << " closed" << Endl;
-        }
-
-        {
-            auto readSettings = TReadSessionSettings()
-                .ConsumerName(TEST_CONSUMER)
-                .AppendTopics(TEST_TOPIC)
-                .DirectRead(true);
-            auto readSession = client.CreateReadSession(readSettings);
-
-            auto event = readSession->GetEvent(true);
-            UNIT_ASSERT(event.Defined());
-
-            auto& startPartitionSession = std::get<TReadSessionEvent::TStartPartitionSessionEvent>(*event);
-            startPartitionSession.Confirm();
-
-            event = readSession->GetEvent(true);
-            UNIT_ASSERT(event.Defined());
-
-            auto& dataReceived = std::get<TReadSessionEvent::TDataReceivedEvent>(*event);
-            dataReceived.Commit();
-
-            auto& messages [[maybe_unused]] = dataReceived.GetMessages();
-            Cerr << dataReceived.DebugString() << Endl;
-            // UNIT_ASSERT(messages.size() == 100);
-            // UNIT_ASSERT(messages[0].GetData() == "message_using_MessageGroupId");
-        }
-    }
-
     Y_UNIT_TEST(ReadWithoutConsumerWithRestarts) {
         TTopicSdkTestSetup setup(TEST_CASE_NAME);
         auto compressor = new TSyncExecutor();

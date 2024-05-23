@@ -283,12 +283,8 @@ void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::Dir
     Y_ABORT_UNLESS(Lock.IsLocked());
     Cerr << response.DebugString() << Endl;
 
-    Ydb::Topic::StreamReadMessage::ReadResponse r;
-    r.set_bytes_size(response.ByteSizeLong());
-    auto* data = r.add_partition_data();
-    data->CopyFrom(response.partition_data());
     if (auto session = SingleClusterReadSession->LockShared()) {
-        session->OnDirectReadDone(std::move(r), deferred);
+        session->OnDirectReadDone(std::move(response), deferred);
     }
 }
 

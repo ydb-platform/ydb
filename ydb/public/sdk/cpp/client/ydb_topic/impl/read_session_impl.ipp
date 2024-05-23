@@ -1572,9 +1572,26 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
 
 
 template <>
-inline void TSingleClusterReadSessionImpl<false>::OnDirectReadDone(Ydb::Topic::StreamReadMessage::ReadResponse&& message, TDeferredActions<false>& deferred) {
-    with_lock(Lock) {
-        OnReadDoneImpl(std::move(message), deferred);
+inline void TSingleClusterReadSessionImpl<false>::OnDirectReadDone(
+    Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&& response,
+    TDeferredActions<false>& deferred
+) {
+    Ydb::Topic::StreamReadMessage::ReadResponse r;
+    r.set_bytes_size(response.ByteSizeLong());
+    auto* data = r.add_partition_data();
+
+    // TODO(qyryq) Eliminate copying.
+    data->CopyFrom(response.partition_data());
+
+    TClientMessage<false> req;
+    auto& ack = *req.mutable_direct_read_ack();
+    ack.set_direct_read_id(response.direct_read_id());
+    ack.set_partition_session_id(response.partition_session_id());
+
+    // Send DirectReadAck then process the data:
+    with_lock (Lock) {
+        WriteToProcessorImpl(std::move(req));
+        OnReadDoneImpl(std::move(r), deferred);
     }
 }
 

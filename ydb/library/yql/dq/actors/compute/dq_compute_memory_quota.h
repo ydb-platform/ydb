@@ -56,6 +56,8 @@ namespace NYql::NDq {
             }
         }
 
+        // Thiss callback is created for testing purposes and will be enabled only with spilling.
+        // Most likely this callback will be removed after: KIKIMR-21481.
         void TrySetIncreaseMemoryLimitCallbackWithRSSControl(NKikimr::NMiniKQL::TScopedAlloc* alloc) {
             if (CanAllocateExtraMemory) {
                 alloc->Ref().SetIncreaseMemoryLimitCallback([this, alloc](ui64 limit, ui64 required) {

@@ -126,7 +126,6 @@ namespace NActors {
             Threads[i].Thread->StopFlag = true;
             Threads[i].WaitingPad.Interrupt();
         }
-        Activations.Stop();
     }
 
     void TIOExecutorPool::Shutdown() {

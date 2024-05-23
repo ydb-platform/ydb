@@ -49,7 +49,7 @@ namespace NActors {
     protected:
 
 #ifdef RING_ACTIVATION_QUEUE
-        using TActivationQueue = TBlockingActivationQueue;
+        using TActivationQueue = TRingActivationQueue;
 #else
         using TActivationQueue = TUnorderedCache<ui32, 512, 4>;
 #endif

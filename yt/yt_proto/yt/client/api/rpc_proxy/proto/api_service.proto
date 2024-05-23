@@ -1064,6 +1064,26 @@ message TRspResumeChaosCells
 
 ////////////////////////////////////////////////////////////////////////////////
 
+message TReqSuspendTabletCells
+{
+    repeated NYT.NProto.TGuid cell_ids = 1;
+}
+
+message TRspSuspendTabletCells
+{ }
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqResumeTabletCells
+{
+    repeated NYT.NProto.TGuid cell_ids = 1;
+}
+
+message TRspResumeTabletCells
+{ }
+
+////////////////////////////////////////////////////////////////////////////////
+
 message TReqAddMaintenance
 {
     required EMaintenanceComponent component = 1;

@@ -1,21 +1,21 @@
 
 # Compares build graphs for two given refs in the current directory git repo
-# Creates ya.make in the current directory listing affected ydb test suites
+# Creates ya.make in the current directory listing affected ydb targets
 # Parameters: base_commit_sha head_commit_sha
 
-set -e
+set -ex
 
 workdir=$(mktemp -d)
 echo Workdir: $workdir
 echo Checkout base commit...
 git checkout $1
 echo Build graph for base commit...
-./ya make -Gj0 -ttt ydb --build release -k --cache-tests | jq '.graph[] | select( ."node-type"=="test")' > $workdir/graph_base
+./ya make -Gj0 -ttt ydb --build release -k --cache-tests --no-strip-idle-build-results | jq '.graph[]' > $workdir/graph_base
 
 echo Checkout head commit...
 git checkout $2
 echo Build graph for head commit...
-./ya make -Gj0 -ttt ydb --build release -k --cache-tests | jq '.graph[] | select( ."node-type"=="test")' > $workdir/graph_head
+./ya make -Gj0 -ttt ydb --build release -k --cache-tests --no-strip-idle-build-results | jq '.graph[]' > $workdir/graph_head
 
 echo Generate lists of uids for base and head...
 cat $workdir/graph_base | jq '.uid' > $workdir/uid_base
@@ -24,8 +24,11 @@ cat $workdir/graph_head | jq '.uid' > $workdir/uid_head
 echo Create a list of changed uids in the head graph...
 (cat $workdir/uid_head;(cat $workdir/uid_base;cat $workdir/uid_head) | sort | uniq -u) | sort | uniq -d > $workdir/uids_new
 
+echo Create ya.make
+echo "" > ya.make
+
 echo Generate list of test shard names from the head graph based on the list of uids...
-cat $workdir/graph_head | jq -r --slurpfile uids $workdir/uids_new 'select( any( .uid; .==$uids[] )) | .kv.path' | sort | uniq > $workdir/testsuites
+cat $workdir/graph_head | jq -r --slurpfile uids $workdir/uids_new 'select( ."node-type"=="test") | select( any( .uid; .==$uids[] )) | .kv.path' | sort | uniq > $workdir/testsuites
 
 echo Number of test suites:
 cat $workdir/testsuites | wc -l
@@ -33,8 +36,17 @@ cat $workdir/testsuites | wc -l
 echo Removing test suite name from the list to get target names...
 sed -E 's/\/[^/]*$//g;/^null$/d' $workdir/testsuites > $workdir/ts2
 
-echo Generating temp ya.make with recurses to all required tests...
-cat $workdir/ts2 | (echo 'RECURSE_FOR_TESTS(';cat;echo ')') > ya.make
+echo Append into ya.make RECURSE_FOR_TESTS to all required tests...
+cat $workdir/ts2 | (echo 'RECURSE_FOR_TESTS(';cat;echo ')') >> ya.make
 
-# echo Running ya test...
-# ./ya make -A -R --build relwithdebinfo .
+echo Generate list of module names from the head graph based on the list of uids...
+cat $workdir/graph_head | jq -r --slurpfile uids $workdir/uids_new 'select( ."target_properties"."module_type" != null) | select( any( .uid; .==$uids[] )) | .target_properties.module_dir' | sort | uniq > $workdir/modules
+
+echo Number of modules:
+cat $workdir/modules | wc -l
+
+echo Append into ya.make RECURSE to all required modules...
+cat $workdir/modules | (echo 'RECURSE(';cat;echo ')') >> ya.make
+
+echo "ya.make content:"
+cat ya.make

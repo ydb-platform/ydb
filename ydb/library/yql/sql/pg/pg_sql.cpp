@@ -2912,7 +2912,7 @@ public:
                 case AT_ColumnDefault: { /* ALTER COLUMN DEFAULT */
                     const auto* def = cmd->def;
                     const auto* colName = cmd->name;
-			        switch (NodeTag(def)) {
+                    switch (NodeTag(def)) {
                         case T_FuncCall: {
                             const auto* newDefault = CAST_NODE(FuncCall, def);
                             const auto* funcName = ListNodeNth(newDefault->funcname, 0);

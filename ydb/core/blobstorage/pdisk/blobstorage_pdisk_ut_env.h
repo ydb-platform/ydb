@@ -125,8 +125,24 @@ public:
                     new NPDisk::TEvYardControl(NPDisk::TEvYardControl::GetPDiskPointer, nullptr),
                     NKikimrProto::OK);
             PDisk = reinterpret_cast<NPDisk::TPDisk*>(evControlRes->Cookie);
+
+            PDiskActor = PDisk->PDiskActor;
         }
         return PDisk;
+    }
+    
+    void StartPDiskRestart() {
+        Send(new TEvBlobStorage::TEvAskWardenRestartPDiskResult(GetPDisk()->PDiskId, MainKey, true, nullptr));
+        const auto evInitRes = Recv<TEvBlobStorage::TEvNotifyWardenPDiskRestarted>();
+
+        if (!Settings.UsePDiskMock) {
+            TActorId wellKnownPDiskActorId = MakeBlobStoragePDiskID(PDiskActor->NodeId(), PDisk->PDiskId);
+
+            PDisk = nullptr;
+
+            // We will temporarily use well know pdisk actor id, because restarted pdisk actor id is not yet known.
+            PDiskActor = wellKnownPDiskActorId;
+        }
     }
 
     template<typename T>

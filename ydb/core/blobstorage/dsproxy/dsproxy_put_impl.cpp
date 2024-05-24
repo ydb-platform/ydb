@@ -88,12 +88,11 @@ ui64 TPutImpl::GetTimeToAccelerateNs(TLogContext &logCtx, ui32 nthWorst) {
     TBatchedVec<ui64> nthWorstPredictedNsVec(Blackboard.BlobStates.size());
     ui64 idx = 0;
     for (auto &[_, state] : Blackboard.BlobStates) {
-        // Find the slowest disk
-        i32 worstSubgroupIdx = -1;
-        ui64 worstPredictedNs = 0;
+        // Find the n'th slowest disk
+        TDiskDelayPredictions worstDisks;
         state.GetWorstPredictedDelaysNs(*Info, *Blackboard.GroupQueues, HandleClassToQueueId(Blackboard.PutHandleClass), nthWorst,
-                &worstPredictedNs, &nthWorstPredictedNsVec[idx], &worstSubgroupIdx);
-        idx++;
+                &worstDisks);
+        nthWorstPredictedNsVec[idx++] = worstDisks[nthWorst].PredictedNs;
     }
     return *MaxElement(nthWorstPredictedNsVec.begin(), nthWorstPredictedNsVec.end());
 }

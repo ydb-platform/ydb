@@ -178,21 +178,12 @@ ui64 TBlobState::GetPredictedDelayNs(const TBlobStorageGroupInfo &info, TGroupQu
 }
 
 void TBlobState::GetWorstPredictedDelaysNs(const TBlobStorageGroupInfo &info, TGroupQueues &groupQueues,
-        NKikimrBlobStorage::EVDiskQueueId queueId, ui32 nthWorst,
-        ui64 *outWorstNs, ui64 *outNthWorstNs, i32 *outWorstSubgroupIdx) const {
-    *outWorstSubgroupIdx = -1;
-    *outWorstNs = 0;
-    TStackVec<ui32, 9> delayNs;
+        NKikimrBlobStorage::EVDiskQueueId queueId, ui32 nWorst, TDiskDelayPredictions *outNWorst) const {
+    outNWorst->resize(Disks.size());
     for (ui32 diskIdx = 0; diskIdx < Disks.size(); ++diskIdx) {
-        ui64 predictedNs = GetPredictedDelayNs(info, groupQueues, diskIdx, queueId);
-        delayNs.push_back(predictedNs);
-        if (predictedNs > *outWorstNs) {
-            *outWorstNs = predictedNs;
-            *outWorstSubgroupIdx = diskIdx;
-        }
+        (*outNWorst)[diskIdx] = { GetPredictedDelayNs(info, groupQueues, diskIdx, queueId), diskIdx };
     }
-    std::nth_element(delayNs.begin(), delayNs.begin() + nthWorst, delayNs.end(), std::greater<ui32>{});
-    *outNthWorstNs = delayNs[nthWorst];
+    std::partial_sort(outNWorst->begin(), outNWorst->begin() + nWorst, outNWorst->end());
 }
 
 bool TBlobState::HasWrittenQuorum(const TBlobStorageGroupInfo& info, const TBlobStorageGroupInfo::TGroupVDisks& expired) const {
@@ -467,22 +458,13 @@ void TBlackboard::ReportPartMapStatus(const TLogoBlobID &id, ssize_t partMapInde
 }
 
 void TBlackboard::GetWorstPredictedDelaysNs(const TBlobStorageGroupInfo &info, TGroupQueues &groupQueues,
-        NKikimrBlobStorage::EVDiskQueueId queueId, ui32 nthWorst,
-        ui64 *outWorstNs, ui64 *outNthWorstNs, i32 *outWorstOrderNumber) const {
-    *outWorstOrderNumber = -1;
-    *outWorstNs = 0;
+        NKikimrBlobStorage::EVDiskQueueId queueId, ui32 nWorst, TDiskDelayPredictions *outNWorst) const {
     ui32 totalVDisks = info.GetTotalVDisksNum();
-    TStackVec<ui32, 9> delayNs;
+    outNWorst->resize(totalVDisks);
     for (ui32 orderNumber = 0; orderNumber < totalVDisks; ++orderNumber) {
-        ui64 predictedNs = groupQueues.GetPredictedDelayNsByOrderNumber(orderNumber, queueId);
-        delayNs.push_back(predictedNs);
-        if (predictedNs > *outWorstNs) {
-            *outWorstNs = predictedNs;
-            *outWorstOrderNumber = orderNumber;
-        }
+        (*outNWorst)[orderNumber] = { groupQueues.GetPredictedDelayNsByOrderNumber(orderNumber, queueId), orderNumber };
     }
-    std::nth_element(delayNs.begin(), delayNs.begin() + nthWorst, delayNs.end(), std::greater<ui32>{});
-    *outNthWorstNs = delayNs[nthWorst];
+    std::partial_sort(outNWorst->begin(), outNWorst->begin() + nWorst, outNWorst->end());
 }
 
 void TBlackboard::RegisterBlobForPut(const TLogoBlobID& id, size_t blobIdx) {

@@ -68,8 +68,8 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
 
     TDiskResponsivenessTracker::TPerDiskStatsPtr Stats;
 
-    ui32 AccelerateRequestsSent;
-    ui32 AcceleratesScheduled;
+    ui32 AccelerateRequestsSent = 0;
+    bool IsAccelerateScheduled = false;
 
     const bool IsMultiPutMode;
 
@@ -98,7 +98,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
     }
 
     void Handle(TEvAccelerate::TPtr &ev) {
-        --AcceleratesScheduled;
+        IsAccelerateScheduled = false;
         RootCauseTrack.OnAccelerate(ev->Get()->CauseIdx);
         Accelerate();
         SanityCheck(); // May Die
@@ -365,16 +365,15 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
     }
 
     void AccelerateIfNeeded() {
-        if (AcceleratesScheduled + AccelerateRequestsSent < 2) {
+        if (!IsAccelerateScheduled && AccelerateRequestsSent < 2) {
             if (WaitingVDiskCount > 0 && WaitingVDiskCount <= 2 && RequestsSent > 1) {
-                ui64 timeToAccelerateUs = Max<ui64>(1, PutImpl.GetTimeToAccelerateNs(
-                        LogCtx, 2 - (AccelerateRequestsSent + AcceleratesScheduled)) / 1000);
+                ui64 timeToAccelerateUs = Max<ui64>(1, PutImpl.GetTimeToAccelerateNs(LogCtx, 2 - AccelerateRequestsSent) / 1000);
                 TDuration timeSinceStart = TActivationContext::Monotonic() - StartTime;
                 if (timeSinceStart.MicroSeconds() < timeToAccelerateUs) {
                     ui64 causeIdx = RootCauseTrack.RegisterAccelerate();
                     Schedule(TDuration::MicroSeconds(timeToAccelerateUs - timeSinceStart.MicroSeconds()),
                             new TEvAccelerate(causeIdx));
-                    ++AcceleratesScheduled;
+                    IsAccelerateScheduled = true;
                 } else {
                     Accelerate();
                 }
@@ -515,8 +514,6 @@ public:
         , TimeStatsEnabled(timeStatsEnabled)
         , Tactic(ev->Tactic)
         , Stats(std::move(stats))
-        , AccelerateRequestsSent(0)
-        , AcceleratesScheduled(0)
         , IsMultiPutMode(false)
         , IncarnationRecords(info->GetTotalVDisksNum())
         , ExpiredVDiskSet(&info->GetTopology())
@@ -559,8 +556,6 @@ public:
         , TimeStatsEnabled(timeStatsEnabled)
         , Tactic(tactic)
         , Stats(std::move(stats))
-        , AccelerateRequestsSent(0)
-        , AcceleratesScheduled(0)
         , IsMultiPutMode(true)
         , IncarnationRecords(info->GetTotalVDisksNum())
         , ExpiredVDiskSet(&info->GetTopology())

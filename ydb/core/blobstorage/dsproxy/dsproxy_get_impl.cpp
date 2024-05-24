@@ -162,20 +162,15 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
 ui64 TGetImpl::GetTimeToAccelerateNs(TLogContext &logCtx, NKikimrBlobStorage::EVDiskQueueId queueId, ui32 nthWorst) {
     Y_UNUSED(logCtx);
     // Find the slowest disk
-    ui64 worstPredictedNs = 0;
-    ui64 nextToWorstPredictedNs = 0;
+    TDiskDelayPredictions worstDisks;
     if (Blackboard.BlobStates.size() == 1) {
-        i32 worstSubgroupIdx = -1;
         Blackboard.BlobStates.begin()->second.GetWorstPredictedDelaysNs(
-                *Info, *Blackboard.GroupQueues, queueId, nthWorst,
-                &worstPredictedNs, &nextToWorstPredictedNs, &worstSubgroupIdx);
+                *Info, *Blackboard.GroupQueues, queueId, nthWorst, &worstDisks);
     } else {
-        i32 worstOrderNumber = -1;
         Blackboard.GetWorstPredictedDelaysNs(
-                *Info, *Blackboard.GroupQueues, queueId, nthWorst,
-                &worstPredictedNs, &nextToWorstPredictedNs, &worstOrderNumber);
+                *Info, *Blackboard.GroupQueues, queueId, nthWorst, &worstDisks);
     }
-    return nextToWorstPredictedNs * 1;
+    return worstDisks[nthWorst].PredictedNs;
 }
 
 ui64 TGetImpl::GetTimeToAccelerateGetNs(TLogContext &logCtx, ui32 acceleratesSent) {

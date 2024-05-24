@@ -73,17 +73,15 @@ namespace NKikimr {
             // find the slowest disk and mark it
             switch (blackboard.AccelerationMode) {
                 case TBlackboard::AccelerationModeSkipOneSlowest: {
-                    i32 worstSubgroupIdx = -1;
-                    ui64 worstPredictedNs = 0;
-                    ui64 nextToWorstPredictedNs = 0;
+                    TDiskDelayPredictions worstDisks;
                     state.GetWorstPredictedDelaysNs(info, *blackboard.GroupQueues,
                             HandleClassToQueueId(blackboard.GetHandleClass), 1,
-                            &worstPredictedNs, &nextToWorstPredictedNs, &worstSubgroupIdx);
+                            &worstDisks);
 
                     // Check if the slowest disk exceptionally slow, or just not very fast
                     i32 slowDiskSubgroupIdx = -1;
-                    if (nextToWorstPredictedNs > 0 && worstPredictedNs > nextToWorstPredictedNs * 2) {
-                        slowDiskSubgroupIdx = worstSubgroupIdx;
+                    if (worstDisks[1].PredictedNs > 0 && worstDisks[0].PredictedNs > worstDisks[1].PredictedNs * 2) {
+                        slowDiskSubgroupIdx = worstDisks[1].DiskIdx;
                     }
 
                     // Mark single slow disk

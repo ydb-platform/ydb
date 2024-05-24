@@ -2,7 +2,7 @@
 $vector = Cast([1, 2, 3, 4, 5] AS List<Float>);
 $vector_binary_str = Knn::ToBinaryStringByte($vector);
 select $vector_binary_str;
-select Len($vector_binary_str) == 6;
+select Len(Untag($vector_binary_str, "ByteVector")) == 6;
 
 --deserialization
 $deserialized_vector = Knn::FloatFromBinaryString($vector_binary_str);

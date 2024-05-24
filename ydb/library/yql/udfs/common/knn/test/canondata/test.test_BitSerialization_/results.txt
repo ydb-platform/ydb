@@ -17,8 +17,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -53,8 +57,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -89,8 +97,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -125,8 +137,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -161,8 +177,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -197,8 +217,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -233,8 +257,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -269,8 +297,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -305,8 +337,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -341,8 +377,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -377,8 +417,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -411,8 +455,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -445,8 +493,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -479,8 +531,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -513,8 +569,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -547,8 +607,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -581,8 +645,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -615,8 +683,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -649,8 +721,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -683,8 +759,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -717,8 +797,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -751,8 +835,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -787,8 +875,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -823,8 +915,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -859,8 +955,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -895,8 +995,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -931,8 +1035,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -967,8 +1075,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -1003,8 +1115,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -1039,8 +1155,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -1073,8 +1193,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -1107,8 +1231,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -1141,8 +1269,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -1175,8 +1307,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -1209,8 +1345,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -1243,8 +1383,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -1277,8 +1421,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -1311,8 +1459,12 @@
                             [
                                 "column1";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]

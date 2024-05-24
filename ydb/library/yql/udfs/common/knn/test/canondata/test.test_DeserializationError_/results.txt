@@ -10,14 +10,8 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "ListType";
-                                        [
-                                            "DataType";
-                                            "Float"
-                                        ]
-                                    ]
+                                    "DataType";
+                                    "Int32"
                                 ]
                             ]
                         ]
@@ -25,39 +19,7 @@
                 ];
                 "Data" = [
                     [
-                        #
-                    ]
-                ]
-            }
-        ]
-    };
-    {
-        "Write" = [
-            {
-                "Type" = [
-                    "ListType";
-                    [
-                        "StructType";
-                        [
-                            [
-                                "column0";
-                                [
-                                    "OptionalType";
-                                    [
-                                        "ListType";
-                                        [
-                                            "DataType";
-                                            "Float"
-                                        ]
-                                    ]
-                                ]
-                            ]
-                        ]
-                    ]
-                ];
-                "Data" = [
-                    [
-                        #
+                        "1"
                     ]
                 ]
             }

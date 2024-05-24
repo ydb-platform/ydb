@@ -10,11 +10,8 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
+                                    "DataType";
+                                    "Bool"
                                 ]
                             ]
                         ]
@@ -22,9 +19,7 @@
                 ];
                 "Data" = [
                     [
-                        [
-                            %true
-                        ]
+                        %true
                     ]
                 ]
             }
@@ -41,11 +36,8 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -53,9 +45,7 @@
                 ];
                 "Data" = [
                     [
-                        [
-                            "14"
-                        ]
+                        "14"
                     ]
                 ]
             }
@@ -72,11 +62,8 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -84,9 +71,7 @@
                 ];
                 "Data" = [
                     [
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -103,11 +88,8 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -115,7 +97,7 @@
                 ];
                 "Data" = [
                     [
-                        #
+                        "32"
                     ]
                 ]
             }
@@ -132,11 +114,8 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -144,7 +123,7 @@
                 ];
                 "Data" = [
                     [
-                        #
+                        "32"
                     ]
                 ]
             }
@@ -161,11 +140,8 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -173,9 +149,7 @@
                 ];
                 "Data" = [
                     [
-                        [
-                            "32"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -192,11 +166,8 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -204,9 +175,7 @@
                 ];
                 "Data" = [
                     [
-                        [
-                            "32"
-                        ]
+                        "64"
                     ]
                 ]
             }
@@ -223,11 +192,8 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -235,100 +201,7 @@
                 ];
                 "Data" = [
                     [
-                        #
-                    ]
-                ]
-            }
-        ]
-    };
-    {
-        "Write" = [
-            {
-                "Type" = [
-                    "ListType";
-                    [
-                        "StructType";
-                        [
-                            [
-                                "column0";
-                                [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
-                                ]
-                            ]
-                        ]
-                    ]
-                ];
-                "Data" = [
-                    [
-                        [
-                            "0"
-                        ]
-                    ]
-                ]
-            }
-        ]
-    };
-    {
-        "Write" = [
-            {
-                "Type" = [
-                    "ListType";
-                    [
-                        "StructType";
-                        [
-                            [
-                                "column0";
-                                [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
-                                ]
-                            ]
-                        ]
-                    ]
-                ];
-                "Data" = [
-                    [
-                        [
-                            "64"
-                        ]
-                    ]
-                ]
-            }
-        ]
-    };
-    {
-        "Write" = [
-            {
-                "Type" = [
-                    "ListType";
-                    [
-                        "StructType";
-                        [
-                            [
-                                "column0";
-                                [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
-                                ]
-                            ]
-                        ]
-                    ]
-                ];
-                "Data" = [
-                    [
-                        [
-                            "32"
-                        ]
+                        "32"
                     ]
                 ]
             }
@@ -352,11 +225,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -365,9 +235,7 @@
                 "Data" = [
                     [
                         "64";
-                        [
-                            "64"
-                        ]
+                        "64"
                     ]
                 ]
             }
@@ -391,11 +259,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -404,9 +269,7 @@
                 "Data" = [
                     [
                         "68";
-                        [
-                            "68"
-                        ]
+                        "68"
                     ]
                 ]
             }
@@ -430,11 +293,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -443,9 +303,7 @@
                 "Data" = [
                     [
                         "72";
-                        [
-                            "72"
-                        ]
+                        "72"
                     ]
                 ]
             }
@@ -469,11 +327,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -482,9 +337,7 @@
                 "Data" = [
                     [
                         "80";
-                        [
-                            "80"
-                        ]
+                        "80"
                     ]
                 ]
             }
@@ -508,11 +361,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -521,9 +371,7 @@
                 "Data" = [
                     [
                         "88";
-                        [
-                            "88"
-                        ]
+                        "88"
                     ]
                 ]
             }
@@ -547,11 +395,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -560,9 +405,7 @@
                 "Data" = [
                     [
                         "96";
-                        [
-                            "96"
-                        ]
+                        "96"
                     ]
                 ]
             }
@@ -586,11 +429,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -599,9 +439,7 @@
                 "Data" = [
                     [
                         "104";
-                        [
-                            "104"
-                        ]
+                        "104"
                     ]
                 ]
             }
@@ -625,11 +463,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -638,9 +473,7 @@
                 "Data" = [
                     [
                         "112";
-                        [
-                            "112"
-                        ]
+                        "112"
                     ]
                 ]
             }
@@ -664,11 +497,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -677,9 +507,7 @@
                 "Data" = [
                     [
                         "120";
-                        [
-                            "120"
-                        ]
+                        "120"
                     ]
                 ]
             }
@@ -703,11 +531,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -716,9 +541,7 @@
                 "Data" = [
                     [
                         "124";
-                        [
-                            "124"
-                        ]
+                        "124"
                     ]
                 ]
             }
@@ -742,11 +565,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -755,9 +575,7 @@
                 "Data" = [
                     [
                         "64";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -781,11 +599,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -794,9 +609,7 @@
                 "Data" = [
                     [
                         "68";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -820,11 +633,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -833,9 +643,7 @@
                 "Data" = [
                     [
                         "72";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -859,11 +667,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -872,9 +677,7 @@
                 "Data" = [
                     [
                         "80";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -898,11 +701,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -911,9 +711,7 @@
                 "Data" = [
                     [
                         "88";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -937,11 +735,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -950,9 +745,7 @@
                 "Data" = [
                     [
                         "96";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -976,11 +769,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -989,9 +779,7 @@
                 "Data" = [
                     [
                         "104";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -1015,11 +803,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -1028,9 +813,7 @@
                 "Data" = [
                     [
                         "112";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -1054,11 +837,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -1067,9 +847,7 @@
                 "Data" = [
                     [
                         "120";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -1093,11 +871,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -1106,9 +881,7 @@
                 "Data" = [
                     [
                         "124";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -1132,11 +905,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -1145,9 +915,7 @@
                 "Data" = [
                     [
                         "64";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -1171,11 +939,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -1184,9 +949,7 @@
                 "Data" = [
                     [
                         "68";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -1210,11 +973,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -1223,9 +983,7 @@
                 "Data" = [
                     [
                         "72";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -1249,11 +1007,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -1262,9 +1017,7 @@
                 "Data" = [
                     [
                         "80";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -1288,11 +1041,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -1301,9 +1051,7 @@
                 "Data" = [
                     [
                         "88";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -1327,11 +1075,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -1340,9 +1085,7 @@
                 "Data" = [
                     [
                         "96";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -1366,11 +1109,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -1379,9 +1119,7 @@
                 "Data" = [
                     [
                         "104";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -1405,11 +1143,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -1418,9 +1153,7 @@
                 "Data" = [
                     [
                         "112";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -1444,11 +1177,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -1457,9 +1187,7 @@
                 "Data" = [
                     [
                         "120";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -1483,11 +1211,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -1496,9 +1221,7 @@
                 "Data" = [
                     [
                         "124";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -1522,11 +1245,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -1535,9 +1255,7 @@
                 "Data" = [
                     [
                         "64";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -1561,11 +1279,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -1574,9 +1289,7 @@
                 "Data" = [
                     [
                         "68";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -1600,11 +1313,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -1613,9 +1323,7 @@
                 "Data" = [
                     [
                         "72";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -1639,11 +1347,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -1652,9 +1357,7 @@
                 "Data" = [
                     [
                         "80";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -1678,11 +1381,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -1691,9 +1391,7 @@
                 "Data" = [
                     [
                         "88";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -1717,11 +1415,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -1730,9 +1425,7 @@
                 "Data" = [
                     [
                         "96";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -1756,11 +1449,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -1769,9 +1459,7 @@
                 "Data" = [
                     [
                         "104";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -1795,11 +1483,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -1808,9 +1493,7 @@
                 "Data" = [
                     [
                         "112";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -1834,11 +1517,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -1847,9 +1527,7 @@
                 "Data" = [
                     [
                         "120";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -1873,11 +1551,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -1886,9 +1561,7 @@
                 "Data" = [
                     [
                         "124";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -1912,11 +1585,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -1925,7 +1595,7 @@
                 "Data" = [
                     [
                         "0";
-                        #
+                        "0"
                     ]
                 ]
             }
@@ -1949,11 +1619,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -1962,9 +1629,7 @@
                 "Data" = [
                     [
                         "4";
-                        [
-                            "4"
-                        ]
+                        "4"
                     ]
                 ]
             }
@@ -1988,11 +1653,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -2001,9 +1663,7 @@
                 "Data" = [
                     [
                         "8";
-                        [
-                            "8"
-                        ]
+                        "8"
                     ]
                 ]
             }
@@ -2027,11 +1687,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -2040,9 +1697,7 @@
                 "Data" = [
                     [
                         "16";
-                        [
-                            "16"
-                        ]
+                        "16"
                     ]
                 ]
             }
@@ -2066,11 +1721,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -2079,9 +1731,7 @@
                 "Data" = [
                     [
                         "24";
-                        [
-                            "24"
-                        ]
+                        "24"
                     ]
                 ]
             }
@@ -2105,11 +1755,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -2118,9 +1765,7 @@
                 "Data" = [
                     [
                         "32";
-                        [
-                            "32"
-                        ]
+                        "32"
                     ]
                 ]
             }
@@ -2144,11 +1789,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -2157,9 +1799,7 @@
                 "Data" = [
                     [
                         "40";
-                        [
-                            "40"
-                        ]
+                        "40"
                     ]
                 ]
             }
@@ -2183,11 +1823,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -2196,9 +1833,7 @@
                 "Data" = [
                     [
                         "48";
-                        [
-                            "48"
-                        ]
+                        "48"
                     ]
                 ]
             }
@@ -2222,11 +1857,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -2235,9 +1867,7 @@
                 "Data" = [
                     [
                         "56";
-                        [
-                            "56"
-                        ]
+                        "56"
                     ]
                 ]
             }
@@ -2261,11 +1891,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -2274,9 +1901,7 @@
                 "Data" = [
                     [
                         "60";
-                        [
-                            "60"
-                        ]
+                        "60"
                     ]
                 ]
             }
@@ -2300,11 +1925,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -2313,7 +1935,7 @@
                 "Data" = [
                     [
                         "0";
-                        #
+                        "0"
                     ]
                 ]
             }
@@ -2337,11 +1959,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -2350,9 +1969,7 @@
                 "Data" = [
                     [
                         "4";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -2376,11 +1993,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -2389,9 +2003,7 @@
                 "Data" = [
                     [
                         "8";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -2415,11 +2027,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -2428,9 +2037,7 @@
                 "Data" = [
                     [
                         "16";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -2454,11 +2061,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -2467,9 +2071,7 @@
                 "Data" = [
                     [
                         "24";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -2493,11 +2095,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -2506,9 +2105,7 @@
                 "Data" = [
                     [
                         "32";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -2532,11 +2129,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -2545,9 +2139,7 @@
                 "Data" = [
                     [
                         "40";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -2571,11 +2163,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -2584,9 +2173,7 @@
                 "Data" = [
                     [
                         "48";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -2610,11 +2197,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -2623,9 +2207,7 @@
                 "Data" = [
                     [
                         "56";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -2649,11 +2231,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -2662,9 +2241,7 @@
                 "Data" = [
                     [
                         "60";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -2688,11 +2265,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -2701,7 +2275,7 @@
                 "Data" = [
                     [
                         "0";
-                        #
+                        "0"
                     ]
                 ]
             }
@@ -2725,11 +2299,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -2738,9 +2309,7 @@
                 "Data" = [
                     [
                         "4";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -2764,11 +2333,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -2777,9 +2343,7 @@
                 "Data" = [
                     [
                         "8";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -2803,11 +2367,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -2816,9 +2377,7 @@
                 "Data" = [
                     [
                         "16";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -2842,11 +2401,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -2855,9 +2411,7 @@
                 "Data" = [
                     [
                         "24";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -2881,11 +2435,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -2894,9 +2445,7 @@
                 "Data" = [
                     [
                         "32";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -2920,11 +2469,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -2933,9 +2479,7 @@
                 "Data" = [
                     [
                         "40";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -2959,11 +2503,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -2972,9 +2513,7 @@
                 "Data" = [
                     [
                         "48";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -2998,11 +2537,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -3011,9 +2547,7 @@
                 "Data" = [
                     [
                         "56";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -3037,11 +2571,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -3050,9 +2581,7 @@
                 "Data" = [
                     [
                         "60";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -3076,11 +2605,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -3089,7 +2615,7 @@
                 "Data" = [
                     [
                         "0";
-                        #
+                        "0"
                     ]
                 ]
             }
@@ -3113,11 +2639,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -3126,9 +2649,7 @@
                 "Data" = [
                     [
                         "4";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -3152,11 +2673,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -3165,9 +2683,7 @@
                 "Data" = [
                     [
                         "8";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -3191,11 +2707,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -3204,9 +2717,7 @@
                 "Data" = [
                     [
                         "16";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -3230,11 +2741,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -3243,9 +2751,7 @@
                 "Data" = [
                     [
                         "24";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -3269,11 +2775,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -3282,9 +2785,7 @@
                 "Data" = [
                     [
                         "32";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -3308,11 +2809,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -3321,9 +2819,7 @@
                 "Data" = [
                     [
                         "40";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -3347,11 +2843,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -3360,9 +2853,7 @@
                 "Data" = [
                     [
                         "48";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -3386,11 +2877,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -3399,9 +2887,7 @@
                 "Data" = [
                     [
                         "56";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }
@@ -3425,11 +2911,8 @@
                             [
                                 "column1";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -3438,9 +2921,7 @@
                 "Data" = [
                     [
                         "60";
-                        [
-                            "0"
-                        ]
+                        "0"
                     ]
                 ]
             }

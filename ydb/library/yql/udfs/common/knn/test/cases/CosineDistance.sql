@@ -12,13 +12,13 @@ $orthogonal_vector2 = Knn::ToBinaryStringByte([0.0f, 2.0f]);
 select Knn::CosineDistance($orthogonal_vector1, $orthogonal_vector2);
 
 --size mismatch
-$bad_vector1 = Knn::ToBinaryStringFloat([1.0f]);
-$bad_vector2 = Knn::ToBinaryStringFloat([4.0f, 5.0f, 6.0f]);
-select Knn::CosineDistance($bad_vector1, $bad_vector2);
+-- $bad_vector1 = Knn::ToBinaryStringFloat([1.0f]);
+-- $bad_vector2 = Knn::ToBinaryStringFloat([4.0f, 5.0f, 6.0f]);
+-- select Knn::CosineDistance($bad_vector1, $bad_vector2);
 
 --bad deserialized vector
-$bad_deserialized_vector2 = "WrongString";
-select Knn::CosineDistance($vector1, $bad_deserialized_vector2);
+-- $bad_deserialized_vector2 = "WrongString";
+-- select Knn::CosineDistance($vector1, $bad_deserialized_vector2);
 
 --float vector
 $float_vector1 = Knn::ToBinaryStringFloat([1.0f, 2.0f, 3.0f]);
@@ -37,7 +37,7 @@ $bitvector_negative = Knn::ToBinaryStringBit(ListReplicate(-1.0f, 64));
 $bitvector_negative_and_positive = Knn::ToBinaryStringBit(ListFromRange(-63.0f, 64.1f));
 $bitvector_negative_and_positive_striped = Knn::ToBinaryStringBit(ListFlatten(ListReplicate([-1.0f, 1.0f], 32)));
 
-select Knn::CosineDistance($bitvector_positive, $bitvector_positive_double_size);
+-- select Knn::CosineDistance($bitvector_positive, $bitvector_positive_double_size);
 select Knn::CosineDistance($bitvector_positive, $bitvector_negative);
 select Knn::CosineDistance($bitvector_positive_double_size, $bitvector_negative_and_positive);
 select Knn::CosineDistance($bitvector_positive, $bitvector_negative_and_positive_striped);

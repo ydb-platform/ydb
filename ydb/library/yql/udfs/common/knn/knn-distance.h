@@ -50,7 +50,8 @@ inline void BitVectorHandleTail(ui64 byteLen, const ui64* v1, const ui64* v2, au
 }
 
 inline void BitVectorHandleOp(ui64 bitLen, const ui64* v1, const ui64* v2, auto&& op) {
-    Y_ASSERT(0 < bitLen);
+    if (Y_UNLIKELY(bitLen == 0))
+        return;
     auto byteLen = (bitLen + 7) / 8;
     const auto wordLen = byteLen / sizeof(ui64);
     if (Y_LIKELY(wordLen == 0)) // fast-path for short case
@@ -74,7 +75,7 @@ inline std::optional<float> KnnManhattanDistance(const TStringRef& str1, const T
             const TArrayRef<const float> vector1 = TKnnSerializerFacade::GetArray<float>(str1);
             const TArrayRef<const float> vector2 = TKnnSerializerFacade::GetArray<float>(str2);
 
-            if (Y_UNLIKELY(vector1.size() != vector2.size() || vector1.empty()))
+            if (Y_UNLIKELY(vector1.size() != vector2.size()))
                 return {};
 
             return ::L1Distance(vector1.data(), vector2.data(), vector1.size());
@@ -83,7 +84,7 @@ inline std::optional<float> KnnManhattanDistance(const TStringRef& str1, const T
             const TArrayRef<const ui8> vector1 = TKnnSerializerFacade::GetArray<ui8>(str1);
             const TArrayRef<const ui8> vector2 = TKnnSerializerFacade::GetArray<ui8>(str2);
 
-            if (Y_UNLIKELY(vector1.size() != vector2.size() || vector1.empty()))
+            if (Y_UNLIKELY(vector1.size() != vector2.size()))
                 return {};
 
             return ::L1Distance(vector1.data(), vector2.data(), vector1.size());
@@ -92,7 +93,7 @@ inline std::optional<float> KnnManhattanDistance(const TStringRef& str1, const T
             auto [v1, bitLen1] = TKnnBitVectorSerializer::GetArray(str1);
             auto [v2, bitLen2] = TKnnBitVectorSerializer::GetArray(str2);
 
-            if (Y_UNLIKELY(bitLen1 != bitLen2 || bitLen1 == 0))
+            if (Y_UNLIKELY(bitLen1 != bitLen2))
                 return {};
 
             ui64 ret = 0;
@@ -118,7 +119,7 @@ inline std::optional<float> KnnEuclideanDistance(const TStringRef& str1, const T
             const TArrayRef<const float> vector1 = TKnnSerializerFacade::GetArray<float>(str1);
             const TArrayRef<const float> vector2 = TKnnSerializerFacade::GetArray<float>(str2);
 
-            if (Y_UNLIKELY(vector1.size() != vector2.size() || vector1.empty()))
+            if (Y_UNLIKELY(vector1.size() != vector2.size()))
                 return {};
 
             return ::L2Distance(vector1.data(), vector2.data(), vector1.size());
@@ -127,7 +128,7 @@ inline std::optional<float> KnnEuclideanDistance(const TStringRef& str1, const T
             const TArrayRef<const ui8> vector1 = TKnnSerializerFacade::GetArray<ui8>(str1);
             const TArrayRef<const ui8> vector2 = TKnnSerializerFacade::GetArray<ui8>(str2);
 
-            if (Y_UNLIKELY(vector1.size() != vector2.size() || vector1.empty()))
+            if (Y_UNLIKELY(vector1.size() != vector2.size()))
                 return {};
 
             return ::L2Distance(vector1.data(), vector2.data(), vector1.size());
@@ -136,7 +137,7 @@ inline std::optional<float> KnnEuclideanDistance(const TStringRef& str1, const T
             auto [v1, bitLen1] = TKnnBitVectorSerializer::GetArray(str1);
             auto [v2, bitLen2] = TKnnBitVectorSerializer::GetArray(str2);
 
-            if (Y_UNLIKELY(bitLen1 != bitLen2 || bitLen1 == 0))
+            if (Y_UNLIKELY(bitLen1 != bitLen2))
                 return {};
 
             ui64 ret = 0;
@@ -162,7 +163,7 @@ inline std::optional<float> KnnDotProduct(const TStringRef& str1, const TStringR
             const TArrayRef<const float> vector1 = TKnnSerializerFacade::GetArray<float>(str1);
             const TArrayRef<const float> vector2 = TKnnSerializerFacade::GetArray<float>(str2);
 
-            if (Y_UNLIKELY(vector1.size() != vector2.size() || vector1.empty()))
+            if (Y_UNLIKELY(vector1.size() != vector2.size()))
                 return {};
 
             return ::DotProduct(vector1.data(), vector2.data(), vector1.size());
@@ -171,7 +172,7 @@ inline std::optional<float> KnnDotProduct(const TStringRef& str1, const TStringR
             const TArrayRef<const ui8> vector1 = TKnnSerializerFacade::GetArray<ui8>(str1);
             const TArrayRef<const ui8> vector2 = TKnnSerializerFacade::GetArray<ui8>(str2);
 
-            if (Y_UNLIKELY(vector1.size() != vector2.size() || vector1.empty()))
+            if (Y_UNLIKELY(vector1.size() != vector2.size()))
                 return {};
 
             return ::DotProduct(vector1.data(), vector2.data(), vector1.size());
@@ -180,7 +181,7 @@ inline std::optional<float> KnnDotProduct(const TStringRef& str1, const TStringR
             auto [v1, bitLen1] = TKnnBitVectorSerializer::GetArray(str1);
             auto [v2, bitLen2] = TKnnBitVectorSerializer::GetArray(str2);
 
-            if (Y_UNLIKELY(bitLen1 != bitLen2 || bitLen1 == 0))
+            if (Y_UNLIKELY(bitLen1 != bitLen2))
                 return {};
 
             ui64 ret = 0;
@@ -206,7 +207,7 @@ inline std::optional<TTriWayDotProduct<float>> KnnTriWayDotProduct(const TString
             const TArrayRef<const float> vector1 = TKnnSerializerFacade::GetArray<float>(str1);
             const TArrayRef<const float> vector2 = TKnnSerializerFacade::GetArray<float>(str2);
 
-            if (Y_UNLIKELY(vector1.size() != vector2.size() || vector1.empty()))
+            if (Y_UNLIKELY(vector1.size() != vector2.size()))
                 return {};
 
             return ::TriWayDotProduct(vector1.data(), vector2.data(), vector1.size());
@@ -215,7 +216,7 @@ inline std::optional<TTriWayDotProduct<float>> KnnTriWayDotProduct(const TString
             const TArrayRef<const ui8> vector1 = TKnnSerializerFacade::GetArray<ui8>(str1);
             const TArrayRef<const ui8> vector2 = TKnnSerializerFacade::GetArray<ui8>(str2);
 
-            if (Y_UNLIKELY(vector1.size() != vector2.size() || vector1.empty()))
+            if (Y_UNLIKELY(vector1.size() != vector2.size()))
                 return {};
 
             TTriWayDotProduct<float> result;
@@ -228,7 +229,7 @@ inline std::optional<TTriWayDotProduct<float>> KnnTriWayDotProduct(const TString
             auto [v1, bitLen1] = TKnnBitVectorSerializer::GetArray(str1);
             auto [v2, bitLen2] = TKnnBitVectorSerializer::GetArray(str2);
 
-            if (Y_UNLIKELY(bitLen1 != bitLen2 || bitLen1 == 0))
+            if (Y_UNLIKELY(bitLen1 != bitLen2))
                 return {};
 
             ui64 ll = 0;

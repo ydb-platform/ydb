@@ -8,4 +8,24 @@ enum EFormat: ui8 {
     BitVector = 10,  // 1-bit  per element
 };
 
-inline constexpr size_t HeaderLen = sizeof(ui8);
+template<typename T>
+struct TTypeToFormat;
+
+template<>
+struct TTypeToFormat<float> {
+    static constexpr auto Format = EFormat::FloatVector;
+};
+
+template<>
+struct TTypeToFormat<ui8> {
+    static constexpr auto Format = EFormat::Uint8Vector;
+};
+
+template<>
+struct TTypeToFormat<bool> {
+    static constexpr auto Format = EFormat::BitVector;
+};
+
+template<typename T>
+inline constexpr auto Format = TTypeToFormat<T>::Format;
+inline constexpr auto HeaderLen = sizeof(ui8);

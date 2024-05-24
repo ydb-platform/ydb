@@ -10,8 +10,12 @@
                             [
                                 "column0";
                                 [
-                                    "DataType";
-                                    "String"
+                                    "TaggedType";
+                                    "ByteVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -62,13 +66,10 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
+                                    "ListType";
                                     [
-                                        "ListType";
-                                        [
-                                            "DataType";
-                                            "Float"
-                                        ]
+                                        "DataType";
+                                        "Float"
                                     ]
                                 ]
                             ]
@@ -78,13 +79,11 @@
                 "Data" = [
                     [
                         [
-                            [
-                                "1";
-                                "2";
-                                "3";
-                                "4";
-                                "5"
-                            ]
+                            "1";
+                            "2";
+                            "3";
+                            "4";
+                            "5"
                         ]
                     ]
                 ]
@@ -102,11 +101,8 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
+                                    "DataType";
+                                    "Float"
                                 ]
                             ]
                         ]
@@ -114,9 +110,7 @@
                 ];
                 "Data" = [
                     [
-                        [
-                            "0.025368094"
-                        ]
+                        "0.025368094"
                     ]
                 ]
             }

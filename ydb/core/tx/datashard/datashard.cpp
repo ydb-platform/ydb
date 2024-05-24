@@ -2869,7 +2869,7 @@ bool TDataShard::CheckDataTxRejectAndReply(const NEvents::TDataEvents::TEvWrite:
 }
 void TDataShard::UpdateProposeQueueSize() const {
     SetCounter(COUNTER_TOTAL_PROPOSE_QUEUE_SIZE, MediatorStateWaitingMsgs.size() + ProposeQueue.Size() + DelayedProposeQueue.size() + Pipeline.WaitingTxs());
-    SetCounter(COUNTER_READ_ITERATORS_QUEUE_SIZE, Pipeline.WaitingReadIterators());
+    SetCounter(COUNTER_READ_ITERATORS_WAITING, Pipeline.WaitingReadIterators());
     SetCounter(COUNTER_MEADIATOR_STATE_QUEUE_SIZE, MediatorStateWaitingMsgs.size());
     SetCounter(COUNTER_WAITING_TX_QUEUE_SIZE, Pipeline.WaitingTxs());
     SetCounter(COUNTER_PROPOSE_QUEUE_SIZE, ProposeQueue.Size());

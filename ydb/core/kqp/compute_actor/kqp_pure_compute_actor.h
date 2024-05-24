@@ -8,17 +8,16 @@
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/runtime/kqp_compute.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
+#include <ydb/core/kqp/runtime/kqp_compute_scheduler.h>
 #include <ydb/core/sys_view/scan.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
-
-#include <ydb/library/yql/dq/actors/compute/dq_sync_compute_actor_base.h>
 
 
 namespace NKikimr {
 namespace NKqp {
 
-class TKqpComputeActor : public TDqSyncComputeActorBase<TKqpComputeActor> {
-    using TBase = TDqSyncComputeActorBase<TKqpComputeActor>;
+class TKqpComputeActor : public TSchedulableComputeActorBase<TKqpComputeActor> {
+    using TBase = TSchedulableComputeActorBase<TKqpComputeActor>;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -29,7 +28,8 @@ public:
         IDqAsyncIoFactory::TPtr asyncIoFactory,
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
         NWilson::TTraceId traceId, TIntrusivePtr<NActors::TProtoArenaHolder> arena,
-        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings);
+        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
+        TComputeActorSchedulingOptions);
 
     void DoBootstrap();
 
@@ -68,7 +68,8 @@ IActor* CreateKqpComputeActor(const TActorId& executerId, ui64 txId, NDqProto::T
     IDqAsyncIoFactory::TPtr asyncIoFactory,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
     NWilson::TTraceId traceId, TIntrusivePtr<NActors::TProtoArenaHolder> arena,
-    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings);
+    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
+    TComputeActorSchedulingOptions);
 
 } // namespace NKqp
 } // namespace NKikimr

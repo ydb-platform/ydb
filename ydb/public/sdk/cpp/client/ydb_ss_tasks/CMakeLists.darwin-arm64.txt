@@ -13,24 +13,35 @@
 # system may be rejected.
 
 
-add_library(cpp-client-ydb_operation)
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
 
-target_link_libraries(cpp-client-ydb_operation PUBLIC
-  contrib-libs-linux-headers
+add_library(cpp-client-ydb_ss_tasks)
+
+target_link_libraries(cpp-client-ydb_ss_tasks PUBLIC
   contrib-libs-cxxsupp
   yutil
+  tools-enum_parser-enum_serialization_runtime
   api-grpc
-  public-lib-operation_id
-  cpp-client-ydb_query
+  api-protos
   client-ydb_common_client-impl
   cpp-client-ydb_driver
-  cpp-client-ydb_export
-  cpp-client-ydb_import
-  cpp-client-ydb_ss_tasks
+  cpp-client-ydb_proto
   client-ydb_types-operation
 )
 
-target_sources(cpp-client-ydb_operation PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_operation/operation.cpp
+target_sources(cpp-client-ydb_ss_tasks PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_ss_tasks/task.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_ss_tasks/out.cpp
+)
+
+generate_enum_serilization(cpp-client-ydb_ss_tasks
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_ss_tasks/task.h
+  INCLUDE_HEADERS
+  ydb/public/sdk/cpp/client/ydb_ss_tasks/task.h
 )
 

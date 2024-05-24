@@ -292,15 +292,10 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             if (col.HasDefaultFromSequence()) {
                 if (sourceColumn.PType.GetTypeId() != NScheme::NTypeIds::Int64 
                         && NPg::PgTypeIdFromTypeDesc(sourceColumn.PType.GetTypeDesc()) != INT8OID) {
-                    if (sourceColumn.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
-                        errStr = Sprintf(
-                            "Sequence value type '%s' must be equal to the column type '%s'", "pgint8",
-                            NScheme::TypeName(sourceColumn.PType, sourceColumn.PTypeMod).c_str());
-                    } else {
-                        errStr = Sprintf(
-                            "Sequence value type '%s' must be equal to the column type '%s'", "Int64",
-                            NScheme::TypeName(sourceColumn.PType, sourceColumn.PTypeMod).c_str());
-                    }
+                    TString sequenceType = sourceColumn.PType.GetTypeId() == NScheme::NTypeIds::Pg ? "pgint8" : "Int64";
+                    errStr = Sprintf(
+                        "Sequence value type '%s' must be equal to the column type '%s'", sequenceType,
+                        NScheme::TypeName(sourceColumn.PType, sourceColumn.PTypeMod).c_str());
                     return nullptr;
                 }
             }

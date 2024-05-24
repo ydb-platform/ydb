@@ -12359,6 +12359,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["PgGrouping"] = &PgGroupingWrapper;
         Functions["PgGroupingSet"] = &PgGroupingSetWrapper;
         Functions["PgToRecord"] = &PgToRecordWrapper;
+        Functions["PgIterate"] = &PgIterateWrapper;
+        Functions["PgIterateAll"] = &PgIterateWrapper;
         Functions["StructUnion"] = &StructMergeWrapper;
         Functions["StructIntersection"] = &StructMergeWrapper;
         Functions["StructDifference"] = &StructMergeWrapper;
@@ -12629,6 +12631,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["AggregateMergeManyFinalize"] = &AggregateWrapper;
 
         ColumnOrderFunctions["PgSetItem"] = &OrderForPgSetItem;
+        ColumnOrderFunctions["PgIterate"] = &OrderFromFirst;
+        ColumnOrderFunctions["PgIterateAll"] = &OrderFromFirst;
         ColumnOrderFunctions["AssumeColumnOrder"] = &OrderForAssumeColumnOrder;
 
         ColumnOrderFunctions["SqlProject"] = ColumnOrderFunctions["OrderedSqlProject"] = &OrderForSqlProject;

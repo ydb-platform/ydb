@@ -4154,4 +4154,123 @@ TExprNode::TPtr ExpandPgGrouping(const TExprNode::TPtr& node, TExprContext& ctx,
         .Build();
 }
 
+TExprNode::TPtr ExpandPgIterate(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    const bool all = node->Content().EndsWith("All");
+    auto init = node->HeadPtr();
+    init = ctx.WrapByCallableIf(!all, "ListUniq", std::move(init));
+    auto lambda = node->TailPtr();
+    const auto limit = optCtx.Types->PgIterateLimit;
+    auto itemArg = ctx.NewArgument(node->Pos(), "item");
+    auto stateArg = ctx.NewArgument(node->Pos(), "state");
+    auto state = ctx.Builder(node->Pos())
+        .Callable("Ensure")
+            .Add(0, stateArg)
+            .Callable(1, "<")
+                .Add(0, itemArg)
+                .Callable(1, "Uint32")
+                    .Atom(0, limit)
+                .Seal()
+            .Seal()
+            .Callable(2, "String")
+                .Atom(0, "Too many CTE iterations: " + ToString(limit))
+            .Seal()
+        .Seal()
+        .Build();
+
+    auto currentIter = ctx.NewCallable(node->Pos(), "Nth", { state, ctx.NewAtom(node->Pos(), 1)});
+    auto add = ctx.Builder(node->Pos())
+        .Apply(lambda)
+            .With(0, currentIter)
+        .Seal()
+        .Build();
+
+    auto currentRes = ctx.NewCallable(node->Pos(), "Nth", { state, ctx.NewAtom(node->Pos(), 0)});
+    add = ctx.WrapByCallableIf(!all, "ListUniq", std::move(add));
+    if (!all) {
+        auto id = ctx.Builder(node->Pos())
+            .Lambda()
+                .Param("x")
+                .Arg("x")
+            .Seal()
+            .Build();
+
+        add = ctx.Builder(node->Pos())
+            .Callable("Filter")
+                .Add(0, add)
+                .Lambda(1)
+                    .Param("item")
+                    .Callable("Not")
+                        .Callable(0, "Contains")
+                            .Callable(0, "ToDict")
+                                .Add(0, currentRes)
+                                .Add(1, id)
+                                .Add(2, id)
+                                .List(3)
+                                    .Atom(0, "Auto", TNodeFlags::Default)
+                                    .Atom(1, "One", TNodeFlags::Default)
+                                .Seal()
+                            .Seal()
+                            .Arg(1, "item")
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build();
+    }
+
+    auto res = ctx.NewCallable(node->Pos(), "Extend", { currentRes, add });
+    auto p = ctx.NewList(node->Pos(), { res, add });
+    auto foldLambdaBody = ctx.NewList(node->Pos(), { p, p});
+    auto foldLambda = ctx.NewLambda(node->Pos(), ctx.NewArguments(node->Pos(), { itemArg, stateArg}), std::move(foldLambdaBody));
+    auto foldMap = ctx.Builder(node->Pos())
+        .Callable("FoldMap")
+            .Callable(0, "ListFromRange")
+                .Callable(0, "Uint32")
+                    .Atom(0, 0)
+                .Seal()
+                .Callable(1, "Uint32")
+                    .Atom(0, limit + 1)
+                .Seal()
+            .Seal()
+            .List(1)
+                .Add(0, init)
+                .Add(1, init)
+            .Seal()
+            .Add(2, foldLambda)
+        .Seal()
+        .Build();
+
+    return ctx.Builder(node->Pos())
+        .Callable("Coalesce")
+            .Callable(0, "Nth")
+                .Callable(0, "ListLast")
+                    .Callable(0, "ListTakeWhile")
+                        .Callable(0, "ListExtend")
+                            .Callable(0, "AsList")
+                                .List(0)
+                                    .Add(0, init)
+                                    .Add(1, init)
+                                .Seal()
+                            .Seal()
+                            .Add(1, foldMap)
+                        .Seal()
+                        .Lambda(1)
+                            .Param("x")
+                            .Callable("HasItems")
+                                .Callable(0, "Nth")
+                                    .Arg(0, "x")
+                                    .Atom(1, 1)
+                                .Seal()
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Atom(1, 0)
+            .Seal()
+            .Callable(1, "AsList")
+            .Seal()
+        .Seal()
+        .Build();
+}
+
 } // namespace NYql

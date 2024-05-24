@@ -1113,23 +1113,26 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
  }
 
 void TTable::Clear() {
-
     for (ui64 bucket = 0; bucket < NumberOfBuckets; bucket++) {
-        TTableBucket & tb = TableBuckets[bucket];
-        tb.KeyIntVals.clear();
-        tb.DataIntVals.clear();
-        tb.StringsOffsets.clear();
-        tb.StringsValues.clear();
-        tb.InterfaceValues.clear();
-        tb.InterfaceOffsets.clear();
-        tb.JoinIds.clear();
-        tb.RightIds.clear();
-
-        TTableBucketStats & tbs = TableBucketsStats[bucket];
-        tbs.TuplesNum = 0;
-        tbs.KeyIntValsTotalSize = 0;
-        tbs.StringValuesTotalSize = 0;
+        ClearBucket(bucket);
     }
+}
+
+void TTable::ClearBucket(ui64 bucket) {
+    TTableBucket & tb = TableBuckets[bucket];
+    tb.KeyIntVals.clear();
+    tb.DataIntVals.clear();
+    tb.StringsOffsets.clear();
+    tb.StringsValues.clear();
+    tb.InterfaceValues.clear();
+    tb.InterfaceOffsets.clear();
+    tb.JoinIds.clear();
+    tb.RightIds.clear();
+
+    TTableBucketStats & tbs = TableBucketsStats[bucket];
+    tbs.TuplesNum = 0;
+    tbs.KeyIntValsTotalSize = 0;
+    tbs.StringValuesTotalSize = 0;
 }
 
 void TTable::InitializeBucketSpillers(ISpiller::TPtr spiller) {
@@ -1206,8 +1209,8 @@ void TTable::StartLoadingBucket(ui32 bucket) {
     TableBucketsSpillers[bucket].StartBucketRestoration();
 }
 
-void TTable::ExtractBucket(ui64 bucket) {
-    if (GetSizeOfBucket(bucket) != 0) return;
+void TTable::PrepareBucket(ui64 bucket) {
+    if (!TableBucketsSpillers[bucket].IsExtractionRequired()) return;
     TableBuckets[bucket] = std::move(TableBucketsSpillers[bucket].ExtractBucket());
 }
 
@@ -1292,6 +1295,7 @@ void TTableBucketSpiller::Finalize() {
 void TTableBucketSpiller::SpillBucket(TTableBucket&& bucket) {
     MKQL_ENSURE(NextVectorToProcess == ENextVectorToProcess::None, "Internal logic error");
     State = EState::Spilling;
+    IsBucketOwnedBySpiller = true;
 
     CurrentBucket = std::move(bucket);
     NextVectorToProcess = ENextVectorToProcess::KeyAndVals;
@@ -1302,6 +1306,7 @@ void TTableBucketSpiller::SpillBucket(TTableBucket&& bucket) {
 TTableBucket&& TTableBucketSpiller::ExtractBucket() {
     MKQL_ENSURE(State == EState::InMemory, "Internal logic error");
     MKQL_ENSURE(SpilledBucketsCount == 0, "Internal logic error");
+    IsBucketOwnedBySpiller = false;
     return std::move(CurrentBucket);
 }
 
@@ -1313,6 +1318,10 @@ bool TTableBucketSpiller::HasRunningAsyncIoOperation() const {
 
 bool TTableBucketSpiller::IsInMemory() const {
     return State == EState::InMemory;
+}
+
+bool TTableBucketSpiller::IsExtractionRequired() const {
+    return IsBucketOwnedBySpiller;
 }
 
 void TTableBucketSpiller::StartBucketRestoration() {

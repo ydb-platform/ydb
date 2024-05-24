@@ -117,6 +117,7 @@ public:
     bool HasRunningAsyncIoOperation() const;
 
     bool IsInMemory() const;
+    bool IsExtractionRequired() const;
 
 private:
     void ProcessBucketSpilling();
@@ -154,6 +155,8 @@ private:
     bool IsFinalizing = false;
 
     TTableBucket CurrentBucket;
+
+    bool IsBucketOwnedBySpiller = false;
 };
 
 
@@ -288,8 +291,11 @@ public:
     // Starts loading spilled bucket to memory.
     void StartLoadingBucket(ui32 bucket);
 
-    // Extracts loaded bucket from spilling.
-    void ExtractBucket(ui64 bucket);
+    // Prepares bucket for joining after spilling and restoring back.
+    void PrepareBucket(ui64 bucket);
+
+    // Clears all the data related to a single bucket
+    void ClearBucket(ui64 bucket);
 
     // Clears table content
     void Clear();

@@ -60,7 +60,7 @@ namespace NYql::NDq {
         // Most likely this callback will be removed after KIKIMR-21481.
         void TrySetIncreaseMemoryLimitCallbackWithRSSControl(NKikimr::NMiniKQL::TScopedAlloc* alloc) {
             if (!CanAllocateExtraMemory) return;
-            const ui64 limitRSS = std::numeric_limits<ui64>::max();
+            const ui64 limitRSS = 1_GB;
             const ui64 criticalRSSValue = limitRSS / 100 * 80;
 
             alloc->Ref().SetIncreaseMemoryLimitCallback([this, alloc](ui64 limit, ui64 required) {

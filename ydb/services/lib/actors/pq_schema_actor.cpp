@@ -734,7 +734,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         pqDescr->SetName(name);
 
         auto minParts = 1;
-        auto* pqTabletConfig = pqDescr->MutablePQTabletConfig(); // savnik
+        auto* pqTabletConfig = pqDescr->MutablePQTabletConfig();
         auto partConfig = pqTabletConfig->MutablePartitionConfig();
         if (settings.has_partitions_count()) {
             if (settings.partitions_count() > 0) {
@@ -1077,12 +1077,12 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         auto pqTabletConfig = pqDescr->MutablePQTabletConfig();
         auto partConfig = pqTabletConfig->MutablePartitionConfig();
-        if (request.has_partitioning_settings()) { // savnik: check for filled in sdk
+        if (request.has_partitioning_settings()) {
             const auto& settings = request.partitioning_settings();
             if (settings.min_active_partitions() > 0) {
                 minParts = settings.min_active_partitions();
             }
-            if (AppData(ctx)->FeatureFlags.GetEnableTopicSplitMerge() && request.has_partitioning_settings()) { // savnik fill it if splitMerge feature disabled?
+            if (AppData(ctx)->FeatureFlags.GetEnableTopicSplitMerge() && request.has_partitioning_settings()) {
                 auto pqTabletConfigPartStrategy = pqTabletConfig->MutablePartitionStrategy();
                 auto autoscaleSettings = settings.autoscaling_settings();
                 pqTabletConfigPartStrategy->SetMinPartitionCount(minParts);
@@ -1248,7 +1248,6 @@ namespace NKikimr::NGRpcProxy::V1 {
                     pqTabletConfig->MutablePartitionStrategy()->SetMinPartitionCount(minParts);
                 }
             }
-            // savnik CHECK_CDC
             if (splitMergeFeatureEnabled) {
                 if (settings.has_set_max_active_partitions()) {
                     pqTabletConfig->MutablePartitionStrategy()->SetMaxPartitionCount(settings.set_max_active_partitions());

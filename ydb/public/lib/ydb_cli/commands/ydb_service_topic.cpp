@@ -377,7 +377,7 @@ namespace {
             partitioningSettings.MinActivePartitions(*MinActivePartitions_);
         }
 
-        if (MaxActivePartitions_.Defined() && (*MaxActivePartitions_ != describeResult.GetTopicDescription().GetPartitioningSettings().GetMaxActivePartitions())) { // savnik check describe
+        if (MaxActivePartitions_.Defined() && (*MaxActivePartitions_ != describeResult.GetTopicDescription().GetPartitioningSettings().GetMaxActivePartitions())) {
             partitioningSettings.MaxActivePartitions(*MaxActivePartitions_);
         }
 
@@ -398,7 +398,6 @@ namespace {
         if (GetScaleUpThresholdPercent().Defined() && *GetScaleUpThresholdPercent() != describeResult.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetScaleUpThresholdPercent()) {
             autoscalingSettings.ScaleUpThresholdPercent(*GetScaleUpThresholdPercent());
         }
-        //savnik: check empty obj
 
         auto codecs = GetCodecs();
         if (!codecs.empty()) {

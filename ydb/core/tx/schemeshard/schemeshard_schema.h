@@ -32,13 +32,11 @@ struct Schema : NIceDb::Schema {
         struct TempDirOwnerActorId :   Column<17, NScheme::NTypeIds::String> {}; // Only for EPathType::EPathTypeDir.
                                                                                  // Not empty if dir must be deleted after loosing connection with TempDirOwnerActorId actor.
                                                                                  // See schemeshard__background_cleaning.cpp.
-        struct Temporary :             Column<18, NScheme::NTypeIds::Bool> {}; // Only for EPathType::EPathTypeDir.
-                                                                                 // A special flag from kqp is needed for creating anything in directory.
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<Id, ParentId, Name, CreateFinished, PathType, StepCreated, CreateTxId,
             StepDropped, DropTxId, Owner, ACL, LastTxId, DirAlterVersion, UserAttrsAlterVersion, ACLVersion,
-            ParentOwnerId, TempDirOwnerActorId, Temporary>;
+            ParentOwnerId, TempDirOwnerActorId>;
     };
 
     struct MigratedPaths : Table<50> {
@@ -61,12 +59,10 @@ struct Schema : NIceDb::Schema {
         struct TempDirOwnerActorId :   Column<17, NScheme::NTypeIds::String> {}; // Only for EPathType::EPathTypeDir.
                                                                                  // Not empty if dir must be deleted after loosing connection with TempDirOwnerActorId actor.
                                                                                  // See schemeshard__background_cleaning.cpp.
-        struct Temporary :             Column<18, NScheme::NTypeIds::Bool> {}; // Only for EPathType::EPathTypeDir.
-                                                                                 // A special flag from kqp is needed for creating anything in directory.
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<OwnerPathId, LocalPathId, ParentOwnerId, ParentLocalId, Name, PathType, StepCreated, CreateTxId,
-            StepDropped, DropTxId, Owner, ACL, LastTxId, DirAlterVersion, UserAttrsAlterVersion, ACLVersion, TempDirOwnerActorId, Temporary>;
+            StepDropped, DropTxId, Owner, ACL, LastTxId, DirAlterVersion, UserAttrsAlterVersion, ACLVersion, TempDirOwnerActorId>;
     };
 
     struct TxInFlight : Table<2> { // not in use

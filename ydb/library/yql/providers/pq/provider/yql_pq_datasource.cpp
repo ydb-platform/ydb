@@ -217,7 +217,8 @@ public:
         return false;
     }
 
-    ui32 GetInputs(const TExprNode& node, TVector<TPinInfo>& inputs) override {
+    ui32 GetInputs(const TExprNode& node, TVector<TPinInfo>& inputs, bool withLimits) override {
+        Y_UNUSED(withLimits);
         if (auto maybeRead = TMaybeNode<TPqReadTopic>(&node)) {
             if (auto maybeTopic = maybeRead.Topic()) {
                 TStringBuf cluster;

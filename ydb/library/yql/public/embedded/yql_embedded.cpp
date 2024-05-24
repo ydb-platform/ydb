@@ -335,7 +335,7 @@ namespace NYql {
                 ytServices.FileStorage = FileStorage_;
                 ytServices.Config = std::make_shared<TYtGatewayConfig>(*ytConfig);
                 auto ytNativeGateway = CreateYtNativeGateway(ytServices);
-                dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway, /*planLimits*/0));
+                dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway));
 
                 ProgramFactory_ = MakeHolder<TProgramFactory>(
                     false, FuncRegistry_.Get(), ExprContext_.NextUniqueId, dataProvidersInit, "embedded");
@@ -441,7 +441,7 @@ namespace NYql {
                     yson.OnEndList();
                 }
 
-                auto plan = program->GetQueryPlan().GetOrElse("");
+                auto plan = program->GetQueryPlan(TPlanSettings().SetWithLimits(false)).GetOrElse("");
                 auto taskInfo = program->GetTasksInfo().GetOrElse("");
 
                 auto statistics = program->GetStatistics().GetOrElse("");

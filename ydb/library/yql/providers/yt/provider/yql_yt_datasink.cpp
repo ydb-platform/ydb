@@ -343,7 +343,7 @@ public:
         return false;
     }
 
-    void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer) override {
+    void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer, bool withLimits) override {
         if (auto maybeOp = TMaybeNode<TYtTransientOpBase>(&node)) {
             writer.OnKeyedItem("InputColumns");
             auto op = maybeOp.Cast();
@@ -367,7 +367,7 @@ public:
                 for (auto section: op.Input()) {
                     writer.OnListItem();
                     writer.OnBeginList();
-                    for (ui32 i = 0; i < Min((ui32)section.Paths().Size(), State_->PlanLimits > 0 ? State_->PlanLimits : Max<ui32>()); ++i) {
+                    for (ui32 i = 0; i < Min((ui32)section.Paths().Size(), (withLimits && State_->PlanLimits) ? State_->PlanLimits : Max<ui32>()); ++i) {
                         writer.OnListItem();
                         writer.OnUint64Scalar(ndx++);
                     }
@@ -467,7 +467,7 @@ public:
         writer.OnStringScalar(node.Child(1)->Content());
     }
 
-    ui32 GetInputs(const TExprNode& node, TVector<TPinInfo>& inputs) override {
+    ui32 GetInputs(const TExprNode& node, TVector<TPinInfo>& inputs, bool withLimits) override {
         ui32 count = 0;
         if (auto maybeOp = TMaybeNode<TYtTransientOpBase>(&node)) {
             auto op = maybeOp.Cast();
@@ -481,7 +481,7 @@ public:
                         auto tmpTable = GetOutTable(path.Table());
                         inputs.push_back(TPinInfo(nullptr, op.DataSink().Raw(), tmpTable.Raw(), MakeTableDisplayName(tmpTable, false), true));
                     }
-                    if (State_->PlanLimits && ++i >= State_->PlanLimits) {
+                    if (withLimits && State_->PlanLimits && ++i >= State_->PlanLimits) {
                         break;
                     }
                 }
@@ -494,7 +494,7 @@ public:
             for (auto out: publish.Input()) {
                 auto tmpTable = GetOutTable(out);
                 inputs.push_back(TPinInfo(nullptr, publish.DataSink().Raw(), tmpTable.Raw(), MakeTableDisplayName(tmpTable, false), true));
-                if (State_->PlanLimits && ++i >= State_->PlanLimits) {
+                if (withLimits && State_->PlanLimits && ++i >= State_->PlanLimits) {
                     break;
                 }
             }
@@ -508,7 +508,8 @@ public:
         return count;
     }
 
-    ui32 GetOutputs(const TExprNode& node, TVector<TPinInfo>& outputs) override {
+    ui32 GetOutputs(const TExprNode& node, TVector<TPinInfo>& outputs, bool withLimits) override {
+        Y_UNUSED(withLimits);
         ui32 count = 0;
         if (auto maybeOp = TMaybeNode<TYtOutputOpBase>(&node)) {
             auto op = maybeOp.Cast();

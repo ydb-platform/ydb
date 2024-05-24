@@ -8,11 +8,21 @@
 
 namespace NYql {
 
+struct TPlanSettings {
+
+    TPlanSettings& SetWithLimits(bool limits) {
+        WithLimits = limits;
+        return *this;
+    }
+
+    bool WithLimits = true;
+};
+
 class IPlanBuilder {
 public:
     virtual ~IPlanBuilder() {};
     virtual void Clear() = 0;
-    virtual void WritePlan(NYson::TYsonWriter& writer, const TExprNode::TPtr& root) = 0;
+    virtual void WritePlan(NYson::TYsonWriter& writer, const TExprNode::TPtr& root, const TPlanSettings& settings = {}) = 0;
 };
 
 TAutoPtr<IPlanBuilder> CreatePlanBuilder(TTypeAnnotationContext& types);

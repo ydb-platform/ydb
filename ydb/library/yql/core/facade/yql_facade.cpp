@@ -1387,7 +1387,7 @@ TMaybe<TString> TProgram::GetQueryAst() {
     return Nothing();
 }
 
-TMaybe<TString> TProgram::GetQueryPlan() {
+TMaybe<TString> TProgram::GetQueryPlan(const TPlanSettings& settings) {
     if (ExternalQueryPlan_) {
         return ExternalQueryPlan_;
     }
@@ -1397,7 +1397,7 @@ TMaybe<TString> TProgram::GetQueryPlan() {
         planStream.Reserve(DEFAULT_PLAN_BUF_SIZE);
 
         NYson::TYsonWriter writer(&planStream, OutputFormat_);
-        PlanBuilder_->WritePlan(writer, ExprRoot_);
+        PlanBuilder_->WritePlan(writer, ExprRoot_, settings);
 
         return planStream.Str();
     }

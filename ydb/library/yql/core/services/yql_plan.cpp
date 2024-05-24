@@ -182,7 +182,7 @@ public:
         : Types_(types)
     {}
 
-    void WritePlan(NYson::TYsonWriter& writer, const TExprNode::TPtr& root) override {
+    void WritePlan(NYson::TYsonWriter& writer, const TExprNode::TPtr& root, const TPlanSettings& settings) override {
         if (!root) {
             return;
         }
@@ -218,8 +218,8 @@ public:
             if (info.Provider) {
                 TVector<TPinInfo> inputs;
                 TVector<TPinInfo> outputs;
-                info.InputsCount = info.Provider->GetPlanFormatter().GetInputs(*node, inputs);
-                info.OutputsCount = info.Provider->GetPlanFormatter().GetOutputs(*node, outputs);
+                info.InputsCount = info.Provider->GetPlanFormatter().GetInputs(*node, inputs, settings.WithLimits);
+                info.OutputsCount = info.Provider->GetPlanFormatter().GetOutputs(*node, outputs, settings.WithLimits);
                 if (info.InputsCount) {
                     writer.OnKeyedItem("InputsCount");
                     writer.OnUint64Scalar(info.InputsCount);
@@ -232,7 +232,7 @@ public:
 
                 WritePins("Inputs", inputs, writer, info.Inputs, providers);
                 WritePins("Outputs", outputs, writer, info.Outputs, providers);
-                info.Provider->GetPlanFormatter().WritePlanDetails(*info.Node, writer);
+                info.Provider->GetPlanFormatter().WritePlanDetails(*info.Node, writer, settings.WithLimits);
             }
 
             TSet<ui64> dependsOn;

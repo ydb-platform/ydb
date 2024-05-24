@@ -395,7 +395,7 @@ public:
         ScanPlanDependencies(node, children);
     }
 
-    void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer) override {
+    void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer, bool withLimits) override {
         if (auto maybeRead = TMaybeNode<TYtReadTable>(&node)) {
             writer.OnKeyedItem("InputColumns");
             auto read = maybeRead.Cast();
@@ -418,7 +418,7 @@ public:
                 for (auto section: read.Input()) {
                     writer.OnListItem();
                     writer.OnBeginList();
-                    for (ui32 i = 0; i < Min((ui32)section.Paths().Size(), State_->PlanLimits > 0 ? State_->PlanLimits : Max<ui32>()); ++i) {
+                    for (ui32 i = 0; i < Min((ui32)section.Paths().Size(), withLimits && State_->PlanLimits ? State_->PlanLimits : Max<ui32>()); ++i) {
                         writer.OnListItem();
                         writer.OnUint64Scalar(ndx++);
                     }
@@ -443,7 +443,7 @@ public:
         writer.OnStringScalar(node.Child(1)->Content());
     }
 
-    ui32 GetInputs(const TExprNode& node, TVector<TPinInfo>& inputs) override {
+    ui32 GetInputs(const TExprNode& node, TVector<TPinInfo>& inputs, bool withLimit) override {
         ui32 count = 0;
         if (auto maybeRead = TMaybeNode<TYtReadTable>(&node)) {
             auto read = maybeRead.Cast();
@@ -457,7 +457,7 @@ public:
                         auto tmpTable = GetOutTable(path.Table());
                         inputs.push_back(TPinInfo(read.DataSource().Raw(), nullptr, tmpTable.Raw(), MakeTableDisplayName(tmpTable, false), true));
                     }
-                    if (State_->PlanLimits && ++i >= State_->PlanLimits) {
+                    if (withLimit && State_->PlanLimits && ++i >= State_->PlanLimits) {
                         break;
                     }
                 }

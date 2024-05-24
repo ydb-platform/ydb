@@ -564,16 +564,16 @@ Node Broker is a system tablet that registers dynamic nodes in the {{ ydb-short-
 
 Node broker gives names to dynamic nodes when they register. By default, a node name consists of the hostname and the port on which the node is running.
 
-Node Broker can give *virtual* names for dynamic nodes, which identify the node within the tenant. If a dynamic node has been shut down, after a timeout its virtual name can be taken by a new dynamic node serving the same tenant. Without using virtual names, the number of known dynamic node names in a cluster can grow infinitely if new dynamic nodes always get unique hostnames, which is common in cloud environments.
+Node Broker can give *virtual* names for dynamic nodes. A virtual name identify the node within the tenant. If a dynamic node has been shut down, after a timeout, its virtual name can be taken by a new dynamic node serving the same tenant. Without using virtual names, the number of known dynamic node names in a cluster can grow infinitely if new dynamic nodes always get unique hostnames, which is common in cloud environments.
 
-To enable virtual node names, you need to add the following to the configuration:
+To enable virtual node names, you need to add the following to the cluster configuration:
 
 ```yaml
 feature_flags:
   enable_virtual_node_names: true
 ```
 
-A virtual node name consists of a prefix and a node's sequential number within its tenant. By default, the prefix is `slot-`. To override the prefix, add the following to the configuration:
+A virtual node name consists of a prefix and a node's sequential number within its tenant. By default, the prefix is `slot-`. To override the prefix, add the following to the cluster configuration:
 
 ```yaml
 node_broker_config:

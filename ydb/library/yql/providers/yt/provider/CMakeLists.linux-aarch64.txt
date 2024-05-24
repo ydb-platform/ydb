@@ -117,15 +117,30 @@ target_sources(providers-yt-provider PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_optimize.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_peephole.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_physical_finalizing.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_transformer.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_physical_optimize.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_provider_impl.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_provider.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_table_desc.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_table.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_transformer_helper.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_dq_integration.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_dq_optimize.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_dq_hybrid.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_wide_flow.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/transformer/yql_yt_transformer_content.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/transformer/yql_yt_transformer_fuse.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/transformer/yql_yt_transformer_join.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/transformer/yql_yt_transformer_key_range.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/transformer/yql_yt_transformer_lambda.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/transformer/yql_yt_transformer_map_reduce.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/transformer/yql_yt_transformer_merge.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/transformer/yql_yt_transformer_misc.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/transformer/yql_yt_transformer_partition.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/transformer/yql_yt_transformer_push.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/transformer/yql_yt_transformer_read_write.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/transformer/yql_yt_transformer_sort.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/transformer/yql_yt_transformer_weak_fields.cpp
 )
 
 generate_enum_serilization(providers-yt-provider

@@ -14,15 +14,29 @@
 
 add_subdirectory(ut)
 
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
+
 add_library(yql-core-cbo)
 
 target_link_libraries(yql-core-cbo PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  tools-enum_parser-enum_serialization_runtime
 )
 
 target_sources(yql-core-cbo PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/cbo/cbo_optimizer_new.cpp
+)
+
+generate_enum_serilization(yql-core-cbo
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/cbo/cbo_optimizer_new.h
+  INCLUDE_HEADERS
+  ydb/library/yql/core/cbo/cbo_optimizer_new.h
 )
 

@@ -1318,21 +1318,21 @@ public:
                         auto columnTuple = item.Cast<TExprList>();
                         auto columnName = columnTuple.Item(0).Cast<TCoAtom>();
                         alter_columns->set_name(TString(columnName));
-
                         auto alterColumnList = columnTuple.Item(1).Cast<TExprList>();
-                        if (TString(alterColumnList.Item(0).Cast<TCoAtom>()) = "setDefault") {
+                        auto alterColumnAction = TString(alterColumnList.Item(0).Cast<TCoAtom>());
+                        if (alterColumnAction == "setDefault") {
                             auto setDefault = alterColumnList.Item(1).Cast<TCoAtomList>();
                             auto func = TString(setDefault.Item(0).Cast<TCoAtom>());
                             auto arg = TString(setDefault.Item(1).Cast<TCoAtom>());
                             if (func != "nextval") {
-                                ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
+                                ctx.AddError(TIssue(ctx.GetPosition(setDefault.Pos()),
                                     TStringBuilder() << "Unsupported function to set default: " << func));
                                 return SyncError();
                             }
                             auto fromSequence = alter_columns->mutable_from_sequence();
                             fromSequence->set_name(arg);
-                        } else {
-                            auto families = columnTuple.Item(1).Cast<TCoAtomList>();
+                        } else if (alterColumnAction == "setFamily") {
+                            auto families = alterColumnList.Item(1).Cast<TCoAtomList>();
                             if (families.Size() > 1) {
                                 ctx.AddError(TIssue(ctx.GetPosition(families.Pos()),
                                     "Unsupported number of families"));
@@ -1341,6 +1341,10 @@ public:
                             for (auto family : families) {
                                 alter_columns->set_family(TString(family.Value()));
                             }
+                        } else {
+                            ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
+                                    TStringBuilder() << "Unsupported action to alter column"));
+                            return SyncError();
                         }
                     }
                 } else if (name == "addColumnFamilies" || name == "alterColumnFamilies") {

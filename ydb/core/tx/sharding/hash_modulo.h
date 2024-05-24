@@ -11,6 +11,12 @@ public:
         YDB_ACCESSOR(ui64, TabletId, 0);
         YDB_ACCESSOR_DEF(std::set<ui32>, AppropriateMods);
     public:
+        bool operator<(const TModuloShardingTablet& item) const {
+            AFL_VERIFY(AppropriateMods.size());
+            AFL_VERIFY(item.AppropriateMods.size());
+            return *AppropriateMods.begin() < *item.AppropriateMods.begin();
+        }
+
         TModuloShardingTablet() = default;
         TModuloShardingTablet(const ui64 tabletId, const std::set<ui32>& mods)
             : TabletId(tabletId)
@@ -65,6 +71,7 @@ public:
         result.resize(ActiveWriteSpecialSharding.size());
         THashMap<ui64, std::vector<ui32>> resultHash;
         std::vector<std::vector<ui32>> shardsByMod;
+        shardsByMod.resize(PartsCount);
         ui32 idx = 0;
         for (auto&& i : ActiveWriteSpecialSharding) {
             for (auto&& m : i->GetAppropriateMods()) {
@@ -89,9 +96,13 @@ public:
 
     bool CheckUnifiedDistribution(const ui32 summaryShardsCount, std::vector<ui64>& orderedShardIds) {
         AFL_VERIFY(IndexConstructed);
-        if (summaryShardsCount != PartsCount) {
+        NKikimrSchemeOp::TColumnTableSharding proto;
+        SerializeToProto(proto);
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("proto", proto.DebugString());
+        if (PartsCount % summaryShardsCount) {
             return false;
         }
+        const ui32 countPerShard = (PartsCount / summaryShardsCount);
         std::set<ui64> activeReadTabletIds;
         for (auto&& i : ActiveReadSpecialSharding) {
             activeReadTabletIds.emplace(i->GetTabletId());
@@ -108,23 +119,22 @@ public:
             return false;
         }
 
-        std::map<ui32, ui64> orderedTabletIds;
+        std::vector<ui64> orderedTabletIdsLocal;
+        ui32 idx = 0;
         for (auto&& i : SpecialSharding) {
-            if (i.GetAppropriateMods().size() != 1) {
+            if (i.GetAppropriateMods().size() != countPerShard) {
                 return false;
             }
-            for (auto&& m : i.GetAppropriateMods()) {
-                AFL_VERIFY(m < PartsCount)("m", m)("parts", PartsCount);
-                if (!orderedTabletIds.emplace(m, i.GetTabletId()).second) {
+            for (ui32 s = 0; s < countPerShard; ++s) {
+                if (!i.GetAppropriateMods().contains(idx + summaryShardsCount * s)) {
                     return false;
                 }
             }
+            orderedTabletIdsLocal.emplace_back(i.GetTabletId());
+            ++idx;
         }
-        orderedShardIds.clear();
-        for (auto&& i : orderedTabletIds) {
-            orderedShardIds.emplace_back(i.second);
-        }
-        AFL_VERIFY(orderedTabletIds.size() == summaryShardsCount);
+        AFL_VERIFY(orderedTabletIdsLocal.size() == summaryShardsCount)("ordered", orderedTabletIdsLocal.size())("summary", summaryShardsCount);
+        std::swap(orderedTabletIdsLocal, orderedShardIds);
         return true;
     }
 
@@ -139,13 +149,12 @@ public:
         }
         ActiveReadSpecialSharding.clear();
         ActiveWriteSpecialSharding.clear();
+        std::sort(SpecialSharding.begin(), SpecialSharding.end());
         std::set<ui32> modsRead;
         std::set<ui32> modsWrite;
         for (auto&& i : SpecialSharding) {
             for (auto&& n : i.GetAppropriateMods()) {
-                if (PartsCount <= n) {
-                    return TConclusionStatus::Fail("too large parts mod in compare with parts count");
-                }
+                AFL_VERIFY(n < PartsCount)("n", n)("parts_count", PartsCount);
                 if (!closedWriteIds.contains(i.GetTabletId())) {
                     modsWrite.emplace(n);
                 }
@@ -206,6 +215,19 @@ public:
         }
     }
 
+    bool DeleteShardInfo(const ui64 tabletId) {
+        const auto pred = [&](const TModuloShardingTablet& info) {
+            return info.GetTabletId() == tabletId;
+        };
+        const ui32 sizeStart = SpecialSharding.size();
+        SpecialSharding.erase(std::remove_if(SpecialSharding.begin(), SpecialSharding.end(), pred), SpecialSharding.end());
+
+        ActiveReadSpecialSharding.clear();
+        ActiveWriteSpecialSharding.clear();
+
+        return sizeStart != SpecialSharding.size();
+    }
+
     bool UpdateShardInfo(const TModuloShardingTablet& info) {
         for (auto&& i : SpecialSharding) {
             if (i.GetTabletId() == info.GetTabletId()) {
@@ -223,6 +245,9 @@ public:
             AFL_VERIFY(i.GetTabletId() != info.GetTabletId());
         }
         SpecialSharding.emplace_back(info);
+
+        ActiveReadSpecialSharding.clear();
+        ActiveWriteSpecialSharding.clear();
     }
 };
 
@@ -235,6 +260,11 @@ private:
     using TBase = THashShardingImpl;
 private:
     std::optional<TSpecificShardingInfo> SpecialShardingInfo;
+
+    bool DeleteShardInfo(const ui64 tabletId) {
+        AFL_VERIFY(!!SpecialShardingInfo);
+        return SpecialShardingInfo->DeleteShardInfo(tabletId);
+    }
 
     bool UpdateShardInfo(const TSpecificShardingInfo::TModuloShardingTablet& info) {
         AFL_VERIFY(SpecialShardingInfo);

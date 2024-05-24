@@ -24,6 +24,7 @@ NKikimr::TConclusionStatus TInStoreShardsTransfer::DoInitializeImpl(const TUpdat
         ::NKikimr::NOlap::TSnapshot ssOpen = sharding->GetShardingOpenSnapshotVerified(alter.GetDestinationTabletId());
 
         destinationSession.MutableTransferContext()->SetDestinationTabletId(alter.GetDestinationTabletId());
+        destinationSession.MutableTransferContext()->SetMoving(alter.GetMoving());
         destinationSession.MutableTransferContext()->SetTxId(context.GetTxId());
         *destinationSession.MutableTransferContext()->MutableSnapshotBarrier() = ssOpen.SerializeToProto();
         for (auto&& i : alter.GetSourceTabletIds()) {

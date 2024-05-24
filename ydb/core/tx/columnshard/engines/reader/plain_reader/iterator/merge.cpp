@@ -145,9 +145,9 @@ TStartMergeTask::TStartMergeTask(const std::shared_ptr<TMergingContext>& merging
 
 bool TContinueMergeTask::DoExecute() {
     TMemoryProfileGuard mGuard("SCAN_PROFILE::MERGE::CONTINUE", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
-    std::optional<NArrow::NMerger::TSortableBatchPosition> lastResultPosition = DrainMergerLinearScan(Context->ReadSequentiallyBufferSize);
+    std::optional<NArrow::NMerger::TCursor> lastResultPosition = DrainMergerLinearScan(Context->ReadSequentiallyBufferSize);
     if (lastResultPosition) {
-        LastPK = lastResultPosition->ExtractSortingPosition();
+        LastPK = lastResultPosition->ExtractSortingPosition(MergingContext->GetFinish().GetSortFields());
     }
     AFL_VERIFY(!!LastPK == (!!ResultBatch && ResultBatch->num_rows()));
     PrepareResultBatch();

@@ -9,7 +9,7 @@ Below are the recipes that will use the same input JSON to demonstrate how to us
 
 ## JSON functions
 
-```sql
+```yql
 $json = @@{
     "friends": [
         {
@@ -37,7 +37,7 @@ This approach typically combines multiple functions and expressions, so a query 
 
 ### Convert the whole JSON to YQL containers
 
-```sql
+```yql
 $json = @@{
     "friends": [
         {
@@ -70,7 +70,7 @@ It is **not** necessary to convert the whole JSON object to a structured combina
 
 ### Work with in-memory representation
 
-```sql
+```yql
 $json = @@{
     "friends": [
         {

@@ -4,7 +4,7 @@
 
 Данный пример запроса принимает входной JSON названный `$fields`, парсит его, заменяет ключ `a` на 0, удаляет ключ `d` и добавляет ключ `c` со значением 3:
 
-```sql
+```yql
 $fields = '{"a": 1, "b": 2, "d": 4}'j;
 $pairs = DictItems(Yson::ConvertToInt64Dict($fields));
 $result_pairs = ListExtend(ListNotNull(ListMap($pairs, ($item) -> {

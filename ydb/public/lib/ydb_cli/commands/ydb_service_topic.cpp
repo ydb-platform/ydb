@@ -266,10 +266,10 @@ namespace {
 
     void TCommandTopicCreate::Config(TConfig& config) {
         TYdbCommand::Config(config);
-        config.Opts->AddLongOption("partitions-count", "Initial number of partitions count for topic")
+        config.Opts->AddLongOption("partitions-count", "Initial number of partitions for topic")
             .DefaultValue(1)
             .StoreResult(&MinActivePartitions_);
-        config.Opts->AddLongOption("max-partitions-count", "Maximum number of partitions count for topic")
+        config.Opts->AddLongOption("max-partitions-count", "Maximum number of partitions for topic")
             .DefaultValue(1)
             .Optional()
             .StoreResult(&MaxActivePartitions_);
@@ -340,9 +340,9 @@ namespace {
 
     void TCommandTopicAlter::Config(TConfig& config) {
         TYdbCommand::Config(config);
-        config.Opts->AddLongOption("partitions-count", "Initial number of partitions count for topic")
+        config.Opts->AddLongOption("partitions-count", "Initial number of partitions for topic")
             .StoreResult(&MinActivePartitions_);
-        config.Opts->AddLongOption("max-partitions-count", "Maximum number of partitions count for topic")
+        config.Opts->AddLongOption("max-partitions-count", "Maximum number of partitions for topic")
             .Optional()
             .StoreResult(&MaxActivePartitions_);
         config.Opts->AddLongOption("retention-period-hours", "Duration for which data in topic is stored")

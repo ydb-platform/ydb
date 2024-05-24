@@ -560,22 +560,24 @@ Fault tolerance<br>mode | Fail<br>domain | Fail<br>realm | Number of<br>data cen
 
 ## Node Broker Configuration {#node-broker-config}
 
-Node Broker is a system tablet that is responsible for registering dynamic nodes in the {{ ydb-short-name }} cluster.
+Node Broker is a system tablet that registers dynamic nodes in the {{ ydb-short-name }} cluster.
 
-Node Broker can automatically generate names for dynamic nodes, which identify the node within the tenant and are displayed in metrics instead of the host name. If a dynamic node has been shut down, after a timeout its name can be taken by a new dynamic node. This allows node names to be reused when host names are changed.
+Node broker gives names to dynamic nodes when they register. By default, a node name consists of the hostname and the port on which the node is running.
 
-To enable automatic node name generation, you need to add the following to the configuration:
+Node Broker can give *virtual* names for dynamic nodes, which identify the node within the tenant. If a dynamic node has been shut down, after a timeout its virtual name can be taken by a new dynamic node serving the same tenant. Without using virtual names, the number of known dynamic node names in a cluster can grow infinitely if new dynamic nodes always get unique hostnames, which is common in cloud environments.
+
+To enable virtual node names, you need to add the following to the configuration:
 
 ```yaml
 feature_flags:
-  enable_dynamic_node_name_generation: true
+  enable_virtual_node_names: true
 ```
 
-The node name consists of a prefix and the sequential number of the node within the tenant. By default, the prefix is `slot-`. To override the prefix, you need to add the following to the configuration:
+A virtual node name consists of a prefix and a node's sequential number within its tenant. By default, the prefix is `slot-`. To override the prefix, add the following to the configuration:
 
 ```yaml
 node_broker_config:
-  node_name_prefix: <new prefix>
+  virtual_node_name_prefix: <new prefix>
 ```
 
 ## Sample cluster configurations {#examples}

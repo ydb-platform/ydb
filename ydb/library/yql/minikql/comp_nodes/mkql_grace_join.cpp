@@ -873,14 +873,13 @@ EFetchResult ProcessSpilledData(TComputationContext&, NUdf::TUnboxedValue*const*
                     UnpackJoinedData(output);
 
                     return EFetchResult::One;
-
                 }
 
                 LeftPacker->TuplesBatchPacked = 0;
-                LeftPacker->TablePtr->Clear(); // Clear table content, ready to collect data for next batch
+                // LeftPacker->TablePtr->Clear(); // Clear table content, ready to collect data for next batch
 
                 RightPacker->TuplesBatchPacked = 0;
-                RightPacker->TablePtr->Clear(); // Clear table content, ready to collect data for next batch
+                // RightPacker->TablePtr->Clear(); // Clear table content, ready to collect data for next batch
 
                 JoinedTablePtr->Clear();
                 JoinedTablePtr->ResetIterator();

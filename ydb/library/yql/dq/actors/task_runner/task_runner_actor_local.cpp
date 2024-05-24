@@ -423,7 +423,11 @@ private:
 
         auto guard = TaskRunner->BindAllocator(MemoryQuota ? TMaybe<ui64>(MemoryQuota->GetMkqlMemoryLimit()) : Nothing());
         if (MemoryQuota) {
-            MemoryQuota->TrySetIncreaseMemoryLimitCallback(guard.GetMutex());
+            if (settings.GetEnableSpilling()) {
+                MemoryQuota->TrySetIncreaseMemoryLimitCallbackWithRSSControl(guard.GetMutex());
+            } else {
+                MemoryQuota->TrySetIncreaseMemoryLimitCallback(guard.GetMutex());
+            }   
         }
 
         TaskRunner->Prepare(settings, ev->Get()->MemoryLimits, *ev->Get()->ExecCtx);

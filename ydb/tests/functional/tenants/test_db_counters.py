@@ -18,6 +18,7 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 
 logger = logging.getLogger(__name__)
 
+
 class BaseDbCounters(object):
     @classmethod
     def setup_class(cls):

@@ -1,7 +1,6 @@
 #include "mkql_grace_join.h"
 #include "mkql_grace_join_imp.h"
 
-#include <format>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <ydb/library/yql/public/decimal/yql_decimal_serialize.h>
@@ -639,8 +638,6 @@ private:
 
 
     void SwitchMode(EOperatingMode mode, TComputationContext& ctx) {
-
-        std::cerr << std::format("[MISHA] switching mode {}->{}\n", (int)Mode, (int)mode);
         switch(mode) {
             case EOperatingMode::InMemory: {
                 MKQL_ENSURE(false, "Internal logic error");
@@ -840,9 +837,7 @@ void DoCalculateWithSpilling(TComputationContext& ctx) {
         UpdateSpilling();
         if (HasRunningAsyncOperation()) return;
         if (!IsSpillingFinalized) {
-            std::cerr << "[MISHA] finalizing table 1\n";
             LeftPacker->TablePtr->FinalizeSpilling();
-            std::cerr << "[MISHA] finalizing table 2\n";
             RightPacker->TablePtr->FinalizeSpilling();
             IsSpillingFinalized = true;
 
@@ -864,7 +859,6 @@ EFetchResult ProcessSpilledData(TComputationContext&, NUdf::TUnboxedValue*const*
         }
 
         if (!RightPacker->TablePtr->IsBucketInMemory(NextBucketToJoin)) {
-            std::cerr << std::format("[MISHA] loading bucket {}\n", NextBucketToJoin);
             RightPacker->TablePtr->StartLoadingBucket(NextBucketToJoin);
         } 
 

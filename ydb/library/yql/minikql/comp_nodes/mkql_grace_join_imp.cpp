@@ -1,6 +1,5 @@
 #include "mkql_grace_join_imp.h"
 
-#include <format>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/utils/log/log.h>
 
@@ -264,7 +263,6 @@ void ResizeHashTable(KeysHashTable &t, ui64 newSlots){
 // Joins two tables and returns join result in joined table. Tuples of joined table could be received by
 // joined table iterator
 void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLeftTuples, bool hasMoreRightTuples, ui32 fromBucket, ui32 toBucket ) {
-    std::cerr << std::format("[MISHA] joining buckets {}->{}\n", fromBucket, toBucket);
     if ( hasMoreLeftTuples )
         LeftTableBatch_ = true;
 
@@ -298,17 +296,12 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
 
 
     for (ui64 bucket = fromBucket; bucket < toBucket; bucket++) {
-
-        // std::cerr << std::format("[MISHA] bucket: {}", bucket);
-
         joinResults.clear();
         TTableBucket * bucket1 = &JoinTable1->TableBuckets[bucket];
         TTableBucket * bucket2 = &JoinTable2->TableBuckets[bucket];
 
         ui64 tuplesNum1 = JoinTable1->TableBucketsStats[bucket].TuplesNum;
         ui64 tuplesNum2 = JoinTable2->TableBucketsStats[bucket].TuplesNum;
-
-        std::cerr << std::format("[MISHA] bucket: {}, tuplesNum1: {}, tuplesNum2: {}, KIVSize1: {}, KIVSize2: {}\n", bucket, tuplesNum1, tuplesNum2, bucket1->KeyIntVals.size(), bucket2->KeyIntVals.size());
 
         ui64 headerSize1 = JoinTable1->HeaderSize;
         ui64 headerSize2 = JoinTable2->HeaderSize;
@@ -1164,7 +1157,6 @@ bool TTable::TryToReduceMemoryAndWait() {
     }
 
     if (!largestBucketSize) return false;
-    std::cerr << std::format("[MISHA] spilling bucket {} of size {}\n", largestBucketIndex, largestBucketSize);
     TableBucketsSpillers[largestBucketIndex].SpillBucket(std::move(TableBuckets[largestBucketIndex]));
     TableBuckets[largestBucketIndex] = TTableBucket{};
 
@@ -1185,10 +1177,7 @@ void TTable::FinalizeSpilling() {
             TableBucketsSpillers[bucket].SpillBucket(std::move(TableBuckets[bucket]));
             TableBuckets[bucket] = TTableBucket{};
             TableBucketsSpillers[bucket].Finalize();
-        } else {
-            std::cerr << std::format("[MISHA] bucket {} in memory\n", bucket);
         }
-
     }
 }
 

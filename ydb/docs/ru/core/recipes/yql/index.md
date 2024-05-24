@@ -1,13 +1,13 @@
-# YQL recipes
+# YQL рецепты
 
-This section contains query recipes for various tasks that can be solved with YQL, {{ ydb-short-name }}'s SQL dialect.
+Этот раздел содержит рецепты запросов для различных задач, которые можно решить с помощью YQL, SQL-диалекта {{ ydb-short-name }}.
 
-Table of contents:
+Содержание:
 
 * [{#T}](accessing-json.md)
 * [{#T}](modifying-json.md)
 
-See also:
+Смотрите также:
 
 - [{#T}](../../yql/reference/index.md)
 - [{#T}](../../dev/index.md)

@@ -5,7 +5,7 @@
 
 #include "ut_helpers.h"
 
-#define Ctest Cerr
+#define Ctest Cnull
 
 Y_UNIT_TEST_SUITE(Acceleration) {
 
@@ -35,9 +35,9 @@ Y_UNIT_TEST_SUITE(Acceleration) {
         UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
     }
 
-    void TestAcceleratePut(const TBlobStorageGroupType& erasure, ui32 slowDisks,
+    void TestAcceleratePut(const TBlobStorageGroupType& erasure, ui32 slowDisksNum,
             NKikimrBlobStorage::EPutHandleClass handleClass) {
-        for (ui32 partsToPass = 0; partsToPass < erasure.BlobSubgroupSize() - 2; ++partsToPass) {
+        for (ui32 fastDisksNum = 0; fastDisksNum < erasure.BlobSubgroupSize() - 2; ++fastDisksNum) {
             std::unique_ptr<TEnvironmentSetup> env;
             ui32 nodeCount;
             ui32 groupId;
@@ -46,8 +46,7 @@ Y_UNIT_TEST_SUITE(Acceleration) {
             constexpr TDuration delay = TDuration::Seconds(2);
             constexpr TDuration waitFor = TDuration::Seconds(1);
 
-            Ctest << "partsToPass# " << partsToPass << Endl;
-            std::unordered_set<TLogoBlobID> passedParts;
+            Ctest << "fastDisksNum# " << fastDisksNum << Endl;
 
             TActorId edge = env->Runtime->AllocateEdgeActor(1);
             TString data = "Test";
@@ -57,7 +56,8 @@ Y_UNIT_TEST_SUITE(Acceleration) {
                 SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(blobId, data, TInstant::Max()), handleClass);
             });
 
-            THashSet<TVDiskID> delayedDisks;
+            THashSet<TVDiskID> fastDisks;
+            THashSet<TVDiskID> slowDisks;
 
             env->Runtime->FilterFunction = [&](ui32/* nodeId*/, std::unique_ptr<IEventHandle>& ev) {
                 if (ev->GetTypeRewrite() == TEvBlobStorage::TEvVPutResult::EventType) {
@@ -65,17 +65,16 @@ Y_UNIT_TEST_SUITE(Acceleration) {
                     TLogoBlobID partId = LogoBlobIDFromLogoBlobID(ev->Get<TEvBlobStorage::TEvVPutResult>()->Record.GetBlobID());
                     Ctest << TAppData::TimeProvider->Now() << " TEvVPutResult: vdiskId# " << vdiskId.ToString() <<
                             " partId# " << partId.ToString() << ", ";
-                    if (passedParts.size() < partsToPass || passedParts.count(partId)) {
-                        passedParts.insert(partId);
+                    if (fastDisks.size() < fastDisksNum || fastDisks.count(vdiskId)) {
+                        fastDisks.insert(vdiskId);
                         Ctest << "pass message" << Endl;
                         return true;
-                    } else if (!delayedDisks.count(vdiskId) && delayedDisks.size() >= slowDisks) {
-                        passedParts.insert(partId);
+                    } else if (!slowDisks.count(vdiskId) && slowDisks.size() >= slowDisksNum) {
                         Ctest << "pass message" << Endl;
                         return true;
                     } else {
                         Ctest << "delay message for " << delay.ToString() << Endl;
-                        delayedDisks.insert(vdiskId);
+                        slowDisks.insert(vdiskId);
                         env->Runtime->WrapInActorContext(edge, [&] {
                             TActivationContext::Schedule(delay, ev.release());
                         });
@@ -87,14 +86,14 @@ Y_UNIT_TEST_SUITE(Acceleration) {
             };
 
             auto res = env->WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false, TAppData::TimeProvider->Now() + waitFor);
-            UNIT_ASSERT_C(res, "partsToPass# " << partsToPass);
+            UNIT_ASSERT_C(res, "fastDisksNum# " << fastDisksNum);
             UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
         }
     }
 
-    void TestAccelerateGet(const TBlobStorageGroupType& erasure, ui32 slowDisks,
+    void TestAccelerateGet(const TBlobStorageGroupType& erasure, ui32 slowDisksNum,
             NKikimrBlobStorage::EGetHandleClass handleClass) {
-        for (ui32 partsToPass = 0; partsToPass < erasure.BlobSubgroupSize() - 2; ++partsToPass) {
+        for (ui32 fastDisksNum = 0; fastDisksNum < erasure.BlobSubgroupSize() - 2; ++fastDisksNum) {
             std::unique_ptr<TEnvironmentSetup> env;
             ui32 nodeCount;
             ui32 groupId;
@@ -103,8 +102,7 @@ Y_UNIT_TEST_SUITE(Acceleration) {
             constexpr TDuration delay = TDuration::Seconds(2);
             constexpr TDuration waitFor = TDuration::Seconds(1);
 
-            Ctest << "partsToPass# " << partsToPass << Endl;
-            std::unordered_set<TLogoBlobID> passedParts;
+            Ctest << "fastDisksNum# " << fastDisksNum << Endl;
 
             TActorId edge = env->Runtime->AllocateEdgeActor(1);
             TString data = MakeData(1024);
@@ -120,26 +118,26 @@ Y_UNIT_TEST_SUITE(Acceleration) {
                 SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(blobId, 0, data.size(), TInstant::Max(), handleClass));
             });
 
-            THashSet<TVDiskID> delayedDisks;
+            THashSet<TVDiskID> slowDisks;
+            THashSet<TVDiskID> fastDisks;
 
             env->Runtime->FilterFunction = [&](ui32/* nodeId*/, std::unique_ptr<IEventHandle>& ev) {
                 if (ev->GetTypeRewrite() == TEvBlobStorage::TEvVGetResult::EventType) {
                     TVDiskID vdiskId = VDiskIDFromVDiskID(ev->Get<TEvBlobStorage::TEvVGetResult>()->Record.GetVDiskID());
                     TLogoBlobID partId = LogoBlobIDFromLogoBlobID(
                             ev->Get<TEvBlobStorage::TEvVGetResult>()->Record.GetResult(0).GetBlobID());
-                    Ctest << TAppData::TimeProvider->Now() << " TEvVGetResult: vdiskId# " << vdiskId.ToString() <<
+                    Ctest << TAppData::TimeProvider->Now() << " TEvVGetResult: " << vdiskId.ToString() <<
                             " partId# " << partId.ToString() << ", ";
-                    if (passedParts.size() < partsToPass || passedParts.count(partId)) {
-                        passedParts.insert(partId);
+                    if (fastDisks.size() < fastDisksNum || fastDisks.count(vdiskId)) {
+                        fastDisks.insert(vdiskId);
                         Ctest << "pass message" << Endl;
                         return true;
-                    } else if (!delayedDisks.count(vdiskId) && delayedDisks.size() >= slowDisks) {
-                        passedParts.insert(partId);
+                    } else if (!slowDisks.count(vdiskId) && slowDisks.size() >= slowDisksNum) {
                         Ctest << "pass message" << Endl;
                         return true;
                     } else {
                         Ctest << "delay message for " << delay.ToString() << Endl;
-                        delayedDisks.insert(vdiskId);
+                        slowDisks.insert(vdiskId);
                         env->Runtime->WrapInActorContext(edge, [&] {
                             TActivationContext::Schedule(delay, ev.release());
                         });
@@ -151,7 +149,7 @@ Y_UNIT_TEST_SUITE(Acceleration) {
             };
 
             auto res = env->WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false, TAppData::TimeProvider->Now() + waitFor);
-            UNIT_ASSERT_C(res, "partsToPass# " << partsToPass);
+            UNIT_ASSERT_C(res, "fastDisksNum# " << fastDisksNum);
             UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
             UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[0].Status, NKikimrProto::OK);
             Ctest << "TEvGetResult# " << res->Get()->ToString() << Endl;
@@ -177,7 +175,7 @@ Y_UNIT_TEST_SUITE(Acceleration) {
 
 //    TEST_ACCELERATE(Mirror3dc, Get, AsyncRead, 2);
 //    TEST_ACCELERATE(Mirror3of4, Get, AsyncRead, 2);
-//    TEST_ACCELERATE(4Plus2Block, Get, AsyncRead, 2);
+    TEST_ACCELERATE(4Plus2Block, Get, AsyncRead, 2);
 
     #undef TEST_ACCELERATE
 }

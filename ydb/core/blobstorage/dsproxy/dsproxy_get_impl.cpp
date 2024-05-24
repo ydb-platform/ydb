@@ -159,7 +159,7 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
 }
 
 
-ui64 TGetImpl::GetTimeToAccelerateNs(TLogContext &logCtx, NKikimrBlobStorage::EVDiskQueueId queueId) {
+ui64 TGetImpl::GetTimeToAccelerateNs(TLogContext &logCtx, NKikimrBlobStorage::EVDiskQueueId queueId, ui32 nthWorst) {
     Y_UNUSED(logCtx);
     // Find the slowest disk
     ui64 worstPredictedNs = 0;
@@ -167,23 +167,25 @@ ui64 TGetImpl::GetTimeToAccelerateNs(TLogContext &logCtx, NKikimrBlobStorage::EV
     if (Blackboard.BlobStates.size() == 1) {
         i32 worstSubgroupIdx = -1;
         Blackboard.BlobStates.begin()->second.GetWorstPredictedDelaysNs(
-                *Info, *Blackboard.GroupQueues, queueId, 1,
+                *Info, *Blackboard.GroupQueues, queueId, nthWorst,
                 &worstPredictedNs, &nextToWorstPredictedNs, &worstSubgroupIdx);
     } else {
         i32 worstOrderNumber = -1;
         Blackboard.GetWorstPredictedDelaysNs(
-                *Info, *Blackboard.GroupQueues, queueId,
+                *Info, *Blackboard.GroupQueues, queueId, nthWorst,
                 &worstPredictedNs, &nextToWorstPredictedNs, &worstOrderNumber);
     }
     return nextToWorstPredictedNs * 1;
 }
 
-ui64 TGetImpl::GetTimeToAccelerateGetNs(TLogContext &logCtx) {
-    return GetTimeToAccelerateNs(logCtx, HandleClassToQueueId(Blackboard.GetHandleClass));
+ui64 TGetImpl::GetTimeToAccelerateGetNs(TLogContext &logCtx, ui32 acceleratesSent) {
+    Y_DEBUG_ABORT_UNLESS(acceleratesSent < 2);
+    return GetTimeToAccelerateNs(logCtx, HandleClassToQueueId(Blackboard.GetHandleClass), 2 - acceleratesSent);
 }
 
-ui64 TGetImpl::GetTimeToAcceleratePutNs(TLogContext &logCtx) {
-    return GetTimeToAccelerateNs(logCtx, HandleClassToQueueId(Blackboard.PutHandleClass));
+ui64 TGetImpl::GetTimeToAcceleratePutNs(TLogContext &logCtx, ui32 acceleratesSent) {
+    Y_DEBUG_ABORT_UNLESS(acceleratesSent < 2);
+    return GetTimeToAccelerateNs(logCtx, HandleClassToQueueId(Blackboard.PutHandleClass), 2 - acceleratesSent);
 }
 
 TString TGetImpl::DumpFullState() const {

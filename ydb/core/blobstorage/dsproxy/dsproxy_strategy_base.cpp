@@ -388,7 +388,7 @@ void TStrategyBase::Prepare3dcPartPlacement(const TBlobState &state,
     }
 }
 
-i32 TStrategyBase::MarkSlowSubgroupDisk(TBlobState &state, const TBlobStorageGroupInfo &info, TBlackboard &blackboard,
+ui32 TStrategyBase::MakeSlowSubgroupDiskMask(TBlobState &state, const TBlobStorageGroupInfo &info, TBlackboard &blackboard,
         bool isPut) {
     // Find the slowest disk
     switch (blackboard.AccelerationMode) {
@@ -402,31 +402,32 @@ i32 TStrategyBase::MarkSlowSubgroupDisk(TBlobState &state, const TBlobStorageGro
                     &worstPredictedNs, &nextToWorstPredictedNs, &worstSubgroupIdx);
 
             // Check if the slowest disk exceptionally slow, or just not very fast
-            i32 slowDiskSubgroupIdx = -1;
+            ui32 slowDiskSubgroupMask = 0;
             if (nextToWorstPredictedNs > 0 && worstPredictedNs > nextToWorstPredictedNs * 2) {
-                slowDiskSubgroupIdx = worstSubgroupIdx;
+                slowDiskSubgroupMask = 1 << worstSubgroupIdx;
             }
 
             // Mark single slow disk
             for (size_t diskIdx = 0; diskIdx < state.Disks.size(); ++diskIdx) {
                 state.Disks[diskIdx].IsSlow = false;
             }
-            if (slowDiskSubgroupIdx >= 0) {
-                state.Disks[slowDiskSubgroupIdx].IsSlow = true;
+            if (slowDiskSubgroupMask > 0) {
+                state.Disks[worstSubgroupIdx].IsSlow = true;
             }
 
-            return slowDiskSubgroupIdx;
+            return slowDiskSubgroupMask;
         }
         case TBlackboard::AccelerationModeSkipMarked: {
+            ui32 slowDiskSubgroupMask = 0;
             for (size_t diskIdx = 0; diskIdx < state.Disks.size(); ++diskIdx) {
                 if (state.Disks[diskIdx].IsSlow) {
-                    return diskIdx;
+                    slowDiskSubgroupMask |= 1 << diskIdx;
                 }
             }
-            return -1;
+            return slowDiskSubgroupMask;
         }
     }
-    return -1;
+    return 0;
 }
 
 }//NKikimr

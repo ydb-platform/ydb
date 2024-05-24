@@ -209,7 +209,7 @@ struct TBlackboard {
     ssize_t AddPartMap(const TLogoBlobID &id, ui32 diskOrderNumber, ui32 requestIndex);
     void ReportPartMapStatus(const TLogoBlobID &id, ssize_t partMapIndex, ui32 responseIndex, NKikimrProto::EReplyStatus status);
     void GetWorstPredictedDelaysNs(const TBlobStorageGroupInfo &info, TGroupQueues &groupQueues,
-            NKikimrBlobStorage::EVDiskQueueId queueId,
+            NKikimrBlobStorage::EVDiskQueueId queueId, ui32 nthWorst,
             ui64 *outWorstNs, ui64 *outNextToWorstNs, i32 *outWorstOrderNumber) const;
     TString ToString() const;
 

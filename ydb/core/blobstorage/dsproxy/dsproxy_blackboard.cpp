@@ -467,22 +467,22 @@ void TBlackboard::ReportPartMapStatus(const TLogoBlobID &id, ssize_t partMapInde
 }
 
 void TBlackboard::GetWorstPredictedDelaysNs(const TBlobStorageGroupInfo &info, TGroupQueues &groupQueues,
-        NKikimrBlobStorage::EVDiskQueueId queueId,
-        ui64 *outWorstNs, ui64 *outNextToWorstNs, i32 *outWorstOrderNumber) const {
+        NKikimrBlobStorage::EVDiskQueueId queueId, ui32 nthWorst,
+        ui64 *outWorstNs, ui64 *outNthWorstNs, i32 *outWorstOrderNumber) const {
     *outWorstOrderNumber = -1;
     *outWorstNs = 0;
-    *outNextToWorstNs = 0;
     ui32 totalVDisks = info.GetTotalVDisksNum();
+    TStackVec<ui32, 9> delayNs;
     for (ui32 orderNumber = 0; orderNumber < totalVDisks; ++orderNumber) {
         ui64 predictedNs = groupQueues.GetPredictedDelayNsByOrderNumber(orderNumber, queueId);
+        delayNs.push_back(predictedNs);
         if (predictedNs > *outWorstNs) {
-            *outNextToWorstNs = *outWorstNs;
             *outWorstNs = predictedNs;
             *outWorstOrderNumber = orderNumber;
-        } else if (predictedNs > *outNextToWorstNs) {
-            *outNextToWorstNs = predictedNs;
         }
     }
+    std::nth_element(delayNs.begin(), delayNs.begin() + nthWorst, delayNs.end(), std::greater<ui32>{});
+    *outNthWorstNs = delayNs[nthWorst];
 }
 
 void TBlackboard::RegisterBlobForPut(const TLogoBlobID& id, size_t blobIdx) {

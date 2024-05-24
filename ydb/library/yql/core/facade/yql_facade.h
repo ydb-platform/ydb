@@ -238,7 +238,7 @@ public:
     }
 
     TMaybe<TString> GetQueryAst();
-    TMaybe<TString> GetQueryPlan(const TPlanSettings& settings = {});
+    TMaybe<TString> GetQueryPlan();
 
     void SetDiagnosticFormat(NYson::EYsonFormat format) {
         DiagnosticFormat_ = format;

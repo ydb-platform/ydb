@@ -591,7 +591,7 @@ void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& 
         for (const auto& c : dataNode["ClusterMapping"].AsMap()) {
             loadedSettings.ClusterMapping[c.first] = c.second.AsString();
         }
-    
+
         currentSettings = &loadedSettings;
     }
 }
@@ -1387,7 +1387,7 @@ TMaybe<TString> TProgram::GetQueryAst() {
     return Nothing();
 }
 
-TMaybe<TString> TProgram::GetQueryPlan(const TPlanSettings& settings) {
+TMaybe<TString> TProgram::GetQueryPlan() {
     if (ExternalQueryPlan_) {
         return ExternalQueryPlan_;
     }
@@ -1397,7 +1397,7 @@ TMaybe<TString> TProgram::GetQueryPlan(const TPlanSettings& settings) {
         planStream.Reserve(DEFAULT_PLAN_BUF_SIZE);
 
         NYson::TYsonWriter writer(&planStream, OutputFormat_);
-        PlanBuilder_->WritePlan(writer, ExprRoot_, settings);
+        PlanBuilder_->WritePlan(writer, ExprRoot_);
 
         return planStream.Str();
     }

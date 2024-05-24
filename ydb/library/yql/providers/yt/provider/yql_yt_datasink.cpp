@@ -343,8 +343,7 @@ public:
         return false;
     }
 
-    void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer, std::optional<ui32> inputsLimit, std::optional<ui32> outputsLimit) override {
-        Y_UNUSED(outputsLimit);
+    void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer) override {
         if (auto maybeOp = TMaybeNode<TYtTransientOpBase>(&node)) {
             writer.OnKeyedItem("InputColumns");
             auto op = maybeOp.Cast();
@@ -368,7 +367,7 @@ public:
                 for (auto section: op.Input()) {
                     writer.OnListItem();
                     writer.OnBeginList();
-                    for (ui32 i = 0; i < Min((ui32)section.Paths().Size(), inputsLimit.value_or(Max<ui32>())); ++i) {
+                    for (ui32 i = 0; i < Min((ui32)section.Paths().Size(), State_->PlanLimits > 0 ? State_->PlanLimits : Max<ui32>()); ++i) {
                         writer.OnListItem();
                         writer.OnUint64Scalar(ndx++);
                     }
@@ -468,7 +467,7 @@ public:
         writer.OnStringScalar(node.Child(1)->Content());
     }
 
-    ui32 GetInputs(const TExprNode& node, TVector<TPinInfo>& inputs, std::optional<ui32> limit) override {
+    ui32 GetInputs(const TExprNode& node, TVector<TPinInfo>& inputs) override {
         ui32 count = 0;
         if (auto maybeOp = TMaybeNode<TYtTransientOpBase>(&node)) {
             auto op = maybeOp.Cast();
@@ -482,7 +481,7 @@ public:
                         auto tmpTable = GetOutTable(path.Table());
                         inputs.push_back(TPinInfo(nullptr, op.DataSink().Raw(), tmpTable.Raw(), MakeTableDisplayName(tmpTable, false), true));
                     }
-                    if (limit && ++i >= *limit) {
+                    if (State_->PlanLimits && ++i >= State_->PlanLimits) {
                         break;
                     }
                 }
@@ -495,7 +494,7 @@ public:
             for (auto out: publish.Input()) {
                 auto tmpTable = GetOutTable(out);
                 inputs.push_back(TPinInfo(nullptr, publish.DataSink().Raw(), tmpTable.Raw(), MakeTableDisplayName(tmpTable, false), true));
-                if (limit && ++i >= *limit) {
+                if (State_->PlanLimits && ++i >= State_->PlanLimits) {
                     break;
                 }
             }
@@ -509,16 +508,12 @@ public:
         return count;
     }
 
-    ui32 GetOutputs(const TExprNode& node, TVector<TPinInfo>& outputs, std::optional<ui32> limit) override {
+    ui32 GetOutputs(const TExprNode& node, TVector<TPinInfo>& outputs) override {
         ui32 count = 0;
         if (auto maybeOp = TMaybeNode<TYtOutputOpBase>(&node)) {
             auto op = maybeOp.Cast();
-            ui32 i = 0;
             for (auto table: op.Output()) {
                 outputs.push_back(TPinInfo(nullptr, op.DataSink().Raw(), table.Raw(), MakeTableDisplayName(table, true), true));
-                if (limit && ++i >= *limit) {
-                    break;
-                }
             }
             count = op.Output().Size();
         }

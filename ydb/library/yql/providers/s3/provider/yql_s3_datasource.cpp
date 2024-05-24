@@ -141,8 +141,7 @@ public:
         return false;
     }
 
-    ui32 GetInputs(const TExprNode& node, TVector<TPinInfo>&, std::optional<ui32> limit) override {
-        Y_UNUSED(limit);
+    ui32 GetInputs(const TExprNode& node, TVector<TPinInfo>&) override {
         if (auto maybeRead = TMaybeNode<TS3ReadObject>(&node)) {
         }
         return 0;

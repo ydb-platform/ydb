@@ -167,7 +167,7 @@ namespace NYql {
         class TOperationFactory: public IOperationFactory {
         public:
             TOperationFactory(const TOperationFactoryOptions& options,
-                const TString& configData, 
+                const TString& configData,
                 std::function<NFS::IDownloaderPtr(const TFileStorageConfig&)> arcDownloaderFactory)
                 : Logger(&Cerr)
                 , Options_(options)
@@ -335,7 +335,7 @@ namespace NYql {
                 ytServices.FileStorage = FileStorage_;
                 ytServices.Config = std::make_shared<TYtGatewayConfig>(*ytConfig);
                 auto ytNativeGateway = CreateYtNativeGateway(ytServices);
-                dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway));
+                dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway, /*planLimits*/0));
 
                 ProgramFactory_ = MakeHolder<TProgramFactory>(
                     false, FuncRegistry_.Get(), ExprContext_.NextUniqueId, dataProvidersInit, "embedded");
@@ -441,7 +441,7 @@ namespace NYql {
                     yson.OnEndList();
                 }
 
-                auto plan = program->GetQueryPlan(TPlanSettings().SetLimitInputPins(std::nullopt).SetLimitOutputPins(std::nullopt)).GetOrElse("");
+                auto plan = program->GetQueryPlan().GetOrElse("");
                 auto taskInfo = program->GetTasksInfo().GetOrElse("");
 
                 auto statistics = program->GetStatistics().GetOrElse("");
@@ -555,7 +555,7 @@ namespace NYql {
 
         THolder<IOperationFactory> MakeOperationFactory(
             const TOperationFactoryOptions& options,
-            const TString& configData, 
+            const TString& configData,
             std::function<NFS::IDownloaderPtr(const TFileStorageConfig&)> arcDownloaderFactory) {
             return MakeHolder<TOperationFactory>(options, configData, arcDownloaderFactory);
         }

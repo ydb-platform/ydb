@@ -28,17 +28,15 @@ void TPlanFormatterBase::GetResultDependencies(const TExprNode::TPtr& node, TExp
     Y_UNUSED(compact);
 }
 
-ui32 TPlanFormatterBase::GetInputs(const TExprNode& node, TVector<TPinInfo>& inputs, std::optional<ui32> limit) {
+ui32 TPlanFormatterBase::GetInputs(const TExprNode& node, TVector<TPinInfo>& inputs) {
     Y_UNUSED(node);
     Y_UNUSED(inputs);
-    Y_UNUSED(limit);
     return 0;
 }
 
-ui32 TPlanFormatterBase::GetOutputs(const TExprNode& node, TVector<TPinInfo>& outputs, std::optional<ui32> limit) {
+ui32 TPlanFormatterBase::GetOutputs(const TExprNode& node, TVector<TPinInfo>& outputs) {
     Y_UNUSED(node);
     Y_UNUSED(outputs);
-    Y_UNUSED(limit);
     return 0;
 }
 
@@ -47,11 +45,9 @@ TString TPlanFormatterBase::GetProviderPath(const TExprNode& node) {
     return TString();
 }
 
-void TPlanFormatterBase::WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer, std::optional<ui32> inputsLimit, std::optional<ui32> outputsLimit) {
+void TPlanFormatterBase::WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer) {
     Y_UNUSED(node);
     Y_UNUSED(writer);
-    Y_UNUSED(inputsLimit);
-    Y_UNUSED(outputsLimit);
 }
 
 void TPlanFormatterBase::WritePullDetails(const TExprNode& node, NYson::TYsonWriter& writer) {

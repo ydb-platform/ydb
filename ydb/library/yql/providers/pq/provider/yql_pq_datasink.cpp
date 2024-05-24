@@ -147,8 +147,7 @@ public:
             .Done().Ptr();
     }
 
-    ui32 GetOutputs(const TExprNode& node, TVector<TPinInfo>& outputs, std::optional<ui32> limit) override {
-        Y_UNUSED(limit);
+    ui32 GetOutputs(const TExprNode& node, TVector<TPinInfo>& outputs) override {
         if (auto maybeOp = TMaybeNode<TPqWriteTopic>(&node)) {
             auto op = maybeOp.Cast();
             outputs.push_back(TPinInfo(nullptr, op.DataSink().Raw(), op.Topic().Raw(), MakeTopicDisplayName(op.Topic().Cluster().Value(), op.Topic().Path().Value()), false));

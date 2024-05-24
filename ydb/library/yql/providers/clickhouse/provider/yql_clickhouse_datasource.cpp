@@ -89,8 +89,7 @@ public:
         return false;
     }
 
-    ui32 GetInputs(const TExprNode& node, TVector<TPinInfo>& inputs, std::optional<ui32> limit) override {
-        Y_UNUSED(limit);
+    ui32 GetInputs(const TExprNode& node, TVector<TPinInfo>& inputs) override {
         if (auto maybeRead = TMaybeNode<TClReadTable>(&node)) {
             if (auto maybeTable = maybeRead.Table()) {
                 TStringBuilder tableNameBuilder;

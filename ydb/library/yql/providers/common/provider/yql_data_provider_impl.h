@@ -15,10 +15,10 @@ public:
     void WriteDetails(const TExprNode& node, NYson::TYsonWriter& writer) override;
     bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override;
     void GetResultDependencies(const TExprNode::TPtr& node, TExprNode::TListType& children, bool compact) override;
-    ui32 GetInputs(const TExprNode& node, TVector<TPinInfo>& inputs, std::optional<ui32> limit) override;
-    ui32 GetOutputs(const TExprNode& node, TVector<TPinInfo>& outputs, std::optional<ui32> limit) override;
+    ui32 GetInputs(const TExprNode& node, TVector<TPinInfo>& inputs) override;
+    ui32 GetOutputs(const TExprNode& node, TVector<TPinInfo>& outputs) override;
     TString GetProviderPath(const TExprNode& node) override;
-    void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer, std::optional<ui32> inputsLimit, std::optional<ui32> outputsLimit) override;
+    void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer) override;
     void WritePullDetails(const TExprNode& node, NYson::TYsonWriter& writer) override;
     void WritePinDetails(const TExprNode& node, NYson::TYsonWriter& writer) override;
     TString GetOperationDisplayName(const TExprNode& node) override;

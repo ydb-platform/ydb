@@ -53,7 +53,7 @@ public:
         for (const auto& r : Reads_) {
             TVector<TPinInfo> inputs;
             auto& formatter = r.second->GetPlanFormatter();
-            formatter.GetInputs(*r.first, inputs, std::nullopt);
+            formatter.GetInputs(*r.first, inputs);
             for (const auto& i : inputs) {
                 auto id = ++NextReadId_;
                 ReadIds_[r.first].push_back(id);
@@ -81,7 +81,7 @@ public:
             auto data = w.first->Child(3);
             TVector<TPinInfo> outputs;
             auto& formatter = w.second->GetPlanFormatter();
-            formatter.GetOutputs(*w.first, outputs, std::nullopt);
+            formatter.GetOutputs(*w.first, outputs);
             YQL_ENSURE(outputs.size() == 1);
             auto id = ++NextWriteId_;
             WriteIds_[w.first] = id;

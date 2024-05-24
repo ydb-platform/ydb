@@ -1455,8 +1455,27 @@ bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& ty
     case NUdf::EDataSlot::Json:
         type = arrow::utf8();
         return true;
-    default:
+    case NUdf::EDataSlot::TzDate: {
+        type = MakeTzDateArrowType<NYql::NUdf::EDataSlot::TzDate>();
+        return true;
+    }
+    case NUdf::EDataSlot::TzDatetime: {
+        type = MakeTzDateArrowType<NYql::NUdf::EDataSlot::TzDatetime>();
+        return true;
+    }
+    case NUdf::EDataSlot::TzTimestamp: {
+        type = MakeTzDateArrowType<NYql::NUdf::EDataSlot::TzTimestamp>();
+        return true;
+    }
+    case NUdf::EDataSlot::Uuid: {
         return false;
+    }
+    case NUdf::EDataSlot::Decimal: {
+        return false;
+    }
+    case NUdf::EDataSlot::DyNumber: {
+        return false;
+    }
     }
 }
 
@@ -2415,8 +2434,21 @@ size_t CalcMaxBlockItemSize(const TType* type) {
         case NUdf::EDataSlot::Json:
             // size of offset part
             return sizeof(arrow::StringType::offset_type);
-        default:
+        case NUdf::EDataSlot::TzDate:
+            return sizeof(typename NUdf::TDataType<NUdf::TTzDate>::TLayout) + sizeof(NYql::NUdf::TTimezoneId);
+        case NUdf::EDataSlot::TzDatetime:
+            return sizeof(typename NUdf::TDataType<NUdf::TTzDatetime>::TLayout) + sizeof(NYql::NUdf::TTimezoneId);
+        case NUdf::EDataSlot::TzTimestamp:
+            return sizeof(typename NUdf::TDataType<NUdf::TTzTimestamp>::TLayout) + sizeof(NYql::NUdf::TTimezoneId);
+        case NUdf::EDataSlot::Uuid: {
             MKQL_ENSURE(false, "Unsupported data slot: " << slot);
+        }
+        case NUdf::EDataSlot::Decimal: {
+            MKQL_ENSURE(false, "Unsupported data slot: " << slot);
+        }
+        case NUdf::EDataSlot::DyNumber: {
+            MKQL_ENSURE(false, "Unsupported data slot: " << slot);
+        }
         }
     }
 
@@ -2432,6 +2464,8 @@ struct TComparatorTraits {
     template <typename TStringType, bool Nullable, NUdf::EDataSlot TOriginal = NUdf::EDataSlot::String>
     using TStrings = NUdf::TStringBlockItemComparator<TStringType, Nullable>;
     using TExtOptional = NUdf::TExternalOptionalBlockItemComparator;
+    template <typename T, bool Nullable>
+    using TTzDateComparator = NUdf::TTzDateBlockItemComparator<T, Nullable>;
 
     static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
         Y_UNUSED(pgBuilder);
@@ -2441,6 +2475,15 @@ struct TComparatorTraits {
     static std::unique_ptr<TResult> MakeResource(bool isOptional) {
         Y_UNUSED(isOptional);
         ythrow yexception() << "Comparator not implemented for block resources: ";
+    }
+
+    template<typename TTzDate>
+    static std::unique_ptr<TResult> MakeTzDate(bool isOptional) {
+        if (isOptional) {
+            return std::make_unique<TTzDateComparator<TTzDate, true>>();
+        } else {
+            return std::make_unique<TTzDateComparator<TTzDate, false>>();
+        }
     }
 };
 
@@ -2453,6 +2496,8 @@ struct THasherTraits {
     template <typename TStringType, bool Nullable, NUdf::EDataSlot TOriginal = NUdf::EDataSlot::String>
     using TStrings = NUdf::TStringBlockItemHasher<TStringType, Nullable>;
     using TExtOptional = NUdf::TExternalOptionalBlockItemHasher;
+    template <typename T, bool Nullable>
+    using TTzDateHasher = NYql::NUdf::TTzDateBlockItemHasher<T, Nullable>;
 
     static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
         Y_UNUSED(pgBuilder);
@@ -2462,6 +2507,15 @@ struct THasherTraits {
     static std::unique_ptr<TResult> MakeResource(bool isOptional) {
         Y_UNUSED(isOptional);
         ythrow yexception() << "Hasher not implemented for block resources";
+    }
+    
+    template<typename TTzDate>
+    static std::unique_ptr<TResult> MakeTzDate(bool isOptional) {
+        if (isOptional) {
+            return std::make_unique<TTzDateHasher<TTzDate, true>>();
+        } else {
+            return std::make_unique<TTzDateHasher<TTzDate, false>>();
+        }
     }
 };
 

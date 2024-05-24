@@ -1,31 +1,29 @@
-#include "write.h"
 #include "slice_builder.h"
+#include "write.h"
 
-#include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tablet_flat/tablet_flat_executor.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
-#include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
+#include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 
-#include <ydb/core/tablet_flat/tablet_flat_executor.h>
-
-
 namespace NKikimr::NColumnShard {
 
-    TWriteOperation::TWriteOperation(const TWriteId writeId, const ui64 lockId, const ui64 cookie, const EOperationStatus& status, const TInstant createdAt)
+    TWriteOperation::TWriteOperation(const TWriteId writeId, const ui64 lockId, const ui64 cookie, const EOperationStatus& status, const TInstant createdAt, const std::optional<ui32> granuleShardingVersionId)
         : Status(status)
         , CreatedAt(createdAt)
         , WriteId(writeId)
         , LockId(lockId)
         , Cookie(cookie)
-    {
+        , GranuleShardingVersionId(granuleShardingVersionId) {
     }
 
     void TWriteOperation::Start(TColumnShard& owner, const ui64 tableId, const NEvWrite::IDataContainer::TPtr& data, const NActors::TActorId& source, const TActorContext& ctx) {
         Y_ABORT_UNLESS(Status == EOperationStatus::Draft);
 
-        NEvWrite::TWriteMeta writeMeta((ui64)WriteId, tableId, source);
+        NEvWrite::TWriteMeta writeMeta((ui64)WriteId, tableId, source, GranuleShardingVersionId);
         std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildSlicesTask>(owner.TabletID(), ctx.SelfID, owner.BufferizationWriteActorId,
             NEvWrite::TWriteData(writeMeta, data, owner.TablesManager.GetPrimaryIndex()->GetReplaceKey(),
                 owner.StoragesManager->GetInsertOperator()->StartWritingAction(NOlap::NBlobOperations::EConsumer::WRITING_OPERATOR)));
@@ -46,7 +44,7 @@ namespace NKikimr::NColumnShard {
             };
 
             auto counters = owner.InsertTable->Commit(dbTable, snapshot.GetPlanStep(), snapshot.GetTxId(), { gWriteId },
-                                                        pathExists);
+                                                      pathExists);
 
             owner.IncCounter(COUNTER_BLOBS_COMMITTED, counters.Rows);
             owner.IncCounter(COUNTER_BYTES_COMMITTED, counters.Bytes);
@@ -72,11 +70,11 @@ namespace NKikimr::NColumnShard {
             NIceDb::TUpdate<Schema::Operations::CreatedAt>(CreatedAt.Seconds()),
             NIceDb::TUpdate<Schema::Operations::Metadata>(metadata),
             NIceDb::TUpdate<Schema::Operations::LockId>(LockId),
-            NIceDb::TUpdate<Schema::Operations::Cookie>(Cookie)
-        );
+            NIceDb::TUpdate<Schema::Operations::Cookie>(Cookie),
+            NIceDb::TUpdate<Schema::Operations::GranuleShardingVersionId>(GranuleShardingVersionId.value_or(0)));
     }
 
-    void TWriteOperation::ToProto(NKikimrTxColumnShard::TInternalOperationData& proto) const  {
+    void TWriteOperation::ToProto(NKikimrTxColumnShard::TInternalOperationData& proto) const {
         for (auto&& writeId : GlobalWriteIds) {
             proto.AddInternalWriteIds((ui64)writeId);
         }
@@ -108,17 +106,21 @@ namespace NKikimr::NColumnShard {
             }
 
             while (!rowset.EndOfSet()) {
-                const TWriteId writeId = (TWriteId) rowset.GetValue<Schema::Operations::WriteId>();
+                const TWriteId writeId = (TWriteId)rowset.GetValue<Schema::Operations::WriteId>();
                 const ui64 createdAtSec = rowset.GetValue<Schema::Operations::CreatedAt>();
                 const ui64 lockId = rowset.GetValue<Schema::Operations::LockId>();
                 const ui64 cookie = rowset.GetValueOrDefault<Schema::Operations::Cookie>(0);
                 const TString metadata = rowset.GetValue<Schema::Operations::Metadata>();
-                const EOperationStatus status = (EOperationStatus) rowset.GetValue<Schema::Operations::Status>();
+                const EOperationStatus status = (EOperationStatus)rowset.GetValue<Schema::Operations::Status>();
+                std::optional<ui32> granuleShardingVersionId;
+                if (rowset.HaveValue<Schema::Operations::GranuleShardingVersionId>() && rowset.GetValue<Schema::Operations::GranuleShardingVersionId>()) {
+                    granuleShardingVersionId = rowset.GetValue<Schema::Operations::GranuleShardingVersionId>();
+                }
 
                 NKikimrTxColumnShard::TInternalOperationData metaProto;
                 Y_ABORT_UNLESS(metaProto.ParseFromString(metadata));
 
-                auto operation = std::make_shared<TWriteOperation>(writeId, lockId, cookie, status, TInstant::Seconds(createdAtSec));
+                auto operation = std::make_shared<TWriteOperation>(writeId, lockId, cookie, status, TInstant::Seconds(createdAtSec), granuleShardingVersionId);
                 operation->FromProto(metaProto);
                 AFL_VERIFY(operation->GetStatus() != EOperationStatus::Draft);
 
@@ -145,7 +147,7 @@ namespace NKikimr::NColumnShard {
                 const ui64 txId = rowset.GetValue<Schema::OperationTxIds::TxId>();
                 AFL_VERIFY(Locks.contains(lockId))("lock_id", lockId);
                 Tx2Lock[txId] = lockId;
-                 if (!rowset.Next()) {
+                if (!rowset.Next()) {
                     return false;
                 }
             }
@@ -208,7 +210,7 @@ namespace NKikimr::NColumnShard {
         AFL_VERIFY(!!lockId)("tx_id", txId);
         Locks.erase(*lockId);
         Tx2Lock.erase(txId);
-        for (auto&& op: operations) {
+        for (auto&& op : operations) {
             RemoveOperation(op, txc);
         }
         NIceDb::TNiceDb db(txc.DB);
@@ -239,9 +241,9 @@ namespace NKikimr::NColumnShard {
         db.Table<Schema::OperationTxIds>().Key(txId, lockId).Update();
     }
 
-    TWriteOperation::TPtr TOperationsManager::RegisterOperation(const ui64 lockId, const ui64 cookie) {
+    TWriteOperation::TPtr TOperationsManager::RegisterOperation(const ui64 lockId, const ui64 cookie, const std::optional<ui32> granuleShardingVersionId) {
         auto writeId = BuildNextWriteId();
-        auto operation = std::make_shared<TWriteOperation>(writeId, lockId, cookie, EOperationStatus::Draft, AppData()->TimeProvider->Now());
+        auto operation = std::make_shared<TWriteOperation>(writeId, lockId, cookie, EOperationStatus::Draft, AppData()->TimeProvider->Now(), granuleShardingVersionId);
         Y_ABORT_UNLESS(Operations.emplace(operation->GetWriteId(), operation).second);
         Locks[operation->GetLockId()].push_back(operation->GetWriteId());
         return operation;
@@ -265,4 +267,4 @@ namespace NKikimr::NColumnShard {
         }
         return EOperationBehaviour::Undefined;
     }
-}
+}   // namespace NKikimr::NColumnShard

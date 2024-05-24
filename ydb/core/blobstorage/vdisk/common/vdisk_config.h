@@ -154,6 +154,11 @@ namespace NKikimr {
         ui32 SyncLogAdvisedIndexedBlockSize;
         ui64 SyncLogMaxMemAmount;
 
+        TControlWrapper EnableLocalSyncLogDataCutting;
+        TControlWrapper EnableSyncLogChunkCompression;
+        TControlWrapper MaxSyncLogChunksInFlight;
+        ui32 MaxSyncLogChunkSize;
+
         ///////////// REPL SETTINGS /////////////////////////
         TDuration ReplTimeInterval;
         TDuration ReplRequestTimeout;

@@ -28,6 +28,7 @@ void DoCreateStream(
     const TPath& tablePath,
     const bool acceptExisted,
     const bool initialScan,
+    const TString& indexName,
     TVector<ISubOperation::TPtr>& result);
 
 void DoCreatePqPart(

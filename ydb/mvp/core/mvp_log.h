@@ -23,5 +23,4 @@ enum EService : NActors::NLog::EComponent {
 #define BLOG_GRPC_DC(context, stream) LOG_DEBUG_S(context, EService::GRPC, stream)
 #define BLOG_QUERY_I(stream) LOG_INFO_S(*NActors::TlsActivationContext, EService::QUERY, stream)
 
-
 }

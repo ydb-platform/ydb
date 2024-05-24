@@ -1,14 +1,15 @@
 #include "object.h"
-#include "update.h"
+#include "config_shards/update.h"
+#include "resharding/update.h"
+#include "schema/update.h"
+#include "transfer/update.h"
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
-TConclusionStatus TInStoreTable::InitializeWithTableInfo(const TColumnTableInfo::TPtr& tInfo, const TEntityInitializationContext& context) {
-    TableInfo = tInfo;
-    AFL_VERIFY(!!TableInfo);
-    AFL_VERIFY(!TableInfo->IsStandalone());
-    const auto storePathId = TableInfo->GetOlapStorePathIdVerified();
+TConclusionStatus TInStoreTable::InitializeWithTableInfo(const TEntityInitializationContext& context) {
+    AFL_VERIFY(!GetTableInfoPtrVerified()->IsStandalone());
+    const auto storePathId = GetTableInfoPtrVerified()->GetOlapStorePathIdVerified();
     TPath storePath = TPath::Init(storePathId, context.GetSSOperationContext()->SS);
     {
         TPath::TChecker checks = storePath.Check();
@@ -28,27 +29,60 @@ TConclusionStatus TInStoreTable::InitializeWithTableInfo(const TColumnTableInfo:
     schema.ParseFromLocalDB(GetTableSchemaProto().DetachResult());
     TableSchema = std::move(schema);
 
-    if (TableInfo->Description.HasTtlSettings()) {
+    if (GetTableInfoPtrVerified()->Description.HasTtlSettings()) {
         TOlapTTL ttl;
-        ttl.DeserializeFromProto(TableInfo->Description.GetTtlSettings()).Validate();
+        ttl.DeserializeFromProto(GetTableInfoPtrVerified()->Description.GetTtlSettings()).Validate();
         TableTTL = std::move(ttl);
     }
 
     return TConclusionStatus::Success();
 }
 
-TConclusionStatus TInStoreTable::DoInitialize(const TEntityInitializationContext& context) {
-    TableInfo = context.GetSSOperationContext()->SS->ColumnTables.GetVerifiedPtr(GetPathId());
-    return InitializeWithTableInfo(TableInfo, context);
+TConclusionStatus TInStoreTable::DoInitializeImpl(const TEntityInitializationContext& context) {
+    return InitializeWithTableInfo(context);
 }
 
-NKikimr::TConclusion<std::shared_ptr<NKikimr::NSchemeShard::NOlap::NAlter::ISSEntityUpdate>> TInStoreTable::DoCreateUpdate(const TUpdateInitializationContext& context, const std::shared_ptr<ISSEntity>& selfPtr) const {
-    std::shared_ptr<ISSEntityUpdate> result = std::make_shared<TInStoreSchemaUpdate>(selfPtr);
+TConclusion<std::shared_ptr<ISSEntityUpdate>> TInStoreTable::DoCreateUpdateImpl(const TUpdateInitializationContext& context) const {
+    std::shared_ptr<ISSEntityUpdate> result;
+    if (context.GetModification()->HasAlterTable()) {
+        result = std::make_shared<TInStoreSchemaUpdate>();
+    } else if (context.GetModification()->HasAlterColumnTable()) {
+        auto& alter = context.GetModification()->GetAlterColumnTable();
+
+        if (alter.HasAlterShards()) {
+            if (alter.GetAlterShards().HasTransfer()) {
+                result = std::make_shared<TInStoreShardsTransfer>();
+            } else if (alter.GetAlterShards().HasModification()) {
+                result = std::make_shared<TInStoreShardsUpdate>();
+            }
+        } else if (alter.HasReshardColumnTable()) {
+            result = std::make_shared<TInStoreShardingUpdate>();
+        } else if (alter.HasAlterSchema() || alter.HasAlterTtlSettings()) {
+            result = std::make_shared<TInStoreSchemaUpdate>();
+        }
+    }
+    if (!result) {
+        return NKikimr::TConclusionStatus::Fail("Undefined modification type");
+    }
     auto initConclusion = result->Initialize(context);
     if (initConclusion.IsFail()) {
         return initConclusion;
     }
     return result;
+}
+
+NKikimr::TConclusion<NKikimrSchemeOp::TColumnTableSchema> TInStoreTable::GetTableSchemaProto() const {
+    AFL_VERIFY(!!StoreInfo);
+    if (!StoreInfo->SchemaPresets.count(GetTableInfoPtrVerified()->Description.GetSchemaPresetId())) {
+        return TConclusionStatus::Fail("No preset for in-store column table");
+    }
+
+    auto& preset = StoreInfo->SchemaPresets.at(GetTableInfoPtrVerified()->Description.GetSchemaPresetId());
+    auto& presetProto = StoreInfo->GetDescription().GetSchemaPresets(preset.GetProtoIndex());
+    if (!presetProto.HasSchema()) {
+        return TConclusionStatus::Fail("No schema in preset for in-store column table");
+    }
+    return presetProto.GetSchema();
 }
 
 }

@@ -173,8 +173,9 @@ void TWorkloadCommand::WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerato
             }
             return result;
         } else {
+            auto mode = queryInfo.UseStaleRO ? NYdb::NTable::TTxSettings::StaleRO() : NYdb::NTable::TTxSettings::SerializableRW();
             auto result = session.ExecuteDataQuery(queryInfo.Query.c_str(),
-                NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx(),
+                NYdb::NTable::TTxControl::BeginTx(mode).CommitTx(),
                 queryInfo.Params, dataQuerySettings
             ).GetValueSync();
             if (queryInfo.DataQueryResultCallback) {

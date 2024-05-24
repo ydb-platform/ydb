@@ -162,6 +162,13 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db) {
     Loaded = true;
     THashMap<ui64, ui64> granuleToPathIdDecoder;
     {
+        TMemoryProfileGuard g("TTxInit/LoadShardingInfo");
+        if (!VersionedIndex.LoadShardingInfo(db)) {
+            return false;
+        }
+    }
+
+    {
         TMemoryProfileGuard g("TTxInit/LoadColumns");
         auto guard = GranulesStorage->GetStats()->StartPackModification();
         if (!LoadColumns(db)) {

@@ -1154,7 +1154,7 @@ bool TTable::TryToReduceMemoryAndWait() {
         }
     }
 
-    if (largestBucketSize) return false;
+    if (largestBucketSize == 0) return false;
 
     TableBucketsSpillers[largestBucketIndex].SpillBucket(std::move(TableBuckets[largestBucketIndex]));
     TableBuckets[largestBucketIndex] = TTableBucket{};

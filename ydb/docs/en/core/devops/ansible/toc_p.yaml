@@ -5,6 +5,8 @@ items:
   href: initial-deployment.md
 - name: Preparing VMs with Terraform
   href: preparing-vms-with-terraform.md
+- name: Restart
+  href: restart.md
 - name: Observability
   include:
     mode: link

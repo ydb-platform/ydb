@@ -205,10 +205,10 @@ namespace {
         auto thresholdTime = config.Opts->AddLongOption("autoscale-threshold-time", "Duration in seconds of high or low load before automatically scale the number of partitions")
             .Optional()
             .StoreResult(&ScaleThresholdTime_);
-        auto upThresholdPercent = config.Opts->AddLongOption("scale-up-threshold-percent", "The load percentage at which the number of partitions will increase.")
+        auto upThresholdPercent = config.Opts->AddLongOption("autoscale-scale-up-threshold-percent", "The load percentage at which the number of partitions will increase.")
             .Optional()
             .StoreResult(&ScaleUpThresholdPercent_);
-        auto downThresholdPercent = config.Opts->AddLongOption("scale-down-threshold-percent", "The load percentage at which the number of partitions will decrease.")
+        auto downThresholdPercent = config.Opts->AddLongOption("autoscale-scale-down-threshold-percent", "The load percentage at which the number of partitions will decrease.")
             .Optional()
             .StoreResult(&ScaleDownThresholdPercent_);
 

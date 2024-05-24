@@ -707,6 +707,14 @@ public:
                     return true;
                 }
 
+                if (name == "constraints"sv) {
+                    TStringBuf unused;
+                    if (!ExtractSettingValue(setting.Tail(), "constraints"sv, format, {}, ctx, unused)) {
+                        return false;
+                    }
+                    return true;
+                }
+
                 YQL_ENSURE(name == "projection"sv);
                 haveProjection = true;
                 if (!EnsureAtom(setting.Tail(), ctx)) {
@@ -721,7 +729,7 @@ public:
                 return true;
             };
             if (!EnsureValidSettings(*input->Child(TS3Object::idx_Settings),
-                                     { "compression"sv, "partitionedby"sv, "projection"sv, "data.interval.unit"sv,
+                                     { "compression"sv, "partitionedby"sv, "projection"sv, "data.interval.unit"sv, "constraints"sv,
                                         "data.datetime.formatname"sv, "data.datetime.format"sv, "data.timestamp.formatname"sv, "data.timestamp.format"sv,
                                         "readmaxbytes"sv, "csvdelimiter"sv, "directories"sv, "filepattern"sv, "pathpattern"sv, "pathpatternvariant"sv }, validator, ctx))
             {

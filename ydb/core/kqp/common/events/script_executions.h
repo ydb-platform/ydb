@@ -224,15 +224,18 @@ struct TEvSaveScriptResultFinished : public NActors::TEventLocal<TEvSaveScriptRe
     NYql::TIssues Issues;
 };
 
-struct TEvFetchScriptResultsQueryResponse : public NActors::TEventLocal<TEvFetchScriptResultsQueryResponse, TKqpScriptExecutionEvents::EvFetchScriptResultsQueryResponse> {
-    TEvFetchScriptResultsQueryResponse(bool truncated, NKikimrKqp::TEvFetchScriptResultsResponse&& results)
-        : Truncated(truncated)
-        , Results(std::move(results))
-    {
-    }
+struct TEvFetchScriptResultsResponse : public NActors::TEventLocal<TEvFetchScriptResultsResponse, TKqpScriptExecutionEvents::EvFetchScriptResultsResponse> {
+    TEvFetchScriptResultsResponse(Ydb::StatusIds::StatusCode status, std::optional<Ydb::ResultSet>&& resultSet, bool hasMoreResults, NYql::TIssues issues)
+        : Status(status)
+        , ResultSet(std::move(resultSet))
+        , HasMoreResults(hasMoreResults)
+        , Issues(std::move(issues))
+    {}
 
-    bool Truncated;
-    NKikimrKqp::TEvFetchScriptResultsResponse Results;
+    Ydb::StatusIds::StatusCode Status;
+    std::optional<Ydb::ResultSet> ResultSet;
+    bool HasMoreResults;
+    NYql::TIssues Issues;
 };
 
 struct TEvSaveScriptExternalEffectRequest : public NActors::TEventLocal<TEvSaveScriptExternalEffectRequest, TKqpScriptExecutionEvents::EvSaveScriptExternalEffectRequest> {

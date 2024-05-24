@@ -20,8 +20,6 @@
 #include <util/generic/stack.h>
 #include <util/generic/hash_set.h>
 
-#include <iostream>
-
 #ifdef _WIN32
 #define __restrict
 #endif

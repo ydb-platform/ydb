@@ -2968,8 +2968,7 @@ public:
         return State.Statements.back();
     }
 
-    [[nodiscard]] 
-    TFromDesc ParseFromClause(const Node* node) {
+    TMaybe<TFromDesc> ParseFromClause(const Node* node) {
         switch (NodeTag(node)) {
         case T_RangeVar:
             return ParseRangeVar(CAST_NODE(RangeVar, node));

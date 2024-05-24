@@ -487,9 +487,14 @@ void DbgPrintValue(TString &res, const TCell &r, NScheme::TTypeInfo typeInfo) {
         case NScheme::NTypeIds::ActorId:
             res += ToString(r.AsValue<NActors::TActorId>());
             break;
-        case NScheme::NTypeIds::Pg:
-            // TODO: support pg types
+        case NScheme::NTypeIds::Pg: {
+            auto convert = NPg::PgNativeTextFromNativeBinary(r.AsBuf(), typeInfo.GetTypeDesc());
+            if (!convert.Error)
+                res += convert.Str;
+            else
+                res += *convert.Error;
             break;
+            }
         default:
             res += EscapeC(r.Data(), r.Size());
         }

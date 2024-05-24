@@ -840,7 +840,9 @@ void DoCalculateWithSpilling(TComputationContext& ctx) {
         UpdateSpilling();
         if (HasRunningAsyncOperation()) return;
         if (!IsSpillingFinalized) {
+            std::cerr << "[MISHA] finalizing table 1\n";
             LeftPacker->TablePtr->FinalizeSpilling();
+            std::cerr << "[MISHA] finalizing table 2\n";
             RightPacker->TablePtr->FinalizeSpilling();
             IsSpillingFinalized = true;
 

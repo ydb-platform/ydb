@@ -4518,8 +4518,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         });
         const int nodeBase = runtime.GetNodeId(0);
         TActorId senderA = runtime.AllocateEdgeActor();
-        const ui64 hiveTablet = MakeDefaultHiveID();
-        const ui64 testerTablet = MakeTabletID(false, 1);
+        const ui64 hiveTablet = MakeDefaultHiveID(0);
+        const ui64 testerTablet = MakeDefaultHiveID(1);
 
         auto getDistribution = [hiveTablet, nodeBase, senderA, &runtime]() -> std::array<std::vector<ui64>, NUM_NODES> {
             std::array<std::vector<ui64>, NUM_NODES> nodeTablets = {};

@@ -631,9 +631,9 @@ private:
     }
 
     bool IsSwitchToSpillingModeCondition() const {
-        // return false;
+        return false;
         // TODO: YQL-18033
-        return !HasMemoryForProcessing();
+        // return !HasMemoryForProcessing();
     }
 
 
@@ -772,7 +772,7 @@ private:
             }
             if (isYield) return EFetchResult::Yield;
 
-            /*if (!*HaveMoreRightRows && !*PartialJoinCompleted && LeftPacker->TuplesBatchPacked >= LeftPacker->BatchSize ) {
+            if (!*HaveMoreRightRows && !*PartialJoinCompleted && LeftPacker->TuplesBatchPacked >= LeftPacker->BatchSize ) {
                 *PartialJoinCompleted = true;
                 JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
                 JoinedTablePtr->ResetIterator();
@@ -783,7 +783,7 @@ private:
                 JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
                 JoinedTablePtr->ResetIterator();
 
-            }*/
+            }
 
             if (!*HaveMoreRightRows && !*HaveMoreLeftRows && !*PartialJoinCompleted) {
                 *PartialJoinCompleted = true;

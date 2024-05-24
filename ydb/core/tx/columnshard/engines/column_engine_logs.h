@@ -133,6 +133,14 @@ public:
         return !!GranulesStorage->GetPortionOptional(pathId, portionId);
     }
 
+    virtual bool ErasePathId(const ui64 pathId) override {
+        if (HasDataInPathId(pathId)) {
+            return false;
+        }
+        return GranulesStorage->EraseTable(pathId);
+    }
+
+
     virtual bool HasDataInPathId(const ui64 pathId) const override {
         auto g = GetGranuleOptional(pathId);
         return g && g->GetPortions().size();
@@ -186,8 +194,6 @@ private:
     bool LoadColumns(IDbWrapper& db);
     bool LoadShardingInfo(IDbWrapper& db);
     bool LoadCounters(IDbWrapper& db);
-
-    void EraseTable(const ui64 pathId);
 
     void UpsertPortion(const TPortionInfo& portionInfo, const TPortionInfo* exInfo = nullptr);
     bool ErasePortion(const TPortionInfo& portionInfo, bool updateStats = true);

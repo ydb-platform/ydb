@@ -16,6 +16,8 @@ private:
     YDB_READONLY(TAtomicCounter, InsertStartedCounter, 0);
     YDB_READONLY(TAtomicCounter, CompactionFinishedCounter, 0);
     YDB_READONLY(TAtomicCounter, CompactionStartedCounter, 0);
+    YDB_READONLY(TAtomicCounter, CleaningFinishedCounter, 0);
+    YDB_READONLY(TAtomicCounter, CleaningStartedCounter, 0);
 
     YDB_READONLY(TAtomicCounter, FilteredRecordsCount, 0);
     YDB_READONLY(TAtomicCounter, IndexesSkippingOnSelect, 0);
@@ -83,6 +85,19 @@ public:
                 start = TInstant::Now();
             }
             Cerr << "WAIT_INDEXATION: " << GetInsertStartedCounter().Val() << Endl;
+            Sleep(TDuration::Seconds(1));
+        }
+    }
+
+    void WaitCleaning(const TDuration d) const {
+        TInstant start = TInstant::Now();
+        ui32 countStart = GetCleaningStartedCounter().Val();
+        while (Now() - start < d) {
+            if (countStart != GetCleaningStartedCounter().Val()) {
+                countStart = GetCleaningStartedCounter().Val();
+                start = TInstant::Now();
+            }
+            Cerr << "WAIT_CLEANING: " << GetCleaningStartedCounter().Val() << Endl;
             Sleep(TDuration::Seconds(1));
         }
     }

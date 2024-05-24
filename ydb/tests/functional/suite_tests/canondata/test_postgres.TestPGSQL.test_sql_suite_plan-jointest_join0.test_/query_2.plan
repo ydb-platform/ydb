@@ -30,19 +30,10 @@
                                 "Plans": [
                                     {
                                         "CTE Name": "precompute_0_0",
-                                        "Node Type": "Limit-Aggregate-ConstantExpr-InnerJoin (MapJoin)-ConstantExpr-Filter-TableFullScan",
+                                        "Node Type": "Limit-CrossJoin-InnerJoin (MapJoin)-ConstantExpr-Filter-TableFullScan-ConstantExpr",
                                         "Operators": [
                                             {
                                                 "Inputs": [
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 3
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
                                                     {
                                                         "InternalOperatorId": 1
                                                     },
@@ -78,23 +69,21 @@
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 2
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 6
                                                     }
                                                 ],
-                                                "Name": "Aggregate"
-                                            },
-                                            {
-                                                "Inputs": [],
-                                                "Name": "ToFlow",
-                                                "ToFlow": "precompute_0_0"
+                                                "Name": "CrossJoin"
                                             },
                                             {
                                                 "Condition": "thousand = Sum0",
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 5
+                                                        "InternalOperatorId": 4
                                                     },
                                                     {
-                                                        "InternalOperatorId": 4
+                                                        "InternalOperatorId": 3
                                                     }
                                                 ],
                                                 "Name": "InnerJoin (MapJoin)"
@@ -107,7 +96,7 @@
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 6
+                                                        "InternalOperatorId": 5
                                                     }
                                                 ],
                                                 "Name": "Filter",
@@ -125,6 +114,11 @@
                                                     "unique2 (-\u221e, +\u221e)"
                                                 ],
                                                 "Table": "postgres_jointest/join0.test_plan/tenk1"
+                                            },
+                                            {
+                                                "Inputs": [],
+                                                "Name": "ToFlow",
+                                                "ToFlow": "precompute_0_0"
                                             }
                                         ],
                                         "PlanNodeId": 6,

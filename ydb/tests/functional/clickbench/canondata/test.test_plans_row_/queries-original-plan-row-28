@@ -41,6 +41,15 @@
                                                         "Inputs": [
                                                             {
                                                                 "InternalOperatorId": 1
+                                                            },
+                                                            {
+                                                                "InternalOperatorId": 1
+                                                            },
+                                                            {
+                                                                "InternalOperatorId": 1
+                                                            },
+                                                            {
+                                                                "InternalOperatorId": 1
                                                             }
                                                         ],
                                                         "Limit": "25",
@@ -74,6 +83,9 @@
                                                                         "Aggregation": "{_yql_agg_1: SUM(state._yql_agg_1,1),_yql_agg_2: MIN(item.Referer,state._yql_agg_2)}",
                                                                         "GroupBy": "item.key",
                                                                         "Inputs": [
+                                                                            {
+                                                                                "InternalOperatorId": 1
+                                                                            },
                                                                             {
                                                                                 "InternalOperatorId": 1
                                                                             }

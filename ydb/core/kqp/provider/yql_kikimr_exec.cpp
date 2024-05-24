@@ -1319,14 +1319,28 @@ public:
                         auto columnName = columnTuple.Item(0).Cast<TCoAtom>();
                         alter_columns->set_name(TString(columnName));
 
-                        auto families = columnTuple.Item(1).Cast<TCoAtomList>();
-                        if (families.Size() > 1) {
-                            ctx.AddError(TIssue(ctx.GetPosition(families.Pos()),
-                                "Unsupported number of families"));
-                            return SyncError();
-                        }
-                        for (auto family : families) {
-                            alter_columns->set_family(TString(family.Value()));
+                        auto alterColumnList = columnTuple.Item(1).Cast<TExprList>();
+                        if (TString(alterColumnList.Item(0).Cast<TCoAtom>()) = "setDefault") {
+                            auto setDefault = alterColumnList.Item(1).Cast<TCoAtomList>();
+                            auto func = TString(setDefault.Item(0).Cast<TCoAtom>());
+                            auto arg = TString(setDefault.Item(1).Cast<TCoAtom>());
+                            if (func != "nextval") {
+                                ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
+                                    TStringBuilder() << "Unsupported function to set default: " << func));
+                                return SyncError();
+                            }
+                            auto fromSequence = alter_columns->mutable_from_sequence();
+                            fromSequence->set_name(arg);
+                        } else {
+                            auto families = columnTuple.Item(1).Cast<TCoAtomList>();
+                            if (families.Size() > 1) {
+                                ctx.AddError(TIssue(ctx.GetPosition(families.Pos()),
+                                    "Unsupported number of families"));
+                                return SyncError();
+                            }
+                            for (auto family : families) {
+                                alter_columns->set_family(TString(family.Value()));
+                            }
                         }
                     }
                 } else if (name == "addColumnFamilies" || name == "alterColumnFamilies") {

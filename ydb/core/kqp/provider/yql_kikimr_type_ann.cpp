@@ -1361,13 +1361,29 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                             << " Column: \"" << name << "\" does not exist"));
                         return TStatus::Error;
                     }
-                    auto families = columnTuple.Item(1);
-                    if (families.Cast<TCoAtomList>().Size() > 1) {
-                        ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
-                            << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
-                            << " Column: \"" << name
-                            << "\". Several column families for a single column are not yet supported"));
-                        return TStatus::Error;
+                    if (TString(columnTuple.Item(1).Cast<TExprList>().Item(0).Cast<TCoAtom>()) == "setDefault") {
+                        auto setDefault = columnTuple.Item(1).Cast<TExprList>().Item(1).Cast<TCoAtomList>();
+                        auto func = TString(setDefault.Item(0).Cast<TCoAtom>());
+                        auto arg = TString(setDefault.Item(1).Cast<TCoAtom>());
+                        if (func != "nextval") {
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
+                                TStringBuilder() << "Unsupported function to set default: " << func));
+                            return TStatus::Error;
+                        }
+                        if (setDefault.Size() > 2) {
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
+                                TStringBuilder() << "Function nextval has exactly one argument"));
+                            return TStatus::Error;
+                        }
+                    } else {
+                        auto families = columnTuple.Item(1);
+                        if (families.Cast<TCoAtomList>().Size() > 1) {
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                                << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                << " Column: \"" << name
+                                << "\". Several column families for a single column are not yet supported"));
+                            return TStatus::Error;
+                        }
                     }
                 }
             } else if (name == "addIndex") {

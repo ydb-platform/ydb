@@ -40,7 +40,7 @@ namespace NYdb::NConsoleClient {
 
         THashMap<TString, NTopic::EAutoscalingStrategy> AutoscaleStrategies = {
             std::pair<TString, NTopic::EAutoscalingStrategy>("disabled", NTopic::EAutoscalingStrategy::Disabled),
-            std::pair<TString, NTopic::EAutoscalingStrategy>("only-up", NTopic::EAutoscalingStrategy::ScaleUp),
+            std::pair<TString, NTopic::EAutoscalingStrategy>("up", NTopic::EAutoscalingStrategy::ScaleUp),
             std::pair<TString, NTopic::EAutoscalingStrategy>("up-and-down", NTopic::EAutoscalingStrategy::ScaleUpAndDown),
         };
 

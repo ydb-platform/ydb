@@ -1049,6 +1049,20 @@
             "uri": "https://{canondata_backend}/1775319/3515b86fb929979a6751f93bd43a0291eaa01262/resource.tar.gz#test.test_expr-lds_empty_compare-default.txt-Plan_/plan.txt"
         }
     ],
+    "test.test[expr-list_top_sort-default.txt-Debug]": [
+        {
+            "checksum": "049a4840aed77024dcb5f9caf73a672f",
+            "size": 1804,
+            "uri": "https://{canondata_backend}/1937424/ef4272c0e98c55575149317381e8efaa85a26157/resource.tar.gz#test.test_expr-list_top_sort-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[expr-list_top_sort-default.txt-Plan]": [
+        {
+            "checksum": "01775e7c945a56ebf0edc2d478f4f68d",
+            "size": 2567,
+            "uri": "https://{canondata_backend}/1903885/804adfc45546340f178ce737d7f1d1e8feb56e81/resource.tar.gz#test.test_expr-list_top_sort-default.txt-Plan_/plan.txt"
+        }
+    ],
     "test.test[expr-to_hashed_dict_list_key-default.txt-Debug]": [
         {
             "checksum": "044532517685890dde36188f8d1567cc",

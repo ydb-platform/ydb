@@ -2578,10 +2578,18 @@ public:
         hintColumn = TStringBuilder() << "GroupingHint" << Hints.size();
         ui64 hint = 0;
         if (GroupByColumns.empty()) {
+            const bool isJoin = GetJoin();
             for (const auto& groupByNode: GroupBy) {
                 auto namePtr = groupByNode->GetColumnName();
                 YQL_ENSURE(namePtr);
-                GroupByColumns.insert(*namePtr);
+                TString column = *namePtr;
+                if (isJoin) {
+                    auto sourceNamePtr = groupByNode->GetSourceName();
+                    if (sourceNamePtr && !sourceNamePtr->empty()) {
+                        column = DotJoin(*sourceNamePtr, column);
+                    }
+                }
+                GroupByColumns.insert(column);
             }
         }
         for (const auto& column: columns) {

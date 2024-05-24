@@ -419,6 +419,7 @@ TJobPreparer::TJobPreparer(
     }
 
     if (auto commandJob = dynamic_cast<const ICommandJob*>(&job)) {
+        IsCommandJob_ = true;
         ClassName_ = TJobFactory::Get()->GetJobName(&job);
         Command_ = commandJob->GetCommand();
     } else {
@@ -463,6 +464,11 @@ bool TJobPreparer::ShouldMountSandbox() const
 ui64 TJobPreparer::GetTotalFileSize() const
 {
     return TotalFileSize_;
+}
+
+bool TJobPreparer::ShouldRedirectStdoutToStderr() const
+{
+    return !IsCommandJob_ && OperationPreparer_.GetContext().Config->RedirectStdoutToStderr;
 }
 
 TString TJobPreparer::GetFileStorage() const

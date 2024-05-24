@@ -209,6 +209,7 @@ public:
 
         const auto& securityConfig(Config.GetDomainsConfig().GetSecurityConfig());
         appData->EnforceUserTokenRequirement = securityConfig.GetEnforceUserTokenRequirement();
+        appData->EnforceUserTokenCheckRequirement = securityConfig.GetEnforceUserTokenCheckRequirement();
         if (securityConfig.AdministrationAllowedSIDsSize() > 0) {
             TVector<TString> administrationAllowedSIDs(securityConfig.GetAdministrationAllowedSIDs().begin(), securityConfig.GetAdministrationAllowedSIDs().end());
             appData->AdministrationAllowedSIDs = std::move(administrationAllowedSIDs);

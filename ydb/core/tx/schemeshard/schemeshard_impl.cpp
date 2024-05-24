@@ -1239,7 +1239,72 @@ bool TSchemeShard::CheckApplyIf(const NKikimrSchemeOp::TModifyScheme &scheme, TS
 
         if (item.HasPathVersion()) {
             const auto requiredVersion = item.GetPathVersion();
-            const auto actualVersion = GetPathVersion(TPath::Init(pathId, this)).GetGeneralVersion();
+            arc_ui64 actualVersion;
+            auto path = TPath::Init(pathId, this);
+            auto pathVersion = GetPathVersion(path);
+
+            if (item.HasCheckEntityVersion() && item.GetCheckEntityVersion()) {
+                switch(path.Base()->PathType) {
+                    case NKikimrSchemeOp::EPathTypePersQueueGroup:
+                        actualVersion = pathVersion.GetPQVersion();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeSubDomain:
+                    case NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain:
+                        actualVersion = pathVersion.GetSubDomainVersion();
+                        break;
+                    case NKikimrSchemeOp::EPathTypeTable:
+                        actualVersion = pathVersion.GetTableSchemaVersion();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeBlockStoreVolume:
+                        actualVersion = pathVersion.GetBSVVersion();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeFileStore:
+                        actualVersion = pathVersion.GetFileStoreVersion();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeKesus:
+                        actualVersion = pathVersion.GetKesusVersion();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeRtmrVolume:
+                        actualVersion = pathVersion.GetRTMRVersion();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeSolomonVolume:
+                        actualVersion = pathVersion.GetSolomonVersion();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeTableIndex:
+                        actualVersion = pathVersion.GetTableIndexVersion();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeColumnStore:
+                        actualVersion = pathVersion.GetColumnStoreVersion();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeColumnTable:
+                        actualVersion = pathVersion.GetColumnTableVersion();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeCdcStream:
+                        actualVersion = pathVersion.GetCdcStreamVersion();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeSequence:
+                        actualVersion = pathVersion.GetSequenceVersion();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeReplication:
+                        actualVersion = pathVersion.GetReplicationVersion();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeExternalTable:
+                        actualVersion = pathVersion.GetExternalTableVersion();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeExternalDataSource:
+                        actualVersion = pathVersion.GetExternalDataSourceVersion();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeView:
+                        actualVersion = pathVersion.GetViewVersion();
+                        break;
+                    default:
+                        actualVersion = pathVersion.GetGeneralVersion();
+                        break;
+                }
+            } else {
+                actualVersion = pathVersion.GetGeneralVersion();
+            }
+
             if (requiredVersion != actualVersion) {
                 errStr = TStringBuilder()
                     << "fail user constraint in ApplyIf section:"

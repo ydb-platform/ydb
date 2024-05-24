@@ -37,10 +37,11 @@ struct TKqpResourcesRequest {
     ui64 ExecutionUnits = 0;
     EKqpMemoryPool MemoryPool = EKqpMemoryPool::Unspecified;
     ui64 Memory = 0;
+    ui64 ExternalMemory = 0;
 
     TString ToString() const {
         return TStringBuilder() << "TKqpResourcesRequest{ MemoryPool: " << (ui32) MemoryPool << ", Memory: " << Memory
-           << " }";
+            << "ExternalMemory: " << ExternalMemory << " }";
     }
 };
 
@@ -83,14 +84,11 @@ public:
     virtual TKqpRMAllocateResult AllocateResources(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources) = 0;
 
     using TResourcesAllocatedCallback = std::function<void(NActors::TActorSystem* as)>;
-    using TNotEnoughtResourcesCallback = std::function<void(NActors::TActorSystem* as, const TString& reason, bool byTimeout)>;
 
     virtual void FreeResources(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources) = 0;
     virtual void FreeResources(ui64 txId, ui64 taskId) = 0;
 
     virtual void NotifyExternalResourcesAllocated(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources) = 0;
-    virtual void NotifyExternalResourcesFreed(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources) = 0;
-    virtual void NotifyExternalResourcesFreed(ui64 txId, ui64 taskId) = 0;
 
     virtual void RequestClusterResourcesInfo(TOnResourcesSnapshotCallback&& callback) = 0;
 

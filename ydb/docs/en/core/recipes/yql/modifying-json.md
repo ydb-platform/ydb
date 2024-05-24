@@ -4,7 +4,7 @@ In memory, YQL operates on immutable values. Thus, when a query needs to change 
 
 This example query takes an input JSON named `$fields`, parses it, substitutes key `a` with 0, drops key `d`, and adds a key `c` with value 3:
 
-```sql
+```yql
 $fields = '{"a": 1, "b": 2, "d": 4}'j;
 $pairs = DictItems(Yson::ConvertToInt64Dict($fields));
 $result_pairs = ListExtend(ListNotNull(ListMap($pairs, ($item) -> {

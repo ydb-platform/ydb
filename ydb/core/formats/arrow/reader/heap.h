@@ -47,7 +47,7 @@ public:
     }
 
     void Push(TSortCursor&& cursor) {
-        Queue.emplace_back(cursor);
+        Queue.emplace_back(std::move(cursor));
         std::push_heap(Queue.begin(), Queue.end());
         NextIdx = 0;
     }

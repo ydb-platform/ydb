@@ -173,9 +173,9 @@ void TAwsSignature::PrepateCgiParameters() {
 
         auto printSingleParam = [&canonicalCgi](const TString& key, const TVector<TString>& values) {
             auto it = values.begin();
-            canonicalCgi << UriEncode(key) << "=" << UriEncode(*it, true);
+            canonicalCgi << UriEncode(key, true) << "=" << UriEncode(*it, true);
             while (++it != values.end()) {
-                canonicalCgi << "&" << UriEncode(key) << "=" << UriEncode(*it, true);
+                canonicalCgi << "&" << UriEncode(key, true) << "=" << UriEncode(*it, true);
             }
 
         };

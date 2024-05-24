@@ -961,5 +961,13 @@ private:
 
 }
 
+
+IShardedWriteControllerPtr CreateShardedWriteController(
+        const TShardedWriteControllerSettings& settings,
+        TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumns,
+        const NMiniKQL::TTypeEnvironment& typeEnv) {
+    return MakeIntrusive<TShardedWriteController>(settings, std::move(inputColumns), typeEnv);
+}
+
 }
 }

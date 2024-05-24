@@ -105,6 +105,7 @@ struct TShardedWriteControllerSettings {
 };
 
 IShardedWriteControllerPtr CreateShardedWriteController(
+    const TShardedWriteControllerSettings& settings,
     TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumns,
     const NMiniKQL::TTypeEnvironment& typeEnv);
 

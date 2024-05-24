@@ -351,6 +351,8 @@ public:
         REGISTER    (TPullQueueCommand,                    "pull_queue",                      Null,       Tabular,    false,  true, ApiVersion4);
         REGISTER    (TPullConsumerCommand,                 "pull_consumer",                   Null,       Tabular,    false,  true, ApiVersion4);
         REGISTER    (TAdvanceConsumerCommand,              "advance_consumer",                Null,       Structured, true,   false, ApiVersion4);
+        REGISTER    (TCreateQueueProducerSessionCommand,   "create_queue_producer_session",   Null,       Structured, true,  false, ApiVersion4);
+        REGISTER    (TRemoveQueueProducerSessionCommand,   "remove_queue_producer_session",   Null,       Structured, true,  false, ApiVersion4);
 
         REGISTER    (TStartQueryCommand,                   "start_query",                     Null,       Structured, true, false, ApiVersion4);
         REGISTER    (TAbortQueryCommand,                   "abort_query",                     Null,       Structured, true, false, ApiVersion4);

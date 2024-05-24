@@ -760,6 +760,35 @@ message TRspListQueueConsumerRegistrations
 
 ////////////////////////////////////////////////////////////////////////////////
 
+message TReqCreateQueueProducerSession
+{
+    optional string producer_path = 1;
+    optional string queue_path = 2;
+    optional string session_id = 3;
+    optional bytes user_meta = 4; // YSON
+}
+
+message TRspCreateQueueProducerSession
+{
+    optional uint64 sequence_number = 1;
+    optional uint64 epoch = 2;
+    optional bytes user_meta = 3; // YSON
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqRemoveQueueProducerSession
+{
+    optional string producer_path = 1;
+    optional string queue_path = 2;
+    optional string session_id = 3;
+}
+
+message TRspRemoveQueueProducerSession
+{ }
+
+////////////////////////////////////////////////////////////////////////////////
+
 message TReqExplainQuery
 {
     required string query = 1;

@@ -124,6 +124,21 @@ public:
         const TListQueueConsumerRegistrationsOptions& options),
         (queuePath, consumerPath, options))
 
+    DELEGATE_METHOD(TFuture<TCreateQueueProducerSessionResult>, CreateQueueProducerSession, (
+        const NYPath::TRichYPath& producerPath,
+        const NYPath::TRichYPath& queuePath,
+        const TString& sessionId,
+        const std::optional<NYson::TYsonString>& userMeta,
+        const TCreateQueueProducerSessionOptions& options),
+        (producerPath, queuePath, sessionId, userMeta, options))
+
+    DELEGATE_METHOD(TFuture<void>, RemoveQueueProducerSession, (
+        const NYPath::TRichYPath& producerPath,
+        const NYPath::TRichYPath& queuePath,
+        const TString& sessionId,
+        const TRemoveQueueProducerSessionOptions& options),
+        (producerPath, queuePath, sessionId, options))
+
     // Cypress
     DELEGATE_METHOD(TFuture<NYson::TYsonString>, GetNode, (
         const NYPath::TYPath& path,

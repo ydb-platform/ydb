@@ -125,4 +125,41 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TCreateQueueProducerSessionCommand
+    : public TTypedCommand<NApi::TCreateQueueProducerSessionOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TCreateQueueProducerSessionCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NYPath::TRichYPath ProducerPath;
+    NYPath::TRichYPath QueuePath;
+    TString SessionId;
+    NYTree::INodePtr UserMeta;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TRemoveQueueProducerSessionCommand
+    : public TTypedCommand<NApi::TRemoveQueueProducerSessionOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TRemoveQueueProducerSessionCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NYPath::TRichYPath ProducerPath;
+    NYPath::TRichYPath QueuePath;
+    TString SessionId;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NDriver

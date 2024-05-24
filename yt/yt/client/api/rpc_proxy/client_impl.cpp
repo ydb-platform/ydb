@@ -873,6 +873,57 @@ TFuture<std::vector<TListQueueConsumerRegistrationsResult>> TClient::ListQueueCo
     }));
 }
 
+TFuture<TCreateQueueProducerSessionResult> TClient::CreateQueueProducerSession(
+    const TRichYPath& producerPath,
+    const TRichYPath& queuePath,
+    const TString& sessionId,
+    const std::optional<TYsonString>& userMeta,
+    const TCreateQueueProducerSessionOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.CreateQueueProducerSession();
+    SetTimeoutOptions(*req, options);
+
+    ToProto(req->mutable_producer_path(), producerPath);
+    ToProto(req->mutable_queue_path(), queuePath);
+    ToProto(req->mutable_session_id(), sessionId);
+    if (userMeta) {
+        ToProto(req->mutable_user_meta(), userMeta->AsStringBuf());
+    }
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspCreateQueueProducerSessionPtr& rsp) {
+        std::optional<TYsonString> userMeta;
+        if (rsp->has_user_meta()) {
+            userMeta = TYsonString(FromProto<TString>(rsp->user_meta()));
+        }
+
+        return TCreateQueueProducerSessionResult{
+            .SequenceNumber = FromProto<ui64>(rsp->sequence_number()),
+            .Epoch = FromProto<ui64>(rsp->epoch()),
+            .UserMeta = std::move(userMeta),
+        };
+    }));
+}
+
+TFuture<void> TClient::RemoveQueueProducerSession(
+    const NYPath::TRichYPath& producerPath,
+    const NYPath::TRichYPath& queuePath,
+    const TString& sessionId,
+    const TRemoveQueueProducerSessionOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.RemoveQueueProducerSession();
+    SetTimeoutOptions(*req, options);
+
+    ToProto(req->mutable_producer_path(), producerPath);
+    ToProto(req->mutable_queue_path(), queuePath);
+    ToProto(req->mutable_session_id(), sessionId);
+
+    return req->Invoke().AsVoid();
+}
+
 TFuture<void> TClient::AddMember(
     const TString& group,
     const TString& member,

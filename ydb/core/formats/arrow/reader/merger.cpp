@@ -22,16 +22,15 @@ void TMergePartialStream::RemoveControlPoint() {
 
 void TMergePartialStream::CheckSequenceInDebug(const TRWSortableBatchPosition& nextKeyColumnsPosition) {
 #ifndef NDEBUG
-    auto nextCursor = nextKeyColumnsPosition.BuildSortingCursor();
     if (CurrentKeyColumns) {
-        const bool linearExecutionCorrectness = CurrentKeyColumns->Compare(nextCursor) == std::partial_ordering::less;
+        const bool linearExecutionCorrectness = nextKeyColumnsPosition.Compare(*CurrentKeyColumns) == std::partial_ordering::greater;
         if (!linearExecutionCorrectness) {
-            const bool newSegmentScan = nextCursor.GetPosition() == 0;
-            AFL_VERIFY(newSegmentScan && nextCursor.Compare(*CurrentKeyColumns) == std::partial_ordering::less)
-                ("merge_debug", DebugJson())("current_ext", nextCursor.DebugJson())("newSegmentScan", newSegmentScan);
+            const bool newSegmentScan = nextKeyColumnsPosition.GetPosition() == 0;
+            AFL_VERIFY(newSegmentScan && nextKeyColumnsPosition.Compare(*CurrentKeyColumns) == std::partial_ordering::less)
+                ("merge_debug", DebugJson())("current_ext", nextKeyColumnsPosition.DebugJson())("newSegmentScan", newSegmentScan);
         }
     }
-    CurrentKeyColumns = nextKeyColumnsPosition;
+    CurrentKeyColumns = nextKeyColumnsPosition.BuildSortingCursor();
 #else
     Y_UNUSED(nextKeyColumnsPosition);
 #endif

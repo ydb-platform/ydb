@@ -68,7 +68,7 @@ public:
     virtual void AddData(NMiniKQL::TUnboxedValueBatch&& data) = 0;
     virtual void Close() = 0;
 
-    //virtual ui64 GetNextNewShardId() = 0;
+    virtual TVector<ui64> GetPendingShards() const = 0;
 
     struct TMessageMetadata {
         ui64 Cookie = 0;

@@ -735,7 +735,7 @@ public:
         return insertIt->second;
     }
 
-    TVector<ui64> GetPendingShards() {
+    TVector<ui64> GetPendingShards() const {
         TVector<ui64> result;
         for (const auto& [id, shard] : ShardsInfo) {
             if (!shard.IsEmpty() && shard.GetSendAttempts() == 0) {
@@ -829,8 +829,9 @@ public:
         BuildBatches();
     }
 
-    //ui64 GetNextNewShardId() override {
-    //}
+    TVector<ui64> GetPendingShards() const override {
+        return ShardsInfo.GetPendingShards();
+    }
 
     std::optional<TMessageMetadata> GetMessageMetadata(ui64 shardId) override {
         const auto& shardInfo = ShardsInfo.GetShard(shardId);

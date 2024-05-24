@@ -1,8 +1,11 @@
 #pragma once
 
+#include <ydb/library/yql/public/udf/udf_data_type.h>
+
 #include <util/system/types.h>
 #include <util/datetime/base.h>
 #include <util/generic/size_literals.h>
+#include <util/generic/set.h>
 
 namespace NYql {
 
@@ -55,6 +58,17 @@ constexpr bool DEFAULT_JOIN_COMMON_USE_MULTI_OUT = false;
 constexpr bool DEFAULT_USE_RPC_READER_IN_DQ = false;
 constexpr size_t DEFAULT_RPC_READER_INFLIGHT = 1;
 constexpr TDuration DEFAULT_RPC_READER_TIMEOUT = TDuration::Seconds(120);
+const TSet<TString> DEFAULT_BLOCK_READER_SUPPORTED_TYPES = {"pg", "tuple"};
+const TSet<NUdf::EDataSlot> DEFAULT_BLOCK_READER_SUPPORTED_DATA_TYPES = 
+    {
+        NUdf::EDataSlot::Int8, NUdf::EDataSlot::Uint8,
+        NUdf::EDataSlot::Int16, NUdf::EDataSlot::Uint16,
+        NUdf::EDataSlot::Int32, NUdf::EDataSlot::Uint32,
+        NUdf::EDataSlot::Int64, NUdf::EDataSlot::Uint64,
+        NUdf::EDataSlot::Bool, NUdf::EDataSlot::Double,
+        NUdf::EDataSlot::String, NUdf::EDataSlot::Json,
+        NUdf::EDataSlot::Yson, NUdf::EDataSlot::Utf8
+    };
 
 constexpr auto DEFAULT_SWITCH_MEMORY_LIMIT = 128_MB;
 

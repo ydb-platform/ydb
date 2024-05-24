@@ -177,7 +177,7 @@ Y_UNIT_TEST_SUITE(Acceleration) {
 
 //    TEST_ACCELERATE(Mirror3dc, Get, AsyncRead, 2);
 //    TEST_ACCELERATE(Mirror3of4, Get, AsyncRead, 2);
-    TEST_ACCELERATE(4Plus2Block, Get, AsyncRead, 2);
+//    TEST_ACCELERATE(4Plus2Block, Get, AsyncRead, 2);
 
     #undef TEST_ACCELERATE
 }

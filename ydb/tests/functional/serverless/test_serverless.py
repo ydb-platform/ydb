@@ -52,6 +52,8 @@ CLUSTER_CONFIG = dict(
     datashard_config={
         'keep_snapshot_timeout': 5000,
     },
+    dynamic_storage_pools=[dict(name="dynamic_storage_pool:1", kind="hdd", pdisk_user_kind=0),
+                           dict(name="dynamic_storage_pool_additional:1", kind="hdd1", pdisk_user_kind=0)],
 )
 
 
@@ -535,15 +537,15 @@ def test_database_used_and_limit_bytes_metrics(ydb_hostel_db, ydb_disk_quoted_se
     driver.wait(120)
     
     alter_database_quotas(ydb_cluster, database, '''storage_quotas {
-        unit_kind: "ssd"
+        unit_kind: "hdd1"
         data_size_hard_quota: 2
         data_size_soft_quota: 1
     }''')
 
     status = ydb_cluster.get_database_status(database)
-    assert status.database_quotas.storage_quotas == (("ssd", 2, 1)), status
+    assert status.database_quotas.storage_quotas == (("hdd1", 2, 1)), status
 
-    check_db_counters(ydb_cluster, database, driver, {"resources.storage.limit_bytes.ssd": 1})
+    check_db_counters(ydb_cluster, database, driver, {"resources.storage.limit_bytes.hdd": 1})
 
     with ydb.SessionPool(driver) as pool:
         def create_table(session, path):
@@ -551,10 +553,10 @@ def test_database_used_and_limit_bytes_metrics(ydb_hostel_db, ydb_disk_quoted_se
             session.execute_scheme(f'''
                 CREATE TABLE `{path}` (
                     id Int32,
-                    value Utf8 FAMILY hdd,
+                    value Utf8 FAMILY custom,
                     PRIMARY KEY (id),
-                    FAMILY default (DATA = "ssd"),
-                    FAMILY hdd (DATA = "hdd")
+                    FAMILY default (DATA = "hdd"),
+                    FAMILY custom (DATA = "hdd1")
                 );
             ''')
 
@@ -591,10 +593,10 @@ def test_database_used_and_limit_bytes_metrics(ydb_hostel_db, ydb_disk_quoted_se
             pool.retry_operation_sync(write_some_data, None, os.path.join(database, "table"))
 
         check_db_counters(ydb_cluster, database, driver, {"resources.storage.used_bytes": 123})
-        check_db_counters(ydb_cluster, database, driver, {"resources.storage.used_bytes.ssd": 123})
+        check_db_counters(ydb_cluster, database, driver, {"resources.storage.used_bytes.ssd": 0})
         check_db_counters(ydb_cluster, database, driver, {"resources.storage.used_bytes.hdd": 123})
         check_db_counters(ydb_cluster, database, driver, {"resources.storage.table.used_bytes": 123})
-        check_db_counters(ydb_cluster, database, driver, {"resources.storage.table.used_bytes.ssd": 123})
+        check_db_counters(ydb_cluster, database, driver, {"resources.storage.table.used_bytes.ssd": 0})
         check_db_counters(ydb_cluster, database, driver, {"resources.storage.table.used_bytes.hdd": 123})
 
         def drop_table(session, path):

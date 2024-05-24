@@ -471,13 +471,6 @@ public:
     THashMap<TNodeId, THolder<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse>> NodeSystemState;
     THashMap<TNodeId, const NKikimrWhiteboard::TSystemStateInfo*> MergedNodeSystemState;
 
-    std::unordered_map<TString, const NKikimrBlobStorage::TBaseConfig::TPDisk*> BSConfigPDisks;
-    std::unordered_map<TString, const NKikimrBlobStorage::TBaseConfig::TVSlot*> BSConfigVSlots;
-    std::unordered_map<ui32, const NKikimrBlobStorage::TBaseConfig::TNode*> BSConfigNodes;
-
-    std::unordered_set<TString> ValidVDisks;
-    std::unordered_set<TString> ValidPDisks;
-    std::unordered_set<TGroupId> ValidGroups;
     std::unordered_map<TString, const NKikimrSysView::TPDiskEntry*> PDisksMap;
     std::unordered_map<TString, Ydb::Monitoring::StatusFlag::Status> VDiskStatuses;
 
@@ -653,7 +646,6 @@ public:
                 const auto& staticConfig = bsConfig.GetServiceSet();
                 for (const NKikimrBlobStorage::TNodeWardenServiceSet_TPDisk& pDisk : staticConfig.pdisks()) {
                     auto pDiskId = GetPDiskId(pDisk);
-                    ValidPDisks.emplace(pDiskId);
                     auto itPDisk = MergedPDiskState.find(pDiskId);
                     if (itPDisk == MergedPDiskState.end()) {
                         PDisksAppended.emplace_back();
@@ -668,7 +660,6 @@ public:
                 }
                 for (const NKikimrBlobStorage::TNodeWardenServiceSet_TVDisk& vDisk : staticConfig.vdisks()) {
                     auto vDiskId = GetVDiskId(vDisk);
-                    ValidVDisks.emplace(vDiskId);
                     auto itVDisk = MergedVDiskState.find(vDiskId);
                     if (itVDisk == MergedVDiskState.end()) {
                         VDisksAppended.emplace_back();
@@ -685,7 +676,6 @@ public:
                     }
                 }
                 for (const NKikimrBlobStorage::TGroupInfo& group : staticConfig.groups()) {
-                    ValidGroups.emplace(group.GetGroupID());
                     TString storagePoolName = group.GetStoragePoolName();
                     if (!storagePoolName) {
                         storagePoolName = STATIC_STORAGE_POOL_NAME;
@@ -1282,7 +1272,6 @@ public:
         }
         for (const auto& vSlot : VSlots->GetEntries()) {
             auto vSlotId = GetVSlotId(vSlot.GetKey());
-            //BSConfigVSlots.emplace(vSlotId, &vSlot);
             GroupState[vSlot.GetInfo().GetGroupId()].VSlots.push_back(&vSlot);
         }
         for (const auto& pool : StoragePools->GetEntries()) { // there is no specific pool for static group here

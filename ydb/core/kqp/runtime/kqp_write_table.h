@@ -66,10 +66,9 @@ public:
         NSchemeCache::TSchemeCacheRequest::TEntry&& partitionsEntry) = 0;
 
     virtual void AddData(NMiniKQL::TUnboxedValueBatch&& data) = 0;
-    virtual void ProcessData(bool forceFlush) = 0;
     virtual void Close() = 0;
 
-    virtual ui64 GetNextNewShardId() = 0;
+    //virtual ui64 GetNextNewShardId() = 0;
 
     struct TMessageMetadata {
         ui64 Cookie = 0;
@@ -78,20 +77,32 @@ public:
     };
     virtual std::optional<TMessageMetadata> GetMessageMetadata(ui64 shardId) = 0;
 
-    virtual bool SerializeMessage(ui64 shardId, NKikimr::NEvents::TDataEvents::TEvWrite& evWrite) = 0;
+    struct TSerializationResult {
+        i64 TotalDataSize = 0;
+        TVector<ui64> PayloadIndexes;
+    };
 
-    virtual bool OnMessageSent(ui64 shardId, ui64 cookie) = 0;
-    virtual bool OnMessageAcknowledged(ui64 shardId, ui64 cookie) = 0;
+    virtual TSerializationResult SerializeMessageToPayload(ui64 shardId, NKikimr::NEvents::TDataEvents::TEvWrite& evWrite) = 0;
 
-    virtual i64 GetMemory() = 0;
+    virtual std::optional<i64> OnMessageAcknowledged(ui64 shardId, ui64 cookie) = 0;
 
-    virtual bool IsClosed() = 0;
-    virtual bool IsEmpty() = 0;
-    virtual bool IsFinished() = 0;
+    virtual i64 GetMemory() const = 0;
+
+    virtual bool IsClosed() const = 0;
+    virtual bool IsEmpty() const = 0;
+    virtual bool IsFinished() const = 0;
+
+    virtual bool IsReady() const = 0;
 };
 
 using IShardedWriteControllerPtr = TIntrusivePtr<IShardedWriteController>;
 
+
+struct TShardedWriteControllerSettings {
+    i64 MemoryLimitTotal;
+    i64 MemoryLimitPerMessage;
+    i64 MaxBatchesPerMessage;
+};
 
 IShardedWriteControllerPtr CreateShardedWriteController(
     TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumns,

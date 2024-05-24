@@ -97,7 +97,7 @@ public:
         const NYql::NDq::TComputeRuntimeSettings& settings,
         NWilson::TTraceId traceId, TIntrusivePtr<NActors::TProtoArenaHolder> arena, const TString& serializedGUCSettings,
         TComputeStagesWithScan& computesByStage, ui64 outputChunkMaxSize, std::shared_ptr<IKqpNodeState> state,
-        NRm::EKqpMemoryPool memoryPool, ui32 numberOfTasks)
+        NRm::EKqpMemoryPool memoryPool, ui32 numberOfTasks, TComputeActorSchedulingOptions schedulingOptions)
     {
         NYql::NDq::TComputeMemoryLimits memoryLimits;
         memoryLimits.ChannelBufferSize = 0;
@@ -168,7 +168,7 @@ public:
             auto& info = computesByStage.UpsertTaskWithScan(*dqTask, meta, !AppData()->FeatureFlags.GetEnableSeparationComputeActorsFromRead());
             IActor* computeActor = CreateKqpScanComputeActor(executerId, txId, dqTask,
                 AsyncIoFactory, runtimeSettings, memoryLimits,
-                std::move(traceId), std::move(arena));
+                std::move(traceId), std::move(arena), std::move(schedulingOptions));
             TActorId result = TlsActivationContext->Register(computeActor);
             info.MutableActorIds().emplace_back(result);
             return result;
@@ -178,7 +178,7 @@ public:
                 GUCSettings = std::make_shared<TGUCSettings>(serializedGUCSettings);
             }
             IActor* computeActor = ::NKikimr::NKqp::CreateKqpComputeActor(executerId, txId, dqTask, AsyncIoFactory,
-                runtimeSettings, memoryLimits, std::move(traceId), std::move(arena), FederatedQuerySetup, GUCSettings);
+                runtimeSettings, memoryLimits, std::move(traceId), std::move(arena), FederatedQuerySetup, GUCSettings, std::move(schedulingOptions));
             return TlsActivationContext->Register(computeActor);
         }
     }

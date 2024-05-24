@@ -14,6 +14,7 @@
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/runtime/kqp_read_actor.h>
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
+#include <ydb/core/kqp/runtime/kqp_compute_scheduler.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 
 #include <ydb/library/wilson_ids/wilson.h>
@@ -75,6 +76,9 @@ public:
         if (config.HasIteratorReadQuotaSettings()) {
             SetIteratorReadsQuotaSettings(config.GetIteratorReadQuotaSettings());
         }
+        if (config.HasComputePoolsConfiguration()) {
+            SetPriorities(config.GetComputePoolsConfiguration());
+        }
     }
 
     void Bootstrap() {
@@ -99,9 +103,10 @@ public:
 
 private:
     STATEFN(WorkState) {
+        Scheduler.AdvanceTime(TlsActivationContext->Monotonic());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvKqpNode::TEvStartKqpTasksRequest, HandleWork);
-            hFunc(TEvKqpNode::TEvFinishKqpTask, HandleWork); // used only for unit tests
+            hFunc(TEvFinishKqpTask, HandleWork); // used only for unit tests
             hFunc(TEvKqpNode::TEvCancelKqpTasksRequest, HandleWork);
             hFunc(TEvents::TEvWakeup, HandleWork);
             // misc
@@ -234,10 +239,18 @@ private:
             auto& taskCtx = request.InFlyTasks[dqTask.GetId()];
             YQL_ENSURE(taskCtx.TaskId != 0);
 
+            TComputeActorSchedulingOptions schedulingOptions {
+                .NodeService = SelfId(),
+                .Scheduler = &Scheduler,
+                .Group = msg.GetRuntimeSettings().GetExecType() == NYql::NDqProto::TComputeRuntimeSettings::SCAN ? "olap" : "",
+                .Weight = 1,
+                .NoThrottle = false//msg.GetRuntimeSettings().GetExecType() == NYql::NDqProto::TComputeRuntimeSettings::DATA,
+            };
+
             taskCtx.ComputeActorId = CaFactory()->CreateKqpComputeActor(
                 request.Executer, txId, &dqTask, runtimeSettingsBase,
                 NWilson::TTraceId(ev->TraceId), ev->Get()->Arena, serializedGUCSettings, computesByStage,
-                msg.GetOutputChunkMaxSize(), State_, memoryPool, tasksCount);
+                msg.GetOutputChunkMaxSize(), State_, memoryPool, tasksCount, std::move(schedulingOptions));
 
             LOG_D("TxId: " << txId << ", executing task: " << taskCtx.TaskId << " on compute actor: " << taskCtx.ComputeActorId);
 
@@ -261,7 +274,7 @@ private:
     }
 
     // used only for unit tests
-    void HandleWork(TEvKqpNode::TEvFinishKqpTask::TPtr& ev) {
+    void HandleWork(TEvFinishKqpTask::TPtr& ev) {
         auto& msg = *ev->Get();
         auto& bucket = State_->GetStateBucketByTx(msg.TxId);
         auto tasksToAbort = bucket.GetTasksByTxId(msg.TxId);
@@ -280,6 +293,9 @@ private:
                 auto abortEv = std::make_unique<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::ABORTED, finalReason);
                 Send(computeActorId, abortEv.release());
             }
+        }
+        if (msg.SchedulerEntity) {
+            Scheduler.Deregister(*msg.SchedulerEntity);
         }
     }
 
@@ -356,12 +372,24 @@ private:
             SetIteratorReadsQuotaSettings(event.GetConfig().GetTableServiceConfig().GetIteratorReadQuotaSettings());
         }
 
+        if (event.GetConfig().GetTableServiceConfig().HasComputePoolsConfiguration()) {
+            SetPriorities(event.GetConfig().GetTableServiceConfig().GetComputePoolsConfiguration());
+        }
+
         auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
     }
 
     void SetIteratorReadsQuotaSettings(const NKikimrConfig::TTableServiceConfig::TIteratorReadQuotaSettings& settings) {
         SetDefaultIteratorQuotaSettings(settings.GetMaxRows(), settings.GetMaxBytes());
+    }
+
+    void SetPriorities(const NKikimrConfig::TTableServiceConfig::TComputePoolConfiguration& conf) {
+        std::function<TComputeScheduler::TDistributionRule(const NKikimrConfig::TTableServiceConfig::TComputePoolConfiguration&)> convert
+            = [](const NKikimrConfig::TTableServiceConfig::TComputePoolConfiguration&)
+        {
+        };
+        Scheduler.SetPriorities(convert(conf), 1, TlsActivationContext->Monotonic());
     }
 
     void SetIteratorReadsRetrySettings(const NKikimrConfig::TTableServiceConfig::TIteratorReadsRetrySettings& settings) {
@@ -467,6 +495,8 @@ private:
     std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
+
+    TComputeScheduler Scheduler;
 
     //state sharded by TxId
     std::shared_ptr<TNodeServiceState> State_;

@@ -47,23 +47,23 @@ static bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
     auto value = BuildLiteralSmartString(ctx.Context(), ctx.Token(in.GetToken3()));
 
     THashMap<TString, bool> settings = {
-        {"connection_string", false},
-        {"endpoint", false},
-        {"database", false},
-        {"token", false},
-        {"token_secret_name", false},
-        {"user", false},
-        {"password", false},
-        {"password_secret_name", false},
-        {"state", true},
-        {"failover_mode", true},
+        {"connection_string", true},
+        {"endpoint", true},
+        {"database", true},
+        {"token", true},
+        {"token_secret_name", true},
+        {"user", true},
+        {"password", true},
+        {"password_secret_name", true},
+        {"state", false},
+        {"failover_mode", false},
     };
 
     auto it = settings.find(to_lower(key.Name));
     if (it == settings.end()) {
         ctx.Context().Error() << "Unknown replication setting: " << key.Name;
         return false;
-    } else if (alter != it->second) {
+    } else if (!alter && !it->second) {
         ctx.Context().Error() << key.Name << " is not supported in " << (alter ? "ALTER" : "CREATE");
         return false;
     }

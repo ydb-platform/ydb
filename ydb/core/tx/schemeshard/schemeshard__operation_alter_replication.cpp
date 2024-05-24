@@ -217,6 +217,60 @@ class TAlterReplication: public TSubOperation {
         }
     }
 
+    bool ValidateAlterState(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc, const NKikimrReplication::TReplicationState& newState) {
+        using TState = NKikimrReplication::TReplicationState;
+        switch (desc.GetState().GetStateCase()) {
+        case TState::kStandBy:
+            if (newState.GetStateCase() != TState::kDone) {
+                result.SetError(NKikimrScheme::StatusInvalidParameter, "Cannot switch state");
+                return false;
+            }
+            break;
+        case TState::kPaused:
+            if (!THashSet<TState::StateCase>{TState::kStandBy, TState::kDone}.contains(newState.GetStateCase())) {
+                result.SetError(NKikimrScheme::StatusInvalidParameter, "Cannot switch state");
+                return false;
+            }
+            break;
+        case TState::kDone:
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Cannot switch state");
+            return false;
+        default:
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "State not set");
+            return false;
+        }
+        return true;
+    }
+
+    bool ValidateAlterConfig(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc, const NKikimrReplication::TReplicationConfig& newConf) {
+        switch (desc.GetState().GetStateCase()) {
+        using TState = NKikimrReplication::TReplicationState;
+        case TState::kStandBy:
+            result.SetError(NKikimrScheme::StatusInvalidParameter,
+                "Please ensure the replication is not in StandBy state before attempting to modify its settings. Modifications are not allowed in StandBy state");
+            return false;
+        case TState::kPaused:
+        case TState::kDone:
+            break;
+        default:
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "State not set");
+            return false;
+        }
+
+        const auto isUserSet = [](const auto& conf) -> bool {
+            return conf.HasSrcConnectionParams() && conf.GetSrcConnectionParams().HasStaticCredentials() &&
+                conf.GetSrcConnectionParams().GetStaticCredentials().HasUser();
+        };
+
+        if (newConf.HasSrcConnectionParams() && newConf.GetSrcConnectionParams().HasStaticCredentials()) {
+            if (!isUserSet(newConf) && !(desc.HasConfig() && isUserSet(desc.GetConfig()))) {
+                result.SetError(NKikimrScheme::StatusInvalidParameter, "User is not set");
+                return false;
+            }
+        }
+        return true;
+    }
+
 public:
     using TSubOperation::TSubOperation;
 
@@ -279,40 +333,69 @@ public:
             return result;
         }
 
-        if (op.HasConfig()) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter, "Cannot alter replication config");
-            return result;
-        }
-
-        if (!op.HasState()) {
+        if (!op.HasConfig() && !op.HasState()) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "Empty alter");
             return result;
         }
 
-        using TState = NKikimrReplication::TReplicationState;
-        switch (replication->Description.GetState().GetStateCase()) {
-        case NKikimrReplication::TReplicationState::kStandBy:
-            if (op.GetState().GetStateCase() != TState::kDone) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter, "Cannot switch state");
-                return result;
-            }
-            break;
-        case NKikimrReplication::TReplicationState::kPaused:
-            if (!THashSet<TState::StateCase>{TState::kStandBy, TState::kDone}.contains(op.GetState().GetStateCase())) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter, "Cannot switch state");
-                return result;
-            }
-            break;
-        case NKikimrReplication::TReplicationState::kDone:
-            result->SetError(NKikimrScheme::StatusInvalidParameter, "Cannot switch state");
+        if (op.HasConfig() && op.HasState()) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter,
+                "It is not allowed to change both settings and the state of the rplication in the same query. Please submit separate queries for each action");
             return result;
-        default:
-            result->SetError(NKikimrScheme::StatusInvalidParameter, "State not set");
+        }
+
+        if (op.HasState() && !ValidateAlterState(*result, replication->Description, op.GetState())) {
+            return result;
+        }
+
+        if (op.HasConfig() && !ValidateAlterConfig(*result, replication->Description, op.GetConfig())) {
             return result;
         }
 
         auto alterData = replication->CreateNextVersion();
-        alterData->Description.MutableState()->CopyFrom(op.GetState());
+
+        if (op.HasState()) {
+            alterData->Description.MutableState()->CopyFrom(op.GetState());
+        }
+
+        if (op.HasConfig()) {
+            const auto conf = op.GetConfig();
+            auto& confRes = *(alterData->Description.MutableConfig());
+
+            if (conf.HasSrcConnectionParams()) {
+                const auto param = conf.GetSrcConnectionParams();
+                auto& paramRes = *(confRes.MutableSrcConnectionParams());
+                if (param.HasEndpoint()) {
+                    paramRes.SetEndpoint(param.GetEndpoint());
+                }
+                if (param.HasDatabase()) {
+                    paramRes.SetDatabase(param.GetDatabase());
+                }
+                if (param.HasStaticCredentials()) {
+                    if (param.GetStaticCredentials().HasUser()) {
+                        paramRes.MutableStaticCredentials()->SetUser(param.GetStaticCredentials().GetUser());
+                    }
+                    if (param.GetStaticCredentials().HasPassword()) {
+                        paramRes.MutableStaticCredentials()->SetPassword(param.GetStaticCredentials().GetPassword());
+                        paramRes.MutableStaticCredentials()->SetPasswordSecretName({});
+                    }
+                    if (param.GetStaticCredentials().HasPasswordSecretName()) {
+                        paramRes.MutableStaticCredentials()->SetPasswordSecretName(param.GetStaticCredentials().GetPasswordSecretName());
+                        paramRes.MutableStaticCredentials()->SetPassword({});
+                    }
+                }
+                if (param.HasOAuthToken()) {
+                    if (param.GetOAuthToken().HasToken()) {
+                        paramRes.MutableOAuthToken()->SetToken(param.GetOAuthToken().GetToken());
+                        paramRes.MutableOAuthToken()->SetTokenSecretName({});
+                    }
+                    if (param.GetOAuthToken().HasTokenSecretName()) {
+                        paramRes.MutableOAuthToken()->SetTokenSecretName(param.GetOAuthToken().GetTokenSecretName());
+                        paramRes.MutableOAuthToken()->SetToken({});
+                    }
+                }
+            }
+        }
 
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         auto& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterReplication, path.Base()->PathId);

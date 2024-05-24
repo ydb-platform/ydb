@@ -38,6 +38,8 @@ public:
         }
 
         switch (record.GetSwitchState().GetStateCase()) {
+        case NKikimrReplication::TReplicationState::kStandBy:
+        case NKikimrReplication::TReplicationState::kPaused:
         case NKikimrReplication::TReplicationState::kDone:
             break;
         default:

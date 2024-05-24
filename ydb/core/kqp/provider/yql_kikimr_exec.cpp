@@ -1995,6 +1995,12 @@ public:
                 return SyncError();
             }
 
+            if (const auto& x = settings.Settings.StaticCredentials; x && (!x->UserName && x->Password || !x->UserName && x->PasswordSecretName)) {
+                ctx.AddError(TIssue(ctx.GetPosition(createReplication.Pos()),
+                    TStringBuilder() << "USER for PASSWORD or PASSWORD_SECRET_NAME are not provided"));
+                return SyncError();
+            }
+
             auto cluster = TString(createReplication.DataSink().Cluster());
             auto future = Gateway->CreateReplication(cluster, settings);
 
@@ -2019,7 +2025,28 @@ public:
 
             for (auto setting : alterReplication.ReplicationSettings()) {
                 auto name = setting.Name().Value();
-                if (name == "state") {
+                if (name == "connection_string") {
+                    settings.Settings.ConnectionString = setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+                } else if (name == "endpoint") {
+                    settings.Settings.Endpoint = setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+                } else if (name == "database") {
+                    settings.Settings.Database = setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+                } else if (name == "token") {
+                    settings.Settings.EnsureOAuthToken().Token =
+                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+                } else if (name == "token_secret_name") {
+                    settings.Settings.EnsureOAuthToken().TokenSecretName =
+                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+                } else if (name == "user") {
+                    settings.Settings.EnsureStaticCredentials().UserName =
+                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+                } else if (name == "password") {
+                    settings.Settings.EnsureStaticCredentials().Password =
+                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+                } else if (name == "password_secret_name") {
+                    settings.Settings.EnsureStaticCredentials().PasswordSecretName =
+                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+                } else if (name == "state") {
                     auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
                     if (to_lower(value) == "done") {
                         settings.Settings.EnsureStateDone();
@@ -2040,6 +2067,30 @@ public:
                         return SyncError();
                     }
                 }
+            }
+
+            if (settings.Settings.ConnectionString && (settings.Settings.Endpoint || settings.Settings.Database)) {
+                ctx.AddError(TIssue(ctx.GetPosition(alterReplication.Pos()),
+                    TStringBuilder() << "Connection string and Endpoint/Database are mutually exclusive"));
+                return SyncError();
+            }
+
+            if (settings.Settings.OAuthToken && settings.Settings.StaticCredentials) {
+                ctx.AddError(TIssue(ctx.GetPosition(alterReplication.Pos()),
+                    TStringBuilder() << "Token and User/Password are mutually exclusive"));
+                return SyncError();
+            }
+
+            if (const auto& x = settings.Settings.OAuthToken; x && x->Token && x->TokenSecretName) {
+                ctx.AddError(TIssue(ctx.GetPosition(alterReplication.Pos()),
+                    TStringBuilder() << "TOKEN and TOKEN_SECRET_NAME are mutually exclusive"));
+                return SyncError();
+            }
+
+            if (const auto& x = settings.Settings.StaticCredentials; x && x->Password && x->PasswordSecretName) {
+                ctx.AddError(TIssue(ctx.GetPosition(alterReplication.Pos()),
+                    TStringBuilder() << "PASSWORD and PASSWORD_SECRET_NAME are mutually exclusive"));
+                return SyncError();
             }
 
             auto cluster = TString(alterReplication.DataSink().Cluster());

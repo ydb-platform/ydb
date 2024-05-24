@@ -27,6 +27,24 @@ bool TOptimizerStatistics::Empty() const {
     return ! (Nrows || Ncols || Cost);
 }
 
+TOptimizerStatistics::TOptimizerStatistics(
+    EStatisticsType type,
+    double nrows,
+    int ncols,
+    double byteSize,
+    double cost,
+    const TVector<TString>& keyColumns,
+    std::unique_ptr<IProviderStatistics> specific)
+    : Type(type)
+    , Nrows(nrows)
+    , Ncols(ncols)
+    , ByteSize(byteSize)
+    , Cost(cost)
+    , KeyColumns(keyColumns)
+    , Specific(std::move(specific))
+{
+}
+
 TOptimizerStatistics& TOptimizerStatistics::operator+=(const TOptimizerStatistics& other) {
     Nrows += other.Nrows;
     Ncols += other.Ncols;

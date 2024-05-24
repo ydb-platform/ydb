@@ -161,8 +161,8 @@ void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationCont
         rightJoinKeys.push_back(RemoveAliases(join.RightKeysColumnNames().Item(i).StringValue()));
     }
 
-    typeCtx->SetStats(join.Raw(), std::make_shared<TOptimizerStatistics>(
-                                      ComputeJoinStats(*leftStats, *rightStats, leftJoinKeys, rightJoinKeys, EJoinAlgoType::MapJoin, ctx)));
+    typeCtx->SetStats(join.Raw(), std::make_shared<TOptimizerStatistics>(           
+         ctx.ComputeJoinStats(*leftStats, *rightStats, leftJoinKeys, rightJoinKeys, EJoinAlgoType::MapJoin)));
 }
 
 /**
@@ -194,7 +194,7 @@ void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, TTypeAnnotationCo
     }
 
     typeCtx->SetStats(join.Raw(), std::make_shared<TOptimizerStatistics>(
-                                      ComputeJoinStats(*leftStats, *rightStats, leftJoinKeys, rightJoinKeys, EJoinAlgoType::GraceJoin, ctx)));
+                                      ctx.ComputeJoinStats(*leftStats, *rightStats, leftJoinKeys, rightJoinKeys, EJoinAlgoType::GraceJoin)));
 }
 
 /**
@@ -241,7 +241,7 @@ void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationCont
         auto outputStats = TOptimizerStatistics(inputStats->Type, inputStats->Nrows * selectivity, inputStats->Ncols, inputStats->ByteSize * selectivity, inputStats->Cost, inputStats->KeyColumns );
         outputStats.Selectivity *= selectivity;
 
-        typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(outputStats) );
+        typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(std::move(outputStats)) );
     }
     else if (flatmap.Lambda().Body().Maybe<TCoMapJoinCore>() || 
             flatmap.Lambda().Body().Maybe<TCoMap>().Input().Maybe<TCoMapJoinCore>() ||
@@ -283,7 +283,7 @@ void InferStatisticsForFilter(const TExprNode::TPtr& input, TTypeAnnotationConte
     auto outputStats = TOptimizerStatistics(inputStats->Type, inputStats->Nrows * selectivity, inputStats->Ncols, inputStats->ByteSize * selectivity, inputStats->Cost, inputStats->KeyColumns);
     outputStats.Selectivity *= selectivity;
 
-    typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(outputStats) );
+    typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(std::move(outputStats)) );
 }
 
 /**
@@ -365,8 +365,8 @@ void InferStatisticsForAsList(const TExprNode::TPtr& input, TTypeAnnotationConte
     if (input->ChildrenSize() && input->Child(0)->IsCallable("AsStruct")) {
         nAttrs = input->Child(0)->ChildrenSize();
     }
-    auto outputStats = TOptimizerStatistics(EStatisticsType::BaseTable, nRows, nAttrs, nRows*nAttrs, 0.0);
-    typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(outputStats));
+    typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(
+        EStatisticsType::BaseTable, nRows, nAttrs, nRows*nAttrs, 0.0));
 }
 
 /***

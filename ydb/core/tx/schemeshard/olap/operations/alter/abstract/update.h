@@ -8,31 +8,47 @@
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
-class ISSEntityEvolution;
-
 class ISSEntityUpdate {
 private:
-    YDB_READONLY_DEF(std::shared_ptr<ISSEntity>, OriginalEntity);
     bool Initialized = false;
 protected:
     virtual TConclusionStatus DoInitialize(const TUpdateInitializationContext& context) = 0;
-    virtual TConclusion<std::shared_ptr<ISSEntityEvolution>> DoBuildEvolution(const std::shared_ptr<ISSEntityUpdate>& selfPtr) const = 0;
+    virtual TConclusionStatus DoStart(const TUpdateStartContext& context) = 0;
+    virtual TConclusionStatus DoFinish(const TUpdateFinishContext& context) = 0;
+    virtual TString DoGetShardTxBodyString(const ui64 tabletId, const TMessageSeqNo& seqNo) const = 0;
+    virtual std::set<ui64> DoGetShardIds() const = 0;
 public:
+    ISSEntityUpdate() = default;
     virtual ~ISSEntityUpdate() = default;
-    ISSEntityUpdate(const std::shared_ptr<ISSEntity>& originalEntity)
-        : OriginalEntity(originalEntity) {
-        AFL_VERIFY(OriginalEntity);
+    virtual NKikimrTxColumnShard::ETransactionKind GetShardTransactionKind() const = 0;
+
+    std::set<ui64> GetShardIds() const {
+        AFL_VERIFY(Initialized);
+        return DoGetShardIds();
+    }
+
+    TString GetShardTxBodyString(const ui64 tabletId, const TMessageSeqNo& seqNo) const {
+        AFL_VERIFY(Initialized);
+        return DoGetShardTxBodyString(tabletId, seqNo);
+    }
+
+    TConclusionStatus Start(const TUpdateStartContext& context) {
+        AFL_VERIFY(Initialized);
+        return DoStart(context);
+    }
+
+    TConclusionStatus Finish(const TUpdateFinishContext& context) {
+        AFL_VERIFY(Initialized);
+        return DoFinish(context);
     }
 
     TConclusionStatus Initialize(const TUpdateInitializationContext& context) {
         AFL_VERIFY(!Initialized);
-        Initialized = true;
-        return DoInitialize(context);
-    }
-
-    TConclusion<std::shared_ptr<ISSEntityEvolution>> BuildEvolution(const std::shared_ptr<ISSEntityUpdate>& selfPtr) const {
-        AFL_VERIFY(!!selfPtr);
-        return DoBuildEvolution(selfPtr);
+        auto result = DoInitialize(context);
+        if (result.IsSuccess()) {
+            Initialized = true;
+        }
+        return result;
     }
 };
 

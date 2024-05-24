@@ -37,6 +37,8 @@ namespace NTypeAnnImpl {
     IGraphTransformer::TStatus ListEnumerateWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus ListReverseWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus ListSortWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
+    IGraphTransformer::TStatus ListTopWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
+    IGraphTransformer::TStatus ListTopSortWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus ListExtractWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus ListCollectWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus FoldMapWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);

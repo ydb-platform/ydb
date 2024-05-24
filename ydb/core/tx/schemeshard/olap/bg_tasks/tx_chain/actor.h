@@ -31,7 +31,11 @@ protected:
     }
     virtual void OnSessionProgressSaved() override;
     virtual void OnSessionStateSaved() override {
-        SendCurrentTxToSS();
+        if (SessionLogic->IsFinished()) {
+            Session->FinishActor();
+        } else {
+            SendCurrentTxToSS();
+        }
     }
     virtual void OnBootstrap(const TActorContext& /*ctx*/) override;
 

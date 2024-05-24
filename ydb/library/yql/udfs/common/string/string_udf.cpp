@@ -538,11 +538,11 @@ namespace {
         std::string input(args[0].AsStringRef());
         const std::string_view remove(args[1].AsStringRef());
         std::array<bool, 256> chars{};
-        for (const char c : remove) {
+        for (const ui8 c : remove) {
             chars[c] = true;
         }
         size_t tpos = 0;
-        for (const char c : input) {
+        for (const ui8 c : input) {
             if (!chars[c]) {
                 input[tpos++] = c;
             }
@@ -562,11 +562,11 @@ namespace {
             std::string input(arg1.AsStringRef());
             const std::string_view remove(arg2.AsStringRef());
             std::array<bool, 256> chars{};
-            for (const char c : remove) {
+            for (const ui8 c : remove) {
                 chars[c] = true;
             }
             size_t tpos = 0;
-            for (const char c : input) {
+            for (const ui8 c : input) {
                 if (!chars[c]) {
                     input[tpos++] = c;
                 }
@@ -586,11 +586,11 @@ namespace {
         std::string input(args[0].AsStringRef());
         const std::string_view remove(args[1].AsStringRef());
         std::array<bool, 256> chars{};
-        for (const char c : remove) {
+        for (const ui8 c : remove) {
             chars[c] = true;
         }
         for (auto it = input.cbegin(); it != input.cend(); ++it) {
-            if (chars[*it]) {
+            if (chars[static_cast<ui8>(*it)]) {
                 input.erase(it);
                 return valueBuilder->NewString(input);
             }
@@ -606,11 +606,11 @@ namespace {
             std::string input(arg1.AsStringRef());
             const std::string_view remove(arg2.AsStringRef());
             std::array<bool, 256> chars{};
-            for (const char c : remove) {
+            for (const ui8 c : remove) {
                 chars[c] = true;
             }
             for (auto it = input.cbegin(); it != input.cend(); ++it) {
-                if (chars[*it]) {
+                if (chars[static_cast<ui8>(*it)]) {
                     input.erase(it);
                     return sink(TBlockItem(input));
                 }
@@ -626,11 +626,11 @@ namespace {
         std::string input(args[0].AsStringRef());
         const std::string_view remove(args[1].AsStringRef());
         std::array<bool, 256> chars{};
-        for (const char c : remove) {
+        for (const ui8 c : remove) {
             chars[c] = true;
         }
         for (auto it = input.crbegin(); it != input.crend(); ++it) {
-            if (chars[*it]) {
+            if (chars[static_cast<ui8>(*it)]) {
                 input.erase(input.crend() - it - 1, 1);
                 return valueBuilder->NewString(input);
             }
@@ -646,11 +646,11 @@ namespace {
             std::string input(arg1.AsStringRef());
             const std::string_view remove(arg2.AsStringRef());
             std::array<bool, 256> chars{};
-            for (const char c : remove) {
+            for (const ui8 c : remove) {
                 chars[c] = true;
             }
             for (auto it = input.crbegin(); it != input.crend(); ++it) {
-                if (chars[*it]) {
+                if (chars[static_cast<ui8>(*it)]) {
                     input.erase(input.crend() - it - 1, 1);
                     return sink(TBlockItem(input));
                 }

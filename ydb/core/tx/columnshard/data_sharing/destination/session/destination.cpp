@@ -1,10 +1,11 @@
 #include "destination.h"
+
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/data_locks/locks/list.h>
 #include <ydb/core/tx/columnshard/data_sharing/destination/events/transfer.h>
+#include <ydb/core/tx/columnshard/data_sharing/destination/transactions/tx_data_from_source.h>
 #include <ydb/core/tx/columnshard/data_sharing/destination/transactions/tx_finish_ack_from_initiator.h>
 #include <ydb/core/tx/columnshard/data_sharing/destination/transactions/tx_finish_from_source.h>
-#include <ydb/core/tx/columnshard/data_sharing/destination/transactions/tx_data_from_source.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
@@ -16,27 +17,8 @@ NKikimr::TConclusionStatus TDestinationSession::DataReceived(THashMap<ui64, NEve
         auto it = PathIds.find(i.first);
         AFL_VERIFY(it != PathIds.end())("path_id_undefined", i.first);
         for (auto&& portion : i.second.DetachPortions()) {
-            ui32 contains = 0;
-            ui32 notContains = 0;
-            THashMap<TString, THashSet<TUnifiedBlobId>> blobIds;
-            portion.FillBlobIdsByStorage(blobIds, index.GetVersionedIndex());
-            for (auto&& s : blobIds) {
-                auto it = CurrentBlobIds.find(s.first);
-                if (it == CurrentBlobIds.end()) {
-                    notContains += s.second.size();
-                    continue;
-                }
-                for (auto&& b : s.second) {
-                    if (it->second.contains(b)) {
-                        ++contains;
-                    }
-                }
-            }
-            AFL_VERIFY(!contains || !notContains);
-            if (!contains) {
-                portion.SetPathId(it->second);
-                index.UpsertPortion(std::move(portion));
-            }
+            portion.SetPathId(it->second);
+            index.UpsertPortion(std::move(portion));
         }
     }
     return TConclusionStatus::Success();
@@ -186,4 +168,23 @@ bool TDestinationSession::DoStart(const NColumnShard::TColumnShard& shard, const
     return true;
 }
 
+bool TDestinationSession::TryTakePortionBlobs(const TVersionedIndex& vIndex, const TPortionInfo& portion) {
+    THashMap<TString, THashSet<TUnifiedBlobId>> blobIds;
+    portion.FillBlobIdsByStorage(blobIds, vIndex);
+    ui32 containsCounter = 0;
+    ui32 newCounter = 0;
+    for (auto&& i : blobIds) {
+        auto& storageBlobIds = CurrentBlobIds[i.first];
+        for (auto&& b : i.second) {
+            if (storageBlobIds.emplace(b).second) {
+                ++newCounter;
+            } else {
+                ++containsCounter;
+            }
+        }
+    }
+    AFL_VERIFY((containsCounter == 0) ^ (newCounter == 0));
+    return newCounter;
 }
+
+}   // namespace NKikimr::NOlap::NDataSharing

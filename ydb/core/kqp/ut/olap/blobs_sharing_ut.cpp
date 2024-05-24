@@ -1,4 +1,6 @@
 #include "helpers/typed_local.h"
+#include "helpers/local.h"
+#include "helpers/writer.h"
 #include <ydb/core/tx/columnshard/data_sharing/initiator/controller/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
@@ -7,6 +9,8 @@
 #include <ydb/core/tx/columnshard/data_sharing/destination/session/destination.h>
 #include <ydb/core/tx/columnshard/data_sharing/destination/events/control.h>
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
+#include <ydb/public/sdk/cpp/client/ydb_ss_tasks/task.h>
 
 namespace NKikimr::NKqp {
 
@@ -261,6 +265,151 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
         tester.Execute(0, {1, 2}, false, NOlap::TSnapshot(TInstant::Now().MilliSeconds(), 1232123), {0});
         tester.WaitNormalization();
     }
+
+    class TReshardingTest {
+    private:
+        YDB_ACCESSOR(TString, ShardingType, "HASH_FUNCTION_CONSISTENCY_64");
+
+        void WaitResharding() {
+            const TInstant start = TInstant::Now();
+            bool clean = false;
+            while (TInstant::Now() - start < TDuration::Seconds(200)) {
+                NYdb::NOperation::TOperationClient operationClient(Kikimr.GetDriver());
+                auto result = operationClient.List<NYdb::NSchemeShard::TBackgroundProcessesResponse>().GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+                if (result.GetList().size() == 0) {
+                    Cerr << "RESHARDING_FINISHED" << Endl;
+                    clean = true;
+                    break;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(result.GetList().size(), 1);
+                Sleep(TDuration::Seconds(1));
+                Cerr << "WAIT_FINISHED..." << Endl;
+            }
+            AFL_VERIFY(clean);
+        }
+
+        void CheckCount(const ui32 expectation) {
+            auto it = Kikimr.GetTableClient().StreamExecuteScanQuery(R"(
+                --!syntax_v1
+
+                SELECT
+                    COUNT(*)
+                FROM `/Root/olapStore/olapTable`
+            )").GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            Cerr << result << Endl;
+            CompareYson(result, "[[" + ::ToString(expectation) + "u;]]");
+        }
+
+        TKikimrRunner Kikimr;
+    public:
+
+        TReshardingTest()
+            : Kikimr(TKikimrSettings().SetWithSampleTables(false))
+        {
+
+        }
+
+        void Execute() {
+            auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+            csController->SetPeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+            csController->SetLagForCompactionBeforeTierings(TDuration::Seconds(1));
+            csController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
+
+            TLocalHelper(Kikimr).SetShardingMethod(ShardingType).CreateTestOlapTable("olapTable", "olapStore", 16, 4);
+            auto tableClient = Kikimr.GetTableClient();
+
+            Tests::NCommon::TLoggerInit(Kikimr).SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS").SetPriority(NActors::NLog::PRI_DEBUG).Initialize();
+
+            std::vector<TString> uids;
+            std::vector<TString> resourceIds;
+            std::vector<ui32> levels;
+
+            {
+                WriteTestData(Kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 10000);
+                WriteTestData(Kikimr, "/Root/olapStore/olapTable", 1100000, 300100000, 10000);
+                WriteTestData(Kikimr, "/Root/olapStore/olapTable", 1200000, 300200000, 10000);
+                WriteTestData(Kikimr, "/Root/olapStore/olapTable", 1300000, 300300000, 10000);
+                WriteTestData(Kikimr, "/Root/olapStore/olapTable", 1400000, 300400000, 10000);
+                WriteTestData(Kikimr, "/Root/olapStore/olapTable", 2000000, 200000000, 70000);
+                WriteTestData(Kikimr, "/Root/olapStore/olapTable", 3000000, 100000000, 110000);
+
+                const auto filler = [&](const ui32 startRes, const ui32 startUid, const ui32 count) {
+                    for (ui32 i = 0; i < count; ++i) {
+                        uids.emplace_back("uid_" + ::ToString(startUid + i));
+                        resourceIds.emplace_back(::ToString(startRes + i));
+                        levels.emplace_back(i % 5);
+                    }
+                };
+
+                filler(1000000, 300000000, 10000);
+                filler(1100000, 300100000, 10000);
+                filler(1200000, 300200000, 10000);
+                filler(1300000, 300300000, 10000);
+                filler(1400000, 300400000, 10000);
+                filler(2000000, 200000000, 70000);
+                filler(3000000, 100000000, 110000);
+
+            }
+
+            CheckCount(230000);
+            {
+                auto alterQuery = TStringBuilder() << R"(ALTER OBJECT `/Root/olapStore/olapTable` (TYPE TABLESTORE) SET (ACTION=ALTER_SHARDING, MODIFICATION=SPLIT);)";
+                auto session = tableClient.CreateSession().GetValueSync().GetSession();
+                auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+            }
+
+            WaitResharding();
+            AFL_VERIFY(csController->GetShardingFiltersCount().Val() == 0);
+            CheckCount(230000);
+
+            i64 count = csController->GetShardingFiltersCount().Val();
+            AFL_VERIFY(count == 16)("count", count);
+            WriteTestData(Kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 10000);
+            csController->WaitIndexation(TDuration::Seconds(5));
+            csController->WaitCompactions(TDuration::Seconds(5));
+
+            csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Disable);
+
+            CheckCount(230000);
+
+            AFL_VERIFY(count == csController->GetShardingFiltersCount().Val())("count", count)("val", csController->GetShardingFiltersCount().Val());
+            const ui32 portionsCount = 8;
+            for (ui32 i = 0; i < 3; ++i) {
+                {
+                    auto alterQuery = TStringBuilder() << R"(ALTER OBJECT `/Root/olapStore/olapTable` (TYPE TABLESTORE) SET (ACTION=ALTER_SHARDING, MODIFICATION=MERGE);)";
+                    auto session = tableClient.CreateSession().GetValueSync().GetSession();
+                    auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+                    UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+                }
+                WaitResharding();
+                csController->WaitCleaning(TDuration::Seconds(5));
+
+                CheckCount(230000);
+                AFL_VERIFY(count + portionsCount == csController->GetShardingFiltersCount().Val())("count", count)("val", csController->GetShardingFiltersCount().Val());
+                count += portionsCount;
+            }
+            {
+                auto alterQuery = TStringBuilder() << R"(ALTER OBJECT `/Root/olapStore/olapTable` (TYPE TABLESTORE) SET (ACTION=ALTER_SHARDING, MODIFICATION=MERGE);)";
+                auto session = tableClient.CreateSession().GetValueSync().GetSession();
+                auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+                UNIT_ASSERT_VALUES_UNEQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+            }
+        }
+    };
+
+    Y_UNIT_TEST(TableReshardingConsistency64) {
+        TReshardingTest().SetShardingType("HASH_FUNCTION_CONSISTENCY_64").Execute();
+    }
+
+    Y_UNIT_TEST(TableReshardingModuloN) {
+        TReshardingTest().SetShardingType("HASH_FUNCTION_MODULO_N").Execute();
+    }
+
 }
 
 }

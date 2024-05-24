@@ -236,8 +236,6 @@
 
 #include <util/system/hostname.h>
 
-#include <thread>
-
 namespace NKikimr {
 
 namespace NKikimrServicesInitializers {
@@ -258,7 +256,7 @@ static TCpuMask ParseAffinity(const TConfig& cfg) {
     if (cfg.GetCpuList()) {
         result = TCpuMask(cfg.GetCpuList());
     } else if (cfg.GetX().size() > 0) {
-        result = TCpuMask(cfg.GetX().begin(), cfg.GetX().size());
+        result = TCpuMask(cfg.GetX().data(), cfg.GetX().size());
     } else { // use all processors
         TAffinity available;
         available.Current();
@@ -1356,14 +1354,17 @@ void TTabletPipePeNodeCachesInitializer::InitializeServices(
 
     TIntrusivePtr<TPipePeNodeCacheConfig> leaderPipeConfig = new TPipePeNodeCacheConfig();
     leaderPipeConfig->PipeRefreshTime = TDuration::Zero();
-    leaderPipeConfig->PipeConfig.RetryPolicy = {.RetryLimitCount = 3};
     leaderPipeConfig->Counters = counters->GetSubgroup("type", "LEADER_PIPE_CACHE");
 
     TIntrusivePtr<TPipePeNodeCacheConfig> followerPipeConfig = new TPipePeNodeCacheConfig();
     followerPipeConfig->PipeRefreshTime = TDuration::Seconds(30);
     followerPipeConfig->PipeConfig.AllowFollower = true;
-    followerPipeConfig->PipeConfig.RetryPolicy = {.RetryLimitCount = 3};
     followerPipeConfig->Counters = counters->GetSubgroup("type", "FOLLOWER_PIPE_CACHE");
+
+    TIntrusivePtr<TPipePeNodeCacheConfig> persistentPipeConfig = new TPipePeNodeCacheConfig();
+    persistentPipeConfig->PipeRefreshTime = TDuration::Zero();
+    persistentPipeConfig->PipeConfig = TPipePeNodeCacheConfig::DefaultPersistentPipeConfig();
+    persistentPipeConfig->Counters = counters->GetSubgroup("type", "PERSISTENT_PIPE_CACHE");
 
     setup->LocalServices.emplace_back(
         MakePipePeNodeCacheID(false),
@@ -1371,6 +1372,9 @@ void TTabletPipePeNodeCachesInitializer::InitializeServices(
     setup->LocalServices.emplace_back(
         MakePipePeNodeCacheID(true),
         TActorSetupCmd(CreatePipePeNodeCache(followerPipeConfig), TMailboxType::ReadAsFilled, appData->UserPoolId));
+    setup->LocalServices.emplace_back(
+        MakePipePeNodeCacheID(EPipePeNodeCache::Persistent),
+        TActorSetupCmd(CreatePipePeNodeCache(persistentPipeConfig), TMailboxType::ReadAsFilled, appData->UserPoolId));
 }
 
 // TTabletMonitoringProxyInitializer

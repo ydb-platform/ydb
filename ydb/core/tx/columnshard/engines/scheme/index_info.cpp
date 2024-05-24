@@ -73,7 +73,7 @@ bool TIndexInfo::IsSpecialColumn(const ui32 fieldId) {
         || fieldId == (ui32)ESpecialColumn::TX_ID;
 }
 
-ui32 TIndexInfo::GetColumnId(const std::string& name) const {
+ui32 TIndexInfo::GetColumnIdVerified(const std::string& name) const {
     auto id = GetColumnIdOptional(name);
     Y_ABORT_UNLESS(!!id, "undefined column %s", name.data());
     return *id;

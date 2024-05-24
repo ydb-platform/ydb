@@ -2904,6 +2904,12 @@ struct TBuiltinFuncData {
             {"listcollect", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListCollect", 1, 1) },
             {"listnotnull", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListNotNull", 1, 1)},
             {"listflatten", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListFlatten", 1, 1)},
+            {"listtop", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListTop", 2, 3)},
+            {"listtopasc", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListTopAsc", 2, 3)},
+            {"listtopdesc", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListTopDesc", 2, 3)},
+            {"listtopsort", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListTopSort", 2, 3)},
+            {"listtopsortasc", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListTopSortAsc", 2, 3)},
+            {"listtopsortdesc", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListTopSortDesc", 2, 3)},
 
             // Dict builtins
             {"dictlength", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Length", 1, 1)},

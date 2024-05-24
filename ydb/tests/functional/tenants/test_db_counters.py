@@ -3,7 +3,6 @@ import logging
 import os
 import time
 import requests
-import subprocess
 
 from hamcrest import (
     assert_that,
@@ -18,38 +17,6 @@ from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 logger = logging.getLogger(__name__)
-
-def ydbcli_db_schema_exec(cluster, operation_proto):
-    endpoint = f'{cluster.nodes[1].host}:{cluster.nodes[1].port}'
-    args = [
-        cluster.nodes[1].binary_path,
-        f'--server=grpc://{endpoint}',
-        'db',
-        'schema',
-        'exec',
-        operation_proto,
-    ]
-    process = subprocess.run(args, capture_output=True)
-    assert process.returncode == 0, process.stderr.decode('utf-8')
-
-
-def alter_database_quotas(cluster, database_path, database_quotas):
-    alter_proto = '''ModifyScheme {
-        OperationType: ESchemeOpAlterExtSubDomain
-        WorkingDir: "%s"
-        SubDomain {
-            Name: "%s"
-            DatabaseQuotas {
-                %s
-            }
-        }
-    }''' % (
-        os.path.dirname(database_path),
-        os.path.basename(database_path),
-        database_quotas
-    )
-
-    ydbcli_db_schema_exec(cluster, alter_proto)
 
 class BaseDbCounters(object):
     @classmethod

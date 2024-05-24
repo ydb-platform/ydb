@@ -6,8 +6,9 @@ import time
 import copy
 import pytest
 import subprocess
+import requests
 
-from hamcrest import assert_that, contains_inanyorder, not_none, not_, only_contains, is_in
+from hamcrest import assert_that, contains_inanyorder, not_none, not_, only_contains, is_in, equal_to
 from tornado import gen
 from tornado.ioloop import IOLoop
 
@@ -460,6 +461,153 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
         # Writes should be allowed again when database moves out of DiskQuotaExceeded state
         time.sleep(1)
         IOLoop.current().run_sync(lambda: async_write_key(path, 0, 'test', ignore_out_of_space=False))
+
+
+def ydbcli_db_schema_exec(cluster, operation_proto):
+    endpoint = f'{cluster.nodes[1].host}:{cluster.nodes[1].port}'
+    args = [
+        cluster.nodes[1].binary_path,
+        f'--server=grpc://{endpoint}',
+        'db',
+        'schema',
+        'exec',
+        operation_proto,
+    ]
+    command = subprocess.run(args, capture_output=True)
+    assert command.returncode == 0, command.stderr.decode('utf-8')
+
+
+def alter_database_quotas(cluster, database_path, database_quotas):
+    logger.debug(f"adding storage quotas to db {database_path}")
+    alter_proto = '''ModifyScheme {
+        OperationType: ESchemeOpAlterExtSubDomain
+        WorkingDir: "%s"
+        SubDomain {
+            Name: "%s"
+            DatabaseQuotas {
+                %s
+            }
+        }
+    }''' % (
+        os.path.dirname(database_path),
+        os.path.basename(database_path),
+        database_quotas
+    )
+
+    ydbcli_db_schema_exec(cluster, alter_proto)
+
+
+def get_db_counters(cluster, service, node_index=1):
+    mon_port = cluster.nodes[node_index].mon_port
+    counters_url = 'http://localhost:{}/counters/counters%3D{}/json'.format(mon_port, service)
+    reply = requests.get(counters_url)
+    if reply.status_code == 204:
+        return None
+
+    assert_that(reply.status_code, equal_to(200))
+    ret = reply.json()
+
+    assert_that(ret, not_none())
+    return ret
+
+def check_db_counters(cluster, database, driver, sensors_to_check):
+    counters = get_db_counters(cluster, 'ydb')
+    if counters:
+        sensors = counters['sensors']
+        for sensor in sensors:
+            for name, value in sensors_to_check.items():
+                if sensor['labels']['name'] == name:
+                    assert_that(sensor['value'], equal_to(value))
+
+
+def test_database_used_and_limit_bytes_metrics(ydb_hostel_db, ydb_disk_quoted_serverless_db, ydb_endpoint, ydb_cluster):
+    logger.debug(f"test for serverless db {ydb_disk_quoted_serverless_db} over hostel db {ydb_hostel_db}")
+
+    database = ydb_disk_quoted_serverless_db
+    
+    driver_config = ydb.DriverConfig(
+        ydb_endpoint,
+        database
+    )
+    logger.info(f"database is {database}")
+
+    driver = ydb.Driver(driver_config)
+    driver.wait(120)
+    
+    alter_database_quotas(ydb_cluster, database, '''storage_quotas {
+        unit_kind: "ssd"
+        data_size_hard_quota: 2
+        data_size_soft_quota: 1
+    }''')
+
+    status = ydb_cluster.get_database_status(database)
+    assert status.database_quotas.storage_quotas == (("ssd", 2, 1)), status
+
+    check_db_counters(ydb_cluster, database, driver, {"resources.storage.limit_bytes.ssd": 1})
+
+    with ydb.SessionPool(driver) as pool:
+        def create_table(session, path):
+            logger.debug("creating table %s", path)
+            session.execute_scheme(f'''
+                CREATE TABLE `{path}` (
+                    id Int32,
+                    value Utf8 FAMILY hdd,
+                    PRIMARY KEY (id),
+                    FAMILY default (DATA = "ssd"),
+                    FAMILY hdd (DATA = "hdd")
+                );
+            ''')
+
+        pool.retry_operation_sync(create_table, None, os.path.join(database, "table"))
+
+        def write_some_data(session, path):
+            session.transaction().execute(f'''
+                UPSERT INTO `{path}` (
+                    id,
+                    value
+                )
+                VALUES
+                    (1, "foo"),
+                    (2, "bar"),
+                    (3, "baz");
+                ''',
+                commit_tx=True
+            )
+
+        pool.retry_operation_sync(write_some_data, None, os.path.join(database, "table"))
+
+        for _ in range(30):
+            time.sleep(1)
+            described = driver.scheme_client.describe_path(database)
+            logger.debug(f'database state after write_keys: {described}')
+            if described.PathDescription.DomainDescription.DomainState.DiskQuotaExceeded:
+                break
+        else:
+            assert False, 'database did not move into DiskQuotaExceeded state'
+
+        # Writes should be denied when database moves into DiskQuotaExceeded state
+        time.sleep(1)
+        with pytest.raises(ydb.Unavailable, match=r'.*OUT_OF_SPACE.*'):
+            pool.retry_operation_sync(write_some_data, None, os.path.join(database, "table"))
+
+        check_db_counters(ydb_cluster, database, driver, {"resources.storage.used_bytes": 123})
+        check_db_counters(ydb_cluster, database, driver, {"resources.storage.used_bytes.ssd": 123})
+        check_db_counters(ydb_cluster, database, driver, {"resources.storage.used_bytes.hdd": 123})
+        check_db_counters(ydb_cluster, database, driver, {"resources.storage.table.used_bytes": 123})
+        check_db_counters(ydb_cluster, database, driver, {"resources.storage.table.used_bytes.ssd": 123})
+        check_db_counters(ydb_cluster, database, driver, {"resources.storage.table.used_bytes.hdd": 123})
+
+        def drop_table(session, path):
+            session.drop_table(path)
+
+        pool.retry_operation_sync(drop_table, None, os.path.join(database, "table"))
+
+        check_db_counters(ydb_cluster, database, driver, {"resources.storage.used_bytes": 0})
+        check_db_counters(ydb_cluster, database, driver, {"resources.storage.used_bytes.ssd": 0})
+        check_db_counters(ydb_cluster, database, driver, {"resources.storage.used_bytes.hdd": 0})
+        check_db_counters(ydb_cluster, database, driver, {"resources.storage.table.used_bytes": 0})
+        check_db_counters(ydb_cluster, database, driver, {"resources.storage.table.used_bytes.ssd": 0})
+        check_db_counters(ydb_cluster, database, driver, {"resources.storage.table.used_bytes.hdd": 0})
 
 
 def test_discovery(ydb_hostel_db, ydb_serverless_db, ydb_endpoint):

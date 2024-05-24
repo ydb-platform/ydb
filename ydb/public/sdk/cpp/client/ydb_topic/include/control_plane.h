@@ -230,7 +230,7 @@ struct TAlterTopicSettings;
 struct TAlterPartitioningSettings {
     using TSelf = TAlterPartitioningSettings;
 public:
-    TAlterPartitioningSettings(TAlterTopicSettings& parent): Parent_(parent) {} //savnik: check tabs
+    TAlterPartitioningSettings(TAlterTopicSettings& parent): Parent_(parent) {}
 
     FLUENT_SETTING_OPTIONAL(ui64, MinActivePartitions);
     FLUENT_SETTING_OPTIONAL(ui64, MaxActivePartitions);

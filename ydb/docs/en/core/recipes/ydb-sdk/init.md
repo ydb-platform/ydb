@@ -1,15 +1,15 @@
 ---
-title: "Инструкция по инициализации драйвера в {{ ydb-short-name }}"
-description: "В статье приведены примеры кода подлкючения к {{ ydb-short-name }} (создания драйвера) в разных {{ ydb-short-name }} SDK."
+title: "Instructions for initializing the driver in {{ ydb-short-name }}"
+description: "The article describes the examples of the code for connecting to {{ ydb-short-name }} (driver creation) in different {{ ydb-short-name }} SDKs."
 ---
 
-# Инициализация драйвера
+# Initialize the driver
 
 {% include [work in progress message](_includes/addition.md) %}
 
-Для подключения к {{ ydb-short-name }} требуется указать обязательные параметры (подробнее читайте в разделе [Подключение к серверу {{ ydb-short-name }}](../../../concepts/connect.md)) и дополнительные, которые определяют поведение драйвера при работе.
+To connect to {{ ydb-short-name }}, you need to specify the required and additional parameters that define the driver's behavior (learn more in [Connecting to the {{ ydb-short-name }} server](../../concepts/connect.md)).
 
-Ниже приведены примеры кода подлкючения к {{ ydb-short-name }} (создания драйвера) в разных {{ ydb-short-name }} SDK.
+Below are examples of the code for connecting to {{ ydb-short-name }} (driver creation) in different {{ ydb-short-name }} SDKs.
 
 {% list tabs %}
 
@@ -40,7 +40,7 @@ description: "В статье приведены примеры кода под�
 
 - Go (database/sql)
 
-  {% cut "С помощью коннектора (рекомендуемый способ)" %}
+  {% cut "Using a connector (recommended)" %}
 
     ```golang
     package main
@@ -80,9 +80,9 @@ description: "В статье приведены примеры кода под�
 
   {% endcut %}
 
-  {% cut "С помощью строки подключения" %}
+  {% cut "Using a connection string" %}
 
-    Регистрация драйвера `database/sql` реализуется в момент импорта пакета конкретного драйвера через символ подчеркивавния:
+    The `database/sql` driver is registered when importing the package of a specific driver separated by an underscore:
     ```golang
     package main
 
@@ -107,31 +107,8 @@ description: "В статье приведены примеры кода под�
 
 - Java
 
+
   {% include [work in progress message](_includes/addition.md) %}
-
-- Python
-
-  ```python
-  import ydb
-
-  with ydb.Driver(connection_string="grpc://localhost:2136?database=/local") as driver:
-    driver.wait(timeout=5)
-    ...
-  ```
-
-- Python (asyncio)
-
-  ```python
-  import ydb
-  import asyncio
-
-  async def ydb_init():
-    async with ydb.aio.Driver(endpoint="grpc://localhost:2136", database="/local") as driver:
-      await driver.wait()
-      ...
-
-  asyncio.run(ydb_init())
-  ```
 
 - C# (.NET)
 

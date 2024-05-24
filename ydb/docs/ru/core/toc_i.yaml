@@ -27,6 +27,10 @@ items:
   include:
     mode: link
     path: reference/toc_p.yaml
+- name: Рецепты
+  include:
+    mode: link
+    path: recipes/toc_p.yaml
 - name: Вопросы и ответы
   include:
     mode: link

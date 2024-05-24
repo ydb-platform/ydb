@@ -74,6 +74,7 @@ struct TGetOwnershipRequestParams {
     TMaybe<ui32> Partition;
     TMaybe<ui64> MsgNo;
     TMaybe<ui64> WriteId;
+    TMaybe<bool> FirstWrite;
     TMaybe<TString> Owner; // o
     TMaybe<ui64> Cookie;
 };
@@ -549,6 +550,9 @@ std::unique_ptr<TEvPersQueue::TEvRequest> TPQTabletFixture::MakeGetOwnershipRequ
     }
     if (params.WriteId.Defined()) {
         request->SetWriteId(*params.WriteId);
+    }
+    if (params.FirstWrite.Defined()) {
+        request->SetFirstWrite(*params.FirstWrite);
     }
     if (params.Cookie.Defined()) {
         request->SetCookie(*params.Cookie);
@@ -1281,6 +1285,7 @@ Y_UNIT_TEST_F(ProposeTx_Command_After_Propose, TPQTabletFixture)
 
     SyncGetOwnership({.Partition=partitionId,
                      .WriteId=writeId,
+                     .FirstWrite=true,
                      .Owner="-=[ 0wn3r ]=-",
                      .Cookie=4},
                      {.Cookie=4,

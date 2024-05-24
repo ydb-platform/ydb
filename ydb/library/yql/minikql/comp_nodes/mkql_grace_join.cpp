@@ -1,6 +1,7 @@
 #include "mkql_grace_join.h"
 #include "mkql_grace_join_imp.h"
 
+#include <format>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <ydb/library/yql/public/decimal/yql_decimal_serialize.h>
@@ -631,13 +632,15 @@ private:
     }
 
     bool IsSwitchToSpillingModeCondition() const {
-        return false;
+        // return false;
         // TODO: YQL-18033
-        // return !HasMemoryForProcessing();
+        return !HasMemoryForProcessing();
     }
 
 
     void SwitchMode(EOperatingMode mode, TComputationContext& ctx) {
+
+        std::cerr << std::format("[MISHA] switching mode {}->{}\n", (int)Mode, (int)mode);
         switch(mode) {
             case EOperatingMode::InMemory: {
                 MKQL_ENSURE(false, "Internal logic error");
@@ -772,7 +775,7 @@ private:
             }
             if (isYield) return EFetchResult::Yield;
 
-            if (!*HaveMoreRightRows && !*PartialJoinCompleted && LeftPacker->TuplesBatchPacked >= LeftPacker->BatchSize ) {
+            /*if (!*HaveMoreRightRows && !*PartialJoinCompleted && LeftPacker->TuplesBatchPacked >= LeftPacker->BatchSize ) {
                 *PartialJoinCompleted = true;
                 JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
                 JoinedTablePtr->ResetIterator();
@@ -783,7 +786,7 @@ private:
                 JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
                 JoinedTablePtr->ResetIterator();
 
-            }
+            }*/
 
             if (!*HaveMoreRightRows && !*HaveMoreLeftRows && !*PartialJoinCompleted) {
                 *PartialJoinCompleted = true;
@@ -855,10 +858,12 @@ EFetchResult ProcessSpilledData(TComputationContext&, NUdf::TUnboxedValue*const*
         if (HasRunningAsyncOperation()) return EFetchResult::Yield;
 
         if (!LeftPacker->TablePtr->IsBucketInMemory(NextBucketToJoin)) {
+            std::cerr << std::format("[MISHA] loading bucket {}\n", NextBucketToJoin);
             LeftPacker->TablePtr->StartLoadingBucket(NextBucketToJoin);
         }
 
         if (!RightPacker->TablePtr->IsBucketInMemory(NextBucketToJoin)) {
+            std::cerr << std::format("[MISHA] loading bucket {}\n", NextBucketToJoin);
             RightPacker->TablePtr->StartLoadingBucket(NextBucketToJoin);
         } 
 

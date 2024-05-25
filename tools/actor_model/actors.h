@@ -1,13 +1,10 @@
 #pragma once
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <util/generic/ptr.h>
-#include <library/cpp/actors/util/should_continue.h>
-#include <memory>
+#include "events.h"
 
-THolder<NActors::IActor> CreateSelfPingActor(const TDuration& latency);
-THolder<NActors::IActor> CreateReadActor(std::shared_ptr<TProgramShouldContinue> shouldContinue, const NActors::TActorId& writeActor);
-THolder<NActors::IActor> CreateMaximumPrimeDevisorActor(int64_t value, const NActors::TActorId& readActor, const NActors::TActorId& writeActor);
-THolder<NActors::IActor> CreateWriteActor(std::shared_ptr<TProgramShouldContinue> shouldContinue);
-std::shared_ptr<TProgramShouldContinue> GetProgramShouldContinue();
+#include <istream>
+#include <ostream>
+
+THolder<NActors::IActor> CreateInputReaderActor(std::istream& input, NActors::TActorId target);
+THolder<NActors::IActor> CreateOutputWriterActor(std::ostream& output);
+THolder<NActors::IActor> CreateMaximumPrimeDevisorActor(int64_t number, NActors::TActorId readerId, NActors::TActorId writerId);

@@ -89,7 +89,6 @@
   - sched.h:       contrib/tools/bison/lib/platform/win64/sched.h
   - signal.h:      contrib/tools/bison/lib/platform/win64/signal.h
   - spawn.h:       contrib/tools/bison/lib/platform/win64/spawn.h
-  - stdbool.h:     contrib/tools/bison/lib/platform/win64/stdbool.h
   - sys/stat.h:    contrib/tools/bison/lib/platform/win64/sys/stat.h
   - sys/time.h:    contrib/tools/bison/lib/platform/win64/sys/time.h
   - sys/wait.h:    contrib/tools/bison/lib/platform/win64/sys/wait.h

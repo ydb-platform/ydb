@@ -77,10 +77,7 @@ SRCS(
     isnand.c
     lbitset.c
     localcharset.c
-    malloc.c
-    malloca.c
     mbswidth.c
-    mbrtowc.c
     nl_langinfo.c
     pipe-safer.c
     pipe2-safer.c
@@ -103,7 +100,6 @@ SRCS(
     xalloc-die.c
     xconcat-filename.c
     xmalloc.c
-    xmalloca.c
     xmemdup0.c
     xsize.c
     xstrndup.c
@@ -122,19 +118,9 @@ IF (NOT OS_LINUX)
     )
 ENDIF()
 
-IF (NOT OS_WINDOWS)
-    SRCS(
-        stdio-write.c
-    )
-ENDIF()
-
 IF (OS_WINDOWS)
     SRCS(
         frexp.c
-        wcrtomb.c
-        fseeko.c
-        fopen.c
-        ftello.c
         msvc-inval.c
         msvc-nothrow.c
         open.c

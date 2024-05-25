@@ -13,7 +13,7 @@ ui64 TSpecialReadContext::GetMemoryForSources(const THashMap<ui32, std::shared_p
     for (auto&& i : sources) {
         auto fetchingPlan = GetColumnsFetchingPlan(i.second);
         AFL_VERIFY(i.second->GetIntervalsCount());
-        const ui64 sourceMemory = fetchingPlan->PredictRawBytes(i.second) / i.second->GetIntervalsCount();
+        const ui64 sourceMemory = std::max<ui64>(1, fetchingPlan->PredictRawBytes(i.second) / i.second->GetIntervalsCount());
         if (!i.second->IsSourceInMemory()) {
             hasSequentialReadSources = true;
         }

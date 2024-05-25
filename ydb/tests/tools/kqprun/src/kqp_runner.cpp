@@ -16,15 +16,10 @@ namespace NKqpRun {
 namespace {
 
 TString FormatNumber(i64 number) {
-    if (number < 0) {
-        return TStringBuilder() << "-" << FormatNumber(-number);
-    }
-
-    if (number < 1000) {
-        return ToString(number);
-    }
-
-    return TStringBuilder() << FormatNumber(number / 1000) << "'" << (number % 1000) / 100 << (number % 100) / 10 << number % 10;
+    std::ostringstream stream;
+    stream.imbue(std::locale("en_US.UTF-8"));
+    stream << number;
+    return stream.str();
 }
 
 void PrintStatistic(const TString& fullStatistic, const THashMap<TString, i64>& flatStatistic, const NFq::TPublicStat& publicStatistic, IOutputStream& output) {

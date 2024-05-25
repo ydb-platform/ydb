@@ -341,7 +341,6 @@ void TColumnShard::RunSchemaTx(const NKikimrTxColumnShard::TSchemaTxBody& body, 
             break;
         }
     }
-
     Y_ABORT("Unsupported schema tx type");
 }
 
@@ -420,7 +419,6 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
     }
 
     tableVerProto.SetSchemaPresetVersionAdj(tableProto.GetSchemaPresetVersionAdj());
-    tableVerProto.SetTtlSettingsPresetVersionAdj(tableProto.GetTtlSettingsPresetVersionAdj());
 
     TablesManager.AddTableVersion(pathId, version, tableVerProto, db, Tiers);
 

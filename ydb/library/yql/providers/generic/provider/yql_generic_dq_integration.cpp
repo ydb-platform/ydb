@@ -173,6 +173,9 @@ namespace NYql {
                         case NYql::NConnector::NApi::YDB:
                             sourceType = "YdbGeneric";
                             break;
+                        case NYql::NConnector::NApi::MS_SQL_SERVER:
+                            sourceType = "MicrosoftSqlServerGeneric";
+                            break;
                         default:
                             ythrow yexception() << "Data source kind is unknown or not specified";
                             break;
@@ -206,6 +209,9 @@ namespace NYql {
                             break;
                         case NConnector::NApi::YDB:
                             properties["SourceType"] = "Ydb";
+                            break;
+                        case NConnector::NApi::MS_SQL_SERVER:
+                            properties["SourceType"] = "MicrosoftSqlServer";
                             break;
                         case NConnector::NApi::DATA_SOURCE_KIND_UNSPECIFIED:
                             break;

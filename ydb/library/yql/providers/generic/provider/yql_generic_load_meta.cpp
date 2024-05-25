@@ -320,6 +320,8 @@ namespace NYql {
                     break;
                 case NYql::NConnector::NApi::YDB:
                     break;
+                case NYql::NConnector::NApi::MS_SQL_SERVER:
+                    break;
                 case NYql::NConnector::NApi::POSTGRESQL: {
                     // for backward compability set schema "public" by default
                     // TODO: simplify during https://st.yandex-team.ru/YQ-2494
@@ -375,6 +377,9 @@ namespace NYql {
                         break;
                     case NYql::NConnector::NApi::POSTGRESQL:
                         dbNameTarget = "postgres";
+                        break;
+                    case NYql::NConnector::NApi::MS_SQL_SERVER:
+                        dbNameTarget = "mssqlserver";
                         break;
                     default:
                         ythrow yexception() << "You must provide database name explicitly for data source kind: '"

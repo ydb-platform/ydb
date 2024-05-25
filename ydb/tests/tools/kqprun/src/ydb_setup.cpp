@@ -163,12 +163,27 @@ private:
         NYql::NLog::InitLogger(NActors::CreateNullBackend());
     }
 
+    void WaitResourcePublishing() const {
+        auto promise = NThreading::NewPromise();
+        GetRuntime()->Register(CreateResourceWaiterActor(promise, Settings_.NodeCount));
+
+        try {
+            promise.GetFuture().GetValue(Settings_.InitializationTimeout);
+        } catch (...) {
+            ythrow yexception() << "Failed to initialize all resources: " << CurrentExceptionMessage();
+        }
+    }
+
 public:
     explicit TImpl(const TYdbSetupSettings& settings)
         : Settings_(settings)
     {
         InitializeYqlLogger();
         InitializeServer();
+
+        if (Settings_.NodeCount > 1) {
+            WaitResourcePublishing();
+        }
     }
 
     NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr SchemeQueryRequest(const TString& query, const TString& traceId) const {

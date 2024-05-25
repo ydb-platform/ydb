@@ -11,4 +11,6 @@ NActors::IActor* CreateRunScriptActorMock(THolder<NKikimr::NKqp::TEvKqp::TEvQuer
     ui64 resultRowsLimit, ui64 resultSizeLimit, std::vector<Ydb::ResultSet>& resultSets,
     TProgressCallback progressCallback);
 
+NActors::IActor* CreateResourceWaiterActor(NThreading::TPromise<void> promise, i32 expectedNodeCount);
+
 }  // namespace NKqpRun

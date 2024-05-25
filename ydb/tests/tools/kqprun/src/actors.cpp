@@ -1,6 +1,7 @@
 #include "actors.h"
 
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 
 
 namespace NKqpRun {
@@ -91,6 +92,54 @@ private:
     TProgressCallback ProgressCallback_;
 };
 
+class TResourceWaiterActor : public NActors::TActorBootstrapped<TResourceWaiterActor> {
+public:
+    TResourceWaiterActor(NThreading::TPromise<void> promise, i32 expectedNodeCount)
+        : ExpectedNodeCount_(expectedNodeCount)
+        , Promise_(promise)
+    {}
+
+    void Bootstrap() {
+        GetResourceManager();
+        WaitResourcePublish();
+
+        Promise_.SetValue();
+        PassAway();
+    }
+
+private:
+    void GetResourceManager() {
+        while (true) {
+            ResourceManager_ = NKikimr::NKqp::TryGetKqpResourceManager(SelfId().NodeId());
+            if (ResourceManager_) {
+                break;
+            }
+
+            Sleep(TDuration::MilliSeconds(10));
+        }
+    }
+
+    void WaitResourcePublish() {
+        while (true) {
+            auto resourcesPromise = NThreading::NewPromise<i32>();
+            ResourceManager_->RequestClusterResourcesInfo([resourcesPromise](TVector<NKikimrKqp::TKqpNodeResources>&& resources) mutable {
+                resourcesPromise.SetValue(resources.size());
+            });
+
+            if (resourcesPromise.GetFuture().GetValueSync() == ExpectedNodeCount_) {
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(10));
+        }
+    }
+
+private:
+    const i32 ExpectedNodeCount_;
+
+    NThreading::TPromise<void> Promise_;
+    std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> ResourceManager_;
+};
+
 }  // anonymous namespace
 
 NActors::IActor* CreateRunScriptActorMock(THolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest> request,
@@ -98,6 +147,10 @@ NActors::IActor* CreateRunScriptActorMock(THolder<NKikimr::NKqp::TEvKqp::TEvQuer
     ui64 resultRowsLimit, ui64 resultSizeLimit, std::vector<Ydb::ResultSet>& resultSets,
     TProgressCallback progressCallback) {
     return new TRunScriptActorMock(std::move(request), promise, resultRowsLimit, resultSizeLimit, resultSets, progressCallback);
+}
+
+NActors::IActor* CreateResourceWaiterActor(NThreading::TPromise<void> promise, i32 expectedNodeCount) {
+    return new TResourceWaiterActor(promise, expectedNodeCount);
 }
 
 }  // namespace NKqpRun

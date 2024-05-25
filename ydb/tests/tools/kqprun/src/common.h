@@ -16,6 +16,7 @@ constexpr char YQL_TOKEN_VARIABLE[] = "YQL_TOKEN";
 struct TYdbSetupSettings {
     i32 NodeCount = 1;
     TString DomainName = "Root";
+    TDuration InitializationTimeout = TDuration::Seconds(10);
 
     bool TraceOptEnabled = false;
     TMaybe<TString> LogOutputFile;

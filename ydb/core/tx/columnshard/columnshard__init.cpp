@@ -185,7 +185,12 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
             Y_ABORT_UNLESS(proto.ParseFromString(rowset.GetValue<Schema::LongTxWrites::LongTxId>()));
             const auto longTxId = NLongTxService::TLongTxId::FromProto(proto);
 
-            Self->LoadLongTxWrite(writeId, writePartId, longTxId);
+            std::optional<ui32> granuleShardingVersion;
+            if (rowset.HaveValue<Schema::LongTxWrites::GranuleShardingVersion>() && rowset.GetValue<Schema::LongTxWrites::GranuleShardingVersion>()) {
+                granuleShardingVersion = rowset.GetValue<Schema::LongTxWrites::GranuleShardingVersion>();
+            }
+
+            Self->LoadLongTxWrite(writeId, writePartId, longTxId, granuleShardingVersion);
 
             if (!rowset.Next()) {
                 return false;

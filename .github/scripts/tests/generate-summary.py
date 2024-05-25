@@ -324,6 +324,7 @@ def main():
     parser.add_argument("--summary-url-prefix", required=True)
     parser.add_argument('--test-history-url', required=False)
     parser.add_argument('--build-preset', default="default-linux-x86-64-relwithdebinfo", required=False)
+    parser.add_argument('--status-report-file', required=False)
     parser.add_argument("args", nargs="+", metavar="TITLE html_out path")
     args = parser.parse_args()
 
@@ -349,13 +350,18 @@ def main():
 
         if summary.is_empty | summary.is_failed:
             color = 'red'
+            overall_status="failure"
         else:
             color = 'green'
+            overall_status="success"
 
         run_number = int(os.environ.get("GITHUB_RUN_NUMBER"))
 
         update_pr_comment_text(pr, args.build_preset, run_number, color, text='\n'.join(text), rewrite=False)
 
+        if args.status_report_file:
+            with open(args.status_report_file,'w') as fo:
+                fo.write( overall_status )
 
 if __name__ == "__main__":
     main()

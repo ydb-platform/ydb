@@ -157,8 +157,18 @@ bool IsOverflow(ui64 a, ui64 b) {
     return b > diff;
 }
 
-bool IsOverflowUi64I64(ui64 a, i64 b) {
-    return b > 0 ? IsOverflow(a, (ui64)b) : a < (ui64)-b;
+ui64 AbsToUi64(i64 value) {
+    if (value >= 0) {
+        return value;
+    }
+    if (value == std::numeric_limits<i64>::min()) {
+        return (ui64)std::numeric_limits<i64>::max() + 1;
+    }
+    return -value;
+}
+
+bool IsOverflow(ui64 a, i64 b) {
+    return b > 0 ? IsOverflow(a, (ui64)b) : a < AbsToUi64(b);
 }
 
 TDuration FromUnit(int64_t interval, IPathGenerator::EIntervalUnit unit) {
@@ -213,7 +223,7 @@ TInstant AddUnit(TInstant current, int64_t interval, IPathGenerator::EIntervalUn
     }
 
     const i64 deltaValue = (interval > 0 ? 1LL : -1LL) * delta.GetValue();
-    if (IsOverflowUi64I64(current.GetValue(), deltaValue)) {
+    if (IsOverflow(current.GetValue(), deltaValue)) {
         ythrow yexception() << "Timestamp is overflowed";
     }
 
@@ -672,7 +682,7 @@ private:
                        TInstant now,
                        size_t p = 0) {
         const auto& rule = rules[p];
-        for (int64_t i = rule.Min; i <= rule.Max; i += rule.Interval) {
+        for (i64 i = rule.Min; i <= rule.Max; i += rule.Interval) {
             TString copyLocationTemplate = locationTemplate;
             ReplaceAll(copyLocationTemplate, "${" + rule.Name + "}", fmtInteger(rule.Digits, i));
             columnsWithValue.push_back(CreateIntegerColumnWithValue(rule.Name, i));

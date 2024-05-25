@@ -76,11 +76,21 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
         tableId.SetTableId(TableId.PathId.LocalPathId);
         tableId.SetSchemaVersion(TableId.SchemaVersion);
 
+        TString source;
         for (auto recordPtr : ev->Get()->Records) {
             MemoryPool.Clear();
             const auto& record = *recordPtr->Get<TChangeRecord>();
             record.Serialize(*event->Record.AddChanges(), MemoryPool);
-            // TODO: set WriteTxId, Source
+
+            if (!source) {
+                source = record.GetSourceId();
+            } else {
+                Y_ABORT_UNLESS(source == record.GetSourceId());
+            }
+        }
+
+        if (source) {
+            event->Record.SetSource(source);
         }
 
         Send(LeaderPipeCache, new TEvPipeCache::TEvForward(event.Release(), TabletId, false));
@@ -427,6 +437,7 @@ class TLocalTableWriter
         for (auto& record : ev->Get()->Records) {
             records.emplace_back(record.Offset, PathId, record.Data.size());
             auto res = PendingRecords.emplace(record.Offset, TChangeRecordBuilder()
+                .WithSourceId(ev->Get()->Source)
                 .WithOrder(record.Offset)
                 .WithBody(std::move(record.Data))
                 .WithSchema(Schema)

@@ -23,14 +23,14 @@ PY3TEST()
         library/python/testing/yatest_common
         ydb/public/sdk/python
     )
-
-    DATA (
-        arcadia/ya
-    )
+    IF(OPENSOURCE != "yes")
+        DATA (
+            sbr://6332216525
+        )
+    ENDIF()
 
     DEPENDS (
         ydb/apps/ydb
-        sbr://6332216525
     )
 
 END()

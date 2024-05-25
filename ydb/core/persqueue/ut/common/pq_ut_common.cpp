@@ -209,11 +209,15 @@ void PQBalancerPrepare(const TString topic, const TVector<std::pair<ui32, std::p
                 part->SetPartition(p.first);
                 part->SetGroup(p.second.second);
                 part->SetTabletId(p.second.first);
+                part->SetStatus(::NKikimrPQ::ETopicPartitionStatus::Active);
 
                 auto tablet = request->Record.AddTablets();
                 tablet->SetTabletId(p.second.first);
                 tablet->SetOwner(1);
                 tablet->SetIdx(p.second.first);
+
+                auto* pp = request->Record.MutableTabletConfig()->AddPartitions();
+                pp->SetStatus(::NKikimrPQ::ETopicPartitionStatus::Active);
             }
             request->Record.SetTxId(12345);
             request->Record.SetPathId(1);

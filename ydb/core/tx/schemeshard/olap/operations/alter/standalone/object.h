@@ -1,52 +1,48 @@
 #pragma once
-#include <ydb/core/tx/schemeshard/olap/operations/alter/abstract/object.h>
+#include <ydb/core/tx/schemeshard/olap/operations/alter/common/object.h>
 #include <ydb/core/tx/schemeshard/olap/table/table.h>
 #include <ydb/core/tx/schemeshard/olap/ttl/schema.h>
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
-class TStandaloneTable: public ISSEntity {
+class TStandaloneTable: public TColumnTableEntity {
 private:
-    using TBase = ISSEntity;
-    TColumnTableInfo::TPtr TableInfo;
+    using TBase = TColumnTableEntity;
     std::optional<TOlapSchema> TableSchema;
     std::optional<TOlapTTL> TableTTL;
-    virtual TConclusion<std::shared_ptr<ISSEntityUpdate>> DoCreateUpdate(const TUpdateInitializationContext& context, const std::shared_ptr<ISSEntity>& selfPtr) const override;
-    virtual TConclusionStatus DoInitialize(const TEntityInitializationContext& context) override;
+    virtual TConclusion<std::shared_ptr<ISSEntityUpdate>> DoCreateUpdateImpl(const TUpdateInitializationContext& context) const override;
+    virtual TConclusionStatus DoInitializeImpl(const TEntityInitializationContext& context) override;
+    TConclusionStatus InitializeFromTableInfo();
 public:
     TStandaloneTable(const TPathId& pathId)
         : TBase(pathId)
     {
 
     }
-    TStandaloneTable(const TPathId& pathId, const TColumnTableInfo::TPtr& tableInfo)
-        : TBase(pathId)
-    {
-        InitializeFromTableInfo(tableInfo).Validate();
-    }
 
-    TColumnTableInfo::TPtr GetTableInfoPtrVerified() const {
-        AFL_VERIFY(!!TableInfo);
-        return TableInfo;
+    TStandaloneTable(const TPathId& pathId, const std::shared_ptr<TColumnTableInfo>& tableInfo)
+        : TBase(pathId, tableInfo)
+    {
+        InitializeFromTableInfo();
     }
 
     virtual TString GetClassName() const override {
         return "STANDALONE_TABLE";
     }
 
-    const NKikimrSchemeOp::TColumnTableSchema& GetTableSchemaProto() {
-        AFL_VERIFY(TableInfo);
-        return TableInfo->Description.GetSchema();
+    const NKikimrSchemeOp::TColumnTableSchema& GetTableSchemaProto() const {
+        AFL_VERIFY(GetTableInfo());
+        return GetTableInfo()->Description.GetSchema();
     }
 
-    const TColumnTableInfo& GetTableInfoVerified() {
-        AFL_VERIFY(TableInfo);
-        return *TableInfo;
+    const TColumnTableInfo& GetTableInfoVerified() const {
+        AFL_VERIFY(GetTableInfo());
+        return *GetTableInfo();
     }
 
-    const NKikimrSchemeOp::TColumnDataLifeCycle& GetTableTTLProto() {
-        AFL_VERIFY(TableInfo);
-        return TableInfo->Description.GetTtlSettings();
+    const NKikimrSchemeOp::TColumnDataLifeCycle& GetTableTTLProto() const {
+        AFL_VERIFY(GetTableInfo());
+        return GetTableInfo()->Description.GetTtlSettings();
     }
 
     const TOlapSchema& GetTableSchemaVerified() const {
@@ -58,9 +54,6 @@ public:
         return TableTTL ? &*TableTTL : nullptr;
     }
 
-    TConclusionStatus InitializeFromTableInfo(const TColumnTableInfo::TPtr& tableInfo);
-
-    
 };
 
 }

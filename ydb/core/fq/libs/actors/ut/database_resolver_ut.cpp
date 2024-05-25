@@ -66,7 +66,7 @@ struct TTestBootstrap : public TTestActorRuntime {
     void CheckEqual(
         const NHttp::TEvHttpProxy::TEvHttpOutgoingRequest& lhs,
         const NHttp::TEvHttpProxy::TEvHttpOutgoingRequest& rhs) {
-        UNIT_ASSERT_EQUAL(lhs.Request->URL, rhs.Request->URL);
+        UNIT_ASSERT_EQUAL_C(lhs.Request->URL, rhs.Request->URL, "Compare: " << lhs.Request->URL << " " << rhs.Request->URL);
     }
 
     void CheckEqual(
@@ -234,6 +234,28 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
             );
     }
 
+    Y_UNIT_TEST(Ydb_Dedicated) {
+        Test(
+            NYql::EDatabaseType::Ydb,
+            NYql::NConnector::NApi::EProtocol::PROTOCOL_UNSPECIFIED,
+            "https://ydbc.ydb.cloud.yandex.net:8789/ydbc/cloud-prod/database?databaseId=etn021us5r9rhld1vgbh",
+            "200",
+            R"(
+                {
+                    "endpoint":"grpcs://lb.etnbrtlini51k7cinbdr.ydb.mdb.yandexcloud.net:2135/?database=/ru-central1/b1gtl2kg13him37quoo6/etn021us5r9rhld1vgbh", 
+                    "dedicatedDatabase":{"resuorcePresetId": "medium"}
+                })",
+            NYql::TDatabaseResolverResponse::TDatabaseDescription{
+                TString{"u-lb.etnbrtlini51k7cinbdr.ydb.mdb.yandexcloud.net:2135"},
+                TString{"u-lb.etnbrtlini51k7cinbdr.ydb.mdb.yandexcloud.net"},
+                2135,
+                TString("/ru-central1/b1gtl2kg13him37quoo6/etn021us5r9rhld1vgbh"),
+                true
+                },
+                {}
+            );
+    }
+
     Y_UNIT_TEST(DataStreams_Serverless) {
         Test(
             NYql::EDatabaseType::DataStreams,
@@ -264,7 +286,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
             R"(
                 {
                     "endpoint":"grpcs://lb.etn021us5r9rhld1vgbh.ydb.mdb.yandexcloud.net:2135/?database=/ru-central1/b1g7jdjqd07qg43c4fmp/etn021us5r9rhld1vgbh",
-                    "storageConfig":{"storageSizeLimit":107374182400}
+                    "dedicatedDatabase":{"resourcePresetId": "medium"}
                 })",
             NYql::TDatabaseResolverResponse::TDatabaseDescription{
                 TString{"u-lb.etn021us5r9rhld1vgbh.ydb.mdb.yandexcloud.net:2135"},

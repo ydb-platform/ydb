@@ -47,6 +47,10 @@
     .testing-tag {
       background-color:#83adda;
     }
+
+    .general-tag {
+      background-color: #daab83;
+    }
   
   }
   
@@ -76,6 +80,10 @@
   
     .testing-tag {
       background-color:#83adda;
+    }
+
+    .general-tag {
+      background-color: #daab83;
     }
     
   }

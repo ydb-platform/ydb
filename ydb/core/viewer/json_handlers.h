@@ -74,7 +74,12 @@ struct TJsonHandlers {
                 json << ',';
             }
             TString name = itJson->first;
-            json << "\"/" << name << '"' << ":{";
+            if (name.StartsWith("/json/")) {
+                name = "/viewer" + name;
+            } else {
+                name = "/" + name;
+            }
+            json << '"' << name << '"' << ":{";
                 json << "\"get\":{";
                     json << "\"tags\":[\"" << TTagInfo::TagName << "\"],";
                     json << "\"produces\":[\"application/json\"],";

@@ -34,10 +34,13 @@
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "ExternalPlanNodeId": 2
+                                                        "InternalOperatorId": 1
                                                     },
                                                     {
-                                                        "ExternalPlanNodeId": 2
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
                                                     },
                                                     {
                                                         "InternalOperatorId": 1

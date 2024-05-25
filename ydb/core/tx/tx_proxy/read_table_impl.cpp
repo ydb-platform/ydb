@@ -541,14 +541,12 @@ private:
             size_t no = 0;
             size_t keys = 0;
 
-            const auto& notNullColumns = res.NotNullColumns;
-
             for (auto &entry : res.Columns) {
                 auto& col = entry.second;
 
                 if (col.KeyOrder != -1) {
                     keyTypes[col.KeyOrder] = col.PType;
-                    notNullKeys[col.KeyOrder] = notNullColumns.contains(col.Name);
+                    notNullKeys[col.KeyOrder] = col.IsNotNullColumn;
                     ++keys;
                 }
 

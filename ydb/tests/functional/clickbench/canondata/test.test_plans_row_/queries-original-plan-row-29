@@ -175,60 +175,6 @@
                                         ]
                                     }
                                 ]
-                            },
-                            {
-                                "Node Type": "Aggregate",
-                                "Operators": [
-                                    {
-                                        "Name": "Aggregate"
-                                    }
-                                ],
-                                "PlanNodeId": 11,
-                                "Plans": [
-                                    {
-                                        "Node Type": "Limit",
-                                        "Operators": [
-                                            {
-                                                "Limit": "1",
-                                                "Name": "Limit"
-                                            }
-                                        ],
-                                        "PlanNodeId": 12,
-                                        "Plans": [
-                                            {
-                                                "Node Type": "Aggregate",
-                                                "Operators": [
-                                                    {
-                                                        "Name": "Aggregate"
-                                                    }
-                                                ],
-                                                "PlanNodeId": 14,
-                                                "Plans": [
-                                                    {
-                                                        "Node Type": "TableFullScan",
-                                                        "Operators": [
-                                                            {
-                                                                "Name": "TableFullScan",
-                                                                "ReadColumns": [
-                                                                    "ResolutionWidth"
-                                                                ],
-                                                                "ReadRanges": [
-                                                                    "CounterID (-\u221e, +\u221e)",
-                                                                    "EventDate (-\u221e, +\u221e)",
-                                                                    "UserID (-\u221e, +\u221e)",
-                                                                    "EventTime (-\u221e, +\u221e)",
-                                                                    "WatchID (-\u221e, +\u221e)"
-                                                                ],
-                                                                "Table": "clickbench/plans/row/hits"
-                                                            }
-                                                        ],
-                                                        "PlanNodeId": 15
-                                                    }
-                                                ]
-                                            }
-                                        ]
-                                    }
-                                ]
                             }
                         ]
                     }

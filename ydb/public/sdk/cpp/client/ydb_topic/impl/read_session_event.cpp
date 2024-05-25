@@ -349,6 +349,12 @@ TEndPartitionSessionEvent::TEndPartitionSessionEvent(TPartitionSession::TPtr par
     , ChildPartitionIds(std::move(childPartitionIds)) {
 }
 
+void TEndPartitionSessionEvent::Confirm() {
+    if (PartitionSession) {
+        static_cast<TPartitionStreamImpl<false>*>(PartitionSession.Get())->ConfirmEnd(GetChildPartitionIds());
+    }
+}
+
 void JoinIds(TStringBuilder& ret, const std::vector<ui32> ids) {
     ret << "[";
     for (size_t i = 0; i < ids.size(); ++i) {

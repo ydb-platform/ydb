@@ -15,3 +15,9 @@
 /ydb/library/yql/yt @Krock21 @Krisha11 @zlobober @gritukan
 
 /ydb/services/fq/ @ydb-platform/fq
+
+/ydb/core/kafka_proxy @ydb-platform/Topics
+/ydb/core/persqueue @ydb-platform/Topics
+/ydb/services/datastreams @ydb-platform/Topics
+/ydb/services/deprecated/persqueue_v0 @ydb-platform/Topics
+/ydb/services/persqueue_v1 @ydb-platform/Topics

@@ -356,9 +356,7 @@ TSet<ui64> TTopicOperations::GetReceivingTabletIds() const
 {
     TSet<ui64> ids;
     for (auto& [_, operations] : Operations_) {
-        if (operations.HasWriteOperations()) {
-            ids.insert(operations.GetTabletId());
-        }
+        ids.insert(operations.GetTabletId());
     }
     return ids;
 }

@@ -1431,6 +1431,45 @@ namespace {
         return OptListWrapperImpl<3U>(input, output, ctx, "Sort");
     }
 
+    IGraphTransformer::TStatus ListTopSortWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (!EnsureMinMaxArgsCount(*input, 2, 3, ctx.Expr)) { 
+            return IGraphTransformer::TStatus::Error;
+        }
+        
+        TStringBuf newName = input->Content();
+        newName.Skip(4);
+        bool desc = false;
+        if (newName.EndsWith("Asc")) {
+            newName.Chop(3);
+        } else if (newName.EndsWith("Desc")) {
+            newName.Chop(4);
+            desc = true;
+        }
+
+        TExprNode::TPtr sortLambda = nullptr;
+        if (input->ChildrenSize() == 3) {
+            sortLambda = input->ChildPtr(2);
+        } else {
+            sortLambda = ctx.Expr.Builder(input->Pos())
+                .Lambda()
+                    .Param("item")
+                    .Arg("item")
+                .Seal()
+            .Build();
+        }
+        
+        return OptListWrapperImpl<4U, 4U>(ctx.Expr.Builder(input->Pos())
+            .Callable(newName)
+                .Add(0, input->ChildPtr(0))
+                .Add(1, input->ChildPtr(1))
+                .Callable(2, "Bool")
+                    .Atom(0, desc ? "false" : "true")
+                .Seal()
+                .Add(3, sortLambda)
+            .Seal()
+        .Build(), output, ctx, newName);
+    }
+
     IGraphTransformer::TStatus ListExtractWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         return OptListWrapperImpl<2U>(input, output, ctx, "OrderedExtract");
     }

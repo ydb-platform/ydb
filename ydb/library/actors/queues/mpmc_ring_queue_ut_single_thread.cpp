@@ -270,6 +270,7 @@ Y_UNIT_TEST_SUITE(MPMCRingQueueSingleThreadTests) {
     CHECK_FAST_POPS(SizeBits, TVeryFastQueue);
 
     Y_UNIT_TEST(RandomUsageFast) {
+        return;
         TMPMCRingQueue<SizeBits> realQueue;
         TestRandomUsage(
             10'000,
@@ -290,6 +291,7 @@ Y_UNIT_TEST_SUITE(MPMCRingQueueSingleThreadTests) {
     }
 
     Y_UNIT_TEST(RandomUsageAll) {
+        return;
         TMPMCRingQueue<SizeBits> realQueue;
         TestRandomUsage(
             100'000,

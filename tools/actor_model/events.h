@@ -1,23 +1,13 @@
-#include <library/cpp/actors/core/event_local.h>
-#include <library/cpp/actors/core/events.h>
+#pragma once
+
+#include <library/cpp/actors/core/actorsystem.h>
+#include <memory>
 
 struct TEvents {
-    enum EEvents {
-        EvWriteValueRequest = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
-        EvDone,
-        EvMaximumPrimeDevisor,
-        EvEnd
-    };
+    struct TEvDone : public NActors::TEventLocal<TEvDone, NActors::TEvents::ES_PRIVATE> {
+        const int64_t MaxPrimeDivisor;
 
-    struct TEvWriteValueRequest : NActors::TEventLocal<TEvWriteValueRequest, EvWriteValueRequest> {
-        int64_t Value;
-        TEvWriteValueRequest(int64_t value) : Value(value) {}
-    };
-
-    struct TEvDone : NActors::TEventLocal<TEvDone, EvDone> {};
-
-    struct TEvMaximumPrimeDevisor : NActors::TEventLocal<TEvMaximumPrimeDevisor, EvMaximumPrimeDevisor> {
-        int64_t Value;
-        TEvMaximumPrimeDevisor(int64_t value) : Value(value) {}
+        explicit TEvDone(int64_t maxPrimeDivisor)
+            : MaxPrimeDivisor(maxPrimeDivisor) {}
     };
 };

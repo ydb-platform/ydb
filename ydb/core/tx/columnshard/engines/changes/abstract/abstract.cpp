@@ -66,15 +66,11 @@ TColumnEngineChanges::~TColumnEngineChanges() {
 }
 
 void TColumnEngineChanges::Abort(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "AbortEmergency")("reason", context.ErrorMessage)("prev_reason", AbortedReason);
-    if (Stage == EStage::Aborted) {
-        AbortedReason += "; +AnotherReason: " + context.ErrorMessage;
-    } else {
-        AFL_VERIFY(Stage != EStage::Finished && Stage != EStage::Created && Stage != EStage::Aborted)("stage", Stage)("reason", context.ErrorMessage)("prev_reason", AbortedReason);
-        Stage = EStage::Aborted;
-        AbortedReason = context.ErrorMessage;
-        OnFinish(self, context);
-    }
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "Abort")("reason", context.ErrorMessage);
+    AFL_VERIFY(Stage != EStage::Finished && Stage != EStage::Created && Stage != EStage::Aborted)("stage", Stage)("reason", context.ErrorMessage)("prev_reason", AbortedReason);
+    Stage = EStage::Aborted;
+    AbortedReason = context.ErrorMessage;
+    OnFinish(self, context);
 }
 
 void TColumnEngineChanges::Start(NColumnShard::TColumnShard& self) {

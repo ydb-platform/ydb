@@ -20,29 +20,28 @@
 
 1. Склонируем ваш форк, изначально директория actor_models есть только в ветке ydb_assignment, так что склонируем ее.
 ```(bash)
-git clone -u ydb_assignment <путь к вашему форку>
+git clone -b ydb_assignment <путь к вашему форку>
 ```  
 2. Переходим в директорию, в которую склонировали репозиторий и собираем контейнер
 ```(bash)
 cd ydb
-``` 
-Для macOS и linux:
-``` (bash)
+
+# Для macOS и linux:
 sudo docker build -t actor_model:latest .
-```
-Для windows
-```(bash)
+
+# Для windows (Power Shell и cmd):
 docker build -t actor_model:latest .
 ``` 
 3. Далее запускаем контейнер (не меняйте пути, там будет директория для билда). При запуске в контейнере запускается cmake и ninja, поэтому собираться будет долго. Лучше сначала запустить контейнер, а потом редактировать код, если упадет ninja, то контейнер не запустится.  
-
-Для macOS и linux:
 ``` (bash)
+Для macOS и linux:
 sudo docker run -v $(pwd):/home/ydbwork/ydb --rm -it actor_model
-```
-Для windows
-```(bash)
+
+# Для windows PowerShell:
 docker run -v ${PWD}:/home/ydbwork/ydb --rm -it actor_model
+
+# Для windows cmd:
+docker run -v %cd%:/home/ydbwork/ydb --rm -it actor_model
 ``` 
 4. После запуска контейнера вы будете в директории build, от туда можно компилировать и запускать ваш код с помощью команд:
 ```(bash)
@@ -72,7 +71,7 @@ echo '1' | ./tools/actor_model/actor_model
 0
 ```
 
-## Ускорения перезапуска контейнера
+## Ускорение перезапуска контейнера
 
 По сути самая долгая часть в запуске контейнера это cmake и проверки от ninja. Если сохранить локально директорию build, то далее запуск контейнера будет сильно быстрее, но перед сборкой контейнера понадобятся дополнительные манипуляции.
 
@@ -90,26 +89,32 @@ git clone -b ydb_assignment <путь к вашему форку>
 # RUN mkdir -p /home/ydbwork/build
 
 # CMD cd /home/ydbwork/build && cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain ../ydb && ninja tools/actor_model/all && bash
-
 ```
 4. Оставаясь в директории ydb соберем контейнер
 ```(bash)
 cd ydb
+
+# Для macOS и linux:
 sudo docker build -t actor_model:latest .
+
+# Для windows (Power Shell и cmd):
+docker build -t actor_model:latest .
 ```
 5. Вернемся в директорию ydbwork и запустим контейнер  
 
-Для macOS и linux:
 ``` (bash)
+Для macOS и linux:
 sudo docker run -v $(pwd):/home/ydbwork/ydb --rm -it actor_model
-```
-Для windows
-```(bash)
+
+# Для windows PowerShell:
 docker run -v ${PWD}:/home/ydbwork/ydb --rm -it actor_model
+
+# Для windows cmd:
+docker run -v %cd%:/home/ydbwork/ydb --rm -it actor_model
 ``` 
 6. Внтури контейнера перейдем в директорию /home/ydbwork/build, внутри нее запустим cmake и ninja
 ```(bash)
-cd /home/build
+cd /home/ydbwork/build
 cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain ../ydb
 ninja tools/actor_model/all
 ```

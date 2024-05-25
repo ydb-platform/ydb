@@ -7,6 +7,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 17,
+                "ColumnName": "TempDirOwnerActorId",
+                "ColumnType": "String"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "Id",
                 "ColumnType": "Uint64"
@@ -85,17 +90,13 @@
                 "ColumnId": 16,
                 "ColumnName": "ParentOwnerId",
                 "ColumnType": "Uint64"
-            },
-            {
-                "ColumnId": 17,
-                "ColumnName": "TempDirOwnerActorId",
-                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    17,
                     1,
                     2,
                     3,
@@ -111,8 +112,7 @@
                     13,
                     14,
                     15,
-                    16,
-                    17
+                    16
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -3208,6 +3208,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 17,
+                "ColumnName": "TempDirOwnerActorId",
+                "ColumnType": "String"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "OwnerPathId",
                 "ColumnType": "Uint64"
@@ -3286,17 +3291,13 @@
                 "ColumnId": 16,
                 "ColumnName": "ACLVersion",
                 "ColumnType": "Uint64"
-            },
-            {
-                "ColumnId": 17,
-                "ColumnName": "TempDirOwnerActorId",
-                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    17,
                     1,
                     2,
                     3,
@@ -3312,8 +3313,7 @@
                     13,
                     14,
                     15,
-                    16,
-                    17
+                    16
                 ],
                 "RoomID": 0,
                 "Codec": 0,

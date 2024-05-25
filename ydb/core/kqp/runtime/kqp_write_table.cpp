@@ -815,7 +815,7 @@ public:
         Serializer->AddData(std::move(data));
 
         FlushSerializer(GetMemory() >= Settings.MemoryLimitTotal);
-        BuildBatches();
+        // BuildBatches();
     }
 
     void Close() override {
@@ -826,7 +826,7 @@ public:
         for (auto& [shardId, shardInfo] : ShardsInfo.GetShards()) {
             shardInfo.Close();
         }
-        BuildBatches();
+        // BuildBatches();
     }
 
     TVector<ui64> GetPendingShards() const override {
@@ -834,15 +834,17 @@ public:
     }
 
     std::optional<TMessageMetadata> GetMessageMetadata(ui64 shardId) override {
-        const auto& shardInfo = ShardsInfo.GetShard(shardId);
+        auto& shardInfo = ShardsInfo.GetShard(shardId);
         if (shardInfo.IsEmpty()) {
             return {};
         }
+        BuildBatchesForShard(shardInfo);
 
         TMessageMetadata meta;
         meta.Cookie = shardInfo.GetCookie();
         meta.OperationsCount = shardInfo.GetBatchesInFlight();
         meta.IsFinal = shardInfo.IsClosed() && shardInfo.Size() == shardInfo.GetBatchesInFlight();
+        meta.SendAttempts = shardInfo.GetSendAttempts();
 
         return meta;
     }
@@ -870,10 +872,15 @@ public:
     std::optional<i64> OnMessageAcknowledged(ui64 shardId, ui64 cookie) override {
         auto& shardInfo = ShardsInfo.GetShard(shardId);
         const auto removedDataSize = shardInfo.PopBatches(cookie);
-        if (removedDataSize) {
-            BuildBatchesForShard(shardInfo);
-        }
         return removedDataSize;
+    }
+
+    void OnMessageSent(ui64 shardId, ui64 cookie) override {
+        auto& shardInfo = ShardsInfo.GetShard(shardId);
+        if (shardInfo.IsEmpty() || shardInfo.GetCookie() != cookie) {
+            return;
+        }
+        shardInfo.IncSendAttempts();
     }
 
     i64 GetMemory() const override {
@@ -929,12 +936,12 @@ private:
         }
     }
 
-    void BuildBatches() {
+    /*void BuildBatches() {
         for (const ui64 shardId : Serializer->GetShardIds()) {
             auto& shard = ShardsInfo.GetShard(shardId);
             BuildBatchesForShard(shard);
         }
-    }
+    }*/
 
     void BuildBatchesForShard(TShardsInfo::TShardInfo& shard) {
         if (shard.GetBatchesInFlight() == 0) {

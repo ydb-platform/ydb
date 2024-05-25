@@ -74,6 +74,7 @@ public:
         ui64 Cookie = 0;
         ui64 OperationsCount = 0;
         bool IsFinal = false;
+        ui64 SendAttempts = 0;
     };
     virtual std::optional<TMessageMetadata> GetMessageMetadata(ui64 shardId) = 0;
 
@@ -85,6 +86,7 @@ public:
     virtual TSerializationResult SerializeMessageToPayload(ui64 shardId, NKikimr::NEvents::TDataEvents::TEvWrite& evWrite) = 0;
 
     virtual std::optional<i64> OnMessageAcknowledged(ui64 shardId, ui64 cookie) = 0;
+    virtual void OnMessageSent(ui64 shardId, ui64 cookie) = 0;
 
     virtual i64 GetMemory() const = 0;
 

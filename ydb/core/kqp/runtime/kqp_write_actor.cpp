@@ -323,8 +323,8 @@ private:
     }
 
     i64 GetFreeSpace() const final {
-        const i64 result = Serializer
-            ? MemoryLimit - Serializer->GetMemory() - ShardsInfo.GetMemory()
+        const i64 result = ShardedWriteController
+            ? MemoryLimit - ShardedWriteController->GetMemory()
             : std::numeric_limits<i64>::min(); // Can't use zero here because compute can use overcommit!
         return result;
     }
@@ -349,7 +349,19 @@ private:
 
         CA_LOG_D("New data: size=" << size << ", finished=" << finished << ".");
 
-        YQL_ENSURE(Serializer);
+        YQL_ENSURE(ShardedWriteController);
+        try {
+            ShardedWriteController->AddData(std::move(data));
+            if (Finished) {
+                ShardedWriteController->Close();
+            }
+        } catch (...) {
+            RuntimeError(
+                CurrentExceptionMessage(),
+                NYql::NDqProto::StatusIds::INTERNAL_ERROR);
+        }
+
+        /*YQL_ENSURE(Serializer);
         try {
             Serializer->AddData(std::move(data));
             if (Finished) {
@@ -377,7 +389,7 @@ private:
             }
 
             YQL_ENSURE(Serializer->IsFinished());
-        }
+        }*/
 
         ProcessBatches();
     }
@@ -613,8 +625,8 @@ private:
 
     void PopShardBatch(ui64 shardId, ui64 cookie) {
         TResumeNotificationManager resumeNotificator(*this);
-        auto& shardInfo = ShardsInfo.GetShard(shardId);
-        if (const auto removedDataSize = shardInfo.PopBatches(cookie); removedDataSize) {
+        const auto removedDataSize = ShardedWriteController->OnMessageAcknowledged(shardId, cookie);
+        if (removedDataSize) {
             EgressStats.Bytes += *removedDataSize;
             EgressStats.Chunks++;
             EgressStats.Splits++;
@@ -625,7 +637,7 @@ private:
 
     void ProcessBatches() {
         if (!ImmediateTx || Finished || GetFreeSpace() <= 0) {
-            MakeNewBatches();
+            //MakeNewBatches();
             SendBatchesToShards();
             if (Finished && Serializer->IsFinished() && ShardsInfo.IsFinished()) {
                 CA_LOG_D("Write actor finished");
@@ -634,7 +646,7 @@ private:
         }
     }
 
-    void MakeNewBatches() {
+    /*void MakeNewBatches() {
         for (const size_t shardId : Serializer->GetShardIds()) {
             auto& shard = ShardsInfo.GetShard(shardId);
             while (true) {
@@ -652,9 +664,11 @@ private:
                         : kMaxBatchesPerMessage);
             }
         }
-    }
+    }*/
 
     void SendBatchesToShards() {
+
+        ShardedWriteController->
         YQL_ENSURE(!ImmediateTx || ShardsInfo.GetShards().size() == 1);
 
         for (const size_t shardId : ShardsInfo.GetPendingShards()) {
@@ -785,16 +799,34 @@ private:
 
         try {
             if (SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
-                Serializer = CreateColumnShardPayloadSerializer(
-                    *SchemeEntry,
-                    columnsMetadata,
+                //Serializer = CreateColumnShardPayloadSerializer(
+                //    *SchemeEntry,
+                //    columnsMetadata,
+                //    TypeEnv);
+                ShardedWriteController = CreateShardedWriteController(
+                    TShardedWriteControllerSettings {
+                        .MemoryLimitTotal = kInFlightMemoryLimitPerActor,
+                        .MemoryLimitPerMessage = kMemoryLimitPerMessage,
+                        .MaxBatchesPerMessage = 1,
+                    },
+                    std::move(columnsMetadata),
                     TypeEnv);
+                ShardedWriteController->OnPartitioningChanged(*SchemeEntry);
             } else {
-                Serializer = CreateDataShardPayloadSerializer(
-                    *SchemeEntry,
-                    std::move(*SchemeRequest),
-                    columnsMetadata,
+                //Serializer = CreateDataShardPayloadSerializer(
+                //    *SchemeEntry,
+                //    std::move(*SchemeRequest),
+                //    columnsMetadata,
+                //    TypeEnv);
+                ShardedWriteController = CreateShardedWriteController(
+                    TShardedWriteControllerSettings {
+                        .MemoryLimitTotal = kInFlightMemoryLimitPerActor,
+                        .MemoryLimitPerMessage = kMemoryLimitPerMessage,
+                        .MaxBatchesPerMessage = kMaxBatchesPerMessage,
+                    },
+                    std::move(columnsMetadata),
                     TypeEnv);
+                ShardedWriteController->OnPartitioningChanged(*SchemeEntry, std::move(*SchemeRequest));
             }
             ResumeExecution();
         } catch (...) {
@@ -834,6 +866,8 @@ private:
     bool Finished = false;
 
     const i64 MemoryLimit = kInFlightMemoryLimitPerActor;
+
+    IShardedWriteControllerPtr ShardedWriteController = nullptr;
 };
 
 void RegisterKqpWriteActor(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusivePtr<TKqpCounters> counters) {

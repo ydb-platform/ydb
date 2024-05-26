@@ -414,8 +414,10 @@ public:
         TSelfCheckContext(TSelfCheckResult* upper)
             : Upper(upper)
         {
-            Location.CopyFrom(upper->Location);
-            Level = upper->Level + 1;
+            if (Upper) {
+                Location.CopyFrom(upper->Location);
+                Level = upper->Level + 1;
+            }
         }
 
         TSelfCheckContext(TSelfCheckResult* upper, const TString& type)
@@ -427,7 +429,9 @@ public:
         TSelfCheckContext(const TSelfCheckContext&) = delete;
 
         ~TSelfCheckContext() {
-            Upper->InheritFrom(*this);
+            if (Upper) {
+                Upper->InheritFrom(*this);
+            }
         }
     };
 
@@ -1026,24 +1030,28 @@ public:
     void Handle(NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr& ev) {
         TabletRequests.CompleteRequest(TTabletRequestsState::RequestStoragePools);
         StoragePools = std::move(ev->Get()->Record);
+        AggregateBSControllerState();
         RequestDone("TEvGetStoragePoolsRequest");
     }
 
     void Handle(NSysView::TEvSysView::TEvGetGroupsResponse::TPtr& ev) {
         TabletRequests.CompleteRequest(TTabletRequestsState::RequestGroups);
         Groups = std::move(ev->Get()->Record);
+        AggregateBSControllerState();
         RequestDone("TEvGetGroupsRequest");
     }
 
     void Handle(NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr& ev) {
         TabletRequests.CompleteRequest(TTabletRequestsState::RequestVSlots);
         VSlots = std::move(ev->Get()->Record);
+        AggregateBSControllerState();
         RequestDone("TEvGetVSlotsRequest");
     }
 
     void Handle(NSysView::TEvSysView::TEvGetPDisksResponse::TPtr& ev) {
         TabletRequests.CompleteRequest(TTabletRequestsState::RequestPDisks);
         PDisks = std::move(ev->Get()->Record);
+        AggregateBSControllerState();
         RequestDone("TEvGetPDisksRequest");
     }
 
@@ -1260,6 +1268,14 @@ public:
         }
     }
 
+    void AggregateStoragePools() {
+        for (const auto& [poolId, pool] : StoragePoolState) {
+            for (const TString& path : PathsByPoolName[pool.Name]) {
+                DatabaseState[path].StoragePools.emplace(poolId);
+            }
+        }
+    }
+
     void AggregateBSControllerState() {
         if (!HaveAllBSControllerInfo()) {
             return;
@@ -1278,15 +1294,20 @@ public:
             ui64 poolId = pool.GetKey().GetStoragePoolId();
             TString storagePoolName = pool.GetInfo().GetName();
             StoragePoolState[poolId].Name = storagePoolName;
-
-            for (const TString& path : PathsByPoolName[storagePoolName]) {
-                DatabaseState[path].StoragePools.emplace(poolId);
-            }
-
         }
         for (const auto& pDisk : PDisks->GetEntries()) {
             auto pDiskId = GetPDiskId(pDisk.GetKey());
             PDisksMap.emplace(pDiskId, &pDisk);
+        }
+
+        // BSC itself works on the static group
+        // So if it is alive and answering that static group is not working,
+        // it should not be trusted
+        Ydb::Monitoring::StorageGroupStatus staticGroupStatus;
+        FillGroupStatus(0, staticGroupStatus, {nullptr});
+        if (staticGroupStatus.overall() != Ydb::Monitoring::StatusFlag::GREEN) {
+            UnknownStaticGroups.emplace(0);
+            RequestStorageConfig();
         }
     }
 
@@ -1987,6 +2008,7 @@ public:
             ++DisksColors[status];
             switch (status) {
                 case Ydb::Monitoring::StatusFlag::BLUE: // disk is good, but not available
+                case Ydb::Monitoring::StatusFlag::YELLOW: // disk is initializing, not currently available
                 case Ydb::Monitoring::StatusFlag::RED: // disk is bad, probably not available
                 case Ydb::Monitoring::StatusFlag::GREY: // the status is absent, the disk is not available
                     IncrementFor(realm);
@@ -2384,7 +2406,7 @@ public:
         storagePoolStatus.set_id(pool.Name);
         bool haveInfo = HaveAllBSControllerInfo();
         for (auto groupId : pool.Groups) {
-            if (haveInfo) {
+            if (haveInfo && !UnknownStaticGroups.contains(groupId)) {
                 FillGroupStatus(groupId, *storagePoolStatus.add_groups(), {&context, "STORAGE_GROUP"});
             } else if (IsStaticGroup(groupId)) {
                 auto itGroup = MergedBSGroupState.find(groupId);
@@ -2408,6 +2430,7 @@ public:
                 context.ReportStatus(context.GetOverallStatus(), "Pool failed", ETags::PoolState, {ETags::GroupState});
                 break;
             default:
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
                 break;
         }
         storagePoolStatus.set_overall(context.GetOverallStatus());
@@ -2446,6 +2469,7 @@ public:
                     context.ReportStatus(context.GetOverallStatus(), "Storage failed", ETags::StorageState, {ETags::PoolState});
                     break;
                 default:
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
                     break;
             }
             if (!HaveAllBSControllerInfo()) {
@@ -2670,7 +2694,7 @@ public:
 
         AggregateHiveInfo();
         AggregateHiveNodeStats();
-        AggregateBSControllerState();
+        AggregateStoragePools();
 
         for (auto& [requestId, request] : TabletRequests.RequestsInFlight) {
             auto tabletId = request.TabletId;

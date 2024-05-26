@@ -15,16 +15,28 @@ namespace NKqpRun {
 
 namespace {
 
+// Function adds thousands separators
+// 123456789 -> 123.456.789
 TString FormatNumber(i64 number) {
+    struct TSeparator : public std::numpunct<char> {
+        char do_thousands_sep() const final {
+            return '.';
+        }
+
+        std::string do_grouping() const final {
+            return "\03";
+        }
+    };
+
     std::ostringstream stream;
-    stream.imbue(std::locale("en_US.UTF-8"));
+    stream.imbue(std::locale(stream.getloc(), new TSeparator()));
     stream << number;
     return stream.str();
 }
 
-void PrintStatistic(const TString& fullStatistic, const THashMap<TString, i64>& flatStatistic, const NFq::TPublicStat& publicStatistic, IOutputStream& output) {
+void PrintStatistics(const TString& fullStat, const THashMap<TString, i64>& flatStat, const NFq::TPublicStat& publicStat, IOutputStream& output) {
     output << "\nFlat statistic:" << Endl;
-    for (const auto& [propery, value] : flatStatistic) {
+    for (const auto& [propery, value] : flatStat) {
         TString valueString = ToString(value);
         if (propery.find("Bytes") != TString::npos || propery.find("Source") != TString::npos) {
             valueString = NKikimr::NBlobDepot::FormatByteSize(value);
@@ -39,31 +51,31 @@ void PrintStatistic(const TString& fullStatistic, const THashMap<TString, i64>& 
     }
 
     output << "\nPublic statistic:" << Endl;
-    if (auto memoryUsageBytes = publicStatistic.MemoryUsageBytes) {
+    if (auto memoryUsageBytes = publicStat.MemoryUsageBytes) {
         output << "MemoryUsage = " << NKikimr::NBlobDepot::FormatByteSize(*memoryUsageBytes) << Endl;
     }
-    if (auto cpuUsageUs = publicStatistic.CpuUsageUs) {
+    if (auto cpuUsageUs = publicStat.CpuUsageUs) {
         output << "CpuUsage = " << NFq::FormatDurationUs(*cpuUsageUs) << Endl;
     }
-    if (auto inputBytes = publicStatistic.InputBytes) {
+    if (auto inputBytes = publicStat.InputBytes) {
         output << "InputSize = " << NKikimr::NBlobDepot::FormatByteSize(*inputBytes) << Endl;
     }
-    if (auto outputBytes = publicStatistic.OutputBytes) {
+    if (auto outputBytes = publicStat.OutputBytes) {
         output << "OutputSize = " << NKikimr::NBlobDepot::FormatByteSize(*outputBytes) << Endl;
     }
-    if (auto sourceInputRecords = publicStatistic.SourceInputRecords) {
+    if (auto sourceInputRecords = publicStat.SourceInputRecords) {
         output << "SourceInputRecords = " << FormatNumber(*sourceInputRecords) << Endl;
     }
-    if (auto sinkOutputRecords = publicStatistic.SinkOutputRecords) {
+    if (auto sinkOutputRecords = publicStat.SinkOutputRecords) {
         output << "SinkOutputRecords = " << FormatNumber(*sinkOutputRecords) << Endl;
     }
-    if (auto runningTasks = publicStatistic.RunningTasks) {
+    if (auto runningTasks = publicStat.RunningTasks) {
         output << "RunningTasks = " << FormatNumber(*runningTasks) << Endl;
     }
 
     output << "\nFull statistic:" << Endl;
     NJson::TJsonValue statsJson;
-    NJson::ReadJsonTree(fullStatistic, &statsJson);
+    NJson::ReadJsonTree(fullStat, &statsJson);
     NJson::WriteJson(&output, &statsJson, true, true, true);
     output << Endl;
 }
@@ -282,26 +294,25 @@ private:
     }
 
     void PrintScriptProgress(const TString& plan) const {
-        if (Options_.InProgressStatisticOutputFile) {
-            TFileOutput outputStream(*Options_.InProgressStatisticOutputFile);
-            outputStream << TInstant::Now().ToIsoStringLocal() << " Script in progress statistic" << Endl;
+        if (Options_.InProgressStatisticsOutputFile) {
+            TFileOutput outputStream(*Options_.InProgressStatisticsOutputFile);
+            outputStream << TInstant::Now().ToIsoStringLocal() << " Script in progress statistics" << Endl;
 
             auto convertedPlan = plan;
             try {
                 convertedPlan = StatProcessor_->ConvertPlan(plan);
-            } catch(const NJson::TJsonException& ex) {
+            } catch (const NJson::TJsonException& ex) {
                 outputStream << "Error plan conversion: " << ex.what() << Endl;
             }
 
             try {
                 double cpuUsage = 0.0;
-                auto stat = StatProcessor_->GetQueryStat(convertedPlan, cpuUsage);
-                outputStream << "\nCPU usage: " << cpuUsage << Endl;
-
+                auto fullStat = StatProcessor_->GetQueryStat(convertedPlan, cpuUsage);
                 auto flatStat = StatProcessor_->GetFlatStat(convertedPlan);
-                auto publicStat = StatProcessor_->GetPublicStat(stat);
+                auto publicStat = StatProcessor_->GetPublicStat(fullStat);
 
-                PrintStatistic(stat, flatStat, publicStat, outputStream);
+                outputStream << "\nCPU usage: " << cpuUsage << Endl;
+                PrintStatistics(fullStat, flatStat, publicStat, outputStream);
             } catch(const NJson::TJsonException& ex) {
                 outputStream << "Error stat conversion: " << ex.what() << Endl;
             }

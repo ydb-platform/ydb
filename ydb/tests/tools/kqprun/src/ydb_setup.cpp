@@ -163,9 +163,9 @@ private:
         NYql::NLog::InitLogger(NActors::CreateNullBackend());
     }
 
-    void WaitResourcePublishing() const {
+    void WaitResourcesPublishing() const {
         auto promise = NThreading::NewPromise();
-        GetRuntime()->Register(CreateResourceWaiterActor(promise, Settings_.NodeCount));
+        GetRuntime()->Register(CreateResourcesWaiterActor(promise, Settings_.NodeCount));
 
         try {
             promise.GetFuture().GetValue(Settings_.InitializationTimeout);
@@ -182,7 +182,7 @@ public:
         InitializeServer();
 
         if (Settings_.NodeCount > 1) {
-            WaitResourcePublishing();
+            WaitResourcesPublishing();
         }
     }
 

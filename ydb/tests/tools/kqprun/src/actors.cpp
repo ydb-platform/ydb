@@ -92,51 +92,87 @@ private:
     TProgressCallback ProgressCallback_;
 };
 
-class TResourceWaiterActor : public NActors::TActorBootstrapped<TResourceWaiterActor> {
+class TResourcesWaiterActor : public NActors::TActorBootstrapped<TResourcesWaiterActor> {
+    struct TEvPrivate {
+        enum EEv : ui32 {
+            EvResourcesInfo = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+
+            EvEnd
+        };
+
+        static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
+
+        struct TEvResourcesInfo : public NActors::TEventLocal<TEvResourcesInfo, EvResourcesInfo> {
+            explicit TEvResourcesInfo(i32 nodeCount)
+                : NodeCount(nodeCount)
+            {}
+
+            const i32 NodeCount;
+        };
+    };
+
+    static constexpr TDuration REFRESH_PERIOD = TDuration::MilliSeconds(10);
+
 public:
-    TResourceWaiterActor(NThreading::TPromise<void> promise, i32 expectedNodeCount)
+    TResourcesWaiterActor(NThreading::TPromise<void> promise, i32 expectedNodeCount)
         : ExpectedNodeCount_(expectedNodeCount)
         , Promise_(promise)
     {}
 
     void Bootstrap() {
-        GetResourceManager();
-        WaitResourcePublish();
-
-        Promise_.SetValue();
-        PassAway();
+        Become(&TResourcesWaiterActor::StateFunc);
+        CheckResourcesPublish();
     }
+
+    void Handle(NActors::TEvents::TEvWakeup::TPtr&) {
+        CheckResourcesPublish();
+    }
+
+    void Handle(TEvPrivate::TEvResourcesInfo::TPtr& ev) {
+        if (ev->Get()->NodeCount == ExpectedNodeCount_) {
+            Promise_.SetValue();
+            PassAway();
+            return;
+        }
+
+        Schedule(REFRESH_PERIOD, new NActors::TEvents::TEvWakeup());
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(NActors::TEvents::TEvWakeup, Handle);
+        hFunc(TEvPrivate::TEvResourcesInfo, Handle);
+    )
 
 private:
-    void GetResourceManager() {
-        while (true) {
-            ResourceManager_ = NKikimr::NKqp::TryGetKqpResourceManager(SelfId().NodeId());
-            if (ResourceManager_) {
-                break;
-            }
+    void CheckResourcesPublish() {
+        GetResourceManager();
 
-            Sleep(TDuration::MilliSeconds(10));
+        if (!ResourceManager_) {
+            Schedule(REFRESH_PERIOD, new NActors::TEvents::TEvWakeup());
+            return;
         }
+
+        UpdateResourcesInfo();
     }
 
-    void WaitResourcePublish() {
-        while (true) {
-            auto resourcesPromise = NThreading::NewPromise<i32>();
-            ResourceManager_->RequestClusterResourcesInfo([resourcesPromise](TVector<NKikimrKqp::TKqpNodeResources>&& resources) mutable {
-                resourcesPromise.SetValue(resources.size());
-            });
-
-            if (resourcesPromise.GetFuture().GetValueSync() == ExpectedNodeCount_) {
-                break;
-            }
-            Sleep(TDuration::MilliSeconds(10));
+    void GetResourceManager() {
+        if (ResourceManager_) {
+            return;
         }
+        ResourceManager_ = NKikimr::NKqp::TryGetKqpResourceManager(SelfId().NodeId());
+    }
+
+    void UpdateResourcesInfo() {
+        ResourceManager_->RequestClusterResourcesInfo(
+        [selfId = SelfId(), actorContext = ActorContext()](TVector<NKikimrKqp::TKqpNodeResources>&& resources) {
+            actorContext.Send(selfId, new TEvPrivate::TEvResourcesInfo(resources.size()));
+        });
     }
 
 private:
     const i32 ExpectedNodeCount_;
-
     NThreading::TPromise<void> Promise_;
+
     std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> ResourceManager_;
 };
 
@@ -149,8 +185,8 @@ NActors::IActor* CreateRunScriptActorMock(THolder<NKikimr::NKqp::TEvKqp::TEvQuer
     return new TRunScriptActorMock(std::move(request), promise, resultRowsLimit, resultSizeLimit, resultSets, progressCallback);
 }
 
-NActors::IActor* CreateResourceWaiterActor(NThreading::TPromise<void> promise, i32 expectedNodeCount) {
-    return new TResourceWaiterActor(promise, expectedNodeCount);
+NActors::IActor* CreateResourcesWaiterActor(NThreading::TPromise<void> promise, i32 expectedNodeCount) {
+    return new TResourcesWaiterActor(promise, expectedNodeCount);
 }
 
 }  // namespace NKqpRun

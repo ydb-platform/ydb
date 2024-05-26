@@ -163,7 +163,7 @@ void RunMain(int argc, const char* argv[]) {
     TString schemeQueryAstFile;
     TString scriptQueryAstFile;
     TString scriptQueryPlanFile;
-    TString inProgressStatisticFile;
+    TString inProgressStatisticsFile;
     TString logFile = "-";
     TString appConfigFile = "./configuration/app_config.conf";
     std::vector<TString> tablesMappingList;
@@ -219,10 +219,10 @@ void RunMain(int argc, const char* argv[]) {
         .Optional()
         .RequiredArgument("FILE")
         .StoreResult(&scriptQueryPlanFile);
-    options.AddLongOption("in-progress-statistic", "File with script inprogress statitic")
+    options.AddLongOption("in-progress-statistics", "File with script inprogress statistics")
         .Optional()
         .RequiredArgument("FILE")
-        .StoreResult(&inProgressStatisticFile);
+        .StoreResult(&inProgressStatisticsFile);
 
     options.AddLongOption('C', "clear-execution", "Execute script query without creating additional tables, one of { query | yql-script }")
         .Optional()
@@ -324,8 +324,8 @@ void RunMain(int argc, const char* argv[]) {
     THolder<TFileOutput> scriptQueryAstFileHolder = SetupDefaultFileOutput(scriptQueryAstFile, runnerOptions.ScriptQueryAstOutput);
     THolder<TFileOutput> scriptQueryPlanFileHolder = SetupDefaultFileOutput(scriptQueryPlanFile, runnerOptions.ScriptQueryPlanOutput);
 
-    if (inProgressStatisticFile) {
-        runnerOptions.InProgressStatisticOutputFile = inProgressStatisticFile;
+    if (inProgressStatisticsFile) {
+        runnerOptions.InProgressStatisticsOutputFile = inProgressStatisticsFile;
     }
 
     runnerOptions.TraceOptType = GetCaseVariant<NKqpRun::TRunnerOptions::ETraceOptType>("trace-opt", traceOptType, {

@@ -1,13 +1,11 @@
-#pragma once
-
-#include <library/cpp/actors/core/actorsystem.h>
-#include <memory>
+#include <library/cpp/actors/core/event_local.h>
+#include <library/cpp/actors/core/events.h>
 
 struct TEvents {
-    struct TEvDone : public NActors::TEventLocal<TEvDone, NActors::TEvents::ES_PRIVATE> {
-        const int64_t MaxPrimeDivisor;
-
-        explicit TEvDone(int64_t maxPrimeDivisor)
-            : MaxPrimeDivisor(maxPrimeDivisor) {}
+    struct TEvWriteValueRequest : NActors::TEventLocal<TEvWriteValueRequest, NActors::TEvents::ES_PRIVATE> {
+        int64_t Value;
+        explicit TEvWriteValueRequest(int64_t value) : Value(value) {}
     };
+
+    struct TEvDone : NActors::TEventLocal<TEvDone, NActors::TEvents::ES_PRIVATE> {};
 };

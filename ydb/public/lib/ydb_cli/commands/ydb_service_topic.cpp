@@ -38,18 +38,6 @@ namespace NYdb::NConsoleClient {
             std::pair<NTopic::EMeteringMode, TString>(NTopic::EMeteringMode::RequestUnits, "Read/write operations valued in request units, storage usage on hourly basis."),
         };
 
-        THashMap<TString, NTopic::EAutoscalingStrategy> AutoscaleStrategies = {
-            std::pair<TString, NTopic::EAutoscalingStrategy>("disabled", NTopic::EAutoscalingStrategy::Disabled),
-            std::pair<TString, NTopic::EAutoscalingStrategy>("up", NTopic::EAutoscalingStrategy::ScaleUp),
-            std::pair<TString, NTopic::EAutoscalingStrategy>("up-and-down", NTopic::EAutoscalingStrategy::ScaleUpAndDown),
-        };
-
-        THashMap<NTopic::EAutoscalingStrategy, TString> AutoscaleStrategiesDescriptions = {
-            std::pair<NTopic::EAutoscalingStrategy, TString>(NTopic::EAutoscalingStrategy::Disabled, "Automatic scaling of the number of partitions is disabled"),
-            std::pair<NTopic::EAutoscalingStrategy, TString>(NTopic::EAutoscalingStrategy::ScaleUp, "The number of partitions can increase under high load, but cannot decrease"),
-            std::pair<NTopic::EAutoscalingStrategy, TString>(NTopic::EAutoscalingStrategy::ScaleUpAndDown, "The number of partitions can increase under high load and decrease under low load"),
-        };
-
         THashMap<ETopicMetadataField, TString> TopicMetadataFieldsDescriptions = {
             {ETopicMetadataField::Body, "Message data"},
             {ETopicMetadataField::WriteTime, "Message write time, a UNIX timestamp the message was written to server."},
@@ -184,72 +172,6 @@ namespace {
         return MeteringMode_;
     }
 
-    void TCommandWithAutoscaling::AddAutoscaling(TClientCommand::TConfig& config, bool withDefault) {
-        TStringStream description;
-        description << "A strategy to automatically change the number of partitions depending on the load. Available strategies: ";
-        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
-        for (const auto& strategy: AutoscaleStrategies) {
-            auto findResult = AutoscaleStrategiesDescriptions.find(strategy.second);
-            Y_ABORT_UNLESS(findResult != AutoscaleStrategiesDescriptions.end(),
-                     "Couldn't find description for %s autoscale strategy", (TStringBuilder() << strategy.second).c_str());
-            description << "\n  " << colors.BoldColor() << strategy.first << colors.OldColor()
-                        << "\n    " << findResult->second;
-            if (strategy.second == NTopic::EAutoscalingStrategy::Disabled) {
-                description << colors.CyanColor() << " (default)" << colors.OldColor();
-            }
-        }
-
-        auto straregy = config.Opts->AddLongOption("autoscale-strategy", description.Str())
-            .Optional()
-            .StoreResult(&AutoscaleStrategy_);
-        auto thresholdTime = config.Opts->AddLongOption("autoscale-threshold-time", "Duration in seconds of high or low load before automatically scale the number of partitions")
-            .Optional()
-            .StoreResult(&ScaleThresholdTime_);
-        auto upThresholdPercent = config.Opts->AddLongOption("autoscale-scale-up-threshold-percent", "The load percentage at which the number of partitions will increase.")
-            .Optional()
-            .StoreResult(&ScaleUpThresholdPercent_);
-        auto downThresholdPercent = config.Opts->AddLongOption("autoscale-scale-down-threshold-percent", "The load percentage at which the number of partitions will decrease.")
-            .Optional()
-            .StoreResult(&ScaleDownThresholdPercent_);
-
-        if (withDefault) {
-            straregy.DefaultValue("disabled");
-            thresholdTime.DefaultValue(300);
-            upThresholdPercent.DefaultValue(90);
-            downThresholdPercent.DefaultValue(30);
-        }
-    }
-
-    void TCommandWithAutoscaling::ParseAutoscalingStrategy() {
-        if (AutoscalingStrategyStr_.empty()) {
-            return;
-        }
-
-        TString toLowerStrategy = to_lower(AutoscalingStrategyStr_);
-        auto strategyIt = AutoscaleStrategies.find(toLowerStrategy);
-        if (strategyIt.IsEnd()) {
-            throw TMisuseException() << "Autoscaling strategy " << AutoscalingStrategyStr_ << " is not available for this command";
-        } else {
-            AutoscaleStrategy_ = strategyIt->second;
-        }
-    }
-
-    TMaybe<NTopic::EAutoscalingStrategy> TCommandWithAutoscaling::GetAutoscalingStrategy() const {
-        return AutoscaleStrategy_;
-    }
-
-    TMaybe<ui32> TCommandWithAutoscaling::GetScaleThresholdTime() const {
-        return ScaleThresholdTime_;
-    }
-
-    TMaybe<ui32> TCommandWithAutoscaling::GetScaleUpThresholdPercent() const {
-        return ScaleUpThresholdPercent_;
-    }
-
-    TMaybe<ui32> TCommandWithAutoscaling::GetScaleDownThresholdPercent() const {
-        return ScaleDownThresholdPercent_;
-    }
-
     TCommandTopic::TCommandTopic()
         : TClientCommandTree("topic", {}, "TopicService operations") {
         AddCommand(std::make_unique<TCommandTopicCreate>());
@@ -266,13 +188,9 @@ namespace {
 
     void TCommandTopicCreate::Config(TConfig& config) {
         TYdbCommand::Config(config);
-        config.Opts->AddLongOption("partitions-count", "Initial number of partitions for topic")
+        config.Opts->AddLongOption("partitions-count", "Total partitions count for topic")
             .DefaultValue(1)
-            .StoreResult(&MinActivePartitions_);
-        config.Opts->AddLongOption("max-partitions-count", "Maximum number of partitions for topic")
-            .DefaultValue(1)
-            .Optional()
-            .StoreResult(&MaxActivePartitions_);
+            .StoreResult(&PartitionsCount_);
         config.Opts->AddLongOption("retention-period-hours", "Duration in hours for which data in topic is stored")
             .DefaultValue(24)
             .Optional()
@@ -289,7 +207,6 @@ namespace {
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
         AddAllowedCodecs(config, AllowedCodecs);
         AddAllowedMeteringModes(config);
-        AddAutoscaling(config, true);
     }
 
     void TCommandTopicCreate::Parse(TConfig& config) {
@@ -297,7 +214,6 @@ namespace {
         ParseTopicName(config, 0);
         ParseCodecs();
         ParseMeteringMode();
-        ParseAutoscalingStrategy();
     }
 
     int TCommandTopicCreate::Run(TConfig& config) {
@@ -305,14 +221,7 @@ namespace {
         NYdb::NTopic::TTopicClient topicClient(driver);
 
         auto settings = NYdb::NTopic::TCreateTopicSettings();
-
-        auto autoscaleSettings = NTopic::TAutoscalingSettings(
-        GetAutoscalingStrategy() ? *GetAutoscalingStrategy() : NTopic::EAutoscalingStrategy::Disabled,
-        GetScaleThresholdTime() ? TDuration::Seconds(*GetScaleThresholdTime()) : TDuration::Seconds(0),
-        GetScaleUpThresholdPercent() ? *GetScaleUpThresholdPercent() : 0,
-        GetScaleDownThresholdPercent() ? *GetScaleDownThresholdPercent() : 0);
-
-        settings.PartitioningSettings(MinActivePartitions_, MaxActivePartitions_, autoscaleSettings);
+        settings.PartitioningSettings(PartitionsCount_, PartitionsCount_);
         settings.PartitionWriteBurstBytes(PartitionWriteSpeedKbps_ * 1_KB);
         settings.PartitionWriteSpeedBytesPerSecond(PartitionWriteSpeedKbps_ * 1_KB);
 
@@ -340,11 +249,8 @@ namespace {
 
     void TCommandTopicAlter::Config(TConfig& config) {
         TYdbCommand::Config(config);
-        config.Opts->AddLongOption("partitions-count", "Initial number of partitions for topic")
-            .StoreResult(&MinActivePartitions_);
-        config.Opts->AddLongOption("max-partitions-count", "Maximum number of partitions for topic")
-            .Optional()
-            .StoreResult(&MaxActivePartitions_);
+        config.Opts->AddLongOption("partitions-count", "Total partitions count for topic")
+            .StoreResult(&PartitionsCount_);
         config.Opts->AddLongOption("retention-period-hours", "Duration for which data in topic is stored")
             .Optional()
             .StoreResult(&RetentionPeriodHours_);
@@ -358,7 +264,6 @@ namespace {
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
         AddAllowedCodecs(config, AllowedCodecs);
         AddAllowedMeteringModes(config);
-        AddAutoscaling(config, false);
     }
 
     void TCommandTopicAlter::Parse(TConfig& config) {
@@ -371,32 +276,9 @@ namespace {
     NYdb::NTopic::TAlterTopicSettings TCommandTopicAlter::PrepareAlterSettings(
         NYdb::NTopic::TDescribeTopicResult& describeResult) {
         auto settings = NYdb::NTopic::TAlterTopicSettings();
-        auto partitioningSettings = settings.BeginAlterPartitioningSettings();
 
-        if (MinActivePartitions_.Defined() && (*MinActivePartitions_ != describeResult.GetTopicDescription().GetPartitioningSettings().GetMinActivePartitions())) {
-            partitioningSettings.MinActivePartitions(*MinActivePartitions_);
-        }
-
-        if (MaxActivePartitions_.Defined() && (*MaxActivePartitions_ != describeResult.GetTopicDescription().GetPartitioningSettings().GetMaxActivePartitions())) {
-            partitioningSettings.MaxActivePartitions(*MaxActivePartitions_);
-        }
-
-        auto autoscalingSettings = partitioningSettings.BeginAlterAutoscalingSettings();
-
-        if (GetScaleThresholdTime().Defined() && *GetScaleThresholdTime() != describeResult.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetThresholdTime().Seconds()) {
-            autoscalingSettings.ThresholdTime(TDuration::Seconds(*GetScaleThresholdTime()));
-        }
-
-        if (GetAutoscalingStrategy().Defined() && *GetAutoscalingStrategy() != describeResult.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetStrategy()) {
-            autoscalingSettings.Strategy(*GetAutoscalingStrategy());
-        }
-
-        if (GetScaleDownThresholdPercent().Defined() && *GetScaleDownThresholdPercent() != describeResult.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetScaleDownThresholdPercent()) {
-            autoscalingSettings.ScaleDownThresholdPercent(*GetScaleDownThresholdPercent());
-        }
-
-        if (GetScaleUpThresholdPercent().Defined() && *GetScaleUpThresholdPercent() != describeResult.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetScaleUpThresholdPercent()) {
-            autoscalingSettings.ScaleUpThresholdPercent(*GetScaleUpThresholdPercent());
+        if (PartitionsCount_.Defined() && (*PartitionsCount_ != describeResult.GetTopicDescription().GetTotalPartitionsCount())) {
+            settings.AlterPartitioningSettings(*PartitionsCount_, *PartitionsCount_);
         }
 
         auto codecs = GetCodecs();

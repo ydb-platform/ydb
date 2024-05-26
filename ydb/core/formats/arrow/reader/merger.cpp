@@ -163,8 +163,8 @@ void TMergePartialStream::DrainCurrentPosition(TRecordBatchBuilder* builder, std
     }
     CheckSequenceInDebug(SortHeap.Current().GetKeyColumns());
     const ui64 startPosition = SortHeap.Current().GetKeyColumns().GetPosition();
-    std::shared_ptr<TSortableScanData> startSorting = SortHeap.Current().GetKeyColumns().GetSorting();
-    std::shared_ptr<TSortableScanData> startVersion = SortHeap.Current().GetVersionColumns().GetSorting();
+    const TSortableScanData* startSorting = SortHeap.Current().GetKeyColumns().GetSorting().get();
+    const TSortableScanData* startVersion = SortHeap.Current().GetVersionColumns().GetSorting().get();
     bool isFirst = true;
     while (SortHeap.Size() && (isFirst || SortHeap.Current().GetKeyColumns().Compare(*startSorting, startPosition) == std::partial_ordering::equivalent)) {
         if (!isFirst) {
@@ -182,6 +182,7 @@ void TMergePartialStream::DrainCurrentPosition(TRecordBatchBuilder* builder, std
         SortHeap.Next();
         isFirst = false;
     }
+    SortHeap.CleanFinished();
 }
 
 std::vector<std::shared_ptr<arrow::RecordBatch>> TMergePartialStream::DrainAllParts(const std::map<TSortableBatchPosition, bool>& positions,

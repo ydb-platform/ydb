@@ -162,7 +162,7 @@ private:
         ResourceManager_ = NKikimr::NKqp::TryGetKqpResourceManager(SelfId().NodeId());
     }
 
-    void UpdateResourcesInfo() {
+    void UpdateResourcesInfo() const {
         ResourceManager_->RequestClusterResourcesInfo(
         [selfId = SelfId(), actorContext = ActorContext()](TVector<NKikimrKqp::TKqpNodeResources>&& resources) {
             actorContext.Send(selfId, new TEvPrivate::TEvResourcesInfo(resources.size()));

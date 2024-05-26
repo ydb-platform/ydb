@@ -35,7 +35,7 @@ TString FormatNumber(i64 number) {
 }
 
 void PrintStatistics(const TString& fullStat, const THashMap<TString, i64>& flatStat, const NFq::TPublicStat& publicStat, IOutputStream& output) {
-    output << "\nFlat statistic:" << Endl;
+    output << "\nFlat statistics:" << Endl;
     for (const auto& [propery, value] : flatStat) {
         TString valueString = ToString(value);
         if (propery.find("Bytes") != TString::npos || propery.find("Source") != TString::npos) {
@@ -50,7 +50,7 @@ void PrintStatistics(const TString& fullStat, const THashMap<TString, i64>& flat
         output << propery << " = " << valueString << Endl;
     }
 
-    output << "\nPublic statistic:" << Endl;
+    output << "\nPublic statistics:" << Endl;
     if (auto memoryUsageBytes = publicStat.MemoryUsageBytes) {
         output << "MemoryUsage = " << NKikimr::NBlobDepot::FormatByteSize(*memoryUsageBytes) << Endl;
     }
@@ -73,7 +73,7 @@ void PrintStatistics(const TString& fullStat, const THashMap<TString, i64>& flat
         output << "RunningTasks = " << FormatNumber(*runningTasks) << Endl;
     }
 
-    output << "\nFull statistic:" << Endl;
+    output << "\nFull statistics:" << Endl;
     NJson::TJsonValue statsJson;
     NJson::ReadJsonTree(fullStat, &statsJson);
     NJson::WriteJson(&output, &statsJson, true, true, true);
@@ -313,7 +313,7 @@ private:
 
                 outputStream << "\nCPU usage: " << cpuUsage << Endl;
                 PrintStatistics(fullStat, flatStat, publicStat, outputStream);
-            } catch(const NJson::TJsonException& ex) {
+            } catch (const NJson::TJsonException& ex) {
                 outputStream << "Error stat conversion: " << ex.what() << Endl;
             }
 

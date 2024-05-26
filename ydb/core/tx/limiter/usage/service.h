@@ -50,6 +50,7 @@ public:
     static const inline TString Name = "CMPD";
     static const inline TDuration DefaultPeriod = TDuration::Seconds(1);
     static const inline ui64 DefaultLimit = (ui64)256 * 1024 * 1024;
+    static const inline bool DefaultEnabled = true;
 };
 
 using TCompDiskOperator = TServiceOperatorImpl<TCompDiskLimiterPolicy>;

@@ -25,11 +25,13 @@ void TDistributor::Bootstrap() {
 }
 
 void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& ev) {
+    const auto now = TMonotonic::Now();
+    const TDuration dExecution = now - ev->Get()->GetStartInstant();
     Counters.SolutionsRate->Inc();
-    Counters.ExecuteHistogram->Collect((TMonotonic::Now() - ev->Get()->GetStartInstant()).MilliSeconds());
+    Counters.ExecuteHistogram->Collect(d.MilliSeconds());
     if (Waiting.size()) {
         auto task = Waiting.pop();
-        Counters.WaitingHistogram->Collect((TMonotonic::Now() - task.GetCreateInstant()).MilliSeconds());
+        Counters.WaitingHistogram->Collect((ev->Get()->GetStartInstant() - task.GetCreateInstant()).MilliSeconds());
         task.OnBeforeStart();
         Send(ev->Sender, new TEvInternal::TEvNewTask(task));
     } else {

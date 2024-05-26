@@ -83,7 +83,7 @@ private:
     };
 
 public:
-    TMrInputSerializer(TSerializerContext& context, NUdf::TUnboxedValue& state)
+    TMrInputSerializer(TSerializerContext& context, const NUdf::TUnboxedValue& state)
         : TInputSerializer(state, EMkqlStateType::SIMPLE_BLOB)
         , Context(context) {    
     }

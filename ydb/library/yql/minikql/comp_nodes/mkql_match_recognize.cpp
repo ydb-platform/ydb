@@ -289,7 +289,7 @@ public:
         return out.MakeState();
     }
 
-    bool Load2(NUdf::TUnboxedValue& state) override {
+    bool Load2(const NUdf::TUnboxedValue& state) override {
         TMrInputSerializer in(SerializerContext, state);
 
         const auto loadStateVersion = in.GetStateVersion();
@@ -437,7 +437,7 @@ public:
         return serializer.MakeState();
     }
 
-    bool Load2(NUdf::TUnboxedValue& state) override {
+    bool Load2(const NUdf::TUnboxedValue& state) override {
         TMrInputSerializer in(SerializerContext, state);
         
         const auto loadStateVersion = in.GetStateVersion();

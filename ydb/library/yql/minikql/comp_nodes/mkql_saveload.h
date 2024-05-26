@@ -216,10 +216,9 @@ public:
         }
     }
    
-    TInputSerializer(NUdf::TUnboxedValue& state, TMaybe<EMkqlStateType> expectedType = Nothing())
+    TInputSerializer(const NUdf::TUnboxedValue& state, TMaybe<EMkqlStateType> expectedType = Nothing())
         : State(StateToString(state))
         , Buf(State) {
-        state.Clear();
         Type = static_cast<EMkqlStateType>(Read<ui32>());
         Read(StateVersion);
         if (expectedType) {
@@ -316,7 +315,7 @@ public:
     }
 
 private:
-    TString StateToString(NUdf::TUnboxedValue& state) {
+    TString StateToString(const NUdf::TUnboxedValue& state) {
         TString result;
         auto listIt = state.GetListIterator();
         NUdf::TUnboxedValue str;

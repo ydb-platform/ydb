@@ -411,7 +411,7 @@
         "path": "{{data}}/ship_mode/",
         "cluster": "yq-tpc-local",
         "format": "parquet",
-        "constrains": {
+        "constraints": {
             "primary_key": ["sm_ship_mode_sk"]
         },
         "schema": [

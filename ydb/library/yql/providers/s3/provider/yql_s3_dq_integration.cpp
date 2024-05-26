@@ -217,8 +217,8 @@ public:
 
             rows = size / 1024; // magic estimate
             return primaryKey 
-                ? TOptimizerStatistics(BaseTable, rows, cols, size, size)
-                : TOptimizerStatistics(BaseTable, rows, cols, size, size, *primaryKey);
+                ? TOptimizerStatistics(BaseTable, rows, cols, size, size, *primaryKey)
+                : TOptimizerStatistics(BaseTable, rows, cols, size, size);
         } else {
             return Nothing();
         }

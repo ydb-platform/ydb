@@ -1,10 +1,10 @@
-#pragma once
+#include <iostream>
+#include <library/cpp/actors/core/actor.h>
+#include <util/generic/ptr.h>
+#include <library/cpp/actors/util/should_continue.h>
 
-#include "events.h"
+std::shared_ptr<TProgramShouldContinue> GetProgramShouldContinue();
 
-#include <istream>
-#include <ostream>
-
-THolder<NActors::IActor> CreateInputReaderActor(std::istream& input, NActors::TActorId target);
-THolder<NActors::IActor> CreateOutputWriterActor(std::ostream& output);
-THolder<NActors::IActor> CreateMaximumPrimeDevisorActor(int64_t number, NActors::TActorId readerId, NActors::TActorId writerId);
+THolder<NActors::IActor> CreateReadActor(std::istream& strm, NActors::TActorId recipient);
+THolder<NActors::IActor> CreateMaximumPrimeDevisorActor(int64_t value, NActors::TActorId readActorId, NActors::TActorId writeActorId);
+THolder<NActors::IActor> CreateWriteActor();

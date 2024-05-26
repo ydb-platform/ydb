@@ -1,0 +1,21 @@
+FeatureFlags {
+    EnableExternalDataSources: true
+    EnableScriptExecutionOperations: true
+}
+
+QueryServiceConfig {
+    Generic {
+        Connector {
+            Endpoint {
+                host: "localhost" 
+                port: 2130
+            }
+            UseSsl: false
+        }
+
+        DefaultSettings {
+            Name: "DateTimeFormat"
+            Value: "YQL"
+        }
+    }
+}

@@ -25,16 +25,6 @@ protected:
 public:
     bool Deserialize(const NKikimrSchemeOp::TColumnTableDescription& description, IErrorCollector& errors) {
         Name = description.GetName();
-        if (description.HasRESERVED_TtlSettingsPresetName() || description.HasRESERVED_TtlSettingsPresetId()) {
-            errors.AddError("TTL presets are not supported");
-            return false;
-        }
-
-        if (description.HasRESERVED_TtlSettingsPresetName() || description.HasRESERVED_TtlSettingsPresetId()) {
-            errors.AddError("TTL presets are not supported");
-            return false;
-        }
-
         ShardsCount = std::max<ui32>(description.GetColumnShardCount(), 1);
 
         if (!DoDeserialize(description, errors)) {

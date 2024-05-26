@@ -41,8 +41,8 @@ void TPartitionScaleRequest::FillProposeRequest(TEvTxUserProxy::TEvProposeTransa
 
     auto applyIf = modifyScheme.AddApplyIf();
     applyIf->SetPathId(PathId);
-    applyIf->SetPathVersion(PathVersion);
-    //applyIf->SetCheckGeneralVersion(false);
+    applyIf->SetPathVersion(PathVersion == 0 ? 1 : PathVersion);
+    applyIf->SetCheckEntityVersion(true);
 
     NKikimrSchemeOp::TPersQueueGroupDescription groupDescription;
     groupDescription.SetName(topicName);
@@ -94,6 +94,11 @@ void TPartitionScaleRequest::Handle(TEvTxUserProxy::TEvProposeTransactionStatus:
     auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(msg->Record.GetStatus());
     if (status != TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress) {
         auto scaleRequestResult = std::make_unique<TEvPartitionScaleRequestDone>(status);
+        TStringBuilder issues;
+        for (auto& issue : ev->Get()->Record.GetIssues()) {
+            issues << issue.ShortDebugString() + ", ";
+        }
+        Cerr << "\n SAVDGB " << issues << "\n";
         Send(ParentActorId, scaleRequestResult.release());
         Die(ctx);
     } else {

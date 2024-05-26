@@ -569,6 +569,33 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetScaleUpThresholdPercent(), alterScaleUpPercent);
         UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetThresholdTime().Seconds(), alterThreshold);
     }
+
+    Y_UNIT_TEST(PartitionSplit_AutosplitByLoad) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicClient client = setup.MakeClient();
+
+        TCreateTopicSettings createSettings;
+        createSettings
+            .BeginConfigurePartitioningSettings()
+            .MinActivePartitions(1)
+            .MaxActivePartitions(100)
+                .BeginConfigureAutoscalingSettings()
+                .ScaleUpThresholdPercent(2)
+                .ScaleDownThresholdPercent(1)
+                .ThresholdTime(TDuration::Seconds(1))
+                .Strategy(EAutoscalingStrategy::ScaleUp)
+                .EndConfigureAutoscalingSettings()
+            .EndConfigurePartitioningSettings();
+        client.CreateTopic(TEST_TOPIC, createSettings).Wait();
+
+        auto msg = TString("a", 1_MB);
+        auto writeSession = CreateWriteSession(client, "producer-1", 0);
+        UNIT_ASSERT(writeSession->Write(Msg(msg, 1)));
+        UNIT_ASSERT(writeSession->Write(Msg(msg, 2)));
+        Sleep(TDuration::Seconds(5));
+        auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+        UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
+    }
 }
 
 } // namespace NKikimr

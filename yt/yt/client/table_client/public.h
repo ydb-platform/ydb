@@ -370,6 +370,8 @@ DECLARE_REFCOUNTED_CLASS(TChunkWriterOptions)
 
 DECLARE_REFCOUNTED_CLASS(TVersionedRowDigestConfig)
 
+DECLARE_REFCOUNTED_CLASS(TSchemalessBufferedDynamicTableWriterConfig)
+
 class TSaveContext;
 class TLoadContext;
 using TPersistenceContext = TCustomPersistenceContext<TSaveContext, TLoadContext>;

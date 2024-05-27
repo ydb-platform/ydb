@@ -79,7 +79,7 @@ public:
         , TypeEnv(typeEnv)
         , MaxKeysInRequest(maxKeysInRequest)
         , KeyTypeHelper(keyType)
-        , Data(1000,
+        , Data(10,
             KeyTypeHelper.GetValueHash(),
             KeyTypeHelper.GetValueEqual()
         )
@@ -89,12 +89,11 @@ public:
         auto guard = Guard(*Alloc);
         KeyTypeHelper = TKeyTypeHelper{};
         Data = TTableData(0, KeyTypeHelper.GetValueHash(), KeyTypeHelper.GetValueEqual());
-        Data.clear();
     }
 
 
     void Bootstrap() {
-        YQL_CLOG(INFO, ProviderGeneric) << "New Yt proivider lookup source actor(ActorId=" << SelfId() << ") for"
+        YQL_CLOG(INFO, ProviderYt) << "New Yt proivider lookup source actor(ActorId=" << SelfId() << ") for"
                                         << " cluster=" << LookupSource.GetCluster()
                                         << ", table=" << LookupSource.GetTable();
         auto path = YtServices->GetTablePath(LookupSource.cluster(),  LookupSource.table(), false);
@@ -143,8 +142,6 @@ public:
                         break;
                 }
             }
-            Y_ABORT_UNLESS(key.IsBoxed());
-            Y_ABORT_UNLESS(payload.IsBoxed());
             Data.emplace(std::move(key), std::move(payload));
 
         }
@@ -158,7 +155,7 @@ private: //IDqAsyncLookupSource
         return MaxKeysInRequest;
     }
     void AsyncLookup(const NKikimr::NMiniKQL::TUnboxedValueVector& keys) override {
-        YQL_CLOG(INFO, ProviderGeneric) << "ActorId=" << SelfId() << " Got LookupRequest for " << keys.size() << " keys";
+        YQL_CLOG(DEBUG, ProviderYt) << "ActorId=" << SelfId() << " Got LookupRequest for " << keys.size() << " keys";
         Y_ABORT_IF(InProgress);
         Y_ABORT_IF(keys.size() > MaxKeysInRequest);
         auto guard = Guard(*Alloc);
@@ -167,8 +164,6 @@ private: //IDqAsyncLookupSource
         for (const  auto& k: keys) {
             const auto it = Data.find(k);
             lookupResult.emplace_back(k, it != Data.end() ? it->second : NUdf::TUnboxedValue{});
-            Y_ABORT_UNLESS(lookupResult.back().first.IsBoxed());
-            Y_ABORT_UNLESS(!lookupResult.back().second || lookupResult.back().second.IsBoxed());
         }
         auto ev = new IDqAsyncLookupSource::TEvLookupResult(Alloc, std::move(lookupResult));
         TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(ParentId, SelfId(), ev));

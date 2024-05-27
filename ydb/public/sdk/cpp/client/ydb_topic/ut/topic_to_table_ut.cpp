@@ -1370,6 +1370,24 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_14, TFixture)
     CommitTx(tx, EStatus::ABORTED);
 }
 
+Y_UNIT_TEST_F(WriteToTopic_Demo_15, TFixture)
+{
+    CreateTopic("topic_A");
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, "message #1", &tx);
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_1);
+    CloseTopicWriteSession("topic_A", TEST_MESSAGE_GROUP_ID_1);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, "message #2", &tx);
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_2);
+    CloseTopicWriteSession("topic_A", TEST_MESSAGE_GROUP_ID_2);
+
+    CommitTx(tx, EStatus::SUCCESS);
+}
+
 }
 
 }

@@ -8,6 +8,17 @@
 
 namespace NKikimr::NKqp::NTopic {
 
+static void UpdateSupportivePartition(TMaybe<ui32>& lhs, const TMaybe<ui32>& rhs)
+{
+    if (lhs) {
+        if ((rhs != Nothing()) && (rhs != lhs)) {
+            lhs = Max<ui32>();
+        }
+    } else {
+        lhs = rhs;
+    }
+}
+
 //
 // TConsumerOperations
 //
@@ -89,7 +100,7 @@ void TTopicPartitionOperations::AddOperation(const TString& topic, ui32 partitio
         Partition_ = partition;
     }
 
-    SupportivePartition_ = SupportivePartition_ ? Max<ui32>() : supportivePartition;
+    UpdateSupportivePartition(SupportivePartition_, supportivePartition);
 
     HasWriteOperations_ = true;
 }
@@ -133,7 +144,7 @@ void TTopicPartitionOperations::Merge(const TTopicPartitionOperations& rhs)
         TabletId_ = rhs.TabletId_;
     }
 
-    SupportivePartition_ = SupportivePartition_ ? Max<ui32>() : rhs.SupportivePartition_;
+    UpdateSupportivePartition(SupportivePartition_, rhs.SupportivePartition_);
 
     for (auto& [key, value] : rhs.Operations_) {
         Operations_[key].Merge(value);

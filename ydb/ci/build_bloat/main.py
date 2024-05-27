@@ -290,8 +290,6 @@ will be generated in output_dir"""
 
 def main():
     args = parse_args()
-    build_output_dir = "out_dir"
-    html_output = "html_out"
 
     actions = []
 

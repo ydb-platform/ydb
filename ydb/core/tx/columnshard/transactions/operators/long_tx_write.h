@@ -12,6 +12,10 @@ namespace NKikimr::NColumnShard {
         static inline auto Registrator = TFactory::TRegistrator<TLongTxTransactionOperator>(NKikimrTxColumnShard::TX_KIND_COMMIT);
 
     private:
+        virtual TString DoDebugString() const override {
+            return "LONG_TX_WRITE";
+        }
+
         virtual TProposeResult DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override;
         virtual void DoStartProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
 
@@ -24,6 +28,9 @@ namespace NKikimr::NColumnShard {
             return false;
         }
         virtual bool DoParse(TColumnShard& owner, const TString& data) override;
+        virtual bool DoCheckTxInfoForReply(const TFullTxInfo& /*originalTxInfo*/) const override {
+            return true;
+        }
         virtual bool DoCheckAllowUpdate(const TFullTxInfo& currentTxInfo) const override {
             return (currentTxInfo.Source == GetTxInfo().Source && currentTxInfo.Cookie == GetTxInfo().Cookie);
         }

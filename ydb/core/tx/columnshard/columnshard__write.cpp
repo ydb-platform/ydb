@@ -283,7 +283,7 @@ bool TProposeWriteTransaction::Execute(TTransactionContext& txc, const TActorCon
     TString txBody;
     Y_ABORT_UNLESS(proto.SerializeToString(&txBody));
     Y_UNUSED(Self->GetProgressTxController().StartProposeOnExecute(
-        TTxController::TBasicTxInfo(NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE, WriteCommit->GetTxId()), txBody, Source, Cookie, {}, txc));
+        TTxController::TTxInfo(NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE, WriteCommit->GetTxId(), Source, Cookie, {}), txBody, txc));
     return true;
 }
 

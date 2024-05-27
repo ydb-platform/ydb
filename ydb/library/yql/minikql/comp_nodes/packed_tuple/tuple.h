@@ -72,6 +72,12 @@ struct TTupleLayout {
     virtual void Pack(const ui8 **columns, const ui8 **isValidBitmask, ui8 *res,
                       std::vector<ui8, TMKQLAllocator<ui8>> &overflow,
                       ui32 start, ui32 count) const = 0;
+
+    // Takes packed rows,
+    // outputs array of pointer to columns, array of validity bitmaps
+    virtual void Unpack(ui8 **columns, ui8 **isValidBitmask, const ui8 *res,
+                        const std::vector<ui8, TMKQLAllocator<ui8>> &overflow,
+                        ui32 start, ui32 count) const = 0;
 };
 
 template <typename TTrait> struct TTupleLayoutFallback : public TTupleLayout {
@@ -81,6 +87,10 @@ template <typename TTrait> struct TTupleLayoutFallback : public TTupleLayout {
     void Pack(const ui8 **columns, const ui8 **isValidBitmask, ui8 *res,
               std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
               ui32 count) const override;
+
+    void Unpack(ui8 **columns, ui8 **isValidBitmask, const ui8 *res,
+                const std::vector<ui8, TMKQLAllocator<ui8>> &overflow,
+                ui32 start, ui32 count) const override;
 
   private:
     std::array<std::vector<TColumnDesc>, 5>
@@ -113,6 +123,12 @@ template <>
 void TTupleLayoutFallback<NSimd::TSimdFallbackTraits>::Pack(
     const ui8 **columns, const ui8 **isValidBitmask, ui8 *res,
     std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
+    ui32 count) const;
+
+template <>
+void TTupleLayoutFallback<NSimd::TSimdFallbackTraits>::Unpack(
+    ui8 **columns, ui8 **isValidBitmask, const ui8 *res,
+    const std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
     ui32 count) const;
 
 } // namespace NPackedTuple

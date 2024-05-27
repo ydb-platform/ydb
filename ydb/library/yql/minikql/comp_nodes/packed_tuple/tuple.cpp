@@ -14,46 +14,6 @@
 #include "hashes_calc.h"
 #include "packing.h"
 
-namespace {
-// Transpose 8x8 bit-matrix packed in ui64 integer
-ui64 transposeBitmatrix(ui64 x) {
-        // a b A B aa bb AA BB
-        // c d C D cc dd CC DD
-        // ->
-        // a c A C aa cc AA CC
-        // b d B D bb dd BB DD
-        // a b A B aa bb AA BB // c d C D cc dd CC DD
-        // a c A C aa cc AA CC // b d B D bb dd BB DD
-        x =
-        ((x & 0b10101010'01010101'10101010'01010101'10101010'01010101'10101010'01010101ull)) |
-        ((x & 0b01010101'00000000'01010101'00000000'01010101'00000000'01010101'00000000ull) >> 7) |
-        ((x & 0b00000000'10101010'00000000'10101010'00000000'10101010'00000000'10101010ull) << 7);
-        // a1 a2 b1 b2 A1 A2 B1 B2
-        // a3 a4 b3 b4 A3 A4 B3 B4
-        // c1 c2 d1 d2 C1 C2 D1 D2
-        // c3 c4 d3 d4 C3 C4 D3 D4
-        // ->
-        // a1 a2 c1 c2 A1 A2 C1 C2
-        // a3 a4 c3 c4 A3 A4 C3 C4
-        // b1 b2 d1 d2 B1 B2 D1 D2
-        // b3 b4 d3 d4 B3 B4 D3 D4
-        //
-        //
-        // a1 a2 b1 b2 A1 A2 B1 B2 // a3 a4 b3 b4 A3 A4 B3 B4 // c1 c2 d1 d2 C1 C2 D1 D2 // c3 c4 d3 d4 C3 C4 D3 D4
-        // ->
-        // a1 a2 c1 c2 A1 A2 C1 C2 // a3 a4 c3 c4 A3 A4 C3 C4 // b1 b2 d1 d2 B1 B2 D1 D2 // b3 b4 d3 d4 B3 B4 D3 D4
-        x =
-        ((x & 0b1100110011001100'0011001100110011'1100110011001100'0011001100110011ull)) |
-        ((x & 0b0011001100110011'0000000000000000'0011001100110011'0000000000000000ull) >> 14) |
-        ((x & 0b0000000000000000'1100110011001100'0000000000000000'1100110011001100ull) << 14);
-        x =
-        ((x & 0b11110000111100001111000011110000'00001111000011110000111100001111ull)) |
-        ((x & 0b00001111000011110000111100001111'00000000000000000000000000000000ull) >> 28) |
-        ((x & 0b00000000000000000000000000000000'11110000111100001111000011110000ull) << 28);
-        return x;
-}
-}
-
 namespace NKikimr {
 namespace NMiniKQL {
 namespace NPackedTuple {
@@ -130,6 +90,28 @@ void transposeBitmatrix(ui8 dst[], const ui8 *src[], const size_t row_size) {
 
     for (size_t ind = 0; ind != 8; ++ind) {
         dst[ind * row_size] = x;
+        x >>= 8;
+    }
+}
+
+void transposeBitmatrix(ui8 *dst[], const ui8 src[], const size_t row_size) {
+    ui64 x = 0;
+    for (size_t ind = 0; ind != 8; ++ind) {
+        x |= ui64(src[ind * row_size]) << (ind * 8);
+    }
+
+    if (x != 0xFFFFFFFFFFFFFFFFLL) {
+        /// blocked matrix transposition
+        x = x & 0xAA55AA55AA55AA55LL | (x & 0x00AA00AA00AA00AALL) << 7 |
+            (x >> 7) & 0x00AA00AA00AA00AALL;
+        x = x & 0xCCCC3333CCCC3333LL | (x & 0x0000CCCC0000CCCCLL) << 14 |
+            (x >> 14) & 0x0000CCCC0000CCCCLL;
+        x = x & 0xF0F0F0F00F0F0F0FLL | (x & 0x00000000F0F0F0F0LL) << 28 |
+            (x >> 28) & 0x00000000F0F0F0F0LL;
+    }
+
+    for (size_t ind = 7; ind != -1ul; --ind) {
+        *dst[ind] = x;
         x >>= 8;
     }
 }
@@ -516,8 +498,7 @@ void TTupleLayoutFallback<NSimd::TSimdFallbackTraits>::Pack(
             }
 
             if (anyOverflow && col.Role == EColumnRole::Key) {
-                hash =
-                    CalculateCRC32<TTraits, sizeof(ui32)>((ui8 *)&size, hash);
+                hash = CalculateCRC32<TTraits>((ui8 *)&size, sizeof(ui32), hash);
                 hash = CalculateCRC32<TTraits>(data, size, hash);
             }
         }
@@ -532,6 +513,126 @@ void TTupleLayoutFallback<NSimd::TSimdFallbackTraits>::Pack(
                                            KeyColumnsEnd - KeyColumnsOffset);
         }
         WriteUnaligned<ui32>(res, hash);
+    }
+}
+
+template <>
+void TTupleLayoutFallback<NSimd::TSimdFallbackTraits>::Unpack(
+    ui8 **columns, ui8 **isValidBitmask, const ui8 *res,
+    const std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
+    ui32 count) const {
+    std::vector<ui64> bitmaskMatrix(BitmaskSize, 0);
+
+    {
+        const auto bitmaskIdx = start / 8;
+        const auto bitmaskShift = start % 8;
+        const auto bitmaskIdxC = (start + count) / 8;
+        const auto bitmaskShiftC = (start + count) % 8;
+
+        /// ready first bitmatrix bytes
+        for (ui32 j = Columns.size(); j--;)
+            bitmaskMatrix[j / 8] |=
+                (isValidBitmask[Columns[j].OriginalIndex][bitmaskIdx] &
+                 ~(0xFF << bitmaskShift))
+                << ((j % 8) * 8);
+
+        /// ready last (which are same as above) bitmatrix bytes if needed
+        if (bitmaskIdx == bitmaskIdxC)
+            for (ui32 j = Columns.size(); j--;)
+                bitmaskMatrix[j / 8] |=
+                    (isValidBitmask[Columns[j].OriginalIndex][bitmaskIdxC] &
+                     (0xFF << bitmaskShiftC))
+                    << ((j % 8) * 8);
+
+        for (auto &m : bitmaskMatrix)
+            m = transposeBitmatrix(m);
+    }
+
+    for (auto ind = 0; ind != start % 8; ++ind) {
+        for (ui32 j = 0; j < BitmaskSize; ++j) {
+            bitmaskMatrix[j] |=
+                ui64(
+                    (res - (start % 8 - ind) * TotalRowSize)[BitmaskOffset + j])
+                << (ind * 8);
+        }
+    }
+
+    for (; count--; ++start, res += TotalRowSize) {
+        const auto bitmaskIdx = start / 8;
+        const auto bitmaskShift = start % 8;
+
+        for (ui32 j = 0; j < BitmaskSize; ++j) {
+            bitmaskMatrix[j] |= ui64(res[BitmaskOffset + j])
+                                << (bitmaskShift * 8);
+        }
+
+        if (bitmaskShift == 7 || count == 0) {
+            for (auto &m : bitmaskMatrix)
+                m = transposeBitmatrix(m);
+            for (ui32 j = Columns.size(); j--;)
+                isValidBitmask[Columns[j].OriginalIndex][bitmaskIdx] =
+                    ui8(bitmaskMatrix[j / 8] >> ((j % 8) * 8));
+            std::fill(bitmaskMatrix.begin(), bitmaskMatrix.end(), 0);
+
+            if (count && count < 8) {
+                /// ready last bitmatrix bytes
+                for (ui32 j = Columns.size(); j--;)
+                    bitmaskMatrix[j / 8] |=
+                        (isValidBitmask[Columns[j].OriginalIndex]
+                                       [bitmaskIdx + 1] &
+                         (0xFF << count))
+                        << ((j % 8) * 8);
+
+                for (auto &m : bitmaskMatrix)
+                    m = transposeBitmatrix(m);
+            }
+        }
+
+        for (auto &col : FixedNPOTColumns_) {
+            std::memcpy(columns[col.OriginalIndex] + start * col.DataSize,
+                        res + col.Offset, col.DataSize);
+        }
+
+#define PackPOTColumn(POT)                                                     \
+    for (auto &col : FixedPOTColumns_[POT]) {                                  \
+        std::memcpy(columns[col.OriginalIndex] + start * (1u << POT),          \
+                    res + col.Offset, 1u << POT);                              \
+    }
+        PackPOTColumn(0);
+        PackPOTColumn(1);
+        PackPOTColumn(2);
+        PackPOTColumn(3);
+        PackPOTColumn(4);
+#undef PackPOTColumn
+
+        for (auto &col : VariableColumns_) {
+            const auto dataOffset = ReadUnaligned<ui32>(
+                columns[col.OriginalIndex] + sizeof(ui32) * start);
+            auto *const data = columns[col.OriginalIndex + 1] + dataOffset;
+
+            ui32 size = ReadUnaligned<ui8>(res + col.Offset);
+
+            if (size < 255) { // embedded str
+                std::memcpy(data, res + col.Offset + 1, size);
+            } else { // overflow buffer used
+                const auto prefixSize = (col.DataSize - 1 - 2 * sizeof(ui32));
+                const auto overflowOffset = ReadUnaligned<ui32>(
+                    res + col.Offset + 1 + 0 * sizeof(ui32));
+                const auto overflowSize = ReadUnaligned<ui32>(
+                    res + col.Offset + 1 + 1 * sizeof(ui32));
+
+                std::memcpy(data, res + col.Offset + 1 + 2 * sizeof(ui32),
+                            prefixSize);
+                std::memcpy(data + prefixSize, overflow.data() + overflowOffset,
+                            overflowSize);
+
+                size = prefixSize + overflowSize;
+            }
+
+            WriteUnaligned<ui32>(columns[col.OriginalIndex] +
+                                     sizeof(ui32) * (start + 1),
+                                 dataOffset + size);
+        }
     }
 }
 
@@ -694,8 +795,7 @@ void TTupleLayoutFallback<TTraits>::Pack(
                                 col.DataSize - (size + 1));
                 }
                 if (anyOverflow && col.Role == EColumnRole::Key) {
-                    hash = CalculateCRC32<TTraits, sizeof(ui32)>((ui8 *)&size,
-                                                                 hash);
+                    hash = CalculateCRC32<TTraits>((ui8 *)&size, sizeof(ui32), hash);
                     hash = CalculateCRC32<TTraits>(data, size, hash);
                 }
             }
@@ -715,17 +815,171 @@ void TTupleLayoutFallback<TTraits>::Pack(
         start += cur_block_size;
         res += cur_block_size * TotalRowSize;
     }
-    template
-    __attribute__((target("avx2")))
-    void TTupleLayoutFallback<NSimd::TSimdAVX2Traits>::Pack( const ui8** columns, const ui8** isValidBitmask, ui8 * res, std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start, ui32 count) const;
-    template
-    __attribute__((target("sse4.2")))
-    void TTupleLayoutFallback<NSimd::TSimdSSE42Traits>::Pack( const ui8** columns, const ui8** isValidBitmask, ui8 * res, std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start, ui32 count) const;
 }
 
-template struct TTupleLayoutFallback<NSimd::TSimdAVX2Traits>;
-template struct TTupleLayoutFallback<NSimd::TSimdSSE42Traits>;
-template struct TTupleLayoutFallback<NSimd::TSimdFallbackTraits>;
+template <typename TTraits>
+void TTupleLayoutFallback<TTraits>::Unpack(
+    ui8 **columns, ui8 **isValidBitmask, const ui8 *res,
+    const std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
+    ui32 count) const {
+
+    std::vector<ui8 *> block_columns;
+    for (const auto col_ind : BlockColumnsOrigInds_) {
+        block_columns.push_back(columns[col_ind]);
+    }
+
+    for (size_t row_ind = 0; row_ind < count; row_ind += BlockRows_) {
+        const size_t cur_block_size = std::min(count - row_ind, BlockRows_);
+        size_t cols_past = 0;
+
+        for (const auto &simd_block : SIMDBlock_) {
+#define CASE(i, j)                                                             \
+    case i *kSIMDMaxCols + j:                                                  \
+        SIMDPack<TTraits>::template UnpackTupleOrImpl<i, j>(                   \
+            res + simd_block.RowOffset, block_columns.data() + cols_past,      \
+            cur_block_size, BlockFixedColsSizes_.data() + cols_past,           \
+            BlockColsOffsets_.data() + cols_past, TotalRowSize,                \
+            SIMDPermMasks_.data() + simd_block.PermMaskOffset + i * j, start); \
+        break;
+
+            switch ((simd_block.InnerLoopIters - 1) * kSIMDMaxCols +
+                    simd_block.Cols - 1) {
+                MULTI_8(MULTI_8_I, CASE)
+
+            default:
+                std::abort();
+            }
+
+#undef CASE
+
+            cols_past += simd_block.Cols;
+        }
+
+        UnpackTupleFallbackColImpl(
+            res, block_columns.data() + cols_past,
+            BlockColsOffsets_.size() - cols_past, cur_block_size,
+            BlockFixedColsSizes_.data() + cols_past,
+            BlockColsOffsets_.data() + cols_past, TotalRowSize, start);
+
+        for (ui32 cols_ind = 0; cols_ind < Columns.size(); cols_ind += 8) {
+            ui8 *bitmasks[8];
+            const size_t cols = std::min(8ul, Columns.size() - cols_ind);
+            for (size_t ind = 0; ind != cols; ++ind) {
+                const auto &col = Columns[cols_ind + ind];
+                bitmasks[ind] = isValidBitmask[col.OriginalIndex] + start / 8;
+            }
+            ui8 trash_byte;
+            for (size_t ind = cols; ind != 8; ++ind) {
+                bitmasks[ind] = &trash_byte; // dereferencable
+            }
+
+            const auto advance_masks = [&] {
+                for (size_t ind = 0; ind != cols; ++ind) {
+                    ++bitmasks[ind];
+                }
+            };
+
+            const size_t first_full_byte = (8u - start) & 7;
+            size_t block_row_ind = 0;
+
+            const auto simple_mask_transpose = [&](const size_t until) {
+                for (size_t col_ind = 0; col_ind != cols; ++col_ind) {
+                    auto col_bitmask =
+                        bitmasks[col_ind][0] & ~((0xFF << (block_row_ind & 7)) ^
+                                                 (0xFF << (until & 7)));
+
+                    for (size_t row_ind = block_row_ind; row_ind < until;
+                         ++row_ind) {
+                        const auto shift = (start + row_ind) % 8;
+
+                        const auto new_res = res + row_ind * TotalRowSize;
+                        const auto res = new_res;
+
+                        col_bitmask |=
+                            ((res[BitmaskOffset + cols_ind / 8] >> col_ind) &
+                             1u)
+                            << shift;
+                    }
+
+                    bitmasks[col_ind][0] = col_bitmask;
+                }
+                block_row_ind = until;
+            };
+
+            simple_mask_transpose(first_full_byte);
+            if (first_full_byte) {
+                advance_masks();
+            }
+
+            for (; block_row_ind + 7 < cur_block_size; block_row_ind += 8) {
+                transposeBitmatrix(bitmasks,
+                                   res + block_row_ind * TotalRowSize +
+                                       BitmaskOffset + cols_ind / 8,
+                                   TotalRowSize);
+                advance_masks();
+            }
+
+            simple_mask_transpose(cur_block_size);
+        }
+
+        for (size_t block_row_ind = 0; block_row_ind != cur_block_size;
+             ++block_row_ind) {
+
+            const auto new_start = start + block_row_ind;
+            const auto start = new_start;
+
+            const auto new_res = res + block_row_ind * TotalRowSize;
+            const auto res = new_res;
+
+            for (auto &col : VariableColumns_) {
+                const auto dataOffset = ReadUnaligned<ui32>(
+                    columns[col.OriginalIndex] + sizeof(ui32) * start);
+                auto *const data = columns[col.OriginalIndex + 1] + dataOffset;
+
+                ui32 size = ReadUnaligned<ui8>(res + col.Offset);
+
+                if (size < 255) { // embedded str
+                    std::memcpy(data, res + col.Offset + 1, size);
+                } else { // overflow buffer used
+                    const auto prefixSize =
+                        (col.DataSize - 1 - 2 * sizeof(ui32));
+                    const auto overflowOffset = ReadUnaligned<ui32>(
+                        res + col.Offset + 1 + 0 * sizeof(ui32));
+                    const auto overflowSize = ReadUnaligned<ui32>(
+                        res + col.Offset + 1 + 1 * sizeof(ui32));
+
+                    std::memcpy(data, res + col.Offset + 1 + 2 * sizeof(ui32),
+                                prefixSize);
+                    std::memcpy(data + prefixSize,
+                                overflow.data() + overflowOffset, overflowSize);
+
+                    size = prefixSize + overflowSize;
+                }
+
+                WriteUnaligned<ui32>(columns[col.OriginalIndex] +
+                                         sizeof(ui32) * (start + 1),
+                                     dataOffset + size);
+            }
+        }
+
+        start += cur_block_size;
+        res += cur_block_size * TotalRowSize;
+    }
+}
+
+template
+__attribute__((target("avx2")))
+void TTupleLayoutFallback<NSimd::TSimdAVX2Traits>::Pack(const ui8** columns, const ui8** isValidBitmask, ui8 * res, std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start, ui32 count) const;
+template
+__attribute__((target("sse4.2")))
+void TTupleLayoutFallback<NSimd::TSimdSSE42Traits>::Pack(const ui8** columns, const ui8** isValidBitmask, ui8 * res, std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start, ui32 count) const;
+
+template
+__attribute__((target("avx2")))
+void TTupleLayoutFallback<NSimd::TSimdAVX2Traits>::Unpack(ui8 **columns, ui8 **isValidBitmask, const ui8 *res, const std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start, ui32 count) const;
+template
+__attribute__((target("sse4.2")))
+void TTupleLayoutFallback<NSimd::TSimdSSE42Traits>::Unpack(ui8 **columns, ui8 **isValidBitmask, const ui8 *res, const std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start, ui32 count) const;
 
 } // namespace NPackedTuple
 } // namespace NMiniKQL

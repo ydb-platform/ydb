@@ -28,7 +28,7 @@ void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& ev) {
     const auto now = TMonotonic::Now();
     const TDuration dExecution = now - ev->Get()->GetStartInstant();
     Counters.SolutionsRate->Inc();
-    Counters.ExecuteHistogram->Collect(d.MilliSeconds());
+    Counters.ExecuteHistogram->Collect(dExecution.MilliSeconds());
     if (Waiting.size()) {
         auto task = Waiting.pop();
         Counters.WaitingHistogram->Collect((ev->Get()->GetStartInstant() - task.GetCreateInstant()).MilliSeconds());

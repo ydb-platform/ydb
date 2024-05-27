@@ -76,7 +76,7 @@ public:
         if (TxOperator->IsFail()) {
             TxOperator->SendReply(*Self, ctx);
         } else {
-            if (!(*TxInfo == TxOperator->GetTxInfo())) {
+            if (!TxOperator->CheckTxInfoForReply(*TxInfo)) {
                 return;
             }
             if (TxOperator->IsAsync()) {

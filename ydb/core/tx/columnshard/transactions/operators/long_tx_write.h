@@ -28,6 +28,9 @@ namespace NKikimr::NColumnShard {
             return false;
         }
         virtual bool DoParse(TColumnShard& owner, const TString& data) override;
+        virtual bool DoCheckTxInfoForReply(const TFullTxInfo& /*originalTxInfo*/) const override {
+            return true;
+        }
         virtual bool DoCheckAllowUpdate(const TFullTxInfo& currentTxInfo) const override {
             return (currentTxInfo.Source == GetTxInfo().Source && currentTxInfo.Cookie == GetTxInfo().Cookie);
         }

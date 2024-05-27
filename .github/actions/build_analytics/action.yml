@@ -31,7 +31,7 @@ runs:
       run: |
         export TARGET_NAME=`basename ${{ inputs.build_target }}`
         export TARGET_DIR=${{ inputs.build_target }}
-        ya tool bloat --linker-map $TARGET_DIR/${TARGET_NAME}.map.lld --input $TARGET_DIR/$TARGET_NAME --save-html ya_bloat_html
+        ./ya tool bloat --linker-map $TARGET_DIR/${TARGET_NAME}.map.lld --input $TARGET_DIR/$TARGET_NAME --save-html ya_bloat_html
 
     - name: Upload results
       shell: bash

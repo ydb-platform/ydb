@@ -12,21 +12,21 @@
 using namespace NYql;
 using namespace NYql::NUdf;
 
-template <typename To>
+template <typename T>
 class TKnnVectorSerializer {
 public:
     static TUnboxedValue Serialize(const IValueBuilder* valueBuilder, const TUnboxedValue x) {
         auto serialize = [&](IOutputStream& outStream) {
             EnumerateVector(x, [&](float from) {
-                To to = static_cast<To>(from);
-                outStream.Write(&to, sizeof(To));
+                T to = static_cast<T>(from);
+                outStream.Write(&to, sizeof(T));
             });
-            const auto format = Format<To>;
+            const auto format = Format<T>;
             outStream.Write(&format, HeaderLen);
         };
 
         if (x.HasFastListLength()) {
-            auto str = valueBuilder->NewStringNotFilled(x.GetListLength() * sizeof(To) + HeaderLen);
+            auto str = valueBuilder->NewStringNotFilled(x.GetListLength() * sizeof(T) + HeaderLen);
             auto strRef = str.AsStringRef();
             TMemoryOutput memoryOutput(strRef.Data(), strRef.Size());
 
@@ -56,16 +56,16 @@ public:
         return res.Release();
     }
 
-    static TArrayRef<const To> GetArray(const TStringRef& str) {
-        const auto* buf = str.Data();
-        const auto len = str.Size() - HeaderLen;
+    static TArrayRef<const T> GetArray(const TStringRef& str) {
+        const char* buf = str.Data();
+        const size_t len = str.Size() - HeaderLen;
 
-        if (Y_UNLIKELY(len % sizeof(To) != 0))
+        if (Y_UNLIKELY(len % sizeof(T) != 0))
             return {};
 
-        const ui32 count = len / sizeof(To);
+        const ui32 count = len / sizeof(T);
 
-        return {reinterpret_cast<const To*>(buf), count};
+        return {reinterpret_cast<const T*>(buf), count};
     }
 };
 

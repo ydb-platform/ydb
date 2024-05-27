@@ -90,6 +90,24 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
             }
             return &it->second;
         }
+
+        TClientState* GetActive() {
+            return ByClient.FindPtr(LastClient);
+        }
+
+        bool IsActive(const TActorId& client) const {
+            return client == LastClient;
+        }
+
+        bool IsActive(TClientState* clientState) const {
+            return clientState->Client == LastClient;
+        }
+
+        void Deactivate(const TActorId& client) {
+            if (LastClient == client) {
+                LastClient = TActorId();
+            }
+        }
     };
 
     struct TPeerState {
@@ -127,6 +145,24 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
         }
     }
 
+    void RemoveClientPeer(TTabletState* tabletState, TClientState* clientState, const TActorId& peer) {
+        clientState->Peers.erase(peer);
+
+        // Remove old clients that no longer have any peers
+        if (clientState->Peers.empty() && !tabletState->IsActive(clientState)) {
+            TActorId client = clientState->Client;
+            if (Counters) {
+                if (clientState->Connected) {
+                    Counters.PipesInactive->Dec();
+                } else {
+                    Counters.PipesConnecting->Dec();
+                }
+            }
+            NTabletPipe::CloseClient(SelfId(), client);
+            tabletState->ByClient.erase(client);
+        }
+    }
+
     void UnlinkOne(TActorId peer, ui64 tablet) {
         auto *tabletState = FindTablet(tablet);
         if (Y_UNLIKELY(!tabletState))
@@ -138,30 +174,17 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
 
         auto *clientState = byPeerIt->second;
         Y_ABORT_UNLESS(clientState, "Unexpected nullptr in tablet's ByPeer links");
-        clientState->Peers.erase(peer);
         tabletState->ByPeer.erase(byPeerIt);
 
-        // Remove old clients that no longer have any peers
-        if (clientState->Peers.empty() && clientState->Client != tabletState->LastClient) {
-            auto clientId = clientState->Client;
-            if (Counters) {
-                if (clientState->Connected) {
-                    Counters.PipesInactive->Dec();
-                } else {
-                    Counters.PipesConnecting->Dec();
-                }
-            }
-            NTabletPipe::CloseClient(SelfId(), clientId);
-            tabletState->ByClient.erase(clientId);
-        }
+        RemoveClientPeer(tabletState, clientState, peer);
 
         // Avoid keeping dead tablets forever
-        if (tabletState->ByClient.empty() && !tabletState->LastClient) {
+        if (tabletState->ByClient.empty()) {
             ForgetTablet(tablet);
         }
     }
 
-    void DropClient(ui64 tablet, TActorId client, bool notDelivered) {
+    void DropClient(ui64 tablet, TActorId client, bool connected, bool notDelivered, bool isDeleted) {
         auto *tabletState = FindTablet(tablet);
         if (Y_UNLIKELY(!tabletState))
             return;
@@ -175,16 +198,11 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
             const ui64 seqNo = kv.second.SeqNo;
             const ui64 cookie = kv.second.Cookie;
             const bool msgNotDelivered = notDelivered || seqNo > clientState->MaxForwardedSeqNo;
-            Send(peer, new TEvPipeCache::TEvDeliveryProblem(tablet, msgNotDelivered), 0, cookie);
+            Send(peer, new TEvPipeCache::TEvDeliveryProblem(tablet, connected, msgNotDelivered, isDeleted), 0, cookie);
 
             tabletState->ByPeer.erase(peer);
 
-            auto byPeerIt = ByPeer.find(peer);
-            Y_ABORT_UNLESS(byPeerIt != ByPeer.end());
-            byPeerIt->second.ConnectedToTablet.erase(tablet);
-            if (byPeerIt->second.ConnectedToTablet.empty()) {
-                ForgetPeer(byPeerIt);
-            }
+            RemovePeerTablet(peer, tablet);
         }
         clientState->Peers.clear();
 
@@ -194,7 +212,7 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
 
         if (Counters) {
             if (clientState->Connected) {
-                if (tabletState->LastClient == client) {
+                if (tabletState->IsActive(clientState)) {
                     Counters.PipesActive->Dec();
                 } else {
                     Counters.PipesInactive->Dec();
@@ -205,12 +223,10 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
         }
 
         tabletState->ByClient.erase(client);
-        if (tabletState->LastClient == client) {
-            tabletState->LastClient = TActorId();
-        }
+        tabletState->Deactivate(client);
 
         // Avoid keeping dead tablets forever
-        if (tabletState->ByClient.empty() && !tabletState->LastClient) {
+        if (tabletState->ByClient.empty()) {
             ForgetTablet(tablet);
         }
     }
@@ -283,6 +299,15 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
         return &ByPeer[peer];
     }
 
+    void RemovePeerTablet(const TActorId& peer, ui64 tablet) {
+        auto it = ByPeer.find(peer);
+        Y_ABORT_UNLESS(it != ByPeer.end());
+        it->second.ConnectedToTablet.erase(tablet);
+        if (it->second.ConnectedToTablet.empty()) {
+            ForgetPeer(it);
+        }
+    }
+
     void ForgetPeer(TByPeer::iterator peerIt) {
         ByPeer.erase(peerIt);
         if (Counters) {
@@ -293,17 +318,25 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
     void Handle(TEvPipeCache::TEvForward::TPtr &ev) {
         TEvPipeCache::TEvForward *msg = ev->Get();
         const ui64 tablet = msg->TabletId;
-        const bool subscribe = msg->Subscribe;
-        const ui64 subscribeCookie = msg->SubscribeCookie;
+        const bool subscribe = msg->Options.Subscribe;
+        const ui64 subscribeCookie = msg->Options.SubscribeCookie;
         const TActorId peer = ev->Sender;
         const ui64 cookie = ev->Cookie;
         NWilson::TTraceId traceId = std::move(ev->TraceId);
+
+        // Don't create an empty tablet record that won't be used
+        if (Y_UNLIKELY(!msg->Options.AutoConnect && !ByTablet.contains(tablet))) {
+            if (subscribe) {
+                Send(peer, new TEvPipeCache::TEvDeliveryProblem(tablet, false, true, false), 0, subscribeCookie);
+            }
+            return;
+        }
 
         auto *tabletState = EnsureTablet(tablet);
 
         TClientState *clientState = nullptr;
 
-        // Prefer using the same pipe after subscription
+        // Use the same pipe after subscription unless resubscribing
         if (!subscribe) {
             auto it = tabletState->ByPeer.find(peer);
             if (it != tabletState->ByPeer.end()) {
@@ -313,28 +346,29 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
 
         // Ensure there's a valid pipe for sending messages
         if (!clientState) {
-            clientState = EnsureClient(tabletState, tablet);
+            if (Y_LIKELY(msg->Options.AutoConnect)) {
+                clientState = EnsureClient(tabletState, tablet);
+            } else if (Y_UNLIKELY(subscribe)) {
+                // Use the last active client or send the delivery problem immediately
+                // Note that this is not a typical use-case, implemented for completeness
+                clientState = tabletState->GetActive();
+                if (!clientState) {
+                    Send(peer, new TEvPipeCache::TEvDeliveryProblem(tablet, false, true, false), 0, subscribeCookie);
+                    return;
+                }
+            } else {
+                return;
+            }
         }
+
+        Y_ABORT_UNLESS(clientState);
 
         if (subscribe) {
             TClientState *&link = tabletState->ByPeer[peer];
             if (link != clientState) {
                 if (Y_UNLIKELY(link)) {
                     // Resubscribing to a new pipe
-                    link->Peers.erase(peer);
-                    if (link->Peers.empty()) {
-                        auto oldClient = link->Client;
-                        Y_ABORT_UNLESS(oldClient != tabletState->LastClient);
-                        if (Counters) {
-                            if (link->Connected) {
-                                Counters.PipesInactive->Dec();
-                            } else {
-                                Counters.PipesConnecting->Dec();
-                            }
-                        }
-                        NTabletPipe::CloseClient(SelfId(), oldClient);
-                        tabletState->ByClient.erase(oldClient);
-                    }
+                    RemoveClientPeer(tabletState, link, peer);
                 } else {
                     // Register new peer to tablet connection
                     EnsurePeer(peer)->ConnectedToTablet.insert(tablet);
@@ -381,7 +415,7 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
             if (Counters) {
                 Counters.EventConnectFailure->Inc();
             }
-            return DropClient(msg->TabletId, msg->ClientId, true);
+            return DropClient(msg->TabletId, msg->ClientId, false, true, msg->Dead);
         } else {
             if (Counters) {
                 Counters.EventConnectOk->Inc();
@@ -395,7 +429,7 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
                 clientState->NodeId = msg->ServerId.NodeId();
                 clientState->Connected = true;
                 if (Counters) {
-                    if (tabletState->LastClient == msg->ClientId) {
+                    if (tabletState->IsActive(clientState)) {
                         Counters.PipesActive->Inc();
                     } else {
                         Counters.PipesInactive->Inc();
@@ -427,13 +461,13 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
             if (clientState) {
                 clientState->MaxForwardedSeqNo = msg->MaxForwardedSeqNo;
             }
-            if (tabletState->LastClient == msg->ClientId) {
+            if (tabletState->IsActive(msg->ClientId)) {
                 Y_ABORT_UNLESS(clientState, "Missing expected client state for active client");
                 if (Counters && Y_LIKELY(clientState->Connected)) {
                     Counters.PipesInactive->Inc();
                     Counters.PipesActive->Dec();
                 }
-                tabletState->LastClient = TActorId();
+                tabletState->Deactivate(msg->ClientId);
                 if (clientState->Peers.empty()) {
                     if (Counters) {
                         if (Y_LIKELY(clientState->Connected)) {
@@ -461,7 +495,7 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
             Counters.EventDisconnect->Inc();
         }
 
-        DropClient(msg->TabletId, msg->ClientId, false);
+        DropClient(msg->TabletId, msg->ClientId, true, false, false);
     }
 
 public:
@@ -491,14 +525,48 @@ public:
     }
 };
 
+NTabletPipe::TClientConfig TPipePeNodeCacheConfig::DefaultPipeConfig() {
+    NTabletPipe::TClientConfig config;
+    config.RetryPolicy = {
+        .RetryLimitCount = 3,
+    };
+    return config;
+}
+
+NTabletPipe::TClientConfig TPipePeNodeCacheConfig::DefaultPersistentPipeConfig() {
+    NTabletPipe::TClientConfig config;
+    config.CheckAliveness = true;
+    config.RetryPolicy = {
+        .RetryLimitCount = 30,
+        .MinRetryTime = TDuration::MilliSeconds(10),
+        .MaxRetryTime = TDuration::MilliSeconds(500),
+        .BackoffMultiplier = 2,
+    };
+    return config;
+}
+
 IActor* CreatePipePeNodeCache(const TIntrusivePtr<TPipePeNodeCacheConfig> &config) {
     return new TPipePeNodeCache(config);
 }
 
-TActorId MakePipePeNodeCacheID(bool allowFollower) {
+TActorId MakePipePeNodeCacheID(EPipePeNodeCache kind) {
     char x[12] = "PipeCache";
-    x[9] = allowFollower ? 'F' : 'A';
+    switch (kind) {
+        case EPipePeNodeCache::Leader:
+            x[9] = 'A';
+            break;
+        case EPipePeNodeCache::Follower:
+            x[9] = 'F';
+            break;
+        case EPipePeNodeCache::Persistent:
+            x[9] = 'P';
+            break;
+    }
     return TActorId(0, TStringBuf(x, 12));
+}
+
+TActorId MakePipePeNodeCacheID(bool allowFollower) {
+    return MakePipePeNodeCacheID(allowFollower ? EPipePeNodeCache::Follower : EPipePeNodeCache::Leader);
 }
 
 }

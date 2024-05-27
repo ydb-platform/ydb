@@ -112,9 +112,11 @@ bool TController::IsTrivialLinks() const {
     TGuard<TMutex> g(Mutex);
     for (auto&& i : ShardActuals) {
         if (!i.second->GetStoragesManager()->GetSharedBlobsManager()->IsTrivialLinks()) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("reason", "non_trivial");
             return false;
         }
         if (i.second->GetStoragesManager()->HasBlobsToDelete()) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("reason", "has_delete");
             return false;
         }
     }

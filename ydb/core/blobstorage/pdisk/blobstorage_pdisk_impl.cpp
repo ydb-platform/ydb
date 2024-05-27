@@ -305,6 +305,7 @@ void TPDisk::Stop() {
         LOG_NOTICE_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId
                 << " shutdown owner info# " << StartupOwnerInfo());
     }
+
     BlockDevice->Stop();
 
     // BlockDevice is stopped, the data will NOT hit the disk.

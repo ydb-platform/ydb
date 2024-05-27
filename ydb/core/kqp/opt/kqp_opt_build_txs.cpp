@@ -578,7 +578,8 @@ public:
             .Add(*BuildTxTransformer, "BuildPhysicalTx")
             .Add(CreateKqpTxPeepholeTransformer(
                 TypeAnnTransformer.Get(), typesCtx, config,
-                /* withFinalStageRules */ config->BlockChannelsMode == NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_FORCE),
+                /* withFinalStageRules */ config->BlockChannelsMode == NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_FORCE,
+                {"KqpPeephole-RewriteCrossJoin"}),
                 "Peephole")
             .Build(false);
 
@@ -589,7 +590,7 @@ public:
             .AddPostTypeAnnotation(/* forSubgraph */ true)
             .Add(CreateKqpBuildPhyStagesTransformer(config->SpillingEnabled(), typesCtx, config->BlockChannelsMode), "BuildPhysicalStages")
             .Add(*BuildTxTransformer, "BuildPhysicalTx")
-            .Add(CreateKqpTxPeepholeTransformer(TypeAnnTransformer.Get(), typesCtx, config, /* withFinalStageRules */ false), "Peephole")
+            .Add(CreateKqpTxPeepholeTransformer(TypeAnnTransformer.Get(), typesCtx, config, /* withFinalStageRules */ false, {"KqpPeephole-RewriteCrossJoin"}), "Peephole")
             .Build(false);
     }
 

@@ -170,6 +170,9 @@
                                                                                                         "Inputs": [
                                                                                                             {
                                                                                                                 "InternalOperatorId": 1
+                                                                                                            },
+                                                                                                            {
+                                                                                                                "InternalOperatorId": 1
                                                                                                             }
                                                                                                         ],
                                                                                                         "Name": "Aggregate"

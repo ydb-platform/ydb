@@ -50,7 +50,7 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
         auto writeId = TWriteId(writeMeta.GetWriteId());
         if (!operation) {
             NIceDb::TNiceDb db(txc.DB);
-            writeId = Self->GetLongTxWrite(db, writeMeta.GetLongTxIdUnsafe(), writeMeta.GetWritePartId());
+            writeId = Self->GetLongTxWrite(db, writeMeta.GetLongTxIdUnsafe(), writeMeta.GetWritePartId(), writeMeta.GetGranuleShardingVersion());
             aggr->AddWriteId(writeId);
         }
 

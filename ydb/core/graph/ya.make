@@ -1,8 +1,3 @@
-OWNER(
-    xenoxeno
-    g:kikimr
-)
-
 RECURSE(
     api
     service

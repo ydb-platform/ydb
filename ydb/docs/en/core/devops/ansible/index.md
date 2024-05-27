@@ -4,5 +4,8 @@ This section of {{ ydb-short-name }} documentation contains a collection of arti
 
 The key articles to get started with this section:
 
-* [Initial deployment](initial-deployment.md)
-* [Preparing VMs with Terraform](preparing-vms-with-terraform.md)
+* [{#T}](initial-deployment.md)
+* [{#T}](preparing-vms-with-terraform.md)
+* [{#T}](restart.md)
+* Observability:
+  * [{#T}](observability/logging.md)

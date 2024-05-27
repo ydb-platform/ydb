@@ -178,6 +178,8 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvDeleteSessionResult::TPtr& ev) {
 
 void TQueryBase::Handle(TEvQueryBasePrivate::TEvDataQueryResult::TPtr& ev) {
     Y_ABORT_UNLESS(RunningQuery);
+    NumberRequests++;
+    AmountRequestsTime += TInstant::Now() - RequestStartTime;
     RunningQuery = false;
     TxId = ev->Get()->Result.tx_meta().id();
     LOG_D("TQueryBase. TEvDataQueryResult " << ev->Get()->Status << ", Issues: \"" << ev->Get()->Issues.ToOneLineString() << "\", SessionId: " << SessionId << ", TxId: " << TxId);
@@ -273,6 +275,7 @@ void TQueryBase::RunDeleteSession() {
 
 void TQueryBase::RunDataQuery(const TString& sql, NYdb::TParamsBuilder* params, TTxControl txControl) {
     Y_ABORT_UNLESS(!RunningQuery);
+    RequestStartTime = TInstant::Now();
     RunningQuery = true;
     LOG_D("RunDataQuery: " << sql);
     using TEvExecuteDataQueryRequest = NGRpcService::TGrpcRequestOperationCall<Ydb::Table::ExecuteDataQueryRequest,
@@ -326,6 +329,16 @@ void TQueryBase::CommitTransaction() {
 
 void TQueryBase::CallOnQueryResult() {
     OnQueryResult();
+}
+
+void TQueryBase::ClearTimeInfo() {
+    AmountRequestsTime = TDuration::Zero();
+    NumberRequests = 0;
+}
+
+TDuration TQueryBase::GetAverageTime() {
+    Y_ABORT_UNLESS(NumberRequests);
+    return AmountRequestsTime / NumberRequests;
 }
 
 } // namespace NKikimr

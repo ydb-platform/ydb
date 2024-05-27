@@ -1,3 +1,5 @@
+#pragma once
+
 #include "dq_opt.h"
 
 #include <ydb/library/yql/core/yql_type_annotation.h>

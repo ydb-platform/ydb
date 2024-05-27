@@ -198,8 +198,10 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
                             (Component, comp), (ReplicaId, replicaId), (Index, index), (Config, *info));
                         as->RegisterLocalService(replicaId, as->Register(factory(info, index), TMailboxType::ReadAsFilled,
                             AppData()->SystemPoolId));
+                    } else if (which == &StateStorageInfo) {
+                        Send(replicaId, new TEvStateStorage::TEvUpdateGroupConfig(info, nullptr, nullptr));
                     } else {
-                        // TODO(alexvru): update replica configuration somehow
+                        // TODO(alexvru): update other kinds of replicas
                     }
                 }
             }

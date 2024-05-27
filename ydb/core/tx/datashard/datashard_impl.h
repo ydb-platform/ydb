@@ -33,6 +33,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/engine/mkql_engine_flat_host.h>
@@ -1264,6 +1265,7 @@ class TDataShard
     void Handle(TEvPrivate::TEvPersistScanState::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext& ctx);
@@ -1397,7 +1399,6 @@ class TDataShard
     }
 
     void UpdateLagCounters(const TActorContext &ctx);
-    static NTabletPipe::TClientConfig GetPipeClientConfig();
 
     void OnDetach(const TActorContext &ctx) override;
     void OnTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const TActorContext &ctx) override;
@@ -1415,9 +1416,13 @@ class TDataShard
 
     TMaybe<TInstant> GetTxPlanStartTimeAndCleanup(ui64 step);
 
-    void RestartPipeRS(ui64 tabletId, const TActorContext& ctx);
-    void AckRSToDeletedTablet(ui64 tabletId, const TActorContext& ctx);
+    struct TPersistentTablet;
+
+    TPersistentTablet& SendPersistent(ui64 tabletId, IEventBase* event, ui64 cookie = 0);
+
+    void AckRSToDeletedTablet(ui64 tabletId, TPersistentTablet& state, const TActorContext& ctx);
     void AbortExpectationsFromDeletedTablet(ui64 tabletId, THashMap<ui64, ui64>&& expectations);
+    void RestartPipeRS(ui64 tabletId, TPersistentTablet& state, const TActorContext& ctx);
 
     void DefaultSignalTabletActive(const TActorContext &ctx) override {
         // This overriden in order to pospone SignalTabletActive until TxInit completes
@@ -1563,7 +1568,6 @@ public:
     ui64 GetMaxTxInFly() { return MaxTxInFly; }
 
     static constexpr ui64 DefaultTxStepDeadline() { return 30 * 1000; }
-    static constexpr ui64 PipeClientCachePoolLimit() { return 100; }
 
     ui64 TxInFly() const { return TransQueue.TxInFly(); }
     ui64 TxPlanned() const { return TransQueue.TxPlanned(); }
@@ -2557,9 +2561,7 @@ private:
     TProposeQueue ProposeQueue;
     TVector<THolder<IEventHandle>> DelayedProposeQueue;
 
-    TIntrusivePtr<NTabletPipe::TBoundedClientCacheConfig> PipeClientCacheConfig;
-    THolder<NTabletPipe::IClientCache> PipeClientCache;
-    TPipeTracker ResendReadSetPipeTracker;
+    TActorId PersistentPipeCache;
     NTabletPipe::TClientRetryPolicy SchemeShardPipeRetryPolicy;
     TActorId SchemeShardPipe;   // For notifications about schema changes
     TActorId StateReportPipe;   // For notifications about shard state changes
@@ -2713,6 +2715,17 @@ private:
 
     // Simple volatile counter
     ui64 NextTieBreakerIndex = 1;
+
+    struct TPersistentTablet {
+        // Outgoing readsets currently inflight (SeqNo)
+        absl::flat_hash_set<ui64> OutReadSets;
+        // When true the pipe is currently subscribed
+        bool Subscribed = false;
+
+        bool IsEmpty() const;
+    };
+
+    THashMap<ui64, TPersistentTablet> PersistentTablets;
 
     struct TInFlightCondErase {
         ui64 TxId;
@@ -3000,6 +3013,7 @@ protected:
             HFuncTraced(TEvPrivate::TEvPersistScanState, Handle);
             HFuncTraced(TEvTabletPipe::TEvClientConnected, Handle);
             HFuncTraced(TEvTabletPipe::TEvClientDestroyed, Handle);
+            HFuncTraced(TEvPipeCache::TEvDeliveryProblem, Handle);
             HFuncTraced(TEvTabletPipe::TEvServerConnected, Handle);
             HFuncTraced(TEvTabletPipe::TEvServerDisconnected, Handle);
             HFuncTraced(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
@@ -3113,34 +3127,7 @@ protected:
         }
     }
 
-    void Die(const TActorContext &ctx) override {
-        NTabletPipe::CloseAndForgetClient(SelfId(), SchemeShardPipe);
-        NTabletPipe::CloseAndForgetClient(SelfId(), StateReportPipe);
-        NTabletPipe::CloseAndForgetClient(SelfId(), DbStatsReportPipe);
-        NTabletPipe::CloseAndForgetClient(SelfId(), TableResolvePipe);
-
-        if (ReplicationSourceOffsetsServer) {
-            InvokeOtherActor(*ReplicationSourceOffsetsServer, &TReplicationSourceOffsetsServer::PassAway);
-        }
-
-        for (const TActorId& actorId : Actors) {
-            Send(actorId, new TEvents::TEvPoison);
-        }
-        Actors.clear();
-
-        KillChangeSender(ctx);
-        ChangeSenderActivator.Shutdown(ctx);
-        ChangeExchangeSplitter.Shutdown(ctx);
-
-        StopFindSubDomainPathId();
-        StopWatchingSubDomainPathId();
-        UnsubscribeReadIteratorSessions(ctx);
-
-        LoanReturnTracker.Shutdown(ctx);
-        Y_ABORT_UNLESS(LoanReturnTracker.Empty());
-        SplitSrcSnapshotSender.Shutdown(ctx);
-        return IActor::Die(ctx);
-    }
+    void Die(const TActorContext &ctx) override;
 
     void SendViaSchemeshardPipe(const TActorContext &ctx, ui64 tabletId, THolder<TEvDataShard::TEvSchemaChanged> event) {
         Y_ABORT_UNLESS(tabletId);

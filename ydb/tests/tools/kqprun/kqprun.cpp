@@ -32,7 +32,7 @@ struct TExecutionOptions {
     EClearExecutionCase ClearExecution = EClearExecutionCase::Disabled;
     NKikimrKqp::EQueryAction ScriptQueryAction = NKikimrKqp::QUERY_ACTION_EXECUTE;
 
-    TString TraceId = "kqprun";
+    TString TraceId = "kqprun_" + CreateGuidAsString();
 
     bool HasResults() const {
         return !ScriptQueries.empty() && ScriptQueryAction == NKikimrKqp::QUERY_ACTION_EXECUTE;
@@ -163,6 +163,7 @@ void RunMain(int argc, const char* argv[]) {
     TString schemeQueryAstFile;
     TString scriptQueryAstFile;
     TString scriptQueryPlanFile;
+    TString inProgressStatisticsFile;
     TString logFile = "-";
     TString appConfigFile = "./configuration/app_config.conf";
     std::vector<TString> tablesMappingList;
@@ -218,6 +219,10 @@ void RunMain(int argc, const char* argv[]) {
         .Optional()
         .RequiredArgument("FILE")
         .StoreResult(&scriptQueryPlanFile);
+    options.AddLongOption("in-progress-statistics", "File with script inprogress statistics")
+        .Optional()
+        .RequiredArgument("FILE")
+        .StoreResult(&inProgressStatisticsFile);
 
     options.AddLongOption('C', "clear-execution", "Execute script query without creating additional tables, one of { query | yql-script }")
         .Optional()
@@ -319,6 +324,10 @@ void RunMain(int argc, const char* argv[]) {
     THolder<TFileOutput> scriptQueryAstFileHolder = SetupDefaultFileOutput(scriptQueryAstFile, runnerOptions.ScriptQueryAstOutput);
     THolder<TFileOutput> scriptQueryPlanFileHolder = SetupDefaultFileOutput(scriptQueryPlanFile, runnerOptions.ScriptQueryPlanOutput);
 
+    if (inProgressStatisticsFile) {
+        runnerOptions.InProgressStatisticsOutputFile = inProgressStatisticsFile;
+    }
+
     runnerOptions.TraceOptType = GetCaseVariant<NKqpRun::TRunnerOptions::ETraceOptType>("trace-opt", traceOptType, {
         {"all", NKqpRun::TRunnerOptions::ETraceOptType::All},
         {"scheme", NKqpRun::TRunnerOptions::ETraceOptType::Scheme},
@@ -399,8 +408,20 @@ void KqprunTerminateHandler() {
 }
 
 
+void SegmentationFaultHandler(int) {
+    NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
+
+    Cerr << colors.Red() << "======= segmentation fault call stack ========" << colors.Default() << Endl;
+    FormatBackTrace(&Cerr);
+    Cerr << colors.Red() << "==============================================" << colors.Default() << Endl;
+
+    abort();
+}
+
+
 int main(int argc, const char* argv[]) {
     std::set_terminate(KqprunTerminateHandler);
+    signal(SIGSEGV, &SegmentationFaultHandler);
 
     try {
         RunMain(argc, argv);

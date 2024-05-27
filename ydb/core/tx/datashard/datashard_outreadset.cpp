@@ -162,7 +162,12 @@ void TOutReadSets::Cleanup(NIceDb::TNiceDb& db, const TActorContext& ctx) {
             Self->TabletID(), sender, dest, consumer, seqno, txId);
 
         RemoveReadSet(db, seqno);
-        Self->ResendReadSetPipeTracker.DetachTablet(seqno, ev.Record.GetTabletDest(), 0, ctx);
+
+        if (auto it = Self->PersistentTablets.find(ev.Record.GetTabletDest());
+            it != Self->PersistentTablets.end())
+        {
+            it->second.OutReadSets.erase(seqno);
+        }
     }
     ReadSetAcks.clear();
     AckedSeqno.clear();
@@ -171,23 +176,19 @@ void TOutReadSets::Cleanup(NIceDb::TNiceDb& db, const TActorContext& ctx) {
 }
 
 void TOutReadSets::ResendAll(const TActorContext& ctx) {
-    TPendingPipeTrackerCommands pendingPipeTrackerCommands;
     for (const auto& rs : CurrentReadSets) {
         if (rs.second.OnHold) {
             continue;
         }
         ui64 seqNo = rs.first;
-        ui64 target = rs.second.To;
         Self->ResendReadSetQueue.Progress(seqNo, ctx);
-        pendingPipeTrackerCommands.AttachTablet(seqNo, target);
     }
-    pendingPipeTrackerCommands.Apply(Self->ResendReadSetPipeTracker, ctx);
 }
 
 void TOutReadSets::HoldArbiterReadSets() {
     for (auto& rs : CurrentReadSets) {
-        const ui64& seqNo = rs.first;
-        const ui64& txId = rs.second.TxId;
+        ui64 seqNo = rs.first;
+        ui64 txId = rs.second.TxId;
         auto* info = Self->VolatileTxManager.FindByTxId(txId);
         if (info && info->IsArbiter && info->State != EVolatileTxState::Committed) {
             info->ArbiterReadSets.push_back(seqNo);
@@ -198,17 +199,13 @@ void TOutReadSets::HoldArbiterReadSets() {
 }
 
 void TOutReadSets::ReleaseOnHoldReadSets(const std::vector<ui64>& seqNos, const TActorContext& ctx) {
-    TPendingPipeTrackerCommands pendingPipeTrackerCommands;
     for (ui64 seqNo : seqNos) {
         auto it = CurrentReadSets.find(seqNo);
         if (it != CurrentReadSets.end() && it->second.OnHold) {
             it->second.OnHold = false;
-            ui64 target = it->second.To;
             Self->ResendReadSetQueue.Progress(seqNo, ctx);
-            pendingPipeTrackerCommands.AttachTablet(seqNo, target);
         }
     }
-    pendingPipeTrackerCommands.Apply(Self->ResendReadSetPipeTracker, ctx);
 }
 
 bool TOutReadSets::ResendRS(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx, ui64 seqNo) {

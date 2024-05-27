@@ -1,4 +1,5 @@
 #include "long_tx_write.h"
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -17,6 +18,15 @@ TLongTxTransactionOperator::TProposeResult TLongTxTransactionOperator::DoStartPr
         if (lw.PreparedTxId != 0) {
             return TProposeResult(NKikimrTxColumnShard::EResultStatus::ERROR,
                 TStringBuilder() << "Commit TxId# " << GetTxId() << " references WriteId# " << (ui64)writeId << " that is already locked by TxId# " << lw.PreparedTxId);
+        }
+
+        auto it = owner.InsertTable->GetInserted().find(writeId);
+        AFL_VERIFY(it != owner.InsertTable->GetInserted().end());
+
+        auto granuleShardingInfo = owner.GetIndexAs<NOlap::TColumnEngineForLogs>().GetVersionedIndex().GetShardingInfoActual(it->second.PathId);
+        if (granuleShardingInfo && lw.GranuleShardingVersionId && *lw.GranuleShardingVersionId != granuleShardingInfo->GetSnapshotVersion()) {
+            return TProposeResult(NKikimrTxColumnShard::EResultStatus::ERROR,
+                TStringBuilder() << "Commit TxId# " << GetTxId() << " references WriteId# " << (ui64)writeId << " declined through sharding deprecated");
         }
     }
 

@@ -1,15 +1,13 @@
-LIBRARY()
-
-OWNER(
-    alexnick
-    xenoxeno
-    tarasov-egor
-    g:kikimr
+RECURSE_FOR_TESTS(
+    ut
 )
+
+LIBRARY()
 
 SRCS(
     meta.cpp
-    meta.h
+    meta_cache.cpp
+    meta_cache.h
     meta_cloud.h
     meta_cluster.h
     meta_clusters.h

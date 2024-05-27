@@ -25,16 +25,6 @@ protected:
 public:
     bool Deserialize(const NKikimrSchemeOp::TColumnTableDescription& description, IErrorCollector& errors) {
         Name = description.GetName();
-        if (description.HasRESERVED_TtlSettingsPresetName() || description.HasRESERVED_TtlSettingsPresetId()) {
-            errors.AddError("TTL presets are not supported");
-            return false;
-        }
-
-        if (description.HasRESERVED_TtlSettingsPresetName() || description.HasRESERVED_TtlSettingsPresetId()) {
-            errors.AddError("TTL presets are not supported");
-            return false;
-        }
-
         ShardsCount = std::max<ui32>(description.GetColumnShardCount(), 1);
 
         if (!DoDeserialize(description, errors)) {
@@ -71,7 +61,7 @@ public:
             }
         }
         tableInfo->AlterVersion = 1;
-        auto shardingValidation = NSharding::TShardingBase::ValidateBehaviour(GetSchema(), tableInfo->Description.GetSharding());
+        auto shardingValidation = NSharding::IShardingBase::ValidateBehaviour(GetSchema(), tableInfo->Description.GetSharding());
         if (shardingValidation.IsFail()) {
             errors.AddError(shardingValidation.GetErrorMessage());
             return nullptr;
@@ -170,7 +160,7 @@ private:
         for (auto&& i : layoutConclusion->MutableTabletIds()) {
             description.MutableSharding()->AddColumnShards(i);
         }
-        auto shardingObject = NSharding::TShardingBase::BuildFromProto(GetSchema(), description.GetSharding());
+        auto shardingObject = NSharding::IShardingBase::BuildFromProto(GetSchema(), description.GetSharding());
         if (shardingObject.IsFail()) {
             return shardingObject;
         }

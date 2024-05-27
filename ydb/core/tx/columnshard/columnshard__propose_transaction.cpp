@@ -20,7 +20,6 @@ public:
     }
 
     virtual bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("tablet_id", Self->TabletID())("tx_id", txId)("this", (ui64)this);
         txc.DB.NoMoreReadsForTx();
         NIceDb::TNiceDb db(txc.DB);
 
@@ -30,6 +29,7 @@ public:
         const auto txKind = record.GetTxKind();
         const ui64 txId = record.GetTxId();
         const auto& txBody = record.GetTxBody();
+        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("tablet_id", Self->TabletID())("tx_id", txId)("this", (ui64)this);
 
         if (txKind == NKikimrTxColumnShard::TX_KIND_TTL) {
             auto proposeResult = ProposeTtlDeprecated(txBody);
@@ -62,13 +62,13 @@ public:
     }
 
     virtual void Complete(const TActorContext& ctx) override {
-        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("tablet_id", Self->TabletID())("tx_id", txId)("this", (ui64)this);
         auto& record = Proto(Ev->Get());
         if (record.GetTxKind() == NKikimrTxColumnShard::TX_KIND_TTL) {
             return;
         }
         AFL_VERIFY(!!TxOperator);
         const ui64 txId = record.GetTxId();
+        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("tablet_id", Self->TabletID())("tx_id", txId)("this", (ui64)this);
         if (Ev->Sender != TxOperator->GetTxInfo().Source) {
             return;
         }

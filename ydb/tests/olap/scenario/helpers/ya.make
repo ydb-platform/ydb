@@ -1,7 +1,5 @@
 PY3_LIBRARY()
 
-    SUBSCRIBER(iddqd)
-
     PY_SRCS (
         __init__.py
         scenario_tests_helper.py

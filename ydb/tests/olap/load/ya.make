@@ -1,7 +1,5 @@
 PY3TEST()
 
-    SUBSCRIBER(iddqd)
-
     TAG(ya:manual)
 
     TIMEOUT(600)

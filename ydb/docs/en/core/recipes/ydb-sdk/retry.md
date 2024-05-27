@@ -260,8 +260,8 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
    * `CompletableFuture<Result<T>> supplyResult`: Executing the operation that returns data. As an argument, it accepts the lambda `Function<Session, CompletableFuture<Result<T>>> fn`
 
    When using the `SessionRetryContext` class, make sure that the operation will be retried in the following cases
-   * The lambda function returned a [retryable](../error_handling.md) error code
-   * The lambda function invoked an `UnexpectedResultException` with a [retryable](../error_handling.md) error code
+   * The lambda function returned a [retryable](../../reference/ydb-sdk/error_handling.md) error code
+   * The lambda function invoked an `UnexpectedResultException` with a [retryable](../../reference/ydb-sdk/error_handling.md) error code
 
 
 

@@ -1,16 +1,11 @@
----
-title: "Overview of code recipes when working with the {{ ydb-short-name }} SDK."
-description: "This section contains code recipes in different programming languages for a variety of tasks that are common when working with the {{ ydb-short-name }} SDK."
----
-
-# Code recipes
+# {{ ydb-short-name }} SDK code recipes
 
 {% include [work in progress message](_includes/addition.md) %}
 
 This section contains code recipes in different programming languages for a variety of tasks that are common when working with the {{ ydb-short-name }} SDK.
 
 Table of contents:
-- [Overview](index.md)
+
 - [Initializing the driver](init.md)
 - [Authentication](auth.md)
    - [Using a token](auth-access-token.md)
@@ -36,3 +31,9 @@ Table of contents:
    - [Enable logging](debug-logs.md)
    - [Enable metrics in Prometheus](debug-prometheus.md)
    - [Enable tracing in Jaeger](debug-jaeger.md)
+
+See also:
+
+- [{#T}](../../dev/index.md)
+- [{#T}](../../dev/example-app/index.md)
+- [{#T}](../../reference/ydb-sdk/index.md)

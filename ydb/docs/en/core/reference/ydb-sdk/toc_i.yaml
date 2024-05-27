@@ -19,7 +19,5 @@ items:
       href: grpc-headers.md
     - name: Health Check API
       href: health-check-api.md
-  - name: Code recipes
-    include: { mode: link, path: recipes/toc_p.yaml }
   - name: Comparison of SDK features
     href: feature-parity.md

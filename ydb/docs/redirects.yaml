@@ -222,6 +222,52 @@ common:
   - from: /maintenance/embedded_monitoring/index.md
     to: /reference/embedded-ui/index.md
 
+# Redirects for recipes
+  - from: reference/ydb-sdk/recipes/auth-access-token.md
+    to: recipes/ydb-sdk/auth-access-token.md
+  - from: reference/ydb-sdk/recipes/auth-anonymous.md
+    to: recipes/ydb-sdk/auth-anonymous.md
+  - from: reference/ydb-sdk/recipes/auth-env.md
+    to: recipes/ydb-sdk/auth-env.md
+  - from: reference/ydb-sdk/recipes/auth-metadata.md
+    to: recipes/ydb-sdk/auth-metadata.md
+  - from: reference/ydb-sdk/recipes/auth-service-account.md
+    to: recipes/ydb-sdk/auth-service-account.md
+  - from: reference/ydb-sdk/recipes/auth-static.md
+    to: recipes/ydb-sdk/auth-static.md
+  - from: reference/ydb-sdk/recipes/auth.md
+    to: recipes/ydb-sdk/auth.md
+  - from: reference/ydb-sdk/recipes/balancing-prefer-local.md
+    to: recipes/ydb-sdk/balancing-prefer-local.md
+  - from: reference/ydb-sdk/recipes/balancing-prefer-location.md
+    to: recipes/ydb-sdk/balancing-prefer-location.md
+  - from: reference/ydb-sdk/recipes/balancing-random-choice.md
+    to: recipes/ydb-sdk/balancing-random-choice.md
+  - from: reference/ydb-sdk/recipes/balancing.md
+    to: recipes/ydb-sdk/balancing.md
+  - from: reference/ydb-sdk/recipes/bulk-upsert.md
+    to: recipes/ydb-sdk/bulk-upsert.md
+  - from: reference/ydb-sdk/recipes/debug-jaeger.md
+    to: recipes/ydb-sdk/debug-jaeger.md
+  - from: reference/ydb-sdk/recipes/debug-logs.md
+    to: recipes/ydb-sdk/debug-logs.md
+  - from: reference/ydb-sdk/recipes/debug-prometheus.md
+    to: recipes/ydb-sdk/debug-prometheus.md
+  - from: reference/ydb-sdk/recipes/debug.md
+    to: recipes/ydb-sdk/debug.md
+  - from: reference/ydb-sdk/recipes/index.md
+    to: recipes/ydb-sdk/index.md
+  - from: reference/ydb-sdk/recipes/init.md
+    to: recipes/ydb-sdk/init.md
+  - from: reference/ydb-sdk/recipes/retry.md
+    to: recipes/ydb-sdk/retry.md
+  - from: reference/ydb-sdk/recipes/session-pool-limit.md
+    to: recipes/ydb-sdk/session-pool-limit.md
+  - from: reference/ydb-sdk/recipes/tx-control.md
+    to: recipes/ydb-sdk/tx-control.md
+  - from: reference/ydb-sdk/recipes/upsert.md
+    to: recipes/ydb-sdk/upsert.md
+
 # Redirects from export_import to export-import   
   - from: /reference/ydb-cli/export_import/s3_conn.md
     to: /reference/ydb-cli/export-import/auth-s3.md

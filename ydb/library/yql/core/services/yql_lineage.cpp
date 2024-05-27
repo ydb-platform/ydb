@@ -53,7 +53,7 @@ public:
         for (const auto& r : Reads_) {
             TVector<TPinInfo> inputs;
             auto& formatter = r.second->GetPlanFormatter();
-            formatter.GetInputs(*r.first, inputs);
+            formatter.GetInputs(*r.first, inputs, /* withLimits */ false);
             for (const auto& i : inputs) {
                 auto id = ++NextReadId_;
                 ReadIds_[r.first].push_back(id);
@@ -81,7 +81,7 @@ public:
             auto data = w.first->Child(3);
             TVector<TPinInfo> outputs;
             auto& formatter = w.second->GetPlanFormatter();
-            formatter.GetOutputs(*w.first, outputs);
+            formatter.GetOutputs(*w.first, outputs, /* withLimits */ false);
             YQL_ENSURE(outputs.size() == 1);
             auto id = ++NextWriteId_;
             WriteIds_[w.first] = id;
@@ -147,7 +147,7 @@ private:
 
         bool operator<(const TFieldLineage& rhs) const {
             return std::tie(InputIndex, Field, Transforms) < std::tie(rhs.InputIndex, rhs.Field, rhs.Transforms);
-        }        
+        }
     };
 
     static TFieldLineage ReplaceTransforms(const TFieldLineage& src, const TString& newTransforms) {
@@ -187,7 +187,7 @@ private:
                 (*ret.StructItems)[i.first] = ReplaceTransforms(i.second, newTransforms);
             }
         }
-        
+
         return ret;
     }
 
@@ -242,15 +242,15 @@ private:
         }
 
         if (node.IsCallable({
-            "Unordered", 
-            "UnorderedSubquery", 
-            "Right!", 
+            "Unordered",
+            "UnorderedSubquery",
+            "Right!",
             "YtTableContent",
-            "Skip", 
-            "Take", 
-            "Sort", 
-            "TopSort", 
-            "AssumeSorted", 
+            "Skip",
+            "Take",
+            "Sort",
+            "TopSort",
+            "AssumeSorted",
             "SkipNullMembers"})) {
             lineage = *CollectLineage(node.Head());
             return &lineage;
@@ -331,7 +331,7 @@ private:
             }
 
             if (inner->StructItems) {
-                TFieldsLineage result; 
+                TFieldsLineage result;
                 result.Items = *(*inner->StructItems).FindPtr(node.Tail().Content());
                 return it->second = result;
             }
@@ -391,7 +391,7 @@ private:
         return it->second = result;
     }
 
-    void MergeLineageFromUsedFields(const TExprNode& expr, const TExprNode& arg, const TLineage& src, 
+    void MergeLineageFromUsedFields(const TExprNode& expr, const TExprNode& arg, const TLineage& src,
         TFieldLineageSet& dst, const TString& newTransforms = "") {
 
         TNodeMap<TMaybe<TFieldsLineage>> visited;
@@ -409,7 +409,7 @@ private:
         }
     }
 
-    void MergeLineageFromUsedFields(const TExprNode& expr, const TExprNode& arg, const TLineage& src, 
+    void MergeLineageFromUsedFields(const TExprNode& expr, const TExprNode& arg, const TLineage& src,
         TFieldsLineage& dst, bool produceStruct, const TString& newTransforms = "") {
         if (produceStruct) {
             auto root = &expr;
@@ -476,7 +476,7 @@ private:
 
             return;
         }
-        
+
         if (value && value->IsCallable("AsStruct")) {
             for (const auto& child : value->Children()) {
                 TString field(child->Head().Content());
@@ -565,7 +565,7 @@ private:
                 for (const auto& child : payload->Child(0)->Children()) {
                     fields.push_back(TString(child->Content()));
                 }
-            } else { 
+            } else {
                 fields.push_back(TString(payload->Child(0)->Content()));
             }
 

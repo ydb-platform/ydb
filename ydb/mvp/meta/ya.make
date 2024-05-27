@@ -4,11 +4,6 @@ RECURSE_FOR_TESTS(
 
 LIBRARY()
 
-OWNER(
-    xenoxeno
-    tarasov-egor
-)
-
 SRCS(
     meta.cpp
     meta_cache.cpp

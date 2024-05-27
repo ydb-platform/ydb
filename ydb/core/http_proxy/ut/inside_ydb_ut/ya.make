@@ -1,5 +1,3 @@
-OWNER(g:kikimr)
-
 UNITTEST()
 
 SIZE(MEDIUM)

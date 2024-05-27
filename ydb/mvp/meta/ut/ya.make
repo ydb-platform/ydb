@@ -1,9 +1,5 @@
 UNITTEST_FOR(ydb/mvp/meta)
 
-OWNER(
-    xenoxeno
-)
-
 SIZE(SMALL)
 
 SRCS(

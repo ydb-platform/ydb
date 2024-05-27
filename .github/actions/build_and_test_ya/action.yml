@@ -42,6 +42,9 @@ inputs:
   put_build_results_to_cache:
     type: boolean
     default: true
+  additional_ya_make_args:
+    type: string
+    default: ""
   secs:
     type: string
     default: ""
@@ -112,6 +115,7 @@ runs:
         bazel_remote_username: ${{ inputs.put_build_results_to_cache &&  fromJSON( inputs.secs ).REMOTE_CACHE_USERNAME || '' }}
         bazel_remote_password: ${{ inputs.put_build_results_to_cache &&  fromJSON( inputs.secs ).REMOTE_CACHE_PASSWORD || '' }}
         link_threads: ${{ inputs.link_threads }}
+        additional_ya_make_args: ${{ inputs.additional_ya_make_args }}
 
     - name: Run tests
       uses: ./.github/actions/test_ya
@@ -125,6 +129,7 @@ runs:
         testman_url: ${{  fromJSON( inputs.vars ).TESTMO_URL }}
         testman_project_id: ${{  fromJSON( inputs.vars ).TESTMO_PROJECT_ID }}
         link_threads: ${{ inputs.link_threads }}
+        additional_ya_make_args: ${{ inputs.additional_ya_make_args }}
         test_threads: ${{ inputs.test_threads }}
         
     - name: Notify about failed build

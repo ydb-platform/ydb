@@ -1,5 +1,3 @@
-OWNER(g:yq)
-
 PY3TEST()
 
 STYLE_PYTHON()

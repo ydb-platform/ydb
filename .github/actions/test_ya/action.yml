@@ -24,6 +24,9 @@ inputs:
     required: false
     default: "12"
     description: "link threads count"
+  additional_ya_make_args:
+    type: string
+    default: ""
   testman_token:
     required: false
     description: "test manager auth token"
@@ -122,7 +125,7 @@ runs:
             EXTRA_TAG=""
             ;;
         esac
-        
+
         testmo automation:resources:add-link --name build --url "$RUN_URL" --resources testmo.json
         testmo automation:resources:add-field --name git-sha --type string --value "${GITHUB_SHA:0:7}" --resources testmo.json
         RUN_ID=$(
@@ -191,6 +194,10 @@ runs:
             ;;
         esac
         
+        if [ ! -z "${{ inputs.additional_ya_make_args }}" ]; then
+          params+=(${{ inputs.additional_ya_make_args }})
+        fi
+
         # Also build targets which are not in tests' dependencies
         params+=(--no-strip-idle-build-results)
 

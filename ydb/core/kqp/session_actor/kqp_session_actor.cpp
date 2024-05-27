@@ -540,10 +540,6 @@ public:
 
     void Handle(TEvKqp::TEvParseResponse::TPtr& ev) {
         QueryState->SaveAndCheckParseResult(std::move(*ev->Get()));
-        Ydb::Table::TransactionSettings settings;
-        settings.mutable_serializable_read_write();
-        BeginTx(settings);
-        QueryState->ImplicitTxId = QueryState->TxId;
         CompileStatement();
     }
 
@@ -721,21 +717,23 @@ public:
         Counters->ReportBeginTransaction(Settings.DbCounters, Transactions.EvictedTx, Transactions.Size(), Transactions.ToBeAbortedSize());
     }
 
-    Ydb::Table::TransactionControl GetImpliedTxControl() {
+    Ydb::Table::TransactionControl GetTxControlWithImplicitTx() {
+        if (!QueryState->ImplicitTxId) {
+            Ydb::Table::TransactionSettings settings;
+            settings.mutable_serializable_read_write();
+            BeginTx(settings);
+            QueryState->ImplicitTxId = QueryState->TxId;
+        }
         Ydb::Table::TransactionControl control;
         control.set_commit_tx(QueryState->ProcessingLastStatement());
-        if (QueryState->ImplicitTxId) {
-            control.set_tx_id(QueryState->ImplicitTxId->GetValue().GetHumanStr());
-        } else {
-            control.mutable_begin_tx()->mutable_serializable_read_write();
-        }
+        control.set_tx_id(QueryState->ImplicitTxId->GetValue().GetHumanStr());
         return control;
     }
 
     bool PrepareQueryTransaction() {
         const bool hasTxControl = QueryState->HasTxControl();
-        if (hasTxControl || QueryState->HasImpliedTx()) {
-            const auto& txControl = hasTxControl ? QueryState->GetTxControl() : GetImpliedTxControl();
+        if (hasTxControl || QueryState->HasImplicitTx()) {
+            const auto& txControl = hasTxControl ? QueryState->GetTxControl() : GetTxControlWithImplicitTx();
 
             QueryState->Commit = txControl.commit_tx();
             switch (txControl.tx_selector_case()) {

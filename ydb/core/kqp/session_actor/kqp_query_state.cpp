@@ -188,7 +188,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
     settings.Syntax = GetSyntax();
 
     bool keepInCache = false;
-    bool perStatementResult = !HasTxControl() && GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE;
+    bool perStatementResult = HasImplicitTx();
     TGUCSettings gUCSettings = gUCSettingsPtr ? *gUCSettingsPtr : TGUCSettings();
     switch (GetAction()) {
         case NKikimrKqp::QUERY_ACTION_EXECUTE:
@@ -452,15 +452,13 @@ bool TKqpQueryState::HasErrors(const NSchemeCache::TSchemeCacheNavigate& respons
     return true;
 }
 
-bool TKqpQueryState::HasImpliedTx() const {
+bool TKqpQueryState::HasImplicitTx() const {
     if (HasTxControl()) {
         return false;
     }
 
     const NKikimrKqp::EQueryAction action = RequestEv->GetAction();
-    if (action != NKikimrKqp::QUERY_ACTION_EXECUTE &&
-        action != NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED)
-    {
+    if (action != NKikimrKqp::QUERY_ACTION_EXECUTE) {
         return false;
     }
 
@@ -472,22 +470,7 @@ bool TKqpQueryState::HasImpliedTx() const {
         return false;
     }
 
-    for (const auto& transactionPtr : PreparedQuery->GetTransactions()) {
-        switch (transactionPtr->GetType()) {
-        case NKqpProto::TKqpPhyTx::TYPE_GENERIC: // data transaction
-            return true;
-        case NKqpProto::TKqpPhyTx::TYPE_UNSPECIFIED:
-        case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
-        case NKqpProto::TKqpPhyTx::TYPE_DATA: // data transaction, but not in QueryService API
-        case NKqpProto::TKqpPhyTx::TYPE_SCAN:
-        case NKqpProto::TKqpPhyTx::TYPE_SCHEME:
-        case NKqpProto::TKqpPhyTx_EType_TKqpPhyTx_EType_INT_MIN_SENTINEL_DO_NOT_USE_:
-        case NKqpProto::TKqpPhyTx_EType_TKqpPhyTx_EType_INT_MAX_SENTINEL_DO_NOT_USE_:
-            break;
-        }
-    }
-
-    return false;
+    return true;
 }
 
 }

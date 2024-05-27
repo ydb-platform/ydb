@@ -63,38 +63,44 @@ inline void BitVectorHandleOp(ui64 bitLen, const ui64* v1, const ui64* v2, auto&
     BitVectorHandleTail(byteLen, v1, v2, op);
 }
 
-inline std::optional<float> KnnManhattanDistance(const TStringRef& str1, const TStringRef& str2) {
+inline void SameFormat(ui8 format1, ui8 format2) {
+    if (Y_UNLIKELY(format1 != format2))
+        ythrow yexception() << "Expected arguments should have same format";
+}
+
+inline void SameLen(ui64 len1, ui64 len2) {
+    if (Y_UNLIKELY(len1 != len2))
+        ythrow yexception() << "Expected arguments should have same length";
+}
+
+[[noreturn]] inline void InvalidFormat() {
+    ythrow yexception() << "Expected arguments should have valid format: Float, Byte, Bit";
+}
+
+inline float KnnManhattanDistance(const TStringRef& str1, const TStringRef& str2) {
     const ui8 format1 = str1.Data()[str1.Size() - HeaderLen];
     const ui8 format2 = str2.Data()[str2.Size() - HeaderLen];
-
-    if (Y_UNLIKELY(format1 != format2))
-        return {};
+    SameFormat(format1, format2);
 
     switch (format1) {
         case EFormat::FloatVector: {
             const TArrayRef<const float> vector1 = TKnnSerializerFacade::GetArray<float>(str1);
             const TArrayRef<const float> vector2 = TKnnSerializerFacade::GetArray<float>(str2);
-
-            if (Y_UNLIKELY(vector1.size() != vector2.size()))
-                return {};
+            SameLen(vector1.size(), vector2.size());
 
             return ::L1Distance(vector1.data(), vector2.data(), vector1.size());
         }
         case EFormat::Uint8Vector: {
             const TArrayRef<const ui8> vector1 = TKnnSerializerFacade::GetArray<ui8>(str1);
             const TArrayRef<const ui8> vector2 = TKnnSerializerFacade::GetArray<ui8>(str2);
-
-            if (Y_UNLIKELY(vector1.size() != vector2.size()))
-                return {};
+            SameLen(vector1.size(), vector2.size());
 
             return ::L1Distance(vector1.data(), vector2.data(), vector1.size());
         }
         case EFormat::BitVector: {
             auto [v1, bitLen1] = TKnnBitVectorSerializer::GetArray(str1);
             auto [v2, bitLen2] = TKnnBitVectorSerializer::GetArray(str2);
-
-            if (Y_UNLIKELY(bitLen1 != bitLen2))
-                return {};
+            SameLen(bitLen1, bitLen2);
 
             ui64 ret = 0;
             BitVectorHandleOp(bitLen1, v1, v2, [&](ui64 d1, ui64 d2) {
@@ -103,42 +109,34 @@ inline std::optional<float> KnnManhattanDistance(const TStringRef& str1, const T
             return ret;
         }
         default:
-            return {};
+            InvalidFormat();
     }
 }
 
-inline std::optional<float> KnnEuclideanDistance(const TStringRef& str1, const TStringRef& str2) {
+inline float KnnEuclideanDistance(const TStringRef& str1, const TStringRef& str2) {
     const ui8 format1 = str1.Data()[str1.Size() - HeaderLen];
     const ui8 format2 = str2.Data()[str2.Size() - HeaderLen];
-
-    if (Y_UNLIKELY(format1 != format2))
-        return {};
+    SameFormat(format1, format2);
 
     switch (format1) {
         case EFormat::FloatVector: {
             const TArrayRef<const float> vector1 = TKnnSerializerFacade::GetArray<float>(str1);
             const TArrayRef<const float> vector2 = TKnnSerializerFacade::GetArray<float>(str2);
-
-            if (Y_UNLIKELY(vector1.size() != vector2.size()))
-                return {};
+            SameLen(vector1.size(), vector2.size());
 
             return ::L2Distance(vector1.data(), vector2.data(), vector1.size());
         }
         case EFormat::Uint8Vector: {
             const TArrayRef<const ui8> vector1 = TKnnSerializerFacade::GetArray<ui8>(str1);
             const TArrayRef<const ui8> vector2 = TKnnSerializerFacade::GetArray<ui8>(str2);
-
-            if (Y_UNLIKELY(vector1.size() != vector2.size()))
-                return {};
+            SameLen(vector1.size(), vector2.size());
 
             return ::L2Distance(vector1.data(), vector2.data(), vector1.size());
         }
         case EFormat::BitVector: {
             auto [v1, bitLen1] = TKnnBitVectorSerializer::GetArray(str1);
             auto [v2, bitLen2] = TKnnBitVectorSerializer::GetArray(str2);
-
-            if (Y_UNLIKELY(bitLen1 != bitLen2))
-                return {};
+            SameLen(bitLen1, bitLen2);
 
             ui64 ret = 0;
             BitVectorHandleOp(bitLen1, v1, v2, [&](ui64 d1, ui64 d2) {
@@ -147,42 +145,34 @@ inline std::optional<float> KnnEuclideanDistance(const TStringRef& str1, const T
             return NPrivate::NL2Distance::L2DistanceSqrt(ret);
         }
         default:
-            return {};
+            InvalidFormat();
     }
 }
 
-inline std::optional<float> KnnDotProduct(const TStringRef& str1, const TStringRef& str2) {
+inline float KnnDotProduct(const TStringRef& str1, const TStringRef& str2) {
     const ui8 format1 = str1.Data()[str1.Size() - HeaderLen];
     const ui8 format2 = str2.Data()[str2.Size() - HeaderLen];
-
-    if (Y_UNLIKELY(format1 != format2))
-        return {};
+    SameFormat(format1, format2);
 
     switch (format1) {
         case EFormat::FloatVector: {
             const TArrayRef<const float> vector1 = TKnnSerializerFacade::GetArray<float>(str1);
             const TArrayRef<const float> vector2 = TKnnSerializerFacade::GetArray<float>(str2);
-
-            if (Y_UNLIKELY(vector1.size() != vector2.size()))
-                return {};
+            SameLen(vector1.size(), vector2.size());
 
             return ::DotProduct(vector1.data(), vector2.data(), vector1.size());
         }
         case EFormat::Uint8Vector: {
             const TArrayRef<const ui8> vector1 = TKnnSerializerFacade::GetArray<ui8>(str1);
             const TArrayRef<const ui8> vector2 = TKnnSerializerFacade::GetArray<ui8>(str2);
-
-            if (Y_UNLIKELY(vector1.size() != vector2.size()))
-                return {};
+            SameLen(vector1.size(), vector2.size());
 
             return ::DotProduct(vector1.data(), vector2.data(), vector1.size());
         }
         case EFormat::BitVector: {
             auto [v1, bitLen1] = TKnnBitVectorSerializer::GetArray(str1);
             auto [v2, bitLen2] = TKnnBitVectorSerializer::GetArray(str2);
-
-            if (Y_UNLIKELY(bitLen1 != bitLen2))
-                return {};
+            SameLen(bitLen1, bitLen2);
 
             ui64 ret = 0;
             BitVectorHandleOp(bitLen1, v1, v2, [&](ui64 d1, ui64 d2) {
@@ -191,33 +181,27 @@ inline std::optional<float> KnnDotProduct(const TStringRef& str1, const TStringR
             return ret;
         }
         default:
-            return {};
+            InvalidFormat();
     }
 }
 
-inline std::optional<TTriWayDotProduct<float>> KnnTriWayDotProduct(const TStringRef& str1, const TStringRef& str2) {
+inline TTriWayDotProduct<float> KnnTriWayDotProduct(const TStringRef& str1, const TStringRef& str2) {
     const ui8 format1 = str1.Data()[str1.Size() - HeaderLen];
     const ui8 format2 = str2.Data()[str2.Size() - HeaderLen];
-
-    if (Y_UNLIKELY(format1 != format2))
-        return {};
+    SameFormat(format1, format2);
 
     switch (format1) {
         case EFormat::FloatVector: {
             const TArrayRef<const float> vector1 = TKnnSerializerFacade::GetArray<float>(str1);
             const TArrayRef<const float> vector2 = TKnnSerializerFacade::GetArray<float>(str2);
-
-            if (Y_UNLIKELY(vector1.size() != vector2.size()))
-                return {};
+            SameLen(vector1.size(), vector2.size());
 
             return ::TriWayDotProduct(vector1.data(), vector2.data(), vector1.size());
         }
         case EFormat::Uint8Vector: {
             const TArrayRef<const ui8> vector1 = TKnnSerializerFacade::GetArray<ui8>(str1);
             const TArrayRef<const ui8> vector2 = TKnnSerializerFacade::GetArray<ui8>(str2);
-
-            if (Y_UNLIKELY(vector1.size() != vector2.size()))
-                return {};
+            SameLen(vector1.size(), vector2.size());
 
             TTriWayDotProduct<float> result;
             result.LL = ::DotProduct(vector1.data(), vector1.data(), vector1.size());
@@ -228,9 +212,7 @@ inline std::optional<TTriWayDotProduct<float>> KnnTriWayDotProduct(const TString
         case EFormat::BitVector: {
             auto [v1, bitLen1] = TKnnBitVectorSerializer::GetArray(str1);
             auto [v2, bitLen2] = TKnnBitVectorSerializer::GetArray(str2);
-
-            if (Y_UNLIKELY(bitLen1 != bitLen2))
-                return {};
+            SameLen(bitLen1, bitLen2);
 
             ui64 ll = 0;
             ui64 rr = 0;
@@ -248,6 +230,6 @@ inline std::optional<TTriWayDotProduct<float>> KnnTriWayDotProduct(const TString
             return result;
         }
         default:
-            return {};
+            InvalidFormat();
     }
 }

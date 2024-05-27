@@ -92,7 +92,7 @@ public:
     TUnboxedValue RunImpl(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
         auto r = TKnnSerializerFacade::Deserialize(valueBuilder, args[0].AsStringRef());
         if (Y_UNLIKELY(!r.HasValue()))
-            ythrow yexception() << "Should be FloatVector or ByteVector";
+            ythrow yexception() << "Expected argument is string from ToBinaryString[Float|Byte]";
         return r;
     }
 
@@ -116,7 +116,7 @@ public:
         auto argType = argsTuple.GetElementType(0);
         auto argTag = GetArg(*typeInfoHelper, argType);
         if (!ValidTag(argTag, {TagStoredVector, TagFloatVector, TagByteVector})) {
-            builder.SetError("Expected argument is string which can be tagged FloatVector or ByteVector");
+            builder.SetError("Expected argument is string from ToBinaryString[Float|Byte]");
             return true;
         }
 
@@ -162,7 +162,7 @@ public:
 
         if (!Base::ValidTag(arg0Tag, {TagStoredVector, TagFloatVector, TagByteVector, TagBitVector}) ||
             !Base::ValidTag(arg1Tag, {TagStoredVector, TagFloatVector, TagByteVector, TagBitVector})) {
-            builder.SetError("Expected arguments are strings which can be tagged FloatVector or ByteVector or BitVector");
+            builder.SetError("Expected arguments are strings from ToBinaryString[Float|Byte|Bit]");
             return true;
         }
 
@@ -194,10 +194,7 @@ public:
     TUnboxedValue RunImpl(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
         Y_UNUSED(valueBuilder);
         const auto ret = KnnDotProduct(args[0].AsStringRef(), args[1].AsStringRef());
-        if (Y_UNLIKELY(!ret))
-            ythrow yexception() << "Should be same types and sizes";
-
-        return TUnboxedValuePod{ret.value()};
+        return TUnboxedValuePod{ret};
     }
 };
 
@@ -212,11 +209,7 @@ public:
 
     TUnboxedValue RunImpl(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
         Y_UNUSED(valueBuilder);
-        const auto ret = KnnTriWayDotProduct(args[0].AsStringRef(), args[1].AsStringRef());
-        if (Y_UNLIKELY(!ret))
-            ythrow yexception() << "Should be same types and sizes";
-
-        const auto [ll, lr, rr] = ret.value();
+        const auto [ll, lr, rr] = KnnTriWayDotProduct(args[0].AsStringRef(), args[1].AsStringRef());
         const auto norm = std::sqrt(ll * rr);
         const float cosine = norm != 0 ? lr / norm : 1;
         return TUnboxedValuePod{cosine};
@@ -234,11 +227,7 @@ public:
 
     TUnboxedValue RunImpl(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
         Y_UNUSED(valueBuilder);
-        const auto ret = KnnTriWayDotProduct(args[0].AsStringRef(), args[1].AsStringRef());
-        if (Y_UNLIKELY(!ret))
-            ythrow yexception() << "Should be same types and sizes";
-
-        const auto [ll, lr, rr] = ret.value();
+        const auto [ll, lr, rr] = KnnTriWayDotProduct(args[0].AsStringRef(), args[1].AsStringRef());
         const auto norm = std::sqrt(ll * rr);
         const float cosine = norm != 0 ? lr / norm : 1;
         return TUnboxedValuePod{1 - cosine};
@@ -257,10 +246,7 @@ public:
     TUnboxedValue RunImpl(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
         Y_UNUSED(valueBuilder);
         const auto ret = KnnManhattanDistance(args[0].AsStringRef(), args[1].AsStringRef());
-        if (Y_UNLIKELY(!ret))
-            ythrow yexception() << "Should be same types and sizes";
-
-        return TUnboxedValuePod{ret.value()};
+        return TUnboxedValuePod{ret};
     }
 };
 
@@ -276,10 +262,7 @@ public:
     TUnboxedValue RunImpl(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
         Y_UNUSED(valueBuilder);
         const auto ret = KnnEuclideanDistance(args[0].AsStringRef(), args[1].AsStringRef());
-        if (Y_UNLIKELY(!ret))
-            ythrow yexception() << "Should be same types and sizes";
-
-        return TUnboxedValuePod{ret.value()};
+        return TUnboxedValuePod{ret};
     }
 };
 

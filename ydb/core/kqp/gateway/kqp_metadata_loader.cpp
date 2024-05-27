@@ -473,8 +473,11 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> LoadExternalDataSo
     return DescribeExternalDataSourceSecrets(authDescription, userToken ? userToken->GetUserSID() : "", actorSystem, maximalSecretsSnapshotWaitTime);
 }
 
+} // anonymous namespace
+
 NExternalSource::TAuth MakeAuth(const NYql::TExternalSource& metadata) {
     switch (metadata.DataSourceAuth.identity_case()) {
+    case NKikimrSchemeOp::TAuth::IDENTITY_NOT_SET:
     case NKikimrSchemeOp::TAuth::kNone:
         return NExternalSource::NAuth::MakeNone();
     case NKikimrSchemeOp::TAuth::kServiceAccount:
@@ -484,7 +487,6 @@ NExternalSource::TAuth MakeAuth(const NYql::TExternalSource& metadata) {
     case NKikimrSchemeOp::TAuth::kBasic:
     case NKikimrSchemeOp::TAuth::kMdbBasic:
     case NKikimrSchemeOp::TAuth::kToken:
-    case NKikimrSchemeOp::TAuth::IDENTITY_NOT_SET:
         Y_ABORT("Unimplemented external source auth: %d", metadata.DataSourceAuth.identity_case());
         break;
     }
@@ -496,6 +498,7 @@ std::shared_ptr<NExternalSource::TMetadata> ConvertToExternalSourceMetadata(cons
     metadata->TableLocation = tableMetadata.ExternalSource.TableLocation;
     metadata->DataSourceLocation = tableMetadata.ExternalSource.DataSourceLocation;
     metadata->DataSourcePath = tableMetadata.ExternalSource.DataSourcePath;
+    metadata->Type = tableMetadata.ExternalSource.Type;
     metadata->Attributes = tableMetadata.Attributes;
     metadata->Auth = MakeAuth(tableMetadata.ExternalSource);
     return metadata;
@@ -525,10 +528,12 @@ bool EnrichMetadata(NYql::TKikimrTableMetadata& tableMetadata, const NExternalSo
         ++id;
     }
     tableMetadata.Attributes = dynamicMetadata.Attributes;
+    tableMetadata.ExternalSource.TableLocation = dynamicMetadata.TableLocation;
+    tableMetadata.ExternalSource.DataSourceLocation = dynamicMetadata.DataSourceLocation;
+    tableMetadata.ExternalSource.DataSourcePath = dynamicMetadata.DataSourcePath;
+    tableMetadata.ExternalSource.Type = dynamicMetadata.Type;
     return true;
 }
-
-} // anonymous namespace
 
 
 TVector<NKikimrKqp::TKqpTableMetadataProto> TKqpTableMetadataLoader::GetCollectedSchemeData() {
@@ -842,12 +847,16 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                 externalSource->LoadDynamicMetadata(std::move(externalSourceMeta))
                                     .Subscribe([promise = std::move(promise), externalDataSourceMetadata](const TFuture<std::shared_ptr<NExternalSource::TMetadata>>& result) mutable {
                                         TTableMetadataResult wrapper;
-                                        if (result.HasValue() && (!result.GetValue()->Changed || EnrichMetadata(*externalDataSourceMetadata.Metadata, *result.GetValue()))) {
-                                            wrapper.SetSuccess();
-                                            wrapper.Metadata = externalDataSourceMetadata.Metadata;
-                                        } else {
-                                            // TODO: forward exception from result
-                                            wrapper.SetException(yexception() << "LoadDynamicMetadata failed");
+                                        try {
+                                            auto& dynamicMetadata = result.GetValue();
+                                            if (!dynamicMetadata->Changed || EnrichMetadata(*externalDataSourceMetadata.Metadata, *dynamicMetadata)) {
+                                                wrapper.SetSuccess();
+                                                wrapper.Metadata = externalDataSourceMetadata.Metadata;
+                                            } else {
+                                                wrapper.SetException(yexception() << "couldn't enrich metadata with dynamically loaded part");
+                                            }
+                                        } catch (const std::exception& exception) {
+                                            wrapper.SetException(yexception() << "couldn't load table metadata: " << exception.what());
                                         }
                                         promise.SetValue(wrapper);
                                     });

@@ -39,5 +39,5 @@ runs:
       run: |
         set -ex
         s3cmd sync -r --acl-public --no-progress --no-check-md5 "ya_bloat_html/" "$S3_BUCKET_PATH/ya_bloat_html/"
-        echo $S3_URL_PREFIX/ya_bloat_html >> $GITHUB_OUTPUT
+        echo "ya_bloat=$S3_URL_PREFIX/ya_bloat_html" >> $GITHUB_OUTPUT
 

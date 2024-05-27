@@ -815,18 +815,17 @@ public:
         Serializer->AddData(std::move(data));
 
         FlushSerializer(GetMemory() >= Settings.MemoryLimitTotal);
-        // BuildBatches();
     }
 
     void Close() override {
         YQL_ENSURE(Serializer);
         Closed = true;
+        Serializer->Close();
         FlushSerializer(true);
         YQL_ENSURE(Serializer->IsFinished());
         for (auto& [shardId, shardInfo] : ShardsInfo.GetShards()) {
             shardInfo.Close();
         }
-        // BuildBatches();
     }
 
     TVector<ui64> GetPendingShards() const override {
@@ -869,6 +868,14 @@ public:
         return result;
     }
 
+    NKikimrDataEvents::EDataFormat GetDataFormat() override {
+        return Serializer->GetDataFormat();
+    }
+
+    std::vector<ui32> GetWriteColumnIds() override {
+        return Serializer->GetWriteColumnIds();
+    }
+
     std::optional<i64> OnMessageAcknowledged(ui64 shardId, ui64 cookie) override {
         auto& shardInfo = ShardsInfo.GetShard(shardId);
         const auto removedDataSize = shardInfo.PopBatches(cookie);
@@ -892,13 +899,8 @@ public:
         return Closed;
     }
 
-    bool IsEmpty() const override {
-        YQL_ENSURE(Serializer);
-        return Serializer->IsFinished() && ShardsInfo.IsFinished();
-    }
-
     bool IsFinished() const override {
-        return IsClosed() && IsEmpty();
+        return IsClosed() && Serializer->IsFinished() && ShardsInfo.IsFinished();
     }
 
     bool IsReady() const override {
@@ -935,13 +937,6 @@ private:
             }
         }
     }
-
-    /*void BuildBatches() {
-        for (const ui64 shardId : Serializer->GetShardIds()) {
-            auto& shard = ShardsInfo.GetShard(shardId);
-            BuildBatchesForShard(shard);
-        }
-    }*/
 
     void BuildBatchesForShard(TShardsInfo::TShardInfo& shard) {
         if (shard.GetBatchesInFlight() == 0) {

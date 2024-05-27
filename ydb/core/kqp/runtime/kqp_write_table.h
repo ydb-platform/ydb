@@ -84,6 +84,8 @@ public:
     };
 
     virtual TSerializationResult SerializeMessageToPayload(ui64 shardId, NKikimr::NEvents::TDataEvents::TEvWrite& evWrite) = 0;
+    virtual NKikimrDataEvents::EDataFormat GetDataFormat() = 0;
+    virtual std::vector<ui32> GetWriteColumnIds() = 0;
 
     virtual std::optional<i64> OnMessageAcknowledged(ui64 shardId, ui64 cookie) = 0;
     virtual void OnMessageSent(ui64 shardId, ui64 cookie) = 0;
@@ -91,7 +93,6 @@ public:
     virtual i64 GetMemory() const = 0;
 
     virtual bool IsClosed() const = 0;
-    virtual bool IsEmpty() const = 0;
     virtual bool IsFinished() const = 0;
 
     virtual bool IsReady() const = 0;

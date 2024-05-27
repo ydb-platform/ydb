@@ -503,8 +503,9 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         TVDiskMock vdisk(&testCtx);
         vdisk.InitFull();
         vdisk.SendEvLogSync();
-        testCtx.Send(new TEvBlobStorage::TEvAskWardenRestartPDiskResult(testCtx.GetPDisk()->PDiskId, testCtx.MainKey, true, nullptr));
-        const auto evInitRes = testCtx.Recv<TEvBlobStorage::TEvNotifyWardenPDiskRestarted>();
+
+        testCtx.StartPDiskRestart();
+
         vdisk.InitFull();
         vdisk.SendEvLogSync();
     }
@@ -928,8 +929,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         while (writeLog() == NKikimrProto::OK) {}
         UNIT_ASSERT_VALUES_EQUAL(writeLog(), NKikimrProto::OUT_OF_SPACE);
 
-        testCtx.Send(new TEvBlobStorage::TEvAskWardenRestartPDiskResult(testCtx.GetPDisk()->PDiskId, testCtx.MainKey, true, nullptr));
-        const auto evInitRes = testCtx.Recv<TEvBlobStorage::TEvNotifyWardenPDiskRestarted>();
+        testCtx.StartPDiskRestart();
 
         vdisk.InitFull();
         vdisk.SendEvLogSync();
@@ -943,8 +943,8 @@ Y_UNIT_TEST_SUITE(PDiskCompatibilityInfo) {
     using TCurrent = NKikimrConfig::TCurrentCompatibilityInfo;
     THolder<NPDisk::TEvYardInitResult> RestartPDisk(TActorTestContext& testCtx, ui32 pdiskId, TVDiskMock& vdisk, TCurrent* newInfo) {
         TCompatibilityInfoTest::Reset(newInfo);
-        testCtx.Send(new TEvBlobStorage::TEvAskWardenRestartPDiskResult(pdiskId, testCtx.MainKey, true, nullptr));
-        testCtx.Recv<TEvBlobStorage::TEvNotifyWardenPDiskRestarted>();
+        Y_UNUSED(pdiskId);
+        testCtx.StartPDiskRestart();
         testCtx.Send(new NPDisk::TEvYardInit(vdisk.OwnerRound.fetch_add(1), vdisk.VDiskID, testCtx.TestCtx.PDiskGuid));
         return testCtx.Recv<NPDisk::TEvYardInitResult>();
     }

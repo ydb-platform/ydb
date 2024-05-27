@@ -601,7 +601,10 @@ void TJaegerTracer::Flush()
 
         if (config->TestDropSpans) {
             DropQueue(batchCount, endpoint);
-            YT_LOG_DEBUG("Spans dropped in test (BatchCount: %v, SpanCount: %v, Endpoint: %v)", batchCount, spanCount, endpoint);
+            YT_LOG_DEBUG("Spans dropped in test (BatchCount: %v, SpanCount: %v, Endpoint: %v)",
+                batchCount,
+                spanCount,
+                endpoint);
             continue;
         }
 

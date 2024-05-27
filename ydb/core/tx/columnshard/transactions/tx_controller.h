@@ -187,9 +187,15 @@ public:
             Status = {};
         }
 
+        virtual TString DoDebugString() const = 0;
+
     public:
         using TPtr = std::shared_ptr<ITransactionOperator>;
         using TFactory = NObjectFactory::TParametrizedObjectFactory<ITransactionOperator, NKikimrTxColumnShard::ETransactionKind, TTxInfo>;
+
+        TString DebugString() const {
+            return DoDebugString();
+        }
 
         bool CheckAllowUpdate(const TFullTxInfo& currentTxInfo) const {
             return DoCheckAllowUpdate(currentTxInfo);

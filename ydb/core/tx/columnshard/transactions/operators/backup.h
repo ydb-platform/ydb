@@ -27,6 +27,10 @@ private:
         return true;
     }
     virtual bool DoParse(TColumnShard& owner, const TString& data) override;
+    virtual TString DoDebugString() const override {
+        return "BACKUP";
+    }
+
 public:
     using TBase::TBase;
 

@@ -101,6 +101,9 @@ namespace NKikimr::NColumnShard {
             }
             return ValidateTableSchema(preset.GetSchema());
         }
+        virtual TString DoDebugString() const override {
+            return "SCHEME:" + SchemaTxBody.DebugString();
+        }
 
     private:
         NKikimrTxColumnShard::TSchemaTxBody SchemaTxBody;

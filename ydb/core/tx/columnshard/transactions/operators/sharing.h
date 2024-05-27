@@ -28,6 +28,10 @@ private:
         return true;
     }
     virtual bool DoParse(TColumnShard& owner, const TString& data) override;
+    virtual TString DoDebugString() const override {
+        return "SHARING";
+    }
+
 public:
     using TBase::TBase;
     virtual void RegisterSubscriber(const TActorId& actorId) override {

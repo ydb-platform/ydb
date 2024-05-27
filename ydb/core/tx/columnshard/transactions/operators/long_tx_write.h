@@ -12,6 +12,10 @@ namespace NKikimr::NColumnShard {
         static inline auto Registrator = TFactory::TRegistrator<TLongTxTransactionOperator>(NKikimrTxColumnShard::TX_KIND_COMMIT);
 
     private:
+        virtual TString DoDebugString() const override {
+            return "LONG_TX_WRITE";
+        }
+
         virtual TProposeResult DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override;
         virtual void DoStartProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
 

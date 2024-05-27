@@ -108,6 +108,7 @@ using namespace NYql;
 
 struct TRunOptions {
     bool Sql = false;
+    bool Pg = false;
     TString User;
     TMaybe<TString> BindingsFile;
     NYson::EYsonFormat ResultsFormat;
@@ -339,9 +340,10 @@ std::tuple<std::unique_ptr<TActorSystemManager>, TActorIds> RunActorSystem(
 int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<TString, TString>& clusters, const THashSet<TString>& sqlFlags) {
     program->SetUseTableMetaFromGraph(options.UseMetaFromGraph);
     bool fail = true;
-    if (options.Sql) {
+    if (options.Sql || options.Pg) {
         Cout << "Parse SQL..." << Endl;
         NSQLTranslation::TTranslationSettings sqlSettings;
+        sqlSettings.PgParser = options.Pg;
         sqlSettings.ClusterMapping = clusters;
         sqlSettings.SyntaxVersion = 1;
         sqlSettings.Flags = sqlFlags;
@@ -507,6 +509,7 @@ int RunMain(int argc, const char* argv[])
         .Optional()
         .NoArgument()
         .SetFlag(&runOptions.Sql);
+    opts.AddLongOption("pg", "Program has PG syntax").NoArgument().SetFlag(&runOptions.Pg);
     opts.AddLongOption('t', "table", "table@file").AppendTo(&tablesMappingList);
     opts.AddLongOption('C', "cluster", "set cluster to service mapping").RequiredArgument("name@service").Handler(new TStoreMappingFunctor(&clusterMapping));
     opts.AddLongOption('u', "user", "MR user")

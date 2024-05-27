@@ -2655,7 +2655,7 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
         if (!req.GetNeedSupportivePartition()) {
             ReplyError(ctx,
                        responseCookie,
-                       NPersQueue::NErrorCode::BAD_REQUEST,
+                       NPersQueue::NErrorCode::PRECONDITION_FAILED,
                        "lost messages");
             return;
         }

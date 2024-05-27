@@ -1332,7 +1332,7 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_12, TFixture)
     DeleteSupportivePartition("topic_A", 0);
 
     WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #2", &tx);
-    WaitForSessionClose("topic_A", TEST_MESSAGE_GROUP_ID, NYdb::EStatus::BAD_REQUEST);
+    WaitForSessionClose("topic_A", TEST_MESSAGE_GROUP_ID, NYdb::EStatus::PRECONDITION_FAILED);
 }
 
 Y_UNIT_TEST_F(WriteToTopic_Demo_13, TFixture)

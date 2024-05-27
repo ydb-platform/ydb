@@ -132,11 +132,13 @@ public:
     }
     
     void StartPDiskRestart() {
-        Send(new TEvBlobStorage::TEvAskWardenRestartPDiskResult(GetPDisk()->PDiskId, MainKey, true, nullptr));
+        ui32 pdiskId = GetPDisk()->PDiskId;
+
+        Send(new TEvBlobStorage::TEvAskWardenRestartPDiskResult(pdiskId, MainKey, true, nullptr));
         const auto evInitRes = Recv<TEvBlobStorage::TEvNotifyWardenPDiskRestarted>();
 
         if (!Settings.UsePDiskMock) {
-            TActorId wellKnownPDiskActorId = MakeBlobStoragePDiskID(PDiskActor->NodeId(), PDisk->PDiskId);
+            TActorId wellKnownPDiskActorId = MakeBlobStoragePDiskID(PDiskActor->NodeId(), pdiskId);
 
             PDisk = nullptr;
 

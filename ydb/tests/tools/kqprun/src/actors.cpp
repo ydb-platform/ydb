@@ -1,6 +1,7 @@
 #include "actors.h"
 
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 
 
 namespace NKqpRun {
@@ -11,13 +12,14 @@ class TRunScriptActorMock : public NActors::TActorBootstrapped<TRunScriptActorMo
 public:
     TRunScriptActorMock(THolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest> request,
         NThreading::TPromise<NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr> promise,
-        ui64 resultRowsLimit, ui64 resultSizeLimit, std::vector<Ydb::ResultSet>& resultSets, TString& queryPlan)
+        ui64 resultRowsLimit, ui64 resultSizeLimit, std::vector<Ydb::ResultSet>& resultSets,
+        TProgressCallback progressCallback)
         : Request_(std::move(request))
         , Promise_(promise)
         , ResultRowsLimit_(std::numeric_limits<ui64>::max())
         , ResultSizeLimit_(std::numeric_limits<i64>::max())
         , ResultSets_(resultSets)
-        , QueryPlan_(queryPlan)
+        , ProgressCallback_(progressCallback)
     {
         if (resultRowsLimit) {
             ResultRowsLimit_ = resultRowsLimit;
@@ -76,7 +78,9 @@ public:
     }
 
     void Handle(NKikimr::NKqp::TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
-        QueryPlan_ = ev->Get()->Record.GetQueryPlan();
+        if (ProgressCallback_) {
+            ProgressCallback_(ev->Get()->Record);
+        }
     }
 
 private:
@@ -85,15 +89,104 @@ private:
     ui64 ResultRowsLimit_;
     ui64 ResultSizeLimit_;
     std::vector<Ydb::ResultSet>& ResultSets_;
-    TString& QueryPlan_;
+    TProgressCallback ProgressCallback_;
+};
+
+class TResourcesWaiterActor : public NActors::TActorBootstrapped<TResourcesWaiterActor> {
+    struct TEvPrivate {
+        enum EEv : ui32 {
+            EvResourcesInfo = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+
+            EvEnd
+        };
+
+        static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
+
+        struct TEvResourcesInfo : public NActors::TEventLocal<TEvResourcesInfo, EvResourcesInfo> {
+            explicit TEvResourcesInfo(i32 nodeCount)
+                : NodeCount(nodeCount)
+            {}
+
+            const i32 NodeCount;
+        };
+    };
+
+    static constexpr TDuration REFRESH_PERIOD = TDuration::MilliSeconds(10);
+
+public:
+    TResourcesWaiterActor(NThreading::TPromise<void> promise, i32 expectedNodeCount)
+        : ExpectedNodeCount_(expectedNodeCount)
+        , Promise_(promise)
+    {}
+
+    void Bootstrap() {
+        Become(&TResourcesWaiterActor::StateFunc);
+        CheckResourcesPublish();
+    }
+
+    void Handle(NActors::TEvents::TEvWakeup::TPtr&) {
+        CheckResourcesPublish();
+    }
+
+    void Handle(TEvPrivate::TEvResourcesInfo::TPtr& ev) {
+        if (ev->Get()->NodeCount == ExpectedNodeCount_) {
+            Promise_.SetValue();
+            PassAway();
+            return;
+        }
+
+        Schedule(REFRESH_PERIOD, new NActors::TEvents::TEvWakeup());
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(NActors::TEvents::TEvWakeup, Handle);
+        hFunc(TEvPrivate::TEvResourcesInfo, Handle);
+    )
+
+private:
+    void CheckResourcesPublish() {
+        GetResourceManager();
+
+        if (!ResourceManager_) {
+            Schedule(REFRESH_PERIOD, new NActors::TEvents::TEvWakeup());
+            return;
+        }
+
+        UpdateResourcesInfo();
+    }
+
+    void GetResourceManager() {
+        if (ResourceManager_) {
+            return;
+        }
+        ResourceManager_ = NKikimr::NKqp::TryGetKqpResourceManager(SelfId().NodeId());
+    }
+
+    void UpdateResourcesInfo() const {
+        ResourceManager_->RequestClusterResourcesInfo(
+        [selfId = SelfId(), actorContext = ActorContext()](TVector<NKikimrKqp::TKqpNodeResources>&& resources) {
+            actorContext.Send(selfId, new TEvPrivate::TEvResourcesInfo(resources.size()));
+        });
+    }
+
+private:
+    const i32 ExpectedNodeCount_;
+    NThreading::TPromise<void> Promise_;
+
+    std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> ResourceManager_;
 };
 
 }  // anonymous namespace
 
 NActors::IActor* CreateRunScriptActorMock(THolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest> request,
     NThreading::TPromise<NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr> promise,
-    ui64 resultRowsLimit, ui64 resultSizeLimit, std::vector<Ydb::ResultSet>& resultSets, TString& queryPlan) {
-    return new TRunScriptActorMock(std::move(request), promise, resultRowsLimit, resultSizeLimit, resultSets, queryPlan);
+    ui64 resultRowsLimit, ui64 resultSizeLimit, std::vector<Ydb::ResultSet>& resultSets,
+    TProgressCallback progressCallback) {
+    return new TRunScriptActorMock(std::move(request), promise, resultRowsLimit, resultSizeLimit, resultSets, progressCallback);
+}
+
+NActors::IActor* CreateResourcesWaiterActor(NThreading::TPromise<void> promise, i32 expectedNodeCount) {
+    return new TResourcesWaiterActor(promise, expectedNodeCount);
 }
 
 }  // namespace NKqpRun

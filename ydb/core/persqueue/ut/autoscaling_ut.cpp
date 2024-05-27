@@ -498,6 +498,104 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         status = client.CommitOffset(TEST_TOPIC, 0, TEST_CONSUMER, 0).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(NYdb::EStatus::BAD_REQUEST, status.GetStatus(), "The consumer cannot commit an offset for inactive, read-to-the-end partitions.");
     }
+
+    Y_UNIT_TEST(CreateAlterDescribe) {
+        auto autoscalingTestTopic = "autoscalit-topic";
+        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicClient client = setup.MakeClient();
+
+        auto minParts = 5;
+        auto maxParts = 10;
+        auto scaleUpPercent = 80;
+        auto scaleDownPercent = 20;
+        auto threshold = 500;
+        auto strategy = EAutoscalingStrategy::ScaleUp;
+
+        TCreateTopicSettings createSettings;
+        createSettings
+            .BeginConfigurePartitioningSettings()
+            .MinActivePartitions(minParts)
+            .MaxActivePartitions(maxParts)
+                .BeginConfigureAutoscalingSettings()
+                .ScaleUpThresholdPercent(scaleUpPercent)
+                .ScaleDownThresholdPercent(scaleDownPercent)
+                .ThresholdTime(TDuration::Seconds(threshold))
+                .Strategy(strategy)
+                .EndConfigureAutoscalingSettings()
+            .EndConfigurePartitioningSettings();
+        client.CreateTopic(autoscalingTestTopic, createSettings).Wait();
+
+        TDescribeTopicSettings descSettings;
+
+        auto describe = client.DescribeTopic(autoscalingTestTopic, descSettings).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), NYdb::EStatus::SUCCESS, describe.GetIssues().ToString());
+
+
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitioningSettings().GetMinActivePartitions(), minParts);
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitioningSettings().GetMaxActivePartitions(), maxParts);
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetStrategy(), strategy);
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetScaleDownThresholdPercent(), scaleDownPercent);
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetScaleUpThresholdPercent(), scaleUpPercent);
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetThresholdTime().Seconds(), threshold);
+
+        auto alterMinParts = 10;
+        auto alterMaxParts = 20;
+        auto alterScaleUpPercent = 90;
+        auto alterScaleDownPercent = 10;
+        auto alterThreshold = 700;
+        auto alterStrategy = EAutoscalingStrategy::ScaleUpAndDown;
+
+        TAlterTopicSettings alterSettings;
+        alterSettings
+            .BeginAlterPartitioningSettings()
+            .MinActivePartitions(alterMinParts)
+            .MaxActivePartitions(alterMaxParts)
+                .BeginAlterAutoscalingSettings()
+                .ScaleDownThresholdPercent(alterScaleDownPercent)
+                .ScaleUpThresholdPercent(alterScaleUpPercent)
+                .ThresholdTime(TDuration::Seconds(alterThreshold))
+                .Strategy(alterStrategy)
+                .EndAlterAutoscalingSettings()
+            .EndAlterTopicPartitioningSettings();
+
+        client.AlterTopic(autoscalingTestTopic, alterSettings).Wait();
+
+        auto describeAfterAlter = client.DescribeTopic(autoscalingTestTopic).GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetMinActivePartitions(), alterMinParts);
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetMaxActivePartitions(), alterMaxParts);
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetStrategy(), alterStrategy);
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetScaleDownThresholdPercent(), alterScaleDownPercent);
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetScaleUpThresholdPercent(), alterScaleUpPercent);
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetThresholdTime().Seconds(), alterThreshold);
+    }
+
+    Y_UNIT_TEST(PartitionSplit_AutosplitByLoad) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicClient client = setup.MakeClient();
+
+        TCreateTopicSettings createSettings;
+        createSettings
+            .BeginConfigurePartitioningSettings()
+            .MinActivePartitions(1)
+            .MaxActivePartitions(100)
+                .BeginConfigureAutoscalingSettings()
+                .ScaleUpThresholdPercent(2)
+                .ScaleDownThresholdPercent(1)
+                .ThresholdTime(TDuration::Seconds(1))
+                .Strategy(EAutoscalingStrategy::ScaleUp)
+                .EndConfigureAutoscalingSettings()
+            .EndConfigurePartitioningSettings();
+        client.CreateTopic(TEST_TOPIC, createSettings).Wait();
+
+        auto msg = TString("a", 1_MB);
+        auto writeSession = CreateWriteSession(client, "producer-1", 0);
+        UNIT_ASSERT(writeSession->Write(Msg(msg, 1)));
+        UNIT_ASSERT(writeSession->Write(Msg(msg, 2)));
+        Sleep(TDuration::Seconds(5));
+        auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+        UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
+    }
 }
 
 } // namespace NKikimr

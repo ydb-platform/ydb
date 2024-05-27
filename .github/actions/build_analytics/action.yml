@@ -29,6 +29,7 @@ runs:
     - name: ya tool bloat
       shell: bash
       run: |
+        set -ex
         export TARGET_NAME=`basename ${{ inputs.build_target }}`
         export TARGET_DIR=${{ inputs.build_target }}
         ./ya tool bloat --linker-map $TARGET_DIR/$TARGET_NAME.map.lld --input $TARGET_DIR/$TARGET_NAME --save-html ya_bloat_html
@@ -36,6 +37,7 @@ runs:
     - name: Upload results
       shell: bash
       run: |
+        set -ex
         s3cmd sync -r --acl-public --no-progress --no-check-md5 "ya_bloat_html/" "$S3_BUCKET_PATH/ya_bloat_html/"
         echo $S3_URL_PREFIX/ya_bloat_html >> $GITHUB_OUTPUT
 

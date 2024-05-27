@@ -410,17 +410,10 @@ void KqprunTerminateHandler() {
 
 void SegmentationFaultHandler(int) {
     NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
-    auto writeMesssage = [](const TString& message) {
-        write(STDERR_FILENO, message.c_str(), message.size());
-    };
 
-    writeMesssage(TStringBuilder() << colors.Red() << "======= segmentation fault call stack ========\n" << colors.Default());
-
-    TStringStream stream;
-    FormatBackTrace(&stream);
-    writeMesssage(stream.Str());
-
-    writeMesssage(TStringBuilder() << colors.Red() << "==============================================\n" << colors.Default());
+    Cerr << colors.Red() << "======= segmentation fault call stack ========" << colors.Default() << Endl;
+    FormatBackTrace(&Cerr);
+    Cerr << colors.Red() << "==============================================" << colors.Default() << Endl;
 
     abort();
 }

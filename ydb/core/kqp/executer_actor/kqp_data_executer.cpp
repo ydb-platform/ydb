@@ -794,9 +794,9 @@ private:
                                 TIssuesIds::KIKIMR_SCHEME_MISMATCH, er.GetReason()));
                         case NKikimrTxDataShard::TError::OUT_OF_SPACE:
                         case NKikimrTxDataShard::TError::DISK_SPACE_EXHAUSTED: {
-                            auto issue = YqlIssue({}, TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE);
+                            auto issue = YqlIssue({}, TIssuesIds::KIKIMR_DISK_SPACE_EXHAUSTED);
                             AddDataShardErrors(result, issue);
-                            return ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, issue);
+                            return ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED, issue);
                         }
                         default:
                             break;

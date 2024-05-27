@@ -292,6 +292,11 @@ ids {
   severity: S_ERROR
 }
 ids {
+  code: KIKIMR_DISK_SPACE_EXHAUSTED
+  severity: S_ERROR
+  format: "Database is out of disk space."
+}
+ids {
   code: YQL_PRAGMA_WARNING_MSG
   severity: S_WARNING
 }

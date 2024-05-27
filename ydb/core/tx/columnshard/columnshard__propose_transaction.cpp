@@ -72,7 +72,7 @@ public:
         if (TxOperator->IsFail()) {
             TxOperator->SendReply(*Self, ctx);
         } else {
-            if (!Self->GetProgressTxController()->IsActualOperator(TxOperator)) {
+            if (!Self->GetProgressTxController().IsActualOperator(TxOperator)) {
                 return;
             }
             if (TxOperator->IsAsync()) {

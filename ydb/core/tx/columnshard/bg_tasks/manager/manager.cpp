@@ -88,7 +88,7 @@ std::unique_ptr<NKikimr::NTabletFlatExecutor::ITransaction> TSessionsManager::Tx
 }
 
 bool TSessionsManager::HasTask(const TTask& task) const {
-    return Storage->GetSession(task.GetDescriptionContainer().GetClassName(), task.GetIdentifier());
+    return !!Storage->GetSession(task.GetDescriptionContainer().GetClassName(), task.GetIdentifier());
 }
 
 }

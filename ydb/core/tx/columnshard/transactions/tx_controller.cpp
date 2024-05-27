@@ -76,7 +76,7 @@ bool TTxController::Load(NTabletFlatExecutor::TTransactionContext& txc) {
     return true;
 }
 
-TTxController::ITransactionOperator::TPtr TTxController::GetTxOperator(const ui64 txId) {
+TTxController::ITransactionOperator::TPtr TTxController::GetTxOperator(const ui64 txId) const {
     auto it = Operators.find(txId);
     if(it == Operators.end()) {
         return nullptr;

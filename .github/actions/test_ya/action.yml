@@ -127,7 +127,7 @@ runs:
         esac
         
         if [ ! -z "${{ inputs.additional_ya_make_args }}" ]; then
-          extra_params+=("${{ inputs.additional_ya_make_args }}")
+          extra_params+=(${{ inputs.additional_ya_make_args }})
         fi
 
         testmo automation:resources:add-link --name build --url "$RUN_URL" --resources testmo.json

@@ -111,7 +111,7 @@ runs:
         esac
         
         if [ ! -z "${{ inputs.additional_ya_make_args }}" ]; then
-          extra_params+=("${{ inputs.additional_ya_make_args }}")
+          extra_params+=(${{ inputs.additional_ya_make_args }})
         fi
 
         echo "::debug::get version"

@@ -24,6 +24,9 @@ inputs:
     required: false
     default: "12"
     description: "link threads count"
+  additional_ya_make_args:
+    type: string
+    default: ""
   testman_token:
     required: false
     description: "test manager auth token"
@@ -123,6 +126,10 @@ runs:
             ;;
         esac
         
+        if [ ! -z "${{ inputs.additional_ya_make_args }}" ]; then
+          extra_params+=("${{ inputs.additional_ya_make_args }}")
+        fi
+
         testmo automation:resources:add-link --name build --url "$RUN_URL" --resources testmo.json
         testmo automation:resources:add-field --name git-sha --type string --value "${GITHUB_SHA:0:7}" --resources testmo.json
         RUN_ID=$(

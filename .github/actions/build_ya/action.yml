@@ -21,6 +21,9 @@ inputs:
     required: false
     default: "8"
     description: "link threads count"
+  additional_ya_make_args:
+    type: string
+    default: ""
 outputs:
   success:
     value: ${{ steps.build.outputs.status }}
@@ -107,6 +110,10 @@ runs:
             ;;
         esac
         
+        if [ ! -z "${{ inputs.additional_ya_make_args }}" ]; then
+          extra_params+=("${{ inputs.additional_ya_make_args }}")
+        fi
+
         echo "::debug::get version"
         ./ya --version
         

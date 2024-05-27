@@ -31,8 +31,10 @@ using TSingleClusterReadSessionPtr = std::shared_ptr<TCallbackContext<TSingleClu
 
 using TNodeId = i32;
 using TGeneration = i64;
+using TPartitionId = i64;
 using TPartitionSessionId = ui64;
 using TServerSessionId = TString;
+using TDirectReadId = i64;
 
 using TDirectReadServerMessage = Ydb::Topic::StreamDirectReadMessage_FromServer;
 using TDirectReadClientMessage = Ydb::Topic::StreamDirectReadMessage_FromClient;
@@ -43,9 +45,18 @@ class TDirectReadSession;
 using TDirectReadSessionPtr = std::shared_ptr<TCallbackContext<TDirectReadSession>>;
 
 struct TDirectReadPartitionSession {
+    enum class EState {
+        CREATED,
+        STARTING,
+        STARTED
+    };
+
     TPartitionSessionId Id;
     TPartitionLocation Location;
+    EState State = EState::CREATED;
     IRetryPolicy::IRetryState::TPtr RetryState = {};
+    TDirectReadId LastDirectReadId = 0;
+
 
     // min read id, partition id, done read id?
 };
@@ -103,7 +114,7 @@ private:
         const NYdbGrpc::IQueueClientContextPtr& connectTimeoutContext
     );
 
-    void SendStartDirectReadPartitionSessionImpl(const TDirectReadPartitionSession&);
+    void SendStartDirectReadPartitionSessionImpl(TDirectReadPartitionSession&);
 
     TStringBuilder GetLogPrefix() const;
 
@@ -134,6 +145,7 @@ private:
     std::shared_ptr<TDirectReadServerMessage> ServerMessage;
 
     THashMap<TPartitionSessionId, TDirectReadPartitionSession> PartitionSessions;
+    IRetryPolicy::IRetryState::TPtr RetryState = {};
 
     EState State;
     TNodeId NodeId;

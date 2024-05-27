@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<!-- Based on https://github.com/martine/webtreemap -->
+<head>
+<title>binary size</title>
+<link rel="stylesheet" href="webtreemap.css">
+<link rel="stylesheet" href="bloat.css">
+<script src='webtreemap.js'></script>
+</head>
+
+<body>
+<legend>
+    <h2>Legend:</h2>
+    <div class="webtreemap-node webtreemap-symbol-dir webtreemap-aggregate">
+        <div class="webtreemap-node webtreemap-symbol-dir">
+            Dir
+        </div>
+    </div>
+    <div class="webtreemap-node webtreemap-symbol-cpp webtreemap-aggregate">
+        <div class="webtreemap-node webtreemap-symbol-cpp">
+            Cpp
+        </div>
+    </div>
+    <div class="webtreemap-node webtreemap-symbol-h webtreemap-aggregate">
+        <div class="webtreemap-node webtreemap-symbol-h">
+            Header
+        </div>
+    </div>
+</legend>
+
+<h1>build time bloat</h1>
+<p>Click on a box to zoom in.  Click on the outermost box to zoom out.</p>
+
+<div id='map'></div>
+
+<script src="bloat.json"></script>
+<script>
+    var map = document.getElementById('map');
+    appendTreemap(map, kTree);
+</script>
+
+</body>

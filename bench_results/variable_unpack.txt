@@ -1,0 +1,332 @@
+Warn: library is not a buildable target. Skip it.
+------- [TM] {default-linux-x86_64, release} ydb/library/yql/minikql/comp_nodes/packed_tuple/ut/unittest >> BenchConve
+Test command err:
+--------------------------------------------------
+
+
+Fallback
+Variable sequence size: 8
+------------- Benchmark for Unpack -------------
+Layout: { key columns count = 1, payload columns count = 7 }
+Count of columns = 8
+Count of rows = 10000
+TotalRowSize = 77
+Data size = 751.953125 [KB]
+Calculating speed = 868MB/sec
+----------------------------------------------
+------------- Benchmark for Unpack -------------
+Layout: { key columns count = 1, payload columns count = 7 }
+Count of columns = 8
+Count of rows = 100000
+TotalRowSize = 77
+Data size = 7.343292236 [MB]
+Calculating speed = 870MB/sec
+----------------------------------------------
+------------- Benchmark for Unpack -------------
+Layout: { key columns count = 1, payload columns count = 7 }
+Count of columns = 8
+Count of rows = 1000000
+TotalRowSize = 77
+Data size = 73.43292236 [MB]
+Calculating speed = 871MB/sec
+----------------------------------------------
+------------- Benchmark for Unpack -------------
+Layout: { key columns count = 3, payload columns count = 29 }
+Count of columns = 32
+Count of rows = 10000
+TotalRowSize = 296
+Data size = 2.822875977 [MB]
+Calculating speed = 962MB/sec
+----------------------------------------------
+------------- Benchmark for Unpack -------------
+Layout: { key columns count = 3, payload columns count = 29 }
+Count of columns = 32
+Count of rows = 100000
+TotalRowSize = 296
+Data size = 28.22875977 [MB]
+Calculating speed = 883MB/sec
+----------------------------------------------
+------------- Benchmark for Unpack -------------
+Layout: { key columns count = 12, payload columns count = 116 }
+Count of columns = 128
+Count of rows = 10000
+TotalRowSize = 1172
+Data size = 11.17706299 [MB]
+Calculating speed = 877MB/sec
+----------------------------------------------
+--------------------------------------------------
+Fallback
+Variable sequence size: 32
+------------- Benchmark for Unpack -------------
+Layout: { key columns count = 1, payload columns count = 7 }
+Count of columns = 8
+Count of rows = 10000
+TotalRowSize = 261
+Data size = 2.489089966 [MB]
+Calculating speed = 2906MB/sec
+----------------------------------------------
+------------- Benchmark for Unpack -------------
+Layout: { key columns count = 1, payload columns count = 7 }
+Count of columns = 8
+Count of rows = 100000
+TotalRowSize = 261
+Data size = 24.89089966 [MB]
+Calculating speed = 2716MB/sec
+----------------------------------------------
+------------- Benchmark for Unpack -------------
+Layout: { key columns count = 3, payload columns count = 29 }
+Count of columns = 32
+Count of rows = 10000
+TotalRowSize = 1032
+Data size = 9.841918945 [MB]
+Calculating speed = 3000MB/sec
+----------------------------------------------
+------------- Benchmark for Unpack -------------
+Layout: { key columns count = 12, payload columns count = 116 }
+Count of columns = 128
+Count of rows = 10000
+TotalRowSize = 4116
+Data size = 39.25323486 [MB]
+Calculating speed = 2672MB/sec
+----------------------------------------------
+--------------------------------------------------
+Fallback
+Variable sequence size: 128
+------------- Benchmark for Unpack -------------
+Layout: { key columns count = 1, payload columns count = 7 }
+Count of columns = 8
+Count of rows = 10000
+TotalRowSize = 1029
+Data size = 9.813308716 [MB]
+Calculating speed = 8518MB/sec
+----------------------------------------------
+------------- Benchmark for Unpack -------------
+Layout: { key columns count = 3, payload columns count = 29 }
+Count of columns = 32
+Count of rows = 10000
+TotalRowSize = 4104
+Data size = 39.13879395 [MB]
+Calculating speed = 7474MB/sec
+----------------------------------------------
+--------------------------------------------------
+
+
+SSE42
+Variable sequence size: 8
+------------- Benchmark for Unpack -------------
+Layout: { key columns count = 1, payload columns count = 7 }
+Count of columns = 8
+Count of rows = 10000
+TotalRowSize = 77
+Data size = 751.953125 [KB]
+Calculating speed = 815MB/sec
+----------------------------------------------
+------------- Benchmark for Unpack -------------
+Layout: { key columns count = 1, payload columns count = 7 }
+Count of columns = 8
+Count of rows = 100000
+TotalRowSize = 77
+Data size = 7.343292236 [MB]
+Calculating speed = 885MB/sec
+----------------------------------------------
+------------- Benchmark for Unpack -------------
+Layout: { key columns count = 1, payload columns count = 7 }
+Count of columns = 8
+Count of rows = 1000000
+TotalRowSize = 77
+Data size = 73.43292236 [MB]
+Calculating speed = 867MB/sec
+----------------------------------------------
+------------- Benchmark for Unpack -------------
+Layout: { key columns count = 3, payload columns count = 29 }
+Count of columns = 32
+Count of rows = 10000
+TotalRowSize = 296
+Data size = 2.822875977 [MB]
+Calculating speed = 960MB/sec
+----------------------------------------------
+------------- Benchmark for Unpack -------------
+Layout: { key columns count = 3, payload columns count = 29 }
+Count of columns = 32
+Count of rows = 100000
+TotalRowSize = 296
+Data size = 28.22875977 [MB]
+Calculating speed = 855MB/sec
+----------------------------------------------
+------------- Benchmark for Unpack -------------
+Layout: { key columns count = 12, payload columns count = 116 }
+Count of columns = 128
+Count of rows = 10000
+TotalRowSize = 1172
+Data size = 11.17706299 [MB]
+Calculating speed = 874MB/sec
+----------------------------------------------
+--------------------------------------------------
+
+
+SSE42
+Variable sequence size: 32
+------------- Benchmark for Unpack -------------
+Layout: { key columns count = 1, payload columns count = 7 }
+Count of columns = 8
+Count of rows = 10000
+TotalRowSize = 261
+Data size = 2.489089966 [MB]
+Calculating speed = 2903MB/sec
+----------------------------------------------
+------------- Benchmark for Unpack -------------
+Layout: { key columns count = 1, payload columns count = 7 }
+Count of columns = 8
+Count of rows = 100000
+TotalRowSize = 261
+Data size = 24.89089966 [MB]
+Calculating speed = 2703MB/sec
+----------------------------------------------
+------------- Benchmark for Unpack -------------
+Layout: { key columns count = 3, payload columns count = 29 }
+Count of columns = 32
+Count of rows = 10000
+TotalRowSize = 1032
+Data size = 9.841918945 [MB]
+Calculating speed = 2930MB/sec
+----------------------------------------------
+------------- Benchmark for Unpack -------------
+Layout: { key columns count = 12, payload columns count = 116 }
+Count of columns = 128
+Count of rows = 10000
+TotalRowSize = 4116
+Data size = 39.25323486 [MB]
+Calculating speed = 2670MB/sec
+----------------------------------------------
+--------------------------------------------------
+SSE42
+Variable sequence size: 128
+------------- Benchmark for Unpack -------------
+Layout: { key columns count = 1, payload columns count = 7 }
+Count of columns = 8
+Count of rows = 10000
+TotalRowSize = 1029
+Data size = 9.813308716 [MB]
+Calculating speed = 8575MB/sec
+----------------------------------------------
+------------- Benchmark for Unpack -------------
+Layout: { key columns count = 3, payload columns count = 29 }
+Count of columns = 32
+Count of rows = 10000
+TotalRowSize = 4104
+Data size = 39.13879395 [MB]
+Calculating speed = 7509MB/sec
+----------------------------------------------
+--------------------------------------------------
+
+
+AVX2
+Variable sequence size: 8
+------------- Benchmark for Unpack -------------
+Layout: { key columns count = 1, payload columns count = 7 }
+Count of columns = 8
+Count of rows = 10000
+TotalRowSize = 77
+Data size = 751.953125 [KB]
+Calculating speed = 984MB/sec
+----------------------------------------------
+------------- Benchmark for Unpack -------------
+Layout: { key columns count = 1, payload columns count = 7 }
+Count of columns = 8
+Count of rows = 100000
+TotalRowSize = 77
+Data size = 7.343292236 [MB]
+Calculating speed = 970MB/sec
+----------------------------------------------
+------------- Benchmark for Unpack -------------
+Layout: { key columns count = 1, payload columns count = 7 }
+Count of columns = 8
+Count of rows = 1000000
+TotalRowSize = 77
+Data size = 73.43292236 [MB]
+Calculating speed = 937MB/sec
+----------------------------------------------
+------------- Benchmark for Unpack -------------
+Layout: { key columns count = 3, payload columns count = 29 }
+Count of columns = 32
+Count of rows = 10000
+TotalRowSize = 296
+Data size = 2.822875977 [MB]
+Calculating speed = 1045MB/sec
+----------------------------------------------
+------------- Benchmark for Unpack -------------
+Layout: { key columns count = 3, payload columns count = 29 }
+Count of columns = 32
+Count of rows = 100000
+TotalRowSize = 296
+Data size = 28.22875977 [MB]
+Calculating speed = 939MB/sec
+----------------------------------------------
+------------- Benchmark for Unpack -------------
+Layout: { key columns count = 12, payload columns count = 116 }
+Count of columns = 128
+Count of rows = 10000
+TotalRowSize = 1172
+Data size = 11.17706299 [MB]
+Calculating speed = 967MB/sec
+----------------------------------------------
+--------------------------------------------------
+AVX2
+Variable sequence size: 32
+------------- Benchmark for Unpack -------------
+Layout: { key columns count = 1, payload columns count = 7 }
+Count of columns = 8
+Count of rows = 10000
+TotalRowSize = 261
+Data size = 2.489089966 [MB]
+Calculating speed = 3202MB/sec
+----------------------------------------------
+------------- Benchmark for Unpack -------------
+Layout: { key columns count = 1, payload columns count = 7 }
+Count of columns = 8
+Count of rows = 100000
+TotalRowSize = 261
+Data size = 24.89089966 [MB]
+Calculating speed = 2769MB/sec
+----------------------------------------------
+------------- Benchmark for Unpack -------------
+Layout: { key columns count = 3, payload columns count = 29 }
+Count of columns = 32
+Count of rows = 10000
+TotalRowSize = 1032
+Data size = 9.841918945 [MB]
+Calculating speed = 3142MB/sec
+----------------------------------------------
+------------- Benchmark for Unpack -------------
+Layout: { key columns count = 12, payload columns count = 116 }
+Count of columns = 128
+Count of rows = 10000
+TotalRowSize = 4116
+Data size = 39.25323486 [MB]
+Calculating speed = 2511MB/sec
+----------------------------------------------
+--------------------------------------------------
+AVX2
+Variable sequence size: 128
+------------- Benchmark for Unpack -------------
+Layout: { key columns count = 1, payload columns count = 7 }
+Count of columns = 8
+Count of rows = 10000
+TotalRowSize = 1029
+Data size = 9.813308716 [MB]
+Calculating speed = 9536MB/sec
+----------------------------------------------
+------------- Benchmark for Unpack -------------
+Layout: { key columns count = 3, payload columns count = 29 }
+Count of columns = 32
+Count of rows = 10000
+TotalRowSize = 4104
+Data size = 39.13879395 [MB]
+Calculating speed = 8125MB/sec
+----------------------------------------------
+
+Total 1 suite:
+	1 - GOOD
+Total 1 test:
+	1 - GOOD
+Ok

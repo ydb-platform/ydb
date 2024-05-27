@@ -220,7 +220,7 @@ private:
             : TThread(
                 "AresDnsResolver",
                 NThreading::TThreadOptions{
-                    .ShutdownPriority = ResolverThreadShutdownPriority
+                    .ShutdownPriority = ResolverThreadShutdownPriority,
                 })
             , Owner_(owner)
         { }
@@ -355,7 +355,7 @@ private:
             return true; // Full batch processed.
         }
 
-        void CleanUp()
+        void Cleanup()
         {
             // Cancel all pending requests.
             // Resolve will not add any more tasks because of short-circuiting.
@@ -371,9 +371,9 @@ private:
             constexpr size_t RequestsBatchSize = 100;
 
             while (!IsStopping()) {
-                constexpr TDuration PollTimeoutMs = TDuration::MilliSeconds(1000);
+                constexpr auto PollTimeout = TDuration::MilliSeconds(1000);
 
-                bool shouldDequeue = ProcessFDEvents(PollTimeoutMs);
+                bool shouldDequeue = ProcessFDEvents(PollTimeout);
 
                 if (shouldDequeue) {
                     if (bool noRequestsLeft = !TryProcessRequests(RequestsBatchSize, /*cancelRequests*/ false)) {
@@ -386,7 +386,7 @@ private:
 
                         // NB(arkady-e1ppa): Do not drain the entire queue
                         // because of OOM risk.
-                        // (TryProcessRequest allocates data in c-ares internals for each request).
+                        // (TryProcessRequest allocates data in c-ares internals for each request.)
                         TryProcessRequests(RequestsBatchSize, /*cancelRequests*/ false);
                     }
                 }
@@ -394,11 +394,11 @@ private:
 
             // We happen to be here in exactly two cases:
             // 1) Resolver has been destroyed:
-            //    1.1) Naturally -- never happens really but equivalent of (2).
+            //    1.1) Naturally -- never happens really but equivalent to (2).
             //    1.2) Someone reconfigures resolver by recreating it: cancel all
             //         pending requests and die.
             // 2) Shutdown is happening. Cancel all pending requests and die.
-            CleanUp();
+            Cleanup();
         }
     };
 
@@ -482,7 +482,7 @@ private:
             hostent);
     }
 
-    void CleanUpAres() noexcept
+    void CleanupAres() noexcept
     {
         ares_destroy(Channel_);
 
@@ -491,7 +491,7 @@ private:
         ares_library_cleanup();
     }
 
-    void CleanUpSocket()
+    void CleanupSocket()
     {
     #ifdef YT_DNS_RESOLVER_USE_EPOLL
         YT_VERIFY(HandleEintr(::close, EpollFD_) == 0);
@@ -507,10 +507,10 @@ private:
 
         // Thread drains the queue.
         ResolverThread_->Stop();
-        // ^- (f) (Actually, Drain which has this call in sihb relation is (f)).
+        // ^- (f) (Actually, Drain which has this call in sihb relation is (f).)
 
-        CleanUpAres();
-        CleanUpSocket();
+        CleanupAres();
+        CleanupSocket();
     }
 
     void SetupSocket()

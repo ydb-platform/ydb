@@ -32,7 +32,7 @@ struct TExecutionOptions {
     EClearExecutionCase ClearExecution = EClearExecutionCase::Disabled;
     NKikimrKqp::EQueryAction ScriptQueryAction = NKikimrKqp::QUERY_ACTION_EXECUTE;
 
-    TString TraceId = "kqprun";
+    TString TraceId = "kqprun_" + CreateGuidAsString();
 
     bool HasResults() const {
         return !ScriptQueries.empty() && ScriptQueryAction == NKikimrKqp::QUERY_ACTION_EXECUTE;

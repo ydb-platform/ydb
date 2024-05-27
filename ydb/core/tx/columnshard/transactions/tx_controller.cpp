@@ -84,7 +84,7 @@ TTxController::ITransactionOperator::TPtr TTxController::GetTxOperator(const ui6
     return it->second;
 }
 
-TTxController::ITransactionOperator::TPtr TTxController::GetVerifiedTxOperator(const ui64 txId) {
+TTxController::ITransactionOperator::TPtr TTxController::GetVerifiedTxOperator(const ui64 txId) const {
     auto it = Operators.find(txId);
     AFL_VERIFY(it != Operators.end())("tx_id", txId);
     return it->second;

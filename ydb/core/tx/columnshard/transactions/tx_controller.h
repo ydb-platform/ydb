@@ -326,8 +326,8 @@ private:
 public:
     TTxController(TColumnShard& owner);
 
-    ITransactionOperator::TPtr GetTxOperator(const ui64 txId);
-    ITransactionOperator::TPtr GetVerifiedTxOperator(const ui64 txId);
+    ITransactionOperator::TPtr GetTxOperator(const ui64 txId) const;
+    ITransactionOperator::TPtr GetVerifiedTxOperator(const ui64 txId) const;
 
     ui64 GetMemoryUsage() const;
     bool HaveOutdatedTxs() const;

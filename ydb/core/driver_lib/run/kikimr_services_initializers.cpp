@@ -2201,7 +2201,9 @@ void TCompConveyorInitializer::InitializeServices(NActors::TActorSystemSetup* se
     if (Config.HasCompConveyorConfig()) {
         Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetCompConveyorConfig()));
     }
-    serviceConfig.SetWorkersCount(2);
+    if (!serviceConfig.HasDefaultFractionOfThreadsCount()) {
+        serviceConfig.SetDefaultFractionOfThreadsCount(0.33);
+    }
 
     if (serviceConfig.IsEnabled()) {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");

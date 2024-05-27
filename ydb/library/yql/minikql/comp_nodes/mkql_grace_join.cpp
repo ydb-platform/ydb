@@ -1,6 +1,7 @@
 #include "mkql_grace_join.h"
 #include "mkql_grace_join_imp.h"
 
+#include <format>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <ydb/library/yql/public/decimal/yql_decimal_serialize.h>
@@ -596,6 +597,7 @@ public:
     }
 
     EFetchResult FetchValues(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
+        std::cerr << "[MISHA] join\n";
         while (true) {
             switch(GetMode()) {
                 case EOperatingMode::InMemory: {
@@ -631,13 +633,14 @@ private:
     }
 
     bool IsSwitchToSpillingModeCondition() const {
-        return false;
+        // return false;
         // TODO: YQL-18033
-        // return !HasMemoryForProcessing();
+        return !HasMemoryForProcessing();
     }
 
 
     void SwitchMode(EOperatingMode mode, TComputationContext& ctx) {
+        std::cerr << std::format("[MISHA] switching {}->{}\n", (int)Mode, (int)mode);
         switch(mode) {
             case EOperatingMode::InMemory: {
                 MKQL_ENSURE(false, "Internal logic error");
@@ -820,6 +823,10 @@ private:
         return LeftPacker->TablePtr->HasRunningAsyncIoOperation() || RightPacker->TablePtr->HasRunningAsyncIoOperation();
     }
 
+    bool IsProcessingFinished() {
+        return LeftPacker->TablePtr->IsProcessingFinished() || RightPacker->TablePtr->IsProcessingFinished();
+    }
+
 void DoCalculateWithSpilling(TComputationContext& ctx) {
     UpdateSpilling();
 
@@ -835,7 +842,7 @@ void DoCalculateWithSpilling(TComputationContext& ctx) {
 
     if (!*HaveMoreLeftRows && !*HaveMoreRightRows) {
         UpdateSpilling();
-        if (HasRunningAsyncOperation()) return;
+        if (HasRunningAsyncOperation() || !IsProcessingFinished()) return;
         if (!IsSpillingFinalized) {
             LeftPacker->TablePtr->FinalizeSpilling();
             RightPacker->TablePtr->FinalizeSpilling();

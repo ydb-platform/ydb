@@ -1,5 +1,6 @@
 #include "mkql_grace_join_imp.h"
 
+#include <format>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/utils/log/log.h>
 
@@ -1147,7 +1148,7 @@ bool TTable::TryToReduceMemoryAndWait() {
     i32 largestBucketIndex = 0;
     ui64 largestBucketSize = 0;
     for (ui32 bucket = 0; bucket < NumberOfBuckets; ++bucket) {
-        if (TableBucketsSpillers[bucket].HasRunningAsyncIoOperation()) return true;
+        if (TableBucketsSpillers[bucket].HasRunningAsyncIoOperation() || !TableBucketsSpillers[bucket].IsProcessingFinished()) return true;
 
         ui64 bucketSize = GetSizeOfBucket(bucket);
         if (bucketSize > largestBucketSize) {
@@ -1186,6 +1187,13 @@ bool TTable::HasRunningAsyncIoOperation() const {
         if (TableBucketsSpillers[bucket].HasRunningAsyncIoOperation()) return true;
     }
     return false;
+}
+
+bool TTable::IsProcessingFinished() const {
+    for (ui32 bucket = 0; bucket < NumberOfBuckets; ++bucket) {
+        if (!TableBucketsSpillers[bucket].IsProcessingFinished()) return false;
+    }
+    return true;
 }
 
 bool TTable::IsBucketInMemory(ui32 bucket) const {
@@ -1314,8 +1322,9 @@ bool TTableBucketSpiller::IsExtractionRequired() const {
 }
 
 void TTableBucketSpiller::StartBucketRestoration() {
-    MKQL_ENSURE(State == EState::Restoring, "Internal logic error");
-    MKQL_ENSURE(NextVectorToProcess == ENextVectorToProcess::None, "Internal logic error");
+    MKQL_ENSURE(State == EState::Restoring, std::format("STATE: {}\n", (int)State));
+    if (NextVectorToProcess != ENextVectorToProcess::None) return;
+    MKQL_ENSURE(NextVectorToProcess == ENextVectorToProcess::None, std::format("NEXT VECTOR: {}\n", (int)NextVectorToProcess));
 
     NextVectorToProcess = ENextVectorToProcess::KeyAndVals;
     ProcessBucketRestoration();

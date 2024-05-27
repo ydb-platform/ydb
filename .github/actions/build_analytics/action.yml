@@ -26,10 +26,11 @@ runs:
         folder_prefix: ya-
         build_preset: ${{ inputs.build_preset }}
 
-    - name: run analyze tools
+    - name: Run analytics tools
       shell: bash
       run: |
         set -ex
+        # FIXME: target name may be not the same as dir name
         export TARGET_NAME=`basename ${{ inputs.build_target }}`
         export TARGET_DIR=${{ inputs.build_target }}
         ./ya tool bloat --linker-map $TARGET_DIR/$TARGET_NAME.map.lld --input $TARGET_DIR/$TARGET_NAME --save-html ya_bloat_html

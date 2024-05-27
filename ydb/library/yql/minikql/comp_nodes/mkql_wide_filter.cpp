@@ -263,7 +263,7 @@ TBaseComputation::TGenerateResult GenFetchProcess(Value* statePtrVal, const TCod
         auto maybeResultVal = PHINode::Create(TMaybeFetchResult::LLVMType(context), 3, "maybe_res", pass);
 
         auto stateVal = new LoadInst(statePtrVal->getType()->getPointerElementType(), statePtrVal, "state", block);
-        auto needFetchCond = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, ConstantInt::get(stateVal->getType(), 1), stateVal, "need_fetch", block);
+        auto needFetchCond = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, GetTrue(context), stateVal, "need_fetch", block);
         maybeResultVal->addIncoming(TMaybeFetchResult(EFetchResult::Finish).LLVMConst(context), block);
         BranchInst::Create(fetch, pass, needFetchCond, block);
         
@@ -275,7 +275,7 @@ TBaseComputation::TGenerateResult GenFetchProcess(Value* statePtrVal, const TCod
 
         block = check;
         auto predicateCond = GenGetPredicate<false>(ctx, fetchGetters, block);
-        auto newStateVal = SelectInst::Create(predicateCond, ConstantInt::get(stateVal->getType(), 0), ConstantInt::get(stateVal->getType(), 1), "new_state", block);
+        auto newStateVal = SelectInst::Create(predicateCond, GetFalse(context), GetTrue(context), "new_state", block);
         new StoreInst(newStateVal, statePtrVal, block);
         auto retOneCond = Inclusive ? ConstantInt::getTrue(context) : predicateCond;
         auto retStatusVal = SelectInst::Create(retOneCond, TMaybeFetchResult(EFetchResult::One).LLVMConst(context), TMaybeFetchResult(EFetchResult::Finish).LLVMConst(context), "ret_status", block);
@@ -339,7 +339,7 @@ public:
 
         auto [fetchResVal, fetchGetters] = fetchGenerator(ctx, block);
         auto stateVal = new LoadInst(statePtrVal->getType()->getPointerElementType(), statePtrVal, "state", block);
-        auto needCheckCond = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, ConstantInt::get(stateVal->getType(), 1), stateVal, "need_check", block);
+        auto needCheckCond = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, GetTrue(context), stateVal, "need_check", block);
         auto oneCond = CmpInst::Create(Instruction::ICmp, CmpInst::ICMP_EQ, ConstantInt::get(fetchResVal->getType(), static_cast<i32>(EFetchResult::One)), fetchResVal, "one", block);
         auto willCheckCond = BinaryOperator::Create(Instruction::And, needCheckCond, oneCond, "will_check", block);
         maybeResultVal->addIncoming(TMaybeFetchResult::LLVMFromFetchResult(fetchResVal, "fetch_res_ext", block), block);
@@ -351,7 +351,7 @@ public:
         BranchInst::Create(pass, save, predicateCond, block);
 
         block = save;
-        new StoreInst(ConstantInt::get(stateVal->getType(), 1), statePtrVal, block);
+        new StoreInst(GetTrue(context), statePtrVal, block);
         maybeResultVal->addIncoming((Inclusive ? TMaybeFetchResult::None() : TMaybeFetchResult(EFetchResult::One)).LLVMConst(context), block);
         BranchInst::Create(pass, block);
 

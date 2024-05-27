@@ -188,18 +188,17 @@ public:
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns, // key columns then value columns
         const NMiniKQL::TTypeEnvironment& typeEnv)
         : TypeEnv(typeEnv)
-        , SchemeEntry(schemeEntry)
         , Columns(BuildColumns(inputColumns))
-        , WriteIndex(BuildWriteIndex(SchemeEntry, inputColumns))
+        , WriteIndex(BuildWriteIndex(schemeEntry, inputColumns))
         , WriteColumnIds(BuildWriteColumnIds(inputColumns, WriteIndex))
         , BatchBuilder(arrow::Compression::UNCOMPRESSED, BuildNotNullColumns(inputColumns)) {
         TString err;
-        if (!BatchBuilder.Start(BuildBatchBuilderColumns(SchemeEntry), 0, 0, err)) {
+        if (!BatchBuilder.Start(BuildBatchBuilderColumns(schemeEntry), 0, 0, err)) {
             yexception() << "Failed to start batch builder: " + err;
         }
 
         // TODO: Checks from ydb/core/tx/data_events/columnshard_splitter.cpp
-        const auto& description = SchemeEntry.ColumnTableInfo->Description;
+        const auto& description = schemeEntry.ColumnTableInfo->Description;
         const auto& scheme = description.GetSchema();
         const auto& sharding = description.GetSharding();
 
@@ -393,7 +392,6 @@ public:
 private:
 
     const NMiniKQL::TTypeEnvironment& TypeEnv;
-    const NSchemeCache::TSchemeCacheNavigate::TEntry SchemeEntry;
     std::shared_ptr<NSharding::TShardingBase> Sharding;
 
     const TVector<TSysTables::TTableColumnInfo> Columns;

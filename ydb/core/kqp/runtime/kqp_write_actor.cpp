@@ -404,12 +404,15 @@ private:
                     << SchemeEntry->TableId.PathId.ToString() << "`."
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << ".");
-            // TODO: Reshard writes
-            RuntimeError(
-                TStringBuilder() << "Got SCHEME CHANGED for table `"
-                    << SchemeEntry->TableId.PathId.ToString() << "`.",
-                NYql::NDqProto::StatusIds::SCHEME_ERROR,
-                getIssues());
+            if (InconsistentTx) {
+                ResolveTable();
+            } else {
+                RuntimeError(
+                    TStringBuilder() << "Got SCHEME CHANGED for table `"
+                        << SchemeEntry->TableId.PathId.ToString() << "`.",
+                    NYql::NDqProto::StatusIds::SCHEME_ERROR,
+                    getIssues());
+            }
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN: {
@@ -589,16 +592,22 @@ private:
                 columnsMetadata.push_back(column);
             }
 
-            ShardedWriteController = CreateShardedWriteController(
-                TShardedWriteControllerSettings {
-                    .MemoryLimitTotal = kInFlightMemoryLimitPerActor,
-                    .MemoryLimitPerMessage = kMemoryLimitPerMessage,
-                    .MaxBatchesPerMessage = (SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable
-                        ? 1
-                        : kMaxBatchesPerMessage),
-                },
-                std::move(columnsMetadata),
-                TypeEnv);
+            try {
+                ShardedWriteController = CreateShardedWriteController(
+                    TShardedWriteControllerSettings {
+                        .MemoryLimitTotal = kInFlightMemoryLimitPerActor,
+                        .MemoryLimitPerMessage = kMemoryLimitPerMessage,
+                        .MaxBatchesPerMessage = (SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable
+                            ? 1
+                            : kMaxBatchesPerMessage),
+                    },
+                    std::move(columnsMetadata),
+                    TypeEnv);
+            } catch (...) {
+                RuntimeError(
+                    CurrentExceptionMessage(),
+                    NYql::NDqProto::StatusIds::INTERNAL_ERROR);
+            }
         }
 
         try {

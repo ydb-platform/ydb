@@ -38,8 +38,11 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
     const TInstant Deadline;
     TInstant StartTime;
     TInstant StartTimePut;
-    ui32 RequestsSent;
-    ui32 ResponsesReceived;
+    ui32 GetRequestsSent = 0;
+    ui32 PutRequestsSent = 0;
+    ui32 GetResponsesReceived = 0;
+    ui32 PutResponsesReceived = 0;
+    ui32 GroupSize;
     i64 ReportedBytes;
     ui32 MaxSaneRequests = 0;
     bool IsPutStarted = false;
@@ -99,8 +102,8 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
     void SendVGetsAndVPuts(TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> &vGets,
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> &vPuts) {
         ReportBytes(GetImpl.GrabBytesToReport());
-        RequestsSent += vGets.size();
-        RequestsSent += vPuts.size();
+        GetRequestsSent += vGets.size();
+        PutRequestsSent += vPuts.size();
         CountPuts(vPuts);
         if (vPuts.size()) {
             if (!IsPutStarted) {
@@ -208,7 +211,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
 
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> vGets;
         TAutoPtr<TEvBlobStorage::TEvGetResult> getResult;
-        ResponsesReceived++;
+        GetResponsesReceived++;
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> vPuts;
         GetImpl.OnVGetResult(LogCtx, *ev->Get(), vGets, vPuts, getResult);
         SendVGetsAndVPuts(vGets, vPuts);
@@ -217,8 +220,10 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
             SendReplyAndDie(getResult);
             return;
         }
-        Y_ABORT_UNLESS(RequestsSent > ResponsesReceived, "RequestsSent# %" PRIu32 " ResponsesReceived# %" PRIu32
-                " GetImpl.DumpFullState# %s", RequestsSent, ResponsesReceived, GetImpl.DumpFullState().c_str());
+        Y_ABORT_UNLESS(GetRequestsSent + PutRequestsSent > GetResponsesReceived + PutResponsesReceived,
+                "GetRequestsSent# %" PRIu32 " GetResponsesReceived# %" PRIu32 "PutRequestsSent# %" PRIu32
+                " PutResponsesReceived# %" PRIu32 " GetImpl.DumpFullState# %s", GetRequestsSent,
+                GetResponsesReceived, PutRequestsSent, PutResponsesReceived, GetImpl.DumpFullState().c_str());
 
         TryScheduleGetAcceleration();
         if (IsPutStarted) {
@@ -228,7 +233,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
     }
 
     void SanityCheck() {
-        if (RequestsSent <= MaxSaneRequests) {
+        if (GetRequestsSent + PutRequestsSent <= MaxSaneRequests) {
             return;
         }
         TStringStream err;
@@ -293,7 +298,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> vGets;
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> vPuts;
         TAutoPtr<TEvBlobStorage::TEvGetResult> getResult;
-        ResponsesReceived++;
+        PutResponsesReceived++;
 
         GetImpl.OnVPutResult(LogCtx, *ev->Get(), vGets, vPuts, getResult);
         SendVGetsAndVPuts(vGets, vPuts);
@@ -301,15 +306,18 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
             SendReplyAndDie(getResult);
             return;
         }
-        Y_ABORT_UNLESS(RequestsSent > ResponsesReceived, "RequestsSent# %" PRIu64 " ResponsesReceived# %" PRIu64,
-                ui64(RequestsSent), ui64(ResponsesReceived));
+
+        Y_ABORT_UNLESS(GetRequestsSent + PutRequestsSent > GetResponsesReceived + PutResponsesReceived,
+                "GetRequestsSent# %" PRIu64 " GetResponsesReceived# %" PRIu64 "PutRequestsSent# %" PRIu64
+                " PutResponsesReceived# %" PRIu64, ui64(GetRequestsSent), ui64(GetResponsesReceived),
+                ui64(PutRequestsSent), ui64(PutResponsesReceived));
 
         TrySchedulePutAcceleration();
         SanityCheck(); // May Die
     }
 
     void TryScheduleGetAcceleration() {
-        if (!IsGetAccelerateScheduled && GetsAccelerated < 2) {
+        if (!IsGetAccelerateScheduled && GetsAccelerated < 2 && GetRequestsSent < GroupSize) {
             // Count VDisks that have requests in flight, if there is no more than 2 such VDisks, Accelerate
             if (CountDisksWithActiveRequests() <= 2) {
                 ui64 timeToAccelerateUs = GetImpl.GetTimeToAccelerateGetNs(LogCtx, GetsAccelerated) / 1000;
@@ -328,7 +336,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
     }
 
     void TrySchedulePutAcceleration() {
-        if (!IsPutAccelerateScheduled && PutsAccelerated < 2) {
+        if (!IsPutAccelerateScheduled && PutsAccelerated < 2 && PutRequestsSent < GroupSize) {
             // Count VDisks that have requests in flight, if there is no more than 2 such VDisks, Accelerate
             if (CountDisksWithActiveRequests() <= 2) {
                 ui64 timeToAccelerateUs = GetImpl.GetTimeToAcceleratePutNs(LogCtx, PutsAccelerated) / 1000;
@@ -403,8 +411,7 @@ public:
         , Deadline(ev->Deadline)
         , StartTime(now)
         , StartTimePut(StartTime)
-        , RequestsSent(0)
-        , ResponsesReceived(0)
+        , GroupSize(info->Type.BlobSubgroupSize())
         , ReportedBytes(0)
     {
         ReportBytes(sizeof(*this));
@@ -438,7 +445,7 @@ public:
         SendVGetsAndVPuts(vGets, vPuts);
         TryScheduleGetAcceleration();
 
-        Y_ABORT_UNLESS(RequestsSent > ResponsesReceived);
+        Y_ABORT_UNLESS(GetRequestsSent + PutRequestsSent > GetResponsesReceived + PutResponsesReceived);
         Become(&TThis::StateWait);
         SanityCheck(); // May Die
     }

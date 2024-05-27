@@ -334,7 +334,7 @@ public:
 
     bool IsActualOperator(const std::shared_ptr<TTxController::ITransactionOperator>& op) const {
         auto opActual = GetTxOperator(op->GetTxId());
-        return !opActual || (ui64)opActual.get() == (ui64)op.get();
+        return !!opActual && (ui64)opActual.get() == (ui64)op.get();
     }
 
     bool Load(NTabletFlatExecutor::TTransactionContext& txc);

@@ -74,6 +74,7 @@ NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> TConsistencySha
                 transfer.SetDestinationTabletId(newTabletIds[idx]);
                 transfer.AddSourceTabletIds(from1);
                 transfer.AddSourceTabletIds(from2);
+                transfer.SetMoving(true);
                 result.emplace_back(alter);
             }
             {
@@ -92,6 +93,13 @@ NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> TConsistencySha
 }
 
 NKikimr::TConclusionStatus TConsistencySharding64::DoApplyModification(const NKikimrSchemeOp::TShardingModification& proto) {
+    AFL_VERIFY(!!SpecialShardingInfo);
+    for (auto&& i : proto.GetDeleteShardIds()) {
+        if (!DeleteShardInfo(i)) {
+            return TConclusionStatus::Fail("no shard with same id on delete consistency interval");
+        }
+    }
+
     if (!proto.HasConsistency()) {
         return TConclusionStatus::Success();
     }

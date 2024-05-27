@@ -227,9 +227,7 @@ message TCreateTable {
     optional NKikimrSchemeOp.TColumnTableSchema Schema = 2;
     optional NKikimrSchemeOp.TColumnTableSchemaPreset SchemaPreset = 3;
     optional NKikimrSchemeOp.TColumnDataLifeCycle TtlSettings = 4;
-    optional NKikimrSchemeOp.TColumnTableTtlSettingsPreset TtlSettingsPreset = 5;
     optional uint64 SchemaPresetVersionAdj = 6;
-    optional uint64 TtlSettingsPresetVersionAdj = 7;
 }
 
 message TInitShard {
@@ -241,13 +239,10 @@ message TInitShard {
 
 message TAlterTable {
     optional uint64 PathId = 1;
-    optional NKikimrSchemeOp.TAlterColumnTable AlterBody = 2;
     optional NKikimrSchemeOp.TColumnTableSchema Schema = 3;
     optional NKikimrSchemeOp.TColumnTableSchemaPreset SchemaPreset = 4;
     optional NKikimrSchemeOp.TColumnDataLifeCycle TtlSettings = 5;
-    optional NKikimrSchemeOp.TColumnTableTtlSettingsPreset TtlSettingsPreset = 6;
     optional uint64 SchemaPresetVersionAdj = 7;
-    optional uint64 TtlSettingsPresetVersionAdj = 8;
 }
 
 message TDropTable {

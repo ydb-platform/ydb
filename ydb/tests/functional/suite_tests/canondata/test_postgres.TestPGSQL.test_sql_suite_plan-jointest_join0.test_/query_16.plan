@@ -40,18 +40,11 @@
                                         "Node Type": "Aggregate-Filter-FullJoin (JoinDict)",
                                         "Operators": [
                                             {
-                                                "Inputs": [
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    }
-                                                ],
+                                                "Inputs": [],
                                                 "Name": "Aggregate"
                                             },
                                             {
                                                 "Inputs": [
-                                                    {
-                                                        "ExternalPlanNodeId": 8
-                                                    },
                                                     {
                                                         "InternalOperatorId": 2
                                                     }

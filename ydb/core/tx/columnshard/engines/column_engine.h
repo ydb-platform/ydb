@@ -276,6 +276,7 @@ public:
     virtual const std::shared_ptr<arrow::Schema>& GetReplaceKey() const;
 
     virtual bool HasDataInPathId(const ui64 pathId) const = 0;
+    virtual bool ErasePathId(const ui64 pathId) = 0;
     virtual bool Load(IDbWrapper& db) = 0;
     void RegisterTable(const ui64 pathId) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "RegisterTable")("path_id", pathId);

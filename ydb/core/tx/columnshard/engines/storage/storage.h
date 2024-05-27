@@ -117,11 +117,16 @@ public:
         return infoEmplace.first->second;
     }
 
-    void EraseTable(const ui64 pathId) {
+    bool EraseTable(const ui64 pathId) {
         auto it = Tables.find(pathId);
-        Y_ABORT_UNLESS(it != Tables.end());
-        Y_ABORT_UNLESS(it->second->IsErasable());
+        if (it == Tables.end()) {
+            return false;
+        }
+        if (!it->second->IsErasable()) {
+            return false;
+        }
         Tables.erase(it);
+        return true;
     }
 
     const THashMap<ui64, std::shared_ptr<TGranuleMeta>>& GetTables() const {

@@ -13,7 +13,7 @@ If the token generation object is not defined, the driver won't add any authenti
 
 ## Methods for creating token generation objects {#auth-provider}
 
-You can click any of the methods below to go to the source code of an example in the repository. You can also learn about the [authentication code recipes](../recipes/auth.md).
+You can click any of the methods below to go to the source code of an example in the repository. You can also learn about the [authentication code recipes](../../../recipes/ydb-sdk/auth.md).
 
 {% list tabs %}
 

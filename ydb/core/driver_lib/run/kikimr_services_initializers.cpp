@@ -256,7 +256,7 @@ static TCpuMask ParseAffinity(const TConfig& cfg) {
     if (cfg.GetCpuList()) {
         result = TCpuMask(cfg.GetCpuList());
     } else if (cfg.GetX().size() > 0) {
-        result = TCpuMask(cfg.GetX().begin(), cfg.GetX().size());
+        result = TCpuMask(cfg.GetX().data(), cfg.GetX().size());
     } else { // use all processors
         TAffinity available;
         available.Current();

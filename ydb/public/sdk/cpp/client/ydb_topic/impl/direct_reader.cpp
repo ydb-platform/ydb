@@ -35,6 +35,9 @@ TDirectReadSessionPtr TDirectReadSessionManager::CreateDirectReadSession(TNodeId
 
 void TDirectReadSessionManager::Close() {
     LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Close");
+    for (auto& [_, nodeSession] : NodeSessions) {
+        nodeSession->Cancel();
+    }
 }
 
 void TDirectReadSessionManager::StartPartitionSession(TDirectReadPartitionSession&& partitionSession) {

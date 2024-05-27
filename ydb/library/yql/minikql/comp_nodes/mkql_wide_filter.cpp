@@ -217,6 +217,40 @@ public:
         return fetchRes;
     }
 
+#ifndef MKQL_DISABLE_CODEGEN
+TBaseComputation::TGenerateResult GenFetchProcess(Value* statePtrVal, const TCodegenContext& ctx, const TResultCodegenerator& fetchGenerator, BasicBlock*& block) const override {
+        auto &context = ctx.Codegen.GetContext();
+        auto fetch = BasicBlock::Create(context, "fetch", ctx.Func);
+        auto pass = BasicBlock::Create(context, "pass", ctx.Func);
+        auto check = BasicBlock::Create(context, "check", ctx.Func);
+        auto maybeResultVal = PHINode::Create(TMaybeFetchResult::LLVMType(context), 3, "maybe_res", pass);
+
+        auto stateVal = new LoadInst(statePtrVal->getType()->getPointerElementType(), statePtrVal, "state", block);
+        auto needFetchCond = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, ConstantInt::get(stateVal->getType(), 1), stateVal, "need_fetch", block);
+        maybeResultVal->addIncoming(TMaybeFetchResult(EFetchResult::Finish).LLVMConst(context), block);
+        BranchInst::Create(fetch, pass, needFetchCond, block);
+        
+        block = fetch;
+        auto [fetchResVal, fetchGetters] = fetchGenerator(ctx, block);
+        auto passCond = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, ConstantInt::get(fetchResVal->getType(), static_cast<i32>(EFetchResult::One)), fetchResVal, "not_one", block);
+        maybeResultVal->addIncoming(TMaybeFetchResult::LLVMFromFetchResult(fetchResVal, "fetch_res_ext", block), block);
+        BranchInst::Create(pass, check, passCond, block);
+
+        block = check;
+        auto predicateCond = GenGetPredicate<false>(ctx, fetchGetters, block);
+        auto newStateVal = SelectInst::Create(predicateCond, ConstantInt::get(stateVal->getType(), 0), ConstantInt::get(stateVal->getType(), 1), "new_state", block);
+        new StoreInst(newStateVal, statePtrVal, block);
+        auto retOneCond = Inclusive ? ConstantInt::getTrue(context) : predicateCond;
+        auto retStatusVal = SelectInst::Create(retOneCond, TMaybeFetchResult(EFetchResult::One).LLVMConst(context), TMaybeFetchResult(EFetchResult::Finish).LLVMConst(context), "ret_status", block);
+        maybeResultVal->addIncoming(retStatusVal, block);
+        BranchInst::Create(pass, block);
+
+        block = pass;
+
+        return {maybeResultVal, std::move(fetchGetters)};
+    }
+#endif
+
 private:
     void RegisterDependencies() const final {
         if (const auto flow = this->FlowDependsOn(Flow)) {

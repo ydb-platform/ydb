@@ -298,6 +298,17 @@ bool BuildAlterTableModifyScheme(const Ydb::Table::AlterTableRequest* req, NKiki
             if (!alter.family().empty()) {
                 column->SetFamilyName(alter.family());
             }
+            switch (alter.default_value_case()) {
+                case Ydb::Table::ColumnMeta::kFromSequence: {
+                    auto fromSequence = column->MutableDefaultFromSequence();
+                    TString sequenceName = alter.from_sequence().name();
+                    if (!IsStartWithSlash(sequenceName)) {
+                        *fromSequence = JoinPath({workingDir, sequenceName});
+                    }
+                    break;
+                }
+                default: break;
+            }
         }
 
         bool hadPartitionConfig = desc->HasPartitionConfig();

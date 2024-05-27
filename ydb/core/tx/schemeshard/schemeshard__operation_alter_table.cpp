@@ -535,36 +535,31 @@ public:
 
         THashSet<TString> localSequences;
 
-        std::optional<TString> defaultFromSequence;
         for (const auto& column: alter.GetColumns()) {
             if (column.HasDefaultFromSequence()) {
-                defaultFromSequence = column.GetDefaultFromSequence();
-            }
-        }
+                TString defaultFromSequence = column.GetDefaultFromSequence();
 
-        if (defaultFromSequence.has_value()) {
-            Y_ABORT_UNLESS(alter.GetColumns().size() == 1);
+                const auto sequencePath = TPath::Resolve(defaultFromSequence, context.SS);
+                {
+                    const auto checks = sequencePath.Check();
+                    checks
+                        .NotEmpty()
+                        .NotUnderDomainUpgrade()
+                        .IsAtLocalSchemeShard()
+                        .IsResolved()
+                        .NotDeleted()
+                        .IsSequence()
+                        .NotUnderDeleting()
+                        .NotUnderOperation();
 
-            const auto sequencePath = TPath::Resolve(*defaultFromSequence, context.SS);
-            {
-                const auto checks = sequencePath.Check();
-                checks
-                    .NotEmpty()
-                    .NotUnderDomainUpgrade()
-                    .IsAtLocalSchemeShard()
-                    .IsResolved()
-                    .NotDeleted()
-                    .IsSequence()
-                    .NotUnderDeleting()
-                    .NotUnderOperation();
-
-                if (!checks) {
-                    result->SetError(checks.GetStatus(), checks.GetError());
-                    return result;
+                    if (!checks) {
+                        result->SetError(checks.GetStatus(), checks.GetError());
+                        return result;
+                    }
                 }
-            }
 
-            localSequences.insert(sequencePath.PathString());
+                localSequences.insert(sequencePath.PathString());
+            }
         }
 
         TString errStr;

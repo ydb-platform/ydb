@@ -4,12 +4,12 @@ namespace NKikimr {
 namespace NPQ {
 
 TPartitionScaleRequest::TPartitionScaleRequest(
-    TString topicName, 
-    TString databasePath, 
-    ui64 pathId, 
-    ui64 pathVersion, 
-    std::vector<NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionSplit> splits, 
-    const std::vector<NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionMerge> merges, 
+    TString topicName,
+    TString databasePath,
+    ui64 pathId,
+    ui64 pathVersion,
+    std::vector<NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionSplit> splits,
+    const std::vector<NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionMerge> merges,
     NActors::TActorId parentActorId
 )
     : Topic(topicName)
@@ -19,7 +19,7 @@ TPartitionScaleRequest::TPartitionScaleRequest(
     , Splits(splits)
     , Merges(merges)
     , ParentActorId(parentActorId) {
-        
+
     }
 
 void TPartitionScaleRequest::Bootstrap(const NActors::TActorContext &ctx) {
@@ -41,8 +41,8 @@ void TPartitionScaleRequest::FillProposeRequest(TEvTxUserProxy::TEvProposeTransa
 
     auto applyIf = modifyScheme.AddApplyIf();
     applyIf->SetPathId(PathId);
-    applyIf->SetPathVersion(PathVersion);
-    //applyIf->SetCheckGeneralVersion(false);
+    applyIf->SetPathVersion(PathVersion == 0 ? 1 : PathVersion);
+    applyIf->SetCheckEntityVersion(true);
 
     NKikimrSchemeOp::TPersQueueGroupDescription groupDescription;
     groupDescription.SetName(topicName);
@@ -70,14 +70,14 @@ void TPartitionScaleRequest::PassAway() {
 
 void TPartitionScaleRequest::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
     if (ev->Get()->Status != NKikimrProto::OK) {
-        auto scaleRequestResult = std::make_unique<TEvPartitionScaleRequestDone>(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable);//savnik: проверить, какой статус тут приходит
+        auto scaleRequestResult = std::make_unique<TEvPartitionScaleRequestDone>(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable);
         Send(ParentActorId, scaleRequestResult.release());
         Die(ctx);
     }
 }
 
 void TPartitionScaleRequest::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&, const TActorContext &ctx) {
-    auto scaleRequestResult = std::make_unique<TEvPartitionScaleRequestDone>(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable);//savnik: проверить, какой статус тут приходит
+    auto scaleRequestResult = std::make_unique<TEvPartitionScaleRequestDone>(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable);
     Send(ParentActorId, scaleRequestResult.release());
     Die(ctx);
 }
@@ -90,11 +90,15 @@ void TPartitionScaleRequest::Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCom
 
 void TPartitionScaleRequest::Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const NActors::TActorContext& ctx) {
     auto msg = ev->Get();
-    //Cerr << "SAVDBG" << msg->Record.GetIssues()[0].Getmessage(); //savnik: log err
 
     auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(msg->Record.GetStatus());
     if (status != TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress) {
-        auto scaleRequestResult = std::make_unique<TEvPartitionScaleRequestDone>(status);//savnik: проверить, какой статус тут приходит
+        auto scaleRequestResult = std::make_unique<TEvPartitionScaleRequestDone>(status);
+        TStringBuilder issues;
+        for (auto& issue : ev->Get()->Record.GetIssues()) {
+            issues << issue.ShortDebugString() + ", ";
+        }
+        Cerr << "\n SAVDGB " << issues << "\n";
         Send(ParentActorId, scaleRequestResult.release());
         Die(ctx);
     } else {

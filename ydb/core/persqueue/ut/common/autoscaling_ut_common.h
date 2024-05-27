@@ -27,7 +27,7 @@ TWriteMessage Msg(const TString& data, ui64 seqNo);
 
 TTopicSdkTestSetup CreateSetup();
 
-std::shared_ptr<ISimpleBlockingWriteSession> CreateWriteSession(TTopicClient& client, const TString& producer, std::optional<ui32> partition = std::nullopt);
+std::shared_ptr<ISimpleBlockingWriteSession> CreateWriteSession(TTopicClient& client, const TString& producer, std::optional<ui32> partition = std::nullopt, TString topic = TEST_TOPIC);
 
 struct TTestReadSession {
     struct MsgInfo {

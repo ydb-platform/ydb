@@ -534,11 +534,12 @@ private:
 
         ShardedWriteController->OnMessageSent(shardId, metadata->Cookie);
 
-        //if (SchemeEntry->Kind != NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
+        // TODO: fix retries for columnshard
+        if (SchemeEntry->Kind != NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
             TlsActivationContext->Schedule(
                 CalculateNextAttemptDelay(metadata->SendAttempts),
                 new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvShardRequestTimeout(shardId), 0, metadata->Cookie));
-        //}
+        }
     }
 
     void RetryShard(const ui64 shardId, const std::optional<ui64> ifCookieEqual) {

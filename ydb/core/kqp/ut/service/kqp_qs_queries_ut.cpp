@@ -2612,8 +2612,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
         auto client = kikimr.GetQueryClient();
 
-        Cerr << "<<<<<<<<>>>>>" << Endl;
-
         {
             const TString sql = R"(
                 REPLACE INTO `/Root/ColumnShard2`
@@ -2622,15 +2620,15 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues().ToString());
 
-            //auto it = client.StreamExecuteQuery(R"(
-            //    SELECT COUNT(*) FROM `/Root/CqolumnShard2`;
-            //)", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            //UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
-            //TString output = StreamResultToYson(it);
-            //CompareYson(
-            //    output,
-            //    R"([[10000u]])");
-        }//
+            auto it = client.StreamExecuteQuery(R"(
+                SELECT COUNT(*) FROM `/Root/ColumnShard2`;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(
+                output,
+                R"([[10000u]])");
+        }
     }
 
     Y_UNIT_TEST(TableSink_ReplaceColumnShard) {

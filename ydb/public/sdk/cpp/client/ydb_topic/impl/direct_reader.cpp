@@ -38,10 +38,8 @@ void TDirectReadSessionManager::Close() {
 }
 
 void TDirectReadSessionManager::StartPartitionSession(TDirectReadPartitionSession&& partitionSession) {
-    TDirectReadSessionPtr session;
     auto nodeId = partitionSession.Location.GetNodeId();
-
-    session = NodeSessions[nodeId];
+    TDirectReadSessionPtr& session = NodeSessions[nodeId];
     if (!session) {
         session = CreateDirectReadSession(nodeId);
     }

@@ -23,6 +23,7 @@ bool TSharingTransactionOperator::DoParse(TColumnShard& owner, const TString& da
 
     auto currentSession = SharingSessionsManager->GetDestinationSession(SharingTask->GetSessionId());
     if (currentSession) {
+        SessionExistsFlag = true;
         SharingTask = currentSession;
     } else {
         SharingTask->Confirm();
@@ -34,14 +35,18 @@ bool TSharingTransactionOperator::DoParse(TColumnShard& owner, const TString& da
 }
 
 TSharingTransactionOperator::TProposeResult TSharingTransactionOperator::DoStartProposeOnExecute(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& txc) {
-    AFL_VERIFY(!!TxPropose);
-    AFL_VERIFY(TxPropose->Execute(txc, NActors::TActivationContext::AsActorContext()));
+    if (!SessionExistsFlag) {
+        AFL_VERIFY(!!TxPropose);
+        AFL_VERIFY(TxPropose->Execute(txc, NActors::TActivationContext::AsActorContext()));
+    }
     return TProposeResult();
 }
 
 void TSharingTransactionOperator::DoStartProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& ctx) {
-    AFL_VERIFY(!!TxPropose);
-    TxPropose->Complete(ctx);
+    if (!SessionExistsFlag) {
+        AFL_VERIFY(!!TxPropose);
+        TxPropose->Complete(ctx);
+    }
     TxPropose.release();
 }
 

@@ -591,6 +591,7 @@ message TConveyorConfig {
     optional uint32 WorkersCount = 2;
     optional uint32 QueueSizeLimit = 3;
     optional double DefaultFractionOfThreadsCount = 4;
+    optional double WorkersCountDouble = 5;
 }
 
 message TExternalIndexConfig {

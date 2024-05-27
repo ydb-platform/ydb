@@ -543,7 +543,7 @@ public:
         Ydb::Table::TransactionSettings settings;
         settings.mutable_serializable_read_write();
         BeginTx(settings);
-        QueryState->ImpliedTxId = QueryState->TxId;
+        QueryState->ImplicitTxId = QueryState->TxId;
         CompileStatement();
     }
 
@@ -724,8 +724,8 @@ public:
     Ydb::Table::TransactionControl GetImpliedTxControl() {
         Ydb::Table::TransactionControl control;
         control.set_commit_tx(QueryState->ProcessingLastStatement());
-        if (QueryState->ImpliedTxId) {
-            control.set_tx_id(QueryState->ImpliedTxId->GetValue().GetHumanStr());
+        if (QueryState->ImplicitTxId) {
+            control.set_tx_id(QueryState->ImplicitTxId->GetValue().GetHumanStr());
         } else {
             control.mutable_begin_tx()->mutable_serializable_read_write();
         }
@@ -748,7 +748,8 @@ public:
                     }
                     QueryState->TxCtx = txCtx;
                     QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
-                    if (QueryState->TxId.GetValue() != txId) {
+                    if (hasTxControl) {
+                        LOG_E("AAA");
                         QueryState->TxId.SetValue(txId);
                     }
                     break;

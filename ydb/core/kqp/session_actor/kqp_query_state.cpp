@@ -16,26 +16,23 @@ using namespace NSchemeCache;
 
 
 TKqpQueryState::TQueryTxId::TQueryTxId(const TQueryTxId& other) {
-    YQL_ENSURE(!IsValueSet);
+    YQL_ENSURE(!Id);
     Id = other.Id;
-    IsValueSet = true;
 }
 
 TKqpQueryState::TQueryTxId& TKqpQueryState::TQueryTxId::operator=(const TQueryTxId& id) {
-    YQL_ENSURE(!IsValueSet);
+    YQL_ENSURE(!Id);
     Id = id.Id;
-    IsValueSet = true;
     return *this;
 }
 
 void TKqpQueryState::TQueryTxId::SetValue(const TTxId& id) {
-    YQL_ENSURE(!IsValueSet);
+    YQL_ENSURE(!Id);
     Id = id.Id;
-    IsValueSet = true;
 }
 
 TTxId TKqpQueryState::TQueryTxId::GetValue() {
-    return Id;
+    return Id ? *Id : TTxId();
 }
 
 void TKqpQueryState::TQueryTxId::Reset() {

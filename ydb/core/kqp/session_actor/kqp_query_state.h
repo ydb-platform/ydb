@@ -45,8 +45,7 @@ public:
         void Reset();
 
     private:
-        TTxId Id;
-        bool IsValueSet = false;
+        TMaybe<TTxId> Id;
     };
 
     TKqpQueryState(TEvKqp::TEvQueryRequest::TPtr& ev, ui64 queryId, const TString& database, const TMaybe<TString>& applicationName,
@@ -148,7 +147,7 @@ public:
     NYql::TIssues Issues;
 
     TVector<TQueryAst> Statements;
-    TMaybe<TQueryTxId> ImpliedTxId = {}; // Implied tx
+    TMaybe<TQueryTxId> ImplicitTxId = {}; // Implicit tx for all statements
     ui32 CurrentStatementId = 0;
     ui32 StatementResultIndex = 0;
     ui32 StatementResultSize = 0;

@@ -140,7 +140,7 @@ int main(int argc, const char *argv[]) {
     try {
         return Main(argc, argv);
     } catch (const TCompileError& e) {
-        Cerr << e.GetIssues();
+        Cerr << e.what() << "\n" << e.GetIssues();
     } catch (...) {
         Cerr << CurrentExceptionMessage() << Endl;
         return 1;

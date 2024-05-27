@@ -379,7 +379,7 @@ public:
         : EventQueue_(New<TMpscInvokerQueue>(
             EventCount_,
             NConcurrency::GetThreadTags("Logging")))
-        , LoggingThread_(New<TThread>(this))
+        , LoggingThread_(New<TLoggingThread>(this))
         , SystemWriters_({
             CreateStderrLogWriter(
                 std::make_unique<TPlainTextLogFormatter>(),
@@ -708,11 +708,11 @@ public:
     }
 
 private:
-    class TThread
+    class TLoggingThread
         : public TSchedulerThread
     {
     public:
-        explicit TThread(TImpl* owner)
+        explicit TLoggingThread(TImpl* owner)
             : TSchedulerThread(
                 owner->EventCount_,
                 "Logging",
@@ -1391,7 +1391,7 @@ private:
 private:
     const TIntrusivePtr<NThreading::TEventCount> EventCount_ = New<NThreading::TEventCount>();
     const TMpscInvokerQueuePtr EventQueue_;
-    const TIntrusivePtr<TThread> LoggingThread_;
+    const TIntrusivePtr<TLoggingThread> LoggingThread_;
     const TShutdownCookie ShutdownCookie_ = RegisterShutdownCallback(
         "LogManager",
         BIND_NO_PROPAGATE(&TImpl::Shutdown, MakeWeak(this)),

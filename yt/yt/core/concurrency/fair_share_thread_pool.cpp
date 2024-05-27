@@ -187,6 +187,10 @@ public:
     void Invoke(TClosure callback, TBucket* bucket)
     {
         auto guard = Guard(SpinLock_);
+        // See Shutdown.
+        if (Stopping_) {
+            return;
+        }
 
         QueueSize_.fetch_add(1, std::memory_order::relaxed);
 
@@ -228,12 +232,13 @@ public:
 
     void Shutdown()
     {
-        Drain();
-    }
-
-    void Drain()
-    {
         auto guard = Guard(SpinLock_);
+        // Setting under spinlock because this way
+        // we have atomicity of two actions:
+        // 1) Write/read flag and 2) Drain/Enqueue callback.
+        // See two_level_fair_share_thread_pool Queue
+        // for more detailed explanation.
+        Stopping_ = true;
         for (const auto& item : Heap_) {
             item.Bucket->Drain();
         }
@@ -339,7 +344,7 @@ private:
     const TIntrusivePtr<NThreading::TEventCount> CallbackEventCount_;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
-
+    bool Stopping_ = false;
     std::vector<THeapItem> Heap_;
 
     std::atomic<int> ThreadCount_ = 0;
@@ -546,14 +551,6 @@ private:
     {
         Queue_->Shutdown();
         TThreadPoolBase::DoShutdown();
-    }
-
-    TClosure MakeFinalizerCallback() override
-    {
-        return BIND_NO_PROPAGATE([queue = Queue_, callback = TThreadPoolBase::MakeFinalizerCallback()] {
-            callback();
-            queue->Drain();
-        });
     }
 
     void DoConfigure(int threadCount) override

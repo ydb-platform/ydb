@@ -31,16 +31,7 @@ template <class TQueueImpl>
 class TSingleQueueSchedulerThread;
 
 template <class TQueueImpl>
-using TSingleQueueSchedulerThreadPtr = TIntrusivePtr<TSingleQueueSchedulerThread<TQueueImpl>>;
-
-template <class TQueueImpl>
 class TSuspendableSingleQueueSchedulerThread;
-
-template <class TQueueImpl>
-using TSuspendableSingleQueueSchedulerThreadPtr = TIntrusivePtr<TSuspendableSingleQueueSchedulerThread<TQueueImpl>>;
-
-using TMpmcSingleQueueSchedulerThread = TSingleQueueSchedulerThread<TMpmcQueueImpl>;
-using TMpmcSingleQueueSchedulerThreadPtr = TIntrusivePtr<TMpmcSingleQueueSchedulerThread>;
 
 using TMpscSingleQueueSchedulerThread = TSingleQueueSchedulerThread<TMpscQueueImpl>;
 using TMpscSingleQueueSchedulerThreadPtr = TIntrusivePtr<TMpscSingleQueueSchedulerThread>;

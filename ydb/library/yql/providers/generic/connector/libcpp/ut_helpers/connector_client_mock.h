@@ -119,7 +119,7 @@ namespace NYql::NConnector::NTest {
     std::shared_ptr<arrow::RecordBatch> MakeEmptyRecordBatch(size_t rowsCount);
 
     template <class T>
-    void SetSimpleValue(const T& value, Ydb::TypedValue* proto);
+    void SetSimpleValue(const T& value, Ydb::TypedValue* proto, bool optional = false);
 
     template <class TParent>
     struct TWithParentBuilder {
@@ -415,8 +415,34 @@ namespace NYql::NConnector::NTest {
                 return *this;
             }
 
+            template <class T>
+            TBuilder& OptionalValue(const T& value) {
+                SetSimpleValue(value, this->Result_->mutable_typed_value(), true);
+                return *this;
+            }
+
             void FillWithDefaults() {
             }
+        };
+        template <class TParent = void /* no parent by default */>
+        struct TPredicateBuilder;
+
+        template <class TParent = void /* no parent by default */>
+        struct TConjunctionBuilder: public TProtoBuilder<TParent, NApi::TPredicate::TConjunction> {
+            using TBuilder = TConjunctionBuilder<TParent>;
+            TConjunctionBuilder(NApi::TPredicate::TConjunction* result = nullptr, TParent* parent = nullptr)
+                : TProtoBuilder<TParent, NApi::TPredicate::TConjunction>(result, parent) {
+            }
+            SUBPROTO_BUILDER(Operand, add_operands, NApi::TPredicate, TPredicateBuilder<TBuilder>);
+        };
+
+        template <class TParent = void /* no parent by default */>
+        struct TDisjunctionBuilder: public TProtoBuilder<TParent, NApi::TPredicate::TDisjunction> {
+            using TBuilder = TDisjunctionBuilder<TParent>;
+            TDisjunctionBuilder(NApi::TPredicate::TDisjunction* result = nullptr, TParent* parent = nullptr)
+                : TProtoBuilder<TParent, NApi::TPredicate::TDisjunction>(result, parent) {
+            }
+            SUBPROTO_BUILDER(Operand, add_operands, NApi::TPredicate, TPredicateBuilder<TBuilder>);
         };
 
         template <class TParent = void /* no parent by default */>
@@ -443,6 +469,10 @@ namespace NYql::NConnector::NTest {
 
             TBuilder& Value(const auto& value) {
                 return Arg().Value(value).Done();
+            }
+
+            TBuilder& OptionalValue(const auto& value) {
+                return Arg().OptionalValue(value).Done();
             }
 
             void FillWithDefaults() {
@@ -494,7 +524,7 @@ namespace NYql::NConnector::NTest {
         template <class TParent>
         using TGreaterOrEqualBuilder = TComparisonBuilder<NApi::TPredicate::TComparison::GE, TParent>;
 
-        template <class TParent = void /* no parent by default */>
+        template <class TParent>
         struct TPredicateBuilder: public TProtoBuilder<TParent, NApi::TPredicate> {
             using TBuilder = TPredicateBuilder<TParent>;
 
@@ -503,6 +533,9 @@ namespace NYql::NConnector::NTest {
             {
                 FillWithDefaults();
             }
+
+            SUBPROTO_BUILDER(Conjunction, mutable_conjunction, NApi::TPredicate::TConjunction, TConjunctionBuilder<TBuilder>);
+            SUBPROTO_BUILDER(Disjunction, mutable_disjunction, NApi::TPredicate::TDisjunction, TDisjunctionBuilder<TBuilder>);
 
             SUBPROTO_BUILDER(Equal, mutable_comparison, NApi::TPredicate::TComparison, TEqualBuilder<TBuilder>);
             SUBPROTO_BUILDER(NotEqual, mutable_comparison, NApi::TPredicate::TComparison, TNotEqualBuilder<TBuilder>);
@@ -642,6 +675,7 @@ namespace NYql::NConnector::NTest {
             }
 
             SUBPROTO_BUILDER(Select, add_selects, NApi::TSelect, TSelectBuilder<TBuilder>);
+            SETTER(MaxSplitCount, max_split_count);
 
             TListSplitsResultBuilder<TBuilder> Result() {
                 return TListSplitsResultBuilder<TBuilder>(ResponseResult_, this);

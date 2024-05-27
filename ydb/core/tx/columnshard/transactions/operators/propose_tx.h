@@ -27,6 +27,10 @@ protected:
     }
 public:
     using TBase::TBase;
+
+    bool TxWithDeadline() const override {
+        return false;
+    }
 };
 
 }

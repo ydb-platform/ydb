@@ -46,6 +46,7 @@ void TLimiterActor::HandleMain(NActors::TEvents::TEvWakeup::TPtr& /*ev*/) {
         VolumeInFlight += RequestsQueue.front().GetRequest()->GetVolume();
         RequestsInFlight.emplace_back(now, RequestsQueue.front().GetRequest()->GetVolume());
         RequestsQueue.front().GetRequest()->OnResourceAllocated();
+        AFL_VERIFY(VolumeInWaiting >= RequestsQueue.front().GetRequest()->GetVolume());
         VolumeInWaiting -= RequestsQueue.front().GetRequest()->GetVolume();
         RequestsQueue.pop_front();
         Counters.InProgressStart->Inc();

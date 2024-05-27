@@ -552,7 +552,7 @@ std::unique_ptr<TEvPersQueue::TEvRequest> TPQTabletFixture::MakeGetOwnershipRequ
         request->SetWriteId(*params.WriteId);
     }
     if (params.NeedSupportivePartition.Defined()) {
-        request->SetNeedSupportivePartition(*params.FirstWrite);
+        request->SetNeedSupportivePartition(*params.NeedSupportivePartition);
     }
     if (params.Cookie.Defined()) {
         request->SetCookie(*params.Cookie);

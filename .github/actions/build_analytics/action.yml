@@ -1,0 +1,41 @@
+name: build_analytics
+description: Gather and send build analytics 
+inputs:
+  build_preset:
+    type: string
+    default: ""
+  build_target:
+    type: string
+    default: ""
+  secs:
+    type: string
+    default: ""
+  vars:
+    type: string
+    default: ""
+runs:
+  using: "composite"
+  steps:
+    - name: Prepare s3cmd
+      uses: ./.github/actions/s3cmd
+      with:
+        s3_bucket: ${{ fromJSON( inputs.vars ).AWS_BUCKET }}
+        s3_endpoint: ${{ fromJSON( inputs.vars ).AWS_ENDPOINT }}
+        s3_key_id: ${{ fromJSON( inputs.secs ).AWS_KEY_ID }}
+        s3_key_secret: ${{ fromJSON( inputs.secs ).AWS_KEY_VALUE }}
+        folder_prefix: ya-
+        build_preset: ${{ inputs.build_preset }}
+
+    - name: ya tool bloat
+      shell: bash
+      run: |
+        export TARGET_NAME=`basename ${{ inputs.build_target }}`
+        export TARGET_DIR=${{ inputs.build_target }}
+        ya tool bloat --linker-map $TARGET_DIR/${TARGET_NAME}.map.lld --input $TARGET_DIR/$TARGET_NAME --save-html ya_bloat_html
+
+    - name: Upload results
+      shell: bash
+      run: |
+        s3cmd sync -r --acl-public --no-progress --no-check-md5 "ya_bloat_html/" "$S3_BUCKET_PATH/ya_bloat_html/"
+        echo $S3_URL_PREFIX/ya_bloat_html >> $GITHUB_OUTPUT
+

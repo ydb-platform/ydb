@@ -402,7 +402,7 @@ NKikimrSchemeOp::TTTLSettings TMultiTableCreator::TtlCol(const TString& columnNa
 }
 
 TMultiTableCreator::TMultiTableCreator(std::vector<NActors::IActor*> tableCreators)
-    : TableCreators(tableCreators)
+    : TableCreators(std::move(tableCreators))
 {}
 
 void TMultiTableCreator::Registered(NActors::TActorSystem* sys, const NActors::TActorId& owner) {

@@ -113,7 +113,8 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
 
         auto itGranule = PathToGranule.find(pathId);
         AFL_VERIFY(itGranule != PathToGranule.end());
-        std::vector<std::shared_ptr<arrow::RecordBatch>> result = NArrow::NMerger::TSortableBatchPosition::SplitByBordersInSequentialContainer(builder.Finalize(), comparableColumns, itGranule->second);
+        std::vector<std::shared_ptr<arrow::RecordBatch>> result = NArrow::NMerger::TRWSortableBatchPosition::
+            SplitByBordersInSequentialContainer(mergedBatch, comparableColumns, itGranule->second);
         for (auto&& b : result) {
             if (!b) {
                 continue;

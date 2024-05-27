@@ -5,7 +5,7 @@ description: "In this article, you will learn how to set up the transaction exec
 
 # Setting up the transaction execution mode
 
-To run your queries, first you need to specify the [transaction execution mode](../../../concepts/transactions.md#modes) in the {{ ydb-short-name }} SDK.
+To run your queries, first you need to specify the [transaction execution mode](../../concepts/transactions.md#modes) in the {{ ydb-short-name }} SDK.
 
 Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to create an object for the *transaction execution mode*.
 

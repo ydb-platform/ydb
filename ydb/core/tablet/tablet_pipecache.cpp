@@ -327,7 +327,7 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
         // Don't create an empty tablet record that won't be used
         if (Y_UNLIKELY(!msg->Options.AutoConnect && !ByTablet.contains(tablet))) {
             if (subscribe) {
-                Send(peer, new TEvPipeCache::TEvDeliveryProblem(tablet, NKikimrProto::ERROR, true, false), 0, subscribeCookie);
+                Send(peer, new TEvPipeCache::TEvDeliveryProblem(tablet, false, true, false), 0, subscribeCookie);
             }
             return;
         }
@@ -353,7 +353,7 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
                 // Note that this is not a typical use-case, implemented for completeness
                 clientState = tabletState->GetActive();
                 if (!clientState) {
-                    Send(peer, new TEvPipeCache::TEvDeliveryProblem(tablet, NKikimrProto::ERROR, true, false), 0, subscribeCookie);
+                    Send(peer, new TEvPipeCache::TEvDeliveryProblem(tablet, false, true, false), 0, subscribeCookie);
                     return;
                 }
             } else {

@@ -868,14 +868,13 @@ EFetchResult ProcessSpilledData(TComputationContext&, NUdf::TUnboxedValue*const*
                     UnpackJoinedData(output);
 
                     return EFetchResult::One;
-
                 }
 
                 LeftPacker->TuplesBatchPacked = 0;
-                LeftPacker->TablePtr->Clear(); // Clear table content, ready to collect data for next batch
+                LeftPacker->TablePtr->ClearBucket(NextBucketToJoin); // Clear content of returned bucket
 
                 RightPacker->TuplesBatchPacked = 0;
-                RightPacker->TablePtr->Clear(); // Clear table content, ready to collect data for next batch
+                RightPacker->TablePtr->ClearBucket(NextBucketToJoin); // Clear content of returned bucket
 
                 JoinedTablePtr->Clear();
                 JoinedTablePtr->ResetIterator();
@@ -883,8 +882,8 @@ EFetchResult ProcessSpilledData(TComputationContext&, NUdf::TUnboxedValue*const*
 
                 NextBucketToJoin++;
             } else {
-                LeftPacker->TablePtr->ExtractBucket(NextBucketToJoin);
-                RightPacker->TablePtr->ExtractBucket(NextBucketToJoin);
+                LeftPacker->TablePtr->PrepareBucket(NextBucketToJoin);
+                RightPacker->TablePtr->PrepareBucket(NextBucketToJoin);
                 *PartialJoinCompleted = true;
                 LeftPacker->StartTime = std::chrono::system_clock::now();
                 RightPacker->StartTime = std::chrono::system_clock::now();

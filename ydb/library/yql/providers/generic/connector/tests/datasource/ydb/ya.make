@@ -48,6 +48,7 @@ IF (OPENSOURCE)
 ENDIF()
 
 TEST_SRCS(
+    select_positive.py
     collection.py
     conftest.py
     test.py

@@ -223,6 +223,7 @@ namespace NActors {
             return true;
         case NKikimr::TEvBlobStorage::EvNotReadyRetryTimeout:
         case NKikimr::TEvTabletPipe::EvClientRetry:
+        case NKikimr::TEvTabletPipe::EvClientCheckDelay:
         case NKikimr::TEvTabletBase::EvFollowerRetry:
         case NKikimr::TEvTabletBase::EvTryBuildFollowerGraph:
         case NKikimr::TEvTabletBase::EvTrySyncFollower:

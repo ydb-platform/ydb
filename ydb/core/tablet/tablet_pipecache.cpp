@@ -184,7 +184,7 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
         }
     }
 
-    void DropClient(ui64 tablet, TActorId client, bool notDelivered, bool isDeleted) {
+    void DropClient(ui64 tablet, TActorId client, bool connected, bool notDelivered, bool isDeleted) {
         auto *tabletState = FindTablet(tablet);
         if (Y_UNLIKELY(!tabletState))
             return;
@@ -198,7 +198,7 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
             const ui64 seqNo = kv.second.SeqNo;
             const ui64 cookie = kv.second.Cookie;
             const bool msgNotDelivered = notDelivered || seqNo > clientState->MaxForwardedSeqNo;
-            Send(peer, new TEvPipeCache::TEvDeliveryProblem(tablet, msgNotDelivered, isDeleted), 0, cookie);
+            Send(peer, new TEvPipeCache::TEvDeliveryProblem(tablet, connected, msgNotDelivered, isDeleted), 0, cookie);
 
             tabletState->ByPeer.erase(peer);
 
@@ -327,7 +327,7 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
         // Don't create an empty tablet record that won't be used
         if (Y_UNLIKELY(!msg->Options.AutoConnect && !ByTablet.contains(tablet))) {
             if (subscribe) {
-                Send(peer, new TEvPipeCache::TEvDeliveryProblem(tablet, true), 0, subscribeCookie);
+                Send(peer, new TEvPipeCache::TEvDeliveryProblem(tablet, NKikimrProto::ERROR, true, false), 0, subscribeCookie);
             }
             return;
         }
@@ -353,7 +353,7 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
                 // Note that this is not a typical use-case, implemented for completeness
                 clientState = tabletState->GetActive();
                 if (!clientState) {
-                    Send(peer, new TEvPipeCache::TEvDeliveryProblem(tablet, true), 0, subscribeCookie);
+                    Send(peer, new TEvPipeCache::TEvDeliveryProblem(tablet, NKikimrProto::ERROR, true, false), 0, subscribeCookie);
                     return;
                 }
             } else {
@@ -415,7 +415,7 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
             if (Counters) {
                 Counters.EventConnectFailure->Inc();
             }
-            return DropClient(msg->TabletId, msg->ClientId, true, msg->Dead);
+            return DropClient(msg->TabletId, msg->ClientId, false, true, msg->Dead);
         } else {
             if (Counters) {
                 Counters.EventConnectOk->Inc();
@@ -495,7 +495,7 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
             Counters.EventDisconnect->Inc();
         }
 
-        DropClient(msg->TabletId, msg->ClientId, false, false);
+        DropClient(msg->TabletId, msg->ClientId, true, false, false);
     }
 
 public:

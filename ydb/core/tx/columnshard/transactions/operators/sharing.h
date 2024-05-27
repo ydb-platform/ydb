@@ -12,6 +12,7 @@ private:
 
     std::shared_ptr<NOlap::NDataSharing::TSessionsManager> SharingSessionsManager;
     std::shared_ptr<NOlap::NDataSharing::TDestinationSession> SharingTask;
+    bool SessionExistsFlag = false;
     using TProposeResult = TTxController::TProposeResult;
     mutable std::unique_ptr<NTabletFlatExecutor::ITransaction> TxPropose;
     mutable std::unique_ptr<NTabletFlatExecutor::ITransaction> TxConfirm;

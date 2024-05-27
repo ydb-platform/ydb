@@ -69,15 +69,17 @@ public:
         AFL_VERIFY(!!TxOperator);
         const ui64 txId = record.GetTxId();
         NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("tablet_id", Self->TabletID())("tx_id", txId)("this", (ui64)this);
-        if (Ev->Sender != TxOperator->GetTxInfo().Source) {
-            return;
-        }
         if (TxOperator->IsFail()) {
             TxOperator->SendReply(*Self, ctx);
-        } else if (TxOperator->IsAsync()) {
-            Self->GetProgressTxController().StartProposeOnComplete(txId, ctx);
         } else {
-            Self->GetProgressTxController().FinishProposeOnComplete(txId, ctx);
+            if (!Self->GetProgressTxController()->IsActualOperator(TxOperator)) {
+                return;
+            }
+            if (TxOperator->IsAsync()) {
+                Self->GetProgressTxController().StartProposeOnComplete(txId, ctx);
+            } else {
+                Self->GetProgressTxController().FinishProposeOnComplete(txId, ctx);
+            }
         }
 
         Self->TryRegisterMediatorTimeCast();

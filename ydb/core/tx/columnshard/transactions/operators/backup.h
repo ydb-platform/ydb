@@ -11,6 +11,7 @@ private:
     using TBase = IProposeTxOperator;
 
     std::shared_ptr<NOlap::NExport::TExportTask> ExportTask;
+    bool TaskExists = false;
     std::unique_ptr<NTabletFlatExecutor::ITransaction> TxAddTask;
     std::unique_ptr<NTabletFlatExecutor::ITransaction> TxConfirm;
     std::unique_ptr<NTabletFlatExecutor::ITransaction> TxAbort;

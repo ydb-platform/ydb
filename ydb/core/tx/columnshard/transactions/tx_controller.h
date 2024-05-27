@@ -332,6 +332,14 @@ public:
     ui64 GetMemoryUsage() const;
     bool HaveOutdatedTxs() const;
 
+    bool IsActualOperator(const std::shared_ptr<TTxController::ITransactionOperator>& op) const {
+        auto opActual = GetTxOperator(op->GetTxId());
+        if (!opActual || (ui64)opActual.get() != (ui64)op.get()) {
+            return false;
+        }
+        return true;
+    }
+
     bool Load(NTabletFlatExecutor::TTransactionContext& txc);
 
     [[nodiscard]] std::shared_ptr<TTxController::ITransactionOperator> UpdateTxSourceInfo(const TFullTxInfo& tx, NTabletFlatExecutor::TTransactionContext& txc);

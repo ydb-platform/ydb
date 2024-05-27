@@ -15,7 +15,7 @@ class TTestNodeMemoryTracker
     : public IMemoryUsageTracker
 {
 public:
-    explicit TTestNodeMemoryTracker(size_t limit);
+    explicit TTestNodeMemoryTracker(i64 limit);
 
     i64 GetLimit() const override;
     i64 GetUsed() const override;
@@ -35,29 +35,18 @@ public:
         TSharedRef reference,
         bool keepHolder = false) override;
 private:
+
     class TTestTrackedReferenceHolder
         : public TSharedRangeHolder
     {
     public:
         TTestTrackedReferenceHolder(
             TSharedRef underlying,
-            TMemoryUsageTrackerGuard guard)
-            : Underlying_(std::move(underlying))
-            , Guard_(std::move(guard))
-        { }
+            TMemoryUsageTrackerGuard guard);
 
-        TSharedRangeHolderPtr Clone(const TSharedRangeHolderCloneOptions& options) override
-        {
-            if (options.KeepMemoryReferenceTracking) {
-                return this;
-            }
-            return Underlying_.GetHolder()->Clone(options);
-        }
+        TSharedRangeHolderPtr Clone(const TSharedRangeHolderCloneOptions& options) override;
 
-        std::optional<size_t> GetTotalByteSize() const override
-        {
-            return Underlying_.GetHolder()->GetTotalByteSize();
-        }
+        std::optional<size_t> GetTotalByteSize() const override;
 
     private:
         const TSharedRef Underlying_;
@@ -65,9 +54,9 @@ private:
     };
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
-    i64 Usage_;
     i64 Limit_;
-    i64 TotalUsage_;
+    i64 Usage_ = 0;
+    i64 TotalUsage_ = 0;
 
     TError DoTryAcquire(i64 size);
     void DoAcquire(i64 size);

@@ -4,9 +4,8 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TTestNodeMemoryTracker::TTestNodeMemoryTracker(size_t limit)
-    : Usage_(0)
-    , Limit_(limit)
+TTestNodeMemoryTracker::TTestNodeMemoryTracker(i64 limit)
+    : Limit_(limit)
 { }
 
 i64 TTestNodeMemoryTracker::GetLimit() const
@@ -126,6 +125,28 @@ TSharedRef TTestNodeMemoryTracker::Track(TSharedRef reference, bool keepExisting
     return TSharedRef(
         rawReference,
         New<TTestTrackedReferenceHolder>(std::move(underlyingReference), std::move(guard)));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TTestNodeMemoryTracker::TTestTrackedReferenceHolder::TTestTrackedReferenceHolder(
+    TSharedRef underlying,
+    TMemoryUsageTrackerGuard guard)
+    : Underlying_(std::move(underlying))
+    , Guard_(std::move(guard))
+{ }
+
+TSharedRangeHolderPtr TTestNodeMemoryTracker::TTestTrackedReferenceHolder::Clone(const TSharedRangeHolderCloneOptions& options)
+{
+    if (options.KeepMemoryReferenceTracking) {
+        return this;
+    }
+    return Underlying_.GetHolder()->Clone(options);
+}
+
+std::optional<size_t> TTestNodeMemoryTracker::TTestTrackedReferenceHolder::GetTotalByteSize() const
+{
+    return Underlying_.GetHolder()->GetTotalByteSize();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

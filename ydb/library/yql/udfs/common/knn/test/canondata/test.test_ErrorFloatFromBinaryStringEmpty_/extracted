@@ -1,9 +1,0 @@
-<tmp_path>/program.sql:<main>: Fatal: Execution
-
-    <tmp_path>/program.sql:<main>:2:1: Fatal: Execution of node: Result
-    	select Knn::FloatFromBinaryString("");
-	^
-        <tmp_path>/program.sql:<main>:2:13: Fatal: (yexception) ydb/library/yql/udfs/common/knn/knn.cpp:xxx: Expected argument is string from ToBinaryString[Float|Byte]
-[FloatFromBinaryString]
-        	select Knn::FloatFromBinaryString("");
-	            ^

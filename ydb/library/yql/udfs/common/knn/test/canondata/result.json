@@ -16,17 +16,17 @@
     ],
     "test.test[ErrorDistanceInvalidFormat]": [
         {
-            "uri": "file://test.test_ErrorDistanceInvalidFormat_/extracted"
+            "uri": "file://test.test_ErrorDistanceInvalidFormat_/results.txt"
         }
     ],
     "test.test[ErrorDistanceSameFormat]": [
         {
-            "uri": "file://test.test_ErrorDistanceSameFormat_/extracted"
+            "uri": "file://test.test_ErrorDistanceSameFormat_/results.txt"
         }
     ],
     "test.test[ErrorDistanceSameSize]": [
         {
-            "uri": "file://test.test_ErrorDistanceSameSize_/extracted"
+            "uri": "file://test.test_ErrorDistanceSameSize_/results.txt"
         }
     ],
     "test.test[ErrorDistanceSameTag]": [
@@ -41,12 +41,12 @@
     ],
     "test.test[ErrorFloatFromBinaryStringEmpty]": [
         {
-            "uri": "file://test.test_ErrorFloatFromBinaryStringEmpty_/extracted"
+            "uri": "file://test.test_ErrorFloatFromBinaryStringEmpty_/results.txt"
         }
     ],
     "test.test[ErrorFloatFromBinaryStringInvalid]": [
         {
-            "uri": "file://test.test_ErrorFloatFromBinaryStringInvalid_/extracted"
+            "uri": "file://test.test_ErrorFloatFromBinaryStringInvalid_/results.txt"
         }
     ],
     "test.test[EuclideanDistance]": [

@@ -66,7 +66,47 @@
                             [
                                 "column0";
                                 [
-                                    "ListType";
+                                    "OptionalType";
+                                    [
+                                        "ListType";
+                                        [
+                                            "DataType";
+                                            "Float"
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            [
+                                "1";
+                                "2";
+                                "3";
+                                "4";
+                                "5"
+                            ]
+                        ]
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "OptionalType";
                                     [
                                         "DataType";
                                         "Float"
@@ -79,11 +119,7 @@
                 "Data" = [
                     [
                         [
-                            "1";
-                            "2";
-                            "3";
-                            "4";
-                            "5"
+                            "0"
                         ]
                     ]
                 ]
@@ -101,8 +137,11 @@
                             [
                                 "column0";
                                 [
-                                    "DataType";
-                                    "Float"
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Float"
+                                    ]
                                 ]
                             ]
                         ]
@@ -110,7 +149,9 @@
                 ];
                 "Data" = [
                     [
-                        "0.025368094"
+                        [
+                            "0"
+                        ]
                     ]
                 ]
             }
@@ -127,8 +168,11 @@
                             [
                                 "column0";
                                 [
-                                    "DataType";
-                                    "Float"
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Float"
+                                    ]
                                 ]
                             ]
                         ]
@@ -136,7 +180,9 @@
                 ];
                 "Data" = [
                     [
-                        "0.025368094"
+                        [
+                            "0"
+                        ]
                     ]
                 ]
             }
@@ -153,8 +199,11 @@
                             [
                                 "column0";
                                 [
-                                    "DataType";
-                                    "Float"
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Float"
+                                    ]
                                 ]
                             ]
                         ]
@@ -162,33 +211,9 @@
                 ];
                 "Data" = [
                     [
-                        "0.025368094"
-                    ]
-                ]
-            }
-        ]
-    };
-    {
-        "Write" = [
-            {
-                "Type" = [
-                    "ListType";
-                    [
-                        "StructType";
                         [
-                            [
-                                "column0";
-                                [
-                                    "DataType";
-                                    "Float"
-                                ]
-                            ]
+                            "0"
                         ]
-                    ]
-                ];
-                "Data" = [
-                    [
-                        "0.025368094"
                     ]
                 ]
             }

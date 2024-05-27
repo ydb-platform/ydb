@@ -1,9 +1,0 @@
-<tmp_path>/program.sql:<main>: Fatal: Execution
-
-    <tmp_path>/program.sql:<main>:2:1: Fatal: Execution of node: Result
-    	select Knn::CosineDistance("\u0001", "u0002");
-	^
-        <tmp_path>/program.sql:<main>:2:13: Fatal: (yexception) ydb/library/yql/udfs/common/knn/knn-distance.h:68: Expected arguments should have same format
-[CosineDistance]
-        	select Knn::CosineDistance("\u0001", "u0002");
-	            ^

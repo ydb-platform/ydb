@@ -90,10 +90,7 @@ public:
     }
 
     TUnboxedValue RunImpl(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
-        auto r = TKnnSerializerFacade::Deserialize(valueBuilder, args[0].AsStringRef());
-        if (Y_UNLIKELY(!r.HasValue()))
-            ythrow yexception() << "Expected argument is string from ToBinaryString[Float|Byte]";
-        return r;
+        return TKnnSerializerFacade::Deserialize(valueBuilder, args[0].AsStringRef());
     }
 
     static bool DeclareSignature(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {
@@ -122,7 +119,7 @@ public:
 
         builder.UserType(userType);
         builder.Args(1)->Add(argType).Flags(ICallablePayload::TArgumentFlags::AutoMap);
-        builder.Returns<TListType<float>>().IsStrict();
+        builder.Returns<TOptional<TListType<float>>>().IsStrict();
 
         if (!typesOnly) {
             builder.Implementation(new TFloatFromBinaryString(builder));
@@ -173,7 +170,7 @@ public:
 
         builder.UserType(userType);
         builder.Args(2)->Add(arg0Type).Flags(ICallablePayload::TArgumentFlags::AutoMap).Add(arg1Type).Flags(ICallablePayload::TArgumentFlags::AutoMap);
-        builder.Returns<float>().IsStrict();
+        builder.Returns<TOptional<float>>().IsStrict();
 
         if (!typesOnly) {
             builder.Implementation(new Derived(builder));
@@ -194,7 +191,9 @@ public:
     TUnboxedValue RunImpl(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
         Y_UNUSED(valueBuilder);
         const auto ret = KnnDotProduct(args[0].AsStringRef(), args[1].AsStringRef());
-        return TUnboxedValuePod{ret};
+        if (Y_UNLIKELY(!ret))
+            return {};
+        return TUnboxedValuePod{*ret};
     }
 };
 
@@ -209,10 +208,10 @@ public:
 
     TUnboxedValue RunImpl(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
         Y_UNUSED(valueBuilder);
-        const auto [ll, lr, rr] = KnnTriWayDotProduct(args[0].AsStringRef(), args[1].AsStringRef());
-        const auto norm = std::sqrt(ll * rr);
-        const float cosine = norm != 0 ? lr / norm : 1;
-        return TUnboxedValuePod{cosine};
+        const auto ret = KnnCosineSimilarity(args[0].AsStringRef(), args[1].AsStringRef());
+        if (Y_UNLIKELY(!ret))
+            return {};
+        return TUnboxedValuePod{*ret};
     }
 };
 
@@ -227,10 +226,10 @@ public:
 
     TUnboxedValue RunImpl(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
         Y_UNUSED(valueBuilder);
-        const auto [ll, lr, rr] = KnnTriWayDotProduct(args[0].AsStringRef(), args[1].AsStringRef());
-        const auto norm = std::sqrt(ll * rr);
-        const float cosine = norm != 0 ? lr / norm : 1;
-        return TUnboxedValuePod{1 - cosine};
+        const auto ret = KnnCosineSimilarity(args[0].AsStringRef(), args[1].AsStringRef());
+        if (Y_UNLIKELY(!ret))
+            return {};
+        return TUnboxedValuePod{1 - *ret};
     }
 };
 
@@ -246,7 +245,9 @@ public:
     TUnboxedValue RunImpl(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
         Y_UNUSED(valueBuilder);
         const auto ret = KnnManhattanDistance(args[0].AsStringRef(), args[1].AsStringRef());
-        return TUnboxedValuePod{ret};
+        if (Y_UNLIKELY(!ret))
+            return {};
+        return TUnboxedValuePod{*ret};
     }
 };
 
@@ -262,7 +263,9 @@ public:
     TUnboxedValue RunImpl(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
         Y_UNUSED(valueBuilder);
         const auto ret = KnnEuclideanDistance(args[0].AsStringRef(), args[1].AsStringRef());
-        return TUnboxedValuePod{ret};
+        if (Y_UNLIKELY(!ret))
+            return {};
+        return TUnboxedValuePod{*ret};
     }
 };
 

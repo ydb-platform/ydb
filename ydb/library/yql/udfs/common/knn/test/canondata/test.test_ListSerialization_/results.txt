@@ -42,10 +42,13 @@
                             [
                                 "column0";
                                 [
-                                    "ListType";
+                                    "OptionalType";
                                     [
-                                        "DataType";
-                                        "Float"
+                                        "ListType";
+                                        [
+                                            "DataType";
+                                            "Float"
+                                        ]
                                     ]
                                 ]
                             ]
@@ -55,11 +58,13 @@
                 "Data" = [
                     [
                         [
-                            "1.2";
-                            "2.3";
-                            "3.4";
-                            "4.5";
-                            "5.6"
+                            [
+                                "1.2";
+                                "2.3";
+                                "3.4";
+                                "4.5";
+                                "5.6"
+                            ]
                         ]
                     ]
                 ]
@@ -77,8 +82,11 @@
                             [
                                 "column0";
                                 [
-                                    "DataType";
-                                    "Bool"
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Bool"
+                                    ]
                                 ]
                             ]
                         ]
@@ -86,7 +94,9 @@
                 ];
                 "Data" = [
                     [
-                        %true
+                        [
+                            %true
+                        ]
                     ]
                 ]
             }

@@ -591,7 +591,7 @@ void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& 
         for (const auto& c : dataNode["ClusterMapping"].AsMap()) {
             loadedSettings.ClusterMapping[c.first] = c.second.AsString();
         }
-    
+
         currentSettings = &loadedSettings;
     }
 }

@@ -79,140 +79,96 @@ public:
 };
 
 
-class TScriptExecutionsTablesCreator : public TActorBootstrapped<TScriptExecutionsTablesCreator> {
+class TScriptExecutionsTablesCreator : public NTableCreator::TMultiTableCreator {
+    using TBase = NTableCreator::TMultiTableCreator;
+
 public:
     explicit TScriptExecutionsTablesCreator(THolder<NActors::IEventBase> resultEvent)
-        : ResultEvent(std::move(resultEvent))
-    {
-    }
-
-    void Registered(NActors::TActorSystem* sys, const NActors::TActorId& owner) override {
-        NActors::TActorBootstrapped<TScriptExecutionsTablesCreator>::Registered(sys, owner);
-        Owner = owner;
-    }
-
-    void Bootstrap() {
-        Become(&TScriptExecutionsTablesCreator::StateFunc);
-        RunCreateScriptExecutions();
-        RunCreateScriptExecutionLeases();
-        RunCreateScriptResultSets();
-    }
+        : TBase({
+            GetScriptExecutionsCreator(),
+            GetScriptExecutionLeasesCreator(),
+            GetScriptResultSetsCreator()
+        })
+        , ResultEvent(std::move(resultEvent))
+    {}
 
 private:
-    static NKikimrSchemeOp::TColumnDescription Col(const TString& columnName, const char* columnType) {
-        NKikimrSchemeOp::TColumnDescription desc;
-        desc.SetName(columnName);
-        desc.SetType(columnType);
-        return desc;
-    }
-
-    static NKikimrSchemeOp::TColumnDescription Col(const TString& columnName, NScheme::TTypeId columnType) {
-        return Col(columnName, NScheme::TypeName(columnType));
-    }
-
-    static NKikimrSchemeOp::TTTLSettings TtlCol(const TString& columnName) {
-        NKikimrSchemeOp::TTTLSettings settings;
-        settings.MutableEnabled()->SetExpireAfterSeconds(DEADLINE_OFFSET.Seconds());
-        settings.MutableEnabled()->SetColumnName(columnName);
-        settings.MutableEnabled()->MutableSysSettings()->SetRunInterval(BRO_RUN_INTERVAL.MicroSeconds());
-        return settings;
-    }
-
-    void RunCreateScriptExecutions() {
-        TablesCreating++;
-        Register(
-            CreateTableCreator(
-                { ".metadata", "script_executions" },
-                {
-                    Col("database", NScheme::NTypeIds::Text),
-                    Col("execution_id", NScheme::NTypeIds::Text),
-                    Col("run_script_actor_id", NScheme::NTypeIds::Text),
-                    Col("operation_status", NScheme::NTypeIds::Int32),
-                    Col("execution_status", NScheme::NTypeIds::Int32),
-                    Col("finalization_status", NScheme::NTypeIds::Int32),
-                    Col("execution_mode", NScheme::NTypeIds::Int32),
-                    Col("start_ts", NScheme::NTypeIds::Timestamp),
-                    Col("end_ts", NScheme::NTypeIds::Timestamp),
-                    Col("query_text", NScheme::NTypeIds::Text),
-                    Col("syntax", NScheme::NTypeIds::Int32),
-                    Col("ast", NScheme::NTypeIds::Text),
-                    Col("ast_compressed", NScheme::NTypeIds::String),
-                    Col("ast_compression_method", NScheme::NTypeIds::Text),
-                    Col("issues", NScheme::NTypeIds::JsonDocument),
-                    Col("plan", NScheme::NTypeIds::JsonDocument),
-                    Col("meta", NScheme::NTypeIds::JsonDocument),
-                    Col("parameters", NScheme::NTypeIds::String), // TODO: store aparameters separately to support bigger storage.
-                    Col("result_set_metas", NScheme::NTypeIds::JsonDocument),
-                    Col("stats", NScheme::NTypeIds::JsonDocument),
-                    Col("expire_at", NScheme::NTypeIds::Timestamp), // Will be deleted from database after this deadline.
-                    Col("customer_supplied_id", NScheme::NTypeIds::Text),
-                    Col("user_token", NScheme::NTypeIds::Text),
-                    Col("script_sinks", NScheme::NTypeIds::JsonDocument),
-                    Col("script_secret_names", NScheme::NTypeIds::JsonDocument),
-                },
-                { "database", "execution_id" },
-                NKikimrServices::KQP_PROXY,
-                TtlCol("expire_at")
-            )
+    static IActor* GetScriptExecutionsCreator() {
+        return CreateTableCreator(
+            { ".metadata", "script_executions" },
+            {
+                Col("database", NScheme::NTypeIds::Text),
+                Col("execution_id", NScheme::NTypeIds::Text),
+                Col("run_script_actor_id", NScheme::NTypeIds::Text),
+                Col("operation_status", NScheme::NTypeIds::Int32),
+                Col("execution_status", NScheme::NTypeIds::Int32),
+                Col("finalization_status", NScheme::NTypeIds::Int32),
+                Col("execution_mode", NScheme::NTypeIds::Int32),
+                Col("start_ts", NScheme::NTypeIds::Timestamp),
+                Col("end_ts", NScheme::NTypeIds::Timestamp),
+                Col("query_text", NScheme::NTypeIds::Text),
+                Col("syntax", NScheme::NTypeIds::Int32),
+                Col("ast", NScheme::NTypeIds::Text),
+                Col("ast_compressed", NScheme::NTypeIds::String),
+                Col("ast_compression_method", NScheme::NTypeIds::Text),
+                Col("issues", NScheme::NTypeIds::JsonDocument),
+                Col("plan", NScheme::NTypeIds::JsonDocument),
+                Col("meta", NScheme::NTypeIds::JsonDocument),
+                Col("parameters", NScheme::NTypeIds::String), // TODO: store aparameters separately to support bigger storage.
+                Col("result_set_metas", NScheme::NTypeIds::JsonDocument),
+                Col("stats", NScheme::NTypeIds::JsonDocument),
+                Col("expire_at", NScheme::NTypeIds::Timestamp), // Will be deleted from database after this deadline.
+                Col("customer_supplied_id", NScheme::NTypeIds::Text),
+                Col("user_token", NScheme::NTypeIds::Text),
+                Col("script_sinks", NScheme::NTypeIds::JsonDocument),
+                Col("script_secret_names", NScheme::NTypeIds::JsonDocument),
+            },
+            { "database", "execution_id" },
+            NKikimrServices::KQP_PROXY,
+            TtlCol("expire_at", DEADLINE_OFFSET, BRO_RUN_INTERVAL)
         );
     }
 
-    void RunCreateScriptExecutionLeases() {
-        TablesCreating++;
-        Register(
-            CreateTableCreator(
-                { ".metadata", "script_execution_leases" },
-                {
-                    Col("database", NScheme::NTypeIds::Text),
-                    Col("execution_id", NScheme::NTypeIds::Text),
-                    Col("lease_deadline", NScheme::NTypeIds::Timestamp),
-                    Col("lease_generation", NScheme::NTypeIds::Int64),
-                    Col("expire_at", NScheme::NTypeIds::Timestamp), // Will be deleted from database after this deadline.
-                },
-                { "database", "execution_id" },
-                NKikimrServices::KQP_PROXY,
-                TtlCol("expire_at")
-            )
+    static IActor* GetScriptExecutionLeasesCreator() {
+        return CreateTableCreator(
+            { ".metadata", "script_execution_leases" },
+            {
+                Col("database", NScheme::NTypeIds::Text),
+                Col("execution_id", NScheme::NTypeIds::Text),
+                Col("lease_deadline", NScheme::NTypeIds::Timestamp),
+                Col("lease_generation", NScheme::NTypeIds::Int64),
+                Col("expire_at", NScheme::NTypeIds::Timestamp), // Will be deleted from database after this deadline.
+            },
+            { "database", "execution_id" },
+            NKikimrServices::KQP_PROXY,
+            TtlCol("expire_at", DEADLINE_OFFSET, BRO_RUN_INTERVAL)
         );
     }
 
-    void RunCreateScriptResultSets() {
-        TablesCreating++;
-        Register(
-            CreateTableCreator(
-                { ".metadata", "result_sets" },
-                {
-                    Col("database", NScheme::NTypeIds::Text),
-                    Col("execution_id", NScheme::NTypeIds::Text),
-                    Col("result_set_id", NScheme::NTypeIds::Int32),
-                    Col("row_id", NScheme::NTypeIds::Int64),
-                    Col("expire_at", NScheme::NTypeIds::Timestamp),
-                    Col("result_set", NScheme::NTypeIds::String),
-                    Col("accumulated_size", NScheme::NTypeIds::Int64),
-                },
-                { "database", "execution_id", "result_set_id", "row_id" },
-                NKikimrServices::KQP_PROXY,
-                TtlCol("expire_at")
-            )
+    static IActor* GetScriptResultSetsCreator() {
+        return CreateTableCreator(
+            { ".metadata", "result_sets" },
+            {
+                Col("database", NScheme::NTypeIds::Text),
+                Col("execution_id", NScheme::NTypeIds::Text),
+                Col("result_set_id", NScheme::NTypeIds::Int32),
+                Col("row_id", NScheme::NTypeIds::Int64),
+                Col("expire_at", NScheme::NTypeIds::Timestamp),
+                Col("result_set", NScheme::NTypeIds::String),
+                Col("accumulated_size", NScheme::NTypeIds::Int64),
+            },
+            { "database", "execution_id", "result_set_id", "row_id" },
+            NKikimrServices::KQP_PROXY,
+            TtlCol("expire_at", DEADLINE_OFFSET, BRO_RUN_INTERVAL)
         );
     }
 
-    void Handle(TEvTableCreator::TEvCreateTableResponse::TPtr&) {
-        Y_ABORT_UNLESS(TablesCreating > 0);
-        if (--TablesCreating == 0) {
-            Send(Owner, std::move(ResultEvent));
-            PassAway();
-        }
+    void OnTablesCreated() override  {
+        Send(Owner, std::move(ResultEvent));
     }
-
-    STRICT_STFUNC(StateFunc,
-        hFunc(TEvTableCreator::TEvCreateTableResponse, Handle);
-    )
 
 private:
     THolder<NActors::IEventBase> ResultEvent;
-    NActors::TActorId Owner;
-    size_t TablesCreating = 0;
 };
 
 Ydb::Query::ExecMode GetExecModeFromAction(NKikimrKqp::EQueryAction action) {

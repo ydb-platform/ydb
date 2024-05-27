@@ -380,6 +380,59 @@ private:
 
 } // namespace
 
+namespace NTableCreator {
+
+NKikimrSchemeOp::TColumnDescription TMultiTableCreator::Col(const TString& columnName, const char* columnType) {
+    NKikimrSchemeOp::TColumnDescription desc;
+    desc.SetName(columnName);
+    desc.SetType(columnType);
+    return desc;
+}
+
+NKikimrSchemeOp::TColumnDescription TMultiTableCreator::Col(const TString& columnName, NScheme::TTypeId columnType) {
+    return Col(columnName, NScheme::TypeName(columnType));
+}
+
+NKikimrSchemeOp::TTTLSettings TMultiTableCreator::TtlCol(const TString& columnName, TDuration expireAfter, TDuration runInterval) {
+    NKikimrSchemeOp::TTTLSettings settings;
+    settings.MutableEnabled()->SetExpireAfterSeconds(expireAfter.Seconds());
+    settings.MutableEnabled()->SetColumnName(columnName);
+    settings.MutableEnabled()->MutableSysSettings()->SetRunInterval(runInterval.MicroSeconds());
+    return settings;
+}
+
+TMultiTableCreator::TMultiTableCreator(std::vector<NActors::IActor*> tableCreators)
+    : TableCreators(tableCreators)
+{}
+
+void TMultiTableCreator::Registered(NActors::TActorSystem* sys, const NActors::TActorId& owner) {
+    TBase::Registered(sys, owner);
+    Owner = owner;
+}
+
+void TMultiTableCreator::Bootstrap() {
+    Become(&TMultiTableCreator::StateFunc);
+
+    TablesCreating = TableCreators.size();
+    for (const auto creator : TableCreators) {
+        Register(creator);
+    }
+}
+
+void TMultiTableCreator::Handle(TEvTableCreator::TEvCreateTableResponse::TPtr&) {
+    Y_ABORT_UNLESS(TablesCreating > 0);
+    if (--TablesCreating == 0) {
+        OnTablesCreated();
+        PassAway();
+    }
+}
+
+STRICT_STFUNC(TMultiTableCreator::StateFunc,
+    hFunc(TEvTableCreator::TEvCreateTableResponse, Handle);
+);
+
+} // namespace NTableCreator
+
 NActors::IActor* CreateTableCreator(
     TVector<TString> pathComponents,
     TVector<NKikimrSchemeOp::TColumnDescription> columns,

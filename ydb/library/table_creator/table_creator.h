@@ -5,6 +5,9 @@
 #include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+
+#include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 namespace NKikimr {
 
@@ -17,6 +20,42 @@ struct TEvTableCreator {
     struct TEvCreateTableResponse : public TEventLocal<TEvCreateTableResponse, EvCreateTableResponse> {
     };
 };
+
+namespace NTableCreator {
+
+class TMultiTableCreator : public NActors::TActorBootstrapped<TMultiTableCreator> {
+    using TBase = NActors::TActorBootstrapped<TMultiTableCreator>;
+
+public:
+    explicit TMultiTableCreator(std::vector<NActors::IActor*> tableCreators);
+
+    void Bootstrap();
+
+protected:
+    virtual void OnTablesCreated() = 0;
+
+    static NKikimrSchemeOp::TColumnDescription Col(const TString& columnName, const char* columnType);
+
+    static NKikimrSchemeOp::TColumnDescription Col(const TString& columnName, NScheme::TTypeId columnType);
+
+    static NKikimrSchemeOp::TTTLSettings TtlCol(const TString& columnName, TDuration expireAfter, TDuration runInterval);
+
+private:
+    void Registered(NActors::TActorSystem* sys, const NActors::TActorId& owner) override;
+
+    void Handle(TEvTableCreator::TEvCreateTableResponse::TPtr&);
+
+    STFUNC(StateFunc);
+
+protected:
+    NActors::TActorId Owner;
+
+private:
+    std::vector<NActors::IActor*> TableCreators;
+    size_t TablesCreating = 0;
+};
+
+} // namespace NTableCreator
 
 NActors::IActor* CreateTableCreator(
     TVector<TString> pathComponents,

@@ -111,7 +111,7 @@ void TPartitionScaleManager::UpdateDatabasePath(const TString& dbPath) {
 }
 
 TString TPartitionScaleManager::GetRangeMid(const TString& from, const TString& to) {
-    if (from > to) {
+    if (from > to && to.size() != 0) {
         return "";
     }
 
@@ -133,7 +133,6 @@ TString TPartitionScaleManager::GetRangeMid(const TString& from, const TString& 
     if (result == from) {
         result += static_cast<unsigned char>(127);
     }
-
     return result;
 }
 

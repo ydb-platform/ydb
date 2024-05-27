@@ -1,7 +1,7 @@
-SUBSCRIBER(g:yql)
 LIBRARY()
 CONLYFLAGS(GLOBAL -DVECTORWISE GLOBAL -DLINUX GLOBAL -DTPCH GLOBAL -DRNG_TEST)
 NO_WERROR()
+IF(LINUX)
 SRCS(
     build.c 
     bm_utils.c 
@@ -14,4 +14,5 @@ SRCS(
     permute.c 
     rng64.c
 )
+ENDIF()
 END()

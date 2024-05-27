@@ -20,13 +20,6 @@
             "uri": "https://{canondata_backend}/1775059/105879cd875204bc7c66426c8bfdd2bbd01bfaf7/resource.tar.gz#test.test_action-evaluate_pure--Results_/results.txt"
         }
     ],
-    "test.test[action-file_cycle--Debug]": [],
-    "test.test[action-file_cycle--Plan]": [],
-    "test.test[action-file_cycle--Results]": [
-        {
-            "uri": "file://test.test_action-file_cycle--Results_/extracted"
-        }
-    ],
     "test.test[action-nested_eval-default.txt-Debug]": [
         {
             "checksum": "dfc49c1f6f30ac41794475c26145cd89",
@@ -372,6 +365,27 @@
             "checksum": "c3076e8456b4edff315911a327bb884c",
             "size": 2883,
             "uri": "https://{canondata_backend}/937458/1e755da0096e05267f6799f8a52aa91931cfd0fa/resource.tar.gz#test.test_aggregate-group_by_rollup_with_filter--Results_/results.txt"
+        }
+    ],
+    "test.test[aggregate-group_by_ru_join_grouping-default.txt-Debug]": [
+        {
+            "checksum": "03ba18c64f9646628b54c395546d9da4",
+            "size": 10879,
+            "uri": "https://{canondata_backend}/1937150/4459582cc65335f3d937232300e125218ede7d86/resource.tar.gz#test.test_aggregate-group_by_ru_join_grouping-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[aggregate-group_by_ru_join_grouping-default.txt-Plan]": [
+        {
+            "checksum": "79c0cfbb9331af7c81e7e1695d89cca1",
+            "size": 15862,
+            "uri": "https://{canondata_backend}/1937150/4459582cc65335f3d937232300e125218ede7d86/resource.tar.gz#test.test_aggregate-group_by_ru_join_grouping-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[aggregate-group_by_ru_join_grouping-default.txt-Results]": [
+        {
+            "checksum": "bfe58549276810f7ce6e67cd44d7c6df",
+            "size": 6019,
+            "uri": "https://{canondata_backend}/1937150/4459582cc65335f3d937232300e125218ede7d86/resource.tar.gz#test.test_aggregate-group_by_ru_join_grouping-default.txt-Results_/results.txt"
         }
     ],
     "test.test[aggregate-group_by_session_aliases--Debug]": [

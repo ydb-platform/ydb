@@ -12321,6 +12321,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["OrderedSqlProject"] = &SqlProjectWrapper;
         Functions["SqlProjectItem"] = &SqlProjectItemWrapper;
         Functions["SqlProjectStarItem"] = &SqlProjectItemWrapper;
+        Functions["PgSelf"] = &PgSelfWrapper;
         Functions["PgStar"] = &PgStarWrapper;
         Functions["PgQualifiedStar"] = &PgQualifiedStarWrapper;
         Functions["PgColumnRef"] = &PgColumnRefWrapper;
@@ -12358,6 +12359,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["PgGrouping"] = &PgGroupingWrapper;
         Functions["PgGroupingSet"] = &PgGroupingSetWrapper;
         Functions["PgToRecord"] = &PgToRecordWrapper;
+        Functions["PgIterate"] = &PgIterateWrapper;
+        Functions["PgIterateAll"] = &PgIterateWrapper;
         Functions["StructUnion"] = &StructMergeWrapper;
         Functions["StructIntersection"] = &StructMergeWrapper;
         Functions["StructDifference"] = &StructMergeWrapper;
@@ -12470,6 +12473,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["ListFlatten"] = &ListFlattenWrapper;
         Functions["ListUniq"] = &ListUniqWrapper;
         Functions["ListUniqStable"] = &ListUniqStableWrapper;
+        Functions["ListTop"] = &ListTopSortWrapper;
+        Functions["ListTopAsc"] = &ListTopSortWrapper;
+        Functions["ListTopDesc"] = &ListTopSortWrapper;
+        Functions["ListTopSort"] = &ListTopSortWrapper;
+        Functions["ListTopSortAsc"] = &ListTopSortWrapper;
+        Functions["ListTopSortDesc"] = &ListTopSortWrapper;
 
         Functions["ExpandMap"] = &ExpandMapWrapper;
         Functions["WideMap"] = &WideMapWrapper;
@@ -12622,6 +12631,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["AggregateMergeManyFinalize"] = &AggregateWrapper;
 
         ColumnOrderFunctions["PgSetItem"] = &OrderForPgSetItem;
+        ColumnOrderFunctions["PgIterate"] = &OrderFromFirst;
+        ColumnOrderFunctions["PgIterateAll"] = &OrderFromFirst;
         ColumnOrderFunctions["AssumeColumnOrder"] = &OrderForAssumeColumnOrder;
 
         ColumnOrderFunctions["SqlProject"] = ColumnOrderFunctions["OrderedSqlProject"] = &OrderForSqlProject;

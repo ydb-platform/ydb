@@ -203,26 +203,16 @@ public:
     }
 };
 
-template<bool Nullable>
-class TTupleBlockReader final : public IBlockReader {
+template<bool Nullable, typename TDerived>
+class TTupleBlockReaderBase : public IBlockReader {
 public:
-    TTupleBlockReader(TVector<std::unique_ptr<IBlockReader>>&& children)
-        : Children(std::move(children))
-        , Items(Children.size())
-    {}
-
     TBlockItem GetItem(const arrow::ArrayData& data, size_t index) final {
         if constexpr (Nullable) {
             if (IsNull(data, index)) {
                 return {};
             }
         }
-
-        for (ui32 i = 0; i < Children.size(); ++i) {
-            Items[i] = Children[i]->GetItem(*data.child_data[i], index);
-        }
-
-        return TBlockItem(Items.data());
+        return static_cast<TDerived*>(this)->GetChildrenItems(data, index);
     }
 
     TBlockItem GetScalarItem(const arrow::Scalar& scalar) final {
@@ -233,12 +223,7 @@ public:
         }
 
         const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(scalar);
-
-        for (ui32 i = 0; i < Children.size(); ++i) {
-            Items[i] = Children[i]->GetScalarItem(*structScalar.value[i]);
-        }
-
-        return TBlockItem(Items.data());
+        return static_cast<TDerived*>(this)->GetChildrenScalarItems(structScalar);
     }
 
     ui64 GetDataWeight(const arrow::ArrayData& data) const final {
@@ -247,19 +232,78 @@ public:
             size += data.length;
         }
 
-        for (ui32 i = 0; i < Children.size(); ++i) {
-            size += Children[i]->GetDataWeight(*data.child_data[i]);
-        }
-
+        size += static_cast<const TDerived*>(this)->GetChildrenDataWeight(data);
         return size;
     }
 
     ui64 GetDataWeight(TBlockItem item) const final {
+        return static_cast<const TDerived*>(this)->GetDataWeightImpl(item);
+    }
+
+    ui64 GetDefaultValueWeight() const final {
+        ui64 size = 0;
+        if constexpr (Nullable) {
+            size = 1;
+        }
+        size += static_cast<const TDerived*>(this)->GetChildrenDefaultDataWeight();
+        return size;
+    }
+
+    void SaveItem(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const final {
+        if constexpr (Nullable) {
+            if (IsNull(data, index)) {
+                return out.PushChar(0);
+            }
+            out.PushChar(1);
+        }
+
+        static_cast<const TDerived*>(this)->SaveChildrenItems(data, index, out);
+    }
+
+    void SaveScalarItem(const arrow::Scalar& scalar, TOutputBuffer& out) const final {
+        if constexpr (Nullable) {
+            if (!scalar.is_valid) {
+                return out.PushChar(0);
+            }
+            out.PushChar(1);
+        }
+
+        const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(scalar);
+
+        static_cast<const TDerived*>(this)->SaveChildrenScalarItems(structScalar, out);
+    }
+};
+
+template<bool Nullable>
+class TTupleBlockReader final : public TTupleBlockReaderBase<Nullable, TTupleBlockReader<Nullable>> {
+public:
+    TTupleBlockReader(TVector<std::unique_ptr<IBlockReader>>&& children)
+        : Children(std::move(children))
+        , Items(Children.size())
+    {}
+
+    TBlockItem GetChildrenItems(const arrow::ArrayData& data, size_t index) {
+        for (ui32 i = 0; i < Children.size(); ++i) {
+            Items[i] = Children[i]->GetItem(*data.child_data[i], index);
+        }
+
+        return TBlockItem(Items.data());
+    }
+
+    TBlockItem GetChildrenScalarItems(const arrow::StructScalar& structScalar) {
+        for (ui32 i = 0; i < Children.size(); ++i) {
+            Items[i] = Children[i]->GetScalarItem(*structScalar.value[i]);
+        }
+
+        return TBlockItem(Items.data());
+    }
+    
+    size_t GetDataWeightImpl(const TBlockItem& item) const {
         const TBlockItem* items = nullptr;
         ui64 size = 0;
         if constexpr (Nullable) {
             if (!item) {
-                return GetDefaultValueWeight();
+                return this->GetDefaultValueWeight();
             }
             size = 1;
             items = item.GetOptionalValue().GetElements();
@@ -274,40 +318,30 @@ public:
         return size;
     }
 
-    ui64 GetDefaultValueWeight() const final {
-        ui64 size = 0;
-        if constexpr (Nullable) {
-            size = 1;
+    size_t GetChildrenDataWeight(const arrow::ArrayData& data) const {
+        size_t size = 0;
+        for (ui32 i = 0; i < Children.size(); ++i) {
+            size += Children[i]->GetDataWeight(*data.child_data[i]);
         }
+
+        return size;
+    }
+
+    size_t GetChildrenDefaultDataWeight() const {
+        size_t size = 0;
         for (ui32 i = 0; i < Children.size(); ++i) {
             size += Children[i]->GetDefaultValueWeight();
         }
         return size;
     }
 
-    void SaveItem(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const final {
-        if constexpr (Nullable) {
-            if (IsNull(data, index)) {
-                return out.PushChar(0);
-            }
-            out.PushChar(1);
-        }
-
+    void SaveChildrenItems(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const {
         for (ui32 i = 0; i < Children.size(); ++i) {
             Children[i]->SaveItem(*data.child_data[i], index, out);
         }
     }
-
-    void SaveScalarItem(const arrow::Scalar& scalar, TOutputBuffer& out) const final {
-        if constexpr (Nullable) {
-            if (!scalar.is_valid) {
-                return out.PushChar(0);
-            }
-            out.PushChar(1);
-        }
-
-        const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(scalar);
-
+    
+    void SaveChildrenScalarItems(const arrow::StructScalar& structScalar, TOutputBuffer& out) const {
         for (ui32 i = 0; i < Children.size(); ++i) {
             Children[i]->SaveScalarItem(*structScalar.value[i], out);
         }
@@ -316,6 +350,65 @@ public:
 private:
     const TVector<std::unique_ptr<IBlockReader>> Children;
     TVector<TBlockItem> Items;
+};
+
+template<typename TTzDate, bool Nullable>
+class TTzDateBlockReader final : public TTupleBlockReaderBase<Nullable, TTzDateBlockReader<TTzDate, Nullable>> {
+public:
+    TBlockItem GetChildrenItems(const arrow::ArrayData& data, size_t index) {
+        Y_DEBUG_ABORT_UNLESS(data.child_data.size() == 2);
+
+        TBlockItem item {DateReader_.GetItem(*data.child_data[0], index)};
+        item.SetTimezoneId(TimezoneReader_.GetItem(*data.child_data[1], index).Get<ui16>());
+        return item;
+    }
+
+    TBlockItem GetChildrenScalarItems(const arrow::StructScalar& structScalar) {
+        Y_DEBUG_ABORT_UNLESS(structScalar.value.size() == 2);
+
+        TBlockItem item {DateReader_.GetScalarItem(*structScalar.value[0])};
+        item.SetTimezoneId(TimezoneReader_.GetScalarItem(*structScalar.value[1]).Get<ui16>());
+        return item;
+    }
+
+    size_t GetChildrenDataWeight(const arrow::ArrayData& data) const {
+        Y_DEBUG_ABORT_UNLESS(data.child_data.size() == 2);
+
+        size_t size = 0;
+        size += DateReader_.GetDataWeight(*data.child_data[0]);
+        size += TimezoneReader_.GetDataWeight(*data.child_data[1]);
+        return size;
+    }
+
+    size_t GetDataWeightImpl(const TBlockItem& item) const {
+        Y_UNUSED(item);
+        return GetChildrenDefaultDataWeight();
+    }
+    
+    size_t GetChildrenDefaultDataWeight() const {
+        ui64 size = 0;
+        if constexpr (Nullable) {
+            size = 1;
+        }
+
+        size += DateReader_.GetDefaultValueWeight();
+        size += TimezoneReader_.GetDefaultValueWeight();
+        return size;
+    }
+
+    void SaveChildrenItems(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const {
+        DateReader_.SaveItem(*data.child_data[0], index, out);
+        TimezoneReader_.SaveItem(*data.child_data[1], index, out);
+    }
+    
+    void SaveChildrenScalarItems(const arrow::StructScalar& structScalar, TOutputBuffer& out) const {
+        DateReader_.SaveScalarItem(*structScalar.value[0], out);
+        TimezoneReader_.SaveScalarItem(*structScalar.value[1], out);
+    }
+
+private:
+    TFixedSizeBlockReader<typename TDataType<TTzDate>::TLayout, /* Nullable */false> DateReader_;
+    TFixedSizeBlockReader<ui16, /* Nullable */false> TimezoneReader_;
 };
 
 class TExternalOptionalBlockReader final : public IBlockReader {
@@ -390,6 +483,8 @@ struct TReaderTraits {
     using TExtOptional = TExternalOptionalBlockReader;
     template<bool Nullable>
     using TResource = TResourceBlockReader<Nullable>;
+    template<typename TTzDate, bool Nullable>
+    using TTzDateReader = TTzDateBlockReader<TTzDate, Nullable>;
 
     static std::unique_ptr<TResult> MakePg(const TPgTypeDescription& desc, const IPgBuilder* pgBuilder) {
         Y_UNUSED(pgBuilder);
@@ -405,6 +500,15 @@ struct TReaderTraits {
             return std::make_unique<TResource<true>>();
         } else {
             return std::make_unique<TResource<false>>();
+        }
+    }
+
+    template<typename TTzDate>
+    static std::unique_ptr<TResult> MakeTzDate(bool isOptional) {
+        if (isOptional) {
+            return std::make_unique<TTzDateReader<TTzDate, true>>();
+        } else {
+            return std::make_unique<TTzDateReader<TTzDate, false>>();
         }
     }
 };
@@ -544,7 +648,15 @@ std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHe
             return MakeStringBlockReaderImpl<TTraits, arrow::StringType, NUdf::EDataSlot::Utf8>(isOptional);
         case NUdf::EDataSlot::Json:
             return MakeStringBlockReaderImpl<TTraits, arrow::StringType, NUdf::EDataSlot::Json>(isOptional);
-        default:
+        case NUdf::EDataSlot::TzDate:
+            return TTraits::template MakeTzDate<TTzDate>(isOptional);
+        case NUdf::EDataSlot::TzDatetime:
+            return TTraits::template MakeTzDate<TTzDatetime>(isOptional);
+        case NUdf::EDataSlot::TzTimestamp:
+            return TTraits::template MakeTzDate<TTzTimestamp>(isOptional);
+        case NUdf::EDataSlot::Uuid:
+        case NUdf::EDataSlot::Decimal:
+        case NUdf::EDataSlot::DyNumber:
             Y_ENSURE(false, "Unsupported data slot");
         }
     }
@@ -606,7 +718,10 @@ inline void UpdateBlockItemSerializeProps(const ITypeInfoHelper& typeInfoHelper,
         if (dataTypeInfo.Features & StringType) {
             props.MaxSize = {};
             props.IsFixed = false;
-        } else {
+        } else if (dataTypeInfo.Features & TzDateType) {
+            *props.MaxSize += dataTypeInfo.FixedSize + sizeof(TTimezoneId);
+        }
+        else {
             *props.MaxSize += dataTypeInfo.FixedSize;
         }
         return;

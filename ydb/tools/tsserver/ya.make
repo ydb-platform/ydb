@@ -1,7 +1,5 @@
 PROGRAM()
 
-OWNER(alexvru)
-
 SRCS(
     main.cpp
 )

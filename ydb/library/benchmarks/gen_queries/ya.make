@@ -1,7 +1,5 @@
 PY3_PROGRAM(gen_queries)
 
-OWNER(g:yql)
-
 PY_SRCS(
     MAIN gen_queries.py
 )

@@ -329,7 +329,7 @@ def invoke_grpc(func, *params, explicit_host=None, host=None):
     if connection_params.verbose:
         p = ', '.join('<<< %s >>>' % text_format.MessageToString(param, as_one_line=True) for param in params)
         print('INFO: issuing %s(%s) @%s:%d protocol %s' % (func, p, host, connection_params.grpc_port,
-            connection_params.mon_protocol), file=sys.stderr)
+              connection_params.mon_protocol), file=sys.stderr)
 
     def work(channel):
         try:
@@ -353,6 +353,7 @@ def invoke_grpc(func, *params, explicit_host=None, host=None):
         with grpc.insecure_channel(hostport, options) as channel:
             retval = work(channel)
     return retval
+
 
 def invoke_bsc_request(request):
     if connection_params.http:

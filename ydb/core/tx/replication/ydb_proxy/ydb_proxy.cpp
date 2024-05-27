@@ -33,6 +33,7 @@ void TEvYdbProxy::TReadTopicResult::TMessage::Out(IOutputStream& out) const {
 
 void TEvYdbProxy::TReadTopicResult::Out(IOutputStream& out) const {
     out << "{"
+        << " PartitionId: " << PartitionId
         << " Messages [" << JoinSeq(",", Messages) << "]"
     << " }";
 }
@@ -205,7 +206,8 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
             x->Confirm();
             return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
         } else if (auto* x = std::get_if<TReadSessionEvent::TEndPartitionSessionEvent>(&*event)) {
-            // do nothing.
+            x->Confirm();
+            return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
         } else if (auto* x = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&*event)) {
             if (AutoCommit) {
                 DeferredCommit.Add(*x);

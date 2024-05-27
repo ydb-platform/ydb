@@ -24,6 +24,9 @@ inputs:
     required: false
     default: "12"
     description: "link threads count"
+  additional_ya_make_args:
+    type: string
+    default: ""
   testman_token:
     required: false
     description: "test manager auth token"
@@ -122,7 +125,7 @@ runs:
             EXTRA_TAG=""
             ;;
         esac
-        
+
         testmo automation:resources:add-link --name build --url "$RUN_URL" --resources testmo.json
         testmo automation:resources:add-field --name git-sha --type string --value "${GITHUB_SHA:0:7}" --resources testmo.json
         RUN_ID=$(
@@ -191,13 +194,20 @@ runs:
             ;;
         esac
         
+        if [ ! -z "${{ inputs.additional_ya_make_args }}" ]; then
+          params+=(${{ inputs.additional_ya_make_args }})
+        fi
+
+        # Also build targets which are not in tests' dependencies
+        params+=(--no-strip-idle-build-results)
+
         echo "::debug::get version"
         ./ya --version
         
         echo "Tests are running..." | .github/scripts/tests/comment-pr.py
 
         ./ya test ${{ inputs.build_target }} "${params[@]}" \
-          --stat --log-file "$LOG_DIR/ya_log.txt" --evlog-file "$LOG_DIR/ya_evlog.jsonl" -DCONSISTENT_DEBUG \
+          --stat --log-file "$LOG_DIR/ya_log2.txt" --evlog-file "$LOG_DIR/ya_evlog2.jsonl" -DCONSISTENT_DEBUG \
           --no-dir-outputs \
           --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR" || (
             RC=$?
@@ -279,13 +289,24 @@ runs:
         mkdir $ARTIFACTS_DIR/summary/
         
         cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))' >> $GITHUB_STEP_SUMMARY
-        
+
         .github/scripts/tests/generate-summary.py \
           --summary-out-path $ARTIFACTS_DIR/summary/ \
           --summary-url-prefix $S3_URL_PREFIX/summary/ \
           --test-history-url $TEST_HISTORY_URL \
           --build-preset "$BUILD_PRESET" \
+          --status-report-file statusrep.txt \
           "Tests" ya-test.html "$JUNIT_REPORT_XML"
+
+        teststatus=$(cat statusrep.txt)
+        if [[ $teststatus == "success" ]];then
+          testmessage="The check has been completed successfully"
+        else
+          testmessage="The check has been failed"
+        fi
+        curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
+            -d '{"state":"'$teststatus'","description":"'"$testmessage"'","context":"test_${{inputs.build_preset}}"}'
 
     - name: sync test results to s3
       if: always()

@@ -213,6 +213,10 @@ public:
         Release();
     }
 
+    void SetMaximumLimitValueReached(bool IsReached) {
+        MyState_.SetMaximumLimitValueReached(IsReached);
+    }
+
 private:
     const bool InitiallyAcquired_;
     TAllocState MyState_;

@@ -280,15 +280,27 @@ public:
     }
 };
 
-class TSnapshotFilter: public IFetchingStep {
+class TSnapshotFilter : public IFetchingStep {
 private:
     using TBase = IFetchingStep;
+
 public:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
     TSnapshotFilter()
         : TBase("SNAPSHOT") {
-
     }
 };
+
+class TShardingFilter : public IFetchingStep {
+private:
+    using TBase = IFetchingStep;
+
+public:
+    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
+    TShardingFilter()
+        : TBase("SHARDING") {
+    }
+};
+
 
 }

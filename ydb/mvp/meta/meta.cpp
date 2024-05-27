@@ -1,12 +1,24 @@
-#include "meta.h"
+#include "mvp.h"
 #include "meta_db_clusters.h"
 #include "meta_clusters.h"
 #include "meta_cluster.h"
 #include "meta_cp_databases.h"
 #include "meta_cp_databases_verbose.h"
 #include "meta_cloud.h"
-
+#include "meta_cache.h"
+#include <util/system/hostname.h>
+#include <ydb/mvp/core/http_check.h>
+#include <ydb/mvp/core/http_sensors.h>
+#include <ydb/mvp/core/mvp_swagger.h>
+#include <ydb/mvp/core/mvp_tokens.h>
+#include <ydb/mvp/core/mvp_log.h>
+#include <ydb/mvp/core/cache_policy.h>
+#include <ydb/library/actors/http/http_static.h>
 #include <ydb/library/actors/http/http_cache.h>
+
+#define MLOG_D(stream) LOG_DEBUG_S((NMVP::InstanceMVP->ActorSystem), EService::MVP, stream)
+
+using namespace NMVP;
 
 NHttp::TCachePolicy GetIncomingMetaCachePolicy(const NHttp::THttpRequest* request) {
     NHttp::TCachePolicy policy;
@@ -14,15 +26,12 @@ NHttp::TCachePolicy GetIncomingMetaCachePolicy(const NHttp::THttpRequest* reques
         return policy;
     }
     TStringBuf url(request->URL);
-    static std::vector<TString> headersToCache = {"Cookie", "Authorization", "x-yacloud-subjecttoken"};
     if (url.starts_with("/meta/cp_databases")) {
-        policy.HeadersToCacheKey = headersToCache;
-        policy.TimeToExpire = TDuration::Hours(12);
+        policy.TimeToExpire = TDuration::Days(3);
         policy.TimeToRefresh = TDuration::Seconds(60);
         policy.KeepOnError = true;
     }
     if (url.starts_with("/meta/clusters")) {
-        //policy.HeadersToCacheKey = headersToCache;
         policy.TimeToExpire = TDuration::Days(7);
         policy.TimeToRefresh = TDuration::Seconds(60);
         policy.KeepOnError = true;
@@ -37,7 +46,7 @@ NHttp::TCachePolicy GetOutgoingMetaCachePolicy(const NHttp::THttpRequest* reques
     }
     TStringBuf url(request->URL);
     if (url.EndsWith("/viewer/json/cluster") || url.EndsWith("/viewer/json/sysinfo") || url.find("/viewer/json/tenantinfo") != TStringBuf::npos) {
-        policy.TimeToExpire = TDuration::Hours(24);
+        policy.TimeToExpire = TDuration::Minutes(5);
         policy.TimeToRefresh = TDuration::Seconds(60);
         policy.KeepOnError = true;
     }
@@ -45,95 +54,167 @@ NHttp::TCachePolicy GetOutgoingMetaCachePolicy(const NHttp::THttpRequest* reques
     return NHttp::GetDefaultCachePolicy(request, policy);
 }
 
-void InitMeta(NActors::TActorSystem& actorSystem,
-              const NActors::TActorId& httpProxyId,
-              const TString& metaApiEndpoint,
-              const TString& metaDatabase) {
-    static TMap<std::pair<TStringBuf, TStringBuf>, TYdbUnitResources> ydbUnitResources = {
-        {
-            {
-                "compute",
-                "slot"
-            },
-            {
-                10.0,
-                (ui64)50*1024*1024*1024,
-                0
-            }
-        },
-        {
-            {
-                "storage",
-                "hdd"
-            },
-            {
-                0,
-                0,
-                (ui64)500*1024*1024*1024
-            }
-        },
-        {
-            {
-                "storage",
-                "ssd"
-            },
-            {
-                0,
-                0,
-                (ui64)100*1024*1024*1024
-            }
-        }
-    };
-
-    static TYdbLocation location = {
+TYdbLocation MetaLocation =
+    {
         "meta",
         "meta",
-        {
-            { "api", metaApiEndpoint },
-            { "cluster-api", metaApiEndpoint }
-        },
-        metaDatabase,
         {},
-        ydbUnitResources,
-        0
+        {}
     };
 
-    TActorId httpIncomingProxyId = actorSystem.Register(NHttp::CreateIncomingHttpCache(httpProxyId, GetIncomingMetaCachePolicy));
-    TActorId httpOutgoingProxyId = actorSystem.Register(NHttp::CreateOutgoingHttpCache(httpProxyId, GetOutgoingMetaCachePolicy));
+// TODO(xenoxeno)
+TString LocalEndpoint;
 
-    actorSystem.Send(httpIncomingProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
+bool GetCacheOwnership(const TString& id, NMeta::TGetCacheOwnershipCallback cb) {
+    MetaLocation.GetTableClient(NYdb::NTable::TClientSettings().Database(MetaLocation.RootDomain).AuthToken(MVPAppData()->Tokenator->GetToken("meta-token")))
+                .CreateSession().Subscribe([id, cb = move(cb)](const NYdb::NTable::TAsyncCreateSessionResult& result) {
+                    auto resultCopy = result;
+                    auto res = resultCopy.ExtractValue();
+                    if (res.IsSuccess()) {
+                        // got session
+                        auto session = res.GetSession();
+                        TString query = "DECLARE $ID AS Text;\n"
+                                        "DECLARE $FORWARD AS Text;\n"
+                                        "UPSERT INTO `ydb/Forwards.db`(Id) VALUES($ID);\n"
+                                        "UPDATE `ydb/Forwards.db` SET Forward=$FORWARD, Deadline=CurrentUtcTimestamp() + Interval('PT60S') WHERE Id=$ID AND (Deadline IS NULL OR (Deadline < CurrentUtcTimestamp()) OR (Forward = $FORWARD AND Deadline < (CurrentUtcTimestamp() + Interval('PT30S'))));\n"
+                                        "SELECT Forward, Deadline FROM `ydb/Forwards.db` WHERE Id=$ID;\n";
+                        NYdb::TParamsBuilder params;
+                        params.AddParam("$ID", NYdb::TValueBuilder().Utf8(id).Build());
+                        params.AddParam("$FORWARD", NYdb::TValueBuilder().Utf8(LocalEndpoint).Build());
+                        session.ExecuteDataQuery(
+                            query,
+                            NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx(),
+                            params.Build()).Subscribe([id, cb = move(cb), session](const NYdb::NTable::TAsyncDataQueryResult& result) mutable {
+                                NYdb::NTable::TAsyncDataQueryResult resultCopy = result;
+                                auto res = resultCopy.ExtractValue();
+                                if (res.IsSuccess()) {
+                                    try {
+                                        // got result
+                                        auto resultSet = res.GetResultSet(0);
+                                        NYdb::TResultSetParser rsParser(resultSet);
+                                        if (rsParser.TryNextRow()) {
+                                            TString forward = (rsParser.ColumnParser(0).GetOptionalUtf8()).GetRef();
+                                            TInstant deadline = (rsParser.ColumnParser(1).GetOptionalTimestamp()).GetRef();
+                                            if (forward == LocalEndpoint) {
+                                                MLOG_D("GetCacheOwnership(" << id << ") - got data (forward to myself until " << deadline << ")");
+                                                cb({.Deadline = deadline});
+                                            } else {
+                                                MLOG_D("GetCacheOwnership(" << id << ") - got data (forward to " << forward << " until " << deadline << ")");
+                                                cb({.ForwardUrl = forward, .Deadline = deadline});
+                                            }
+                                        } else {
+                                            // no data
+                                            MLOG_D("GetCacheOwnership(" << id << ") - failed to get data");
+                                            cb({});
+                                        }
+                                    } catch (const std::exception& e) {
+                                        // exception
+                                        MLOG_D("GetCacheOwnership(" << id << ") - exception: " << e.what());
+                                        cb({});
+                                    }
+                                } else {
+                                    // no result
+                                    MLOG_D("GetCacheOwnership(" << id << ") - failed to get result:\n" << (NYdb::TStatus&)res);
+                                    cb({});
+                                }
+                                session.Close();
+                            });
+                    } else {
+                        // no session
+                        MLOG_D("GetCacheOwnership(" << id << ") - failed to get session:\n" << (NYdb::TStatus&)res);
+                        cb({});
+                    }
+                });
+
+    return true;
+}
+
+NActors::IActor* CreateMemProfiler();
+
+void TMVP::InitMeta() {
+    MetaLocation.Endpoints.emplace_back("api", MetaApiEndpoint);
+    MetaLocation.Endpoints.emplace_back("cluster-api", MetaApiEndpoint);
+    MetaLocation.RootDomain = MetaDatabase;
+
+    LocalEndpoint = TStringBuilder() << "http://" << FQDNHostName() << ":" << HttpPort;
+
+    TActorId httpIncomingProxyId = ActorSystem.Register(NHttp::CreateIncomingHttpCache(HttpProxyId, GetIncomingMetaCachePolicy));
+    TActorId httpOutgoingProxyId = ActorSystem.Register(NHttp::CreateOutgoingHttpCache(HttpProxyId, GetOutgoingMetaCachePolicy));
+
+    if (MetaCache) {
+        httpIncomingProxyId = ActorSystem.Register(NMeta::CreateHttpMetaCache(httpIncomingProxyId, GetIncomingMetaCachePolicy, GetCacheOwnership));
+    }
+
+    ActorSystem.Send(httpIncomingProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
                          "/meta/db_clusters",
-                         actorSystem.Register(new NMVP::THandlerActorMetaDbClusters(location))
+                         ActorSystem.Register(new NMVP::THandlerActorMetaDbClusters(MetaLocation))
                          )
                      );
 
-    actorSystem.Send(httpIncomingProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
+    ActorSystem.Send(httpIncomingProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
                          "/meta/clusters",
-                         actorSystem.Register(new NMVP::THandlerActorMetaClusters(httpOutgoingProxyId, location))
+                         ActorSystem.Register(new NMVP::THandlerActorMetaClusters(httpOutgoingProxyId, MetaLocation))
                          )
                      );
 
-    actorSystem.Send(httpIncomingProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
+    ActorSystem.Send(httpIncomingProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
                          "/meta/cluster",
-                         actorSystem.Register(new NMVP::THandlerActorMetaCluster(httpOutgoingProxyId, location))
+                         ActorSystem.Register(new NMVP::THandlerActorMetaCluster(httpOutgoingProxyId, MetaLocation))
                          )
                      );
 
-    actorSystem.Send(httpIncomingProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
+    ActorSystem.Send(httpIncomingProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
                          "/meta/cp_databases",
-                         actorSystem.Register(new NMVP::THandlerActorMetaCpDatabases(httpOutgoingProxyId, location))
+                         ActorSystem.Register(new NMVP::THandlerActorMetaCpDatabases(httpOutgoingProxyId, MetaLocation))
                          )
                      );
 
-    actorSystem.Send(httpIncomingProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
+    ActorSystem.Send(httpIncomingProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
                          "/meta/cp_databases_verbose",
-                         actorSystem.Register(new NMVP::THandlerActorMetaCpDatabasesVerbose(httpOutgoingProxyId, location))
+                         ActorSystem.Register(new NMVP::THandlerActorMetaCpDatabasesVerbose(httpOutgoingProxyId, MetaLocation))
                          )
                      );
 
-    actorSystem.Send(httpIncomingProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
+    ActorSystem.Send(httpIncomingProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
                          "/meta/cloud",
-                         actorSystem.Register(new NMVP::THandlerActorMetaCloud(httpOutgoingProxyId, location))
+                         ActorSystem.Register(new NMVP::THandlerActorMetaCloud(httpOutgoingProxyId, MetaLocation))
                          )
                      );
+
+    ActorSystem.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
+                         "/ping",
+                         ActorSystem.Register(new NMVP::THandlerActorHttpCheck())
+                         )
+                     );
+
+    ActorSystem.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
+                         "/mem_profiler",
+                         ActorSystem.Register(CreateMemProfiler())
+                         )
+                     );
+
+    ActorSystem.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
+                         "/mvp/sensors.json",
+                         ActorSystem.Register(new NMVP::THandlerActorHttpSensors())
+                         )
+                     );
+
+    ActorSystem.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
+                         "/api/mvp.json",
+                         ActorSystem.Register(new NMVP::THandlerActorMvpSwagger())
+                         )
+                     );
+
+    ActorSystem.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
+                         "/api/",
+                         ActorSystem.Register(NHttp::CreateHttpStaticContentHandler(
+                                                  "/api/", // url
+                                                  "./content/api/", // file path
+                                                  "/mvp/content/api/", // resource path
+                                                  "index.html" // index name
+                                                  )
+                                              )
+                         )
+                     );
+
 }

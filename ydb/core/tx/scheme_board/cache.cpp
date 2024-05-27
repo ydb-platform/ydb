@@ -20,6 +20,7 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/sys_view/common/schema.h>
 #include <ydb/core/tx/schemeshard/schemeshard_types.h>
+#include <ydb/core/tx/sharding/sharding.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -783,6 +784,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 }
 
                 if (columnDesc.GetNotNull()) {
+                    column.IsNotNullColumn = true;
                     NotNullColumns.insert(columnDesc.GetName());
                 }
             }
@@ -1953,8 +1955,12 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 } else if (Kind == TNavigate::KindColumnTable) {
                     FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::ColumnTable);
                     // Add all shards of the OLAP table
+                    auto shardingInfo = NSharding::IShardingBase::BuildFromProto(ColumnTableInfo->Description.GetSharding());
+                    if (shardingInfo.IsFail()) {
+                        return SetError(context, entry, TResolve::EStatus::PathErrorUnknown, TKeyDesc::EStatus::NotExists);
+                    }
                     auto partitions = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
-                    for (ui64 columnShard : ColumnTableInfo->Description.GetSharding().GetColumnShards()) {
+                    for (ui64 columnShard : (*shardingInfo)->GetActiveReadShardIds()) {
                         partitions->push_back(TKeyDesc::TPartitionInfo(columnShard));
                         partitions->back().Range = TKeyDesc::TPartitionRangeInfo();
                     }

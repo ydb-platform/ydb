@@ -1070,7 +1070,6 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
 
     if (response.PQGroupInfo) {
         const auto& pqDescr = response.PQGroupInfo->Description;
-        Result.mutable_partitioning_settings()->set_min_active_partitions(pqDescr.GetTotalGroupCount());
         for(ui32 i = 0; i < pqDescr.GetTotalGroupCount(); ++i) {
             auto part = Result.add_partitions();
             part->set_partition_id(i);
@@ -1078,6 +1077,23 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
         }
 
         const auto &config = pqDescr.GetPQTabletConfig();
+        Result.mutable_partitioning_settings()->set_min_active_partitions(config.GetPartitionStrategy().GetMinPartitionCount());
+        Result.mutable_partitioning_settings()->set_max_active_partitions(config.GetPartitionStrategy().GetMaxPartitionCount());
+        switch(config.GetPartitionStrategy().GetPartitionStrategyType()) {
+            case ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT:
+                Result.mutable_partitioning_settings()->mutable_autoscaling_settings()->set_strategy(Ydb::Topic::AutoscalingStrategy::AUTOSCALING_STRATEGY_SCALE_UP);
+                break;
+            case ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE:
+                Result.mutable_partitioning_settings()->mutable_autoscaling_settings()->set_strategy(Ydb::Topic::AutoscalingStrategy::AUTOSCALING_STRATEGY_SCALE_UP_AND_DOWN);
+                break;
+            default:
+                Result.mutable_partitioning_settings()->mutable_autoscaling_settings()->set_strategy(Ydb::Topic::AutoscalingStrategy::AUTOSCALING_STRATEGY_DISABLED);
+                break;
+        }
+        Result.mutable_partitioning_settings()->mutable_autoscaling_settings()->mutable_partition_write_speed()->mutable_threshold_time()->set_seconds(config.GetPartitionStrategy().GetScaleThresholdSeconds());
+        Result.mutable_partitioning_settings()->mutable_autoscaling_settings()->mutable_partition_write_speed()->set_scale_down_threshold_percent(config.GetPartitionStrategy().GetScaleDownPartitionWriteSpeedThresholdPercent());
+        Result.mutable_partitioning_settings()->mutable_autoscaling_settings()->mutable_partition_write_speed()->set_scale_up_threshold_percent(config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent());
+
         if (!config.GetRequireAuthWrite()) {
             (*Result.mutable_attributes())["_allow_unauthenticated_write"] = "true";
         }

@@ -142,7 +142,7 @@ public:
         NHttp::THeaders headers(Request->Headers);
         NHttp::TCookies cookies(headers.Get("cookie"));
 
-        if (!code.Empty() && IsStateValid(state, cookies, ctx)) {
+        if (IsStateValid(state, cookies, ctx) && !code.Empty()) {
             NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestPost(Settings.AuthorizationServerAddress + "/oauth/token");
             httpRequest->Set<&NHttp::THttpRequest::ContentType>("application/x-www-form-urlencoded");
             httpRequest->Set("Authorization", "Basic " + Settings.GetAuthorizationString());
@@ -151,8 +151,7 @@ public:
             httpRequest->Set<&NHttp::THttpRequest::Body>(body);
             ctx.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
         } else {
-            ResponseHeaders.Set("Content-Type", "text/plain");
-            NHttp::THttpOutgoingResponsePtr response = Request->CreateResponse("400", "Bad Request", ResponseHeaders, "Parameters state and code are invalid");
+            NHttp::THttpOutgoingResponsePtr response = GetHttpOutgoingResponsePtr(TStringBuf(), Request, Settings, ResponseHeaders, IsAjaxRequest);
             ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
             TBase::Die(ctx);
             return;

@@ -191,6 +191,16 @@ IGraphTransformer::TStatus InferPgCommonType(TPositionHandle pos, const TExprNod
     return IGraphTransformer::TStatus::Ok;
 }
 
+IGraphTransformer::TStatus PgSelfWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 0, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    input->SetTypeAnn(ctx.Expr.MakeType<TUnitExprType>());
+    return IGraphTransformer::TStatus::Ok;
+}
+
 IGraphTransformer::TStatus PgStarWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     Y_UNUSED(output);
     if (!EnsureArgsCount(*input, 0, ctx.Expr)) {
@@ -3838,8 +3848,11 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                 inputStructType = ctx.Expr.MakeType<TStructExprType>(items);
                                 columnOrder = TColumnOrder({ TString(memberName) });
                             }
-                        }
-                        else {
+                        } else {
+                            if (p->Head().IsCallable("PgSelf")) {
+                                input->SetTypeAnn(ctx.Expr.MakeType<TUnitExprType>());
+                                return IGraphTransformer::TStatus::Ok;
+                            }
                             if (!EnsureListType(p->Head(), ctx.Expr)) {
                                 return IGraphTransformer::TStatus::Error;
                             }
@@ -4859,6 +4872,7 @@ IGraphTransformer::TStatus PgSelectWrapper(const TExprNode::TPtr& input, TExprNo
     TExprNode* setItems = nullptr;
     TExprNode* setOps = nullptr;
     bool hasSort = false;
+    bool hasLimit = false;
 
     for (ui32 pass = 0; pass < 2; ++pass) {
         for (auto& option : options.Children()) {
@@ -4918,6 +4932,7 @@ IGraphTransformer::TStatus PgSelectWrapper(const TExprNode::TPtr& input, TExprNo
                     setItems = &option->Tail();
                 }
             } else if (optionName == "limit" || optionName == "offset") {
+                hasLimit = true;
                 if (pass != 0) {
                     continue;
                 }
@@ -5012,6 +5027,90 @@ IGraphTransformer::TStatus PgSelectWrapper(const TExprNode::TPtr& input, TExprNo
     if (balance != 1) {
         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Disbalanced set_ops"));
         return IGraphTransformer::TStatus::Error;
+    }
+
+    const bool hasRecursive = AnyOf(setItems->Children(), [](const auto& n) {
+        return n->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Unit;
+    });
+
+    if (hasRecursive) {
+        bool error = false;
+        if (setItems->ChildrenSize() != 2) {
+            error = true;
+        } else if (setItems->Child(0)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Unit) {
+            error = true;
+        } else if (setOps->Child(2)->Content() != "union" && setOps->Child(2)->Content() != "union_all") {
+            error = true;
+        } else if (hasSort || hasLimit) {
+            error = true;
+        }
+
+        if (error) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                "Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto nonRecursivePart = setItems->ChildPtr(0);
+        auto recursivePart = setItems->ChildPtr(1);
+        auto tableArg = ctx.Expr.NewArgument(input->Pos(), "table");
+        auto order = *ctx.Types.LookupColumnOrder(*nonRecursivePart);
+        auto withColumnOrder = KeepColumnOrder(order, tableArg, ctx.Expr);
+        auto status = OptimizeExpr(recursivePart, recursivePart, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+            Y_UNUSED(ctx);
+            if (node->IsCallable("PgSelf")) {
+                return withColumnOrder;
+            }
+
+            return node;
+        }, ctx.Expr, TOptimizeExprSettings(&ctx.Types));
+
+        YQL_ENSURE(status.Level != IGraphTransformer::TStatus::Error);
+
+        auto lambdaBody = ctx.Expr.Builder(input->Pos())
+            .Callable("PgSelect")
+                .List(0)
+                    .List(0)
+                        .Atom(0, "set_items")
+                        .List(1)
+                            .Add(0, recursivePart)
+                        .Seal()
+                    .Seal()
+                    .List(1)
+                        .Atom(0, "set_ops")
+                        .List(1)
+                            .Atom(0, "push")
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build();
+
+        auto lambda = ctx.Expr.NewLambda(input->Pos(), ctx.Expr.NewArguments(input->Pos(), { tableArg }), std::move(lambdaBody));
+
+        output = ctx.Expr.Builder(input->Pos())
+            .Callable(ToString("PgIterate") + (setOps->Child(2)->Content() == "union_all" ? "All" : ""))
+                .Callable(0, "PgSelect")
+                    .List(0)
+                        .List(0)
+                            .Atom(0, "set_items")
+                            .List(1)
+                                .Add(0, nonRecursivePart)
+                            .Seal()
+                        .Seal()
+                        .List(1)
+                            .Atom(0, "set_ops")
+                            .List(1)
+                                .Atom(0, "push")
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Add(1, lambda)
+            .Seal()
+            .Build();
+
+        return IGraphTransformer::TStatus::Repeat;
     }
 
     TColumnOrder resultColumnOrder;
@@ -5802,6 +5901,41 @@ IGraphTransformer::TStatus PgToRecordWrapper(const TExprNode::TPtr& input, TExpr
     }
 
     input->SetTypeAnn(ctx.Expr.MakeType<TPgExprType>(NPg::LookupType("record").TypeId));
+    return IGraphTransformer::TStatus::Ok;
+}
+
+IGraphTransformer::TStatus PgIterateWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!EnsureListType(input->Head(), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto& lambda = input->ChildRef(1);
+    const auto status = ConvertToLambda(lambda, ctx.Expr, 1);
+    if (status.Level != IGraphTransformer::TStatus::Ok) {
+        return status;
+    }
+
+    if (!UpdateLambdaAllArgumentsTypes(lambda, { input->Head().GetTypeAnn() }, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!lambda->GetTypeAnn()) {
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    if (!IsSameAnnotation(*lambda->GetTypeAnn(), *input->Head().GetTypeAnn())) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambda->Pos()), TStringBuilder() <<
+            "Mismatch of transform lambda return type and input type: " <<
+            *lambda->GetTypeAnn() << " != " << *input->Head().GetTypeAnn()));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    input->SetTypeAnn(input->Head().GetTypeAnn());
     return IGraphTransformer::TStatus::Ok;
 }
 

@@ -2,8 +2,6 @@ PY23_NATIVE_LIBRARY()
 
 YQL_ABI_VERSION(2 27 0)
 
-SUBSCRIBER(g:yql)
-
 SRCS(
     python_udf.cpp
 )

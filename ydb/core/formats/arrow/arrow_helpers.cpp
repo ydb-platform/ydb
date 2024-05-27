@@ -348,21 +348,44 @@ std::shared_ptr<arrow::RecordBatch> Reorder(const std::shared_ptr<arrow::RecordB
     return (*res).record_batch();
 }
 
-std::vector<std::shared_ptr<arrow::RecordBatch>> ShardingSplit(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                                               const std::vector<ui32>& sharding, ui32 numShards) {
-    Y_ABORT_UNLESS((size_t)batch->num_rows() == sharding.size());
-
-    std::vector<std::vector<ui32>> shardRows(numShards);
-    for (size_t row = 0; row < sharding.size(); ++row) {
-        ui32 shardNo = sharding[row];
-        Y_ABORT_UNLESS(shardNo < numShards);
-        shardRows[shardNo].push_back(row);
-    }
-
+THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> ShardingSplit(const std::shared_ptr<arrow::RecordBatch>& batch, const THashMap<ui64, std::vector<ui32>>& shardRows) {
+    AFL_VERIFY(batch);
     std::shared_ptr<arrow::UInt64Array> permutation;
     {
         arrow::UInt64Builder builder;
-        Y_VERIFY_OK(builder.Reserve(sharding.size()));
+        Y_VERIFY_OK(builder.Reserve(batch->num_rows()));
+
+        for (auto&& [shardId, rowIdxs]: shardRows) {
+            for (auto& row : rowIdxs) {
+                Y_VERIFY_OK(builder.Append(row));
+            }
+        }
+        Y_VERIFY_OK(builder.Finish(&permutation));
+    }
+
+    auto reorderedBatch = Reorder(batch, permutation, false);
+
+    THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> out;
+
+    int offset = 0;
+    for (auto&& [shardId, shardRowIdxs] : shardRows) {
+        if (shardRowIdxs.empty()) {
+            continue;
+        }
+        out.emplace(shardId, reorderedBatch->Slice(offset, shardRowIdxs.size()));
+        offset += shardRowIdxs.size();
+    }
+
+    Y_ABORT_UNLESS(offset == batch->num_rows());
+    return out;
+}
+
+std::vector<std::shared_ptr<arrow::RecordBatch>> ShardingSplit(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::vector<ui32>>& shardRows, const ui32 numShards) {
+    AFL_VERIFY(batch);
+    std::shared_ptr<arrow::UInt64Array> permutation;
+    {
+        arrow::UInt64Builder builder;
+        Y_VERIFY_OK(builder.Reserve(batch->num_rows()));
 
         for (ui32 shardNo = 0; shardNo < numShards; ++shardNo) {
             for (auto& row : shardRows[shardNo]) {
@@ -387,6 +410,20 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> ShardingSplit(const std::shared
 
     Y_ABORT_UNLESS(offset == batch->num_rows());
     return out;
+}
+
+std::vector<std::shared_ptr<arrow::RecordBatch>> ShardingSplit(const std::shared_ptr<arrow::RecordBatch>& batch,
+                                                               const std::vector<ui32>& sharding, ui32 numShards) {
+    AFL_VERIFY(batch);
+    Y_ABORT_UNLESS((size_t)batch->num_rows() == sharding.size());
+
+    std::vector<std::vector<ui32>> shardRows(numShards);
+    for (size_t row = 0; row < sharding.size(); ++row) {
+        ui32 shardNo = sharding[row];
+        Y_ABORT_UNLESS(shardNo < numShards);
+        shardRows[shardNo].push_back(row);
+    }
+    return ShardingSplit(batch, shardRows, numShards);
 }
 
 void DedupSortedBatch(const std::shared_ptr<arrow::RecordBatch>& batch,

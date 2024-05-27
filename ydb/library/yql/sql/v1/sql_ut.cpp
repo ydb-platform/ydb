@@ -2494,7 +2494,25 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
     Y_UNIT_TEST(AlterTableAddIndexWithIsNotSupported) {
         ExpectFailWithError("USE plato; ALTER TABLE table ADD INDEX idx LOCAL WITH (a=b, c=d, e=f) ON (col)",
-            "<main>:1:40: Error: local: alternative is not implemented yet: 720:7: local_index\n");
+            "<main>:1:40: Error: local: alternative is not implemented yet: 722:7: local_index\n");
+    }
+
+    Y_UNIT_TEST(AlterTableAlterIndexSetPartitioningIsCorrect) {
+        const auto result = SqlToYql("USE plato; ALTER TABLE table ALTER INDEX index SET AUTO_PARTITIONING_MIN_PARTITIONS_COUNT 10");
+        UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+    }
+
+    Y_UNIT_TEST(AlterTableAlterIndexSetMultiplePartitioningSettings) {
+        const auto result = SqlToYql("USE plato; ALTER TABLE table ALTER INDEX index SET "
+            "(AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10)"
+        );
+        UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+    }
+
+    Y_UNIT_TEST(AlterTableAlterIndexResetPartitioningIsNotSupported) {
+        ExpectFailWithError("USE plato; ALTER TABLE table ALTER INDEX index RESET (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT)",
+            "<main>:1:55: Error: AUTO_PARTITIONING_MIN_PARTITIONS_COUNT reset is not supported\n"
+        );
     }
 
     Y_UNIT_TEST(OptionalAliases) {
@@ -6514,6 +6532,20 @@ Y_UNIT_TEST_SUITE(TopicsDDL) {
                 ALTER CONSUMER consumer3 SET (supported_codecs = "RAW", read_from = 1),
                 ALTER CONSUMER consumer3 SET (read_from = 2);
         )", false);
+    }
+
+    Y_UNIT_TEST(TopicWithPrefix) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+            USE plato;
+            PRAGMA TablePathPrefix = '/database/path/to/tables';
+            ALTER TOPIC `my_table/my_feed` ADD CONSUMER `my_consumer`;
+        )");
+        UNIT_ASSERT(res.Root);
+
+        TWordCountHive elementStat = {{TString("/database/path/to/tables/my_table/my_feed"), 0}, {"topic", 0}};
+        VerifyProgram(res, elementStat);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["topic"]);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["/database/path/to/tables/my_table/my_feed"]);
     }
 }
 

@@ -87,6 +87,8 @@ struct TPDiskInfo
     EPDiskStatus PrevStatus = EPDiskStatus::ACTIVE;
     TInstant LastStatusChange;
     bool StatusChangeFailed = false;
+    // means that this pdisk status change last time was the reason of whole request failure
+    bool LastStatusChangeFailed = false;
     ui32 StatusChangeAttempt = 0;
     ui32 PrevStatusChangeAttempt = 0;
     EIgnoreReason IgnoreReason = NKikimrCms::TPDiskInfo::NOT_IGNORED;

@@ -91,6 +91,12 @@ private:
     static const ui32 MAX_ERRORS_COUNT_TO_STORE = 10;
     static const ui32 SCALE_REQUEST_REPEAT_MIN_SECONDS = 60;
 
+    enum EDeletePartitionState {
+        DELETION_NOT_INITED = 0,
+        DELETION_INITED = 1,
+        DELETION_IN_PROCESS = 2,
+    };
+
 private:
     struct THasDataReq;
     struct THasDataDeadline;
@@ -374,6 +380,9 @@ private:
 
     void CommitWriteOperations(const TActorContext& ctx);
 
+    void HandleOnInit(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorContext& ctx);
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PERSQUEUE_PARTITION_ACTOR;
@@ -457,6 +466,7 @@ private:
             HFuncTraced(TEvPQ::TEvGetWriteInfoRequest, Handle);
             HFuncTraced(TEvPQ::TEvGetWriteInfoResponse, Handle);
             HFuncTraced(TEvPQ::TEvGetWriteInfoError, Handle);
+            HFuncTraced(TEvPQ::TEvDeletePartition, HandleOnInit);
         default:
             if (!Initializer.Handle(ev)) {
                 ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
@@ -519,6 +529,7 @@ private:
             HFuncTraced(NReadQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
             HFuncTraced(NReadQuoterEvents::TEvQuotaCountersUpdated, Handle);
             HFuncTraced(TEvPQ::TEvProcessChangeOwnerRequests, Handle);
+            HFuncTraced(TEvPQ::TEvDeletePartition, Handle);
         default:
             ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
             break;
@@ -795,6 +806,23 @@ private:
     bool ClosedInternalPartition = false;
 
     bool IsSupportive() const;
+
+    EDeletePartitionState DeletePartitionState = DELETION_NOT_INITED;
+
+    void ScheduleDeletePartitionDone();
+    void ScheduleNegativeReplies();
+    void AddCmdDeleteRangeForAllKeys(TEvKeyValue::TEvRequest& request);
+
+    void ScheduleNegativeReply(const TEvPQ::TEvSetClientInfo& event);
+    void ScheduleNegativeReply(const TEvPersQueue::TEvProposeTransaction& event);
+    void ScheduleNegativeReply(const TTransaction& tx);
+    void ScheduleNegativeReply(const TMessage& msg);
+
+    void OnHandleWriteResponse(const TActorContext& ctx);
+
+    void ScheduleTransactionCompleted(const NKikimrPQ::TEvProposeTransaction& tx);
+
+    void DestroyActor(const TActorContext& ctx);
 };
 
 } // namespace NKikimr::NPQ

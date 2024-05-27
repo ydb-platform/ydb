@@ -136,6 +136,7 @@ TExecutor::TExecutor(
     , CounterEventsInFlight(new TEvTabletCounters::TInFlightCookie)
     , Stats(new TExecutorStatsImpl())
     , LogFlushDelayOverrideUsec(-1, -1, 60*1000*1000)
+    , MaxCommitRedoMB(256, 1, 4096)
 {}
 
 TExecutor::~TExecutor() {
@@ -159,6 +160,7 @@ void TExecutor::Registered(TActorSystem *sys, const TActorId&)
     Memory = new TMemory(Logger.Get(), this, Emitter, Sprintf(" at tablet %" PRIu64, Owner->TabletID()));
     TString myTabletType = TTabletTypes::TypeToStr(Owner->TabletType());
     AppData()->Icb->RegisterSharedControl(LogFlushDelayOverrideUsec, myTabletType + "_LogFlushDelayOverrideUsec");
+    AppData()->Icb->RegisterSharedControl(MaxCommitRedoMB, "TabletControls.MaxCommitRedoMB");
 
     // instantiate alert counters so even never reported alerts are created
     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_pending_nodata", true);
@@ -1724,12 +1726,17 @@ void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ct
     }
 
     bool failed = false;
-    TString failureReason;
-    if (done && (failed = !Database->ValidateCommit(failureReason))) {
-        if (auto logl = Logger->Log(ELnLev::Crit)) {
-            logl
-                << NFmt::Do(*this) << " " << NFmt::Do(*seat)
-                << " fatal commit failure: " << failureReason;
+    if (done) {
+        ui64 commitRedoBytes = Database->GetCommitRedoBytes();
+        ui64 maxCommitRedoBytes = ui64(MaxCommitRedoMB) << 20; // MB to bytes
+        if (commitRedoBytes > maxCommitRedoBytes) {
+            if (auto logl = Logger->Log(ELnLev::Crit)) {
+                logl
+                    << NFmt::Do(*this) << " " << NFmt::Do(*seat)
+                    << " fatal commit failure: Redo commit of " << commitRedoBytes
+                    << " bytes is more than the allowed limit";
+            }
+            failed = true;
         }
     }
 

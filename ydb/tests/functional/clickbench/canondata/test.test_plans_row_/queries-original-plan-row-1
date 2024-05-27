@@ -66,11 +66,7 @@
                                                 "Node Type": "Aggregate-Filter-TableFullScan",
                                                 "Operators": [
                                                     {
-                                                        "Inputs": [
-                                                            {
-                                                                "InternalOperatorId": 1
-                                                            }
-                                                        ],
+                                                        "Inputs": [],
                                                         "Name": "Aggregate"
                                                     },
                                                     {
@@ -148,41 +144,7 @@
                                                         "Name": "Aggregate"
                                                     }
                                                 ],
-                                                "PlanNodeId": 7,
-                                                "Plans": [
-                                                    {
-                                                        "Node Type": "Filter",
-                                                        "Operators": [
-                                                            {
-                                                                "Name": "Filter",
-                                                                "Predicate": "item.AdvEngineID != 0"
-                                                            }
-                                                        ],
-                                                        "PlanNodeId": 8,
-                                                        "Plans": [
-                                                            {
-                                                                "Node Type": "TableFullScan",
-                                                                "Operators": [
-                                                                    {
-                                                                        "Name": "TableFullScan",
-                                                                        "ReadColumns": [
-                                                                            "AdvEngineID"
-                                                                        ],
-                                                                        "ReadRanges": [
-                                                                            "CounterID (-\u221e, +\u221e)",
-                                                                            "EventDate (-\u221e, +\u221e)",
-                                                                            "UserID (-\u221e, +\u221e)",
-                                                                            "EventTime (-\u221e, +\u221e)",
-                                                                            "WatchID (-\u221e, +\u221e)"
-                                                                        ],
-                                                                        "Table": "clickbench/plans/row/hits"
-                                                                    }
-                                                                ],
-                                                                "PlanNodeId": 9
-                                                            }
-                                                        ]
-                                                    }
-                                                ]
+                                                "PlanNodeId": 7
                                             }
                                         ]
                                     }

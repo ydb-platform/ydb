@@ -33,6 +33,7 @@ PEERDIR(
     ydb/core/tx/columnshard
     ydb/core/kqp/ut/olap/helpers
     ydb/core/tx/datashard/ut_common
+    ydb/public/sdk/cpp/client/ydb_operation
 )
 
 YQL_LAST_ABI_VERSION()

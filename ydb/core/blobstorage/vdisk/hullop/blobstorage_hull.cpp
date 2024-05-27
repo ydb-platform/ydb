@@ -513,14 +513,11 @@ namespace NKikimr {
 
     ///////////////// SYNC //////////////////////////////////////////////////////
     TLsnSeg THull::AllocateLsnForSyncDataCmd(const TString &data) {
-        // count number of elements
-        ui32 counter = 0;
-        auto count = [&counter] (const void *) { counter++; };
-        // do job - count all elements
-        NSyncLog::TFragmentReader(data).ForEach(count, count, count, count);
+        NSyncLog::TFragmentReader fragment(data);
 
         // allocate LsnSeg; we reserve a diapason of lsns since we put multiple records
-        ui64 lsnAdvance = counter;
+        std::vector<const NSyncLog::TRecordHdr*> records = fragment.ListRecords();
+        ui64 lsnAdvance = records.size();
         Y_ABORT_UNLESS(lsnAdvance > 0);
         auto seg = Fields->LsnMngr->AllocLsnForHull(lsnAdvance);
 
@@ -536,7 +533,9 @@ namespace NKikimr {
             curLsn++;
         };
         // do job - update blocks cache
-        NSyncLog::TFragmentReader(data).ForEach(otherHandler, blockHandler, otherHandler, blockHandlerV2);
+        for (const NSyncLog::TRecordHdr* rec : records) {
+            NSyncLog::HandleRecordHdr(rec, otherHandler, blockHandler, otherHandler, blockHandlerV2);
+        }
         // check that all records are applied
         Y_DEBUG_ABORT_UNLESS(curLsn == seg.Last + 1);
 

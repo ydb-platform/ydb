@@ -2,8 +2,6 @@ IF (OS_LINUX)
     IF (NOT WITH_VALGRIND)
         UNITTEST_FOR(ydb/library/yql/udfs/common/python/bindings)
 
-        SUBSCRIBER(g:yql)
-
         SRCS(
             py_callable_ut.cpp
             py_cast_ut.cpp

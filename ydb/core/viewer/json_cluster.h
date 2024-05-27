@@ -98,7 +98,15 @@ public:
             for (TTabletId id : domain->TxAllocators) {
                 filterTablets.emplace(id);
             }
+            filterTablets.emplace(domain->SchemeRoot);
+            filterTablets.emplace(domains->GetHive());
         }
+        filterTablets.emplace(MakeBSControllerID());
+        filterTablets.emplace(MakeDefaultHiveID());
+        filterTablets.emplace(MakeCmsID());
+        filterTablets.emplace(MakeNodeBrokerID());
+        filterTablets.emplace(MakeTenantSlotBrokerID());
+        filterTablets.emplace(MakeConsoleID());
         const NKikimrSchemeOp::TPathDescription& pathDescription(DescribeResult->GetRecord().GetPathDescription());
         if (pathDescription.HasDomainDescription()) {
             const NKikimrSubDomains::TDomainDescription& domainDescription(pathDescription.GetDomainDescription());
@@ -326,6 +334,10 @@ public:
             TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
             if (const auto& domain = domains->Domain) {
                 tablets.emplace(MakeBSControllerID());
+                tablets.emplace(MakeDefaultHiveID());
+                tablets.emplace(MakeCmsID());
+                tablets.emplace(MakeNodeBrokerID());
+                tablets.emplace(MakeTenantSlotBrokerID());
                 tablets.emplace(MakeConsoleID());
                 tablets.emplace(domain->SchemeRoot);
                 tablets.emplace(domains->GetHive());

@@ -24,6 +24,8 @@ enum KvWorkloadConstants : ui64 {
     MIXED_CHANGE_PARTITIONS_SIZE = false,
     MIXED_DO_READ_ROWS = true,
     MIXED_DO_SELECT = true,
+
+    STALE_RO = false,
 };
 
 class TKvWorkloadParams : public TWorkloadParams {
@@ -48,6 +50,8 @@ public:
     ui64 MixedDoSelect = KvWorkloadConstants::MIXED_DO_SELECT;
 
     const std::string TableName = "kv_test";
+
+    bool StaleRO = KvWorkloadConstants::STALE_RO;
 };
 
 class TKvWorkloadGenerator final: public TWorkloadQueryGeneratorBase<TKvWorkloadParams> {

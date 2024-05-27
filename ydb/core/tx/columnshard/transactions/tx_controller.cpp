@@ -359,14 +359,9 @@ void TTxController::FinishProposeOnComplete(const ui64 txId, const TActorContext
     txOperator->SendReply(Owner, ctx);
 }
 
-bool TTxController::ITransactionOperator::SwitchState(const EStatus from, const EStatus to) {
-    if (!Status || Status == from) {
-        Status = to;
-        return true;
-    } else {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("real_state", *Status)("expected", from);
-        return false;
-    }
+void TTxController::ITransactionOperator::SwitchStateVerified(const EStatus from, const EStatus to) {
+    AFL_VERIFY(!Status || *Status == from)("error", "incorrect expected status")("real_state", *Status)("expected", from);
+    Status = to;
 }
 
 }

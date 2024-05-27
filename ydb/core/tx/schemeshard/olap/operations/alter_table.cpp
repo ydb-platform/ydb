@@ -1,6 +1,5 @@
 #include "alter/abstract/object.h"
 #include "alter/abstract/update.h"
-#include "alter/abstract/evolution.h"
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
@@ -44,34 +43,27 @@ public:
         TPath path = TPath::Init(pathId, context.SS);
         TString pathString = path.PathString();
 
-        auto tableInfo = context.SS->ColumnTables.GetVerifiedPtr(pathId);
-        std::shared_ptr<ISSEntityEvolution> evolution;
-        {
-            TEvolutionInitializationContext eContext(&context);
-            evolution = tableInfo->BuildEvolution(pathId, eContext).DetachResult();
-        }
-        TColumnTableInfo::TPtr alterData = tableInfo->AlterData;
-        Y_ABORT_UNLESS(alterData);
+        std::shared_ptr<ISSEntity> originalEntity = ISSEntity::GetEntityVerified(context, path);
+        TUpdateRestoreContext urContext(originalEntity.get(), &context, (ui64)OperationId.GetTxId());
+        std::shared_ptr<ISSEntityUpdate> update = originalEntity->RestoreUpdateVerified(urContext);
 
         TSimpleErrorCollector errors;
         TEntityInitializationContext iContext(&context);
 
         txState->ClearShardsInProgress();
-        NKikimrTxColumnShard::TSchemaTxBody tx;
         auto seqNo = context.SS->StartRound(*txState);
-        context.SS->FillSeqNo(tx, seqNo);
 
         for (auto& shard : txState->Shards) {
             const TTabletId tabletId = context.SS->ShardInfos[shard.Idx].TabletID;
             AFL_VERIFY(shard.TabletType == ETabletType::ColumnShard);
-            auto txShard = evolution->GetShardTxBody(tx, (ui64)tabletId);
+            auto txShardString = update->GetShardTxBodyString((ui64)tabletId, seqNo);
             auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
-                evolution->GetShardTransactionKind(),
+                update->GetShardTransactionKind(),
                 context.SS->TabletID(),
                 context.Ctx.SelfID,
                 ui64(OperationId.GetTxId()),
-                txShard.SerializeAsString(),
-                context.SS->SelectProcessingParams(txState->TargetPathId));
+                txShardString,
+                context.SS->SelectProcessingParams(txState->TargetPathId), seqNo);
 
             context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
 
@@ -118,12 +110,16 @@ public:
 
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
+        TPath objPath = TPath::Init(pathId, context.SS);
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        auto tableInfo = context.SS->ColumnTables.TakeAlterVerified(pathId);
-        context.SS->PersistColumnTableAlterRemove(db, pathId);
-        context.SS->PersistColumnTable(db, pathId, *tableInfo);
+        std::shared_ptr<ISSEntity> originalEntity = ISSEntity::GetEntityVerified(context, objPath);
+        TUpdateRestoreContext urContext(originalEntity.get(), &context, (ui64)OperationId.GetTxId());
+        std::shared_ptr<ISSEntityUpdate> update = originalEntity->RestoreUpdateVerified(urContext);
+
+        TUpdateFinishContext fContext(&objPath, &context, &db, NKikimr::NOlap::TSnapshot(ev->Get()->StepId, ev->Get()->TxId));
+        update->Finish(fContext).Validate();
 
         auto parentDir = context.SS->PathsById.at(path->ParentPathId);
         if (parentDir->IsLikeDirectory()) {
@@ -184,7 +180,7 @@ public:
     }
 
     bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
-        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxAlterColumnTable); 
+        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxAlterColumnTable);
         auto shardId = TTabletId(ev->Get()->Record.GetOrigin());
         auto shardIdx = context.SS->MustGetShardIdx(shardId);
         Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shardIdx));
@@ -295,47 +291,19 @@ public:
             }
         }
 
-        auto tableInfo = context.SS->ColumnTables.GetVerifiedPtr(path.Base()->PathId);
-
-        if (tableInfo->AlterVersion == 0) {
-            result->SetError(NKikimrScheme::StatusMultipleModifications, "Table is not created yet");
-            return result;
-        }
-        if (tableInfo->AlterData) {
-            result->SetError(NKikimrScheme::StatusMultipleModifications, "There's another Alter in flight");
-            return result;
-        }
         TProposeErrorCollector errors(*result);
-        std::shared_ptr<ISSEntity> originalEntity;
-        {
-            TEntityInitializationContext iContext(&context);
-            auto conclusion = tableInfo->BuildEntity(path.Base()->PathId, iContext);
-            if (conclusion.IsFail()) {
-                errors.AddError(conclusion.GetErrorMessage());
-                return result;
-            }
-            originalEntity = conclusion.DetachResult();
-        }
+        TEntityInitializationContext iContext(&context);
+        std::shared_ptr<ISSEntity> originalEntity = ISSEntity::GetEntityVerified(context, path);
 
         std::shared_ptr<ISSEntityUpdate> update;
         {
-            TUpdateInitializationContext uContext(&context, &Transaction);
-            TConclusion<std::shared_ptr<ISSEntityUpdate>> conclusion = originalEntity->CreateUpdate(uContext, originalEntity);
+            TUpdateInitializationContext uContext(&*originalEntity, &context, &Transaction, (ui64)OperationId.GetTxId());
+            TConclusion<std::shared_ptr<ISSEntityUpdate>> conclusion = originalEntity->CreateUpdate(uContext);
             if (conclusion.IsFail()) {
                 errors.AddError(conclusion.GetErrorMessage());
                 return result;
             }
             update = conclusion.DetachResult();
-        }
-
-        std::shared_ptr<ISSEntityEvolution> evolution;
-        {
-            auto conclusion = update->BuildEvolution(update);
-            if (conclusion.IsFail()) {
-                errors.AddError(conclusion.GetErrorMessage());
-                return result;
-            }
-            evolution = conclusion.DetachResult();
         }
 
         TString errStr;
@@ -346,39 +314,61 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterColumnTable, path->PathId);
-        txState.State = TTxState::ConfigureParts;
+        if (update->GetShardIds().size()) {
+            TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterColumnTable, path->PathId);
+            txState.State = TTxState::ConfigureParts;
 
-        // TODO: we need to know all shards where this table is currently active
-        for (ui64 columnShardId : tableInfo->GetColumnShards()) {
-            auto tabletId = TTabletId(columnShardId);
-            auto shardIdx = context.SS->TabletIdToShardIdx.at(tabletId);
+            for (ui64 columnShardId : update->GetShardIds()) {
+                auto tabletId = TTabletId(columnShardId);
+                auto shardIdx = context.SS->TabletIdToShardIdx.at(tabletId);
 
-            Y_VERIFY_S(context.SS->ShardInfos.contains(shardIdx), "Unknown shardIdx " << shardIdx);
-            txState.Shards.emplace_back(shardIdx, context.SS->ShardInfos[shardIdx].TabletType, TTxState::ConfigureParts);
+                Y_VERIFY_S(context.SS->ShardInfos.contains(shardIdx), "Unknown shardIdx " << shardIdx);
+                txState.Shards.emplace_back(shardIdx, context.SS->ShardInfos[shardIdx].TabletType, TTxState::ConfigureParts);
 
-            context.SS->ShardInfos[shardIdx].CurrentTxId = OperationId.GetTxId();
-            context.SS->PersistShardTx(db, shardIdx, OperationId.GetTxId());
-        }
-
-        path->LastTxId = OperationId.GetTxId();
-        path->PathState = TPathElement::EPathState::EPathStateAlter;
-        context.SS->PersistLastTxId(db, path.Base());
-
-        {
-            TEvolutionStartContext startContext(&path, &context, &db);
-            auto status = evolution->StartEvolution(startContext);
-            if (status.IsFail()) {
-                errors.AddError(status.GetErrorMessage());
-                return result;
+                context.SS->ShardInfos[shardIdx].CurrentTxId = OperationId.GetTxId();
+                context.SS->PersistShardTx(db, shardIdx, OperationId.GetTxId());
             }
+
+            path->LastTxId = OperationId.GetTxId();
+            path->PathState = TPathElement::EPathState::EPathStateAlter;
+            context.SS->PersistLastTxId(db, path.Base());
+
+            {
+                TUpdateStartContext startContext(&path, &context, &db);
+                auto status = update->Start(startContext);
+                if (status.IsFail()) {
+                    errors.AddError(status.GetErrorMessage());
+                    return result;
+                }
+            }
+            context.SS->PersistTxState(db, OperationId);
+
+            context.OnComplete.ActivateTx(OperationId);
+
+            SetState(NextState());
+        } else {
+            {
+                {
+                    TUpdateStartContext startContext(&path, &context, &db);
+                    auto status = update->Start(startContext);
+                    if (status.IsFail()) {
+                        errors.AddError(status.GetErrorMessage());
+                        return result;
+                    }
+                }
+                {
+                    TUpdateFinishContext fContext(&path, &context, &db, {});
+                    auto status = update->Finish(fContext);
+                    if (status.IsFail()) {
+                        errors.AddError(status.GetErrorMessage());
+                        return result;
+                    }
+                }
+            }
+            result->SetStatus(NKikimrScheme::StatusSuccess);
+            SetState(TTxState::Done);
         }
 
-        context.SS->PersistTxState(db, OperationId);
-
-        context.OnComplete.ActivateTx(OperationId);
-
-        SetState(NextState());
         return result;
     }
 

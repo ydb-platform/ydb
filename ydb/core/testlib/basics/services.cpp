@@ -9,6 +9,8 @@
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/tablet_resolver.h>
+#include <ydb/core/cms/console/immediate_controls_configurator.h>
+#include <ydb/core/control/immediate_control_board_actor.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
 #include <ydb/core/quoter/quoter_service.h>
@@ -39,6 +41,20 @@ namespace NKikimr {
 namespace NPDisk {
     extern const ui64 YdbDefaultPDiskSequence = 0x7e5700007e570000;
 }
+
+    void SetupIcb(TTestActorRuntime& runtime, ui32 nodeIndex, const NKikimrConfig::TImmediateControlsConfig& config,
+            const TIntrusivePtr<NKikimr::TControlBoard>& icb)
+    {
+        runtime.AddLocalService(MakeIcbId(runtime.GetNodeId(nodeIndex)),
+            TActorSetupCmd(CreateImmediateControlActor(icb, runtime.GetDynamicCounters(nodeIndex)),
+                    TMailboxType::ReadAsFilled, 0),
+            nodeIndex);
+
+        runtime.AddLocalService(TActorId{},
+            TActorSetupCmd(NConsole::CreateImmediateControlsConfigurator(icb, config),
+                    TMailboxType::ReadAsFilled, 0),
+            nodeIndex);
+    }
 
     void SetupBSNodeWarden(TTestActorRuntime& runtime, ui32 nodeIndex, TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig)
     {
@@ -71,18 +87,22 @@ namespace NPDisk {
     {
         TIntrusivePtr<TPipePeNodeCacheConfig> leaderPipeConfig = new TPipePeNodeCacheConfig();
         leaderPipeConfig->PipeRefreshTime = TDuration::Zero();
-        leaderPipeConfig->PipeConfig.RetryPolicy = {.RetryLimitCount = 3};
 
         TIntrusivePtr<TPipePeNodeCacheConfig> followerPipeConfig = new TPipePeNodeCacheConfig();
         followerPipeConfig->PipeRefreshTime = TDuration::Seconds(30);
         followerPipeConfig->PipeConfig.AllowFollower = true;
-        followerPipeConfig->PipeConfig.RetryPolicy = {.RetryLimitCount = 3};
         followerPipeConfig->PipeConfig.ForceFollower = forceFollowers;
+
+        TIntrusivePtr<TPipePeNodeCacheConfig> persistentPipeConfig = new TPipePeNodeCacheConfig();
+        persistentPipeConfig->PipeRefreshTime = TDuration::Zero();
+        persistentPipeConfig->PipeConfig = TPipePeNodeCacheConfig::DefaultPersistentPipeConfig();
 
         runtime.AddLocalService(MakePipePeNodeCacheID(false),
             TActorSetupCmd(CreatePipePeNodeCache(leaderPipeConfig), TMailboxType::Revolving, 0), nodeIndex);
         runtime.AddLocalService(MakePipePeNodeCacheID(true),
             TActorSetupCmd(CreatePipePeNodeCache(followerPipeConfig), TMailboxType::Revolving, 0), nodeIndex);
+        runtime.AddLocalService(MakePipePeNodeCacheID(EPipePeNodeCache::Persistent),
+            TActorSetupCmd(CreatePipePeNodeCache(persistentPipeConfig), TMailboxType::Revolving, 0), nodeIndex);
     }
 
     void SetupResourceBroker(TTestActorRuntime& runtime, ui32 nodeIndex)
@@ -325,12 +345,17 @@ namespace NPDisk {
             app.AddHive(0);
         }
 
+        while (app.Icb.size() < runtime.GetNodeCount()) {
+            app.Icb.emplace_back(new TControlBoard);
+        }
+
         for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
             SetupStateStorageGroups(runtime, nodeIndex);
             NKikimrProto::TKeyConfig keyConfig;
             if (const auto it = app.Keys.find(nodeIndex); it != app.Keys.end()) {
                 keyConfig = it->second;
             }
+            SetupIcb(runtime, nodeIndex, app.ImmediateControlsConfig, app.Icb[nodeIndex]);
             SetupBSNodeWarden(runtime, nodeIndex, disk.MakeWardenConf(*app.Domains, keyConfig));
 
             SetupTabletResolver(runtime, nodeIndex);

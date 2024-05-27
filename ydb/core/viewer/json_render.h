@@ -254,7 +254,12 @@ public:
     }
 
     void Handle(TEvViewer::TEvViewerResponse::TPtr& ev) {
-        HandleRenderResponse(*(ev.Get()->Get()->Record.MutableRenderResponse()));
+        auto& record = ev.Get()->Get()->Record;
+        if (record.HasRenderResponse()) {
+            HandleRenderResponse(*(record.MutableRenderResponse()));
+        } else {
+            SendGraphRequest(); // fallback
+        }
     }
 
     void HandleTimeout() {

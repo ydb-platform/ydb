@@ -24,6 +24,11 @@ namespace NKikimr::NGRpcProxy::V1 {
     constexpr i32 MAX_READ_RULES_COUNT = 3000;
     constexpr i32 MAX_SUPPORTED_CODECS_COUNT = 100;
 
+    template<typename T>
+    T IfEqualThenDefault(const T& value, const T& compareTo, const T& defaultValue) {
+        return value == compareTo ? defaultValue : value;
+    }
+
     TClientServiceTypes GetSupportedClientServiceTypes(const TActorContext& ctx) {
         TClientServiceTypes serviceTypes;
         const auto& pqConfig = AppData(ctx)->PQConfig;
@@ -683,8 +688,40 @@ namespace NKikimr::NGRpcProxy::V1 {
 
     }
 
+    std::optional<TYdbPqCodes> ValidatePartitionStrategy(const ::NKikimrPQ::TPQTabletConfig& config, TString& error) {
+        if (!config.has_partitionstrategy())
+            return std::nullopt;
+        auto strategy = config.GetPartitionStrategy();
+        if (strategy.GetMinPartitionCount() < 0) {
+            error = TStringBuilder() << "Partitions count must be non-negative, provided " << strategy.GetMinPartitionCount();
+            return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
+        }
+        if (strategy.GetMaxPartitionCount() < 0) {
+            error = TStringBuilder() << "Partitions count must be non-negative, provided " << strategy.GetMaxPartitionCount();
+            return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
+        }
+        if (strategy.GetMaxPartitionCount() != 0 && strategy.GetMaxPartitionCount() < strategy.GetMinPartitionCount()) {
+            error = TStringBuilder() << "Max active partitions must be greater than or equal to partitions count or equals zero (unlimited), provided "
+                << strategy.GetMaxPartitionCount() << " and " << strategy.GetMinPartitionCount();
+            return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
+        }
+        if (strategy.GetScaleUpPartitionWriteSpeedThresholdPercent() < 0 || strategy.GetScaleUpPartitionWriteSpeedThresholdPercent() > 100) {
+            error = TStringBuilder() << "Partition scale up threshold percent must be between 0 and 100, provided " << strategy.GetScaleUpPartitionWriteSpeedThresholdPercent();
+            return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
+        }
+        if (strategy.GetScaleDownPartitionWriteSpeedThresholdPercent() < 0 || strategy.GetScaleDownPartitionWriteSpeedThresholdPercent() > 100) {
+            error = TStringBuilder() << "Partition scale down threshold percent must be between 0 and 100, provided " << strategy.GetScaleDownPartitionWriteSpeedThresholdPercent();
+            return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
+        }
+        if (strategy.GetScaleThresholdSeconds() <= 0) {
+            error = TStringBuilder() << "Partition scale threshold time must be greater then 1 second, provided " << strategy.GetScaleThresholdSeconds() << " seconds";
+            return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
+        }
 
-    Ydb::StatusIds::StatusCode FillProposeRequestImpl(
+        return std::nullopt;
+    }
+
+    Ydb::StatusIds::StatusCode FillProposeRequestImpl( // create and alter
             const TString& name, const Ydb::PersQueue::V1::TopicSettings& settings,
             NKikimrSchemeOp::TModifyScheme& modifyScheme, const TActorContext& ctx,
             bool alter, TString& error, const TString& path, const TString& database, const TString& localDc
@@ -695,17 +732,46 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         auto pqDescr = alter ? modifyScheme.MutableAlterPersQueueGroup() : modifyScheme.MutableCreatePersQueueGroup();
         pqDescr->SetName(name);
-        if (settings.partitions_count() <= 0) {
-            error = TStringBuilder() << "Partitions count must be positive, provided " << settings.partitions_count();
-            return Ydb::StatusIds::BAD_REQUEST;
+
+        auto minParts = 1;
+        auto* pqTabletConfig = pqDescr->MutablePQTabletConfig();
+        auto partConfig = pqTabletConfig->MutablePartitionConfig();
+        if (settings.has_partitions_count()) {
+            if (settings.partitions_count() > 0) {
+                minParts = settings.partitions_count();
+            }
+        } else if (settings.has_autoscaling_settings()) {
+            const auto& autoScalteSettings = settings.autoscaling_settings();
+            if (autoScalteSettings.min_active_partitions() > 0) {
+                minParts = autoScalteSettings.min_active_partitions();
+            }
+            if (AppData(ctx)->FeatureFlags.GetEnableTopicSplitMerge()) {
+                auto pqTabletConfigPartStrategy = pqTabletConfig->MutablePartitionStrategy();
+
+                pqTabletConfigPartStrategy->SetMinPartitionCount(minParts);
+                pqTabletConfigPartStrategy->SetMaxPartitionCount(IfEqualThenDefault(autoScalteSettings.max_active_partitions(), 0L, 1L));
+                pqTabletConfigPartStrategy->SetScaleUpPartitionWriteSpeedThresholdPercent(IfEqualThenDefault(autoScalteSettings.partition_write_speed().scale_up_threshold_percent(), 0 ,30));
+                pqTabletConfigPartStrategy->SetScaleDownPartitionWriteSpeedThresholdPercent(IfEqualThenDefault(autoScalteSettings.partition_write_speed().scale_down_threshold_percent(), 0, 90));
+                pqTabletConfigPartStrategy->SetScaleThresholdSeconds(IfEqualThenDefault(autoScalteSettings.partition_write_speed().threshold_time().seconds(), 0L, 300L));
+                switch(autoScalteSettings.strategy()) {
+                    case ::Ydb::PersQueue::V1::AutoscalingStrategy::AUTOSCALING_STRATEGY_SCALE_UP:
+                        pqTabletConfigPartStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
+                        break;
+                    case ::Ydb::PersQueue::V1::AutoscalingStrategy::AUTOSCALING_STRATEGY_SCALE_UP_AND_DOWN:
+                        pqTabletConfigPartStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE);
+                        break;
+                    default:
+                        pqTabletConfigPartStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED);
+                        break;
+                }
+                if (auto code = ValidatePartitionStrategy(*pqTabletConfig, error); code) {
+                    return code->YdbCode;
+                }
+            }
         }
-
-        pqDescr->SetTotalGroupCount(settings.partitions_count());
-
-        auto* config = pqDescr->MutablePQTabletConfig();
-
-        config->SetRequireAuthWrite(true);
-        config->SetRequireAuthRead(true);
+        pqDescr->SetTotalGroupCount(minParts);
+        pqTabletConfig->SetRequireAuthWrite(true);
+        pqTabletConfig->SetRequireAuthRead(true);
         if (!alter)
             pqDescr->SetPartitionPerTablet(1);
 
@@ -720,26 +786,24 @@ namespace NKikimr::NGRpcProxy::V1 {
         if (!pqConfig.GetTopicsAreFirstClassCitizen()) {
             auto converter = NPersQueue::TTopicNameConverter::ForFederation(
                     pqConfig.GetRoot(), pqConfig.GetTestDatabaseRoot(), name, path, database, local, localDc,
-                    config->GetFederationAccount()
+                    pqTabletConfig->GetFederationAccount()
             );
 
             if (!converter->IsValid()) {
                 error = TStringBuilder() << "Bad topic: " << converter->GetReason();
                 return Ydb::StatusIds::BAD_REQUEST;
             }
-            config->SetLocalDC(local);
-            config->SetDC(converter->GetCluster());
-            config->SetProducer(converter->GetLegacyProducer());
-            config->SetTopic(converter->GetLegacyLogtype());
-            config->SetIdent(converter->GetLegacyProducer());
+            pqTabletConfig->SetLocalDC(local);
+            pqTabletConfig->SetDC(converter->GetCluster());
+            pqTabletConfig->SetProducer(converter->GetLegacyProducer());
+            pqTabletConfig->SetTopic(converter->GetLegacyLogtype());
+            pqTabletConfig->SetIdent(converter->GetLegacyProducer());
         }
 
         //config->SetTopicName(name);
         //config->SetTopicPath(topicPath);
 
         //Sets legacy 'logtype'.
-
-        auto partConfig = config->MutablePartitionConfig();
 
         const auto& channelProfiles = pqConfig.GetChannelProfiles();
         if (channelProfiles.size() > 2) {
@@ -834,9 +898,9 @@ namespace NKikimr::NGRpcProxy::V1 {
             error = TStringBuilder() << "Unknown format version with value " << (int)settings.supported_format();
             return Ydb::StatusIds::BAD_REQUEST;
         }
-        config->SetFormatVersion(settings.supported_format() - 1);
+        pqTabletConfig->SetFormatVersion(settings.supported_format() - 1);
 
-        auto ct = config->MutableCodecs();
+        auto ct = pqTabletConfig->MutableCodecs();
         if (settings.supported_codecs().size() > MAX_SUPPORTED_CODECS_COUNT) {
             error = TStringBuilder() << "supported_codecs count cannot be more than "
                                      << MAX_SUPPORTED_CODECS_COUNT << ", provided " << settings.supported_codecs().size();
@@ -861,14 +925,14 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
 
         {
-            error = ReadRuleServiceTypeMigration(config, ctx);
+            error = ReadRuleServiceTypeMigration(pqTabletConfig, ctx);
             if (error) {
                 return Ydb::StatusIds::INTERNAL_ERROR;
             }
         }
         const auto& supportedClientServiceTypes = GetSupportedClientServiceTypes(ctx);
         for (const auto& rr : settings.read_rules()) {
-            auto messageAndCode = AddReadRuleToConfig(config, rr, supportedClientServiceTypes, ctx);
+            auto messageAndCode = AddReadRuleToConfig(pqTabletConfig, rr, supportedClientServiceTypes, ctx);
             if (messageAndCode.PQCode != Ydb::PersQueue::ErrorCode::OK) {
                 error = messageAndCode.Message;
                 return Ydb::StatusIds::BAD_REQUEST;
@@ -960,7 +1024,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
 
-        return CheckConfig(*config, supportedClientServiceTypes, error, ctx, Ydb::StatusIds::BAD_REQUEST);
+        return CheckConfig(*pqTabletConfig, supportedClientServiceTypes, error, ctx, Ydb::StatusIds::BAD_REQUEST);
     }
 
     static bool FillMeteringMode(Ydb::Topic::MeteringMode mode, NKikimrPQ::TPQTabletConfig& config,
@@ -1009,40 +1073,42 @@ namespace NKikimr::NGRpcProxy::V1 {
         auto pqDescr = modifyScheme.MutableCreatePersQueueGroup();
 
         pqDescr->SetName(name);
-        ui32 parts = 1;
-        ui32 maxParts = 0;
+        ui32 minParts = 1;
+
+        auto pqTabletConfig = pqDescr->MutablePQTabletConfig();
+        auto partConfig = pqTabletConfig->MutablePartitionConfig();
         if (request.has_partitioning_settings()) {
             const auto& settings = request.partitioning_settings();
-            if (settings.min_active_partitions() < 0) {
-                error = TStringBuilder() << "Partitions count must be positive, provided " << settings.min_active_partitions();
-                return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
+            if (settings.min_active_partitions() > 0) {
+                minParts = settings.min_active_partitions();
             }
-            parts = settings.min_active_partitions();
-            if (parts == 0) parts = 1;
-
-            if (settings.partition_count_limit() > 0) {
-                maxParts = settings.partition_count_limit();
-
-                if (maxParts < parts) {
-                    error = TStringBuilder() << "Partitions count limit must be greater than or equal to partitions count, provided " 
-                                             << settings.partition_count_limit() << " and " << settings.min_active_partitions();
-                    return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
+            if (AppData(ctx)->FeatureFlags.GetEnableTopicSplitMerge() && request.has_partitioning_settings()) {
+                auto pqTabletConfigPartStrategy = pqTabletConfig->MutablePartitionStrategy();
+                auto autoscaleSettings = settings.autoscaling_settings();
+                pqTabletConfigPartStrategy->SetMinPartitionCount(minParts);
+                pqTabletConfigPartStrategy->SetMaxPartitionCount(IfEqualThenDefault(settings.max_active_partitions(),0L,1L));
+                pqTabletConfigPartStrategy->SetScaleUpPartitionWriteSpeedThresholdPercent(IfEqualThenDefault(autoscaleSettings.partition_write_speed().scale_up_threshold_percent(), 0, 90));
+                pqTabletConfigPartStrategy->SetScaleDownPartitionWriteSpeedThresholdPercent(IfEqualThenDefault(autoscaleSettings.partition_write_speed().scale_down_threshold_percent(), 0, 30));
+                pqTabletConfigPartStrategy->SetScaleThresholdSeconds(IfEqualThenDefault(autoscaleSettings.partition_write_speed().threshold_time().seconds(), 0L, 300L));
+                switch(autoscaleSettings.strategy()) {
+                    case ::Ydb::Topic::AutoscalingStrategy::AUTOSCALING_STRATEGY_SCALE_UP:
+                        pqTabletConfigPartStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
+                        break;
+                    case ::Ydb::Topic::AutoscalingStrategy::AUTOSCALING_STRATEGY_SCALE_UP_AND_DOWN:
+                        pqTabletConfigPartStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE);
+                        break;
+                    default:
+                        pqTabletConfigPartStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED);
+                        break;
+                }
+                if (auto code = ValidatePartitionStrategy(*pqTabletConfig, error); code) {
+                    return *code;
                 }
             }
         }
-
-        pqDescr->SetTotalGroupCount(parts);
-
-        auto config = pqDescr->MutablePQTabletConfig();
-        auto partConfig = config->MutablePartitionConfig();
-
-        if (maxParts > 0 && AppData(ctx)->FeatureFlags.GetEnableTopicSplitMerge()) {
-            config->MutablePartitionStrategy()->SetMinPartitionCount(parts);
-            config->MutablePartitionStrategy()->SetMaxPartitionCount(maxParts);
-        }
-
-        config->SetRequireAuthWrite(true);
-        config->SetRequireAuthRead(true);
+        pqDescr->SetTotalGroupCount(minParts);
+        pqTabletConfig->SetRequireAuthWrite(true);
+        pqTabletConfig->SetRequireAuthRead(true);
         pqDescr->SetPartitionPerTablet(1);
 
         partConfig->SetMaxCountInPartition(Max<i32>());
@@ -1061,18 +1127,18 @@ namespace NKikimr::NGRpcProxy::V1 {
         if (!pqConfig.GetTopicsAreFirstClassCitizen()) {
             auto converter = NPersQueue::TTopicNameConverter::ForFederation(
                     pqConfig.GetRoot(), pqConfig.GetTestDatabaseRoot(), name, path, database, local, localDc,
-                    config->GetFederationAccount()
+                    pqTabletConfig->GetFederationAccount()
             );
 
             if (!converter->IsValid()) {
                 error = TStringBuilder() << "Bad topic: " << converter->GetReason();
                 return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT);
             }
-            config->SetLocalDC(local);
-            config->SetDC(converter->GetCluster());
-            config->SetProducer(converter->GetLegacyProducer());
-            config->SetTopic(converter->GetLegacyLogtype());
-            config->SetIdent(converter->GetLegacyProducer());
+            pqTabletConfig->SetLocalDC(local);
+            pqTabletConfig->SetDC(converter->GetCluster());
+            pqTabletConfig->SetProducer(converter->GetLegacyProducer());
+            pqTabletConfig->SetTopic(converter->GetLegacyLogtype());
+            pqTabletConfig->SetIdent(converter->GetLegacyProducer());
         }
 
 //        config->SetTopicName(name);
@@ -1113,9 +1179,9 @@ namespace NKikimr::NGRpcProxy::V1 {
                 partConfig->SetBurstSize(burstSpeed);
             }
         }
-        config->SetFormatVersion(0);
+        pqTabletConfig->SetFormatVersion(0);
 
-        auto ct = config->MutableCodecs();
+        auto ct = pqTabletConfig->MutableCodecs();
         for(const auto& codec : request.supported_codecs().codecs()) {
             if ((!Ydb::Topic::Codec_IsValid(codec) && codec < Ydb::Topic::CODEC_CUSTOM) || codec == 0) {
                 error = TStringBuilder() << "Unknown codec with value " << codec;
@@ -1132,14 +1198,14 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
 
         {
-            error = ReadRuleServiceTypeMigration(config, ctx);
+            error = ReadRuleServiceTypeMigration(pqTabletConfig, ctx);
             if (error) {
                 return TYdbPqCodes(Ydb::StatusIds::INTERNAL_ERROR, Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT);
             }
         }
 
         Ydb::StatusIds::StatusCode code;
-        if (!FillMeteringMode(request.metering_mode(), *config, pqConfig.GetBillingMeteringConfig().GetEnabled(), false, code, error)) {
+        if (!FillMeteringMode(request.metering_mode(), *pqTabletConfig, pqConfig.GetBillingMeteringConfig().GetEnabled(), false, code, error)) {
             return TYdbPqCodes(code, Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT);
         }
 
@@ -1147,14 +1213,14 @@ namespace NKikimr::NGRpcProxy::V1 {
 
 
         for (const auto& rr : request.consumers()) {
-            auto messageAndCode = AddReadRuleToConfig(config, rr, supportedClientServiceTypes, true, ctx);
+            auto messageAndCode = AddReadRuleToConfig(pqTabletConfig, rr, supportedClientServiceTypes, true, ctx);
             if (messageAndCode.PQCode != Ydb::PersQueue::ErrorCode::OK) {
                 error = messageAndCode.Message;
                 return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, messageAndCode.PQCode);
             }
         }
 
-        return TYdbPqCodes(CheckConfig(*config, supportedClientServiceTypes, error, ctx, Ydb::StatusIds::BAD_REQUEST), Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
+        return TYdbPqCodes(CheckConfig(*pqTabletConfig, supportedClientServiceTypes, error, ctx, Ydb::StatusIds::BAD_REQUEST), Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
     }
 
     Ydb::StatusIds::StatusCode FillProposeRequestImpl(
@@ -1168,18 +1234,56 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
 
         const auto& pqConfig = AppData(ctx)->PQConfig;
+        auto pqTabletConfig = pqDescr.MutablePQTabletConfig();
+        NPQ::Migrate(*pqTabletConfig);
+        auto partConfig = pqTabletConfig->MutablePartitionConfig();
+        if (request.has_alter_partitioning_settings()) {
+            auto splitMergeFeatureEnabled = AppData(ctx)->FeatureFlags.GetEnableTopicSplitMerge();
 
-        if (request.has_alter_partitioning_settings() && request.alter_partitioning_settings().has_set_min_active_partitions()) {
-            CHECK_CDC;
-            auto parts = request.alter_partitioning_settings().set_min_active_partitions();
-            if (parts == 0) parts = 1;
-            pqDescr.SetTotalGroupCount(parts);
+            const auto& settings = request.alter_partitioning_settings();
+            if (settings.has_set_min_active_partitions()) {
+                auto minParts = IfEqualThenDefault(settings.set_min_active_partitions(), 0L, 1L);
+                pqDescr.SetTotalGroupCount(minParts);
+                if (splitMergeFeatureEnabled) {
+                    pqTabletConfig->MutablePartitionStrategy()->SetMinPartitionCount(minParts);
+                }
+            }
+            if (splitMergeFeatureEnabled) {
+                if (settings.has_set_max_active_partitions()) {
+                    pqTabletConfig->MutablePartitionStrategy()->SetMaxPartitionCount(settings.set_max_active_partitions());
+                }
+                if (settings.has_alter_autoscaling_settings()) {
+                    if (settings.alter_autoscaling_settings().has_set_partition_write_speed()) {
+                        if (settings.alter_autoscaling_settings().set_partition_write_speed().has_set_scale_up_threshold_percent()) {
+                            pqTabletConfig->MutablePartitionStrategy()->SetScaleUpPartitionWriteSpeedThresholdPercent(settings.alter_autoscaling_settings().set_partition_write_speed().set_scale_up_threshold_percent());
+                        }
+                        if (settings.alter_autoscaling_settings().set_partition_write_speed().has_set_scale_down_threshold_percent()) {
+                            pqTabletConfig->MutablePartitionStrategy()->SetScaleDownPartitionWriteSpeedThresholdPercent(settings.alter_autoscaling_settings().set_partition_write_speed().set_scale_down_threshold_percent());
+                        }
+                        if (settings.alter_autoscaling_settings().set_partition_write_speed().has_set_threshold_time()) {
+                            pqTabletConfig->MutablePartitionStrategy()->SetScaleThresholdSeconds(settings.alter_autoscaling_settings().set_partition_write_speed().set_threshold_time().seconds());
+                        }
+                    }
+                    if (settings.alter_autoscaling_settings().has_set_strategy()) {
+                        switch(settings.alter_autoscaling_settings().set_strategy()) {
+                            case ::Ydb::Topic::AutoscalingStrategy::AUTOSCALING_STRATEGY_SCALE_UP:
+                                pqTabletConfig->MutablePartitionStrategy()->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
+                                break;
+                            case ::Ydb::Topic::AutoscalingStrategy::AUTOSCALING_STRATEGY_SCALE_UP_AND_DOWN:
+                                pqTabletConfig->MutablePartitionStrategy()->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE);
+                                break;
+                            default:
+                                pqTabletConfig->MutablePartitionStrategy()->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED);
+                                break;
+                        }
+                    }
+                }
+                if (auto code = ValidatePartitionStrategy(*pqTabletConfig, error); code) {
+                    return code->YdbCode;
+                }
+            }
+
         }
-
-
-        auto config = pqDescr.MutablePQTabletConfig();
-        NPQ::Migrate(*config);
-        auto partConfig = config->MutablePartitionConfig();
 
         if (request.alter_attributes().size()) {
             CHECK_CDC;
@@ -1227,8 +1331,8 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         if (request.has_set_supported_codecs()) {
             CHECK_CDC;
-            config->ClearCodecs();
-            auto ct = config->MutableCodecs();
+            pqTabletConfig->ClearCodecs();
+            auto ct = pqTabletConfig->MutableCodecs();
             for(const auto& codec : request.set_supported_codecs().codecs()) {
                 if ((!Ydb::Topic::Codec_IsValid(codec) && codec < Ydb::Topic::CODEC_CUSTOM) || codec == 0) {
                     error = TStringBuilder() << "Unknown codec with value " << codec;
@@ -1239,14 +1343,14 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
         {
-            error = ReadRuleServiceTypeMigration(config, ctx);
+            error = ReadRuleServiceTypeMigration(pqTabletConfig, ctx);
             if (error) {
                 return Ydb::StatusIds::INTERNAL_ERROR;
             }
         }
 
         Ydb::StatusIds::StatusCode code;
-        if (!FillMeteringMode(request.set_metering_mode(), *config, pqConfig.GetBillingMeteringConfig().GetEnabled(), true, code, error)) {
+        if (!FillMeteringMode(request.set_metering_mode(), *pqTabletConfig, pqConfig.GetBillingMeteringConfig().GetEnabled(), true, code, error)) {
             return code;
         }
 
@@ -1257,7 +1361,7 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         i32 dropped = 0;
 
-        for (const auto& c : config->GetConsumers()) {
+        for (const auto& c : pqTabletConfig->GetConsumers()) {
             auto& oldName = c.GetName();
             auto name = NPersQueue::ConvertOldConsumerName(oldName, ctx);
 
@@ -1310,25 +1414,25 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
 
-        config->ClearReadRules();
+        pqTabletConfig->ClearReadRules();
         partConfig->ClearImportantClientId();
-        config->ClearConsumerCodecs();
-        config->ClearReadFromTimestampsMs();
-        config->ClearConsumerFormatVersions();
-        config->ClearReadRuleServiceTypes();
-        config->ClearReadRuleGenerations();
-        config->ClearReadRuleVersions();
-        config->ClearConsumers();
+        pqTabletConfig->ClearConsumerCodecs();
+        pqTabletConfig->ClearReadFromTimestampsMs();
+        pqTabletConfig->ClearConsumerFormatVersions();
+        pqTabletConfig->ClearReadRuleServiceTypes();
+        pqTabletConfig->ClearReadRuleGenerations();
+        pqTabletConfig->ClearReadRuleVersions();
+        pqTabletConfig->ClearConsumers();
 
         for (const auto& rr : consumers) {
-            auto messageAndCode = AddReadRuleToConfig(config, rr.second, supportedClientServiceTypes, rr.first, ctx);
+            auto messageAndCode = AddReadRuleToConfig(pqTabletConfig, rr.second, supportedClientServiceTypes, rr.first, ctx);
             if (messageAndCode.PQCode != Ydb::PersQueue::ErrorCode::OK) {
                 error = messageAndCode.Message;
                 return Ydb::StatusIds::BAD_REQUEST;
             }
         }
 
-        return CheckConfig(*config, supportedClientServiceTypes, error, ctx, Ydb::StatusIds::ALREADY_EXISTS);
+        return CheckConfig(*pqTabletConfig, supportedClientServiceTypes, error, ctx, Ydb::StatusIds::ALREADY_EXISTS);
     }
 
 

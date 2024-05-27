@@ -1,5 +1,4 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
-#include "datashard_ut_common_kqp.h"
 #include "ydb/core/tablet_flat/shared_sausagecache.h"
 #include <ydb/core/tablet_flat/test/libs/table/test_make.h>
 
@@ -8,6 +7,18 @@ namespace NKikimr {
 using namespace NKikimr::NDataShard;
 using namespace NSchemeShard;
 using namespace Tests;
+
+namespace {
+    void UpsertRows(TServer::TPtr server, TActorId sender, ui32 keyFrom = 0, ui32 keyTo = 2000) {
+        TString query = "UPSERT INTO `/Root/table-1` (key, value) VALUES ";
+        for (auto key : xrange(keyFrom, keyTo)) {
+            if (key != keyFrom)
+                query += ", ";
+            query += "(" + ToString(key) + ", " + ToString(key) + ") ";
+        }
+        ExecSQL(server, sender, query);
+    }
+}
 
 Y_UNIT_TEST_SUITE(DataShardStats) {
 
@@ -171,20 +182,13 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         const auto shard1 = GetTableShards(server, sender, "/Root/table-1").at(0);
         const auto tableId1 = ResolveTableId(server, sender, "/Root/table-1");
 
-        const int count = 2000;
-        TString query = "UPSERT INTO `/Root/table-1` (key, value) VALUES ";
-        for (auto times = 0; times < count; times++) {
-            if (times != 0)
-                query += ", ";
-            query += "(" + ToString(times) + ", " + ToString(times) + ") ";
-        }
-        ExecSQL(server, sender, query);
+        UpsertRows(server, sender);
 
         {
             Cerr << "... waiting for stats after upsert" << Endl;
             auto stats = WaitTableStats(runtime, shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), count);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 2000);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 0);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetDataSize(), 196096);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetIndexSize(), 0);
@@ -196,7 +200,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
             Cerr << "... waiting for stats after compaction" << Endl;
             auto stats = WaitTableStats(runtime, shard1, 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), count);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 2000);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetDataSize(), 30100);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetIndexSize(), bTreeIndex ? 233 : 138);
@@ -414,6 +418,11 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
     }
 
     Y_UNIT_TEST(NoData) {
+        const auto gDbStatsDataSizeResolutionBefore = NDataShard::gDbStatsDataSizeResolution;
+        const auto gDbStatsRowCountResolutionBefore = NDataShard::gDbStatsRowCountResolution;
+        NDataShard::gDbStatsDataSizeResolution = 1; // by page stats
+        NDataShard::gDbStatsRowCountResolution = 1;
+
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
@@ -431,7 +440,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         auto [shards, tableId1] = CreateShardedTable(server, sender, "/Root", "table-1", 1);
         const auto shard1 = GetTableShards(server, sender, "/Root/table-1").at(0);
 
-        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3)");
+        UpsertRows(server, sender);
         
         bool captured = false;
         auto observer = runtime.AddObserver<NSharedCache::TEvResult>([&](NSharedCache::TEvResult::TPtr& event) {
@@ -459,9 +468,13 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
             Cerr << "Waiting stats.." << Endl;
             auto stats = WaitTableStats(runtime, shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
+            UNIT_ASSERT_GT(stats.GetTableStats().GetIndexSize(), 0);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 2000);
         }
+
+        NDataShard::gDbStatsDataSizeResolution = gDbStatsDataSizeResolutionBefore;
+        NDataShard::gDbStatsRowCountResolution = gDbStatsRowCountResolutionBefore;
     }
 
 } // Y_UNIT_TEST_SUITE(DataShardStats)

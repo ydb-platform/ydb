@@ -276,6 +276,7 @@ namespace NYql::NDqs {
                 : TServiceProxyActor(ctx, counters, traceId, username)
                 , GraphExecutionEventsActorId(graphExecutionEventsActorId)
             {
+                ExecutionTimeout = Request->GetExecutionTimeout();
             }
 
             void DoRetry() override {
@@ -378,7 +379,7 @@ namespace NYql::NDqs {
                 YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__;
                 MergeTaskMetas(params);
 
-                auto executerId = RegisterChild(NDq::MakeDqExecuter(MakeWorkerManagerActorID(SelfId().NodeId()), SelfId(), TraceId, Username, Settings, Counters, RequestStartTime));
+                auto executerId = RegisterChild(NDq::MakeDqExecuter(MakeWorkerManagerActorID(SelfId().NodeId()), SelfId(), TraceId, Username, Settings, Counters, RequestStartTime, false, ExecutionTimeout));
 
                 TVector<TString> columns;
                 columns.reserve(Request->GetColumns().size());
@@ -427,6 +428,7 @@ namespace NYql::NDqs {
             }
 
             NActors::TActorId GraphExecutionEventsActorId;
+            ui64 ExecutionTimeout;
         };
 
         TString GetVersionString() {

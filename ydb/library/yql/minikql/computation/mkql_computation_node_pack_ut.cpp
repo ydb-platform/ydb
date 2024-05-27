@@ -665,6 +665,9 @@ protected:
             auto scalarOptStrType = PgmBuilder.NewBlockType(optStrType, TBlockType::EShape::Scalar);
             auto blockOptTupleOptUi32StrType = PgmBuilder.NewBlockType(optTupleOptUi32StrType, TBlockType::EShape::Many);
             auto scalarUi64Type = PgmBuilder.NewBlockType(ui64Type, TBlockType::EShape::Scalar);
+            
+            auto tzDateType = PgmBuilder.NewDataType(NUdf::EDataSlot::TzDate);
+            auto blockTzDateType = PgmBuilder.NewBlockType(tzDateType, TBlockType::EShape::Many);
 
             auto rowType =
                 legacyStruct
@@ -674,10 +677,11 @@ protected:
                           {"_yql_block_length", scalarUi64Type},
                           {"a", scalarOptStrType},
                           {"b", blockOptTupleOptUi32StrType},
+                          {"c", blockTzDateType}
                       })
                     : PgmBuilder.NewMultiType(
                           {blockUi32Type, blockOptStrType, scalarOptStrType,
-                           blockOptTupleOptUi32StrType, scalarUi64Type});
+                           blockOptTupleOptUi32StrType, blockTzDateType, scalarUi64Type});
 
             ui64 blockLen = 1000;
             UNIT_ASSERT_LE(offset + len, blockLen);
@@ -685,6 +689,7 @@ protected:
             auto builder1 = MakeArrayBuilder(TTypeInfoHelper(), ui32Type, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(ui32Type)), nullptr);
             auto builder2 = MakeArrayBuilder(TTypeInfoHelper(), optStrType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(optStrType)), nullptr);
             auto builder3 = MakeArrayBuilder(TTypeInfoHelper(), optTupleOptUi32StrType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(optTupleOptUi32StrType)), nullptr);
+            auto builder4 = MakeArrayBuilder(TTypeInfoHelper(), tzDateType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(tzDateType)), nullptr);
 
             for (ui32 i = 0; i < blockLen; ++i) {
                 TBlockItem b1(i);
@@ -697,6 +702,10 @@ protected:
                 TBlockItem b3items[] = { (i % 2) ? TBlockItem(i) : TBlockItem(), TBlockItem(a) };
                 TBlockItem b3 = (i % 7) ? TBlockItem(b3items) : TBlockItem();
                 builder3->Add(b3);
+                
+                TBlockItem tzDate {i};
+                tzDate.SetTimezoneId(i % 100);
+                builder4->Add(tzDate);
             }
 
             std::string_view testScalarString = "foobar";
@@ -709,11 +718,13 @@ protected:
                 datums.emplace_back(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(blockLen)));
                 datums.emplace_back(arrow::Datum(std::make_shared<arrow::BinaryScalar>(strbuf)));
                 datums.emplace_back(builder3->Build(true));
+                datums.emplace_back(builder4->Build(true));
             } else {
                 datums.emplace_back(builder1->Build(true));
                 datums.emplace_back(builder2->Build(true));
                 datums.emplace_back(arrow::Datum(std::make_shared<arrow::BinaryScalar>(strbuf)));
                 datums.emplace_back(builder3->Build(true));
+                datums.emplace_back(builder4->Build(true));
                 datums.emplace_back(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(blockLen)));
             }
 
@@ -767,6 +778,7 @@ protected:
             auto reader1 = MakeBlockReader(TTypeInfoHelper(), ui32Type);
             auto reader2 = MakeBlockReader(TTypeInfoHelper(), optStrType);
             auto reader3 = MakeBlockReader(TTypeInfoHelper(), optTupleOptUi32StrType);
+            auto reader4 = MakeBlockReader(TTypeInfoHelper(), tzDateType);
 
             for (ui32 i = offset; i < len; ++i) {
                 TBlockItem b1 = reader1->GetItem(*TArrowBlock::From(unpackedColumns[0]).GetDatum().array(), i - offset);
@@ -792,6 +804,10 @@ protected:
                 } else {
                     UNIT_ASSERT(!b3);
                 }
+
+                TBlockItem b4 = reader4->GetItem(*TArrowBlock::From(unpackedColumns[legacyStruct ? 5 : 4]).GetDatum().array(), i - offset);
+                UNIT_ASSERT(b4.Get<ui16>() == i);
+                UNIT_ASSERT(b4.GetTimezoneId() == (i % 100));
             }
         }
     }

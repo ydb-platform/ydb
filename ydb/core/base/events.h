@@ -172,7 +172,10 @@ struct TKikimrEvents : TEvents {
         ES_PQ_PARTITION_CHOOSER,
         ES_GRAPH,
         ES_REPLICATION_SERVICE,
-        ES_CHANGE_EXCHANGE,
+        ES_BACKUP_SERVICE,
+        ES_TX_BACKGROUND,
+        ES_SS_BG_TASKS,
+        ES_LIMITER
     };
 };
 

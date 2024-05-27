@@ -117,9 +117,9 @@ Y_UNIT_TEST_SUITE(TPipeCacheTest) {
         };
         runtime.SetObserverFunc(observerFunc);
 
-        auto config = MakeIntrusive<TPipePeNodeCacheConfig>();
+        auto config = MakeIntrusive<TPipePerNodeCacheConfig>();
         config->PipeRefreshTime = TDuration::Seconds(1);
-        auto cacheActor = runtime.Register(CreatePipePeNodeCache(config));
+        auto cacheActor = runtime.Register(CreatePipePerNodeCache(config));
 
         TActorId sender = runtime.AllocateEdgeActor();
         for (size_t i = 0; i < 20; ++i) {
@@ -138,9 +138,9 @@ Y_UNIT_TEST_SUITE(TPipeCacheTest) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
 
-        auto config = MakeIntrusive<TPipePeNodeCacheConfig>();
+        auto config = MakeIntrusive<TPipePerNodeCacheConfig>();
         config->PipeRefreshTime = TDuration::Seconds(1);
-        auto cacheActor = runtime.Register(CreatePipePeNodeCache(config));
+        auto cacheActor = runtime.Register(CreatePipePerNodeCache(config));
 
         TActorId sender = runtime.AllocateEdgeActor();
 
@@ -175,8 +175,8 @@ Y_UNIT_TEST_SUITE(TPipeCacheTest) {
                 return new TCustomTablet(tablet, info);
             });
 
-        auto config = MakeIntrusive<TPipePeNodeCacheConfig>();
-        auto cacheActor = runtime.Register(CreatePipePeNodeCache(config));
+        auto config = MakeIntrusive<TPipePerNodeCacheConfig>();
+        auto cacheActor = runtime.Register(CreatePipePerNodeCache(config));
 
         TActorId sender = runtime.AllocateEdgeActor();
 

@@ -1440,7 +1440,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     }
     if (serviceMask.EnableTabletResolver) {
         sil->AddServiceInitializer(new TTabletResolverInitializer(runConfig));
-        sil->AddServiceInitializer(new TTabletPipePeNodeCachesInitializer(runConfig));
+        sil->AddServiceInitializer(new TTabletPipePerNodeCachesInitializer(runConfig));
     }
     if (serviceMask.EnableTabletMonitoringProxy) {
         sil->AddServiceInitializer(new TTabletMonitoringProxyInitializer(runConfig));

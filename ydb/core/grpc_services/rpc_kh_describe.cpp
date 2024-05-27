@@ -98,7 +98,7 @@ private:
             }
 
             std::unique_ptr<TEvTablet::TEvLocalSchemeTx> ev(new TEvTablet::TEvLocalSchemeTx());
-            ctx.Send(MakePipePeNodeCacheID(true), new TEvPipeCache::TEvForward(ev.release(), *tabletId, true), IEventHandle::FlagTrackDelivery);
+            ctx.Send(MakePipePerNodeCacheID(true), new TEvPipeCache::TEvForward(ev.release(), *tabletId, true), IEventHandle::FlagTrackDelivery);
 
             TBase::Become(&TThis::StateWaitResolveTable);
             WaitingResolveReply = true;

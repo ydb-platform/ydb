@@ -3,6 +3,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_topic/ut/ut_utils/topic_sdk_test_setup.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/core/persqueue/partition_scale_manager.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_env.h>
 
@@ -499,7 +500,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         UNIT_ASSERT_VALUES_EQUAL_C(NYdb::EStatus::BAD_REQUEST, status.GetStatus(), "The consumer cannot commit an offset for inactive, read-to-the-end partitions.");
     }
 
-    Y_UNIT_TEST(CreateAlterDescribe) {
+    Y_UNIT_TEST(ControlPlane_CreateAlterDescribe) {
         auto autoscalingTestTopic = "autoscalit-topic";
         TTopicSdkTestSetup setup = CreateSetup();
         TTopicClient client = setup.MakeClient();
@@ -589,12 +590,61 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         client.CreateTopic(TEST_TOPIC, createSettings).Wait();
 
         auto msg = TString("a", 1_MB);
+
         auto writeSession = CreateWriteSession(client, "producer-1", 0);
         UNIT_ASSERT(writeSession->Write(Msg(msg, 1)));
         UNIT_ASSERT(writeSession->Write(Msg(msg, 2)));
-        Sleep(TDuration::Seconds(5));
+        Sleep(TDuration::Seconds(10));
         auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
         UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
+
+        auto writeSession2 = CreateWriteSession(client, "producer-1", 1);
+        UNIT_ASSERT(writeSession2->Write(Msg(msg, 3)));
+        Sleep(TDuration::Seconds(10));
+        auto describe2 = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+        UNIT_ASSERT_EQUAL(describe2.GetTopicDescription().GetPartitions().size(), 5);
+    }
+
+    Y_UNIT_TEST(MidOfRange) {
+        TString a = "a";
+        TString b = "c";
+        auto res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(a,b);
+
+        b = "b";
+        res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(a,b);
+        UNIT_ASSERT(a < res);
+        UNIT_ASSERT(b > res);
+
+        a = {};
+        b = "b";
+        res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(a,b);
+        UNIT_ASSERT(a < res);
+        UNIT_ASSERT(b > res);
+
+        a = "a";
+        b = {};
+        res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(a,b);
+        Cerr << "\n SAVDBG " << res << "\n";
+        UNIT_ASSERT(a < res);
+        UNIT_ASSERT(b != res);
+
+        a = "aa";
+        b = {};
+        res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(a,b);
+        UNIT_ASSERT(a < res);
+        UNIT_ASSERT(b != res);
+
+        a = "aaa";
+        b = "b";
+        res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(a,b);
+        UNIT_ASSERT(a < res);
+        UNIT_ASSERT(b > res);
+
+        a = "aaa";
+        b = "aab";
+        res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(a,b);
+        UNIT_ASSERT(a < res);
+        UNIT_ASSERT(b > res);
     }
 }
 

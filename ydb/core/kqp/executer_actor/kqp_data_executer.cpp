@@ -2463,6 +2463,7 @@ private:
         const bool singlePartitionOptAllowed = !HasOlapTable && !UnknownAffectedShardCount && !HasExternalSources && DatashardTxs.empty() && EvWriteTxs.empty();
         const bool useDataQueryPool = !(HasExternalSources && DatashardTxs.empty() && EvWriteTxs.empty());
         const bool localComputeTasks = !DatashardTxs.empty();
+        const bool mayRunTasksLocally = !((HasExternalSources || HasOlapTable || HasDatashardSourceScan) && DatashardTxs.empty());
 
         Planner = CreateKqpPlanner({
             .TasksGraph = TasksGraph,
@@ -2486,7 +2487,8 @@ private:
             .UserRequestContext = GetUserRequestContext(),
             .FederatedQuerySetup = FederatedQuerySetup,
             .OutputChunkMaxSize = Request.OutputChunkMaxSize,
-            .GUCSettings = GUCSettings
+            .GUCSettings = GUCSettings,
+            .MayRunTasksLocally = mayRunTasksLocally
         });
 
         auto err = Planner->PlanExecution();

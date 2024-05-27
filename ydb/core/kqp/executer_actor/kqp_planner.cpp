@@ -55,7 +55,7 @@ bool TKqpPlanner::UseMockEmptyPlanner = false;
 // Task can allocate extra memory during execution.
 // So, we estimate total memory amount required for task as apriori task size multiplied by this constant.
 constexpr ui32 MEMORY_ESTIMATION_OVERFLOW = 2;
-constexpr ui32 MAX_NON_PARALLEL_TASKS_EXECUTION_LIMIT = 4;
+constexpr ui32 MAX_NON_PARALLEL_TASKS_EXECUTION_LIMIT = 8;
 
 TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     : TxId(args.TxId)
@@ -80,6 +80,7 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , FederatedQuerySetup(args.FederatedQuerySetup)
     , OutputChunkMaxSize(args.OutputChunkMaxSize)
     , GUCSettings(std::move(args.GUCSettings))
+    , MayRunTasksLocally(args.MayRunTasksLocally)
 {
     if (!Database) {
         // a piece of magic for tests
@@ -435,7 +436,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
             PendingComputeTasks.insert(taskId);
         }
 
-        for (auto& [shardId, tasks] : TasksPerNode) {
+        for (auto& [nodeId, tasks] : TasksPerNode) {
             for (ui64 taskId : tasks) {
                 PendingComputeTasks.insert(taskId);
             }
@@ -446,7 +447,23 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
             return err;
         }
 
+        if (MayRunTasksLocally) {
+            // temporary flag until common ca factory is implemented.
+            auto tasksOnNodeIt = TasksPerNode.find(ExecuterId.NodeId());
+            if (tasksOnNodeIt != TasksPerNode.end()) {
+                auto& tasks = tasksOnNodeIt->second;
+                const bool shareMailbox = (tasks.size() <= 1);
+                for (ui64 taskId: tasks) {
+                    ExecuteDataComputeTask(taskId, shareMailbox, /* optimizeProtoForLocalExecution = */ true);
+                    PendingComputeTasks.erase(taskId);
+                }
+            }
+        }
+
         for(auto& [nodeId, tasks] : TasksPerNode) {
+            if (MayRunTasksLocally && ExecuterId.NodeId() == nodeId)
+                continue;
+
             SortUnique(tasks);
             auto& request = Requests.emplace_back(std::move(tasks), CalcSendMessageFlagsForNode(nodeId), nodeId);
             request.SerializedRequest = SerializeRequest(request);

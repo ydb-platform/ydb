@@ -185,15 +185,15 @@ inline TDistanceResult KnnCosineSimilarity(const TStringRef& str1, const TString
     switch (format1) {
         case EFormat::FloatVector:
             return VectorFunc<float>(str1, str2, [&](const float* v1, const float* v2, size_t len) {
-                auto res = ::TriWayDotProduct(v1, v2, len);
+                const auto res = ::TriWayDotProduct(v1, v2, len);
                 return compute(res.LL, res.LR, res.RR);
             });
         case EFormat::Uint8Vector:
             return VectorFunc<ui8>(str1, str2, [&](const ui8* v1, const ui8* v2, size_t len) {
                 // TODO We can optimize it if we will iterate over both vector at the same time, look to the float implementation
-                const auto ll = ::DotProduct(v1, v2, len);
-                const auto lr = ::DotProduct(v1, v2, len);
-                const auto rr = ::DotProduct(v1, v2, len);
+                const ui64 ll = ::DotProduct(v1, v1, len);
+                const ui64 lr = ::DotProduct(v1, v2, len);
+                const ui64 rr = ::DotProduct(v2, v2, len);
                 return compute(ll, lr, rr);
             });
         case EFormat::BitVector:

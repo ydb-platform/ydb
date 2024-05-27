@@ -97,10 +97,9 @@ private:
 
     Yql::DqsProto::TWorkerFilter GetPragmaFilter() {
         Yql::DqsProto::TWorkerFilter pragmaFilter;
-        if (Settings->WorkerFilter.Get()) {
+        if (const auto& filter = Settings->WorkerFilter.Get(); filter.Defined()) {
             try {
-                TString inputString = Settings->WorkerFilter.Get().GetOrElse("");
-                TStringInput inputStream1(inputString);
+                TStringInput inputStream1(*filter);
                 ParseFromTextFormat(inputStream1, pragmaFilter);
             } catch (...) {
                 YQL_CLOG(INFO, ProviderDq) << "Cannot parse filter pragma " << CurrentExceptionMessage();

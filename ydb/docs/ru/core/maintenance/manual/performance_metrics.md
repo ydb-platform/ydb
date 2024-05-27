@@ -82,7 +82,7 @@ D = \frac{UserDiskCost + InternalDiskCost + CompactionDiskCost + DefragDiskCost 
 $$
 Задайте параметр `disk_time_available_scale` конфигурации равным рассчитанному значению $D$. Мы предполагаем, что физические устройства на пользовательском кластере по производительности сравнимы с эталоном, поэтому по умолчанию параметр `disk_time_available_scale` равен 1.
 
-Создать подобную нагрузку можно, например, с помощью [Storage LoadActor](../../development/load-actors-storage.md).
+Создать подобную нагрузку можно, например, с помощью [Storage LoadActor](../../contributor/load-actors-storage.md).
 
 ### Дашборд в Monitoring
 Для удобного просмотра метрик и диагностики существует [дашборд](https://m.yandex-team.ru/projects/kikimr/dashboards/mongi8n4phijn4n3o4il) во внутреннем инструменте Monitoring.

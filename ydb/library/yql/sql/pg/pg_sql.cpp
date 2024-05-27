@@ -506,6 +506,8 @@ public:
             return ParseCreateSeqStmt(CAST_NODE(CreateSeqStmt, node)) != nullptr;
         case T_AlterSeqStmt:
             return ParseAlterSeqStmt(CAST_NODE(AlterSeqStmt, node)) != nullptr;
+        case T_AlterTableStmt:
+            return ParseAlterTableStmt(CAST_NODE(AlterTableStmt, node)) != nullptr;
         default:
             NodeNotImplemented(value, node);
             return false;
@@ -2880,6 +2882,83 @@ public:
         if (value->for_identity) {
             options.push_back(QL(QA("for_identity")));
         }
+
+        State.Statements.push_back(
+                L(A("let"), A("world"),
+                  L(A("Write!"), A("world"), sink, key, L(A("Void")),
+                    QVL(options.data(), options.size()))));
+
+        return State.Statements.back();
+    }
+
+    [[nodiscard]] 
+    TAstNode* ParseAlterTableStmt(const AlterTableStmt* value) {
+        std::vector<TAstNode*> options;
+        TString mode = (value->missing_ok) ? "alter_if_exists" : "alter";
+
+        options.push_back(QL(QA("mode"), QA(mode)));
+
+        const auto [sink, key] = ParseWriteRangeVar(value->relation, true);
+        if (!sink || !key) {
+            return nullptr;
+        }
+
+        std::vector<TAstNode*> alterColumns;
+        for (int i = 0; i < ListLength(value->cmds); ++i) {
+            auto rawNode = ListNodeNth(value->cmds, i);
+
+            const auto* cmd = CAST_NODE(AlterTableCmd, rawNode);
+            switch (cmd->subtype) {
+                case AT_ColumnDefault: { /* ALTER COLUMN DEFAULT */
+                    const auto* def = cmd->def;
+                    const auto* colName = cmd->name;
+                    switch (NodeTag(def)) {
+                        case T_FuncCall: {
+                            const auto* newDefault = CAST_NODE(FuncCall, def);
+                            const auto* funcName = ListNodeNth(newDefault->funcname, 0);
+                            if (NodeTag(funcName) != T_String) {
+                                NodeNotImplemented(newDefault, funcName);
+                                return nullptr;
+                            }
+                            auto strFuncName = StrVal(funcName);
+                            if (strcmp(strFuncName, "nextval") != 0) {
+                                NodeNotImplemented(newDefault, funcName);
+                                return nullptr;
+                            }
+                            const auto* rawArg = ListNodeNth(newDefault->args, 0);
+                            if (NodeTag(rawArg) != T_A_Const) {
+                                NodeNotImplemented(newDefault, rawArg);
+                                return nullptr;
+                            }
+                            const auto* arg = CAST_NODE(A_Const, rawArg);
+                            if (NodeTag(arg->val) != T_String) {
+                                ValueNotImplemented(newDefault, arg->val);
+                                return nullptr;
+                            }
+                            auto seqName = StrVal(arg->val);
+
+                            alterColumns.push_back(QL(QAX(colName), QL(QA("setDefault"), QL(QA("nextval"), QA(seqName)))));
+                            break;
+                        }
+                        default:
+                            NodeNotImplemented(def);
+                            return nullptr;
+                    }
+			        break;
+                }
+                default:
+                    NodeNotImplemented(rawNode);
+                    return nullptr;
+            }
+        }
+
+        std::vector<TAstNode*> actions { QL(QA("alterColumns"), QVL(alterColumns.data(), alterColumns.size())) };
+
+        options.push_back(
+            QL(QA("actions"), 
+               QVL(actions.data(), actions.size())
+            )
+        );
 
         State.Statements.push_back(
                 L(A("let"), A("world"),

@@ -58,7 +58,7 @@ struct TTableConstInfo : public TAtomicRefCount<TTableConstInfo> {
         Columns.emplace(phyColumn.GetId().GetName(), std::move(column));
         if (!phyColumn.GetDefaultFromSequence().empty()) {
             TString seq = phyColumn.GetDefaultFromSequence();
-            if (!seq.StartsWith(Path)) {
+            if (!seq.StartsWith("/")) {
                 seq = Path + "/" + seq;
             }
 

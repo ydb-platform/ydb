@@ -1335,7 +1335,8 @@ public:
                 for (const auto& family : col.Families) {
                     familiesDesc = L(familiesDesc, BuildQuotedAtom(family.Pos, family.Name));
                 }
-                columnDesc = L(columnDesc, Q(familiesDesc));
+
+                columnDesc = L(columnDesc, Q(Y(Q("setFamily"), Q(familiesDesc))));
                 columns = L(columns, Q(columnDesc));
             }
             actions = L(actions, Q(Y(Q("alterColumns"), Q(columns))));

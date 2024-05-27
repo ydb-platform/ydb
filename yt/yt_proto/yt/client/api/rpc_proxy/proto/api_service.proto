@@ -804,7 +804,7 @@ message TReqExplainQuery
     optional string udf_registry_path = 10;
     optional string execution_pool = 11;
     optional bool new_range_inference = 12;
-    optional int32 syntax_version = 13;
+    optional int32 syntax_version = 13 [default = 1];
 }
 
 message TRspExplainQuery

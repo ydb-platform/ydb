@@ -179,7 +179,7 @@ public:
         return ShutdownThreadId_.load();
     }
 
-    void EnsureSystemInvokersRunning() const
+    void EnsureSafeShutdown() const
     {
         NConcurrency::GetFinalizerInvoker();
         NConcurrency::GetShutdownInvoker();
@@ -285,7 +285,7 @@ size_t GetShutdownThreadId()
 
 void EnsureSafeShutdown()
 {
-    TShutdownManager::Get()->EnsureSystemInvokersRunning();
+    TShutdownManager::Get()->EnsureSafeShutdown();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

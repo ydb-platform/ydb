@@ -13,19 +13,56 @@ namespace NTable {
 
 Y_UNIT_TEST_SUITE(PgTest) {
 
-    Y_UNIT_TEST(DumpCells) {
+    Y_UNIT_TEST(DumpIntCells) {
+        NScheme::TTypeRegistry typeRegistry;
+
+        i64 intVal = 55555;
+
+        {
+            TCell cell((const char *)&intVal, sizeof(i64));
+            NScheme::TTypeInfo typeInfo(NScheme::TInt64::TypeId);
+
+            TString printRes = DbgPrintCell(cell, typeInfo, typeRegistry);
+            UNIT_ASSERT_STRINGS_EQUAL(printRes, "Int64 : 55555");
+        }
+
+        {
+            NScheme::TTypeInfo pgTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeId(INT8OID));
+            auto desc = pgTypeInfo.GetTypeDesc();
+            auto res = NPg::PgNativeBinaryFromNativeText(Sprintf("%u", intVal), desc);
+            UNIT_ASSERT_C(!res.Error, *res.Error);
+            TString binary = res.Str;
+            TCell pgCell((const char*)binary.data(), binary.size());
+
+            TString printRes = DbgPrintCell(pgCell, pgTypeInfo, typeRegistry);
+            UNIT_ASSERT_STRINGS_EQUAL(printRes, "pgint8 : 55555");
+        }
+    }
+
+    Y_UNIT_TEST(DumpStringCells) {
         NScheme::TTypeRegistry typeRegistry;
 
         char strVal[] = "This is the value";
-        TCell strCell((const char*)&strVal, sizeof(strVal) - 1);
 
-        NScheme::TTypeInfo typeInfo(NScheme::TString::TypeId);
-        TString strRes = DbgPrintCell(strCell, typeInfo, typeRegistry);
-        UNIT_ASSERT_STRINGS_EQUAL(strRes, TStringBuilder() << "String : " << strVal);
+        {
+            TCell cell((const char*)&strVal, sizeof(strVal) - 1);
+            NScheme::TTypeInfo typeInfo(NScheme::TString::TypeId);
 
-        NScheme::TTypeInfo pgTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeId(TEXTOID));
-        TString pgStrRes = DbgPrintCell(strCell, pgTypeInfo, typeRegistry);
-        UNIT_ASSERT_STRINGS_EQUAL(pgStrRes, TStringBuilder() << "pgtext : " << strVal);
+            TString printRes = DbgPrintCell(cell, typeInfo, typeRegistry);
+            UNIT_ASSERT_STRINGS_EQUAL(printRes, TStringBuilder() << "String : " << strVal);
+        }
+
+        {
+            NScheme::TTypeInfo pgTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeId(TEXTOID));
+            auto desc = pgTypeInfo.GetTypeDesc();
+            auto res = NPg::PgNativeBinaryFromNativeText(strVal, desc);
+            UNIT_ASSERT_C(!res.Error, *res.Error);
+            TString binary = res.Str;
+            TCell pgCell((const char*)binary.data(), binary.size());
+
+            TString printRes = DbgPrintCell(pgCell, pgTypeInfo, typeRegistry);
+            UNIT_ASSERT_STRINGS_EQUAL(printRes, TStringBuilder() << "pgtext : " << strVal);
+        }
     }
 }
 

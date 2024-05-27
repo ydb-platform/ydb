@@ -113,6 +113,7 @@ target_link_libraries(run PUBLIC
   core-tx-columnshard
   core-tx-coordinator
   tx-conveyor-service
+  tx-limiter-service
   core-tx-datashard
   core-tx-long_tx_service
   tx-long_tx_service-public

@@ -50,6 +50,7 @@ void WithTables(const F&& f) {
 
 struct TRunSettings {
     bool IsSql = true;
+    bool IsPg = false;
     THashMap<TString, TString> Tables;
     TMaybe<TString> ParametersYson;
     THashMap<TString, TString> StaticFiles, DynamicFiles;
@@ -114,8 +115,9 @@ bool RunProgram(bool replay, const TString& query, const TQContext& qContext, co
         program->AddUserDataTable(MakeUserTables(runSettings.DynamicFiles));
     }
 
-    if (runSettings.IsSql) {
+    if (runSettings.IsSql || runSettings.IsPg) {
         NSQLTranslation::TTranslationSettings settings;
+        settings.PgParser = runSettings.IsPg;
         if (!replay) {
             settings.ClusterMapping["plato"] = TString(YtProviderName);
         }
@@ -123,7 +125,7 @@ bool RunProgram(bool replay, const TString& query, const TQContext& qContext, co
         if (!program->ParseSql(settings)) {
             program->PrintErrorsTo(Cerr);
             return false;
-        } 
+        }
     } else if (!program->ParseYql()) {
         program->PrintErrorsTo(Cerr);
         return false;
@@ -134,7 +136,7 @@ bool RunProgram(bool replay, const TString& query, const TQContext& qContext, co
         return false;
     }
 
-    TProgram::TStatus status = replay ? 
+    TProgram::TStatus status = replay ?
         program->Optimize(GetUsername()) :
         program->Run(GetUsername());
     if (status == TProgram::TStatus::Error) {
@@ -188,7 +190,7 @@ Y_UNIT_TEST_SUITE(QPlayerTests) {
 (return world)
 )
         )";
-        
+
         TRunSettings runSettings;
         runSettings.IsSql = false;
         CheckProgram(s, runSettings);
@@ -200,12 +202,19 @@ Y_UNIT_TEST_SUITE(QPlayerTests) {
         CheckProgram(s, runSettings);
     }
 
+    Y_UNIT_TEST(SimplePg) {
+        auto s = "select 1::text";
+        TRunSettings runSettings;
+        runSettings.IsPg = true;
+        CheckProgram(s, runSettings);
+    }
+
     Y_UNIT_TEST(Udf) {
         auto s = "select String::AsciiToUpper('a')";
         TRunSettings runSettings;
         CheckProgram(s, runSettings);
     }
-    
+
     Y_UNIT_TEST(YtGetFolder) {
         auto s = "select * from plato.folder('','_yql_row_spec')";
         WithTables([&](const auto& tables) {

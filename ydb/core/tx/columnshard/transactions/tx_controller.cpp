@@ -285,12 +285,10 @@ void TTxController::OnTabletInit() {
     }
 }
 
-std::shared_ptr<TTxController::ITransactionOperator> TTxController::StartProposeOnExecute(const TTxController::TBasicTxInfo& txInfo, const TString& txBody, const TActorId source, const ui64 cookie, 
-    const std::optional<TMessageSeqNo>& seqNo, NTabletFlatExecutor::TTransactionContext& txc) {
+std::shared_ptr<TTxController::ITransactionOperator> TTxController::StartProposeOnExecute(const TTxController::TTxInfo& txInfo, const TString& txBody, NTabletFlatExecutor::TTransactionContext& txc) {
     NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("method", "TTxController::StartProposeOnExecute")("tx_info", txInfo.DebugString());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "start");
-    std::shared_ptr<TTxController::ITransactionOperator> txOperator(TTxController::ITransactionOperator::TFactory::Construct(txInfo.TxKind,
-        TTxController::TTxInfo(txInfo.TxKind, txInfo.TxId, source, cookie, seqNo)));
+    std::shared_ptr<TTxController::ITransactionOperator> txOperator(TTxController::ITransactionOperator::TFactory::Construct(txInfo.TxKind, txInfo));
     AFL_VERIFY(!!txOperator);
     if (!txOperator->Parse(Owner, txBody)) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse txOperator");

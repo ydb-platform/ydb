@@ -20,6 +20,8 @@ public:
         , TxId(txId) {
     }
 
+    bool operator==(const TBasicTxInfo& item) const = default;
+
     ui64 GetTxId() const {
         return TxId;
     }
@@ -37,6 +39,8 @@ struct TFullTxInfo: public TBasicTxInfo {
     ui64 Cookie = 0;
     std::optional<TMessageSeqNo> SeqNo;
 public:
+    bool operator==(const TFullTxInfo& item) const = default;
+
     TString SerializeSeqNoAsString() const {
         if (!SeqNo) {
             return "";
@@ -332,16 +336,12 @@ public:
     ui64 GetMemoryUsage() const;
     bool HaveOutdatedTxs() const;
 
-    bool IsActualOperator(const std::shared_ptr<TTxController::ITransactionOperator>& op) const {
-        auto opActual = GetTxOperator(op->GetTxId());
-        return !!opActual && (ui64)opActual.get() == (ui64)op.get();
-    }
-
     bool Load(NTabletFlatExecutor::TTransactionContext& txc);
 
     [[nodiscard]] std::shared_ptr<TTxController::ITransactionOperator> UpdateTxSourceInfo(const TFullTxInfo& tx, NTabletFlatExecutor::TTransactionContext& txc);
 
-    [[nodiscard]] std::shared_ptr<TTxController::ITransactionOperator> StartProposeOnExecute(const TBasicTxInfo& txInfo, const TString& txBody, const TActorId source, const ui64 cookie, const std::optional<TMessageSeqNo>& seqNo, NTabletFlatExecutor::TTransactionContext& txc);
+    [[nodiscard]] std::shared_ptr<TTxController::ITransactionOperator> StartProposeOnExecute(
+        const TTxController::TTxInfo& txInfo, const TString& txBody, NTabletFlatExecutor::TTransactionContext& txc);
     void StartProposeOnComplete(const ui64 txId, const TActorContext& ctx);
 
     void FinishProposeOnExecute(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);

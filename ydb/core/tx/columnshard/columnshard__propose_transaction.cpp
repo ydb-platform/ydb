@@ -11,6 +11,8 @@ using namespace NTabletFlatExecutor;
 class TTxProposeTransaction : public NTabletFlatExecutor::TTransactionBase<TColumnShard> {
 private:
     using TBase = NTabletFlatExecutor::TTransactionBase<TColumnShard>;
+    std::optional<TTxController::TTxInfo> TxInfo;
+
 public:
     TTxProposeTransaction(TColumnShard* self, TEvColumnShard::TEvProposeTransaction::TPtr& ev)
         : TBase(self)
@@ -57,7 +59,8 @@ public:
             seqNo.DeserializeFromProto(Ev->Get()->Record.GetSeqNo()).Validate();
             msgSeqNo = seqNo;
         }
-        TxOperator = Self->GetProgressTxController().StartProposeOnExecute(TTxController::TBasicTxInfo(txKind, txId), txBody, Ev->Get()->GetSource(), Ev->Cookie, msgSeqNo, txc);
+        TxInfo.emplace(txKind, txId, Ev->Get()->GetSource(), Ev->Cookie, msgSeqNo);
+        TxOperator = Self->GetProgressTxController().StartProposeOnExecute(*TxInfo, txBody, txc);
         return true;
     }
 
@@ -67,12 +70,13 @@ public:
             return;
         }
         AFL_VERIFY(!!TxOperator);
+        AFL_VERIFY(!!TxInfo);
         const ui64 txId = record.GetTxId();
         NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("tablet_id", Self->TabletID())("tx_id", txId)("this", (ui64)this);
         if (TxOperator->IsFail()) {
             TxOperator->SendReply(*Self, ctx);
         } else {
-            if (!Self->GetProgressTxController().IsActualOperator(TxOperator)) {
+            if (!(*TxInfo == TxOperator->GetTxInfo())) {
                 return;
             }
             if (TxOperator->IsAsync()) {

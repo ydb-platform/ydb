@@ -1,11 +1,11 @@
-CREATE OBJECT ydb_local_password (TYPE SECRET) WITH (value = password);
+CREATE OBJECT local_password (TYPE SECRET) WITH (value = "123456");
 
-CREATE EXTERNAL DATA SOURCE mr_nvme_testing_01_ydb_native WITH (
+CREATE EXTERNAL DATA SOURCE mr_nvme_testing_08_greenplum_native WITH (
     SOURCE_TYPE="Greenplum",
-    LOCATION="localhost:2136",
+    LOCATION="0.0.0.0:32806",
     AUTH_METHOD="BASIC",
-    LOGIN="admin",
-    DATABASE_NAME="local",
-    PASSWORD_SECRET_NAME="ydb_local_password",
+    LOGIN="gpadmin",
+    DATABASE_NAME="template1",
+    PASSWORD_SECRET_NAME="local_password",
     PROTOCOL="NATIVE"
 );

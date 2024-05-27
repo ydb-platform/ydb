@@ -322,6 +322,18 @@ namespace NYql {
                     break;
                 case NYql::NConnector::NApi::MYSQL:
                     break;
+                case NYql::NConnector::NApi::GREENPLUM: {
+                    TString schema;
+                    const auto it = clusterConfig.GetDataSourceOptions().find("schema");
+                    if (it != clusterConfig.GetDataSourceOptions().end()) {
+                        schema = it->second;
+                    }
+                    if (!schema) {
+                        schema = "public";
+                    }
+
+                    request.mutable_data_source_instance()->mutable_pg_options()->set_schema(schema);
+                }break;
                 case NYql::NConnector::NApi::POSTGRESQL: {
                     // for backward compability set schema "public" by default
                     // TODO: simplify during https://st.yandex-team.ru/YQ-2494

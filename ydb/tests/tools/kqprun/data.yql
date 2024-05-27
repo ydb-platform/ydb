@@ -1,1 +1,1 @@
-SELECT * FROM external_data_source.users
+SELECT * FROM mr_nvme_testing_08_greenplum_native.simple

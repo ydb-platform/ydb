@@ -11,88 +11,271 @@
 using namespace NYql;
 using namespace NYql::NUdf;
 
-SIMPLE_STRICT_UDF_WITH_OPTIONAL_ARGS(TToBinaryString, TOptional<char*>(TAutoMap<TListType<float>>, TOptional<const char*>), 1) {
-    const TUnboxedValuePod x = args[0];
+static constexpr const char TagStoredVector[] = "StoredVector";
 
-    EFormat format = EFormat::FloatVector;
-    if (args[1]) {
-        const TStringRef formatStr = args[1].AsStringRef();
-        if (formatStr == "float")
-            format = EFormat::FloatVector;
-        else if (formatStr == "byte")
-            format = EFormat::Uint8Vector;
-        else if (formatStr == "bit")
-            format = EFormat::BitVector;
-        else
-            return {};
+static constexpr const char TagFloatVector[] = "FloatVector";
+using TFloatVector = TTagged<const char*, TagFloatVector>;
+static constexpr const char TagByteVector[] = "ByteVector";
+using TByteVector = TTagged<const char*, TagByteVector>;
+static constexpr const char TagBitVector[] = "BitVector";
+using TBitVector = TTagged<const char*, TagBitVector>;
+
+SIMPLE_STRICT_UDF(TToBinaryStringFloat, TFloatVector(TAutoMap<TListType<float>>)) {
+    return TKnnVectorSerializer<float>::Serialize(valueBuilder, args[0]);
+}
+
+SIMPLE_STRICT_UDF(TToBinaryStringByte, TByteVector(TAutoMap<TListType<float>>)) {
+    return TKnnVectorSerializer<ui8>::Serialize(valueBuilder, args[0]);
+}
+
+SIMPLE_STRICT_UDF(TToBinaryStringBit, TBitVector(TAutoMap<TListType<float>>)) {
+    return TKnnBitVectorSerializer::Serialize(valueBuilder, args[0]);
+}
+
+template <typename Derived>
+class TMultiSignatureBase: public TBoxedValue {
+public:
+    using TBlockType = void;
+    using TTypeAwareMarker = void;
+
+    explicit TMultiSignatureBase(IFunctionTypeInfoBuilder& builder)
+        : Pos_{GetSourcePosition(builder)}
+    {
     }
 
-    return TKnnSerializerFacade::Serialize(format, valueBuilder, x);
-}
+    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final try {
+        return static_cast<const Derived&>(*this).RunImpl(valueBuilder, args);
+    } catch (const std::exception&) {
+        TStringBuilder sb;
+        sb << Pos_ << " ";
+        sb << CurrentExceptionMessage();
+        sb << Endl << "[" << TStringBuf(Derived::Name()) << "]";
+        UdfTerminate(sb.c_str());
+    }
 
-SIMPLE_STRICT_UDF(TFromBinaryString, TOptional<TListType<float>>(TAutoMap<const char*>)) {
-    TStringRef str = args[0].AsStringRef();
+    TSourcePosition GetPos() const {
+        return Pos_;
+    }
 
-    return TKnnSerializerFacade::Deserialize(valueBuilder, str);
-}
+protected:
+    static TStringRef GetArg(ITypeInfoHelper& typeInfoHelper, const TType* argType) {
+        const TTaggedTypeInspector tagged{typeInfoHelper, argType};
+        TStringRef tag = TagStoredVector;
+        if (tagged) {
+            tag = tagged.GetTag();
+            argType = tagged.GetBaseType();
+        }
+        const TDataTypeInspector data{typeInfoHelper, argType};
+        if (!data || data.GetTypeId() != TDataType<const char*>::Id) {
+            return {};
+        }
+        return tag;
+    }
 
-SIMPLE_STRICT_UDF(TInnerProductSimilarity, TOptional<float>(TAutoMap<const char*>, TAutoMap<const char*>)) {
-    Y_UNUSED(valueBuilder);
+    static bool ValidTag(const TStringRef& tag, std::initializer_list<TStringRef>&& allowedTags) {
+        return std::count(allowedTags.begin(), allowedTags.end(), tag) != 0;
+    }
 
-    const auto ret = KnnDotProduct(args[0].AsStringRef(), args[1].AsStringRef());
-    if (Y_UNLIKELY(!ret))
-        return {};
+private:
+    TSourcePosition Pos_;
+};
 
-    return TUnboxedValuePod{ret.value()};
-}
+class TFloatFromBinaryString: public TMultiSignatureBase<TFloatFromBinaryString> {
+public:
+    using TMultiSignatureBase<TFloatFromBinaryString>::TMultiSignatureBase;
 
-SIMPLE_STRICT_UDF(TCosineSimilarity, TOptional<float>(TAutoMap<const char*>, TAutoMap<const char*>)) {
-    Y_UNUSED(valueBuilder);
+    static const TStringRef& Name() {
+        static auto name = TStringRef::Of("FloatFromBinaryString");
+        return name;
+    }
 
-    const auto ret = KnnTriWayDotProduct(args[0].AsStringRef(), args[1].AsStringRef());
-    if (Y_UNLIKELY(!ret))
-        return {};
+    TUnboxedValue RunImpl(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
+        return TKnnSerializerFacade::Deserialize(valueBuilder, args[0].AsStringRef());
+    }
 
-    const auto [ll, lr, rr] = ret.value();
-    const float cosine = lr / std::sqrt(ll * rr);
-    return TUnboxedValuePod{cosine};
-}
+    static bool DeclareSignature(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {
+        if (Name() != name) {
+            return false;
+        }
 
-SIMPLE_STRICT_UDF(TCosineDistance, TOptional<float>(TAutoMap<const char*>, TAutoMap<const char*>)) {
-    Y_UNUSED(valueBuilder);
+        auto typeInfoHelper = builder.TypeInfoHelper();
+        Y_ENSURE(userType);
+        TTupleTypeInspector tuple{*typeInfoHelper, userType};
+        Y_ENSURE(tuple);
+        Y_ENSURE(tuple.GetElementsCount() > 0);
+        TTupleTypeInspector argsTuple{*typeInfoHelper, tuple.GetElementType(0)};
+        Y_ENSURE(argsTuple);
+        if (argsTuple.GetElementsCount() != 1) {
+            builder.SetError("Expected one argument");
+            return true;
+        }
 
-    const auto ret = KnnTriWayDotProduct(args[0].AsStringRef(), args[1].AsStringRef());
-    if (Y_UNLIKELY(!ret))
-        return {};
+        auto argType = argsTuple.GetElementType(0);
+        auto argTag = GetArg(*typeInfoHelper, argType);
+        if (!ValidTag(argTag, {TagStoredVector, TagFloatVector, TagByteVector})) {
+            builder.SetError("Expected argument is string from ToBinaryString[Float|Byte]");
+            return true;
+        }
 
-    const auto [ll, lr, rr] = ret.value();
-    const float cosine = lr / std::sqrt(ll * rr);
-    return TUnboxedValuePod{1 - cosine};
-}
+        builder.UserType(userType);
+        builder.Args(1)->Add(argType).Flags(ICallablePayload::TArgumentFlags::AutoMap);
+        builder.Returns<TOptional<TListType<float>>>().IsStrict();
 
-SIMPLE_STRICT_UDF(TManhattanDistance, TOptional<float>(TAutoMap<const char*>, TAutoMap<const char*>)) {
-    Y_UNUSED(valueBuilder);
+        if (!typesOnly) {
+            builder.Implementation(new TFloatFromBinaryString(builder));
+        }
+        return true;
+    }
+};
 
-    const auto ret = KnnManhattanDistance(args[0].AsStringRef(), args[1].AsStringRef());
-    if (Y_UNLIKELY(!ret))
-        return {};
+template <typename Derived>
+class TDistanceBase: public TMultiSignatureBase<Derived> {
+    using Base = TMultiSignatureBase<Derived>;
 
-    return TUnboxedValuePod{ret.value()};
-}
+public:
+    using Base::Base;
 
-SIMPLE_STRICT_UDF(TEuclideanDistance, TOptional<float>(TAutoMap<const char*>, TAutoMap<const char*>)) {
-    Y_UNUSED(valueBuilder);
+    static bool DeclareSignature(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {
+        if (Derived::Name() != name) {
+            return false;
+        }
 
-    const auto ret = KnnEuclideanDistance(args[0].AsStringRef(), args[1].AsStringRef());
-    if (Y_UNLIKELY(!ret))
-        return {};
+        auto typeInfoHelper = builder.TypeInfoHelper();
+        Y_ENSURE(userType);
+        TTupleTypeInspector tuple{*typeInfoHelper, userType};
+        Y_ENSURE(tuple);
+        Y_ENSURE(tuple.GetElementsCount() > 0);
+        TTupleTypeInspector argsTuple{*typeInfoHelper, tuple.GetElementType(0)};
+        Y_ENSURE(argsTuple);
+        if (argsTuple.GetElementsCount() != 2) {
+            builder.SetError("Expected two arguments");
+            return true;
+        }
 
-    return TUnboxedValuePod{ret.value()};
-}
+        auto arg0Type = argsTuple.GetElementType(0);
+        auto arg0Tag = Base::GetArg(*typeInfoHelper, arg0Type);
+        auto arg1Type = argsTuple.GetElementType(1);
+        auto arg1Tag = Base::GetArg(*typeInfoHelper, arg1Type);
+
+        if (!Base::ValidTag(arg0Tag, {TagStoredVector, TagFloatVector, TagByteVector, TagBitVector}) ||
+            !Base::ValidTag(arg1Tag, {TagStoredVector, TagFloatVector, TagByteVector, TagBitVector})) {
+            builder.SetError("Expected arguments are strings from ToBinaryString[Float|Byte|Bit]");
+            return true;
+        }
+
+        if (arg0Tag != arg1Tag && arg0Tag != TagStoredVector && arg1Tag != TagStoredVector) {
+            builder.SetError("Expected arguments should have same tags");
+            return true;
+        }
+
+        builder.UserType(userType);
+        builder.Args(2)->Add(arg0Type).Flags(ICallablePayload::TArgumentFlags::AutoMap).Add(arg1Type).Flags(ICallablePayload::TArgumentFlags::AutoMap);
+        builder.Returns<TOptional<float>>().IsStrict();
+
+        if (!typesOnly) {
+            builder.Implementation(new Derived(builder));
+        }
+        return true;
+    }
+};
+
+class TInnerProductSimilarity: public TDistanceBase<TInnerProductSimilarity> {
+public:
+    using TDistanceBase::TDistanceBase;
+
+    static const TStringRef& Name() {
+        static auto name = TStringRef::Of("InnerProductSimilarity");
+        return name;
+    }
+
+    TUnboxedValue RunImpl(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
+        Y_UNUSED(valueBuilder);
+        const auto ret = KnnDotProduct(args[0].AsStringRef(), args[1].AsStringRef());
+        if (Y_UNLIKELY(!ret))
+            return {};
+        return TUnboxedValuePod{*ret};
+    }
+};
+
+class TCosineSimilarity: public TDistanceBase<TCosineSimilarity> {
+public:
+    using TDistanceBase::TDistanceBase;
+
+    static const TStringRef& Name() {
+        static auto name = TStringRef::Of("CosineSimilarity");
+        return name;
+    }
+
+    TUnboxedValue RunImpl(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
+        Y_UNUSED(valueBuilder);
+        const auto ret = KnnCosineSimilarity(args[0].AsStringRef(), args[1].AsStringRef());
+        if (Y_UNLIKELY(!ret))
+            return {};
+        return TUnboxedValuePod{*ret};
+    }
+};
+
+class TCosineDistance: public TDistanceBase<TCosineDistance> {
+public:
+    using TDistanceBase::TDistanceBase;
+
+    static const TStringRef& Name() {
+        static auto name = TStringRef::Of("CosineDistance");
+        return name;
+    }
+
+    TUnboxedValue RunImpl(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
+        Y_UNUSED(valueBuilder);
+        const auto ret = KnnCosineSimilarity(args[0].AsStringRef(), args[1].AsStringRef());
+        if (Y_UNLIKELY(!ret))
+            return {};
+        return TUnboxedValuePod{1 - *ret};
+    }
+};
+
+class TManhattanDistance: public TDistanceBase<TManhattanDistance> {
+public:
+    using TDistanceBase::TDistanceBase;
+
+    static const TStringRef& Name() {
+        static auto name = TStringRef::Of("ManhattanDistance");
+        return name;
+    }
+
+    TUnboxedValue RunImpl(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
+        Y_UNUSED(valueBuilder);
+        const auto ret = KnnManhattanDistance(args[0].AsStringRef(), args[1].AsStringRef());
+        if (Y_UNLIKELY(!ret))
+            return {};
+        return TUnboxedValuePod{*ret};
+    }
+};
+
+class TEuclideanDistance: public TDistanceBase<TEuclideanDistance> {
+public:
+    using TDistanceBase::TDistanceBase;
+
+    static const TStringRef& Name() {
+        static auto name = TStringRef::Of("EuclideanDistance");
+        return name;
+    }
+
+    TUnboxedValue RunImpl(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
+        Y_UNUSED(valueBuilder);
+        const auto ret = KnnEuclideanDistance(args[0].AsStringRef(), args[1].AsStringRef());
+        if (Y_UNLIKELY(!ret))
+            return {};
+        return TUnboxedValuePod{*ret};
+    }
+};
+
+// TODO IR for Distance functions?
 
 SIMPLE_MODULE(TKnnModule,
-              TFromBinaryString,
-              TToBinaryString,
+              TToBinaryStringFloat,
+              TToBinaryStringByte,
+              TToBinaryStringBit,
+              TFloatFromBinaryString,
               TInnerProductSimilarity,
               TCosineSimilarity,
               TCosineDistance,

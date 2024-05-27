@@ -14,9 +14,39 @@
             "uri": "file://test.test_CosineSimilarity_/results.txt"
         }
     ],
-    "test.test[DeserializationError]": [
+    "test.test[ErrorDistanceInvalidFormat]": [
         {
-            "uri": "file://test.test_DeserializationError_/results.txt"
+            "uri": "file://test.test_ErrorDistanceInvalidFormat_/results.txt"
+        }
+    ],
+    "test.test[ErrorDistanceSameFormat]": [
+        {
+            "uri": "file://test.test_ErrorDistanceSameFormat_/results.txt"
+        }
+    ],
+    "test.test[ErrorDistanceSameSize]": [
+        {
+            "uri": "file://test.test_ErrorDistanceSameSize_/results.txt"
+        }
+    ],
+    "test.test[ErrorDistanceSameTag]": [
+        {
+            "uri": "file://test.test_ErrorDistanceSameTag_/extracted"
+        }
+    ],
+    "test.test[ErrorFloatFromBinaryStringBitVector]": [
+        {
+            "uri": "file://test.test_ErrorFloatFromBinaryStringBitVector_/extracted"
+        }
+    ],
+    "test.test[ErrorFloatFromBinaryStringEmpty]": [
+        {
+            "uri": "file://test.test_ErrorFloatFromBinaryStringEmpty_/results.txt"
+        }
+    ],
+    "test.test[ErrorFloatFromBinaryStringInvalid]": [
+        {
+            "uri": "file://test.test_ErrorFloatFromBinaryStringInvalid_/results.txt"
         }
     ],
     "test.test[EuclideanDistance]": [

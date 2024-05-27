@@ -10,7 +10,8 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
+                                    "TaggedType";
+                                    "FloatVector";
                                     [
                                         "DataType";
                                         "String"
@@ -23,9 +24,7 @@
                 "Data" = [
                     [
                         [
-                            [
-                                "mpmZPzMzE0CamVlAAACQQDMzs0AB"
-                            ]
+                            "mpmZPzMzE0CamVlAAACQQDMzs0AB"
                         ]
                     ]
                 ]

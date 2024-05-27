@@ -10,7 +10,8 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
+                                    "TaggedType";
+                                    "ByteVector";
                                     [
                                         "DataType";
                                         "String"
@@ -22,9 +23,7 @@
                 ];
                 "Data" = [
                     [
-                        [
-                            "\1\2\3\4\5\2"
-                        ]
+                        "\1\2\3\4\5\2"
                     ]
                 ]
             }
@@ -41,11 +40,8 @@
                             [
                                 "column0";
                                 [
-                                    "OptionalType";
-                                    [
-                                        "DataType";
-                                        "Bool"
-                                    ]
+                                    "DataType";
+                                    "Bool"
                                 ]
                             ]
                         ]
@@ -53,9 +49,7 @@
                 ];
                 "Data" = [
                     [
-                        [
-                            %true
-                        ]
+                        %true
                     ]
                 ]
             }
@@ -125,7 +119,100 @@
                 "Data" = [
                     [
                         [
-                            "0.025368094"
+                            "0"
+                        ]
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Float"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            "0"
+                        ]
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Float"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            "0"
+                        ]
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Float"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            "0"
                         ]
                     ]
                 ]

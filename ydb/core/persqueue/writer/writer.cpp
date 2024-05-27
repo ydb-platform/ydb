@@ -308,6 +308,12 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         }
     }
 
+    void SetNeedSupportivePartition(NKikimrClient::TPersQueuePartitionRequest& request, bool value) {
+        if (HasWriteId()) {
+            request.SetNeedSupportivePartition(value);
+        }
+    }
+
     /// GetOwnership
 
     void GetOwnership() {
@@ -319,14 +325,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         cmd.SetForce(true);
 
         SetWriteId(request);
-        // While waiting for a response from KQP, the recording session could
-        // send the following messages. They are in the "Pending" queue and 
-        // the FirstWrite flag will be reset
-        if (Pending) {
-            request.SetFirstWrite(Pending.begin()->second.GetPartitionRequest().GetFirstWrite());
-        } else {
-            request.SetFirstWrite(FirstWrite);
-        }
+        SetNeedSupportivePartition(request, true);
 
         NTabletPipe::SendData(SelfId(), PipeClient, ev.Release());
         Become(&TThis::StateGetOwnership);
@@ -539,8 +538,6 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
         auto& request = *record.MutablePartitionRequest();
         SetWriteId(request);
-        request.SetFirstWrite(FirstWrite);
-        FirstWrite = false;
 
         Pending.emplace(cookie, std::move(record));
 
@@ -573,7 +570,6 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
             request.SetMessageNo(MessageNo++);
 
             SetWriteId(request);
-            request.SetFirstWrite(it->second.MutablePartitionRequest()->GetFirstWrite());
 
             auto& cmd = *request.MutableCmdReserveBytes();
             cmd.SetSize(it->second.ByteSize());
@@ -928,7 +924,6 @@ private:
 
     ui64 WriteId = INVALID_WRITE_ID;
     ui32 SupportivePartitionId = INVALID_PARTITION_ID;
-    bool FirstWrite = true;
 
     using IRetryPolicy = IRetryPolicy<Ydb::StatusIds::StatusCode>;
     using IRetryState = IRetryPolicy::IRetryState;

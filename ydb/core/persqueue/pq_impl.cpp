@@ -2002,7 +2002,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
                     " Write in transaction." <<
                     " Partition: " << req.GetPartition() <<
                     ", WriteId: " << req.GetWriteId() <<
-                    ", FirstWrite: " << req.GetFirstWrite());
+                    ", NeedSupportivePartition: " << req.GetNeedSupportivePartition());
     }
 
     for (ui32 i = 0; i < req.CmdWriteSize(); ++i) {
@@ -2200,7 +2200,7 @@ void TPersQueue::HandleReserveBytesRequest(const ui64 responseCookie, const TAct
                     " Reserve bytes in transaction." <<
                     " Partition: " << req.GetPartition() <<
                     ", WriteId: " << req.GetWriteId() <<
-                    ", FirstWrite: " << req.GetFirstWrite());
+                    ", NeedSupportivePartition: " << req.GetNeedSupportivePartition());
     }
 
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_RESERVE_BYTES);
@@ -2622,7 +2622,6 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
 
     ui64 writeId = req.GetWriteId();
     ui32 originalPartitionId = req.GetPartition();
-    bool firstWrite = req.GetFirstWrite();
 
     if (TxWrites.contains(writeId) && TxWrites.at(writeId).Partitions.contains(originalPartitionId)) {
         //
@@ -2653,7 +2652,7 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
                                                    sender);
         }
     } else {
-        if (!firstWrite) {
+        if (!req.GetNeedSupportivePartition()) {
             ReplyError(ctx,
                        responseCookie,
                        NPersQueue::NErrorCode::BAD_REQUEST,

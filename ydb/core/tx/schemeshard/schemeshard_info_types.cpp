@@ -189,17 +189,17 @@ void TSubDomainInfo::CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskS
 }
 
 void TSubDomainInfo::CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskSpaceQuotas& prev, const TDiskSpaceQuotas& next) {
-    i64 hardDelta = i64(next.HardQuota) - i64(prev.HardQuota);
+    i64 hardDelta = next.HardQuota - prev.HardQuota;
     if (hardDelta != 0) {
         counters->ChangeDiskSpaceHardQuotaBytes(hardDelta);
     }
-    i64 softDelta = i64(next.SoftQuota) - i64(prev.SoftQuota);
+    i64 softDelta = next.SoftQuota - prev.SoftQuota;
     if (softDelta != 0) {
         counters->ChangeDiskSpaceSoftQuotaBytes(softDelta);
     }
     for (const auto& [poolKind, newPoolQuotas] : next.StoragePoolsQuotas) {
         const auto* oldPoolQuotas = prev.StoragePoolsQuotas.FindPtr(poolKind);
-        i64 delta = i64(newPoolQuotas.SoftQuota) - (oldPoolQuotas ? i64(oldPoolQuotas->SoftQuota) : 0);
+        i64 delta = newPoolQuotas.SoftQuota - (oldPoolQuotas ? oldPoolQuotas->SoftQuota : 0u);
         if (delta != 0) {
             counters->ChangeDiskSpaceSoftQuotaBytes(GetUserFacingStorageType(poolKind), delta);
         }

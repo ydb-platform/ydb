@@ -935,10 +935,6 @@ public:
                             AddFrom(*p, fromList);
                             traverseNodeStack.pop();
                             oneJoinGroup.push_back(QL(QA("push")));
-<<<<<<< HEAD
-=======
-                            Cerr << "push\n";
->>>>>>> 945353a7bef68f6317c9e86862e699f9194c4181
                         } else {
                             auto join = CAST_NODE(JoinExpr, top.first);
                             if (!join->larg || !join->rarg) {

@@ -52,8 +52,8 @@ TDirectReadSessionManager::TDirectReadSessionManager(
     TServerSessionId serverSessionId,
     const NYdb::NTopic::TReadSessionSettings settings,
     // TSingleClusterReadSessionPtr<false> singleClusterReadSession,
-    std::function<void(Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&& response, TDeferredActions<false>& deferred)> onDirectReadDoneCallback,
-    std::function<void(TSessionClosedEvent&& closeEvent)> onAbortSessionCallback,
+    TDirectReadSession::TOnDirectReadDoneCallback onDirectReadDoneCallback,
+    TDirectReadSession::TOnAbortSessionCallback onAbortSessionCallback,
     NYdbGrpc::IQueueClientContextPtr clientContext,
     IDirectReadConnectionFactoryPtr connectionFactory,
     TLog log
@@ -152,8 +152,8 @@ TDirectReadSession::TDirectReadSession(
     TString serverSessionId,
     const NYdb::NTopic::TReadSessionSettings settings,
     // TSingleClusterReadSessionPtr<false> singleClusterReadSession,
-    std::function<void(Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&& response, TDeferredActions<false>& deferred)> onDirectReadDoneCallback,
-    std::function<void(TSessionClosedEvent&& closeEvent)> onAbortSessionCallback,
+    TOnDirectReadDoneCallback onDirectReadDoneCallback,
+    TOnAbortSessionCallback onAbortSessionCallback,
     NYdbGrpc::IQueueClientContextPtr clientContext,
     IDirectReadConnectionFactoryPtr connectionFactory,
     TLog log

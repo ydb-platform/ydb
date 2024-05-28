@@ -66,14 +66,16 @@ class TDirectReadSession : public TEnableSelfContext<TDirectReadSession> {
 public:
     using TSelf = TDirectReadSession;
     using TPtr = std::shared_ptr<TSelf>;
+    using TOnDirectReadDoneCallback = std::function<void(Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&& response, TDeferredActions<false>& deferred)>;
+    using TOnAbortSessionCallback = std::function<void(TSessionClosedEvent&& closeEvent)>;
 
     TDirectReadSession(
         TNodeId node,
         TString serverSessionId,
         const NYdb::NTopic::TReadSessionSettings settings,
         // TSingleClusterReadSessionPtr<false> singleClusterReadSession,
-        std::function<void(Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&& response, TDeferredActions<false>& deferred)> onDirectReadDoneCallback,
-        std::function<void(TSessionClosedEvent&& closeEvent)> onAbortSessionCallback,
+        TOnDirectReadDoneCallback onDirectReadDoneCallback,
+        TOnAbortSessionCallback onAbortSessionCallback,
         NYdbGrpc::IQueueClientContextPtr clientContext,
         IDirectReadConnectionFactoryPtr connectionFactory,
         TLog log
@@ -146,8 +148,8 @@ private:
 
     const NYdb::NTopic::TReadSessionSettings ReadSessionSettings;
     // TSingleClusterReadSessionPtr<false> SingleClusterReadSession;
-    std::function<void(Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&& response, TDeferredActions<false>& deferred)> OnDirectReadDoneCallback;
-    std::function<void(TSessionClosedEvent&& closeEvent)> OnAbortSessionCallback;
+    TOnDirectReadDoneCallback OnDirectReadDoneCallback;
+    TOnAbortSessionCallback OnAbortSessionCallback;
     TServerSessionId ServerSessionId;
     IDirectReadConnection::TPtr Connection;
     IDirectReadConnectionFactoryPtr ConnectionFactory;
@@ -170,8 +172,8 @@ public:
         TServerSessionId serverSessionId,
         const NYdb::NTopic::TReadSessionSettings,
         // TSingleClusterReadSessionPtr<false> singleClusterReadSession,
-        std::function<void(Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&& response, TDeferredActions<false>& deferred)> onDirectReadDoneCallback,
-        std::function<void(TSessionClosedEvent&& closeEvent)> onAbortSessionCallback,
+        TDirectReadSession::TOnDirectReadDoneCallback onDirectReadDoneCallback,
+        TDirectReadSession::TOnAbortSessionCallback onAbortSessionCallback,
         NYdbGrpc::IQueueClientContextPtr clientContext,
         IDirectReadConnectionFactoryPtr connectionFactory,
         TLog log
@@ -196,8 +198,8 @@ private:
     const NYdb::NTopic::TReadSessionSettings ReadSessionSettings;
     TServerSessionId ServerSessionId;
     // TSingleClusterReadSessionPtr<false> SingleClusterReadSession;
-    std::function<void(Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&& response, TDeferredActions<false>& deferred)> OnDirectReadDoneCallback;
-    std::function<void(TSessionClosedEvent&& closeEvent)> OnAbortSessionCallback;
+    TDirectReadSession::TOnDirectReadDoneCallback OnDirectReadDoneCallback;
+    TDirectReadSession::TOnAbortSessionCallback OnAbortSessionCallback;
     NYdbGrpc::IQueueClientContextPtr ClientContext;
     IDirectReadConnectionFactoryPtr ConnectionFactory;
     TNodeSessionsMap NodeSessions;

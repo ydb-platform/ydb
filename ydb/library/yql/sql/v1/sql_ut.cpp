@@ -1885,7 +1885,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         auto res = SqlToYql(req);
         UNIT_ASSERT(res.Root);
         const auto programm = GetPrettyPrint(res);
-        auto expected = "(Apply (lambda '(\"$foo bar\" \"$x\")";
+        auto expected = "(lambda '(\"$foo bar\" \"$x\")";
         UNIT_ASSERT(programm.find(expected) != TString::npos);
     }
 
@@ -5164,6 +5164,7 @@ Y_UNIT_TEST_SUITE(JsonPassing) {
 
         for (const auto& function : functions) {
             const auto query = Sprintf(R"(
+                pragma CompactNamedExprs;
                 $json = CAST(@@{"key": 1238}@@ as Json);
                 SELECT %s(
                     $json,
@@ -5187,7 +5188,7 @@ Y_UNIT_TEST_SUITE(JsonPassing) {
                 UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos, line.find(R"('('"var2" (Double '"1.234")))"), "Cannot find `var2`");
                 UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos, line.find(R"('('"var3" (SafeCast (Int32 '"1") (DataType 'Int64))))"), "Cannot find `var3`");
                 UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos, line.find(R"('('"var4" (Bool '"true")))"), "Cannot find `var4`");
-                UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos, line.find(R"('('"var5" (SafeCast (String '@@{"key": 1238}@@) (DataType 'Json))))"), "Cannot find `var5`");
+                UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos, line.find(R"('('"var5" namedexprnode0))"), "Cannot find `var5`");
             };
 
             TWordCountHive elementStat({"JsonVariables"});
@@ -6753,5 +6754,15 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
         UNIT_ASSERT_VALUES_EQUAL(0, elementStat["SqlAccess"]);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["SqlProjectItem"]);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Read!"]);
+    }
+}
+
+Y_UNIT_TEST_SUITE(CompactNamedExprs) {
+    Y_UNIT_TEST(TableRowInWrongContext) {
+        ExpectFailWithError(
+            "pragma CompactNamedExprs;\n"
+            "$foo = TableRow();\n"
+            "select $foo from plato.Input;\n",
+            "<main>:2:8: Error: TableRow requires data source\n");
     }
 }

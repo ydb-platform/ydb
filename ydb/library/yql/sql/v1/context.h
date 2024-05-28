@@ -315,6 +315,7 @@ namespace NSQLTranslationV1 {
         bool BlockEngineForce = false;
         bool UnorderedResult = false;
         ui64 ParallelModeCount = 0;
+        bool CompactNamedExprs = false;
     };
 
     class TColumnRefScope {

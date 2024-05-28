@@ -1515,7 +1515,7 @@ bool TSqlExpression::SqlLambdaParams(const TNodePtr& node, TVector<TSymbolNameWi
     args.clear();
     optionalArgumentsCount = 0;
     auto errMsg = TStringBuf("Invalid lambda arguments syntax. Lambda arguments should start with '$' as named value.");
-    auto tupleNodePtr = dynamic_cast<TTupleNode*>(node.Get());
+    auto tupleNodePtr = node->GetTupleNode();;
     if (!tupleNodePtr) {
         Ctx.Error(node->GetPos()) << errMsg;
         return false;

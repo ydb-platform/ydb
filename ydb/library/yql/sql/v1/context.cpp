@@ -60,6 +60,7 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"BlockEngineEnable", &TContext::BlockEngineEnable},
     {"BlockEngineForce", &TContext::BlockEngineForce},
     {"UnorderedResult", &TContext::UnorderedResult},
+    {"CompactNamedExprs", &TContext::CompactNamedExprs},
 };
 
 typedef TMaybe<bool> TContext::*TPragmaMaybeField;

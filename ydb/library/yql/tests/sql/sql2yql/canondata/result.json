@@ -2988,6 +2988,20 @@
             "uri": "https://{canondata_backend}/1784117/d56ae82ad9d30397a41490647be1bd2124718f98/resource.tar.gz#test_sql2yql.test_binding-bind_select_/sql.yql"
         }
     ],
+    "test_sql2yql.test[binding-compact_named_exprs]": [
+        {
+            "checksum": "a773b156672b11373a9608855255ca6a",
+            "size": 1785,
+            "uri": "https://{canondata_backend}/1809005/b7945fe82426e7557a5cb23e4f8d7e62a7121d64/resource.tar.gz#test_sql2yql.test_binding-compact_named_exprs_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[binding-compact_named_subq_actions]": [
+        {
+            "checksum": "07d95d138d6a8f8408d9b97f3853a3fb",
+            "size": 6320,
+            "uri": "https://{canondata_backend}/1946324/346199389197bc9c043ccc12a40510ba4660b1a6/resource.tar.gz#test_sql2yql.test_binding-compact_named_subq_actions_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[binding-drop_binding]": [
         {
             "checksum": "75cf90a7c8914e5b41f1df89ab444492",
@@ -21592,6 +21606,20 @@
             "checksum": "ff5c3df6ad35bb633df7c587b5d186b4",
             "size": 129,
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_binding-bind_select_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[binding-compact_named_exprs]": [
+        {
+            "checksum": "35ad55137c3afe0b7dfb083f9366aaec",
+            "size": 162,
+            "uri": "https://{canondata_backend}/1809005/b7945fe82426e7557a5cb23e4f8d7e62a7121d64/resource.tar.gz#test_sql_format.test_binding-compact_named_exprs_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[binding-compact_named_subq_actions]": [
+        {
+            "checksum": "5253022e37bb40f5af0cea746efa0ca4",
+            "size": 702,
+            "uri": "https://{canondata_backend}/1946324/346199389197bc9c043ccc12a40510ba4660b1a6/resource.tar.gz#test_sql_format.test_binding-compact_named_subq_actions_/formatted.sql"
         }
     ],
     "test_sql_format.test[binding-drop_binding]": [

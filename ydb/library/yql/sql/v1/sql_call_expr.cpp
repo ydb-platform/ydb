@@ -38,7 +38,7 @@ TNodePtr TSqlCallExpr::BuildCall() {
         TVector<TNodePtr> args;
         bool warnOnYqlNameSpace = true;
 
-        TUdfNode* udf_node = Node ? dynamic_cast<TUdfNode*>(Node.Get()) : nullptr;
+        TUdfNode* udf_node = Node ? Node->GetUdfNode() : nullptr;
         if (udf_node) {
             if (!udf_node->DoInit(Ctx, nullptr)) {
                 return nullptr;

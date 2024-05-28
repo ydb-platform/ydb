@@ -192,7 +192,7 @@ namespace NYql {
                        NYql::TGenericClusterConfig& clusterConfig) {
         using namespace NConnector::NApi;
 
-        if (clusterConfig.GetKind() == EDataSourceKind::YDB) {
+        if (clusterConfig.GetKind() == EDataSourceKind::YDB || clusterConfig.GetKind() == EDataSourceKind::GREENPLUM) {
             clusterConfig.SetProtocol(EProtocol::NATIVE);
             return;
         }

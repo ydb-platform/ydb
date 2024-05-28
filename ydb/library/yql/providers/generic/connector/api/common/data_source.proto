@@ -50,6 +50,12 @@ message TPostgreSQLDataSourceOptions {
     string schema = 1;
 }
 
+// TGreenplumDataSourceOptions represents settings specific to Greenplum
+message TGreenplumSQLDataSourceOptions {
+    // Greenplum schema
+    string schema = 1;
+}
+
 // TClickhouseDataSourceOptions represents settings specific to Clickhouse
 message TClickhouseDataSourceOptions {
 }

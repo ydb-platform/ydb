@@ -6,6 +6,5 @@ CREATE EXTERNAL DATA SOURCE mr_nvme_testing_08_greenplum_native WITH (
     AUTH_METHOD="BASIC",
     LOGIN="gpadmin",
     DATABASE_NAME="template1",
-    PASSWORD_SECRET_NAME="local_password",
-    PROTOCOL="NATIVE"
+    PASSWORD_SECRET_NAME="local_password"
 );

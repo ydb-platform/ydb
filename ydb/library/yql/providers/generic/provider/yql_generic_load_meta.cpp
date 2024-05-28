@@ -334,7 +334,7 @@ namespace NYql {
                         schema = "public";
                     }
 
-                    request.mutable_data_source_instance()->mutable_pg_options()->set_schema(schema);
+                    request.mutable_data_source_instance()->mutable_gp_options()->set_schema(schema);
                 }break;
                 case NYql::NConnector::NApi::POSTGRESQL: {
                     // for backward compability set schema "public" by default

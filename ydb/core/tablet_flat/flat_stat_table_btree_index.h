@@ -12,10 +12,34 @@ using TFrames = NPage::TFrames;
 using TBtreeIndexNode = NPage::TBtreeIndexNode;
 using TChild = TBtreeIndexNode::TChild;
 using TCells = NPage::TCells;
+using TCellsIterable = TBtreeIndexNode::TCellsIterable;
+using TRecIdx = NPage::TRecIdx;
+
+struct TNodeState {
+    TPageId PageId;
+    TRowId BeginRowId;
+    TRowId EndRowId;
+    TCellsIterable BeginKey;
+    TCellsIterable EndKey;
+    std::optional<TBtreeIndexNode> Node;
+    std::optional<TRecIdx> Pos;
+
+    TNodeState(TPageId pageId, TRowId beginRowId, TRowId endRowId, TCellsIterable beginKey, TCellsIterable endKey)
+        : PageId(pageId)
+        , BeginRowId(beginRowId)
+        , EndRowId(endRowId)
+        , BeginKey(beginKey)
+        , EndKey(endKey)
+    {
+    }
+};
 
 ui64 GetPrevDataSize(const TPart* part, TGroupId groupId, TRowId rowId, IPages* env, bool& ready) {
     auto& meta = part->IndexPages.GetBTree(groupId);
 
+    if (rowId == 0) {
+        return 0;
+    }
     if (rowId >= meta.RowCount) {
         return meta.DataSize;
     }
@@ -46,6 +70,9 @@ ui64 GetPrevHistoricDataSize(const TPart* part, TGroupId groupId, TRowId rowId, 
 
     auto& meta = part->IndexPages.GetBTree(groupId);
 
+    if (rowId == 0) {
+        return 0;
+    }
     if (rowId >= part->IndexPages.GetBTree({}).RowCount) {
         historicRowId = meta.RowCount;
         return meta.DataSize;

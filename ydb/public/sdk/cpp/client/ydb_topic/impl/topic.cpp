@@ -9,6 +9,13 @@
 #include <util/string/cast.h>
 #include <util/string/subst.h>
 
+template<>
+void Out<NYdb::NTopic::TPartitionLocation>(IOutputStream& o, NYdb::NTopic::TPartitionLocation const& location) {
+    o << "{ NodeId: \"" << location.GetNodeId() << "\"";
+    o << ", Generation: " << location.GetGeneration() << "";
+    o << " }";
+}
+
 namespace NYdb::NTopic {
 
 class TCommonCodecsProvider {
@@ -375,6 +382,12 @@ TPartitionLocation::TPartitionLocation(const Ydb::Topic::PartitionLocation& part
 {
 }
 
+TPartitionLocation::TPartitionLocation(i32 nodeId, i64 generation)
+    : NodeId_(nodeId)
+    , Generation_(generation)
+{
+}
+
 i32 TPartitionLocation::GetNodeId() const {
     return NodeId_;
 }
@@ -395,6 +408,7 @@ TPartitionInfo::TPartitionInfo(const Ydb::Topic::DescribeTopicResult::PartitionI
     for (const auto& partId : partitionInfo.parent_partition_ids()) {
         ParentPartitionIds_.push_back(partId);
     }
+
     if (partitionInfo.has_partition_stats()) {
         PartitionStats_ = TPartitionStats{partitionInfo.partition_stats()};
     }

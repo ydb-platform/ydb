@@ -15,6 +15,7 @@
 add_subdirectory(json)
 add_subdirectory(protos)
 add_subdirectory(ut)
+add_subdirectory(yaml)
 
 get_built_tool_path(
   TOOL_rescompiler_bin
@@ -55,6 +56,7 @@ target_link_libraries(ydb-core-viewer PUBLIC
   core-tx-tx_proxy
   ydb-core-util
   core-viewer-json
+  core-viewer-yaml
   core-viewer-protos
   library-persqueue-topic_parser
   api-protos
@@ -62,6 +64,7 @@ target_link_libraries(ydb-core-viewer PUBLIC
   public-lib-json_value
   api-grpc
   cpp-client-ydb_types
+  contrib-libs-yaml-cpp
 )
 
 target_sources(ydb-core-viewer PRIVATE
@@ -162,6 +165,7 @@ target_link_libraries(ydb-core-viewer.global PUBLIC
   core-tx-tx_proxy
   ydb-core-util
   core-viewer-json
+  core-viewer-yaml
   core-viewer-protos
   library-persqueue-topic_parser
   api-protos
@@ -169,14 +173,15 @@ target_link_libraries(ydb-core-viewer.global PUBLIC
   public-lib-json_value
   api-grpc
   cpp-client-ydb_types
+  contrib-libs-yaml-cpp
 )
 
 target_sources(ydb-core-viewer.global PRIVATE
-  ${PROJECT_BINARY_DIR}/ydb/core/viewer/1cdc663173c623f6a008fb99b02498f1.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/viewer/6c9a1ef37d8b63e26a573579c716cfb5.cpp
 )
 
 resources(ydb-core-viewer.global
-  ${PROJECT_BINARY_DIR}/ydb/core/viewer/1cdc663173c623f6a008fb99b02498f1.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/viewer/6c9a1ef37d8b63e26a573579c716cfb5.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/index.html
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/viewer.js
@@ -222,53 +227,14 @@ resources(ydb-core-viewer.global
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/v2/vdisk.js
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/v2/viewer.css
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/v2/viewer.js
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/css/print.css
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/css/reset.css
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/css/screen.css
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/css/style.css
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/css/typography.css
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/fonts/DroidSans-Bold.ttf
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/fonts/DroidSans.ttf
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/images/collapse.gif
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/images/expand.gif
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/images/explorer_icons.png
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/images/favicon-16x16.png
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/images/favicon-32x32.png
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/images/favicon.ico
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/images/logo_small.png
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/images/throbber.gif
+  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/favicon-16x16.png
+  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/favicon-32x32.png
+  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/index.css
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/index.html
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/lang/ca.js
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/lang/en.js
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/lang/es.js
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/lang/fr.js
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/lang/geo.js
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/lang/it.js
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/lang/ja.js
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/lang/ko-kr.js
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/lang/pl.js
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/lang/pt.js
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/lang/ru.js
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/lang/tr.js
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/lang/translator.js
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/lang/zh-cn.js
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/lib/backbone-min.js
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/lib/es5-shim.js
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/lib/handlebars-4.0.5.js
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/lib/highlight.9.1.0.pack.js
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/lib/highlight.9.1.0.pack_extended.js
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/lib/jquery-1.8.0.min.js
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/lib/jquery.ba-bbq.min.js
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/lib/jquery.slideto.min.js
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/lib/jquery.wiggle.min.js
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/lib/js-yaml.min.js
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/lib/jsoneditor.min.js
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/lib/lodash.min.js
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/lib/marked.js
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/lib/object-assign-pollyfill.js
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/lib/sanitize-html.min.js
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/lib/swagger-oauth.js
-  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/swagger-ui.min.js
+  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/swagger-initializer.js
+  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/swagger-ui-bundle.js
+  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/swagger-ui.css
+  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/api/swagger-ui-standalone-preset.js
   KEYS
   viewer/index.html
   viewer/viewer.js
@@ -314,53 +280,14 @@ resources(ydb-core-viewer.global
   viewer/v2/vdisk.js
   viewer/v2/viewer.css
   viewer/v2/viewer.js
-  viewer/api/css/print.css
-  viewer/api/css/reset.css
-  viewer/api/css/screen.css
-  viewer/api/css/style.css
-  viewer/api/css/typography.css
-  viewer/api/fonts/DroidSans-Bold.ttf
-  viewer/api/fonts/DroidSans.ttf
-  viewer/api/images/collapse.gif
-  viewer/api/images/expand.gif
-  viewer/api/images/explorer_icons.png
-  viewer/api/images/favicon-16x16.png
-  viewer/api/images/favicon-32x32.png
-  viewer/api/images/favicon.ico
-  viewer/api/images/logo_small.png
-  viewer/api/images/throbber.gif
+  viewer/api/favicon-16x16.png
+  viewer/api/favicon-32x32.png
+  viewer/api/index.css
   viewer/api/index.html
-  viewer/api/lang/ca.js
-  viewer/api/lang/en.js
-  viewer/api/lang/es.js
-  viewer/api/lang/fr.js
-  viewer/api/lang/geo.js
-  viewer/api/lang/it.js
-  viewer/api/lang/ja.js
-  viewer/api/lang/ko-kr.js
-  viewer/api/lang/pl.js
-  viewer/api/lang/pt.js
-  viewer/api/lang/ru.js
-  viewer/api/lang/tr.js
-  viewer/api/lang/translator.js
-  viewer/api/lang/zh-cn.js
-  viewer/api/lib/backbone-min.js
-  viewer/api/lib/es5-shim.js
-  viewer/api/lib/handlebars-4.0.5.js
-  viewer/api/lib/highlight.9.1.0.pack.js
-  viewer/api/lib/highlight.9.1.0.pack_extended.js
-  viewer/api/lib/jquery-1.8.0.min.js
-  viewer/api/lib/jquery.ba-bbq.min.js
-  viewer/api/lib/jquery.slideto.min.js
-  viewer/api/lib/jquery.wiggle.min.js
-  viewer/api/lib/js-yaml.min.js
-  viewer/api/lib/jsoneditor.min.js
-  viewer/api/lib/lodash.min.js
-  viewer/api/lib/marked.js
-  viewer/api/lib/object-assign-pollyfill.js
-  viewer/api/lib/sanitize-html.min.js
-  viewer/api/lib/swagger-oauth.js
-  viewer/api/swagger-ui.min.js
+  viewer/api/swagger-initializer.js
+  viewer/api/swagger-ui-bundle.js
+  viewer/api/swagger-ui.css
+  viewer/api/swagger-ui-standalone-preset.js
 )
 
 option(YDB_EMBEDDED_UI_DEV_SNAPSHOT "Use latest dev version of embedded UI git repo" Off)

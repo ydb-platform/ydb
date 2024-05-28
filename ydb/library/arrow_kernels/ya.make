@@ -12,7 +12,6 @@ GENERATE_ENUM_SERIALIZATION(operations.h)
 
 SRCS(
     func_cast.cpp
-    ut_common.cpp
 )
 
 END()

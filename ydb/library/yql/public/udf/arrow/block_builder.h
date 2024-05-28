@@ -8,7 +8,6 @@
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <ydb/library/yql/public/udf/udf_value_builder.h>
 #include <ydb/library/yql/public/udf/udf_type_inspection.h>
-#include <ydb/library/yql/minikql/mkql_type_builder.h>
 
 #include <arrow/datum.h>
 #include <arrow/c/bridge.h>
@@ -1158,7 +1157,7 @@ class TTzDateArrayBuilder final : public TTupleArrayBuilderBase<Nullable, TTzDat
 public:
     TTzDateArrayBuilder(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen, size_t* totalAllocated = nullptr)
         : TTupleArrayBuilderBase<Nullable, TTzDateArrayBuilder<TDate, Nullable>>(typeInfoHelper, type, pool, maxLen, totalAllocated)
-        , DateBuilder_(typeInfoHelper, NKikimr::NMiniKQL::MakeTzLayoutArrowType<DataSlot>(), pool, maxLen)
+        , DateBuilder_(typeInfoHelper, GetArrowType(typeInfoHelper, type), pool, maxLen)
         , TimezoneBuilder_(typeInfoHelper, arrow::uint16(), pool, maxLen)
         {
         }

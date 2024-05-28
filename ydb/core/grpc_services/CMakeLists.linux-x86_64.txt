@@ -146,6 +146,7 @@ target_sources(ydb-core-grpc_services PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_read_rows.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_remove_directory.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_rename_tables.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_replication.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_rollback_transaction.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_scheme_base.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_stream_execute_scan_query.cpp

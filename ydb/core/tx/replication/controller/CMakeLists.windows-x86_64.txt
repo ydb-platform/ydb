@@ -69,6 +69,7 @@ target_sources(tx-replication-controller PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_create_dst_result.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_create_replication.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_create_stream_result.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_describe_replication.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_discovery_targets_result.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_drop_dst_result.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_drop_replication.cpp

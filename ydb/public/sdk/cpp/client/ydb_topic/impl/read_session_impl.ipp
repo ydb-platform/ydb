@@ -1239,33 +1239,6 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-template <>
-template <>
-inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
-    Ydb::Topic::StreamReadMessage::InitResponse&& msg,
-    TDeferredActions<false>& deferred) {
-
-    Y_ABORT_UNLESS(Lock.IsLocked());
-    Y_UNUSED(deferred);
-
-    RetryState = nullptr;
-
-    ServerSessionId = msg.session_id();
-    if (Settings.DirectRead_) {
-        DirectReadSessionManager = std::make_shared<TDirectReadSessionManager>(
-            ServerSessionId,
-            Settings,
-            this->SelfContext,
-            ClientContext->CreateContext(),
-            DirectConnectionFactory,
-            Log
-        );
-    }
-    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Server session id: " << ServerSessionId);
-
-    // Successful init. Do nothing.
-    ContinueReadingDataImpl();
-}
 
 template <>
 template <>
@@ -1349,6 +1322,65 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     }
 
     WaitingReadResponse = false;
+    ContinueReadingDataImpl();
+}
+
+template <>
+inline void TSingleClusterReadSessionImpl<false>::OnDirectReadDone(
+    Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&& response,
+    TDeferredActions<false>& deferred
+) {
+    Ydb::Topic::StreamReadMessage::ReadResponse r;
+    r.set_bytes_size(response.ByteSizeLong());
+    auto* data = r.add_partition_data();
+
+    // TODO(qyryq) Eliminate copying.
+    data->CopyFrom(response.partition_data());
+
+    TClientMessage<false> req;
+    auto& ack = *req.mutable_direct_read_ack();
+    ack.set_direct_read_id(response.direct_read_id());
+    ack.set_partition_session_id(response.partition_session_id());
+
+    // Send DirectReadAck then process the data:
+    with_lock (Lock) {
+        WriteToProcessorImpl(std::move(req));
+        OnReadDoneImpl(std::move(r), deferred);
+    }
+}
+
+template <>
+template <>
+inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
+    Ydb::Topic::StreamReadMessage::InitResponse&& msg,
+    TDeferredActions<false>& deferred) {
+
+    Y_ABORT_UNLESS(Lock.IsLocked());
+    Y_UNUSED(deferred);
+
+    RetryState = nullptr;
+
+    ServerSessionId = msg.session_id();
+    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Server session id: " << ServerSessionId);
+    if (Settings.DirectRead_) {
+        Y_ABORT_UNLESS(DirectReadSessionManager == nullptr);
+        DirectReadSessionManager = std::make_shared<TDirectReadSessionManager>(
+            ServerSessionId,
+            Settings,
+            [this](Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&& response, TDeferredActions<false>& deferred) {
+                if (auto s = this->SelfContext->LockShared()) {
+                    this->OnDirectReadDone(std::move(response), deferred);
+                }
+            },
+            [this](TSessionClosedEvent&& closeEvent) {
+                this->AbortSession(std::move(closeEvent));
+            },
+            ClientContext->CreateContext(),
+            DirectConnectionFactory,
+            Log
+        );
+    }
+
     ContinueReadingDataImpl();
 }
 
@@ -1563,31 +1595,6 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     Y_ABORT_UNLESS(Lock.IsLocked());
     // TODO
     Y_UNUSED(msg, deferred);
-}
-
-
-template <>
-inline void TSingleClusterReadSessionImpl<false>::OnDirectReadDone(
-    Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&& response,
-    TDeferredActions<false>& deferred
-) {
-    Ydb::Topic::StreamReadMessage::ReadResponse r;
-    r.set_bytes_size(response.ByteSizeLong());
-    auto* data = r.add_partition_data();
-
-    // TODO(qyryq) Eliminate copying.
-    data->CopyFrom(response.partition_data());
-
-    TClientMessage<false> req;
-    auto& ack = *req.mutable_direct_read_ack();
-    ack.set_direct_read_id(response.direct_read_id());
-    ack.set_partition_session_id(response.partition_session_id());
-
-    // Send DirectReadAck then process the data:
-    with_lock (Lock) {
-        WriteToProcessorImpl(std::move(req));
-        OnReadDoneImpl(std::move(r), deferred);
-    }
 }
 
 //////////////

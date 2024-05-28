@@ -598,6 +598,7 @@ public:
     ~TDirectReadSessionImplTestSetup() noexcept(false); // Performs extra validation and UNIT_ASSERTs
 
     TSingleClusterReadSessionImpl<false>* GetControlSession();
+    TDirectReadSession* GetDirectReadSession();
 
     std::shared_ptr<TReadSessionEventsQueue<false>> GetEventsQueue();
     IExecutor::TPtr GetDefaultExecutor();
@@ -609,7 +610,7 @@ public:
 
 public:
     // Members
-    TReadSessionSettings Settings;
+    TReadSessionSettings ReadSessionSettings;
     TLog Log = CreateLogBackend("cerr");
     std::shared_ptr<TReadSessionEventsQueue<false>> EventsQueue;
     std::shared_ptr<TFakeContext> FakeContext = std::make_shared<TFakeContext>();
@@ -617,14 +618,20 @@ public:
     std::shared_ptr<TMockDirectReadProcessorFactory> MockDirectReadProcessorFactory = std::make_shared<TMockDirectReadProcessorFactory>();
     TIntrusivePtr<TMockReadSessionProcessor> MockReadProcessor = MakeIntrusive<TMockReadSessionProcessor>();
     TIntrusivePtr<TMockDirectReadSessionProcessor> MockDirectReadProcessor = MakeIntrusive<TMockDirectReadSessionProcessor>();
-    typename TSingleClusterReadSessionImpl<false>::TPtr Session;
+
+    TSingleClusterReadSessionImpl<false>::TPtr Session;
     std::shared_ptr<TCallbackContext<TSingleClusterReadSessionImpl<false>>> CbContext;
+
+    TDirectReadSession::TPtr DirectReadSession;
+    std::shared_ptr<TCallbackContext<TDirectReadSession>> DirectReadSessionCbContext;
+
     std::shared_ptr<TThreadPool> ThreadPool;
     IExecutor::TPtr DefaultExecutor;
 };
 
 TDirectReadSessionImplTestSetup::TDirectReadSessionImplTestSetup() {
-    Settings
+    ReadSessionSettings
+        .DirectRead(true)
         .AppendTopics({"TestTopic"})
         .ConsumerName("TestConsumer")
         .RetryPolicy(NYdb::NPersQueue::IRetryPolicy::GetFixedIntervalPolicy(TDuration::MilliSeconds(10)))
@@ -648,14 +655,25 @@ TDirectReadSessionImplTestSetup::~TDirectReadSessionImplTestSetup() noexcept(fal
         MockDirectReadProcessor->Validate();
     }
 
-    if (auto session = CbContext->LockShared()) {
-        session->Close({});
+    if (CbContext) {
+        if (auto session = CbContext->LockShared()) {
+            session->Close({});
+        }
+        CbContext->Cancel();
     }
 
-    CbContext->Cancel();
+    if (DirectReadSessionCbContext) {
+        if (auto session = DirectReadSessionCbContext->LockShared()) {
+            session->Close();
+        }
+        DirectReadSessionCbContext->Cancel();
+    }
+
     Session = nullptr;
 
-    ThreadPool->Stop();
+    if (ThreadPool) {
+        ThreadPool->Stop();
+    }
 }
 
 
@@ -673,7 +691,7 @@ void TDirectReadSessionImplTestSetup::SuccessfulInit(bool hasInitRequest) {
 
 std::shared_ptr<TReadSessionEventsQueue<false>> TDirectReadSessionImplTestSetup::GetEventsQueue() {
     if (!EventsQueue) {
-        EventsQueue = std::make_shared<TReadSessionEventsQueue<false>>(Settings);
+        EventsQueue = std::make_shared<TReadSessionEventsQueue<false>>(ReadSessionSettings);
     }
     return EventsQueue;
 }
@@ -694,14 +712,14 @@ IExecutor::TPtr TDirectReadSessionImplTestSetup::GetDefaultExecutor() {
 
 TSingleClusterReadSessionImpl<false>* TDirectReadSessionImplTestSetup::GetControlSession() {
     if (!Session) {
-        if (!Settings.DecompressionExecutor_) {
-            Settings.DecompressionExecutor(GetDefaultExecutor());
+        if (!ReadSessionSettings.DecompressionExecutor_) {
+            ReadSessionSettings.DecompressionExecutor(GetDefaultExecutor());
         }
-        if (!Settings.EventHandlers_.HandlersExecutor_) {
-            Settings.EventHandlers_.HandlersExecutor(GetDefaultExecutor());
+        if (!ReadSessionSettings.EventHandlers_.HandlersExecutor_) {
+            ReadSessionSettings.EventHandlers_.HandlersExecutor(GetDefaultExecutor());
         }
         CbContext = MakeWithCallbackContext<TSingleClusterReadSessionImpl<false>>(
-            Settings,
+            ReadSessionSettings,
             "db",
             "sessionid",
             "",
@@ -717,16 +735,83 @@ TSingleClusterReadSessionImpl<false>* TDirectReadSessionImplTestSetup::GetContro
     return Session.get();
 }
 
+TDirectReadSession* TDirectReadSessionImplTestSetup::GetDirectReadSession() {
+    if (!DirectReadSession) {
+        DirectReadSessionCbContext = MakeWithCallbackContext<TDirectReadSession>(
+            TNodeId(1),
+            TString("server-session-id-1"),
+            ReadSessionSettings,
+            [](Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&& response, TDeferredActions<false>& deferred) {
+                Y_UNUSED(response);
+                Y_UNUSED(deferred);
+            },
+            [](TSessionClosedEvent&& closeEvent) {
+                Y_UNUSED(closeEvent);
+            },
+            FakeContext,
+            MockDirectReadProcessorFactory,
+            Log);
+        DirectReadSession = DirectReadSessionCbContext->TryGet();
+    }
+    return DirectReadSession.get();
+}
+
 
 Y_UNIT_TEST_SUITE(DirectRead) {
+
+    Y_UNIT_TEST(WriteReadOneMessage) {
+        TTopicSdkTestSetup setup(TEST_CASE_NAME);
+        TTopicClient client = setup.MakeClient();
+
+        {
+            // Write a message:
+
+            auto settings = TWriteSessionSettings()
+                .Path(TEST_TOPIC)
+                .ProducerId(TEST_MESSAGE_GROUP_ID)
+                .MessageGroupId(TEST_MESSAGE_GROUP_ID);
+            Cerr << ">>> Open write session\n";
+            auto writer = client.CreateSimpleBlockingWriteSession(settings);
+            UNIT_ASSERT(writer->Write("message_using_MessageGroupId"));
+            Cerr << ">>> Write session: message written\n";
+            writer->Close();
+            Cerr << ">>> Write session closed\n";
+        }
+
+        {
+            // Read the message:
+
+            auto settings = TReadSessionSettings()
+                .ConsumerName(TEST_CONSUMER)
+                .AppendTopics(TEST_TOPIC)
+                .DirectRead(true);
+            auto reader = client.CreateReadSession(settings);
+
+            auto event = reader->GetEvent(true);
+            UNIT_ASSERT(event.Defined());
+
+            auto& startPartitionSession = std::get<TReadSessionEvent::TStartPartitionSessionEvent>(*event);
+            startPartitionSession.Confirm();
+
+            event = reader->GetEvent(true);
+            UNIT_ASSERT(event.Defined());
+
+            auto& dataReceived = std::get<TReadSessionEvent::TDataReceivedEvent>(*event);
+            dataReceived.Commit();
+
+            auto& messages = dataReceived.GetMessages();
+            UNIT_ASSERT_EQUAL(messages.size(), 1);
+            Cerr << dataReceived.DebugString() << Endl;
+        }
+    }
+
     void SuccessfulInitImpl(bool thenTimeout) {
         TDirectReadSessionImplTestSetup setup;
-        setup.Settings
+        setup.ReadSessionSettings
             .MaxLag(TDuration::Seconds(32))
-            .ReadFromTimestamp(TInstant::Seconds(42))
-            .DirectRead(true);
+            .ReadFromTimestamp(TInstant::Seconds(42));
 
-        setup.Settings.Topics_[0]
+        setup.ReadSessionSettings.Topics_[0]
             .ReadFromTimestamp(TInstant::Seconds(146))
             .AppendPartitionIds(100)
             .AppendPartitionIds(101);
@@ -741,10 +826,10 @@ Y_UNIT_TEST_SUITE(DirectRead) {
             });
         EXPECT_CALL(*setup.MockReadProcessor, OnInitRequest(_))
             .WillOnce(Invoke([&setup](const Ydb::Topic::StreamReadMessage::InitRequest& req) {
-                UNIT_ASSERT_STRINGS_EQUAL(req.consumer(), setup.Settings.ConsumerName_);
+                UNIT_ASSERT_STRINGS_EQUAL(req.consumer(), setup.ReadSessionSettings.ConsumerName_);
                 UNIT_ASSERT(req.direct_read());
                 UNIT_ASSERT_VALUES_EQUAL(req.topics_read_settings_size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(req.topics_read_settings(0).path(), setup.Settings.Topics_[0].Path_);
+                UNIT_ASSERT_VALUES_EQUAL(req.topics_read_settings(0).path(), setup.ReadSessionSettings.Topics_[0].Path_);
                 UNIT_ASSERT_VALUES_EQUAL(req.topics_read_settings(0).read_from().seconds(), 146);
                 UNIT_ASSERT_VALUES_EQUAL(req.topics_read_settings(0).partition_ids_size(), 2);
                 UNIT_ASSERT_VALUES_EQUAL(req.topics_read_settings(0).partition_ids(0), 100);
@@ -765,8 +850,7 @@ Y_UNIT_TEST_SUITE(DirectRead) {
 
     Y_UNIT_TEST(HappyWay) {
         TDirectReadSessionImplTestSetup setup;
-        setup.Settings.DirectRead(true);
-        setup.Settings.Topics_[0].AppendPartitionIds(100);
+        setup.ReadSessionSettings.Topics_[0].AppendPartitionIds(100);
 
         TString const sessionId = "session-id-1";
 
@@ -789,7 +873,7 @@ Y_UNIT_TEST_SUITE(DirectRead) {
                 .WillOnce(Invoke([&setup](const Ydb::Topic::StreamReadMessage::InitRequest& req) {
                     UNIT_ASSERT(req.direct_read());
                     UNIT_ASSERT_VALUES_EQUAL(req.topics_read_settings_size(), 1);
-                    UNIT_ASSERT_VALUES_EQUAL(req.topics_read_settings(0).path(), setup.Settings.Topics_[0].Path_);
+                    UNIT_ASSERT_VALUES_EQUAL(req.topics_read_settings(0).path(), setup.ReadSessionSettings.Topics_[0].Path_);
                     UNIT_ASSERT_VALUES_EQUAL(req.topics_read_settings(0).partition_ids_size(), 1);
                     UNIT_ASSERT_VALUES_EQUAL(req.topics_read_settings(0).partition_ids(0), 100);
                 }));
@@ -814,8 +898,8 @@ Y_UNIT_TEST_SUITE(DirectRead) {
                 .WillOnce(Invoke([&sessionId, &setup](const Ydb::Topic::StreamDirectReadMessage::InitDirectReadRequest& req) {
                     UNIT_ASSERT_EQUAL(req.session_id(), sessionId);
                     UNIT_ASSERT_VALUES_EQUAL(req.topics_read_settings_size(), 1);
-                    UNIT_ASSERT_VALUES_EQUAL(req.topics_read_settings(0).path(), setup.Settings.Topics_[0].Path_);
-                    UNIT_ASSERT_VALUES_EQUAL(req.consumer(), setup.Settings.ConsumerName_);
+                    UNIT_ASSERT_VALUES_EQUAL(req.topics_read_settings(0).path(), setup.ReadSessionSettings.Topics_[0].Path_);
+                    UNIT_ASSERT_VALUES_EQUAL(req.consumer(), setup.ReadSessionSettings.ConsumerName_);
                 }));
 
             EXPECT_CALL(*setup.MockDirectReadProcessor, OnStartDirectReadPartitionSessionRequest(_))
@@ -864,50 +948,52 @@ Y_UNIT_TEST_SUITE(DirectRead) {
         setup.AssertNoEvents();
     }
 
-    Y_UNIT_TEST(WriteReadOneMessage) {
-        TTopicSdkTestSetup setup(TEST_CASE_NAME);
-        TTopicClient client = setup.MakeClient();
+    Y_UNIT_TEST(DirectReadSession) {
+        TDirectReadSessionImplTestSetup setup;
+
+        auto gotStart = NThreading::NewPromise();
 
         {
-            // Write a message:
+            ::testing::InSequence sequence;
 
-            auto settings = TWriteSessionSettings()
-                .Path(TEST_TOPIC)
-                .ProducerId(TEST_MESSAGE_GROUP_ID)
-                .MessageGroupId(TEST_MESSAGE_GROUP_ID);
-            Cerr << ">>> Open write session\n";
-            auto writer = client.CreateSimpleBlockingWriteSession(settings);
-            UNIT_ASSERT(writer->Write("message_using_MessageGroupId"));
-            Cerr << ">>> Write session: message written\n";
-            writer->Close();
-            Cerr << ">>> Write session closed\n";
+            EXPECT_CALL(*setup.MockDirectReadProcessorFactory, OnCreateProcessor(_))
+                .WillOnce([&]() {
+                    setup.MockDirectReadProcessorFactory->CreateProcessor(setup.MockDirectReadProcessor);
+                });
+
+            EXPECT_CALL(*setup.MockDirectReadProcessor, OnInitDirectReadRequest(_))
+                .WillOnce(Invoke([](const Ydb::Topic::StreamDirectReadMessage::InitDirectReadRequest&) {}));
+
+            EXPECT_CALL(*setup.MockDirectReadProcessor, OnStartDirectReadPartitionSessionRequest(_))
+                .WillOnce(Invoke([&gotStart](const Ydb::Topic::StreamDirectReadMessage::StartDirectReadPartitionSessionRequest&) {
+                    gotStart.SetValue();
+                }));
         }
 
-        {
-            // Read the message:
+        auto session = setup.GetDirectReadSession();
+        session->Start();
+        session->AddPartitionSession({ .Id = 1, .Location = {2, 3} });
 
-            auto settings = TReadSessionSettings()
-                .ConsumerName(TEST_CONSUMER)
-                .AppendTopics(TEST_TOPIC)
-                .DirectRead(true);
-            auto reader = client.CreateReadSession(settings);
+        setup.MockDirectReadProcessor->AddServerResponse(TMockDirectReadSessionProcessor::TServerReadInfo()
+            .InitDirectReadResponse());
 
-            auto event = reader->GetEvent(true);
-            UNIT_ASSERT(event.Defined());
+        setup.MockDirectReadProcessor->AddServerResponse(TMockDirectReadSessionProcessor::TServerReadInfo()
+            .StartDirectReadPartitionSessionResponse(1));
 
-            auto& startPartitionSession = std::get<TReadSessionEvent::TStartPartitionSessionEvent>(*event);
-            startPartitionSession.Confirm();
+        gotStart.GetFuture().Wait();
+    }
 
-            event = reader->GetEvent(true);
-            UNIT_ASSERT(event.Defined());
+    Y_UNIT_TEST(DirectReadSessionRetry) {
+        TDirectReadSessionImplTestSetup setup;
+        setup.ReadSessionSettings.RetryPolicy(NYdb::NPersQueue::IRetryPolicy::GetNoRetryPolicy());
 
-            auto& dataReceived = std::get<TReadSessionEvent::TDataReceivedEvent>(*event);
-            dataReceived.Commit();
+        EXPECT_CALL(*setup.MockDirectReadProcessorFactory, OnCreateProcessor(_))
+            .WillOnce([&]() { setup.MockDirectReadProcessorFactory->FailCreation(); });
 
-            auto& messages = dataReceived.GetMessages();
-            UNIT_ASSERT_EQUAL(messages.size(), 1);
-            Cerr << dataReceived.DebugString() << Endl;
-        }
+        auto session = setup.GetDirectReadSession();
+        session->Start();
+        setup.MockDirectReadProcessorFactory->Wait();
+        session->Close();
     }
 } // Y_UNIT_TEST_SUITE(DirectRead)
 

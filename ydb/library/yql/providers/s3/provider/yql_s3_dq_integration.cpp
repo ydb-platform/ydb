@@ -410,7 +410,7 @@ public:
 
             auto fileQueueBatchObjectCountLimit = State_->Configuration->FileQueueBatchObjectCountLimit.Get().GetOrElse(1000);
             srcDesc.MutableSettings()->insert({"fileQueueBatchObjectCountLimit", ToString(fileQueueBatchObjectCountLimit)});
-            
+
             YQL_CLOG(DEBUG, ProviderS3) << " useRuntimeListing=" << useRuntimeListing;
 
             if (useRuntimeListing) {
@@ -422,8 +422,8 @@ public:
                         packed.Data().Literal().Value(),
                         FromString<bool>(packed.IsText().Literal().Value()),
                         paths);
-                    paths.insert(paths.end(), 
-                        std::make_move_iterator(pathsChunk.begin()), 
+                    paths.insert(paths.end(),
+                        std::make_move_iterator(pathsChunk.begin()),
                         std::make_move_iterator(pathsChunk.end()));
                 }
 
@@ -434,11 +434,11 @@ public:
                     builder.AddPath(f.Path, f.Size, f.IsDirectory);
                 });
                 builder.Save(&range);
-                
+
                 TVector<TString> serialized(1);
                 TStringOutput out(serialized.front());
                 range.Save(&out);
-                
+
                 paths.clear();
                 ReadPathsList(srcDesc, {}, serialized, paths);
 
@@ -485,12 +485,18 @@ public:
 
                 YQL_CLOG(DEBUG, ProviderS3) << " hasDirectories=" << hasDirectories << ", consumersCount=" << consumersCount;
 
+                ui64 readLimit = std::numeric_limits<ui64>::max();
+                if (const auto sizeLimitIter = srcDesc.MutableSettings()->find("sizeLimit"); sizeLimitIter != srcDesc.MutableSettings()->cend()) {
+                    readLimit = FromString<ui64>(sizeLimitIter->second);
+                }
+
                 auto fileQueueActor = NActors::TActivationContext::ActorSystem()->Register(
                     NDq::CreateS3FileQueueActor(
                         0ul,
                         std::move(paths),
                         fileQueuePrefetchSize,
                         fileSizeLimit,
+                        readLimit,
                         useRuntimeListing,
                         consumersCount,
                         fileQueueBatchSizeLimit,

@@ -1755,6 +1755,8 @@ message TClientCertificateAuthorization {
     message TDynamicNodeDefinition {
         repeated TSubjectTerm SubjectTerms = 1;
         optional bool CanCheckNodeHostByCN = 2 [default = false];
+        optional string SidName = 3;
+        optional bool NeedCheckIssuer = 4 [default = true];
     }
 
     optional TDynamicNodeDefinition DynamicNodeAuthorization = 1;

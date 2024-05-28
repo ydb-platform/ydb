@@ -152,8 +152,9 @@ namespace Tests {
         NMiniKQL::TComputationNodeFactory ComputationFactory;
         NYql::IYtGateway::TPtr YtGateway;
         bool InitializeFederatedQuerySetupFactory = false;
+        TString ServerCertFilePath;
 
-        std::function<IActor*(const NKikimrProto::TAuthConfig&, const NKikimrConfig::TClientCertificateAuthorization&)> CreateTicketParser = NKikimr::CreateTicketParser;
+        std::function<IActor*(const NKikimrProto::TAuthConfig&, const TCertificateAuthValues&)> CreateTicketParser = NKikimr::CreateTicketParser;
         std::shared_ptr<TGrpcServiceFactory> GrpcServiceFactory;
         std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory = NYql::NDq::CreateDefaultS3ActorsFactory();
 

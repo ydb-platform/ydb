@@ -90,13 +90,40 @@ TVector<std::pair<TString, TString>> X509CertificateReader::ReadAllSubjectTerms(
     return subjectTerms;
 }
 
+TVector<std::pair<TString, TString>> X509CertificateReader::ReadIssuerTerms(const X509Ptr& x509) {
+    TVector<std::pair<TString, TString>> issuerTerms;
+    X509_NAME* name = X509_get_issuer_name(x509.get()); // return internal pointer
+
+    int entryCount = X509_NAME_entry_count(name);
+    issuerTerms.reserve(entryCount);
+    for (int i = 0; i < entryCount; i++) {
+        const X509_NAME_ENTRY* entry = X509_NAME_get_entry(name, i);
+        if (!entry) {
+            continue;
+        }
+        const ASN1_STRING* data = X509_NAME_ENTRY_get_data(entry);
+        if (!data) {
+            continue;
+        }
+
+        const ASN1_OBJECT* object = X509_NAME_ENTRY_get_object(entry);
+        if (!object) {
+            continue;
+        }
+        const int nid = OBJ_obj2nid(object);
+        const char* sn = OBJ_nid2sn(nid);
+        issuerTerms.push_back(std::make_pair(TString(sn, std::strlen(sn)), TString(reinterpret_cast<char*>(data->data), data->length)));
+    }
+    return issuerTerms;
+}
+
 TDynamicNodeAuthorizationParams::TDistinguishedName& TDynamicNodeAuthorizationParams::TDistinguishedName::AddRelativeDistinguishedName(TRelativeDistinguishedName name) {
     RelativeDistinguishedNames.push_back(std::move(name));
     return *this;
 }
 
 TDynamicNodeAuthorizationParams::operator bool() const {
-    return bool(CertSubjectsDescriptions);
+    return !CertSubjectsDescriptions.empty();
 }
 
 bool TDynamicNodeAuthorizationParams::IsSubjectDescriptionMatched(const TMap<TString, TString>& subjectDescription) const {

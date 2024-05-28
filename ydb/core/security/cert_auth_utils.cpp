@@ -2,13 +2,13 @@
 
 namespace NKikimr {
 
-TDynamicNodeAuthorizationParams GetDynamicNodeAuthorizationParams(const NKikimrConfig::TClientCertificateAuthorization &clientSertificateAuth) {
+TDynamicNodeAuthorizationParams GetDynamicNodeAuthorizationParams(const NKikimrConfig::TClientCertificateAuthorization &clientCertificateAuth) {
     TDynamicNodeAuthorizationParams certAuthConf;
-    if (!clientSertificateAuth.HasDynamicNodeAuthorization()) {
+    if (!clientCertificateAuth.HasDynamicNodeAuthorization()) {
         return certAuthConf;
     }
 
-    const auto& dynNodeAuth = clientSertificateAuth.GetDynamicNodeAuthorization();
+    const auto& dynNodeAuth = clientCertificateAuth.GetDynamicNodeAuthorization();
     TDynamicNodeAuthorizationParams::TDistinguishedName distinguishedName;
     for (const auto& term: dynNodeAuth.GetSubjectTerms()) {
         auto name = TDynamicNodeAuthorizationParams::TRelativeDistinguishedName(term.GetShortName());
@@ -24,6 +24,8 @@ TDynamicNodeAuthorizationParams GetDynamicNodeAuthorizationParams(const NKikimrC
         certAuthConf.AddCertSubjectDescription(distinguishedName);
     }
     certAuthConf.CanCheckNodeByAttributeCN = dynNodeAuth.GetCanCheckNodeHostByCN();
+    certAuthConf.NeedCheckIssuer = dynNodeAuth.GetNeedCheckIssuer();
+    certAuthConf.SidName = dynNodeAuth.GetSidName();
     return certAuthConf;
 }
 

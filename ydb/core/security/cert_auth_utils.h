@@ -5,7 +5,11 @@
 #include <util/generic/string.h>
 
 namespace NKikimr {
+struct TCertificateAuthValues {
+    NKikimrConfig::TClientCertificateAuthorization ClientCertificateAuthorization;
+    TString ServerCertificateFilePath;
+};
 
-TDynamicNodeAuthorizationParams GetDynamicNodeAuthorizationParams(const NKikimrConfig::TClientCertificateAuthorization& clientSertificateAuth);
+TDynamicNodeAuthorizationParams GetDynamicNodeAuthorizationParams(const NKikimrConfig::TClientCertificateAuthorization& clientCertificateAuth);
 
 } //namespace NKikimr

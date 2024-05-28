@@ -257,6 +257,7 @@ protected:
 
     NKikimrProto::TAuthConfig Config;
     const TDynamicNodeAuthorizationParams DynamicNodeAuthorizationParams;
+    const TString ServerCertificate;
     TDuration ExpireTime = TDuration::Hours(24); // after what time ticket will expired and removed from cache
 
     template <typename TTokenRecord>
@@ -670,35 +671,72 @@ private:
             return false;
         }
         CounterTicketsCertificate->Inc();
-        X509CertificateReader::X509Ptr x509cert = X509CertificateReader::ReadCertAsPEM(record.Ticket);
-        if (!x509cert) {
-            SetError(key, record, { .Message = "Cannot create token from certificate. Cannot read certificate", .Retryable = false });
+        X509CertificateReader::X509Ptr x509clientCert = X509CertificateReader::ReadCertAsPEM(record.Ticket);
+        if (!x509clientCert) {
+            SetError(key, record, { .Message = "Cannot create token from certificate. Cannot read client certificate", .Retryable = false });
             return false;
         }
-        TStringBuilder dn;
-        TMap<TString, TString> subjectDescription;
-        for (const auto& [attribute, value] : X509CertificateReader::ReadAllSubjectTerms(x509cert)) {
-            dn << attribute << "=" << value << ",";
-            subjectDescription[attribute] = value;
-        }
-        if (dn.empty()) {
-            SetError(key, record, { .Message = "Cannot create token from certificate. Cannot extract subject from certificate", .Retryable = false });
+
+        X509CertificateReader::X509Ptr x509serverCert = X509CertificateReader::ReadCertAsPEM(ServerCertificate);
+        if (!x509serverCert) {
+            SetError(key, record, { .Message = "Cannot create token from certificate. Cannot read server certificate", .Retryable = false });
             return false;
         }
+        std::vector<TString> userGroups;
+        TStringBuilder subjectDn;
         // Validate certificate
-        if (AppData()->FeatureFlags.GetEnableDynamicNodeAuthorization() && DynamicNodeAuthorizationParams) {
+        if (DynamicNodeAuthorizationParams) {
+            if (DynamicNodeAuthorizationParams.NeedCheckIssuer) {
+                const auto& clientIssuerDn = X509CertificateReader::ReadIssuerTerms(x509clientCert);
+                const auto& serverIssuerDn = X509CertificateReader::ReadIssuerTerms(x509serverCert);
+                if (clientIssuerDn != serverIssuerDn) {
+                    SetError(key, record, { .Message = "Cannot create token from certificate. Client certificate and server certificate have different issuers", .Retryable = false });
+                    return false;
+                }
+            }
+            TMap<TString, TString> subjectDescription;
+            for (const auto& [attribute, value] : X509CertificateReader::ReadAllSubjectTerms(x509clientCert)) {
+                subjectDn << attribute << "=" << value << ",";
+                subjectDescription[attribute] = value;
+            }
+            if (subjectDn.empty()) {
+                SetError(key, record, { .Message = "Cannot create token from certificate. Cannot extract subject from client certificate", .Retryable = false });
+                return false;
+            }
             if (!DynamicNodeAuthorizationParams.IsSubjectDescriptionMatched(subjectDescription)) {
                 SetError(key, record, { .Message = "Cannot create token from certificate. Client certificate failed verification", .Retryable = false });
                 return false;
             }
+            userGroups.push_back(DynamicNodeAuthorizationParams.SidName + "@" + Config.GetCertificateAuthenticationDomain());
+        } else {
+            const auto& clientIssuerDn = X509CertificateReader::ReadIssuerTerms(x509clientCert);
+            const auto& serverIssuerDn = X509CertificateReader::ReadIssuerTerms(x509serverCert);
+            if (clientIssuerDn != serverIssuerDn) {
+                SetError(key, record, { .Message = "Cannot create token from certificate. Client certificate and server certificate have different issuers", .Retryable = false });
+                return false;
+            }
+            for (const auto& [attribute, value] : X509CertificateReader::ReadAllSubjectTerms(x509clientCert)) {
+                subjectDn << attribute << "=" << value << ",";
+            }
+            if (subjectDn.empty()) {
+                SetError(key, record, { .Message = "Cannot create token from certificate. Cannot extract subject from client certificate", .Retryable = false });
+                return false;
+            }
+            userGroups.push_back(TString(DEFAULT_REGISTER_NODE_CERT_USER) + "@" + Config.GetCertificateAuthenticationDomain());
         }
-        dn.remove(dn.size() - 1);
-        dn << "@" << Config.GetCertificateAuthenticationDomain();
-        SetToken(key, record, new NACLib::TUserToken({
+
+        subjectDn.remove(subjectDn.size() - 1);
+        subjectDn << "@" << Config.GetCertificateAuthenticationDomain();
+        NACLib::TUserToken::TUserTokenInitFields userTokenInitFields {
             .OriginalUserToken = record.Ticket,
-            .UserSID = dn,
+            .UserSID = subjectDn,
             .AuthType = record.GetAuthType()
-        }));
+        };
+        auto userToken = MakeIntrusive<NACLib::TUserToken>(std::move(userTokenInitFields));
+        for (const auto& group : userGroups) {
+            userToken->AddGroupSID(group);
+        }
+        SetToken(key, record, userToken);
         return true;
     }
 
@@ -2111,10 +2149,18 @@ public:
         }
     }
 
-    TTicketParserImpl(const NKikimrProto::TAuthConfig& authConfig, const NKikimrConfig::TClientCertificateAuthorization& clientCertificateAuth = {})
+    static TString ReadFile(const TString& fileName) {
+        TFileInput f(fileName);
+        return f.ReadAll();
+    }
+
+    TTicketParserImpl(const NKikimrProto::TAuthConfig& authConfig, const TCertificateAuthValues& certificateAuthValues)
         : Config(authConfig)
-        , DynamicNodeAuthorizationParams(GetDynamicNodeAuthorizationParams(clientCertificateAuth))
-        {}
+        , DynamicNodeAuthorizationParams(GetDynamicNodeAuthorizationParams(certificateAuthValues.ClientCertificateAuthorization))
+        , ServerCertificate((certificateAuthValues.ServerCertificateFilePath ? ReadFile(certificateAuthValues.ServerCertificateFilePath) : ""))
+        {
+            Cerr << "++++++++: " << ServerCertificate << Endl;
+        }
 };
 
 }

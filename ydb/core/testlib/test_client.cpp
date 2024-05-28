@@ -805,7 +805,10 @@ namespace Tests {
                 TActorId ldapAuthProviderId = Runtime->Register(ldapAuthProvider, nodeIdx);
                 Runtime->RegisterService(MakeLdapAuthProviderID(), ldapAuthProviderId, nodeIdx);
             }
-            IActor* ticketParser = Settings->CreateTicketParser(Settings->AuthConfig, Settings->AppConfig->GetClientCertificateAuthorization());
+            IActor* ticketParser = Settings->CreateTicketParser(Settings->AuthConfig, {
+                .ClientCertificateAuthorization = Settings->AppConfig->GetClientCertificateAuthorization(),
+                .ServerCertificateFilePath = Settings->ServerCertFilePath
+            });
             TActorId ticketParserId = Runtime->Register(ticketParser, nodeIdx);
             Runtime->RegisterService(MakeTicketParserID(), ticketParserId, nodeIdx);
         }

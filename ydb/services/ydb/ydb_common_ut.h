@@ -7,6 +7,8 @@
 #include <ydb/services/ydb/ydb_dummy.h>
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 
+#include <util/system/tempfile.h>
+
 #include "ydb_keys_ut.h"
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/csv/api.h> // for WriteCSV()
@@ -100,6 +102,9 @@ public:
             builder(*ServerSettings);;
         }
 
+        ServerCertificateFile.Write(TestSettings::GetServerCrt().data(), TestSettings::GetServerCrt().size());
+        ServerSettings->ServerCertFilePath = ServerCertificateFile.Name();
+
         Server_.Reset(new TServer(*ServerSettings));
         Tenants_.Reset(new Tests::TTenants(Server_));
 
@@ -168,6 +173,7 @@ public:
 private:
     TPortManager PortManager;
     ui16 GRpcPort_;
+    TTempFileHandle ServerCertificateFile;
 };
 
 struct TTestOlap {

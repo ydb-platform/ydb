@@ -1410,7 +1410,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
 
     if (Settings.DirectRead_) {
         DirectReadSessionManager->StartPartitionSession({
-            .Id = static_cast<TPartitionSessionId>(partitionSessionId),
+            .PartitionSessionId = static_cast<TPartitionSessionId>(partitionSessionId),
             .Location = TPartitionLocation(msg.partition_location())
         });
     }

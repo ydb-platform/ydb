@@ -18,6 +18,6 @@ RECURSE(
     deprecated/persqueue_v0
     deprecated/persqueue_v0/api
     rate_limiter
-    ext_index
+    replication
     ydb
 )

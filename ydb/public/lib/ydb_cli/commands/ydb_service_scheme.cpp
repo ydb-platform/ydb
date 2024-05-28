@@ -177,6 +177,8 @@ int TCommandDescribe::PrintPathResponse(TDriver& driver, const NScheme::TDescrib
         return DescribeTopic(driver);
     case NScheme::ESchemeEntryType::CoordinationNode:
         return DescribeCoordinationNode(driver);
+    case NScheme::ESchemeEntryType::Replication:
+        return DescribeReplication(driver);
     default:
         return DescribeEntryDefault(entry);
     }
@@ -423,6 +425,86 @@ int TCommandDescribe::DescribeCoordinationNode(const TDriver& driver) {
     NCoordination::TDescribeNodeResult description = client.DescribeNode(Path).GetValueSync();
 
     return PrintCoordinationNodeResponse(description);
+}
+
+int TCommandDescribe::PrintReplicationResponsePretty(const NYdb::NReplication::TDescribeReplicationResult& result) const {
+    const auto& desc = result.GetReplicationDescription();
+
+    Cout << Endl << "State: " << desc.GetState();
+    switch (desc.GetState()) {
+    case NReplication::TReplicationDescription::EState::Error:
+        Cout << Endl << "Issues: " << desc.GetErrorState().GetIssues().ToOneLineString();
+        break;
+    default:
+        break;
+    }
+
+    const auto& connParams = desc.GetConnectionParams();
+    Cout << Endl << "Endpoint: " << connParams.GetDiscoveryEndpoint();
+    Cout << Endl << "Database: " << connParams.GetDatabase();
+
+    switch (connParams.GetCredentials()) {
+    case NReplication::TConnectionParams::ECredentials::Static:
+        Cout << Endl << "User: " << connParams.GetStaticCredentials().User;
+        Cout << Endl << "Password (SECRET): " << connParams.GetStaticCredentials().PasswordSecretName;
+        break;
+    case NReplication::TConnectionParams::ECredentials::OAuth:
+        Cout << Endl << "OAuth token (SECRET): " << connParams.GetOAuthCredentials().TokenSecretName;
+        break;
+    }
+
+    if (const auto& items = desc.GetItems()) {
+        Cout << Endl << "Items (source => destination):";
+        for (const auto& item : items) {
+            Cout << Endl << "  " << item.SrcPath << " => " << item.DstPath;
+        }
+    }
+
+    Cout << Endl;
+    return EXIT_SUCCESS;
+}
+
+int TCommandDescribe::PrintReplicationResponseProtoJsonBase64(const NYdb::NReplication::TDescribeReplicationResult& result) const {
+    TString json;
+    google::protobuf::util::JsonPrintOptions jsonOpts;
+    jsonOpts.preserve_proto_field_names = true;
+    auto convertStatus = google::protobuf::util::MessageToJsonString(
+        NYdb::TProtoAccessor::GetProto(result),
+        &json,
+        jsonOpts
+    );
+    if (convertStatus.ok()) {
+        Cout << json << Endl;
+    } else {
+        Cerr << "Error occurred while converting result proto to json" << Endl;
+        return EXIT_FAILURE;
+    }
+    return EXIT_SUCCESS;
+}
+
+int TCommandDescribe::PrintReplicationResponse(const NYdb::NReplication::TDescribeReplicationResult& result) const {
+    switch (OutputFormat) {
+        case EOutputFormat::Default:
+        case EOutputFormat::Pretty:
+            PrintReplicationResponsePretty(result);
+            break;
+        case EOutputFormat::Json:
+            Cerr << "Warning! Option --json is deprecated and will be removed soon. "
+                 << "Use \"--format proto-json-base64\" option instead." << Endl;
+            [[fallthrough]];
+        case EOutputFormat::ProtoJsonBase64:
+            return PrintReplicationResponseProtoJsonBase64(result);
+        default:
+            throw TMisuseException() << "This command doesn't support " << OutputFormat << " output format";
+    }
+    return EXIT_SUCCESS;
+}
+
+int TCommandDescribe::DescribeReplication(const TDriver& driver) {
+    NReplication::TReplicationClient client(driver);
+    auto result = client.DescribeReplication(Path).ExtractValueSync();
+    ThrowOnError(result);
+    return PrintReplicationResponse(result);
 }
 
 namespace {

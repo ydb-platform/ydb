@@ -189,6 +189,10 @@ namespace {
                     exprCtx.NewAtom(pos, "mode"),
                     exprCtx.NewAtom(pos, "replace"),
                 }),
+                exprCtx.NewList(pos, {
+                    exprCtx.NewAtom(pos, "allowInconsistent"),
+                    exprCtx.NewAtom(pos, "true"),
+                }),
             }),
         });
 

@@ -200,7 +200,7 @@ namespace NActors {
         bool preempted = false;
         bool wasWorking = false;
         NHPTimer::STime hpnow = Ctx.HPStart;
-        NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfProcessingEventTs(hpnow);
+        NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
         Ctx.AddElapsedCycles(ActorSystemIndex, hpnow - hpprev);
         NHPTimer::STime eventStart = Ctx.HPStart;
         TlsThreadContext->ActivationStartTS.store(Ctx.HPStart, std::memory_order_release);
@@ -251,8 +251,7 @@ namespace NActors {
                     actor->Receive(ev);
 
                     hpnow = GetCycleCountFast();
-                    hpprev = TlsThreadContext->UpdateStartOfProcessingEventTs(hpnow);
-                    NanoSleep(50'000'000);
+                    hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
 
                     mailbox->ProcessEvents(mailbox);
                     actor->OnDequeueEvent();
@@ -289,7 +288,7 @@ namespace NActors {
                         Ctx.IncrementNonDeliveredEvents();
                     }
                     hpnow = GetCycleCountFast();
-                    hpprev = TlsThreadContext->UpdateStartOfProcessingEventTs(hpnow);
+                    hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
                     Ctx.AddElapsedCycles(ActorSystemIndex, hpnow - hpprev);
                 }
                 eventStart = hpnow;
@@ -373,6 +372,7 @@ namespace NActors {
                 break; // empty queue, leave
             }
         }
+        TlsThreadContext->ActivationStartTS.store(GetCycleCountFast(), std::memory_order_release);
         TlsThreadContext->ElapsingActorActivity.store(ActorSystemIndex, std::memory_order_release);
 
         NProfiling::TMemoryTagScope::Reset(0);
@@ -513,7 +513,7 @@ namespace NActors {
         TlsThreadCtx.ActorSystemIndex = ActorSystemIndex;
         TlsThreadCtx.ElapsingActorActivity = ActorSystemIndex;
         NHPTimer::STime now = GetCycleCountFast();
-        TlsThreadCtx.StartOfProcessingEventTs = now;
+        TlsThreadCtx.StartOfProcessingEventTS = now;
         TlsThreadCtx.ActivationStartTS = now;
         TlsThreadContext = &TlsThreadCtx;
         if (ThreadName) {
@@ -551,7 +551,7 @@ namespace NActors {
         TlsThreadCtx.ActorSystemIndex = ActorSystemIndex;
         TlsThreadCtx.ElapsingActorActivity = ActorSystemIndex;
         NHPTimer::STime now = GetCycleCountFast();
-        TlsThreadCtx.StartOfProcessingEventTs = now;
+        TlsThreadCtx.StartOfProcessingEventTS = now;
         TlsThreadCtx.ActivationStartTS = now;
         TlsThreadContext = &TlsThreadCtx;
         if (ThreadName) {
@@ -785,22 +785,18 @@ namespace NActors {
     void TGenericExecutorThread::UpdateThreadStats() {
         NHPTimer::STime hpnow = GetCycleCountFast();
         ui64 activityType = TlsThreadCtx.ElapsingActorActivity.load(std::memory_order_acquire);
-        NHPTimer::STime hpprev = TlsThreadCtx.UpdateStartOfProcessingEventTs(hpnow);
+        NHPTimer::STime hpprev = TlsThreadCtx.UpdateStartOfProcessingEventTS(hpnow);
         if (activityType == Max<ui64>()) {
             Ctx.AddParkedCycles(hpnow - hpprev);
         } else {
             Ctx.AddElapsedCycles(activityType, hpnow - hpprev);
         }
-        if (activityType != Max<ui64>() && activityType != TlsThreadCtx.ActorSystemIndex) {
+        if (activityType != Max<ui64>()) {
             NHPTimer::STime activationStart = TlsThreadCtx.ActivationStartTS.load(std::memory_order_acquire);
-            NHPTimer::STime passedTime = hpnow - activationStart;
-            if (Ts2Us(passedTime) > DEFAULT_TIME_PER_MAILBOX.MicroSeconds() && activityType != Max<ui64>()) {
-                Ctx.SetCurrentLongActivation(activityType, passedTime);
-            } else {
-                Ctx.SetCurrentLongActivation(0, 0);
-            }
+            NHPTimer::STime passedTime = Max<i64>(hpnow - activationStart, 0);
+            Ctx.SetCurrentActivationTime(activityType, Ts2Us(passedTime));
         } else {
-            Ctx.SetCurrentLongActivation(0, 0);
+            Ctx.SetCurrentActivationTime(0, 0);
         }
     }
 

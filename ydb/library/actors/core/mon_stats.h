@@ -85,6 +85,11 @@ namespace NActors {
         bool HasHalfOfOtherSharedThread = false;
     };
 
+    struct TActivationTime {
+        i64 TimeUs = 0;
+        ui32 LastActivity = 0;
+    };
+
     struct TExecutorThreadStats {
         ui64 SentEvents = 0;
         ui64 ReceivedEvents = 0;
@@ -95,8 +100,7 @@ namespace NActors {
         ui64 SafeElapsedTicks = 0;
         ui64 WorstActivationTimeUs = 0;
 
-        i64 CurrentLongActivationTimeUs = 0;
-        ui32 CurrentLongActivation = 0;
+        TActivationTime CurrentActivationTime;
 
         NHPTimer::STime ElapsedTicks = 0;
         NHPTimer::STime ParkedTicks = 0;
@@ -111,6 +115,7 @@ namespace NActors {
         TVector<i64> ActorsAliveByActivity; // the sum should be positive, but per-thread might be negative
         TVector<ui64> ScheduledEventsByActivity;
         TVector<ui64> StuckActorsByActivity;
+        TVector<TActivationTime> AggregatedCurrentActivationTime;
         TVector<std::array<ui64, 10>> UsageByActivity;
         ui64 PoolActorRegistrations = 0;
         ui64 PoolDestroyedActors = 0;
@@ -170,6 +175,12 @@ namespace NActors {
             AggregateOne(ActorsAliveByActivity, other.ActorsAliveByActivity);
             AggregateOne(ScheduledEventsByActivity, other.ScheduledEventsByActivity);
             AggregateOne(StuckActorsByActivity, other.StuckActorsByActivity);
+            if (other.CurrentActivationTime.TimeUs) {
+                AggregatedCurrentActivationTime.push_back(other.CurrentActivationTime);
+            }
+            if (other.AggregatedCurrentActivationTime.size()) {
+                AggregatedCurrentActivationTime.insert(AggregatedCurrentActivationTime.end(), other.AggregatedCurrentActivationTime.begin(), other.AggregatedCurrentActivationTime.end());
+            }
 
             if (UsageByActivity.size() < other.UsageByActivity.size()) {
                 UsageByActivity.resize(other.UsageByActivity.size());

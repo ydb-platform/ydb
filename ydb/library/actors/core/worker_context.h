@@ -60,9 +60,9 @@ namespace NActors {
             statsCopy.Aggregate(*Stats);
         }
 
-        void SetCurrentLongActivation(ui32 activityType, i64 elapsed) {
-            RelaxedStore(&Stats->CurrentLongActivation, activityType);
-            RelaxedStore(&Stats->CurrentLongActivationTimeUs, elapsed);
+        void SetCurrentActivationTime(ui32 activityType, i64 elapsed) {
+            RelaxedStore(&Stats->CurrentActivationTime.LastActivity, activityType);
+            RelaxedStore(&Stats->CurrentActivationTime.TimeUs, (elapsed > 0 ? elapsed : 0));
         }
 
         void AddElapsedCycles(ui32 activityType, i64 elapsed) {

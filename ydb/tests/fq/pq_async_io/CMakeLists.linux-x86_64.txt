@@ -5859,31 +5859,10 @@ get_built_tool_path(
 )
 
 get_built_tool_path(
-  TOOL_protoc-gen-mypy_bin
-  TOOL_protoc-gen-mypy_dependency
-  contrib/python/mypy-protobuf/bin/protoc-gen-mypy
-  protoc-gen-mypy
-)
-
-get_built_tool_path(
-  TOOL_protoc_bin
-  TOOL_protoc_dependency
-  contrib/tools/protoc
-  protoc
-)
-
-get_built_tool_path(
   TOOL_rescompiler_bin
   TOOL_rescompiler_dependency
   tools/rescompiler/bin
   rescompiler
-)
-
-get_built_tool_path(
-  TOOL_py3cc_bin
-  TOOL_py3cc_dependency
-  tools/py3cc
-  py3cc
 )
 
 get_built_tool_path(
@@ -24435,7 +24414,7 @@ target_sources(ydb-tests-fq-pq_async_io PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/library/folder_service/proto/0065ba21b98e1525eaa61691320df82a.cpp
   ${PROJECT_BINARY_DIR}/ydb/library/yql/public/issue/protos/4b98572815e8f98a065606a6de73abad.cpp
   ${PROJECT_BINARY_DIR}/ydb/library/yql/core/issue/protos/580bff2450b8e4f181d4c3d174261a7b.cpp
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/dq/proto/3e42be899337bf734f4a3df3be226eb5.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/dq/proto/48e8d50d30109ceab3da3ef382725a90.cpp
   ${PROJECT_BINARY_DIR}/ydb/library/yql/public/types/a140651c5884410cee8152ac8fb3cb79.cpp
   ${PROJECT_BINARY_DIR}/ydb/library/yql/dq/actors/protos/c34587d3d6cda28dbbb0c0c5773d01bf.cpp
   ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/s3/proto/11542c86f8ee32123da26d064f1271be.cpp
@@ -32522,12 +32501,8 @@ resources(ydb-tests-fq-pq_async_io
 )
 
 resources(ydb-tests-fq-pq_async_io
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/dq/proto/3e42be899337bf734f4a3df3be226eb5.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/dq/proto/48e8d50d30109ceab3da3ef382725a90.cpp
   INPUTS
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/proto/-
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/dq/proto/dq_checkpoint__intpy3___pb2.py
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/proto/-
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/dq/proto/dq_checkpoint__intpy3___pb2.py.vv67.yapyc3
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/proto/-
   ${PROJECT_BINARY_DIR}/ydb/library/yql/dq/proto/dq_state_load_plan__intpy3___pb2.py
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/proto/-
@@ -32541,10 +32516,6 @@ resources(ydb-tests-fq-pq_async_io
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/proto/-
   ${PROJECT_BINARY_DIR}/ydb/library/yql/dq/proto/dq_transport__intpy3___pb2.py.vv67.yapyc3
   KEYS
-  resfs/src/resfs/file/py/ydb/library/yql/dq/proto/dq_checkpoint_pb2.py=ydb/library/yql/dq/proto/dq_checkpoint__intpy3___pb2.py
-  resfs/file/py/ydb/library/yql/dq/proto/dq_checkpoint_pb2.py
-  resfs/src/resfs/file/py/ydb/library/yql/dq/proto/dq_checkpoint_pb2.py.yapyc3=ydb/library/yql/dq/proto/dq_checkpoint__intpy3___pb2.py.vv67.yapyc3
-  resfs/file/py/ydb/library/yql/dq/proto/dq_checkpoint_pb2.py.yapyc3
   resfs/src/resfs/file/py/ydb/library/yql/dq/proto/dq_state_load_plan_pb2.py=ydb/library/yql/dq/proto/dq_state_load_plan__intpy3___pb2.py
   resfs/file/py/ydb/library/yql/dq/proto/dq_state_load_plan_pb2.py
   resfs/src/resfs/file/py/ydb/library/yql/dq/proto/dq_state_load_plan_pb2.py.yapyc3=ydb/library/yql/dq/proto/dq_state_load_plan__intpy3___pb2.py.vv67.yapyc3

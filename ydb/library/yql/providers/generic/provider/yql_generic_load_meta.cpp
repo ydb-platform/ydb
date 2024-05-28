@@ -323,6 +323,8 @@ namespace NYql {
                 case NYql::NConnector::NApi::MYSQL:
                     break;
                 case NYql::NConnector::NApi::GREENPLUM: {
+                    // for backward compability set schema "public" by default
+                    // TODO: simplify during https://st.yandex-team.ru/YQ-2494
                     TString schema;
                     const auto it = clusterConfig.GetDataSourceOptions().find("schema");
                     if (it != clusterConfig.GetDataSourceOptions().end()) {

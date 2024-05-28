@@ -2600,9 +2600,9 @@ void TServiceBase::DoConfigure(
             auto* method = FindMethodInfo(methodName);
 
             if (!method) {
-                // TODO(don-dron): Split service configs by realmid, for example for DataNodeService and ProxyDataNodeService.
+                // TODO(don-dron): Split service configs by realmid.
                 YT_LOG_WARNING(
-                    "Method is not registered (Service:%v, RealmId:%v, Method: %v)",
+                    "Method is not registered (Service: %v, RealmId: %v, Method: %v)",
                     ServiceId_.ServiceName,
                     ServiceId_.RealmId,
                     methodName);

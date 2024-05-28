@@ -184,7 +184,7 @@ namespace {
         return MeteringMode_;
     }
 
-    void TCommandWithAutoscaling::AddAutoscaling(TClientCommand::TConfig& config, bool withDefault) {
+    void TCommandWithAutoscaling::AddAutoscaling(TClientCommand::TConfig& config, bool isAlter) {
         TStringStream description;
         description << "A strategy to automatically change the number of partitions depending on the load. Available strategies: ";
         NColorizer::TColors colors = NColorizer::AutoColors(Cout);
@@ -194,29 +194,38 @@ namespace {
                      "Couldn't find description for %s autoscale strategy", (TStringBuilder() << strategy.second).c_str());
             description << "\n  " << colors.BoldColor() << strategy.first << colors.OldColor()
                         << "\n    " << findResult->second;
-            if (strategy.second == NTopic::EAutoscalingStrategy::Disabled) {
-                description << colors.CyanColor() << " (default)" << colors.OldColor();
-            }
         }
 
-        auto straregy = config.Opts->AddLongOption("autoscale-strategy", description.Str())
-            .Optional()
-            .StoreResult(&AutoscaleStrategy_);
-        auto thresholdTime = config.Opts->AddLongOption("autoscale-threshold-time", "Duration in seconds of high or low load before automatically scale the number of partitions")
-            .Optional()
-            .StoreResult(&ScaleThresholdTime_);
-        auto upThresholdPercent = config.Opts->AddLongOption("autoscale-scale-up-threshold-percent", "The load percentage at which the number of partitions will increase.")
-            .Optional()
-            .StoreResult(&ScaleUpThresholdPercent_);
-        auto downThresholdPercent = config.Opts->AddLongOption("autoscale-scale-down-threshold-percent", "The load percentage at which the number of partitions will decrease.")
-            .Optional()
-            .StoreResult(&ScaleDownThresholdPercent_);
-
-        if (withDefault) {
-            straregy.DefaultValue("disabled");
-            thresholdTime.DefaultValue(300);
-            upThresholdPercent.DefaultValue(90);
-            downThresholdPercent.DefaultValue(30);
+        if (isAlter) {
+            config.Opts->AddLongOption("autoscale-strategy", description.Str())
+                .Optional()
+                .StoreResult(&AutoscaleStrategy_);
+            config.Opts->AddLongOption("autoscale-threshold-time", "Duration in seconds of high or low load before automatically scale the number of partitions")
+                .Optional()
+                .StoreResult(&ScaleThresholdTime_);
+            config.Opts->AddLongOption("autoscale-scale-up-threshold-percent", "The load percentage at which the number of partitions will increase")
+                .Optional()
+                .StoreResult(&ScaleUpThresholdPercent_);
+            config.Opts->AddLongOption("autoscale-scale-down-threshold-percent", "The load percentage at which the number of partitions will decrease")
+                .Optional()
+                .StoreResult(&ScaleDownThresholdPercent_);
+        } else {
+            config.Opts->AddLongOption("autoscale-strategy", description.Str())
+                .Optional()
+                .DefaultValue("disabled")
+                .StoreResult(&AutoscaleStrategy_);
+            config.Opts->AddLongOption("autoscale-threshold-time", "Duration in seconds of high or low load before automatically scale the number of partitions")
+                .Optional()
+                .DefaultValue(300)
+                .StoreResult(&ScaleThresholdTime_);
+            config.Opts->AddLongOption("autoscale-scale-up-threshold-percent", "The load percentage at which the number of partitions will increase")
+                .Optional()
+                .DefaultValue(90)
+                .StoreResult(&ScaleUpThresholdPercent_);
+            config.Opts->AddLongOption("autoscale-scale-down-threshold-percent", "The load percentage at which the number of partitions will decrease")
+                .Optional()
+                .DefaultValue(30)
+                .StoreResult(&ScaleDownThresholdPercent_);
         }
     }
 
@@ -289,7 +298,7 @@ namespace {
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
         AddAllowedCodecs(config, AllowedCodecs);
         AddAllowedMeteringModes(config);
-        AddAutoscaling(config, true);
+        AddAutoscaling(config, false);
     }
 
     void TCommandTopicCreate::Parse(TConfig& config) {
@@ -358,7 +367,7 @@ namespace {
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
         AddAllowedCodecs(config, AllowedCodecs);
         AddAllowedMeteringModes(config);
-        AddAutoscaling(config, false);
+        AddAutoscaling(config, true);
     }
 
     void TCommandTopicAlter::Parse(TConfig& config) {

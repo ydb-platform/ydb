@@ -107,5 +107,11 @@ Y_UNIT_TEST_SUITE(TContinuousBackupTests) {
             NLs::PathExist,
             NLs::HasOffloadConfig,
         });
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/continuousBackupImpl/incBackupImpl"), {
+            NLs::PathExist,
+            NLs::IsTable,
+            NLs::CheckColumns("incBackupImpl", {"key", "value", "__incrBackupImpl_deleted"}, {}, {"key"}),
+        });
     }
 } // TCdcStreamWithInitialScanTests

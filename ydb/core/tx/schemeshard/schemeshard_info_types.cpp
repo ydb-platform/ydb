@@ -51,6 +51,12 @@ EDiskUsageStatus CheckStoragePoolsQuotas(const THashMap<TString, TStoragePoolUsa
             : EDiskUsageStatus::BelowSoftQuota;
 }
 
+/*
+This is a workaround!
+It makes sense only in the specific case where:
+    - there are no multiple storage pools of the same kind
+    - all storage pool kinds belong to the set {ssh*, hdd*, rot*, nvme*}
+*/
 EUserFacingStorageType GetUserFacingStorageType(const TString& poolKind) {
     if (poolKind.StartsWith("ssd") || poolKind.StartsWith("nvme")) {
         return EUserFacingStorageType::Ssd;

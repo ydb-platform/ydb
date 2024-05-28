@@ -6,10 +6,11 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-inline bool CheckStoragePoolsInQuotas(const Ydb::Cms::DatabaseQuotas& quotas,
-                                      const TVector<TStoragePool>& pools,
-                                      const TString& path,
-                                      TString& error
+inline bool CheckStoragePoolsInQuotas(
+    const Ydb::Cms::DatabaseQuotas& quotas,
+    const TVector<TStoragePool>& pools,
+    const TString& path,
+    TString& error
 ) {
     TVector<TString> quotedKinds;
     quotedKinds.reserve(quotas.storage_quotas_size());

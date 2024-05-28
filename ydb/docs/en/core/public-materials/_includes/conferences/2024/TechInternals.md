@@ -8,9 +8,9 @@ First, we will speak about benchmarking strategies from a user's perspective. We
 
 Next, we’ll briefly discuss the popular key-value benchmark YCSB, which we believe is a prerequisite for robust performance in distributed transactions. Following this, we'll explore the TPC-C benchmark in greater detail, sharing valuable insights derived from our own implementation.
 
-We'll conclude our talk by presenting performance results from TPC-C benchmark, comparing YDB and CockroachDB with PostgreSQL to illustrate situations where PostgreSQL might be not enough and when you might want to consider a distributed DBMS instead.
+We'll conclude our talk by presenting performance results from the TPC-C benchmark, comparing YDB and CockroachDB with PostgreSQL to illustrate situations where PostgreSQL might not be enough and when you might want to consider a distributed DBMS instead.
 
-[{{ team.ivanov.name }}]({{ team.ivanov.profile }}) ({{ team.ivanov.position }}) discussed best high performance benchmarking practices and some pitfalls found during TPC-C implementation, then demonstrated TPC-C results of PostgreSQL, CockroachDB and YDB.
+[{{ team.ivanov.name }}]({{ team.ivanov.profile }}) ({{ team.ivanov.position }}) discussed best high-performance benchmarking practices and some pitfalls found during TPC-C implementation, then demonstrated TPC-C results of PostgreSQL, CockroachDB, and YDB.
 
 @[YouTube](https://youtu.be/LlqfqzPtLD0?si=YYDcXkUZFsLJRJEY)
 

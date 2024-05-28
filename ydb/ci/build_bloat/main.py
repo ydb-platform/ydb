@@ -144,7 +144,7 @@ def gather_time_traces(build_output_dir: str) -> list[str]:
     return time_trace_paths
 
 
-def generate_cpp_bloat(build_output_dir: str) -> dict:
+def generate_cpp_bloat(build_output_dir: str, result_dir: str) -> dict:
     time_trace_paths = gather_time_traces(build_output_dir)
 
     result = []
@@ -157,6 +157,8 @@ def generate_cpp_bloat(build_output_dir: str) -> dict:
     result.sort()
 
     tree = {"name": "/"}
+    
+    cpp_compilation_times_ms = []
 
     for duration, path, time_trace_path in result:
         splitted = path.split(os.sep)
@@ -222,7 +224,7 @@ def parse_includes(path: str) -> list[tuple[int, str]]:
     return path_to_time
 
 
-def generate_header_bloat(build_output_dir: str) -> dict:
+def generate_header_bloat(build_output_dir: str, result_dir: str) -> dict:
     time_trace_paths = gather_time_traces(build_output_dir)
 
     path_to_stat = {}  # header path -> (total_duration, count)
@@ -299,11 +301,14 @@ def main():
     if args.html_dir_cpp:
         actions.append(("header build time impact", generate_header_bloat, args.html_dir_headers))
 
+    current_script_dir = os.path.dirname(os.path.realpath(__file__))
+    html_dir = os.path.join(current_script_dir, "html")
+
     for description, fn, output_path in actions:
         print("Performing '{}'".format(description))
-        tree = fn(args.build_dir)
+        tree = fn(args.build_dir, output_path)
 
-        shutil.copytree("html", output_path, dirs_exist_ok=True)
+        shutil.copytree(html_dir, output_path, dirs_exist_ok=True)
         with open(os.path.join(output_path, "bloat.json"), "w") as f:
             f.write("var kTree = ")
             json.dump(tree, f, indent=4)

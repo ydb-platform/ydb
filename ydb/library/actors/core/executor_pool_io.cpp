@@ -37,7 +37,7 @@ namespace NActors {
             ThreadQueue.Push(workerId + 1, revolvingCounter);
 
             NHPTimer::STime hpnow = GetCycleCountFast();
-            NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfElapsingTime(hpnow);
+            NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
             TlsThreadContext->ElapsingActorActivity.store(Max<ui64>(), std::memory_order_release);
             wctx.AddElapsedCycles(ActorSystemIndex, hpnow - hpprev);
 
@@ -45,7 +45,7 @@ namespace NActors {
                 return 0;
 
             hpnow = GetCycleCountFast();
-            hpprev = TlsThreadContext->UpdateStartOfElapsingTime(hpnow);
+            hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
             TlsThreadContext->ElapsingActorActivity.store(ActorSystemIndex, std::memory_order_release);
             wctx.AddParkedCycles(hpnow - hpprev);
         }

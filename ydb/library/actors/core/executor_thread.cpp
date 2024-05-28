@@ -200,9 +200,10 @@ namespace NActors {
         bool preempted = false;
         bool wasWorking = false;
         NHPTimer::STime hpnow = Ctx.HPStart;
-        NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfElapsingTime(hpnow);
+        NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
         Ctx.AddElapsedCycles(ActorSystemIndex, hpnow - hpprev);
         NHPTimer::STime eventStart = Ctx.HPStart;
+        TlsThreadContext->ActivationStartTS.store(Ctx.HPStart, std::memory_order_release);
 
         for (; Ctx.ExecutedEvents < Ctx.EventsPerMailbox; ++Ctx.ExecutedEvents) {
             if (TAutoPtr<IEventHandle> evExt = mailbox->Pop()) {
@@ -250,7 +251,7 @@ namespace NActors {
                     actor->Receive(ev);
 
                     hpnow = GetCycleCountFast();
-                    hpprev = TlsThreadContext->UpdateStartOfElapsingTime(hpnow);
+                    hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
 
                     mailbox->ProcessEvents(mailbox);
                     actor->OnDequeueEvent();
@@ -287,7 +288,7 @@ namespace NActors {
                         Ctx.IncrementNonDeliveredEvents();
                     }
                     hpnow = GetCycleCountFast();
-                    hpprev = TlsThreadContext->UpdateStartOfElapsingTime(hpnow);
+                    hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
                     Ctx.AddElapsedCycles(ActorSystemIndex, hpnow - hpprev);
                 }
                 eventStart = hpnow;
@@ -371,6 +372,7 @@ namespace NActors {
                 break; // empty queue, leave
             }
         }
+        TlsThreadContext->ActivationStartTS.store(GetCycleCountFast(), std::memory_order_release);
         TlsThreadContext->ElapsingActorActivity.store(ActorSystemIndex, std::memory_order_release);
 
         NProfiling::TMemoryTagScope::Reset(0);
@@ -510,7 +512,9 @@ namespace NActors {
         TlsThreadCtx.WorkerCtx = &Ctx;
         TlsThreadCtx.ActorSystemIndex = ActorSystemIndex;
         TlsThreadCtx.ElapsingActorActivity = ActorSystemIndex;
-        TlsThreadCtx.StartOfElapsingTime = GetCycleCountFast();
+        NHPTimer::STime now = GetCycleCountFast();
+        TlsThreadCtx.StartOfProcessingEventTS = now;
+        TlsThreadCtx.ActivationStartTS = now;
         TlsThreadContext = &TlsThreadCtx;
         if (ThreadName) {
             ::SetCurrentThreadName(ThreadName);
@@ -546,7 +550,9 @@ namespace NActors {
         TlsThreadCtx.WorkerCtx = &Ctx;
         TlsThreadCtx.ActorSystemIndex = ActorSystemIndex;
         TlsThreadCtx.ElapsingActorActivity = ActorSystemIndex;
-        TlsThreadCtx.StartOfElapsingTime = GetCycleCountFast();
+        NHPTimer::STime now = GetCycleCountFast();
+        TlsThreadCtx.StartOfProcessingEventTS = now;
+        TlsThreadCtx.ActivationStartTS = now;
         TlsThreadContext = &TlsThreadCtx;
         if (ThreadName) {
             ::SetCurrentThreadName(ThreadName);
@@ -776,27 +782,31 @@ namespace NActors {
         }
     }
 
-    void TGenericExecutorThread::GetCurrentStats(TExecutorThreadStats& statsCopy) const {
+    void TGenericExecutorThread::UpdateThreadStats() {
         NHPTimer::STime hpnow = GetCycleCountFast();
         ui64 activityType = TlsThreadCtx.ElapsingActorActivity.load(std::memory_order_acquire);
-        NHPTimer::STime hpprev = TlsThreadCtx.UpdateStartOfElapsingTime(hpnow);
+        NHPTimer::STime hpprev = TlsThreadCtx.UpdateStartOfProcessingEventTS(hpnow);
         if (activityType == Max<ui64>()) {
             Ctx.AddParkedCycles(hpnow - hpprev);
         } else {
             Ctx.AddElapsedCycles(activityType, hpnow - hpprev);
         }
+        if (activityType != Max<ui64>()) {
+            NHPTimer::STime activationStart = TlsThreadCtx.ActivationStartTS.load(std::memory_order_acquire);
+            NHPTimer::STime passedTime = Max<i64>(hpnow - activationStart, 0);
+            Ctx.SetCurrentActivationTime(activityType, Ts2Us(passedTime));
+        } else {
+            Ctx.SetCurrentActivationTime(0, 0);
+        }
+    }
+
+    void TGenericExecutorThread::GetCurrentStats(TExecutorThreadStats& statsCopy) {
+        UpdateThreadStats();
         Ctx.GetCurrentStats(statsCopy);
     }
 
-    void TGenericExecutorThread::GetSharedStats(i16 poolId, TExecutorThreadStats &statsCopy) const {
-        NHPTimer::STime hpnow = GetCycleCountFast();
-        ui64 activityType = TlsThreadCtx.ElapsingActorActivity.load(std::memory_order_acquire);
-        NHPTimer::STime hpprev = TlsThreadCtx.UpdateStartOfElapsingTime(hpnow);
-        if (activityType == Max<ui64>()) {
-            Ctx.AddParkedCycles(hpnow - hpprev);
-        } else {
-            Ctx.AddElapsedCycles(activityType, hpnow - hpprev);
-        }
+    void TGenericExecutorThread::GetSharedStats(i16 poolId, TExecutorThreadStats &statsCopy) {
+        UpdateThreadStats();
         statsCopy = TExecutorThreadStats();
         statsCopy.Aggregate(SharedStats[poolId]);
     }

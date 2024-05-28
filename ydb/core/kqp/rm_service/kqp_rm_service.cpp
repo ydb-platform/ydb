@@ -714,7 +714,7 @@ private:
     void HandleWork(TEvKqp::TEvKqpProxyPublishRequest::TPtr&) {
         SendWhiteboardRequest();
         if (AppData()->TenantName.empty() || !SelfDataCenterId) {
-            LOG_E("Cannot start publishing usage for kqp_proxy, tenants: " << AppData()->TenantName << ", " <<  SelfDataCenterId.value_or("empty"));
+            LOG_I("Cannot start publishing usage for kqp_proxy, tenants: " << AppData()->TenantName << ", " <<  SelfDataCenterId.value_or("empty"));
             return;
         }
         PublishResourceUsage("kqp_proxy");

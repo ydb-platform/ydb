@@ -58,6 +58,12 @@ public:
             TMessageSeqNo seqNo;
             seqNo.DeserializeFromProto(Ev->Get()->Record.GetSeqNo()).Validate();
             msgSeqNo = seqNo;
+        } else if (txKind == NKikimrTxColumnShard::TX_KIND_SCHEMA) {
+            // deprecated. alive while all branches in SS not updated in new flow
+            NKikimrTxColumnShard::TSchemaTxBody schemaTxBody;
+            if (schemaTxBody.ParseFromString(txBody)) {
+                msgSeqNo = SeqNoFromProto(schemaTxBody.GetSeqNo());
+            }
         }
         TxInfo.emplace(txKind, txId, Ev->Get()->GetSource(), Ev->Cookie, msgSeqNo);
         TxOperator = Self->GetProgressTxController().StartProposeOnExecute(*TxInfo, txBody, txc);

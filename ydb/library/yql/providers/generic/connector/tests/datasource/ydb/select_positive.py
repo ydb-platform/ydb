@@ -93,17 +93,17 @@ class Factory:
                 ),
                 Column(
                     name='col_14_date',
-                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.DATE),
+                    ydb_type=makeYdbTypeFromTypeID(Type.DATE),
                     data_source_type=DataSourceType(ch=types_ydb.Date().to_non_nullable()),
                 ),
                 Column(
                     name='col_15_datetime',
-                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.DATETIME),
+                    ydb_type=makeYdbTypeFromTypeID(Type.DATETIME),
                     data_source_type=DataSourceType(ch=types_ydb.Datetime().to_non_nullable()),
                 ),
                 Column(
                     name='col_16_datetime',
-                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.TIMESTAMP),
+                    ydb_type=makeYdbTypeFromTypeID(Type.TIMESTAMP),
                     data_source_type=DataSourceType(ch=types_ydb.Timestamp().to_non_nullable()),
                 ),
             ),
@@ -116,8 +116,9 @@ class Factory:
             schema=schema,
             select_what=SelectWhat.asterisk(schema.columns),
             select_where=None,
-            data_in=[
+            data_out=[
                 [
+                    1,
                     False,
                     2,
                     3,
@@ -129,124 +130,39 @@ class Factory:
                     9,
                     10.10,
                     11.11,
+                    'аз',
                     'az',
-                    'az   ',
-                    '2023-01-09',
-                    '2023-01-09',
-                    '2023-01-09 13:19:11',
-                    '2023-01-09 13:19:11.123456',
+                    datetime.date(1988, 11, 20),
+                    datetime.datetime(1988, 11, 20, 12, 55, 28),
+                    datetime.datetime(1988, 11, 20, 12, 55, 28, 111),
                 ],
                 [
+                    2,
                     True,
                     -2,
-                    3,
+                    -3,
                     -4,
-                    5,
-                    -6,
-                    7,
-                    -8,
-                    9,
-                    -10.10,
-                    -11.11,
-                    'buki',
-                    'buki ',
-                    '1988-11-20',
-                    '1988-11-20',
-                    '1988-11-20 12:00:00',
-                    '1988-11-20 12:00:00.100000',
-                ],
-            ],
-            data_out_=[
-                [
-                    False,
-                    2,
-                    3,
-                    4,
-                    5,
+                    -5,
                     6,
                     7,
                     8,
                     9,
-                    10.10,
-                    11.11,
-                    'az',
-                    'az   ',
-                    datetime.date(2023, 1, 9),
-                    datetime.date(2023, 1, 9),
-                    datetime.datetime(2023, 1, 9, 13, 19, 11),
-                    datetime.datetime(2023, 1, 9, 13, 19, 11, 123456),
-                ],
-                [
-                    True,
-                    -2,
-                    3,
-                    -4,
-                    5,
-                    -6,
-                    7,
-                    -8,
-                    9,
                     -10.10,
                     -11.11,
+                    'буки',
                     'buki',
-                    'buki ',
-                    datetime.date(1988, 11, 20),
-                    datetime.date(1988, 11, 20),
-                    datetime.datetime(1988, 11, 20, 12, 00, 00),
-                    datetime.datetime(1988, 11, 20, 12, 00, 00, 100000),
+                    datetime.date(2024, 5, 27),
+                    datetime.datetime(2024, 5, 27, 18, 43, 32),
+                    datetime.datetime(2024, 5, 27, 18, 43, 32, 123456),
                 ],
             ],
-            data_source_kind=EDataSourceKind.CLICKHOUSE,
+            data_source_kind=EDataSourceKind.YDB,
             protocol=EProtocol.NATIVE,
             pragmas=dict(),
             check_output_schema=True,
         )
 
-        # ClickHouse returns different data if columns are Nullable
-        schema_nullable = Schema(columns=ColumnList())
-        data_in_nullable = [[]]
-        data_out_nullable = [[]]
-
-        for i, col in enumerate(schema.columns):
-            ch_type = col.data_source_type.ch
-
-            # copy type and example value to new TestCase
-            schema_nullable.columns.append(
-                Column(
-                    name=col.name,
-                    ydb_type=makeOptionalYdbTypeFromYdbType(col.ydb_type),
-                    data_source_type=DataSourceType(ch=ch_type.to_nullable()),
-                )
-            )
-            data_in_nullable[0].append(tc.data_in[0][i])
-            data_out_nullable[0].append(tc.data_out_[0][i])
-
-        # Add row containing only NULL values
-        data_in_nullable.append([None] * len(data_in_nullable[0]))
-        data_out_nullable.append([None] * len(data_out_nullable[0]))
-
-        # for the sake of CH output sorting
-        data_in_nullable[1][0] = data_out_nullable[1][0] = True
-
-        test_case_name_nullable = 'primitive_types_nullable'
-
-        tc_nullable = TestCase(
-            name_=test_case_name_nullable,
-            schema=schema_nullable,
-            select_what=SelectWhat.asterisk(schema_nullable.columns),
-            select_where=None,
-            data_source_kind=EDataSourceKind.CLICKHOUSE,
-            data_in=data_in_nullable,
-            data_out_=data_out_nullable,
-            protocol=EProtocol.NATIVE,
-            pragmas=dict(),
-            check_output_schema=True,
-        )
-
-        return [
-            tc,
-            tc_nullable,
-        ]
+        return [tc]
 
     def _constant(self) -> Sequence[TestCase]:
         '''

@@ -70,10 +70,10 @@ set -ex
     primitives (id, col_01_bool, col_02_int8, col_03_int16, col_04_int32, col_05_int64, col_06_uint8, col_07_uint16,
                 col_08_uint32, col_09_uint64, col_10_float, col_11_double, col_12_string, col_13_utf8,
                 col_14_date, col_15_datetime, col_16_timestamp)
-    VALUES (1, false, 1, -2, 3, -4, 5, 6, 7, 8, 9.9f, -10.10, "аз", "az",
-            Date("1988-11-20"), Datetime("1988-11-20T12:55:28Z"), Timestamp("1988-11-20T12:55:28.123Z")),
-           (2, true, 20, -20, 30, -40, 50, 60, 70, 80, 90.90f, -100.100, "буки", "buki",
-            Date("2024-05-27"), Datetime("2024-05-27T18:43:32Z"), Timestamp("2024-05-27T18:43:32.123Z"));
+    VALUES (1, false, 2, 3, 4, 5, 6, 7, 8, 9, 10.10f, 11.11f "аз", "az",
+            Date("1988-11-20"), Datetime("1988-11-20T12:55:28Z"), Timestamp("1988-11-20T12:55:28.111Z")),
+           (2, true, -2, -3, -4, -5, 6, 7, 8, 9, -10.10f, -11.11f, "буки", "buki",
+            Date("2024-05-27"), Datetime("2024-05-27T18:43:32Z"), Timestamp("2024-05-27T18:43:32.123456Z"));
     COMMIT;
   '
 

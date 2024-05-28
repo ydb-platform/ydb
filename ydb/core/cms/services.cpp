@@ -1,5 +1,7 @@
 #include "services.h"
 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/nameservice.h>
 #include <util/generic/hash.h>
 
 namespace NKikimr::NCms {
@@ -17,6 +19,17 @@ bool TryFromWhiteBoardRole(const TString& role, EService& value) {
 
     value = it->second;
     return true;
+}
+
+void TryFromNodeId(ui32 nodeId, TServices& value) {
+    if (AppData()->DynamicNameserviceConfig) {
+        if (nodeId <= AppData()->DynamicNameserviceConfig->MaxStaticNodeId) {
+            value |= EService::Static;
+            value |= EService::Storage; // for compatibility with old scripts
+        } else {
+            value |= EService::DynamicNode;
+        }
+    }
 }
 
 } // namespace NKikimr::NCms

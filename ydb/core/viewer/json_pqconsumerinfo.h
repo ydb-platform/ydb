@@ -119,37 +119,70 @@ public:
 
 template <>
 struct TJsonRequestSchema<TJsonPQConsumerInfo> {
-    static TString GetSchema() {
-        TStringStream stream;
-        TProtoToJson::ProtoToJsonSchema<NKikimrClient::TPersQueueMetaResponse>(stream);
-        return stream.Str();
+    static YAML::Node GetSchema() {
+        return TProtoToYaml::ProtoToYamlSchema<NKikimrClient::TPersQueueMetaResponse>();
     }
 };
 
 template <>
 struct TJsonRequestParameters<TJsonPQConsumerInfo> {
-    static TString GetParameters() {
-        return R"___([{"name":"topic","in":"query","description":"topic name","required":true,"type":"string"},
-                      {"name":"dc","in":"query","description":"dc name (required with version >= 3)","required":false,"type":"string", "default":""},
-                      {"name":"version","in":"query","description":"query version","required":false,"type":"integer", "default":"0"},
-                      {"name":"client","in":"query","description":"client name","required":true,"type":"string"},
-                      {"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean","default":false},
-                      {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean","default":false},
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer","default":10000}])___";
+    static YAML::Node GetParameters() {
+        return YAML::Load(R"___(
+            - name: topic
+              in: query
+              description: topic name
+              required: true
+              type: string
+            - name: dc
+              in: query
+              description: dc name (required with version >= 3)
+              required: false
+              type: string
+              default: ""
+            - name: version
+              in: query
+              description: query version
+              required: false
+              type: integer
+              default: 0
+            - name: client
+              in: query
+              description: client name
+              required: true
+              type: string
+            - name: enums
+              in: query
+              description: convert enums to strings
+              required: false
+              type: boolean
+              default: false
+            - name: ui64
+              in: query
+              description: return ui64 as number
+              required: false
+              type: boolean
+              default: false
+            - name: timeout
+              in: query
+              description: timeout in ms
+              required: false
+              type: integer
+              default: 10000
+            )___");
     }
 };
 
 template <>
 struct TJsonRequestSummary<TJsonPQConsumerInfo> {
     static TString GetSummary() {
-        return "\"Consumer-topic metrics\"";
+        return "Consumer-topic metrics";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonPQConsumerInfo> {
     static TString GetDescription() {
-        return "\"Returns consumer-topic metrics\"";
+        return "Returns consumer-topic metrics";
     }
 };
 

@@ -416,7 +416,7 @@ public:
                 if (FilterTenant.empty()) {
                     RequestForTenant(path);
                 }
-                
+
                 if (entry.DomainInfo->ResourcesDomainKey && entry.DomainInfo->DomainKey != entry.DomainInfo->ResourcesDomainKey) {
                     TPathId resourceDomainKey(entry.DomainInfo->ResourcesDomainKey);
                     BLOG_TRACE("Requesting navigate for resource domain " << resourceDomainKey);
@@ -880,44 +880,100 @@ public:
 
 template <>
 struct TJsonRequestSchema<TJsonNodes> {
-    static TString GetSchema() {
-        TStringStream stream;
-        TProtoToJson::ProtoToJsonSchema<NKikimrViewer::TNodesInfo>(stream);
-        return stream.Str();
+    static YAML::Node GetSchema() {
+        return TProtoToYaml::ProtoToYamlSchema<NKikimrViewer::TNodesInfo>();
     }
 };
 
 template <>
 struct TJsonRequestParameters<TJsonNodes> {
-    static TString GetParameters() {
-        return R"___([{"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
-                      {"name":"ui64","in":"query","description":"return ui64 as numbers","required":false,"type":"boolean"},
-                      {"name":"path","in":"query","description":"path to schema object","required":false,"type":"string"},
-                      {"name":"with","in":"query","description":"filter nodes by missing disks or space","required":false,"type":"string"},
-                      {"name":"type","in":"query","description":"nodes type to get (static,dynamic,any)","required":false,"type":"string"},
-                      {"name":"storage","in":"query","description":"return storage info","required":false,"type":"boolean"},
-                      {"name":"tablets","in":"query","description":"return tablets info","required":false,"type":"boolean"},
-                      {"name":"sort","in":"query","description":"sort by (NodeId,Host,DC,Rack,Version,Uptime,Memory,CPU,LoadAverage,Missing)","required":false,"type":"string"},
-                      {"name":"offset","in":"query","description":"skip N nodes","required":false,"type":"integer"},
-                      {"name":"limit","in":"query","description":"limit to N nodes","required":false,"type":"integer"},
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"},
-                      {"name":"uptime","in":"query","description":"return only nodes with less uptime in sec.","required":false,"type":"integer"},
-                      {"name":"problems_only","in":"query","description":"return only problem nodes","required":false,"type":"boolean"},
-                      {"name":"filter","in":"query","description":"filter nodes by id or host","required":false,"type":"string"}])___";
+    static YAML::Node GetParameters() {
+        return YAML::Load(R"___(
+              - name: enums
+                in: query
+                description: convert enums to strings
+                required: false
+                type: boolean
+              - name: ui64
+                in: query
+                description: return ui64 as numbers
+                required: false
+                type: boolean
+              - name: path
+                in: query
+                description: path to schema object
+                required: false
+                type: string
+              - name: with
+                in: query
+                description: filter nodes by missing disks or space
+                required: false
+                type: string
+              - name: type
+                in: query
+                description: nodes type to get (static,dynamic,any)
+                required: false
+                type: string
+              - name: storage
+                in: query
+                description: return storage info
+                required: false
+                type: boolean
+              - name: tablets
+                in: query
+                description: return tablets info
+                required: false
+                type: boolean
+              - name: sort
+                in: query
+                description: sort by (NodeId,Host,DC,Rack,Version,Uptime,Memory,CPU,LoadAverage,Missing)
+                required: false
+                type: string
+              - name: offset
+                in: query
+                description: skip N nodes
+                required: false
+                type: integer
+              - name: limit
+                in: query
+                description: limit to N nodes
+                required: false
+                type: integer
+              - name: timeout
+                in: query
+                description: timeout in ms
+                required: false
+                type: integer
+              - name: uptime
+                in: query
+                description: return only nodes with less uptime in sec.
+                required: false
+                type: integer
+              - name: problems_only
+                in: query
+                description: return only problem nodes
+                required: false
+                type: boolean
+              - name: filter
+                in: query
+                description: filter nodes by id or host
+                required: false
+                type: string
+        )___");
     }
 };
 
 template <>
 struct TJsonRequestSummary<TJsonNodes> {
     static TString GetSummary() {
-        return "\"Nodes info\"";
+        return "Nodes info";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonNodes> {
     static TString GetDescription() {
-        return "\"Information about nodes\"";
+        return "Information about nodes";
     }
 };
 

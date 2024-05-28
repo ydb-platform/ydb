@@ -203,27 +203,58 @@ public:
 
 template <typename RequestType, typename ResponseType>
 struct TJsonRequestParameters<TJsonVDiskRequest<RequestType, ResponseType>> {
-    static TString GetParameters() {
-        return R"___([{"name":"node_id","in":"query","description":"node identifier","required":true,"type":"integer"},
-               {"name":"pdisk_id","in":"query","description":"pdisk identifier","required":true,"type":"integer"},
-               {"name":"vslot_id","in":"query","description":"vdisk slot identifier","required":true,"type":"integer"},)___"
-               +
-               TJsonVDiskRequestHelper<RequestType, ResponseType>::GetAdditionalParameters()
-               +
-               R"___({"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
-               {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
-               {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"},
-               {"name":"retries","in":"query","description":"number of retries","required":false,"type":"integer"},
-               {"name":"retry_period","in":"query","description":"retry period in ms","required":false,"type":"integer","default":500}])___";
+    static YAML::Node GetParameters() {
+        return YAML::Load(R"___(
+            - name: node_id
+              in: query
+              description: node identifier
+              required: true
+              type: integer
+            - name: pdisk_id
+              in: query
+              description: pdisk identifier
+              required: true
+              type: integer
+            - name: vslot_id
+              in: query
+              description: vdisk slot identifier
+              required: true
+              type: integer
+            )___" + TJsonVDiskRequestHelper<RequestType, ResponseType>::GetAdditionalParameters() + R"___(
+            - name: enums
+              in: query
+              description: convert enums to strings
+              required: false
+              type: boolean
+            - name: ui64
+              in: query
+              description: return ui64 as number
+              required: false
+              type: boolean
+            - name: timeout
+              in: query
+              description: timeout in ms
+              required: false
+              type: integer
+            - name: retries
+              in: query
+              description: number of retries
+              required: false
+              type: integer
+            - name: retry_period
+              in: query
+              description: retry period in ms
+              required: false
+              type: integer
+              default: 500
+            )___");
     }
 };
 
 template <typename RequestType, typename ResponseType>
 struct TJsonRequestSchema<TJsonVDiskRequest<RequestType, ResponseType>> {
-    static TString GetSchema() {
-        TStringStream stream;
-        TProtoToJson::ProtoToJsonSchema<typename ResponseType::ProtoRecordType>(stream);
-        return stream.Str();
+    static YAML::Node GetSchema() {
+        return TProtoToYaml::ProtoToYamlSchema<typename ResponseType::ProtoRecordType>();
     }
 };
 

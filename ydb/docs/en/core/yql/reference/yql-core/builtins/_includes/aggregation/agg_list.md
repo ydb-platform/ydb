@@ -1,6 +1,6 @@
 ## AGGREGATE_LIST {#agg-list}
 
-Get all column values as a list. When combined with `DISTINCT`, it returns only distinct values. The optional second parameter sets the maximum number of values to be returned. Zero limit value equals to unlimited.
+Get all column values as a list. When combined with `DISTINCT,` it returns only distinct values. The optional second parameter sets the maximum number of values to be returned. A zero limit value means unlimited.
 
 If you know already that you have few distinct values, use the `AGGREGATE_LIST_DISTINCT` aggregate function to build the same result in memory (that might not be enough for a large number of distinct values).
 

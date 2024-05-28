@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/viewer/json/json.h>
+#include <ydb/core/viewer/yaml/yaml.h>
 
 #include <ydb/core/tablet/defs.h>
 #include <ydb/library/actors/core/defs.h>
@@ -154,9 +155,20 @@ public:
         const TContentHandler& handler) = 0;
 
     virtual TString GetCORS(const NMon::TEvHttpInfo* request) = 0;
-    virtual TString GetHTTPOK(const NMon::TEvHttpInfo* request, TString contentType = {}, TString response = {}) = 0;
-    virtual TString GetHTTPOKJSON(const NMon::TEvHttpInfo* request, TString response = {}) = 0;
-    virtual TString GetHTTPOKTEXT(const NMon::TEvHttpInfo* request, TString response = {}) = 0;
+    virtual TString GetHTTPOK(const NMon::TEvHttpInfo* request, TString contentType = {}, TString response = {}, TInstant lastModified = {}) = 0;
+
+    TString GetHTTPOKJSON(const NMon::TEvHttpInfo* request, TString response = {}, TInstant lastModified = {}) {
+        return GetHTTPOK(request, "application/json", response, lastModified);
+    }
+
+    TString GetHTTPOKYAML(const NMon::TEvHttpInfo* request, TString response = {}, TInstant lastModified = {}) {
+        return GetHTTPOK(request, "application/yaml", response, lastModified);
+    }
+
+    TString GetHTTPOKTEXT(const NMon::TEvHttpInfo* request, TString response = {}, TInstant lastModified = {}) {
+        return GetHTTPOK(request, "text/plain", response, lastModified);
+    }
+
     virtual TString GetHTTPGATEWAYTIMEOUT(const NMon::TEvHttpInfo* request) = 0;
     virtual TString GetHTTPBADREQUEST(const NMon::TEvHttpInfo* request, TString contentType = {}, TString response = {}) = 0;
     virtual TString GetHTTPFORBIDDEN(const NMon::TEvHttpInfo* request) = 0;
@@ -168,22 +180,22 @@ void SetupKqpContentHandler(IViewer* viewer);
 
 template <typename RequestType>
 struct TJsonRequestSchema {
-    static TString GetSchema() { return TString(); }
+    static YAML::Node GetSchema() { return {}; }
 };
 
 template <typename RequestType>
 struct TJsonRequestSummary {
-    static TString GetSummary() { return TString(); }
+    static TString GetSummary() { return {}; }
 };
 
 template <typename RequestType>
 struct TJsonRequestDescription {
-    static TString GetDescription() { return TString(); }
+    static TString GetDescription() { return {}; }
 };
 
 template <typename RequestType>
 struct TJsonRequestParameters {
-    static TString GetParameters() { return TString(); }
+    static YAML::Node GetParameters() { return {}; }
 };
 
 template <typename ValueType, typename OutputIteratorType>

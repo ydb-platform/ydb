@@ -102,34 +102,51 @@ public:
 
 template <>
 struct TJsonRequestSchema<TJsonTenants> {
-    static TString GetSchema() {
-        TStringStream stream;
-        TProtoToJson::ProtoToJsonSchema<NConsole::TEvConsole::TEvListTenantsResponse::ProtoRecordType>(stream);
-        return stream.Str();
+    static YAML::Node GetSchema() {
+        return TProtoToYaml::ProtoToYamlSchema<NConsole::TEvConsole::TEvListTenantsResponse::ProtoRecordType>();
     }
 };
 
 template <>
 struct TJsonRequestParameters<TJsonTenants> {
-    static TString GetParameters() {
-        return R"___([{"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
-                      {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
-                      {"name":"state","in":"query","description":"return tenant state","required":false,"type":"boolean","default":true},
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___";
+    static YAML::Node GetParameters() {
+        return YAML::Load(R"___(
+            - name: enums
+              in: query
+              description: convert enums to strings
+              required: false
+              type: boolean
+            - name: ui64
+              in: query
+              description: return ui64 as number
+              required: false
+              type: boolean
+            - name: state
+              in: query
+              description: return tenant state
+              required: false
+              type: boolean
+              default: true
+            - name: timeout
+              in: query
+              description: timeout in ms
+              required: false
+              type: integer
+              )___");
     }
 };
 
 template <>
 struct TJsonRequestSummary<TJsonTenants> {
     static TString GetSummary() {
-        return "\"Tenant info (brief)\"";
+        return "Tenant info (brief)";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonTenants> {
     static TString GetDescription() {
-        return "\"Returns list of tenants\"";
+        return "Returns list of tenants";
     }
 };
 

@@ -169,36 +169,60 @@ public:
 
 template <>
 struct TJsonRequestSchema<TJsonTabletCounters> {
-    static TString GetSchema() {
-        TStringStream stream;
-        TProtoToJson::ProtoToJsonSchema<TEvTablet::TEvGetCountersResponse::ProtoRecordType>(stream);
-        return stream.Str();
+    static YAML::Node GetSchema() {
+        return TProtoToYaml::ProtoToYamlSchema<TEvTablet::TEvGetCountersResponse::ProtoRecordType>();
     }
 };
 
 template <>
 struct TJsonRequestParameters<TJsonTabletCounters> {
-    static TString GetParameters() {
-        return R"___([{"name":"path","in":"query","description":"schema path","required":false,"type":"string"},
-                      {"name":"tablet_id","in":"query","description":"tablet identifier","required":false,"type":"integer"},
-                      {"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
-                      {"name":"aggregate","in":"query","description":"aggregate tablet counters","required":false,"type":"boolean"},
-                      {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___";
+    static YAML::Node GetParameters() {
+        return YAML::Load(R"___(
+            - name: path
+              in: query
+              description: schema path
+              required: false
+              type: string
+            - name: tablet_id
+              in: query
+              description: tablet identifier
+              required: false
+              type: integer
+            - name: enums
+              in: query
+              description: convert enums to strings
+              required: false
+              type: boolean
+            - name: aggregate
+              in: query
+              description: aggregate tablet counters
+              required: false
+              type: boolean
+            - name: ui64
+              in: query
+              description: return ui64 as number
+              required: false
+              type: boolean
+            - name: timeout
+              in: query
+              description: timeout in ms
+              required: false
+              type: integer
+            )___");
     }
 };
 
 template <>
 struct TJsonRequestSummary<TJsonTabletCounters> {
     static TString GetSummary() {
-        return "\"Tablet counters information\"";
+        return "Tablet counters information";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonTabletCounters> {
     static TString GetDescription() {
-        return "\"Returns information about tablet counters\"";
+        return "Returns information about tablet counters";
     }
 };
 

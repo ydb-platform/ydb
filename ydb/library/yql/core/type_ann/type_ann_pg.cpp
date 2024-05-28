@@ -4068,8 +4068,19 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         if (!EnsureTuple(*child, ctx.Expr)) {
                             return IGraphTransformer::TStatus::Error;
                         }
-
-                        totalTupleSizes += child->ChildrenSize() + 1;
+                        for (const auto& e: child->Children()) {
+                            if (!e->IsList()) {
+                                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(e->Pos()),
+                                    TStringBuilder() << "Excepted list"));
+                                return IGraphTransformer::TStatus::Error;
+                            }
+                            if (!e->Head().IsAtom()) {
+                                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(e->Pos()),
+                                    TStringBuilder() << "Excepted atom"));
+                                return IGraphTransformer::TStatus::Error;
+                            }
+                            totalTupleSizes += e->Head().Content() == "push";
+                        }
                     }
 
                     if (totalTupleSizes != inputs.size()) {
@@ -4084,8 +4095,6 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                     ui32 inputIndex = 0;
                     THashSet<TString> usedInUsingBefore;
                     for (ui32 joinGroupNo = 0; joinGroupNo < data.ChildrenSize(); ++joinGroupNo) {
-                        joinInputs.push_back(inputs[inputIndex]);
-                        ++inputIndex;
                         // same names allowed in group, but not allowed in different since columns must not repeat
                         THashSet<TString> usedInUsingInThatGroup;
                         for (ui32 i = 0; i < data.Child(joinGroupNo)->ChildrenSize(); ++i) {
@@ -4099,6 +4108,11 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                             }
 
                             auto joinType = child->Head().Content();
+                            if (joinType == "push") {
+                                joinInputs.push_back(inputs[inputIndex++]);
+                                continue;
+                            }
+
                             if (joinType != "cross" && joinType != "inner" && joinType != "left"
                                 && joinType != "right" && joinType != "full") {
                                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(option->Head().Pos()),
@@ -4110,9 +4124,6 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                 if (!EnsureTupleSize(*child, 1, ctx.Expr)) {
                                     return IGraphTransformer::TStatus::Error;
                                 }
-
-                                joinInputs.push_back(inputs[inputIndex]);
-                                ++inputIndex;
                             }
                             else {
                                 if (!EnsureTupleMinSize(*child, 2, ctx.Expr)) {
@@ -4127,8 +4138,6 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                     }
                                 }
 
-                                joinInputs.push_back(inputs[inputIndex]);
-                                ++inputIndex;
                                 if (rightSideIsOptional) {
                                     MakeOptionalColumns(joinInputs.back().Type, ctx.Expr);
                                 }
@@ -4172,24 +4181,22 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                             TInputs groupInputs;
                             THashSet<TString> usedInUsingBefore;
                             THashSet<TString> groupPossibleAliases;
-                            if (data.Child(joinGroupNo)->ChildrenSize() > 0) {
-                                groupInputs.push_back(inputs[inputIndex]);
-                                auto alias = inputs[inputIndex].Alias;
-                                if (!alias.empty()) {
-                                    groupPossibleAliases.insert(alias);
-                                }
-                            }
 
-                            ++inputIndex;
-                            for (ui32 i = 0; i < data.Child(joinGroupNo)->ChildrenSize(); ++i, ++inputIndex) {
-                                groupInputs.push_back(inputs[inputIndex]);
-                                auto alias = inputs[inputIndex].Alias;
-                                if (!alias.empty()) {
-                                    groupPossibleAliases.insert(alias);
-                                }
+                            for (ui32 i = 0; i < data.Child(joinGroupNo)->ChildrenSize(); ++i) {
 
                                 auto child = data.Child(joinGroupNo)->Child(i);
                                 auto joinType = child->Head().Content();
+                                if (joinType == "push") {
+                                    groupInputs.push_back(inputs[inputIndex]);
+                                    auto alias = inputs[inputIndex].Alias;
+                                    if (!alias.empty()) {
+                                        groupPossibleAliases.insert(alias);
+                                    }
+                                    ++inputIndex;
+                                    newGroupItems.push_back(data.Child(joinGroupNo)->ChildPtr(i));
+                                    continue;
+                                }
+
                                 if (joinType == "cross") {
                                     newGroupItems.push_back(data.Child(joinGroupNo)->ChildPtr(i));
                                 } else if (needRewrite && child->ChildrenSize() > 1 && child->Child(1)->Content() != "using") {

@@ -216,9 +216,9 @@ BENCHMARK_DEFINE_F(TPartFixture, DoCharge)(benchmark::State& state) {
         auto key1 = tool.KeyCells(Mass->Saved[row1]);
         auto key2 = tool.KeyCells(Mass->Saved[row2]);
         if (reverse) {
-            ChargeRangeReverse(&Env, key1, key2, run, *Subset->Scheme->Keys, tags, items, 0);
+            ChargeRangeReverse(&Env, key1, key2, run, *Subset->Scheme->Keys, tags, items, 0, true);
         } else {
-            ChargeRange(&Env, key1, key2, run, *Subset->Scheme->Keys, tags, items, 0);
+            ChargeRange(&Env, key1, key2, run, *Subset->Scheme->Keys, tags, items, 0, true);
         }
     }
 }

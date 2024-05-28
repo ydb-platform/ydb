@@ -158,6 +158,7 @@ def generate_cpp_bloat(build_output_dir: str, result_dir: str) -> dict:
     tree = {"name": "/"}
     
     cpp_compilation_times = [] 
+    total_compilation_time = 0.0
 
     for duration, path, time_trace_path in result:
         splitted = path.split(os.sep)
@@ -172,10 +173,12 @@ def generate_cpp_bloat(build_output_dir: str, result_dir: str) -> dict:
             "path": path,
             "time_s": duration,
         })
+        total_compilation_time += duration
 
     os.makedirs(result_dir, exist_ok=True)
 
     human_readable_output = {
+        "total_compilation_time": total_compilation_time,
         "cpp_compilation_times": cpp_compilation_times,
     }
 

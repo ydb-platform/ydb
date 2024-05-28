@@ -37,6 +37,7 @@ UINT64_COLUMNS = [
 ]
 
 DOUBLE_COLUMNS = [
+    "total_compilation_time_s",
     "compilation_time_s"
 ]
 
@@ -45,10 +46,21 @@ ALL_COLUMNS = UTF8_COLUMNS + DATETIME_COLUMNS + UINT64_COLUMNS
 
 def sanitize_str(s):
     return s or "N\\A"
-    # YDB SDK expects bytes for 'String' columns
-    if s is None:
-        s = "N\A"
-    return s.encode("utf-8")
+
+def generate_column_types(row):
+    column_types = ydb.BulkUpsertColumns()
+    for column_name in row:
+        if column_name in UTF8_COLUMNS:
+            column_types = column_types.add_column(column_name, ydb.PrimitiveType.Utf8)
+        elif column_name in UINT64_COLUMNS:
+            column_types = column_types.add_column(column_name, ydb.PrimitiveType.Uint64)
+        elif column_name in DOUBLE_COLUMNS:
+            column_types = column_types.add_column(column_name, ydb.PrimitiveType.Double)
+        elif column_name in DATETIME_COLUMNS:
+            column_types = column_types.add_column(column_name, ydb.PrimitiveType.Datetime)
+        else:
+            assert False
+    return column_types
 
 
 def main():
@@ -66,9 +78,6 @@ def main():
         credentials=ydb.credentials_from_env_variables()
     ) as driver:
         driver.wait(timeout=10, fail_fast=True)
-        session = ydb.retry_operation_sync(
-            lambda: driver.table_client.session().create()
-        )
 
         column_types = ydb.BulkUpsertColumns()
         for type_ in UTF8_COLUMNS:
@@ -118,13 +127,21 @@ def main():
         for entry in cpp_stats["cpp_compilation_times"]:
             path = entry["path"]
             time_s = entry["time_s"]
-            parameters["path"] = sanitize_str(path)
-            parameters["compilation_time_s"] = time_s
-            parameters["id"] = str(uuid.uuid4())
-            rows.append(copy.copy(parameters))
+            row = copy.copy(common_parameters)
+            row["path"] = sanitize_str(path)
+            row["compilation_time_s"] = time_s
+            row["id"] = str(uuid.uuid4())
+            rows.append(copy.copy(row))
         
-        driver.table_client.bulk_upsert(DATABASE_PATH + "/cpp_compile_time", rows, column_types)
+        if rows:
+            row = rows[0]
+            driver.table_client.bulk_upsert(DATABASE_PATH + "/cpp_compile_time", rows, generate_column_types(row))
+        
+        row = copy.copy(common_parameters)
+        row["id"] = str(uuid.uuid4())
+        row["total_compilation_time_s"] = cpp_stats["total_compilation_time"]
 
+        driver.table_client.bulk_upsert(DATABASE_PATH + "/total_compile_time", [row], generate_column_types(row))
 
 if __name__ == "__main__":
     exit(main())

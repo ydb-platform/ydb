@@ -1,6 +1,5 @@
 #include "mkql_grace_join_imp.h"
 
-#include <format>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/utils/log/log.h>
 
@@ -1323,8 +1322,8 @@ bool TTableBucketSpiller::IsExtractionRequired() const {
 }
 
 void TTableBucketSpiller::StartBucketRestoration() {
-    MKQL_ENSURE(State == EState::Restoring, std::format("STATE: {}\n", (int)State));
-    MKQL_ENSURE(NextVectorToProcess == ENextVectorToProcess::None, std::format("NEXT VECTOR: {}\n", (int)NextVectorToProcess));
+    MKQL_ENSURE(State == EState::Restoring, "Internal logic error");
+    MKQL_ENSURE(NextVectorToProcess == ENextVectorToProcess::None, "Internal logic error");
 
     NextVectorToProcess = ENextVectorToProcess::KeyAndVals;
     ProcessBucketRestoration();

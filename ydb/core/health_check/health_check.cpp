@@ -1604,7 +1604,7 @@ public:
         return TStringBuilder() << pDiskKey.GetNodeId() << "-" << pDiskKey.GetPDiskId();
     }
 
-    void FillPDiskStatus(const TString& pDiskId, Ydb::Monitoring::StoragePDiskStatus& storagePDiskStatus, TSelfCheckContext context) {
+    void FillPDiskStatus(const TString& pDiskId, Ydb::Monitoring::StoragePDiskStatus& storagePDiskStatus, TSelfCheckContext& context) {
         context.Location.clear_database(); // PDisks are shared between databases
         context.Location.mutable_storage()->mutable_pool()->clear_name(); // PDisks are shared between pools
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->clear_id(); // PDisks are shared between groups
@@ -1714,9 +1714,12 @@ public:
             return;
         }
 
+        Ydb::Monitoring::StatusFlag::Status spaceStatus = Ydb::Monitoring::StatusFlag::GREEN;
         if (vSlot->GetKey().HasPDiskId()) {
             TString pDiskId = GetPDiskId(vSlot->GetKey());
-            FillPDiskStatus(pDiskId, *storageVDiskStatus.mutable_pdisk(), {&context, "PDISK"});
+            TSelfCheckContext pDiskContext{&context, "PDISK"};
+            FillPDiskStatus(pDiskId, *storageVDiskStatus.mutable_pdisk(), pDiskContext);
+            spaceStatus = MaxStatus(spaceStatus, pDiskContext.FindMaxStatus({ETags::PDiskSpace}));
         }
 
         switch (status->number()) {
@@ -1739,27 +1742,12 @@ public:
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
             }
         }
-
-        /* BS sys views do not expose VDisk space color
-        switch (vslot.vdiskmetrics().spacecolor()) {
-            case NKikimrBlobStorage::TPDiskSpaceColor::GREEN:
-            case NKikimrBlobStorage::TPDiskSpaceColor::CYAN:
-                if (context.IssueRecords.size() == 0) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
-                } else {
-                    context.ReportStatus(context.IssueRecords.begin()->IssueLog.status(),
-                                        TStringBuilder() << "VDisk have space issue",
-                                        ETags::VDiskState,
-                                        {ETags::PDiskSpace});
-                }
-                break;
-            default:
-                context.ReportStatus(GetFlagFromBSPDiskSpaceColor(vslot.vdiskmetrics().spacecolor()),
-                                    TStringBuilder() << "DiskSpace is " << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(vslot.vdiskmetrics().spacecolor()),
-                                    ETags::VDiskSpace,
-                                    {ETags::PDiskSpace});
-                break;
-        }*/
+        if (spaceStatus != Ydb::Monitoring::StatusFlag::GREEN) {
+            context.ReportStatus(context.IssueRecords.begin()->IssueLog.status(),
+                                TStringBuilder() << "VDisk have space issue",
+                                ETags::VDiskState,
+                                {ETags::PDiskSpace});
+        }
 
         storageVDiskStatus.set_overall(context.GetOverallStatus());
     }

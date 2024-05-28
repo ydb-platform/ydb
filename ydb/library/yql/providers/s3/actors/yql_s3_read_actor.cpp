@@ -36,10 +36,7 @@
 
 #endif
 
-#include "parquet_cache.h"
 #include "raw_read_actor.h"
-#include "read_json_each_row.h"
-#include "read_parquet.h"
 #include "source_queue.h"
 #include "yql_arrow_column_converters.h"
 #include "yql_s3_actors_util.h"
@@ -1213,8 +1210,7 @@ public:
         ui64 fileQueueBatchSizeLimit,
         ui64 fileQueueBatchObjectCountLimit,
         ui64 fileQueueConsumersCountDelta,
-        bool asyncDecoding,
-        bool sourceCoroActor
+        bool asyncDecoding
     )   : ReadActorFactoryCfg(readActorFactoryCfg)
         , Gateway(std::move(gateway))
         , HolderFactory(holderFactory)
@@ -1240,8 +1236,7 @@ public:
         , FileQueueBatchSizeLimit(fileQueueBatchSizeLimit)
         , FileQueueBatchObjectCountLimit(fileQueueBatchObjectCountLimit)
         , FileQueueConsumersCountDelta(fileQueueConsumersCountDelta)
-        , AsyncDecoding(asyncDecoding)
-        , SourceCoroActor(sourceCoroActor) {
+        , AsyncDecoding(asyncDecoding) {
         if (Counters) {
             QueueDataSize = Counters->GetCounter("QueueDataSize");
             QueueDataLimit = Counters->GetCounter("QueueDataLimit");
@@ -1300,14 +1295,6 @@ public:
             ReadSpec->RowSpec,
             ReadSpec->Settings
         );
-
-        UseParquetCache = (ReadSpec->Format == "parquet") && !SourceCoroActor;
-
-        if (UseParquetCache) {
-            Send(ParquetCacheActorId(), new TEvS3Provider::TEvCacheSourceStart(
-                SourceContext->SourceId, TxId, SourceContext->Schema
-            ));
-        }
 
         if (!UseRuntimeListing) {
             FileQueueActor = RegisterWithSameMailbox(CreateS3FileQueueActor(
@@ -1386,73 +1373,37 @@ public:
                                       << pathIndex);
 
         TActorId actorId;
-        if (ReadSpec->Format == "json_each_row" && ReadSpec->Arrow) {
-            auto splitContext = std::make_shared<TSplitReadContext>(
-                SourceContext,
-                Gateway,
-                Url + object.GetPath(),
-                0, object.GetSize(), object.GetSize(), // complete
-                object.GetPathIndex(),
-                IHTTPGateway::MakeYcHeaders(requestId, AuthInfo.GetToken(), {}, AuthInfo.GetAwsUserPwd(), AuthInfo.GetAwsSigV4()),
-                RetryPolicy,
-                TxId,
-                requestId
-            );
-            if (AsyncDecoding) {
-                actorId = Register(CreateS3ReadJsonEachRowActor(splitContext));
-            } else {
-                actorId = RegisterWithSameMailbox(CreateS3ReadJsonEachRowActor(splitContext));
-            }
-        } else if (ReadSpec->Format == "parquet" && !SourceCoroActor) {
-            Y_ASSERT(ReadSpec->Arrow);
-            auto splitContext = std::make_shared<TSplitReadContext>(
-                SourceContext,
-                Gateway,
-                Url + object.GetPath(),
-                0, object.GetSize(), object.GetSize(),
-                object.GetPathIndex(),
-                IHTTPGateway::MakeYcHeaders(requestId, AuthInfo.GetToken(), {}, AuthInfo.GetAwsUserPwd(), AuthInfo.GetAwsSigV4()),
-                RetryPolicy,
-                TxId,
-                requestId
-            );
-            if (AsyncDecoding) {
-                actorId = Register(CreateS3ReadParquetActor(splitContext, ReadSpec->ParallelRowGroupCount, ReadSpec->RowGroupReordering, UseParquetCache));
-            } else {
-                actorId = RegisterWithSameMailbox(CreateS3ReadParquetActor(splitContext, ReadSpec->ParallelRowGroupCount, ReadSpec->RowGroupReordering, UseParquetCache));
-            }
+        auto stuff = std::make_shared<TRetryStuff>(
+            Gateway,
+            Url + object.GetPath(),
+            IHTTPGateway::MakeYcHeaders(requestId, AuthInfo.GetToken(), {}, AuthInfo.GetAwsUserPwd(), AuthInfo.GetAwsSigV4()),
+            object.GetSize(),
+            TxId,
+            requestId,
+            RetryPolicy);
+        auto impl = MakeHolder<TS3ReadCoroImpl>(
+            InputIndex,
+            TxId,
+            ComputeActorId,
+            std::move(stuff),
+            ReadSpec,
+            pathIndex,
+            object.GetPath(),
+            Url,
+            RowsRemained,
+            ReadActorFactoryCfg,
+            SourceContext,
+            DeferredQueueSize,
+            HttpInflightSize,
+            HttpDataRps,
+            RawInflightSize
+        );
+        if (AsyncDecoding) {
+            actorId = Register(new TS3ReadCoroActor(std::move(impl)));
         } else {
-            auto stuff = std::make_shared<TRetryStuff>(
-                Gateway,
-                Url + object.GetPath(),
-                IHTTPGateway::MakeYcHeaders(requestId, AuthInfo.GetToken(), {}, AuthInfo.GetAwsUserPwd(), AuthInfo.GetAwsSigV4()),
-                object.GetSize(),
-                TxId,
-                requestId,
-                RetryPolicy);
-            auto impl = MakeHolder<TS3ReadCoroImpl>(
-                InputIndex,
-                TxId,
-                ComputeActorId,
-                std::move(stuff),
-                ReadSpec,
-                pathIndex,
-                object.GetPath(),
-                Url,
-                RowsRemained,
-                ReadActorFactoryCfg,
-                SourceContext,
-                DeferredQueueSize,
-                HttpInflightSize,
-                HttpDataRps,
-                RawInflightSize
-            );
-            if (AsyncDecoding) {
-                actorId = Register(new TS3ReadCoroActor(std::move(impl)));
-            } else {
-                actorId = RegisterWithSameMailbox(new TS3ReadCoroActor(std::move(impl)));
-            }
+            actorId = RegisterWithSameMailbox(new TS3ReadCoroActor(std::move(impl)));
         }
+
         CoroActors.insert(actorId);
     }
 
@@ -1575,12 +1526,6 @@ private:
             ContainerCache.Clear();
             ArrowTupleContainerCache.Clear();
             ArrowRowContainerCache.Clear();
-            if (UseParquetCache) {
-                Send(ParquetCacheActorId(), new TEvS3Provider::TEvCacheSourceFinish(
-                    SourceContext->SourceId
-                ));
-            }
-
         } else if(!total) {
             IngressStats.TryPause();
         }
@@ -1871,14 +1816,12 @@ private:
     ui64 FileQueueBatchObjectCountLimit;
     ui64 FileQueueConsumersCountDelta;
     const bool AsyncDecoding;
-    const bool SourceCoroActor;
     bool IsCurrentBatchEmpty = false;
     bool IsFileQueueEmpty = false;
     bool IsWaitingFileQueueResponse = false;
     bool IsConfirmedFileQueueFinish = false;
     TRetryEventsQueue FileQueueEvents;
     TDeque<TVector<NS3::FileQueue::TObjectPath>> PathBatchQueue;
-    bool UseParquetCache = false;
 };
 
 using namespace NKikimr::NMiniKQL;
@@ -2231,7 +2174,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
                                                   std::move(paths), addPathIndex, readSpec, computeActorId, retryPolicy,
                                                   cfg, counters, taskCounters, fileSizeLimit, sizeLimit, rowsLimitHint, memoryQuotaManager,
                                                   params.GetUseRuntimeListing(), fileQueueActor, fileQueueBatchSizeLimit, fileQueueBatchObjectCountLimit, fileQueueConsumersCountDelta,
-                                                  params.GetAsyncDecoding(), params.GetSourceCoroActor());
+                                                  params.GetAsyncDecoding());
 
         return {actor, actor};
     } else {

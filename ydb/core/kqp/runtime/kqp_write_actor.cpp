@@ -242,9 +242,6 @@ private:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        if (SchemeEntry) {
-            return;
-        }
         if (ev->Get()->Request->ErrorCount > 0) {
             RuntimeError(TStringBuilder() << "Failed to get table: "
                 << TableId << "'", NYql::NDqProto::StatusIds::SCHEME_ERROR);
@@ -272,7 +269,7 @@ private:
     }
 
     void ResolveShards() {
-        YQL_ENSURE(!SchemeRequest);
+        YQL_ENSURE(!SchemeRequest || InconsistentTx);
         YQL_ENSURE(SchemeEntry);
 
         TVector<TKeyDesc::TColumnOp> columns;

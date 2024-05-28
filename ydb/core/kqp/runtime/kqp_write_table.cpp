@@ -233,7 +233,7 @@ public:
         FlushUnsharded(false);
     }
 
-    void AddBatch(IPayloadSerializer::IBatchPtr&& batch) override {
+    void AddBatch(const IPayloadSerializer::IBatchPtr& batch) override {
         auto columnshardBatch = dynamic_cast<TBatch*>(batch.Get());
         YQL_ENSURE(columnshardBatch);
         auto data = columnshardBatch->Extract();
@@ -500,7 +500,7 @@ public:
         });
     }
 
-    void AddBatch(IPayloadSerializer::IBatchPtr&& batch) override {
+    void AddBatch(const IPayloadSerializer::IBatchPtr& batch) override {
         auto datashardBatch = dynamic_cast<TBatch*>(batch.Get());
         YQL_ENSURE(datashardBatch);
         auto data = datashardBatch->Extract();
@@ -773,6 +773,11 @@ public:
         return Memory;
     }
 
+    void Clear() {
+        ShardsInfo = {};
+        Memory = 0;
+    }
+
 private:
     THashMap<ui64, TShardInfo> ShardsInfo;
     i64 Memory = 0;
@@ -789,6 +794,7 @@ public:
             InputColumnsMetadata,
             TypeEnv);
         ReshardData();
+        ShardsInfo.Clear();
     }
 
     void OnPartitioningChanged(
@@ -803,6 +809,7 @@ public:
             InputColumnsMetadata,
             TypeEnv);
         ReshardData();
+        ShardsInfo.Clear();
     }
 
     void AddData(NMiniKQL::TUnboxedValueBatch&& data) override {
@@ -945,6 +952,11 @@ private:
     }
 
     void ReshardData() {
+        for (auto& [_, shardInfo] : ShardsInfo.GetShards()) {
+            for (size_t index = 0; index < shardInfo.Size(); ++index) {
+                Serializer->AddBatch(shardInfo.GetBatch(index));
+            }
+        }
     }
 
     TString LogPrefix = "ShardedWriteController";

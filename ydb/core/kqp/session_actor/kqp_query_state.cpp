@@ -323,8 +323,14 @@ void TKqpQueryState::AddOffsetsToTransaction() {
     const auto& operations = GetTopicOperations();
 
     TMaybe<TString> consumer;
-    if (operations.HasConsumer())
+    if (operations.HasConsumer()) {
         consumer = operations.GetConsumer();
+    }
+
+    TMaybe<ui32> supportivePartition;
+    if (operations.HasSupportivePartition()) {
+        supportivePartition = operations.GetSupportivePartition();
+    }
 
     TopicOperations = NTopic::TTopicOperations();
 
@@ -334,7 +340,7 @@ void TKqpQueryState::AddOffsetsToTransaction() {
 
         for (auto& partition : topic.partitions()) {
             if (partition.partition_offsets().empty()) {
-                TopicOperations.AddOperation(path, partition.partition_id());
+                TopicOperations.AddOperation(path, partition.partition_id(), supportivePartition);
             } else {
                 for (auto& range : partition.partition_offsets()) {
                     YQL_ENSURE(consumer.Defined());

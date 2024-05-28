@@ -145,6 +145,7 @@ message TPersQueuePartitionRequest {
     optional int64 MessageNo = 12; //mandatory for write
     optional int64 CmdWriteOffset = 13; //optional
     optional int64 WriteId = 23;
+    optional bool NeedSupportivePartition = 28;
 
     repeated TCmdWrite CmdWrite = 4;
     optional TCmdGetMaxSeqNo CmdGetMaxSeqNo = 5;
@@ -473,6 +474,9 @@ message TPersQueuePartitionResponse {
         optional string OwnerCookie = 1;
         optional NKikimrPQ.ETopicPartitionStatus Status = 2;
         optional int64 SeqNo = 3;
+
+        // transactions
+        optional int32 SupportivePartition = 4;
     }
 
     message TCmdPrepareDirectReadResult {

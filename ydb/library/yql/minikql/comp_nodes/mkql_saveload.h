@@ -127,7 +127,8 @@ public:
     }
 
 public:
-    TOutputSerializer(EMkqlStateType stateType, ui32 stateVersion) {
+    TOutputSerializer(EMkqlStateType stateType, ui32 stateVersion, TComputationContext& ctx)
+        : Ctx(ctx) {
         Write(static_cast<ui32>(stateType));
         Write(stateVersion);
     }
@@ -178,19 +179,46 @@ public:
         Buf.AppendNoAlias(state.data(), state.size());
     }
 
+    static NUdf::TUnboxedValue MakeArray(TComputationContext& ctx, const TStringBuf& buf) {
+        const size_t MaxItemLen = 1048576;
+        
+        size_t count = buf.size() / MaxItemLen + (buf.size() % MaxItemLen ? 1 : 0);
+        NUdf::TUnboxedValue *items = nullptr;
+        auto array = ctx.HolderFactory.CreateDirectArrayHolder(count, items);
+
+        size_t pos = 0;
+        for (size_t index = 0; index < count; ++index) {
+            size_t itemSize = std::min(buf.size() - pos, MaxItemLen);
+            NUdf::TStringValue str(itemSize);
+            std::memcpy(str.Data(), buf.Data() + pos, itemSize);
+            items[index] = NUdf::TUnboxedValuePod(std::move(str));
+            pos += itemSize;
+        }
+        return array;
+    }
+
     NUdf::TUnboxedValue MakeState() {
-        auto strRef = NUdf::TStringRef(Buf.data(), Buf.size());
-        return NMiniKQL::MakeString(strRef);
+        return MakeArray(Ctx, Buf);
     }
 protected:
     TString Buf;
+    TComputationContext& Ctx;
 };
-
 
 struct TInputSerializer {
 public:
-    TInputSerializer(const NUdf::TStringRef& state, TMaybe<EMkqlStateType> expectedType = Nothing())
-        : Buf(state) { 
+    TInputSerializer(const TStringBuf& state, TMaybe<EMkqlStateType> expectedType = Nothing()) 
+        : Buf(state) {
+        Type = static_cast<EMkqlStateType>(Read<ui32>());
+        Read(StateVersion);
+        if (expectedType) {
+            MKQL_ENSURE(Type == *expectedType, "state type is not expected");
+        }
+    }
+   
+    TInputSerializer(const NUdf::TUnboxedValue& state, TMaybe<EMkqlStateType> expectedType = Nothing())
+        : State(StateToString(state))
+        , Buf(State) {
         Type = static_cast<EMkqlStateType>(Read<ui32>());
         Read(StateVersion);
         if (expectedType) {
@@ -235,7 +263,7 @@ public:
 
     Y_FORCE_INLINE NUdf::TUnboxedValue ReadUnboxedValue(const TValuePacker& packer, TComputationContext& ctx) {
         auto size = Read<ui32>();
-        MKQL_ENSURE(size <= Buf.size(), "Serialized state is corrupted");
+        MKQL_ENSURE_S(size <= Buf.size(), "Serialized state is corrupted, size " << size << ", Buf.size " << Buf.size());
         auto value = packer.Unpack(TStringBuf(Buf.data(), Buf.data() + size), ctx.HolderFactory);
         Buf.Skip(size);
         return value;
@@ -286,7 +314,20 @@ public:
         return Buf.empty();
     }
 
+private:
+    TString StateToString(const NUdf::TUnboxedValue& state) {
+        TString result;
+        auto listIt = state.GetListIterator();
+        NUdf::TUnboxedValue str;
+        while (listIt.Next(str)) {
+            const TStringBuf strRef = str.AsStringRef();
+            result.AppendNoAlias(strRef.Data(), strRef.Size());
+        }
+        return result;
+    }
+
 protected:
+    TString State;
     TStringBuf Buf;
     EMkqlStateType Type{EMkqlStateType::SIMPLE_BLOB};
     ui32 StateVersion{0};
@@ -296,7 +337,7 @@ protected:
 class TNodeStateHelper {
 public:
     static void AddNodeState(TString& result, const TStringBuf& state) {
-        WriteUi32(result, state.Size());
+        WriteUi64(result, state.Size());
         result.AppendNoAlias(state.Data(), state.Size());
     }
 };

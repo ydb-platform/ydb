@@ -144,8 +144,8 @@ public:
     }
 
 private:
-    void SaveState(const NYql::NDqProto::TCheckpoint&, NYql::NDqProto::TSourceState&) final {}
-    void LoadState(const NYql::NDqProto::TSourceState&) final {}
+    void SaveState(const NYql::NDqProto::TCheckpoint&, NYql::NDq::TSourceState&) final {}
+    void LoadState(const NYql::NDq::TSourceState&) final {}
     void CommitState(const NYql::NDqProto::TCheckpoint&) final {}
 
     ui64 GetInputIndex() const final {

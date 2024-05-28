@@ -3,7 +3,7 @@
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
-#include <ydb/library/yql/dq/proto/dq_checkpoint.pb.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 #include <ydb/library/yql/minikql/computation/mkql_value_builder.h>
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
@@ -63,7 +63,7 @@ struct TAsyncInputPromises {
 struct TAsyncOutputPromises {
     NThreading::TPromise<void> ResumeExecution = NThreading::NewPromise();
     NThreading::TPromise<TIssues> Issue = NThreading::NewPromise<TIssues>();
-    NThreading::TPromise<NDqProto::TSinkState> StateSaved = NThreading::NewPromise<NDqProto::TSinkState>();
+    NThreading::TPromise<TSinkState> StateSaved = NThreading::NewPromise<TSinkState>();
 };
 
 NYql::NDqProto::TCheckpoint CreateCheckpoint(ui64 id = 0);
@@ -100,10 +100,10 @@ class TFakeActor : public NActors::TActor<TFakeActor> {
             Parent.AsyncOutputPromises.Issue = NThreading::NewPromise<TIssues>();
         };
 
-        void OnAsyncOutputStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint&) override {
+        void OnAsyncOutputStateSaved(TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint&) override {
             Y_UNUSED(outputIndex);
             Parent.AsyncOutputPromises.StateSaved.SetValue(state);
-            Parent.AsyncOutputPromises.StateSaved = NThreading::NewPromise<NDqProto::TSinkState>();
+            Parent.AsyncOutputPromises.StateSaved = NThreading::NewPromise<TSinkState>();
         };
 
         void OnAsyncOutputFinished(ui64 outputIndex) override {
@@ -251,10 +251,10 @@ struct TFakeCASetup {
 
     void AsyncOutputWrite(const TWriteValueProducer valueProducer, TMaybe<NDqProto::TCheckpoint> checkpoint = Nothing(), bool finish = false);
 
-    void SaveSourceState(NDqProto::TCheckpoint checkpoint, NDqProto::TSourceState& state);
+    void SaveSourceState(NDqProto::TCheckpoint checkpoint, TSourceState& state);
 
-    void LoadSource(const NDqProto::TSourceState& state);
-    void LoadSink(const NDqProto::TSinkState& state);
+    void LoadSource(const TSourceState& state);
+    void LoadSink(const TSinkState& state);
 
     void Execute(TCallback callback);
 

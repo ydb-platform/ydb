@@ -935,6 +935,10 @@ public:
                             AddFrom(*p, fromList);
                             traverseNodeStack.pop();
                             oneJoinGroup.push_back(QL(QA("push")));
+<<<<<<< HEAD
+=======
+                            Cerr << "push\n";
+>>>>>>> 945353a7bef68f6317c9e86862e699f9194c4181
                         } else {
                             auto join = CAST_NODE(JoinExpr, top.first);
                             if (!join->larg || !join->rarg) {
@@ -953,10 +957,16 @@ public:
                             }
 
                             if (!top.second) {
+<<<<<<< HEAD
                                 traverseNodeStack.push({ join->rarg, false });
                                 traverseNodeStack.push({ join->larg, false });
+=======
+                                traverseNodeStack.push({ join->larg, false });
+                                traverseNodeStack.push({ join->rarg, false });
+>>>>>>> 945353a7bef68f6317c9e86862e699f9194c4181
                                 top.second = true;
                             } else {
+                                Cerr << "join\n";
                                 TString op;
                                 switch (join->jointype) {
                                 case JOIN_INNER:

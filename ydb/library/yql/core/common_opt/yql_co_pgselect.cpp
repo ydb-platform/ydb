@@ -3686,6 +3686,7 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
             } else {
                 // extract all used columns
                 TVector<std::pair<TString, TString>> joinUsingColumns;
+                Cerr << joinOps->Dump() << "\n";
                 auto usedColumns = GatherUsedColumns(result, joinOps, filter, groupExprs, having, extraSortColumns, window, winCtx, joinUsingColumns);
 
                 // fill index of input for each column

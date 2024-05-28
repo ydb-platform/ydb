@@ -3,6 +3,46 @@
 
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
+template<>
+void Out<NYdb::NTopic::TDirectReadSession::EState>(IOutputStream& o, NYdb::NTopic::TDirectReadSession::EState state) {
+    #define DIRECT_READ_SESSION_STATE_NAME_OUT(state) case NYdb::NTopic::TDirectReadSession::EState::state: o << #state; break;
+
+    switch (state) {
+    DIRECT_READ_SESSION_STATE_NAME_OUT(CREATED)
+    DIRECT_READ_SESSION_STATE_NAME_OUT(CONNECTING)
+    DIRECT_READ_SESSION_STATE_NAME_OUT(CONNECTED)
+    DIRECT_READ_SESSION_STATE_NAME_OUT(INITIALIZING)
+    DIRECT_READ_SESSION_STATE_NAME_OUT(WORKING)
+    DIRECT_READ_SESSION_STATE_NAME_OUT(CLOSING)
+    DIRECT_READ_SESSION_STATE_NAME_OUT(CLOSED)
+    }
+
+    #undef DIRECT_READ_SESSION_STATE_NAME_OUT
+}
+
+template<>
+void Out<NYdb::NTopic::TDirectReadPartitionSession::EState>(IOutputStream& o, NYdb::NTopic::TDirectReadPartitionSession::EState state) {
+    #define DIRECT_READ_SESSION_STATE_NAME_OUT(state) case NYdb::NTopic::TDirectReadPartitionSession::EState::state: o << #state; break;
+
+    switch (state) {
+    DIRECT_READ_SESSION_STATE_NAME_OUT(CREATED)
+    DIRECT_READ_SESSION_STATE_NAME_OUT(STARTING)
+    DIRECT_READ_SESSION_STATE_NAME_OUT(STARTED)
+    }
+
+    #undef DIRECT_READ_SESSION_STATE_NAME_OUT
+}
+
+
+template<>
+void Out<NYdb::NTopic::TDirectReadPartitionSession>(IOutputStream& o, NYdb::NTopic::TDirectReadPartitionSession const& session) {
+    o << "{ PartitionSessionId: \"" << session.Id << "\"";
+    o << ", Location: " << session.Location << "";
+    o << ", State: " << session.State << "";
+    o << ", LastDirectReadId: " << session.LastDirectReadId << "";
+    o << " }";
+}
+
 namespace NYdb::NTopic {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -11,14 +51,18 @@ namespace NYdb::NTopic {
 TDirectReadSessionManager::TDirectReadSessionManager(
     TServerSessionId serverSessionId,
     const NYdb::NTopic::TReadSessionSettings settings,
-    TSingleClusterReadSessionPtr<false> singleClusterReadSession,
+    // TSingleClusterReadSessionPtr<false> singleClusterReadSession,
+    std::function<void(Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&& response, TDeferredActions<false>& deferred)> onDirectReadDoneCallback,
+    std::function<void(TSessionClosedEvent&& closeEvent)> onAbortSessionCallback,
     NYdbGrpc::IQueueClientContextPtr clientContext,
     IDirectReadConnectionFactoryPtr connectionFactory,
     TLog log
 )
     : ReadSessionSettings(settings)
     , ServerSessionId(serverSessionId)
-    , SingleClusterReadSession(singleClusterReadSession)
+    // , SingleClusterReadSession(singleClusterReadSession)
+    , OnDirectReadDoneCallback(onDirectReadDoneCallback)
+    , OnAbortSessionCallback(onAbortSessionCallback)
     , ClientContext(clientContext)
     , ConnectionFactory(connectionFactory)
     , Log(log)
@@ -30,7 +74,14 @@ TStringBuilder TDirectReadSessionManager::GetLogPrefix() const {
 
 TDirectReadSessionPtr TDirectReadSessionManager::CreateDirectReadSession(TNodeId nodeId) {
     return MakeWithCallbackContext<TDirectReadSession>(
-        nodeId, ServerSessionId, ReadSessionSettings, SingleClusterReadSession, ClientContext->CreateContext(), ConnectionFactory, Log);
+        nodeId,
+        ServerSessionId,
+        ReadSessionSettings,
+        OnDirectReadDoneCallback,
+        OnAbortSessionCallback,
+        ClientContext->CreateContext(),
+        ConnectionFactory,
+        Log);
 }
 
 void TDirectReadSessionManager::Close() {
@@ -42,6 +93,7 @@ void TDirectReadSessionManager::Close() {
 
 void TDirectReadSessionManager::StartPartitionSession(TDirectReadPartitionSession&& partitionSession) {
     auto nodeId = partitionSession.Location.GetNodeId();
+    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "StartPartitionSession " << partitionSession);
     TDirectReadSessionPtr& session = NodeSessions[nodeId];
     if (!session) {
         session = CreateDirectReadSession(nodeId);
@@ -53,6 +105,7 @@ void TDirectReadSessionManager::StartPartitionSession(TDirectReadPartitionSessio
 }
 
 void TDirectReadSessionManager::DeletePartitionSession(TPartitionSessionId id, TNodeSessionsMap::iterator it) {
+    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "DeletePartitionSession " << id);
     if (auto session = it->second->LockShared()) {
         session->DeletePartitionSession(id);
         if (session->Empty()) {
@@ -98,14 +151,18 @@ TDirectReadSession::TDirectReadSession(
     TNodeId nodeId,
     TString serverSessionId,
     const NYdb::NTopic::TReadSessionSettings settings,
-    TSingleClusterReadSessionPtr<false> singleClusterReadSession,
+    // TSingleClusterReadSessionPtr<false> singleClusterReadSession,
+    std::function<void(Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&& response, TDeferredActions<false>& deferred)> onDirectReadDoneCallback,
+    std::function<void(TSessionClosedEvent&& closeEvent)> onAbortSessionCallback,
     NYdbGrpc::IQueueClientContextPtr clientContext,
     IDirectReadConnectionFactoryPtr connectionFactory,
     TLog log
 )
     : ClientContext(clientContext)
     , ReadSessionSettings(settings)
-    , SingleClusterReadSession(singleClusterReadSession)
+    // , SingleClusterReadSession(singleClusterReadSession)
+    , OnDirectReadDoneCallback(onDirectReadDoneCallback)
+    , OnAbortSessionCallback(onAbortSessionCallback)
     , ServerSessionId(serverSessionId)
     , ConnectionFactory(connectionFactory)
     , State(EState::CREATED)
@@ -126,7 +183,9 @@ void TDirectReadSession::Start()  {
 
 void TDirectReadSession::Close() {
     with_lock (Lock) {
-        State = EState::CLOSING;
+        if (State < EState::CLOSING) {
+            State = EState::CLOSED;
+        }
     }
 }
 
@@ -166,6 +225,20 @@ void TDirectReadSession::UpdatePartitionSessionGeneration(TPartitionSessionId id
 void TDirectReadSession::DeletePartitionSession(TPartitionSessionId id) {
     with_lock (Lock) {
         PartitionSessions.erase(id);
+    }
+}
+
+void TDirectReadSession::AbortControlSession(TSessionClosedEvent&& closeEvent) {
+    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Abort control session");
+    bool doCallback = false;
+    with_lock (Lock) {
+        if (State < EState::CLOSING) {
+            State = EState::CLOSED;
+            doCallback = true;
+        }
+    }
+    if (doCallback) {
+        OnAbortSessionCallback(std::move(closeEvent));
     }
 }
 
@@ -220,13 +293,13 @@ void TDirectReadSession::OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t c
         }
     }
 
-    // if (!errorStatus.Ok()) {
-    //     ++*Settings.Counters_->Errors;
+    if (!errorStatus.Ok()) {
+        ReadSessionSettings.Counters_->Errors->Inc();
 
-    //     if (!Reconnect(errorStatus)) {
-    //         AbortSession(std::move(errorStatus));
-    //     }
-    // }
+        if (!Reconnect(errorStatus)) {
+            AbortControlSession(std::move(errorStatus));
+        }
+    }
 }
 
 void TDirectReadSession::SendStartDirectReadPartitionSessionImpl(TDirectReadPartitionSession& partitionSession) {
@@ -235,11 +308,15 @@ void TDirectReadSession::SendStartDirectReadPartitionSessionImpl(TDirectReadPart
     // Send the StartDirectReadPartitionSession request only if we're already connected.
     // In other cases adding the session to PartitionSessions is enough,
     // the request will be sent from OnReadDoneImpl(InitDirectReadResponse).
-    if (State != EState::CONNECTED || partitionSession.State != TDirectReadPartitionSession::EState::CREATED) {
+    if (State != EState::WORKING || partitionSession.State != TDirectReadPartitionSession::EState::CREATED) {
+        LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "SendStartDirectReadPartitionSessionImpl bail out, State=" << State
+                                                << " partitionSession.State=" << partitionSession.State);
         return;
     }
 
     partitionSession.State = TDirectReadPartitionSession::EState::STARTING;
+
+    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "SendStartDirectReadPartitionSessionImpl send request");
 
     TDirectReadClientMessage req;
     auto& start = *req.mutable_start_direct_read_partition_session_request();
@@ -251,6 +328,10 @@ void TDirectReadSession::SendStartDirectReadPartitionSessionImpl(TDirectReadPart
 
 void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::InitDirectReadResponse&&, TDeferredActions<false>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
+
+    Y_ABORT_UNLESS(State == EState::INITIALIZING);
+
+    State = EState::WORKING;
 
     LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "InitDirectReadResponse");
 
@@ -295,9 +376,11 @@ void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::Dir
     Y_ABORT_UNLESS(it != PartitionSessions.end());
     it->second.LastDirectReadId = response.direct_read_id();
 
-    if (auto session = SingleClusterReadSession->LockShared()) {
-        session->OnDirectReadDone(std::move(response), deferred);
-    }
+    OnDirectReadDoneCallback(std::move(response), deferred);
+
+    // if (auto session = SingleClusterReadSession->LockShared()) {
+    //     session->OnDirectReadDone(std::move(response), deferred);
+    // }
 }
 
 void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::UpdateTokenResponse&& response, TDeferredActions<false>&) {
@@ -347,7 +430,11 @@ TStringBuilder TDirectReadSession::GetLogPrefix() const {
 void TDirectReadSession::InitImpl(TDeferredActions<false>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
+    Y_ABORT_UNLESS(State == EState::CONNECTED);
+
     LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Successfully connected. Initializing session");
+
+    State = EState::INITIALIZING;
 
     TDirectReadClientMessage req;
     auto& init = *req.mutable_init_direct_read_request();
@@ -365,9 +452,9 @@ void TDirectReadSession::InitImpl(TDeferredActions<false>& deferred) {
 
 
 void TDirectReadSession::OnConnectTimeout(
-    [[maybe_unused]] const NYdbGrpc::IQueueClientContextPtr& connectTimeoutContext
+    const NYdbGrpc::IQueueClientContextPtr& connectTimeoutContext
 ) {
-
+    Y_UNUSED(connectTimeoutContext);
 }
 
 void TDirectReadSession::OnConnect(
@@ -387,32 +474,31 @@ void TDirectReadSession::OnConnect(
         ConnectTimeoutContext = nullptr;
         ConnectDelayContext = nullptr;
 
-        // if (Closing || Aborting) {
-        //     CallCloseCallbackImpl();
-        //     return;
-        // }
+        if (State >= EState::CLOSING) {
+            return;
+        }
 
         if (st.Ok()) {
             Connection = std::move(connection);
-            // ConnectionAttemptsDone = 0;
+            ConnectionAttemptsDone = 0;
             InitImpl(deferred);
             return;
         }
     }
 
-    // if (!st.Ok()) {
-    //     ++*Settings.Counters_->Errors;
-    //     if (!Reconnect(st)) {
-    //         AbortSession(
-    //             st.Status, MakeIssueWithSubIssues(TStringBuilder() << "Failed to establish connection to server \""
-    //                                                                << st.Endpoint << "\" ( cluster " << ClusterName
-    //                                                                << "). Attempts done: " << ConnectionAttemptsDone,
-    //                                               st.Issues));
-    //     }
-    // }
+    if (!st.Ok()) {
+        ReadSessionSettings.Counters_->Errors->Inc();
+        if (!Reconnect(st)) {
+            AbortControlSession(TSessionClosedEvent(
+                st.Status,
+                MakeIssueWithSubIssues(
+                    TStringBuilder() << "Failed to establish connection to server \"" << st.Endpoint << "\". Attempts done: " << ConnectionAttemptsDone,
+                    st.Issues)));
+        }
+    }
 }
 
-bool TDirectReadSession::Reconnect([[maybe_unused]] const TPlainStatus& status) {
+bool TDirectReadSession::Reconnect(const TPlainStatus& status) {
     State = EState::CONNECTING;
     TDuration delay = TDuration::Zero();
 
@@ -425,16 +511,15 @@ bool TDirectReadSession::Reconnect([[maybe_unused]] const TPlainStatus& status) 
     std::function<void(TPlainStatus&&, IDirectReadConnection::TPtr&&)> connectCallback;
     std::function<void(bool)> connectTimeoutCallback;
 
-    // if (!status.Ok()) {
-    //     LOG_LAZY(Log, TLOG_ERR, GetLogPrefix() << "Got error. Status: " << status.Status
-    //                                         << ". Description: " << IssuesSingleLineString(status.Issues));
-    // }
+    if (!status.Ok()) {
+        LOG_LAZY(Log, TLOG_ERR, GetLogPrefix() << "Got error. Status: " << status.Status
+                                               << ". Description: " << IssuesSingleLineString(status.Issues));
+    }
 
     NYdbGrpc::IQueueClientContextPtr delayContext = nullptr;
     NYdbGrpc::IQueueClientContextPtr connectContext = nullptr;
     NYdbGrpc::IQueueClientContextPtr connectTimeoutContext = nullptr;
 
-    TDeferredActions<true> deferred;
     with_lock (Lock) {
         connectContext = ClientContext->CreateContext();
         connectTimeoutContext = ClientContext->CreateContext();
@@ -449,19 +534,8 @@ bool TDirectReadSession::Reconnect([[maybe_unused]] const TPlainStatus& status) 
         }
         Connection = nullptr;
     //     WaitingReadResponse = false;
-        ServerMessage = std::make_shared<Ydb::Topic::StreamDirectReadMessage::FromServer>();
+        ServerMessage = std::make_shared<TDirectReadServerMessage>();
         ++ConnectionGeneration;
-
-    //     LOG_LAZY(Log, TLOG_DEBUG,
-    //             GetLogPrefix() << "In Reconnect, ReadSizeBudget = " << ReadSizeBudget
-    //                             << ", ReadSizeServerDelta = " << ReadSizeServerDelta);
-
-    //     ReadSizeBudget += ReadSizeServerDelta;
-    //     ReadSizeServerDelta = 0;
-
-    //     LOG_LAZY(Log, TLOG_DEBUG,
-    //             GetLogPrefix() << "New values: ReadSizeBudget = " << ReadSizeBudget
-    //                             << ", ReadSizeServerDelta = " << ReadSizeServerDelta);
 
         if (!RetryState) {
             RetryState = ReadSessionSettings.RetryPolicy_->CreateRetryState();
@@ -479,9 +553,9 @@ bool TDirectReadSession::Reconnect([[maybe_unused]] const TPlainStatus& status) 
             }
         }
 
-    //     LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Reconnecting session to cluster " << ClusterName << " in " << delay);
+        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Reconnecting direct read session to node " << NodeId << " in " << delay);
 
-    //     ++ConnectionAttemptsDone;
+        ++ConnectionAttemptsDone;
 
         // Set new context
         prevConnectContext = std::exchange(ConnectContext, connectContext);
@@ -490,8 +564,8 @@ bool TDirectReadSession::Reconnect([[maybe_unused]] const TPlainStatus& status) 
 
         Y_ASSERT(ConnectContext);
         Y_ASSERT(ConnectTimeoutContext);
-    //     Y_ASSERT((delay == TDuration::Zero()) == !ConnectDelayContext);
-    //     Y_ABORT_UNLESS(this->SelfContext);
+        Y_ASSERT((delay == TDuration::Zero()) == !ConnectDelayContext);
+        Y_ABORT_UNLESS(this->SelfContext);
 
         connectCallback =
             [cbContext = this->SelfContext, connectContext]
@@ -518,7 +592,7 @@ bool TDirectReadSession::Reconnect([[maybe_unused]] const TPlainStatus& status) 
 
     Y_ASSERT(connectContext);
     Y_ASSERT(connectTimeoutContext);
-    // Y_ASSERT((delay == TDuration::Zero()) == !delayContext);
+    Y_ASSERT((delay == TDuration::Zero()) == !delayContext);
     ConnectionFactory->CreateProcessor(
         std::move(connectCallback),
         TRpcRequestSettings::Make(ReadSessionSettings, TEndpointKey(NodeId)),

@@ -57,8 +57,7 @@ struct TDirectReadPartitionSession {
     IRetryPolicy::IRetryState::TPtr RetryState = {};
     TDirectReadId LastDirectReadId = 0;
 
-
-    // min read id, partition id, done read id?
+    // TODO(qyryq) min read id, partition id, done read id?
 };
 
 // One TDirectReadSession instance comprises multiple TDirectReadPartitionSessions.
@@ -72,7 +71,9 @@ public:
         TNodeId node,
         TString serverSessionId,
         const NYdb::NTopic::TReadSessionSettings settings,
-        TSingleClusterReadSessionPtr<false> singleClusterReadSession,
+        // TSingleClusterReadSessionPtr<false> singleClusterReadSession,
+        std::function<void(Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&& response, TDeferredActions<false>& deferred)> onDirectReadDoneCallback,
+        std::function<void(TSessionClosedEvent&& closeEvent)> onAbortSessionCallback,
         NYdbGrpc::IQueueClientContextPtr clientContext,
         IDirectReadConnectionFactoryPtr connectionFactory,
         TLog log
@@ -116,6 +117,8 @@ private:
 
     void SendStartDirectReadPartitionSessionImpl(TDirectReadPartitionSession&);
 
+    void AbortControlSession(TSessionClosedEvent&& closeEvent);
+
     TStringBuilder GetLogPrefix() const;
 
 private:
@@ -124,9 +127,13 @@ private:
         CREATED,
         CONNECTING,
         CONNECTED,
+        INITIALIZING,
+        WORKING,
         CLOSING,
         CLOSED
     };
+
+    friend void Out<NYdb::NTopic::TDirectReadSession::EState>(IOutputStream& o, NYdb::NTopic::TDirectReadSession::EState state);
 
 private:
     TAdaptiveLock Lock;
@@ -138,7 +145,9 @@ private:
     size_t ConnectionGeneration = 0;
 
     const NYdb::NTopic::TReadSessionSettings ReadSessionSettings;
-    TSingleClusterReadSessionPtr<false> SingleClusterReadSession;
+    // TSingleClusterReadSessionPtr<false> SingleClusterReadSession;
+    std::function<void(Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&& response, TDeferredActions<false>& deferred)> OnDirectReadDoneCallback;
+    std::function<void(TSessionClosedEvent&& closeEvent)> OnAbortSessionCallback;
     TServerSessionId ServerSessionId;
     IDirectReadConnection::TPtr Connection;
     IDirectReadConnectionFactoryPtr ConnectionFactory;
@@ -146,6 +155,7 @@ private:
 
     THashMap<TPartitionSessionId, TDirectReadPartitionSession> PartitionSessions;
     IRetryPolicy::IRetryState::TPtr RetryState = {};
+    size_t ConnectionAttemptsDone = 0;
 
     EState State;
     TNodeId NodeId;
@@ -159,7 +169,9 @@ public:
     TDirectReadSessionManager(
         TServerSessionId serverSessionId,
         const NYdb::NTopic::TReadSessionSettings,
-        TSingleClusterReadSessionPtr<false> singleClusterReadSession,
+        // TSingleClusterReadSessionPtr<false> singleClusterReadSession,
+        std::function<void(Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&& response, TDeferredActions<false>& deferred)> onDirectReadDoneCallback,
+        std::function<void(TSessionClosedEvent&& closeEvent)> onAbortSessionCallback,
         NYdbGrpc::IQueueClientContextPtr clientContext,
         IDirectReadConnectionFactoryPtr connectionFactory,
         TLog log
@@ -183,7 +195,9 @@ private:
     TMutex Lock;
     const NYdb::NTopic::TReadSessionSettings ReadSessionSettings;
     TServerSessionId ServerSessionId;
-    TSingleClusterReadSessionPtr<false> SingleClusterReadSession;
+    // TSingleClusterReadSessionPtr<false> SingleClusterReadSession;
+    std::function<void(Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&& response, TDeferredActions<false>& deferred)> OnDirectReadDoneCallback;
+    std::function<void(TSessionClosedEvent&& closeEvent)> OnAbortSessionCallback;
     NYdbGrpc::IQueueClientContextPtr ClientContext;
     IDirectReadConnectionFactoryPtr ConnectionFactory;
     TNodeSessionsMap NodeSessions;

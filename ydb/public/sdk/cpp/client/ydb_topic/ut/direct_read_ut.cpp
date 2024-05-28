@@ -1,4 +1,3 @@
-#include "ut_utils/managed_executor.h"
 #include "ut_utils/topic_sdk_test_setup.h"
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/ut_utils.h>
 
@@ -11,6 +10,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/impl/write_session.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/write_session.h>
 
+#include <library/cpp/retry/retry_policy.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/threading/future/future.h>
@@ -637,8 +637,8 @@ TDirectReadSessionImplTestSetup::TDirectReadSessionImplTestSetup() {
         .DirectRead(true)
         .AppendTopics({"TestTopic"})
         .ConsumerName("TestConsumer")
-        .RetryPolicy(NYdb::NPersQueue::IRetryPolicy::GetFixedIntervalPolicy(TDuration::MilliSeconds(10)))
-        .Counters(MakeIntrusive<NYdb::NPersQueue::TReaderCounters>(MakeIntrusive<::NMonitoring::TDynamicCounters>()));
+        .RetryPolicy(NYdb::NTopic::IRetryPolicy::GetFixedIntervalPolicy(TDuration::MilliSeconds(10)))
+        .Counters(MakeIntrusive<NYdb::NTopic::TReaderCounters>(MakeIntrusive<::NMonitoring::TDynamicCounters>()));
 
     Log.SetFormatter(GetPrefixLogFormatter(""));
 }
@@ -1037,7 +1037,7 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
 
     Y_UNIT_TEST(NoRetry) {
         TDirectReadSessionImplTestSetup setup;
-        setup.ReadSessionSettings.RetryPolicy(NYdb::NPersQueue::IRetryPolicy::GetNoRetryPolicy());
+        setup.ReadSessionSettings.RetryPolicy(NYdb::NTopic::IRetryPolicy::GetNoRetryPolicy());
 
         auto gotClosedEvent = NThreading::NewPromise();
 
@@ -1049,6 +1049,28 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
         setup.MockDirectReadProcessorFactory->Wait();
         gotClosedEvent.GetFuture().Wait();
     }
+
+    Y_UNIT_TEST(Retry) {
+        TDirectReadSessionImplTestSetup setup;
+        size_t nRetries = 2;
+        setup.ReadSessionSettings.RetryPolicy(NYdb::NTopic::IRetryPolicy::GetFixedIntervalPolicy(
+            TDuration::MilliSeconds(1), TDuration::MilliSeconds(1), nRetries));
+
+        auto gotClosedEvent = NThreading::NewPromise();
+
+        ON_CALL(*setup.MockDirectReadProcessorFactory, OnCreateProcessor(_))
+            .WillByDefault([&]() { setup.MockDirectReadProcessorFactory->FailCreation(); });
+
+        EXPECT_CALL(*setup.MockDirectReadProcessorFactory, OnCreateProcessor(_))
+            .Times(1 + nRetries);  // First call + N retries.
+
+        auto session = setup.GetDirectReadSession({}, [&gotClosedEvent](TSessionClosedEvent&&) { gotClosedEvent.SetValue(); });
+        session->Start();
+        setup.MockDirectReadProcessorFactory->Wait();
+
+        gotClosedEvent.GetFuture().Wait();
+    }
+
 } // Y_UNIT_TEST_SUITE(DirectReadSession)
 
 } // namespace NYdb::NTopic::NTests

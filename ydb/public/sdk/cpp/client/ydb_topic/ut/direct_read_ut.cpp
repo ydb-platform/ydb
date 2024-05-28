@@ -598,7 +598,7 @@ public:
     ~TDirectReadSessionImplTestSetup() noexcept(false); // Performs extra validation and UNIT_ASSERTs
 
     TSingleClusterReadSessionImpl<false>* GetControlSession();
-    TDirectReadSession* GetDirectReadSession();
+    TDirectReadSession* GetDirectReadSession(TDirectReadSession::TOnDirectReadDoneCallback, TDirectReadSession::TOnAbortSessionCallback);
 
     std::shared_ptr<TReadSessionEventsQueue<false>> GetEventsQueue();
     IExecutor::TPtr GetDefaultExecutor();
@@ -721,7 +721,7 @@ TSingleClusterReadSessionImpl<false>* TDirectReadSessionImplTestSetup::GetContro
         CbContext = MakeWithCallbackContext<TSingleClusterReadSessionImpl<false>>(
             ReadSessionSettings,
             "db",
-            "sessionid",
+            "server-session-id-1",
             "",
             Log,
             MockReadProcessorFactory,
@@ -735,19 +735,17 @@ TSingleClusterReadSessionImpl<false>* TDirectReadSessionImplTestSetup::GetContro
     return Session.get();
 }
 
-TDirectReadSession* TDirectReadSessionImplTestSetup::GetDirectReadSession() {
+TDirectReadSession* TDirectReadSessionImplTestSetup::GetDirectReadSession(
+    TDirectReadSession::TOnDirectReadDoneCallback readDoneCallback = {},
+    TDirectReadSession::TOnAbortSessionCallback abortCallback = {}
+) {
     if (!DirectReadSession) {
         DirectReadSessionCbContext = MakeWithCallbackContext<TDirectReadSession>(
             TNodeId(1),
             TString("server-session-id-1"),
             ReadSessionSettings,
-            [](Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&& response, TDeferredActions<false>& deferred) {
-                Y_UNUSED(response);
-                Y_UNUSED(deferred);
-            },
-            [](TSessionClosedEvent&& closeEvent) {
-                Y_UNUSED(closeEvent);
-            },
+            readDoneCallback,
+            abortCallback,
             FakeContext,
             MockDirectReadProcessorFactory,
             Log);
@@ -757,9 +755,17 @@ TDirectReadSession* TDirectReadSessionImplTestSetup::GetDirectReadSession() {
 }
 
 
-Y_UNIT_TEST_SUITE(DirectRead) {
+Y_UNIT_TEST_SUITE(DirectReadWithClient) {
 
-    Y_UNIT_TEST(WriteReadOneMessage) {
+    /*
+    This suite tests direct read mode only through IReadSession, without using internal classes.
+    */
+
+    Y_UNIT_TEST(OneMessage) {
+        /*
+        The simplest case: write one message and read it back.
+        */
+
         TTopicSdkTestSetup setup(TEST_CASE_NAME);
         TTopicClient client = setup.MakeClient();
 
@@ -770,12 +776,9 @@ Y_UNIT_TEST_SUITE(DirectRead) {
                 .Path(TEST_TOPIC)
                 .ProducerId(TEST_MESSAGE_GROUP_ID)
                 .MessageGroupId(TEST_MESSAGE_GROUP_ID);
-            Cerr << ">>> Open write session\n";
             auto writer = client.CreateSimpleBlockingWriteSession(settings);
-            UNIT_ASSERT(writer->Write("message_using_MessageGroupId"));
-            Cerr << ">>> Write session: message written\n";
+            UNIT_ASSERT(writer->Write("message"));
             writer->Close();
-            Cerr << ">>> Write session closed\n";
         }
 
         {
@@ -787,23 +790,42 @@ Y_UNIT_TEST_SUITE(DirectRead) {
                 .DirectRead(true);
             auto reader = client.CreateReadSession(settings);
 
-            auto event = reader->GetEvent(true);
-            UNIT_ASSERT(event.Defined());
+            {
+                // Start partition session:
+                auto event = reader->GetEvent(true);
+                UNIT_ASSERT(event.Defined());
+                UNIT_ASSERT_EVENT_TYPE(*event, TReadSessionEvent::TStartPartitionSessionEvent);
+                std::get<TReadSessionEvent::TStartPartitionSessionEvent>(*event).Confirm();
+            }
 
-            auto& startPartitionSession = std::get<TReadSessionEvent::TStartPartitionSessionEvent>(*event);
-            startPartitionSession.Confirm();
+            {
+                // Receive the message and commit.
+                auto event = reader->GetEvent(true);
+                UNIT_ASSERT(event.Defined());
+                UNIT_ASSERT_EVENT_TYPE(*event, TReadSessionEvent::TDataReceivedEvent);
+                auto& dataReceived = std::get<TReadSessionEvent::TDataReceivedEvent>(*event);
+                auto& messages = dataReceived.GetMessages();
+                UNIT_ASSERT_EQUAL(messages.size(), 1);
+                dataReceived.Commit();
+            }
 
-            event = reader->GetEvent(true);
-            UNIT_ASSERT(event.Defined());
+            {
+                // Get commit ack.
+                auto event = reader->GetEvent(true);
+                UNIT_ASSERT(event.Defined());
+                UNIT_ASSERT_EVENT_TYPE(*event, TReadSessionEvent::TCommitOffsetAcknowledgementEvent);
+            }
 
-            auto& dataReceived = std::get<TReadSessionEvent::TDataReceivedEvent>(*event);
-            dataReceived.Commit();
-
-            auto& messages = dataReceived.GetMessages();
-            UNIT_ASSERT_EQUAL(messages.size(), 1);
-            Cerr << dataReceived.DebugString() << Endl;
         }
     }
+} // Y_UNIT_TEST_SUITE(DirectReadWithClient)
+
+
+Y_UNIT_TEST_SUITE(DirectReadWithControlSession) {
+
+    /*
+    This suite tests direct read sessions together with a control session.
+    */
 
     void SuccessfulInitImpl(bool thenTimeout) {
         TDirectReadSessionImplTestSetup setup;
@@ -947,6 +969,14 @@ Y_UNIT_TEST_SUITE(DirectRead) {
 
         setup.AssertNoEvents();
     }
+} // Y_UNIT_TEST_SUITE(DirectReadWithControlSession)
+
+
+Y_UNIT_TEST_SUITE(DirectReadSession) {
+
+    /*
+    This suite test TDirectReadSession in isolation, without control session.
+    */
 
     Y_UNIT_TEST(DirectReadSession) {
         TDirectReadSessionImplTestSetup setup;
@@ -983,18 +1013,20 @@ Y_UNIT_TEST_SUITE(DirectRead) {
         gotStart.GetFuture().Wait();
     }
 
-    Y_UNIT_TEST(DirectReadSessionRetry) {
+    Y_UNIT_TEST(NoRetry) {
         TDirectReadSessionImplTestSetup setup;
         setup.ReadSessionSettings.RetryPolicy(NYdb::NPersQueue::IRetryPolicy::GetNoRetryPolicy());
+
+        auto gotClosedEvent = NThreading::NewPromise();
 
         EXPECT_CALL(*setup.MockDirectReadProcessorFactory, OnCreateProcessor(_))
             .WillOnce([&]() { setup.MockDirectReadProcessorFactory->FailCreation(); });
 
-        auto session = setup.GetDirectReadSession();
+        auto session = setup.GetDirectReadSession({}, [&gotClosedEvent](TSessionClosedEvent&&) { gotClosedEvent.SetValue(); });
         session->Start();
         setup.MockDirectReadProcessorFactory->Wait();
-        session->Close();
+        gotClosedEvent.GetFuture().Wait();
     }
-} // Y_UNIT_TEST_SUITE(DirectRead)
+} // Y_UNIT_TEST_SUITE(DirectReadSession)
 
-} // namespace
+} // namespace NYdb::NTopic::NTests

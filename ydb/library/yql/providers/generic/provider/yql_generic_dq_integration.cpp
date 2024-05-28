@@ -1,5 +1,6 @@
 #include "yql_generic_dq_integration.h"
 
+#include "ydb/library/yql/providers/generic/connector/api/common/data_source.pb.h"
 #include "yql_generic_mkql_compiler.h"
 #include "yql_generic_predicate_pushdown.h"
 
@@ -170,6 +171,9 @@ namespace NYql {
                         case NYql::NConnector::NApi::POSTGRESQL:
                             sourceType = "PostgreSqlGeneric";
                             break;
+                        case NYql::NConnector::NApi::MYSQL:
+                            sourceType = "MySqlGeneric";
+                            break;
                         case NYql::NConnector::NApi::YDB:
                             sourceType = "YdbGeneric";
                             break;
@@ -203,6 +207,9 @@ namespace NYql {
                             break;
                         case NConnector::NApi::POSTGRESQL:
                             properties["SourceType"] = "PostgreSql";
+                            break;
+                        case NConnector::NApi::MYSQL:
+                            properties["SourceType"] = "MySql";
                             break;
                         case NConnector::NApi::YDB:
                             properties["SourceType"] = "Ydb";

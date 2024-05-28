@@ -1,3 +1,4 @@
+#include "ydb/library/yql/providers/generic/connector/api/common/data_source.pb.h"
 #include "yql_generic_provider_impl.h"
 
 #include <library/cpp/json/json_reader.h>
@@ -319,6 +320,8 @@ namespace NYql {
                 case NYql::NConnector::NApi::CLICKHOUSE:
                     break;
                 case NYql::NConnector::NApi::YDB:
+                    break;
+                case NYql::NConnector::NApi::MYSQL:
                     break;
                 case NYql::NConnector::NApi::POSTGRESQL: {
                     // for backward compability set schema "public" by default

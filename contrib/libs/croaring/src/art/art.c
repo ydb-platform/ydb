@@ -1041,7 +1041,7 @@ static art_indexed_child_t art_node_next_child(const art_node_t *node,
             return art_node256_next_child((art_node256_t *)node, index);
         default:
             assert(false);
-            return (art_indexed_child_t){0};
+            return (art_indexed_child_t){0, 0, 0};
     }
 }
 
@@ -1065,7 +1065,7 @@ static art_indexed_child_t art_node_prev_child(const art_node_t *node,
             return art_node256_prev_child((art_node256_t *)node, index);
         default:
             assert(false);
-            return (art_indexed_child_t){0};
+            return (art_indexed_child_t){0, 0, 0};
     }
 }
 
@@ -1089,7 +1089,7 @@ static art_indexed_child_t art_node_child_at(const art_node_t *node,
             return art_node256_child_at((art_node256_t *)node, index);
         default:
             assert(false);
-            return (art_indexed_child_t){0};
+            return (art_indexed_child_t){0, 0, 0};
     }
 }
 
@@ -1113,7 +1113,7 @@ static art_indexed_child_t art_node_lower_bound(const art_node_t *node,
             return art_node256_lower_bound((art_node256_t *)node, key_chunk);
         default:
             assert(false);
-            return (art_indexed_child_t){0};
+            return (art_indexed_child_t){0, 0, 0};
     }
 }
 
@@ -1670,7 +1670,7 @@ static bool art_node_iterator_lower_bound(const art_node_t *node,
 }
 
 art_iterator_t art_init_iterator(const art_t *art, bool first) {
-    art_iterator_t iterator = {0};
+    art_iterator_t iterator = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     if (art->root == NULL) {
         return iterator;
     }
@@ -1727,7 +1727,7 @@ bool art_iterator_lower_bound(art_iterator_t *iterator,
 }
 
 art_iterator_t art_lower_bound(const art_t *art, const art_key_chunk_t *key) {
-    art_iterator_t iterator = {0};
+    art_iterator_t iterator = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     if (art->root != NULL) {
         art_node_iterator_lower_bound(art->root, &iterator, key);
     }
@@ -1735,7 +1735,7 @@ art_iterator_t art_lower_bound(const art_t *art, const art_key_chunk_t *key) {
 }
 
 art_iterator_t art_upper_bound(const art_t *art, const art_key_chunk_t *key) {
-    art_iterator_t iterator = {0};
+    art_iterator_t iterator = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     if (art->root != NULL) {
         if (art_node_iterator_lower_bound(art->root, &iterator, key) &&
             art_compare_keys(iterator.key, key) == 0) {

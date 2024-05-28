@@ -725,7 +725,7 @@ public:
             QueryState->ImplicitTxId = QueryState->TxId;
         }
         Ydb::Table::TransactionControl control;
-        control.set_commit_tx(QueryState->ProcessingLastStatement());
+        control.set_commit_tx(QueryState->ProcessingLastStatement() && QueryState->ProcessingLastStatementPart());
         control.set_tx_id(QueryState->ImplicitTxId->GetValue().GetHumanStr());
         return control;
     }

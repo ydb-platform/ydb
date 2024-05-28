@@ -323,6 +323,10 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedR
         false, SplittedCtx.Get(), SplittedExprs.at(NextSplittedExpr));
 }
 
+bool TKqpQueryState::ProcessingLastStatementPart() {
+    return SplittedExprs.empty() || (NextSplittedExpr + 1 >= static_cast<int>(SplittedExprs.size()));
+}
+
 bool TKqpQueryState::PrepareNextStatementPart() {
     QueryData = {};
     PreparedQuery = {};
@@ -335,9 +339,7 @@ bool TKqpQueryState::PrepareNextStatementPart() {
     TopicOperations = {};
     ReplayMessage = {};
 
-    ++NextSplittedExpr;
-    
-    if (NextSplittedExpr >= static_cast<int>(SplittedExprs.size()) || SplittedExprs.empty()) {
+    if (ProcessingLastStatementPart()) {
         SplittedWorld.Reset();
         SplittedExprs.clear();
         SplittedCtx.Reset();
@@ -345,6 +347,7 @@ bool TKqpQueryState::PrepareNextStatementPart() {
         return false;
     }
 
+    ++NextSplittedExpr;
     return true;
 }
 

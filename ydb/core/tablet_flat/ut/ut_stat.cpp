@@ -26,7 +26,9 @@ namespace {
                     auto dataPage = NPage::TDataPage(page);
                     
                     TouchedBytes += page->size();
-                    TouchedRows += dataPage->Count;
+                    if (groupId.IsMain()) {
+                        TouchedRows += dataPage->Count;
+                    }
                 }
                 if (type == EPage::FlatIndex || type == EPage::BTreeIndex) {
                     TouchedIndex += page->size();
@@ -496,7 +498,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
             for (auto c : subset.Scheme->Cols) {
                 tags.push_back(c.Tag);
             }
-            Y_ABORT_UNLESS(ChargeRange(&env, {}, key.GetCells(), run, keyDefaults, tags, 0, 0));
+            Y_ABORT_UNLESS(ChargeRange(&env, {}, key.GetCells(), run, keyDefaults, tags, 0, 0, true));
         }
 
         bytes = env.TouchedBytes;
@@ -528,8 +530,9 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
             Cerr << ") ";
 
             Cerr << "value = " << bucket.Value << " (actual " << actualValue << " - ";
-            Cerr << FormatPercent(static_cast<i64>(bucket.Value) - static_cast<i64>(actualValue), total) << " error)" << Endl;
-            VerifyPercent(static_cast<i64>(bucket.Value) - static_cast<i64>(actualValue), total, 10);
+            i64 bucketError = static_cast<i64>(bucket.Value) - static_cast<i64>(actualValue);
+            Cerr << FormatPercent(bucketError, total) << " error)" << Endl;
+            VerifyPercent(bucketError, total, 10);
 
             prevValue = bucket.Value;
             prevActualValue = actualValue;
@@ -538,7 +541,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
         {
             UNIT_ASSERT_GT(total, prevValue);
             ui64 delta = total - prevValue, actualDelta = total - prevActualValue;
-            Cerr << "    " << FormatPercent(delta, total) << " (" << FormatPercent(actualDelta, total) << ")" << Endl;
+            Cerr << "    " << FormatPercent(delta, total) << " (actual " << FormatPercent(actualDelta, total) << ")" << Endl;
             // TODO: implement B-Tree index histogram
             if (histogram.size()) {
                 VerifyPercent(delta, total, 20);

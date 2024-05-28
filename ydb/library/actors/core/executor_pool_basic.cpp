@@ -432,6 +432,7 @@ namespace NActors {
         ScheduleWriters.Reset(new NSchedulerQueue::TWriter[MaxFullThreadCount + 2]);
 
 
+
         for (i16 i = 0; i != MaxFullThreadCount; ++i) {
             Threads[i].Thread.reset(
                 new TExecutorThread(

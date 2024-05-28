@@ -18,6 +18,7 @@ NActors::IActor* CreateS3FileQueueActor(
         NS3Details::TPathList paths,
         size_t prefetchSize,
         ui64 fileSizeLimit,
+        ui64 readLimit,
         bool useRuntimeListing,
         ui64 consumersCount,
         ui64 batchSizeLimit,

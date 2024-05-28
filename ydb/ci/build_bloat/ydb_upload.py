@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import argparse
 import copy
 import datetime
 import json
@@ -61,7 +62,27 @@ def generate_column_types(row):
     return column_types
 
 
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-c",
+        "--html-dir-cpp",
+        required=True,
+        help="Path to treemap view of compilation times",
+    )
+    parser.add_argument(
+        "-i",
+        "--html-dir-headers",
+        required=False,
+        default="html_headers_impact",
+        help="Path to treemap view of headers impact on cpp compilation",
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
+
     if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
         print("Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping")
         return 1
@@ -111,7 +132,7 @@ def main():
             value = os.environ.get(column, None)
             common_parameters[column.lower()] = sanitize_str(value)
 
-        with open("html_cpp_impact/output.json") as f:
+        with open(os.path.join(args.html_dir_cpp, "output.json")) as f:
             cpp_stats = json.load(f)
 
         rows = []

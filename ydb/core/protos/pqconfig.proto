@@ -930,6 +930,7 @@ message TPartitionOperation {
     optional uint64 End = 3;
     optional string Consumer = 4;
     optional string Path = 5; // topic path
+    optional uint32 SupportivePartition = 6;
 };
 
 message TDataTransaction {

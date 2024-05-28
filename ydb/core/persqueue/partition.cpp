@@ -3042,6 +3042,8 @@ void TPartition::Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const T
 
 void TPartition::HandleOnInit(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorContext&)
 {
+    Y_ABORT_UNLESS(IsSupportive());
+
     PendingEvents.emplace_back(ev->ReleaseBase().Release());
 }
 

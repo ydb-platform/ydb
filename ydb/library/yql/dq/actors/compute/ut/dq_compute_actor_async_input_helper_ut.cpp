@@ -41,14 +41,14 @@ Y_UNIT_TEST_SUITE(TComputeActorAsyncInputHelperTest) {
             }
 
             // Checkpointing.
-            void SaveState(const NDqProto::TCheckpoint& checkpoint, NDqProto::TSourceState& state) override {
+            void SaveState(const NDqProto::TCheckpoint& checkpoint, TSourceState& state) override {
                 Y_UNUSED(checkpoint);
                 Y_UNUSED(state);
             }
             void CommitState(const NDqProto::TCheckpoint& checkpoint) override {
                 Y_UNUSED(checkpoint);
             }
-            void LoadState(const NDqProto::TSourceState& state) override {
+            void LoadState(const TSourceState& state) override {
                 Y_UNUSED(state);
             }
 

@@ -205,6 +205,7 @@ private:
     };
 
     THashMap<ui64, TTxWriteInfo> TxWrites;
+    bool TxWritesChanged = false;
     ui32 NextSupportivePartitionId = 100'000;
 
     TActorId CacheActor;
@@ -494,6 +495,10 @@ private:
 
     void BeginDeleteTx(const TDistributedTransaction& tx);
     void BeginDeletePartitions(TTxWriteInfo& writeInfo);
+
+    bool CheckTxWriteOperation(const NKikimrPQ::TPartitionOperation& operation,
+                               ui64 writeId) const;
+    bool CheckTxWriteOperations(const NKikimrPQ::TDataTransaction& txBody) const;
 };
 
 

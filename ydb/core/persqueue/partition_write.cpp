@@ -41,6 +41,9 @@ void TPartition::ReplyOwnerOk(const TActorContext& ctx, const ui64 dst, const TS
     r->SetOwnerCookie(cookie);
     r->SetStatus(PartitionConfig ? PartitionConfig->GetStatus() : NKikimrPQ::ETopicPartitionStatus::Active);
     r->SetSeqNo(seqNo);
+    if (IsSupportive()) {
+        r->SetSupportivePartition(Partition.InternalPartitionId);
+    }
 
     ctx.Send(Tablet, response.Release());
 }

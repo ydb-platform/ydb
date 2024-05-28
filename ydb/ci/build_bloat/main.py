@@ -299,11 +299,14 @@ def main():
     if args.html_dir_cpp:
         actions.append(("header build time impact", generate_header_bloat, args.html_dir_headers))
 
+    current_script_dir = os.path.dirname(os.path.realpath(__file__))
+    html_dir = os.path.join(current_script_dir, "html")
+
     for description, fn, output_path in actions:
         print("Performing '{}'".format(description))
         tree = fn(args.build_dir)
 
-        shutil.copytree("html", output_path, dirs_exist_ok=True)
+        shutil.copytree(html_dir, output_path, dirs_exist_ok=True)
         with open(os.path.join(output_path, "bloat.json"), "w") as f:
             f.write("var kTree = ")
             json.dump(tree, f, indent=4)

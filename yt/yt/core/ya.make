@@ -139,6 +139,7 @@ SRCS(
     misc/phoenix.cpp
     misc/pool_allocator.cpp
     misc/proc.cpp
+    misc/process_exit_profiler.cpp
     misc/protobuf_helpers.cpp
     misc/public.cpp
     misc/random.cpp

@@ -73,34 +73,50 @@ public:
 
 template <>
 struct TJsonRequestSchema<TJsonBSControllerInfo> {
-    static TString GetSchema() {
-        TStringStream stream;
-        TProtoToJson::ProtoToJsonSchema<TEvBlobStorage::TEvResponseControllerInfo::ProtoRecordType>(stream);
-        return stream.Str();
+    static YAML::Node GetSchema() {
+        return TProtoToYaml::ProtoToYamlSchema<TEvBlobStorage::TEvResponseControllerInfo::ProtoRecordType>();
     }
 };
 
 template <>
 struct TJsonRequestParameters<TJsonBSControllerInfo> {
-    static TString GetParameters() {
-        return R"___([{"name":"controller_id","in":"query","description":"storage controller identifier (tablet id)","required":true,"type":"string"},
-                      {"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
-                      {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___";
+    static YAML::Node GetParameters() {
+        return YAML::Node(R"___(
+            - name: controller_id
+              in: query
+              description: storage controller identifier (tablet id)
+              required: true
+              type: string
+            - name: enums
+              in: query
+              description: convert enums to strings
+              required: false
+              type: boolean
+            - name: ui64
+              in: query
+              description: return ui64 as number
+              required: false
+              type: boolean
+            - name: timeout
+              in: query
+              description: timeout in ms
+              required: false
+              type: integer
+        )___");
     }
 };
 
 template <>
 struct TJsonRequestSummary<TJsonBSControllerInfo> {
     static TString GetSummary() {
-        return "\"Storage controller information\"";
+        return "Storage controller information";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonBSControllerInfo> {
     static TString GetDescription() {
-        return "\"Returns information about storage controller\"";
+        return "Returns information about storage controller";
     }
 };
 

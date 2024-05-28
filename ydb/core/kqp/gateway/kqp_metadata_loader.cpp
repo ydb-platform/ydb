@@ -754,7 +754,12 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                 const bool resolveEntityInsideDataSource = (cluster != Cluster);
                 // resolveEntityInsideDataSource => entry.Kind == EKind::KindExternalDataSource
                 if (resolveEntityInsideDataSource && entry.Kind != EKind::KindExternalDataSource) {
-                    throw yexception() << "\"" << CombinePath(entry.Path.begin(), entry.Path.end()) << "\" is expected to be external data source";
+                    const auto message = TStringBuilder()
+                            << "\"" << CombinePath(entry.Path.begin(), entry.Path.end())
+                            << "\" is expected to be external data source";
+
+                    promise.SetValue(ResultFromError<TResult>(YqlIssue({}, TIssuesIds::KIKIMR_BAD_REQUEST, message)));
+                    return;
                 }
 
                 switch (entry.Kind) {

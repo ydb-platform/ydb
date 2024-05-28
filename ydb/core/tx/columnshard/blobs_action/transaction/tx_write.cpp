@@ -88,8 +88,9 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
                 proto.SetLockId(operation->GetLockId());
                 TString txBody;
                 Y_ABORT_UNLESS(proto.SerializeToString(&txBody));
-                auto op = Self->GetProgressTxController().StartProposeOnExecute(TTxController::TBasicTxInfo(NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE, operation->GetLockId()),
-                    txBody, writeMeta.GetSource(), operation->GetCookie(), {}, txc);
+                auto op = Self->GetProgressTxController().StartProposeOnExecute(
+                    TTxController::TTxInfo(NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE, operation->GetLockId(), writeMeta.GetSource(), operation->GetCookie(), {}), txBody,
+                    txc);
                 AFL_VERIFY(!op->IsFail());
                 ResultOperators.emplace_back(op);
             } else {

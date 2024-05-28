@@ -81,36 +81,60 @@ public:
 
 template <>
 struct TJsonRequestSchema<TJsonHiveStats> {
-    static TString GetSchema() {
-        TStringStream stream;
-        TProtoToJson::ProtoToJsonSchema<TEvHive::TEvResponseHiveDomainStats::ProtoRecordType>(stream);
-        return stream.Str();
+    static YAML::Node GetSchema() {
+        return TProtoToYaml::ProtoToYamlSchema<TEvHive::TEvResponseHiveDomainStats::ProtoRecordType>();
     }
 };
 
 template <>
 struct TJsonRequestParameters<TJsonHiveStats> {
-    static TString GetParameters() {
-        return R"___([{"name":"hive_id","in":"query","description":"hive identifier (tablet id)","required":true,"type":"string"},
-                      {"name":"followers","in":"query","description":"return followers","required":false,"type":"boolean"},
-                      {"name":"metrics","in":"query","description":"return tablet metrics","required":false,"type":"boolean"},
-                      {"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
-                      {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___";
+    static YAML::Node GetParameters() {
+        return YAML::Load(R"___(
+            - name: hive_id
+              in: query
+              description: hive identifier (tablet id)
+              required: true
+              type: string
+            - name: followers
+              in: query
+              description: return followers
+              required: false
+              type: boolean
+            - name: metrics
+              in: query
+              description: return tablet metrics
+              required: false
+              type: boolean
+            - name: enums
+              in: query
+              description: convert enums to strings
+              required: false
+              type: boolean
+            - name: ui64
+              in: query
+              description: return ui64 as number
+              required: false
+              type: boolean
+            - name: timeout
+              in: query
+              description: timeout in ms
+              required: false
+              type: integer
+            )___");
     }
 };
 
 template <>
 struct TJsonRequestSummary<TJsonHiveStats> {
     static TString GetSummary() {
-        return "\"Hive statistics\"";
+        return "Hive statistics";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonHiveStats> {
     static TString GetDescription() {
-        return "\"Returns information about Hive statistics\"";
+        return "Returns information about Hive statistics";
     }
 };
 

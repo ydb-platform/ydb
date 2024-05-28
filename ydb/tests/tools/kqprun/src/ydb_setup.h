@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common.h"
+#include "actors.h"
 
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_query/query.h>
@@ -54,7 +55,7 @@ public:
 
     TRequestResult ScriptRequest(const TString& script, NKikimrKqp::EQueryAction action, const TString& traceId, TString& operation) const;
 
-    TRequestResult QueryRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets) const;
+    TRequestResult QueryRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets, TProgressCallback progressCallback) const;
 
     TRequestResult YqlScriptRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets) const;
 

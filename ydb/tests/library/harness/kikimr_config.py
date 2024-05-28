@@ -396,6 +396,7 @@ class KikimrConfigGenerator(object):
             self.yaml_config["table_service_config"]["index_auto_choose_mode"] = 'max_used_prefix'
             self.yaml_config["feature_flags"]['enable_temp_tables'] = True
             self.yaml_config["feature_flags"]['enable_table_pg_types'] = True
+            self.yaml_config['feature_flags']['enable_uniq_constraint'] = True
 
         if generic_connector_config:
             if "query_service_config" not in self.yaml_config:

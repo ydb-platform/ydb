@@ -158,6 +158,7 @@ private: //IDqAsyncLookupSource
         YQL_CLOG(DEBUG, ProviderYt) << "ActorId=" << SelfId() << " Got LookupRequest for " << keys.size() << " keys";
         Y_ABORT_IF(InProgress);
         Y_ABORT_IF(keys.size() > MaxKeysInRequest);
+        InProgress = true;
         auto guard = Guard(*Alloc);
         NKikimr::NMiniKQL::TKeyPayloadPairVector lookupResult;
         lookupResult.reserve(keys.size());
@@ -167,6 +168,7 @@ private: //IDqAsyncLookupSource
         }
         auto ev = new IDqAsyncLookupSource::TEvLookupResult(Alloc, std::move(lookupResult));
         TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(ParentId, SelfId(), ev));
+        InProgress = false;
     }
 
 private: //events
@@ -192,8 +194,6 @@ private:
     NYql::NYt::NSource::TLookupSource LookupSource;
     const NKikimr::NMiniKQL::TStructType* const KeyType;
     const NKikimr::NMiniKQL::TStructType* const PayloadType;
-    // const NKikimr::NMiniKQL::TStructType* const OutputType;
-    // const TIndexedColumns OutputColumns;
     const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
     const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
     const size_t MaxKeysInRequest;

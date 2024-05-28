@@ -32,7 +32,7 @@ namespace NKikimr {
 
         TInstant LastCutTime;
         TDeque<ui64> FreeUpToLsn;
-        ui64 FreeUpToLsnLastWritten = 0;
+        ui64 FirstLsnToKeepLastWritten = 0;
 
         const TDuration FirstDuration;
         const TDuration RegularDuration;
@@ -115,19 +115,18 @@ namespace NKikimr {
 
             const ui64 curLsn = Min(HullLsnToKeep, SyncLogLsnToKeep, SyncerLsnToKeep, HugeKeeperLsnToKeep, ScrubLsnToKeep);
 
-            // find the maximum of requested LSN's to free up to
-            TMaybe<ui64> freeUpToLsn;
-            while (FreeUpToLsn && curLsn >= FreeUpToLsn.front()) {
-                freeUpToLsn = FreeUpToLsn.front();
-                FreeUpToLsn.pop_front();
+            // only issue command if there is a progress in FreeUpToLsn queue
+            bool progress = false;
+            for (; FreeUpToLsn && FreeUpToLsn.front() < curLsn; FreeUpToLsn.pop_front()) {
+                progress = true;
             }
 
-            if (freeUpToLsn) {
+            if (progress) {
                 LastCutTime = TAppData::TimeProvider->Now();
 
                 // generate clear log message
                 NPDisk::TCommitRecord commitRec;
-                commitRec.FirstLsnToKeep = *freeUpToLsn;
+                commitRec.FirstLsnToKeep = curLsn;
                 commitRec.IsStartingPoint = false;
                 TLsnSeg seg = LogCutterCtx.LsnMngr->AllocLsnForLocalUse();
                 ui8 signature = TLogSignature::SignatureHullCutLog;
@@ -135,13 +134,13 @@ namespace NKikimr {
                     new NPDisk::TEvLog(LogCutterCtx.PDiskCtx->Dsk->Owner,
                         LogCutterCtx.PDiskCtx->Dsk->OwnerRound, signature, commitRec, TRcBuf(), seg, nullptr));
                 WriteInProgress = true;
-                FreeUpToLsnLastWritten = *freeUpToLsn;
+                FirstLsnToKeepLastWritten = curLsn;
 
                 LOG_DEBUG(ctx, NKikimrServices::BS_LOGCUTTER,
                         VDISKP(LogCutterCtx.VCtx->VDiskLogPrefix,
                             "CUT: Lsn# %" PRIu64 " Hull# %" PRIu64 " SyncLog# %" PRIu64
                             " Syncer# %" PRIu64 " Huge# %" PRIu64 " Db# LogoBlobs Db# Barriers Db# Blocks",
-                            *freeUpToLsn, HullLsnToKeep, SyncLogLsnToKeep, SyncerLsnToKeep, HugeKeeperLsnToKeep));
+                            curLsn, HullLsnToKeep, SyncLogLsnToKeep, SyncerLsnToKeep, HugeKeeperLsnToKeep));
             }
         }
 
@@ -167,7 +166,7 @@ namespace NKikimr {
 
                         str << "FreeUpToLsn: " << FormatList(FreeUpToLsn) << "<br>";
 
-                        str << "FreeUpToLsnLastWritten: [Lsn=" << FreeUpToLsnLastWritten
+                        str << "FirstLsnToKeepLastWritten: [Lsn=" << FirstLsnToKeepLastWritten
                             << ", LastUpdate=" << ToStringLocalTimeUpToSeconds(LastCutTime) << "]<br>";
 
                         str << "FirstDuration: " << FirstDuration << "<br>";

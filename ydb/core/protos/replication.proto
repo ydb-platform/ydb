@@ -1,5 +1,6 @@
 import "ydb/core/scheme/protos/pathid.proto";
 import "ydb/public/api/protos/annotations/sensitive.proto";
+import "ydb/public/api/protos/ydb_issue_message.proto";
 
 package NKikimrReplication;
 option java_package = "ru.yandex.kikimr.proto";
@@ -70,10 +71,15 @@ message TReplicationState {
         optional EFailoverMode FailoverMode = 1;
     }
 
+    message TError {
+        repeated Ydb.Issue.IssueMessage Issues = 1;
+    }
+
     oneof State {
         TStandBy StandBy = 1;
         TPaused Paused = 2;
         TDone Done = 3;
+        TError Error = 4;
     }
 }
 
@@ -133,6 +139,23 @@ message TEvDropReplicationResult {
     optional TOperationId OperationId = 1;
     optional uint64 Origin = 2;
     optional EStatus Status = 3;
+}
+
+message TEvDescribeReplication {
+    optional NKikimrProto.TPathID PathId = 1;
+}
+
+message TEvDescribeReplicationResult {
+    enum EStatus {
+        UNKNOWN = 0;
+        SUCCESS = 1;
+        NOT_FOUND = 2;
+    }
+
+    optional EStatus Status = 1;
+    optional TConnectionParams ConnectionParams = 2;
+    repeated TReplicationConfig.TTargetSpecific.TTarget Targets = 3;
+    optional TReplicationState State = 4;
 }
 
 message TControllerIdentity {

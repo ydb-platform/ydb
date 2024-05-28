@@ -5,8 +5,8 @@ namespace NPQ {
 
 
 TPartitionScaleManager::TPartitionScaleManager(
-    const TString& topicName, 
-    const TString& databasePath, 
+    const TString& topicName,
+    const TString& databasePath,
     NKikimrPQ::TUpdateBalancerConfig& balancerConfig
 )
     : TopicName(topicName)
@@ -34,7 +34,7 @@ void TPartitionScaleManager::TrySendScaleRequest(const TActorContext& ctx) {
     if (splitMergePair.first.empty() && splitMergePair.second.empty()) {
         return;
     }
-    
+
     RequestInflight = true;
     CurrentScaleRequest = ctx.Register(new TPartitionScaleRequest(
         TopicName,
@@ -55,7 +55,7 @@ std::pair<std::vector<TPartitionSplit>, std::vector<TPartitionMerge>> TPartition
     std::vector<TPartitionSplit> splitsToApply;
     std::vector<TPartitionMerge> mergesToApply;
 
-    size_t allowedSplitsCount = BalancerConfig.PartitionCountLimit > BalancerConfig.CurPartitions ? BalancerConfig.PartitionCountLimit - BalancerConfig.CurPartitions : 0;
+    size_t allowedSplitsCount = BalancerConfig.MaxActivePartitions > BalancerConfig.CurPartitions ? BalancerConfig.MaxActivePartitions - BalancerConfig.CurPartitions : 0;
     auto itSplit = PartitionsToSplit.begin();
     while (allowedSplitsCount > 0 && itSplit != PartitionsToSplit.end()) {
         const auto partitionId = itSplit->first;
@@ -111,7 +111,7 @@ void TPartitionScaleManager::UpdateDatabasePath(const TString& dbPath) {
 }
 
 TString TPartitionScaleManager::GetRangeMid(const TString& from, const TString& to) {
-    if (from > to) {
+    if (from > to && to.size() != 0) {
         return "";
     }
 
@@ -133,7 +133,6 @@ TString TPartitionScaleManager::GetRangeMid(const TString& from, const TString& 
     if (result == from) {
         result += static_cast<unsigned char>(127);
     }
-
     return result;
 }
 

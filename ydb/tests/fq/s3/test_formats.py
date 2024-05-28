@@ -492,3 +492,20 @@ Pear,15,33'''
         assert len(result_set.rows) == 1
         assert result_set.rows[0].items[0].bytes_value == b"Pear"
         assert result_set.rows[0].items[1].int32_value == 15
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_raw_empty_schema_query(self, kikimr, s3, client, unique_prefix):
+        self.create_bucket_and_upload_file("test.parquet", s3, kikimr)
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+        sql = f'''
+            SELECT * FROM `{storage_connection_name}`.`*`
+            WITH (format=raw, SCHEMA ());
+            '''
+
+        query_id = client.create_query("test_raw_empty_schema", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+        describe_result = client.describe_query(query_id).result
+        describe_string = "{}".format(describe_result)
+        assert r"Only one column in schema supported in raw format" in describe_string

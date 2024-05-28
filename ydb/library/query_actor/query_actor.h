@@ -113,6 +113,9 @@ protected:
     void RunDataQuery(const TString& sql, NYdb::TParamsBuilder* params = nullptr, TTxControl txControl = TTxControl::BeginAndCommitTx());
     void CommitTransaction();
 
+    void ClearTimeInfo();
+    TDuration GetAverageTime();
+
     template <class THandlerFunc>
     void SetQueryResultHandler(THandlerFunc handler) {
         QueryResultHandler = static_cast<TQueryResultHandler>(handler);
@@ -167,6 +170,10 @@ protected:
     NActors::TActorId Owner;
 
     std::vector<NYdb::TResultSet> ResultSets;
+
+    TInstant RequestStartTime;
+    TDuration AmountRequestsTime;
+    ui32 NumberRequests = 0;
 };
 
 template<typename TQueryActor, typename TResponse, typename ...TArgs>
@@ -247,7 +254,6 @@ public:
             || status == Ydb::StatusIds::BAD_SESSION
             || status == Ydb::StatusIds::SESSION_EXPIRED
             || status == Ydb::StatusIds::SESSION_BUSY
-            || status == Ydb::StatusIds::TIMEOUT
             || status == Ydb::StatusIds::ABORTED) {
             return ERetryErrorClass::ShortRetry;
         }

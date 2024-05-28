@@ -32,7 +32,7 @@ struct TExecutionOptions {
     EClearExecutionCase ClearExecution = EClearExecutionCase::Disabled;
     NKikimrKqp::EQueryAction ScriptQueryAction = NKikimrKqp::QUERY_ACTION_EXECUTE;
 
-    TString TraceId = "kqprun";
+    TString TraceId = "kqprun_" + CreateGuidAsString();
 
     bool HasResults() const {
         return !ScriptQueries.empty() && ScriptQueryAction == NKikimrKqp::QUERY_ACTION_EXECUTE;
@@ -87,7 +87,24 @@ void RunScript(const TExecutionOptions& executionOptions, const NKqpRun::TRunner
     }
 
     if (executionOptions.HasResults()) {
-        runner.PrintScriptResults();
+        try {
+            runner.PrintScriptResults();
+        } catch (...) {
+            ythrow yexception() << "Failed to print script results, reason:\n" <<  CurrentExceptionMessage();
+        }
+    }
+
+    if (runnerOptions.YdbSettings.MonitoringEnabled) {
+        Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Started reading commands" << colors.Default() << Endl;
+        while (true) {
+            TString command;
+            Cin >> command;
+
+            if (command == "exit") {
+                break;
+            }
+            Cerr << colors.Red() << TInstant::Now().ToIsoStringLocal() << " Invalid command '" << command << "'" << colors.Default() << Endl;
+        }
     }
 
     Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Finalization of kqp runner..." << colors.Default() << Endl;
@@ -159,6 +176,7 @@ void RunMain(int argc, const char* argv[]) {
     TString schemeQueryAstFile;
     TString scriptQueryAstFile;
     TString scriptQueryPlanFile;
+    TString inProgressStatisticsFile;
     TString logFile = "-";
     TString appConfigFile = "./configuration/app_config.conf";
     std::vector<TString> tablesMappingList;
@@ -214,6 +232,10 @@ void RunMain(int argc, const char* argv[]) {
         .Optional()
         .RequiredArgument("FILE")
         .StoreResult(&scriptQueryPlanFile);
+    options.AddLongOption("in-progress-statistics", "File with script inprogress statistics")
+        .Optional()
+        .RequiredArgument("FILE")
+        .StoreResult(&inProgressStatisticsFile);
 
     options.AddLongOption('C', "clear-execution", "Execute script query without creating additional tables, one of { query | yql-script }")
         .Optional()
@@ -240,7 +262,7 @@ void RunMain(int argc, const char* argv[]) {
         .RequiredArgument("STR")
         .DefaultValue(planOutputFormat)
         .StoreResult(&planOutputFormat);
-    options.AddLongOption('R', "result-format", "Script query result format, one of { rows | full }")
+    options.AddLongOption('R', "result-format", "Script query result format, one of { rows | full-json | full-proto }")
         .Optional()
         .RequiredArgument("STR")
         .DefaultValue(resultOutputFormat)
@@ -260,6 +282,11 @@ void RunMain(int argc, const char* argv[]) {
         .RequiredArgument("INT")
         .DefaultValue(runnerOptions.YdbSettings.NodeCount)
         .StoreResult(&runnerOptions.YdbSettings.NodeCount);
+    options.AddLongOption('M', "monitoring", "Enable embedded UI access and run kqprun as deamon")
+        .Optional()
+        .NoArgument()
+        .DefaultValue(runnerOptions.YdbSettings.MonitoringEnabled)
+        .SetFlag(&runnerOptions.YdbSettings.MonitoringEnabled);
 
     options.AddLongOption('u', "udf", "Load shared library with UDF by given path")
         .Optional()
@@ -283,7 +310,7 @@ void RunMain(int argc, const char* argv[]) {
 
     // Execution options
 
-    if (!schemeQueryFile && scriptQueryFiles.empty()) {
+    if (!schemeQueryFile && scriptQueryFiles.empty() && !runnerOptions.YdbSettings.MonitoringEnabled) {
         ythrow yexception() << "Nothing to execute";
     }
 
@@ -315,6 +342,10 @@ void RunMain(int argc, const char* argv[]) {
     THolder<TFileOutput> scriptQueryAstFileHolder = SetupDefaultFileOutput(scriptQueryAstFile, runnerOptions.ScriptQueryAstOutput);
     THolder<TFileOutput> scriptQueryPlanFileHolder = SetupDefaultFileOutput(scriptQueryPlanFile, runnerOptions.ScriptQueryPlanOutput);
 
+    if (inProgressStatisticsFile) {
+        runnerOptions.InProgressStatisticsOutputFile = inProgressStatisticsFile;
+    }
+
     runnerOptions.TraceOptType = GetCaseVariant<NKqpRun::TRunnerOptions::ETraceOptType>("trace-opt", traceOptType, {
         {"all", NKqpRun::TRunnerOptions::ETraceOptType::All},
         {"scheme", NKqpRun::TRunnerOptions::ETraceOptType::Scheme},
@@ -325,7 +356,8 @@ void RunMain(int argc, const char* argv[]) {
 
     runnerOptions.ResultOutputFormat = GetCaseVariant<NKqpRun::TRunnerOptions::EResultOutputFormat>("result-format", resultOutputFormat, {
         {"rows", NKqpRun::TRunnerOptions::EResultOutputFormat::RowsJson},
-        {"full", NKqpRun::TRunnerOptions::EResultOutputFormat::FullJson}
+        {"full-json", NKqpRun::TRunnerOptions::EResultOutputFormat::FullJson},
+        {"full-proto", NKqpRun::TRunnerOptions::EResultOutputFormat::FullProto}
     });
 
     runnerOptions.PlanOutputFormat = GetCaseVariant<NYdb::NConsoleClient::EOutputFormat>("plan-format", planOutputFormat, {
@@ -394,8 +426,20 @@ void KqprunTerminateHandler() {
 }
 
 
+void SegmentationFaultHandler(int) {
+    NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
+
+    Cerr << colors.Red() << "======= segmentation fault call stack ========" << colors.Default() << Endl;
+    FormatBackTrace(&Cerr);
+    Cerr << colors.Red() << "==============================================" << colors.Default() << Endl;
+
+    abort();
+}
+
+
 int main(int argc, const char* argv[]) {
     std::set_terminate(KqprunTerminateHandler);
+    signal(SIGSEGV, &SegmentationFaultHandler);
 
     try {
         RunMain(argc, argv);

@@ -327,7 +327,9 @@ ui64 TNodeInfo::GetMaxCountForTabletType(TTabletTypes::EType tabletType) const {
 }
 
 bool TNodeInfo::IsOverloaded() const {
-    return GetNodeUsage() >= Hive.GetMaxNodeUsageToKick();
+    auto maxValues = GetResourceMaximumValues() * Hive.GetResourceOvercommitment();
+    auto normValues = NormalizeRawValues(GetResourceCurrentValues(), maxValues);
+    return GetNodeUsage(normValues) >= Hive.GetMaxNodeUsageToKick();
 }
 
 bool TNodeInfo::BecomeConnected() {

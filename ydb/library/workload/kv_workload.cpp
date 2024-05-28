@@ -316,8 +316,9 @@ TQueryInfoList TKvWorkloadGenerator::Select(TVector<TRow>&& rows) {
     }
 
     auto params = paramsBuilder.Build();
-
-    return TQueryInfoList(1, TQueryInfo(ss.str(), std::move(params)));
+    TQueryInfo info(ss.str(), std::move(params));
+    info.UseStaleRO = Params.StaleRO;
+    return TQueryInfoList(1, std::move(info));
 }
 
 TQueryInfoList TKvWorkloadGenerator::ReadRows(TVector<TRow>&& rows) {
@@ -546,6 +547,13 @@ void TKvWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandTy
                 .DefaultValue((ui64)NYdbWorkload::KvWorkloadConstants::ROWS_CNT).StoreResult(&RowsCnt);
             break;
         case TKvWorkloadGenerator::EType::SelectRandom:
+            opts.AddLongOption("cols", "Number of columns to select for a single query")
+                .DefaultValue((ui64)KvWorkloadConstants::COLUMNS_CNT).StoreResult(&ColumnsCnt);
+            opts.AddLongOption("rows", "Number of rows to select for a single query")
+                .DefaultValue((ui64)NYdbWorkload::KvWorkloadConstants::ROWS_CNT).StoreResult(&RowsCnt);
+            opts.AddLongOption("stale-ro", "Read with Stale Read Only mode")
+                .DefaultValue((ui64)KvWorkloadConstants::STALE_RO).StoreResult(&StaleRO);
+            break;
         case TKvWorkloadGenerator::EType::ReadRowsRandom:
             opts.AddLongOption("cols", "Number of columns to select for a single query")
                 .DefaultValue((ui64)KvWorkloadConstants::COLUMNS_CNT).StoreResult(&ColumnsCnt);

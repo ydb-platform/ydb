@@ -112,6 +112,7 @@ PEERDIR(
     ydb/core/tx/columnshard
     ydb/core/tx/coordinator
     ydb/core/tx/conveyor/service
+    ydb/core/tx/limiter/service
     ydb/core/tx/datashard
     ydb/core/tx/long_tx_service
     ydb/core/tx/long_tx_service/public
@@ -162,6 +163,7 @@ PEERDIR(
     ydb/services/deprecated/persqueue_v0
     ydb/services/persqueue_v1
     ydb/services/rate_limiter
+    ydb/services/replication
     ydb/services/ydb
 )
 

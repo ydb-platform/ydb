@@ -3,6 +3,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_topic/ut/ut_utils/topic_sdk_test_setup.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/core/persqueue/partition_scale_manager.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_env.h>
 
@@ -45,7 +46,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         readSession.WaitAllMessages();
 
-        for(const auto& info : readSession.ReceivedMessages) {
+        for(const auto& info : readSession.Impl->ReceivedMessages) {
             if (info.Data == "message_1.1") {
                 UNIT_ASSERT_EQUAL(0, info.PartitionId);
                 UNIT_ASSERT_EQUAL(2, info.SeqNo);
@@ -92,14 +93,14 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         readSession.WaitAndAssertPartitions({0}, "We are reading only one partition because offset is not commited");
         readSession.Run();
-        readSession.AutoCommit = true;
+        readSession.Impl->AutoCommit = true;
         readSession.Commit();
         readSession.WaitAndAssertPartitions({0, 1, 2}, "We are reading all partitions because offset is commited");
         readSession.Run();
 
         readSession.WaitAllMessages();
 
-        for(const auto& info : readSession.ReceivedMessages) {
+        for(const auto& info : readSession.Impl->ReceivedMessages) {
             if (info.Data == "message_1.1") {
                 UNIT_ASSERT_EQUAL(0, info.PartitionId);
                 UNIT_ASSERT_EQUAL(2, info.SeqNo);
@@ -111,7 +112,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             }
         }
 
-        UNIT_ASSERT_C(readSession.EndedPartitionEvents.empty(), "Old SDK is not support EndPartitionEvent");
+        UNIT_ASSERT_C(readSession.Impl->EndedPartitionEvents.empty(), "Old SDK is not support EndPartitionEvent");
 
         writeSession->Close(TDuration::Seconds(1));
         readSession.Close();
@@ -140,7 +141,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         readSession.WaitAllMessages();
 
-        for(const auto& info : readSession.ReceivedMessages) {
+        for(const auto& info : readSession.Impl->ReceivedMessages) {
             if (info.Data == "message_1.1") {
                 UNIT_ASSERT_EQUAL(0, info.PartitionId);
                 UNIT_ASSERT_EQUAL(2, info.SeqNo);
@@ -152,8 +153,8 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             }
         }
 
-        UNIT_ASSERT_VALUES_EQUAL_C(1, readSession.EndedPartitionEvents.size(), "Only one partition was ended");
-        auto& ev = readSession.EndedPartitionEvents.front();
+        UNIT_ASSERT_VALUES_EQUAL_C(1, readSession.Impl->EndedPartitionEvents.size(), "Only one partition was ended");
+        auto& ev = readSession.Impl->EndedPartitionEvents.front();
         UNIT_ASSERT_VALUES_EQUAL_C(std::vector<ui32>{}, ev.GetAdjacentPartitionIds(), "There isn`t adjacent partitions after split");
         std::vector<ui32> children = {1, 2};
         UNIT_ASSERT_VALUES_EQUAL_C(children, ev.GetChildPartitionIds(), "");
@@ -198,7 +199,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         Cerr << ">>>>> All messages received" << Endl;
 
-        for(const auto& info : readSession.ReceivedMessages) {
+        for(const auto& info : readSession.Impl->ReceivedMessages) {
             if (info.Data == "message_1.1") {
                 UNIT_ASSERT_EQUAL(0, info.PartitionId);
                 UNIT_ASSERT_EQUAL(2, info.SeqNo);
@@ -267,7 +268,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         readSession.WaitAllMessages();
 
-        for(const auto& info : readSession.ReceivedMessages) {
+        for(const auto& info : readSession.Impl->ReceivedMessages) {
             if (info.Data == TString("message_1.1")) {
                 UNIT_ASSERT_EQUAL(0, info.PartitionId);
                 UNIT_ASSERT_EQUAL(2, info.SeqNo);
@@ -283,13 +284,13 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         }
 
         if (autoscaleAwareSDK) {
-            UNIT_ASSERT_VALUES_EQUAL_C(2, readSession.EndedPartitionEvents.size(), "Two partition was ended which was merged");
-            for (auto& ev : readSession.EndedPartitionEvents) {
+            UNIT_ASSERT_VALUES_EQUAL_C(2, readSession.Impl->EndedPartitionEvents.size(), "Two partition was ended which was merged");
+            for (auto& ev : readSession.Impl->EndedPartitionEvents) {
                 UNIT_ASSERT(ev.GetAdjacentPartitionIds() == std::vector<ui32>{0} || ev.GetAdjacentPartitionIds() == std::vector<ui32>{1});
                 UNIT_ASSERT_VALUES_EQUAL_C(std::vector<ui32>{2}, ev.GetChildPartitionIds(), "");
             }
         } else {
-            UNIT_ASSERT_VALUES_EQUAL_C(0, readSession.EndedPartitionEvents.size(), "OLD SDK");
+            UNIT_ASSERT_VALUES_EQUAL_C(0, readSession.Impl->EndedPartitionEvents.size(), "OLD SDK");
         }
 
 
@@ -353,7 +354,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         readSession.WaitAndAssertPartitions({0}, "Must secondary read for check read from end");
         readSession.WaitAndAssertPartitions({}, "Partition must be released for secondary read because start not from the end of partition after 2 seconds");
 
-        readSession.Offsets[0] = 1;
+        readSession.SetOffset(0, 1);
         readSession.WaitAndAssertPartitions({0, 1, 2}, "Must read from all partitions because had been read from the end of partition");
 
         readSession.Close();
@@ -393,12 +394,12 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         SplitPartition(setup, ++txId, 0, "a");
 
         TTestReadSession readSession1("Session-0", client, Max<size_t>(), false, {0, 1, 2}, false);
-        readSession1.Offsets[0] = 1;
+        readSession1.SetOffset(0, 1);
         readSession1.WaitAndAssertPartitions({0, 1, 2}, "Must read all exists partitions because read the partition 0 from offset 1");
-        readSession1.Offsets[0] = 0;
+        readSession1.SetOffset(0, 0);
 
         TTestReadSession readSession2("Session-1", client, Max<size_t>(), false, {0}, false);
-        readSession2.Offsets[0] = 0;
+        readSession2.SetOffset(0, 0);
 
         readSession2.WaitAndAssertPartitions({0}, "Must read partition 0 because it defined in the readSession");
         readSession2.Run();
@@ -497,6 +498,153 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         status = client.CommitOffset(TEST_TOPIC, 0, TEST_CONSUMER, 0).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(NYdb::EStatus::BAD_REQUEST, status.GetStatus(), "The consumer cannot commit an offset for inactive, read-to-the-end partitions.");
+    }
+
+    Y_UNIT_TEST(ControlPlane_CreateAlterDescribe) {
+        auto autoscalingTestTopic = "autoscalit-topic";
+        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicClient client = setup.MakeClient();
+
+        auto minParts = 5;
+        auto maxParts = 10;
+        auto scaleUpPercent = 80;
+        auto scaleDownPercent = 20;
+        auto threshold = 500;
+        auto strategy = EAutoscalingStrategy::ScaleUp;
+
+        TCreateTopicSettings createSettings;
+        createSettings
+            .BeginConfigurePartitioningSettings()
+            .MinActivePartitions(minParts)
+            .MaxActivePartitions(maxParts)
+                .BeginConfigureAutoscalingSettings()
+                .ScaleUpThresholdPercent(scaleUpPercent)
+                .ScaleDownThresholdPercent(scaleDownPercent)
+                .ThresholdTime(TDuration::Seconds(threshold))
+                .Strategy(strategy)
+                .EndConfigureAutoscalingSettings()
+            .EndConfigurePartitioningSettings();
+        client.CreateTopic(autoscalingTestTopic, createSettings).Wait();
+
+        TDescribeTopicSettings descSettings;
+
+        auto describe = client.DescribeTopic(autoscalingTestTopic, descSettings).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), NYdb::EStatus::SUCCESS, describe.GetIssues().ToString());
+
+
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitioningSettings().GetMinActivePartitions(), minParts);
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitioningSettings().GetMaxActivePartitions(), maxParts);
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetStrategy(), strategy);
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetScaleDownThresholdPercent(), scaleDownPercent);
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetScaleUpThresholdPercent(), scaleUpPercent);
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetThresholdTime().Seconds(), threshold);
+
+        auto alterMinParts = 10;
+        auto alterMaxParts = 20;
+        auto alterScaleUpPercent = 90;
+        auto alterScaleDownPercent = 10;
+        auto alterThreshold = 700;
+        auto alterStrategy = EAutoscalingStrategy::ScaleUpAndDown;
+
+        TAlterTopicSettings alterSettings;
+        alterSettings
+            .BeginAlterPartitioningSettings()
+            .MinActivePartitions(alterMinParts)
+            .MaxActivePartitions(alterMaxParts)
+                .BeginAlterAutoscalingSettings()
+                .ScaleDownThresholdPercent(alterScaleDownPercent)
+                .ScaleUpThresholdPercent(alterScaleUpPercent)
+                .ThresholdTime(TDuration::Seconds(alterThreshold))
+                .Strategy(alterStrategy)
+                .EndAlterAutoscalingSettings()
+            .EndAlterTopicPartitioningSettings();
+
+        client.AlterTopic(autoscalingTestTopic, alterSettings).Wait();
+
+        auto describeAfterAlter = client.DescribeTopic(autoscalingTestTopic).GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetMinActivePartitions(), alterMinParts);
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetMaxActivePartitions(), alterMaxParts);
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetStrategy(), alterStrategy);
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetScaleDownThresholdPercent(), alterScaleDownPercent);
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetScaleUpThresholdPercent(), alterScaleUpPercent);
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetThresholdTime().Seconds(), alterThreshold);
+    }
+
+    Y_UNIT_TEST(PartitionSplit_AutosplitByLoad) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicClient client = setup.MakeClient();
+
+        TCreateTopicSettings createSettings;
+        createSettings
+            .BeginConfigurePartitioningSettings()
+            .MinActivePartitions(1)
+            .MaxActivePartitions(100)
+                .BeginConfigureAutoscalingSettings()
+                .ScaleUpThresholdPercent(2)
+                .ScaleDownThresholdPercent(1)
+                .ThresholdTime(TDuration::Seconds(1))
+                .Strategy(EAutoscalingStrategy::ScaleUp)
+                .EndConfigureAutoscalingSettings()
+            .EndConfigurePartitioningSettings();
+        client.CreateTopic(TEST_TOPIC, createSettings).Wait();
+
+        auto msg = TString("a", 1_MB);
+
+        auto writeSession = CreateWriteSession(client, "producer-1", 0);
+        UNIT_ASSERT(writeSession->Write(Msg(msg, 1)));
+        UNIT_ASSERT(writeSession->Write(Msg(msg, 2)));
+        Sleep(TDuration::Seconds(10));
+        auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+        UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
+
+        auto writeSession2 = CreateWriteSession(client, "producer-1", 1);
+        UNIT_ASSERT(writeSession2->Write(Msg(msg, 3)));
+        Sleep(TDuration::Seconds(10));
+        auto describe2 = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+        UNIT_ASSERT_EQUAL(describe2.GetTopicDescription().GetPartitions().size(), 5);
+    }
+
+    Y_UNIT_TEST(MidOfRange) {
+        TString a = "a";
+        TString b = "c";
+        auto res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(a,b);
+
+        b = "b";
+        res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(a,b);
+        UNIT_ASSERT(a < res);
+        UNIT_ASSERT(b > res);
+
+        a = {};
+        b = "b";
+        res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(a,b);
+        UNIT_ASSERT(a < res);
+        UNIT_ASSERT(b > res);
+
+        a = "a";
+        b = {};
+        res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(a,b);
+        Cerr << "\n SAVDBG " << res << "\n";
+        UNIT_ASSERT(a < res);
+        UNIT_ASSERT(b != res);
+
+        a = "aa";
+        b = {};
+        res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(a,b);
+        UNIT_ASSERT(a < res);
+        UNIT_ASSERT(b != res);
+
+        a = "aaa";
+        b = "b";
+        res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(a,b);
+        UNIT_ASSERT(a < res);
+        UNIT_ASSERT(b > res);
+
+        a = "aaa";
+        b = "aab";
+        res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(a,b);
+        UNIT_ASSERT(a < res);
+        UNIT_ASSERT(b > res);
     }
 }
 

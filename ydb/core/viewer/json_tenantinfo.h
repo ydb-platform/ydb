@@ -47,6 +47,7 @@ class TJsonTenantInfo : public TViewerPipeClient<TJsonTenantInfo> {
     bool SystemTablets = false;
     bool Storage = false;
     bool Nodes = false;
+    bool Users = false;
     bool OffloadMerge = false;
     THashMap<TString, std::vector<TNodeId>> TenantNodes;
     THashMap<TString, NKikimrViewer::TEvViewerResponse> OffloadMergedTabletStateResponse;
@@ -103,6 +104,7 @@ public:
         SystemTablets = FromStringWithDefault<bool>(params.Get("system_tablets"), Tablets); // Tablets here is by design
         Storage = FromStringWithDefault<bool>(params.Get("storage"), Storage);
         Nodes = FromStringWithDefault<bool>(params.Get("nodes"), Nodes);
+        Users = FromStringWithDefault<bool>(params.Get("users"), Users);
         User = params.Get("user");
         Path = params.Get("path");
         OffloadMerge = FromStringWithDefault<bool>(params.Get("offload_merge"), OffloadMerge);
@@ -521,16 +523,18 @@ public:
                     continue;
                 }
                 std::unordered_set<TString> users;
-                if (entry.SecurityObject) {
-                    users.emplace(entry.SecurityObject->GetOwnerSID());
-                    for (const NACLibProto::TACE& ace : entry.SecurityObject->GetACL().GetACE()) {
-                        if (ace.GetAccessType() == (ui32)NACLib::EAccessType::Allow) {
-                            users.emplace(ace.GetSID());
+                if(!User.empty() || Users) {
+                    if (entry.SecurityObject) {
+                        users.emplace(entry.SecurityObject->GetOwnerSID());
+                        for (const NACLibProto::TACE& ace : entry.SecurityObject->GetACL().GetACE()) {
+                            if (ace.GetAccessType() == (ui32)NACLib::EAccessType::Allow) {
+                                users.emplace(ace.GetSID());
+                            }
                         }
                     }
-                }
-                if (!IsValidOwner(users)) {
-                    continue;
+                    if (!IsValidOwner(users)) {
+                        continue;
+                    }
                 }
                 NKikimrViewer::TTenant& tenant = *Result.AddTenantInfo();
                 auto itTenantByPath = TenantByPath.find(path);
@@ -766,28 +770,76 @@ public:
 
 template <>
 struct TJsonRequestSchema<TJsonTenantInfo> {
-    static TString GetSchema() {
-        TStringStream stream;
-        TProtoToJson::ProtoToJsonSchema<NKikimrViewer::TTenantInfo>(stream);
-        return stream.Str();
+    static YAML::Node GetSchema() {
+        return TProtoToYaml::ProtoToYamlSchema<NKikimrViewer::TTenantInfo>();
     }
 };
 
 template <>
 struct TJsonRequestParameters<TJsonTenantInfo> {
-    static TString GetParameters() {
-        return R"___([{"name":"path","in":"query","description":"schema path","required":false,"type":"string"},
-                      {"name":"user","in":"query","description":"tenant owner","required":false,"type":"string"},
-                      {"name":"followers","in":"query","description":"return followers","required":false,"type":"boolean"},
-                      {"name":"metrics","in":"query","description":"return tablet metrics","required":false,"type":"boolean"},
-                      {"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
-                      {"name":"tablets","in":"query","description":"return tablets","required":false,"type":"boolean"},
-                      {"name":"system_tablets","in":"query","description":"return system tablets","required":false,"type":"boolean"},
-                      {"name":"offload_merge","in":"query","description":"use offload merge","required":false,"type":"boolean"},
-                      {"name":"storage","in":"query","description":"return storage info","required":false,"type":"boolean"},
-                      {"name":"nodes","in":"query","description":"return nodes info","required":false,"type":"boolean"},
-                      {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___";
+    static YAML::Node GetParameters() {
+        return YAML::Load(R"___(
+            - name: path
+              in: query
+              description: schema path
+              required: false
+              type: string
+            - name: user
+              in: query
+              description: tenant owner
+              required: false
+              type: string
+            - name: followers
+              in: query
+              description: return followers
+              required: false
+              type: boolean
+            - name: metrics
+              in: query
+              description: return tablet metrics
+              required: false
+              type: boolean
+            - name: enums
+              in: query
+              description: convert enums to strings
+              required: false
+              type: boolean
+            - name: tablets
+              in: query
+              description: return tablets
+              required: false
+              type: boolean
+            - name: system_tablets
+              in: query
+              description: return system tablets
+              required: false
+              type: boolean
+            - name: offload_merge
+              in: query
+              description: use offload merge
+              required: false
+              type: boolean
+            - name: storage
+              in: query
+              description: return storage info
+              required: false
+              type: boolean
+            - name: nodes
+              in: query
+              description: return nodes info
+              required: false
+              type: boolean
+            - name: ui64
+              in: query
+              description: return ui64 as number
+              required: false
+              type: boolean
+            - name: timeout
+              in: query
+              description: timeout in ms
+              required: false
+              type: integer
+        )___");
     }
 };
 

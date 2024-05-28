@@ -2095,8 +2095,7 @@ private:
                 KqpShardsResolverId = this->RegisterWithSameMailbox(kqpShardsResolver);
                 return;
             } else if (HasOlapTable) {
-                GetResourcesSnapshot();
-                return;
+                ResourceSnapshotRequired = true;
             }
         }
         DoExecute();
@@ -2106,10 +2105,8 @@ private:
         if (!TBase::HandleResolve(ev)) {
             return;
         }
-        if (HasOlapTable) {
-            GetResourcesSnapshot();
-            return;
-        } else if (HasDatashardSourceScan) {
+        if (HasOlapTable || HasDatashardSourceScan) {
+            ResourceSnapshotRequired = ResourceSnapshotRequired || HasOlapTable;
             DoExecute();
             return;
         }
@@ -2304,7 +2301,7 @@ private:
             !topicTxs.empty());
 
         if (!locksMap.empty() || VolatileTx ||
-            Request.TopicOperations.HasReadOperations())
+            Request.TopicOperations.HasReadOperations() || Request.TopicOperations.HasWriteOperations())
         {
             YQL_ENSURE(Request.LocksOp == ELocksOp::Commit || Request.LocksOp == ELocksOp::Rollback || VolatileTx);
 
@@ -2352,6 +2349,7 @@ private:
                 }
 
                 if (auto tabletIds = Request.TopicOperations.GetReceivingTabletIds()) {
+                    sendingShardsSet.insert(tabletIds.begin(), tabletIds.end());
                     receivingShardsSet.insert(tabletIds.begin(), tabletIds.end());
                 }
 
@@ -2397,6 +2395,7 @@ private:
                     }
                 }
             }
+
 
             // Encode sending/receiving shards in tx bodies
             if (needCommit) {
@@ -2464,6 +2463,7 @@ private:
         const bool singlePartitionOptAllowed = !HasOlapTable && !UnknownAffectedShardCount && !HasExternalSources && DatashardTxs.empty() && EvWriteTxs.empty();
         const bool useDataQueryPool = !(HasExternalSources && DatashardTxs.empty() && EvWriteTxs.empty());
         const bool localComputeTasks = !DatashardTxs.empty();
+        const bool mayRunTasksLocally = !((HasExternalSources || HasOlapTable || HasDatashardSourceScan) && DatashardTxs.empty());
 
         Planner = CreateKqpPlanner({
             .TasksGraph = TasksGraph,
@@ -2487,7 +2487,8 @@ private:
             .UserRequestContext = GetUserRequestContext(),
             .FederatedQuerySetup = FederatedQuerySetup,
             .OutputChunkMaxSize = Request.OutputChunkMaxSize,
-            .GUCSettings = GUCSettings
+            .GUCSettings = GUCSettings,
+            .MayRunTasksLocally = mayRunTasksLocally
         });
 
         auto err = Planner->PlanExecution();

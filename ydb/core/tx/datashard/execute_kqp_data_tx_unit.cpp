@@ -189,7 +189,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         };
 
         auto [validated, brokenLocks] = op->HasVolatilePrepareFlag()
-            ? KqpValidateVolatileTx(tabletId, sysLocks, kqpLocks, useGenericReadSets, 
+            ? KqpValidateVolatileTx(tabletId, sysLocks, kqpLocks, useGenericReadSets,
                 txId, tx->DelayedInReadSets(), awaitingDecisions, outReadSets)
             : KqpValidateLocks(tabletId, sysLocks, kqpLocks, useGenericReadSets, inReadSets);
 
@@ -219,12 +219,12 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
 
         NKqp::NRm::TKqpResourcesRequest req;
         req.MemoryPool = NKqp::NRm::EKqpMemoryPool::DataQuery;
-        req.Memory = txc.GetMemoryLimit();
+        req.ExternalMemory = txc.GetMemoryLimit();
         ui64 taskId = dataTx->GetFirstKqpTaskId();
         NKqp::GetKqpResourceManager()->NotifyExternalResourcesAllocated(txId, taskId, req);
 
         Y_DEFER {
-            NKqp::GetKqpResourceManager()->NotifyExternalResourcesFreed(txId, taskId);
+            NKqp::GetKqpResourceManager()->FreeResources(txId, taskId);
         };
 
         LOG_T("Operation " << *op << " (execute_kqp_data_tx) at " << tabletId

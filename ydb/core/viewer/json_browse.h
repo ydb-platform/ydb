@@ -204,34 +204,50 @@ public:
 
 template <>
 struct TJsonRequestSchema<TJsonBrowse> {
-    static TString GetSchema() {
-        TStringStream stream;
-        TProtoToJson::ProtoToJsonSchema<NKikimrViewer::TBrowseInfo>(stream);
-        return stream.Str();
+    static YAML::Node GetSchema() {
+        return TProtoToYaml::ProtoToYamlSchema<NKikimrViewer::TBrowseInfo>();
     }
 };
 
 template <>
 struct TJsonRequestParameters<TJsonBrowse> {
-    static TString GetParameters() {
-        return R"___([{"name":"path","in":"query","description":"schema path","required":true,"type":"string"},
-                      {"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
-                      {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___";
+    static YAML::Node GetParameters() {
+        return YAML::Load(R"___(
+            - name: path
+              in: query
+              description: schema path
+              required: true
+              type: string
+            - name: enums
+              in: query
+              description: convert enums to strings
+              required: false
+              type: boolean
+            - name: ui64
+              in: query
+              description: return ui64 as number
+              required: false
+              type: boolean
+            - name: timeout
+              in: query
+              description: timeout in ms
+              required: false
+              type: integer
+        )___");
     }
 };
 
 template <>
 struct TJsonRequestSummary<TJsonBrowse> {
     static TString GetSummary() {
-        return "\"Schema information\"";
+        return "Schema information";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonBrowse> {
     static TString GetDescription() {
-        return "\"Returns brief information about schema object\"";
+        return "Returns brief information about schema object";
     }
 };
 

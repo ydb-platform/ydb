@@ -302,53 +302,14 @@ RESOURCE(
     content/v2/vdisk.js viewer/v2/vdisk.js
     content/v2/viewer.css viewer/v2/viewer.css
     content/v2/viewer.js viewer/v2/viewer.js
-    content/api/css/print.css viewer/api/css/print.css
-    content/api/css/reset.css viewer/api/css/reset.css
-    content/api/css/screen.css viewer/api/css/screen.css
-    content/api/css/style.css viewer/api/css/style.css
-    content/api/css/typography.css viewer/api/css/typography.css
-    content/api/fonts/DroidSans-Bold.ttf viewer/api/fonts/DroidSans-Bold.ttf
-    content/api/fonts/DroidSans.ttf viewer/api/fonts/DroidSans.ttf
-    content/api/images/collapse.gif viewer/api/images/collapse.gif
-    content/api/images/expand.gif viewer/api/images/expand.gif
-    content/api/images/explorer_icons.png viewer/api/images/explorer_icons.png
-    content/api/images/favicon-16x16.png viewer/api/images/favicon-16x16.png
-    content/api/images/favicon-32x32.png viewer/api/images/favicon-32x32.png
-    content/api/images/favicon.ico viewer/api/images/favicon.ico
-    content/api/images/logo_small.png viewer/api/images/logo_small.png
-    content/api/images/throbber.gif viewer/api/images/throbber.gif
+    content/api/favicon-16x16.png viewer/api/favicon-16x16.png
+    content/api/favicon-32x32.png viewer/api/favicon-32x32.png
+    content/api/index.css viewer/api/index.css
     content/api/index.html viewer/api/index.html
-    content/api/lang/ca.js viewer/api/lang/ca.js
-    content/api/lang/en.js viewer/api/lang/en.js
-    content/api/lang/es.js viewer/api/lang/es.js
-    content/api/lang/fr.js viewer/api/lang/fr.js
-    content/api/lang/geo.js viewer/api/lang/geo.js
-    content/api/lang/it.js viewer/api/lang/it.js
-    content/api/lang/ja.js viewer/api/lang/ja.js
-    content/api/lang/ko-kr.js viewer/api/lang/ko-kr.js
-    content/api/lang/pl.js viewer/api/lang/pl.js
-    content/api/lang/pt.js viewer/api/lang/pt.js
-    content/api/lang/ru.js viewer/api/lang/ru.js
-    content/api/lang/tr.js viewer/api/lang/tr.js
-    content/api/lang/translator.js viewer/api/lang/translator.js
-    content/api/lang/zh-cn.js viewer/api/lang/zh-cn.js
-    content/api/lib/backbone-min.js viewer/api/lib/backbone-min.js
-    content/api/lib/es5-shim.js viewer/api/lib/es5-shim.js
-    content/api/lib/handlebars-4.0.5.js viewer/api/lib/handlebars-4.0.5.js
-    content/api/lib/highlight.9.1.0.pack.js viewer/api/lib/highlight.9.1.0.pack.js
-    content/api/lib/highlight.9.1.0.pack_extended.js viewer/api/lib/highlight.9.1.0.pack_extended.js
-    content/api/lib/jquery-1.8.0.min.js viewer/api/lib/jquery-1.8.0.min.js
-    content/api/lib/jquery.ba-bbq.min.js viewer/api/lib/jquery.ba-bbq.min.js
-    content/api/lib/jquery.slideto.min.js viewer/api/lib/jquery.slideto.min.js
-    content/api/lib/jquery.wiggle.min.js viewer/api/lib/jquery.wiggle.min.js
-    content/api/lib/js-yaml.min.js viewer/api/lib/js-yaml.min.js
-    content/api/lib/jsoneditor.min.js viewer/api/lib/jsoneditor.min.js
-    content/api/lib/lodash.min.js viewer/api/lib/lodash.min.js
-    content/api/lib/marked.js viewer/api/lib/marked.js
-    content/api/lib/object-assign-pollyfill.js viewer/api/lib/object-assign-pollyfill.js
-    content/api/lib/sanitize-html.min.js viewer/api/lib/sanitize-html.min.js
-    content/api/lib/swagger-oauth.js viewer/api/lib/swagger-oauth.js
-    content/api/swagger-ui.min.js viewer/api/swagger-ui.min.js
+    content/api/swagger-initializer.js viewer/api/swagger-initializer.js
+    content/api/swagger-ui-bundle.js viewer/api/swagger-ui-bundle.js
+    content/api/swagger-ui.css viewer/api/swagger-ui.css
+    content/api/swagger-ui-standalone-preset.js viewer/api/swagger-ui-standalone-preset.js
 )
 
 PEERDIR(
@@ -373,6 +334,7 @@ PEERDIR(
     ydb/core/tx/tx_proxy
     ydb/core/util
     ydb/core/viewer/json
+    ydb/core/viewer/yaml
     ydb/core/viewer/protos
     ydb/library/persqueue/topic_parser
     ydb/public/api/protos
@@ -380,6 +342,7 @@ PEERDIR(
     ydb/public/lib/json_value
     ydb/public/api/grpc
     ydb/public/sdk/cpp/client/ydb_types
+    contrib/libs/yaml-cpp
 )
 
 YQL_LAST_ABI_VERSION()

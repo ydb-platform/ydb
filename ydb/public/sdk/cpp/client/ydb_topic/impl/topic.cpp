@@ -222,15 +222,48 @@ const TVector<NScheme::TPermissions>& TTopicDescription::GetEffectivePermissions
 
 TPartitioningSettings::TPartitioningSettings(const Ydb::Topic::PartitioningSettings& settings)
     : MinActivePartitions_(settings.min_active_partitions())
+    , MaxActivePartitions_(settings.max_active_partitions())
     , PartitionCountLimit_(settings.partition_count_limit())
+    , AutoscalingSettings_(settings.autoscaling_settings())
 {}
 
 ui64 TPartitioningSettings::GetMinActivePartitions() const {
     return MinActivePartitions_;
 }
 
+ui64 TPartitioningSettings::GetMaxActivePartitions() const {
+    return MaxActivePartitions_;
+}
+
 ui64 TPartitioningSettings::GetPartitionCountLimit() const {
     return PartitionCountLimit_;
+}
+
+TAutoscalingSettings TPartitioningSettings::GetAutoscalingSettings() const {
+    return AutoscalingSettings_;
+}
+
+TAutoscalingSettings::TAutoscalingSettings(const Ydb::Topic::AutoscalingSettings& settings)
+    : Strategy_(static_cast<EAutoscalingStrategy>(settings.strategy()))
+    , ThresholdTime_(TDuration::Seconds(settings.partition_write_speed().threshold_time().seconds()))
+    , ScaleDownThresholdPercent_(settings.partition_write_speed().scale_down_threshold_percent())
+    , ScaleUpThresholdPercent_(settings.partition_write_speed().scale_up_threshold_percent())
+{}
+
+EAutoscalingStrategy TAutoscalingSettings::GetStrategy() const {
+    return Strategy_;
+}
+
+TDuration TAutoscalingSettings::GetThresholdTime() const {
+    return ThresholdTime_;
+}
+
+ui32 TAutoscalingSettings::GetScaleUpThresholdPercent() const {
+    return ScaleUpThresholdPercent_;
+}
+
+ui32 TAutoscalingSettings::GetScaleDownThresholdPercent() const {
+    return ScaleDownThresholdPercent_;
 }
 
 TTopicStats::TTopicStats(const Ydb::Topic::DescribeTopicResult::TopicStats& topicStats)

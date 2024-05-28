@@ -34,6 +34,12 @@ protected:
     void SaveSessionProgress();
 
     void SaveSessionState();
+
+    template <class T>
+    T* GetShardVerified() const {
+        return &Adapter->GetTabletExecutorVerifiedAs<T>();
+    }
+
 public:
     TSessionActor(const std::shared_ptr<TSession>& session, const std::shared_ptr<ITabletAdapter>& adapter)
         : TabletId(adapter->GetTabletId())

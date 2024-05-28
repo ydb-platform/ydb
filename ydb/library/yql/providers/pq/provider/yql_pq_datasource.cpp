@@ -217,7 +217,8 @@ public:
         return false;
     }
 
-    void GetInputs(const TExprNode& node, TVector<TPinInfo>& inputs) override {
+    ui32 GetInputs(const TExprNode& node, TVector<TPinInfo>& inputs, bool withLimits) override {
+        Y_UNUSED(withLimits);
         if (auto maybeRead = TMaybeNode<TPqReadTopic>(&node)) {
             if (auto maybeTopic = maybeRead.Topic()) {
                 TStringBuf cluster;
@@ -226,8 +227,10 @@ public:
                 }
                 auto topicDisplayName = MakeTopicDisplayName(cluster, maybeTopic.Cast().Path().Value());
                 inputs.push_back(TPinInfo(maybeRead.DataSource().Raw(), nullptr, maybeTopic.Cast().Raw(), topicDisplayName, false));
+                return 1;
             }
         }
+        return 0;
     }
 
     IDqIntegration* GetDqIntegration() override {

@@ -1,4 +1,5 @@
 #include "session.h"
+
 #include <ydb/core/tx/columnshard/bg_tasks/abstract/adapter.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/export/actor/export_actor.h>
@@ -16,4 +17,4 @@ NKikimr::TConclusion<std::unique_ptr<NActors::IActor>> TSession::DoCreateActor(c
     return std::make_unique<TActor>(context.GetSessionSelfPtr(), context.GetAdapter(), blobsOperator.DetachResult());
 }
 
-}
+}   // namespace NKikimr::NOlap::NExport

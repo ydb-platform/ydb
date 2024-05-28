@@ -320,7 +320,7 @@ void TPrintable<TStartPartitionSessionEvent>::DebugString(TStringBuilder& ret, b
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // NTopic::TReadSessionEvent::TStopPartitionSessionEvent
 
-TStopPartitionSessionEvent::TStopPartitionSessionEvent(TPartitionSession::TPtr partitionSession, bool committedOffset)
+TStopPartitionSessionEvent::TStopPartitionSessionEvent(TPartitionSession::TPtr partitionSession, ui64 committedOffset)
     : TPartitionSessionAccessor(std::move(partitionSession))
     , CommittedOffset(committedOffset) {
 }
@@ -347,6 +347,12 @@ TEndPartitionSessionEvent::TEndPartitionSessionEvent(TPartitionSession::TPtr par
     : TPartitionSessionAccessor(std::move(partitionSession))
     , AdjacentPartitionIds(std::move(adjacentPartitionIds))
     , ChildPartitionIds(std::move(childPartitionIds)) {
+}
+
+void TEndPartitionSessionEvent::Confirm() {
+    if (PartitionSession) {
+        static_cast<TPartitionStreamImpl<false>*>(PartitionSession.Get())->ConfirmEnd(GetChildPartitionIds());
+    }
 }
 
 void JoinIds(TStringBuilder& ret, const std::vector<ui32> ids) {

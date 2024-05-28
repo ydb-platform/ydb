@@ -167,7 +167,7 @@ namespace NYql {
         class TOperationFactory: public IOperationFactory {
         public:
             TOperationFactory(const TOperationFactoryOptions& options,
-                const TString& configData, 
+                const TString& configData,
                 std::function<NFS::IDownloaderPtr(const TFileStorageConfig&)> arcDownloaderFactory)
                 : Logger(&Cerr)
                 , Options_(options)
@@ -441,7 +441,7 @@ namespace NYql {
                     yson.OnEndList();
                 }
 
-                auto plan = program->GetQueryPlan(TPlanSettings().SetLimitInputPins(std::nullopt).SetLimitOutputPins(std::nullopt)).GetOrElse("");
+                auto plan = program->GetQueryPlan(TPlanSettings().SetWithLimits(false)).GetOrElse("");
                 auto taskInfo = program->GetTasksInfo().GetOrElse("");
 
                 auto statistics = program->GetStatistics().GetOrElse("");
@@ -555,7 +555,7 @@ namespace NYql {
 
         THolder<IOperationFactory> MakeOperationFactory(
             const TOperationFactoryOptions& options,
-            const TString& configData, 
+            const TString& configData,
             std::function<NFS::IDownloaderPtr(const TFileStorageConfig&)> arcDownloaderFactory) {
             return MakeHolder<TOperationFactory>(options, configData, arcDownloaderFactory);
         }

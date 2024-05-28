@@ -1,11 +1,15 @@
 #include "ro_controller.h"
-#include <ydb/core/tx/columnshard/columnshard_impl.h>
+
 #include <ydb/core/tx/columnshard/blobs_action/abstract/gc.h>
-#include <ydb/core/tx/columnshard/engines/column_engine.h>
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/engines/changes/cleanup_portions.h>
+#include <ydb/core/tx/columnshard/engines/changes/cleanup_tables.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
 #include <ydb/core/tx/columnshard/engines/changes/indexation.h>
 #include <ydb/core/tx/columnshard/engines/changes/ttl.h>
+#include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 
 namespace NKikimr::NYDBTest::NColumnShard {
@@ -18,6 +22,12 @@ bool TReadOnlyController::DoOnAfterFilterAssembling(const std::shared_ptr<arrow:
 }
 
 bool TReadOnlyController::DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& change, const ::NKikimr::NColumnShard::TColumnShard& /*shard*/) {
+    if (change.TypeString() == NOlap::TCleanupPortionsColumnEngineChanges::StaticTypeName()) {
+        CleaningFinishedCounter.Inc();
+    }
+    if (change.TypeString() == NOlap::TCleanupTablesColumnEngineChanges::StaticTypeName()) {
+        CleaningFinishedCounter.Inc();
+    }
     if (change.TypeString() == NOlap::TTTLColumnEngineChanges::StaticTypeName()) {
         TTLFinishedCounter.Inc();
     }
@@ -33,6 +43,12 @@ bool TReadOnlyController::DoOnWriteIndexComplete(const NOlap::TColumnEngineChang
 
 bool TReadOnlyController::DoOnWriteIndexStart(const ui64 tabletId, NOlap::TColumnEngineChanges& change) {
     AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", change.TypeString())("tablet_id", tabletId);
+    if (change.TypeString() == NOlap::TCleanupPortionsColumnEngineChanges::StaticTypeName()) {
+        CleaningStartedCounter.Inc();
+    }
+    if (change.TypeString() == NOlap::TCleanupTablesColumnEngineChanges::StaticTypeName()) {
+        CleaningStartedCounter.Inc();
+    }
     if (change.TypeString() == NOlap::TTTLColumnEngineChanges::StaticTypeName()) {
         TTLStartedCounter.Inc();
     }
@@ -45,4 +61,4 @@ bool TReadOnlyController::DoOnWriteIndexStart(const ui64 tabletId, NOlap::TColum
     return true;
 }
 
-}
+}   // namespace NKikimr::NYDBTest::NColumnShard

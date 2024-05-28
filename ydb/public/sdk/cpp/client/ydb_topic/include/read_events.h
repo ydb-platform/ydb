@@ -242,7 +242,7 @@ struct TReadSessionEvent {
     //! Server command for creating and starting partition session.
     struct TStartPartitionSessionEvent: public TPartitionSessionAccessor,
                                         public TPrintable<TStartPartitionSessionEvent> {
-        explicit TStartPartitionSessionEvent(TPartitionSession::TPtr, ui64 committedOffset, ui64 endOffset);
+        TStartPartitionSessionEvent(TPartitionSession::TPtr, ui64 committedOffset, ui64 endOffset);
 
         //! Current committed offset in partition session.
         ui64 GetCommittedOffset() const {
@@ -268,7 +268,7 @@ struct TReadSessionEvent {
     //! Server can destroy partition session gracefully
     //! for rebalancing among all topic clients.
     struct TStopPartitionSessionEvent: public TPartitionSessionAccessor, public TPrintable<TStopPartitionSessionEvent> {
-        TStopPartitionSessionEvent(TPartitionSession::TPtr partitionSession, bool committedOffset);
+        TStopPartitionSessionEvent(TPartitionSession::TPtr partitionSession, ui64 committedOffset);
 
         //! Last offset of the partition session that was committed.
         ui64 GetCommittedOffset() const {
@@ -297,6 +297,10 @@ struct TReadSessionEvent {
         const std::vector<ui32> GetChildPartitionIds() const {
             return ChildPartitionIds;
         }
+
+        //! Confirm partition session destruction.
+        //! Confirm has no effect if TPartitionSessionClosedEvent for same partition session with is received.
+        void Confirm();
 
     private:
         std::vector<ui32> AdjacentPartitionIds;

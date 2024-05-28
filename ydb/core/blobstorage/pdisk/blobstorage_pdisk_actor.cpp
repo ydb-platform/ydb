@@ -39,6 +39,21 @@ namespace NPDisk {
 
 LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
+void CreatePDiskActor(
+        TGenericExecutorThread& executorThread,
+        const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
+        const TIntrusivePtr<TPDiskConfig> &cfg,
+        const NPDisk::TMainKey &mainKey,
+        ui32 pDiskID, ui32 poolId, ui32 nodeId
+) {
+
+    TActorId actorId = executorThread.RegisterActor(CreatePDisk(cfg, mainKey, counters), TMailboxType::ReadAsFilled, poolId);
+
+    TActorId pDiskServiceId = MakeBlobStoragePDiskID(nodeId, pDiskID);
+
+    executorThread.ActorSystem->RegisterLocalService(pDiskServiceId, actorId);
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // PDisk Actor
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -993,29 +1008,48 @@ public:
             return;
         }
 
-        if (restartAllowed) {
-            MainKey = ev->Get()->MainKey;
-            SecureWipeBuffer((ui8*)ev->Get()->MainKey.Keys.data(), sizeof(NPDisk::TKey) * ev->Get()->MainKey.Keys.size());
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PDiskId
-                    << " Going to restart PDisk since recieved TEvAskWardenRestartPDiskResult");
-
-            PDisk->Stop();
-
-            auto& newCfg = ev->Get()->Config;
-            if (newCfg) {
-                Y_VERIFY_S(Cfg->PDiskId == PDisk->PDiskId,
-                        "New config's PDiskId# " << newCfg->PDiskId << " is not equal to real PDiskId# " << PDisk->PDiskId);
-                Cfg = std::move(newCfg);
-            }
-
-            StartPDiskThread();
-
-            Send(ev->Sender, new TEvBlobStorage::TEvNotifyWardenPDiskRestarted(PDisk->PDiskId));
-        }
-
         if (PendingRestartResponse) {
             PendingRestartResponse(restartAllowed, ev->Get()->Details);
             PendingRestartResponse = {};
+        }
+
+        if (restartAllowed) {
+            NPDisk::TMainKey newMainKey = ev->Get()->MainKey;
+
+            SecureWipeBuffer((ui8*)ev->Get()->MainKey.Keys.data(), sizeof(NPDisk::TKey) * ev->Get()->MainKey.Keys.size());
+            
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PDiskId
+                    << " Going to restart PDisk since recieved TEvAskWardenRestartPDiskResult");
+
+            const TActorIdentity& thisActorId = SelfId();
+            ui32 nodeId = thisActorId.NodeId();
+            ui32 poolId = thisActorId.PoolID();
+            ui32 pdiskId = PDisk->PDiskId;
+
+            PDisk->Stop();
+
+            TIntrusivePtr<TPDiskConfig> actorCfg = std::move(Cfg);
+
+            auto& newCfg = ev->Get()->Config;
+            
+            if (newCfg) {
+                Y_VERIFY_S(newCfg->PDiskId == pdiskId,
+                        "New config's PDiskId# " << newCfg->PDiskId << " is not equal to real PDiskId# " << pdiskId);
+
+                actorCfg = std::move(newCfg);
+            }
+
+            const TActorContext& actorCtx = ActorContext();
+
+            auto& counters = AppData(actorCtx)->Counters;
+
+            TGenericExecutorThread& executorThread = actorCtx.ExecutorThread;
+
+            PassAway();
+            
+            CreatePDiskActor(executorThread, counters, actorCfg, newMainKey, pdiskId, poolId, nodeId);
+
+            Send(ev->Sender, new TEvBlobStorage::TEvNotifyWardenPDiskRestarted(pdiskId));
         }
     }
 
@@ -1290,10 +1324,7 @@ IActor* CreatePDisk(const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TMainK
 
 void TRealPDiskServiceFactory::Create(const TActorContext &ctx, ui32 pDiskID,
         const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TMainKey &mainKey, ui32 poolId, ui32 nodeId) {
-    TActorId actorId = ctx.ExecutorThread.RegisterActor(
-        CreatePDisk(cfg, mainKey, AppData(ctx)->Counters), TMailboxType::ReadAsFilled, poolId);
-    TActorId pDiskServiceId = MakeBlobStoragePDiskID(nodeId, pDiskID);
-    ctx.ExecutorThread.ActorSystem->RegisterLocalService(pDiskServiceId, actorId);
+    CreatePDiskActor(ctx.ExecutorThread, AppData(ctx)->Counters, cfg, mainKey, pDiskID, poolId, nodeId);
 }
 
 } // NKikimr

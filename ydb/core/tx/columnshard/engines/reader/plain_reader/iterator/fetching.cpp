@@ -101,6 +101,13 @@ TConclusion<bool> TSnapshotFilter::DoExecuteInplace(const std::shared_ptr<IDataS
     return true;
 }
 
+TConclusion<bool> TShardingFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    NYDBTest::TControllers::GetColumnShardController()->OnSelectShardingFilter();
+    auto filter = source->GetContext()->GetReadMetadata()->GetRequestShardingInfo()->GetShardingInfo()->GetFilter(source->GetStageData().GetTable()->BuildTable());
+    source->MutableStageData().AddFilter(filter);
+    return true;
+}
+
 TConclusion<bool> TBuildFakeSpec::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     std::vector<std::shared_ptr<arrow::Array>> columns;
     for (auto&& f : TIndexInfo::ArrowSchemaSnapshot()->fields()) {

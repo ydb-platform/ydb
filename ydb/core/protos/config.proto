@@ -232,6 +232,7 @@ message TDomainsConfig {
 
     message TSecurityConfig {
         optional bool EnforceUserTokenRequirement = 1 [default = false];
+        optional bool EnforceUserTokenCheckRequirement = 7 [default = false]; // Check if a token was specified // If not, or if the token was incorrect or access was denied, the request will be handled as if no token was provided
         repeated string MonitoringAllowedSIDs = 2;
         repeated string AdministrationAllowedSIDs = 3;
         repeated string DefaultUserSIDs = 4;
@@ -591,6 +592,13 @@ message TConveyorConfig {
     optional uint32 WorkersCount = 2;
     optional uint32 QueueSizeLimit = 3;
     optional double DefaultFractionOfThreadsCount = 4;
+    optional double WorkersCountDouble = 5;
+}
+
+message TLimiterConfig {
+    optional bool Enabled = 1 [default = true];
+    optional uint64 Limit = 2;
+    optional uint64 PeriodMilliSeconds = 3 [default = 1000];
 }
 
 message TExternalIndexConfig {
@@ -1228,12 +1236,50 @@ message TImmediateControlsConfig {
             DefaultValue: 8388608 }];
     }
 
+    message TVDiskControls {
+        optional uint64 EnableLocalSyncLogDataCutting = 1 [(ControlOptions) = {
+            Description: "Allow cutting large TEvLocalSyncLogData messages into smaller chunks",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
+        optional uint64 EnableSyncLogChunkCompressionHDD = 2 [(ControlOptions) = {
+            Description: "Compress SyncLog chunks before writing to log, setting for HDD",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 1 }];
+        optional uint64 EnableSyncLogChunkCompressionSSD = 3 [(ControlOptions) = {
+            Description: "Compress SyncLog chunks before writing to log, setting for SSD",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
+        optional uint64 MaxSyncLogChunksInFlightHDD = 4 [(ControlOptions) = {
+            Description: "Maximum number of SyncLog chunks written simultaneously to log, setting for HDD",
+            MinValue: 1,
+            MaxValue: 1024,
+            DefaultValue: 10 }];
+        optional uint64 MaxSyncLogChunksInFlightSSD = 5 [(ControlOptions) = {
+            Description: "Maximum number of SyncLog chunks written simultaneously to log, setting for SSD",
+            MinValue: 1,
+            MaxValue: 1024,
+            DefaultValue: 10 }];
+    }
+
+    message TTabletControls {
+        optional uint64 MaxCommitRedoMB = 1 [(ControlOptions) = {
+            Description: "Maximum redo size per commit in megabytes",
+            MinValue: 8,
+            MaxValue: 4096,
+            DefaultValue: 256 }];
+    }
+
     optional TDataShardControls DataShardControls = 1;
     optional TTxLimitControls TxLimitControls = 2;
     optional TCoordinatorControls CoordinatorControls = 3;
     optional TSchemeShardControls SchemeShardControls = 4;
     optional TTCMallocControls TCMallocControls = 5;
     reserved 6;
+    optional TVDiskControls VDiskControls = 7;
+    optional TTabletControls TabletControls = 8;
 };
 
 message TMeteringConfig {
@@ -1801,6 +1847,7 @@ message TAppConfig {
     optional TS3ProxyResolverConfig S3ProxyResolverConfig = 76;
     optional TBackgroundCleaningConfig BackgroundCleaningConfig = 77;
     optional TBlobCacheConfig BlobCacheConfig = 78;
+    optional TLimiterConfig CompDiskLimiterConfig = 79;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

@@ -403,7 +403,7 @@ public:
         SendWhiteboardRequest();
 
         if (AppData()->TenantName.empty() || !SelfDataCenterId) {
-            KQP_PROXY_LOG_E("Cannot start publishing usage, tenants: " << AppData()->TenantName << ", " <<  SelfDataCenterId.value_or("empty"));
+            KQP_PROXY_LOG_I("Cannot start publishing usage, tenants: " << AppData()->TenantName << ", " <<  SelfDataCenterId.value_or("empty"));
             return;
         }
 

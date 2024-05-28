@@ -254,7 +254,12 @@ public:
     }
 
     void Handle(TEvViewer::TEvViewerResponse::TPtr& ev) {
-        HandleRenderResponse(*(ev.Get()->Get()->Record.MutableRenderResponse()));
+        auto& record = ev.Get()->Get()->Record;
+        if (record.HasRenderResponse()) {
+            HandleRenderResponse(*(record.MutableRenderResponse()));
+        } else {
+            SendGraphRequest(); // fallback
+        }
     }
 
     void HandleTimeout() {
@@ -280,28 +285,58 @@ public:
 
 template <>
 struct TJsonRequestParameters<TJsonRender> {
-    static TString GetParameters() {
-        return R"___([{"name":"target","in":"query","description":"metrics comma delimited","required":true,"type":"string"},
-                      {"name":"from","in":"query","description":"time in seconds","required":false,"type":"integer"},
-                      {"name":"database","in":"query","description":"database name","required":false,"type":"string"},
-                      {"name":"direct","in":"query","description":"force processing query on current node","required":false,"type":"boolean"},
-                      {"name":"until","in":"query","description":"time in seconds","required":false,"type":"integer"},
-                      {"name":"maxDataPoints","in":"query","description":"maximum number of data points","required":false,"type":"integer"},
-                      {"name":"format","in":"query","description":"response format","required":false,"type":"string"}])___";
+    static YAML::Node GetParameters() {
+        return YAML::Load(R"___(
+            - name: target
+              in: query
+              description: metrics comma delimited
+              required: true
+              type: string
+            - name: from
+              in: query
+              description: time in seconds
+              required: false
+              type: integer
+            - name: database
+              in: query
+              description: database name
+              required: false
+              type: string
+            - name: direct
+              in: query
+              description: force processing query on current node
+              required: false
+              type: boolean
+            - name: until
+              in: query
+              description: time in seconds
+              required: false
+              type: integer
+            - name: maxDataPoints
+              in: query
+              description: maximum number of data points
+              required: false
+              type: integer
+            - name: format
+              in: query
+              description: response format
+              required: false
+              type: string
+            )___");
     }
 };
 
 template <>
 struct TJsonRequestSummary<TJsonRender> {
     static TString GetSummary() {
-        return "\"Graph data\"";
+        return "Graph data";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonRender> {
     static TString GetDescription() {
-        return "\"Returns graph data in graphite format\"";
+        return "Returns graph data in graphite format";
     }
 };
 

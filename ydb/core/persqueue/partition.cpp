@@ -391,7 +391,6 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
     write->SetKey(ikey.Data(), ikey.Size());
     write->SetValue(out.c_str(), out.size());
     write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
-
 }
 
 bool TPartition::CleanUp(TEvKeyValue::TEvRequest* request, const TActorContext& ctx) {
@@ -492,7 +491,8 @@ void TPartition::Handle(TEvPQ::TEvMirrorerCounters::TPtr& ev, const TActorContex
     }
 }
 
-void TPartition::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
+void TPartition::DestroyActor(const TActorContext& ctx)
+{
     // Reply to all outstanding requests in order to destroy corresponding actors
 
     TStringBuilder ss;
@@ -523,10 +523,17 @@ void TPartition::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx)
         UsersInfoStorage->Clear(ctx);
     }
 
-    Send(ReadQuotaTrackerActor, new TEvents::TEvPoisonPill());
-    Send(WriteQuotaTrackerActor, new TEvents::TEvPoisonPill());
+    if (!IsSupportive()) {
+        Send(ReadQuotaTrackerActor, new TEvents::TEvPoisonPill());
+        Send(WriteQuotaTrackerActor, new TEvents::TEvPoisonPill());
+    }
 
     Die(ctx);
+}
+
+void TPartition::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx)
+{
+    DestroyActor(ctx);
 }
 
 bool CheckDiskStatus(const TStorageStatusFlags status) {
@@ -1020,6 +1027,7 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoResponse::TPtr& ev, const TActorCo
         --ImmediateTxCount;
 
         ProcessImmediateTx(tx, predicate, ctx);
+        ScheduleTransactionCompleted(tx);
         TxInProgress = false;
         ContinueProcessTxsAndUserActs(ctx);
 
@@ -1056,6 +1064,7 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoError::TPtr& ev, const TActorConte
                              NKikimrPQ::TEvProposeTransactionResult::ABORTED,
                              NKikimrPQ::TError::BAD_REQUEST,
                              ev->Get()->Message);
+        ScheduleTransactionCompleted(t->Record);
 
         UserActionAndTransactionEvents.pop_front();
         --ImmediateTxCount;
@@ -1574,13 +1583,11 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
 
     const auto writeDuration = ctx.Now() - WriteStartTime;
     const auto minWriteLatency = TDuration::MilliSeconds(AppData(ctx)->PQConfig.GetMinWriteLatencyMs());
+
     if (writeDuration > minWriteLatency) {
-        KVWriteInProgress = false;
-        OnProcessTxsAndUserActsWriteComplete(ctx);
-        HandleWriteResponse(ctx);
-        ProcessTxsAndUserActs(ctx);
+        OnHandleWriteResponse(ctx);
     } else {
-        ctx.Schedule(minWriteLatency - writeDuration, new TEvPQ::TEvHandleWriteResponse());
+        ctx.Schedule(minWriteLatency - writeDuration, new TEvPQ::TEvHandleWriteResponse(response.GetCookie()));
     }
 }
 
@@ -1657,6 +1664,20 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
     Y_ABORT_UNLESS(!TxInProgress);
 
     THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
+
+    if (DeletePartitionState == DELETION_INITED) {
+        ScheduleNegativeReplies();
+        ScheduleDeletePartitionDone();
+
+        AddCmdDeleteRangeForAllKeys(*request);
+
+        ctx.Send(Tablet, request.Release());
+
+        DeletePartitionState = DELETION_IN_PROCESS;
+        KVWriteInProgress = true;
+
+        return;
+    }
 
     HaveWriteMsg = false;
 
@@ -2629,6 +2650,12 @@ void TPartition::SchedulePartitionConfigChanged()
                          MakeHolder<TEvPQ::TEvPartitionConfigChanged>(Partition).Release());
 }
 
+void TPartition::ScheduleDeletePartitionDone()
+{
+    Replies.emplace_back(Tablet,
+                         MakeHolder<TEvPQ::TEvDeletePartitionDone>(Partition).Release());
+}
+
 void TPartition::AddCmdDeleteRange(NKikimrClient::TKeyValueRequest& request,
                                    const TKeyPrefix& ikey, const TKeyPrefix& ikeyDeprecated)
 {
@@ -3011,6 +3038,84 @@ void TPartition::Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const T
     }
 
     Send(ev->Sender, response.Release());
+}
+
+void TPartition::HandleOnInit(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorContext&)
+{
+    Y_ABORT_UNLESS(IsSupportive());
+
+    PendingEvents.emplace_back(ev->ReleaseBase().Release());
+}
+
+void TPartition::Handle(TEvPQ::TEvDeletePartition::TPtr&, const TActorContext& ctx)
+{
+    Y_ABORT_UNLESS(IsSupportive());
+    Y_ABORT_UNLESS(DeletePartitionState == DELETION_NOT_INITED);
+
+    DeletePartitionState = DELETION_INITED;
+
+    ProcessTxsAndUserActs(ctx);
+}
+
+void TPartition::ScheduleNegativeReplies()
+{
+    for (auto& event : UserActionAndTransactionEvents) {
+        auto visitor = [this](auto& event) {
+            using T = std::decay_t<decltype(event)>;
+            if constexpr (TIsSimpleSharedPtr<T>::value) {
+                return this->ScheduleNegativeReply(*event);
+            } else {
+                return this->ScheduleNegativeReply(event);
+            }
+        };
+
+        std::visit(visitor, event);
+    }
+
+    UserActionAndTransactionEvents.clear();
+}
+
+void TPartition::AddCmdDeleteRangeForAllKeys(TEvKeyValue::TEvRequest& request)
+{
+    NPQ::AddCmdDeleteRange(request, TKeyPrefix::TypeInfo, Partition);
+    NPQ::AddCmdDeleteRange(request, TKeyPrefix::TypeData, Partition);
+    NPQ::AddCmdDeleteRange(request, TKeyPrefix::TypeTmpData, Partition);
+    NPQ::AddCmdDeleteRange(request, TKeyPrefix::TypeMeta, Partition);
+    NPQ::AddCmdDeleteRange(request, TKeyPrefix::TypeTxMeta, Partition);
+}
+
+void TPartition::ScheduleNegativeReply(const TEvPQ::TEvSetClientInfo&)
+{
+    Y_ABORT("The supportive partition does not accept read operations");
+}
+
+void TPartition::ScheduleNegativeReply(const TEvPersQueue::TEvProposeTransaction&)
+{
+    Y_ABORT("The supportive partition does not accept immediate transactions");
+}
+
+void TPartition::ScheduleNegativeReply(const TTransaction&)
+{
+    Y_ABORT("The supportive partition does not accept distribute transactions");
+}
+
+void TPartition::ScheduleNegativeReply(const TMessage& msg)
+{
+    ScheduleReplyError(msg.GetCookie(), NPersQueue::NErrorCode::ERROR, "The transaction is completed");
+}
+
+void TPartition::ScheduleTransactionCompleted(const NKikimrPQ::TEvProposeTransaction& tx)
+{
+    Y_ABORT_UNLESS(tx.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData);
+    Y_ABORT_UNLESS(tx.HasData());
+
+    TMaybe<ui64> writeId;
+    if (tx.GetData().HasWriteId()) {
+        writeId = tx.GetData().GetWriteId();
+    }
+
+    Replies.emplace_back(Tablet,
+                         MakeHolder<TEvPQ::TEvTransactionCompleted>(writeId).Release());
 }
 
 const NKikimrPQ::TPQTabletConfig::TPartition* TPartition::GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config)

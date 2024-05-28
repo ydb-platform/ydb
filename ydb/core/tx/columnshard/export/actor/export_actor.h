@@ -3,12 +3,12 @@
 
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
-#include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
 #include <ydb/core/tx/columnshard/bg_tasks/manager/actor.h>
-#include <ydb/core/tx/columnshard/export/session/session.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
 #include <ydb/core/tx/columnshard/export/common/identifier.h>
 #include <ydb/core/tx/columnshard/export/events/events.h>
 #include <ydb/core/tx/columnshard/export/session/selector/abstract/selector.h>
+#include <ydb/core/tx/columnshard/export/session/session.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -48,14 +48,10 @@ protected:
         TBase::Send(*ScanActorId, new NKqp::TEvKqpCompute::TEvScanDataAck(FreeSpace, (ui64)TabletId, 1));
     }
 
-    virtual void OnSessionStateSaved() override {
-        AFL_VERIFY(ExportSession->IsFinished());
-        NYDBTest::TControllers::GetColumnShardController()->OnExportFinished();
-        Session->FinishActor();
-    }
+    virtual void OnSessionStateSaved() override;
 
     virtual void OnTxCompleted(const ui64 /*txId*/) override {
-        AFL_VERIFY(false);
+        Session->FinishActor();
     }
 
     virtual void OnSessionProgressSaved() override {
@@ -91,12 +87,10 @@ protected:
     }
 
 public:
-
-    TActor(std::shared_ptr<NBackground::TSession> bgSession,
-        const std::shared_ptr<NBackground::ITabletAdapter>& adapter, const std::shared_ptr<IBlobsStorageOperator>& blobsOperator)
+    TActor(std::shared_ptr<NBackground::TSession> bgSession, const std::shared_ptr<NBackground::ITabletAdapter>& adapter,
+        const std::shared_ptr<IBlobsStorageOperator>& blobsOperator)
         : TBase(bgSession, adapter)
-        , BlobsOperator(blobsOperator)
-    {
+        , BlobsOperator(blobsOperator) {
         ExportSession = bgSession->GetLogicAsVerifiedPtr<NExport::TSession>();
     }
 
@@ -115,8 +109,6 @@ public:
             AFL_VERIFY(false);
         }
     }
-
-
 };
 
-}
+}   // namespace NKikimr::NOlap::NExport

@@ -6,8 +6,6 @@
 
 namespace NKikimr::NStorage {
 
-    constexpr TDuration PDISK_CONFIDENCE_DELAY = TDuration::Seconds(15);
-
     void TNodeWarden::DestroyLocalVDisk(TVDiskRecord& vdisk) {
         STLOG(PRI_INFO, BS_NODE, NW35, "DestroyLocalVDisk", (VDiskId, vdisk.GetVDiskId()), (VSlotId, vdisk.GetVSlotId()));
         Y_ABORT_UNLESS(!vdisk.RuntimeData);
@@ -176,6 +174,16 @@ namespace NKikimr::NStorage {
         vdiskConfig->EnableVDiskCooldownTimeout = Cfg->EnableVDiskCooldownTimeout;
         vdiskConfig->ReplPausedAtStart = Cfg->VDiskReplPausedAtStart;
         vdiskConfig->EnableVPatch = EnableVPatch;
+
+        vdiskConfig->EnableLocalSyncLogDataCutting = EnableLocalSyncLogDataCutting;
+        if (deviceType == NPDisk::EDeviceType::DEVICE_TYPE_ROT) {
+            vdiskConfig->EnableSyncLogChunkCompression = EnableSyncLogChunkCompressionHDD;
+            vdiskConfig->MaxSyncLogChunksInFlight = MaxSyncLogChunksInFlightHDD;
+        } else {
+            vdiskConfig->EnableSyncLogChunkCompression = EnableSyncLogChunkCompressionSSD;
+            vdiskConfig->MaxSyncLogChunksInFlight = MaxSyncLogChunksInFlightSSD;
+        }
+
         vdiskConfig->FeatureFlags = Cfg->FeatureFlags;
 
         if (Cfg->BlobStorageConfig.HasCostMetricsSettings()) {
@@ -296,7 +304,7 @@ namespace NKikimr::NStorage {
             StartLocalVDiskActor(record, TDuration::Zero());
         } else if (record.RuntimeData->DonorMode < record.Config.HasDonorMode() || record.RuntimeData->ReadOnly != record.Config.GetReadOnly()) {
             PoisonLocalVDisk(record);
-            StartLocalVDiskActor(record, PDISK_CONFIDENCE_DELAY);
+            StartLocalVDiskActor(record, VDiskCooldownTimeout);
         }
     }
 
@@ -323,7 +331,7 @@ namespace NKikimr::NStorage {
             auto& record = it->second;
             if (record.GetVDiskId() == vDiskId) {
                 PoisonLocalVDisk(record);
-                StartLocalVDiskActor(record, PDISK_CONFIDENCE_DELAY);
+                StartLocalVDiskActor(record, VDiskCooldownTimeout);
                 break;
             }
         }

@@ -1152,7 +1152,7 @@ std::pair<bool, bool> IsRequiredSide(const TExprNode::TPtr& joinTree, const TJoi
         else {
             auto table = right->Content();
             if (*labels.FindInputIndex(table) == inputIndex) {
-                return{ true, joinType == "Inner" || joinType == "RightSemi" };
+                return{ true, joinType == "Inner" || joinType == "RightSemi"};
             }
         }
     }

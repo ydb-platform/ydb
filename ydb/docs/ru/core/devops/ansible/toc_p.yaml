@@ -5,6 +5,10 @@ items:
   href: initial-deployment.md
 - name: Подготовка виртуальных машин с Terraform
   href: preparing-vms-with-terraform.md
+- name: Перезапуск
+  href: restart.md
+- name: Обновление конфигурации
+  href: update-config.md
 - name: Наблюдаемость
   include:
     mode: link

@@ -91,6 +91,29 @@ void ValidateCountMin(TTestActorRuntime& runtime, TPathId pathId) {
     }
 }
 
+void ValidateCountMinAbsense(TTestActorRuntime& runtime, TPathId pathId) {
+    auto statServiceId = NStat::MakeStatServiceID(runtime.GetNodeId(1));
+
+    NStat::TRequest req;
+    req.PathId = pathId;
+    req.ColumnName = "Key";
+
+    auto evGet = std::make_unique<TEvStatistics::TEvGetStatistics>();
+    evGet->StatType = NStat::EStatType::COUNT_MIN_SKETCH;
+    evGet->StatRequests.push_back(req);
+
+    auto sender = runtime.AllocateEdgeActor(1);
+    runtime.Send(statServiceId, sender, evGet.release(), 1, true);
+    auto evResult = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvGetStatisticsResult>(sender);
+
+    UNIT_ASSERT(evResult);
+    UNIT_ASSERT(evResult->Get());
+    UNIT_ASSERT(evResult->Get()->StatResponses.size() == 1);
+
+    auto rsp = evResult->Get()->StatResponses[0];
+    UNIT_ASSERT(!rsp.Success);
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(StatisticsAggregator) {
@@ -271,6 +294,8 @@ Y_UNIT_TEST_SUITE(StatisticsAggregator) {
         runtime.SendToPipe(tabletId, sender, ev.release());
 
         runtime.SimulateSleep(TDuration::Seconds(60));
+
+        ValidateCountMinAbsense(runtime, pathId);
     }
 
 }

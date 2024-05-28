@@ -4,6 +4,7 @@ import "ydb/core/tx/columnshard/engines/protos/portion_info.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/protos/long_tx_service.proto";
 import "ydb/core/protos/subdomains.proto";
+import "ydb/core/protos/tx.proto";
 import "ydb/core/formats/arrow/protos/ssa.proto";
 
 package NKikimrTxColumnShard;
@@ -78,6 +79,7 @@ message TEvWrite {
     optional TMetadata Meta = 7;
     optional NKikimrLongTxService.TLongTxId LongTxId = 8;
     optional uint32 WritePartId = 9 [default = 0];
+    optional uint32 GranuleShardingVersion = 10;
 }
 
 message TEvWriteResult {
@@ -131,6 +133,7 @@ enum ETransactionKind {
     TX_KIND_DATA = 4;
     TX_KIND_COMMIT_WRITE = 5;
     TX_KIND_BACKUP = 6;
+    TX_KIND_SHARING = 7;
 }
 
 enum ETransactionFlag {
@@ -146,6 +149,7 @@ message TEvProposeTransaction {
     optional uint64 SchemeShardId = 5;
     optional NKikimrSubDomains.TProcessingParams ProcessingParams = 6;
     optional uint64 Flags = 7;
+    optional NKikimrTx.TMessageSeqNo SeqNo = 8;
 }
 
 message TEvCheckPlannedTransaction {
@@ -223,9 +227,7 @@ message TCreateTable {
     optional NKikimrSchemeOp.TColumnTableSchema Schema = 2;
     optional NKikimrSchemeOp.TColumnTableSchemaPreset SchemaPreset = 3;
     optional NKikimrSchemeOp.TColumnDataLifeCycle TtlSettings = 4;
-    optional NKikimrSchemeOp.TColumnTableTtlSettingsPreset TtlSettingsPreset = 5;
     optional uint64 SchemaPresetVersionAdj = 6;
-    optional uint64 TtlSettingsPresetVersionAdj = 7;
 }
 
 message TInitShard {
@@ -237,13 +239,10 @@ message TInitShard {
 
 message TAlterTable {
     optional uint64 PathId = 1;
-    optional NKikimrSchemeOp.TAlterColumnTable AlterBody = 2;
     optional NKikimrSchemeOp.TColumnTableSchema Schema = 3;
     optional NKikimrSchemeOp.TColumnTableSchemaPreset SchemaPreset = 4;
     optional NKikimrSchemeOp.TColumnDataLifeCycle TtlSettings = 5;
-    optional NKikimrSchemeOp.TColumnTableTtlSettingsPreset TtlSettingsPreset = 6;
     optional uint64 SchemaPresetVersionAdj = 7;
-    optional uint64 TtlSettingsPresetVersionAdj = 8;
 }
 
 message TDropTable {
@@ -281,6 +280,8 @@ message TSchemaTxBody {
         TAlterTable AlterTable = 5;
         TAlterStore AlterStore = 6;
     }
+
+    optional NKikimrSchemeOp.TGranuleShardingInfo GranuleShardingInfo = 20;
 }
 
 message TTtlTxBody {

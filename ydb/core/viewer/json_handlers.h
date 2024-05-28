@@ -1,7 +1,7 @@
 #pragma once
 
 #include "viewer.h"
-#include <ydb/core/viewer/json/json.h>
+#include <library/cpp/yaml/as/tstring.h>
 
 namespace NKikimr::NViewer {
 
@@ -9,10 +9,10 @@ class TJsonHandlerBase {
 public:
     virtual ~TJsonHandlerBase() = default;
     virtual IActor* CreateRequestActor(IViewer* viewer, NMon::TEvHttpInfo::TPtr& event) = 0;
-    virtual TString GetResponseJsonSchema() = 0;
-    virtual TString GetRequestSummary() { return TString(); }
-    virtual TString GetRequestDescription() { return TString(); }
-    virtual TString GetRequestParameters() { return TString(); }
+    virtual YAML::Node GetResponseJsonSchema() = 0;
+    virtual TString GetRequestSummary() = 0;
+    virtual TString GetRequestDescription() = 0;
+    virtual YAML::Node GetRequestParameters() = 0;
 };
 
 template <typename ActorRequestType>
@@ -22,97 +22,43 @@ public:
         return new ActorRequestType(viewer, event);
     }
 
-    TString GetResponseJsonSchema() override {
-        static TString jsonSchema = TJsonRequestSchema<ActorRequestType>::GetSchema();
+    YAML::Node GetResponseJsonSchema() override {
+        static YAML::Node jsonSchema = TJsonRequestSchema<ActorRequestType>::GetSchema();
         return jsonSchema;
     }
 
     TString GetRequestSummary() override {
-        static TString jsonSummary = TJsonRequestSummary<ActorRequestType>::GetSummary();
-        return jsonSummary;
+        static TString summary = TJsonRequestSummary<ActorRequestType>::GetSummary();
+        return summary;
     }
 
     TString GetRequestDescription() override {
-        static TString jsonDescription = TJsonRequestDescription<ActorRequestType>::GetDescription();
-        return jsonDescription;
+        static TString description = TJsonRequestDescription<ActorRequestType>::GetDescription();
+        return description;
     }
 
-    TString GetRequestParameters() override {
-        static TString jsonParameters = TJsonRequestParameters<ActorRequestType>::GetParameters();
-        return jsonParameters;
+    YAML::Node GetRequestParameters() override {
+        static YAML::Node parameters = TJsonRequestParameters<ActorRequestType>::GetParameters();
+        return parameters;
     }
 };
 
-template <typename TTagInfo>
 struct TJsonHandlers {
-    THashMap<TString, TAutoPtr<TJsonHandlerBase>> JsonHandlers;
+    std::vector<TString> JsonHandlersList;
+    THashMap<TString, TAutoPtr<TJsonHandlerBase>> JsonHandlersIndex;
 
-    void Init();
-
-    void Handle(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
-        NMon::TEvHttpInfo* msg = ev->Get();
-        auto itJson = JsonHandlers.find(msg->Request.GetPage()->Path + msg->Request.GetPathInfo());
-        if (itJson == JsonHandlers.end()) {
-            itJson = JsonHandlers.find(msg->Request.GetPathInfo());
-        }
-        if (itJson != JsonHandlers.end()) {
-            try {
-                ctx.ExecutorThread.RegisterActor(itJson->second->CreateRequestActor(viewer, ev));
-            }
-            catch (const std::exception& e) {
-                ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(TString("HTTP/1.1 400 Bad Request\r\n\r\n") + e.what(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-                return;
-            }
-        } else {
-            ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(NMonitoring::HTTPNOTFOUND));
-        }
+    void AddHandler(const TString& name, TAutoPtr<TJsonHandlerBase> handler) {
+        JsonHandlersList.push_back(name);
+        JsonHandlersIndex[name] = std::move(handler);
     }
 
-    void PrintForSwagger(TStringStream &json) {
-        for (auto itJson = JsonHandlers.begin(); itJson != JsonHandlers.end(); ++itJson) {
-            if (itJson != JsonHandlers.begin()) {
-                json << ',';
-            }
-            TString name = itJson->first;
-            json << "\"/" << name << '"' << ":{";
-                json << "\"get\":{";
-                    json << "\"tags\":[\"" << TTagInfo::TagName << "\"],";
-                    json << "\"produces\":[\"application/json\"],";
-                    TString summary = itJson->second->GetRequestSummary();
-                    if (!summary.empty()) {
-                        json << "\"summary\":" << summary << ',';
-                    }
-                    TString description = itJson->second->GetRequestDescription();
-                    if (!description.empty()) {
-                        json << "\"description\":" << description << ',';
-                    }
-                    TString parameters = itJson->second->GetRequestParameters();
-                    if (!parameters.empty()) {
-                        json << "\"parameters\":" << parameters << ',';
-                    }
-                    json << "\"responses\":{";
-                        json << "\"200\":{";
-                            TString schema = itJson->second->GetResponseJsonSchema();
-                            if (!schema.empty()) {
-                                json << "\"schema\":" << schema;
-                            }
-                        json << "}";
-                    json << "}";
-                json << "}";
-            json << "}";
+    TJsonHandlerBase* FindHandler(const TString& name) const {
+        auto it = JsonHandlersIndex.find(name);
+        if (it == JsonHandlersIndex.end()) {
+            return nullptr;
         }
+        return it->second.Get();
     }
 };
 
-struct TViewerTagInfo {
-    static constexpr auto TagName = "viewer";
-};
-struct TVDiskTagInfo {
-    static constexpr auto TagName = "vdisk";
-};
-
-using TViewerJsonHandlers = TJsonHandlers<TViewerTagInfo>;
-using TVDiskJsonHandlers = TJsonHandlers<TVDiskTagInfo>;
-
-
-}
+} // namespace NKikimr::NViewer

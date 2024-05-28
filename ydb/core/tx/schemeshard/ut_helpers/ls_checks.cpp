@@ -819,6 +819,12 @@ TCheckFunc IndexDataColumns(const TVector<TString>& dataColumnNames) {
     };
 }
 
+TCheckFunc SequenceName(const TString& name) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetSequenceDescription().GetName(), name);
+    };
+}
+
 TCheckFunc SequenceIncrement(i64 increment) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetSequenceDescription().GetIncrement(), increment);
@@ -1243,6 +1249,11 @@ TCheckFunc ServerlessComputeResourcesMode(NKikimrSubDomains::EServerlessComputeR
             UNIT_ASSERT(!domainDesc.HasServerlessComputeResourcesMode());
         }
     };
+}
+
+void HasOffloadConfigBase(const NKikimrScheme::TEvDescribeSchemeResult& record, TInverseTag inverse) {
+    UNIT_ASSERT(inverse.Value xor record.GetPathDescription().GetPersQueueGroup()
+        .GetPQTabletConfig().HasOffloadConfig());
 }
 
 #undef DESCRIBE_ASSERT_EQUAL

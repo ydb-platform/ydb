@@ -286,6 +286,8 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
                         index.Columns(item.Value().Cast<TCoAtomList>());
                     } else if (indexItemName == "dataColumns") {
                         index.DataColumns(item.Value().Cast<TCoAtomList>());
+                    } else if (indexItemName == "tableSettings") {
+                        index.TableSettings(item.Value().Cast<TCoNameValueTupleList>());
                     } else {
                         YQL_ENSURE(false, "unknown index item");
                     }
@@ -1532,7 +1534,7 @@ bool ValidateFormatForInput(
             ++realSchemaColumnsCount;
         }
 
-        if (realSchemaColumnsCount > 1) {
+        if (realSchemaColumnsCount != 1) {
             ctx.AddError(TIssue(TStringBuilder() << "Only one column in schema supported in raw format (you have "
                 << realSchemaColumnsCount << " fields)"));
             return false;

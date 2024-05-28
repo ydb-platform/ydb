@@ -75,6 +75,7 @@ enum EQueryReplyFlags {
 message TTopicOperationsRequest {
     optional string Consumer = 1;
     repeated Ydb.Topic.UpdateOffsetsInTransactionRequest.TopicOffsets Topics = 2;
+    optional uint32 SupportivePartition = 3;
 }
 
 message TTopicOperationsResponse {
@@ -752,19 +753,6 @@ message TKqpSequencerSettings {
     optional NKqpProto.TKqpPhyTableId Table = 1;
     repeated TKqpColumnMetadataProto Columns = 2;
     optional string Database = 3;
-}
-
-message TEvFetchScriptResultsRequest {
-    optional uint64 ResultSetIndex = 3;
-    optional uint64 RowsOffset = 1;
-    optional uint64 RowsLimit = 2;
-}
-
-message TEvFetchScriptResultsResponse {
-    optional Ydb.StatusIds.StatusCode Status = 1;
-    repeated Ydb.Issue.IssueMessage Issues = 2;
-    optional uint64 ResultSetIndex = 3;
-    optional Ydb.ResultSet ResultSet = 4;
 }
 
 message TResourceExchangeNodeData {

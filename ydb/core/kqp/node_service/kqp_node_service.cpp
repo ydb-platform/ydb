@@ -60,15 +60,8 @@ NKqpNode::TState& GetStateBucketByTx(std::shared_ptr<TBucketArray> buckets, ui64
 }
 
 void FinishKqpTask(ui64 txId, ui64 taskId, bool success, NKqpNode::TState& bucket, std::shared_ptr<NRm::IKqpResourceManager> ResourceManager) {
-    auto ctx = bucket.RemoveTask(txId, taskId, success);
-    if (ctx) {
-        ResourceManager->FreeExecutionUnits(1);
-        if (ctx->ComputeActorsNumber == 0) {
-            ResourceManager->FreeResources(txId);
-        } else {
-            ResourceManager->FreeResources(txId, taskId);
-        }
-    }
+    bucket.RemoveTask(txId, taskId, success);
+    ResourceManager->FreeResources(txId, taskId);
 }
 
 struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
@@ -86,7 +79,8 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
     , Buckets(std::move(buckets))
     , TxId(txId)
     , TaskId(taskId)
-    , InstantAlloc(instantAlloc) {
+    , InstantAlloc(instantAlloc)
+    {
     }
 
     ~TMemoryQuotaManager() override {
@@ -100,8 +94,10 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
             return false;
         }
 
-        if (!ResourceManager->AllocateResources(TxId, TaskId,
-                NRm::TKqpResourcesRequest{.MemoryPool = MemoryPool, .Memory = extraSize})) {
+        auto result = ResourceManager->AllocateResources(TxId, TaskId,
+            NRm::TKqpResourcesRequest{.MemoryPool = MemoryPool, .Memory = extraSize});
+
+        if (!result) {
             LOG_W("Can not allocate memory. TxId: " << TxId << ", taskId: " << TaskId << ", memory: +" << extraSize);
             return false;
         }
@@ -285,16 +281,21 @@ private:
         auto requester = ev->Sender;
 
         ui64 txId = msg.GetTxId();
-        bool isScan = msg.HasSnapshot();
         const ui64 outputChunkMaxSize = msg.GetOutputChunkMaxSize();
 
         YQL_ENSURE(msg.GetStartAllOrFail()); // todo: support partial start
 
-        LOG_D("TxId: " << txId << ", new " << (isScan ? "scan " : "") << "compute tasks request from " << requester
+        LOG_D("TxId: " << txId << ", new compute tasks request from " << requester
             << " with " << msg.GetTasks().size() << " tasks: " << TasksIdsStr(msg.GetTasks()));
 
-        NKqpNode::TTasksRequest request;
-        request.Executer = ActorIdFromProto(msg.GetExecuterActorId());
+        auto now = TAppData::TimeProvider->Now();
+        NKqpNode::TTasksRequest request(txId, ev->Sender, now);
+        auto& msgRtSettings = msg.GetRuntimeSettings();
+        if (msgRtSettings.GetTimeoutMs() > 0) {
+            // compute actor should not arm timer since in case of timeout it will receive TEvAbortExecution from Executer
+            auto timeout = TDuration::MilliSeconds(msgRtSettings.GetTimeoutMs());
+            request.Deadline = now + timeout + /* gap */ TDuration::Seconds(5);
+        }
 
         auto& bucket = GetStateBucketByTx(Buckets, txId);
 
@@ -310,16 +311,6 @@ private:
             memoryPool = NRm::EKqpMemoryPool::DataQuery;
         } else {
             memoryPool = NRm::EKqpMemoryPool::Unspecified;
-        }
-
-        size_t executionUnits = msg.GetTasks().size();
-        if (!ResourceManager()->AllocateExecutionUnits(executionUnits)) {
-            Counters->RmNotEnoughComputeActors->Inc();
-            TStringBuilder error;
-            error << "TxId: " << txId << ", NodeId: " << SelfId().NodeId() << ", not enough compute actors, requested " << msg.GetTasks().size();
-            LOG_N(error);
-            ReplyError(txId, request.Executer, msg, NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_EXECUTION_UNITS, error);
-            return;
         }
 
         ui32 requestChannels = 0;
@@ -339,58 +330,30 @@ private:
             LOG_D("TxId: " << txId << ", task: " << taskCtx.TaskId << ", requested memory: " << taskCtx.Memory);
 
             requestChannels += estimation.ChannelBuffersCount;
-            request.TotalMemory += taskCtx.Memory;
         }
 
         LOG_D("TxId: " << txId << ", channels: " << requestChannels
-            << ", computeActors: " << msg.GetTasks().size() << ", memory: " << request.TotalMemory);
-
-        auto txMemory = bucket.GetTxMemory(txId, memoryPool) + request.TotalMemory;
-        if (txMemory > Config.GetQueryMemoryLimit()) {
-            LOG_N("TxId: " << txId << ", requested too many memory: " << request.TotalMemory
-                << "(" << txMemory << " for this Tx), limit: " << Config.GetQueryMemoryLimit());
-
-            Counters->RmNotEnoughMemory->Inc();
-
-            return ReplyError(txId, request.Executer, msg, NKikimrKqp::TEvStartKqpTasksResponse::QUERY_MEMORY_LIMIT_EXCEEDED,
-                TStringBuilder() << "Required: " << txMemory << ", limit: " << Config.GetQueryMemoryLimit());
-        }
+            << ", computeActors: " << msg.GetTasks().size() << ", memory: " << request.CalculateTotalMemory());
 
         TVector<ui64> allocatedTasks;
         allocatedTasks.reserve(msg.GetTasks().size());
         for (auto& task : request.InFlyTasks) {
             NRm::TKqpResourcesRequest resourcesRequest;
             resourcesRequest.MemoryPool = memoryPool;
+            resourcesRequest.ExecutionUnits = 1;
 
             // !!!!!!!!!!!!!!!!!!!!!
             // we have to allocate memory instead of reserve only. currently, this memory will not be used for request processing.
             resourcesRequest.Memory = Min<double>(task.second.Memory, 1 << 19) /* 512kb limit for check that memory exists for processing with minimal requirements */;
 
-            NRm::TKqpNotEnoughResources resourcesResponse;
-            if (!ResourceManager()->AllocateResources(txId, task.first, resourcesRequest, &resourcesResponse)) {
-                NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason failReason = NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR;
-                TStringBuilder error;
-                if (resourcesResponse.ScanQueryMemory()) {
-                    error << "TxId: " << txId << ", NodeId: " << SelfId().NodeId() << ", not enough memory, requested " << task.second.Memory;
-                    LOG_N(error);
+            auto result = ResourceManager()->AllocateResources(txId, task.first, resourcesRequest);
 
-                    failReason = NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_MEMORY;
-                }
-
-                if (resourcesResponse.QueryMemoryLimit()) {
-                    error << "TxId: " << txId << ", NodeId: " << SelfId().NodeId() << ", memory limit exceeded, requested " << task.second.Memory;
-                    LOG_N(error);
-
-                    failReason = NKikimrKqp::TEvStartKqpTasksResponse::QUERY_MEMORY_LIMIT_EXCEEDED;
-                }
-
+            if (!result) {
                 for (ui64 taskId : allocatedTasks) {
                     ResourceManager()->FreeResources(txId, taskId);
                 }
 
-                ResourceManager()->FreeExecutionUnits(executionUnits);
-
-                ReplyError(txId, request.Executer, msg, failReason, error);
+                ReplyError(txId, request.Executer, msg, result.GetStatus(), result.GetFailReason());
                 return;
             }
 
@@ -406,14 +369,6 @@ private:
         memoryLimits.MkqlHeavyProgramMemoryLimit = Config.GetMkqlHeavyProgramMemoryLimit();
 
         NYql::NDq::TComputeRuntimeSettings runtimeSettingsBase;
-        auto& msgRtSettings = msg.GetRuntimeSettings();
-        if (msgRtSettings.GetTimeoutMs() > 0) {
-            // compute actor should not arm timer since in case of timeout it will receive TEvAbortExecution from Executer
-            auto timeout = TDuration::MilliSeconds(msgRtSettings.GetTimeoutMs());
-            request.Deadline = TAppData::TimeProvider->Now() + timeout + /* gap */ TDuration::Seconds(5);
-            bucket.InsertExpiringRequest(request.Deadline, txId, requester);
-        }
-
         runtimeSettingsBase.ExtraMemoryAllocationPool = memoryPool;
         runtimeSettingsBase.FailOnUndelivery = msgRtSettings.GetExecType() != NYql::NDqProto::TComputeRuntimeSettings::SCAN;
 
@@ -531,7 +486,7 @@ private:
 
         Counters->NodeServiceProcessTime->Collect(NHPTimer::GetTimePassed(&workHandlerStart) * SecToUsec);
 
-        bucket.NewRequest(txId, requester, std::move(request), memoryPool);
+        bucket.NewRequest(std::move(request));
     }
 
     // used only for unit tests
@@ -551,42 +506,30 @@ private:
         Counters->NodeServiceProcessCancelTime->Collect(timer.Passed() * SecToUsec);
     }
 
-    void TerminateTx(ui64 txId, const TString& reason) {
+    void TerminateTx(ui64 txId, const TString& reason, NYql::NDqProto::StatusIds_StatusCode status = NYql::NDqProto::StatusIds::UNSPECIFIED) {
         auto& bucket = GetStateBucketByTx(Buckets, txId);
-        auto tasksToAbort = bucket.RemoveTx(txId);
+        auto tasksToAbort = bucket.GetTasksByTxId(txId);
 
         if (!tasksToAbort.empty()) {
-            LOG_D("TxId: " << txId << ", cancel granted resources");
-            ResourceManager()->FreeResources(txId);
+            TStringBuilder finalReason;
+            finalReason << "node service cancelled the task, because it " << reason
+                << ", NodeId: "<< SelfId().NodeId()
+                << ", TxId: " << txId;
 
-            for (const auto& tasksRequest: tasksToAbort) {
-                ResourceManager()->FreeExecutionUnits(tasksRequest.InFlyTasks.size());
-                for (const auto& [taskId, task] : tasksRequest.InFlyTasks) {
-                    auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::UNSPECIFIED,
-                        reason);
-                    Send(task.ComputeActorId, abortEv.Release());
-                }
+            LOG_E(finalReason);
+            for (const auto& [taskId, computeActorId]: tasksToAbort) {
+                auto abortEv = std::make_unique<TEvKqp::TEvAbortExecution>(status, reason);
+                Send(computeActorId, abortEv.release());
             }
         }
     }
 
     void HandleWork(TEvents::TEvWakeup::TPtr& ev) {
         Schedule(TDuration::Seconds(1), ev->Release().Release());
-        std::vector<ui64> txIdsToFree;
         for (auto& bucket : *Buckets) {
             auto expiredRequests = bucket.ClearExpiredRequests();
             for (auto& cxt : expiredRequests) {
-                    LOG_D("txId: " << cxt.RequestId.TxId << ", requester: " << cxt.RequestId.Requester
-                        << ", execution timeout, request: " << cxt.Exists);
-                    if (!cxt.Exists) {
-                        // it is ok since in most cases requests is finished by exlicit TEvAbortExecution from their Executer
-                        LOG_I("txId: " << cxt.RequestId.TxId << ", requester: " << cxt.RequestId.Requester
-                            << ", unknown request");
-                        continue;
-                    }
-                    // don't send to executer and compute actors, they will be destroyed by TEvAbortExecution in that order:
-                    // KqpProxy -> SessionActor -> Executer -> ComputeActor
-                    ResourceManager()->FreeResources(cxt.RequestId.TxId);
+                TerminateTx(cxt.TxId, "reached execution deadline", NYql::NDqProto::StatusIds::TIMEOUT);
             }
         }
     }
@@ -654,9 +597,9 @@ private:
         switch (ev->Get()->SourceType) {
             case TEvKqpNode::TEvStartKqpTasksResponse::EventType: {
                 ui64 txId = ev->Cookie;
-                LOG_E("TxId: " << txId << ", executer lost: " << (int) ev->Get()->Reason);
-
-                TerminateTx(txId, "executer lost");
+                TStringBuilder reason;
+                reason << "executer lost: " << (int) ev->Get()->Reason;
+                TerminateTx(txId, reason, NYql::NDqProto::StatusIds::ABORTED);
                 break;
             }
 

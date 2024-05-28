@@ -1155,6 +1155,7 @@ class TCachedBlockDevice : public TRealBlockDevice {
         ui32 Size;
         ui64 Offset;
         TReqId ReqId;
+
     public:
         TCachedReadCompletion(TCachedBlockDevice &cachedBlockDevice, void *data, ui32 size, ui64 offset, TReqId reqId)
             : CachedBlockDevice(cachedBlockDevice)
@@ -1225,7 +1226,7 @@ class TCachedBlockDevice : public TRealBlockDevice {
     TMutex CacheMutex;
     TLogCache Cache; // cache records MUST NOT cross chunk boundaries
     TMultiMap<ui64, TRead> ReadsForOffset;
-    TMap<ui64, TCachedReadCompletion*> CurrentReads;
+    TMap<ui64, std::shared_ptr<TCachedReadCompletion>> CurrentReads;
     ui64 ReadsInFly;
     TPDisk * const PDisk;
 
@@ -1256,11 +1257,9 @@ class TCachedBlockDevice : public TRealBlockDevice {
             TRead &read = it->second;
             auto currentIt = CurrentReads.find(read.Offset);
             if (currentIt == CurrentReads.end()) {
-                TCachedReadCompletion *ptr = new TCachedReadCompletion(*this, read.Data, read.Size, read.Offset,
-                        read.ReqId);
+                auto ptr = std::make_shared<TCachedReadCompletion>(*this, read.Data, read.Size, read.Offset, read.ReqId);
                 CurrentReads[read.Offset] = ptr;
-                ActorSystem->Send(PDiskActor, new TEvReadLogContinue(read.Data, read.Size, read.Offset,
-                            ptr, read.ReqId));
+                ActorSystem->Send(PDiskActor, new TEvReadLogContinue(read.Data, read.Size, read.Offset, ptr, read.ReqId));
                 ReadsInFly++;
                 if (ReadsInFly >= MaxReadsInFly) {
                     return;
@@ -1328,7 +1327,6 @@ public:
                     ReadsForOffset.erase(it);
                 }
             }
-            delete currentReadIt->second;
             CurrentReads.erase(currentReadIt);
             ReadsInFly--;
             UpdateReads();
@@ -1369,7 +1367,6 @@ public:
 
         auto it = CurrentReads.find(completion->GetOffset());
         Y_ABORT_UNLESS(it != CurrentReads.end());
-        delete it->second;
         CurrentReads.erase(it);
         ReadsInFly--;
     }
@@ -1402,9 +1399,6 @@ public:
 
     void Stop() override {
         TRealBlockDevice::Stop();
-        for (auto it = CurrentReads.begin(); it != CurrentReads.end(); ++it) {
-            delete it->second;
-        }
         CurrentReads.clear();
         for (auto it = ReadsForOffset.begin(); it != ReadsForOffset.end(); ++it) {
             if (it->second.CompletionAction) {

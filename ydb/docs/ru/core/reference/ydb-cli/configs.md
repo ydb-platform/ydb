@@ -133,7 +133,7 @@ selectors:
   selector:
     tenant: /Root/db1
   config:
-    actor_system_config: !inheirt
+    actor_system_config: !inherit
       use_auto_config: true
       cpu_count: 12
 ```

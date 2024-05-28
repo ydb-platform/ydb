@@ -9,6 +9,11 @@
 
 namespace NYql {
 
-NNodes::TExprBase FlatMapOverEquiJoin(const NNodes::TCoFlatMapBase& node, TExprContext& ctx, const TParentsMap& parentsMap, bool multiUsage);
+NNodes::TExprBase FlatMapOverEquiJoin(
+    const NNodes::TCoFlatMapBase& node, 
+    TExprContext& ctx, 
+    const TParentsMap& parentsMap, 
+    bool multiUsage,
+    bool filterPushdownOverJoinOptionalSide);
 
 } // NYql

@@ -540,13 +540,15 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     }
     PartitionsInfo = std::unordered_map<ui32, TPartitionInfo>(partitionsInfo.rbegin(), partitionsInfo.rend());
 
+    Balancer->UpdateConfig(newPartitionsIds, deletedPartitions, ctx);
+
     Execute(new TTxWrite(this, std::move(deletedPartitions), std::move(newPartitions), std::move(newTablets), std::move(newGroups), std::move(reallocatedTablets)), ctx);
 
     if (SubDomainPathId && (!WatchingSubDomainPathId || *WatchingSubDomainPathId != *SubDomainPathId)) {
         StartWatchingSubDomainPathId();
     }
 
-    Balancer->UpdateConfig(newPartitionsIds, deletedPartitions, ctx);
+    UpdateConfigCounters();
 }
 
 
@@ -799,29 +801,21 @@ void TPersQueueReadBalancer::CheckStat(const TActorContext& ctx) {
     UpdateCounters(ctx);
 }
 
-void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
-    if (!AggregatedStats.Stats.size())
+void TPersQueueReadBalancer::InitCounters(const TActorContext& ctx) {
+    if (!DatabasePath) {
         return;
+    }
 
-    if (!DatabasePath)
+    if (DynamicCounters) {
         return;
-
-    using TPartitionLabeledCounters = TProtobufTabletLabeledCounters<EPartitionLabeledCounters_descriptor>;
-    THolder<TPartitionLabeledCounters> labeledCounters;
-    using TConsumerLabeledCounters = TProtobufTabletLabeledCounters<EClientLabeledCounters_descriptor>;
-    THolder<TConsumerLabeledCounters> labeledConsumerCounters;
-
-
-    labeledCounters.Reset(new TPartitionLabeledCounters("topic", 0, DatabasePath));
-    labeledConsumerCounters.Reset(new TConsumerLabeledCounters("topic|x|consumer", 0, DatabasePath));
-
-    auto counters = AppData(ctx)->Counters;
-    bool isServerless = AppData(ctx)->FeatureFlags.GetEnableDbCounters(); //TODO: find out it via describe
+    }
 
     TStringBuf name = TStringBuf(Path);
     name.SkipPrefix(DatabasePath);
     name.SkipPrefix("/");
-    counters = counters->GetSubgroup("counters", isServerless ? "topics_serverless" : "topics")
+
+    bool isServerless = AppData(ctx)->FeatureFlags.GetEnableDbCounters(); //TODO: find out it via describe
+    DynamicCounters = AppData(ctx)->Counters->GetSubgroup("counters", isServerless ? "topics_serverless" : "topics")
                 ->GetSubgroup("host", "")
                 ->GetSubgroup("database", DatabasePath)
                 ->GetSubgroup("cloud_id", CloudId)
@@ -829,20 +823,52 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
                 ->GetSubgroup("database_id", DatabaseId)
                 ->GetSubgroup("topic", TString(name));
 
+    ActivePartitionCountCounter = DynamicCounters->GetExpiringNamedCounter("name", "topic.partition.active_count", false);
+    InactivePartitionCountCounter = DynamicCounters->GetExpiringNamedCounter("name", "topic.partition.inactive_count", false);
+}
+
+void TPersQueueReadBalancer::UpdateConfigCounters() {
+    if (!DynamicCounters) {
+        return;
+    }
+
+    size_t inactiveCount = std::count_if(TabletConfig.GetPartitions().begin(), TabletConfig.GetPartitions().end(), [](auto& p) {
+        return p.GetStatus() == NKikimrPQ::ETopicPartitionStatus::Inactive;
+    });
+
+    ActivePartitionCountCounter->Set(PartitionsInfo.size() - inactiveCount);
+    InactivePartitionCountCounter->Set(inactiveCount);
+}
+
+void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
+    if (!AggregatedStats.Stats.size())
+        return;
+
+    if (!DynamicCounters)
+        return;
+
+    using TPartitionLabeledCounters = TProtobufTabletLabeledCounters<EPartitionLabeledCounters_descriptor>;
+    THolder<TPartitionLabeledCounters> labeledCounters;
+    using TConsumerLabeledCounters = TProtobufTabletLabeledCounters<EClientLabeledCounters_descriptor>;
+    THolder<TConsumerLabeledCounters> labeledConsumerCounters;
+
+    labeledCounters.Reset(new TPartitionLabeledCounters("topic", 0, DatabasePath));
+    labeledConsumerCounters.Reset(new TConsumerLabeledCounters("topic|x|consumer", 0, DatabasePath));
+
     if (AggregatedCounters.empty()) {
         for (ui32 i = 0; i < labeledCounters->GetCounters().Size(); ++i) {
             TString name = labeledCounters->GetNames()[i];
             TStringBuf nameBuf = name;
             nameBuf.SkipPrefix("PQ/");
             name = nameBuf;
-            AggregatedCounters.push_back(name.empty() ? nullptr : counters->GetExpiringNamedCounter("name", name, false));
+            AggregatedCounters.push_back(name.empty() ? nullptr : DynamicCounters->GetExpiringNamedCounter("name", name, false));
         }
     }
 
     for (auto& [consumer, info]: Consumers) {
         info.Aggr.Reset(new TTabletLabeledCountersBase{});
         if (info.AggregatedCounters.empty()) {
-            auto clientCounters = counters->GetSubgroup("consumer", NPersQueue::ConvertOldConsumerName(consumer, ctx));
+            auto clientCounters = DynamicCounters->GetSubgroup("consumer", NPersQueue::ConvertOldConsumerName(consumer, ctx));
             for (ui32 i = 0; i < labeledConsumerCounters->GetCounters().Size(); ++i) {
                 TString name = labeledConsumerCounters->GetNames()[i];
                 TStringBuf nameBuf = name;
@@ -1106,6 +1132,9 @@ void TPersQueueReadBalancer::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated
             if (attr.GetKey() == "cloud_id") CloudId = attr.GetValue();
             if (attr.GetKey() == "database_id") DatabaseId = attr.GetValue();
         }
+
+        InitCounters(ctx);
+        UpdateConfigCounters();
     }
 
     if (PartitionsScaleManager) {

@@ -27,18 +27,22 @@ items:
   include:
     mode: link
     path: reference/toc_p.yaml
+- name: Recipes
+  include:
+    mode: link
+    path: recipes/toc_p.yaml
 - name: Questions and answers
   include:
     mode: link
     path: faq/toc_p.yaml
-- name: Downloads
-  include:
-    mode: link
-    path: downloads/toc_p.yaml
 - name: Public materials
   include:
     mode: link
     path: public-materials/toc_p.yaml
+- name: Downloads
+  include:
+    mode: link
+    path: downloads/toc_p.yaml
 - name: Changelog
   include:
     mode: link

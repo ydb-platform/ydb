@@ -2,14 +2,18 @@
 -- TPC TPC-H Parameter Substitution (Version 2.17.2 build 0)
 -- using 1680793381 as a seed to the RNG
 
+$phone_code = ($c_phone) -> {
+    RETURN (Substring(CAST($c_phone AS String), 0u, 2u));
+};
+
 $customers = (
 select
     c_acctbal,
     c_custkey,
-    Substring(c_phone, 0u, 2u) as cntrycode
+    $phone_code(c_phone) as cntrycode
 from
     `{path}customer`
-where (Substring(c_phone, 0u, 2u) = '31' or Substring(c_phone, 0u, 2u) = '29' or Substring(c_phone, 0u, 2u) = '30' or Substring(c_phone, 0u, 2u) = '26' or Substring(c_phone, 0u, 2u) = '28' or Substring(c_phone, 0u, 2u) = '25' or Substring(c_phone, 0u, 2u) = '15')
+where ($phone_code(c_phone) = '31' or $phone_code(c_phone) = '29' or $phone_code(c_phone) = '30' or $phone_code(c_phone) = '26' or $phone_code(c_phone) = '28' or $phone_code(c_phone) = '25' or $phone_code(c_phone) = '15')
 );
 $avg = (
 select

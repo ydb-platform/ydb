@@ -67,11 +67,13 @@ SRCS(
     rpc_read_rows.cpp
     rpc_remove_directory.cpp
     rpc_rename_tables.cpp
+    rpc_replication.cpp
     rpc_rollback_transaction.cpp
     rpc_scheme_base.cpp
     rpc_stream_execute_scan_query.cpp
     rpc_stream_execute_yql_script.cpp
     rpc_whoami.cpp
+    rpc_object_storage.cpp
     table_settings.cpp
 
     rpc_common/rpc_common_kqp_session.cpp

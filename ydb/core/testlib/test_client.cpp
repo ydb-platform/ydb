@@ -20,6 +20,7 @@
 #include <ydb/services/ydb/ydb_export.h>
 #include <ydb/services/ydb/ydb_import.h>
 #include <ydb/services/ydb/ydb_operation.h>
+#include <ydb/services/ydb/ydb_object_storage.h>
 #include <ydb/services/ydb/ydb_query.h>
 #include <ydb/services/ydb/ydb_scheme.h>
 #include <ydb/services/ydb/ydb_scripting.h>
@@ -184,6 +185,8 @@ namespace Tests {
         app.SetAwsRegion(Settings->AwsRegion);
         app.CompactionConfig = Settings->CompactionConfig;
         app.FeatureFlags = Settings->FeatureFlags;
+        app.ImmediateControlsConfig = Settings->Controls;
+        app.InitIcb(StaticNodes() + DynamicNodes());
 
         Runtime = MakeHolder<TTestBasicRuntime>(StaticNodes() + DynamicNodes(), Settings->UseRealThreads);
 
@@ -232,6 +235,7 @@ namespace Tests {
             appData.NetClassifierConfig.MergeFrom(Settings->NetClassifierConfig);
             appData.StreamingConfig.MergeFrom(Settings->AppConfig->GetGRpcConfig().GetStreamingConfig());
             appData.EnforceUserTokenRequirement = Settings->AppConfig->GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement();
+            appData.EnforceUserTokenCheckRequirement = Settings->AppConfig->GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenCheckRequirement();
             appData.DomainsConfig.MergeFrom(Settings->AppConfig->GetDomainsConfig());
             appData.ColumnShardConfig.MergeFrom(Settings->AppConfig->GetColumnShardConfig());
             appData.PersQueueGetReadSessionsInfoWorkerFactory = Settings->PersQueueGetReadSessionsInfoWorkerFactory.get();
@@ -267,12 +271,7 @@ namespace Tests {
         //
         for (ui32 nodeIdx = 0; nodeIdx < StaticNodes(); ++nodeIdx) {
             SetupDomainLocalService(nodeIdx);
-            SetupConfigurators(nodeIdx);
             SetupProxies(nodeIdx);
-        }
-
-        for (ui32 nodeIdx = StaticNodes(); nodeIdx < StaticNodes() + DynamicNodes(); ++nodeIdx) {
-            SetupConfigurators(nodeIdx);
         }
 
         CreateBootstrapTablets();
@@ -383,6 +382,7 @@ namespace Tests {
         }
         GRpcServer->AddService(discoveryService);
         GRpcServer->AddService(new NGRpcService::TGRpcYdbClickhouseInternalService(system, counters, appData.InFlightLimiterRegistry, grpcRequestProxies[0], true));
+        GRpcServer->AddService(new NGRpcService::TGRpcYdbObjectStorageService(system, counters, grpcRequestProxies[0], true));
         GRpcServer->AddService(new NQuoter::TRateLimiterGRpcService(system, counters, grpcRequestProxies[0]));
         GRpcServer->AddService(new NGRpcService::TGRpcDataStreamsService(system, counters, grpcRequestProxies[0], true));
         GRpcServer->AddService(new NGRpcService::TGRpcMonitoringService(system, counters, grpcRequestProxies[0], true));
@@ -931,8 +931,6 @@ namespace Tests {
                 IActor* proxy = BusServer->CreateProxy();
                 TActorId proxyId = Runtime->Register(proxy, nodeIdx, Runtime->GetAppData(nodeIdx).SystemPoolId, TMailboxType::Revolving, 0);
                 Runtime->RegisterService(NMsgBusProxy::CreateMsgBusProxyId(), proxyId, nodeIdx);
-
-                Cerr << "NMsgBusProxy registered on Port " << Settings->Port << " GrpcPort " << Settings->GrpcPort << Endl;
             }
         }
         {

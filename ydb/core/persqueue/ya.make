@@ -1,11 +1,5 @@
 LIBRARY()
 
-OWNER(
-    alexnick
-    g:kikimr
-    g:logbroker
-)
-
 SRCS(
     actor_persqueue_client_iface.h
     blob.cpp

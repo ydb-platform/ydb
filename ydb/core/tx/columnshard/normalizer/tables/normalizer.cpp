@@ -30,6 +30,10 @@ public:
         return true;
     }
 
+    ui64 GetSize() const override {
+        return PathIds.size();
+    }
+
     static std::optional<std::vector<INormalizerChanges::TPtr>> Init(NTabletFlatExecutor::TTransactionContext& txc) {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);

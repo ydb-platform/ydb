@@ -352,7 +352,7 @@ struct TReadSessionEvent {
 
         TString DebugString() const;
 
-        TDestroyPartitionStreamEvent(TPartitionStream::TPtr partitionStream, bool committedOffset);
+        TDestroyPartitionStreamEvent(TPartitionStream::TPtr partitionStream, ui64 committedOffset);
 
     private:
         TPartitionStream::TPtr PartitionStream;

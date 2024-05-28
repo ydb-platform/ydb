@@ -322,6 +322,7 @@ private:
             .Add(Log("PhysicalPeephole"), "LogPhysicalPeephole")
             .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config))
             .AddPostTypeAnnotation()
+            .Add(GetDqIntegrationPeepholeTransformer(false, typesCtx), "DqIntegrationPeephole")
             .Add(
                 CreateKqpTxsPeepholeTransformer(
                     CreateTypeAnnotationTransformer(

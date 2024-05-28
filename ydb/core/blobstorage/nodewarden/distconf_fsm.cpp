@@ -299,13 +299,12 @@ namespace NKikimr::NStorage {
         switch (task.Request.GetRequestCase()) {
             case TEvScatter::kCollectConfigs: {
                 std::vector<TString> drives;
-                EnumerateConfigDrives(*StorageConfig, 0, [&](const auto& /*node*/, const auto& drive) {
+                auto callback = [&](const auto& /*node*/, const auto& drive) {
                     drives.push_back(drive.GetPath());
-                });
+                };
+                EnumerateConfigDrives(*StorageConfig, SelfId().NodeId(), callback);
                 if (ProposedStorageConfig) {
-                    EnumerateConfigDrives(*ProposedStorageConfig, 0, [&](const auto& /*node*/, const auto& drive) {
-                        drives.push_back(drive.GetPath());
-                    });
+                    EnumerateConfigDrives(*ProposedStorageConfig, SelfId().NodeId(), callback);
                 }
                 std::sort(drives.begin(), drives.end());
                 drives.erase(std::unique(drives.begin(), drives.end()), drives.end());
@@ -342,8 +341,6 @@ namespace NKikimr::NStorage {
                     }
 
                     PersistConfig([this, cookie](TEvPrivate::TEvStorageConfigStored& msg) {
-                        STLOG(PRI_DEBUG, BS_NODE, NWDC45, "ProposeStorageConfig TEvStorageConfigStored", (Cookie, cookie));
-
                         Y_ABORT_UNLESS(ProposedStorageConfigCookieUsage);
                         Y_ABORT_UNLESS(cookie == ProposedStorageConfigCookie);
                         --ProposedStorageConfigCookieUsage;
@@ -362,6 +359,11 @@ namespace NKikimr::NStorage {
                                     }
                                 }
                             }
+                            STLOG(PRI_DEBUG, BS_NODE, NWDC48, "ProposeStorageConfig TEvStorageConfigStored",
+                                (Cookie, cookie), (Status, *status));
+                        } else {
+                            STLOG(PRI_DEBUG, BS_NODE, NWDC45, "ProposeStorageConfig TEvStorageConfigStored no scatter task",
+                                (Cookie, cookie));
                         }
 
                         FinishAsyncOperation(cookie);

@@ -45,12 +45,14 @@ STFUNC(TController::StateWork) {
         HFunc(TEvController::TEvCreateReplication, Handle);
         HFunc(TEvController::TEvAlterReplication, Handle);
         HFunc(TEvController::TEvDropReplication, Handle);
+        HFunc(TEvController::TEvDescribeReplication, Handle);
         HFunc(TEvPrivate::TEvDropReplication, Handle);
         HFunc(TEvPrivate::TEvDiscoveryTargetsResult, Handle);
         HFunc(TEvPrivate::TEvAssignStreamName, Handle);
         HFunc(TEvPrivate::TEvCreateStreamResult, Handle);
         HFunc(TEvPrivate::TEvDropStreamResult, Handle);
         HFunc(TEvPrivate::TEvCreateDstResult, Handle);
+        HFunc(TEvPrivate::TEvAlterDstResult, Handle);
         HFunc(TEvPrivate::TEvDropDstResult, Handle);
         HFunc(TEvPrivate::TEvResolveSecretResult, Handle);
         HFunc(TEvPrivate::TEvResolveTenantResult, Handle);
@@ -123,6 +125,11 @@ void TController::Handle(TEvPrivate::TEvDropReplication::TPtr& ev, const TActorC
     RunTxDropReplication(ev, ctx);
 }
 
+void TController::Handle(TEvController::TEvDescribeReplication::TPtr& ev, const TActorContext& ctx) {
+    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    RunTxDescribeReplication(ev, ctx);
+}
+
 void TController::Handle(TEvPrivate::TEvDiscoveryTargetsResult::TPtr& ev, const TActorContext& ctx) {
     CLOG_T(ctx, "Handle " << ev->Get()->ToString());
     RunTxDiscoveryTargetsResult(ev, ctx);
@@ -146,6 +153,11 @@ void TController::Handle(TEvPrivate::TEvDropStreamResult::TPtr& ev, const TActor
 void TController::Handle(TEvPrivate::TEvCreateDstResult::TPtr& ev, const TActorContext& ctx) {
     CLOG_T(ctx, "Handle " << ev->Get()->ToString());
     RunTxCreateDstResult(ev, ctx);
+}
+
+void TController::Handle(TEvPrivate::TEvAlterDstResult::TPtr& ev, const TActorContext& ctx) {
+    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    RunTxAlterDstResult(ev, ctx);
 }
 
 void TController::Handle(TEvPrivate::TEvDropDstResult::TPtr& ev, const TActorContext& ctx) {

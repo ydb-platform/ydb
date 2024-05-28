@@ -30,8 +30,6 @@ static const ui32 MAX_INLINE_SIZE = 1000;
 
 static constexpr NPersQueue::NErrorCode::EErrorCode InactivePartitionErrorCode = NPersQueue::NErrorCode::WRITE_ERROR_PARTITION_INACTIVE;
 
-void AddCmdDeleteRange(TEvKeyValue::TEvRequest& request, TKeyPrefix::EType c, const TPartitionId& partitionId);
-
 void TPartition::ReplyOwnerOk(const TActorContext& ctx, const ui64 dst, const TString& cookie, ui64 seqNo) {
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "TPartition::ReplyOwnerOk. Partition: " << Partition);
 
@@ -43,6 +41,9 @@ void TPartition::ReplyOwnerOk(const TActorContext& ctx, const ui64 dst, const TS
     r->SetOwnerCookie(cookie);
     r->SetStatus(PartitionConfig ? PartitionConfig->GetStatus() : NKikimrPQ::ETopicPartitionStatus::Active);
     r->SetSeqNo(seqNo);
+    if (IsSupportive()) {
+        r->SetSupportivePartition(Partition.InternalPartitionId);
+    }
 
     ctx.Send(Tablet, response.Release());
 }
@@ -439,12 +440,22 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
     UpdateUserInfoEndOffset(ctx.Now());
 }
 
-void TPartition::Handle(TEvPQ::TEvHandleWriteResponse::TPtr&, const TActorContext& ctx) {
-    PQ_LOG_T("TPartition::HandleOnWrite TEvHandleWriteResponse.");
+void TPartition::OnHandleWriteResponse(const TActorContext& ctx)
+{
     KVWriteInProgress = false;
     OnProcessTxsAndUserActsWriteComplete(ctx);
     HandleWriteResponse(ctx);
     ProcessTxsAndUserActs(ctx);
+
+    if (DeletePartitionState == DELETION_IN_PROCESS) {
+        DestroyActor(ctx);
+    }
+}
+
+void TPartition::Handle(TEvPQ::TEvHandleWriteResponse::TPtr&, const TActorContext& ctx)
+{
+    PQ_LOG_T("TPartition::HandleOnWrite TEvHandleWriteResponse.");
+    OnHandleWriteResponse(ctx);
 }
 
 void TPartition::UpdateAfterWriteCounters(bool writeComplete) {
@@ -533,9 +544,14 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
 NKikimrPQ::EScaleStatus TPartition::CheckScaleStatus(const TActorContext& /*ctx*/) {
     auto const writeSpeedUsagePercent = SplitMergeAvgWriteBytes->GetValue() * 100.0 / Config.GetPartitionStrategy().GetScaleThresholdSeconds() / TotalPartitionWriteSpeed;
 
-    if (writeSpeedUsagePercent >= Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent()) {
+    auto splitEnabled = Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT
+        || Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE;
+        
+    auto mergeEnabled = Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE;
+
+    if (splitEnabled && writeSpeedUsagePercent >= Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent()) {
         return NKikimrPQ::EScaleStatus::NEED_SPLIT;
-    } else if (writeSpeedUsagePercent <= Config.GetPartitionStrategy().GetScaleDownPartitionWriteSpeedThresholdPercent()) {
+    } else if (mergeEnabled && writeSpeedUsagePercent <= Config.GetPartitionStrategy().GetScaleDownPartitionWriteSpeedThresholdPercent()) {
         return NKikimrPQ::EScaleStatus::NEED_MERGE;
     }
     return NKikimrPQ::EScaleStatus::NORMAL;

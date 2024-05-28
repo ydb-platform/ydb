@@ -34,6 +34,8 @@ public:
         Creating,
         Syncing,
         Ready,
+        Alter,
+        Done,
         Removing,
         Error = 255
     };

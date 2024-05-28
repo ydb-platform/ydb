@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/fq/libs/control_plane_storage/internal)
 
-OWNER(g:yq)
-
 SIZE(MEDIUM)
 
 SRCS(utils_ut.cpp)

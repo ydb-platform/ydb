@@ -125,6 +125,7 @@ namespace NKikimr {
                         OutOfSpaceState.UpdateLocalLog(ev.StatusFlags);
                     }
                     return true;
+                case NKikimrProto::ERROR:
                 case NKikimrProto::INVALID_OWNER:
                 case NKikimrProto::INVALID_ROUND:
                     // BlobStorage group reconfiguration, just return false and wait until

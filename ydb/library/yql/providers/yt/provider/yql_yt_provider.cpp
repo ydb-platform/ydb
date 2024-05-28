@@ -307,6 +307,7 @@ void TYtState::Reset() {
     AnonymousLabels.clear();
     NodeHash.clear();
     Checkpoints.clear();
+    WalkFoldersState.clear();
     NextEpochId = 1;
 }
 
@@ -373,8 +374,8 @@ std::pair<TIntrusivePtr<TYtState>, TStatWriter> CreateYtNativeState(IYtGateway::
     return {ytState, statWriter};
 }
 
-TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gateway) {
-    return [originalGateway = gateway] (
+TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gateway, ui32 planLimits) {
+    return [originalGateway = gateway, planLimits] (
         const TString& userName,
         const TString& sessionId,
         const TGatewaysConfig* gatewaysConfig,
@@ -404,6 +405,7 @@ TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gat
         TIntrusivePtr<TYtState> ytState;
         TStatWriter statWriter;
         std::tie(ytState, statWriter) = CreateYtNativeState(gateway, userName, sessionId, ytGatewayConfig, typeCtx);
+        ytState->PlanLimits = planLimits;
 
         info.Names.insert({TString{YtProviderName}});
         info.Source = CreateYtDataSource(ytState);

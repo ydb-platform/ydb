@@ -420,7 +420,12 @@ private:
     }
 
     void HandleReply(TEvViewer::TEvViewerResponse::TPtr& ev) {
-        Handle(*(ev.Get()->Get()->Record.MutableQueryResponse()));
+        auto& record = ev.Get()->Get()->Record;
+        if (record.HasQueryResponse()) {
+            Handle(*(ev.Get()->Get()->Record.MutableQueryResponse()));
+        } else {
+            SendKpqProxyRequest(); // fallback
+        }
     }
 
     void HandleReply(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev) {
@@ -619,31 +624,73 @@ private:
 
 template <>
 struct TJsonRequestParameters<TJsonQuery> {
-    static TString GetParameters() {
-        return R"___([{"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
-                      {"name":"query","in":"query","description":"query text","required":true,"type":"string"},
-                      {"name":"direct","in":"query","description":"force processing query on current node","required":false,"type":"boolean"},
-                      {"name":"syntax","in":"query","description":"query syntax (yql_v1, pg)","required":false,"type":"string"},
-                      {"name":"database","in":"query","description":"database name","required":false,"type":"string"},
-                      {"name":"schema","in":"query","description":"result format schema (classic, modern, ydb, multi)","required":false,"type":"string"},
-                      {"name":"stats","in":"query","description":"return stats (profile, full)","required":false,"type":"string"},
-                      {"name":"action","in":"query","description":"execute method (execute-scan, execute-script, execute-query, execute-data,explain-ast, explain-scan, explain-script, explain-query, explain-data)","required":false,"type":"string"},
-                      {"name":"base64","in":"query","description":"return strings using base64 encoding","required":false,"type":"string"},
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___";
+    static YAML::Node GetParameters() {
+        return YAML::Load(R"___(
+              - name: ui64
+                in: query
+                description: return ui64 as number
+                type: boolean
+                required: false
+              - name: query
+                in: query
+                description: query text
+                type: string
+                required: true
+              - name: direct
+                in: query
+                description: force processing query on current node
+                type: boolean
+                required: false
+              - name: syntax
+                in: query
+                description: query syntax (yql_v1, pg)
+                type: string
+                required: false
+              - name: database
+                in: query
+                description: database name
+                type: string
+                required: false
+              - name: schema
+                in: query
+                description: result format schema (classic, modern, ydb, multi)
+                type: string
+                required: false
+              - name: stats
+                in: query
+                description: return stats (profile, full)
+                type: string
+                required: false
+              - name: action
+                in: query
+                description: execute method (execute-scan, execute-script, execute-query, execute-data,explain-ast, explain-scan, explain-script, explain-query, explain-data)
+                type: string
+                required: false
+              - name: base64
+                in: query
+                description: return strings using base64 encoding
+                type: string
+                required: false
+              - name: timeout
+                in: query
+                description: timeout in ms
+                type: integer
+                required: false
+                )___");
     }
 };
 
 template <>
 struct TJsonRequestSummary<TJsonQuery> {
     static TString GetSummary() {
-        return "\"Execute query\"";
+        return "Execute query";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonQuery> {
     static TString GetDescription() {
-        return "\"Executes database query\"";
+        return "Executes database query";
     }
 };
 

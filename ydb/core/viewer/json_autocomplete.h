@@ -425,7 +425,12 @@ public:
     }
 
     void Handle(TEvViewer::TEvViewerResponse::TPtr& ev) {
-        ProxyResult = ev.Release()->Release();
+        if (ev.Get()->Get()->Record.HasAutocompleteResponse()) {
+            ProxyResult = ev.Release()->Release();
+        } else {
+            Direct = true;
+            SendSchemeCacheRequest(); // fallback
+        }
         RequestDone();
     }
 
@@ -443,37 +448,70 @@ public:
 
 template <>
 struct TJsonRequestSchema<TJsonAutocomplete> {
-    static TString GetSchema() {
-        TStringStream stream;
-        TProtoToJson::ProtoToJsonSchema<NKikimrViewer::TQueryAutocomplete>(stream);
-        return stream.Str();
+    static YAML::Node GetSchema() {
+        return TProtoToYaml::ProtoToYamlSchema<NKikimrViewer::TQueryAutocomplete>();
     }
 };
 
 template <>
 struct TJsonRequestParameters<TJsonAutocomplete> {
-    static TString GetParameters() {
-        return R"___([{"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
-                      {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
-                      {"name":"direct","in":"query","description":"force execution on current node","required":false,"type":"boolean"},
-                      {"name":"table","in":"query","description":"table list","required":false,"type":"string"},
-                      {"name":"prefix","in":"query","description":"known part of the word","required":false,"type":"string"},
-                      {"name":"limit","in":"query","description":"limit of entities","required":false,"type":"integer"},
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___";
+    static YAML::Node GetParameters() {
+        return YAML::Load(R"___(
+            - name: database
+              in: query
+              description: database name
+              required: false
+              type: string
+            - name: table
+              in: query
+              description: table list
+              required: false
+              type: string
+            - name: prefix
+              in: query
+              description: known part of the word
+              required: false
+              type: string
+            - name: limit
+              in: query
+              description: limit of entities
+              required: false
+              type: integer
+            - name: timeout
+              in: query
+              description: timeout in ms
+              required: false
+              type: integer
+            - name: enums
+              in: query
+              description: convert enums to strings
+              required: false
+              type: boolean
+            - name: ui64
+              in: query
+              description: return ui64 as number
+              required: false
+              type: boolean
+            - name: direct
+              in: query
+              description: force execution on current node
+              required: false
+              type: boolean
+            )___");
     }
 };
 
 template <>
 struct TJsonRequestSummary<TJsonAutocomplete> {
     static TString GetSummary() {
-        return "\"Tenant info (brief)\"";
+        return "Autocomplete information";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonAutocomplete> {
     static TString GetDescription() {
-        return "\"Returns list of tenants\"";
+        return "Returns autocomplete information about objects in the database";
     }
 };
 

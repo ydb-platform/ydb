@@ -68,8 +68,8 @@ namespace NActors {
         template <ESendingType SendingType = ESendingType::Common>
         bool Send(TAutoPtr<IEventHandle> ev);
 
-        void GetCurrentStats(TExecutorThreadStats& statsCopy) const;
-        void GetSharedStats(i16 poolId, TExecutorThreadStats &stats) const;
+        void GetCurrentStats(TExecutorThreadStats& statsCopy);
+        void GetSharedStats(i16 poolId, TExecutorThreadStats &stats);
 
         TThreadId GetThreadId() const; // blocks, must be called after Start()
         TWorkerId GetWorkerId() const;
@@ -79,6 +79,8 @@ namespace NActors {
 
         template <typename TMailbox>
         TProcessingResult Execute(TMailbox* mailbox, ui32 hint, bool isTailExecution);
+
+        void UpdateThreadStats();
 
     public:
         TActorSystem* const ActorSystem;

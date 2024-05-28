@@ -265,7 +265,7 @@ static-node-3 static-node-3.ydb-cluster.com
 
 В терминал будет выведен отчёт следующего вида:
 ```
-Window	Txs/Sec	Retries	Errors	p50(ms)	p95(ms)	p99(ms)	pMax(ms)	Timestamp
+Window Txs/Sec Retries Errors  p50(ms) p95(ms) p99(ms) pMax(ms)        Timestamp
 1          727 0       0       11      27      71      116     2024-02-14T12:56:39Z
 2          882 0       0       10      21      29      38      2024-02-14T12:56:40Z
 3          848 0       0       10      22      30      105     2024-02-14T12:56:41Z

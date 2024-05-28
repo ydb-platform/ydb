@@ -1853,7 +1853,6 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
             }
         }
         Y_ENSURE(stack.size() == 1, "Expected stack.size() == 1 after all joins");
-        Cerr << "\n\n" << stack.back()->Dump() << "\n\n\n";
         joinGroups.push_back(stack.back());
     }
 
@@ -3687,7 +3686,6 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
             } else {
                 // extract all used columns
                 TVector<std::pair<TString, TString>> joinUsingColumns;
-                Cerr << joinOps->Dump() << "\n";
                 auto usedColumns = GatherUsedColumns(result, joinOps, filter, groupExprs, having, extraSortColumns, window, winCtx, joinUsingColumns);
 
                 // fill index of input for each column

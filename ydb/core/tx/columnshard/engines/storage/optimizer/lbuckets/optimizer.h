@@ -672,7 +672,7 @@ public:
 
         ~TModificationGuard() {
             AFL_VERIFY_DEBUG(Owner.Validate());
-            Owner.NextActualizeInstant = TInstant::Now();
+            Owner.NextActualizeInstant = TInstant::Zero();
             if (!Owner.MainPortion) {
                 return;
             }

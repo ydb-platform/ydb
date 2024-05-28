@@ -10,14 +10,6 @@ HEADER_COMPILE_TIME_TO_SHOW = 0.5  # sec
 
 
 def sanitize_path(path: str, base_dir: str) -> str:
-    prefixes_to_remove = [
-        base_dir,
-        os.path.abspath(base_dir),
-    ]
-
-    for prefix in prefixes_to_remove:
-        path = path.removeprefix(prefix)
-
     ya_build_path_chunk = ".ya/build/build_root"
     if ya_build_path_chunk in path:
         # remove path to before .ya
@@ -27,8 +19,15 @@ def sanitize_path(path: str, base_dir: str) -> str:
         splitted = path.split(os.sep)
         del splitted[3:5]
         path = os.sep.join(splitted)
+    else:
+        # dirty hack: remove all before ydb (repo name) including ydb
+        ydb_repo_chunk = "ydb/"
+        if ydb_repo_chunk in path:
+            # remove path to before ydb with ydb
+            path = path[path.find(ydb_repo_chunk) + len(ydb_repo_chunk) :]
 
-    return "root" + "/" + path
+
+    return "ydb/" + path
 
 
 def get_compile_duration_and_cpp_path(time_trace_path: str) -> tuple[float, str, str]:
@@ -158,7 +157,7 @@ def generate_cpp_bloat(build_output_dir: str, result_dir: str) -> dict:
 
     tree = {"name": "/"}
     
-    cpp_compilation_times_ms = []
+    cpp_compilation_times = [] 
 
     for duration, path, time_trace_path in result:
         splitted = path.split(os.sep)
@@ -169,7 +168,20 @@ def generate_cpp_bloat(build_output_dir: str, result_dir: str) -> dict:
             additional_chunks = list(zip(inc_path, "h" * len(inc_path)))
             add_to_tree(chunks + additional_chunks, inc_duration / 1000, tree)
         print("{} -> {:.2f}s".format(path, duration))
+        cpp_compilation_times.append({
+            "path": path,
+            "time_s": duration,
+        })
 
+    os.makedirs(result_dir, exist_ok=True)
+
+    human_readable_output = {
+        "cpp_compilation_times": cpp_compilation_times,
+    }
+
+    with open(os.path.join(result_dir, "output.json"), "w") as f:
+        json.dump(human_readable_output, f, indent=4)
+    
     propogate_area(tree)
     enrich_names_with_sec(tree)
 

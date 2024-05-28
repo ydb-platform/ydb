@@ -48,7 +48,8 @@ private:
         );
     }
 
-    void OnTablesCreated() override {
+    void OnTablesCreated(bool success, NYql::TIssues issues) override {
+        UNIT_ASSERT_C(success, issues.ToString());
         Promise.SetValue();
     }
 

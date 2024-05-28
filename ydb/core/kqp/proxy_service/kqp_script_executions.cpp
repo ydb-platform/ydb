@@ -83,13 +83,12 @@ class TScriptExecutionsTablesCreator : public NTableCreator::TMultiTableCreator 
     using TBase = NTableCreator::TMultiTableCreator;
 
 public:
-    explicit TScriptExecutionsTablesCreator(THolder<NActors::IEventBase> resultEvent)
+    explicit TScriptExecutionsTablesCreator()
         : TBase({
             GetScriptExecutionsCreator(),
             GetScriptExecutionLeasesCreator(),
             GetScriptResultSetsCreator()
         })
-        , ResultEvent(std::move(resultEvent))
     {}
 
 private:
@@ -97,7 +96,7 @@ private:
         return CreateTableCreator(
             { ".metadata", "script_executions" },
             {
-                Col("database", NScheme::NTypeIds::Text),
+                Col("database", ";lkdlkfddlf"),
                 Col("execution_id", NScheme::NTypeIds::Text),
                 Col("run_script_actor_id", NScheme::NTypeIds::Text),
                 Col("operation_status", NScheme::NTypeIds::Int32),
@@ -163,12 +162,9 @@ private:
         );
     }
 
-    void OnTablesCreated() override  {
-        Send(Owner, std::move(ResultEvent));
+    void OnTablesCreated(bool success, NYql::TIssues issues) override  {
+        Send(Owner, new TEvScriptExecutionsTablesCreationFinished(success, std::move(issues)));
     }
-
-private:
-    THolder<NActors::IEventBase> ResultEvent;
 };
 
 Ydb::Query::ExecMode GetExecModeFromAction(NKikimrKqp::EQueryAction action) {
@@ -2823,8 +2819,8 @@ NActors::IActor* CreateScriptExecutionCreatorActor(TEvKqp::TEvScriptRequest::TPt
     return new TCreateScriptExecutionActor(std::move(ev), queryServiceConfig, counters, maxRunTime);
 }
 
-NActors::IActor* CreateScriptExecutionsTablesCreator(THolder<NActors::IEventBase> resultEvent) {
-    return new TScriptExecutionsTablesCreator(std::move(resultEvent));
+NActors::IActor* CreateScriptExecutionsTablesCreator() {
+    return new TScriptExecutionsTablesCreator();
 }
 
 NActors::IActor* CreateForgetScriptExecutionOperationActor(TEvForgetScriptExecutionOperation::TPtr ev) {

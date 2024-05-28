@@ -272,34 +272,39 @@ public:
     }
 
     void Fail(NSchemeCache::TSchemeCacheNavigate::EStatus status) {
-        LOG_ERROR_S(*TlsActivationContext, LogService,
-            LogPrefix << "Failed to upgrade table: " << status);
-        Reply();
+        TString message = TStringBuilder() << "Failed to upgrade table: " << status;
+        LOG_ERROR_S(*TlsActivationContext, LogService, LogPrefix << message);
+        Reply(false, message);
     }
 
     void Fail(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev) {
-        LOG_ERROR_S(*TlsActivationContext, LogService,
-            LogPrefix << "Failed " << GetOperationType() << " request: " << ev->Get()->Status() << ". Response: " << ev->Get()->Record);
-        Reply();
+        TString message = TStringBuilder() << "Failed " << GetOperationType() << " request: " << ev->Get()->Status() << ". Response: " << ev->Get()->Record;
+        LOG_ERROR_S(*TlsActivationContext, LogService, LogPrefix << message);
+        Reply(false, message);
     }
 
     void Fail() {
-        LOG_ERROR_S(*TlsActivationContext, LogService, LogPrefix << "Retry limit exceeded");
-        Reply();
+        TString message = "Retry limit exceeded";
+        LOG_ERROR_S(*TlsActivationContext, LogService, LogPrefix << message);
+        Reply(false, message);
     }
 
     void Success() {
-        Reply();
+        Reply(true);
     }
 
     void Success(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev) {
         LOG_INFO_S(*TlsActivationContext, LogService,
             LogPrefix << "Successful " << GetOperationType() <<  " request: " << ev->Get()->Status());
-        Reply();
+        Reply(true);
     }
 
-    void Reply() {
-        Send(Owner, new TEvTableCreator::TEvCreateTableResponse());
+    void Reply(bool success, const TString& message) {
+        Reply(success, {NYql::TIssue(message)});
+    }
+
+    void Reply(bool success, NYql::TIssues issues = {}) {
+        Send(Owner, new TEvTableCreator::TEvCreateTableResponse(success, std::move(issues)));
         if (SchemePipeActorId) {
             NTabletPipe::CloseClient(SelfId(), SchemePipeActorId);
         }
@@ -419,10 +424,15 @@ void TMultiTableCreator::Bootstrap() {
     }
 }
 
-void TMultiTableCreator::Handle(TEvTableCreator::TEvCreateTableResponse::TPtr&) {
+void TMultiTableCreator::Handle(TEvTableCreator::TEvCreateTableResponse::TPtr& ev) {
+    if (!ev->Get()->Success) {
+        Success = false;
+        Issues.AddIssues(std::move(ev->Get()->Issues));
+    }
+
     Y_ABORT_UNLESS(TablesCreating > 0);
     if (--TablesCreating == 0) {
-        OnTablesCreated();
+        OnTablesCreated(Success, std::move(Issues));
         PassAway();
     }
 }

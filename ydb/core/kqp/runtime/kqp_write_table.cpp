@@ -206,7 +206,7 @@ public:
 
         NSchemeShard::TOlapSchema olapSchema;
         olapSchema.ParseFromLocalDB(scheme);
-        auto shardingConclusion = NSharding::TShardingBase::BuildFromProto(olapSchema, sharding);
+        auto shardingConclusion = NSharding::IShardingBase::BuildFromProto(olapSchema, sharding);
         if (shardingConclusion.IsFail()) {
             ythrow yexception() << "Ydb::StatusIds::SCHEME_ERROR : " <<  shardingConclusion.GetErrorMessage();
         }
@@ -392,9 +392,8 @@ public:
     }
 
 private:
-
     const NMiniKQL::TTypeEnvironment& TypeEnv;
-    std::shared_ptr<NSharding::TShardingBase> Sharding;
+    std::shared_ptr<NSharding::IShardingBase> Sharding;
 
     const TVector<TSysTables::TTableColumnInfo> Columns;
     const std::vector<ui32> WriteIndex;

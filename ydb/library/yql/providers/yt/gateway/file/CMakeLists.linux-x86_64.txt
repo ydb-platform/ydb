@@ -64,5 +64,6 @@ target_sources(yt-gateway-file PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/file/yql_yt_file_mkql_compiler.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/file/yql_yt_file.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/file/yql_yt_file_text_yson.cpp
 )
 

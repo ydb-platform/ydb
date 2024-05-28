@@ -139,6 +139,7 @@ SRCS(
     table_client/record_helpers.cpp
 
     tablet_client/config.cpp
+    tablet_client/watermark_runtime_data.cpp
     tablet_client/table_mount_cache_detail.cpp
     tablet_client/table_mount_cache.cpp
     tablet_client/public.cpp

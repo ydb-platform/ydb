@@ -99,7 +99,7 @@ const T& VerifiedCast(const F& from)
 
 TLogicalType::TLogicalType(ELogicalMetatype type)
     : Metatype_(type)
-{}
+{ }
 
 const TSimpleLogicalType& TLogicalType::AsSimpleTypeRef() const
 {

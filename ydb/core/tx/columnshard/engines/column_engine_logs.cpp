@@ -304,6 +304,7 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
     ui32 skipLocked = 0;
     ui32 portionsFromDrop = 0;
     bool limitExceeded = false;
+    THashSet<TPortionAddress> uniquePortions;
     for (ui64 pathId : pathsToDrop) {
         auto g = GranulesStorage->GetGranuleOptional(pathId);
         if (!g) {
@@ -321,6 +322,8 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
                 limitExceeded = true;
                 break;
             }
+            const auto inserted = uniquePortions.emplace(info->GetAddress()).second;
+            Y_ABORT_UNLESS(inserted);
             changes->PortionsToDrop.push_back(*info);
             ++portionsFromDrop;
         }
@@ -337,14 +340,17 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
                 ++i;
                 continue;
             }
-            Y_ABORT_UNLESS(it->second[i].CheckForCleanup(snapshot));
-            if (txSize + it->second[i].GetTxVolume() < txSizeLimit || changes->PortionsToDrop.empty()) {
-                txSize += it->second[i].GetTxVolume();
-            } else {
-                limitExceeded = true;
-                break;
+            const auto inserted = uniquePortions.emplace(it->second[i].GetAddress()).second;
+            if (inserted) {
+                Y_ABORT_UNLESS(it->second[i].CheckForCleanup(snapshot));
+                if (txSize + it->second[i].GetTxVolume() < txSizeLimit || changes->PortionsToDrop.empty()) {
+                    txSize += it->second[i].GetTxVolume();
+                } else {
+                    limitExceeded = true;
+                    break;
+                }
+                changes->PortionsToDrop.push_back(std::move(it->second[i]));
             }
-            changes->PortionsToDrop.push_back(std::move(it->second[i]));
             if (i + 1 < it->second.size()) {
                 it->second[i] = std::move(it->second.back());
             }

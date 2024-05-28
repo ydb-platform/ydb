@@ -197,9 +197,11 @@ public:
             yexception() << "Failed to start batch builder: " + err;
         }
 
-        // TODO: Checks from ydb/core/tx/data_events/columnshard_splitter.cpp
+        YQL_ENSURE(schemeEntry.ColumnTableInfo);
         const auto& description = schemeEntry.ColumnTableInfo->Description;
+        YQL_ENSURE(description.HasSchema());
         const auto& scheme = description.GetSchema();
+        YQL_ENSURE(description.HasSharding());
         const auto& sharding = description.GetSharding();
 
         NSchemeShard::TOlapSchema olapSchema;

@@ -1148,7 +1148,7 @@ bool TTable::TryToReduceMemoryAndWait() {
     i32 largestBucketIndex = 0;
     ui64 largestBucketSize = 0;
     for (ui32 bucket = 0; bucket < NumberOfBuckets; ++bucket) {
-        if (TableBucketsSpillers[bucket].IsProcessingSpilling()) return true;
+        if (TableBucketsSpillers[bucket].HasRunningAsyncIoOperation() || !TableBucketsSpillers[bucket].IsProcessingFinished()) return true;
 
         ui64 bucketSize = GetSizeOfBucket(bucket);
         if (bucketSize > largestBucketSize) {
@@ -1158,7 +1158,6 @@ bool TTable::TryToReduceMemoryAndWait() {
     }
 
     if (!largestBucketSize) return false;
-    std::cerr << std::format("[MISHA] spilling {}\n", largestBucketIndex);
     TableBucketsSpillers[largestBucketIndex].SpillBucket(std::move(TableBuckets[largestBucketIndex]));
     TableBuckets[largestBucketIndex] = TTableBucket{};
 
@@ -1171,36 +1170,11 @@ void TTable::UpdateSpilling() {
     }
 }
 
-bool TTable::IsSpillingFinished() const {
-    for (ui64 i = 0; i < NumberOfBuckets; ++i) {
-        if (TableBucketsSpillers[i].IsProcessingSpilling()) return false;
-    }
-    return true;
-}
-
-bool TTable::IsSpillingAcceptingDataRequests() const {
-    for (ui64 i = 0; i < NumberOfBuckets; ++i) {
-        if (!TableBucketsSpillers[i].IsAcceptingDataRequests()) {
-            std::cerr << std::format("[MISHA] bucket {} not accepting data requests\n", i);
-            return false;
-        }
-    }
-    return true;
-}
-
-bool TTable::IsRestoringSpilledBuckets() const {
-    for (ui64 i = 0; i < NumberOfBuckets; ++i) {
-        if (TableBucketsSpillers[i].IsRestoring()) return true;
-    }
-    return false;
-}
-
 void TTable::FinalizeSpilling() {
     MKQL_ENSURE(!HasRunningAsyncIoOperation(), "Internal logic error");
 
     for (ui32 bucket = 0; bucket < NumberOfBuckets; ++bucket) {
         if (!TableBucketsSpillers[bucket].IsInMemory()) {
-            std::cerr << std::format("[MISHA] finalizing {}\n", bucket);
             TableBucketsSpillers[bucket].SpillBucket(std::move(TableBuckets[bucket]));
             TableBuckets[bucket] = TTableBucket{};
             TableBucketsSpillers[bucket].Finalize();
@@ -1215,12 +1189,15 @@ bool TTable::HasRunningAsyncIoOperation() const {
     return false;
 }
 
-bool TTable::IsBucketInMemory(ui32 bucket) const {
-    return TableBucketsSpillers[bucket].IsInMemory();
+bool TTable::IsProcessingFinished() const {
+    for (ui32 bucket = 0; bucket < NumberOfBuckets; ++bucket) {
+        if (!TableBucketsSpillers[bucket].IsProcessingFinished()) return false;
+    }
+    return true;
 }
 
-bool TTable::IsSpilledBucketWaitingForExtraction(ui32 bucket) const {
-    return TableBucketsSpillers[bucket].IsExtractionRequired();
+bool TTable::IsBucketInMemory(ui32 bucket) const {
+    return TableBucketsSpillers[bucket].IsInMemory();
 }
 
 void TTable::StartLoadingBucket(ui32 bucket) {
@@ -1303,20 +1280,19 @@ void TTableBucketSpiller::Update() {
 
     if (State == EState::Spilling) {
         ProcessBucketSpilling();
-    } else if (State == EState::Finalizing) {
-        ProcessFinalizing();
     } else if (State == EState::Restoring) {
         ProcessBucketRestoration();
     }
 }
 
 void TTableBucketSpiller::Finalize() {
-    IsFinalizingRequested = true;
+    IsFinalizing = true;
 }
 
 void TTableBucketSpiller::SpillBucket(TTableBucket&& bucket) {
     MKQL_ENSURE(NextVectorToProcess == ENextVectorToProcess::None, "Internal logic error");
     State = EState::Spilling;
+    IsBucketOwnedBySpiller = true;
 
     CurrentBucket = std::move(bucket);
     NextVectorToProcess = ENextVectorToProcess::KeyAndVals;
@@ -1327,7 +1303,7 @@ void TTableBucketSpiller::SpillBucket(TTableBucket&& bucket) {
 TTableBucket&& TTableBucketSpiller::ExtractBucket() {
     MKQL_ENSURE(State == EState::InMemory, "Internal logic error");
     MKQL_ENSURE(SpilledBucketsCount == 0, "Internal logic error");
-    State = EState::InMemory;
+    IsBucketOwnedBySpiller = false;
     return std::move(CurrentBucket);
 }
 
@@ -1342,16 +1318,15 @@ bool TTableBucketSpiller::IsInMemory() const {
 }
 
 bool TTableBucketSpiller::IsExtractionRequired() const {
-    return State == EState::WaitingForExtraction;
+    return IsBucketOwnedBySpiller;
 }
 
 void TTableBucketSpiller::StartBucketRestoration() {
-    MKQL_ENSURE(State == EState::AcceptingDataRequests, std::format("STATE: {}\n", (int)State));
+    MKQL_ENSURE(State == EState::Restoring, std::format("STATE: {}\n", (int)State));
     if (NextVectorToProcess != ENextVectorToProcess::None) return;
     MKQL_ENSURE(NextVectorToProcess == ENextVectorToProcess::None, std::format("NEXT VECTOR: {}\n", (int)NextVectorToProcess));
 
     NextVectorToProcess = ENextVectorToProcess::KeyAndVals;
-    State = EState::Restoring;
     ProcessBucketRestoration();
 }
 
@@ -1400,24 +1375,15 @@ void TTableBucketSpiller::ProcessBucketSpilling() {
                 return;
         }
     }
+    if (!HasRunningAsyncIoOperation() && IsFinalizing) {
 
-    if (IsFinalizingRequested) {
-        if (!StateCharAdapter.IsAcceptingData() || !StateUi32Adapter.IsAcceptingData() || !StateUi64Adapter.IsAcceptingData()) return;
-        std::cerr << "[MISHA] actually finalizing\n";
-        State = EState::Finalizing;
         StateUi64Adapter.Finalize();
         StateUi32Adapter.Finalize();
         StateCharAdapter.Finalize();
 
-        ProcessFinalizing();
-        return;
-    }
-    State = EState::AcceptingData;
-}
-
-void TTableBucketSpiller::ProcessFinalizing() {
-    if (StateCharAdapter.IsAcceptingDataRequests() && StateUi32Adapter.IsAcceptingDataRequests() && StateUi64Adapter.IsAcceptingDataRequests()) {
-        State = EState::AcceptingDataRequests;
+        if (StateCharAdapter.IsAcceptingDataRequests() && StateUi32Adapter.IsAcceptingDataRequests() && StateUi64Adapter.IsAcceptingDataRequests()) {
+            State = EState::Restoring;
+        }
     }
 }
 
@@ -1495,7 +1461,7 @@ void TTableBucketSpiller::ProcessBucketRestoration() {
                 SpilledBucketsCount--;
                 if (SpilledBucketsCount == 0) {
                     NextVectorToProcess = ENextVectorToProcess::None;
-                    State = EState::WaitingForExtraction;
+                    State = EState::InMemory;
                 } else {
                     NextVectorToProcess = ENextVectorToProcess::KeyAndVals;
                 }

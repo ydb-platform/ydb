@@ -638,6 +638,7 @@ private:
         return !HasMemoryForProcessing();
     }
 
+
     void SwitchMode(EOperatingMode mode, TComputationContext& ctx) {
         std::cerr << std::format("[MISHA] switching {}->{}\n", (int)Mode, (int)mode);
         switch(mode) {
@@ -818,17 +819,12 @@ private:
         RightPacker->TablePtr->UpdateSpilling();
     }
 
-
-    bool IsSpillingFinished() const {
-        return LeftPacker->TablePtr->IsSpillingFinished() && RightPacker->TablePtr->IsSpillingFinished();
+    bool HasRunningAsyncOperation() const {
+        return LeftPacker->TablePtr->HasRunningAsyncIoOperation() || RightPacker->TablePtr->HasRunningAsyncIoOperation();
     }
 
-    bool IsReadyForSpilledDataProcessing() const {
-        return LeftPacker->TablePtr->IsSpillingAcceptingDataRequests() && RightPacker->TablePtr->IsSpillingAcceptingDataRequests();
-    }
-
-    bool IsRestoringSpilledBuckets() const {
-        return LeftPacker->TablePtr->IsRestoringSpilledBuckets() && RightPacker->TablePtr->IsRestoringSpilledBuckets();
+    bool IsProcessingFinished() {
+        return LeftPacker->TablePtr->IsProcessingFinished() || RightPacker->TablePtr->IsProcessingFinished();
     }
 
 void DoCalculateWithSpilling(TComputationContext& ctx) {
@@ -845,20 +841,15 @@ void DoCalculateWithSpilling(TComputationContext& ctx) {
     }
 
     if (!*HaveMoreLeftRows && !*HaveMoreRightRows) {
-        std::cerr << "[MISHA] everything fetched\n";
-        if (!IsSpillingFinished()) return;
-
+        UpdateSpilling();
+        if (HasRunningAsyncOperation() || !IsProcessingFinished()) return;
         if (!IsSpillingFinalized) {
             LeftPacker->TablePtr->FinalizeSpilling();
             RightPacker->TablePtr->FinalizeSpilling();
             IsSpillingFinalized = true;
 
-            UpdateSpilling();
+            if (HasRunningAsyncOperation()) return;
         }
-        if (!IsReadyForSpilledDataProcessing()) return;
-
-        LeftPacker->TablePtr->PrintSpillersState("LEFT");
-        RightPacker->TablePtr->PrintSpillersState("RIGHT");
         SwitchMode(EOperatingMode::ProcessSpilled, ctx);
         return;
     }
@@ -867,25 +858,14 @@ void DoCalculateWithSpilling(TComputationContext& ctx) {
 EFetchResult ProcessSpilledData(TComputationContext&, NUdf::TUnboxedValue*const* output) {
     while (NextBucketToJoin != GraceJoin::NumberOfBuckets) {
         UpdateSpilling();
-        if (IsRestoringSpilledBuckets()) return EFetchResult::Yield;
 
-        if (LeftPacker->TablePtr->IsSpilledBucketWaitingForExtraction(NextBucketToJoin)) {
-            std::cerr << std::format("[MISHA][LEFT] extracting bucket {}\n", NextBucketToJoin);
-            LeftPacker->TablePtr->PrepareBucket(NextBucketToJoin);
-        }
-
-        if (RightPacker->TablePtr->IsSpilledBucketWaitingForExtraction(NextBucketToJoin)) {
-            std::cerr << std::format("[MISHA][RIGHT] extracting bucket {}\n", NextBucketToJoin);
-            RightPacker->TablePtr->PrepareBucket(NextBucketToJoin);
-        } 
+        if (HasRunningAsyncOperation()) return EFetchResult::Yield;
 
         if (!LeftPacker->TablePtr->IsBucketInMemory(NextBucketToJoin)) {
-            std::cerr << std::format("[MISHA][LEFT] restoring bucket {}\n", NextBucketToJoin);
             LeftPacker->TablePtr->StartLoadingBucket(NextBucketToJoin);
         }
 
         if (!RightPacker->TablePtr->IsBucketInMemory(NextBucketToJoin)) {
-            std::cerr << std::format("[MISHA][RIGHT] restoring bucket {}\n", NextBucketToJoin);
             RightPacker->TablePtr->StartLoadingBucket(NextBucketToJoin);
         } 
 
@@ -909,6 +889,8 @@ EFetchResult ProcessSpilledData(TComputationContext&, NUdf::TUnboxedValue*const*
 
                 NextBucketToJoin++;
             } else {
+                LeftPacker->TablePtr->PrepareBucket(NextBucketToJoin);
+                RightPacker->TablePtr->PrepareBucket(NextBucketToJoin);
                 *PartialJoinCompleted = true;
                 LeftPacker->StartTime = std::chrono::system_clock::now();
                 RightPacker->StartTime = std::chrono::system_clock::now();

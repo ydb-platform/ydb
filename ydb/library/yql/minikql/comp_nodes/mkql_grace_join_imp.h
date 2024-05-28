@@ -119,35 +119,8 @@ public:
     bool IsInMemory() const;
     bool IsExtractionRequired() const;
 
-    bool IsProcessingSpilling() const {
-        return State == EState::Spilling;
-    }
-    bool IsAcceptingDataRequests() const {
-        return State == EState::AcceptingDataRequests;
-    }
-
-    bool IsRestoring() const {
-        return State == EState::Restoring;
-    }
-
-    std::string GetStateName() const {
-        switch (State) {
-
-        case EState::InMemory:
-            return "InMemory";
-        case EState::Spilling:
-            return "Spilling";
-        case EState::AcceptingData:
-            return "AcceptingData";
-        case EState::Finalizing:
-            return "Finalizing";
-        case EState::AcceptingDataRequests:
-            return "AcceptingDataRequests";
-        case EState::Restoring:
-            return "Restoring";
-        case EState::WaitingForExtraction:
-            return "WaitingForExtraction";
-        }
+    bool IsProcessingFinished() const {
+        return NextVectorToProcess == ENextVectorToProcess::None;
     }
 
 private:
@@ -155,18 +128,12 @@ private:
     template <class T>
     void AppendVector(std::vector<T, TMKQLAllocator<T>>& first, std::vector<T, TMKQLAllocator<T>>&& second) const;
     void ProcessBucketRestoration();
-    void ProcessFinalizing();
 
 private:
-
     enum class EState {
-        InMemory,
         Spilling,
-        AcceptingData,
-        Finalizing,
-        AcceptingDataRequests,
         Restoring,
-        WaitingForExtraction
+        InMemory
     };
 
     enum class ENextVectorToProcess {
@@ -189,9 +156,11 @@ private:
 
     ui64 SpilledBucketsCount = 0;
 
-    bool IsFinalizingRequested = false;
+    bool IsFinalizing = false;
 
     TTableBucket CurrentBucket;
+
+    bool IsBucketOwnedBySpiller = false;
 };
 
 
@@ -320,16 +289,10 @@ public:
     // Checks if there any async operation running. If return value is true it's safe to return Yield.
     bool HasRunningAsyncIoOperation() const;
 
-    bool IsSpillingFinished() const;
-
-    bool IsSpillingAcceptingDataRequests() const;
-
-    bool IsRestoringSpilledBuckets() const;
+    bool IsProcessingFinished() const;
 
     // Checks if bucket fully loaded to memory and may be joined.
     bool IsBucketInMemory(ui32 bucket) const;
-
-    bool IsSpilledBucketWaitingForExtraction(ui32 bucket) const;
 
     // Starts loading spilled bucket to memory.
     void StartLoadingBucket(ui32 bucket);
@@ -342,18 +305,6 @@ public:
 
     // Clears table content
     void Clear();
-
-    void PrintSpillersState(std::string name) {
-        
-        for (ui64 bucket = 0; bucket < NumberOfBuckets; ++bucket) {
-            std::string log = "[MISHA][" + name + "]";
-            log += std::format("[{}]", bucket);
-            log += std::format("[{}]", TableBucketsSpillers[bucket].GetStateName());
-
-            log += "\n";
-            std::cerr << log;
-        }
-    }
 
     // Creates new table with key columns and data columns
     TTable(ui64 numberOfKeyIntColumns = 0, ui64 numberOfKeyStringColumns = 0,

@@ -1,6 +1,5 @@
 #pragma once
 
-#include <format>
 #include <queue>
 
 #include <ydb/library/yql/minikql/defs.h>
@@ -112,11 +111,11 @@ public:
         return std::move(CurrentVector);
     }
 
-    ///Start restoring next vector. If the entire contents of the vector is in memory
-    ///State will be changed to DataReady without any async read operation. ExtractVector is expected
+    ///Start restoring next vector. If th eentire contents of the vector are in memory
+    ///State will be changed to DataREady without any async read operation. ExtractVector is expected
     ///to be called immediately.
     void RequestNextVector() {
-        MKQL_ENSURE(State == EState::AcceptingDataRequests, std::format("[MISHA ERROR], State = {}\n", (int)State));
+        MKQL_ENSURE(State == EState::AcceptingDataRequests, "Internal logic error");
         MKQL_ENSURE(CurrentVector.empty(), "Internal logic error");
         MKQL_ENSURE(!StoredChunksElementsCount.empty(), "Internal logic error");
 

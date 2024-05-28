@@ -1583,7 +1583,7 @@ private:
                 if (DelayedEventsQueue.size() < 10000) {
                     DelayedEventsQueue.push_back({
                         .Event = std::move(ev),
-                        .ResponeBuilder = [](Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
+                        .ResponseBuilder = [](Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
                             return new TResponse(status, std::move(issues));
                         }
                     });
@@ -1615,7 +1615,7 @@ private:
             if (ev->Get()->Success) {
                 Send(std::move(delayedEvent.Event));
             } else {
-                Send(delayedEvent.Event->Sender, delayedEvent.ResponeBuilder(Ydb::StatusIds::INTERNAL_ERROR, {rootIssue}));
+                Send(delayedEvent.Event->Sender, delayedEvent.ResponseBuilder(Ydb::StatusIds::INTERNAL_ERROR, {rootIssue}));
             }
             DelayedEventsQueue.pop_front();
         }
@@ -1782,7 +1782,7 @@ private:
     };
     struct TDelayedEvent {
         THolder<IEventHandle> Event;
-        std::function<IEventBase*(Ydb::StatusIds::StatusCode, NYql::TIssues)> ResponeBuilder;
+        std::function<IEventBase*(Ydb::StatusIds::StatusCode, NYql::TIssues)> ResponseBuilder;
     };
     EScriptExecutionsCreationStatus ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::NotStarted;
     std::deque<TDelayedEvent> DelayedEventsQueue;

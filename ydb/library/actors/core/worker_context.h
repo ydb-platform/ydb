@@ -168,7 +168,7 @@ namespace NActors {
         }
 #else
         void GetCurrentStats(TExecutorThreadStats&) const {}
-        void SetCurrentLongActivation(ui32, i64) {}
+        void SetCurrentActivationTime(ui32, i64) {}
         inline void AddElapsedCycles(ui32, i64) {}
         inline void AddParkedCycles(i64) {}
         inline void AddBlockedCycles(i64) {}

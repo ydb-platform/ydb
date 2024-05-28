@@ -1202,6 +1202,7 @@ bool TTable::IsBucketInMemory(ui32 bucket) const {
 
 void TTable::StartLoadingBucket(ui32 bucket) {
     MKQL_ENSURE(!TableBucketsSpillers[bucket].IsInMemory(), "Internal logic error");
+    if (!TableBucketsSpillers[bucket].IsProcessingFinished()) return;
 
     TableBucketsSpillers[bucket].StartBucketRestoration();
 }
@@ -1323,7 +1324,6 @@ bool TTableBucketSpiller::IsExtractionRequired() const {
 
 void TTableBucketSpiller::StartBucketRestoration() {
     MKQL_ENSURE(State == EState::Restoring, std::format("STATE: {}\n", (int)State));
-    if (NextVectorToProcess != ENextVectorToProcess::None) return;
     MKQL_ENSURE(NextVectorToProcess == ENextVectorToProcess::None, std::format("NEXT VECTOR: {}\n", (int)NextVectorToProcess));
 
     NextVectorToProcess = ENextVectorToProcess::KeyAndVals;

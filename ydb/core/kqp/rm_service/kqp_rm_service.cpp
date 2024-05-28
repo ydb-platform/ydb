@@ -475,6 +475,23 @@ public:
         FireResourcesPublishing();
     }
 
+    TVector<NKikimrKqp::TKqpNodeResources> GetClusterResources() const override {
+        TVector<NKikimrKqp::TKqpNodeResources> resources;
+        Y_ABORT_UNLESS(PublishResourcesByExchanger);
+
+        if (PublishResourcesByExchanger) {
+            std::shared_ptr<TVector<NKikimrKqp::TKqpNodeResources>> infos;
+            with_lock (ResourceSnapshotState->Lock) {
+                infos = ResourceSnapshotState->Snapshot;
+            }
+            if (infos != nullptr) {
+                resources = *infos;
+            }
+        }
+
+        return resources;
+    }
+
     void RequestClusterResourcesInfo(TOnResourcesSnapshotCallback&& callback) override {
         LOG_AS_D("Schedule Snapshot request");
         if (PublishResourcesByExchanger) {
@@ -714,7 +731,7 @@ private:
     void HandleWork(TEvKqp::TEvKqpProxyPublishRequest::TPtr&) {
         SendWhiteboardRequest();
         if (AppData()->TenantName.empty() || !SelfDataCenterId) {
-            LOG_E("Cannot start publishing usage for kqp_proxy, tenants: " << AppData()->TenantName << ", " <<  SelfDataCenterId.value_or("empty"));
+            LOG_I("Cannot start publishing usage for kqp_proxy, tenants: " << AppData()->TenantName << ", " <<  SelfDataCenterId.value_or("empty"));
             return;
         }
         PublishResourceUsage("kqp_proxy");

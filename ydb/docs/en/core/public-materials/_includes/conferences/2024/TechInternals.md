@@ -6,7 +6,7 @@ Modern distributed databases scale horizontally with great efficiency, making th
 
 First, we will speak about benchmarking strategies from a user's perspective. We will dive into key details related to benchmark implementations, which could be useful when you create a custom benchmark to mirror your production scenarios. Throughout our performance journey, we have identified numerous anti-patterns: there are things you should unequivocally avoid in your benchmark implementations. We'll highlight these "bad" and "ugly" practices with illustrative examples.
 
-Next, we’ll briefly discuss the popular key-value benchmark YCSB, which we believe is a prerequisite for robust performance in distributed transactions. Following this, we'll explore the TPC-C benchmark in greater detail, sharing valuable insights derived from our own implementation.
+Next, we'll briefly discuss the popular key-value benchmark YCSB, which is a prerequisite for robust performance in distributed transactions. We'll then explore the TPC-C benchmark in greater detail, sharing valuable insights derived from our own implementation.
 
 We'll conclude our talk by presenting performance results from the TPC-C benchmark, comparing YDB and CockroachDB with PostgreSQL to illustrate situations where PostgreSQL might not be enough and when you might want to consider a distributed DBMS instead.
 

@@ -212,7 +212,7 @@ namespace NActors {
 
         if (Harmonizer) {
             LWPROBE(TryToHarmonize, PoolId, PoolName);
-            Harmonizer->Harmonize(TlsThreadContext->StartOfElapsingTime.load(std::memory_order_relaxed));
+            Harmonizer->Harmonize(TlsThreadContext->StartOfProcessingEventTS.load(std::memory_order_relaxed));
         }
 
         TAtomic x = AtomicGet(Semaphore);

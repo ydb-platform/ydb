@@ -38,7 +38,7 @@ DEFINE_REFCOUNTED_TYPE(TThrottlerRequest)
 ////////////////////////////////////////////////////////////////////////////////
 
 class TReconfigurableThroughputThrottler
-    : public IReconfigurableThroughputThrottler
+    : public ITestableReconfigurableThroughputThrottler
 {
 public:
     TReconfigurableThroughputThrottler(
@@ -224,6 +224,11 @@ public:
         return Available_.load();
     }
 
+    void SetLastUpdated(TInstant lastUpdated) override
+    {
+        LastUpdated_.store(lastUpdated);
+    }
+
 private:
     const TLogger Logger;
 
@@ -306,6 +311,21 @@ private:
         return request->Promise;
     }
 
+    static i64 GetDeltaAvailable(TInstant current, TInstant lastUpdated, TDuration period, double limit)
+    {
+        auto timePassed = current - lastUpdated;
+
+        if (limit > 1) {
+            // Preventing arithmetic overflows by reducing time interval.
+            timePassed = std::min(period, timePassed);
+        }
+
+        auto deltaAvailable = static_cast<i64>(timePassed.MilliSeconds() * limit / 1000);
+        YT_VERIFY(deltaAvailable >= 0);
+
+        return deltaAvailable;
+    }
+
     void DoReconfigure(std::optional<double> limit, TDuration period)
     {
         VERIFY_THREAD_AFFINITY_ANY();
@@ -327,8 +347,8 @@ private:
                 Available_ = maxAvailable;
                 LastUpdated_ = now;
             } else {
-                auto millisecondsPassed = (now - lastUpdated).MilliSeconds();
-                auto deltaAvailable = static_cast<i64>(millisecondsPassed * *limit / 1000);
+                auto deltaAvailable = GetDeltaAvailable(now, lastUpdated, period, *limit);
+
                 auto newAvailable = Available_.load() + deltaAvailable;
                 if (newAvailable > maxAvailable) {
                     LastUpdated_ = now;
@@ -375,8 +395,7 @@ private:
         auto current = GetInstant();
         auto lastUpdated = LastUpdated_.load();
 
-        auto millisecondsPassed = (current - lastUpdated).MilliSeconds();
-        auto deltaAvailable = static_cast<i64>(millisecondsPassed * limit / 1000);
+        auto deltaAvailable = GetDeltaAvailable(current, lastUpdated, period, limit);
 
         if (deltaAvailable == 0) {
             return;

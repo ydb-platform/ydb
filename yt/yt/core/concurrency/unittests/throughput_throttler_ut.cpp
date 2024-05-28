@@ -53,6 +53,28 @@ TEST(TReconfigurableThroughputThrottlerTest, TestLimit)
     EXPECT_LE(duration, 3000u);
 }
 
+TEST(TReconfigurableThroughputThrottlerTest, TestNoOverflow)
+{
+    auto throttler = CreateReconfigurableThroughputThrottler(
+        TThroughputThrottlerConfig::Create(100_TB));
+
+    auto* testableThrottler = static_cast<ITestableReconfigurableThroughputThrottler*>(throttler.Get());
+
+    NProfiling::TWallTimer timer;
+    testableThrottler->Throttle(1).Get().ThrowOnError();
+    testableThrottler->SetLastUpdated(TInstant::Now() - TDuration::Days(1));
+
+    std::vector<TFuture<void>> futures;
+    for (int i = 0; i < 2; ++i) {
+        futures.push_back(testableThrottler->Throttle(1));
+        testableThrottler->SetLimit(5_TB);
+    }
+
+    WaitFor(AllSucceeded(futures)
+        .WithTimeout(TDuration::Seconds(5)))
+        .ThrowOnError();
+}
+
 TEST(TReconfigurableThroughputThrottlerTest, TestScheduleUpdate)
 {
     auto throttler = CreateReconfigurableThroughputThrottler(

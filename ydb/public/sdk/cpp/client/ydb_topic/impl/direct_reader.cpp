@@ -36,7 +36,7 @@ void Out<NYdb::NTopic::TDirectReadPartitionSession::EState>(IOutputStream& o, NY
 
 template<>
 void Out<NYdb::NTopic::TDirectReadPartitionSession>(IOutputStream& o, NYdb::NTopic::TDirectReadPartitionSession const& session) {
-    o << "{ PartitionSessionId: \"" << session.Id << "\"";
+    o << "{ PartitionSessionId: \"" << session.PartitionSessionId << "\"";
     o << ", Location: " << session.Location << "";
     o << ", State: " << session.State << "";
     o << ", LastDirectReadId: " << session.LastDirectReadId << "";
@@ -130,7 +130,7 @@ void TDirectReadSessionManager::UpdatePartitionSession(TPartitionSessionId id, T
         DeletePartitionSession(id, sessionIt);
 
         // TODO(qyryq) std::move an old RetryState?
-        StartPartitionSession({ .Id = id, .Location = location });
+        StartPartitionSession({ .PartitionSessionId = id, .Location = location });
     }
 }
 
@@ -199,7 +199,7 @@ void TDirectReadSession::AddPartitionSession(TDirectReadPartitionSession&& sessi
     with_lock (Lock) {
         Y_ABORT_UNLESS(State < EState::CLOSING);
 
-        auto [it, inserted] = PartitionSessions.emplace(session.Id, std::move(session));
+        auto [it, inserted] = PartitionSessions.emplace(session.PartitionSessionId, std::move(session));
         Y_ABORT_UNLESS(inserted);
 
         SendStartDirectReadPartitionSessionImpl(it->second);
@@ -213,7 +213,7 @@ void TDirectReadSession::UpdatePartitionSessionGeneration(TPartitionSessionId id
 
         // TODO(qyryq) Add TPartitionLocation::SetGeneration method?
         it->second = {
-            .Id = id,
+            .PartitionSessionId = id,
             .Location = location,
             .RetryState = std::move(it->second.RetryState),
         };
@@ -320,7 +320,7 @@ void TDirectReadSession::SendStartDirectReadPartitionSessionImpl(TDirectReadPart
 
     TDirectReadClientMessage req;
     auto& start = *req.mutable_start_direct_read_partition_session_request();
-    start.set_partition_session_id(partitionSession.Id);
+    start.set_partition_session_id(partitionSession.PartitionSessionId);
     start.set_last_direct_read_id(partitionSession.LastDirectReadId);
     start.set_generation(partitionSession.Location.GetGeneration());
     WriteToProcessorImpl(std::move(req));

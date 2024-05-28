@@ -51,7 +51,7 @@ struct TDirectReadPartitionSession {
         STARTED
     };
 
-    TPartitionSessionId Id;
+    TPartitionSessionId PartitionSessionId;
     TPartitionLocation Location;
     EState State = EState::CREATED;
     IRetryPolicy::IRetryState::TPtr RetryState = {};

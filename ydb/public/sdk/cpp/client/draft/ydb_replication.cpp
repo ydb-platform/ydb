@@ -21,13 +21,16 @@ TConnectionParams::TConnectionParams(const Ydb::Replication::ConnectionParams& p
 
     switch (params.credentials_case()) {
     case Ydb::Replication::ConnectionParams::kStaticCredentials:
-        Credentials_ = TStaticCredentials(
-            params.static_credentials().user(),
-            params.static_credentials().password_secret_name());
+        Credentials_ = TStaticCredentials{
+            .User = params.static_credentials().user(),
+            .PasswordSecretName = params.static_credentials().password_secret_name(),
+        };
         break;
 
     case Ydb::Replication::ConnectionParams::kOauth:
-        Credentials_ = TOAuthCredentials(params.oauth().token_secret_name());
+        Credentials_ = TOAuthCredentials{
+            .TokenSecretName = params.oauth().token_secret_name(),
+        };
         break;
 
     default:
@@ -86,7 +89,10 @@ TReplicationDescription::TReplicationDescription(const Ydb::Replication::Describ
 {
     Items_.reserve(desc.items_size());
     for (const auto& item : desc.items()) {
-        Items_.emplace_back(item.source_path(), item.destination_path());
+        Items_.push_back(TItem{
+            .SrcPath = item.source_path(),
+            .DstPath = item.destination_path(),
+        });
     }
 
     switch (desc.state_case()) {

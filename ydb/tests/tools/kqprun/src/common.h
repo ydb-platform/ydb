@@ -18,6 +18,7 @@ struct TYdbSetupSettings {
     TString DomainName = "Root";
     TDuration InitializationTimeout = TDuration::Seconds(10);
 
+    bool MonitoringEnabled = false;
     bool TraceOptEnabled = false;
     TMaybe<TString> LogOutputFile;
 

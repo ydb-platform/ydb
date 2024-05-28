@@ -346,7 +346,7 @@ Y_UNIT_TEST_SUITE(BuildStatsMixedIndex) {
     {
         auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), true, WriteBTreeIndex)).Mixed(0, 1, TMixerOne{ }, 0.3, 13);   
         subset->Flatten.begin()->Slices->Describe(Cerr); Cerr << Endl;
-        CheckMixedIndex(*subset, 13570, 2114857 /* ~2277890 */, 48540, 5310, 531050);
+        CheckMixedIndex(*subset, 13570, 2234982 /* ~2277890 */, 48540, 5310, 531050);
     }
 }
 

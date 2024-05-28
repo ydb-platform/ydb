@@ -6,7 +6,7 @@ from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 
 from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
-from utils.settings import Settings
+from ydb.tests.fq.generic.utils.settings import Settings
 
 
 class TestStreamingJoin(TestYdsBase):

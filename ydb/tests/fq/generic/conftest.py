@@ -9,7 +9,7 @@ from ydb.tests.tools.fq_runner.kikimr_utils import MDBExtension
 from ydb.tests.tools.fq_runner.kikimr_utils import YdbMvpExtension
 from ydb.tests.tools.fq_runner.kikimr_utils import start_kikimr
 
-from utils.settings import Settings
+from ydb.tests.fq.generic.utils.settings import Settings
 
 
 @pytest.fixture

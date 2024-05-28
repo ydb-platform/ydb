@@ -32,7 +32,7 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-NYql::NDqProto::TComputeActorState MakeStateFromBlob(size_t blobSize, bool isIncrement = false) {
+NYql::NDq::TComputeActorState MakeStateFromBlob(size_t blobSize, bool isIncrement = false) {
     TString blob;
     blob.reserve(blobSize);
     for (size_t i = 0; i < blobSize; ++i) {
@@ -51,8 +51,8 @@ NYql::NDqProto::TComputeActorState MakeStateFromBlob(size_t blobSize, bool isInc
     const TStringBuf savedBuf = value.AsStringRef();
     TString result;
     NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(result, savedBuf);
-    NYql::NDqProto::TComputeActorState state;
-    state.MutableMiniKqlProgram()->MutableData()->MutableStateData()->SetBlob(result);
+    NYql::NDq::TComputeActorState state;
+    state.MiniKqlProgram.ConstructInPlace().Data.Blob = result;
     return state;
 }
 

@@ -56,11 +56,26 @@ void SaveGraphState(const NUdf::TUnboxedValue* roots, ui32 rootCount, ui64 hash,
 
     for (ui32 i = 0; i < values.size(); ++i) {
         auto state = values[i].Save();
-        auto strRef = state.AsStringRef();
-        auto size = strRef.Size();
-        WriteUi32(out, size);
-        if (size) {
-            out.AppendNoAlias(strRef.Data(), size);
+        if (state.IsString() || state.IsEmbedded()) {
+            auto strRef = state.AsStringRef();
+            auto size = strRef.Size();
+            WriteUi64(out, size);
+            if (size) {
+                out.AppendNoAlias(strRef.Data(), size);
+            }
+        }
+        else if (state.IsBoxed()) {
+            TString taskState;
+            auto listIt = state.GetListIterator();
+            NUdf::TUnboxedValue str;
+            while (listIt.Next(str)) {
+                const TStringBuf strRef = str.AsStringRef();
+                taskState.AppendNoAlias(strRef.Data(), strRef.Size());
+            }
+            WriteUi64(out, taskState.size());
+            if (!taskState.empty()) {
+                out.AppendNoAlias(taskState.Data(), taskState.size());
+            }
         }
     }
 }
@@ -78,7 +93,7 @@ void LoadGraphState(const NUdf::TUnboxedValue* roots, ui32 rootCount, ui64 hash,
     TraverseGraph(roots, rootCount, values);
 
     for (ui32 i = 0; i < values.size(); ++i) {
-        auto size = ReadUi32(state);
+        auto size = ReadUi64(state);
         if (size) {
             MKQL_ENSURE(size <= state.size(), "Serialized state is corrupted");
             values[i].Load(NUdf::TStringRef(state.data(), size));

@@ -66,7 +66,7 @@ runs:
           extra_params+=(--target="${{ inputs.build_target }}")
         fi
 
-        if [ "${{ inputs.put_build_results_to_cache }}" != "false" ]; then
+        if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
           extra_params+=(--bazel-remote-store)
           extra_params+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
         fi

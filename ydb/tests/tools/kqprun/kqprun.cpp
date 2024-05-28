@@ -95,16 +95,15 @@ void RunScript(const TExecutionOptions& executionOptions, const NKqpRun::TRunner
     }
 
     if (runnerOptions.YdbSettings.MonitoringEnabled) {
-        Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Started reading comands" << colors.Default() << Endl;
+        Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Started reading commands" << colors.Default() << Endl;
         while (true) {
             TString command;
             Cin >> command;
 
             if (command == "exit") {
                 break;
-            } else {
-                Cerr << colors.Red() << TInstant::Now().ToIsoStringLocal() << " Invalid comand '" << command << "'" << colors.Default() << Endl;
             }
+            Cerr << colors.Red() << TInstant::Now().ToIsoStringLocal() << " Invalid command '" << command << "'" << colors.Default() << Endl;
         }
     }
 

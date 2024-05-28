@@ -67,7 +67,7 @@ namespace {
 
     const NTest::TMass Mass0(new NTest::TModelStd(false), 24000);
     const NTest::TMass Mass1(new NTest::TModelStd(true), 24000);
-    const NTest::TMass Mass2(new NTest::TModelStd(true), 240000);
+    const NTest::TMass Mass2(new NTest::TModelStd(false), 240000);
 
     void CheckMixedIndex(const TSubset& subset, ui64 expectedRows, ui64 expectedData, ui64 expectedIndex, ui64 rowCountResolution = 531, ui64 dataSizeResolution = 53105) {
         TStats stats;
@@ -190,6 +190,27 @@ Y_UNIT_TEST_SUITE(BuildStatsFlatIndex) {
         auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), WriteBTreeIndex)).Mixed(0, 4, TMixerRnd(4), 0.3);
         CheckMixedIndex(*subset, 24000, 4054270, 19152);
     }
+
+    Y_UNIT_TEST(Serial)
+    {
+        TMixerSeq mixer(4, Mass0.Saved.Size());
+        auto subset = TMake(Mass0, PageConf(Mass0.Model->Scheme->Families.size(), WriteBTreeIndex)).Mixed(0, 4, mixer);
+        CheckMixedIndex(*subset, 24000, 2106459, 25428);
+    }
+
+    Y_UNIT_TEST(Serial_Groups)
+    {
+        TMixerSeq mixer(4, Mass1.Saved.Size());
+        auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), WriteBTreeIndex)).Mixed(0, 4, mixer);
+        CheckMixedIndex(*subset, 24000, 2460259, 13528);
+    }
+
+    Y_UNIT_TEST(Serial_Groups_History)
+    {
+        TMixerSeq mixer(4, Mass1.Saved.Size());
+        auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), WriteBTreeIndex)).Mixed(0, 4, mixer, 0.3);
+        CheckMixedIndex(*subset, 24000, 4054290, 19168);
+    }
 }
 
 Y_UNIT_TEST_SUITE(BuildStatsMixedIndex) {
@@ -264,6 +285,27 @@ Y_UNIT_TEST_SUITE(BuildStatsMixedIndex) {
     {
         auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), WriteBTreeIndex)).Mixed(0, 4, TMixerRnd(4), 0.3);
         CheckMixedIndex(*subset, 24000, 4054270, 34579);
+    }
+
+    Y_UNIT_TEST(Serial)
+    {
+        TMixerSeq mixer(4, Mass0.Saved.Size());
+        auto subset = TMake(Mass0, PageConf(Mass0.Model->Scheme->Families.size(), WriteBTreeIndex)).Mixed(0, 4, mixer);
+        CheckMixedIndex(*subset, 24000, 2106459, 49502);
+    }
+
+    Y_UNIT_TEST(Serial_Groups)
+    {
+        TMixerSeq mixer(4, Mass1.Saved.Size());
+        auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), WriteBTreeIndex)).Mixed(0, 4, mixer);
+        CheckMixedIndex(*subset, 24000, 2460259, 23628);
+    }
+
+    Y_UNIT_TEST(Serial_Groups_History)
+    {
+        TMixerSeq mixer(4, Mass1.Saved.Size());
+        auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), WriteBTreeIndex)).Mixed(0, 4, mixer, 0.3);
+        CheckMixedIndex(*subset, 24000, 4054290, 34652);
     }
 
     Y_UNIT_TEST(Single_LowResolution)
@@ -405,8 +447,39 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
         return conf;
     }
 
+    void Dump(const TSubset& subset)
+    {
+        const ui32 samples = 5;
+
+        Cerr << "Parts:" << Endl;
+        for (auto &part : subset.Flatten) {
+            TTestEnv env;
+            auto index = CreateIndexIter(part.Part.Get(), &env, {});
+            Cerr << "  " << index->GetEndRowId() << " rows: ";
+            for (ui32 sample : xrange(samples + 1)) {
+                TRowId rowId((index->GetEndRowId() - 1) * sample / samples);
+                Y_ABORT_UNLESS(index->Seek(rowId) == EReady::Data);
+                TSmallVec<TCell> keyCells;
+                index->GetKeyCells(keyCells);
+                Cerr << "(";
+                for (auto off : xrange(keyCells.size())) {
+                    TString str;
+                    DbgPrintValue(str, keyCells[off], subset.Scheme->Cols[off].TypeInfo);
+                    Cerr << (off ? ", " : "") << str;
+                }
+                Cerr << ") ";
+            }
+            Cerr << Endl;
+        }
+    }
+
     TString FormatPercent(double value, ui64 total) {
-        return TStringBuilder() << static_cast<int>(100 * value / total) << "%";
+        return TStringBuilder() << static_cast<int>(100.0 * value / total) << "%";
+    }
+
+    void VerifyPercent(double value, ui64 total, int allowed) {
+        auto percent = static_cast<int>(100.0 * value / total);
+        UNIT_ASSERT_LE(percent, allowed);
     }
 
     void CalcDataBefore(const TSubset& subset, TSerializedCellVec key, ui64& bytes, ui64& rows) {
@@ -443,7 +516,8 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
 
             UNIT_ASSERT_GT(bucket.Value, prevValue);
             ui64 delta = bucket.Value - prevValue, actualDelta = actualValue - prevActualValue;
-            Cerr << "    " << FormatPercent(delta, total) << " (" << FormatPercent(actualDelta, total) << ")" << Endl;
+            Cerr << "    " << FormatPercent(delta, total) << " (actual " << FormatPercent(actualDelta, total) << ")" << Endl;
+            VerifyPercent(delta, total, 20);
 
             Cerr << "    key = (";
             for (auto off : xrange(key.GetCells().size())) {
@@ -453,8 +527,9 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
             }
             Cerr << ") ";
 
-            Cerr << "value = " << bucket.Value << " (" << actualValue << " - ";
+            Cerr << "value = " << bucket.Value << " (actual " << actualValue << " - ";
             Cerr << FormatPercent(static_cast<i64>(bucket.Value) - static_cast<i64>(actualValue), total) << " error)" << Endl;
+            VerifyPercent(static_cast<i64>(bucket.Value) - static_cast<i64>(actualValue), total, 10);
 
             prevValue = bucket.Value;
             prevActualValue = actualValue;
@@ -464,10 +539,18 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
             UNIT_ASSERT_GT(total, prevValue);
             ui64 delta = total - prevValue, actualDelta = total - prevActualValue;
             Cerr << "    " << FormatPercent(delta, total) << " (" << FormatPercent(actualDelta, total) << ")" << Endl;
+            // TODO: implement B-Tree index histogram
+            if (histogram.size()) {
+                VerifyPercent(delta, total, 20);
+            }
         }
     }
 
     void Check(const TSubset& subset, TMode mode) {
+        if (mode == 0) {
+            Dump(subset);
+        }
+
         Cerr << "Checking " << (mode == FlatIndex ? "Flat" : (mode == MixedIndex ? "Mixed" : "BTree")) << ":" << Endl;
 
         TStats stats;
@@ -538,38 +621,6 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
         }
     }
 
-    Y_UNIT_TEST(Four_Mixed)
-    {
-        for (auto mode : {FlatIndex, MixedIndex, BTreeIndex}) {
-            auto subset = TMake(Mass2, PageConf(Mass2.Model->Scheme->Families.size(), mode)).Mixed(0, 4, TMixerRnd(4));
-            Check(*subset, mode);
-        }
-    }
-
-    Y_UNIT_TEST(Four_Mixed_Groups)
-    {
-        for (auto mode : {FlatIndex, MixedIndex, BTreeIndex}) {
-            auto subset = TMake(Mass2, PageConf(Mass2.Model->Scheme->Families.size(), mode)).Mixed(0, 4, TMixerRnd(4));
-            Check(*subset, mode);
-        }
-    }
-
-    Y_UNIT_TEST(Four_Mixed_Groups_History)
-    {
-        for (auto mode : {FlatIndex, MixedIndex, BTreeIndex}) {
-            auto subset = TMake(Mass2, PageConf(Mass2.Model->Scheme->Families.size(), mode)).Mixed(0, 4, TMixerRnd(4), 0.3);
-            Check(*subset, mode);
-        }
-    }
-
-    Y_UNIT_TEST(Debug)
-    {
-        for (auto mode : {BTreeIndex}) {
-            auto subset = TMake(Mass2, PageConf(Mass2.Model->Scheme->Families.size(), mode)).Mixed(0, 10, TMixerRnd(10));
-            Check(*subset, mode);
-        }
-    }
-
     Y_UNIT_TEST(Ten_Mixed)
     {
         for (auto mode : {FlatIndex, MixedIndex, BTreeIndex}) {
@@ -578,14 +629,265 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
         }
     }
 
-    Y_UNIT_TEST(Ten_Seq)
+    Y_UNIT_TEST(Ten_Serial)
     {
-        
+        for (auto mode : {FlatIndex, MixedIndex, BTreeIndex}) {
+            auto subset = TMake(Mass2, PageConf(Mass2.Model->Scheme->Families.size(), mode)).Mixed(0, 10, TMixerSeq(10, Mass2.Saved.Size()));
+            Check(*subset, mode);
+        }
     }
 
     Y_UNIT_TEST(Ten_Crossed)
     {
-        
+        struct TMixer {
+            TMixer(ui32 buckets, ui64 rows)
+                : Buckets(buckets)
+                , RowsPerBucket(rows / buckets)
+            {
+            }
+
+            ui32 operator()(const TRow&) noexcept
+            {
+                while (CurrentSize >= RowsPerBucket) {
+                    CurrentSize = NextSize;
+                    NextSize = 0;
+                    CurrentBucket++;
+                }
+
+                if (CurrentSize > RowsPerBucket / 2 && Random.Uniform(2)) {
+                    NextSize++;
+                    return Min(CurrentBucket + 1, Buckets - 1);
+                } else {
+                    CurrentSize++;
+                    return Min(CurrentBucket, Buckets - 1);
+                }
+            }
+
+        private:
+            const ui32 Buckets;
+            ui64 RowsPerBucket;
+            ui32 CurrentBucket = 0;
+            ui64 CurrentSize = 0, NextSize = 0;
+            TMersenne<ui64> Random;
+        };
+
+        for (auto mode : {FlatIndex, MixedIndex, BTreeIndex}) {
+            auto subset = TMake(Mass2, PageConf(Mass2.Model->Scheme->Families.size(), mode)).Mixed(0, 10, TMixer(10, Mass2.Saved.Size()));
+            Check(*subset, mode);
+        }
+    }
+
+    Y_UNIT_TEST(Ten_Mixed_Log)
+    {
+        struct TMixer {
+            TMixer(ui32 buckets) 
+                : Buckets(buckets) 
+            {
+            }
+
+            ui32 operator()(const TRow&) noexcept
+            {
+                auto x = Random.Uniform(1 << Buckets);
+                return Min(ui32(log2(x)), Buckets - 1);
+            }
+
+        private:
+            const ui32 Buckets = 1;
+            TMersenne<ui64> Random;
+        };
+
+        for (auto mode : {FlatIndex, MixedIndex, BTreeIndex}) {
+            auto subset = TMake(Mass2, PageConf(Mass2.Model->Scheme->Families.size(), mode)).Mixed(0, 10, TMixer(10));
+            Check(*subset, mode);
+        }
+    }
+
+    Y_UNIT_TEST(Ten_Serial_Log)
+    {
+        struct TMixer {
+            TMixer(ui32 buckets, ui64 rows)
+                : Buckets(buckets)
+                , RowsPerBucket(rows / 2)
+            {
+            }
+
+            ui32 operator()(const TRow&) noexcept
+            {
+                while (CurrentSize >= RowsPerBucket && RowsPerBucket) {
+                    CurrentSize = 0;
+                    CurrentBucket++;
+                    RowsPerBucket /= 2;
+                }
+
+                CurrentSize++;
+
+                return Min(CurrentBucket, Buckets - 1);
+            }
+
+        private:
+            const ui32 Buckets;
+            ui64 RowsPerBucket;
+            ui32 CurrentBucket = 0;
+            ui64 CurrentSize = 0;
+            TMersenne<ui64> Random;
+        };
+
+        for (auto mode : {FlatIndex, MixedIndex, BTreeIndex}) {
+            auto subset = TMake(Mass2, PageConf(Mass2.Model->Scheme->Families.size(), mode)).Mixed(0, 10, TMixer(10, Mass2.Saved.Size()));
+            Check(*subset, mode);
+        }
+    }
+
+    Y_UNIT_TEST(Ten_Crossed_Log)
+    {
+        struct TMixer {
+            TMixer(ui32 buckets, ui64 rows)
+                : Buckets(buckets)
+                , RowsPerBucket(rows / 2)
+            {
+            }
+
+            ui32 operator()(const TRow&) noexcept
+            {
+                while (CurrentSize >= RowsPerBucket && RowsPerBucket) {
+                    CurrentSize = NextSize;
+                    NextSize = 0;
+                    CurrentBucket++;
+                    RowsPerBucket /= 2;
+                }
+
+                if (CurrentSize > RowsPerBucket / 2 && Random.Uniform(3) == 0) {
+                    NextSize++;
+                    return Min(CurrentBucket + 1, Buckets - 1);
+                } else {
+                    CurrentSize++;
+                    return Min(CurrentBucket, Buckets - 1);
+                }
+            }
+
+        private:
+            const ui32 Buckets;
+            ui64 RowsPerBucket;
+            ui32 CurrentBucket = 0;
+            ui64 CurrentSize = 0, NextSize = 0;
+            TMersenne<ui64> Random;
+        };
+
+        for (auto mode : {FlatIndex, MixedIndex, BTreeIndex}) {
+            auto subset = TMake(Mass2, PageConf(Mass2.Model->Scheme->Families.size(), mode)).Mixed(0, 10, TMixer(10, Mass2.Saved.Size()));
+            Check(*subset, mode);
+        }
+    }
+
+    Y_UNIT_TEST(Five_Five_Mixed)
+    {
+        struct TMixer {
+            TMixer(ui32 buckets) 
+                : Buckets(buckets) 
+            {
+            }
+
+            ui32 operator()(const TRow&) noexcept
+            {
+                if (Random.Uniform(20) == 0) {
+                    return Random.Uniform(Buckets / 2);
+                } else {
+                    return Buckets / 2 + Random.Uniform(Buckets / 2);
+                }
+            }
+
+        private:
+            const ui32 Buckets = 1;
+            TMersenne<ui64> Random;
+        };
+
+        for (auto mode : {FlatIndex, MixedIndex, BTreeIndex}) {
+            auto subset = TMake(Mass2, PageConf(Mass2.Model->Scheme->Families.size(), mode)).Mixed(0, 10, TMixer(10));
+            Check(*subset, mode);
+        }
+    }
+
+    Y_UNIT_TEST(Five_Five_Serial)
+    {
+        struct TMixer {
+            TMixer(ui32 buckets, ui64 rows)
+                : Buckets(buckets)
+                , RowsPerBigBucket(rows / Buckets / 10 * 19)
+                , RowsPerSmallBucket(rows / Buckets / 10 * 1)
+                , RowsPerBucket(RowsPerBigBucket)
+            {
+            }
+
+            ui32 operator()(const TRow&) noexcept
+            {
+                while (CurrentSize >= RowsPerBucket) {
+                    CurrentSize = 0;
+                    CurrentBucket++;
+                    RowsPerBucket = RowsPerBigBucket + RowsPerSmallBucket - RowsPerBucket;
+                }
+
+                CurrentSize++;
+
+                return Min(CurrentBucket, Buckets - 1);
+            }
+
+        private:
+            const ui32 Buckets;
+            ui64 RowsPerBigBucket, RowsPerSmallBucket, RowsPerBucket;
+            ui32 CurrentBucket = 0;
+            ui64 CurrentSize = 0;
+            TMersenne<ui64> Random;
+        };
+
+        for (auto mode : {FlatIndex, MixedIndex, BTreeIndex}) {
+            TMixer mixer(10, Mass2.Saved.Size());
+            auto subset = TMake(Mass2, PageConf(Mass2.Model->Scheme->Families.size(), mode)).Mixed(0, 10, mixer);
+            Check(*subset, mode);
+        }
+    }
+
+    Y_UNIT_TEST(Five_Five_Crossed)
+    {
+        struct TMixer {
+            TMixer(ui32 buckets, ui64 rows)
+                : Buckets(buckets)
+                , RowsPerBigBucket(rows / Buckets / 10 * 19)
+                , RowsPerSmallBucket(rows / Buckets / 10 * 1)
+                , RowsPerBucket(RowsPerBigBucket)
+            {
+            }
+
+            ui32 operator()(const TRow&) noexcept
+            {
+                while (CurrentSize >= RowsPerBucket && RowsPerBucket) {
+                    CurrentSize = NextSize;
+                    NextSize = 0;
+                    CurrentBucket++;
+                    RowsPerBucket = RowsPerBigBucket + RowsPerSmallBucket - RowsPerBucket;
+                }
+
+                if (CurrentSize > RowsPerBucket / 2 && (RowsPerBucket == RowsPerBigBucket) == (Random.Uniform(20) == 0)) {
+                    NextSize++;
+                    return Min(CurrentBucket + 1, Buckets - 1);
+                } else {
+                    CurrentSize++;
+                    return Min(CurrentBucket, Buckets - 1);
+                }
+            }
+
+        private:
+            const ui32 Buckets;
+            ui64 RowsPerBigBucket, RowsPerSmallBucket, RowsPerBucket;
+            ui32 CurrentBucket = 0;
+            ui64 CurrentSize = 0, NextSize = 0;
+            TMersenne<ui64> Random;
+        };
+
+        for (auto mode : {FlatIndex, MixedIndex, BTreeIndex}) {
+            TMixer mixer(10, Mass2.Saved.Size());
+            auto subset = TMake(Mass2, PageConf(Mass2.Model->Scheme->Families.size(), mode)).Mixed(0, 10, mixer);
+            Check(*subset, mode);
+        }
     }
 }
 

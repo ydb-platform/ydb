@@ -94,36 +94,63 @@ public:
 
 template <>
 struct TJsonRequestSchema<TJsonTopicInfo> {
-    static TString GetSchema() {
-        TStringStream stream;
-        TProtoToJson::ProtoToJsonSchema<TEvTabletCounters::TEvTabletLabeledCountersResponse::ProtoRecordType>(stream);
-        return stream.Str();
+    static YAML::Node GetSchema() {
+        return TProtoToYaml::ProtoToYamlSchema<TEvTabletCounters::TEvTabletLabeledCountersResponse::ProtoRecordType>();
     }
 };
 
 template <>
 struct TJsonRequestParameters<TJsonTopicInfo> {
-    static TString GetParameters() {
-        return R"___([{"name":"path","in":"query","description":"schema path","required":true,"type":"string"},
-                      {"name":"client","in":"query","description":"client name","required":false,"type":"string","default":"total"},
-                      {"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
-                      {"name":"all","in":"query","description":"return all topics and all clients","required":false,"type":"boolean","default":false},
-                      {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer","default":10000}])___";
+    static YAML::Node GetParameters() {
+        return YAML::Load(R"___(
+            - name: path
+              in: query
+              description: schema path
+              required: true
+              type: string
+            - name: client
+              in: query
+              description: client name
+              required: false
+              type: string
+              default: total
+            - name: enums
+              in: query
+              description: convert enums to strings
+              required: false
+              type: boolean
+            - name: all
+              in: query
+              description: return all topics and all clients
+              required: false
+              type: boolean
+              default: false
+            - name: ui64
+              in: query
+              description: return ui64 as number
+              required: false
+              type: boolean
+            - name: timeout
+              in: query
+              description: timeout in ms
+              required: false
+              type: integer
+              default: 10000
+            )___");
     }
 };
 
 template <>
 struct TJsonRequestSummary<TJsonTopicInfo> {
     static TString GetSummary() {
-        return "\"PQ topic information\"";
+        return "Topic information";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonTopicInfo> {
     static TString GetDescription() {
-        return "\"Information about PQ topic\"";
+        return "Information about topic";
     }
 };
 

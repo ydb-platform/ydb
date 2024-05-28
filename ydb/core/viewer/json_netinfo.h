@@ -301,35 +301,55 @@ public:
 
 template <>
 struct TJsonRequestSchema<TJsonNetInfo> {
-    static TString GetSchema() {
-        TStringStream stream;
-        TProtoToJson::ProtoToJsonSchema<NKikimrViewer::TNetInfo>(stream);
-        return stream.Str();
+    static YAML::Node GetSchema() {
+        return TProtoToYaml::ProtoToYamlSchema<NKikimrViewer::TNetInfo>();
     }
 };
 
 template <>
 struct TJsonRequestParameters<TJsonNetInfo> {
-    static TString GetParameters() {
-        return R"___([{"name":"path","in":"query","description":"schema path","required":false,"type":"string"},
-                      {"name":"hive_id","in":"query","description":"hive identifier (tablet id)","required":false,"type":"string"},
-                      {"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
-                      {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___";
+    static YAML::Node GetParameters() {
+        return YAML::Load(R"___(
+              - name: path
+                in: query
+                description: schema path
+                required: false
+                type: string
+              - name: hive_id
+                in: query
+                description: hive identifier (tablet id)
+                required: false
+                type: string
+              - name: enums
+                in: query
+                description: convert enums to strings
+                required: false
+                type: boolean
+              - name: ui64
+                in: query
+                description: return ui64 as number
+                required: false
+                type: boolean
+              - name: timeout
+                in: query
+                description: timeout in ms
+                required: false
+                type: integer
+            )___");
     }
 };
 
 template <>
 struct TJsonRequestSummary<TJsonNetInfo> {
     static TString GetSummary() {
-        return "\"Network information\"";
+        return "Network information";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonNetInfo> {
     static TString GetDescription() {
-        return "\"Returns network information\"";
+        return "Returns network information";
     }
 };
 

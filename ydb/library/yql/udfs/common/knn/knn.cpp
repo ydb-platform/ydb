@@ -58,18 +58,27 @@ public:
     }
 
 protected:
-    static TStringRef GetArg(ITypeInfoHelper& typeInfoHelper, const TType* argType) {
-        const TTaggedTypeInspector tagged{typeInfoHelper, argType};
+    static TStringRef GetArg(ITypeInfoHelper& typeInfoHelper, const TType*& argType, IFunctionTypeInfoBuilder& builder) {
         TStringRef tag = TagStoredVector;
+        if (const auto kind = typeInfoHelper.GetTypeKind(argType); kind == ETypeKind::Null) {
+            argType = builder.SimpleType<const char*>();
+            return tag;
+        }
+        const TOptionalTypeInspector optional{typeInfoHelper, argType};
+        if (optional) {
+            argType = optional.GetItemType();
+        }
+        const auto* dataType = argType;
+        const TTaggedTypeInspector tagged{typeInfoHelper, dataType};
         if (tagged) {
             tag = tagged.GetTag();
-            argType = tagged.GetBaseType();
+            dataType = tagged.GetBaseType();
         }
-        const TDataTypeInspector data{typeInfoHelper, argType};
-        if (!data || data.GetTypeId() != TDataType<const char*>::Id) {
-            return {};
+        const TDataTypeInspector data{typeInfoHelper, dataType};
+        if (data && data.GetTypeId() == TDataType<const char*>::Id) {
+            return tag;
         }
-        return tag;
+        return {};
     }
 
     static bool ValidTag(const TStringRef& tag, std::initializer_list<TStringRef>&& allowedTags) {
@@ -82,7 +91,7 @@ private:
 
 class TFloatFromBinaryString: public TMultiSignatureBase<TFloatFromBinaryString> {
 public:
-    using TMultiSignatureBase<TFloatFromBinaryString>::TMultiSignatureBase;
+    using TMultiSignatureBase::TMultiSignatureBase;
 
     static const TStringRef& Name() {
         static auto name = TStringRef::Of("FloatFromBinaryString");
@@ -111,7 +120,7 @@ public:
         }
 
         auto argType = argsTuple.GetElementType(0);
-        auto argTag = GetArg(*typeInfoHelper, argType);
+        auto argTag = GetArg(*typeInfoHelper, argType, builder);
         if (!ValidTag(argTag, {TagStoredVector, TagFloatVector, TagByteVector})) {
             builder.SetError("Expected argument is string from ToBinaryString[Float|Byte]");
             return true;
@@ -153,9 +162,9 @@ public:
         }
 
         auto arg0Type = argsTuple.GetElementType(0);
-        auto arg0Tag = Base::GetArg(*typeInfoHelper, arg0Type);
+        auto arg0Tag = Base::GetArg(*typeInfoHelper, arg0Type, builder);
         auto arg1Type = argsTuple.GetElementType(1);
-        auto arg1Tag = Base::GetArg(*typeInfoHelper, arg1Type);
+        auto arg1Tag = Base::GetArg(*typeInfoHelper, arg1Type, builder);
 
         if (!Base::ValidTag(arg0Tag, {TagStoredVector, TagFloatVector, TagByteVector, TagBitVector}) ||
             !Base::ValidTag(arg1Tag, {TagStoredVector, TagFloatVector, TagByteVector, TagBitVector})) {

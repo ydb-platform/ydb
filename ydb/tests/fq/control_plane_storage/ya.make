@@ -1,7 +1,5 @@
 UNITTEST_FOR(ydb/core/fq/libs/control_plane_storage)
 
-SUBSCRIBER(g:yq)
-
 SIZE(MEDIUM)
 
 SPLIT_FACTOR(18)

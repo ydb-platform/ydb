@@ -5,6 +5,7 @@
 
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
+#include <ydb/public/sdk/cpp/client/draft/ydb_replication.h>
 #include <ydb/public/sdk/cpp/client/ydb_coordination/coordination.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
@@ -71,8 +72,13 @@ private:
     int PrintCoordinationNodeResponsePretty(const NYdb::NCoordination::TNodeDescription& result) const;
     int PrintCoordinationNodeResponseProtoJsonBase64(const NYdb::NCoordination::TNodeDescription& result) const;
 
+    int DescribeReplication(const TDriver& driver);
+    int PrintReplicationResponse(const NYdb::NReplication::TDescribeReplicationResult& result) const;
+    int PrintReplicationResponsePretty(const NYdb::NReplication::TDescribeReplicationResult& result) const;
+    int PrintReplicationResponseProtoJsonBase64(const NYdb::NReplication::TDescribeReplicationResult& result) const;
+
     template<typename TDescriptionType>
-    void PrintPermissionsIfNeeded(const TDescriptionType& description) {
+    void PrintPermissionsIfNeeded(const TDescriptionType& description) const {
         if (ShowPermissions) {
             Cout << Endl;
             PrintAllPermissions(

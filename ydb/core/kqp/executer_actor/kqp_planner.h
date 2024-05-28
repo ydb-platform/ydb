@@ -63,6 +63,7 @@ public:
         const std::optional<TKqpFederatedQuerySetup>& FederatedQuerySetup;
         const ui64 OutputChunkMaxSize = 0;
         const TGUCSettings::TPtr GUCSettings;
+        const bool MayRunTasksLocally = false;
     };
 
     TKqpPlanner(TKqpPlanner::TArgs&& args);
@@ -104,7 +105,7 @@ private:
     const bool WithSpilling;
     const TMaybe<NKikimrKqp::TRlPath> RlPath;
     THashSet<ui32> TrackingNodes;
-    const TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;
+    TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;
     NWilson::TSpan& ExecuterSpan;
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& ExecuterRetriesConfig;
     ui64 LocalRunMemoryEst = 0;
@@ -126,6 +127,7 @@ private:
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
     const ui64 OutputChunkMaxSize;
     const TGUCSettings::TPtr GUCSettings;
+    const bool MayRunTasksLocally;
 
 public:
     static bool UseMockEmptyPlanner;  // for tests: if true then use TKqpMockEmptyPlanner that leads to the error

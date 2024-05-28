@@ -1,4 +1,3 @@
-#include "actors.h"
 #include "ydb_setup.h"
 
 #include <ydb/core/kqp/common/kqp_script_executions.h>
@@ -164,12 +163,27 @@ private:
         NYql::NLog::InitLogger(NActors::CreateNullBackend());
     }
 
+    void WaitResourcesPublishing() const {
+        auto promise = NThreading::NewPromise();
+        GetRuntime()->Register(CreateResourcesWaiterActor(promise, Settings_.NodeCount));
+
+        try {
+            promise.GetFuture().GetValue(Settings_.InitializationTimeout);
+        } catch (...) {
+            ythrow yexception() << "Failed to initialize all resources: " << CurrentExceptionMessage();
+        }
+    }
+
 public:
     explicit TImpl(const TYdbSetupSettings& settings)
         : Settings_(settings)
     {
         InitializeYqlLogger();
         InitializeServer();
+
+        if (Settings_.NodeCount > 1) {
+            WaitResourcesPublishing();
+        }
     }
 
     NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr SchemeQueryRequest(const TString& query, const TString& traceId) const {
@@ -186,18 +200,18 @@ public:
         return RunKqpProxyRequest<NKikimr::NKqp::TEvKqp::TEvScriptRequest, NKikimr::NKqp::TEvKqp::TEvScriptResponse>(std::move(event));
     }
 
-    NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr QueryRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, std::vector<Ydb::ResultSet>& resultSets, TString& queryPlan) const {
+    NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr QueryRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, std::vector<Ydb::ResultSet>& resultSets, TProgressCallback progressCallback) const {
         auto event = MakeHolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest>();
         FillQueryRequest(query, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, action, traceId, event->Record);
 
         if (auto progressStatsPeriodMs = Settings_.AppConfig.GetQueryServiceConfig().GetProgressStatsPeriodMs()) {
-            event->SetProgressStatsPeriod(TDuration::MilliSeconds(Settings_.AppConfig.GetQueryServiceConfig().GetProgressStatsPeriodMs()));
+            event->SetProgressStatsPeriod(TDuration::MilliSeconds(progressStatsPeriodMs));
         }
 
         auto promise = NThreading::NewPromise<NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr>();
         auto rowsLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultRowsLimit();
         auto sizeLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultSizeLimit();
-        GetRuntime()->Register(CreateRunScriptActorMock(std::move(event), promise, rowsLimit, sizeLimit, resultSets, queryPlan));
+        GetRuntime()->Register(CreateRunScriptActorMock(std::move(event), promise, rowsLimit, sizeLimit, resultSets, progressCallback));
 
         return promise.GetFuture().GetValueSync();
     }
@@ -344,10 +358,10 @@ TRequestResult TYdbSetup::ScriptRequest(const TString& script, NKikimrKqp::EQuer
     return TRequestResult(scriptExecutionOperation->Get()->Status, scriptExecutionOperation->Get()->Issues);
 }
 
-TRequestResult TYdbSetup::QueryRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets) const {
+TRequestResult TYdbSetup::QueryRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets, TProgressCallback progressCallback) const {
     resultSets.clear();
 
-    auto queryOperationResponse = Impl_->QueryRequest(query, action, traceId, resultSets, meta.Plan)->Get()->Record.GetRef();
+    auto queryOperationResponse = Impl_->QueryRequest(query, action, traceId, resultSets, progressCallback)->Get()->Record.GetRef();
     const auto& responseRecord = queryOperationResponse.GetResponse();
 
     meta.Ast = responseRecord.GetQueryAst();

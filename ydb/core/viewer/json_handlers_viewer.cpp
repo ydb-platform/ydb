@@ -42,44 +42,45 @@
 
 namespace NKikimr::NViewer {
 
-template <>
-void TViewerJsonHandlers::Init() {
-    JsonHandlers["/json/nodelist"] = new TJsonHandler<TJsonNodeList>;
-    JsonHandlers["/json/nodeinfo"] = new TJsonHandler<TJsonNodeInfo>;
-    JsonHandlers["/json/vdiskinfo"] = new TJsonHandler<TJsonVDiskInfo>;
-    JsonHandlers["/json/pdiskinfo"] = new TJsonHandler<TJsonPDiskInfo>;
-    JsonHandlers["/json/describe"] = new TJsonHandler<TJsonDescribe>;
-    JsonHandlers["/json/describe_topic"] = new TJsonHandler<TJsonDescribeTopic>;
-    JsonHandlers["/json/describe_consumer"] = new TJsonHandler<TJsonDescribeConsumer>;
-    JsonHandlers["/json/hotkeys"] = new TJsonHandler<TJsonHotkeys>;
-    JsonHandlers["/json/sysinfo"] = new TJsonHandler<TJsonSysInfo>;
-    JsonHandlers["/json/tabletinfo"] = new TJsonHandler<TJsonTabletInfo>;
-    JsonHandlers["/json/hiveinfo"] = new TJsonHandler<TJsonHiveInfo>;
-    JsonHandlers["/json/bsgroupinfo"] = new TJsonHandler<TJsonBSGroupInfo>;
-    JsonHandlers["/json/bscontrollerinfo"] = new TJsonHandler<TJsonBSControllerInfo>;
-    JsonHandlers["/json/config"] = new TJsonHandler<TJsonConfig>;
-    JsonHandlers["/json/counters"] = new TJsonHandler<TJsonCounters>;
-    JsonHandlers["/json/topicinfo"] = new TJsonHandler<TJsonTopicInfo>;
-    JsonHandlers["/json/pqconsumerinfo"] = new TJsonHandler<TJsonPQConsumerInfo>();
-    JsonHandlers["/json/tabletcounters"] = new TJsonHandler<TJsonTabletCounters>;
-    JsonHandlers["/json/storage"] = new TJsonHandler<TJsonStorage>;
-    JsonHandlers["/json/storage_usage"] = new TJsonHandler<TJsonStorageUsage>;
-    JsonHandlers["/json/metainfo"] = new TJsonHandler<TJsonMetaInfo>;
-    JsonHandlers["/json/browse"] = new TJsonHandler<TJsonBrowse>;
-    JsonHandlers["/json/cluster"] = new TJsonHandler<TJsonCluster>;
-    JsonHandlers["/json/content"] = new TJsonHandler<TJsonContent>;
-    JsonHandlers["/json/labeledcounters"] = new TJsonHandler<TJsonLabeledCounters>;
-    JsonHandlers["/json/tenants"] = new TJsonHandler<TJsonTenants>;
-    JsonHandlers["/json/hivestats"] = new TJsonHandler<TJsonHiveStats>;
-    JsonHandlers["/json/tenantinfo"] = new TJsonHandler<TJsonTenantInfo>;
-    JsonHandlers["/json/whoami"] = new TJsonHandler<TJsonWhoAmI>;
-    JsonHandlers["/json/query"] = new TJsonHandler<TJsonQuery>;
-    JsonHandlers["/json/netinfo"] = new TJsonHandler<TJsonNetInfo>;
-    JsonHandlers["/json/compute"] = new TJsonHandler<TJsonCompute>;
-    JsonHandlers["/json/healthcheck"] = new TJsonHandler<TJsonHealthCheck>;
-    JsonHandlers["/json/nodes"] = new TJsonHandler<TJsonNodes>;
-    JsonHandlers["/json/acl"] = new TJsonHandler<TJsonACL>;
-    JsonHandlers["/json/graph"] = new TJsonHandler<TJsonGraph>;
-    JsonHandlers["/json/render"] = new TJsonHandler<TJsonRender>;
-    JsonHandlers["/json/autocomplete"] = new TJsonHandler<TJsonAutocomplete>;
-}}
+void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers) {
+    jsonHandlers.AddHandler("/viewer/json/nodelist", new TJsonHandler<TJsonNodeList>);
+    jsonHandlers.AddHandler("/viewer/json/nodeinfo", new TJsonHandler<TJsonNodeInfo>);
+    jsonHandlers.AddHandler("/viewer/json/sysinfo", new TJsonHandler<TJsonSysInfo>);
+    jsonHandlers.AddHandler("/viewer/json/vdiskinfo", new TJsonHandler<TJsonVDiskInfo>);
+    jsonHandlers.AddHandler("/viewer/json/pdiskinfo", new TJsonHandler<TJsonPDiskInfo>);
+    jsonHandlers.AddHandler("/viewer/json/tabletinfo", new TJsonHandler<TJsonTabletInfo>);
+    jsonHandlers.AddHandler("/viewer/json/describe", new TJsonHandler<TJsonDescribe>);
+    jsonHandlers.AddHandler("/viewer/json/describe_topic", new TJsonHandler<TJsonDescribeTopic>);
+    jsonHandlers.AddHandler("/viewer/json/describe_consumer", new TJsonHandler<TJsonDescribeConsumer>);
+    jsonHandlers.AddHandler("/viewer/json/hotkeys", new TJsonHandler<TJsonHotkeys>);
+    jsonHandlers.AddHandler("/viewer/json/hiveinfo", new TJsonHandler<TJsonHiveInfo>);
+    jsonHandlers.AddHandler("/viewer/json/bsgroupinfo", new TJsonHandler<TJsonBSGroupInfo>);
+    jsonHandlers.AddHandler("/viewer/json/bscontrollerinfo", new TJsonHandler<TJsonBSControllerInfo>);
+    jsonHandlers.AddHandler("/viewer/json/config", new TJsonHandler<TJsonConfig>);
+    jsonHandlers.AddHandler("/viewer/json/counters", new TJsonHandler<TJsonCounters>);
+    jsonHandlers.AddHandler("/viewer/json/topicinfo", new TJsonHandler<TJsonTopicInfo>);
+    jsonHandlers.AddHandler("/viewer/json/pqconsumerinfo", new TJsonHandler<TJsonPQConsumerInfo>);
+    jsonHandlers.AddHandler("/viewer/json/tabletcounters", new TJsonHandler<TJsonTabletCounters>);
+    jsonHandlers.AddHandler("/viewer/json/storage", new TJsonHandler<TJsonStorage>);
+    jsonHandlers.AddHandler("/viewer/json/storage_usage", new TJsonHandler<TJsonStorageUsage>);
+    jsonHandlers.AddHandler("/viewer/json/metainfo", new TJsonHandler<TJsonMetaInfo>);
+    jsonHandlers.AddHandler("/viewer/json/browse", new TJsonHandler<TJsonBrowse>);
+    jsonHandlers.AddHandler("/viewer/json/cluster", new TJsonHandler<TJsonCluster>);
+    jsonHandlers.AddHandler("/viewer/json/content", new TJsonHandler<TJsonContent>);
+    jsonHandlers.AddHandler("/viewer/json/labeledcounters", new TJsonHandler<TJsonLabeledCounters>);
+    jsonHandlers.AddHandler("/viewer/json/tenants", new TJsonHandler<TJsonTenants>);
+    jsonHandlers.AddHandler("/viewer/json/hivestats", new TJsonHandler<TJsonHiveStats>);
+    jsonHandlers.AddHandler("/viewer/json/tenantinfo", new TJsonHandler<TJsonTenantInfo>);
+    jsonHandlers.AddHandler("/viewer/json/whoami", new TJsonHandler<TJsonWhoAmI>);
+    jsonHandlers.AddHandler("/viewer/json/query", new TJsonHandler<TJsonQuery>);
+    jsonHandlers.AddHandler("/viewer/json/netinfo", new TJsonHandler<TJsonNetInfo>);
+    jsonHandlers.AddHandler("/viewer/json/compute", new TJsonHandler<TJsonCompute>);
+    jsonHandlers.AddHandler("/viewer/json/healthcheck", new TJsonHandler<TJsonHealthCheck>);
+    jsonHandlers.AddHandler("/viewer/json/nodes", new TJsonHandler<TJsonNodes>);
+    jsonHandlers.AddHandler("/viewer/json/acl", new TJsonHandler<TJsonACL>);
+    jsonHandlers.AddHandler("/viewer/json/graph", new TJsonHandler<TJsonGraph>);
+    jsonHandlers.AddHandler("/viewer/json/render", new TJsonHandler<TJsonRender>);
+    jsonHandlers.AddHandler("/viewer/json/autocomplete", new TJsonHandler<TJsonAutocomplete>);
+}
+
+}

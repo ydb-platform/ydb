@@ -742,6 +742,8 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
 
     TMap<TActorId, TActorId> ReplicaProbes;
 
+    THashMap<std::tuple<TActorId, ui64>, ui64> Subscriptions;
+
     void Handle(TEvStateStorage::TEvRequestReplicasDumps::TPtr &ev) {
         TActivationContext::Register(new TStateStorageDumpRequest(ev->Sender, Info));
     }
@@ -763,7 +765,14 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
     }
 
     void Handle(TEvStateStorage::TEvResolveReplicas::TPtr &ev) {
+        if (ev->Get()->Subscribe) {
+            Subscriptions.emplace(std::make_tuple(ev->Sender, ev->Cookie), ev->Get()->TabletID);
+        }
         ResolveReplicas(ev, ev->Get()->TabletID, Info);
+    }
+
+    void HandleUnsubscribe(STATEFN_SIG) {
+        Subscriptions.erase(std::make_tuple(ev->Sender, ev->Cookie));
     }
 
     void Handle(TEvStateStorage::TEvResolveBoard::TPtr &ev) {
@@ -859,6 +868,12 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
         SchemeBoardInfo = msg->SchemeBoardConfig;
 
         RegisterDerivedServices(TlsActivationContext->ExecutorThread.ActorSystem, old.Get());
+
+        for (const auto& [key, tabletId] : Subscriptions) {
+            const auto& [sender, cookie] = key;
+            struct { TActorId Sender; ui64 Cookie; } ev{sender, cookie};
+            ResolveReplicas(&ev, tabletId, Info);
+        }
     }
 
     void RegisterDerivedServices(TActorSystem *sys, const TStateStorageInfo *old) {
@@ -983,6 +998,7 @@ public:
             hFunc(TEvStateStorage::TEvUpdateGroupConfig, Handle);
             hFunc(TEvStateStorage::TEvReplicaProbeSubscribe, Handle);
             hFunc(TEvStateStorage::TEvReplicaProbeUnsubscribe, Handle);
+            fFunc(TEvents::TSystem::Unsubscribe, HandleUnsubscribe);
         default:
             TActivationContext::Forward(ev, RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, FlowControlledInfo)));
             break;

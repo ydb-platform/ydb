@@ -74,13 +74,23 @@ struct TEvPipeCache {
 
     struct TEvDeliveryProblem : public TEventLocal<TEvDeliveryProblem, EvDeliveryProblem> {
         const ui64 TabletId;
+        const bool Connected;
         const bool NotDelivered;
         const bool IsDeleted;
 
-        TEvDeliveryProblem(ui64 tabletId, bool notDelivered, bool isDeleted = false)
+        TEvDeliveryProblem(ui64 tabletId, bool connected, bool notDelivered, bool isDeleted)
             : TabletId(tabletId)
+            , Connected(connected)
             , NotDelivered(notDelivered)
             , IsDeleted(isDeleted)
+        {}
+
+        // For compatibility with existing tests
+        TEvDeliveryProblem(ui64 tabletId, bool notDelivered)
+            : TabletId(tabletId)
+            , Connected(notDelivered ? false : true)
+            , NotDelivered(notDelivered)
+            , IsDeleted(false)
         {}
     };
 

@@ -216,7 +216,8 @@ public:
         return TPlanFormatterBase::GetOperationDisplayName(node);
     }
 
-    void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer) override {
+    void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer, bool withLimits) override {
+        Y_UNUSED(withLimits);
         if (auto maybeStage = TMaybeNode<TDqStageBase>(&node)) {
             writer.OnKeyedItem("Streams");
             writer.OnBeginMap();

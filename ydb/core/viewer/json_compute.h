@@ -624,41 +624,85 @@ public:
 
 template <>
 struct TJsonRequestSchema<TJsonCompute> {
-    static TString GetSchema() {
-        TStringStream stream;
-        TProtoToJson::ProtoToJsonSchema<NKikimrViewer::TNetInfo>(stream);
-        return stream.Str();
+    static YAML::Node GetSchema() {
+        return TProtoToYaml::ProtoToYamlSchema<NKikimrViewer::TNetInfo>();
     }
 };
 
 template <>
 struct TJsonRequestParameters<TJsonCompute> {
-    static TString GetParameters() {
-        return R"___([{"name":"version","in":"query","description":"query version (v1, v2)","required":false,"type":"string"},
-                      {"name":"path","in":"query","description":"schema path","required":false,"type":"string"},
-                      {"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
-                      {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"},
-                      {"name":"uptime","in":"query","description":"return only nodes with less uptime in sec.","required":false,"type":"integer"},
-                      {"name":"problems_only","in":"query","description":"return only problem nodes","required":false,"type":"boolean"},
-                      {"name":"filter","in":"query","description":"filter nodes by id or host","required":false,"type":"string"},
-                      {"name":"sort","in":"query","description":"sort by (NodeId,Host,DC,Rack,Version,Uptime,Memory,CPU,LoadAverage)","required":false,"type":"string"},
-                      {"name":"offset","in":"query","description":"skip N nodes","required":false,"type":"integer"},
-                      {"name":"limit","in":"query","description":"limit to N nodes","required":false,"type":"integer"}])___";
+    static YAML::Node GetParameters() {
+        return YAML::Load(R"___(
+            - name: version
+              in: query
+              description: query version (v1, v2)
+              required: false
+              type: string
+            - name: path
+              in: query
+              description: schema path
+              required: false
+              type: string
+            - name: enums
+              in: query
+              description: convert enums to strings
+              required: false
+              type: boolean
+            - name: ui64
+              in: query
+              description: return ui64 as number
+              required: false
+              type: boolean
+            - name: timeout
+              in: query
+              description: timeout in ms
+              required: false
+              type: integer
+            - name: uptime
+              in: query
+              description: return only nodes with less uptime in sec.
+              required: false
+              type: integer
+            - name: problems_only
+              in: query
+              description: return only problem nodes
+              required: false
+              type: boolean
+            - name: filter
+              in: query
+              description: filter nodes by id or host
+              required: false
+              type: string
+            - name: sort
+              in: query
+              description: sort by (NodeId,Host,DC,Rack,Version,Uptime,Memory,CPU,LoadAverage)
+              required: false
+              type: string
+            - name: offset
+              in: query
+              description: skip N nodes
+              required: false
+              type: integer
+            - name: limit
+              in: query
+              description: limit to N nodes
+              required: false
+              type: integer
+        )___");
     }
 };
 
 template <>
 struct TJsonRequestSummary<TJsonCompute> {
     static TString GetSummary() {
-        return "\"Database compute information\"";
+        return "Database compute information";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonCompute> {
     static TString GetDescription() {
-        return "\"Returns information about compute layer of database\"";
+        return "Returns information about compute layer of database";
     }
 };
 

@@ -45,6 +45,7 @@ STFUNC(TController::StateWork) {
         HFunc(TEvController::TEvCreateReplication, Handle);
         HFunc(TEvController::TEvAlterReplication, Handle);
         HFunc(TEvController::TEvDropReplication, Handle);
+        HFunc(TEvController::TEvDescribeReplication, Handle);
         HFunc(TEvPrivate::TEvDropReplication, Handle);
         HFunc(TEvPrivate::TEvDiscoveryTargetsResult, Handle);
         HFunc(TEvPrivate::TEvAssignStreamName, Handle);
@@ -122,6 +123,11 @@ void TController::Handle(TEvController::TEvDropReplication::TPtr& ev, const TAct
 void TController::Handle(TEvPrivate::TEvDropReplication::TPtr& ev, const TActorContext& ctx) {
     CLOG_T(ctx, "Handle " << ev->Get()->ToString());
     RunTxDropReplication(ev, ctx);
+}
+
+void TController::Handle(TEvController::TEvDescribeReplication::TPtr& ev, const TActorContext& ctx) {
+    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    RunTxDescribeReplication(ev, ctx);
 }
 
 void TController::Handle(TEvPrivate::TEvDiscoveryTargetsResult::TPtr& ev, const TActorContext& ctx) {

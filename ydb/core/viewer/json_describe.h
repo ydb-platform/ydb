@@ -320,43 +320,102 @@ public:
 
 template <>
 struct TJsonRequestSchema<TJsonDescribe> {
-    static TString GetSchema() {
-        TStringStream stream;
-        TProtoToJson::ProtoToJsonSchema<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::ProtoRecordType>(stream);
-        return stream.Str();
+    static YAML::Node GetSchema() {
+        return TProtoToYaml::ProtoToYamlSchema<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::ProtoRecordType>();
     }
 };
 
 template <>
 struct TJsonRequestParameters<TJsonDescribe> {
-    static TString GetParameters() {
-        return R"___([{"name":"path","in":"query","description":"schema path","required":false,"type":"string"},
-                      {"name":"schemeshard_id","in":"query","description":"schemeshard identifier (tablet id)","required":false,"type":"integer"},
-                      {"name":"path_id","in":"query","description":"path id","required":false,"type":"integer"},
-                      {"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
-                      {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
-                      {"name":"backup","in":"query","description":"return backup information","required":false,"type":"boolean","default":true},
-                      {"name":"private","in":"query","description":"return private tables","required":false,"type":"boolean","default":true},
-                      {"name":"children","in":"query","description":"return children","required":false,"type":"boolean","default":true},
-                      {"name":"boundaries","in":"query","description":"return boundaries","required":false,"type":"boolean","default":false},
-                      {"name":"partition_config","in":"query","description":"return partition configuration","required":false,"type":"boolean","default":true},
-                      {"name":"partition_stats","in":"query","description":"return partitions statistics","required":false,"type":"boolean","default":false},
-                      {"name":"partitioning_info","in":"query","description":"return partitioning information","required":false,"type":"boolean","default":true},
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___";
+    static YAML::Node GetParameters() {
+        return YAML::Load(R"___(
+            - name: path
+              in: query
+              description: schema path
+              required: false
+              type: string
+            - name: schemeshard_id
+              in: query
+              description: schemeshard identifier (tablet id)
+              required: false
+              type: integer
+            - name: path_id
+              in: query
+              description: path id
+              required: false
+              type: integer
+            - name: enums
+              in: query
+              description: convert enums to strings
+              required: false
+              type: boolean
+            - name: ui64
+              in: query
+              description: return ui64 as number
+              required: false
+              type: boolean
+            - name: backup
+              in: query
+              description: return backup information
+              required: false
+              type: boolean
+              default: true
+            - name: private
+              in: query
+              description: return private tables
+              required: false
+              type: boolean
+              default: true
+            - name: children
+              in: query
+              description: return children
+              required: false
+              type: boolean
+              default: true
+            - name: boundaries
+              in: query
+              description: return boundaries
+              required: false
+              type: boolean
+              default: false
+            - name: partition_config
+              in: query
+              description: return partition configuration
+              required: false
+              type: boolean
+              default: true
+            - name: partition_stats
+              in: query
+              description: return partitions statistics
+              required: false
+              type: boolean
+              default: false
+            - name: partitioning_info
+              in: query
+              description: return partitioning information
+              required: false
+              type: boolean
+              default: true
+            - name: timeout
+              in: query
+              description: timeout in ms
+              required: false
+              type: integer
+            )___");
     }
 };
 
 template <>
 struct TJsonRequestSummary<TJsonDescribe> {
     static TString GetSummary() {
-        return "\"Schema detailed information\"";
+        return "Schema detailed information";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonDescribe> {
     static TString GetDescription() {
-        return "\"Returns detailed information about schema object\"";
+        return "Returns detailed information about schema object";
     }
 };
 

@@ -269,10 +269,11 @@ public:
     , Cache(cache)
     , Terminating(false)
     , SerializerContext(ctx, rowType, rowPacker)
+    , Ctx(ctx)
     {}
 
     NUdf::TUnboxedValue Save() const override {
-        TMrOutputSerializer out(SerializerContext, EMkqlStateType::SIMPLE_BLOB, StateVersion);
+        TMrOutputSerializer out(SerializerContext, EMkqlStateType::SIMPLE_BLOB, StateVersion, Ctx);
         out.Write(CurPartitionPackedKey);
         bool isValid = static_cast<bool>(PartitionHandler);
         out.Write(isValid);
@@ -288,7 +289,7 @@ public:
         return out.MakeState();
     }
 
-    void Load(const NUdf::TStringRef& state) override {
+    bool Load2(const NUdf::TUnboxedValue& state) override {
         TMrInputSerializer in(SerializerContext, state);
 
         const auto loadStateVersion = in.GetStateVersion();
@@ -316,6 +317,11 @@ public:
         restoredRowPatternConfiguration->Load(in);
         MKQL_ENSURE(*restoredRowPatternConfiguration == *RowPatternConfiguration, "Restored and current RowPatternConfiguration is different");
         MKQL_ENSURE(in.Empty(), "State is corrupted");
+        return true;
+    }
+
+    bool HasListItems() const override {
+        return false;
     }
 
     bool ProcessInputRow(NUdf::TUnboxedValue&& row, TComputationContext& ctx) {
@@ -386,6 +392,7 @@ private:
     NUdf::TUnboxedValue DelayedRow;
     bool Terminating;
     TSerializerContext SerializerContext;
+    TComputationContext& Ctx;
 };
 
 class TStateForInterleavedPartitions
@@ -413,10 +420,11 @@ public:
     , NfaTransitionGraph(TNfaTransitionGraphBuilder::Create(parameters.Pattern, parameters.VarNamesLookup))
     , Cache(cache)
     , SerializerContext(ctx, rowType, rowPacker)
+    , Ctx(ctx)
     {}
 
     NUdf::TUnboxedValue Save() const override {
-        TMrOutputSerializer serializer(SerializerContext, EMkqlStateType::SIMPLE_BLOB, StateVersion);
+        TMrOutputSerializer serializer(SerializerContext, EMkqlStateType::SIMPLE_BLOB, StateVersion, Ctx);
         serializer.Write(Partitions.size());
 
         for (const auto& [key, state] : Partitions) {
@@ -429,7 +437,7 @@ public:
         return serializer.MakeState();
     }
 
-    void Load(const NUdf::TStringRef& state) override {
+    bool Load2(const NUdf::TUnboxedValue& state) override {
         TMrInputSerializer in(SerializerContext, state);
         
         const auto loadStateVersion = in.GetStateVersion();
@@ -464,6 +472,11 @@ public:
         MKQL_ENSURE(NfaTransitionGraph, "Empty NfaTransitionGraph");
         MKQL_ENSURE(*restoredTransitionGraph == *NfaTransitionGraph, "Restored and current NfaTransitionGraph is different");
         MKQL_ENSURE(in.Empty(), "State is corrupted");
+        return true;
+    }
+
+    bool HasListItems() const override {
+        return false;
     }
 
     bool ProcessInputRow(NUdf::TUnboxedValue&& row, TComputationContext& ctx) {
@@ -529,6 +542,7 @@ private:
     const TNfaTransitionGraph::TPtr NfaTransitionGraph;
     const TContainerCacheOnContext& Cache;
     TSerializerContext SerializerContext;
+    TComputationContext& Ctx;
 };
 
 template<class State>
@@ -565,20 +579,24 @@ public:
                 RowType,
                 RowPacker
             );
-        } else if (stateValue.HasValue() && !stateValue.IsBoxed()) {
-            // Load from saved state.
-            NUdf::TUnboxedValue state = ctx.HolderFactory.Create<State>(
-                InputRowArg,
-                PartitionKey,
-                PartitionKeyType,
-                Parameters,
-                Cache,
-                ctx,
-                RowType,
-                RowPacker
-            );
-            state.Load(stateValue.AsStringRef());
-            stateValue = state;
+        } else if (stateValue.HasValue()) {
+            MKQL_ENSURE(stateValue.IsBoxed(), "Expected boxed value");
+            bool isStateToLoad = stateValue.HasListItems();
+            if (isStateToLoad) {
+                // Load from saved state.
+                NUdf::TUnboxedValue state = ctx.HolderFactory.Create<State>(
+                    InputRowArg,
+                    PartitionKey,
+                    PartitionKeyType,
+                    Parameters,
+                    Cache,
+                    ctx,
+                    RowType,
+                    RowPacker
+                );
+                state.Load2(stateValue);
+                stateValue = state;
+            }
         }
         auto state = static_cast<State*>(stateValue.AsBoxed().Get());
         while (true) {

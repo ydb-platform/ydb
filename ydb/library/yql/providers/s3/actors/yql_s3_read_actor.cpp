@@ -160,12 +160,12 @@ struct TEvS3FileQueue {
 
         EvEnd
     };
-    static_assert(EvEnd < EventSpaceEnd(NKikimr::TKikimrEvents::ES_S3_FILE_QUEUE), 
+    static_assert(EvEnd < EventSpaceEnd(NKikimr::TKikimrEvents::ES_S3_FILE_QUEUE),
                   "expect EvEnd < EventSpaceEnd(TEvents::ES_S3_FILE_QUEUE)");
-    
+
     struct TEvUpdateConsumersCount :
         public TEventPB<TEvUpdateConsumersCount, NS3::FileQueue::TEvUpdateConsumersCount, EvUpdateConsumersCount> {
-        
+
         explicit TEvUpdateConsumersCount(ui64 consumersCountDelta = 0) {
             Record.SetConsumersCountDelta(consumersCountDelta);
         }
@@ -173,7 +173,7 @@ struct TEvS3FileQueue {
 
     struct TEvAck :
         public TEventPB<TEvAck, NS3::FileQueue::TEvAck, EvAck> {
-        
+
         TEvAck() = default;
 
         explicit TEvAck(const TMessageTransportMeta& transportMeta) {
@@ -388,6 +388,7 @@ public:
         TPathList paths,
         size_t prefetchSize,
         ui64 fileSizeLimit,
+        ui64 readLimit,
         bool useRuntimeListing,
         ui64 consumersCount,
         ui64 batchSizeLimit,
@@ -401,6 +402,7 @@ public:
         : TxId(std::move(txId))
         , PrefetchSize(prefetchSize)
         , FileSizeLimit(fileSizeLimit)
+        , ReadLimit(readLimit)
         , MaybeIssues(Nothing())
         , UseRuntimeListing(useRuntimeListing)
         , ConsumersCount(consumersCount)
@@ -513,7 +515,9 @@ public:
                 // skip 'directories'
                 continue;
             }
-            if (object.Size > FileSizeLimit) {
+
+            const ui64 bytesUsed = std::min(object.Size, ReadLimit);
+            if (bytesUsed > FileSizeLimit) {
                 auto errorMessage = TStringBuilder()
                                     << "Size of object " << object.Path << " = "
                                     << object.Size
@@ -525,10 +529,10 @@ public:
             LOG_T("TS3FileQueueActor", "SaveRetrievedResults adding path: " << object.Path << " of size " << object.Size);
             TObjectPath objectPath;
             objectPath.SetPath(object.Path);
-            objectPath.SetSize(object.Size);
+            objectPath.SetSize(bytesUsed);
             objectPath.SetPathIndex(CurrentDirectoryPathIndex);
             Objects.emplace_back(std::move(objectPath));
-            ObjectsTotalSize += object.Size;
+            ObjectsTotalSize += bytesUsed;
         }
         return true;
     }
@@ -598,7 +602,7 @@ public:
         Send(ev->Sender, new TEvS3FileQueue::TEvObjectPathReadError(*MaybeIssues, ev->Get()->Record.GetTransportMeta()));
         TryFinish(ev->Sender, ev->Get()->Record.GetTransportMeta().GetSeqNo());
     }
-    
+
     void HandleUpdateConsumersCount(TEvS3FileQueue::TEvUpdateConsumersCount::TPtr& ev) {
         if (!UpdatedConsumers.contains(ev->Sender)) {
             UpdatedConsumers.insert(ev->Sender);
@@ -653,7 +657,7 @@ private:
 
         LOG_D("TS3FileQueueActor", "SendObjects Sending " << result.size() << " objects to consumer with id " << consumer << ", " << ObjectsTotalSize << " bytes left");
         Send(consumer, new TEvS3FileQueue::TEvObjectPathBatch(std::move(result), HasNoMoreItems(), transportMeta));
-        
+
         if (HasNoMoreItems()) {
             TryFinish(consumer, transportMeta.GetSeqNo());
         }
@@ -675,7 +679,7 @@ private:
     }
 
     bool CanSendToConsumer(const TActorId& consumer) {
-        return !UseRuntimeListing || RoundRobinStageFinished || 
+        return !UseRuntimeListing || RoundRobinStageFinished ||
                (StartedConsumers.size() < ConsumersCount && !StartedConsumers.contains(consumer));
     }
 
@@ -753,7 +757,7 @@ private:
                     }
                 });
     }
-    
+
     void ScheduleRequest(const TActorId& consumer, const TMessageTransportMeta& transportMeta) {
         PendingRequests[consumer].push_back(transportMeta);
         HasPendingRequests = true;
@@ -790,7 +794,7 @@ private:
             }
         }
     }
-    
+
     void TryFinish(const TActorId& consumer, ui64 seqNo) {
         LOG_T("TS3FileQueueActor", "TryFinish from consumer " << consumer << ", " << FinishedConsumers.size() << " consumers already finished, seqNo=" << seqNo);
         if (FinishingConsumerToLastSeqNo.contains(consumer)) {
@@ -814,6 +818,7 @@ private:
 
     size_t PrefetchSize;
     ui64 FileSizeLimit;
+    ui64 ReadLimit;
     TMaybe<NS3Lister::IS3Lister::TPtr> MaybeLister = Nothing();
     TMaybe<NThreading::TFuture<NS3Lister::TListResult>> ListingFuture;
     size_t CurrentDirectoryPathIndex = 0;
@@ -838,7 +843,7 @@ private:
     const TString Pattern;
     const ES3PatternVariant PatternVariant;
     const ES3PatternType PatternType;
-    
+
     static constexpr TDuration PoisonTimeout = TDuration::Hours(3);
     static constexpr TDuration RoundRobinStageTimeout = TDuration::Seconds(3);
 };
@@ -918,6 +923,7 @@ public:
                 std::move(Paths),
                 ReadActorFactoryCfg.MaxInflight * 2,
                 FileSizeLimit,
+                SizeLimit,
                 false,
                 1,
                 FileQueueBatchSizeLimit,
@@ -1012,8 +1018,8 @@ public:
     static constexpr char ActorName[] = "S3_READ_ACTOR";
 
 private:
-    void SaveState(const NDqProto::TCheckpoint&, NDqProto::TSourceState&) final {}
-    void LoadState(const NDqProto::TSourceState&) final {}
+    void SaveState(const NDqProto::TCheckpoint&, TSourceState&) final {}
+    void LoadState(const TSourceState&) final {}
     void CommitState(const NDqProto::TCheckpoint&) final {}
 
     ui64 GetInputIndex() const final {
@@ -1097,7 +1103,7 @@ private:
     void HandleAck(TEvS3FileQueue::TEvAck::TPtr& ev) {
         FileQueueEvents.OnEventReceived(ev);
     }
-    
+
     static void OnDownloadFinished(TActorSystem* actorSystem, TActorId selfId, const TString& requestId, IHTTPGateway::TResult&& result, size_t pathInd, const TString path) {
         if (!result.Issues) {
             actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvReadResult(std::move(result.Content), requestId, pathInd, path)));
@@ -1209,7 +1215,7 @@ private:
         auto issues = NS3Util::AddParentIssue(TStringBuilder{} << "Error while reading file " << path << " with request id [" << requestId << "]", TIssues{result->Get()->Error});
         Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
     }
-    
+
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr&) {
         FileQueueEvents.Retry();
     }
@@ -2088,7 +2094,7 @@ public:
                 if (isCancelled) {
                     LOG_CORO_D("RunCoroBlockArrowParserOverHttp - STOPPED ON SATURATION, downloaded " <<
                                QueueBufferCounter->DownloadedBytes << " bytes");
-                    break;        
+                    break;
                 }
             }
         }
@@ -2538,6 +2544,7 @@ public:
         ::NMonitoring::TDynamicCounterPtr counters,
         ::NMonitoring::TDynamicCounterPtr taskCounters,
         ui64 fileSizeLimit,
+        ui64 readLimit,
         std::optional<ui64> rowsLimitHint,
         IMemoryQuotaManager::TPtr memoryQuotaManager,
         bool useRuntimeListing,
@@ -2564,6 +2571,7 @@ public:
         , TaskCounters(std::move(taskCounters))
         , FileQueueActor(fileQueueActor)
         , FileSizeLimit(fileSizeLimit)
+        , ReadLimit(readLimit)
         , MemoryQuotaManager(memoryQuotaManager)
         , UseRuntimeListing(useRuntimeListing)
         , FileQueueBatchSizeLimit(fileQueueBatchSizeLimit)
@@ -2622,6 +2630,7 @@ public:
                 std::move(Paths),
                 ReadActorFactoryCfg.MaxInflight * 2,
                 FileSizeLimit,
+                ReadLimit,
                 false,
                 1,
                 FileQueueBatchSizeLimit,
@@ -2779,12 +2788,12 @@ private:
         size_t PathInd;
     };
 
-    void SaveState(const NDqProto::TCheckpoint&, NDqProto::TSourceState&) final {}
-    void LoadState(const NDqProto::TSourceState&) final {}
+    void SaveState(const NDqProto::TCheckpoint&, TSourceState&) final {}
+    void LoadState(const TSourceState&) final {}
     void CommitState(const NDqProto::TCheckpoint&) final {}
 
     ui64 GetInputIndex() const final {
-        return InputIndex; 
+        return InputIndex;
     }
 
     const TDqAsyncStats& GetIngressStats() const final {
@@ -3038,7 +3047,7 @@ private:
             }
         }
     }
-    
+
     void Handle(TEvS3FileQueue::TEvAck::TPtr& ev) {
         FileQueueEvents.OnEventReceived(ev);
     }
@@ -3136,6 +3145,7 @@ private:
     std::set<NActors::TActorId> CoroActors;
     NActors::TActorId FileQueueActor;
     const ui64 FileSizeLimit;
+    const ui64 ReadLimit;
     bool Bootstrapped = false;
     IMemoryQuotaManager::TPtr MemoryQuotaManager;
     bool UseRuntimeListing;
@@ -3295,6 +3305,7 @@ IActor* CreateS3FileQueueActor(
         TPathList paths,
         size_t prefetchSize,
         ui64 fileSizeLimit,
+        ui64 readLimit,
         bool useRuntimeListing,
         ui64 consumersCount,
         ui64 batchSizeLimit,
@@ -3310,6 +3321,7 @@ IActor* CreateS3FileQueueActor(
         paths,
         prefetchSize,
         fileSizeLimit,
+        readLimit,
         useRuntimeListing,
         consumersCount,
         batchSizeLimit,
@@ -3394,7 +3406,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     if (params.GetRowsLimitHint() != 0) {
         rowsLimitHint = params.GetRowsLimitHint();
     }
-    
+
     TActorId fileQueueActor;
     if (auto it = settings.find("fileQueueActor"); it != settings.cend()) {
         NActorsProto::TActorId protoId;
@@ -3402,7 +3414,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
         ParseFromTextFormat(inputStream, protoId);
         fileQueueActor = ActorIdFromProto(protoId);
     }
-    
+
     ui64 fileQueueBatchSizeLimit = 0;
     if (auto it = settings.find("fileQueueBatchSizeLimit"); it != settings.cend()) {
         fileQueueBatchSizeLimit = FromString<ui64>(it->second);
@@ -3412,7 +3424,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     if (auto it = settings.find("fileQueueBatchObjectCountLimit"); it != settings.cend()) {
         fileQueueBatchObjectCountLimit = FromString<ui64>(it->second);
     }
-    
+
     ui64 fileQueueConsumersCountDelta = 0;
     if (readRanges.size() > 1) {
         fileQueueConsumersCountDelta = readRanges.size() - 1;
@@ -3520,9 +3532,14 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
 
 #undef SET_FLAG
 #undef SUPPORTED_FLAGS
+        ui64 sizeLimit = std::numeric_limits<ui64>::max();
+        if (const auto it = settings.find("sizeLimit"); settings.cend() != it) {
+            sizeLimit = FromString<ui64>(it->second);
+        }
+
         const auto actor = new TS3StreamReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, params.GetUrl(), authInfo, pathPattern, pathPatternVariant,
                                                   std::move(paths), addPathIndex, readSpec, computeActorId, retryPolicy,
-                                                  cfg, counters, taskCounters, fileSizeLimit, rowsLimitHint, memoryQuotaManager,
+                                                  cfg, counters, taskCounters, fileSizeLimit, sizeLimit, rowsLimitHint, memoryQuotaManager,
                                                   params.GetUseRuntimeListing(), fileQueueActor, fileQueueBatchSizeLimit, fileQueueBatchObjectCountLimit, fileQueueConsumersCountDelta);
 
         return {actor, actor};

@@ -572,13 +572,24 @@ void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& 
     const NSQLTranslation::TTranslationSettings*& currentSettings)
 {
     if (QContext_.CanWrite()) {
-        auto clusterMappingsNode = NYT::TNode();
+        auto clusterMappingsNode = NYT::TNode::CreateMap();
         for (const auto& c : currentSettings->ClusterMapping) {
             clusterMappingsNode(c.first, c.second);
         }
 
+        auto sqlFlagsNode = NYT::TNode::CreateList();
+        for (const auto& f : currentSettings->Flags) {
+            sqlFlagsNode.Add(f);
+        }
+
         auto dataNode = NYT::TNode()
-            ("ClusterMapping", clusterMappingsNode);
+            ("ClusterMapping", clusterMappingsNode)
+            ("V0Behavior", ui64(currentSettings->V0Behavior))
+            ("V0WarnAsError", currentSettings->V0WarnAsError->Allow())
+            ("DqDefaultAuto", currentSettings->DqDefaultAuto->Allow())
+            ("BlockDefaultAuto", currentSettings->BlockDefaultAuto->Allow())
+            ("SqlFlags", sqlFlagsNode);
+
         auto data = NYT::NodeToYsonString(dataNode, NYT::NYson::EYsonFormat::Binary);
         QContext_.GetWriter()->Put({FacadeComponent, TranslationLabel}, data).GetValueSync();
     } else if (QContext_.CanRead()) {
@@ -588,10 +599,20 @@ void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& 
         }
 
         auto dataNode = NYT::NodeFromYsonString(loaded->Value);
+        loadedSettings.ClusterMapping.clear();
         for (const auto& c : dataNode["ClusterMapping"].AsMap()) {
             loadedSettings.ClusterMapping[c.first] = c.second.AsString();
         }
+
+        loadedSettings.Flags.clear();
+        for (const auto& f : dataNode["SqlFlags"].AsList()) {
+            loadedSettings.Flags.insert(f.AsString());
+        }
     
+        loadedSettings.V0Behavior = (NSQLTranslation::EV0Behavior)dataNode["V0Behavior"].AsUint64();
+        loadedSettings.V0WarnAsError = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["V0WarnAsError"].AsBool());
+        loadedSettings.DqDefaultAuto = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["DqDefaultAuto"].AsBool());
+        loadedSettings.BlockDefaultAuto = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["BlockDefaultAuto"].AsBool());
         currentSettings = &loadedSettings;
     }
 }
@@ -629,6 +650,7 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
     HandleSourceCode(sourceCode);
     const NSQLTranslation::TTranslationSettings* currentSettings = &settings;
     NSQLTranslation::TTranslationSettings loadedSettings;
+    loadedSettings.PgParser = settings.PgParser;
     if (QContext_) {
         HandleTranslationSettings(loadedSettings, currentSettings);
     }

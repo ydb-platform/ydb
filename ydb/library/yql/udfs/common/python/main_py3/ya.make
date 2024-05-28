@@ -1,7 +1,5 @@
 LIBRARY()
 
-SUBSCRIBER(g:yql sinister)
-
 USE_PYTHON3()
 
 ADDINCL(

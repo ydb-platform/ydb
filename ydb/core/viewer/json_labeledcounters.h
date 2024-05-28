@@ -149,40 +149,87 @@ public:
 
 template <>
 struct TJsonRequestSchema<TJsonLabeledCounters> {
-    static TString GetSchema() {
-        TStringStream stream;
-        TProtoToJson::ProtoToJsonSchema<TEvTabletCounters::TEvTabletLabeledCountersResponse::ProtoRecordType>(stream);
-        return stream.Str();
+    static YAML::Node GetSchema() {
+        return TProtoToYaml::ProtoToYamlSchema<TEvTabletCounters::TEvTabletLabeledCountersResponse::ProtoRecordType>();
     }
 };
 
 template <>
 struct TJsonRequestParameters<TJsonLabeledCounters> {
-    static TString GetParameters() {
-        return R"___([{"name":"group","in":"query","description":"group name","required":false,"type":"string"},
-                      {"name":"dc","in":"query","description":"datacenter name","required":false,"type":"string", "default":"*"},
-                      {"name":"topic","in":"query","description":"topic name","required":false,"type":"string", "default":"*"},
-                      {"name":"consumer","in":"query","description":"consumer name","required":false,"type":"string", "default":""},
-                      {"name":"group_names","in":"query","description":"group names","required":false,"type":"string"},
-                      {"name":"counters","in":"query","description":"counters names","required":false,"type":"string"},
-                      {"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean","default":false},
-                      {"name":"all","in":"query","description":"return information about all topics and clients","required":false,"type":"boolean","default":false},
-                      {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean","default":false},
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer","default":10000}])___";
+    static YAML::Node GetParameters() {
+        return YAML::Load(R"___(
+            - name: group
+              in: query
+              description: group name
+              required: false
+              type: string
+            - name: dc
+              in: query
+              description: datacenter name
+              required: false
+              type: string
+              default: "*"
+            - name: topic
+              in: query
+              description: topic name
+              required: false
+              type: string
+              default: "*"
+            - name: consumer
+              in: query
+              description: consumer name
+              required: false
+              type: string
+              default: ""
+            - name: group_names
+              in: query
+              description: group names
+              required: false
+              type: string
+            - name: counters
+              in: query
+              description: counters names
+              required: false
+              type: string
+            - name: enums
+              in: query
+              description: convert enums to strings
+              required: false
+              type: boolean
+              default: false
+            - name: all
+              in: query
+              description: return information about all topics and clients
+              required: false
+              type: boolean
+              default: false
+            - name: ui64
+              in: query
+              description: return ui64 as number
+              required: false
+              type: boolean
+              default: false
+            - name: timeout
+              in: query
+              description: timeout in ms
+              required: false
+              type: integer
+              default: 10000
+            )___");
     }
 };
 
 template <>
 struct TJsonRequestSummary<TJsonLabeledCounters> {
     static TString GetSummary() {
-        return "\"Labeled counters info\"";
+        return "Labeled counters info";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonLabeledCounters> {
     static TString GetDescription() {
-        return "\"Returns information about labeled counters\"";
+        return "Returns information about labeled counters";
     }
 };
 

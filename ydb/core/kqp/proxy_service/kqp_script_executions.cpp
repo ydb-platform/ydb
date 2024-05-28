@@ -96,7 +96,7 @@ private:
         return CreateTableCreator(
             { ".metadata", "script_executions" },
             {
-                Col("database", ";lkdlkfddlf"),
+                Col("database", NScheme::NTypeIds::Text),
                 Col("execution_id", NScheme::NTypeIds::Text),
                 Col("run_script_actor_id", NScheme::NTypeIds::Text),
                 Col("operation_status", NScheme::NTypeIds::Int32),

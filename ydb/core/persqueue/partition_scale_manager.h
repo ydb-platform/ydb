@@ -66,7 +66,7 @@ private:
     using TPartitionSplit = NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionSplit;
     using TPartitionMerge = NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionMerge;
 
-    std::pair<std::vector<TPartitionSplit>, std::vector<TPartitionMerge>> BuildScaleRequest();
+    std::pair<std::vector<TPartitionSplit>, std::vector<TPartitionMerge>> BuildScaleRequest(const TActorContext& ctx);
 
 public:
     static const ui64 TRY_SCALE_REQUEST_WAKE_UP_TAG = 10;

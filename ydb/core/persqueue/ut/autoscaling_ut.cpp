@@ -624,7 +624,6 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         a = "a";
         b = {};
         res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(a,b);
-        Cerr << "\n SAVDBG " << res << "\n";
         UNIT_ASSERT(a < res);
         UNIT_ASSERT(b != res);
 

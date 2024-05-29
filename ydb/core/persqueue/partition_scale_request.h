@@ -12,7 +12,7 @@
 
 namespace NKikimr {
 namespace NPQ {
-    
+
 class TPartitionScaleRequest: public NActors::TActorBootstrapped<TPartitionScaleRequest> {
     using TBase = NActors::TActorBootstrapped<TPartitionScaleRequest>;
 
@@ -48,7 +48,7 @@ private:
     }
     std::pair<TString, TString> SplitPath(const TString& path);
     void SendProposeRequest(const NActors::TActorContext &ctx);
-    void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TString& workingDir, const TString& topicName);
+    void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TString& workingDir, const TString& topicName, const NActors::TActorContext &ctx);
 
 private:
     const TString Topic;

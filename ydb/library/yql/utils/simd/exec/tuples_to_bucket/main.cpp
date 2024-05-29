@@ -135,6 +135,14 @@ struct TPerfomancer {
     };
 };
 
+template
+__attribute__((target("avx2")))
+int TPerfomancer::TWorker<NSimd::TSimdAVX2Traits>::TuplesToBucket(bool);
+
+template
+__attribute__((target("sse4.2")))
+int TPerfomancer::TWorker<NSimd::TSimdSSE42Traits>::TuplesToBucket(bool);
+
 int main() {
     TPerfomancer tp;
     auto worker = NSimd::SelectSimdTraits(tp);

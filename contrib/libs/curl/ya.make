@@ -20,12 +20,14 @@ PEERDIR(
     contrib/libs/nghttp2
     contrib/libs/openssl
     contrib/libs/zlib
+    contrib/libs/zstd
 )
 
 ADDINCL(
     GLOBAL contrib/libs/curl/include
     contrib/libs/c-ares/include
     contrib/libs/curl/lib
+    contrib/libs/zstd/include
 )
 
 NO_COMPILER_WARNINGS()

@@ -1,6 +1,7 @@
 #include <util/generic/ptr.h>
 #include <util/system/cpu_id.h>
 #include <util/system/types.h>
+#include <new>
 
 #include <ydb/library/yql/utils/simd/simd.h>
 
@@ -18,8 +19,8 @@ struct TPerfomancer {
         using TSimd = typename TTraits::template TSimd8<T>;
         TWorker() = default;
 
-        ui8* ShuffleMask(ui32 v[8]) {
-            ui8* det = new ui8[32];
+        TSimd<ui8> ShuffleMask(ui32 v[8]) {
+            ui8 det[32];
             for (size_t i = 0; i < 32; i += 1) {
                 det[i] = v[i / 4] == ui32(-1) ? ui8(-1) : 4 * v[i / 4] + i % 4;
             }
@@ -32,8 +33,8 @@ struct TPerfomancer {
             const ui64 NTuples = 32 << 18;
             const ui64 TupleSize =  sizeof(ui32) + sizeof(ui64);
 
-            ui32 *arrUi32 __attribute__((aligned(32))) = new ui32[NTuples];
-            ui64 *arrUi64 __attribute__((aligned(32))) = new ui64[NTuples];
+            ui32* arrUi32 = new (std::align_val_t(TTraits::Size)) ui32[NTuples];
+            ui64* arrUi64 = new (std::align_val_t(TTraits::Size)) ui64[NTuples];
 
             for (ui32 i = 0; i < NTuples; i++) {
                 arrUi32[i] = 2 * i;
@@ -143,8 +144,8 @@ struct TPerfomancer {
                     << " MB/sec" << Endl;
                 Cerr << Endl;
             }
-            delete[] arrUi32;
-            delete[] arrUi64;
+            operator delete[](arrUi64, std::align_val_t(TTraits::Size));
+            operator delete[](arrUi32, std::align_val_t(TTraits::Size));
 
             return 1;
         }

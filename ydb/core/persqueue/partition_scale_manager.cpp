@@ -18,7 +18,7 @@ TPartitionScaleManager::TPartitionScaleManager(
 void TPartitionScaleManager::HandleScaleStatusChange(const TPartitionInfo& partition, NKikimrPQ::EScaleStatus scaleStatus, const TActorContext& ctx) {
     if (scaleStatus == NKikimrPQ::EScaleStatus::NEED_SPLIT) {
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, "TPartitionScaleManager::HandleScaleStatusChange "
-            << "need to split partition " << partition);
+            << "need to split partition " << partition.Id);
         PartitionsToSplit.emplace(partition.Id, partition);
         TrySendScaleRequest(ctx);
     } else {

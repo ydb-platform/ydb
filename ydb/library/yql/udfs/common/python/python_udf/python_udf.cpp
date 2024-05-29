@@ -1,8 +1,8 @@
 #include "python_udf.h"
 #include "python_function_factory.h"
 
-#include <contrib/ydb/library/yql/public/udf/udf_version.h>
-#include <contrib/ydb/library/yql/udfs/common/python/bindings/py_utils.h>
+#include <ydb/library/yql/public/udf/udf_version.h>
+#include <ydb/library/yql/udfs/common/python/bindings/py_utils.h>
 
 #include <util/generic/vector.h>
 #include <util/system/execpath.h>

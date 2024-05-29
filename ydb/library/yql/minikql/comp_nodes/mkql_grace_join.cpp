@@ -596,6 +596,10 @@ public:
     }
 
     EFetchResult FetchValues(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
+        if (!IsLogPrinted) {
+            std::cerr << "[MISHA] new join\n";
+            IsLogPrinted = true;
+        }
         while (true) {
             switch(GetMode()) {
                 case EOperatingMode::InMemory: {
@@ -622,6 +626,8 @@ public:
     }
 
 private:
+    bool IsLogPrinted = false;
+
     EOperatingMode GetMode() const {
         return Mode;
     }
@@ -800,6 +806,7 @@ private:
             }
 
         }
+        std::cerr << "[MISHA] join finished\n";
 
         return EFetchResult::Finish;
     }
@@ -832,7 +839,7 @@ private:
 void DoCalculateWithSpilling(TComputationContext& ctx) {
     UpdateSpilling();
 
-    if (!HasMemoryForProcessing()) {
+    if (!HasMemoryForProcessing() && !IsSpillingFinalized) {
         bool isWaitingForReduce = TryToReduceMemoryAndWait();
         if (isWaitingForReduce) return;
     }
@@ -906,6 +913,7 @@ EFetchResult ProcessSpilledData(TComputationContext&, NUdf::TUnboxedValue*const*
 
                 NextBucketToJoin++;
             } else {
+                std::cerr << "[MISHA] joining\n";
                 *PartialJoinCompleted = true;
                 LeftPacker->StartTime = std::chrono::system_clock::now();
                 RightPacker->StartTime = std::chrono::system_clock::now();

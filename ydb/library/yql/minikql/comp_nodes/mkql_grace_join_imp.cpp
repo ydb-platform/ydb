@@ -1172,7 +1172,10 @@ void TTable::UpdateSpilling() {
 
 bool TTable::IsSpillingFinished() const {
     for (ui64 i = 0; i < NumberOfBuckets; ++i) {
-        if (TableBucketsSpillers[i].IsProcessingSpilling()) return false;
+        if (TableBucketsSpillers[i].IsProcessingSpilling()) {
+            std::cerr << std::format("[MISHA] bucket {} still spilling : {}\n", i, TableBucketsSpillers[i].GetStateName());
+            return false;
+        }
     }
     return true;
 }

@@ -40,6 +40,7 @@ namespace NViewer {
 using namespace NNodeWhiteboard;
 
 extern void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers);
+extern void InitPDiskJsonHandlers(TJsonHandlers& jsonHandlers);
 extern void InitVDiskJsonHandlers(TJsonHandlers& jsonHandlers);
 
 void SetupPQVirtualHandlers(IViewer* viewer) {
@@ -92,13 +93,13 @@ public:
         if (mon) {
             NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(VIEWER_PROVIDER));
             TVector<TString> viewerAllowedSIDs;
+            TVector<TString> monitoringAllowedSIDs;
             {
                 const auto& protoAllowedSIDs = KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetViewerAllowedSIDs();
                 for (const auto& sid : protoAllowedSIDs) {
                     viewerAllowedSIDs.emplace_back(sid);
                 }
             }
-            TVector<TString> monitoringAllowedSIDs;
             {
                 const auto& protoAllowedSIDs = KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetMonitoringAllowedSIDs();
                 for (const auto& sid : protoAllowedSIDs) {
@@ -146,6 +147,14 @@ public:
                 .UseAuth = true,
                 .AllowedSIDs = monitoringAllowedSIDs,
             });
+            mon->RegisterActorPage({
+                .Title = "PDisk",
+                .RelPath = "pdisk",
+                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorId = ctx.SelfID,
+                .UseAuth = true,
+                .AllowedSIDs = monitoringAllowedSIDs,
+            });
             auto whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId());
             ctx.Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddEndpoint(
                 "http-mon", Sprintf(":%d", KikimrRunConfig.AppConfig.GetMonitoringConfig().GetMonitoringPort())));
@@ -153,7 +162,25 @@ public:
             AllowOrigin = KikimrRunConfig.AppConfig.GetMonitoringConfig().GetAllowOrigin();
 
             InitViewerJsonHandlers(JsonHandlers);
+            InitPDiskJsonHandlers(JsonHandlers);
             InitVDiskJsonHandlers(JsonHandlers);
+
+            for (const auto& handler : JsonHandlers.JsonHandlersList) {
+                // temporary handling of old paths
+                TStringBuf newPath(handler);
+                TString oldPath = "/" + TString(newPath.After('/').Before('/')) + "/json/" + TString(newPath.After('/').After('/'));
+                JsonHandlers.JsonHandlersIndex[oldPath] = JsonHandlers.JsonHandlersIndex[newPath];
+            }
+
+            // TODO: redirect old paths
+            Redirect307["/viewer/v2/json/config"] = "/viewer/config";
+            Redirect307["/viewer/v2/json/sysinfo"] = "/viewer/sysinfo";
+            Redirect307["/viewer/v2/json/pdiskinfo"] = "/viewer/pdiskinfo";
+            Redirect307["/viewer/v2/json/vdiskinfo"] = "/viewer/vdiskinfo";
+            Redirect307["/viewer/v2/json/storage"] = "/viewer/storage";
+            Redirect307["/viewer/v2/json/nodelist"] = "/viewer/nodelist";
+            Redirect307["/viewer/v2/json/tabletinfo"] = "/viewer/tabletinfo";
+            Redirect307["/viewer/v2/json/nodeinfo"] = "/viewer/nodeinfo";
 
             TWhiteboardInfo<NKikimrWhiteboard::TEvNodeStateResponse>::InitMerger();
             TWhiteboardInfo<NKikimrWhiteboard::TEvBSGroupStateResponse>::InitMerger();
@@ -166,9 +193,10 @@ public:
 
     TString GetCORS(const NMon::TEvHttpInfo* request) override;
     TString GetHTTPOK(const NMon::TEvHttpInfo* request, TString type, TString response, TInstant lastModified) override;
-    TString GetHTTPGATEWAYTIMEOUT(const NMon::TEvHttpInfo* request) override;
+    TString GetHTTPGATEWAYTIMEOUT(const NMon::TEvHttpInfo* request, TString type, TString response) override;
     TString GetHTTPBADREQUEST(const NMon::TEvHttpInfo* request, TString type, TString response) override;
     TString GetHTTPFORBIDDEN(const NMon::TEvHttpInfo* request) override;
+    TString GetHTTPNOTFOUND(const NMon::TEvHttpInfo* request) override;
 
     void RegisterVirtualHandler(
             NKikimrViewer::EObjectType parentObjectType,
@@ -200,6 +228,7 @@ public:
 
 private:
     TJsonHandlers JsonHandlers;
+    std::unordered_map<TString, TString> Redirect307;
     const TKikimrRunConfig KikimrRunConfig;
     std::unordered_multimap<NKikimrViewer::EObjectType, TVirtualHandler> VirtualHandlersByParentType;
     std::unordered_map<NKikimrViewer::EObjectType, TContentHandler> ContentHandlers;
@@ -217,22 +246,27 @@ private:
     YAML::Node GetSwaggerPathsYaml() {
         YAML::Node paths;
         for (const TString& name : JsonHandlers.JsonHandlersList) {
-            TAutoPtr<TJsonHandlerBase>& handler = JsonHandlers.JsonHandlersIndex[name];
+            const auto& handler = JsonHandlers.JsonHandlersIndex[name];
             TString tag = TString(TStringBuf(name.substr(1)).Before('/'));
             auto path = paths[name];
-            auto get = path["get"];
-            get["tags"].push_back(tag);
-            get["produces"].push_back("application/json");
-            if (auto summary = handler->GetRequestSummary()) {
-                get["summary"] = summary;
+            auto swagger = handler->GetRequestSwagger();
+            if (swagger.IsNull()) {
+                auto get = path["get"];
+                get["tags"].push_back(tag);
+                get["produces"].push_back("application/json");
+                if (auto summary = handler->GetRequestSummary()) {
+                    get["summary"] = summary;
+                }
+                if (auto description = handler->GetRequestDescription()) {
+                    get["description"] = description;
+                }
+                get["parameters"] = handler->GetRequestParameters();
+                auto responses = get["responses"];
+                auto response200 = responses["200"];
+                response200["schema"] = handler->GetResponseJsonSchema();
+            } else {
+                path = swagger;
             }
-            if (auto description = handler->GetRequestDescription()) {
-                get["description"] = description;
-            }
-            get["parameters"] = handler->GetRequestParameters();
-            auto responses = get["responses"];
-            auto response200 = responses["200"];
-            response200["schema"] = handler->GetResponseJsonSchema();
         }
         return paths;
     }
@@ -251,14 +285,20 @@ private:
         return yaml;
     }
 
-    static TInstant GetCompileTime() {
-        tm compileTime;
+    static time_t GetCompileTimeSeconds() {
+        tm compileTime = {};
         strptime(__DATE__ " " __TIME__, "%B %d %Y %H:%M:%S", &compileTime);
-        return TInstant::Seconds(mktime(&compileTime));
+        return mktime(&compileTime);
+    }
+
+    static TInstant GetCompileTime() {
+        static TInstant instantTime(timeval{.tv_sec = GetCompileTimeSeconds(), .tv_usec = 0});
+        return instantTime;
     }
 
     bool ReplyWithFile(NMon::TEvHttpInfo::TPtr& ev, const TString& name) {
         if (name == "/api/viewer.yaml") {
+            Cerr << "CompileTime is " << GetCompileTime() << Endl;
             Send(ev->Sender, new NMon::TEvHttpInfoRes(GetHTTPOKYAML(ev->Get(), Dump(GetSwaggerYaml()), GetCompileTime()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
             return true;
         }
@@ -360,56 +400,56 @@ private:
             }
             return;
         }
-        TString filename(msg->Request.GetPage()->Path + msg->Request.GetPathInfo());
-        if (msg->Request.GetPathInfo().StartsWith("/json/")) {
-            TString path = "/" + msg->Request.GetPage()->Path + msg->Request.GetPathInfo();
-            auto handler = JsonHandlers.FindHandler(path);
-            if (!handler) {
-                handler = JsonHandlers.FindHandler(TString(msg->Request.GetPathInfo()));
+        TString path("/" + msg->Request.GetPage()->Path + msg->Request.GetPathInfo());
+        auto itRedirect307 = Redirect307.find(path);
+        if (itRedirect307 != Redirect307.end()) {
+            TString redirect(msg->Request.GetUri());
+            redirect.erase(0, itRedirect307->first.size());
+            redirect.insert(0, itRedirect307->second);
+            Send(ev->Sender, new NMon::TEvHttpInfoRes("HTTP/1.1 307 Temporary Redirect\r\nLocation: " + redirect + "\r\n\r\n", 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+            return;
+        }
+        auto handler = JsonHandlers.FindHandler(path);
+        if (handler) {
+            try {
+                ctx.ExecutorThread.RegisterActor(handler->CreateRequestActor(this, ev));
+                return;
             }
-            if (handler) {
-                try {
-                    ctx.ExecutorThread.RegisterActor(handler->CreateRequestActor(this, ev));
-                    return;
-                }
-                catch (const std::exception& e) {
-                    ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(TString("HTTP/1.1 400 Bad Request\r\n\r\n") + e.what(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-                    return;
-                }
+            catch (const std::exception& e) {
+                ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(TString("HTTP/1.1 400 Bad Request\r\n\r\n") + e.what(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+                return;
             }
         }
-        if (filename.StartsWith("counters/hosts")) {
+        if (path.StartsWith("counters/hosts")) {
             ctx.ExecutorThread.RegisterActor(new TCountersHostsList(this, ev));
             return;
         }
-        if (filename.StartsWith("healthcheck")) {
+        if (path.StartsWith("healthcheck")) {
             ctx.ExecutorThread.RegisterActor(new TJsonHealthCheck(this, ev));
             return;
         }
         // TODO: check path validity
         // TODO: cache
         if (msg->Request.GetPathInfo().StartsWith('/')) {
-            if (filename.StartsWith("viewer")) {
-                filename.erase(0, 6);
-            } else if (filename.StartsWith("vdisk")) {
-                filename.erase(0, 5);
+            if (path.StartsWith("/viewer")) {
+                path.erase(0, 7);
             }
-            if (IsMatchesWildcard(filename, "monitoring*/static/js/*")
-            || IsMatchesWildcard(filename, "monitoring*/static/css/*")
-            || IsMatchesWildcard(filename, "monitoring*/static/media/*")
-            || IsMatchesWildcard(filename, "monitoring*/static/assets/fonts/*")
-            || IsMatchesWildcard(filename, "monitoring*/static/favicon.png")) {
-                auto resPos = filename.find("/static/");
+            if (IsMatchesWildcard(path, "monitoring*/static/js/*")
+            || IsMatchesWildcard(path, "monitoring*/static/css/*")
+            || IsMatchesWildcard(path, "monitoring*/static/media/*")
+            || IsMatchesWildcard(path, "monitoring*/static/assets/fonts/*")
+            || IsMatchesWildcard(path, "monitoring*/static/favicon.png")) {
+                auto resPos = path.find("/static/");
                 if (resPos != TString::npos) {
-                    filename = "monitoring" + filename.substr(resPos);
+                    path = "monitoring" + path.substr(resPos);
                 }
-            } else if (filename.StartsWith("monitoring") && filename != "monitoring/index.html") {
-                filename = "monitoring/index.html";
+            } else if (path.StartsWith("monitoring") && path != "monitoring/index.html") {
+                path = "monitoring/index.html";
             }
-            if (filename.EndsWith('/')) {
-                filename += "index.html";
+            if (path.EndsWith('/')) {
+                path += "index.html";
             }
-            if (ReplyWithFile(ev, filename)) {
+            if (ReplyWithFile(ev, path)) {
                 return;
             }
         }
@@ -422,7 +462,7 @@ private:
             ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes("HTTP/1.1 302 Found\r\nLocation: " + SplitPath(msg->Request.GetPage()->Path).back() + "/\r\n\r\n", 0, NMon::IEvHttpInfoRes::EContentType::Custom));
             return;
         }
-        ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(NMonitoring::HTTPNOTFOUND));
+        Send(ev->Sender, new NMon::TEvHttpInfoRes(GetHTTPNOTFOUND(ev->Get()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
     }
 };
 
@@ -474,20 +514,29 @@ TString TViewer::GetCORS(const NMon::TEvHttpInfo* request) {
     return res;
 }
 
-TString TViewer::GetHTTPGATEWAYTIMEOUT(const NMon::TEvHttpInfo* request) {
+TString TViewer::GetHTTPGATEWAYTIMEOUT(const NMon::TEvHttpInfo* request, TString contentType, TString response) {
     TStringBuilder res;
     res << "HTTP/1.1 504 Gateway Time-out\r\n"
         << "Connection: Close\r\n"
-        << "X-Worker-Name: " << FQDNHostName() << ":" << CurrentWorkerName << "\r\n";
+        << "X-Worker-Name: " << CurrentWorkerName << "\r\n";
+    if (contentType) {
+        res << "Content-Type: " << contentType << "\r\n";
+    }
     res << GetCORS(request);
-    res << "\r\nGateway Time-out\r\n";
+    res << "\r\n";
+    if (response) {
+        res << response << "\r\n";
+    } else {
+        res << "Gateway Time-out\r\n";
+    }
     return res;
 }
 
 TString TViewer::GetHTTPBADREQUEST(const NMon::TEvHttpInfo* request, TString contentType, TString response) {
     TStringBuilder res;
     res << "HTTP/1.1 400 Bad Request\r\n"
-        << "Connection: Close\r\n";
+        << "Connection: Close\r\n"
+        << "X-Worker-Name: " << CurrentWorkerName << "\r\n";
     if (contentType) {
         res << "Content-Type: " << contentType << "\r\n";
     }
@@ -502,7 +551,15 @@ TString TViewer::GetHTTPBADREQUEST(const NMon::TEvHttpInfo* request, TString con
 TString TViewer::GetHTTPFORBIDDEN(const NMon::TEvHttpInfo* request) {
     TStringBuilder res;
     res << "HTTP/1.1 403 Forbidden\r\n"
-        << "Content-Type: application/json; charset=utf-8\r\n"
+        << "Connection: Close\r\n";
+    res << GetCORS(request);
+    res << "\r\n";
+    return res;
+}
+
+TString TViewer::GetHTTPNOTFOUND(const NMon::TEvHttpInfo* request) {
+    TStringBuilder res;
+    res << "HTTP/1.1 404 Not Found\r\n"
         << "Connection: Close\r\n";
     res << GetCORS(request);
     res << "\r\n";
@@ -517,7 +574,7 @@ TString TViewer::GetHTTPOK(const NMon::TEvHttpInfo* request, TString contentType
     if (response) {
         res << "Content-Type: " << contentType << "\r\n";
         res << "Content-Length: " << response.size() << "\r\n";
-        if (lastModified) {
+        if (lastModified != TInstant()) {
             res << "Date: " << TInstant::Now().ToRfc822String() << "\r\n";
             res << "Last-Modified: " << lastModified.ToRfc822String() << "\r\n";
             res << "Cache-Control: max-age=604800\r\n"; // one week

@@ -17,6 +17,8 @@ TPartitionScaleManager::TPartitionScaleManager(
 
 void TPartitionScaleManager::HandleScaleStatusChange(const TPartitionInfo& partition, NKikimrPQ::EScaleStatus scaleStatus, const TActorContext& ctx) {
     if (scaleStatus == NKikimrPQ::EScaleStatus::NEED_SPLIT) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, "TPartitionScaleManager::HandleScaleStatusChange "
+            << "need to split partition " << partition);
         PartitionsToSplit.emplace(partition.Id, partition);
         TrySendScaleRequest(ctx);
     } else {
@@ -30,12 +32,14 @@ void TPartitionScaleManager::TrySendScaleRequest(const TActorContext& ctx) {
         return;
     }
 
-    auto splitMergePair = BuildScaleRequest();
+    auto splitMergePair = BuildScaleRequest(ctx);
     if (splitMergePair.first.empty() && splitMergePair.second.empty()) {
         return;
     }
 
     RequestInflight = true;
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, "TPartitionScaleManager::HandleScaleStatusChange "
+        << "send split request");
     CurrentScaleRequest = ctx.Register(new TPartitionScaleRequest(
         TopicName,
         DatabasePath,
@@ -51,7 +55,7 @@ void TPartitionScaleManager::TrySendScaleRequest(const TActorContext& ctx) {
 using TPartitionSplit = NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionSplit;
 using TPartitionMerge = NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionMerge;
 
-std::pair<std::vector<TPartitionSplit>, std::vector<TPartitionMerge>> TPartitionScaleManager::BuildScaleRequest() {
+std::pair<std::vector<TPartitionSplit>, std::vector<TPartitionMerge>> TPartitionScaleManager::BuildScaleRequest(const TActorContext& ctx) {
     std::vector<TPartitionSplit> splitsToApply;
     std::vector<TPartitionMerge> mergesToApply;
 
@@ -62,11 +66,15 @@ std::pair<std::vector<TPartitionSplit>, std::vector<TPartitionMerge>> TPartition
         const auto& partition = itSplit->second;
 
         if (BalancerConfig.PartitionGraph.GetPartition(partitionId)->Children.empty()) {
-            auto mid = GetRangeMid(partition.KeyRange.FromBound ? *partition.KeyRange.FromBound : "", partition.KeyRange.ToBound ?*partition.KeyRange.ToBound : "");
+            auto from = partition.KeyRange.FromBound ? *partition.KeyRange.FromBound : "";
+            auto to = partition.KeyRange.ToBound ?*partition.KeyRange.ToBound : "";
+            auto mid = GetRangeMid(from, to);
             if (mid.empty()) {
                 itSplit = PartitionsToSplit.erase(itSplit);
+                LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, "TPartitionScaleManager::BuildScaleRequest wrong partition key range. Can't get mid. Topic# " << TopicName << ", partition# " << partitionId);
                 continue;
             }
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, "TPartitionScaleManager::BuildScaleRequest partition split ranges. From# '" << from << "'. To# '" << to << "'. Mid# '" << mid <<"'. Topic# " << TopicName << ". Partition# " << partitionId);
 
             TPartitionSplit split;
             split.set_partition(partition.Id);
@@ -87,6 +95,7 @@ void TPartitionScaleManager::HandleScaleRequestResult(TPartitionScaleRequest::TE
     RequestInflight = false;
     LastResponseTime = ctx.Now();
     auto result = ev->Get();
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, "TPartitionScaleManager::HandleScaleRequestResult scale request result: " << result->Status << ". Topic# " << TopicName);
     if (result->Status == TEvTxUserProxy::TResultStatus::ExecComplete) {
         TrySendScaleRequest(ctx);
     } else {

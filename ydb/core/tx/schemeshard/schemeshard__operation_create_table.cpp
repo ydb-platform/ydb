@@ -449,7 +449,7 @@ public:
                     checks.IsInsideTableIndexPath()
                           .IsUnderCreating(NKikimrScheme::StatusNameConflict)
                           .IsUnderTheSameOperation(OperationId.GetTxId()); //allow only as part of creating base table
-                } else {
+                } else if (!Transaction.GetAllowAccessToPrivatePaths()) {
                     checks.IsCommonSensePath()
                           .IsLikeDirectory();
                 }

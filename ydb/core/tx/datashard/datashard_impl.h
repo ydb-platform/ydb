@@ -1621,10 +1621,10 @@ public:
         return nullptr;
     }
 
-    void RemoveUserTable(const TPathId& tableId) {
-        TableInfos.erase(tableId.LocalPathId);
-        SysLocks.RemoveSchema(tableId);
+    void RemoveUserTable(const TPathId& tableId, ILocksDb* locksDb) {
+        SysLocks.RemoveSchema(tableId, locksDb);
         Pipeline.GetDepTracker().RemoveSchema(tableId);
+        TableInfos.erase(tableId.LocalPathId);
     }
 
     void AddUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo) {

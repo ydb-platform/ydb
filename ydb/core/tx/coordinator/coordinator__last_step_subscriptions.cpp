@@ -141,7 +141,7 @@ namespace NKikimr::NFlatTxCoordinator {
 
     void TTxCoordinator::SubscribeToSibling(TSiblingState& state) {
         if (!state.Subscribed) {
-            auto pipeCache = MakePipePeNodeCacheID(false);
+            auto pipeCache = MakePipePerNodeCacheID(false);
             Send(pipeCache, new TEvPipeCache::TEvForward(
                     new TEvTxProxy::TEvSubscribeLastStep(state.CoordinatorId, ++state.SeqNo),
                     state.CoordinatorId,
@@ -153,7 +153,7 @@ namespace NKikimr::NFlatTxCoordinator {
     void TTxCoordinator::UnsubscribeFromSiblings() {
         for (auto& pr : Siblings) {
             if (pr.second.Subscribed) {
-                auto pipeCache = MakePipePeNodeCacheID(false);
+                auto pipeCache = MakePipePerNodeCacheID(false);
                 Send(pipeCache, new TEvPipeCache::TEvForward(
                         new TEvTxProxy::TEvUnsubscribeLastStep(pr.first, pr.second.SeqNo),
                         pr.first,

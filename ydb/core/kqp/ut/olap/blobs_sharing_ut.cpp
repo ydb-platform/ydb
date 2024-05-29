@@ -146,7 +146,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
             const TString sessionId = TGUID::CreateTimebased().AsUuidString();
             NOlap::NDataSharing::TTransferContext transferContext((NOlap::TTabletId)destination, sourceTablets, snapshot, move);
             NOlap::NDataSharing::TDestinationSession session(std::make_shared<TTestController>(), pathIdsRemap, sessionId, transferContext);
-            Kikimr.GetTestServer().GetRuntime()->Send(MakePipePeNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
+            Kikimr.GetTestServer().GetRuntime()->Send(MakePipePerNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
                 new NOlap::NDataSharing::NEvents::TEvProposeFromInitiator(session), destination, false));
             {
                 const TInstant start = TInstant::Now();
@@ -157,13 +157,13 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
                 AFL_VERIFY(CSTransferStatus->GetProposed());
             }
             if (RebootTablet) {
-                Kikimr.GetTestServer().GetRuntime()->Send(MakePipePeNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
+                Kikimr.GetTestServer().GetRuntime()->Send(MakePipePerNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
                     new TEvents::TEvPoisonPill(), destination, false));
             }
             {
                 const TInstant start = TInstant::Now();
                 while (!CSTransferStatus->GetConfirmed() && TInstant::Now() - start < TDuration::Seconds(10)) {
-                    Kikimr.GetTestServer().GetRuntime()->Send(MakePipePeNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
+                    Kikimr.GetTestServer().GetRuntime()->Send(MakePipePerNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
                         new NOlap::NDataSharing::NEvents::TEvConfirmFromInitiator(sessionId), destination, false));
                     Sleep(TDuration::Seconds(1));
                     Cerr << "WAIT_CONFIRMED..." << Endl;
@@ -171,10 +171,10 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
                 AFL_VERIFY(CSTransferStatus->GetConfirmed());
             }
             if (RebootTablet) {
-                Kikimr.GetTestServer().GetRuntime()->Send(MakePipePeNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
+                Kikimr.GetTestServer().GetRuntime()->Send(MakePipePerNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
                     new TEvents::TEvPoisonPill(), destination, false));
                 for (auto&& i : sources) {
-                    Kikimr.GetTestServer().GetRuntime()->Send(MakePipePeNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
+                    Kikimr.GetTestServer().GetRuntime()->Send(MakePipePerNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
                         new TEvents::TEvPoisonPill(), i, false));
                 }
             }

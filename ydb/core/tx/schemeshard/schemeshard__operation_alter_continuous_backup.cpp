@@ -35,6 +35,23 @@ void DoAlterPqPart(const TOperationId& opId, const TPath& topicPath, TTopicInfo:
     result.push_back(CreateAlterPQ(NextPartId(opId, result), outTx));
 }
 
+void DoCreateIncBackupTable(const TOperationId& opId, const TPath& dst, NKikimrSchemeOp::TTableDescription tableDesc, TVector<ISubOperation::TPtr>& result) {
+    auto outTx = TransactionTemplate(dst.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
+    // outTx.SetFailOnExist(!acceptExisted);
+
+    outTx.SetAllowAccessToPrivatePaths(true);
+
+    auto& desc = *outTx.MutableCreateTable();
+    desc.CopyFrom(tableDesc);
+    desc.SetName(dst.LeafName());
+
+    auto col = desc.AddColumns();
+    col->SetName("__incrBackupImpl_deleted");
+    col->SetType("Bool");
+
+    result.push_back(CreateNewTable(NextPartId(opId, result), outTx));
+}
+
 TVector<ISubOperation::TPtr> CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpAlterContinuousBackup);
 
@@ -48,8 +65,18 @@ TVector<ISubOperation::TPtr> CreateAlterContinuousBackup(TOperationId opId, cons
     }
 
     const auto [tablePath, streamPath] = std::get<NCdc::TStreamPaths>(checksResult);
+    TTableInfo::TPtr table = context.SS->Tables.at(tablePath.Base()->PathId);
+
     const auto topicPath = streamPath.Child("streamImpl");
     TTopicInfo::TPtr topic = context.SS->Topics.at(topicPath.Base()->PathId);
+
+    const auto backupTablePath = tablePath.Child("incBackupImpl");
+
+    const NScheme::TTypeRegistry* typeRegistry = AppData(context.Ctx)->TypeRegistry;
+
+    NKikimrSchemeOp::TTableDescription schema;
+    context.SS->DescribeTable(table, typeRegistry, true, false, &schema);
+    schema.MutablePartitionConfig()->CopyFrom(table->TableDescription.GetPartitionConfig());
 
     TString errStr;
     if (!context.SS->CheckApplyIf(tx, errStr)) {
@@ -79,6 +106,7 @@ TVector<ISubOperation::TPtr> CreateAlterContinuousBackup(TOperationId opId, cons
     NCdc::DoAlterStream(alterCdcStreamOp, opId, workingDirPath, tablePath, result);
 
     if (cbOp.GetActionCase() == NKikimrSchemeOp::TAlterContinuousBackup::kTakeIncrementalBackup) {
+        DoCreateIncBackupTable(opId, backupTablePath, schema, result);
         DoAlterPqPart(opId, topicPath, topic, result);
     }
 

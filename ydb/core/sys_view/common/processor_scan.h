@@ -74,7 +74,7 @@ private:
         auto req = MakeHolder<TEvRequest>();
         req->Record.CopyFrom(Request);
 
-        TBase::Send(MakePipePeNodeCacheID(false),
+        TBase::Send(MakePipePerNodeCacheID(false),
             new TEvPipeCache::TEvForward(req.Release(), this->SysViewProcessorId, true),
             IEventHandle::FlagTrackDelivery);
 
@@ -110,7 +110,7 @@ private:
     }
 
     void PassAway() override {
-        TBase::Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
+        TBase::Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
         TBase::PassAway();
     }
 

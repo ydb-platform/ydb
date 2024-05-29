@@ -806,7 +806,7 @@ private:
     }
 
     NActors::TActorId TxProxyId = MakeTxProxyID();
-    NActors::TActorId PipeCacheId = NKikimr::MakePipePeNodeCacheID(false);
+    NActors::TActorId PipeCacheId = NKikimr::MakePipePerNodeCacheID(false);
 
     TString LogPrefix;
     const NKikimrKqp::TKqpTableSinkSettings Settings;

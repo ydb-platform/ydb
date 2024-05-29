@@ -14,7 +14,8 @@ enum class EDatabaseType {
     DataStreams,
     ObjectStorage,
     PostgreSQL,
-    YT
+    YT,
+    MySQL
 };
 
 inline EDatabaseType DatabaseTypeFromDataSourceKind(NConnector::NApi::EDataSourceKind dataSourceKind) {
@@ -25,6 +26,8 @@ inline EDatabaseType DatabaseTypeFromDataSourceKind(NConnector::NApi::EDataSourc
             return EDatabaseType::ClickHouse;
         case NConnector::NApi::EDataSourceKind::YDB:
             return EDatabaseType::Ydb;
+        case NConnector::NApi::EDataSourceKind::MYSQL:
+            return EDatabaseType::MySQL;
         default:
             ythrow yexception() << "Unknown data source kind: " << NConnector::NApi::EDataSourceKind_Name(dataSourceKind);
     }
@@ -38,6 +41,8 @@ inline NConnector::NApi::EDataSourceKind DatabaseTypeToDataSourceKind(EDatabaseT
             return  NConnector::NApi::EDataSourceKind::CLICKHOUSE;
         case EDatabaseType::Ydb:
             return  NConnector::NApi::EDataSourceKind::YDB;
+        case EDatabaseType::MySQL:
+            return NConnector::NApi::EDataSourceKind::MYSQL;
         default:
             ythrow yexception() << "Unknown database type: " << ToString(databaseType);
     }

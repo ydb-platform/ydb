@@ -766,7 +766,11 @@ private:
 
             bool isYield = FetchAndPackData(ctx);
             if (ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
-                YQL_LOG(DEBUG) << "switching Memory mode to Spilling";
+                const auto used = TlsAllocState->GetUsed();
+                const auto limit = TlsAllocState->GetLimit();
+
+                YQL_LOG(INFO) << "yellow zone reached " << (used*100/limit) << "%=" << used << "/" << limit;
+                YQL_LOG(INFO) << "switching Memory mode to Spilling";
 
                 SwitchMode(EOperatingMode::Spilling, ctx);
                 return EFetchResult::Yield;
@@ -854,7 +858,7 @@ void DoCalculateWithSpilling(TComputationContext& ctx) {
         }
         if (!IsReadyForSpilledDataProcessing()) return;
 
-        YQL_LOG(DEBUG) << "switching to ProcessSpilled";
+        YQL_LOG(INFO) << "switching to ProcessSpilled";
         SwitchMode(EOperatingMode::ProcessSpilled, ctx);
         return;
     }

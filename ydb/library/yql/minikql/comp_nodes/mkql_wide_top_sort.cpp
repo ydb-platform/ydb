@@ -445,7 +445,12 @@ private:
                 case EFetchResult::One:
                     if (Put()) {
                         if (ctx.SpillerFactory && !HasMemoryForProcessing()) {
-                            YQL_LOG(DEBUG) << "switching Memory mode to Spilling";
+                            const auto used = TlsAllocState->GetUsed();
+                            const auto limit = TlsAllocState->GetLimit();
+
+                            YQL_LOG(INFO) << "yellow zone reached " << (used*100/limit) << "%=" << used << "/" << limit;
+
+                            YQL_LOG(INFO) << "switching Memory mode to Spilling";
 
                             SwitchMode(EOperatingMode::Spilling, ctx);
                             return EFetchResult::Yield;
@@ -485,7 +490,7 @@ private:
         ResetFields();
         auto nextMode = (IsReadFromChannelFinished() ? EOperatingMode::ProcessSpilled : EOperatingMode::InMemory);
 
-        YQL_LOG(DEBUG) << (nextMode ==  EOperatingMode::ProcessSpilled ? "switching to ProcessSpilled" :  "switching to Memory mode");
+        YQL_LOG(INFO) << (nextMode ==  EOperatingMode::ProcessSpilled ? "switching to ProcessSpilled" :  "switching to Memory mode");
 
         SwitchMode(nextMode, ctx);
         return EFetchResult::Yield;

@@ -55,7 +55,7 @@ public:
         if (!Read) {
             return;
         }
-        if (!ReplacedUserchema && Metadata) {
+        if (!ReplacedUserchema && Metadata && !Metadata->Columns.empty()) {
             Children.push_back(BuildSchemaFromMetadata(Read->Pos(), Ctx, Metadata->Columns));
         }
         for (const auto& [key, value] : NewAttributes) {

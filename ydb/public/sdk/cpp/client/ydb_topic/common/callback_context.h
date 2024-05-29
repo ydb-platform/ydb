@@ -4,11 +4,8 @@
 #include <util/system/guard.h>
 #include <util/system/spinlock.h>
 
-#include <map>
 #include <memory>
 #include <mutex>
-#include <shared_mutex>
-#include <thread>
 
 namespace NYdb::NTopic {
 
@@ -19,61 +16,27 @@ template <typename TGuardedObject>
 class TCallbackContext {
     friend class TContextOwner<TGuardedObject>;
 
-    // thread_id -> number of LockShared calls from this thread
-    using TSharedLockCounter = std::map<std::thread::id, size_t>;
-    using TSharedLockCounterPtr = std::shared_ptr<TSharedLockCounter>;
-    using TSpinLockPtr = std::shared_ptr<TSpinLock>;
-
 public:
-    using TMutexPtr = std::shared_ptr<std::shared_mutex>;
-
     class TBorrowed {
     public:
+        TBorrowed() {}
+
         explicit TBorrowed(const TCallbackContext& parent)
             : Mutex(parent.Mutex)
-            , SharedLockCounterMutex(parent.SharedLockCounterMutex)
-            , SharedLockCounter(parent.SharedLockCounter)
+            , Die(parent.Die)
+            , AllDied(parent.AllDied)
+            , LockCounter(parent.LockCounter)
         {
-            // "Recursive shared lock".
-            //
-            // https://en.cppreference.com/w/cpp/thread/shared_mutex/lock_shared says:
-            //   If lock_shared is called by a thread that already owns the mutex
-            //   in any mode (exclusive or shared), the behavior is UNDEFINED.
-            //
-            // So if a thread calls LockShared more than once without releasing the lock,
-            // we should call lock_shared only on the first call.
-
-            bool takeLock = false;
-
-            with_lock(*SharedLockCounterMutex) {
-                auto& counter = SharedLockCounter->emplace(std::this_thread::get_id(), 0).first->second;
-                ++counter;
-                takeLock = counter == 1;
-            }
-
-            if (takeLock) {
-                Mutex->lock_shared();
-            }
-
+            ++*LockCounter;
             Ptr = parent.GuardedObjectPtr.get();
         }
 
         ~TBorrowed() {
-            bool releaseLock = false;
-
-            with_lock(*SharedLockCounterMutex) {
-                auto it = SharedLockCounter->find(std::this_thread::get_id());
-                Y_ABORT_UNLESS(it != SharedLockCounter->end());
-                auto& counter = it->second;
-                --counter;
-                if (counter == 0) {
-                    releaseLock = true;
-                    SharedLockCounter->erase(it);
-                }
-            }
-
-            if (releaseLock) {
-                Mutex->unlock_shared();
+            if (!Mutex) return;
+            std::lock_guard lock(*Mutex);
+            --*LockCounter;
+            if (*Die) {
+                AllDied->notify_one();
             }
         }
 
@@ -90,22 +53,27 @@ public:
         }
 
     private:
-        TMutexPtr Mutex;
+        std::shared_ptr<std::mutex> Mutex;
+        std::shared_ptr<std::atomic<bool>> Die;
+        std::shared_ptr<std::condition_variable> AllDied;
         TGuardedObject* Ptr = nullptr;
-
-        TSpinLockPtr SharedLockCounterMutex;
-        TSharedLockCounterPtr SharedLockCounter;
+        std::shared_ptr<size_t> LockCounter;
     };
 
 public:
     explicit TCallbackContext(std::shared_ptr<TGuardedObject> ptr)
-        : Mutex(std::make_shared<std::shared_mutex>())
+        : Mutex(std::make_shared<std::mutex>())
+        , Die(std::make_shared<std::atomic<bool>>(false))
+        , AllDied(std::make_shared<std::condition_variable>())
         , GuardedObjectPtr(std::move(ptr))
-        , SharedLockCounterMutex(std::make_shared<TSpinLock>())
-        , SharedLockCounter(std::make_shared<TSharedLockCounter>())
+        , LockCounter(std::make_shared<size_t>())
         {}
 
     TBorrowed LockShared() {
+        std::lock_guard lock(*Mutex);
+        if (*Die) {
+            return TBorrowed();
+        }
         return TBorrowed(*this);
     }
 
@@ -113,8 +81,10 @@ public:
 // (relation of 1 owner : n impls)
 public:
     void Cancel() {
+        std::unique_lock lock(*Mutex);
+        *Die = true;
         std::shared_ptr<TGuardedObject> waste;
-        std::lock_guard lock(*Mutex);
+        AllDied->wait(lock, [this] { return *LockCounter == 0; });
         std::swap(waste, GuardedObjectPtr);
     }
 
@@ -127,11 +97,11 @@ public:
 
 private:
 
-    TMutexPtr Mutex;
+    std::shared_ptr<std::mutex> Mutex;
+    std::shared_ptr<std::atomic<bool>> Die;
+    std::shared_ptr<std::condition_variable> AllDied;
     std::shared_ptr<TGuardedObject> GuardedObjectPtr;
-
-    TSpinLockPtr SharedLockCounterMutex;
-    TSharedLockCounterPtr SharedLockCounter;
+    std::shared_ptr<size_t> LockCounter;
 };
 
 template<typename T>

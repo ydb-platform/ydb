@@ -6263,8 +6263,6 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["PgLike"] = &ExpandPgLike;
     map["PgILike"] = &ExpandPgLike;
 
-    map["PgInStrict"] = &ExpandPgInStrict;
-
     map["PgBetween"] = &ExpandPgBetween;
     map["PgBetweenSym"] = &ExpandPgBetween;
 

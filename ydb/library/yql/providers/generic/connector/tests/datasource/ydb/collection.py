@@ -4,6 +4,7 @@ from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 impo
 
 # import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_missing_database as select_missing_database
 # import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_missing_table as select_missing_table
+import ydb.library.yql.providers.generic.connector.tests.ydb.select_positive as select_positive
 import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_positive_common as select_positive_common
 
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
@@ -16,7 +17,7 @@ class Collection(object):
         self._test_cases = {
             # 'select_missing_database': select_missing_database.Factory().make_test_cases(EDataSourceKind.YDB),
             # 'select_missing_table': select_missing_table.Factory().make_test_cases(EDataSourceKind.YDB),
-            'select_positive': select_positive_common.Factory(ss).make_test_cases(EDataSourceKind.YDB),
+            'select_positive': select_positive_common.Factory(ss).make_test_cases(EDataSourceKind.YDB) + select_positive.Factory().make_test_cases(),
         }
 
     def get(self, key: str) -> Sequence:

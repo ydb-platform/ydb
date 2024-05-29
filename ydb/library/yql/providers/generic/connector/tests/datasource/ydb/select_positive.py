@@ -164,173 +164,163 @@ class Factory:
 
         return [tc]
 
-    def _constant(self) -> Sequence[TestCase]:
-        '''
-        In this test case set we check SELECT 42 from a ch table.
-        '''
+    #def _constant(self) -> Sequence[TestCase]:
+    #    '''
+    #    In this test case set we check SELECT 42 from a ch table.
+    #    '''
 
-        schema = Schema(
-            columns=ColumnList(
-                Column(
-                    name='col',
-                    ydb_type=Type.INT64,
-                    data_source_type=DataSourceType(ch=clickhouse.Int64()),
-                ),
-            )
-        )
+    #    schema = Schema(
+    #        columns=ColumnList(
+    #            Column(
+    #                name='col',
+    #                ydb_type=Type.INT64,
+    #                data_source_type=DataSourceType(ch=clickhouse.Int64()),
+    #            ),
+    #        )
+    #    )
 
-        test_case_name = 'constant'
+    #    test_case_name = 'constant'
 
-        tc = TestCase(
-            name_=test_case_name,
-            schema=schema,
-            select_what=SelectWhat(SelectWhat.Item(name='42', kind='expr')),
-            select_where=None,
-            data_in=[
-                [
-                    1,
-                ],
-                [
-                    2,
-                ],
-                [
-                    3,
-                ],
-            ],
-            data_out_=[
-                [
-                    42,
-                ],
-                [
-                    42,
-                ],
-                [
-                    42,
-                ],
-            ],
-            data_source_kind=EDataSourceKind.CLICKHOUSE,
-            protocol=EProtocol.NATIVE,
-            pragmas=dict(),
-        )
+    #    tc = TestCase(
+    #        name_=test_case_name,
+    #        schema=schema,
+    #        select_what=SelectWhat(SelectWhat.Item(name='42', kind='expr')),
+    #        select_where=None,
+    #        data_in=[
+    #            [
+    #                1,
+    #            ],
+    #            [
+    #                2,
+    #            ],
+    #            [
+    #                3,
+    #            ],
+    #        ],
+    #        data_out_=[
+    #            [
+    #                42,
+    #            ],
+    #            [
+    #                42,
+    #            ],
+    #            [
+    #                42,
+    #            ],
+    #        ],
+    #        data_source_kind=EDataSourceKind.CLICKHOUSE,
+    #        protocol=EProtocol.NATIVE,
+    #        pragmas=dict(),
+    #    )
 
-        return [tc]
+    #    return [tc]
 
-    def _count(self) -> Sequence[TestCase]:
-        '''
-        In this test case set we check SELECT COUNT(*) from a ch table.
-        '''
+    #def _count(self) -> Sequence[TestCase]:
+    #    '''
+    #    In this test case set we check SELECT COUNT(*) from a ch table.
+    #    '''
 
-        schema = Schema(
-            columns=ColumnList(
-                Column(
-                    name='col',
-                    ydb_type=Type.FLOAT,
-                    data_source_type=DataSourceType(ch=clickhouse.Float64()),
-                ),
-            )
-        )
+    #    schema = Schema(
+    #        columns=ColumnList(
+    #            Column(
+    #                name='col',
+    #                ydb_type=Type.FLOAT,
+    #                data_source_type=DataSourceType(ch=clickhouse.Float64()),
+    #            ),
+    #        )
+    #    )
 
-        test_case_name = 'count'
+    #    test_case_name = 'count'
 
-        tc = TestCase(
-            name_=test_case_name,
-            schema=schema,
-            select_what=SelectWhat(SelectWhat.Item(name='COUNT(*)', kind='expr')),
-            select_where=None,
-            data_in=[
-                [
-                    3.14,
-                ],
-                [
-                    1.0,
-                ],
-                [
-                    2.718,
-                ],
-                [
-                    -0.0,
-                ],
-            ],
-            data_out_=[
-                [
-                    4,
-                ],
-            ],
-            protocol=EProtocol.NATIVE,
-            data_source_kind=EDataSourceKind.CLICKHOUSE,
-            pragmas=dict(),
-        )
+    #    tc = TestCase(
+    #        name_=test_case_name,
+    #        schema=schema,
+    #        select_what=SelectWhat(SelectWhat.Item(name='COUNT(*)', kind='expr')),
+    #        select_where=None,
+    #        data_in=[
+    #            [
+    #                3.14,
+    #            ],
+    #            [
+    #                1.0,
+    #            ],
+    #            [
+    #                2.718,
+    #            ],
+    #            [
+    #                -0.0,
+    #            ],
+    #        ],
+    #        data_out_=[
+    #            [
+    #                4,
+    #            ],
+    #        ],
+    #        protocol=EProtocol.NATIVE,
+    #        data_source_kind=EDataSourceKind.CLICKHOUSE,
+    #        pragmas=dict(),
+    #    )
 
-        return [tc]
+    #    return [tc]
 
-    def _pushdown(self) -> TestCase:
-        schema = Schema(
-            columns=ColumnList(
-                Column(
-                    name='col_int32',
-                    ydb_type=Type.INT32,
-                    data_source_type=DataSourceType(ch=clickhouse.Int32()),
-                ),
-                Column(
-                    name='col_string',
-                    ydb_type=Type.UTF8,
-                    data_source_type=DataSourceType(ch=clickhouse.String()),
-                ),
-            ),
-        )
+    #def _pushdown(self) -> TestCase:
+    #    schema = Schema(
+    #        columns=ColumnList(
+    #            Column(
+    #                name='col_int32',
+    #                ydb_type=Type.INT32,
+    #                data_source_type=DataSourceType(ch=clickhouse.Int32()),
+    #            ),
+    #            Column(
+    #                name='col_string',
+    #                ydb_type=Type.UTF8,
+    #                data_source_type=DataSourceType(ch=clickhouse.String()),
+    #            ),
+    #        ),
+    #    )
 
-        data_in = [
-            [
-                1,
-                'one',
-            ],
-            [
-                2,
-                'two',
-            ],
-            [
-                3,
-                'three',
-            ],
-        ]
+    #    data_in = [
+    #        [
+    #            1,
+    #            'one',
+    #        ],
+    #        [
+    #            2,
+    #            'two',
+    #        ],
+    #        [
+    #            3,
+    #            'three',
+    #        ],
+    #    ]
 
-        data_out = [
-            ['one'],
-        ]
+    #    data_out = [
+    #        ['one'],
+    #    ]
 
-        data_source_kind = EDataSourceKind.CLICKHOUSE
-        test_case_name = 'pushdown'
+    #    data_source_kind = EDataSourceKind.CLICKHOUSE
+    #    test_case_name = 'pushdown'
 
-        return [
-            TestCase(
-                name_=test_case_name,
-                data_in=data_in,
-                data_out_=data_out,
-                pragmas=dict({'generic.UsePredicatePushdown': 'true'}),
-                select_what=SelectWhat(SelectWhat.Item(name='col_string')),
-                select_where=SelectWhere('col_int32 = 1'),
-                data_source_kind=data_source_kind,
-                protocol=EProtocol.NATIVE,
-                schema=schema,
-            )
-        ]
+    #    return [
+    #        TestCase(
+    #            name_=test_case_name,
+    #            data_in=data_in,
+    #            data_out_=data_out,
+    #            pragmas=dict({'generic.UsePredicatePushdown': 'true'}),
+    #            select_what=SelectWhat(SelectWhat.Item(name='col_string')),
+    #            select_where=SelectWhere('col_int32 = 1'),
+    #            data_source_kind=data_source_kind,
+    #            protocol=EProtocol.NATIVE,
+    #            schema=schema,
+    #        )
+    #    ]
 
     def make_test_cases(self) -> Sequence[TestCase]:
-        protocols = [EProtocol.NATIVE, EProtocol.HTTP]
-
-        base_test_cases = list(
+        return list(
             itertools.chain(
                 self._primitive_types(),
-                self._constant(),
-                self._count(),
-                self._pushdown(),
+                # self._constant(),
+                # self._count(),
+                # self._pushdown(),
             )
         )
-
-        test_cases = []
-        for base_tc in base_test_cases:
-            for protocol in protocols:
-                tc = replace(base_tc)
-                tc.protocol = protocol
-                test_cases.append(tc)
-        return test_cases

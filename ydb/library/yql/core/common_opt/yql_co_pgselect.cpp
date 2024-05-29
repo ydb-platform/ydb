@@ -960,7 +960,9 @@ TUsedColumns GatherUsedColumns(const TExprNode::TPtr& result, const TExprNode::T
                     if (lr->Child(0)->IsAtom()) {
                         usedColumns.insert(std::make_pair(TString(lr->Child(0)->Content()), std::make_pair(Max<ui32>(), TString())));
                     }
-                    usedColumns.insert(std::make_pair(TString(lr->Child(1)->Content()), std::make_pair(Max<ui32>(), TString())));
+                    if (lr->Child(1)->IsAtom()) {
+                        usedColumns.insert(std::make_pair(TString(lr->Child(1)->Content()), std::make_pair(Max<ui32>(), TString())));
+                    }
                     joinUsingColumns.emplace_back(ToString(groupNo), join->Child(2)->Child(col)->Content());
                 }
                 continue;
@@ -1541,7 +1543,6 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
 
     ui32 inputIndex = 0;
     for (ui32 groupNo = 0; groupNo < joinOps->Tail().ChildrenSize(); ++groupNo) {
-        groupForIndex.push_back(groupNo);
         auto groupTuple = joinOps->Tail().Child(groupNo);
         if (groupTuple->ChildrenSize() == 0) {
             joinGroups.push_back(cleanedInputs[inputIndex++]);
@@ -1550,7 +1551,6 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
         TVector<TExprNode::TPtr> stack;
         TVector<THashSet<ui32>> stackInputIdxs;
         for (ui32 i = 0; i < groupTuple->ChildrenSize(); ++i) {
-            groupForIndex.push_back(groupNo);
             // current = join current & with
             auto join = groupTuple->Child(i);
             auto joinType = join->Child(0)->Content();
@@ -1558,6 +1558,7 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
                 stackInputIdxs.emplace_back();
                 stackInputIdxs.back().emplace(inputIndex);
                 stack.push_back(cleanedInputs[inputIndex++]);
+                groupForIndex.push_back(groupNo);
                 continue;
             }
             auto with = stack.back();
@@ -1590,14 +1591,51 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
                 TExprNode::TListType leftColumns;
                 TExprNode::TListType rightColumns;
                 TExprNode::TListType toRemove;
+                auto buildRenameLambda = [&ctx, &pos] (const TExprNode::TPtr& newName, const TExprNode::TPtr& oldName) {
+                    return ctx.Builder(pos)
+                        .Lambda()
+                            .Param("row")
+                            .Callable(0, "RemoveMember")
+                                .Callable(0, "AddMember")
+                                    .Arg(0, "row")
+                                    .Add(1, newName)
+                                    .Callable(2, "Member")
+                                        .Arg(0, "row")
+                                        .Add(1, oldName)
+                                    .Seal()
+                                .Seal()
+                                .Add(1, oldName)
+                            .Seal()
+                        .Seal().Build();
+                };
+
                 for (auto& col: join->Child(3)->ChildrenList()) {
                     if (col->Child(0)->IsAtom()) {
                         leftColumns.push_back(col->Child(0));
                     } else {
-                        toRemove.push_back(col->Child(0)->Child(0));
-                        leftColumns.push_back(col->Child(0)->Child(0));
+                        auto pname = col->Child(0)->Child(0);
+                        auto lname = ctx.Builder(pos).Atom(TString("_left_.") + pname->Content()).Build();
+                        left = ctx.Builder(pos)
+                            .Callable("OrderedMap")
+                                .Add(0, left)
+                                .Add(1, buildRenameLambda(lname, pname))
+                            .Seal().Build();
+                        toRemove.push_back(lname);
+                        leftColumns.push_back(lname);
                     }
-                    rightColumns.push_back(col->Child(1));
+                    if (col->Child(1)->IsAtom()) {
+                        rightColumns.push_back(col->Child(1));
+                    } else {
+                        auto pname = col->Child(1)->Child(0);
+                        auto lname = ctx.Builder(pos).Atom(TString("_right_.") + pname->Content()).Build();
+                        right = ctx.Builder(pos)
+                            .Callable("OrderedMap")
+                                .Add(0, right)
+                                .Add(1, buildRenameLambda(lname, pname))
+                            .Seal().Build();
+                        toRemove.push_back(lname);
+                        rightColumns.push_back(lname);
+                    }
                 }
                 current = BuildEquiJoin(pos, joinType, left, right, leftColumns, rightColumns, ctx);
                 auto secondStruct = ctx.Builder(pos)
@@ -3686,7 +3724,6 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
             } else {
                 // extract all used columns
                 TVector<std::pair<TString, TString>> joinUsingColumns;
-                Cerr << joinOps->Dump() << "\n";
                 auto usedColumns = GatherUsedColumns(result, joinOps, filter, groupExprs, having, extraSortColumns, window, winCtx, joinUsingColumns);
 
                 // fill index of input for each column

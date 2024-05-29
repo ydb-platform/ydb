@@ -957,7 +957,6 @@ public:
                                 traverseNodeStack.push({ join->larg, false });
                                 top.second = true;
                             } else {
-                                Cerr << "join\n";
                                 TString op;
                                 switch (join->jointype) {
                                 case JOIN_INNER:

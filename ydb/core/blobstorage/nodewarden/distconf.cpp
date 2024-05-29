@@ -1,5 +1,6 @@
 #include "distconf.h"
 #include "node_warden_impl.h"
+#include <ydb/core/mind/dynamic_nameserver.h>
 
 namespace NKikimr::NStorage {
 
@@ -16,8 +17,13 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::Bootstrap() {
         STLOG(PRI_DEBUG, BS_NODE, NWDC00, "Bootstrap");
 
-        // TODO: maybe extract list of nodes from the initial storage config?
-        Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes(true));
+        // report initial node listing
+        auto ns = NNodeBroker::BuildNameserverTable(Cfg->NameserviceConfig);
+        auto ev = std::make_unique<TEvInterconnect::TEvNodesInfo>();
+        for (const auto& [nodeId, item] : ns->StaticNodeTable) {
+            ev->Nodes.emplace_back(nodeId, item.Address, item.Host, item.ResolveHost, item.Port, item.Location);
+        }
+        Send(SelfId(), ev.release());
 
         // generate initial drive set and query stored configuration
         EnumerateConfigDrives(InitialConfig, SelfId().NodeId(), [&](const auto& /*node*/, const auto& drive) {

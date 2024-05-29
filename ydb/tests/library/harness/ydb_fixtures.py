@@ -75,7 +75,7 @@ def ydb_safe_test_name(request):
 
 
 @contextlib.contextmanager
-def ydb_database_ctx(ydb_cluster, database_path, node_count=1, timeout_seconds=20):
+def ydb_database_ctx(ydb_cluster, database_path, node_count=1, timeout_seconds=20, storage_pools={'hdd': 1}):
     ''' ??? '''
     assert os.path.abspath(database_path), 'database_path should be an (absolute) path, not a database name'
 
@@ -88,9 +88,7 @@ def ydb_database_ctx(ydb_cluster, database_path, node_count=1, timeout_seconds=2
 
     ydb_cluster.create_database(
         database_path,
-        storage_pool_units_count={
-            'hdd': 1
-        },
+        storage_pool_units_count=storage_pools,
         timeout_seconds=timeout_seconds
     )
 

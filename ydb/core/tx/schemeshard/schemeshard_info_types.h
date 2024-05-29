@@ -1295,12 +1295,12 @@ struct IQuotaCounters {
     virtual void ChangeDiskSpaceTablesDataBytes(i64 delta) = 0;
     virtual void ChangeDiskSpaceTablesIndexBytes(i64 delta) = 0;
     virtual void ChangeDiskSpaceTablesTotalBytes(i64 delta) = 0;
-    virtual void ChangeDiskSpaceTables(EUserFacingStorageType storageType, i64 dataDelta, i64 indexDelta) = 0;
+    virtual void AddDiskSpaceTables(EUserFacingStorageType storageType, ui64 data, ui64 index) = 0;
     virtual void ChangeDiskSpaceTopicsTotalBytes(ui64 value) = 0;
     virtual void ChangeDiskSpaceQuotaExceeded(i64 delta) = 0;
     virtual void ChangeDiskSpaceHardQuotaBytes(i64 delta) = 0;
     virtual void ChangeDiskSpaceSoftQuotaBytes(i64 delta) = 0;
-    virtual void ChangeDiskSpaceSoftQuotaBytes(EUserFacingStorageType storageType, i64 delta) = 0;
+    virtual void AddDiskSpaceSoftQuotaBytes(EUserFacingStorageType storageType, ui64 addend) = 0;
 };
 
 struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {

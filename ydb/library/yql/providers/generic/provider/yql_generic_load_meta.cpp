@@ -320,6 +320,8 @@ namespace NYql {
                     break;
                 case NYql::NConnector::NApi::YDB:
                     break;
+                case NYql::NConnector::NApi::MYSQL:
+                    break;
                 case NYql::NConnector::NApi::POSTGRESQL: {
                     // for backward compability set schema "public" by default
                     // TODO: simplify during https://st.yandex-team.ru/YQ-2494

@@ -197,6 +197,11 @@ namespace NYql {
             return;
         }
 
+        if (clusterConfig.GetKind() == EDataSourceKind::MYSQL) {
+            clusterConfig.SetProtocol(EProtocol::NATIVE);
+            return;
+        }
+
         auto it = properties.find("protocol");
         if (it == properties.cend()) {
             ythrow yexception() << "missing 'PROTOCOL' value";

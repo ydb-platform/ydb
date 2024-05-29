@@ -98,16 +98,6 @@ def main():
     ) as driver:
         driver.wait(timeout=10, fail_fast=True)
 
-        column_types = ydb.BulkUpsertColumns()
-        for type_ in UTF8_COLUMNS:
-            column_types = column_types.add_column(type_, ydb.PrimitiveType.Utf8)
-        for type_ in UINT64_COLUMNS:
-            column_types = column_types.add_column(type_, ydb.PrimitiveType.Uint64)
-        for type_ in DATETIME_COLUMNS:
-            column_types = column_types.add_column(type_, ydb.PrimitiveType.Datetime)
-        for type_ in DOUBLE_COLUMNS:
-            column_types = column_types.add_column(type_, ydb.PrimitiveType.Double)
-
         build_preset = os.environ.get("build_preset", None)
         github_sha = os.environ.get("GITHUB_SHA", None)
 

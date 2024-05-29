@@ -66,6 +66,33 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         Basic("/Root/Dir/Replicated");
     }
 
+    Y_UNIT_TEST(SameOwner) {
+        TEnv env;
+        env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
+
+        env.ModifyOwner("/", "Root", "user@builtin");
+        env.CreateTable("/Root", *MakeTableDescription({
+            .Name = "Table",
+            .KeyColumns = {"key"},
+            .Columns = {
+                {.Name = "key", .Type = "Uint32"},
+                {.Name = "value", .Type = "Utf8"},
+            },
+            .ReplicationConfig = Nothing(),
+        }));
+        env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(), env.GetPathId("/Root"),
+            1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table, "/Root/Table", "/Root/Replicated"
+        ));
+
+        auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrScheme::StatusSuccess);
+
+        auto desc = env.GetDescription("/Root/Replicated");
+        const auto& replicatedSelf = desc.GetPathDescription().GetSelf();
+        UNIT_ASSERT_VALUES_EQUAL(replicatedSelf.GetOwner(), "user@builtin");
+    }
+
     Y_UNIT_TEST(NonExistentSrc) {
         TEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);

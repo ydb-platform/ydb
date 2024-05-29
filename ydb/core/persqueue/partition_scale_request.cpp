@@ -30,11 +30,11 @@ void TPartitionScaleRequest::Bootstrap(const NActors::TActorContext &ctx) {
 void TPartitionScaleRequest::SendProposeRequest(const NActors::TActorContext &ctx) {
     auto proposal = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
     proposal->Record.SetDatabaseName(CanonizePath(DatabasePath));
-    FillProposeRequest(ctx,*proposal, DatabasePath, Topic);
+    FillProposeRequest(*proposal, DatabasePath, Topic, ctx);
     ctx.Send(MakeTxProxyID(), proposal.release());
 }
 
-void TPartitionScaleRequest::FillProposeRequest(const NActors::TActorContext &ctx, TEvTxUserProxy::TEvProposeTransaction& proposal, const TString& workingDir, const TString& topicName) {
+void TPartitionScaleRequest::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TString& workingDir, const TString& topicName, const NActors::TActorContext &ctx) {
     auto& modifyScheme = *proposal.Record.MutableTransaction()->MutableModifyScheme();
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup);
     modifyScheme.SetWorkingDir(workingDir);

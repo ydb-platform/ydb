@@ -48,7 +48,7 @@ private:
     }
     std::pair<TString, TString> SplitPath(const TString& path);
     void SendProposeRequest(const NActors::TActorContext &ctx);
-    void FillProposeRequest(const NActors::TActorContext &ctx, TEvTxUserProxy::TEvProposeTransaction& proposal, const TString& workingDir, const TString& topicName);
+    void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TString& workingDir, const TString& topicName, const NActors::TActorContext &ctx);
 
 private:
     const TString Topic;

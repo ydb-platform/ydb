@@ -1,12 +1,11 @@
 #include "schemaless_dynamic_table_writer.h"
+#include "helpers.h"
+#include "name_table.h"
+#include "schema.h"
+#include "unversioned_writer.h"
 
 #include <yt/yt/client/api/client.h>
 #include <yt/yt/client/api/transaction.h>
-
-#include <yt/yt/client/table_client/helpers.h>
-#include <yt/yt/client/table_client/name_table.h>
-#include <yt/yt/client/table_client/schema.h>
-#include <yt/yt/client/table_client/unversioned_writer.h>
 
 namespace NYT::NTableClient {
 
@@ -14,10 +13,6 @@ using namespace NApi;
 using namespace NConcurrency;
 using namespace NTransactionClient;
 using namespace NYPath;
-
-////////////////////////////////////////////////////////////////////////////////
-
-static auto Logger = NLogging::TLogger("SchemalessDynamicTableWriter");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -30,24 +25,13 @@ public:
         , Client_(std::move(client))
     { }
 
+    // NB(eshcherbin): This writer is synchronous and it's always ready.
     TFuture<void> GetReadyEvent() override
     {
-        // NB: this writer is synchronous and throws no errors. It just logs
-        // them instead. See TSchemalessDynamicTableWriter::Write().
         return VoidFuture;
     }
 
     bool Write(TRange<TUnversionedRow> rows) override
-    {
-        try {
-            return DoWrite(rows);
-        } catch (const std::exception& ex) {
-            YT_LOG_WARNING(ex, "Could not write to event log");
-            return false;
-        }
-    }
-
-    bool DoWrite(TRange<TUnversionedRow> rows)
     {
         TUnversionedRowsBuilder builder;
         for (auto row : rows) {

@@ -106,6 +106,10 @@ namespace NKikimr::NTable::NPage {
                 return RowCount - ErasedRowCount;
             }
 
+            ui64 GetTotalDataSize() const noexcept {
+                return DataSize + GroupDataSize;
+            }
+
             TString ToString() const noexcept {
                 TStringBuilder result;
                 result << "PageId: " << PageId << " RowCount: " << RowCount << " DataSize: " << DataSize;

@@ -11,9 +11,9 @@ using TGroupId = NPage::TGroupId;
 using TFrames = NPage::TFrames;
 using TBtreeIndexNode = NPage::TBtreeIndexNode;
 using TChild = TBtreeIndexNode::TChild;
+using TColumns = TBtreeIndexNode::TColumns;
 using TCells = NPage::TCells;
 using TCellsIterable = TBtreeIndexNode::TCellsIterable;
-using TRecIdx = NPage::TRecIdx;
 
 struct TNodeState {
     TPageId PageId;
@@ -21,17 +21,27 @@ struct TNodeState {
     TRowId EndRowId;
     TCellsIterable BeginKey;
     TCellsIterable EndKey;
-    std::optional<TBtreeIndexNode> Node;
-    std::optional<TRecIdx> Pos;
+    ui64 BeginDataSize;
+    ui64 EndDataSize;
 
-    TNodeState(TPageId pageId, TRowId beginRowId, TRowId endRowId, TCellsIterable beginKey, TCellsIterable endKey)
+    TNodeState(TPageId pageId, TRowId beginRowId, TRowId endRowId, TCellsIterable beginKey, TCellsIterable endKey, ui64 beginDataSize, ui64 endDataSize)
         : PageId(pageId)
         , BeginRowId(beginRowId)
         , EndRowId(endRowId)
         , BeginKey(beginKey)
         , EndKey(endKey)
+        , BeginDataSize(beginDataSize)
+        , EndDataSize(endDataSize)
     {
     }
+};
+
+struct TGetRowCount {
+
+};
+
+struct TGetDataSize {
+
 };
 
 ui64 GetPrevDataSize(const TPart* part, TGroupId groupId, TRowId rowId, IPages* env, bool& ready) {
@@ -204,6 +214,50 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env) {
     return ready;
 }
 
+void BuildHistogramRecursive(const TVector<TVector<TNodeState>>& parts, THistogram& histogram, ui64 resolution, ui64 beginValue, ui64 endValue, ui32 deep, IPages* env) {
+    const static ui32 MaxDeep = 100;
+    if (beginValue > endValue || endValue - beginValue <= resolution || deep > MaxDeep) {
+        return;
+    }
+
+    size_t biggestPartIndex = Max<size_t>();
+    ui64 biggestPartSize = 0;
+    for (auto index : xrange(parts.size())) {
+        ui64 size = 0;
+        for (const auto& node : parts[index]) {
+            size += node.EndRowId - node.BeginRowId;
+        }
+        if (size > biggestPartSize) {
+            biggestPartSize = size;
+            biggestPartIndex = index;
+        }
+    }
+
+    if (Y_UNLIKELY(biggestPartIndex == Max<size_t>())) {
+        Y_DEBUG_ABORT("Invalid part states");
+    }
+
+
+}
+
+void BuildHistogram(const TSubset& subset, THistogram& histogram, ui64 resolution, ui64 total, IPages* env) {
+    const static TCellsIterable EmptyKey(static_cast<const char*>(nullptr), TColumns());
+    
+    TVector<TVector<TNodeState>> parts;
+
+    for (const auto& part : subset.Flatten) {
+        auto& meta = part->IndexPages.GetBTree({});
+        parts.emplace_back();
+        parts.back().emplace_back(meta.PageId, 0, meta.RowCount, EmptyKey, EmptyKey, 0, meta.GetTotalDataSize());
+    }
+
+    BuildHistogramRecursive(parts, histogram, resolution, 0, total, env);
+
+    for (auto& bucket : histogram) {
+        bucket.Value = Min(bucket.Value, total);
+    }
+}
+
 }
 
 inline bool BuildStatsBTreeIndex(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, IPages* env) {
@@ -219,8 +273,8 @@ inline bool BuildStatsBTreeIndex(const TSubset& subset, TStats& stats, ui64 rowC
         return false;
     }
 
-    // TODO: build histogram here
-    Y_UNUSED(rowCountResolution, dataSizeResolution);
+    BuildHistogram(subset, stats.RowCountHistogram, rowCountResolution, stats.RowCount, env);
+    Y_UNUSED(dataSizeResolution);
 
     return true;
 }

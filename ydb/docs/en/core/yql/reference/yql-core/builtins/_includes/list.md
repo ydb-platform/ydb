@@ -608,10 +608,7 @@ Arguments:
 
 **Signature**
 ```
-ListTop(List<T>, N)->List<T>
-ListTop(List<T>?, N)->List<T>?
-
-ListTop(List<T>, N, (T)->U)->List<T>
-ListTop(List<T>?, N, (T)->U)->List<T>?
+ListTop(List<T>{Flags:AutoMap}, N)->List<T>
+ListTop(List<T>{Flags:AutoMap}, N, (T)->U)->List<T>
 ```
 The signatures of other functions are the same.

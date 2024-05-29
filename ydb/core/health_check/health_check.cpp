@@ -1604,7 +1604,7 @@ public:
         return TStringBuilder() << pDiskKey.GetNodeId() << "-" << pDiskKey.GetPDiskId();
     }
 
-    void FillPDiskStatus(const TString& pDiskId, Ydb::Monitoring::StoragePDiskStatus& storagePDiskStatus, TSelfCheckContext& context) {
+    void FillPDiskStatus(const TString& pDiskId, Ydb::Monitoring::StoragePDiskStatus& storagePDiskStatus, TSelfCheckContext context) {
         context.Location.clear_database(); // PDisks are shared between databases
         context.Location.mutable_storage()->mutable_pool()->clear_name(); // PDisks are shared between pools
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->clear_id(); // PDisks are shared between groups
@@ -1624,19 +1624,31 @@ public:
         const auto& pDisk = itPDisk->second->GetInfo();
 
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_pdisk()->begin()->set_path(pDisk.GetPath());
-        const auto& status = pDisk.GetStatusV2();
-        if (status == "ACTIVE") {
-            context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
-        } else if (status == "INACTIVE") {
-            context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "PDisk is inactive", ETags::PDiskState);
-        } else if (status == "BROKEN" || status == "FAULT" || status == "TO_BE_REMOVED") {
+        const auto& statusString = pDisk.GetStatusV2();
+        const auto *descriptor = NKikimrBlobStorage::EDriveStatus_descriptor();
+        auto status = descriptor->FindValueByName(statusString);
+        if (!status) {
             context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
-                                 TStringBuilder() << "PDisk state is " << status,
+                                 TStringBuilder() << "Unknown PDisk state: " << statusString,
                                  ETags::PDiskState);
-        } else {
-            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
-                                 TStringBuilder() << "Unknown PDisk state: " << status,
-                                 ETags::PDiskState);
+        }
+        switch (status->number()) {
+            case NKikimrBlobStorage::ACTIVE: {
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
+                break;
+            }
+            case NKikimrBlobStorage::INACTIVE: {
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "PDisk is inactive", ETags::PDiskState);
+                break;
+            }
+            case NKikimrBlobStorage::FAULTY:
+            case NKikimrBlobStorage::BROKEN:
+            case NKikimrBlobStorage::TO_BE_REMOVED: {
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
+                                     TStringBuilder() << "PDisk state is " << statusString,
+                                     ETags::PDiskState);
+                break;
+            }
         }
 
         if (pDisk.GetAvailableSize() != 0 && pDisk.GetTotalSize() != 0) { // do not replace it with Has()
@@ -1714,12 +1726,9 @@ public:
             return;
         }
 
-        Ydb::Monitoring::StatusFlag::Status spaceStatus = Ydb::Monitoring::StatusFlag::GREEN;
         if (vSlot->GetKey().HasPDiskId()) {
             TString pDiskId = GetPDiskId(vSlot->GetKey());
-            TSelfCheckContext pDiskContext{&context, "PDISK"};
-            FillPDiskStatus(pDiskId, *storageVDiskStatus.mutable_pdisk(), pDiskContext);
-            spaceStatus = MaxStatus(spaceStatus, pDiskContext.FindMaxStatus({ETags::PDiskSpace}));
+            FillPDiskStatus(pDiskId, *storageVDiskStatus.mutable_pdisk(), {&context, "PDISK"});
         }
 
         switch (status->number()) {
@@ -1742,12 +1751,9 @@ public:
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
             }
         }
-        if (spaceStatus != Ydb::Monitoring::StatusFlag::GREEN) {
-            context.ReportStatus(context.IssueRecords.begin()->IssueLog.status(),
-                                TStringBuilder() << "VDisk have space issue",
-                                ETags::VDiskState,
-                                {ETags::PDiskSpace});
-        }
+        context.ReportWithMaxChildStatus("VDisk have space issue",
+                            ETags::VDiskState,
+                            {ETags::PDiskSpace});
 
         storageVDiskStatus.set_overall(context.GetOverallStatus());
     }

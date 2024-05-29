@@ -302,12 +302,12 @@ namespace NActors {
         }
         if (poolId == Max<ui32>()) {
             if constexpr (SendingType == ESendingType::Common) {
-                return TlsThreadContext->Pool->Register(actor, mailboxType, ++RevolvingWriteCounter, parentId);
+                return Ctx.Executor->Register(actor, mailboxType, ++RevolvingWriteCounter, parentId);
             } else if (!TlsThreadContext) {
-                return TlsThreadContext->Pool->Register(actor, mailboxType, ++RevolvingWriteCounter, parentId);
+                return Ctx.Executor->Register(actor, mailboxType, ++RevolvingWriteCounter, parentId);
             } else {
                 ESendingType previousType = std::exchange(TlsThreadContext->SendingType, SendingType);
-                TActorId id = TlsThreadContext->Pool->Register(actor, mailboxType, ++RevolvingWriteCounter, parentId);
+                TActorId id = Ctx.Executor->Register(actor, mailboxType, ++RevolvingWriteCounter, parentId);
                 TlsThreadContext->SendingType = previousType;
                 return id;
             }
@@ -326,12 +326,12 @@ namespace NActors {
             parentId = CurrentRecipient;
         }
         if constexpr (SendingType == ESendingType::Common) {
-            return TlsThreadContext->Pool->Register(actor, mailbox, hint, parentId);
+            return Ctx.Executor->Register(actor, mailbox, hint, parentId);
         } else if (!TlsActivationContext) {
-            return TlsThreadContext->Pool->Register(actor, mailbox, hint, parentId);
+            return Ctx.Executor->Register(actor, mailbox, hint, parentId);
         } else {
             ESendingType previousType = std::exchange(TlsThreadContext->SendingType, SendingType);
-            TActorId id = TlsThreadContext->Pool->Register(actor, mailbox, hint, parentId);
+            TActorId id = Ctx.Executor->Register(actor, mailbox, hint, parentId);
             TlsThreadContext->SendingType = previousType;
             return id;
         }

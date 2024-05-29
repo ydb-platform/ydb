@@ -1214,13 +1214,6 @@ bool TTable::HasRunningAsyncIoOperation() const {
     return false;
 }
 
-bool TTable::IsProcessingFinished() const {
-    for (ui32 bucket = 0; bucket < NumberOfBuckets; ++bucket) {
-        if (!TableBucketsSpillers[bucket].IsProcessingFinished()) return false;
-    }
-    return true;
-}
-
 bool TTable::IsBucketInMemory(ui32 bucket) const {
     return TableBucketsSpillers[bucket].IsInMemory();
 }
@@ -1231,7 +1224,6 @@ bool TTable::IsSpilledBucketWaitingForExtraction(ui32 bucket) const {
 
 void TTable::StartLoadingBucket(ui32 bucket) {
     MKQL_ENSURE(!TableBucketsSpillers[bucket].IsInMemory(), "Internal logic error");
-    if (!TableBucketsSpillers[bucket].IsProcessingFinished()) return;
 
     TableBucketsSpillers[bucket].StartBucketRestoration();
 }

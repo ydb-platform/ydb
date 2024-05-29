@@ -1051,7 +1051,7 @@ TValuePackerTransport<Fast>::TValuePackerTransport(const TType* type, arrow::Mem
     : Type_(type)
     , State_(ScanTypeProperties(Type_, false))
     , IncrementalState_(ScanTypeProperties(Type_, true))
-    , ArrowPool_(pool ? *pool : *arrow::default_memory_pool())
+    , ArrowPool_(pool ? *pool : *NYql::NUdf::GetYqlMemoryPool())
 {
     InitBlocks();
 }

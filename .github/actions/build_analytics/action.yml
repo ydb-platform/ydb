@@ -37,7 +37,7 @@ runs:
         export build_target="${{ inputs.build_target }}" 
         ./ya tool bloat --linker-map $TARGET_DIR/$TARGET_NAME.map.lld --input $TARGET_DIR/$TARGET_NAME --save-html ya_bloat_html
         ./ydb/ci/build_bloat/main.py --build-dir . --html-dir-cpp html_cpp_impact --html-dir-headers html_headers_impact
-        ./ydb/ci/build_bloat/upload_ydb.py --html-dir-cpp html_cpp_impact --html-dir-headers html_headers_impact
+        ./ydb/ci/build_bloat/ydb_upload.py --html-dir-cpp html_cpp_impact --html-dir-headers html_headers_impact
 
     - name: Upload results
       shell: bash

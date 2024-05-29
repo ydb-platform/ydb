@@ -58,7 +58,9 @@ public:
                 PathIdFromPathId(pathId, ev->Record.MutablePathId());
                 ev->Record.MutableOperationId()->SetTxId(ui64(OperationId.GetTxId()));
                 ev->Record.MutableOperationId()->SetPartId(ui32(OperationId.GetSubTxId()));
-                ev->Record.MutableSwitchState()->CopyFrom(alterData->Description.GetState());
+                if (alterData->Description.GetState().GetStateCase() != context.SS->Replications.at(pathId)->Description.GetState().GetStateCase()) {
+                    ev->Record.MutableSwitchState()->CopyFrom(alterData->Description.GetState());
+                }
 
                 LOG_D(DebugHint() << "Send TEvAlterReplication to controller"
                     << ": tabletId# " << tabletId
@@ -340,7 +342,7 @@ public:
 
         if (op.HasConfig() && op.HasState()) {
             result->SetError(NKikimrScheme::StatusInvalidParameter,
-                "It is not allowed to change both settings and the state of the rplication in the same query. Please submit separate queries for each action");
+                "It is not allowed to change both settings and the state of the replication in the same query. Please submit separate queries for each action");
             return result;
         }
 

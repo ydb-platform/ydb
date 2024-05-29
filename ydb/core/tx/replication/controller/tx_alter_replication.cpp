@@ -37,9 +37,12 @@ public:
             return true;
         }
 
+        if (!record.HasSwitchState()) {
+            Result->Record.SetStatus(NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
+            return true;
+        }
+
         switch (record.GetSwitchState().GetStateCase()) {
-        case NKikimrReplication::TReplicationState::kStandBy:
-        case NKikimrReplication::TReplicationState::kPaused:
         case NKikimrReplication::TReplicationState::kDone:
             break;
         default:

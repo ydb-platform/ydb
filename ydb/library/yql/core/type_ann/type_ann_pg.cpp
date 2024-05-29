@@ -4069,7 +4069,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                             return IGraphTransformer::TStatus::Error;
                         }
                         for (const auto& e: child->Children()) {
-                            if (!EnsureTuple(*e, ctx.Expr)) {
+                            if (!EnsureTupleMinSize(*e, 1, ctx.Expr)) {
                                 return IGraphTransformer::TStatus::Error;
                             }
                             if (!EnsureAtom(e->Head(), ctx.Expr)) {

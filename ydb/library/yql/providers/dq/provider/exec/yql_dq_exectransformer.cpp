@@ -1782,13 +1782,14 @@ private:
             TStatus combinedStatus = TStatus::Repeat;
             TExecState::TQueueType completed;
             auto newPromise = NThreading::NewPromise();
-            {
-                TGuard<TAdaptiveLock> guard(execState->Lock);
+            with_lock(execState->Lock) {
                 completed.Swap(execState->Completed);
-                execState->Promise.Swap(newPromise);
-                execState->HasResult = false;
+                if (execState->HasResult) {
+                    execState->Promise = std::move(newPromise);
+                    execState->HasResult = false;
+                }
             }
-
+            YQL_ENSURE(completed.Empty() == newPromise.Initialized());
             for (auto& item : completed) {
                 TExprNode::TPtr callableOutput;
                 auto status = item.Callback(item.Node, callableOutput, ctx);

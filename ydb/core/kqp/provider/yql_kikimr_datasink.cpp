@@ -998,7 +998,6 @@ public:
                             .Ptr();
                     }
                 } else {
-                    Cerr << "TEST <<< >>> " << NCommon::ExprToPrettyString(ctx, *settings.Other.Ptr()) << Endl;
                     return Build<TKiWriteTable>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))

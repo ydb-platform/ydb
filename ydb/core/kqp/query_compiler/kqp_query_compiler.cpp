@@ -1063,12 +1063,9 @@ private:
                 }
             }
 
-            Cerr << "TEST <<  " << settings.InconsistentWrite().Cast().StringValue() << Endl;
             if (const auto inconsistentWrite = settings.InconsistentWrite().Cast(); inconsistentWrite.StringValue() == "true") {
                 settingsProto.SetInconsistentTx(true);
             }
-
-            //settingsProto.SetInconsistentTx(true);
 
             internalSinkProto.MutableSettings()->PackFrom(settingsProto);
         } else {

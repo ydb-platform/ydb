@@ -14,8 +14,8 @@ enum class EDatabaseType {
     DataStreams,
     ObjectStorage,
     PostgreSQL,
-    MySQL,
-    YT
+    YT,
+    MySQL
 };
 
 inline EDatabaseType DatabaseTypeFromDataSourceKind(NConnector::NApi::EDataSourceKind dataSourceKind) {

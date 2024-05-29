@@ -79,17 +79,19 @@ void TLoader::StageParseMeta() noexcept
 
         BTreeGroupIndexes.clear();
         BTreeHistoricIndexes.clear();
-        for (bool history : {false, true}) {
-            for (const auto &meta : history ? layout.GetBTreeHistoricIndexes() : layout.GetBTreeGroupIndexes()) {
-                NPage::TBtreeIndexMeta converted{{
-                    meta.GetRootPageId(), 
-                    meta.GetRowCount(), 
-                    meta.GetDataSize(),
-                    meta.GetGroupDataSize(),
-                    meta.GetErasedRowCount()}, 
-                    meta.GetLevelCount(), 
-                    meta.GetIndexSize()};
-                (history ? BTreeHistoricIndexes : BTreeGroupIndexes).push_back(converted);
+        if (layout.HasBTreeIndexesFormatVersion() && layout.GetBTreeIndexesFormatVersion() == NPage::TBtreeIndexNode::FormatVersion) {
+            for (bool history : {false, true}) {
+                for (const auto &meta : history ? layout.GetBTreeHistoricIndexes() : layout.GetBTreeGroupIndexes()) {
+                    NPage::TBtreeIndexMeta converted{{
+                        meta.GetRootPageId(), 
+                        meta.GetRowCount(), 
+                        meta.GetDataSize(),
+                        meta.GetGroupDataSize(),
+                        meta.GetErasedRowCount()}, 
+                        meta.GetLevelCount(), 
+                        meta.GetIndexSize()};
+                    (history ? BTreeHistoricIndexes : BTreeGroupIndexes).push_back(converted);
+                }
             }
         }
 

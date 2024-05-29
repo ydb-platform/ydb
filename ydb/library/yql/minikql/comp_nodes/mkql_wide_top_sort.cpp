@@ -101,7 +101,7 @@ struct TSpilledData {
         return AsyncWriteOperation;
     }
 
-    TAsyncReadOperation Read(TStorage &buffer, TComputationContext& ctx) {
+    TAsyncReadOperation Read(TStorage &buffer, const TComputationContext& ctx) {
         if (AsyncReadOperation) {
             if (AsyncReadOperation->HasValue()) {
                 Spiller->AsyncReadCompleted(AsyncReadOperation->ExtractValue().value(), ctx.HolderFactory);
@@ -134,7 +134,7 @@ private:
     TSpilledData::TPtr SpilledData;
     std::function<bool(const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*)> LessFunc;
     ui32 Width_;
-    TComputationContext* Ctx;
+    const TComputationContext* Ctx;
     bool HasValue = false;
 public:
 
@@ -142,7 +142,7 @@ public:
         const std::function<bool(const NUdf::TUnboxedValuePod*,const NUdf::TUnboxedValuePod*)>& lessFunc,
         TSpilledData::TPtr spilledData,
         size_t dataWidth,
-        TComputationContext* ctx
+        const TComputationContext* ctx
         )
         : SpilledData(spilledData)
         , LessFunc(lessFunc)
@@ -251,32 +251,6 @@ public:
             InputStatus = EFetchResult::Finish;
     }
 
-    virtual EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
-        while (EFetchResult::Finish != InputStatus) {
-            switch (InputStatus = Flow->FetchValues(ctx, GetFields())) {
-                case EFetchResult::One:
-                    Put();
-                    continue;
-                case EFetchResult::Yield:
-                    return EFetchResult::Yield;
-                case EFetchResult::Finish:
-                    Seal();
-                    break;
-            }
-        }
-
-        if (auto extract = Extract()) {
-            for (const auto index : Indexes)
-                if (const auto to = output[index])
-                    *to = std::move(*extract++);
-                else
-                    ++extract;
-            return EFetchResult::One;
-        }
-
-        return EFetchResult::Finish;
-    }
-
     NUdf::TUnboxedValue*const* GetFields() const {
         return Fields.data();
     }
@@ -383,7 +357,9 @@ private:
 
     void ResetFields() {
         NUdf::TUnboxedValuePod* ptr;
-        if constexpr (!HasCount) {
+        if constexpr (HasCount) {
+            ptr = Tongue = Free.back();
+        } else {
             auto pos = Storage.size();
             Storage.insert(Storage.end(), Indexes.size(), {});
             ptr = Storage.data() + pos;
@@ -394,156 +370,220 @@ private:
 
 public:
     TSpillingSupportState(TMemoryUsageInfo* memInfo, ui64 count, const bool* directons, size_t keyWidth, const TCompareFunc& compare,
-        const std::vector<ui32>& indexes, IComputationWideFlowNode *const flow, TMultiType* tupleMultiType)
+        const std::vector<ui32>& indexes, TMultiType* tupleMultiType, const TComputationContext& ctx)
         : TBase(memInfo)
-        , Flow(flow)
         , Count(count)
         , Indexes(indexes)
         , Directions(directons, directons + keyWidth)
         , LessFunc(std::bind(std::less<int>(), std::bind(compare, Directions.data(), std::placeholders::_1, std::placeholders::_2), 0))
         , Fields(Indexes.size(), nullptr)
         , TupleMultiType(tupleMultiType)
+        , Ctx(ctx)
     {
         if constexpr (!HasCount) {
             ResetFields();
             return;
         }
-        throw yexception() << "Spilling doesn't support TopSort.";
-    }
 
-    virtual EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
-        while (true) {
-            switch(GetMode()) {
-                case EOperatingMode::InMemory: {
-                    auto r = DoCalculateInMemory(ctx, output);
-                    if (GetMode() == TSpillingSupportState::EOperatingMode::InMemory) {
-                        return r;
-                    }
-                    break;
-                }
-                case EOperatingMode::Spilling: {
-                    DoCalculateWithSpilling(ctx);
-                    if (GetMode() == EOperatingMode::Spilling) {
-                        return EFetchResult::Yield;
-                    }
-                    break;
-                }
-                case EOperatingMode::ProcessSpilled: {
-                    return ProcessSpilledData(output);
-                }
-
-            }
-        }
-        Y_UNREACHABLE();
-    }
-
-private:
-
-    EFetchResult DoCalculateInMemory(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
-        while (EFetchResult::Finish != InputStatus) {
-            switch (InputStatus = Flow->FetchValues(ctx, GetFields())) {
-                case EFetchResult::One:
-                    if (Put()) {
-                        if (ctx.SpillerFactory && !HasMemoryForProcessing()) {
-                            const auto used = TlsAllocState->GetUsed();
-                            const auto limit = TlsAllocState->GetLimit();
-
-                            YQL_LOG(INFO) << "yellow zone reached " << (used*100/limit) << "%=" << used << "/" << limit;
-
-                            YQL_LOG(INFO) << "switching Memory mode to Spilling";
-
-                            SwitchMode(EOperatingMode::Spilling, ctx);
-                            return EFetchResult::Yield;
-                        }
-                    }
-                    continue;
-                case EFetchResult::Yield:
-                    return EFetchResult::Yield;
-                case EFetchResult::Finish:
-                {
-                    if (!SpilledStates.empty()) {
-                        SwitchMode(EOperatingMode::Spilling, ctx);
-                        return EFetchResult::Yield;
-                    }
-                    Seal();
-                    break;
-                }
-            }
-        }
-
-        if (auto extract = Extract()) {
-            for (const auto index : Indexes)
-                if (const auto to = output[index])
-                    *to = std::move(*extract++);
-                else
-                    ++extract;
-            return EFetchResult::One;
-        }
-
-        return EFetchResult::Finish;
-    }
-
-    EFetchResult DoCalculateWithSpilling(TComputationContext& ctx) {
-        if (!SpillState()) {
-            return EFetchResult::Yield;
-        }
-        ResetFields();
-        auto nextMode = (IsReadFromChannelFinished() ? EOperatingMode::ProcessSpilled : EOperatingMode::InMemory);
-
-        YQL_LOG(INFO) << (nextMode ==  EOperatingMode::ProcessSpilled ? "switching to ProcessSpilled" :  "switching to Memory mode");
-
-        SwitchMode(nextMode, ctx);
-        return EFetchResult::Yield;
-    }
-
-    EFetchResult ProcessSpilledData(NUdf::TUnboxedValue*const* output) {
-        if (SpilledUnboxedValuesIterators.empty()) {
-            return EFetchResult::Finish;
-        }
-
-        for (auto &spilledUnboxedValuesIterator : SpilledUnboxedValuesIterators) {
-            if (!spilledUnboxedValuesIterator.CheckForInit()) {
-                return EFetchResult::Yield;
-            }
-        }
-        if (!IsHeapBuilt) {
-            std::make_heap(SpilledUnboxedValuesIterators.begin(), SpilledUnboxedValuesIterators.end());
-            IsHeapBuilt = true;
+        Storage.resize(GetStorageSize() * Indexes.size());
+        Free.resize(GetStorageSize(), nullptr);
+        if (Count) {
+            Full.reserve(GetStorageSize());
+            auto ptr = Storage.data();
+            std::generate(Free.begin(), Free.end(), [&ptr, this]() {
+                const auto p = ptr;
+                ptr += Indexes.size();
+                return p;
+            });
+            ResetFields();
         } else {
-            std::push_heap(SpilledUnboxedValuesIterators.begin(), SpilledUnboxedValuesIterators.end());
+            InputStatus = EFetchResult::Finish;
         }
+    }
 
-        std::pop_heap(SpilledUnboxedValuesIterators.begin(), SpilledUnboxedValuesIterators.end());
-        auto &currentIt = SpilledUnboxedValuesIterators.back();
-        NKikimr::NUdf::TUnboxedValue* res = currentIt.GetValue();
-        for (const auto index : Indexes)
-        {
-            if (const auto to = output[index])
-                *to = std::move(*res++);
-            else
-                ++res;
+    // virtual EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
+    //     while (true) {
+    //         switch(GetMode()) {
+    //             case EOperatingMode::InMemory: {
+    //                 auto r = DoCalculateInMemory(ctx, output);
+    //                 if (GetMode() == TSpillingSupportState::EOperatingMode::InMemory) {
+    //                     return r;
+    //                 }
+    //                 break;
+    //             }
+    //             case EOperatingMode::Spilling: {
+    //                 DoCalculateWithSpilling(ctx);
+    //                 if (GetMode() == EOperatingMode::Spilling) {
+    //                     return EFetchResult::Yield;
+    //                 }
+    //                 break;
+    //             }
+    //             case EOperatingMode::ProcessSpilled: {
+    //                 return ProcessSpilledData(output);
+    //             }
+
+    //         }
+    //     }
+    //     Y_UNREACHABLE();
+    // }
+
+    bool IsReadyToContinue() {
+        switch (GetMode()) {
+            case EOperatingMode::InMemory:
+               return true;
+            case EOperatingMode::Spilling:
+            {
+                if (!SpillState()) {
+                    return false;
+                }
+                ResetFields();
+                auto nextMode = (IsReadFromChannelFinished() ? EOperatingMode::ProcessSpilled : EOperatingMode::InMemory);
+                SwitchMode(nextMode);
+                return true;
+            }
+            case EOperatingMode::ProcessSpilled:
+            {
+                if (SpilledUnboxedValuesIterators.empty()) {
+                    return true;
+                }
+                for (auto &spilledUnboxedValuesIterator : SpilledUnboxedValuesIterators) {
+                    if (!spilledUnboxedValuesIterator.CheckForInit()) {
+                        return false;
+                    }
+                }
+                return true;
+            }
         }
-        currentIt.Pop();
-        if (currentIt.IsFinished()) {
-            SpilledUnboxedValuesIterators.pop_back();
-        }
-        return EFetchResult::One;
+    }
+
+    bool IsFinished() const {
+        return IsReadFromChannelFinished() && SpilledUnboxedValuesIterators.empty();
     }
 
     NUdf::TUnboxedValue*const* GetFields() const {
         return Fields.data();
     }
 
-    bool Put() {
+    // EFetchResult DoCalculateInMemory(TComputationContext& , NUdf::TUnboxedValue*const* ) {
+        //         case EFetchResult::One:
+        //             if (Put()) {
+        //                 if (ctx.SpillerFactory && !HasMemoryForProcessing()) {
+        //                     SwitchMode(EOperatingMode::Spilling);
+        //                     return EFetchResult::Yield;
+        //                 }
+        //             }
+        //             continue;
+        //         case EFetchResult::Yield:
+        //             return EFetchResult::Yield;
+        //         case EFetchResult::Finish:
+        //         {
+        //             if (!SpilledStates.empty()) {
+        //                 SwitchMode(EOperatingMode::Spilling);
+        //                 return EFetchResult::Yield;
+        //             }
+        //             Seal();
+        //             break;
+        //         }
+        //     }
+        // }
+
+        // if (auto extract = Extract()) {
+        //     for (const auto index : Indexes)
+        //         if (const auto to = output[index])
+        //             *to = std::move(*extract++);
+        //         else
+        //             ++extract;
+        //     return EFetchResult::One;
+        // }
+
+    //     return EFetchResult::Finish;
+    // }
+
+    // EFetchResult DoCalculateWithSpilling(TComputationContext& ctx) {
+    //     if (!SpillState()) {
+    //         return EFetchResult::Yield;
+    //     }
+    //     ResetFields();
+    //     auto nextMode = (IsReadFromChannelFinished() ? EOperatingMode::ProcessSpilled : EOperatingMode::InMemory);
+    //     SwitchMode(nextMode);
+    //     return EFetchResult::Yield;
+    // }
+
+    // EFetchResult ProcessSpilledData(NUdf::TUnboxedValue*const* output) {
+    //     if (SpilledUnboxedValuesIterators.empty()) {
+    //         return EFetchResult::Finish;
+    //     }
+
+    //     for (auto &spilledUnboxedValuesIterator : SpilledUnboxedValuesIterators) {
+    //         if (!spilledUnboxedValuesIterator.CheckForInit()) {
+    //             return EFetchResult::Yield;
+    //         }
+    //     }
+    //     if (!IsHeapBuilt) {
+    //         std::make_heap(SpilledUnboxedValuesIterators.begin(), SpilledUnboxedValuesIterators.end());
+    //         IsHeapBuilt = true;
+    //     } else {
+    //         std::push_heap(SpilledUnboxedValuesIterators.begin(), SpilledUnboxedValuesIterators.end());
+    //     }
+
+    //     std::pop_heap(SpilledUnboxedValuesIterators.begin(), SpilledUnboxedValuesIterators.end());
+    //     auto &currentIt = SpilledUnboxedValuesIterators.back();
+    //     NKikimr::NUdf::TUnboxedValue* res = currentIt.GetValue();
+    //     for (const auto index : Indexes)
+    //     {
+    //         if (const auto to = output[index])
+    //             *to = std::move(*res++);
+    //         else
+    //             ++res;
+    //     }
+    //     currentIt.Pop();
+    //     if (currentIt.IsFinished()) {
+    //         SpilledUnboxedValuesIterators.pop_back();
+    //     }
+    //     return EFetchResult::One;
+    // }
+
+    void Put() {
         if constexpr (!HasCount) {
             ResetFields();
-            return true;
+            if (Ctx.SpillerFactory && !HasMemoryForProcessing()) {
+                SwitchMode(EOperatingMode::Spilling);
+            }
+            return;
         }
 
-        throw yexception() << "Spilling doesn't support TopSort.";
+        if (Full.size() + 1U == GetStorageSize()) {
+            Free.pop_back();
+
+            NYql::FastNthElement(Full.begin(), Full.begin() + Count, Full.end(), LessFunc);
+            std::copy(Full.cbegin() + Count, Full.cend(), std::back_inserter(Free));
+            Full.resize(Count);
+
+            std::for_each(Free.cbegin(), Free.cend(), [this](NUdf::TUnboxedValuePod* ptr) {
+                std::fill_n(static_cast<NUdf::TUnboxedValue*>(ptr), Indexes.size(), NUdf::TUnboxedValuePod());
+            });
+            Free.emplace_back(Tongue);
+            Throat = nullptr;
+        }
+
+        if (Full.size() >= Count) {
+            if (!Throat)
+                Throat = *std::max_element(Full.cbegin(), Full.cend(), LessFunc);
+
+            if (!LessFunc(Tongue, Throat))
+                return;
+        }
+
+        Full.emplace_back(Free.back());
+        Free.pop_back();
+        ResetFields();
     }
 
     void Seal() {
+        if (!SpilledStates.empty()) {
+            SwitchMode(EOperatingMode::Spilling);
+            return;
+        }
         if constexpr (!HasCount) {
             static_assert (Sort);
             // Remove placeholder for new data
@@ -558,35 +598,73 @@ private:
             return;
         }
 
-        throw yexception() << "Spilling doesn't support TopSort.";
+        Free.clear();
+        Free.shrink_to_fit();
+
+        if (Full.size() > Count) {
+            NYql::FastNthElement(Full.begin(), Full.begin() + Count, Full.end(), LessFunc);
+            Full.resize(Count);
+        }
+
+        if constexpr (Sort) {
+            std::sort(Full.rbegin(), Full.rend(), LessFunc);
+        }
     }
 
     NUdf::TUnboxedValue* Extract() {
-        if (Full.empty())
-            return nullptr;
+        if (SpilledStates.empty()) {
+            // No spilled data
+            if (Full.empty())
+                return nullptr;
 
-        const auto ptr = Full.back();
-        Full.pop_back();
-        return static_cast<NUdf::TUnboxedValue*>(ptr);
+            const auto ptr = Full.back();
+            Full.pop_back();
+            return static_cast<NUdf::TUnboxedValue*>(ptr);
+        }
+
+        if (!IsHeapBuilt) {
+            std::make_heap(SpilledUnboxedValuesIterators.begin(), SpilledUnboxedValuesIterators.end());
+            IsHeapBuilt = true;
+        } else {
+            std::push_heap(SpilledUnboxedValuesIterators.begin(), SpilledUnboxedValuesIterators.end());
+        }
+
+        std::pop_heap(SpilledUnboxedValuesIterators.begin(), SpilledUnboxedValuesIterators.end());
+        auto &currentIt = SpilledUnboxedValuesIterators.back();
+        return currentIt.GetValue();
     }
 
+    void Clean() {
+        if (SpilledStates.empty()) {
+            // No spilled data
+            return;
+        }
+        auto &currentIt = SpilledUnboxedValuesIterators.back();
+        currentIt.Pop();
+        if (currentIt.IsFinished()) {
+            SpilledUnboxedValuesIterators.pop_back();
+        }
+    }
+
+private:
     EOperatingMode GetMode() const { return Mode; }
 
     bool HasMemoryForProcessing() const {
         return !TlsAllocState->IsMemoryYellowZoneEnabled();
+        // return false;
     }
 
     bool IsReadFromChannelFinished() const {
         return InputStatus == EFetchResult::Finish;
     }
 
-    void SwitchMode(EOperatingMode mode, TComputationContext& ctx) {
+    void SwitchMode(EOperatingMode mode) {
         switch(mode) {
             case EOperatingMode::InMemory:
                 break;
             case EOperatingMode::Spilling:
             {
-                auto spiller = ctx.SpillerFactory->CreateSpiller();
+                auto spiller = Ctx.SpillerFactory->CreateSpiller();
                 const size_t PACK_SIZE = 5_MB;
                 SpilledStates.emplace_back(std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, TupleMultiType, PACK_SIZE));
                 break;
@@ -595,7 +673,7 @@ private:
             {
                 SpilledUnboxedValuesIterators.reserve(SpilledStates.size());
                 for (auto &state: SpilledStates) {
-                    SpilledUnboxedValuesIterators.emplace_back(LessFunc, &state, Indexes.size(), &ctx);
+                    SpilledUnboxedValuesIterators.emplace_back(LessFunc, &state, Indexes.size(), &Ctx);
                 }
                 break;
             }
@@ -637,8 +715,10 @@ private:
         return true;
     }
 
+public:
     EFetchResult InputStatus = EFetchResult::One;
-    IComputationWideFlowNode *const Flow;
+
+private:
     const ui64 Count;
     const std::vector<ui32> Indexes;
     const std::vector<bool> Directions;
@@ -647,17 +727,20 @@ private:
     TPointers Free, Full;
     TFields Fields;
     TMultiType* TupleMultiType;
+    const TComputationContext& Ctx;
     std::vector<TSpilledData> SpilledStates;
     EOperatingMode Mode = EOperatingMode::InMemory;
     std::vector<TSpilledUnboxedValuesIterator> SpilledUnboxedValuesIterators;
+    NUdf::TUnboxedValuePod* Tongue = nullptr;
+    NUdf::TUnboxedValuePod* Throat = nullptr;
     bool IsHeapBuilt = false;
 };
 
 #ifndef MKQL_DISABLE_CODEGEN
 template <bool Sort, bool HasCount>
-class TLLVMFieldsStructureState: public TLLVMFieldsStructure<TComputationValue<TState<Sort, HasCount>>> {
+class TLLVMFieldsStructureState: public TLLVMFieldsStructure<TComputationValue<TSpillingSupportState<Sort, HasCount>>> {
 private:
-    using TBase = TLLVMFieldsStructure<TComputationValue<TState<Sort, HasCount>>>;
+    using TBase = TLLVMFieldsStructure<TComputationValue<TSpillingSupportState<Sort, HasCount>>>;
     llvm::IntegerType* ValueType;
     llvm::PointerType* PtrValueType;
     llvm::IntegerType* StatusType;
@@ -726,23 +809,42 @@ public:
 
             std::vector<bool> dirs(Directions.size());
             std::transform(Directions.cbegin(), Directions.cend(), dirs.begin(), [&ctx](IComputationNode* dir){ return dir->GetValue(ctx).Get<bool>(); });
-            if (!ctx.ExecuteLLVM) {
-                MakeSpillingSupportState(ctx, state, count, dirs.data());
-            } else {
-                MakeState(ctx, state, count, dirs.data());
-            }
+            MakeSpillingSupportState(ctx, state, count, dirs.data());
         }
 
-        // To avoid dynamic_cast implementation in LLVM implementation
-        // This is temporary solution. Final result will have just one state here.
-        if (!ctx.ExecuteLLVM) {
-            if (const auto ptr = static_cast<TSpillingSupportState<Sort, HasCount>*>(state.AsBoxed().Get())) {
-                return ptr->DoCalculate(ctx, output);
+        if (const auto ptr = static_cast<TSpillingSupportState<Sort, HasCount>*>(state.AsBoxed().Get())) {
+            while (EFetchResult::Finish != ptr->InputStatus) {
+                if (!ptr->IsReadyToContinue()) {
+                    return EFetchResult::Yield;
+                }
+                switch (ptr->InputStatus = Flow->FetchValues(ctx, ptr->GetFields())) {
+                    case EFetchResult::One:
+                        ptr->Put();
+                        continue;
+                    case EFetchResult::Yield:
+                        return EFetchResult::Yield;
+                    case EFetchResult::Finish:
+                        ptr->Seal();
+                        break;
+                }
             }
-        } else {
-            if (const auto ptr = static_cast<TState<Sort, HasCount>*>(state.AsBoxed().Get())) {
-                return ptr->DoCalculate(ctx, output);
+
+            if (!ptr->IsReadyToContinue()) {
+                return EFetchResult::Yield;
             }
+
+            if (auto extract = ptr->Extract()) {
+                for (const auto index : Indexes) {
+                    if (const auto to = output[index])
+                        *to = std::move(*extract++);
+                    else
+                        ++extract;
+                }
+                ptr->Clean();
+                return EFetchResult::One;
+            }
+
+            return ptr->IsFinished() ? EFetchResult::Finish : EFetchResult::Yield;
         }
 
         Y_UNREACHABLE();
@@ -845,7 +947,7 @@ public:
             block = rest;
 
             new StoreInst(ConstantInt::get(last->getType(), static_cast<i32>(EFetchResult::Finish)), statusPtr, block);
-            const auto sealFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState<Sort, HasCount>::Seal));
+            const auto sealFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSpillingSupportState<Sort, HasCount>::Seal));
             const auto sealType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType()}, false);
             const auto sealPtr = CastInst::Create(Instruction::IntToPtr, sealFunc, PointerType::getUnqual(sealType), "seal", block);
             CallInst::Create(sealType, sealPtr, {stateArg}, "", block);
@@ -876,7 +978,7 @@ public:
             }
 
 
-            const auto pushFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState<Sort, HasCount>::Put));
+            const auto pushFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSpillingSupportState<Sort, HasCount>::Put));
             const auto pushType = FunctionType::get(Type::getInt1Ty(context), {stateArg->getType()}, false);
             const auto pushPtr = CastInst::Create(Instruction::IntToPtr, pushFunc, PointerType::getUnqual(pushType), "function", block);
             const auto accepted = CallInst::Create(pushType, pushPtr, {stateArg}, "accepted", block);
@@ -916,7 +1018,7 @@ public:
 
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
 
-            const auto extractFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState<Sort, HasCount>::Extract));
+            const auto extractFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSpillingSupportState<Sort, HasCount>::Extract));
             const auto extractType = FunctionType::get(outputPtrType, {stateArg->getType()}, false);
             const auto extractPtr = CastInst::Create(Instruction::IntToPtr, extractFunc, PointerType::getUnqual(extractType), "extract", block);
             const auto out = CallInst::Create(extractType, extractPtr, {stateArg}, "out", block);
@@ -948,11 +1050,11 @@ private:
     }
 
     void MakeSpillingSupportState(TComputationContext& ctx, NUdf::TUnboxedValue& state, ui64 count, const bool* directions) const {
-        if (Sort && !HasCount && !ctx.ExecuteLLVM) {
-            state = ctx.HolderFactory.Create<TSpillingSupportState<Sort, HasCount>>(count, directions, Directions.size(), TMyValueCompare(Keys), Indexes, Flow, TupleMultiType);
-            return;
-        }
-        state = ctx.HolderFactory.Create<TState<Sort, HasCount>>(count, directions, Directions.size(), TMyValueCompare(Keys), Indexes, Flow);
+#ifdef MKQL_DISABLE_CODEGEN
+        state = ctx.HolderFactory.Create<TSpillingSupportState<Sort, HasCount>>(count, directions, Directions.size(), TMyValueCompare(Keys), Indexes, TupleMultiType, ctx);
+#else
+        state = ctx.HolderFactory.Create<TSpillingSupportState<Sort, HasCount>>(count, directions, Directions.size(), ctx.ExecuteLLVM && Compare ? TCompareFunc(Compare) : TCompareFunc(TMyValueCompare(Keys)), Indexes, TupleMultiType, ctx);
+#endif
     }
 
     void RegisterDependencies() const final {

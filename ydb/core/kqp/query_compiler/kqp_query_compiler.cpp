@@ -1033,6 +1033,7 @@ private:
             for (const auto& columnName : tableMeta->KeyColumnNames) {
                 const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
                 YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + columnName + "\"");
+
                 auto keyColumnProto = settingsProto.AddKeyColumns();
                 keyColumnProto->SetId(columnMeta->Id);
                 keyColumnProto->SetName(columnName);
@@ -1061,6 +1062,13 @@ private:
                     typeInfo.SetPgTypeMod(columnMeta->TypeMod);
                 }
             }
+
+            Cerr << "TEST <<  " << settings.InconsistentWrite().Cast().StringValue() << Endl;
+            if (const auto inconsistentWrite = settings.InconsistentWrite().Cast(); inconsistentWrite.StringValue() == "true") {
+                settingsProto.SetInconsistentTx(true);
+            }
+
+            //settingsProto.SetInconsistentTx(true);
 
             internalSinkProto.MutableSettings()->PackFrom(settingsProto);
         } else {

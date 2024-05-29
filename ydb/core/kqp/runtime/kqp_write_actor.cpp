@@ -143,7 +143,7 @@ public:
             Settings.GetInconsistentTx())
     {
         YQL_ENSURE(std::holds_alternative<ui64>(TxId));
-        YQL_ENSURE(!InconsistentTx && !ImmediateTx);
+        //YQL_ENSURE(!InconsistentTx && !ImmediateTx);
         EgressStats.Level = args.StatsLevel;
     }
 

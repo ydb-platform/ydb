@@ -243,6 +243,7 @@ TExprBase BuildUpsertTable(const TKiWriteTable& write, const TCoAtomList& inputC
         .Input(input.Ptr())
         .Columns(columns.Ptr())
         .ReturningColumns(write.ReturningColumns())
+        //.Settings(write.Settings())
         .Done();
 
     return effect;
@@ -263,6 +264,7 @@ TExprBase BuildUpsertTableWithIndex(const TKiWriteTable& write, const TCoAtomLis
         .Columns(columns.Ptr())
         .ReturningColumns(write.ReturningColumns())
         .GenerateColumnsIfInsert(generateColumnsIfInsert)
+        //.Settings(write.Settings())
         .Done();
 
     return effect;
@@ -272,12 +274,28 @@ TExprBase BuildReplaceTable(const TKiWriteTable& write, const TCoAtomList& input
     const TCoAtomList& autoincrement,
     const TKikimrTableDescription& table, TExprContext& ctx)
 {
+    TVector<TCoNameValueTuple> settings;
+    auto setting = GetSetting(write.Settings().Ref(), "AllowInconsistentWrites");
+    if (setting) {
+        Cerr << "TEST :: " << NCommon::ExprToPrettyString(ctx, *setting) << Endl;
+        settings.push_back(TCoNameValueTuple(setting));
+    }
+
+    Cerr << "TEST :: " << NCommon::ExprToPrettyString(ctx, write.Settings().Ref()) << Endl;
+    //auto settingResult = TCoNameValueTuple(setting);
+    //TODO: rewrite 
+    auto result = Build<TCoNameValueTupleList>(ctx, write.Pos())
+        .Add(settings)
+        .Done()
+        .Ptr();
+
     const auto [input, columns] = BuildWriteInput(write, table, inputColumns, autoincrement, write.Pos(), ctx);
     auto effect = Build<TKqlUpsertRows>(ctx, write.Pos())
         .Table(BuildTableMeta(table, write.Pos(), ctx))
         .Input(input.Ptr())
         .Columns(columns)
         .ReturningColumns(write.ReturningColumns())
+        .Settings(result)
         .Done();
 
     return effect;
@@ -294,6 +312,7 @@ TExprBase BuildReplaceTableWithIndex(const TKiWriteTable& write, const TCoAtomLi
         .Columns(columns.Ptr())
         .ReturningColumns(write.ReturningColumns())
         .GenerateColumnsIfInsert<TCoAtomList>().Build()
+        //.Settings(write.Settings())
         .Done();
 
     return effect;

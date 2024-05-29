@@ -249,7 +249,7 @@ namespace NKikimr::NTable::NPage {
 
     public:
         // Version = 0 didn't have GroupDataSize field
-        static const ui32 FormatVersion = 1;
+        static const ui16 FormatVersion = 1;
 
         TBtreeIndexNode(TSharedData raw)
             : Raw(std::move(raw))

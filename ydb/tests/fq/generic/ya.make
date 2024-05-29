@@ -49,6 +49,8 @@ IF (OPENSOURCE)
     REQUIREMENTS(cpu:all)
 ENDIF()
 
+DEPENDS(ydb/tests/tools/pq_read)
+
 PEERDIR(
     ydb/tests/fq/generic/utils
     ydb/tests/tools/datastreams_helpers

@@ -46,7 +46,16 @@ class TestStreamingJoin(TestYdsBase):
         fq_client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
         kikimr.compute_plane.wait_zero_checkpoint(query_id)
 
-        messages = [b'A', b'B', b'C']
+        messages = ['A', 'B', 'C']
         self.write_stream(messages)
 
-        fq_client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        read_data = self.read_stream(len(messages))
+        assert read_data == messages
+
+        fq_client.abort_query(query_id)
+        fq_client.wait_query(query_id)
+
+        describe_response = fq_client.describe_query(query_id)
+        status = describe_response.result.query.meta.status
+        assert not describe_response.issues, str(describe_response.issues)
+        assert status == fq.QueryMeta.ABORTED_BY_USER, fq.QueryMeta.ComputeStatus.Name(status)

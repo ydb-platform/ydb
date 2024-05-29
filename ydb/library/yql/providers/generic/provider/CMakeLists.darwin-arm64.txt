@@ -50,6 +50,7 @@ target_link_libraries(providers-generic-provider PUBLIC
   providers-generic-proto
   connector-api-common
   generic-connector-libcpp
+  providers-result-expr_nodes
   yql-utils-plan
   client-ydb_types-credentials
 )

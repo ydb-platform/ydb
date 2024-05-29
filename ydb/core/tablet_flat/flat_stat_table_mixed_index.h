@@ -14,12 +14,16 @@ inline bool BuildStatsMixedIndex(const TSubset& subset, TStats& stats, ui64 rowC
     TDataStats iteratorStats = { };
     TStatsIterator statsIterator(subset.Scheme->Keys);
 
+    // Note: B-Tree index uses resolution to skip huge nodes
+    // doesn't work well with intersecting SSTs
+    const ui32 resolutionDivider = 5;
+
     // Make index iterators for all parts
     bool started = true;
     for (const auto& part : subset.Flatten) {
         stats.IndexSize.Add(part->IndexesRawSize, part->Label.Channel());
         TAutoPtr<TStatsScreenedPartIterator> iter = new TStatsScreenedPartIterator(part, env, subset.Scheme->Keys, part->Small, part->Large, 
-            rowCountResolution, dataSizeResolution);
+            rowCountResolution / resolutionDivider, dataSizeResolution / resolutionDivider);
         auto ready = iter->Start();
         if (ready == EReady::Page) {
             started = false;

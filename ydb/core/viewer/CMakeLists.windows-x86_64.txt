@@ -119,6 +119,7 @@ target_sources(ydb-core-viewer PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/wb_filter.h
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/wb_group.h
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/wb_merge.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/json_handlers_pdisk.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/json_handlers_vdisk.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/json_handlers_viewer.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/viewer_request.cpp

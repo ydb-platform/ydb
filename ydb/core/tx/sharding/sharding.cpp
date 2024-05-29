@@ -242,7 +242,7 @@ NKikimrSchemeOp::TColumnTableSharding IShardingBase::SerializeToProto() const {
 }
 
 THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> IShardingBase::SplitByShardsToArrowBatches(const std::shared_ptr<arrow::RecordBatch>& batch) {
-    auto sharding = MakeSharding(batch);
+    THashMap<ui64, std::vector<ui32>> sharding = MakeSharding(batch);
     THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> chunks;
     if (sharding.size() == 1) {
         AFL_VERIFY(chunks.emplace(sharding.begin()->first, batch).second);
@@ -257,7 +257,10 @@ TConclusion<THashMap<ui64, std::vector<NArrow::TSerializedBatch>>> IShardingBase
     auto splitted = SplitByShardsToArrowBatches(batch);
     NArrow::TBatchSplitttingContext context(chunkBytesLimit);
     THashMap<ui64, std::vector<NArrow::TSerializedBatch>> result;
-    for (auto [tabletId, chunk] : splitted) {
+    for (auto&& [tabletId, chunk] : splitted) {
+        if (!chunk) {
+            continue;
+        }
         auto blobsSplittedConclusion = NArrow::SplitByBlobSize(chunk, context);
         if (blobsSplittedConclusion.IsFail()) {
             return TConclusionStatus::Fail("cannot split batch in according to limits: " + blobsSplittedConclusion.GetErrorMessage());

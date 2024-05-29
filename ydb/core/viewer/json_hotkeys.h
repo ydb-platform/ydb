@@ -142,12 +142,12 @@ public:
     }
 
     void ReplyAndPassAway() {
-        TString headers = Viewer->GetHTTPOKJSON(Event->Get());
         if (DescribeResult != nullptr) {
             switch (DescribeResult->GetRecord().GetStatus()) {
             case NKikimrScheme::StatusAccessDenied:
-                headers = Viewer->GetHTTPFORBIDDEN(Event->Get());
-                break;
+                Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPFORBIDDEN(Event->Get()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+                PassAway();
+                return;
             default:
                 break;
             }
@@ -155,7 +155,7 @@ public:
         NJson::TJsonValue root = BuildResponse();
         TString json = NJson::WriteJson(root, false);
 
-        Send(Event->Sender, new NMon::TEvHttpInfoRes(headers + json, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), json), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         PassAway();
     }
 

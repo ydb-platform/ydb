@@ -169,9 +169,10 @@ public:
         return GetHTTPOK(request, "text/plain", response, lastModified);
     }
 
-    virtual TString GetHTTPGATEWAYTIMEOUT(const NMon::TEvHttpInfo* request) = 0;
+    virtual TString GetHTTPGATEWAYTIMEOUT(const NMon::TEvHttpInfo* request, TString contentType = {}, TString response = {}) = 0;
     virtual TString GetHTTPBADREQUEST(const NMon::TEvHttpInfo* request, TString contentType = {}, TString response = {}) = 0;
     virtual TString GetHTTPFORBIDDEN(const NMon::TEvHttpInfo* request) = 0;
+    virtual TString GetHTTPNOTFOUND(const NMon::TEvHttpInfo* request) = 0;
 };
 
 void SetupPQVirtualHandlers(IViewer* viewer);
@@ -197,6 +198,12 @@ template <typename RequestType>
 struct TJsonRequestParameters {
     static YAML::Node GetParameters() { return {}; }
 };
+
+template <typename RequestType>
+struct TJsonRequestSwagger {
+    static YAML::Node GetSwagger() { return {}; }
+};
+
 
 template <typename ValueType, typename OutputIteratorType>
 void GenericSplitIds(TStringBuf source, char delim, OutputIteratorType it) {

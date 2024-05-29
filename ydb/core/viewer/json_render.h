@@ -200,13 +200,13 @@ public:
             if (response.GetError()) {
                 json["status"] = "error";
                 json["error"] = response.GetError();
-                ReplyAndPassAway(Viewer->GetHTTPOKJSON(Event->Get()) + NJson::WriteJson(json, false));
+                ReplyAndPassAway(Viewer->GetHTTPOKJSON(Event->Get(), NJson::WriteJson(json, false)));
                 return;
             }
             if (response.DataSize() != Metrics.size()) {
                 json["status"] = "error";
                 json["error"] = "Invalid data size received";
-                ReplyAndPassAway(Viewer->GetHTTPOKJSON(Event->Get()) + NJson::WriteJson(json, false));
+                ReplyAndPassAway(Viewer->GetHTTPOKJSON(Event->Get(), NJson::WriteJson(json, false)));
                 return;
             }
             for (size_t nMetric = 0; nMetric < response.DataSize(); ++nMetric) {
@@ -214,7 +214,7 @@ public:
                 if (response.TimeSize() != protoMetric.ValuesSize()) {
                     json["status"] = "error";
                     json["error"] = "Invalid value size received";
-                    ReplyAndPassAway(Viewer->GetHTTPOKJSON(Event->Get()) + NJson::WriteJson(json, false));
+                    ReplyAndPassAway(Viewer->GetHTTPOKJSON(Event->Get(), NJson::WriteJson(json, false)));
                     return;
                 }
             }
@@ -241,7 +241,7 @@ public:
                 }
             }
 
-            ReplyAndPassAway(Viewer->GetHTTPOKJSON(Event->Get()) + NJson::WriteJson(json, false));
+            ReplyAndPassAway(Viewer->GetHTTPOKJSON(Event->Get(), NJson::WriteJson(json, false)));
         } else {
             TEvViewer::TEvViewerResponse* viewerResponse = new TEvViewer::TEvViewerResponse();
             viewerResponse->Record.MutableRenderResponse()->CopyFrom(response);

@@ -186,8 +186,10 @@ namespace Tests {
         app.CompactionConfig = Settings->CompactionConfig;
         app.FeatureFlags = Settings->FeatureFlags;
         app.ImmediateControlsConfig = Settings->Controls;
-        app.ResourceBrokerConfig = Settings->AppConfig->GetResourceBrokerConfig();
         app.InitIcb(StaticNodes() + DynamicNodes());
+        if (Settings->AppConfig->HasResourceBrokerConfig()) {
+            app.ResourceBrokerConfig = Settings->AppConfig->GetResourceBrokerConfig();
+        }
 
         Runtime = MakeHolder<TTestBasicRuntime>(StaticNodes() + DynamicNodes(), Settings->UseRealThreads);
 

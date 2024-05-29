@@ -108,7 +108,7 @@ public:
     void ReplyAndDie(const TActorContext &ctx) {
         TStringStream json;
         TProtoToJson::ProtoToJson(json, MetaInfo, JsonSettings);
-        ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get()) + json.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), json.Str()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         Die(ctx);
     }
 

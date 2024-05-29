@@ -43,6 +43,7 @@ message DescribeReplicationResult {
     message Item {
         string source_path = 1;
         string destination_path = 2;
+        optional string source_changefeed_name = 3;
     }
 
     message RunningState {

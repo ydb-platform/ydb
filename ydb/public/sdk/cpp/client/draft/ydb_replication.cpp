@@ -92,6 +92,8 @@ TReplicationDescription::TReplicationDescription(const Ydb::Replication::Describ
         Items_.push_back(TItem{
             .SrcPath = item.source_path(),
             .DstPath = item.destination_path(),
+            .SrcChangefeedName = item.has_source_changefeed_name()
+                ? std::make_optional(item.source_changefeed_name()) : std::nullopt,
         });
     }
 

@@ -45,6 +45,9 @@ public:
             auto& item = *Result->Record.AddTargets();
             item.SetSrcPath(target->GetSrcPath());
             item.SetDstPath(target->GetDstPath());
+            if (target->GetStreamName()) {
+                item.SetSrcStreamName(target->GetStreamName());
+            }
         }
 
         auto& state = *Result->Record.MutableState();

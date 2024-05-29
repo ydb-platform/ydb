@@ -429,9 +429,13 @@ int TCommandDescribe::PrintReplicationResponsePretty(const NYdb::NReplication::T
     }
 
     if (const auto& items = desc.GetItems()) {
-        Cout << Endl << "Items (source => destination):";
+        Cout << Endl << "Items (source [changefeed] => destination):";
         for (const auto& item : items) {
-            Cout << Endl << "  " << item.SrcPath << " => " << item.DstPath;
+            Cout << Endl << "  " << item.SrcPath;
+            if (item.SrcChangefeedName) {
+                Cout << " [" << *item.SrcChangefeedName << "]";
+            }
+            Cout << " => " << item.DstPath;
         }
     }
 

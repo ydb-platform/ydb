@@ -108,7 +108,7 @@ Y_UNIT_TEST_SUITE(TContinuousBackupTests) {
             NLs::HasOffloadConfig,
         });
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/continuousBackupImpl/incBackupImpl"), {
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/incBackupImpl"), {
             NLs::PathExist,
             NLs::IsTable,
             NLs::CheckColumns("incBackupImpl", {"key", "value", "__incrBackupImpl_deleted"}, {}, {"key"}),

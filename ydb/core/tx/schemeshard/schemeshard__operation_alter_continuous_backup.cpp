@@ -70,7 +70,7 @@ TVector<ISubOperation::TPtr> CreateAlterContinuousBackup(TOperationId opId, cons
     const auto topicPath = streamPath.Child("streamImpl");
     TTopicInfo::TPtr topic = context.SS->Topics.at(topicPath.Base()->PathId);
 
-    const auto backupTablePath = streamPath.Child("incBackupImpl");
+    const auto backupTablePath = tablePath.Child("incBackupImpl");
 
     const NScheme::TTypeRegistry* typeRegistry = AppData(context.Ctx)->TypeRegistry;
 

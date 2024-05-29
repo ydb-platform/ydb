@@ -6693,6 +6693,11 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
                 break;
             }
 
+            case NKikimrSchemeOp::EPathTypeTable: {
+                // TODO: move BackupImplTable under special scheme element
+                break;
+            }
+
             default:
                 Y_FAIL_S("Unexpected table's child"
                     << ": tableId# " << tableId

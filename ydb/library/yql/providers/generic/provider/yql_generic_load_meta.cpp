@@ -1,4 +1,3 @@
-#include "ydb/library/yql/providers/generic/connector/api/common/data_source.pb.h"
 #include "yql_generic_provider_impl.h"
 
 #include <library/cpp/json/json_reader.h>

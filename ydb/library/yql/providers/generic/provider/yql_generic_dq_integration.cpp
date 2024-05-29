@@ -1,6 +1,5 @@
 #include "yql_generic_dq_integration.h"
 
-#include "ydb/library/yql/providers/generic/connector/api/common/data_source.pb.h"
 #include "yql_generic_mkql_compiler.h"
 #include "yql_generic_predicate_pushdown.h"
 

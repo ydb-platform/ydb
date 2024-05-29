@@ -243,7 +243,7 @@ private:
             << " MaxMessagesCount: " << MaxMessagesCount_
             << " TotalWaitDuration: " << TotalWaitDuration_
             << " ReceiveAttemptId: " << ReceiveAttemptId_;
-        return std::move(ret);
+        return ret;
     }
 
     const TReceiveMessageRequest& Request() const {

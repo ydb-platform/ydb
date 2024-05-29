@@ -169,14 +169,14 @@ namespace NKikimr {
             for (auto &diffBlock : diffs) {
                 diff->AddDiff(diffBlock.Offset, diffBlock.Buffer);
             }
-            return std::move(diff);
+            return diff;
         }
 
         std::unique_ptr<TEvBlobStorage::TEvVPatchDiff> CreateForceEndVPatchDiff(ui8 partId, TMaybe<ui64> cookie) const {
             std::unique_ptr<TEvBlobStorage::TEvVPatchDiff> diff = std::make_unique<TEvBlobStorage::TEvVPatchDiff>(TLogoBlobID(OriginalBlobId, partId),
                     TLogoBlobID(PatchedBlobId, partId), VDiskIds[partId - 1], false, Deadline, cookie);
             diff->SetForceEnd();
-            return std::move(diff);
+            return diff;
         }
 
         template <typename DecoratorType = void>

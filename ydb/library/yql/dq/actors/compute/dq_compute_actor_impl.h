@@ -608,7 +608,7 @@ protected:
             issues.PrintTo(log.Out, true /* oneLine */);
         }
         log << '.';
-        return std::move(log);
+        return log;
     }
 
     void ContinueExecute(EResumeSource source = EResumeSource::Default) {

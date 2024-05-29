@@ -296,7 +296,7 @@ namespace { // Tests
                 }
             );
             RunThreads(std::make_unique<TTestThread<decltype(worker)>>(worker, &collector));
-            return std::move(collector);
+            return collector;
         }
 
         template <template <ui32> typename TQueueAdaptor, ui32 ThreadCount, ui32 RepeatCount>
@@ -319,7 +319,7 @@ namespace { // Tests
                 threads.emplace_back(new TTestThread<decltype(worker)>(worker, &collector));
             }
             RunThreads(threads);
-            return std::move(collector);
+            return collector;
         }
 
         template <template <ui32> typename TQueueAdaptor, ui32 ThreadCount>
@@ -335,7 +335,7 @@ namespace { // Tests
                 threads.emplace_back(new TTestThread<decltype(worker)>(worker, &collector));
             }
             RunThreads(threads);
-            return std::move(collector);
+            return collector;
         }
 
         template <template <ui32> typename TQueueAdaptor, ui32 ThreadCount, ui32 Reads>
@@ -351,7 +351,7 @@ namespace { // Tests
                 threads.emplace_back(new TTestThread<decltype(worker)>(worker, &collector));
             }
             RunThreads(threads);
-            return std::move(collector);
+            return collector;
         }
 
         template <template <ui32> typename TQueueAdaptor, ui32 ProducingThreadCount, ui32 ConsumingThreadCount, ui32 PushedItems, ui32 PoppedItems>
@@ -374,7 +374,7 @@ namespace { // Tests
                 threads.emplace_back(new TTestThread<decltype(worker)>(worker, &collector));
             }
             RunThreads(threads);
-            return std::move(collector);
+            return collector;
         }
 
     };

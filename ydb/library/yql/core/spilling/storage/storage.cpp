@@ -100,7 +100,7 @@ TString TSpillMetaRecord::AsString() {
     res = "RecordHash: " + std::to_string(RecordHash_) + " |Offset: " + std::to_string(Offset_) + " |RecordNumber: " + std::to_string(RecordNumber_) + " |Meta1: " + std::format("{:#08x}", Meta1_) + 
             " |DataSize: " + std::to_string(DataSize_) + " |DataHash: " + std::to_string(DataHash_) + " |Name: " + Name_;
 
-    return std::move(res);
+    return res;
 
 }
 

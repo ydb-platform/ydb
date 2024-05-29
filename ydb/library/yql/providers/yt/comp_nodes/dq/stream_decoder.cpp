@@ -582,7 +582,7 @@ Result<std::shared_ptr<Buffer>> DecompressBuffer(const std::shared_ptr<Buffer>& 
                            actual_decompressed);
   }
 
-  return std::move(uncompressed);
+  return uncompressed;
 }
 
 Status DecompressBuffers(Compression::type compression, const IpcReadOptions& options,

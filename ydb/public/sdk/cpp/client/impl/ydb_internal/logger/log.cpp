@@ -36,7 +36,7 @@ TLogFormatter GetPrefixLogFormatter(const TString& prefix) {
 
         result << TInstant::Now() << priorityString << prefix << message << Endl;
         Y_ASSERT(result.size() == toReserve);
-        return std::move(result);
+        return result;
     };
 }
 

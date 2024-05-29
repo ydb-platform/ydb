@@ -13,7 +13,7 @@ Y_UNIT_TEST_SUITE(OperationLog) {
         for (ui32 i = 0; i < size; ++i) {
             data += 'a' + RandomNumber<ui32>() % ('z' - 'a' + 1);
         }
-        return std::move(data);
+        return data;
     }
 
     template<ui32 Size>

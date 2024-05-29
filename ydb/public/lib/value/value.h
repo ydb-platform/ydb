@@ -113,7 +113,7 @@ public:
         dump << "Type:" << Endl << res << Endl;
         ::google::protobuf::TextFormat::PrintToString(Value, &res);
         dump << "Value:" << Endl << res << Endl;
-        return std::move(dump);
+        return dump;
     }
 
     void DumpValue() const {

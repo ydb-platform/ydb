@@ -56,7 +56,7 @@ public:
             }
             auto table = NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches({resultBatch}));
             TPartialReadResult out(table, lastKey, std::nullopt);
-            return std::move(out);
+            return out;
         }
         return std::nullopt;
     }

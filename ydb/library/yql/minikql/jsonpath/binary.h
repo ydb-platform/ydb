@@ -263,7 +263,7 @@ private:
         static_assert(std::is_pod_v<T>, "Type must be POD");
         T value = ReadUnaligned<T>(Path->Begin() + pos);
         pos += sizeof(T);
-        return std::move(value);
+        return value;
     }
 
     const TJsonPathPtr Path;

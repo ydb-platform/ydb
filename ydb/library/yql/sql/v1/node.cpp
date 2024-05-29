@@ -588,7 +588,7 @@ TString TCallNode::GetCallExplain() const {
     if (derivedName != OpName) {
         sb << ", converted to " << OpName << "()";
     }
-    return std::move(sb);
+    return sb;
 }
 
 void TCallNode::CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) {

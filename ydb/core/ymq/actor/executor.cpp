@@ -424,7 +424,7 @@ TString TMiniKqlExecutionActor::GetRequestType() const {
     } else {
         ret << "Query";
     }
-    return std::move(ret);
+    return ret;
 }
 
 void TMiniKqlExecutionActor::PassAway() {

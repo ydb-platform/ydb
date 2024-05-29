@@ -575,7 +575,7 @@ protected:
     void InvalidateNode(ui64 node) {
         for (auto tablet : ShardsOnNode[node]) {
             auto ev = MakeHolder<TEvPipeCache::TEvForcePipeReconnect>(tablet);
-            this->Send(MakePipePeNodeCacheID(false), ev.Release());
+            this->Send(MakePipePerNodeCacheID(false), ev.Release());
         }
     }
 

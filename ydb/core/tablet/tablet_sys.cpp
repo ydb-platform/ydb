@@ -1734,7 +1734,7 @@ void TTablet::ReassignYellowChannels(TVector<ui32> &&yellowMoveChannels) {
         " Type: " << TTabletTypes::TypeToStr((TTabletTypes::EType)Info->TabletType)
         << ", YellowMoveChannels: " << yellowMoveChannelsString(), "TSYS30");
 
-    Send(MakePipePeNodeCacheID(false),
+    Send(MakePipePerNodeCacheID(false),
         new TEvPipeCache::TEvForward(
             new TEvHive::TEvReassignTabletSpace(Info->TabletID, std::move(yellowMoveChannels)),
             Info->HiveId,

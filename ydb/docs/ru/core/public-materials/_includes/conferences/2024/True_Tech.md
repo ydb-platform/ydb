@@ -14,4 +14,4 @@
 * С какими проблемами использования топиков для хранения логов столкнулась команда {{ ydb-short-name }} и как их решала?
 * Как обеспечить запись данных в целевой кластер при работе с распределенными транзакциями?
 
-[Слайды](https://presentations.ydb.tech/2024/ru/true_tech/parralel_async_replication/presentation.pdf)
+[Слайды](https://presentations.ydb.tech/2024/ru/mts_true_tech/presentation.pdf)

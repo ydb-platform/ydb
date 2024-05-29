@@ -233,6 +233,12 @@ namespace NPackedTuple {
             WriteUnaligned<ui32>(res, hash);
         }
     }
+    template
+    __attribute__((target("avx2")))
+    void TTupleLayoutFallback<NSimd::TSimdAVX2Traits>::Pack( const ui8** columns, const ui8** isValidBitmask, ui8 * res, std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start, ui32 count) const;
+    template
+    __attribute__((target("sse4.2")))
+    void TTupleLayoutFallback<NSimd::TSimdSSE42Traits>::Pack( const ui8** columns, const ui8** isValidBitmask, ui8 * res, std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start, ui32 count) const;
 }
 }
 }

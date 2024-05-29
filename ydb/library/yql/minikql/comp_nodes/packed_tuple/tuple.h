@@ -73,7 +73,7 @@ private:
     std::array<std::vector<TColumnDesc>, 5> FixedPOTColumns_; // Fixed-size columns for power-of-two sizes from 1 to 16 bytes
     std::vector<TColumnDesc> FixedNPOTColumns_; // Remaining fixed-size columns
     std::vector<TColumnDesc> VariableColumns_; // Variable-size columns only
-    using TSimdI8 = TTrait::TSimdI8;
+    using TSimdI8 = typename TTrait::TSimdI8;
 };
 
 }

@@ -905,10 +905,7 @@ ListToTuple(List<T>?, N)->Tuple<T,T,...T>? -- ширина кортежа N
 
 **Сигнатура**
 ```
-ListTop(List<T>, N)->List<T>
-ListTop(List<T>?, N)->List<T>?
-
-ListTop(List<T>, N, (T)->U)->List<T>
-ListTop(List<T>?, N, (T)->U)->List<T>?
+ListTop(List<T>{Flags:AutoMap}, N)->List<T>
+ListTop(List<T>{Flags:AutoMap}, N, (T)->U)->List<T>
 ```
 Сигнатуры остальных функций совпадают с ListTop.

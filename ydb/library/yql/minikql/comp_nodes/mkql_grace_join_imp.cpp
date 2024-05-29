@@ -1179,8 +1179,9 @@ bool TTable::IsSpillingFinished() const {
 
 bool TTable::IsSpillingAcceptingDataRequests() const {
     for (ui64 i = 0; i < NumberOfBuckets; ++i) {
+        if (TableBucketsSpillers[i].IsInMemory()) continue;
         if (!TableBucketsSpillers[i].IsAcceptingDataRequests()) {
-            std::cerr << std::format("[MISHA] bucket {} not accepting data requests\n", i);
+            std::cerr << std::format("[MISHA] bucket {} not accepting data requests: {}\n", i, TableBucketsSpillers[i].GetStateName());
             return false;
         }
     }
@@ -1199,10 +1200,11 @@ void TTable::FinalizeSpilling() {
 
     for (ui32 bucket = 0; bucket < NumberOfBuckets; ++bucket) {
         if (!TableBucketsSpillers[bucket].IsInMemory()) {
+            TableBucketsSpillers[bucket].Finalize();
             std::cerr << std::format("[MISHA] finalizing {}\n", bucket);
             TableBucketsSpillers[bucket].SpillBucket(std::move(TableBuckets[bucket]));
             TableBuckets[bucket] = TTableBucket{};
-            TableBucketsSpillers[bucket].Finalize();
+            
         }
     }
 }
@@ -1324,7 +1326,7 @@ void TTableBucketSpiller::SpillBucket(TTableBucket&& bucket) {
 }
 
 TTableBucket&& TTableBucketSpiller::ExtractBucket() {
-    MKQL_ENSURE(State == EState::InMemory, "Internal logic error");
+    MKQL_ENSURE(State == EState::WaitingForExtraction, "Internal logic error");
     MKQL_ENSURE(SpilledBucketsCount == 0, "Internal logic error");
     State = EState::InMemory;
     return std::move(CurrentBucket);

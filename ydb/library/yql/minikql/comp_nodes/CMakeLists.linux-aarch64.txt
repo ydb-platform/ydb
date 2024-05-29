@@ -14,6 +14,7 @@
 
 add_subdirectory(llvm14)
 add_subdirectory(no_llvm)
+add_subdirectory(packed_tuple)
 
 add_library(yql-minikql-comp_nodes INTERFACE)
 

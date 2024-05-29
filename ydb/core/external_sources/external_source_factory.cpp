@@ -58,8 +58,15 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         {
             ToString(NYql::EDatabaseType::Ydb),
             CreateExternalDataSource(TString{NYql::GenericProviderName}, {"BASIC", "SERVICE_ACCOUNT"}, {"database_name", "use_tls", "database_id"}, hostnamePatternsRegEx)
-        }
-    });
+        },
+        {
+            ToString(NYql::EDatabaseType::YT),
+            CreateExternalDataSource(TString{NYql::YtProviderName}, {"NONE", "TOKEN"}, {}, hostnamePatternsRegEx)
+        },
+        {
+            ToString(NYql::EDatabaseType::Greenplum),
+            CreateExternalDataSource(TString{NYql::GenericProviderName}, {"MDB_BASIC", "BASIC"}, {"database_name", "mdb_cluster_id", "use_tls", "schema"}, hostnamePatternsRegEx)
+        }});
 }
 
 }

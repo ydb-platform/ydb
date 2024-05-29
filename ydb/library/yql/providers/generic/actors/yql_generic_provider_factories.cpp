@@ -31,7 +31,7 @@ namespace NYql::NDq {
                 args.MaxKeysInRequest);
         };
 
-        for (auto& name : {"ClickHouseGeneric", "PostgreSqlGeneric", "YdbGeneric", "MySqlGeneric"}) {
+        for (auto& name : {"ClickHouseGeneric", "PostgreSqlGeneric", "YdbGeneric", "MySqlGeneric", "GreenplumGeneric"}) {
             factory.RegisterSource<Generic::TSource>(name, readActorFactory);
             factory.RegisterLookupSource<Generic::TLookupSource>(name, lookupActorFactory);
         }

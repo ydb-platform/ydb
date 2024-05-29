@@ -313,7 +313,7 @@ namespace NYql {
             *dsi->mutable_credentials()->mutable_token()->mutable_type() = "IAM";
         }
 
-        template<typename T>
+        template <typename T>
         void SetSchema(T& request, const TGenericClusterConfig& clusterConfig) {
             TString schema;
             const auto it = clusterConfig.GetDataSourceOptions().find("schema");

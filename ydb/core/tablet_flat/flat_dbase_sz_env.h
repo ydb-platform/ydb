@@ -38,7 +38,7 @@ namespace NTable {
             auto type = EPage(info->PageCollection->Page(pageId).Type);
             
             switch (type) {
-                case EPage::FlatIndex:
+                case EPage::Index:
                 case EPage::BTreeIndex:
                     // need index pages to continue counting
                     // do not count index

@@ -22,6 +22,9 @@ target_link_libraries(ydb-core-ymq-base-ut PUBLIC
   cpp-testing-unittest_main
   ydb-core-base
   core-ymq-base
+  yql-public-udf
+  yql-parser-pg_wrapper
+  udf-service-exception_policy
 )
 
 target_link_options(ydb-core-ymq-base-ut PRIVATE

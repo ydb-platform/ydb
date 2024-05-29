@@ -1275,6 +1275,15 @@ NKikimrTxDataShard::TEvCompactTableResult CompactTable(
     return ev->Get()->Record;
 }
 
+NKikimrTxDataShard::TEvCompactBorrowedResult CompactBorrowed(TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId) {
+    auto request = MakeHolder<TEvDataShard::TEvCompactBorrowed>(tableId.PathId);
+    auto sender = runtime.AllocateEdgeActor();
+    runtime.SendToPipe(shardId, sender, request.Release(), 0, GetPipeConfigWithRetries());
+
+    auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvCompactBorrowedResult>(sender);
+    return ev->Get()->Record;
+}
+
 std::pair<TTableInfoMap, ui64> GetTables(
     Tests::TServer::TPtr server,
     ui64 tabletId)

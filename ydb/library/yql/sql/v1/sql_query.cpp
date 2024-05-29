@@ -1560,10 +1560,21 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
         }
         break;
     }
+    case TRule_alter_table_action::kAltAlterTableAction17: {
+        // ALTER COLUMN id SET (NOT NULL | NULL)
+        const auto& alterRule = node.GetAlt_alter_table_action17().GetRule_alter_table_alter_column_set_null1();
 
-    case TRule_alter_table_action::ALT_NOT_SET:
+        if (!AlterTableAlterColumnSetNull(alterRule, params)) {
+            return false;
+        }
+
+        break;
+    }
+
+    case TRule_alter_table_action::ALT_NOT_SET: {
         AltNotImplemented("alter_table_action", node);
         return false;
+    }
     }
     return true;
 }
@@ -1820,6 +1831,27 @@ bool TSqlQuery::AlterTableAlterIndex(const TRule_alter_table_alter_index& node, 
         return false;
     }
 
+    return true;
+}
+
+bool TSqlQuery::AlterTableAlterColumnSetNull(const TRule_alter_table_alter_column_set_null& node, TAlterTableParameters& params) {
+    TString name = Id(node.GetRule_an_id3(), *this);
+    const TPosition pos(Context().Pos());
+    auto tokenId = node.GetBlock5().GetAlt1().GetToken1().GetId(); // null | not null
+    bool nullable;
+
+    switch (tokenId) {
+    case SQLv1LexerTokens::TOKEN_NULL:
+        nullable = true;
+        break;
+    case SQLv1LexerTokens::TOKEN_NOTNULL:
+        nullable = false;
+        break;
+    default:
+        return false;
+    }
+
+    params.AlterColumns.emplace_back(pos, name, nullptr, nullable, TVector<TIdentifier>(), false, nullptr);
     return true;
 }
 

@@ -92,7 +92,7 @@ namespace NBalancing {
             for (ui32 cnt = 0; It.Valid(); It.Next(), ++cnt) {
                 if (cnt % 1000 == 999 && TDuration::Seconds(timer.Passed()) > JOB_GRANULARITY) {
                     // actor should not block the thread for a long time, so we should yield
-                    STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB04, VDISKP(Ctx->VCtx, "Collect keys"), (collected, cnt));
+                    STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB04, VDISKP(Ctx->VCtx, "Collect keys"), (collected, cnt), (passed, timer.Passed()));
                     Send(SelfId(), new NActors::TEvents::TEvWakeup());
                     return;
                 }
@@ -111,6 +111,7 @@ namespace NBalancing {
                     if (lastBalancingTimeIt == Ctx->LastBalancingTime.end()) {
                         lastBalancingTimeIt = Ctx->LastBalancingTime.emplace(key, TlsActivationContext->Now()).first;
                     }
+                    // if (lastBalancingTimeIt->second + SEND_TIMEOUT + TDuration::Seconds(rand() % SEND_TIMEOUT.Seconds()) > TlsActivationContext->Now()) {
                     if (lastBalancingTimeIt->second + SEND_TIMEOUT > TlsActivationContext->Now()) {
                         // skip balancing for this key
                         continue;
@@ -137,6 +138,14 @@ namespace NBalancing {
                 }
 
                 merger.Clear();
+            }
+
+            for (auto it = Ctx->LastBalancingTime.begin(); it != Ctx->LastBalancingTime.end();) {
+                if (it->second + SEND_TIMEOUT < TlsActivationContext->Now()) {
+                    Ctx->LastBalancingTime.erase(it++);
+                } else {
+                    ++it;
+                }
             }
 
             STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB08, VDISKP(Ctx->VCtx, "Keys collected"),

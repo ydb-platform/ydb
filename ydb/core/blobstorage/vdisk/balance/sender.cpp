@@ -108,6 +108,67 @@ namespace {
         }
     };
 
+    struct TSenderMngr {
+        enum EState {
+            EInit,
+            EReadParts,
+            ESendParts,
+            ECompleteBatch,
+            EPassAway
+        };
+
+        EState State = EInit;
+
+        const TDuration SendTimeout = TDuration::Seconds(10);
+        TInstant SendPartsStart;
+        ui32 ToSendPartsCount = 0;
+        ui32 SentPartsCount = 0;
+        ui32 PartsLeft = 0;
+        ui64 Epoch = 0;
+
+        void StartReadNewBatch() {
+            Y_VERIFY(State == EInit || State == ECompleteBatch, "Invalid state");
+            State = EReadParts;
+        }
+
+        ui64 StartSendParts(TInstant now, ui32 count, ui32 partsLeft) {
+            Y_VERIFY(State == EReadParts, "Invalid state");
+            State = ESendParts;
+            SendPartsStart = now;
+            ToSendPartsCount = count;
+            PartsLeft = partsLeft;
+            return Epoch;
+        }
+
+        void PartSent(ui64 epoch, ui32 cnt=1) {
+            if (epoch != Epoch) {
+                return;
+            }
+            Y_VERIFY(State == ESendParts, "Invalid state");
+            SentPartsCount += cnt;
+        }
+
+        NActors::TEvents::TEvCompleted* IsSendingFinished(ui32 epoch, TInstant now) {
+            if (epoch != Epoch) {
+                return nullptr;
+            }
+            Y_VERIFY(State == ESendParts, "Invalid state");
+            if (SentPartsCount == ToSendPartsCount || now > SendPartsStart + SendTimeout) {
+                State = PartsLeft == 0 ? EPassAway : ECompleteBatch;
+                ToSendPartsCount = 0;
+                SentPartsCount = 0;
+                ++Epoch;
+                return new NActors::TEvents::TEvCompleted(SENDER_ID, PartsLeft);
+            }
+            return nullptr;
+        }
+
+        bool IsPassAway() {
+            Y_VERIFY(State == ECompleteBatch || State == EPassAway, "Invalid state");
+            return State == EPassAway;
+        }
+    };
+
 
     class TSender : public TActorBootstrapped<TSender> {
         TActorId NotifyId;
@@ -115,6 +176,7 @@ namespace {
         std::shared_ptr<TBalancingCtx> Ctx;
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
         TReader Reader;
+        TSenderMngr Mngr;
 
         struct TStats {
             ui32 PartsRead = 0;
@@ -124,21 +186,29 @@ namespace {
         TStats Stats;
 
         void ScheduleJobQuant() {
+            Mngr.StartReadNewBatch();
             Reader.ScheduleJobQuant(SelfId());
-            // if all parts are already in memory, we could process results right away
+            // if all parts are already in memory, we could process results right now
             TryProcessResults();
         }
 
         void TryProcessResults() {
             if (auto [batch, partsLeft] = Reader.TryGetResults(); batch.has_value()) {
                 Stats.PartsRead += batch->size();
-                SendParts(std::move(*batch));
+                ui64 epoch = Mngr.StartSendParts(TlsActivationContext->Now(), batch->size(), partsLeft);
+                SendParts(std::move(*batch), epoch);
+                Schedule(Mngr.SendTimeout, new NActors::TEvents::TEvCompleted(epoch));
+            }
+        }
 
-                // notify about job quant completion
-                Send(NotifyId, new NActors::TEvents::TEvCompleted(SENDER_ID, partsLeft));
+        void TryCompleteBatch(NActors::TEvents::TEvCompleted::TPtr ev) {
+            TryCompleteBatch(ev->Get()->Id);
+        }
 
-                if (partsLeft == 0) {
-                    // no more parts to send
+        void TryCompleteBatch(ui64 epoch) {
+            if (auto ev = Mngr.IsSendingFinished(epoch, TlsActivationContext->Now()); ev != nullptr) {
+                Send(NotifyId, ev);
+                if (Mngr.IsPassAway()) {
                     PassAway();
                 }
             }
@@ -149,7 +219,7 @@ namespace {
             TryProcessResults();
         }
 
-        void SendParts(TVector<TPart> batch) {
+        void SendParts(TVector<TPart> batch, ui64 epoch) {
             STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB11, VDISKP(Ctx->VCtx, "Sending parts"), (BatchSize, batch.size()));
 
             THashMap<TVDiskID, std::unique_ptr<TEvBlobStorage::TEvVMultiPut>> vDiskToEv;
@@ -164,7 +234,7 @@ namespace {
                         auto& queue = (*QueueActorMapPtr)[TVDiskIdShort(vDiskId)];
                         auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(
                             key, data, vDiskId,
-                            true, nullptr,
+                            true, &epoch,
                             TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::AsyncBlob
                         );
                         TReplQuoter::QuoteMessage(
@@ -178,7 +248,7 @@ namespace {
 
                         auto& ev = vDiskToEv[vDiskId];
                         if (!ev) {
-                            ev = std::make_unique<TEvBlobStorage::TEvVMultiPut>(vDiskId, TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::AsyncBlob, true, nullptr);
+                            ev = std::make_unique<TEvBlobStorage::TEvVMultiPut>(vDiskId, TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::AsyncBlob, true, &epoch);
                         }
 
                         ev->AddVPut(key, TRcBuf(data), nullptr, {}, NWilson::TTraceId());
@@ -209,10 +279,14 @@ namespace {
             if (ev->Get()->Record.GetStatus() != NKikimrProto::OK) {
                 ++Stats.PartsSentUnsuccsesfull;
                 STLOG(PRI_WARN, BS_VDISK_BALANCING, BSVB13, VDISKP(Ctx->VCtx, "Put failed"), (Msg, ev->Get()->ToString()));
-                return;
+            } else {
+                ++Ctx->MonGroup.SentOnMain();
+                Ctx->MonGroup.SentOnMainBytes() += GInfo->GetTopology().GType.PartSize(LogoBlobIDFromLogoBlobID(ev->Get()->Record.GetBlobID()));
+                STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB14, VDISKP(Ctx->VCtx, "Put done"), (Msg, ev->Get()->ToString()));
             }
-            ++Ctx->MonGroup.SentOnMain();
-            STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB14, VDISKP(Ctx->VCtx, "Put done"), (Msg, ev->Get()->ToString()));
+            ui64 epoch = ev->Get()->Record.GetCookie();
+            Mngr.PartSent(epoch);
+            TryCompleteBatch(epoch);
         }
 
         void Handle(TEvBlobStorage::TEvVMultiPutResult::TPtr ev) {
@@ -227,6 +301,9 @@ namespace {
                 ++Ctx->MonGroup.SentOnMain();
                 STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB16, VDISKP(Ctx->VCtx, "Put done"), (Key, LogoBlobIDFromLogoBlobID(item.GetBlobID()).ToString()));
             }
+            ui64 epoch = ev->Get()->Record.GetCookie();
+            TryCompleteBatch(epoch);
+            Mngr.PartSent(epoch, items.size());
         }
 
         void PassAway() override {
@@ -244,6 +321,7 @@ namespace {
             hFunc(TEvBlobStorage::TEvVPutResult, Handle)
             hFunc(TEvBlobStorage::TEvVMultiPutResult, Handle)
             cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)
+            hFunc(NActors::TEvents::TEvCompleted, TryCompleteBatch)
 
             hFunc(TEvVGenerationChange, Handle)
         );

@@ -221,6 +221,8 @@ public:
     bool IsMemoryYellowZoneEnabled() const noexcept {
         return IsMemoryYellowZoneReached;
     }
+
+    static void* AllocImpl(size_t size, size_t ahead, ui64& extraPages, ui8*& extraPage);
     
 protected:
     void* Alloc(size_t size);
@@ -280,5 +282,11 @@ protected:
 };
 
 using TAlignedPagePool = TAlignedPagePoolImpl<>;
+
+template<typename TMmap = TSystemMmap>
+void* GetAlignedPage(ui64 size);
+
+template<typename TMmap = TSystemMmap>
+void ReleaseAlignedPage(void* mem, ui64 size);
 
 } // NKikimr

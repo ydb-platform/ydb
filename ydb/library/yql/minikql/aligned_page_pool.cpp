@@ -417,51 +417,15 @@ void* TAlignedPagePoolImpl<T>::Alloc(size_t size) {
     }
 
     if (!res) {
-        auto allocSize = size + ALLOC_AHEAD_PAGES * POOL_PAGE_SIZE;
-        void* mem = T::Mmap(allocSize);
-        if (Y_UNLIKELY(MAP_FAILED == mem)) {
-            ythrow yexception() << "Mmap failed to allocate " << (size + POOL_PAGE_SIZE) << " bytes: " << LastSystemErrorText();
-        }
-
-        res = AlignUp(mem, POOL_PAGE_SIZE);
-        const size_t off = reinterpret_cast<intptr_t>(res) - reinterpret_cast<intptr_t>(mem);
-        if (Y_UNLIKELY(off)) {
-            // unmap prefix
-            if (Y_UNLIKELY(0 != T::Munmap(mem, off))) {
-                ythrow yexception() << "Munmap(0x"
-                    << IntToString<16>(reinterpret_cast<uintptr_t>(mem))
-                    << ", " << off << ") failed: " << LastSystemErrorText();
-            }
-        }
-        // Extra space is also page-aligned. Put it to the free page list
-        auto alignedSize = AlignUp(size, POOL_PAGE_SIZE);
-        ui64 extraPages = (allocSize - off - alignedSize) / POOL_PAGE_SIZE;
-        ui64 tail = (allocSize - off - alignedSize) % POOL_PAGE_SIZE;
-        auto extraPage = reinterpret_cast<ui8*>(res) + alignedSize;
+        ui64 extraPages;
+        ui8* extraPage;
+        res = AllocImpl(size, size > POOL_PAGE_SIZE ? 1 : ALLOC_AHEAD_PAGES, extraPages, extraPage);
         for (ui64 i = 0; i < extraPages; ++i) {
             AllPages.emplace(extraPage);
             FreePages.emplace(extraPage);
             extraPage += POOL_PAGE_SIZE;
         }
-        if (size != alignedSize) {
-            // unmap unaligned hole
-            if (Y_UNLIKELY(0 != T::Munmap(reinterpret_cast<ui8*>(res) + size, alignedSize - size))) {
-                ythrow yexception() << "Munmap(0x"
-                    << IntToString<16>(reinterpret_cast<uintptr_t>(reinterpret_cast<ui8*>(res)+size))
-                    << ", " << alignedSize - size
-                    << ") failed: " << LastSystemErrorText();
-            }
-        }
-        if (tail) {
-            // unmap suffix
-            Y_DEBUG_ABORT_UNLESS(extraPage+tail <= reinterpret_cast<ui8*>(mem) + size + ALLOC_AHEAD_PAGES * POOL_PAGE_SIZE);
-            if (Y_UNLIKELY(0 != T::Munmap(extraPage, tail))) {
-                ythrow yexception() << "Munmap(0x"
-                    << IntToString<16>(reinterpret_cast<uintptr_t>(extraPage))
-                    << ", " << tail
-                    << ") failed: " << LastSystemErrorText();
-            }
-        }
+
         auto extraSize = extraPages * POOL_PAGE_SIZE;
         auto totalSize = size + extraSize;
         TotalAllocated += totalSize;
@@ -478,6 +442,52 @@ void* TAlignedPagePoolImpl<T>::Alloc(size_t size) {
     }
     ++AllocCount;
     UpdatePeaks();
+    return res;
+}
+
+template<typename T>
+void* TAlignedPagePoolImpl<T>::AllocImpl(size_t size, size_t ahead, ui64& extraPages, ui8*& extraPage) {
+    auto allocSize = size + ahead * POOL_PAGE_SIZE;
+    void* mem = T::Mmap(allocSize);
+    if (Y_UNLIKELY(MAP_FAILED == mem)) {
+        ythrow yexception() << "Mmap failed to allocate " << (size + POOL_PAGE_SIZE) << " bytes: " << LastSystemErrorText();
+    }
+
+    void* res = AlignUp(mem, POOL_PAGE_SIZE);
+    const size_t off = reinterpret_cast<intptr_t>(res) - reinterpret_cast<intptr_t>(mem);
+    if (Y_UNLIKELY(off)) {
+        // unmap prefix
+        if (Y_UNLIKELY(0 != T::Munmap(mem, off))) {
+            ythrow yexception() << "Munmap(0x"
+                << IntToString<16>(reinterpret_cast<uintptr_t>(mem))
+                << ", " << off << ") failed: " << LastSystemErrorText();
+        }
+    }
+    // Extra space is also page-aligned. Put it to the free page list
+    auto alignedSize = AlignUp(size, POOL_PAGE_SIZE);
+    extraPages = (allocSize - off - alignedSize) / POOL_PAGE_SIZE;
+    ui64 tail = (allocSize - off - alignedSize) % POOL_PAGE_SIZE;
+    extraPage = reinterpret_cast<ui8*>(res) + alignedSize;
+    if (size != alignedSize) {
+        // unmap unaligned hole
+        if (Y_UNLIKELY(0 != T::Munmap(reinterpret_cast<ui8*>(res) + size, alignedSize - size))) {
+            ythrow yexception() << "Munmap(0x"
+                << IntToString<16>(reinterpret_cast<uintptr_t>(reinterpret_cast<ui8*>(res)+size))
+                << ", " << alignedSize - size
+                << ") failed: " << LastSystemErrorText();
+        }
+    }
+    if (tail) {
+        // unmap suffix
+        Y_DEBUG_ABORT_UNLESS(extraPage+tail <= reinterpret_cast<ui8*>(mem) + size + ahead * POOL_PAGE_SIZE);
+        if (Y_UNLIKELY(0 != T::Munmap(extraPage, tail))) {
+            ythrow yexception() << "Munmap(0x"
+                << IntToString<16>(reinterpret_cast<uintptr_t>(extraPage))
+                << ", " << tail
+                << ") failed: " << LastSystemErrorText();
+        }
+    }
+
     return res;
 }
 
@@ -549,5 +559,60 @@ void TAlignedPagePoolImpl<T>::ResetGlobalsUT()
 template class TAlignedPagePoolImpl<>;
 template class TAlignedPagePoolImpl<TFakeAlignedMmap>;
 template class TAlignedPagePoolImpl<TFakeUnalignedMmap>;
+
+template<typename TMmap>
+void* GetAlignedPage(ui64 size) {
+    using TPool = TAlignedPagePoolImpl<TMmap>;
+    size = AlignUp(size, SYS_PAGE_SIZE);
+    if (size < TPool::POOL_PAGE_SIZE) {
+        size = TPool::POOL_PAGE_SIZE;
+    }
+
+    if (size >= TPool::POOL_PAGE_SIZE && size <= MaxMidSize) {
+        size = FastClp2(size);
+        auto level = LeastSignificantBit(size) - LeastSignificantBit(TPool::POOL_PAGE_SIZE);
+        Y_DEBUG_ABORT_UNLESS(level <= MidLevels);
+        auto res = TGlobalPools<TMmap>::Instance().Get(level).GetPage();
+        if (res) {
+            return res;
+        }
+    }
+
+    ui64 extraPages;
+    ui8* extraPage;
+    auto res = TPool::AllocImpl(size, size > TPool::POOL_PAGE_SIZE ? 1 : TPool::ALLOC_AHEAD_PAGES, extraPages, extraPage);
+    for (ui64 i = 0; i < extraPages; ++i) {
+        TGlobalPools<TMmap>::Instance().Get(0).PushPage(extraPage);
+        extraPage += TPool::POOL_PAGE_SIZE;
+    }
+
+    return res;
+}
+
+template<typename TMmap>
+void ReleaseAlignedPage(void* mem, ui64 size) {
+    using TPool = TAlignedPagePoolImpl<TMmap>;
+    size = AlignUp(size, SYS_PAGE_SIZE);
+    if (size < TPool::POOL_PAGE_SIZE) {
+        size = TPool::POOL_PAGE_SIZE;
+    }
+
+    if (size >= TPool::POOL_PAGE_SIZE && size <= MaxMidSize) {
+        size = FastClp2(size);
+        auto level = LeastSignificantBit(size) - LeastSignificantBit(TPool::POOL_PAGE_SIZE);
+        Y_DEBUG_ABORT_UNLESS(level <= MidLevels);
+        TGlobalPools<TMmap>::Instance().Get(level).PushPage(mem);
+    } else {
+        Y_ABORT_UNLESS(!TMmap::Munmap(mem, size));
+    }
+}
+
+template void* GetAlignedPage<>(ui64);
+template void* GetAlignedPage<TFakeAlignedMmap>(ui64);
+template void* GetAlignedPage<TFakeUnalignedMmap>(ui64);
+
+template void ReleaseAlignedPage<>(void*,ui64);
+template void ReleaseAlignedPage<TFakeAlignedMmap>(void*,ui64);
+template void ReleaseAlignedPage<TFakeUnalignedMmap>(void*,ui64);
 
 } // NKikimr

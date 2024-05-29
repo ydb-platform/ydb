@@ -1147,7 +1147,7 @@ bool TTable::TryToReduceMemoryAndWait() {
     i32 largestBucketIndex = 0;
     ui64 largestBucketSize = 0;
     for (ui32 bucket = 0; bucket < NumberOfBuckets; ++bucket) {
-        if (TableBucketsSpillers[bucket].HasRunningAsyncIoOperation()) return true;
+        if (TableBucketsSpillers[bucket].HasRunningAsyncIoOperation() || !TableBucketsSpillers[bucket].IsProcessingFinished()) return true;
 
         ui64 bucketSize = GetSizeOfBucket(bucket);
         if (bucketSize > largestBucketSize) {
@@ -1188,12 +1188,20 @@ bool TTable::HasRunningAsyncIoOperation() const {
     return false;
 }
 
+bool TTable::IsProcessingFinished() const {
+    for (ui32 bucket = 0; bucket < NumberOfBuckets; ++bucket) {
+        if (!TableBucketsSpillers[bucket].IsProcessingFinished()) return false;
+    }
+    return true;
+}
+
 bool TTable::IsBucketInMemory(ui32 bucket) const {
     return TableBucketsSpillers[bucket].IsInMemory();
 }
 
 void TTable::StartLoadingBucket(ui32 bucket) {
     MKQL_ENSURE(!TableBucketsSpillers[bucket].IsInMemory(), "Internal logic error");
+    if (!TableBucketsSpillers[bucket].IsProcessingFinished()) return;
 
     TableBucketsSpillers[bucket].StartBucketRestoration();
 }

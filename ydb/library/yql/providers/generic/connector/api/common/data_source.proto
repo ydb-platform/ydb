@@ -50,12 +50,6 @@ message TPostgreSQLDataSourceOptions {
     string schema = 1;
 }
 
-// TGreenplumDataSourceOptions represents settings specific to Greenplum
-message TGreenplumDataSourceOptions {
-    // Greenplum schema
-    string schema = 1;
-}
-
 // TClickhouseDataSourceOptions represents settings specific to Clickhouse
 message TClickhouseDataSourceOptions {
 }
@@ -66,6 +60,12 @@ message TS3DataSourceOptions {
     string region = 1;
     // the bucket the object belongs to
     string bucket = 2;
+}
+
+// TGreenplumDataSourceOptions represents settings specific to Greenplum
+message TGreenplumDataSourceOptions {
+    // Greenplum schema
+    string schema = 1;
 }
 
 // TDataSourceInstance helps to identify the instance of a data source to redirect request to.

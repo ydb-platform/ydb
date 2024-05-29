@@ -468,6 +468,7 @@ void* TAlignedPagePoolImpl<T>::AllocImpl(size_t size, size_t ahead, ui64& extraP
     extraPages = (allocSize - off - alignedSize) / POOL_PAGE_SIZE;
     ui64 tail = (allocSize - off - alignedSize) % POOL_PAGE_SIZE;
     extraPage = reinterpret_cast<ui8*>(res) + alignedSize;
+    auto lastExtraPage = extraPage + extraPages * POOL_PAGE_SIZE;
     if (size != alignedSize) {
         // unmap unaligned hole
         if (Y_UNLIKELY(0 != T::Munmap(reinterpret_cast<ui8*>(res) + size, alignedSize - size))) {
@@ -479,10 +480,10 @@ void* TAlignedPagePoolImpl<T>::AllocImpl(size_t size, size_t ahead, ui64& extraP
     }
     if (tail) {
         // unmap suffix
-        Y_DEBUG_ABORT_UNLESS(extraPage+tail <= reinterpret_cast<ui8*>(mem) + size + ahead * POOL_PAGE_SIZE);
-        if (Y_UNLIKELY(0 != T::Munmap(extraPage, tail))) {
+        Y_DEBUG_ABORT_UNLESS(lastExtraPage + tail <= reinterpret_cast<ui8*>(mem) + size + ahead * POOL_PAGE_SIZE);
+        if (Y_UNLIKELY(0 != T::Munmap(lastExtraPage, tail))) {
             ythrow yexception() << "Munmap(0x"
-                << IntToString<16>(reinterpret_cast<uintptr_t>(extraPage))
+                << IntToString<16>(reinterpret_cast<uintptr_t>(lastExtraPage))
                 << ", " << tail
                 << ") failed: " << LastSystemErrorText();
         }

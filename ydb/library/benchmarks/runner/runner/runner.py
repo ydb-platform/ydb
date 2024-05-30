@@ -64,6 +64,7 @@ def main():
                     '--plan-file', name + '-plan.yson',
                     '--err-file', name + '-err.txt',
                     '--expr-file', name + '-expr.txt',
+                    '--stat', name + '-stat.yson',
                     '-p', q
                 ],
                 name + '-stdout.txt',

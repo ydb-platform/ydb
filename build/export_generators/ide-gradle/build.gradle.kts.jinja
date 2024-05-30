@@ -91,7 +91,7 @@ repositories {
 
 }
 
-val project_root="{%- if exportRoot.startswith(arcadiaRoot + '/') -%}{{ arcadiaRoot }}{%- else -%}{{ exportRoot }}{%- endif -%}"
+val project_root="{%- if export_root.startswith(arcadia_root + '/') -%}{{ arcadia_root }}{%- else -%}{{ export_root }}{%- endif -%}"
 
 {%  if mainClass -%}
 application {
@@ -116,7 +116,7 @@ configurations.testImplementation {
     isTransitive = false
 }
 
-{%  if hasTest -%}
+{%  if has_test -%}
 val testsJar by tasks.registering(Jar::class) {
     dependsOn(JavaPlugin.COMPILE_TEST_JAVA_TASK_NAME)
     archiveClassifier.set("tests")

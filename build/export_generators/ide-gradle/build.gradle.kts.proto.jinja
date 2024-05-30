@@ -37,7 +37,7 @@ sourceSets {
     }
 }
 
-val project_root="{%- if exportRoot.startswith(arcadiaRoot + '/') -%}{{ arcadiaRoot }}{%- else -%}{{ exportRoot }}{%- endif -%}"
+val project_root="{%- if export_root.startswith(arcadia_root + '/') -%}{{ arcadia_root }}{%- else -%}{{ export_root }}{%- endif -%}"
 
 java {
     withSourcesJar()

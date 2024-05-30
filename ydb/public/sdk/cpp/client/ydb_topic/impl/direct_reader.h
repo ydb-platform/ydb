@@ -42,11 +42,21 @@ using IDirectReadConnectionFactory = ISessionConnectionProcessorFactory<TDirectR
 using IDirectReadConnectionFactoryPtr = std::shared_ptr<IDirectReadConnectionFactory>;
 using IDirectReadConnection = IDirectReadConnectionFactory::IProcessor;
 class TDirectReadSession;
-using TDirectReadSessionPtr = std::shared_ptr<TCallbackContext<TDirectReadSession>>;
+using TDirectReadSessionCbContextPtr = std::shared_ptr<TCallbackContext<TDirectReadSession>>;
+
+struct TDirectReadSessionCallbacks {
+    using TOnDirectReadDone = std::function<void(Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&& response, TDeferredActions<false>& deferred)>;
+    using TOnAbortSession = std::function<void(TSessionClosedEvent&& closeEvent)>;
+    using TOnSchedule = std::function<void(TDuration delay, std::function<void()> callback)>;
+
+    TOnDirectReadDone OnDirectReadDone;
+    TOnAbortSession OnAbortSession;
+    TOnSchedule OnSchedule;
+};
 
 struct TDirectReadPartitionSession {
     enum class EState {
-        CREATED,
+        CREATED,  // TODO(qyryq) IDLE?
         STARTING,
         STARTED
     };
@@ -66,16 +76,13 @@ class TDirectReadSession : public TEnableSelfContext<TDirectReadSession> {
 public:
     using TSelf = TDirectReadSession;
     using TPtr = std::shared_ptr<TSelf>;
-    using TOnDirectReadDoneCallback = std::function<void(Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&& response, TDeferredActions<false>& deferred)>;
-    using TOnAbortSessionCallback = std::function<void(TSessionClosedEvent&& closeEvent)>;
 
     TDirectReadSession(
         TNodeId node,
         TString serverSessionId,
         const NYdb::NTopic::TReadSessionSettings settings,
         // TSingleClusterReadSessionPtr<false> singleClusterReadSession,
-        TOnDirectReadDoneCallback onDirectReadDoneCallback,
-        TOnAbortSessionCallback onAbortSessionCallback,
+        TDirectReadSessionCallbacks callbacks,
         NYdbGrpc::IQueueClientContextPtr clientContext,
         IDirectReadConnectionFactoryPtr connectionFactory,
         TLog log
@@ -117,9 +124,10 @@ private:
         const NYdbGrpc::IQueueClientContextPtr& connectTimeoutContext
     );
 
-    void SendStartDirectReadPartitionSessionImpl(TDirectReadPartitionSession&);
+    void SendStartDirectReadPartitionSessionImpl(TDirectReadPartitionSession&, TPlainStatus&&);
+    void SendStartDirectReadPartitionSessionImpl(TPartitionSessionId, TPlainStatus&&);
 
-    void AbortControlSession(TSessionClosedEvent&& closeEvent);
+    void Abort(TSessionClosedEvent&& closeEvent);
 
     TStringBuilder GetLogPrefix() const;
 
@@ -148,8 +156,7 @@ private:
 
     const NYdb::NTopic::TReadSessionSettings ReadSessionSettings;
     // TSingleClusterReadSessionPtr<false> SingleClusterReadSession;
-    TOnDirectReadDoneCallback OnDirectReadDoneCallback;
-    TOnAbortSessionCallback OnAbortSessionCallback;
+    TDirectReadSessionCallbacks Callbacks;
     TServerSessionId ServerSessionId;
     IDirectReadConnection::TPtr Connection;
     IDirectReadConnectionFactoryPtr ConnectionFactory;
@@ -172,8 +179,7 @@ public:
         TServerSessionId serverSessionId,
         const NYdb::NTopic::TReadSessionSettings,
         // TSingleClusterReadSessionPtr<false> singleClusterReadSession,
-        TDirectReadSession::TOnDirectReadDoneCallback onDirectReadDoneCallback,
-        TDirectReadSession::TOnAbortSessionCallback onAbortSessionCallback,
+        TDirectReadSessionCallbacks callbacks,
         NYdbGrpc::IQueueClientContextPtr clientContext,
         IDirectReadConnectionFactoryPtr connectionFactory,
         TLog log
@@ -186,20 +192,18 @@ public:
 
 private:
 
-    using TNodeSessionsMap = TMap<TNodeId, TDirectReadSessionPtr>;
+    using TNodeSessionsMap = TMap<TNodeId, TDirectReadSessionCbContextPtr>;
 
-    TDirectReadSessionPtr CreateDirectReadSession(TNodeId);
+    TDirectReadSessionCbContextPtr CreateDirectReadSession(TNodeId);
     void DeletePartitionSession(TPartitionSessionId id, TNodeSessionsMap::iterator it);
+    void DeleteNodeSessionIfEmpty(TNodeId);
 
     TStringBuilder GetLogPrefix() const;
 
 private:
-    TMutex Lock;
     const NYdb::NTopic::TReadSessionSettings ReadSessionSettings;
     TServerSessionId ServerSessionId;
-    // TSingleClusterReadSessionPtr<false> SingleClusterReadSession;
-    TDirectReadSession::TOnDirectReadDoneCallback OnDirectReadDoneCallback;
-    TDirectReadSession::TOnAbortSessionCallback OnAbortSessionCallback;
+    TDirectReadSessionCallbacks Callbacks;
     NYdbGrpc::IQueueClientContextPtr ClientContext;
     IDirectReadConnectionFactoryPtr ConnectionFactory;
     TNodeSessionsMap NodeSessions;

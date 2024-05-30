@@ -62,7 +62,7 @@ public:
 
 
 private:
-    static constexpr Enabled = false;
+    static constexpr bool Enabled = false;
     static ui32 Index;
     ui32 NextIndex = 0;
 };

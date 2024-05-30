@@ -2062,7 +2062,8 @@
             "visible": false
         },
         "ytexec": {
-            "description": "Run ytexec"
+            "description": "Run ytexec",
+            "visible": false
         }
     }
 }

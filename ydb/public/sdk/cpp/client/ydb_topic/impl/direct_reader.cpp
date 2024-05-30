@@ -318,7 +318,9 @@ void TDirectReadSession::OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t c
         ReadSessionSettings.Counters_->Errors->Inc();
 
         if (!Reconnect(errorStatus)) {
-            AbortImpl(std::move(errorStatus));
+            with_lock (Lock) {
+                AbortImpl(std::move(errorStatus));
+            }
         }
     }
 }
@@ -550,11 +552,13 @@ void TDirectReadSession::OnConnect(
     if (!st.Ok()) {
         ReadSessionSettings.Counters_->Errors->Inc();
         if (!Reconnect(st)) {
-            AbortImpl(TSessionClosedEvent(
-                st.Status,
-                MakeIssueWithSubIssues(
-                    TStringBuilder() << "Failed to establish connection to server \"" << st.Endpoint << "\". Attempts done: " << ConnectionAttemptsDone,
-                    st.Issues)));
+            with_lock (Lock) {
+                AbortImpl(TSessionClosedEvent(
+                    st.Status,
+                    MakeIssueWithSubIssues(
+                        TStringBuilder() << "Failed to establish connection to server \"" << st.Endpoint << "\". Attempts done: " << ConnectionAttemptsDone,
+                        st.Issues)));
+            }
         }
     }
 }

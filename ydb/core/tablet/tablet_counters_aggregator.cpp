@@ -773,6 +773,8 @@ private:
         TCounterPtr ResourcesStorageUsedBytesOnSsd;
         TCounterPtr ResourcesStorageUsedBytesOnHdd;
         TCounterPtr ResourcesStorageLimitBytes;
+        TCounterPtr ResourcesStorageLimitBytesOnSsd;
+        TCounterPtr ResourcesStorageLimitBytesOnHdd;
         TCounterPtr ResourcesStorageTableUsedBytes;
         TCounterPtr ResourcesStorageTableUsedBytesOnSsd;
         TCounterPtr ResourcesStorageTableUsedBytesOnHdd;
@@ -814,6 +816,8 @@ private:
         TCounterPtr DiskSpaceTablesTotalBytesOnHdd;
         TCounterPtr DiskSpaceTopicsTotalBytes;
         TCounterPtr DiskSpaceSoftQuotaBytes;
+        TCounterPtr DiskSpaceSoftQuotaBytesOnSsd;
+        TCounterPtr DiskSpaceSoftQuotaBytesOnHdd;
 
         TCounterPtr StreamShardsCount;
         TCounterPtr StreamShardsQuota;
@@ -872,6 +876,10 @@ private:
                 "resources.storage.used_bytes.hdd", false);
             ResourcesStorageLimitBytes = ydbGroup->GetNamedCounter("name",
                 "resources.storage.limit_bytes", false);
+            ResourcesStorageLimitBytesOnSsd = ydbGroup->GetNamedCounter("name",
+                "resources.storage.limit_bytes.ssd", false);
+            ResourcesStorageLimitBytesOnHdd = ydbGroup->GetNamedCounter("name",
+                "resources.storage.limit_bytes.hdd", false);
             ResourcesStorageTableUsedBytes = ydbGroup->GetNamedCounter("name",
                 "resources.storage.table.used_bytes", false);
             ResourcesStorageTableUsedBytesOnSsd = ydbGroup->GetNamedCounter("name",
@@ -948,6 +956,8 @@ private:
                 DiskSpaceTablesTotalBytesOnHdd = appGroup->GetCounter("SUM(SchemeShard/DiskSpaceTablesTotalBytesOnHdd)");
                 DiskSpaceTopicsTotalBytes = appGroup->GetCounter("SUM(SchemeShard/DiskSpaceTopicsTotalBytes)");
                 DiskSpaceSoftQuotaBytes = appGroup->GetCounter("SUM(SchemeShard/DiskSpaceSoftQuotaBytes)");
+                DiskSpaceSoftQuotaBytesOnSsd = appGroup->GetCounter("SUM(SchemeShard/DiskSpaceSoftQuotaBytesOnSsd)");
+                DiskSpaceSoftQuotaBytesOnHdd = appGroup->GetCounter("SUM(SchemeShard/DiskSpaceSoftQuotaBytesOnHdd)");
 
                 StreamShardsCount = appGroup->GetCounter("SUM(SchemeShard/StreamShardsCount)");
                 StreamShardsQuota = appGroup->GetCounter("SUM(SchemeShard/StreamShardsQuota)");
@@ -988,6 +998,8 @@ private:
 
             if (DiskSpaceTablesTotalBytes) {
                 ResourcesStorageLimitBytes->Set(DiskSpaceSoftQuotaBytes->Val());
+                ResourcesStorageLimitBytesOnSsd->Set(DiskSpaceSoftQuotaBytesOnSsd->Val());
+                ResourcesStorageLimitBytesOnHdd->Set(DiskSpaceSoftQuotaBytesOnHdd->Val());
                 ResourcesStorageTableUsedBytes->Set(DiskSpaceTablesTotalBytes->Val());
                 ResourcesStorageTableUsedBytesOnSsd->Set(DiskSpaceTablesTotalBytesOnSsd->Val());
                 ResourcesStorageTableUsedBytesOnHdd->Set(DiskSpaceTablesTotalBytesOnHdd->Val());

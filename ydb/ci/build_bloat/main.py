@@ -153,8 +153,8 @@ def generate_cpp_bloat(build_output_dir: str, result_dir: str, base_src_dir: str
     result.sort()
 
     tree = {"name": "/"}
-    
-    cpp_compilation_times = [] 
+
+    cpp_compilation_times = []
     total_compilation_time = 0.0
 
     for duration, path, time_trace_path in result:
@@ -166,10 +166,12 @@ def generate_cpp_bloat(build_output_dir: str, result_dir: str, base_src_dir: str
             additional_chunks = list(zip(inc_path, "h" * len(inc_path)))
             add_to_tree(chunks + additional_chunks, inc_duration / 1000, tree)
         print("{} -> {:.2f}s".format(path, duration))
-        cpp_compilation_times.append({
-            "path": path,
-            "time_s": duration,
-        })
+        cpp_compilation_times.append(
+            {
+                "path": path,
+                "time_s": duration,
+            }
+        )
         total_compilation_time += duration
 
     os.makedirs(result_dir, exist_ok=True)
@@ -181,7 +183,7 @@ def generate_cpp_bloat(build_output_dir: str, result_dir: str, base_src_dir: str
 
     with open(os.path.join(result_dir, "output.json"), "w") as f:
         json.dump(human_readable_output, f, indent=4)
-    
+
     propogate_area(tree)
     enrich_names_with_sec(tree)
 

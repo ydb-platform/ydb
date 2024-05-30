@@ -138,13 +138,17 @@ def main():
 
         if rows:
             row = rows[0]
-            driver.table_client.bulk_upsert(DATABASE_PATH + "/code-agility/cpp_compile_time", rows, generate_column_types(row))
+            driver.table_client.bulk_upsert(
+                DATABASE_PATH + "/code-agility/cpp_compile_time", rows, generate_column_types(row)
+            )
 
         row = copy.copy(common_parameters)
         row["id"] = str(uuid.uuid4())
         row["total_compilation_time_s"] = cpp_stats["total_compilation_time"]
 
-        driver.table_client.bulk_upsert(DATABASE_PATH + "/code-agility/total_compile_time", [row], generate_column_types(row))
+        driver.table_client.bulk_upsert(
+            DATABASE_PATH + "/code-agility/total_compile_time", [row], generate_column_types(row)
+        )
 
 
 if __name__ == "__main__":

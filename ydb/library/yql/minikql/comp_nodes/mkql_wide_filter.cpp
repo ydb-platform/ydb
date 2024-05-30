@@ -171,7 +171,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-TBaseComputation::TGenerateResult GenFetchProcess(Value* statePtrVal, const TCodegenContext& ctx, const TResultCodegenerator& fetchGenerator, BasicBlock*& block) const override {
+    typename TBaseComputation::TGenerateResult GenFetchProcess(Value* statePtrVal, const TCodegenContext& ctx, const TResultCodegenerator& fetchGenerator, BasicBlock*& block) const override {
         auto &context = ctx.Codegen.GetContext();
         auto fetch = BasicBlock::Create(context, "fetch", ctx.Func);
         auto pass = BasicBlock::Create(context, "pass", ctx.Func);
@@ -255,7 +255,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-TBaseComputation::TGenerateResult GenFetchProcess(Value* statePtrVal, const TCodegenContext& ctx, const TResultCodegenerator& fetchGenerator, BasicBlock*& block) const override {
+    typename TBaseComputation::TGenerateResult GenFetchProcess(Value* statePtrVal, const TCodegenContext& ctx, const TResultCodegenerator& fetchGenerator, BasicBlock*& block) const override {
         auto &context = ctx.Codegen.GetContext();
         auto fetch = BasicBlock::Create(context, "fetch", ctx.Func);
         auto pass = BasicBlock::Create(context, "pass", ctx.Func);
@@ -330,7 +330,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    TBaseComputation::TGenerateResult GenFetchProcess(Value* statePtrVal, const TCodegenContext& ctx, const TResultCodegenerator& fetchGenerator, BasicBlock*& block) const override {
+    typename TBaseComputation::TGenerateResult GenFetchProcess(Value* statePtrVal, const TCodegenContext& ctx, const TResultCodegenerator& fetchGenerator, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
         auto check = BasicBlock::Create(context, "check", ctx.Func);
         auto save = BasicBlock::Create(context, "save", ctx.Func);

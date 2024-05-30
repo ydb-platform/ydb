@@ -84,8 +84,6 @@ void TTargetBase::Progress(TReplication::TPtr replication, const TActorContext& 
             DstCreator = ctx.Register(CreateDstCreator(replication, Id, ctx));
         }
         break;
-    case EDstState::Syncing:
-        break; // TODO
     case EDstState::Ready:
         if (!WorkerRegistar) {
             WorkerRegistar = ctx.Register(CreateWorkerRegistar(replication, ctx));

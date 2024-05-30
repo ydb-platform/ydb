@@ -5,6 +5,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_types/exceptions/exceptions.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <library/cpp/json/json_reader.h>
+#include <chrono>
 
 namespace NYdb {
 
@@ -519,6 +520,28 @@ Y_UNIT_TEST_SUITE(JsonValueTest) {
             .Build();
         const TString jsonString = FormatValueJson(value, EBinaryStringEncoding::Unicode);
         UNIT_ASSERT_NO_DIFF(jsonString, R"({"Id":1,"Name":"Anna","Value":-100,"Description":null})");
+        TValue resultValue = JsonToYdbValue(jsonString, value.GetType(), EBinaryStringEncoding::Unicode);
+        UNIT_ASSERT_NO_DIFF(
+            TProtoAccessor::GetProto(value).DebugString(),
+            TProtoAccessor::GetProto(resultValue).DebugString()
+        );
+    }
+
+    Y_UNIT_TEST(NewDatetimeValuesStruct) {
+        TValue value = TValueBuilder()
+            .BeginStruct()
+            .AddMember("Interval64")
+                .Interval64(1)
+            .AddMember("Date32")
+                .Date32(-123)
+            .AddMember("Value")
+                .Int32(-100)
+            .AddMember("Description")
+                .EmptyOptional(EPrimitiveType::Utf8)
+            .EndStruct()
+            .Build();
+        const TString jsonString = FormatValueJson(value, EBinaryStringEncoding::Unicode);
+        UNIT_ASSERT_NO_DIFF(jsonString, R"({"Interval64":1,"Date32":"1969-08-31","Value":-100,"Description":null})");
         TValue resultValue = JsonToYdbValue(jsonString, value.GetType(), EBinaryStringEncoding::Unicode);
         UNIT_ASSERT_NO_DIFF(
             TProtoAccessor::GetProto(value).DebugString(),

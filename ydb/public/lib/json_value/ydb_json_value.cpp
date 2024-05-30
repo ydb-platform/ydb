@@ -1,9 +1,11 @@
 #include "ydb_json_value.h"
 
 #include <library/cpp/string_utils/base64/base64.h>
+#include <util/stream/format.h>
 #include <util/string/builder.h>
 #include <util/string/printf.h>
 #include <library/cpp/json/json_reader.h>
+#include <chrono>
 
 namespace NYdb {
 
@@ -107,6 +109,56 @@ namespace NYdb {
         size_t CurPos;
     };
 
+    ui32 ParseNumber(ui32& pos, const::std::string_view& buf, ui32& value, i8 dig_cnt) {
+        ui32 count = 0U;
+        for (value = 0U; dig_cnt && pos < buf.size(); --dig_cnt, ++pos) {
+            if (const auto c = buf[pos]; c >= '0' && c <= '9') {
+                value = value * 10U + (c - '0');
+                ++count;
+                continue;
+            }
+            break;
+        }
+
+        return count;
+    }
+
+    std::chrono::year_month_day ParseDate(ui32& pos, const std::string_view& buf) {
+        bool beforeChrist = false;
+        if (pos < buf.size()) {
+            switch (buf.data()[pos]) {
+                case '-':
+                    beforeChrist = true;
+                    [[fallthrough]];
+                case '+':
+                    ++pos;
+                    [[fallthrough]];
+                default:
+                    break;
+            }
+        }
+
+        ui32 year, month, day;
+        if (!ParseNumber(pos, buf, year, 6U) || pos == buf.size() || buf[pos] != '-' ||
+            !ParseNumber(++pos, buf, month, 2U) || pos == buf.size() || buf[pos] != '-' ||
+            !ParseNumber(++pos, buf, day, 2U)) {
+            return {};
+        }
+
+        const i32 iyear = beforeChrist ? -year : year;
+        return std::chrono::year_month_day{std::chrono::year{iyear}, std::chrono::month{month}, std::chrono::day{day}};
+    }
+
+    TString FormatDate(i32 days) {
+        const std::chrono::year_month_day ymd{std::chrono::sys_days(std::chrono::days(days))};
+        if (!ymd.ok()) {
+            ThrowFatalError(TStringBuilder() << "Invalid value for Date32: " << days);
+        }
+        TStringBuilder str;
+        str << int(ymd.year()) << '-' << LeftPad(unsigned(ymd.month()), 2U, '0') << '-' << LeftPad(unsigned(ymd.day()), 2U, '0');
+        return str;
+    }
+
     class TYdbToJsonConverter {
     public:
         TYdbToJsonConverter(TValueParser& parser, NJsonWriter::TBuf& writer, EBinaryStringEncoding encoding)
@@ -167,6 +219,12 @@ namespace NYdb {
                 break;
             case EPrimitiveType::Interval:
                 Writer.WriteLongLong(Parser.GetInterval());
+                break;
+            case EPrimitiveType::Date32:
+                Writer.WriteString(FormatDate(Parser.GetDate32()));
+                break;
+            case EPrimitiveType::Interval64:
+                Writer.WriteLongLong(Parser.GetInterval64());
                 break;
             case EPrimitiveType::TzDate:
                 Writer.WriteString(Parser.GetTzDate());
@@ -548,6 +606,21 @@ namespace {
             case EPrimitiveType::Interval:
                 EnsureType(jsonValue, NJson::JSON_INTEGER);
                 ValueBuilder.Interval(jsonValue.GetInteger());
+                break;
+            case EPrimitiveType::Date32:
+            {
+                EnsureType(jsonValue, NJson::JSON_STRING);
+                ui32 pos = 0U;
+                const auto date = ParseDate(pos, jsonValue.GetString());
+                if (!date.ok()) {
+                    ThrowFatalError(TStringBuilder() << "Can't parse date from string \"" << jsonValue.GetString() << "\"");
+                }
+                ValueBuilder.Date32(std::chrono::sys_days(date).time_since_epoch().count());
+                break;
+            }
+            case EPrimitiveType::Interval64:
+                EnsureType(jsonValue, NJson::JSON_INTEGER);
+                ValueBuilder.Interval64(jsonValue.GetInteger());
                 break;
             case EPrimitiveType::TzDate:
                 EnsureType(jsonValue, NJson::JSON_STRING);

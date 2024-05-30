@@ -1019,7 +1019,7 @@ public:
             SecureWipeBuffer((ui8*)ev->Get()->MainKey.Keys.data(), sizeof(NPDisk::TKey) * ev->Get()->MainKey.Keys.size());
             
             LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PDiskId
-                    << " Going to restart PDisk since recieved TEvAskWardenRestartPDiskResult");
+                    << " Going to restart PDisk since received TEvAskWardenRestartPDiskResult");
 
             const TActorIdentity& thisActorId = SelfId();
             ui32 nodeId = thisActorId.NodeId();

@@ -504,7 +504,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         vdisk.InitFull();
         vdisk.SendEvLogSync();
 
-        testCtx.StartPDiskRestart();
+        testCtx.GracefulPDiskRestart();
 
         vdisk.InitFull();
         vdisk.SendEvLogSync();
@@ -512,7 +512,6 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
     Y_UNIT_TEST(PDiskRestartManyLogWrites) {
         TActorTestContext testCtx({ false });
-        testCtx.TestCtx.SectorMap->ImitateIoErrorProbability = 1e-4;
 
         const TVDiskID vDiskID(0, 1, 0, 0, 0);
         const auto evInitRes = testCtx.TestResponse<NPDisk::TEvYardInitResult>(
@@ -522,14 +521,16 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         //ui32 errors = 0;
         ui32 lsn = 2;
         TRcBuf logData = TRcBuf(PrepareData(4096));
+
         for (ui32 i = 0; i < 1000; ++i) {
             testCtx.Send(new NPDisk::TEvLog(evInitRes->PDiskParams->Owner, evInitRes->PDiskParams->OwnerRound, 0,
                         logData, TLsnSeg(lsn, lsn), nullptr));
             if (i == 100) {
-                testCtx.Send(new TEvBlobStorage::TEvAskWardenRestartPDiskResult(testCtx.GetPDisk()->PDiskId, testCtx.MainKey, true, nullptr));
+                testCtx.GracefulPDiskRestart(false);
             }
             ++lsn;
         }
+
         for (ui32 i = 0; i < 100;) {
             const auto logRes = testCtx.Recv<NPDisk::TEvLogResult>();
             i += logRes->Results.size();
@@ -929,7 +930,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         while (writeLog() == NKikimrProto::OK) {}
         UNIT_ASSERT_VALUES_EQUAL(writeLog(), NKikimrProto::OUT_OF_SPACE);
 
-        testCtx.StartPDiskRestart();
+        testCtx.GracefulPDiskRestart();
 
         vdisk.InitFull();
         vdisk.SendEvLogSync();
@@ -944,7 +945,7 @@ Y_UNIT_TEST_SUITE(PDiskCompatibilityInfo) {
     THolder<NPDisk::TEvYardInitResult> RestartPDisk(TActorTestContext& testCtx, ui32 pdiskId, TVDiskMock& vdisk, TCurrent* newInfo) {
         TCompatibilityInfoTest::Reset(newInfo);
         Y_UNUSED(pdiskId);
-        testCtx.StartPDiskRestart();
+        testCtx.GracefulPDiskRestart();
         testCtx.Send(new NPDisk::TEvYardInit(vdisk.OwnerRound.fetch_add(1), vdisk.VDiskID, testCtx.TestCtx.PDiskGuid));
         return testCtx.Recv<NPDisk::TEvYardInitResult>();
     }

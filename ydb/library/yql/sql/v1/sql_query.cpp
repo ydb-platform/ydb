@@ -183,7 +183,11 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 for (size_t i = 0; i < names.size(); ++i) {
                     nodes.push_back(BuildSubqueryRef(blocks.back(), ref, names.size() == 1 ? -1 : i));
                 }
-            } else if (!Ctx.CompactNamedExprs) {
+            } else if (!Ctx.CompactNamedExprs || nodeExpr->GetUdfNode()) {
+                // Unlike other nodes, TUdfNode is not an independent node, but more like a set of parameters which should be
+                // applied on UDF call site. For example, TUdfNode can not be Translate()d
+                // So we can't add it to blocks and use reference, instead we store the TUdfNode itself as named node
+                // TODO: remove this special case
                 if (names.size() > 1) {
                     auto tupleRes = BuildTupleResult(nodeExpr, names.size());
                     for (size_t i = 0; i < names.size(); ++i) {

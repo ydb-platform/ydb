@@ -132,7 +132,7 @@ public:
                 controller.GetCounters().CountObjects(chunksCount);
             }
         }
-        ACFL_INFO("normalizer", "TGranulesNormalizer")("message", TStringBuilder() << fullChunksCount << " chunks found");
+        ACFL_INFO("normalizer", "TCleanGranuleIdNormalizer")("message", TStringBuilder() << fullChunksCount << " chunks found");
         return tasks;
     }
 

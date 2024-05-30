@@ -864,29 +864,26 @@ EFetchResult ProcessSpilledData(TComputationContext&, NUdf::TUnboxedValue*const*
         if (IsRestoringSpilledBuckets()) return EFetchResult::Yield;
 
         if (LeftPacker->TablePtr->IsSpilledBucketWaitingForExtraction(NextBucketToJoin)) {
-            std::cerr << std::format("[MISHA][LEFT][{}] Extracting bucket\n", NextBucketToJoin);
             LeftPacker->TablePtr->PrepareBucket(NextBucketToJoin);
         }
 
         if (RightPacker->TablePtr->IsSpilledBucketWaitingForExtraction(NextBucketToJoin)) {
-            std::cerr << std::format("[MISHA][RIGHT][{}] Extracting bucket\n", NextBucketToJoin);
             RightPacker->TablePtr->PrepareBucket(NextBucketToJoin);
         } 
 
         if (!LeftPacker->TablePtr->IsBucketInMemory(NextBucketToJoin)) {
-            std::cerr << std::format("[MISHA][LEFT][{}] Loading bucket\n", NextBucketToJoin);
             LeftPacker->TablePtr->StartLoadingBucket(NextBucketToJoin);
         }
 
         if (!RightPacker->TablePtr->IsBucketInMemory(NextBucketToJoin)) {
-            std::cerr << std::format("[MISHA][RIGHT][{}] Loading bucket\n", NextBucketToJoin);
             RightPacker->TablePtr->StartLoadingBucket(NextBucketToJoin);
         } 
 
         if (LeftPacker->TablePtr->IsBucketInMemory(NextBucketToJoin) && RightPacker->TablePtr->IsBucketInMemory(NextBucketToJoin)) {
             if (*PartialJoinCompleted) {
-                while (JoinedTablePtr->NextJoinedData(LeftPacker->JoinTupleData, RightPacker->JoinTupleData, NextBucketToJoin + 1)) {
+                while (JoinedTablePtr->NextJoinedData(LeftPacker->JoinTupleData, RightPacker->JoinTupleData)) {
                     UnpackJoinedData(output);
+
                     return EFetchResult::One;
                 }
 

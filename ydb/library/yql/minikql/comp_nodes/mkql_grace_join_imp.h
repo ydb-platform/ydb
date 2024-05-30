@@ -275,11 +275,7 @@ public:
     void Join(TTable& t1, TTable& t2, EJoinKind joinKind = EJoinKind::Inner, bool hasMoreLeftTuples = false, bool hasMoreRightTuples = false, ui32 fromBucket = 0, ui32 toBucket = NumberOfBuckets);
 
     // Returns next jointed tuple data. Returs true if there are more tuples
-    bool NextJoinedData(TupleData& td1, TupleData& td2, ui64 bucketLimit);
-
-    bool NextJoinedData(TupleData& td1, TupleData& td2) {
-        return NextJoinedData(td1, td2, JoinTable1->TableBucketsStats.size());
-    }
+    bool NextJoinedData(TupleData& td1, TupleData& td2);
 
     // Creates buckets that support spilling.
     void InitializeBucketSpillers(ISpiller::TPtr spiller);

@@ -1157,7 +1157,6 @@ bool TTable::TryToReduceMemoryAndWait() {
     }
 
     if (!largestBucketSize) return false;
-    std::cerr << std::format("[MISHA] spilling {}\n", largestBucketIndex);
     TableBucketsSpillers[largestBucketIndex].SpillBucket(std::move(TableBuckets[largestBucketIndex]));
     TableBuckets[largestBucketIndex] = TTableBucket{};
 
@@ -1172,10 +1171,7 @@ void TTable::UpdateSpilling() {
 
 bool TTable::IsSpillingFinished() const {
     for (ui64 i = 0; i < NumberOfBuckets; ++i) {
-        if (TableBucketsSpillers[i].IsProcessingSpilling()) {
-            std::cerr << std::format("[MISHA] bucket {} still spilling : {}\n", i, TableBucketsSpillers[i].GetStateName());
-            return false;
-        }
+        if (TableBucketsSpillers[i].IsProcessingSpilling()) return false;
     }
     return true;
 }
@@ -1183,10 +1179,8 @@ bool TTable::IsSpillingFinished() const {
 bool TTable::IsSpillingAcceptingDataRequests() const {
     for (ui64 i = 0; i < NumberOfBuckets; ++i) {
         if (TableBucketsSpillers[i].IsInMemory()) continue;
-        if (!TableBucketsSpillers[i].IsAcceptingDataRequests()) {
-            std::cerr << std::format("[MISHA] bucket {} not accepting data requests: {}\n", i, TableBucketsSpillers[i].GetStateName());
-            return false;
-        }
+
+        if (!TableBucketsSpillers[i].IsAcceptingDataRequests()) return false;
     }
     return true;
 }
@@ -1199,24 +1193,14 @@ bool TTable::IsRestoringSpilledBuckets() const {
 }
 
 void TTable::FinalizeSpilling() {
-    MKQL_ENSURE(!HasRunningAsyncIoOperation(), "Internal logic error");
-
     for (ui32 bucket = 0; bucket < NumberOfBuckets; ++bucket) {
         if (!TableBucketsSpillers[bucket].IsInMemory()) {
             TableBucketsSpillers[bucket].Finalize();
-            std::cerr << std::format("[MISHA] finalizing {}\n", bucket);
             TableBucketsSpillers[bucket].SpillBucket(std::move(TableBuckets[bucket]));
             TableBuckets[bucket] = TTableBucket{};
             
         }
     }
-}
-
-bool TTable::HasRunningAsyncIoOperation() const {
-    for (ui32 bucket = 0; bucket < NumberOfBuckets; ++bucket) {
-        if (TableBucketsSpillers[bucket].HasRunningAsyncIoOperation()) return true;
-    }
-    return false;
 }
 
 bool TTable::IsBucketInMemory(ui32 bucket) const {
@@ -1350,9 +1334,9 @@ bool TTableBucketSpiller::IsExtractionRequired() const {
 }
 
 void TTableBucketSpiller::StartBucketRestoration() {
-    MKQL_ENSURE(State == EState::AcceptingDataRequests, std::format("STATE: {}\n", (int)State));
+    MKQL_ENSURE(State == EState::AcceptingDataRequests, "Internal logic error");
     if (NextVectorToProcess != ENextVectorToProcess::None) return;
-    MKQL_ENSURE(NextVectorToProcess == ENextVectorToProcess::None, std::format("NEXT VECTOR: {}\n", (int)NextVectorToProcess));
+    MKQL_ENSURE(NextVectorToProcess == ENextVectorToProcess::None, "Internal logic error");
 
     NextVectorToProcess = ENextVectorToProcess::KeyAndVals;
     State = EState::Restoring;
@@ -1407,7 +1391,6 @@ void TTableBucketSpiller::ProcessBucketSpilling() {
 
     if (IsFinalizingRequested) {
         if (!StateCharAdapter.IsAcceptingData() || !StateUi32Adapter.IsAcceptingData() || !StateUi64Adapter.IsAcceptingData()) return;
-        std::cerr << "[MISHA] actually finalizing\n";
         State = EState::Finalizing;
         StateUi64Adapter.Finalize();
         StateUi32Adapter.Finalize();

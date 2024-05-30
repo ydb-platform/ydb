@@ -596,10 +596,6 @@ public:
     }
 
     EFetchResult FetchValues(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
-        if (!IsLogPrinted) {
-            std::cerr << "[MISHA] new join\n";
-            IsLogPrinted = true;
-        }
         while (true) {
             switch(GetMode()) {
                 case EOperatingMode::InMemory: {
@@ -626,8 +622,6 @@ public:
     }
 
 private:
-    bool IsLogPrinted = false;
-
     EOperatingMode GetMode() const {
         return Mode;
     }
@@ -643,7 +637,6 @@ private:
     }
 
     void SwitchMode(EOperatingMode mode, TComputationContext& ctx) {
-        std::cerr << std::format("[MISHA] changing state {} -> {}\n", (int)Mode, (int)mode);
         switch(mode) {
             case EOperatingMode::InMemory: {
                 MKQL_ENSURE(false, "Internal logic error");
@@ -806,7 +799,6 @@ private:
             }
 
         }
-        std::cerr << "[MISHA] join finished\n";
 
         return EFetchResult::Finish;
     }
@@ -850,7 +842,6 @@ void DoCalculateWithSpilling(TComputationContext& ctx) {
     }
 
     if (!*HaveMoreLeftRows && !*HaveMoreRightRows) {
-        std::cerr << "[MISHA] everything fetched\n";
         if (!IsSpillingFinished()) return;
         if (!IsSpillingFinalized) {
             LeftPacker->TablePtr->FinalizeSpilling();
@@ -861,8 +852,6 @@ void DoCalculateWithSpilling(TComputationContext& ctx) {
         }
         if (!IsReadyForSpilledDataProcessing()) return;
 
-        LeftPacker->TablePtr->PrintSpillersState("LEFT");
-        RightPacker->TablePtr->PrintSpillersState("RIGHT");
         SwitchMode(EOperatingMode::ProcessSpilled, ctx);
         return;
     }
@@ -874,22 +863,18 @@ EFetchResult ProcessSpilledData(TComputationContext&, NUdf::TUnboxedValue*const*
         if (IsRestoringSpilledBuckets()) return EFetchResult::Yield;
 
         if (LeftPacker->TablePtr->IsSpilledBucketWaitingForExtraction(NextBucketToJoin)) {
-            std::cerr << std::format("[MISHA][LEFT] extracting bucket {}\n", NextBucketToJoin);
             LeftPacker->TablePtr->PrepareBucket(NextBucketToJoin);
         }
 
         if (RightPacker->TablePtr->IsSpilledBucketWaitingForExtraction(NextBucketToJoin)) {
-            std::cerr << std::format("[MISHA][RIGHT] extracting bucket {}\n", NextBucketToJoin);
             RightPacker->TablePtr->PrepareBucket(NextBucketToJoin);
         } 
 
         if (!LeftPacker->TablePtr->IsBucketInMemory(NextBucketToJoin)) {
-            std::cerr << std::format("[MISHA][LEFT] restoring bucket {}\n", NextBucketToJoin);
             LeftPacker->TablePtr->StartLoadingBucket(NextBucketToJoin);
         }
 
         if (!RightPacker->TablePtr->IsBucketInMemory(NextBucketToJoin)) {
-            std::cerr << std::format("[MISHA][RIGHT] restoring bucket {}\n", NextBucketToJoin);
             RightPacker->TablePtr->StartLoadingBucket(NextBucketToJoin);
         } 
 
@@ -913,7 +898,6 @@ EFetchResult ProcessSpilledData(TComputationContext&, NUdf::TUnboxedValue*const*
 
                 NextBucketToJoin++;
             } else {
-                std::cerr << "[MISHA] joining\n";
                 *PartialJoinCompleted = true;
                 LeftPacker->StartTime = std::chrono::system_clock::now();
                 RightPacker->StartTime = std::chrono::system_clock::now();

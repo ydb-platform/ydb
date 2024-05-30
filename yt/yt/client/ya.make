@@ -120,8 +120,8 @@ SRCS(
     table_client/row_buffer.cpp
     table_client/schema.cpp
     table_client/schema_serialization_helpers.cpp
+    table_client/schemaless_buffered_dynamic_table_writer.cpp
     table_client/schemaless_dynamic_table_writer.cpp
-    table_client/schemaless_dynamic_table_buffered_writer.cpp
     table_client/serialize.cpp
     table_client/logical_type.cpp
     table_client/name_table.cpp

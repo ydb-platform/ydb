@@ -25,19 +25,19 @@ public:
         , Client_(std::move(client))
     { }
 
-    // NB(eshcherbin): This writer is synchronous and it's always ready.
     TFuture<void> GetReadyEvent() override
     {
+        // NB(eshcherbin): This writer is synchronous and it's always ready.
         return VoidFuture;
     }
 
     bool Write(TRange<TUnversionedRow> rows) override
     {
         TUnversionedRowsBuilder builder;
+        builder.ReserveRows(std::ssize(rows));
         for (auto row : rows) {
             builder.AddRow(row);
         }
-
         auto sharedRows = builder.Build();
 
         auto transaction = WaitFor(Client_->StartTransaction(ETransactionType::Tablet))
@@ -67,7 +67,6 @@ public:
 private:
     const TYPath Path_;
     const IClientPtr Client_;
-
     const TNameTablePtr NameTable_ = New<TNameTable>();
     const TTableSchemaPtr Schema_ = New<TTableSchema>();
 };

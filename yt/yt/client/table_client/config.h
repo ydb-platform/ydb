@@ -487,7 +487,7 @@ class TSchemalessBufferedDynamicTableWriterConfig
 public:
     i64 MaxBatchSize;
     TDuration FlushPeriod;
-    TExponentialBackoffOptions ExponentialBackoffOptions;
+    TExponentialBackoffOptions RetryBackoff;
 
     REGISTER_YSON_STRUCT(TSchemalessBufferedDynamicTableWriterConfig);
 

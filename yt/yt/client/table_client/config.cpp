@@ -535,7 +535,7 @@ void TSchemalessBufferedDynamicTableWriterConfig::Register(TRegistrar registrar)
         .Default(1000);
     registrar.Parameter("flush_period", &TThis::FlushPeriod)
         .Default(TDuration::Seconds(5));
-    registrar.Parameter("exponential_backoff_options", &TThis::ExponentialBackoffOptions)
+    registrar.Parameter("retry_backoff", &TThis::RetryBackoff)
         .Default();
 }
 

@@ -21,7 +21,7 @@ def fmtchange(cur, ref, plus='bad', minus='good', threshold=10):
     elif change < -threshold:
         cls = ' class="{}"'.format(minus)
 
-    return ret + '<span{}>{:+3}%</span>'.format(cls, change)
+    return ret + '<code{}> {:+3}%</code>'.format(cls, change)
 
 
 def main():
@@ -50,6 +50,7 @@ def main():
 .tabnum { text-align: right; }
 .good { color: green; }
 .bad { color: red; }
+code { white-space: pre; }
 </style></head>
 ''')
     print('<table border="1">')

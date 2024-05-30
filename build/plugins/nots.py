@@ -486,7 +486,8 @@ def _add_test(unit, test_type, test_files, deps=None, test_record=None, test_cwd
     if test_record:
         full_test_record.update(test_record)
 
-    data = ytest.dump_test(unit, full_test_record)
+    # this kind of dart is very sensitive to missing fields, so we disable trimming
+    data = ytest.dump_test(unit, full_test_record, trim_falsy_fields=False)
     if data:
         unit.set_property(["DART_DATA", data])
 

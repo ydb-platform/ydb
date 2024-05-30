@@ -333,7 +333,12 @@ def validate_test(unit, kw):
     return valid_kw, warnings, errors
 
 
-def dump_test(unit, kw):
+def dump_test(unit, kw, trim_falsy_fields=True):
+    if trim_falsy_fields:
+        # "SCRIPT-REL-PATH", "SOURCE-FOLDER-PATH", "TEST-NAME" are required to distinguish dart files
+        # TODO remove "TEST-FILES", "FILES" once defaults are moved to tests suites
+        dont_trim = ("SCRIPT-REL-PATH", "SOURCE-FOLDER-PATH", "TEST-NAME", "TEST-FILES", "FILES")
+        kw = {k: v for k, v in kw.items() if k in dont_trim or v and (not isinstance(v, (str, bytes)) or v.strip())}
     valid_kw, warnings, errors = validate_test(unit, kw)
     for w in warnings:
         unit.message(['warn', w])
@@ -510,24 +515,14 @@ def check_data(unit, *args):
 
     test_record = {
         'TEST-NAME': check_type.lower(),
-        'TEST-TIMEOUT': '',
         'SCRIPT-REL-PATH': 'check.data',
         'TESTED-PROJECT-NAME': os.path.basename(test_dir),
         'SOURCE-FOLDER-PATH': test_dir,
         'CUSTOM-DEPENDENCIES': " ".join(spec_args.get('DEPENDS', [])),
-        'TEST-DATA': '',
         'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
         'SBR-UID-EXT': uid_ext,
-        'SPLIT-FACTOR': '',
-        'TEST_PARTITION': 'SEQUENTIAL',
-        'FORK-MODE': '',
-        'FORK-TEST-FILES': '',
-        'SIZE': 'SMALL',
-        'TAG': '',
         'REQUIREMENTS': " ".join(spec_args.get('REQUIREMENTS', [])),
-        'USE_ARCADIA_PYTHON': unit.get('USE_ARCADIA_PYTHON') or '',
-        'OLD_PYTEST': 'no',
-        'PYTHON-PATHS': '',
+        'USE_ARCADIA_PYTHON': unit.get('USE_ARCADIA_PYTHON'),
         # TODO remove FILES, see DEVTOOLS-7052
         'FILES': serialized_test_files,
         'TEST-FILES': serialized_test_files,
@@ -566,24 +561,14 @@ def check_resource(unit, *args):
 
     test_record = {
         'TEST-NAME': check_type.lower(),
-        'TEST-TIMEOUT': '',
         'SCRIPT-REL-PATH': 'check.resource',
         'TESTED-PROJECT-NAME': os.path.basename(test_dir),
         'SOURCE-FOLDER-PATH': test_dir,
         'CUSTOM-DEPENDENCIES': " ".join(spec_args.get('DEPENDS', [])),
-        'TEST-DATA': '',
         'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
         'SBR-UID-EXT': uid_ext,
-        'SPLIT-FACTOR': '',
-        'TEST_PARTITION': 'SEQUENTIAL',
-        'FORK-MODE': '',
-        'FORK-TEST-FILES': '',
-        'SIZE': 'SMALL',
-        'TAG': '',
         'REQUIREMENTS': " ".join(spec_args.get('REQUIREMENTS', [])),
-        'USE_ARCADIA_PYTHON': unit.get('USE_ARCADIA_PYTHON') or '',
-        'OLD_PYTEST': 'no',
-        'PYTHON-PATHS': '',
+        'USE_ARCADIA_PYTHON': unit.get('USE_ARCADIA_PYTHON'),
         # TODO remove FILES, see DEVTOOLS-7052
         'FILES': serialized_test_files,
         'TEST-FILES': serialized_test_files,
@@ -642,17 +627,8 @@ def ktlint(unit, *args):
         'CUSTOM-DEPENDENCIES': " ".join(spec_args.get('DEPENDS', [])),
         'TEST-DATA': extra_test_data,
         'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
-        'SBR-UID-EXT': '',
-        'SPLIT-FACTOR': '',
-        'TEST_PARTITION': 'SEQUENTIAL',
-        'FORK-MODE': '',
-        'FORK-TEST-FILES': '',
-        'SIZE': 'SMALL',
-        'TAG': '',
         'REQUIREMENTS': " ".join(spec_args.get('REQUIREMENTS', [])),
-        'USE_ARCADIA_PYTHON': unit.get('USE_ARCADIA_PYTHON') or '',
-        'OLD_PYTEST': 'no',
-        'PYTHON-PATHS': '',
+        'USE_ARCADIA_PYTHON': unit.get('USE_ARCADIA_PYTHON'),
         # TODO remove FILES, see DEVTOOLS-7052
         'FILES': serialized_test_files,
         'TEST-FILES': serialized_test_files,
@@ -714,17 +690,9 @@ def java_style(unit, *args):
         'CUSTOM-DEPENDENCIES': " ".join(spec_args.get('DEPENDS', [])),
         'TEST-DATA': java_srcdirs_to_data(unit, 'ALL_SRCDIRS') if ymake_java_test else '',
         'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
-        'SBR-UID-EXT': '',
-        'SPLIT-FACTOR': '',
-        'TEST_PARTITION': 'SEQUENTIAL',
-        'FORK-MODE': unit.get('TEST_FORK_MODE') or '',
-        'FORK-TEST-FILES': '',
-        'SIZE': 'SMALL',
-        'TAG': '',
+        'FORK-MODE': unit.get('TEST_FORK_MODE'),
         'REQUIREMENTS': " ".join(spec_args.get('REQUIREMENTS', [])),
-        'USE_ARCADIA_PYTHON': unit.get('USE_ARCADIA_PYTHON') or '',
-        'OLD_PYTEST': 'no',
-        'PYTHON-PATHS': '',
+        'USE_ARCADIA_PYTHON': unit.get('USE_ARCADIA_PYTHON'),
         # TODO remove FILES, see DEVTOOLS-7052
         'FILES': serialized_test_files,
         'TEST-FILES': serialized_test_files,
@@ -766,24 +734,13 @@ def gofmt(unit, *args):
 
     test_record = {
         'TEST-NAME': check_type.lower(),
-        'TEST-TIMEOUT': '',
         'SCRIPT-REL-PATH': 'gofmt',
         'TESTED-PROJECT-NAME': os.path.basename(test_dir),
         'SOURCE-FOLDER-PATH': test_dir,
         'CUSTOM-DEPENDENCIES': " ".join(spec_args.get('DEPENDS', [])),
-        'TEST-DATA': '',
         'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
-        'SBR-UID-EXT': '',
-        'SPLIT-FACTOR': '',
-        'TEST_PARTITION': 'SEQUENTIAL',
-        'FORK-MODE': '',
-        'FORK-TEST-FILES': '',
-        'SIZE': 'SMALL',
-        'TAG': '',
         'REQUIREMENTS': " ".join(spec_args.get('REQUIREMENTS', [])),
-        'USE_ARCADIA_PYTHON': unit.get('USE_ARCADIA_PYTHON') or '',
-        'OLD_PYTEST': 'no',
-        'PYTHON-PATHS': '',
+        'USE_ARCADIA_PYTHON': unit.get('USE_ARCADIA_PYTHON'),
         # TODO remove FILES, see DEVTOOLS-7052
         'FILES': serialized_test_files,
         'TEST-FILES': serialized_test_files,
@@ -818,24 +775,13 @@ def govet(unit, *args):
 
     test_record = {
         'TEST-NAME': check_type.lower(),
-        'TEST-TIMEOUT': '',
         'SCRIPT-REL-PATH': 'govet',
         'TESTED-PROJECT-NAME': os.path.basename(test_dir),
         'SOURCE-FOLDER-PATH': test_dir,
         'CUSTOM-DEPENDENCIES': " ".join(spec_args.get('DEPENDS', [])),
-        'TEST-DATA': '',
         'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
-        'SBR-UID-EXT': '',
-        'SPLIT-FACTOR': '',
-        'TEST_PARTITION': 'SEQUENTIAL',
-        'FORK-MODE': '',
-        'FORK-TEST-FILES': '',
-        'SIZE': 'SMALL',
-        'TAG': '',
         'REQUIREMENTS': " ".join(spec_args.get('REQUIREMENTS', [])),
-        'USE_ARCADIA_PYTHON': unit.get('USE_ARCADIA_PYTHON') or '',
-        'OLD_PYTEST': 'no',
-        'PYTHON-PATHS': '',
+        'USE_ARCADIA_PYTHON': unit.get('USE_ARCADIA_PYTHON'),
         # TODO remove FILES, see DEVTOOLS-7052
         'FILES': serialized_test_files,
         'TEST-FILES': serialized_test_files,
@@ -898,34 +844,21 @@ def onadd_check_py_imports(unit, *args):
     check_type = "py.imports"
     test_dir = _common.get_norm_unit_path(unit)
 
-    use_arcadia_python = unit.get('USE_ARCADIA_PYTHON')
     test_files = serialize_list([_common.get_norm_unit_path(unit, unit.filename())])
     test_record = {
         'TEST-NAME': "pyimports",
-        'TEST-TIMEOUT': '',
         'SCRIPT-REL-PATH': check_type,
         'TESTED-PROJECT-NAME': os.path.basename(test_dir),
         'SOURCE-FOLDER-PATH': test_dir,
-        'CUSTOM-DEPENDENCIES': '',
-        'TEST-DATA': '',
         'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
-        'SPLIT-FACTOR': '',
-        'TEST_PARTITION': 'SEQUENTIAL',
-        'FORK-MODE': '',
-        'FORK-TEST-FILES': '',
-        'SIZE': 'SMALL',
-        'TAG': '',
-        'USE_ARCADIA_PYTHON': use_arcadia_python or '',
-        'OLD_PYTEST': 'no',
-        'PYTHON-PATHS': '',
+        'USE_ARCADIA_PYTHON': unit.get('USE_ARCADIA_PYTHON'),
         # TODO remove FILES, see DEVTOOLS-7052
         'FILES': test_files,
         'TEST-FILES': test_files,
     }
     if unit.get('NO_CHECK_IMPORTS_FOR_VALUE') != "None":
         test_record["NO-CHECK"] = serialize_list(get_values_list(unit, 'NO_CHECK_IMPORTS_FOR_VALUE') or ["*"])
-    else:
-        test_record["NO-CHECK"] = ''
+
     data = dump_test(unit, test_record)
     if data:
         unit.set_property(["DART_DATA", data])
@@ -950,10 +883,6 @@ def onadd_pytest_bin(unit, *args):
         timeout = timeout[0]
     else:
         timeout = '0'
-    fork_mode = unit.get('TEST_FORK_MODE').split() or ''
-    split_factor = unit.get('TEST_SPLIT_FACTOR') or ''
-    test_size = unit.get('TEST_SIZE_NAME') or ''
-    test_cwd = unit.get('TEST_CWD_VALUE') or ''
     yt_spec = get_values_list(unit, 'TEST_YT_SPEC_VALUE')
     unit.ondata_files(yt_spec)
 
@@ -971,8 +900,10 @@ def onadd_pytest_bin(unit, *args):
 
     unit_path = unit.path()
     fork_test_files = unit.get('FORK_TEST_FILES_MODE')
+    fork_mode = unit.get('TEST_FORK_MODE').split() or ''
     fork_mode = ' '.join(fork_mode) if fork_mode else ''
     use_arcadia_python = unit.get('USE_ARCADIA_PYTHON')
+    test_cwd = unit.get('TEST_CWD_VALUE') or ''
     if test_cwd:
         test_cwd = test_cwd.replace("$TEST_CWD_VALUE", "").replace('"MACRO_CALLS_DELIM"', "").strip()
     test_name = os.path.basename(binary_path)
@@ -987,22 +918,22 @@ def onadd_pytest_bin(unit, *args):
         #  'TEST-PRESERVE-ENV': 'da',
         'TEST-DATA': serialize_list(sorted(_common.filter_out_by_keyword(test_data, 'AUTOUPDATED'))),
         'TEST-RECIPES': prepare_recipes(unit.get("TEST_RECIPES_VALUE")),
-        'SPLIT-FACTOR': split_factor,
-        'TEST_PARTITION': unit.get('TEST_PARTITION') or 'SEQUENTIAL',
+        'SPLIT-FACTOR': unit.get('TEST_SPLIT_FACTOR'),
+        'TEST_PARTITION': unit.get('TEST_PARTITION'),
         'FORK-MODE': fork_mode,
         'FORK-TEST-FILES': fork_test_files,
         'TEST-FILES': serialize_list(test_files),
-        'SIZE': test_size,
+        'SIZE': unit.get('TEST_SIZE_NAME'),
         'TAG': serialize_list(sorted(tags)),
         'REQUIREMENTS': serialize_list(requirements),
-        'USE_ARCADIA_PYTHON': use_arcadia_python or '',
+        'USE_ARCADIA_PYTHON': use_arcadia_python,
         'OLD_PYTEST': 'no',
         'PYTHON-PATHS': serialize_list(python_paths),
-        'TEST-CWD': test_cwd or '',
-        'SKIP_TEST': unit.get('SKIP_TEST_VALUE') or '',
+        'TEST-CWD': test_cwd,
+        'SKIP_TEST': unit.get('SKIP_TEST_VALUE'),
         'BUILD-FOLDER-PATH': _common.strip_roots(unit_path),
-        'BLOB': unit.get('TEST_BLOB_DATA') or '',
-        'CANONIZE_SUB_PATH': unit.get('CANONIZE_SUB_PATH') or '',
+        'BLOB': unit.get('TEST_BLOB_DATA'),
+        'CANONIZE_SUB_PATH': unit.get('CANONIZE_SUB_PATH'),
     }
     if binary_path:
         test_record['BINARY-PATH'] = _common.strip_roots(binary_path)
@@ -1010,6 +941,7 @@ def onadd_pytest_bin(unit, *args):
         test_record['TEST-RUNNER-BIN'] = runner_bin
     if yt_spec:
         test_record['YT-SPEC'] = serialize_list(yt_spec)
+
     data = dump_test(unit, test_record)
     if data:
         unit.set_property(["DART_DATA", data])
@@ -1082,8 +1014,6 @@ def onjava_test(unit, *args):
 
     props = base64.b64encode(six.ensure_binary(json.dumps(props)))
 
-    test_cwd = unit.get('TEST_CWD_VALUE') or ''  # TODO: validate test_cwd value
-
     if unit.get('MODULE_TYPE') == 'JUNIT5':
         script_rel_path = 'junit5.test'
     else:
@@ -1094,25 +1024,25 @@ def onjava_test(unit, *args):
         'SOURCE-FOLDER-PATH': path,
         'TEST-NAME': '-'.join([os.path.basename(os.path.dirname(path)), os.path.basename(path)]),
         'SCRIPT-REL-PATH': script_rel_path,
-        'TEST-TIMEOUT': unit.get('TEST_TIMEOUT') or '',
+        'TEST-TIMEOUT': unit.get('TEST_TIMEOUT'),
         'TESTED-PROJECT-NAME': path,
         'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
         #  'TEST-PRESERVE-ENV': 'da',
         'TEST-DATA': serialize_list(sorted(_common.filter_out_by_keyword(test_data, 'AUTOUPDATED'))),
-        'FORK-MODE': unit.get('TEST_FORK_MODE') or '',
-        'SPLIT-FACTOR': unit.get('TEST_SPLIT_FACTOR') or '',
+        'FORK-MODE': unit.get('TEST_FORK_MODE'),
+        'SPLIT-FACTOR': unit.get('TEST_SPLIT_FACTOR'),
         'CUSTOM-DEPENDENCIES': ' '.join(get_values_list(unit, 'TEST_DEPENDS_VALUE')),
         'TAG': serialize_list(sorted(_get_test_tags(unit))),
-        'SIZE': unit.get('TEST_SIZE_NAME') or '',
+        'SIZE': unit.get('TEST_SIZE_NAME'),
         'REQUIREMENTS': serialize_list(get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')),
         'TEST-RECIPES': prepare_recipes(unit.get("TEST_RECIPES_VALUE")),
         # JTEST/JTEST_FOR only
         'MODULE_TYPE': unit.get('MODULE_TYPE'),
-        'UNITTEST_DIR': unit.get('UNITTEST_DIR') or '',
+        'UNITTEST_DIR': unit.get('UNITTEST_DIR'),
         'JVM_ARGS': serialize_list(get_values_list(unit, 'JVM_ARGS_VALUE')),
         'SYSTEM_PROPERTIES': props,
-        'TEST-CWD': test_cwd,
-        'SKIP_TEST': unit.get('SKIP_TEST_VALUE') or '',
+        'TEST-CWD': unit.get('TEST_CWD_VALUE'),  # TODO: validate test_cwd value
+        'SKIP_TEST': unit.get('SKIP_TEST_VALUE'),
         'JAVA_CLASSPATH_CMD_TYPE': java_cp_arg_type,
         'JDK_RESOURCE': 'JDK' + (unit.get('JDK_VERSION') or unit.get('JDK_REAL_VERSION') or '_DEFAULT'),
         'JDK_FOR_TESTS': 'JDK' + (unit.get('JDK_VERSION') or unit.get('JDK_REAL_VERSION') or '_DEFAULT') + '_FOR_TESTS',
@@ -1153,21 +1083,11 @@ def onjava_test_deps(unit, *args):
             '-'
         ),
         'SCRIPT-REL-PATH': 'java.dependency.test',
-        'TEST-TIMEOUT': '',
         'TESTED-PROJECT-NAME': path,
-        'TEST-DATA': '',
-        'TEST_PARTITION': 'SEQUENTIAL',
-        'FORK-MODE': '',
-        'SPLIT-FACTOR': '',
         'CUSTOM-DEPENDENCIES': ' '.join(get_values_list(unit, 'TEST_DEPENDS_VALUE')),
-        'TAG': '',
-        'SIZE': 'SMALL',
         'IGNORE_CLASSPATH_CLASH': ' '.join(get_values_list(unit, 'JAVA_IGNORE_CLASSPATH_CLASH_VALUE')),
         # JTEST/JTEST_FOR only
         'MODULE_TYPE': unit.get('MODULE_TYPE'),
-        'UNITTEST_DIR': '',
-        'SYSTEM_PROPERTIES': '',
-        'TEST-CWD': '',
     }
     if mode == 'strict':
         test_record['STRICT_CLASSPATH_CLASH'] = 'yes'
@@ -1229,10 +1149,8 @@ def onsetup_exectest(unit, *args):
         timeout = timeout[0]
     else:
         timeout = '0'
-    fork_mode = unit.get('TEST_FORK_MODE').split() or ''
-    split_factor = unit.get('TEST_SPLIT_FACTOR') or ''
-    test_size = unit.get('TEST_SIZE_NAME') or ''
-    test_cwd = unit.get('TEST_CWD_VALUE') or ''
+    split_factor = unit.get('TEST_SPLIT_FACTOR')
+    test_cwd = unit.get('TEST_CWD_VALUE')
     yt_spec = get_values_list(unit, 'TEST_YT_SPEC_VALUE')
     unit.ondata_files(yt_spec)
 
@@ -1246,6 +1164,7 @@ def onsetup_exectest(unit, *args):
 
     unit_path = unit.path()
     fork_test_files = unit.get('FORK_TEST_FILES_MODE')
+    fork_mode = unit.get('TEST_FORK_MODE').split() or ''
     fork_mode = ' '.join(fork_mode) if fork_mode else ''
     use_arcadia_python = unit.get('USE_ARCADIA_PYTHON')
     if test_cwd:
@@ -1263,25 +1182,26 @@ def onsetup_exectest(unit, *args):
         'TEST-DATA': serialize_list(sorted(_common.filter_out_by_keyword(test_data, 'AUTOUPDATED'))),
         'TEST-RECIPES': prepare_recipes(unit.get("TEST_RECIPES_VALUE")),
         'SPLIT-FACTOR': split_factor,
-        'TEST_PARTITION': unit.get('TEST_PARTITION') or 'SEQUENTIAL',
+        'TEST_PARTITION': unit.get('TEST_PARTITION'),
         'FORK-MODE': fork_mode,
         'FORK-TEST-FILES': fork_test_files,
         'TEST-FILES': serialize_list(test_files),
-        'SIZE': test_size,
+        'SIZE': unit.get('TEST_SIZE_NAME'),
         'TAG': serialize_list(sorted(tags)),
         'REQUIREMENTS': serialize_list(requirements),
-        'USE_ARCADIA_PYTHON': use_arcadia_python or '',
+        'USE_ARCADIA_PYTHON': use_arcadia_python,
         'OLD_PYTEST': 'no',
         'PYTHON-PATHS': serialize_list(python_paths),
-        'TEST-CWD': test_cwd or '',
-        'SKIP_TEST': unit.get('SKIP_TEST_VALUE') or '',
+        'TEST-CWD': test_cwd,
+        'SKIP_TEST': unit.get('SKIP_TEST_VALUE'),
         'BUILD-FOLDER-PATH': _common.strip_roots(unit_path),
-        'BLOB': unit.get('TEST_BLOB_DATA') or '',
-        'CANONIZE_SUB_PATH': unit.get('CANONIZE_SUB_PATH') or '',
+        'BLOB': unit.get('TEST_BLOB_DATA'),
+        'CANONIZE_SUB_PATH': unit.get('CANONIZE_SUB_PATH'),
     }
     test_record['BINARY-PATH'] = _common.strip_roots(os.path.join(unit.path(), unit.filename()).replace(".pkg", ""))
     if yt_spec:
         test_record['YT-SPEC'] = serialize_list(yt_spec)
+
     data = dump_test(unit, test_record)
     if data:
         unit.set_property(["DART_DATA", data])
@@ -1485,9 +1405,9 @@ def clang_tidy(unit, *args, from_other_type=False):
     else:
         unit.ondata_files(get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE'))
 
-        test_size = ''.join(spec_args.get('SIZE', [])) or unit.get('TEST_SIZE_NAME') or ''
+        test_size = ''.join(spec_args.get('SIZE', [])) or unit.get('TEST_SIZE_NAME')
         test_tags = serialize_list(sorted(_get_test_tags(unit, spec_args)))
-        test_timeout = ''.join(spec_args.get('TIMEOUT', [])) or unit.get('TEST_TIMEOUT') or ''
+        test_timeout = ''.join(spec_args.get('TIMEOUT', [])) or unit.get('TEST_TIMEOUT')
         test_requirements = spec_args.get('REQUIREMENTS', []) + get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')
 
     test_data = sorted(
@@ -1533,23 +1453,17 @@ def clang_tidy(unit, *args, from_other_type=False):
         'TEST-DATA': serialize_list(sorted(test_data)),
         'TEST-TIMEOUT': test_timeout,
         'FORK-MODE': fork_mode,
-        'SPLIT-FACTOR': ''.join(spec_args.get('SPLIT_FACTOR', [])) or unit.get('TEST_SPLIT_FACTOR') or '',
+        'SPLIT-FACTOR': ''.join(spec_args.get('SPLIT_FACTOR', [])) or unit.get('TEST_SPLIT_FACTOR'),
         'SIZE': test_size,
         'TAG': test_tags,
         'REQUIREMENTS': serialize_list(test_requirements),
-        'TEST-CWD': unit.get('TEST_CWD_VALUE') or '',
-        'FUZZ-DICTS': serialize_list(
-            spec_args.get('FUZZ_DICTS', []) + get_unit_list_variable(unit, 'FUZZ_DICTS_VALUE')
-        ),
-        'FUZZ-OPTS': serialize_list(spec_args.get('FUZZ_OPTS', []) + get_unit_list_variable(unit, 'FUZZ_OPTS_VALUE')),
+        'TEST-CWD': unit.get('TEST_CWD_VALUE'),
         'YT-SPEC': serialize_list(spec_args.get('YT_SPEC', []) + get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE')),
-        'BLOB': unit.get('TEST_BLOB_DATA') or '',
-        'SKIP_TEST': unit.get('SKIP_TEST_VALUE') or '',
-        'TEST_IOS_DEVICE_TYPE': unit.get('TEST_IOS_DEVICE_TYPE_VALUE') or '',
-        'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE') or '',
-        'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE') or '',
-        'TEST_PARTITION': unit.get("TEST_PARTITION") or 'SEQUENTIAL',
-        'GO_BENCH_TIMEOUT': unit.get('GO_BENCH_TIMEOUT') or '',
+        'SKIP_TEST': unit.get('SKIP_TEST_VALUE'),
+        'TEST_IOS_DEVICE_TYPE': unit.get('TEST_IOS_DEVICE_TYPE_VALUE'),
+        'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE'),
+        'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE'),
+        'TEST_PARTITION': unit.get("TEST_PARTITION"),
     }
 
     data = dump_test(unit, test_record)
@@ -1610,23 +1524,18 @@ def unittest_py(unit, *args):
         'TEST-DATA': serialize_list(sorted(test_data)),
         'TEST-TIMEOUT': test_timeout,
         'FORK-MODE': fork_mode,
-        'SPLIT-FACTOR': ''.join(spec_args.get('SPLIT_FACTOR', [])) or unit.get('TEST_SPLIT_FACTOR') or '',
+        'SPLIT-FACTOR': ''.join(spec_args.get('SPLIT_FACTOR', [])) or unit.get('TEST_SPLIT_FACTOR'),
         'SIZE': test_size,
         'TAG': test_tags,
         'REQUIREMENTS': serialize_list(test_requirements),
-        'TEST-CWD': unit.get('TEST_CWD_VALUE') or '',
-        'FUZZ-DICTS': serialize_list(
-            spec_args.get('FUZZ_DICTS', []) + get_unit_list_variable(unit, 'FUZZ_DICTS_VALUE')
-        ),
-        'FUZZ-OPTS': serialize_list(spec_args.get('FUZZ_OPTS', []) + get_unit_list_variable(unit, 'FUZZ_OPTS_VALUE')),
+        'TEST-CWD': unit.get('TEST_CWD_VALUE'),
         'YT-SPEC': serialize_list(spec_args.get('YT_SPEC', []) + get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE')),
-        'BLOB': unit.get('TEST_BLOB_DATA') or '',
-        'SKIP_TEST': unit.get('SKIP_TEST_VALUE') or '',
-        'TEST_IOS_DEVICE_TYPE': unit.get('TEST_IOS_DEVICE_TYPE_VALUE') or '',
-        'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE') or '',
-        'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE') or '',
-        'TEST_PARTITION': unit.get("TEST_PARTITION") or 'SEQUENTIAL',
-        'GO_BENCH_TIMEOUT': unit.get('GO_BENCH_TIMEOUT') or '',
+        'BLOB': unit.get('TEST_BLOB_DATA'),
+        'SKIP_TEST': unit.get('SKIP_TEST_VALUE'),
+        'TEST_IOS_DEVICE_TYPE': unit.get('TEST_IOS_DEVICE_TYPE_VALUE'),
+        'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE'),
+        'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE'),
+        'TEST_PARTITION': unit.get("TEST_PARTITION"),
     }
 
     data = dump_test(unit, test_record)
@@ -1687,23 +1596,18 @@ def gunittest(unit, *args):
         'TEST-DATA': serialize_list(sorted(test_data)),
         'TEST-TIMEOUT': test_timeout,
         'FORK-MODE': fork_mode,
-        'SPLIT-FACTOR': ''.join(spec_args.get('SPLIT_FACTOR', [])) or unit.get('TEST_SPLIT_FACTOR') or '',
+        'SPLIT-FACTOR': ''.join(spec_args.get('SPLIT_FACTOR', [])) or unit.get('TEST_SPLIT_FACTOR'),
         'SIZE': test_size,
         'TAG': test_tags,
         'REQUIREMENTS': serialize_list(test_requirements),
-        'TEST-CWD': unit.get('TEST_CWD_VALUE') or '',
-        'FUZZ-DICTS': serialize_list(
-            spec_args.get('FUZZ_DICTS', []) + get_unit_list_variable(unit, 'FUZZ_DICTS_VALUE')
-        ),
-        'FUZZ-OPTS': serialize_list(spec_args.get('FUZZ_OPTS', []) + get_unit_list_variable(unit, 'FUZZ_OPTS_VALUE')),
+        'TEST-CWD': unit.get('TEST_CWD_VALUE'),
         'YT-SPEC': serialize_list(spec_args.get('YT_SPEC', []) + get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE')),
-        'BLOB': unit.get('TEST_BLOB_DATA') or '',
-        'SKIP_TEST': unit.get('SKIP_TEST_VALUE') or '',
-        'TEST_IOS_DEVICE_TYPE': unit.get('TEST_IOS_DEVICE_TYPE_VALUE') or '',
-        'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE') or '',
-        'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE') or '',
-        'TEST_PARTITION': unit.get("TEST_PARTITION") or 'SEQUENTIAL',
-        'GO_BENCH_TIMEOUT': unit.get('GO_BENCH_TIMEOUT') or '',
+        'BLOB': unit.get('TEST_BLOB_DATA'),
+        'SKIP_TEST': unit.get('SKIP_TEST_VALUE'),
+        'TEST_IOS_DEVICE_TYPE': unit.get('TEST_IOS_DEVICE_TYPE_VALUE'),
+        'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE'),
+        'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE'),
+        'TEST_PARTITION': unit.get("TEST_PARTITION"),
     }
 
     data = dump_test(unit, test_record)
@@ -1764,23 +1668,18 @@ def g_benchmark(unit, *args):
         'TEST-DATA': serialize_list(sorted(test_data)),
         'TEST-TIMEOUT': test_timeout,
         'FORK-MODE': fork_mode,
-        'SPLIT-FACTOR': ''.join(spec_args.get('SPLIT_FACTOR', [])) or unit.get('TEST_SPLIT_FACTOR') or '',
+        'SPLIT-FACTOR': ''.join(spec_args.get('SPLIT_FACTOR', [])) or unit.get('TEST_SPLIT_FACTOR'),
         'SIZE': test_size,
         'TAG': test_tags,
         'REQUIREMENTS': serialize_list(test_requirements),
-        'TEST-CWD': unit.get('TEST_CWD_VALUE') or '',
-        'FUZZ-DICTS': serialize_list(
-            spec_args.get('FUZZ_DICTS', []) + get_unit_list_variable(unit, 'FUZZ_DICTS_VALUE')
-        ),
-        'FUZZ-OPTS': serialize_list(spec_args.get('FUZZ_OPTS', []) + get_unit_list_variable(unit, 'FUZZ_OPTS_VALUE')),
+        'TEST-CWD': unit.get('TEST_CWD_VALUE'),
         'YT-SPEC': serialize_list(spec_args.get('YT_SPEC', []) + get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE')),
-        'BLOB': unit.get('TEST_BLOB_DATA') or '',
-        'SKIP_TEST': unit.get('SKIP_TEST_VALUE') or '',
-        'TEST_IOS_DEVICE_TYPE': unit.get('TEST_IOS_DEVICE_TYPE_VALUE') or '',
-        'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE') or '',
-        'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE') or '',
-        'TEST_PARTITION': unit.get("TEST_PARTITION") or 'SEQUENTIAL',
-        'GO_BENCH_TIMEOUT': unit.get('GO_BENCH_TIMEOUT') or '',
+        'BLOB': unit.get('TEST_BLOB_DATA'),
+        'SKIP_TEST': unit.get('SKIP_TEST_VALUE'),
+        'TEST_IOS_DEVICE_TYPE': unit.get('TEST_IOS_DEVICE_TYPE_VALUE'),
+        'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE'),
+        'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE'),
+        'TEST_PARTITION': unit.get("TEST_PARTITION"),
     }
 
     benchmark_opts = get_unit_list_variable(unit, 'BENCHMARK_OPTS_VALUE')
@@ -1817,9 +1716,9 @@ def go_test(unit, *args):
     data, _ = get_canonical_test_resources(unit)
     test_data += data
 
-    test_size = ''.join(spec_args.get('SIZE', [])) or unit.get('TEST_SIZE_NAME') or ''
+    test_size = ''.join(spec_args.get('SIZE', [])) or unit.get('TEST_SIZE_NAME')
     test_tags = serialize_list(sorted(_get_test_tags(unit, spec_args)))
-    test_timeout = ''.join(spec_args.get('TIMEOUT', [])) or unit.get('TEST_TIMEOUT') or ''
+    test_timeout = ''.join(spec_args.get('TIMEOUT', [])) or unit.get('TEST_TIMEOUT')
     test_requirements = spec_args.get('REQUIREMENTS', []) + get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')
 
     fork_mode = []
@@ -1849,23 +1748,18 @@ def go_test(unit, *args):
         'TEST-DATA': serialize_list(sorted(test_data)),
         'TEST-TIMEOUT': test_timeout,
         'FORK-MODE': fork_mode,
-        'SPLIT-FACTOR': ''.join(spec_args.get('SPLIT_FACTOR', [])) or unit.get('TEST_SPLIT_FACTOR') or '',
+        'SPLIT-FACTOR': ''.join(spec_args.get('SPLIT_FACTOR', [])) or unit.get('TEST_SPLIT_FACTOR'),
         'SIZE': test_size,
         'TAG': test_tags,
         'REQUIREMENTS': serialize_list(test_requirements),
-        'TEST-CWD': unit.get('TEST_CWD_VALUE') or '',
-        'FUZZ-DICTS': serialize_list(
-            spec_args.get('FUZZ_DICTS', []) + get_unit_list_variable(unit, 'FUZZ_DICTS_VALUE')
-        ),
-        'FUZZ-OPTS': serialize_list(spec_args.get('FUZZ_OPTS', []) + get_unit_list_variable(unit, 'FUZZ_OPTS_VALUE')),
+        'TEST-CWD': unit.get('TEST_CWD_VALUE'),
         'YT-SPEC': serialize_list(spec_args.get('YT_SPEC', []) + get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE')),
-        'BLOB': unit.get('TEST_BLOB_DATA') or '',
-        'SKIP_TEST': unit.get('SKIP_TEST_VALUE') or '',
-        'TEST_IOS_DEVICE_TYPE': unit.get('TEST_IOS_DEVICE_TYPE_VALUE') or '',
-        'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE') or '',
-        'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE') or '',
-        'TEST_PARTITION': unit.get("TEST_PARTITION") or 'SEQUENTIAL',
-        'GO_BENCH_TIMEOUT': unit.get('GO_BENCH_TIMEOUT') or '',
+        'BLOB': unit.get('TEST_BLOB_DATA'),
+        'SKIP_TEST': unit.get('SKIP_TEST_VALUE'),
+        'TEST_IOS_DEVICE_TYPE': unit.get('TEST_IOS_DEVICE_TYPE_VALUE'),
+        'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE'),
+        'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE'),
+        'TEST_PARTITION': unit.get("TEST_PARTITION"),
     }
 
     data = dump_test(unit, test_record)
@@ -1896,9 +1790,9 @@ def boost_test(unit, *args):
         )
     )
 
-    test_size = ''.join(spec_args.get('SIZE', [])) or unit.get('TEST_SIZE_NAME') or ''
+    test_size = ''.join(spec_args.get('SIZE', [])) or unit.get('TEST_SIZE_NAME')
     test_tags = serialize_list(sorted(_get_test_tags(unit, spec_args)))
-    test_timeout = ''.join(spec_args.get('TIMEOUT', [])) or unit.get('TEST_TIMEOUT') or ''
+    test_timeout = ''.join(spec_args.get('TIMEOUT', [])) or unit.get('TEST_TIMEOUT')
     test_requirements = spec_args.get('REQUIREMENTS', []) + get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')
 
     fork_mode = []
@@ -1928,23 +1822,18 @@ def boost_test(unit, *args):
         'TEST-DATA': serialize_list(sorted(test_data)),
         'TEST-TIMEOUT': test_timeout,
         'FORK-MODE': fork_mode,
-        'SPLIT-FACTOR': ''.join(spec_args.get('SPLIT_FACTOR', [])) or unit.get('TEST_SPLIT_FACTOR') or '',
+        'SPLIT-FACTOR': ''.join(spec_args.get('SPLIT_FACTOR', [])) or unit.get('TEST_SPLIT_FACTOR'),
         'SIZE': test_size,
         'TAG': test_tags,
         'REQUIREMENTS': serialize_list(test_requirements),
-        'TEST-CWD': unit.get('TEST_CWD_VALUE') or '',
-        'FUZZ-DICTS': serialize_list(
-            spec_args.get('FUZZ_DICTS', []) + get_unit_list_variable(unit, 'FUZZ_DICTS_VALUE')
-        ),
-        'FUZZ-OPTS': serialize_list(spec_args.get('FUZZ_OPTS', []) + get_unit_list_variable(unit, 'FUZZ_OPTS_VALUE')),
+        'TEST-CWD': unit.get('TEST_CWD_VALUE'),
         'YT-SPEC': serialize_list(spec_args.get('YT_SPEC', []) + get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE')),
-        'BLOB': unit.get('TEST_BLOB_DATA') or '',
-        'SKIP_TEST': unit.get('SKIP_TEST_VALUE') or '',
-        'TEST_IOS_DEVICE_TYPE': unit.get('TEST_IOS_DEVICE_TYPE_VALUE') or '',
-        'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE') or '',
-        'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE') or '',
-        'TEST_PARTITION': unit.get("TEST_PARTITION") or 'SEQUENTIAL',
-        'GO_BENCH_TIMEOUT': unit.get('GO_BENCH_TIMEOUT') or '',
+        'BLOB': unit.get('TEST_BLOB_DATA'),
+        'SKIP_TEST': unit.get('SKIP_TEST_VALUE'),
+        'TEST_IOS_DEVICE_TYPE': unit.get('TEST_IOS_DEVICE_TYPE_VALUE'),
+        'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE'),
+        'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE'),
+        'TEST_PARTITION': unit.get("TEST_PARTITION"),
     }
 
     data = dump_test(unit, test_record)
@@ -1977,9 +1866,9 @@ def fuzz_test(unit, *args):
         )
     )
 
-    test_size = ''.join(spec_args.get('SIZE', [])) or unit.get('TEST_SIZE_NAME') or ''
+    test_size = ''.join(spec_args.get('SIZE', [])) or unit.get('TEST_SIZE_NAME')
     test_tags = serialize_list(sorted(_get_test_tags(unit, spec_args)))
-    test_timeout = ''.join(spec_args.get('TIMEOUT', [])) or unit.get('TEST_TIMEOUT') or ''
+    test_timeout = ''.join(spec_args.get('TIMEOUT', [])) or unit.get('TEST_TIMEOUT')
     test_requirements = spec_args.get('REQUIREMENTS', []) + get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')
 
     fork_mode = []
@@ -2009,23 +1898,22 @@ def fuzz_test(unit, *args):
         'TEST-DATA': serialize_list(sorted(test_data)),
         'TEST-TIMEOUT': test_timeout,
         'FORK-MODE': fork_mode,
-        'SPLIT-FACTOR': ''.join(spec_args.get('SPLIT_FACTOR', [])) or unit.get('TEST_SPLIT_FACTOR') or '',
+        'SPLIT-FACTOR': ''.join(spec_args.get('SPLIT_FACTOR', [])) or unit.get('TEST_SPLIT_FACTOR'),
         'SIZE': test_size,
         'TAG': test_tags,
         'REQUIREMENTS': serialize_list(test_requirements),
-        'TEST-CWD': unit.get('TEST_CWD_VALUE') or '',
+        'TEST-CWD': unit.get('TEST_CWD_VALUE'),
         'FUZZ-DICTS': serialize_list(
             spec_args.get('FUZZ_DICTS', []) + get_unit_list_variable(unit, 'FUZZ_DICTS_VALUE')
         ),
         'FUZZ-OPTS': serialize_list(spec_args.get('FUZZ_OPTS', []) + get_unit_list_variable(unit, 'FUZZ_OPTS_VALUE')),
         'YT-SPEC': serialize_list(spec_args.get('YT_SPEC', []) + get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE')),
-        'BLOB': unit.get('TEST_BLOB_DATA') or '',
-        'SKIP_TEST': unit.get('SKIP_TEST_VALUE') or '',
-        'TEST_IOS_DEVICE_TYPE': unit.get('TEST_IOS_DEVICE_TYPE_VALUE') or '',
-        'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE') or '',
-        'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE') or '',
-        'TEST_PARTITION': unit.get("TEST_PARTITION") or 'SEQUENTIAL',
-        'GO_BENCH_TIMEOUT': unit.get('GO_BENCH_TIMEOUT') or '',
+        'BLOB': unit.get('TEST_BLOB_DATA'),
+        'SKIP_TEST': unit.get('SKIP_TEST_VALUE'),
+        'TEST_IOS_DEVICE_TYPE': unit.get('TEST_IOS_DEVICE_TYPE_VALUE'),
+        'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE'),
+        'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE'),
+        'TEST_PARTITION': unit.get("TEST_PARTITION"),
     }
 
     if unit.get('FUZZING') == 'yes':
@@ -2060,9 +1948,9 @@ def y_benchmark(unit, *args):
         )
     )
 
-    test_size = ''.join(spec_args.get('SIZE', [])) or unit.get('TEST_SIZE_NAME') or ''
+    test_size = ''.join(spec_args.get('SIZE', [])) or unit.get('TEST_SIZE_NAME')
     test_tags = serialize_list(sorted(_get_test_tags(unit, spec_args)))
-    test_timeout = ''.join(spec_args.get('TIMEOUT', [])) or unit.get('TEST_TIMEOUT') or ''
+    test_timeout = ''.join(spec_args.get('TIMEOUT', [])) or unit.get('TEST_TIMEOUT')
     test_requirements = spec_args.get('REQUIREMENTS', []) + get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')
 
     fork_mode = []
@@ -2092,23 +1980,18 @@ def y_benchmark(unit, *args):
         'TEST-DATA': serialize_list(sorted(test_data)),
         'TEST-TIMEOUT': test_timeout,
         'FORK-MODE': fork_mode,
-        'SPLIT-FACTOR': ''.join(spec_args.get('SPLIT_FACTOR', [])) or unit.get('TEST_SPLIT_FACTOR') or '',
+        'SPLIT-FACTOR': ''.join(spec_args.get('SPLIT_FACTOR', [])) or unit.get('TEST_SPLIT_FACTOR'),
         'SIZE': test_size,
         'TAG': test_tags,
         'REQUIREMENTS': serialize_list(test_requirements),
-        'TEST-CWD': unit.get('TEST_CWD_VALUE') or '',
-        'FUZZ-DICTS': serialize_list(
-            spec_args.get('FUZZ_DICTS', []) + get_unit_list_variable(unit, 'FUZZ_DICTS_VALUE')
-        ),
-        'FUZZ-OPTS': serialize_list(spec_args.get('FUZZ_OPTS', []) + get_unit_list_variable(unit, 'FUZZ_OPTS_VALUE')),
+        'TEST-CWD': unit.get('TEST_CWD_VALUE'),
         'YT-SPEC': serialize_list(spec_args.get('YT_SPEC', []) + get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE')),
-        'BLOB': unit.get('TEST_BLOB_DATA') or '',
-        'SKIP_TEST': unit.get('SKIP_TEST_VALUE') or '',
-        'TEST_IOS_DEVICE_TYPE': unit.get('TEST_IOS_DEVICE_TYPE_VALUE') or '',
-        'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE') or '',
-        'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE') or '',
-        'TEST_PARTITION': unit.get("TEST_PARTITION") or 'SEQUENTIAL',
-        'GO_BENCH_TIMEOUT': unit.get('GO_BENCH_TIMEOUT') or '',
+        'BLOB': unit.get('TEST_BLOB_DATA'),
+        'SKIP_TEST': unit.get('SKIP_TEST_VALUE'),
+        'TEST_IOS_DEVICE_TYPE': unit.get('TEST_IOS_DEVICE_TYPE_VALUE'),
+        'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE'),
+        'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE'),
+        'TEST_PARTITION': unit.get("TEST_PARTITION"),
     }
 
     benchmark_opts = get_unit_list_variable(unit, 'BENCHMARK_OPTS_VALUE')
@@ -2139,9 +2022,9 @@ def coverage_extractor(unit, *args):
         )
     )
 
-    test_size = ''.join(spec_args.get('SIZE', [])) or unit.get('TEST_SIZE_NAME') or ''
+    test_size = ''.join(spec_args.get('SIZE', [])) or unit.get('TEST_SIZE_NAME')
     test_tags = serialize_list(sorted(_get_test_tags(unit, spec_args)))
-    test_timeout = ''.join(spec_args.get('TIMEOUT', [])) or unit.get('TEST_TIMEOUT') or ''
+    test_timeout = ''.join(spec_args.get('TIMEOUT', [])) or unit.get('TEST_TIMEOUT')
     test_requirements = spec_args.get('REQUIREMENTS', []) + get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')
 
     fork_mode = []
@@ -2171,23 +2054,18 @@ def coverage_extractor(unit, *args):
         'TEST-DATA': serialize_list(sorted(test_data)),
         'TEST-TIMEOUT': test_timeout,
         'FORK-MODE': fork_mode,
-        'SPLIT-FACTOR': ''.join(spec_args.get('SPLIT_FACTOR', [])) or unit.get('TEST_SPLIT_FACTOR') or '',
+        'SPLIT-FACTOR': ''.join(spec_args.get('SPLIT_FACTOR', [])) or unit.get('TEST_SPLIT_FACTOR'),
         'SIZE': test_size,
         'TAG': test_tags,
         'REQUIREMENTS': serialize_list(test_requirements),
-        'TEST-CWD': unit.get('TEST_CWD_VALUE') or '',
-        'FUZZ-DICTS': serialize_list(
-            spec_args.get('FUZZ_DICTS', []) + get_unit_list_variable(unit, 'FUZZ_DICTS_VALUE')
-        ),
-        'FUZZ-OPTS': serialize_list(spec_args.get('FUZZ_OPTS', []) + get_unit_list_variable(unit, 'FUZZ_OPTS_VALUE')),
+        'TEST-CWD': unit.get('TEST_CWD_VALUE'),
         'YT-SPEC': serialize_list(spec_args.get('YT_SPEC', []) + get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE')),
-        'BLOB': unit.get('TEST_BLOB_DATA') or '',
-        'SKIP_TEST': unit.get('SKIP_TEST_VALUE') or '',
-        'TEST_IOS_DEVICE_TYPE': unit.get('TEST_IOS_DEVICE_TYPE_VALUE') or '',
-        'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE') or '',
-        'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE') or '',
-        'TEST_PARTITION': unit.get("TEST_PARTITION") or 'SEQUENTIAL',
-        'GO_BENCH_TIMEOUT': unit.get('GO_BENCH_TIMEOUT') or '',
+        'BLOB': unit.get('TEST_BLOB_DATA'),
+        'SKIP_TEST': unit.get('SKIP_TEST_VALUE'),
+        'TEST_IOS_DEVICE_TYPE': unit.get('TEST_IOS_DEVICE_TYPE_VALUE'),
+        'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE'),
+        'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE'),
+        'TEST_PARTITION': unit.get("TEST_PARTITION"),
     }
 
     data = dump_test(unit, test_record)
@@ -2215,9 +2093,9 @@ def go_bench(unit, *args):
         )
     )
 
-    test_size = ''.join(spec_args.get('SIZE', [])) or unit.get('TEST_SIZE_NAME') or ''
+    test_size = ''.join(spec_args.get('SIZE', [])) or unit.get('TEST_SIZE_NAME')
     test_tags = serialize_list(sorted(_get_test_tags(unit, spec_args)))
-    test_timeout = ''.join(spec_args.get('TIMEOUT', [])) or unit.get('TEST_TIMEOUT') or ''
+    test_timeout = ''.join(spec_args.get('TIMEOUT', [])) or unit.get('TEST_TIMEOUT')
     test_requirements = spec_args.get('REQUIREMENTS', []) + get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')
 
     fork_mode = []
@@ -2247,23 +2125,19 @@ def go_bench(unit, *args):
         'TEST-DATA': serialize_list(sorted(test_data)),
         'TEST-TIMEOUT': test_timeout,
         'FORK-MODE': fork_mode,
-        'SPLIT-FACTOR': ''.join(spec_args.get('SPLIT_FACTOR', [])) or unit.get('TEST_SPLIT_FACTOR') or '',
+        'SPLIT-FACTOR': ''.join(spec_args.get('SPLIT_FACTOR', [])) or unit.get('TEST_SPLIT_FACTOR'),
         'SIZE': test_size,
         'TAG': test_tags,
         'REQUIREMENTS': serialize_list(test_requirements),
-        'TEST-CWD': unit.get('TEST_CWD_VALUE') or '',
-        'FUZZ-DICTS': serialize_list(
-            spec_args.get('FUZZ_DICTS', []) + get_unit_list_variable(unit, 'FUZZ_DICTS_VALUE')
-        ),
-        'FUZZ-OPTS': serialize_list(spec_args.get('FUZZ_OPTS', []) + get_unit_list_variable(unit, 'FUZZ_OPTS_VALUE')),
+        'TEST-CWD': unit.get('TEST_CWD_VALUE'),
         'YT-SPEC': serialize_list(spec_args.get('YT_SPEC', []) + get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE')),
-        'BLOB': unit.get('TEST_BLOB_DATA') or '',
-        'SKIP_TEST': unit.get('SKIP_TEST_VALUE') or '',
-        'TEST_IOS_DEVICE_TYPE': unit.get('TEST_IOS_DEVICE_TYPE_VALUE') or '',
-        'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE') or '',
-        'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE') or '',
-        'TEST_PARTITION': unit.get("TEST_PARTITION") or 'SEQUENTIAL',
-        'GO_BENCH_TIMEOUT': unit.get('GO_BENCH_TIMEOUT') or '',
+        'BLOB': unit.get('TEST_BLOB_DATA'),
+        'SKIP_TEST': unit.get('SKIP_TEST_VALUE'),
+        'TEST_IOS_DEVICE_TYPE': unit.get('TEST_IOS_DEVICE_TYPE_VALUE'),
+        'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE'),
+        'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE'),
+        'TEST_PARTITION': unit.get("TEST_PARTITION"),
+        'GO_BENCH_TIMEOUT': unit.get('GO_BENCH_TIMEOUT'),
     }
 
     if "ya:run_go_benchmark" not in test_record["TAG"]:

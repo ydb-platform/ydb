@@ -133,14 +133,13 @@ private:
                     auto workerTaskId = workersInfo.WorkerActors.TaskIds[i];
                     auto actorId = workersInfo.WorkerActors.ActorIds[i];
                     if (workerTaskId == taskId) {
-                        ev->Forward(actorId);
+                        Send(ev->Forward(actorId));
                         return;
                     }
                 }
             }
 
             html << "<div style='border:1px dotted red;padding:2%;'>Couldn't find the worker with parameters: TxId = " <<  txId << ", TaskId: " << taskId << "</div>";
-            return;
         }
 
         html << "<form method='get'>";
@@ -184,8 +183,8 @@ private:
                 html << "<td>" << workerTaskId <<"</td>";
                 html << "<td>";
                 html << "<form method='get'>";
-                html << "<p>TxId:<input name='tx_id' type='hidden' value='" << (traceId ? *traceId : "<unknown>") << "'/></p>";
-                html << "<p>TaskId:<input name='task_id' type='hidden' value='" << workerTaskId << "'/></p>";
+                html << "<input name='tx_id' type='hidden' value='" << (traceId ? *traceId : "<unknown>") << "'/>";
+                html << "<input name='task_id' type='hidden' value='" << workerTaskId << "'/>";
                 html << "<button name='get' type='submit'><b>Detailed</b></button>";
                 html << "</form>";
                 html <<"</td>";

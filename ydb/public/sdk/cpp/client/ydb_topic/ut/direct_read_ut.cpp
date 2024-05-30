@@ -598,7 +598,7 @@ public:
     ~TDirectReadSessionImplTestSetup() noexcept(false); // Performs extra validation and UNIT_ASSERTs
 
     TSingleClusterReadSessionImpl<false>* GetControlSession();
-    TDirectReadSession* GetDirectReadSession(TDirectReadSession::TOnDirectReadDoneCallback, TDirectReadSession::TOnAbortSessionCallback);
+    TDirectReadSession* GetDirectReadSession(TDirectReadSessionCallbacks);
 
     std::shared_ptr<TReadSessionEventsQueue<false>> GetEventsQueue();
     IExecutor::TPtr GetDefaultExecutor();
@@ -734,6 +734,9 @@ TSingleClusterReadSessionImpl<false>* TDirectReadSessionImplTestSetup::GetContro
             "client-session-id-1",
             "",
             Log,
+            [](TDuration, std::function<void()> cb) {
+                cb();
+            },
             MockReadProcessorFactory,
             GetEventsQueue(),
             FakeContext,
@@ -745,17 +748,13 @@ TSingleClusterReadSessionImpl<false>* TDirectReadSessionImplTestSetup::GetContro
     return Session.get();
 }
 
-TDirectReadSession* TDirectReadSessionImplTestSetup::GetDirectReadSession(
-    TDirectReadSession::TOnDirectReadDoneCallback readDoneCallback = {},
-    TDirectReadSession::TOnAbortSessionCallback abortCallback = {}
-) {
+TDirectReadSession* TDirectReadSessionImplTestSetup::GetDirectReadSession(TDirectReadSessionCallbacks callbacks = {}) {
     if (!DirectReadSession) {
         DirectReadSessionCbContext = MakeWithCallbackContext<TDirectReadSession>(
             TNodeId(1),
             TString("client-session-id-1"),
             ReadSessionSettings,
-            readDoneCallback,
-            abortCallback,
+            callbacks,
             FakeContext,
             MockDirectReadProcessorFactory,
             Log);
@@ -1008,9 +1007,7 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
             ::testing::InSequence sequence;
 
             EXPECT_CALL(*setup.MockDirectReadProcessorFactory, OnCreateProcessor(_))
-                .WillOnce([&]() {
-                    setup.MockDirectReadProcessorFactory->CreateProcessor(setup.MockDirectReadProcessor);
-                });
+                .WillOnce([&]() { setup.MockDirectReadProcessorFactory->CreateProcessor(setup.MockDirectReadProcessor); });
 
             EXPECT_CALL(*setup.MockDirectReadProcessor, OnInitDirectReadRequest(_))
                 .WillOnce(Invoke([](const Ydb::Topic::StreamDirectReadMessage::InitDirectReadRequest&) {}));
@@ -1035,7 +1032,7 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
         gotStart.GetFuture().Wait();
     }
 
-    Y_UNIT_TEST(NoRetry) {
+    Y_UNIT_TEST(NoRetryDirectReadSession) {
         TDirectReadSessionImplTestSetup setup;
         setup.ReadSessionSettings.RetryPolicy(NYdb::NTopic::IRetryPolicy::GetNoRetryPolicy());
 
@@ -1044,13 +1041,15 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
         EXPECT_CALL(*setup.MockDirectReadProcessorFactory, OnCreateProcessor(_))
             .WillOnce([&]() { setup.MockDirectReadProcessorFactory->FailCreation(); });
 
-        auto session = setup.GetDirectReadSession({}, [&gotClosedEvent](TSessionClosedEvent&&) { gotClosedEvent.SetValue(); });
+        auto session = setup.GetDirectReadSession({
+            .OnAbortSession = [&gotClosedEvent](TSessionClosedEvent&&) { gotClosedEvent.SetValue(); },
+        });
         session->Start();
         setup.MockDirectReadProcessorFactory->Wait();
         gotClosedEvent.GetFuture().Wait();
     }
 
-    Y_UNIT_TEST(Retry) {
+    Y_UNIT_TEST(RetryDirectReadSession) {
         TDirectReadSessionImplTestSetup setup;
         size_t nRetries = 2;
         setup.ReadSessionSettings.RetryPolicy(NYdb::NTopic::IRetryPolicy::GetFixedIntervalPolicy(
@@ -1064,9 +1063,43 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
         EXPECT_CALL(*setup.MockDirectReadProcessorFactory, OnCreateProcessor(_))
             .Times(1 + nRetries);  // First call + N retries.
 
-        auto session = setup.GetDirectReadSession({}, [&gotClosedEvent](TSessionClosedEvent&&) { gotClosedEvent.SetValue(); });
+        auto session = setup.GetDirectReadSession({
+            .OnAbortSession = [&gotClosedEvent](TSessionClosedEvent&&) { gotClosedEvent.SetValue(); },
+        });
         session->Start();
         setup.MockDirectReadProcessorFactory->Wait();
+
+        gotClosedEvent.GetFuture().Wait();
+    }
+
+    Y_UNIT_TEST(NoRetryPartitionSession) {
+        TDirectReadSessionImplTestSetup setup;
+        setup.ReadSessionSettings.RetryPolicy(NYdb::NTopic::IRetryPolicy::GetNoRetryPolicy());
+
+        auto gotClosedEvent = NThreading::NewPromise();
+
+        {
+            ::testing::InSequence sequence;
+
+            EXPECT_CALL(*setup.MockDirectReadProcessorFactory, OnCreateProcessor(_))
+                .WillOnce([&]() { setup.MockDirectReadProcessorFactory->CreateProcessor(setup.MockDirectReadProcessor); });
+            EXPECT_CALL(*setup.MockDirectReadProcessor, OnInitDirectReadRequest(_)).Times(1);
+            EXPECT_CALL(*setup.MockDirectReadProcessor, OnStartDirectReadPartitionSessionRequest(_)).Times(1);
+        }
+
+        auto session = setup.GetDirectReadSession({
+            .OnAbortSession = [&gotClosedEvent](TSessionClosedEvent&&) { gotClosedEvent.SetValue(); },
+        });
+        session->Start();
+        setup.MockDirectReadProcessorFactory->Wait();
+
+        session->AddPartitionSession({ .PartitionSessionId = 1, .Location = {2, 3} });
+
+        setup.AddDirectReadResponse(TMockDirectReadSessionProcessor::TServerReadInfo()
+            .InitDirectReadResponse());
+
+        setup.AddDirectReadResponse(TMockDirectReadSessionProcessor::TServerReadInfo()
+            .StopDirectReadPartitionSession(Ydb::StatusIds::OVERLOADED, TPartitionSessionId(1)));
 
         gotClosedEvent.GetFuture().Wait();
     }

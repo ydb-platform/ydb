@@ -1072,6 +1072,7 @@ public:
         const TString& sessionId,
         const TString& clusterName,
         const TLog& log,
+        std::function<void(TDuration delay, std::function<void()> callback)> scheduleCallback,
         std::shared_ptr<IReadSessionConnectionProcessorFactory<UseMigrationProtocol>> connectionFactory,
         std::shared_ptr<TReadSessionEventsQueue<UseMigrationProtocol>> eventsQueue,
         NYdbGrpc::IQueueClientContextPtr clientContext,
@@ -1297,6 +1298,7 @@ private:
     TLog Log;
     ui64 NextPartitionStreamId;
     ui64 PartitionStreamIdStep;
+    std::function<void(TDuration delay, std::function<void()> callback)> ScheduleCallback;
     std::shared_ptr<IReadSessionConnectionProcessorFactory<UseMigrationProtocol>> ConnectionFactory;
     IDirectReadConnectionFactoryPtr DirectConnectionFactory;
     std::shared_ptr<TReadSessionEventsQueue<UseMigrationProtocol>> EventsQueue;

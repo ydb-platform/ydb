@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 import os
-import sys
 from pathlib import Path
 import re
 import datetime
 import json
+import argparse
 
 try:
     from time import clock_gettime_ns, CLOCK_MONOTONIC
@@ -36,10 +36,14 @@ def run(argv, out, err):
 
 def main():
 
-    qdir = sys.argv[1] or 'q/scalar'
-    bindings = sys.argv[2] or 'bindings.json'
-    outdir = sys.argv[3] or "result-{:%Y%m%dT%H%M%S}".format(datetime.datetime.now())
-    argv = sys.argv[4:]
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--query-dir', type=str, default='q/scalar')
+    parser.add_argument('--bindings', type=str, default='bindings.json')
+    parser.add_argument('--result-dir', type=str, default="result-{:%Y%m%dT%H%M%S}".format(datetime.datetime.now()))
+    args, argv = parser.parse_known_intermixed_args()
+    qdir = args.query_dir
+    bindings = args.bindings
+    outdir = args.result_dir
     assert len(argv)
     querydir = Path(qdir)
     os.makedirs(outdir + '/' + qdir, exist_ok=True)

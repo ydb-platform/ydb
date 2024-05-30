@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defs.h"
+#include "activity_guard.h"
 #include "executor_thread.h"
 #include "thread_context.h"
 
@@ -61,14 +62,12 @@ namespace NActors {
         template <typename TDerived, typename TWaitState>
         void Spin(ui64 spinThresholdCycles, std::atomic<bool> *stopFlag) {
             bool doSpin = true;
-            NHPTimer::STime hpnow = GetCycleCountFast();
-            NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
-            TlsThreadContext->ElapsingActorActivity.store(TlsThreadContext->ActorSystemSpinIndex, std::memory_order_release);
-            TlsThreadContext->WorkerCtx->AddElapsedCycles(TlsThreadContext->ActorSystemIndex, hpnow - hpprev);
+            NHPTimer::STime start = GetCycleCountFast();
+            TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_SPIN> activityGuard(start);
             while (true) {
                 for (ui32 j = 0; doSpin && j < 12; ++j) {
-                    hpnow = GetCycleCountFast();
-                    if (hpnow >= i64(hpprev + spinThresholdCycles)) {
+                    NHPTimer::STime hpnow = GetCycleCountFast();
+                    if (hpnow >= i64(start + spinThresholdCycles)) {
                         doSpin = false;
                         break;
                     }
@@ -78,10 +77,6 @@ namespace NActors {
                             SpinLockPause();
                         } else {
                             static_cast<TDerived*>(this)->AfterWakeUp(state);
-                            hpnow = GetCycleCountFast();
-                            hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
-                            TlsThreadContext->ElapsingActorActivity.store(TlsThreadContext->ActorSystemIndex, std::memory_order_release);
-                            TlsThreadContext->WorkerCtx->AddElapsedCycles(TlsThreadContext->ActorSystemSpinIndex, hpnow - hpprev);
                             doSpin = false;
                             break;
                         }

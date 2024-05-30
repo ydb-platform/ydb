@@ -110,7 +110,6 @@ namespace NActors {
 
         std::vector<TExecutorThreadStats> SharedStats;
         const ui32 ActorSystemIndex;
-        const ui32 ActorSystemSpinIndex;
     };
 
     class TExecutorThread: public TGenericExecutorThread {

@@ -4,6 +4,7 @@
 #include "executor_thread.h"
 #include "probes.h"
 
+#include "activity_guard.h"
 #include "actorsystem.h"
 #include "executor_pool_basic.h"
 #include "executor_pool_basic_feature_flags.h"
@@ -373,9 +374,6 @@ private:
 
     std::atomic<double> AvgAwakeningTimeUs = 0;
     std::atomic<double> AvgWakingUpTimeUs = 0;
-
-    ui32 HarmonizerActivityIndex = TActorTypeOperator::GetActorSystemHarmonizerIndex();
-    ui32 ActorSystemActivityIndex = TActorTypeOperator::GetActorSystemIndex();
 
     void PullStats(ui64 ts);
     void HarmonizeImpl(ui64 ts);
@@ -761,22 +759,17 @@ void THarmonizer::Harmonize(ui64 ts) {
     ui64 previousNextHarmonizeTs = NextHarmonizeTs.exchange(ts + Us2Ts(1'000'000ull));
     LWPROBE(TryToHarmonizeSuccess, ts, NextHarmonizeTs, previousNextHarmonizeTs);
 
-    NHPTimer::STime hpnow = GetCycleCountFast();
-    NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
-    TlsThreadContext->ElapsingActorActivity.store(HarmonizerActivityIndex, std::memory_order_release);
-    TlsThreadContext->WorkerCtx->AddElapsedCycles(ActorSystemActivityIndex, hpnow - hpprev);
+    {
+        TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_HARMONIZER> activityGuard;
 
-    if (PriorityOrder.empty()) {
-        CalculatePriorityOrder();
+        if (PriorityOrder.empty()) {
+            CalculatePriorityOrder();
+        }
+
+        PullStats(ts);
+        HarmonizeImpl(ts);
     }
 
-    PullStats(ts);
-    HarmonizeImpl(ts);
-
-    hpnow = GetCycleCountFast();
-    hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
-    TlsThreadContext->ElapsingActorActivity.store(ActorSystemActivityIndex, std::memory_order_release);
-    TlsThreadContext->WorkerCtx->AddElapsedCycles(HarmonizerActivityIndex, hpnow - hpprev);
     Lock.Release();
 }
 

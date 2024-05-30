@@ -27,13 +27,5 @@ public:
     static ui32 GetActorActivityIncorrectIndex() {
         return TEnumProcessKey<TActorActivityTag, EInternalActorType>::GetIndex(EInternalActorType::INCORRECT_ACTOR_TYPE_INDEX);
     }
-
-    static ui32 GetActorSystemSpinIndex() {
-        return TEnumProcessKey<TActorActivityTag, EInternalActorType>::GetIndex(EInternalActorType::ACTOR_SYSTEM_SPIN);
-    }
-
-    static ui32 GetActorSystemHarmonizerIndex() {
-        return TEnumProcessKey<TActorActivityTag, EInternalActorType>::GetIndex(EInternalActorType::ACTOR_SYSTEM_HARMONIZER);
-    }
 };
 }

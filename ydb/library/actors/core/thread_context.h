@@ -35,7 +35,6 @@ namespace NActors {
         std::atomic<ui64> ElapsingActorActivity = Max<ui64>();
         TWorkerContext *WorkerCtx = nullptr;
         ui32 ActorSystemIndex = 0;
-        ui32 ActorSystemSpinIndex = 0;
 
         TThreadContext() {
             i64 now = GetCycleCountFast();

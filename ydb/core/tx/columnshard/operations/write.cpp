@@ -21,7 +21,9 @@ namespace NKikimr::NColumnShard {
     }
 
     void TWriteOperation::Start(TColumnShard& owner, const ui64 tableId, const NEvWrite::IDataContainer::TPtr& data, const NActors::TActorId& source, const TActorContext& ctx) {
-        Y_ABORT_UNLESS(Status == EOperationStatus::Draft);
+        if (Status != EOperationStatus::Draft) {
+            return;
+        }
 
         NEvWrite::TWriteMeta writeMeta((ui64)WriteId, tableId, source, GranuleShardingVersionId);
         std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildSlicesTask>(owner.TabletID(), ctx.SelfID, owner.BufferizationWriteActorId,
@@ -235,16 +237,27 @@ namespace NKikimr::NColumnShard {
         return std::nullopt;
     }
 
-    void TOperationsManager::LinkTransaction(const ui64 lockId, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
+    bool TOperationsManager::LinkTransaction(const ui64 lockId, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
+        auto lockIt = Locks.find(lockId);
+        if (lockIt == Locks.end()) {
+            return false;
+        }
         Tx2Lock[txId] = lockId;
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::OperationTxIds>().Key(txId, lockId).Update();
+        return true;
     }
 
     TWriteOperation::TPtr TOperationsManager::RegisterOperation(const ui64 lockId, const ui64 cookie, const std::optional<ui32> granuleShardingVersionId) {
         auto writeId = BuildNextWriteId();
         auto operation = std::make_shared<TWriteOperation>(writeId, lockId, cookie, EOperationStatus::Draft, AppData()->TimeProvider->Now(), granuleShardingVersionId);
-        Y_ABORT_UNLESS(Operations.emplace(operation->GetWriteId(), operation).second);
+        auto insertIt = Operations.emplace(operation->GetWriteId(), operation);
+        if (!insertIt.second) {
+            if (insertIt.first->second->GetCookie() == cookie) {
+                return insertIt.first->second;
+            }
+            return nullptr;
+        }
         Locks[operation->GetLockId()].push_back(operation->GetWriteId());
         return operation;
     }
@@ -263,7 +276,7 @@ namespace NKikimr::NColumnShard {
         }
 
         if (evWrite.Record.HasTxId() && evWrite.Record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_PREPARE) {
-            return EOperationBehaviour::InTxWrite;
+            return EOperationBehaviour::WriteWithCoordinator;
         }
         return EOperationBehaviour::Undefined;
     }

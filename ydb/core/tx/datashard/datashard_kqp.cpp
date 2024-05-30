@@ -216,37 +216,6 @@ bool NeedEraseLocks(NKikimrDataEvents::TKqpLocks::ELocksOp op) {
     }
 }
 
-bool NeedCommitLocks(NKikimrDataEvents::TKqpLocks::ELocksOp op) {
-    switch (op) {
-        case NKikimrDataEvents::TKqpLocks::Commit:
-            return true;
-
-        case NKikimrDataEvents::TKqpLocks::Rollback:
-        case NKikimrDataEvents::TKqpLocks::Unspecified:
-            return false;
-    }
-}
-
-TVector<TCell> MakeLockKey(const NKikimrDataEvents::TLock& lockProto) {
-    auto lockId = lockProto.GetLockId();
-    auto lockDatashard = lockProto.GetDataShard();
-    auto lockSchemeShard = lockProto.GetSchemeShard();
-    auto lockPathId = lockProto.GetPathId();
-
-    Y_ASSERT(TCell::CanInline(sizeof(lockId)));
-    Y_ASSERT(TCell::CanInline(sizeof(lockDatashard)));
-    Y_ASSERT(TCell::CanInline(sizeof(lockSchemeShard)));
-    Y_ASSERT(TCell::CanInline(sizeof(lockPathId)));
-
-    TVector<TCell> lockKey{
-        TCell(reinterpret_cast<const char*>(&lockId), sizeof(lockId)),
-        TCell(reinterpret_cast<const char*>(&lockDatashard), sizeof(lockDatashard)),
-        TCell(reinterpret_cast<const char*>(&lockSchemeShard), sizeof(lockSchemeShard)),
-        TCell(reinterpret_cast<const char*>(&lockPathId), sizeof(lockPathId))};
-
-    return lockKey;
-}
-
 // returns list of broken locks
 TVector<NKikimrDataEvents::TLock> ValidateLocks(const NKikimrDataEvents::TKqpLocks& txLocks, TSysLocks& sysLocks, ui64 tabletId)
 {
@@ -409,6 +378,37 @@ void KqpSetTxKeysImpl(ui64 tabletId, ui64 taskId, const TTableId& tableId, const
 }
 
 }  // anonymous namespace
+
+bool NeedCommitLocks(NKikimrDataEvents::TKqpLocks::ELocksOp op) {
+    switch (op) {
+        case NKikimrDataEvents::TKqpLocks::Commit:
+            return true;
+
+        case NKikimrDataEvents::TKqpLocks::Rollback:
+        case NKikimrDataEvents::TKqpLocks::Unspecified:
+            return false;
+    }
+}
+
+TVector<TCell> MakeLockKey(const NKikimrDataEvents::TLock& lockProto) {
+    auto lockId = lockProto.GetLockId();
+    auto lockDatashard = lockProto.GetDataShard();
+    auto lockSchemeShard = lockProto.GetSchemeShard();
+    auto lockPathId = lockProto.GetPathId();
+
+    Y_ASSERT(TCell::CanInline(sizeof(lockId)));
+    Y_ASSERT(TCell::CanInline(sizeof(lockDatashard)));
+    Y_ASSERT(TCell::CanInline(sizeof(lockSchemeShard)));
+    Y_ASSERT(TCell::CanInline(sizeof(lockPathId)));
+
+    TVector<TCell> lockKey{
+        TCell(reinterpret_cast<const char*>(&lockId), sizeof(lockId)),
+        TCell(reinterpret_cast<const char*>(&lockDatashard), sizeof(lockDatashard)),
+        TCell(reinterpret_cast<const char*>(&lockSchemeShard), sizeof(lockSchemeShard)),
+        TCell(reinterpret_cast<const char*>(&lockPathId), sizeof(lockPathId))};
+
+    return lockKey;
+}
 
 void KqpSetTxKeys(ui64 tabletId, ui64 taskId, const TUserTable* tableInfo, const NKikimrTxDataShard::TKqpTransaction_TDataTaskMeta& meta, const NScheme::TTypeRegistry& typeRegistry, const TActorContext& ctx, TKeyValidator& keyValidator)
 {
@@ -828,6 +828,15 @@ void KqpEraseLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, TS
 }
 
 void KqpCommitLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, TSysLocks& sysLocks, const TRowVersion& writeVersion, IDataShardUserDb& userDb) {
+    KqpCommitLocks(origin, kqpLocks, sysLocks, [&writeVersion, &userDb](const NKikimrDataEvents::TLock& lockProto) {
+            TTableId tableId(lockProto.GetSchemeShard(), lockProto.GetPathId());
+            auto txId = lockProto.GetLockId();
+
+            userDb.CommitChanges(tableId, txId, writeVersion);
+        });
+}
+
+void KqpCommitLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, TSysLocks& sysLocks, std::function<void(const NKikimrDataEvents::TLock&)> commitCb) {
     if (kqpLocks == nullptr) {
         return;
     }
@@ -844,10 +853,7 @@ void KqpCommitLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, T
             auto lockKey = MakeLockKey(lockProto);
             sysLocks.CommitLock(lockKey);
 
-            TTableId tableId(lockProto.GetSchemeShard(), lockProto.GetPathId());
-            auto txId = lockProto.GetLockId();
-
-            userDb.CommitChanges(tableId, txId, writeVersion);
+            commitCb(lockProto);
         }
     } else {
         KqpEraseLocks(origin, kqpLocks, sysLocks);

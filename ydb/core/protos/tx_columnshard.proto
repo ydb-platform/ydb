@@ -6,6 +6,7 @@ import "ydb/core/protos/long_tx_service.proto";
 import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/tx.proto";
 import "ydb/core/formats/arrow/protos/ssa.proto";
+import "ydb/core/protos/data_events.proto";
 
 package NKikimrTxColumnShard;
 option java_package = "ru.yandex.kikimr.proto";
@@ -194,6 +195,7 @@ message TBackupTxBody {
 
 message TCommitWriteTxBody {
     optional uint64 LockId = 1;
+    optional NKikimrDataEvents.TKqpLocks KqpLocks = 2;
 }
 
 message TSchemaPresetVersionInfo {

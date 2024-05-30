@@ -1,18 +1,17 @@
 #pragma once
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/datashard/operation.h>
 
 namespace NKikimr::NColumnShard {
 
     class TEvWriteTransactionOperator : public TTxController::ITransactionOperator {
         using TBase = TTxController::ITransactionOperator;
         using TProposeResult = TTxController::TProposeResult;
+        using TInReadSets = TMap<std::pair<ui64, ui64>, TVector<NDataShard::TRSData>>;
         static inline auto Registrator = TFactory::TRegistrator<TEvWriteTransactionOperator>(NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE);
     private:
-        virtual TProposeResult DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override {
-            owner.OperationsManager->LinkTransaction(LockId, GetTxId(), txc);
-            return TProposeResult();
-        }
+        virtual TProposeResult DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override;
         virtual void DoStartProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
 
         }
@@ -40,25 +39,24 @@ namespace NKikimr::NColumnShard {
             ctx.Send(txInfo.Source, evResult.release(), 0, txInfo.Cookie);
         }
 
-        virtual bool DoParse(TColumnShard& /*owner*/, const TString& data) override {
-            NKikimrTxColumnShard::TCommitWriteTxBody commitTxBody;
-            if (!commitTxBody.ParseFromString(data)) {
-                return false;
-            }
-            LockId = commitTxBody.GetLockId();
-            return !!LockId;
-        }
+        virtual bool DoParse(TColumnShard& /*owner*/, const TString& data) override;
 
     public:
         using TBase::TBase;
 
-        virtual bool ExecuteOnProgress(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override {
-            return owner.OperationsManager->CommitTransaction(owner, GetTxId(), txc, version);
-        }
+        virtual bool ExecuteOnProgress(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override;
 
         virtual bool CompleteOnProgress(TColumnShard& owner, const TActorContext& ctx) override {
-            auto result = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(owner.TabletID(), GetTxId());
-            ctx.Send(TxInfo.Source, result.release(), 0, TxInfo.Cookie);
+            if (BrokenLocks.empty()) {
+                auto result = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(owner.TabletID(), GetTxId());
+                ctx.Send(TxInfo.Source, result.release(), 0, TxInfo.Cookie);
+            } else {
+                auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(owner.TabletID(), GetTxId(), NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, "Operation is aborting because locks are not valid");
+                for (auto& brokenLock : BrokenLocks) {
+                    result->Record.MutableTxLocks()->Add()->Swap(&brokenLock);
+                }
+                ctx.Send(TxInfo.Source, result.release(), 0, TxInfo.Cookie);
+            }
             return true;
         }
 
@@ -70,7 +68,14 @@ namespace NKikimr::NColumnShard {
         }
 
     private:
+        void SubscribeNewLocks(TColumnShard& owner, const TActorContext& ctx);
+
+    private:
         ui64 LockId = 0;
+        std::optional<NKikimrDataEvents::TKqpLocks> KqpLocks;
+        TInReadSets InReadSets;
+
+        TVector<NKikimrDataEvents::TLock> BrokenLocks;
     };
 
 }

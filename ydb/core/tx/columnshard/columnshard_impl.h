@@ -34,6 +34,7 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/data_events/events.h>
+#include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/tiering/common.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tx/tx_processing.h>
@@ -150,6 +151,7 @@ class TColumnShard
     friend class TTxApplyNormalizer;
     friend class TTxMonitoring;
     friend class TTxRemoveSharedBlobs;
+    friend class TTxRemoveLock;
 
     friend class NOlap::TCleanupPortionsColumnEngineChanges;
     friend class NOlap::TCleanupTablesColumnEngineChanges;
@@ -231,6 +233,8 @@ class TColumnShard
     void Handle(NOlap::NDataSharing::NEvents::TEvFinishedFromSource::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NDataSharing::NEvents::TEvAckFinishToSource::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator::TPtr& ev, const TActorContext& ctx);
+
+    void Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx);
 
     ITransaction* CreateTxInitSchema();
 
@@ -383,6 +387,7 @@ protected:
             HFunc(NOlap::NDataSharing::NEvents::TEvFinishedFromSource, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvAckFinishToSource, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator, Handle);
+            HFunc(NLongTxService::TEvLongTxService::TEvLockStatus, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 LOG_S_WARN("TColumnShard.StateWork at " << TabletID()
@@ -581,6 +586,10 @@ public:
 
     const std::shared_ptr<NOlap::NDataSharing::TSessionsManager>& GetSharingSessionsManager() const {
         return SharingSessionsManager;
+    }
+
+    NDataShard::TSysLocks& SysLocksTable() {
+        return SysLocks;
     }
 
     template <class T>

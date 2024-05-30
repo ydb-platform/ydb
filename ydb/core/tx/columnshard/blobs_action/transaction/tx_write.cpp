@@ -83,7 +83,7 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
             Y_ABORT_UNLESS(operation);
             Y_ABORT_UNLESS(operation->GetStatus() == EOperationStatus::Started);
             operation->OnWriteFinish(txc, aggr->GetWriteIds());
-            if (operation->GetBehaviour() == EOperationBehaviour::InTxWrite) {
+            if (operation->GetBehaviour() == EOperationBehaviour::WriteWithCoordinator) {
                 NKikimrTxColumnShard::TCommitWriteTxBody proto;
                 proto.SetLockId(operation->GetLockId());
                 TString txBody;

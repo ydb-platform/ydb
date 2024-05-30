@@ -9,6 +9,8 @@ SRCS(
     propose_tx.cpp
 )
 
+YQL_LAST_ABI_VERSION()
+
 PEERDIR(
     ydb/core/tx/columnshard/data_sharing/destination/events
     ydb/core/tx/columnshard/export/session

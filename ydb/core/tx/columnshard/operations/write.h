@@ -31,7 +31,7 @@ namespace NKikimr::NColumnShard {
 
      enum class EOperationBehaviour : ui32 {
         Undefined = 1,
-        InTxWrite = 2,
+        WriteWithCoordinator = 2,
         WriteWithLock = 3,
         CommitWriteLock = 4
     };
@@ -73,10 +73,27 @@ namespace NKikimr::NColumnShard {
         bool Load(NTabletFlatExecutor::TTransactionContext& txc);
 
         TWriteOperation::TPtr GetOperation(const TWriteId writeId) const;
+        TWriteOperation::TPtr GetOperationVerified(const TWriteId writeId) const {
+            auto res = GetOperation(writeId);
+            AFL_VERIFY(res)("write_id", (ui64)writeId);
+            return res;
+        }
         bool CommitTransaction(TColumnShard& owner, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot);
         bool AbortTransaction(TColumnShard& owner, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
-        void LinkTransaction(const ui64 lockId, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
-        std::optional<ui64> GetLockForTx(const ui64 lockId) const;
+        bool LinkTransaction(const ui64 lockId, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
+        std::optional<ui64> GetLockForTx(const ui64 txId) const;
+
+        std::vector<TWriteOperation::TPtr> GetOperations(const ui64 lockId) const {
+            auto lockIt = Locks.find(lockId);
+            if (lockIt == Locks.end()) {
+                return {};
+            }
+            std::vector<TWriteOperation::TPtr> result;
+            for (auto writeId : lockIt->second) {
+                result.push_back(GetOperationVerified(writeId));
+            }
+            return result;
+        }
 
         TWriteOperation::TPtr RegisterOperation(const ui64 lockId, const ui64 cookie, const std::optional<ui32> granuleShardingVersionId);
         static EOperationBehaviour GetBehaviour(const NEvents::TDataEvents::TEvWrite& evWrite);

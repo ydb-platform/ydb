@@ -17,6 +17,7 @@ protected:
 public:
     virtual ~IChangeRecordSerializer() = default;
     virtual void Serialize(TCmdWrite& cmd, const TChangeRecord& record) = 0;
+    virtual TString DebugString(const TChangeRecord& record) = 0;
 };
 
 struct TChangeRecordSerializerOpts {
@@ -25,8 +26,12 @@ struct TChangeRecordSerializerOpts {
     TString AwsRegion;
     bool VirtualTimestamps = false;
     ui64 ShardId = 0;
+    bool Debug = false;
+
+    static TChangeRecordSerializerOpts DebugOpts();
 };
 
 IChangeRecordSerializer* CreateChangeRecordSerializer(const TChangeRecordSerializerOpts& opts);
+IChangeRecordSerializer* CreateChangeRecordDebugSerializer();
 
 }

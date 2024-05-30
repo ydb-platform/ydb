@@ -4,7 +4,7 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
-#include <ydb/library/yql/dq/proto/dq_checkpoint.pb.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
@@ -101,7 +101,8 @@ class TDqPqWriteActor : public NActors::TActor<TDqPqWriteActor>, public IDqCompu
             LastAckLatency = task->GetCounter("LastAckLatencyMs");
             InFlyCheckpoints = task->GetCounter("InFlyCheckpoints");
             InFlyData = task->GetCounter("InFlyData");
-            AlreadyWritten = task->GetCounter("AlreadWritten");
+            AlreadyWritten = task->GetCounter("AlreadyWritten");
+            FirstContinuationTokenMs = task->GetCounter("FirstContinuationTokenMs");
         }
 
         ~TMetrics() {
@@ -115,6 +116,7 @@ class TDqPqWriteActor : public NActors::TActor<TDqPqWriteActor>, public IDqCompu
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlyCheckpoints;
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlyData;
         ::NMonitoring::TDynamicCounters::TCounterPtr AlreadyWritten;
+        ::NMonitoring::TDynamicCounters::TCounterPtr FirstContinuationTokenMs;
     };
 
     struct TAckInfo {
@@ -232,12 +234,12 @@ public:
         }
     };
 
-    void LoadState(const NDqProto::TSinkState& state) override {
+    void LoadState(const TSinkState& state) override {
         Y_ABORT_UNLESS(NextSeqNo == 1);
-        const auto& data = state.GetData().GetStateData();
-        if (data.GetVersion() == StateVersion) { // Current version
+        const auto& data = state.Data;
+        if (data.Version == StateVersion) { // Current version
             NPq::NProto::TDqPqTopicSinkState stateProto;
-            YQL_ENSURE(stateProto.ParseFromString(data.GetBlob()), "Serialized state is corrupted");
+            YQL_ENSURE(stateProto.ParseFromString(data.Blob), "Serialized state is corrupted");
             SINK_LOG_D("Load state: " << stateProto);
             SourceId = stateProto.GetSourceId();
             ConfirmedSeqNo = stateProto.GetConfirmedSeqNo();
@@ -245,7 +247,7 @@ public:
             EgressStats.Bytes = stateProto.GetEgressBytes();
             return;
         }
-        ythrow yexception() << "Invalid state version " << data.GetVersion();
+        ythrow yexception() << "Invalid state version " << data.Version;
     }
 
     void CommitState(const NDqProto::TCheckpoint& checkpoint) override {
@@ -352,7 +354,7 @@ private:
         return !events.empty();
     }
 
-    NDqProto::TSinkState BuildState(const NDqProto::TCheckpoint& checkpoint) {
+    TSinkState BuildState(const NDqProto::TCheckpoint& checkpoint) {
         NPq::NProto::TDqPqTopicSinkState stateProto;
         stateProto.SetSourceId(GetSourceId());
         stateProto.SetConfirmedSeqNo(ConfirmedSeqNo);
@@ -360,11 +362,11 @@ private:
         TString serializedState;
         YQL_ENSURE(stateProto.SerializeToString(&serializedState));
 
-        NDqProto::TSinkState sinkState;
-        auto* data = sinkState.MutableData()->MutableStateData();
-        data->SetVersion(StateVersion);
-        data->SetBlob(serializedState);
-        SINK_LOG_T("Save checkpoint " << checkpoint << " state: " << stateProto << ". Sink state: " << sinkState);
+        TSinkState sinkState;
+        auto& data = sinkState.Data;
+        data.Version = StateVersion;
+        data.Blob = serializedState;
+        SINK_LOG_T("Save checkpoint " << checkpoint << " state: " << stateProto);
         return sinkState;
     }
 
@@ -433,6 +435,10 @@ private:
         std::optional<TIssues> operator()(NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent& ev) {
             //Y_ABORT_UNLESS(!Self.ContinuationToken);
 
+            if (*Self.Metrics.FirstContinuationTokenMs == 0) {
+                Self.Metrics.FirstContinuationTokenMs->Set((TInstant::Now() - Self.StartTime).MilliSeconds());
+            }
+
             if (!Self.Buffer.empty()) {
                 Self.WriteNextMessage(std::move(ev.ContinuationToken));
                 return std::nullopt;
@@ -452,6 +458,7 @@ private:
     }
 
 private:
+    TInstant StartTime = TInstant::Now();
     const ui64 OutputIndex;
     TDqAsyncStats EgressStats;
     const TTxId TxId;

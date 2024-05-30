@@ -155,7 +155,6 @@ namespace NKikimr::NSchemeShard {
         switch (typeId) {
             case NYql::NProto::Bool:
             case NYql::NProto::Interval:
-            case NYql::NProto::Decimal:
             case NYql::NProto::DyNumber:
                 return false;
             default:
@@ -193,8 +192,11 @@ namespace NKikimr::NSchemeShard {
             case NYql::NProto::Date:
             case NYql::NProto::Datetime:
             case NYql::NProto::Timestamp:
+            case NYql::NProto::Date32:
+            case NYql::NProto::Datetime64:
             case NYql::NProto::Timestamp64:
             case NYql::NProto::Interval64:
+            case NYql::NProto::Decimal:
                 return true;
             default:
                 return false;

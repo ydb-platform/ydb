@@ -1154,3 +1154,12 @@ SELECT
     JSON_QUERY($json, "$.friends[0]" WITH CONDITIONAL WRAPPER), -- {"name": "James Holden", "age": 35}
     JSON_QUERY($json, "$.friends.name" WITH CONDITIONAL WRAPPER); -- ["James Holden", "Naomi Nagata"]
 ```
+
+{% if oss %}
+
+## Смотрите также
+
+* [{#T}](../../../../recipes/yql/accessing-json.md)
+* [{#T}](../../../../recipes/yql/modifying-json.md)
+
+{% endif %}

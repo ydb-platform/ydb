@@ -157,9 +157,13 @@ public:
     const TIP6Address& GetMask() const;
     int GetMaskSize() const;
 
+    //! Get project id as extracted by FromString().
+    std::optional<ui32> GetProjectId() const;
+
 private:
     TIP6Address Network_;
     TIP6Address Mask_;
+    std::optional<ui32> ProjectId_;
 };
 
 void FormatValue(TStringBuilderBase* builder, const TIP6Network& network, TStringBuf spec);

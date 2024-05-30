@@ -1,6 +1,6 @@
 import io
 import logging
-from datetime import tzinfo, datetime
+from datetime import tzinfo
 
 import pytz
 
@@ -12,6 +12,7 @@ from clickhouse_connect import common
 from clickhouse_connect.common import version
 from clickhouse_connect.datatypes.registry import get_from_name
 from clickhouse_connect.datatypes.base import ClickHouseType
+from clickhouse_connect.driver import tzutil
 from clickhouse_connect.driver.common import dict_copy, StreamContext, coerce_int, coerce_bool
 from clickhouse_connect.driver.constants import CH_VERSION_WITH_PROTOCOL, PROTOCOL_VERSION_WITH_LOW_CARD
 from clickhouse_connect.driver.exceptions import ProgrammingError, OperationalError
@@ -39,6 +40,7 @@ class Client(ABC):
     optional_transport_settings = set()
     database = None
     max_error_message = 0
+    apply_server_timezone = False
 
     def __init__(self,
                  database: str,
@@ -56,16 +58,21 @@ class Client(ABC):
         self.query_limit = coerce_int(query_limit)
         self.query_retries = coerce_int(query_retries)
         self.server_host_name = server_host_name
-        self.server_tz = pytz.UTC
+        self.server_tz, dst_safe = pytz.UTC, True
         self.server_version, server_tz = \
             tuple(self.command('SELECT version(), timezone()', use_database=False))
         try:
-            self.server_tz = pytz.timezone(server_tz)
+            server_tz = pytz.timezone(server_tz)
+            server_tz, dst_safe = tzutil.normalize_timezone(server_tz)
+            if apply_server_timezone is None:
+                apply_server_timezone = dst_safe
+            self.apply_server_timezone = apply_server_timezone == 'always' or coerce_bool(apply_server_timezone)
         except UnknownTimeZoneError:
             logger.warning('Warning, server is using an unrecognized timezone %s, will use UTC default', server_tz)
-        offsets_differ = datetime.now().astimezone().utcoffset() != datetime.now(tz=self.server_tz).utcoffset()
-        self.apply_server_timezone = apply_server_timezone == 'always' or (
-                coerce_bool(apply_server_timezone) and offsets_differ)
+
+        if not self.apply_server_timezone and not tzutil.local_tz_dst_safe:
+            logger.warning('local timezone %s may return unexpected times due to Daylight Savings Time/' +
+                           'Summer Time differences', tzutil.local_tz.tzname())
         readonly = 'readonly'
         if not self.min_version('19.17'):
             readonly = common.get_setting('readonly')

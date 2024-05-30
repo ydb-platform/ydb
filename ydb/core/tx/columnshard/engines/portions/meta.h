@@ -2,9 +2,9 @@
 #include <ydb/core/tx/columnshard/common/portion.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/scheme/statistics/abstract/portion_storage.h>
+#include <ydb/core/tx/columnshard/engines/protos/portion_info.pb.h>
 #include <ydb/core/formats/arrow/replace_key.h>
 #include <ydb/core/formats/arrow/special_keys.h>
-#include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/library/accessor/accessor.h>
 #include <util/stream/output.h>
 

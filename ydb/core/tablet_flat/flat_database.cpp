@@ -13,13 +13,30 @@
 #include <ydb/core/util/pb.h>
 #include <ydb/core/scheme_types/scheme_type_registry.h>
 #include <util/generic/cast.h>
-
-
-#define MAX_REDO_BYTES_PER_COMMIT 268435456U // 256MB
-
+#include <util/stream/output.h>
 
 namespace NKikimr {
 namespace NTable {
+
+bool TDatabase::TChangeCounter::operator<(const TChangeCounter& rhs) const {
+    if (Serial && rhs.Serial) {
+        // When both counters have serial they can be compared directly
+        return Serial < rhs.Serial;
+    }
+
+    if (Epoch == rhs.Epoch) {
+        // When this counter is (0, epoch) but rhs is (non-zero, epoch), it
+        // indicates rhs may have more changes. When serial is zero it means
+        // the current memtable is empty, but rhs epoch is the same, so it
+        // cannot have fewer changes.
+        return Serial < rhs.Serial;
+    }
+
+    // The one with the smaller epoch must have fewer changes. In the worst
+    // case that change may have been a flush (incrementing epoch and serial)
+    // and then compact (possibly resetting serial to zero).
+    return Epoch < rhs.Epoch;
+}
 
 TDatabase::TDatabase(TDatabaseImpl *databaseImpl) noexcept
     : DatabaseImpl(databaseImpl ? databaseImpl : new TDatabaseImpl(0, new TScheme, nullptr))
@@ -248,6 +265,12 @@ TSelectRowVersionResult TDatabase::SelectRowVersion(
 {
     return Require(table)->SelectRowVersion(key, Env, readFlags, visible, observer);
 }
+
+TSizeEnv TDatabase::CreateSizeEnv()
+{
+    return TSizeEnv(Env);
+}
+
 
 void TDatabase::CalculateReadSize(TSizeEnv& env, ui32 table, TRawVals minKey, TRawVals maxKey,
                                   TTagsRef tags, ui64 flg, ui64 items, ui64 bytes,
@@ -500,7 +523,7 @@ void TDatabase::SetTableObserver(ui32 table, TIntrusivePtr<ITableObserver> ptr) 
     Require(table)->SetTableObserver(std::move(ptr));
 }
 
-TDatabase::TChg TDatabase::Head(ui32 table) const noexcept
+TDatabase::TChangeCounter TDatabase::Head(ui32 table) const noexcept
 {
     if (table == Max<ui32>()) {
         return { DatabaseImpl->Serial(), TEpoch::Max() };
@@ -643,18 +666,6 @@ size_t TDatabase::GetCommitRedoBytes() const
 {
     Y_ABORT_UNLESS(Redo, "Transaction is not in progress");
     return Redo->Bytes();
-}
-
-bool TDatabase::ValidateCommit(TString &err)
-{
-    if (*Redo && Redo->Bytes() > MAX_REDO_BYTES_PER_COMMIT) {
-        err = TStringBuilder()
-            << "Redo commit of " << Redo->Bytes()
-            << " bytes is more than the allowed limit";
-        return false;
-    }
-
-    return true;
 }
 
 bool TDatabase::HasChanges() const
@@ -844,3 +855,11 @@ void DebugDumpDb(const TDatabase &db) {
 }
 
 }}
+
+Y_DECLARE_OUT_SPEC(, NKikimr::NTable::TDatabase::TChangeCounter, stream, value) {
+    stream << "TChangeCounter{serial=";
+    stream << value.Serial;
+    stream << ", epoch=";
+    stream << value.Epoch;
+    stream << "}";
+}

@@ -3,6 +3,7 @@
 #include "yql_yt_gateway.h"
 #include "yql_yt_table_desc.h"
 #include "yql_yt_table.h"
+#include "yql_yt_io_discovery_walk_folders.h"
 
 #include <ydb/library/yql/providers/yt/common/yql_yt_settings.h>
 #include <ydb/library/yql/providers/yt/lib/row_spec/yql_row_spec.h>
@@ -108,6 +109,9 @@ struct TYtState : public TThrRefBase {
     TDuration TimeSpentInHybrid;
     NMonotonic::TMonotonic HybridStartTime;
     std::unordered_set<ui32> HybridInFlightOprations;
+    THashMap<ui64, TWalkFoldersImpl> WalkFoldersState;
+    ui32 PlanLimits = 10;
+
 private:
     std::unordered_map<ui64, TYtVersionedConfiguration::TState> ConfigurationEvalStates_;
     std::unordered_map<ui64, ui32> EpochEvalStates_;
@@ -119,7 +123,7 @@ std::pair<TIntrusivePtr<TYtState>, TStatWriter> CreateYtNativeState(IYtGateway::
 TIntrusivePtr<IDataProvider> CreateYtDataSource(TYtState::TPtr state);
 TIntrusivePtr<IDataProvider> CreateYtDataSink(TYtState::TPtr state);
 
-TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gateway);
+TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gateway, ui32 planLimits = 10);
 
 const THashSet<TStringBuf>& YtDataSourceFunctions();
 const THashSet<TStringBuf>& YtDataSinkFunctions();

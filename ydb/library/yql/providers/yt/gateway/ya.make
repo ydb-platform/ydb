@@ -3,4 +3,5 @@ RECURSE(
     lib
     native
     profile
+    qplayer
 )

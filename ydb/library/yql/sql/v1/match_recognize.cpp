@@ -43,6 +43,12 @@ public:
         ));
     }
 private:
+    TMatchRecognize(const TMatchRecognize& other)
+        : TAstListNode(other.Pos)
+    {
+        Nodes = CloneContainer(other.Nodes);
+    }
+
     TNodePtr BuildBlockStatements(
             TPosition pos,
             ISource* source,

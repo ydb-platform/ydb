@@ -138,6 +138,14 @@ namespace NLs {
     TCheckFunc IndexKeys(const TVector<TString>& keyNames);
     TCheckFunc IndexDataColumns(const TVector<TString>& dataColumnNames);
 
+    TCheckFunc SequenceName(const TString& name);
+    TCheckFunc SequenceIncrement(i64 increment);
+    TCheckFunc SequenceMaxValue(i64 maxValue);
+    TCheckFunc SequenceMinValue(i64 minValue);
+    TCheckFunc SequenceCycle(bool cycle);
+    TCheckFunc SequenceStartValue(i64 startValue);
+    TCheckFunc SequenceCache(ui64 cache);
+
     TCheckFunc StreamMode(NKikimrSchemeOp::ECdcStreamMode mode);
     TCheckFunc StreamFormat(NKikimrSchemeOp::ECdcStreamFormat format);
     TCheckFunc StreamState(NKikimrSchemeOp::ECdcStreamState state);
@@ -158,7 +166,15 @@ namespace NLs {
     TCheckFunc DatabaseQuotas(ui64 dataStreamShards);
     TCheckFunc SharedHive(ui64 sharedHiveId);
     TCheckFunc ServerlessComputeResourcesMode(NKikimrSubDomains::EServerlessComputeResourcesMode serverlessComputeResourcesMode);
-    
+
+    struct TInverseTag {
+        bool Value = false;
+    };
+
+    void HasOffloadConfigBase(const NKikimrScheme::TEvDescribeSchemeResult& record, TInverseTag inverse);
+    inline void HasOffloadConfig(const NKikimrScheme::TEvDescribeSchemeResult& record) { return HasOffloadConfigBase(record, {}); };
+    inline void HasNotOffloadConfig(const NKikimrScheme::TEvDescribeSchemeResult& record) { return HasOffloadConfigBase(record, {.Value = true}); };
+
     template<class TCheck>
     void PerformAllChecks(const NKikimrScheme::TEvDescribeSchemeResult& result, TCheck&& check) {
         check(result);

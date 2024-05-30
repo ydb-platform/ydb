@@ -214,7 +214,7 @@ void TPDisk::OutputHtmlOwners(TStringStream &str) {
                     if (data.VDiskId != TVDiskID::InvalidId) {
                         TABLER() {
                             TABLED() { str << (ui32) owner;}
-                            TABLED() { str << data.VDiskId.ToStringWOGeneration(); }
+                            TABLED() { str << data.VDiskId.ToStringWOGeneration() << "<br/>(" << data.VDiskId.GroupID << ")"; }
                             TABLED() { str << chunksOwned[owner]; }
                             TABLED() { str << data.CutLogId.ToString(); }
                             TABLED() { str << data.WhiteboardProxyId; }
@@ -275,7 +275,7 @@ void TPDisk::OutputHtmlLogChunksDetails(TStringStream &str) {
                         if (id == TVDiskID::InvalidId) {
                             TABLEH() {str << "o" << owner << "v--"; }
                         } else {
-                            TABLEH() {str << "o" << owner << "v" << id.ToStringWOGeneration(); }
+                            TABLEH() {str << "o" << owner << "v" << id.ToStringWOGeneration() << "<br/>(" << id.GroupID << ")"; }
                         }
                     }
                 }

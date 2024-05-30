@@ -11,6 +11,9 @@
 
 class TGUCSettings {
 public:
+    TGUCSettings() = default;
+    TGUCSettings(const TString& serialized);
+
     using TPtr = std::shared_ptr<TGUCSettings>;
     void Setup(const std::unordered_map<std::string, std::string>& runtimeSettings);
     std::optional<std::string> Get(const std::string&) const;
@@ -19,6 +22,7 @@ public:
     void RollBack();
     void ExportToJson(NJson::TJsonValue& value) const;
     void ImportFromJson(const NJson::TJsonValue& value);
+    TString SerializeToString() const;
 
     size_t GetHash() const noexcept;
     bool operator==(const TGUCSettings& other) const;

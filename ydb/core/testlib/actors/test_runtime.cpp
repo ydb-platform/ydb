@@ -154,6 +154,10 @@ namespace NActors {
             nodeAppData->GraphConfig = app0->GraphConfig;
             nodeAppData->EnableMvccSnapshotWithLegacyDomainRoot = app0->EnableMvccSnapshotWithLegacyDomainRoot;
             nodeAppData->IoContextFactory = app0->IoContextFactory;
+            if (nodeIndex < egg.Icb.size()) {
+                nodeAppData->Icb = std::move(egg.Icb[nodeIndex]);
+                nodeAppData->InFlightLimiterRegistry.Reset(new NKikimr::NGRpcService::TInFlightLimiterRegistry(nodeAppData->Icb));
+            }
             if (KeyConfigGenerator) {
                 nodeAppData->KeyConfig = KeyConfigGenerator(nodeIndex);
             } else {
@@ -205,6 +209,10 @@ namespace NActors {
         return *node->GetAppData<NKikimr::TAppData>();
     }
 
+    ui32 TTestActorRuntime::GetFirstNodeId() {
+        return FirstNodeId;
+    }
+
     bool TTestActorRuntime::DefaultScheduledFilterFunc(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline) {
         Y_UNUSED(delay);
         Y_UNUSED(deadline);
@@ -215,6 +223,7 @@ namespace NActors {
             return true;
         case NKikimr::TEvBlobStorage::EvNotReadyRetryTimeout:
         case NKikimr::TEvTabletPipe::EvClientRetry:
+        case NKikimr::TEvTabletPipe::EvClientCheckDelay:
         case NKikimr::TEvTabletBase::EvFollowerRetry:
         case NKikimr::TEvTabletBase::EvTryBuildFollowerGraph:
         case NKikimr::TEvTabletBase::EvTrySyncFollower:

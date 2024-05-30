@@ -4,8 +4,6 @@ RECURSE_FOR_TESTS(
 
 LIBRARY()
 
-OWNER(xenoxeno g:kikimr)
-
 SRCS(
     appdata.h
     filter.cpp

@@ -563,8 +563,8 @@ TBlobStorageGroupInfo::TDynamicInfo::TDynamicInfo(ui32 groupId, ui32 groupGen)
 ////////////////////////////////////////////////////////////////////////////
 TBlobStorageGroupInfo::TBlobStorageGroupInfo(TBlobStorageGroupType gtype, ui32 numVDisksPerFailDomain,
         ui32 numFailDomains, ui32 numFailRealms, const TVector<TActorId> *vdiskIds, EEncryptionMode encryptionMode,
-        ELifeCyclePhase lifeCyclePhase, TCypherKey key)
-    : GroupID(0)
+        ELifeCyclePhase lifeCyclePhase, TCypherKey key, ui32 groupId)
+    : GroupID(groupId)
     , GroupGeneration(1)
     , Type(gtype)
     , Dynamic(GroupID, GroupGeneration)

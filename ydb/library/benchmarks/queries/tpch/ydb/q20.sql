@@ -11,8 +11,8 @@ select
 from
     `{path}lineitem`
 where
-    cast(l_shipdate as timestamp) >= $border
-    and cast(l_shipdate as timestamp) < ($border + Interval("P365D"))
+    l_shipdate >= $border
+    and l_shipdate < ($border + Interval("P365D"))
 group by
     l_partkey, l_suppkey
 );

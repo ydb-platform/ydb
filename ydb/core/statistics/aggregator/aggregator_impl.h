@@ -47,6 +47,7 @@ private:
     struct TTxStatisticsScanResponse;
     struct TTxSaveQueryResponse;
     struct TTxScheduleScan;
+    struct TTxDeleteQueryResponse;
 
     struct TEvPrivate {
         enum EEv {
@@ -107,6 +108,7 @@ private:
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev);
     void Handle(TEvStatistics::TEvStatTableCreationResponse::TPtr& ev);
     void Handle(TEvStatistics::TEvSaveStatisticsQueryResponse::TPtr& ev);
+    void Handle(TEvStatistics::TEvDeleteStatisticsQueryResponse::TPtr& ev);
     void Handle(TEvPrivate::TEvScheduleScan::TPtr& ev);
 
     void Initialize();
@@ -114,11 +116,16 @@ private:
     void Resolve();
     void NextRange();
     void SaveStatisticsToTable();
+    void DeleteStatisticsFromTable();
     void ScheduleNextScan();
 
     void PersistSysParam(NIceDb::TNiceDb& db, ui64 id, const TString& value);
     void PersistScanTableId(NIceDb::TNiceDb& db);
     void PersistScanStartTime(NIceDb::TNiceDb& db);
+
+    void ResetScanState(NIceDb::TNiceDb& db);
+    void RescheduleScanTable(NIceDb::TNiceDb& db);
+    void DropScanTable(NIceDb::TNiceDb& db);
 
     STFUNC(StateInit) {
         StateInitImpl(ev, SelfId());
@@ -201,6 +208,7 @@ private:
 
     bool IsStatisticsTableCreated = false;
     bool PendingSaveStatistics = false;
+    bool PendingDeleteStatistics = false;
 
     std::vector<NScheme::TTypeInfo> KeyColumnTypes;
     TVector<TKeyDesc::TColumnOp> Columns;

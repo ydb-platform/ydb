@@ -1,6 +1,7 @@
 
 #pragma once
 
+#include <util/system/mem_info.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/minikql/mkql_alloc.h>
@@ -53,6 +54,23 @@ namespace NYql::NDq {
                     RequestExtraMemory(required - limit, alloc);
                 });
             }
+        }
+
+        // This callback is created for testing purposes and will be enabled only with spilling.
+        // Most likely this callback will be removed after KIKIMR-21481.
+        void TrySetIncreaseMemoryLimitCallbackWithRSSControl(NKikimr::NMiniKQL::TScopedAlloc* alloc) {
+            if (!CanAllocateExtraMemory) return;
+            const ui64 limitRSS = std::numeric_limits<ui64>::max();
+            const ui64 criticalRSSValue = limitRSS / 100 * 80;
+
+            alloc->Ref().SetIncreaseMemoryLimitCallback([this, alloc](ui64 limit, ui64 required) {
+                RequestExtraMemory(required - limit, alloc);
+                
+                ui64 currentRSS = NMemInfo::GetMemInfo().RSS;
+                if (currentRSS > criticalRSSValue) {
+                    alloc->SetMaximumLimitValueReached(true);
+                }
+            });
         }
 
         void TryShrinkMemory(NKikimr::NMiniKQL::TScopedAlloc* alloc) {

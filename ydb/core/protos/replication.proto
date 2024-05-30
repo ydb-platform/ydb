@@ -1,5 +1,6 @@
 import "ydb/core/scheme/protos/pathid.proto";
 import "ydb/public/api/protos/annotations/sensitive.proto";
+import "ydb/public/api/protos/ydb_issue_message.proto";
 
 package NKikimrReplication;
 option java_package = "ru.yandex.kikimr.proto";
@@ -7,6 +8,12 @@ option java_package = "ru.yandex.kikimr.proto";
 message TStaticCredentials {
     optional string User = 1;
     optional string Password = 2 [(Ydb.sensitive) = true];
+    optional string PasswordSecretName = 3;
+}
+
+message TOAuthToken {
+    optional string Token = 1 [(Ydb.sensitive) = true];
+    optional string TokenSecretName = 2;
 }
 
 message TConnectionParams {
@@ -15,7 +22,7 @@ message TConnectionParams {
     // credentials
     oneof Credentials {
         TStaticCredentials StaticCredentials = 3;
-        string OAuthToken = 4 [(Ydb.sensitive) = true];
+        TOAuthToken OAuthToken = 4;
     }
 }
 
@@ -28,6 +35,7 @@ message TReplicationConfig {
         message TTarget {
             optional string SrcPath = 1;
             optional string DstPath = 2;
+            optional string SrcStreamName = 3;
         }
 
         repeated TTarget Targets = 1;
@@ -64,10 +72,15 @@ message TReplicationState {
         optional EFailoverMode FailoverMode = 1;
     }
 
+    message TError {
+        repeated Ydb.Issue.IssueMessage Issues = 1;
+    }
+
     oneof State {
         TStandBy StandBy = 1;
         TPaused Paused = 2;
         TDone Done = 3;
+        TError Error = 4;
     }
 }
 
@@ -114,6 +127,7 @@ message TEvAlterReplicationResult {
 message TEvDropReplication {
     optional NKikimrProto.TPathID PathId = 1;
     optional TOperationId OperationId = 2;
+    optional bool Cascade = 3 [default = true];
 }
 
 message TEvDropReplicationResult {
@@ -126,6 +140,23 @@ message TEvDropReplicationResult {
     optional TOperationId OperationId = 1;
     optional uint64 Origin = 2;
     optional EStatus Status = 3;
+}
+
+message TEvDescribeReplication {
+    optional NKikimrProto.TPathID PathId = 1;
+}
+
+message TEvDescribeReplicationResult {
+    enum EStatus {
+        UNKNOWN = 0;
+        SUCCESS = 1;
+        NOT_FOUND = 2;
+    }
+
+    optional EStatus Status = 1;
+    optional TConnectionParams ConnectionParams = 2;
+    repeated TReplicationConfig.TTargetSpecific.TTarget Targets = 3;
+    optional TReplicationState State = 4;
 }
 
 message TControllerIdentity {

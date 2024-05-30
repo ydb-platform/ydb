@@ -166,7 +166,7 @@ public:
     TString BuildMemoryLimitExceptionMessage() const {
         if (Request.TxAlloc) {
             return TStringBuilder() << "Memory limit exception at " << CurrentStateFuncName()
-                << ", current limit is " << Request.TxAlloc->Alloc.GetLimit() << " bytes.";
+                << ", current limit is " << Request.TxAlloc->Alloc->GetLimit() << " bytes.";
         }
         return TStringBuilder() << "Memory limit exception at " << CurrentStateFuncName();
     }
@@ -575,7 +575,7 @@ protected:
     void InvalidateNode(ui64 node) {
         for (auto tablet : ShardsOnNode[node]) {
             auto ev = MakeHolder<TEvPipeCache::TEvForcePipeReconnect>(tablet);
-            this->Send(MakePipePeNodeCacheID(false), ev.Release());
+            this->Send(MakePipePerNodeCacheID(false), ev.Release());
         }
     }
 
@@ -1983,7 +1983,7 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, const TActorId& creator,
     TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
     const bool enableOlapSink, const bool useEvWrite, ui32 statementResultIndex,
-    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup);
+    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings);
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,

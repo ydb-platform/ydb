@@ -10,13 +10,12 @@
 #include <map>
 #include <sstream>
 
-
 namespace NYql {
 
 /**
  * OptimizerNodes are the internal representations of operators inside the
  * Cost-based optimizer. Currently we only support RelOptimizerNode - a node that
- * is an input relation to the equi-join, and JoinOptimizerNode - an inner join 
+ * is an input relation to the equi-join, and JoinOptimizerNode - an inner join
  * that connects two sets of relations.
 */
 enum EOptimizerNodeKind: ui32
@@ -35,11 +34,74 @@ struct IBaseOptimizerNode {
     std::shared_ptr<TOptimizerStatistics> Stats;
 
     IBaseOptimizerNode(EOptimizerNodeKind k) : Kind(k) {}
-    IBaseOptimizerNode(EOptimizerNodeKind k, std::shared_ptr<TOptimizerStatistics> s) : 
+    IBaseOptimizerNode(EOptimizerNodeKind k, std::shared_ptr<TOptimizerStatistics> s) :
         Kind(k), Stats(s) {}
 
     virtual TVector<TString> Labels()=0;
     virtual void Print(std::stringstream& stream, int ntabs=0)=0;
+};
+
+
+/**
+ * This is a temporary structure for KQP provider
+ * We will soon be supporting multiple providers and we will need to design
+ * some interfaces to pass provider-specific context to the optimizer
+*/
+struct IProviderContext {
+    virtual ~IProviderContext() = default;
+
+    virtual double ComputeJoinCost(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, const double outputRows, const double outputByteSize, EJoinAlgoType joinAlgol) const = 0;
+
+    virtual TOptimizerStatistics ComputeJoinStats(
+        const TOptimizerStatistics& leftStats,
+        const TOptimizerStatistics& rightStats,
+        const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions, EJoinAlgoType joinAlgo) const = 0;
+
+    virtual TOptimizerStatistics ComputeJoinStats(
+        const TOptimizerStatistics& leftStats,
+        const TOptimizerStatistics& rightStats,
+        const TVector<TString>& leftJoinKeys,
+        const TVector<TString>& rightJoinKeys,
+        EJoinAlgoType joinAlgo) const = 0;
+
+    virtual bool IsJoinApplicable(const std::shared_ptr<IBaseOptimizerNode>& left,
+        const std::shared_ptr<IBaseOptimizerNode>& right,
+        const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
+        const TVector<TString>& leftJoinKeys,
+        const TVector<TString>& rightJoinKeys,
+        EJoinAlgoType joinAlgo) = 0;
+};
+
+/**
+ * Default provider context with default cost and stats computation.
+*/
+
+struct TBaseProviderContext : public IProviderContext {
+    TBaseProviderContext() {}
+
+    double ComputeJoinCost(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, const double outputRows, const double outputByteSize, EJoinAlgoType joinAlgo) const override;
+
+    bool IsJoinApplicable(const std::shared_ptr<IBaseOptimizerNode>& left,
+        const std::shared_ptr<IBaseOptimizerNode>& right,
+        const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
+        const TVector<TString>& leftJoinKeys,
+        const TVector<TString>& rightJoinKeys,
+        EJoinAlgoType joinAlgo) override;
+
+    virtual TOptimizerStatistics ComputeJoinStats(
+        const TOptimizerStatistics& leftStats,
+        const TOptimizerStatistics& rightStats,
+        const TVector<TString>& leftJoinKeys,
+        const TVector<TString>& rightJoinKeys,
+        EJoinAlgoType joinAlgo) const override;
+
+    virtual TOptimizerStatistics ComputeJoinStats(
+        const TOptimizerStatistics& leftStats,
+        const TOptimizerStatistics& rightStats,
+        const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
+        EJoinAlgoType joinAlgo) const override;
+
+    static const TBaseProviderContext& Instance();
 };
 
 /**
@@ -52,9 +114,9 @@ struct TRelOptimizerNode : public IBaseOptimizerNode {
     // Temporary solution to check if a LookupJoin is possible in KQP
     //void* Expr;
 
-    TRelOptimizerNode(TString label, std::shared_ptr<TOptimizerStatistics> stats) : 
+    TRelOptimizerNode(TString label, std::shared_ptr<TOptimizerStatistics> stats) :
         IBaseOptimizerNode(RelNodeType, stats), Label(label) { }
-    //TRelOptimizerNode(TString label, std::shared_ptr<TOptimizerStatistics> stats, const TExprNode::TPtr expr) : 
+    //TRelOptimizerNode(TString label, std::shared_ptr<TOptimizerStatistics> stats, const TExprNode::TPtr expr) :
     //    IBaseOptimizerNode(RelNodeType, stats), Label(label), Expr(expr) { }
     virtual ~TRelOptimizerNode() {}
 
@@ -80,61 +142,6 @@ EJoinKind ConvertToJoinKind(const TString& joinString);
 TString ConvertToJoinString(const EJoinKind kind);
 
 /**
- * This is a temporary structure for KQP provider
- * We will soon be supporting multiple providers and we will need to design
- * some interfaces to pass provider-specific context to the optimizer
-*/
-struct IProviderContext {
-    virtual ~IProviderContext() = default;
-
-    virtual double ComputeJoinCost(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, const double outputRows, const double outputByteSize, EJoinAlgoType joinAlgol) const = 0;
-
-    virtual bool IsJoinApplicable(const std::shared_ptr<IBaseOptimizerNode>& left, 
-        const std::shared_ptr<IBaseOptimizerNode>& right, 
-        const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
-        const TVector<TString>& leftJoinKeys,
-        const TVector<TString>& rightJoinKeys,
-        EJoinAlgoType joinAlgo) = 0;
-
-};
-
-/**
- * Temporary solution for default provider context
-*/
-
-struct TDummyProviderContext : public IProviderContext {
-    TDummyProviderContext() {}
-
-    double ComputeJoinCost(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, const double outputRows, const double outputByteSize, EJoinAlgoType joinAlgo) const override {
-        Y_UNUSED(outputByteSize);
-        Y_UNUSED(joinAlgo);
-        return leftStats.Nrows + 2.0 * rightStats.Nrows + outputRows;
-    }
-
-    bool IsJoinApplicable(const std::shared_ptr<IBaseOptimizerNode>& left, 
-        const std::shared_ptr<IBaseOptimizerNode>& right, 
-        const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
-        const TVector<TString>& leftJoinKeys,
-        const TVector<TString>& rightJoinKeys,
-        EJoinAlgoType joinAlgo) override {
-
-        Y_UNUSED(left);
-        Y_UNUSED(right);
-        Y_UNUSED(joinConditions);
-        Y_UNUSED(leftJoinKeys);
-        Y_UNUSED(rightJoinKeys);
-
-        return joinAlgo == EJoinAlgoType::MapJoin;
-    }
-
-    static const TDummyProviderContext& instance() {
-        static TDummyProviderContext staticContext;
-        return staticContext;
-    }
-
-};
-
-/**
  * JoinOptimizerNode records the left and right arguments of the join
  * as well as the set of join conditions.
  * It also has methods to compute the statistics and cost of a join,
@@ -150,11 +157,11 @@ struct TJoinOptimizerNode : public IBaseOptimizerNode {
     EJoinAlgoType JoinAlgo;
     bool IsReorderable;
 
-    TJoinOptimizerNode(const std::shared_ptr<IBaseOptimizerNode>& left, 
-        const std::shared_ptr<IBaseOptimizerNode>& right, 
+    TJoinOptimizerNode(const std::shared_ptr<IBaseOptimizerNode>& left,
+        const std::shared_ptr<IBaseOptimizerNode>& right,
         const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
-        const EJoinKind joinType, 
-        const EJoinAlgoType joinAlgo, 
+        const EJoinKind joinType,
+        const EJoinAlgoType joinAlgo,
         bool nonReorderable=false);
     virtual ~TJoinOptimizerNode() {}
     virtual TVector<TString> Labels();

@@ -239,6 +239,7 @@ public:
     TRuntimeNode BlockExists(TRuntimeNode data);
     TRuntimeNode BlockMember(TRuntimeNode structure, const std::string_view& memberName);
     TRuntimeNode BlockNth(TRuntimeNode tuple, ui32 index);
+    TRuntimeNode BlockAsStruct(const TArrayRef<std::pair<std::string_view, TRuntimeNode>>& args);
     TRuntimeNode BlockAsTuple(const TArrayRef<const TRuntimeNode>& args);
     TRuntimeNode BlockToPg(TRuntimeNode input, TType* returnType);
     TRuntimeNode BlockFromPg(TRuntimeNode input, TType* returnType);

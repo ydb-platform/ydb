@@ -44,7 +44,8 @@ public:
         const TDqConfiguration::TPtr& settings,
         const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
         TInstant requestStartTime,
-        bool createTaskSuspended)
+        bool createTaskSuspended,
+        ui64 executionTimeout)
         : TRichActor<TDqExecuter>(&TDqExecuter::Handler)
         , GwmActorId(gwmActorId)
         , PrinterId(printerId)
@@ -54,6 +55,7 @@ public:
         , Counters(counters) // root, component=dq
         , LongWorkersAllocationCounter(Counters->GetSubgroup("component", "ServiceProxyActor")->GetCounter("LongWorkersAllocation"))
         , ExecutionTimeoutCounter(Counters->GetSubgroup("component", "ServiceProxyActor")->GetCounter("ExecutionTimeout", /*derivative=*/ true))
+        , Timeout(TDuration::MilliSeconds(executionTimeout))
         , WorkersAllocationFailTimeout(TDuration::MilliSeconds(Settings->_LongWorkersAllocationFailTimeout.Get().GetOrElse(TDqSettings::TDefault::LongWorkersAllocationFailTimeout)))
         , WorkersAllocationWarnTimeout(TDuration::MilliSeconds(Settings->_LongWorkersAllocationWarnTimeout.Get().GetOrElse(TDqSettings::TDefault::LongWorkersAllocationWarnTimeout)))
         , RequestStartTime(requestStartTime)
@@ -238,10 +240,6 @@ private:
             resourceAllocator,
             allocateRequest.Release(),
             IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession));
-
-        Timeout = tasks.size() == 1
-            ? TDuration::MilliSeconds(Settings->_LiteralTimeout.Get().GetOrElse(TDqSettings::TDefault::LiteralTimeout))
-            : TDuration::MilliSeconds(Settings->_TableTimeout.Get().GetOrElse(TDqSettings::TDefault::TableTimeout));
 
         YQL_CLOG(DEBUG, ProviderDq) << "Dq timeouts are set to: "
             << ToString(Timeout) << " (global), "
@@ -523,9 +521,10 @@ NActors::IActor* MakeDqExecuter(
     const TDqConfiguration::TPtr& settings,
     const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
     TInstant requestStartTime,
-    bool createTaskSuspended
+    bool createTaskSuspended,
+    ui64 executionTimeout
 ) {
-    return new TLogWrapReceive(new TDqExecuter(gwmActorId, printerId, traceId, username, settings, counters, requestStartTime, createTaskSuspended), traceId);
+    return new TLogWrapReceive(new TDqExecuter(gwmActorId, printerId, traceId, username, settings, counters, requestStartTime, createTaskSuspended, executionTimeout), traceId);
 }
 
 } // namespace NDq

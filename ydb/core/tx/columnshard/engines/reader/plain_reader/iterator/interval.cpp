@@ -24,10 +24,10 @@ void TFetchingInterval::OnInitResourcesGuard(const std::shared_ptr<NResourceBrok
     AFL_VERIFY(guard);
     AFL_VERIFY(!ResourcesGuard);
     ResourcesGuard = guard;
-    AFL_VERIFY(ReadyGuards.Inc() <= 1);
     for (auto&& i : Sources) {
         i.second->OnInitResourcesGuard(i.second);
     }
+    AFL_VERIFY(ReadyGuards.Inc() <= 1);
     ConstructResult();
 }
 

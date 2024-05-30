@@ -33,7 +33,7 @@ ui64 TopicPartitionReserveThroughput(const NKikimrPQ::TPQTabletConfig& config) {
 }
 
 bool SplitMergeEnabled(const NKikimrPQ::TPQTabletConfig& config) {
-    return 0 < config.GetPartitionStrategy().GetMaxPartitionCount();
+    return config.has_partitionstrategy() && config.partitionstrategy().has_partitionstrategytype() && config.partitionstrategy().partitionstrategytype() != ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED;
 }
 
 static constexpr ui64 PUT_UNIT_SIZE = 40960u; // 40Kb
@@ -251,6 +251,10 @@ std::unordered_map<ui32, TPartitionGraph::Node> BuildGraph(const TCollection& pa
 TPartitionGraph::Node::Node(ui32 id, ui64 tabletId)
     : Id(id)
     , TabletId(tabletId) {
+}
+
+bool TPartitionGraph::Node::IsRoot() const {
+    return Parents.empty();
 }
 
 TPartitionGraph MakePartitionGraph(const NKikimrPQ::TPQTabletConfig& config) {

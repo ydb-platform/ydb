@@ -7,7 +7,7 @@
 namespace NKikimr::NKqp {
 
 IActor* CreateScriptFinalizerActor(TEvScriptFinalizeRequest::TPtr request,
-    const NKikimrConfig::TFinalizeScriptServiceConfig& finalizeScriptServiceConfig,
+    const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
     const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup);
 

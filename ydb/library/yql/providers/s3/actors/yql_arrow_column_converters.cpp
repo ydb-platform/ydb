@@ -116,7 +116,7 @@ std::shared_ptr<arrow::Array> ArrowTypeAsYqlDatetime(const std::shared_ptr<arrow
             throw parquet::ParquetException(TStringBuilder() << "datetime in parquet is out of range [0, " << ::NYql::NUdf::MAX_DATETIME << "]: " << baseValue);
         }
 
-        const ui64 v = baseValue * multiplier;
+        const ui64 v = baseValue * static_cast<ui64>(multiplier);
         if (v > ::NYql::NUdf::MAX_DATETIME) {
             throw parquet::ParquetException(TStringBuilder() << "datetime in parquet is out of range [0, " << ::NYql::NUdf::MAX_DATETIME << "] after transformation: " << v);
         }

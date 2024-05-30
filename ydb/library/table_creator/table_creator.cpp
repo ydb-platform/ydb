@@ -272,34 +272,39 @@ public:
     }
 
     void Fail(NSchemeCache::TSchemeCacheNavigate::EStatus status) {
-        LOG_ERROR_S(*TlsActivationContext, LogService,
-            LogPrefix << "Failed to upgrade table: " << status);
-        Reply();
+        TString message = TStringBuilder() << "Failed to upgrade table: " << status;
+        LOG_ERROR_S(*TlsActivationContext, LogService, LogPrefix << message);
+        Reply(false, message);
     }
 
     void Fail(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev) {
-        LOG_ERROR_S(*TlsActivationContext, LogService,
-            LogPrefix << "Failed " << GetOperationType() << " request: " << ev->Get()->Status() << ". Response: " << ev->Get()->Record);
-        Reply();
+        TString message = TStringBuilder() << "Failed " << GetOperationType() << " request: " << ev->Get()->Status() << ". Response: " << ev->Get()->Record;
+        LOG_ERROR_S(*TlsActivationContext, LogService, LogPrefix << message);
+        Reply(false, message);
     }
 
     void Fail() {
-        LOG_ERROR_S(*TlsActivationContext, LogService, LogPrefix << "Retry limit exceeded");
-        Reply();
+        TString message = "Retry limit exceeded";
+        LOG_ERROR_S(*TlsActivationContext, LogService, LogPrefix << message);
+        Reply(false, message);
     }
 
     void Success() {
-        Reply();
+        Reply(true);
     }
 
     void Success(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev) {
         LOG_INFO_S(*TlsActivationContext, LogService,
             LogPrefix << "Successful " << GetOperationType() <<  " request: " << ev->Get()->Status());
-        Reply();
+        Reply(true);
     }
 
-    void Reply() {
-        Send(Owner, new TEvTableCreator::TEvCreateTableResponse());
+    void Reply(bool success, const TString& message) {
+        Reply(success, {NYql::TIssue(message)});
+    }
+
+    void Reply(bool success, NYql::TIssues issues = {}) {
+        Send(Owner, new TEvTableCreator::TEvCreateTableResponse(success, std::move(issues)));
         if (SchemePipeActorId) {
             NTabletPipe::CloseClient(SelfId(), SchemePipeActorId);
         }
@@ -379,6 +384,64 @@ private:
 };
 
 } // namespace
+
+namespace NTableCreator {
+
+NKikimrSchemeOp::TColumnDescription TMultiTableCreator::Col(const TString& columnName, const char* columnType) {
+    NKikimrSchemeOp::TColumnDescription desc;
+    desc.SetName(columnName);
+    desc.SetType(columnType);
+    return desc;
+}
+
+NKikimrSchemeOp::TColumnDescription TMultiTableCreator::Col(const TString& columnName, NScheme::TTypeId columnType) {
+    return Col(columnName, NScheme::TypeName(columnType));
+}
+
+NKikimrSchemeOp::TTTLSettings TMultiTableCreator::TtlCol(const TString& columnName, TDuration expireAfter, TDuration runInterval) {
+    NKikimrSchemeOp::TTTLSettings settings;
+    settings.MutableEnabled()->SetExpireAfterSeconds(expireAfter.Seconds());
+    settings.MutableEnabled()->SetColumnName(columnName);
+    settings.MutableEnabled()->MutableSysSettings()->SetRunInterval(runInterval.MicroSeconds());
+    return settings;
+}
+
+TMultiTableCreator::TMultiTableCreator(std::vector<NActors::IActor*> tableCreators)
+    : TableCreators(std::move(tableCreators))
+{}
+
+void TMultiTableCreator::Registered(NActors::TActorSystem* sys, const NActors::TActorId& owner) {
+    TBase::Registered(sys, owner);
+    Owner = owner;
+}
+
+void TMultiTableCreator::Bootstrap() {
+    Become(&TMultiTableCreator::StateFunc);
+
+    TablesCreating = TableCreators.size();
+    for (const auto creator : TableCreators) {
+        Register(creator);
+    }
+}
+
+void TMultiTableCreator::Handle(TEvTableCreator::TEvCreateTableResponse::TPtr& ev) {
+    if (!ev->Get()->Success) {
+        Success = false;
+        Issues.AddIssues(std::move(ev->Get()->Issues));
+    }
+
+    Y_ABORT_UNLESS(TablesCreating > 0);
+    if (--TablesCreating == 0) {
+        OnTablesCreated(Success, std::move(Issues));
+        PassAway();
+    }
+}
+
+STRICT_STFUNC(TMultiTableCreator::StateFunc,
+    hFunc(TEvTableCreator::TEvCreateTableResponse, Handle);
+);
+
+} // namespace NTableCreator
 
 NActors::IActor* CreateTableCreator(
     TVector<TString> pathComponents,

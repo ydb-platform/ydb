@@ -181,7 +181,7 @@ Y_UNIT_TEST_SUITE(BSCRestartPDisk) {
                     if (serviceSetUpdate) {
                         const auto &pdisks = serviceSetUpdate->Record.GetServiceSet().GetPDisks();
                         const auto &pdisk = pdisks[0];
-                        UNIT_ASSERT(pdisk.GetEntityStatus() == NKikimrBlobStorage::RESTART);
+                        UNIT_ASSERT_EQUAL(NKikimrBlobStorage::RESTART, pdisk.GetEntityStatus());
                         gotServiceSetUpdate = true;
                     }
                 }

@@ -58,7 +58,7 @@ class TDqComputeActorCheckpoints : public NActors::TActor<TDqComputeActorCheckpo
 
         const size_t SinksCount;
         TMaybe<NDqProto::TCheckpoint> Checkpoint;
-        NDqProto::TComputeActorState ComputeActorState;
+        TComputeActorState ComputeActorState;
         size_t SavedSinkStatesCount = 0;
         bool SavedComputeActorState = false;
     };
@@ -69,7 +69,7 @@ public:
     struct ICallbacks {
         [[nodiscard]]
         virtual bool ReadyToCheckpoint() const = 0;
-        virtual void SaveState(const NDqProto::TCheckpoint& checkpoint, NDqProto::TComputeActorState& state) const = 0;
+        virtual void SaveState(const NDqProto::TCheckpoint& checkpoint, TComputeActorState& state) const = 0;
         virtual void CommitState(const NDqProto::TCheckpoint& checkpoint) = 0;
         virtual void InjectBarrierToOutputs(const NDqProto::TCheckpoint& checkpoint) = 0;
         virtual void ResumeInputsByCheckpoint() = 0;
@@ -78,7 +78,7 @@ public:
         virtual void Stop() = 0;
         virtual void ResumeExecution(EResumeSource source) = 0;
 
-        virtual void LoadState(NDqProto::TComputeActorState&& state) = 0;
+        virtual void LoadState(TComputeActorState&& state) = 0;
 
         virtual ~ICallbacks() = default;
     };
@@ -102,9 +102,9 @@ public:
     void AbortCheckpoint();
 
     // Sink support.
-    void OnSinkStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint);
+    void OnSinkStateSaved(TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint);
 
-    void OnTransformStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) {
+    void OnTransformStateSaved(TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) {
         Y_UNUSED(state);
         Y_UNUSED(outputIndex); // Note that we can have both sink and transform on one output index
         Y_UNUSED(checkpoint);

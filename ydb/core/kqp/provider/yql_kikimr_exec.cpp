@@ -27,6 +27,7 @@
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
+#include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 
 namespace NYql {
 namespace {
@@ -285,27 +286,33 @@ namespace {
         };
     }
 
+    TSequenceSettings ParseSequenceSettings(const TCoNameValueTupleList& sequenceSettings) {
+        TSequenceSettings result;
+        for (const auto& setting: sequenceSettings) {
+            auto name = setting.Name().Value();
+            auto value = TString(setting.Value().template Cast<TCoAtom>().Value());
+            if (name == "start") {
+                result.StartValue = FromString<i64>(value);
+            } else if (name == "maxvalue") {
+                result.MaxValue = FromString<i64>(value);
+            } else if (name == "minvalue") {
+                result.MinValue = FromString<i64>(value);
+            } else if (name == "cache") {
+                result.Cache = FromString<ui64>(value);
+            } else if (name == "cycle") {
+                result.Cycle = value == "1" ? true : false;
+            } else if (name == "increment") {
+                result.Increment = FromString<i64>(value);
+            }
+        }
+        return result;
+    }
+
     TCreateSequenceSettings ParseCreateSequenceSettings(TKiCreateSequence createSequence) {
         TCreateSequenceSettings createSequenceSettings;
         createSequenceSettings.Name = TString(createSequence.Sequence());
         createSequenceSettings.Temporary = TString(createSequence.Temporary()) == "true" ? true : false;
-        for (const auto& setting: createSequence.SequenceSettings()) {
-            auto name = setting.Name().Value();
-            auto value = TString(setting.Value().template Cast<TCoAtom>().Value());
-            if (name == "start") {
-                createSequenceSettings.SequenceSettings.StartValue = FromString<i64>(value);
-            } else if (name == "maxvalue") {
-                createSequenceSettings.SequenceSettings.MaxValue = FromString<i64>(value);
-            } else if (name == "minvalue") {
-                createSequenceSettings.SequenceSettings.MinValue = FromString<i64>(value);
-            } else if (name == "cache") {
-                createSequenceSettings.SequenceSettings.Cache = FromString<ui64>(value);
-            } else if (name == "cycle") {
-                createSequenceSettings.SequenceSettings.Cycle = value == "1" ? true : false;
-            } else if (name == "increment") {
-                createSequenceSettings.SequenceSettings.Increment = FromString<i64>(value);
-            }
-        }
+        createSequenceSettings.SequenceSettings = ParseSequenceSettings(createSequence.SequenceSettings());
 
         return createSequenceSettings;
     }
@@ -314,6 +321,14 @@ namespace {
         return TDropSequenceSettings{
             .Name = TString(dropSequence.Sequence())
         };
+    }
+
+    TAlterSequenceSettings ParseAlterSequenceSettings(TKiAlterSequence alterSequence) {
+        TAlterSequenceSettings alterSequenceSettings;
+        alterSequenceSettings.Name = TString(alterSequence.Sequence());
+        alterSequenceSettings.SequenceSettings = ParseSequenceSettings(alterSequence.SequenceSettings());
+
+        return alterSequenceSettings;
     }
 
     [[nodiscard]] TString AddConsumerToTopicRequest(
@@ -491,6 +506,96 @@ namespace {
             }
         }
     }
+
+    bool IsPartitioningSetting(TStringBuf name) {
+        return name == "autoPartitioningBySize"
+            || name == "partitionSizeMb"
+            || name == "autoPartitioningByLoad"
+            || name == "minPartitions"
+            || name == "maxPartitions";
+    }
+
+    [[nodiscard]] bool ParsePartitioningSettings(
+        Ydb::Table::PartitioningSettings& partitioningSettings,
+        const TCoNameValueTuple& setting,
+        TExprContext& ctx
+    ) {
+        auto name = setting.Name().Value();
+        if (name == "autoPartitioningBySize") {
+            auto val = to_lower(setting.Value().Cast<TCoAtom>().StringValue());
+            if (val == "enabled") {
+                partitioningSettings.set_partitioning_by_size(Ydb::FeatureFlag::ENABLED);
+            } else if (val == "disabled") {
+                partitioningSettings.set_partitioning_by_size(Ydb::FeatureFlag::DISABLED);
+            } else {
+                ctx.AddError(
+                    TIssue(ctx.GetPosition(setting.Value().Cast<TCoAtom>().Pos()),
+                           TStringBuilder() << "Unknown feature flag '" << val << "' for auto partitioning by size"
+                    )
+                );
+                return false;
+            }
+        } else if (name == "partitionSizeMb") {
+            ui64 value = FromString<ui64>(
+                setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+            );
+            if (value) {
+                partitioningSettings.set_partition_size_mb(value);
+            } else {
+                ctx.AddError(
+                    TIssue(ctx.GetPosition(setting.Name().Pos()),
+                           "Can't set preferred partition size to 0. "
+                           "To disable auto partitioning by size use 'SET AUTO_PARTITIONING_BY_SIZE DISABLED'"
+                    )
+                );
+                return false;
+            }
+        } else if (name == "autoPartitioningByLoad") {
+            auto val = to_lower(setting.Value().Cast<TCoAtom>().StringValue());
+            if (val == "enabled") {
+                partitioningSettings.set_partitioning_by_load(Ydb::FeatureFlag::ENABLED);
+            } else if (val == "disabled") {
+                partitioningSettings.set_partitioning_by_load(Ydb::FeatureFlag::DISABLED);
+            } else {
+                ctx.AddError(
+                    TIssue(ctx.GetPosition(setting.Value().Cast<TCoAtom>().Pos()),
+                           TStringBuilder() << "Unknown feature flag '" << val << "' for auto partitioning by load"
+                    )
+                );
+                return false;
+            }
+        } else if (name == "minPartitions") {
+            ui64 value = FromString<ui64>(
+                setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+            );
+            if (value) {
+                partitioningSettings.set_min_partitions_count(value);
+            } else {
+                ctx.AddError(
+                    TIssue(ctx.GetPosition(setting.Name().Pos()),
+                           "Can't set min partition count to 0"
+                    )
+                );
+                return false;
+            }
+        } else if (name == "maxPartitions") {
+            ui64 value = FromString<ui64>(
+                setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+            );
+            if (value) {
+                partitioningSettings.set_max_partitions_count(value);
+            } else {
+                ctx.AddError(
+                    TIssue(ctx.GetPosition(setting.Name().Pos()),
+                           "Can't set max partition count to 0"
+                    )
+                );
+                return false;
+            }
+        }
+
+        return true;
+    }
 }
 
 class TKiSinkPlanInfoTransformer : public TGraphTransformerBase {
@@ -563,7 +668,7 @@ private:
             return peepHoleStatus;
         }
 
-        auto guard = Guard(SessionCtx->Query().QueryData->GetAllocState()->Alloc);
+        auto guard = Guard(*SessionCtx->Query().QueryData->GetAllocState()->Alloc);
 
         auto input = Build<TDqPhyStage>(ctx, pos)
             .Inputs()
@@ -1213,15 +1318,33 @@ public:
                         auto columnTuple = item.Cast<TExprList>();
                         auto columnName = columnTuple.Item(0).Cast<TCoAtom>();
                         alter_columns->set_name(TString(columnName));
-
-                        auto families = columnTuple.Item(1).Cast<TCoAtomList>();
-                        if (families.Size() > 1) {
-                            ctx.AddError(TIssue(ctx.GetPosition(families.Pos()),
-                                "Unsupported number of families"));
+                        auto alterColumnList = columnTuple.Item(1).Cast<TExprList>();
+                        auto alterColumnAction = TString(alterColumnList.Item(0).Cast<TCoAtom>());
+                        if (alterColumnAction == "setDefault") {
+                            auto setDefault = alterColumnList.Item(1).Cast<TCoAtomList>();
+                            auto func = TString(setDefault.Item(0).Cast<TCoAtom>());
+                            auto arg = TString(setDefault.Item(1).Cast<TCoAtom>());
+                            if (func != "nextval") {
+                                ctx.AddError(TIssue(ctx.GetPosition(setDefault.Pos()),
+                                    TStringBuilder() << "Unsupported function to set default: " << func));
+                                return SyncError();
+                            }
+                            auto fromSequence = alter_columns->mutable_from_sequence();
+                            fromSequence->set_name(arg);
+                        } else if (alterColumnAction == "setFamily") {
+                            auto families = alterColumnList.Item(1).Cast<TCoAtomList>();
+                            if (families.Size() > 1) {
+                                ctx.AddError(TIssue(ctx.GetPosition(families.Pos()),
+                                    "Unsupported number of families"));
+                                return SyncError();
+                            }
+                            for (auto family : families) {
+                                alter_columns->set_family(TString(family.Value()));
+                            }
+                        } else {
+                            ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
+                                    TStringBuilder() << "Unsupported action to alter column"));
                             return SyncError();
-                        }
-                        for (auto family : families) {
-                            alter_columns->set_family(TString(family.Value()));
                         }
                     }
                 } else if (name == "addColumnFamilies" || name == "alterColumnFamilies") {
@@ -1276,71 +1399,10 @@ public:
                             alterTableRequest.set_set_compaction_policy(TString(
                                 setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
                             ));
-                        } else if (name == "autoPartitioningBySize") {
-                            auto partitioningSettings = alterTableRequest.mutable_alter_partitioning_settings();
-                            auto val = to_lower(TString(setting.Value().Cast<TCoAtom>().Value()));
-                            if (val == "enabled") {
-                                partitioningSettings->set_partitioning_by_size(Ydb::FeatureFlag::ENABLED);
-                            } else if (val == "disabled") {
-                                partitioningSettings->set_partitioning_by_size(Ydb::FeatureFlag::DISABLED);
-                            } else {
-                                auto errText = TStringBuilder() << "Unknown feature flag '"
-                                    << val
-                                    << "' for auto partitioning by size";
-                                ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Cast<TCoAtom>().Pos()),
-                                    errText));
-                                return SyncError();
-                            }
-                        } else if (name == "partitionSizeMb") {
-                            ui64 value = FromString<ui64>(
-                                setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
-                                );
-                            if (value) {
-                                auto partitioningSettings = alterTableRequest.mutable_alter_partitioning_settings();
-                                partitioningSettings->set_partition_size_mb(value);
-                            } else {
-                                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                                    "Can't set preferred partition size to 0. "
-                                    "To disable auto partitioning by size use 'SET AUTO_PARTITIONING_BY_SIZE DISABLED'"));
-                                return SyncError();
-                            }
-                        } else if (name == "autoPartitioningByLoad") {
-                            auto partitioningSettings = alterTableRequest.mutable_alter_partitioning_settings();
-                            TString val = to_lower(TString(setting.Value().Cast<TCoAtom>().Value()));
-                            if (val == "enabled") {
-                                partitioningSettings->set_partitioning_by_load(Ydb::FeatureFlag::ENABLED);
-                            } else if (val == "disabled") {
-                                partitioningSettings->set_partitioning_by_load(Ydb::FeatureFlag::DISABLED);
-                            } else {
-                                auto errText = TStringBuilder() << "Unknown feature flag '"
-                                    << val
-                                    << "' for auto partitioning by load";
-                                ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Cast<TCoAtom>().Pos()),
-                                    errText));
-                                return SyncError();
-                            }
-                        } else if (name == "minPartitions") {
-                            ui64 value = FromString<ui64>(
-                                setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
-                                );
-                            if (value) {
-                                auto partitioningSettings = alterTableRequest.mutable_alter_partitioning_settings();
-                                partitioningSettings->set_min_partitions_count(value);
-                            } else {
-                                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                                    "Can't set min partition count to 0"));
-                                return SyncError();
-                            }
-                        } else if (name == "maxPartitions") {
-                            ui64 value = FromString<ui64>(
-                                setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
-                                );
-                            if (value) {
-                                auto partitioningSettings = alterTableRequest.mutable_alter_partitioning_settings();
-                                partitioningSettings->set_max_partitions_count(value);
-                            } else {
-                                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                                    "Can't set max partition count to 0"));
+                        } else if (IsPartitioningSetting(name)) {
+                            if (!ParsePartitioningSettings(
+                                *alterTableRequest.mutable_alter_partitioning_settings(), setting, ctx
+                            )) {
                                 return SyncError();
                             }
                         } else if (name == "keyBloomFilter") {
@@ -1461,6 +1523,49 @@ public:
                             break;
                         default:
                             YQL_ENSURE(false, "Unknown index type: " << (ui32)add_index->type_case());
+                    }
+                } else if (name == "alterIndex") {
+                    if (maybeAlter.Cast().Actions().Size() > 1) {
+                        ctx.AddError(
+                            TIssue(ctx.GetPosition(action.Name().Pos()),
+                                   "ALTER INDEX action cannot be combined with any other ALTER TABLE action"
+                            )
+                        );
+                        return SyncError();
+                    }
+                    auto listNode = action.Value().Cast<TCoNameValueTupleList>();
+                    for (const auto& indexSetting : listNode) {
+                        auto settingName = indexSetting.Name().Value();
+                        if (settingName == "indexName") {
+                            auto indexName = indexSetting.Value().Cast<TCoAtom>().StringValue();
+                            auto indexTablePath = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(table.Metadata->Name, indexName);
+                            alterTableRequest.set_path(std::move(indexTablePath));
+                        } else if (settingName == "tableSettings") {
+                            auto tableSettings = indexSetting.Value().Cast<TCoNameValueTupleList>();
+                            for (const auto& tableSetting : tableSettings) {
+                                if (IsPartitioningSetting(tableSetting.Name().Value())) {
+                                    if (!ParsePartitioningSettings(
+                                        *alterTableRequest.mutable_alter_partitioning_settings(), tableSetting, ctx
+                                    )) {
+                                        return SyncError();
+                                    }
+                                } else {
+                                    ctx.AddError(
+                                        TIssue(ctx.GetPosition(tableSetting.Name().Pos()),
+                                               TStringBuilder() << "Unknown index table setting: " << name
+                                        )
+                                    );
+                                    return SyncError();
+                                }
+                            }
+                        } else {
+                            ctx.AddError(
+                                TIssue(ctx.GetPosition(indexSetting.Name().Pos()),
+                                       TStringBuilder() << "Unknown alter index setting: " << settingName
+                                )
+                            );
+                            return SyncError();
+                        }
                     }
                 } else if (name == "dropIndex") {
                     auto nameNode = action.Value().Cast<TCoAtom>();
@@ -1722,6 +1827,26 @@ public:
             }, "Executing DROP SEQUENCE");
         }
 
+        if (auto maybeAlterSequence = TMaybeNode<TKiAlterSequence>(input)) {
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto cluster = TString(maybeAlterSequence.Cast().DataSink().Cluster());
+            TAlterSequenceSettings alterSequenceSettings = ParseAlterSequenceSettings(maybeAlterSequence.Cast());
+            bool missingOk = (maybeAlterSequence.MissingOk().Cast().Value() == "1");
+
+            auto future = Gateway->AlterSequence(cluster, alterSequenceSettings, missingOk);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing CREATE SEQUENCE");
+        }
+
         if (auto maybeAlter = TMaybeNode<TKiAlterTopic>(input)) {
             auto requireStatus = RequireChild(*input, 0);
             if (requireStatus.Level != TStatus::Ok) {
@@ -1817,12 +1942,19 @@ public:
                 } else if (name == "database") {
                     settings.Settings.Database = setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
                 } else if (name == "token") {
-                    settings.Settings.OAuthToken = setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+                    settings.Settings.EnsureOAuthToken().Token =
+                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+                } else if (name == "token_secret_name") {
+                    settings.Settings.EnsureOAuthToken().TokenSecretName =
+                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
                 } else if (name == "user") {
                     settings.Settings.EnsureStaticCredentials().UserName =
                         setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
                 } else if (name == "password") {
                     settings.Settings.EnsureStaticCredentials().Password =
+                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+                } else if (name == "password_secret_name") {
+                    settings.Settings.EnsureStaticCredentials().PasswordSecretName =
                         setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
                 }
             }
@@ -1833,9 +1965,33 @@ public:
                 return SyncError();
             }
 
+            if (!settings.Settings.ConnectionString && !settings.Settings.Endpoint) {
+                ctx.AddError(TIssue(ctx.GetPosition(createReplication.Pos()),
+                    TStringBuilder() << "Neither Connection string nor Endpoint/Database are provided"));
+                return SyncError();
+            }
+
             if (settings.Settings.OAuthToken && settings.Settings.StaticCredentials) {
                 ctx.AddError(TIssue(ctx.GetPosition(createReplication.Pos()),
                     TStringBuilder() << "Token and User/Password are mutually exclusive"));
+                return SyncError();
+            }
+
+            if (!settings.Settings.OAuthToken && !settings.Settings.StaticCredentials) {
+                ctx.AddError(TIssue(ctx.GetPosition(createReplication.Pos()),
+                    TStringBuilder() << "Neither Token nor User/Password are provided"));
+                return SyncError();
+            }
+
+            if (const auto& x = settings.Settings.OAuthToken; x && x->Token && x->TokenSecretName) {
+                ctx.AddError(TIssue(ctx.GetPosition(createReplication.Pos()),
+                    TStringBuilder() << "TOKEN and TOKEN_SECRET_NAME are mutually exclusive"));
+                return SyncError();
+            }
+
+            if (const auto& x = settings.Settings.StaticCredentials; x && x->Password && x->PasswordSecretName) {
+                ctx.AddError(TIssue(ctx.GetPosition(createReplication.Pos()),
+                    TStringBuilder() << "PASSWORD and PASSWORD_SECRET_NAME are mutually exclusive"));
                 return SyncError();
             }
 

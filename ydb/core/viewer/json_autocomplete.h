@@ -5,8 +5,9 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/viewer/json/json.h>
-#include "viewer.h"
+
 #include "query_autocomplete_helper.h"
+#include "viewer_request.h"
 
 namespace NKikimr {
 namespace NViewer {
@@ -79,6 +80,7 @@ public:
             Tables.emplace_back(table);
         }
         Prefix = request.GetPrefix();
+        Limit = request.GetLimit();
 
         Timeout = ViewerRequest->Get()->Record.GetTimeout();
         Direct = true;
@@ -111,6 +113,9 @@ public:
         } else {
             SearchWord = Prefix;
         }
+        if (Limit == 0) {
+            Limit = std::numeric_limits<ui32>::max();
+        }
     }
 
     void ParseCgiParameters(const TCgiParameters& params) {
@@ -136,20 +141,14 @@ public:
                 }
             }
             Prefix = Prefix.empty() ? requestData["prefix"].GetStringSafe({}) : Prefix;
+            if (requestData["limit"].IsDefined()) {
+                Limit = requestData["limit"].GetInteger();
+            }
         }
     }
 
-    bool IsPostContent() {
-        if (Event->Get()->Request.GetMethod() == HTTP_METHOD_POST) {
-            const THttpHeaders& headers = Event->Get()->Request.GetHeaders();
-            auto itContentType = FindIf(headers, [](const auto& header) { return header.Name() == "Content-Type"; });
-            if (itContentType != headers.end()) {
-                TStringBuf contentTypeHeader = itContentType->Value();
-                TStringBuf contentType = contentTypeHeader.NextTok(';');
-                return contentType == "application/json";
-            }
-        }
-        return false;
+    bool IsPostContent() const {
+        return NViewer::IsPostContent(Event);
     }
 
     TAutoPtr<NSchemeCache::TSchemeCacheNavigate> MakeSchemeCacheRequest() {
@@ -242,6 +241,7 @@ public:
             autocompleteRequest->AddTables(path);
         }
         autocompleteRequest->SetPrefix(Prefix);
+        autocompleteRequest->SetLimit(Limit);
 
         ViewerWhiteboardCookie cookie(NKikimrViewer::TEvViewerRequest::kAutocompleteRequest, nodeId);
         SendRequest(viewerServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, cookie.ToUi64());
@@ -390,7 +390,7 @@ public:
         } else {
             TStringStream json;
             TProtoToJson::ProtoToJson(json, Result, JsonSettings);
-            Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get()) + json.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+            Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), json.Str()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         }
     }
 
@@ -425,7 +425,12 @@ public:
     }
 
     void Handle(TEvViewer::TEvViewerResponse::TPtr& ev) {
-        ProxyResult = ev.Release()->Release();
+        if (ev.Get()->Get()->Record.HasAutocompleteResponse()) {
+            ProxyResult = ev.Release()->Release();
+        } else {
+            Direct = true;
+            SendSchemeCacheRequest(); // fallback
+        }
         RequestDone();
     }
 
@@ -443,37 +448,70 @@ public:
 
 template <>
 struct TJsonRequestSchema<TJsonAutocomplete> {
-    static TString GetSchema() {
-        TStringStream stream;
-        TProtoToJson::ProtoToJsonSchema<NKikimrViewer::TQueryAutocomplete>(stream);
-        return stream.Str();
+    static YAML::Node GetSchema() {
+        return TProtoToYaml::ProtoToYamlSchema<NKikimrViewer::TQueryAutocomplete>();
     }
 };
 
 template <>
 struct TJsonRequestParameters<TJsonAutocomplete> {
-    static TString GetParameters() {
-        return R"___([{"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
-                      {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
-                      {"name":"direct","in":"query","description":"force execution on current node","required":false,"type":"boolean"},
-                      {"name":"table","in":"query","description":"table list","required":false,"type":"string"},
-                      {"name":"prefix","in":"query","description":"known part of the word","required":false,"type":"string"},
-                      {"name":"limit","in":"query","description":"limit of entities","required":false,"type":"integer"},
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___";
+    static YAML::Node GetParameters() {
+        return YAML::Load(R"___(
+            - name: database
+              in: query
+              description: database name
+              required: false
+              type: string
+            - name: table
+              in: query
+              description: table list
+              required: false
+              type: string
+            - name: prefix
+              in: query
+              description: known part of the word
+              required: false
+              type: string
+            - name: limit
+              in: query
+              description: limit of entities
+              required: false
+              type: integer
+            - name: timeout
+              in: query
+              description: timeout in ms
+              required: false
+              type: integer
+            - name: enums
+              in: query
+              description: convert enums to strings
+              required: false
+              type: boolean
+            - name: ui64
+              in: query
+              description: return ui64 as number
+              required: false
+              type: boolean
+            - name: direct
+              in: query
+              description: force execution on current node
+              required: false
+              type: boolean
+            )___");
     }
 };
 
 template <>
 struct TJsonRequestSummary<TJsonAutocomplete> {
     static TString GetSummary() {
-        return "\"Tenant info (brief)\"";
+        return "Autocomplete information";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonAutocomplete> {
     static TString GetDescription() {
-        return "\"Returns list of tenants\"";
+        return "Returns autocomplete information about objects in the database";
     }
 };
 

@@ -2,12 +2,86 @@
 #include "ydb_setup.h"
 
 #include <library/cpp/colorizer/colors.h>
+#include <library/cpp/json/json_reader.h>
+
+#include <ydb/core/blob_depot/mon_main.h>
+#include <ydb/core/fq/libs/compute/common/utils.h>
 
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 
 
 namespace NKqpRun {
+
+namespace {
+
+// Function adds thousands separators
+// 123456789 -> 123.456.789
+TString FormatNumber(i64 number) {
+    struct TSeparator : public std::numpunct<char> {
+        char do_thousands_sep() const final {
+            return '.';
+        }
+
+        std::string do_grouping() const final {
+            return "\03";
+        }
+    };
+
+    std::ostringstream stream;
+    stream.imbue(std::locale(stream.getloc(), new TSeparator()));
+    stream << number;
+    return stream.str();
+}
+
+void PrintStatistics(const TString& fullStat, const THashMap<TString, i64>& flatStat, const NFq::TPublicStat& publicStat, IOutputStream& output) {
+    output << "\nFlat statistics:" << Endl;
+    for (const auto& [propery, value] : flatStat) {
+        TString valueString = ToString(value);
+        if (propery.find("Bytes") != TString::npos || propery.find("Source") != TString::npos) {
+            valueString = NKikimr::NBlobDepot::FormatByteSize(value);
+        } else if (propery.find("TimeUs") != TString::npos) {
+            valueString = NFq::FormatDurationUs(value);
+        } else if (propery.find("TimeMs") != TString::npos) {
+            valueString = NFq::FormatDurationMs(value);
+        } else {
+            valueString = FormatNumber(value);
+        }
+        output << propery << " = " << valueString << Endl;
+    }
+
+    output << "\nPublic statistics:" << Endl;
+    if (auto memoryUsageBytes = publicStat.MemoryUsageBytes) {
+        output << "MemoryUsage = " << NKikimr::NBlobDepot::FormatByteSize(*memoryUsageBytes) << Endl;
+    }
+    if (auto cpuUsageUs = publicStat.CpuUsageUs) {
+        output << "CpuUsage = " << NFq::FormatDurationUs(*cpuUsageUs) << Endl;
+    }
+    if (auto inputBytes = publicStat.InputBytes) {
+        output << "InputSize = " << NKikimr::NBlobDepot::FormatByteSize(*inputBytes) << Endl;
+    }
+    if (auto outputBytes = publicStat.OutputBytes) {
+        output << "OutputSize = " << NKikimr::NBlobDepot::FormatByteSize(*outputBytes) << Endl;
+    }
+    if (auto sourceInputRecords = publicStat.SourceInputRecords) {
+        output << "SourceInputRecords = " << FormatNumber(*sourceInputRecords) << Endl;
+    }
+    if (auto sinkOutputRecords = publicStat.SinkOutputRecords) {
+        output << "SinkOutputRecords = " << FormatNumber(*sinkOutputRecords) << Endl;
+    }
+    if (auto runningTasks = publicStat.RunningTasks) {
+        output << "RunningTasks = " << FormatNumber(*runningTasks) << Endl;
+    }
+
+    output << "\nFull statistics:" << Endl;
+    NJson::TJsonValue statsJson;
+    NJson::ReadJsonTree(fullStat, &statsJson);
+    NJson::WriteJson(&output, &statsJson, true, true, true);
+    output << Endl;
+}
+
+}  // anonymous namespace
+
 
 //// TKqpRunner::TImpl
 
@@ -21,6 +95,7 @@ public:
     explicit TImpl(const TRunnerOptions& options)
         : Options_(options)
         , YdbSetup_(options.YdbSettings)
+        , StatProcessor_(NFq::CreateStatProcessor("stat_full"))
         , CerrColors_(NColorizer::AutoColors(Cerr))
         , CoutColors_(NColorizer::AutoColors(Cout))
     {}
@@ -62,7 +137,7 @@ public:
         TRequestResult status;
         switch (queryType) {
         case EQueryType::ScriptQuery:
-            status = YdbSetup_.QueryRequest(query, action, traceId, meta, ResultSets_);
+            status = YdbSetup_.QueryRequest(query, action, traceId, meta, ResultSets_, GetProgressCallback());
             break;
 
         case EQueryType::YqlScriptQuery:
@@ -74,6 +149,8 @@ public:
 
         PrintScriptAst(meta.Ast);
 
+        PrintScriptPlan(meta.Plan);
+
         if (!status.IsSuccess()) {
             Cerr << CerrColors_.Red() << "Failed to execute query, reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
             return false;
@@ -82,8 +159,6 @@ public:
         if (!status.Issues.Empty()) {
             Cerr << CerrColors_.Red() << "Request finished with issues:" << CerrColors_.Default() << Endl << status.Issues.ToString() << Endl;
         }
-
-        PrintScriptPlan(meta.Plan);
 
         return true;
     }
@@ -130,9 +205,17 @@ public:
 
 private:
     bool WaitScriptExecutionOperation() {
+        ExecutionMeta_ = TExecutionMeta();
+
+        TDuration getOperationPeriod = TDuration::Seconds(1);
+        if (auto progressStatsPeriodMs = Options_.YdbSettings.AppConfig.GetQueryServiceConfig().GetProgressStatsPeriodMs()) {
+            getOperationPeriod = TDuration::MilliSeconds(progressStatsPeriodMs);
+        }
+
         TRequestResult status;
         while (true) {
             status = YdbSetup_.GetScriptExecutionOperationRequest(ExecutionOperation_, ExecutionMeta_);
+            PrintScriptProgress(ExecutionMeta_.Plan);
 
             if (ExecutionMeta_.Ready) {
                 break;
@@ -143,17 +226,21 @@ private:
                 return false;
             }
 
-            Sleep(TDuration::Seconds(1));
+            Sleep(getOperationPeriod);
         }
 
         PrintScriptAst(ExecutionMeta_.Ast);
+
+        PrintScriptPlan(ExecutionMeta_.Plan);
 
         if (!status.IsSuccess() || ExecutionMeta_.ExecutionStatus != NYdb::NQuery::EExecStatus::Completed) {
             Cerr << CerrColors_.Red() << "Failed to execute script, invalid final status, reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
             return false;
         }
 
-        PrintScriptPlan(ExecutionMeta_.Plan);
+        if (!status.Issues.Empty()) {
+            Cerr << CerrColors_.Red() << "Request finished with issues:" << CerrColors_.Default() << Endl << status.Issues.ToString() << Endl;
+        }
 
         return true;
     }
@@ -184,13 +271,65 @@ private:
         }
     }
 
+    void PrintPlan(const TString& plan, IOutputStream* output) const {
+        if (!plan) {
+            return;
+        }
+
+        NJson::TJsonValue planJson;
+        NJson::ReadJsonTree(plan, &planJson, true);
+        if (!planJson.GetMapSafe().contains("meta")) {
+            return;
+        }
+
+        NYdb::NConsoleClient::TQueryPlanPrinter printer(Options_.PlanOutputFormat, true, *output);
+        printer.Print(plan);
+    }
+
     void PrintScriptPlan(const TString& plan) const {
         if (Options_.ScriptQueryPlanOutput) {
             Cout << CoutColors_.Cyan() << "Writing script query plan" << CoutColors_.Default() << Endl;
-
-            NYdb::NConsoleClient::TQueryPlanPrinter printer(Options_.PlanOutputFormat, true, *Options_.ScriptQueryPlanOutput);
-            printer.Print(plan);
+            PrintPlan(plan, Options_.ScriptQueryPlanOutput);
         }
+    }
+
+    void PrintScriptProgress(const TString& plan) const {
+        if (Options_.InProgressStatisticsOutputFile) {
+            TFileOutput outputStream(*Options_.InProgressStatisticsOutputFile);
+            outputStream << TInstant::Now().ToIsoStringLocal() << " Script in progress statistics" << Endl;
+
+            auto convertedPlan = plan;
+            try {
+                convertedPlan = StatProcessor_->ConvertPlan(plan);
+            } catch (const NJson::TJsonException& ex) {
+                outputStream << "Error plan conversion: " << ex.what() << Endl;
+            }
+
+            try {
+                double cpuUsage = 0.0;
+                auto fullStat = StatProcessor_->GetQueryStat(convertedPlan, cpuUsage);
+                auto flatStat = StatProcessor_->GetFlatStat(convertedPlan);
+                auto publicStat = StatProcessor_->GetPublicStat(fullStat);
+
+                outputStream << "\nCPU usage: " << cpuUsage << Endl;
+                PrintStatistics(fullStat, flatStat, publicStat, outputStream);
+            } catch (const NJson::TJsonException& ex) {
+                outputStream << "Error stat conversion: " << ex.what() << Endl;
+            }
+
+            outputStream << "\nPlan visualization:" << Endl;
+            PrintPlan(convertedPlan, &outputStream);
+
+            outputStream.Finish();
+        }
+    }
+
+    TProgressCallback GetProgressCallback() {
+        return [this](const NKikimrKqp::TEvExecuterProgress& executerProgress) mutable {
+            const TString& plan = executerProgress.GetQueryPlan();
+            ExecutionMeta_.Plan = plan;
+            PrintScriptProgress(plan);
+        };
     }
 
     void PrintScriptResult(const Ydb::ResultSet& resultSet) const {
@@ -209,6 +348,16 @@ private:
 
         case TRunnerOptions::EResultOutputFormat::FullJson:
             resultSet.PrintJSON(*Options_.ResultOutput);
+            *Options_.ResultOutput << Endl;
+            break;
+
+        case TRunnerOptions::EResultOutputFormat::FullProto:
+            TString resultSetString;
+            google::protobuf::TextFormat::Printer printer;
+            printer.SetSingleLineMode(false);
+            printer.SetUseUtf8StringEscaping(true);
+            printer.PrintToString(resultSet, &resultSetString);
+            *Options_.ResultOutput << resultSetString;
             break;
         }
     }
@@ -217,6 +366,7 @@ private:
     TRunnerOptions Options_;
 
     TYdbSetup YdbSetup_;
+    std::unique_ptr<NFq::IPlanStatProcessor> StatProcessor_;
     NColorizer::TColors CerrColors_;
     NColorizer::TColors CoutColors_;
 

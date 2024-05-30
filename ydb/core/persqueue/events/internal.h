@@ -188,12 +188,20 @@ struct TEvPQ {
         EvWakeupReleasePartition,
         EvPartitionScaleStatusChanged,
         EvPartitionScaleRequestDone,
+        EvBalanceConsumer,
+        EvDeletePartition,
+        EvDeletePartitionDone,
+        EvTransactionCompleted,
         EvEnd
     };
 
     struct TEvHandleWriteResponse : TEventLocal<TEvHandleWriteResponse, EvHandleWriteResponse> {
-        TEvHandleWriteResponse()
-        {}
+        explicit TEvHandleWriteResponse(ui64 cookie) :
+            Cookie(cookie)
+        {
+        }
+
+        ui64 Cookie = 0;
     };
 
     struct TEvWrite : public TEventLocal<TEvWrite, EvWrite> {
@@ -1117,6 +1125,35 @@ struct TEvPQ {
             Record.SetPartitionId(partitionId);
             Record.SetScaleStatus(scaleStatus);
         }
+    };
+
+    struct TEvBalanceConsumer : TEventLocal<TEvBalanceConsumer, EvBalanceConsumer> {
+        TEvBalanceConsumer(const TString& consumerName)
+            : ConsumerName(consumerName)
+        {}
+
+        TString ConsumerName;
+    };
+
+    struct TEvDeletePartition : TEventLocal<TEvDeletePartition, EvDeletePartition> {
+    };
+
+    struct TEvDeletePartitionDone : TEventLocal<TEvDeletePartitionDone, EvDeletePartitionDone> {
+        explicit TEvDeletePartitionDone(const NPQ::TPartitionId& partitionId) :
+            PartitionId(partitionId)
+        {
+        }
+
+        NPQ::TPartitionId PartitionId;
+    };
+
+    struct TEvTransactionCompleted : TEventLocal<TEvTransactionCompleted, EvTransactionCompleted> {
+        explicit TEvTransactionCompleted(TMaybe<ui64> writeId) :
+            WriteId(writeId)
+        {
+        }
+
+        TMaybe<ui64> WriteId;
     };
 };
 

@@ -9,6 +9,8 @@ IF (ARCH_X86_64)
     CFLAGS(-mpclmul)
 ENDIF()
 
+NO_LTO()
+
 SRCS(
     actions/cancelable_context.cpp
     actions/current_invoker.cpp

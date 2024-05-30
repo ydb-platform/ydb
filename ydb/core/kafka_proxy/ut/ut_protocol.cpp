@@ -397,7 +397,7 @@ public:
 
     TMessagePtr<TOffsetCommitResponseData> OffsetCommit(TString groupId, std::unordered_map<TString, std::vector<std::pair<ui64,ui64>>> topicsToPartions) {
         Cerr << ">>>>> TOffsetCommitRequestData\n";
-        
+
         TRequestHeaderData header = Header(NKafka::EApiKey::OFFSET_COMMIT, 1);
 
         TOffsetCommitRequestData request;
@@ -406,7 +406,7 @@ public:
         for (const auto& topicToPartitions : topicsToPartions) {
             NKafka::TOffsetCommitRequestData::TOffsetCommitRequestTopic topic;
             topic.Name = topicToPartitions.first;
-            
+
             for (auto partitionAndOffset : topicToPartitions.second) {
                 NKafka::TOffsetCommitRequestData::TOffsetCommitRequestTopic::TOffsetCommitRequestPartition partition;
                 partition.PartitionIndex = partitionAndOffset.first;
@@ -516,7 +516,7 @@ public:
         auto generationId =  joinResponse->GenerationId;
         auto balanceStrategy =  joinResponse->ProtocolName;
         UNIT_ASSERT_VALUES_EQUAL(joinResponse->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-    
+
 
         auto syncResponse = SyncGroup(memberId.value(), generationId, groupId);
         UNIT_ASSERT_VALUES_EQUAL(syncResponse->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
@@ -563,7 +563,7 @@ public:
             if (partitionsCount == expectedPartitionsCount) {
                 break;
             }
-            WaitRebalance(readInfo.MemberId, readInfo.GenerationId, groupId);    
+            WaitRebalance(readInfo.MemberId, readInfo.GenerationId, groupId);
         }
         return readInfo;
     }
@@ -582,7 +582,7 @@ public:
 
     TMessagePtr<TOffsetFetchResponseData> OffsetFetch(TString groupId, std::map<TString, std::vector<i32>> topicsToPartions) {
         Cerr << ">>>>> TOffsetFetchRequestData\n";
-        
+
         TRequestHeaderData header = Header(NKafka::EApiKey::OFFSET_FETCH, 8);
 
         TOffsetFetchRequestData::TOffsetFetchRequestGroup group;
@@ -634,7 +634,7 @@ public:
 
     TMessagePtr<TCreateTopicsResponseData> CreateTopics(std::vector<TTopicConfig> topicsToCreate, bool validateOnly = false) {
         Cerr << ">>>>> TCreateTopicsRequestData\n";
-        
+
         TRequestHeaderData header = Header(NKafka::EApiKey::CREATE_TOPICS, 7);
         TCreateTopicsRequestData request;
         request.ValidateOnly = validateOnly;
@@ -644,7 +644,7 @@ public:
             topic.Name = topicToCreate.Name;
             topic.NumPartitions = topicToCreate.PartitionsNumber;
 
-            auto addConfig = [&topic](std::optional<TString> configValue, TString configName) { 
+            auto addConfig = [&topic](std::optional<TString> configValue, TString configName) {
                 if (configValue.has_value()) {
                     NKafka::TCreateTopicsRequestData::TCreatableTopic::TCreateableTopicConfig config;
                     config.Name = configName;
@@ -652,7 +652,7 @@ public:
                     topic.Configs.push_back(config);
                 }
             };
-            
+
             addConfig(topicToCreate.RetentionMs, "retention.ms");
             addConfig(topicToCreate.RetentionBytes, "retention.bytes");
 
@@ -671,7 +671,7 @@ public:
 
     TMessagePtr<TCreatePartitionsResponseData> CreatePartitions(std::vector<TTopicConfig> topicsToCreate, bool validateOnly = false) {
         Cerr << ">>>>> TCreateTopicsRequestData\n";
-        
+
         TRequestHeaderData header = Header(NKafka::EApiKey::CREATE_PARTITIONS, 3);
         TCreatePartitionsRequestData request;
         request.ValidateOnly = validateOnly;
@@ -690,7 +690,7 @@ public:
 
     TMessagePtr<TAlterConfigsResponseData> AlterConfigs(std::vector<TTopicConfig> topicsToModify, bool validateOnly = false) {
         Cerr << ">>>>> TAlterConfigsRequestData\n";
-        
+
         TRequestHeaderData header = Header(NKafka::EApiKey::ALTER_CONFIGS, 2);
         TAlterConfigsRequestData request;
         request.ValidateOnly = validateOnly;
@@ -700,7 +700,7 @@ public:
             resource.ResourceType = TOPIC_RESOURCE_TYPE;
             resource.ResourceName = topicToModify.Name;
 
-            auto addConfig = [&resource](std::optional<TString> configValue, TString configName) { 
+            auto addConfig = [&resource](std::optional<TString> configValue, TString configName) {
                 if (configValue.has_value()) {
                     NKafka::TAlterConfigsRequestData::TAlterConfigsResource::TAlterableConfig config;
                     config.Name = configName;
@@ -708,7 +708,7 @@ public:
                     resource.Configs.push_back(config);
                 }
             };
-            
+
             addConfig(topicToModify.RetentionMs, "retention.ms");
             addConfig(topicToModify.RetentionBytes, "retention.bytes");
 
@@ -854,11 +854,11 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
                 UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
                 auto record = msg->Responses[0].Partitions[0].Records->Records[0];
-              
+
                 auto data = record.Value.value();
                 auto dataStr = TString(data.data(), data.size());
                 UNIT_ASSERT_VALUES_EQUAL(dataStr, value);
-                
+
                 auto headerKey = record.Headers[0].Key.value();
                 auto headerKeyStr = TString(headerKey.data(), headerKey.size());
                 UNIT_ASSERT_VALUES_EQUAL(dataStr, value);
@@ -1047,7 +1047,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = client.ListOffsets(partitions, topicName);
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Partitions.size(), 2);
-            
+
             for (auto& topic: msg->Topics) {
                 for (auto& partition: topic.Partitions) {
                     UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
@@ -1158,7 +1158,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         {
             // Check not exists topics and partition
             std::vector<std::pair<TString, std::vector<i32>>> topics {
-                {notExistsTopicName, {0}}, 
+                {notExistsTopicName, {0}},
                 {"", {0}},
                 {topicName, {5000}},
                 {topicName, {-1}}
@@ -1169,7 +1169,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             for (size_t i = 0; i < topics.size(); i++) {
                 UNIT_ASSERT_VALUES_EQUAL(msg->Responses[i].Partitions.size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION));
-            }         
+            }
         }
 
         //broken
@@ -1180,7 +1180,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         //     UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
         //     UNIT_ASSERT_VALUES_EQUAL(msg->Responses.size(), 1);
         //     UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions.size(), 2);
-            
+
         //     for (size_t i = 0; i < 2; i++) {
         //         auto record = msg->Responses[0].Partitions[i].Records->Records[0];
 
@@ -1196,7 +1196,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = client.Fetch(topics);
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses.size(), 2);
-            
+
             for (size_t i = 0; i < 2; i++) {
                 UNIT_ASSERT_VALUES_EQUAL(msg->Responses[i].Partitions.size(), 1);
                 auto record = msg->Responses[i].Partitions[0].Records->Records[0];
@@ -1378,7 +1378,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             // all other clients leaves the group
             UNIT_ASSERT_VALUES_EQUAL(clientB.LeaveGroup(readInfoB.MemberId, group)->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
             UNIT_ASSERT_VALUES_EQUAL(clientC.LeaveGroup(readInfoC.MemberId, group)->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(clientD.LeaveGroup(readInfoD.MemberId, group)->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));         
+            UNIT_ASSERT_VALUES_EQUAL(clientD.LeaveGroup(readInfoD.MemberId, group)->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
         }
 
         //release partition before lock
@@ -1418,7 +1418,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             // Check not exists topic
             std::vector<TString> topics;
             topics.push_back(notExistsTopicName);
-            
+
             auto joinResponse = clientA.JoinGroup(topics, group);
             UNIT_ASSERT_VALUES_EQUAL(joinResponse->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION));
         }
@@ -1428,7 +1428,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             std::vector<TString> topics;
             topics.push_back(topicName);
             topics.push_back(secondTopicName);
-            
+
             auto readInfo = clientA.JoinAndSyncGroupAndWaitPartitions(topics, group, minActivePartitions * 2);
 
             std::unordered_set<TString> topicsSet;
@@ -1445,7 +1445,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         }
 
     } // Y_UNIT_TEST(BalanceScenario)
-    
+
     Y_UNIT_TEST(OffsetCommitAndFetchScenario) {
         TInsecureTestServer testServer("2");
 
@@ -1526,7 +1526,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             for (auto i = 0; i < recordsCount; i++) {
                 batch.Records[i].Key = TKafkaRawBytes(key.Data(), key.Size());
                 batch.Records[i].Value = TKafkaRawBytes(value.Data(), value.Size());
-            }      
+            }
 
             auto msg = client.Produce(firstTopicName, 0, batch);
 
@@ -1549,7 +1549,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_UNEQUAL(partition0, partitions.end());
             UNIT_ASSERT_VALUES_EQUAL(partition0->CommittedOffset, 0);
         }
-        
+
         {
             // Check commit
             std::unordered_map<TString, std::vector<std::pair<ui64,ui64>>> offsets;
@@ -1572,7 +1572,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                         }
                     } else {
                         UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::OFFSET_OUT_OF_RANGE));
-                    } 
+                    }
                 }
             }
         }
@@ -1625,7 +1625,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         }
 
         {
-            // Check fetch offsets nonexistent consumer 
+            // Check fetch offsets nonexistent consumer
             std::map<TString, std::vector<i32>> topicsToPartions;
             topicsToPartions[firstTopicName] = std::vector<i32>{0, 1};
             auto msg = client.OffsetFetch(notExistsConsumerName, topicsToPartions);
@@ -1776,7 +1776,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].ErrorCode, NONE_ERROR);
             auto result996 = pqClient.DescribeTopic("/Root/topic-996-test", describeTopicSettings).GetValueSync();
             UNIT_ASSERT(result996.IsSuccess());
-            
+
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[1].Name.value(), "topic-995-test");
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[1].ErrorCode, INVALID_REQUEST);
 
@@ -1789,7 +1789,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             client.CreateTopics({ TTopicConfig("topic-994-test", 1) });
             auto result = pqClient.DescribeTopic("/Root/topic-994-test", describeTopicSettings).GetValueSync();
             UNIT_ASSERT(result.IsSuccess());
-            
+
             auto msg = client.CreateTopics({ TTopicConfig("topic-994-test", 1) });
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Name.value(), "topic-994-test");
@@ -1887,7 +1887,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT(!result993.IsSuccess());
         }
 
-        {   
+        {
             // Validation only
             auto msg = client.CreateTopics({ TTopicConfig("topic-988-test", 1)}, true);
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
@@ -2121,7 +2121,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         auto describeTopicSettings = NTopic::TDescribeTopicSettings().IncludeStats(true);
 
-        {   
+        {
             // Check validate only
             auto msg = client.AlterConfigs({ TTopicConfig(shortTopic0Name, 1), TTopicConfig(notExistsTopicName, 1) }, true);
 
@@ -2132,7 +2132,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses[1].ErrorCode, NONE_ERROR);
         }
 
-        {   
+        {
             // Set valid retention
             ui64 retentionMs = 168 * 60 * 60 * 1000;
             ui64 retentionBytes = 51'200 * 1_MB;
@@ -2231,7 +2231,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         }
 
         {
-            // Legal, but meaningless for Logbroker config 
+            // Legal, but meaningless for Logbroker config
             std::map<TString, TString> configs { std::make_pair("flush.messages", "1") };
             auto msg = client.AlterConfigs({ TTopicConfig(shortTopic0Name, 1, std::nullopt, std::nullopt, configs) });
 

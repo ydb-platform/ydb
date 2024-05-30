@@ -1,6 +1,6 @@
 #pragma once
 
-#include "intrusive_list.h"
+#include <util/generic/intrlist.h>
 
 #include <atomic>
 
@@ -8,17 +8,17 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class T, class Tag = TIntrusiveNodeDefaultTag>
-class TIntrusiveMPSCStack
+template <class T, class Tag = TIntrusiveListDefaultTag>
+class TIntrusiveMpscStack
 {
-    using TNode = TIntrusiveNode<T, Tag>;
+    using TNode = TIntrusiveListItem<T, Tag>;
 
 public:
-    TIntrusiveMPSCStack() noexcept;
+    TIntrusiveMpscStack() noexcept;
 
     void Push(TNode* item) noexcept;
 
-    TSimpleIntrusiveList<T, Tag> PopAll() noexcept;
+    TIntrusiveList<T, Tag> PopAll() noexcept;
 
 private:
     std::atomic<TNode*> Head_ = nullptr;

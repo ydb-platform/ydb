@@ -14,8 +14,11 @@ namespace NKqpRun {
 constexpr char YQL_TOKEN_VARIABLE[] = "YQL_TOKEN";
 
 struct TYdbSetupSettings {
+    i32 NodeCount = 1;
     TString DomainName = "Root";
+    TDuration InitializationTimeout = TDuration::Seconds(10);
 
+    bool MonitoringEnabled = false;
     bool TraceOptEnabled = false;
     TMaybe<TString> LogOutputFile;
 
@@ -38,12 +41,14 @@ struct TRunnerOptions {
     enum class EResultOutputFormat {
         RowsJson,  // Rows in json format
         FullJson,  // Columns, rows and types in json format
+        FullProto,  // Columns, rows and types in proto string format
     };
 
     IOutputStream* ResultOutput = &Cout;
     IOutputStream* SchemeQueryAstOutput = nullptr;
     IOutputStream* ScriptQueryAstOutput = nullptr;
     IOutputStream* ScriptQueryPlanOutput = nullptr;
+    TMaybe<TString> InProgressStatisticsOutputFile;
 
     EResultOutputFormat ResultOutputFormat = EResultOutputFormat::RowsJson;
     NYdb::NConsoleClient::EOutputFormat PlanOutputFormat = NYdb::NConsoleClient::EOutputFormat::Default;

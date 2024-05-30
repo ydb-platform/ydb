@@ -33,7 +33,7 @@ TCreateSessionSettings::TCreateSessionSettings() {
 
 static void SetTxSettings(const TTxSettings& txSettings, Ydb::Query::TransactionSettings* proto)
 {
-    switch (txSettings.Mode_) {
+    switch (txSettings.GetMode()) {
         case TTxSettings::TS_SERIALIZABLE_RW:
             proto->mutable_serializable_read_write();
             break;

@@ -7284,5 +7284,71 @@
                 "Blobs": 1
             }
         }
+    },
+    {
+        "TableId": 109,
+        "TableName": "BackgroundSessions",
+        "TableKey": [
+            1,
+            2
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "ClassName",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "Identifier",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "StatusChannel",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "LogicDescription",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "Progress",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "State",
+                "ColumnType": "String"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1
+            }
+        }
     }
 ]

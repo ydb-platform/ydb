@@ -1,6 +1,6 @@
 ## TOPFREQ and MODE {#topfreq-mode}
 
-Getting an approximate list of the most common values in a column with an estimation of their count. Returns a list of structures with two fields:
+Getting an **approximate** list of the most common values in a column with an estimation of their count. Returns a list of structures with two fields:
 
 * `Value`: the frequently occurring value that was found.
 * `Frequency`: An estimated value occurrence in the table.

@@ -39,7 +39,7 @@ protected:
         return NNet::CreateDialer(
             New<TDialerConfig>(),
             Poller_,
-            NetLogger);
+            NetLogger());
     }
 };
 

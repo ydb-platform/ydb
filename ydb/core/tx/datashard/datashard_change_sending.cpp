@@ -329,7 +329,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, "TTxRemoveChangeRecords Complete"
+        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "TTxRemoveChangeRecords Complete"
             << ": removed# " << RemovedCount
             << ", left# " << Self->ChangeRecordsToRemove.size()
             << ", at tablet# " << Self->TabletID());
@@ -374,7 +374,7 @@ public:
     }
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
-        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "TTxChangeExchangeSplitAck Execute"
+        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, "TTxChangeExchangeSplitAck Execute"
             << ", at tablet# " << Self->TabletID());
 
         Y_ABORT_UNLESS(!Self->ChangesQueue);

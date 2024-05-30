@@ -40,7 +40,8 @@ protected:
     void Suspend();
 
 private:
-    enum class ECoroState {
+    enum class EState
+    {
         Running,
         Abandoned,
         Completed,
@@ -56,7 +57,7 @@ private:
         TExceptionSafeContext CoroutineContext;
     };
 
-    ECoroState State_ = ECoroState::Running;
+    EState State_ = EState::Running;
     struct TCoroutineAbandonedException
     { };
 

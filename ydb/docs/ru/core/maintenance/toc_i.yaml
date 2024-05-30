@@ -11,8 +11,6 @@ items:
     include: { mode: link, path: manual/toc_p.yaml }
   - name: Изменение конфигурации актор-системы
     href: manual/change_actorsystem_configs.md
-  - name: Обслуживание кластера без потери доступности
-    href: maintenance-without-outages.md
   - name: Управление конфигурацией кластера
     items:
     - name: Обзор конфигурации

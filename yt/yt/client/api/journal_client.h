@@ -22,8 +22,8 @@ struct TJournalReaderOptions
 struct IJournalWritesObserver
     : public TRefCounted
 {
-    virtual void RegisterPayloadWrite(int payloadBytes) = 0;
-    virtual void RegisterJournalWrite(int journalBytes, int mediumBytes) = 0;
+    virtual void RegisterPayloadWrite(i64 payloadBytes) = 0;
+    virtual void RegisterJournalWrite(i64 journalBytes, i64 mediumBytes) = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IJournalWritesObserver)

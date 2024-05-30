@@ -1,9 +1,10 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/read_session_impl.ipp>
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/callback_context.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/counters_logger.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/topic_impl.h>
+#include "counters_logger.h"
+#include "read_session_impl.ipp"
+#include "topic_impl.h"
+
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/callback_context.h>
 
 namespace NYdb::NTopic {
 

@@ -12,6 +12,9 @@
 #include <ydb/library/yql/public/udf/arrow/util.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/cast.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_scalar.h>
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -634,6 +637,31 @@ TBytesStatistics TKqpScanComputeContext::TScanData::TRowBatchReader::AddData(con
     return stats;
 }
 
+std::shared_ptr<arrow::Array> AdoptArrowTypeToYQL(const std::shared_ptr<arrow::Array>& original) {
+    if (original->type_id() == arrow::Type::TIMESTAMP) {
+        auto timestamps = std::static_pointer_cast<arrow::TimestampArray>(original);
+        auto ui64Data = std::make_shared<arrow::ArrayData>(arrow::TypeTraits<arrow::UInt64Type>::type_singleton(), original->length(), timestamps->data()->buffers);
+        auto ui64Array = std::make_shared<arrow::UInt64Array>(ui64Data);
+        auto timestampType = std::static_pointer_cast<arrow::TimestampType>(original->type());
+
+        static arrow::Datum const1M(std::make_shared<arrow::UInt64Scalar>(1000000));
+        static arrow::Datum const1K(std::make_shared<arrow::UInt64Scalar>(1000));
+
+        switch (timestampType->unit()) {
+        case arrow::TimeUnit::SECOND:
+            return NArrow::TStatusValidator::GetValid(arrow::compute::Multiply(ui64Array, const1M)).make_array();
+        case arrow::TimeUnit::MILLI:
+            return NArrow::TStatusValidator::GetValid(arrow::compute::Multiply(ui64Array, const1K)).make_array();
+        case arrow::TimeUnit::MICRO:
+            return ui64Array;
+        case arrow::TimeUnit::NANO:
+            return NArrow::TStatusValidator::GetValid(arrow::compute::Divide(ui64Array, const1K)).make_array();
+        }
+    } else {
+        return original;
+    }
+}
+
 TBytesStatistics TKqpScanComputeContext::TScanData::TBlockBatchReader::AddData(const TBatchDataAccessor& dataAccessor, TMaybe<ui64> /*shardId*/,
     const THolderFactory& holderFactory)
 {
@@ -644,7 +672,7 @@ TBytesStatistics TKqpScanComputeContext::TScanData::TBlockBatchReader::AddData(c
         TUnboxedValueVector batchValues;
         batchValues.resize(totalColsCount);
         for (int i = 0; i < filtered->num_columns(); ++i) {
-            batchValues[i] = holderFactory.CreateArrowBlock(arrow::Datum(filtered->column(i)));
+            batchValues[i] = holderFactory.CreateArrowBlock(arrow::Datum(AdoptArrowTypeToYQL(filtered->column(i))));
         }
         const ui64 batchByteSize = NArrow::GetBatchDataSize(filtered);
         stats.AddStatistics({batchByteSize, batchByteSize});

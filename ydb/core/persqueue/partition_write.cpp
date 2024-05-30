@@ -41,6 +41,9 @@ void TPartition::ReplyOwnerOk(const TActorContext& ctx, const ui64 dst, const TS
     r->SetOwnerCookie(cookie);
     r->SetStatus(PartitionConfig ? PartitionConfig->GetStatus() : NKikimrPQ::ETopicPartitionStatus::Active);
     r->SetSeqNo(seqNo);
+    if (IsSupportive()) {
+        r->SetSupportivePartition(Partition.InternalPartitionId);
+    }
 
     ctx.Send(Tablet, response.Release());
 }
@@ -436,12 +439,22 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
     UpdateUserInfoEndOffset(ctx.Now());
 }
 
-void TPartition::Handle(TEvPQ::TEvHandleWriteResponse::TPtr&, const TActorContext& ctx) {
-    PQ_LOG_T("TPartition::HandleOnWrite TEvHandleWriteResponse.");
+void TPartition::OnHandleWriteResponse(const TActorContext& ctx)
+{
     KVWriteInProgress = false;
     OnProcessTxsAndUserActsWriteComplete(ctx);
     HandleWriteResponse(ctx);
     ProcessTxsAndUserActs(ctx);
+
+    if (DeletePartitionState == DELETION_IN_PROCESS) {
+        DestroyActor(ctx);
+    }
+}
+
+void TPartition::Handle(TEvPQ::TEvHandleWriteResponse::TPtr&, const TActorContext& ctx)
+{
+    PQ_LOG_T("TPartition::HandleOnWrite TEvHandleWriteResponse.");
+    OnHandleWriteResponse(ctx);
 }
 
 void TPartition::UpdateAfterWriteCounters(bool writeComplete) {
@@ -526,6 +539,45 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     ProcessHasDataRequests(ctx);
 
     ProcessTimestampsForNewData(prevEndOffset, ctx);
+}
+
+NKikimrPQ::EScaleStatus TPartition::CheckScaleStatus(const TActorContext& ctx) {
+    auto const writeSpeedUsagePercent = SplitMergeAvgWriteBytes->GetValue() * 100.0 / Config.GetPartitionStrategy().GetScaleThresholdSeconds() / TotalPartitionWriteSpeed;
+    LOG_DEBUG_S(
+        ctx, NKikimrServices::PERSQUEUE,
+        "TPartition::CheckScaleStatus writeSpeedUsagePercent# " << writeSpeedUsagePercent << " Topic: \"" << TopicName() << "\"." <<
+        " Partition: " << Partition
+    );
+    auto splitEnabled = Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT
+        || Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE;
+
+    auto mergeEnabled = Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE;
+
+    if (splitEnabled && writeSpeedUsagePercent >= Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent()) {
+        LOG_DEBUG_S(
+            ctx, NKikimrServices::PERSQUEUE,
+            "TPartition::CheckScaleStatus NEED_SPLIT" << " Topic: \"" << TopicName() << "\"." <<
+            " Partition: " << Partition
+        );
+        return NKikimrPQ::EScaleStatus::NEED_SPLIT;
+    } else if (mergeEnabled && writeSpeedUsagePercent <= Config.GetPartitionStrategy().GetScaleDownPartitionWriteSpeedThresholdPercent()) {
+        LOG_DEBUG_S(
+            ctx, NKikimrServices::PERSQUEUE,
+            "TPartition::CheckScaleStatus NEED_MERGE" << " Topic: \"" << TopicName() << "\"." <<
+            " Partition: " << Partition
+        );
+        return NKikimrPQ::EScaleStatus::NEED_MERGE;
+    }
+    return NKikimrPQ::EScaleStatus::NORMAL;
+}
+
+void TPartition::ChangeScaleStatusIfNeeded(NKikimrPQ::EScaleStatus scaleStatus) {
+    if (scaleStatus == ScaleStatus || LastScaleRequestTime + TDuration::Seconds(SCALE_REQUEST_REPEAT_MIN_SECONDS) > TInstant::Now()) {
+        return;
+    }
+    Send(Tablet, new TEvPQ::TEvPartitionScaleStatusChanged(Partition.OriginalPartitionId, scaleStatus));
+    LastScaleRequestTime = TInstant::Now();
+    ScaleStatus = scaleStatus;
 }
 
 void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& ctx) {
@@ -963,9 +1015,15 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         }
 
         TString().swap(p.Msg.Data);
-
         return true;
     }
+        if (p.Msg.PartNo == 0) { //create new PartitionedBlob
+            //there could be parts from previous owner, clear them
+            if (!parameters.OldPartsCleared) {
+                parameters.OldPartsCleared = true;
+
+                NPQ::AddCmdDeleteRange(*request, TKeyPrefix::TypeTmpData, Partition);
+            }
 
     if (const auto& hbVersion = p.Msg.HeartbeatVersion) {
         if (!sourceId.SeqNo()) {

@@ -40,7 +40,9 @@ struct TEnvironmentSetup {
         const TFeatureFlags FeatureFlags;
         const NPDisk::EDeviceType DiskType = NPDisk::EDeviceType::DEVICE_TYPE_NVME;
         const ui32 BurstThresholdNs = 0;
+        const ui32 MinHugeBlobInBytes = 0;
         const float DiskTimeAvailableScale = 1;
+        const bool UseFakeConfigDispatcher = false;
     };
 
     const TSettings Settings;
@@ -65,6 +67,51 @@ struct TEnvironmentSetup {
             const TActorId& serviceId = MakeBlobStoragePDiskID(nodeId, pdiskId);
             ctx.ExecutorThread.ActorSystem->RegisterLocalService(serviceId, actorId);
             Env.PDiskActors.push_back(actorId);
+        }
+    };
+
+
+    class TFakeConfigDispatcher : public TActor<TFakeConfigDispatcher> {
+        std::unordered_set<TActorId> Subscribers;
+        TActorId EdgeId;
+    public:
+        TFakeConfigDispatcher()
+            : TActor<TFakeConfigDispatcher>(&TFakeConfigDispatcher::StateWork)
+        {
+        }
+
+        STFUNC(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest, Handle);
+                hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle)
+                hFunc(NConsole::TEvConsole::TEvConfigNotificationResponse, Handle)
+                hFunc(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest, Handle)
+            }
+        }
+
+        void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest::TPtr& ev) {
+            auto& items = ev->Get()->ConfigItemKinds;
+            if (items.at(0) != NKikimrConsole::TConfigItem::BlobStorageConfigItem) {
+                return;
+            }
+            Subscribers.emplace(ev->Sender);
+        }
+
+        void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+            EdgeId = ev->Sender;
+            for (auto& id : Subscribers) {
+                auto update = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+                update->Record.CopyFrom(ev->Get()->Record);
+                Send(id, update.Release());
+            }
+        }
+
+        void Handle(NConsole::TEvConsole::TEvConfigNotificationResponse::TPtr& ev) {
+            Forward(ev, EdgeId);
+        }
+
+        void Handle(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest::TPtr& ev) {
+                Send(ev->Sender, MakeHolder<NConsole::TEvConsole::TEvRemoveConfigSubscriptionResponse>().Release());
         }
     };
 
@@ -336,11 +383,22 @@ struct TEnvironmentSetup {
                     type->SetDiskTimeAvailableScale(Settings.DiskTimeAvailableScale);
                 }
 
+                {
+                    auto* type = config->BlobStorageConfig.MutableVDiskPerformanceSettings()->AddVDiskTypes();
+                    type->SetPDiskType(PDiskTypeToPDiskType(Settings.DiskType));
+                    if (Settings.MinHugeBlobInBytes) {
+                        type->SetMinHugeBlobSizeInBytes(Settings.MinHugeBlobInBytes);
+                    }
+                }
+
                 warden.reset(CreateBSNodeWarden(config));
             }
 
             const TActorId wardenId = Runtime->Register(warden.release(), nodeId);
             Runtime->RegisterService(MakeBlobStorageNodeWardenID(nodeId), wardenId);
+            if (Settings.UseFakeConfigDispatcher) {
+                Runtime->RegisterService(NConsole::MakeConfigsDispatcherID(nodeId), Runtime->Register(new TFakeConfigDispatcher(), nodeId));
+            }
         }
     }
 
@@ -639,6 +697,16 @@ struct TEnvironmentSetup {
                 << NKikimrProto::EReplyStatus_Name(record.GetStatus()) << " ***" << Endl;
             UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrProto::OK);
         });
+    }
+
+     void PutBlob(const ui32 groupId, const TLogoBlobID& blobId, const TString& part) {
+        TActorId edge = Runtime->AllocateEdgeActor(Settings.ControllerNodeId);
+        Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(blobId, part, TInstant::Max(),
+                NKikimrBlobStorage::TabletLog, TEvBlobStorage::TEvPut::TacticMaxThroughput));
+        });
+        auto res = WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge);
+        Y_ABORT_UNLESS(res->Get()->Status == NKikimrProto::OK);
     }
 
     void CommenceReplication() {

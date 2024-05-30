@@ -338,7 +338,8 @@ private:
             .AllowSinglePartitionOpt = false,
             .UserRequestContext = GetUserRequestContext(),
             .FederatedQuerySetup = std::nullopt,
-            .OutputChunkMaxSize = Request.OutputChunkMaxSize
+            .OutputChunkMaxSize = Request.OutputChunkMaxSize,
+            .GUCSettings = nullptr
         });
 
         LOG_D("Execute scan tx, PendingComputeTasks: " << TasksGraph.GetTasks().size());

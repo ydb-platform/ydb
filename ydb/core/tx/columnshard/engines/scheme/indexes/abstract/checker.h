@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/protos/ssa.pb.h>
+#include <ydb/core/formats/arrow/protos/ssa.pb.h>
 #include <ydb/services/bg_tasks/abstract/interface.h>
 #include <ydb/library/accessor/accessor.h>
 #include <library/cpp/object_factory/object_factory.h>

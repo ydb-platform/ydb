@@ -76,7 +76,7 @@ public:
     }
 
     TPtr DoClone() const final {
-        return {};
+        return new TSubqueryNode(Source->CloneSource(), Alias, InSubquery, EnsureTupleSize, Scoped);
     }
 
 protected:
@@ -412,8 +412,9 @@ protected:
     }
 
     TMaybe<bool> AddColumn(TContext& ctx, TColumnNode& column) override {
-        auto& label = *column.GetSourceName();
-        if (!label.empty() && label != GetLabel()) {
+        const auto& label = *column.GetSourceName();
+        const auto& source = GetLabel();
+        if (!label.empty() && label != source && !(source.StartsWith(label) && source[label.size()] == ':')) {
             if (column.IsReliable()) {
                 ctx.Error(column.GetPos()) << "Unknown correlation name: " << label;
             }
@@ -703,7 +704,8 @@ public:
     }
 
     bool ShouldUseSourceAsColumn(const TString& source) const override {
-        return source && source != GetLabel();
+        const auto& label = GetLabel();
+        return source && source != label && !(label.StartsWith(source) && label[source.size()] == ':');
     }
 
     TMaybe<bool> AddColumn(TContext& ctx, TColumnNode& column) override {
@@ -851,7 +853,7 @@ public:
         Y_UNUSED(initSrc);
         auto source = Node->GetSource();
         if (!source) {
-            NewSource = TryMakeSourceFromExpression(ctx, Service, Cluster, Node);
+            NewSource = TryMakeSourceFromExpression(Pos, ctx, Service, Cluster, Node);
             source = NewSource.Get();
         }
 
@@ -1452,7 +1454,7 @@ public:
         bool assumeSorted,
         const TVector<TSortSpecificationPtr>& orderBy,
         TNodePtr having,
-        TWinSpecs& winSpecs,
+        const TWinSpecs& winSpecs,
         TLegacyHoppingWindowSpecPtr legacyHoppingWindowSpec,
         const TVector<TNodePtr>& terms,
         bool distinct,
@@ -1886,13 +1888,9 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        TWinSpecs newSpecs;
-        for (auto cur: WinSpecs) {
-            newSpecs.emplace(cur.first, cur.second->Clone());
-        }
         return new TSelectCore(Pos, Source->CloneSource(), CloneContainer(GroupByExpr),
                 CloneContainer(GroupBy), CompactGroupBy, GroupBySuffix, AssumeSorted, CloneContainer(OrderBy),
-                SafeClone(Having), newSpecs, SafeClone(LegacyHoppingWindowSpec),
+                SafeClone(Having), CloneContainer(WinSpecs), SafeClone(LegacyHoppingWindowSpec),
                 CloneContainer(Terms), Distinct, Without, SelectStream, Settings, TColumnsSets(UniqueSets), TColumnsSets(DistinctSets));
     }
 
@@ -2578,10 +2576,18 @@ public:
         hintColumn = TStringBuilder() << "GroupingHint" << Hints.size();
         ui64 hint = 0;
         if (GroupByColumns.empty()) {
+            const bool isJoin = GetJoin();
             for (const auto& groupByNode: GroupBy) {
                 auto namePtr = groupByNode->GetColumnName();
                 YQL_ENSURE(namePtr);
-                GroupByColumns.insert(*namePtr);
+                TString column = *namePtr;
+                if (isJoin) {
+                    auto sourceNamePtr = groupByNode->GetSourceName();
+                    if (sourceNamePtr && !sourceNamePtr->empty()) {
+                        column = DotJoin(*sourceNamePtr, column);
+                    }
+                }
+                GroupByColumns.insert(column);
             }
         }
         for (const auto& column: columns) {
@@ -2696,7 +2702,7 @@ TSourcePtr DoBuildSelectCore(
         }
         totalGroups += contentPtr->size();
         TSelectCore* selectCore = new TSelectCore(pos, std::move(proxySource), CloneContainer(groupByExpr),
-            CloneContainer(*contentPtr), compactGroupBy, groupBySuffix, assumeSorted, orderBy, SafeClone(having), winSpecs,
+            CloneContainer(*contentPtr), compactGroupBy, groupBySuffix, assumeSorted, orderBy, SafeClone(having), CloneContainer(winSpecs),
             legacyHoppingWindowSpec, terms, distinct, without, selectStream, settings, TColumnsSets(uniqueSets), TColumnsSets(distinctSets));
         subselects.emplace_back(selectCore);
     }

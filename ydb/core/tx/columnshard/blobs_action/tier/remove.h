@@ -15,14 +15,14 @@ protected:
 
     }
 
-    virtual void DoOnExecuteTxAfterRemoving(NColumnShard::TColumnShard& /*self*/, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
+    virtual void DoOnExecuteTxAfterRemoving(TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
         if (blobsWroteSuccessfully) {
             for (auto i = GetDeclaredBlobs().GetIterator(); i.IsValid(); ++i) {
                 dbBlobs.AddTierBlobToDelete(GetStorageId(), i.GetBlobId(), i.GetTabletId());
             }
         }
     }
-    virtual void DoOnCompleteTxAfterRemoving(NColumnShard::TColumnShard& /*self*/, const bool blobsWroteSuccessfully) {
+    virtual void DoOnCompleteTxAfterRemoving(const bool blobsWroteSuccessfully) {
         if (blobsWroteSuccessfully) {
             for (auto&& i : GetDeclaredBlobs()) {
                 if (GCInfo->IsBlobInUsage(i.first)) {

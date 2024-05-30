@@ -133,6 +133,12 @@ namespace NKikimr::NStorage {
         TControlWrapper EnablePutBatching;
         TControlWrapper EnableVPatch;
 
+        TControlWrapper EnableLocalSyncLogDataCutting;
+        TControlWrapper EnableSyncLogChunkCompressionHDD;
+        TControlWrapper EnableSyncLogChunkCompressionSSD;
+        TControlWrapper MaxSyncLogChunksInFlightHDD;
+        TControlWrapper MaxSyncLogChunksInFlightSSD;
+
         TReplQuoter::TPtr ReplNodeRequestQuoter;
         TReplQuoter::TPtr ReplNodeResponseQuoter;
 
@@ -148,6 +154,11 @@ namespace NKikimr::NStorage {
             : Cfg(cfg)
             , EnablePutBatching(Cfg->FeatureFlags.GetEnablePutBatchingForBlobStorage(), false, true)
             , EnableVPatch(Cfg->FeatureFlags.GetEnableVPatch(), false, true)
+            , EnableLocalSyncLogDataCutting(0, 0, 1)
+            , EnableSyncLogChunkCompressionHDD(1, 0, 1)
+            , EnableSyncLogChunkCompressionSSD(0, 0, 1)
+            , MaxSyncLogChunksInFlightHDD(10, 1, 1024)
+            , MaxSyncLogChunksInFlightSSD(10, 1, 1024)
         {
             Y_ABORT_UNLESS(Cfg->BlobStorageConfig.GetServiceSet().AvailabilityDomainsSize() <= 1);
             AvailDomainId = 1;
@@ -369,6 +380,7 @@ namespace NKikimr::NStorage {
 
         std::map<TVSlotId, TVDiskRecord> LocalVDisks;
         std::map<TVSlotId, ui64> SlayInFlight;
+        std::set<ui32> PDiskRestartInFlight;
         TIntrusiveList<TVDiskRecord, TUnreportedMetricTag> VDisksWithUnreportedMetrics;
 
         void DestroyLocalVDisk(TVDiskRecord& vdisk);
@@ -515,15 +527,12 @@ namespace NKikimr::NStorage {
         TIntrusivePtr<TStateStorageInfo> StateStorageInfo;
         TIntrusivePtr<TStateStorageInfo> BoardInfo;
         TIntrusivePtr<TStateStorageInfo> SchemeBoardInfo;
-        THashSet<TActorId> ReplicaStartPending;
 
         void StartDistributedConfigKeeper();
         void ForwardToDistributedConfigKeeper(STATEFN_SIG);
 
         NKikimrBlobStorage::TStorageConfig StorageConfig;
         THashSet<TActorId> StorageConfigSubscribers;
-        ui64 NextGoneCookie = 1;
-        std::unordered_map<ui64, std::function<void()>> GoneCallbacks;
 
         void Handle(TEvNodeWardenQueryStorageConfig::TPtr ev);
         void Handle(TEvNodeWardenStorageConfig::TPtr ev);
@@ -531,7 +540,6 @@ namespace NKikimr::NStorage {
         void ApplyStorageConfig(const NKikimrBlobStorage::TNodeWardenServiceSet& current,
                 const NKikimrBlobStorage::TNodeWardenServiceSet *proposed);
         void ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConfig *proposed);
-        void HandleGone(STATEFN_SIG);
         void ApplyStaticServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet& ss);
 
         void Handle(TEvNodeWardenQueryBaseConfig::TPtr ev);
@@ -628,8 +636,6 @@ namespace NKikimr::NStorage {
 
                 hFunc(TEvNodeWardenQueryBaseConfig, Handle);
                 hFunc(TEvNodeConfigInvokeOnRootResult, Handle);
-
-                fFunc(TEvents::TSystem::Gone, HandleGone);
 
                 default:
                     EnqueuePendingMessage(ev);

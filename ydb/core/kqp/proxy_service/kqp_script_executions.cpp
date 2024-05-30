@@ -1,6 +1,7 @@
 #include "kqp_script_executions.h"
 #include "kqp_script_executions_impl.h"
 
+#include <ydb/core/fq/libs/common/compression.h>
 #include <ydb/core/fq/libs/common/rows_proto_splitter.h>
 #include <ydb/core/grpc_services/rpc_kqp_base.h>
 #include <ydb/core/kqp/common/events/events.h>
@@ -78,138 +79,92 @@ public:
 };
 
 
-class TScriptExecutionsTablesCreator : public TActorBootstrapped<TScriptExecutionsTablesCreator> {
+class TScriptExecutionsTablesCreator : public NTableCreator::TMultiTableCreator {
+    using TBase = NTableCreator::TMultiTableCreator;
+
 public:
-    explicit TScriptExecutionsTablesCreator(THolder<NActors::IEventBase> resultEvent)
-        : ResultEvent(std::move(resultEvent))
-    {
-    }
-
-    void Registered(NActors::TActorSystem* sys, const NActors::TActorId& owner) override {
-        NActors::TActorBootstrapped<TScriptExecutionsTablesCreator>::Registered(sys, owner);
-        Owner = owner;
-    }
-
-    void Bootstrap() {
-        Become(&TScriptExecutionsTablesCreator::StateFunc);
-        RunCreateScriptExecutions();
-        RunCreateScriptExecutionLeases();
-        RunCreateScriptResultSets();
-    }
+    explicit TScriptExecutionsTablesCreator()
+        : TBase({
+            GetScriptExecutionsCreator(),
+            GetScriptExecutionLeasesCreator(),
+            GetScriptResultSetsCreator()
+        })
+    {}
 
 private:
-    static NKikimrSchemeOp::TColumnDescription Col(const TString& columnName, const char* columnType) {
-        NKikimrSchemeOp::TColumnDescription desc;
-        desc.SetName(columnName);
-        desc.SetType(columnType);
-        return desc;
-    }
-
-    static NKikimrSchemeOp::TColumnDescription Col(const TString& columnName, NScheme::TTypeId columnType) {
-        return Col(columnName, NScheme::TypeName(columnType));
-    }
-
-    static NKikimrSchemeOp::TTTLSettings TtlCol(const TString& columnName) {
-        NKikimrSchemeOp::TTTLSettings settings;
-        settings.MutableEnabled()->SetExpireAfterSeconds(DEADLINE_OFFSET.Seconds());
-        settings.MutableEnabled()->SetColumnName(columnName);
-        settings.MutableEnabled()->MutableSysSettings()->SetRunInterval(BRO_RUN_INTERVAL.MicroSeconds());
-        return settings;
-    }
-
-    void RunCreateScriptExecutions() {
-        TablesCreating++;
-        Register(
-            CreateTableCreator(
-                { ".metadata", "script_executions" },
-                {
-                    Col("database", NScheme::NTypeIds::Text),
-                    Col("execution_id", NScheme::NTypeIds::Text),
-                    Col("run_script_actor_id", NScheme::NTypeIds::Text),
-                    Col("operation_status", NScheme::NTypeIds::Int32),
-                    Col("execution_status", NScheme::NTypeIds::Int32),
-                    Col("finalization_status", NScheme::NTypeIds::Int32),
-                    Col("execution_mode", NScheme::NTypeIds::Int32),
-                    Col("start_ts", NScheme::NTypeIds::Timestamp),
-                    Col("end_ts", NScheme::NTypeIds::Timestamp),
-                    Col("query_text", NScheme::NTypeIds::Text),
-                    Col("syntax", NScheme::NTypeIds::Int32),
-                    Col("ast", NScheme::NTypeIds::Text),
-                    Col("issues", NScheme::NTypeIds::JsonDocument),
-                    Col("plan", NScheme::NTypeIds::JsonDocument),
-                    Col("meta", NScheme::NTypeIds::JsonDocument),
-                    Col("parameters", NScheme::NTypeIds::String), // TODO: store aparameters separately to support bigger storage.
-                    Col("result_set_metas", NScheme::NTypeIds::JsonDocument),
-                    Col("stats", NScheme::NTypeIds::JsonDocument),
-                    Col("expire_at", NScheme::NTypeIds::Timestamp), // Will be deleted from database after this deadline.
-                    Col("customer_supplied_id", NScheme::NTypeIds::Text),
-                    Col("user_token", NScheme::NTypeIds::Text),
-                    Col("script_sinks", NScheme::NTypeIds::JsonDocument),
-                    Col("script_secret_names", NScheme::NTypeIds::JsonDocument),
-                },
-                { "database", "execution_id" },
-                NKikimrServices::KQP_PROXY,
-                TtlCol("expire_at")
-            )
+    static IActor* GetScriptExecutionsCreator() {
+        return CreateTableCreator(
+            { ".metadata", "script_executions" },
+            {
+                Col("database", NScheme::NTypeIds::Text),
+                Col("execution_id", NScheme::NTypeIds::Text),
+                Col("run_script_actor_id", NScheme::NTypeIds::Text),
+                Col("operation_status", NScheme::NTypeIds::Int32),
+                Col("execution_status", NScheme::NTypeIds::Int32),
+                Col("finalization_status", NScheme::NTypeIds::Int32),
+                Col("execution_mode", NScheme::NTypeIds::Int32),
+                Col("start_ts", NScheme::NTypeIds::Timestamp),
+                Col("end_ts", NScheme::NTypeIds::Timestamp),
+                Col("query_text", NScheme::NTypeIds::Text),
+                Col("syntax", NScheme::NTypeIds::Int32),
+                Col("ast", NScheme::NTypeIds::Text),
+                Col("ast_compressed", NScheme::NTypeIds::String),
+                Col("ast_compression_method", NScheme::NTypeIds::Text),
+                Col("issues", NScheme::NTypeIds::JsonDocument),
+                Col("plan", NScheme::NTypeIds::JsonDocument),
+                Col("meta", NScheme::NTypeIds::JsonDocument),
+                Col("parameters", NScheme::NTypeIds::String), // TODO: store aparameters separately to support bigger storage.
+                Col("result_set_metas", NScheme::NTypeIds::JsonDocument),
+                Col("stats", NScheme::NTypeIds::JsonDocument),
+                Col("expire_at", NScheme::NTypeIds::Timestamp), // Will be deleted from database after this deadline.
+                Col("customer_supplied_id", NScheme::NTypeIds::Text),
+                Col("user_token", NScheme::NTypeIds::Text),
+                Col("script_sinks", NScheme::NTypeIds::JsonDocument),
+                Col("script_secret_names", NScheme::NTypeIds::JsonDocument),
+            },
+            { "database", "execution_id" },
+            NKikimrServices::KQP_PROXY,
+            TtlCol("expire_at", DEADLINE_OFFSET, BRO_RUN_INTERVAL)
         );
     }
 
-    void RunCreateScriptExecutionLeases() {
-        TablesCreating++;
-        Register(
-            CreateTableCreator(
-                { ".metadata", "script_execution_leases" },
-                {
-                    Col("database", NScheme::NTypeIds::Text),
-                    Col("execution_id", NScheme::NTypeIds::Text),
-                    Col("lease_deadline", NScheme::NTypeIds::Timestamp),
-                    Col("lease_generation", NScheme::NTypeIds::Int64),
-                    Col("expire_at", NScheme::NTypeIds::Timestamp), // Will be deleted from database after this deadline.
-                },
-                { "database", "execution_id" },
-                NKikimrServices::KQP_PROXY,
-                TtlCol("expire_at")
-            )
+    static IActor* GetScriptExecutionLeasesCreator() {
+        return CreateTableCreator(
+            { ".metadata", "script_execution_leases" },
+            {
+                Col("database", NScheme::NTypeIds::Text),
+                Col("execution_id", NScheme::NTypeIds::Text),
+                Col("lease_deadline", NScheme::NTypeIds::Timestamp),
+                Col("lease_generation", NScheme::NTypeIds::Int64),
+                Col("expire_at", NScheme::NTypeIds::Timestamp), // Will be deleted from database after this deadline.
+            },
+            { "database", "execution_id" },
+            NKikimrServices::KQP_PROXY,
+            TtlCol("expire_at", DEADLINE_OFFSET, BRO_RUN_INTERVAL)
         );
     }
 
-    void RunCreateScriptResultSets() {
-        TablesCreating++;
-        Register(
-            CreateTableCreator(
-                { ".metadata", "result_sets" },
-                {
-                    Col("database", NScheme::NTypeIds::Text),
-                    Col("execution_id", NScheme::NTypeIds::Text),
-                    Col("result_set_id", NScheme::NTypeIds::Int32),
-                    Col("row_id", NScheme::NTypeIds::Int64),
-                    Col("expire_at", NScheme::NTypeIds::Timestamp),
-                    Col("result_set", NScheme::NTypeIds::String),
-                    Col("accumulated_size", NScheme::NTypeIds::Int64),
-                },
-                { "database", "execution_id", "result_set_id", "row_id" },
-                NKikimrServices::KQP_PROXY,
-                TtlCol("expire_at")
-            )
+    static IActor* GetScriptResultSetsCreator() {
+        return CreateTableCreator(
+            { ".metadata", "result_sets" },
+            {
+                Col("database", NScheme::NTypeIds::Text),
+                Col("execution_id", NScheme::NTypeIds::Text),
+                Col("result_set_id", NScheme::NTypeIds::Int32),
+                Col("row_id", NScheme::NTypeIds::Int64),
+                Col("expire_at", NScheme::NTypeIds::Timestamp),
+                Col("result_set", NScheme::NTypeIds::String),
+                Col("accumulated_size", NScheme::NTypeIds::Int64),
+            },
+            { "database", "execution_id", "result_set_id", "row_id" },
+            NKikimrServices::KQP_PROXY,
+            TtlCol("expire_at", DEADLINE_OFFSET, BRO_RUN_INTERVAL)
         );
     }
 
-    void Handle(TEvTableCreator::TEvCreateTableResponse::TPtr&) {
-        Y_ABORT_UNLESS(TablesCreating > 0);
-        if (--TablesCreating == 0) {
-            Send(Owner, std::move(ResultEvent));
-            PassAway();
-        }
+    void OnTablesCreated(bool success, NYql::TIssues issues) override  {
+        Send(Owner, new TEvScriptExecutionsTablesCreationFinished(success, std::move(issues)));
     }
-
-    STRICT_STFUNC(StateFunc,
-        hFunc(TEvTableCreator::TEvCreateTableResponse, Handle);
-    )
-
-private:
-    THolder<NActors::IEventBase> ResultEvent;
-    NActors::TActorId Owner;
-    size_t TablesCreating = 0;
 };
 
 Ydb::Query::ExecMode GetExecModeFromAction(NKikimrKqp::EQueryAction action) {
@@ -833,13 +788,6 @@ private:
 
 class TForgetScriptExecutionOperationQueryActor : public TQueryBase {
     static constexpr i64 MAX_NUMBER_ROWS_IN_BATCH = 100000;
-    static constexpr i64 MAX_BATCH_SIZE = 10_MB;
-
-    struct TResultSetDescription {
-        i64 MaxRowId;
-        i64 MaxAccumulatedSize;
-        i32 ResultSetId;
-    };
 
 public:
     TForgetScriptExecutionOperationQueryActor(const TString& executionId, const TString& database, TInstant operationDeadline)
@@ -849,10 +797,6 @@ public:
     {}
 
     void OnRunQuery() override {
-        if (!CheckDeadline()) {
-            return;
-        }
-
         TString sql = R"(
             -- TForgetScriptExecutionOperationQueryActor::OnRunQuery
             DECLARE $database AS Text;
@@ -862,10 +806,10 @@ public:
             FROM `.metadata/script_executions`
             WHERE database = $database AND execution_id = $execution_id;
 
-            SELECT result_set_id, MAX(row_id) AS max_row_id, MAX(accumulated_size) AS max_accumulated_size
+            SELECT MAX(result_set_id) AS max_result_set_id, MAX(row_id) AS max_row_id
             FROM `.metadata/result_sets`
-            WHERE database = $database AND execution_id = $execution_id
-            GROUP BY result_set_id;
+            WHERE database = $database AND execution_id = $execution_id AND
+                  (expire_at > CurrentUtcTimestamp() OR expire_at IS NULL);
 
             DELETE
             FROM `.metadata/script_execution_leases`
@@ -892,69 +836,44 @@ public:
         }
 
         NYdb::TResultSetParser result(ResultSets[0]);
-        if (result.RowsCount() == 0) {
-            Finish();
+        if (result.RowsCount() != 1) {
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
             return;
         }
 
-        ResultSetsDescription.reserve(result.RowsCount());
-        while (result.TryNextRow()) {
-            TMaybe<i32> resultSetId = result.ColumnParser("result_set_id").GetOptionalInt32();
-            if (!resultSetId) {
-                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result set id is not specified");
-                return;
-            }
+        result.TryNextRow();
 
-            TMaybe<i64> maxRowId = result.ColumnParser("max_row_id").GetOptionalInt64();
-            if (!maxRowId) {
-                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result set row id is not specified");
-                return;
-            }
-
-            i64 maxAccumulatedSize = result.ColumnParser("max_accumulated_size").GetOptionalInt64().GetOrElse(0);
-
-            ResultSetsDescription.emplace_back(TResultSetDescription{*maxRowId, maxAccumulatedSize, *resultSetId});
+        TMaybe<i64> maxResultSetId = result.ColumnParser("max_result_set_id").GetOptionalInt32();
+        if (!maxResultSetId) {
+            Finish();
+            return;
         }
+        NumberRowsInBatch = std::max(MAX_NUMBER_ROWS_IN_BATCH / (*maxResultSetId + 1), 1l);
 
+        TMaybe<i64> maxRowId = result.ColumnParser("max_row_id").GetOptionalInt64();
+        if (!maxRowId) {
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result set row id is not specified");
+            return;
+        }
+        MaxRowId = *maxRowId;
+
+        ClearTimeInfo();
         DeleteScriptResults();
     }
 
     void DeleteScriptResults() {
-        if (ResultSetsDescription.empty()) {
-            Finish();
-            return;
-        }
-
-        if (!CheckDeadline()) {
-            return;
-        }
-
-        const TResultSetDescription& resultSet = ResultSetsDescription.back();
-
         TString sql = R"(
             -- TForgetScriptExecutionOperationQueryActor::DeleteScriptResults
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
-            DECLARE $result_set_id AS Int32;
+            DECLARE $min_row_id AS Int64;
             DECLARE $max_row_id AS Int64;
-            DECLARE $max_rows_in_batch AS Int64;
-            DECLARE $min_accumulated_size AS Int64;
 
-            DELETE
-            FROM `.metadata/result_sets`
+            UPDATE `.metadata/result_sets`
+            SET expire_at = CurrentUtcTimestamp()
             WHERE database = $database
               AND execution_id = $execution_id
-              AND result_set_id = $result_set_id
-              AND (row_id = $max_row_id OR (
-                   $max_row_id - row_id < $max_rows_in_batch
-                   AND (accumulated_size IS NULL OR accumulated_size - LEN(result_set) >= $min_accumulated_size)
-              ));
-
-            SELECT MAX(row_id) AS max_row_id, MAX(accumulated_size) AS max_accumulated_size
-            FROM `.metadata/result_sets`
-            WHERE database = $database
-              AND execution_id = $execution_id
-              AND result_set_id = $result_set_id;
+              AND $min_row_id < row_id AND row_id <= $max_row_id;
         )";
 
         NYdb::TParamsBuilder params;
@@ -965,17 +884,11 @@ public:
             .AddParam("$execution_id")
                 .Utf8(ExecutionId)
                 .Build()
-            .AddParam("$result_set_id")
-                .Int32(resultSet.ResultSetId)
+            .AddParam("$min_row_id")
+                .Int64(MaxRowId - NumberRowsInBatch)
                 .Build()
             .AddParam("$max_row_id")
-                .Int64(resultSet.MaxRowId)
-                .Build()
-            .AddParam("$max_rows_in_batch")
-                .Int64(MAX_NUMBER_ROWS_IN_BATCH)
-                .Build()
-            .AddParam("$min_accumulated_size")
-                .Int64(resultSet.MaxAccumulatedSize - MAX_BATCH_SIZE)
+                .Int64(MaxRowId)
                 .Build();
 
         RunDataQuery(sql, &params);
@@ -983,26 +896,15 @@ public:
     }
 
     void OnResultsDeleted() {
-        if (ResultSets.size() != 1) {
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
+        MaxRowId -= NumberRowsInBatch;
+        if (MaxRowId < 0) {
+            Finish();
             return;
         }
 
-        NYdb::TResultSetParser result(ResultSets[0]);
-        if (result.RowsCount() != 1) {
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
+        if (TInstant::Now() + 2 * GetAverageTime() >= Deadline) {
+            Finish(Ydb::StatusIds::TIMEOUT, ForgetOperationTimeoutIssues());
             return;
-        }
-
-        result.TryNextRow();
-        TMaybe<i64> maxRowId = result.ColumnParser("max_row_id").GetOptionalInt64();
-        TMaybe<i64> maxAccumulatedSize = result.ColumnParser("max_accumulated_size").GetOptionalInt64();
-
-        if (maxRowId) {
-            ResultSetsDescription.back().MaxRowId = *maxRowId;
-            ResultSetsDescription.back().MaxAccumulatedSize = maxAccumulatedSize.GetOrElse(0);
-        } else {
-            ResultSetsDescription.pop_back();
         }
 
         DeleteScriptResults();
@@ -1017,19 +919,11 @@ public:
     }
 
 private:
-    bool CheckDeadline() {
-        if (TInstant::Now() >= Deadline) {
-            Finish(Ydb::StatusIds::TIMEOUT, ForgetOperationTimeoutIssues());
-            return false;
-        }
-        return true;
-    }
-
-private:
     TString ExecutionId;
     TString Database;
     TInstant Deadline;
-    std::vector<TResultSetDescription> ResultSetsDescription;
+    i64 NumberRowsInBatch = 0;
+    i64 MaxRowId = 0;
 };
 
 class TForgetScriptExecutionOperationActor : public TActorBootstrapped<TForgetScriptExecutionOperationActor> {
@@ -1072,7 +966,7 @@ public:
         }
 
         TDuration minDelay = TDuration::MilliSeconds(10);
-        TDuration maxTime = Request->Get()->Deadline - TInstant::Now() - TDuration::Seconds(1);
+        TDuration maxTime = Request->Get()->Deadline - TInstant::Now();
         if (maxTime <= minDelay) {
             Reply(Ydb::StatusIds::TIMEOUT, TForgetScriptExecutionOperationQueryActor::ForgetOperationTimeoutIssues());
             return;
@@ -1135,7 +1029,9 @@ public:
                 plan,
                 issues,
                 stats,
-                ast
+                ast,
+                ast_compressed,
+                ast_compression_method
             FROM `.metadata/script_executions`
             WHERE database = $database AND execution_id = $execution_id AND
                   (expire_at > CurrentUtcTimestamp() OR expire_at IS NULL);
@@ -1220,7 +1116,17 @@ public:
             Metadata.mutable_exec_stats()->set_query_plan(*plan);
         }
 
-        const TMaybe<TString> ast = result.ColumnParser("ast").GetOptionalUtf8();
+        TMaybe<TString> ast;
+        const TMaybe<TString> astCompressionMethod = result.ColumnParser("ast_compression_method").GetOptionalUtf8();
+        if (astCompressionMethod) {
+            const TMaybe<TString> astCompressed = result.ColumnParser("ast_compressed").GetOptionalString();
+            if (astCompressed) {
+                const NFq::TCompressor compressor(*astCompressionMethod);
+                ast = compressor.Decompress(*astCompressed);
+            }
+        } else {
+            ast = result.ColumnParser("ast").GetOptionalUtf8();
+        }
         if (ast) {
             Metadata.mutable_exec_stats()->set_query_ast(*ast);
         }
@@ -1946,13 +1852,20 @@ std::optional<std::pair<TDuration, TDuration>> GetTtlFromSerializedMeta(const TS
     }
 }
 
-class TGetScriptExecutionResultQuery : public TQueryBase {
+class TGetScriptExecutionResultQueryActor : public TQueryBase {
+    static constexpr i64 MAX_NUMBER_ROWS_IN_BATCH = 100000;
+    static constexpr i64 MAX_BATCH_SIZE = 20_MB;
+
 public:
-    TGetScriptExecutionResultQuery(const TString& database, const TString& executionId, i32 resultSetIndex, i64 offset, i64 limit)
-        : Database(database), ExecutionId(executionId), ResultSetIndex(resultSetIndex), Offset(offset), Limit(limit)
-    {
-        Response.SetResultSetIndex(ResultSetIndex);
-    }
+    TGetScriptExecutionResultQueryActor(const TString& database, const TString& executionId, i32 resultSetIndex, i64 offset, i64 rowsLimit, i64 sizeLimit, TInstant deadline)
+        : Database(database)
+        , ExecutionId(executionId)
+        , ResultSetIndex(resultSetIndex)
+        , Offset(offset)
+        , RowsLimit(rowsLimit ? rowsLimit : std::numeric_limits<i64>::max())
+        , SizeLimit(sizeLimit ? sizeLimit : std::numeric_limits<i64>::max())
+        , Deadline(rowsLimit ? TInstant::Max() : deadline)
+    {}
 
     void OnRunQuery() override {
         TString sql = R"(
@@ -1961,22 +1874,28 @@ public:
             DECLARE $execution_id AS Text;
             DECLARE $result_set_id AS Int32;
             DECLARE $offset AS Int64;
-            DECLARE $limit AS Uint64;
 
-            SELECT result_set_metas,  operation_status, issues, end_ts, meta
+            SELECT result_set_metas, operation_status, issues, end_ts, meta
             FROM `.metadata/script_executions`
             WHERE database = $database
               AND execution_id = $execution_id
               AND (expire_at > CurrentUtcTimestamp() OR expire_at IS NULL);
 
-            SELECT database, execution_id, result_set_id, row_id, result_set
+            $result_set_table = (
+            SELECT row_id, accumulated_size
             FROM `.metadata/result_sets`
             WHERE database = $database
               AND execution_id = $execution_id
               AND result_set_id = $result_set_id
-              AND row_id >= $offset
-            ORDER BY database, execution_id, result_set_id, row_id
-            LIMIT $limit;
+            );
+
+            SELECT MAX(row_id) AS max_row_id
+            FROM $result_set_table
+            WHERE row_id >= $offset;
+
+            SELECT MAX(accumulated_size) AS start_accumulated_size
+            FROM $result_set_table
+            WHERE row_id < $offset;
         )";
 
         NYdb::TParamsBuilder params;
@@ -1992,21 +1911,18 @@ public:
                 .Build()
             .AddParam("$offset")
                 .Int64(Offset)
-                .Build()
-            .AddParam("$limit")
-                .Uint64(Limit)
                 .Build();
 
         RunDataQuery(sql, &params);
     }
 
     void OnQueryResult() override {
-        if (ResultSets.size() != 2) {
+        if (ResultSets.size() != 3) {
             Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
             return;
         }
 
-        { // columns
+        { // columns meta
             NYdb::TResultSetParser result(ResultSets[0]);
 
             if (!result.TryNextRow()) {
@@ -2014,7 +1930,7 @@ public:
                 return;
             }
 
-            TMaybe<i32> operationStatus = result.ColumnParser("operation_status").GetOptionalInt32();
+            const TMaybe<i32> operationStatus = result.ColumnParser("operation_status").GetOptionalInt32();
             if (!operationStatus) {
                 Finish(Ydb::StatusIds::BAD_REQUEST, "Results are not ready");
                 return;
@@ -2075,122 +1991,217 @@ public:
             Ydb::Query::Internal::ResultSetMeta meta;
             NProtobufJson::Json2Proto(*metaValue, meta);
 
-            *Response.MutableResultSet()->mutable_columns() = meta.columns();
-            Response.MutableResultSet()->set_truncated(meta.truncated());
-        }
+            *ResultSet.mutable_columns() = meta.columns();
+            ResultSet.set_truncated(meta.truncated());
 
-        { // rows
-            Truncated = ResultSets[1].Truncated();
-
-            NYdb::TResultSetParser result(ResultSets[1]);
-
-            while (result.TryNextRow()) {
-                const TMaybe<TString> serializedRow = result.ColumnParser("result_set").GetOptionalString();
-
-                if (!serializedRow) {
-                    Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result set row is null");
+            if (SizeLimit) {
+                const i64 resultSetSize = ResultSet.ByteSizeLong();
+                if (resultSetSize > SizeLimit) {
+                    Finish(Ydb::StatusIds::BAD_REQUEST, "Result set meta is larger than fetch size limit");
                     return;
                 }
-
-                if (serializedRow->Empty()) {
-                    Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result set row is empty");
-                    return;
-                }
-
-                if (!Response.MutableResultSet()->add_rows()->ParseFromString(*serializedRow)) {
-                    Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result set row is corrupted");
-                    return;
-                }
+                SizeLimit -= resultSetSize;
             }
         }
 
-        Finish();
+        { // max row id
+            NYdb::TResultSetParser result(ResultSets[1]);
+            if (result.RowsCount() != 1) {
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
+                return;
+            }
+
+            result.TryNextRow();
+
+            const TMaybe<i64> maxRowId = result.ColumnParser("max_row_id").GetOptionalInt64();
+            if (!maxRowId) {
+                HasMoreResults = false;
+                Finish();
+                return;
+            }
+            MaxRowId = *maxRowId;
+        }
+
+        { // start accumulated size
+            NYdb::TResultSetParser result(ResultSets[2]);
+            if (result.RowsCount() != 1) {
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
+                return;
+            }
+
+            result.TryNextRow();
+            StartAccumulatedSize = result.ColumnParser("start_accumulated_size").GetOptionalInt64().GetOrElse(0);
+        }
+
+        ClearTimeInfo();
+        FetchScriptResults();
+    }
+
+    void FetchScriptResults() {
+        TString sql = R"(
+            -- TGetScriptExecutionResultQuery::FetchScriptResults
+            DECLARE $database AS Text;
+            DECLARE $execution_id AS Text;
+            DECLARE $result_set_id AS Int32;
+            DECLARE $offset AS Int64;
+            DECLARE $limit AS Uint64;
+            DECLARE $max_accumulated_size AS int64;
+
+            SELECT database, execution_id, result_set_id, row_id, result_set
+            FROM `.metadata/result_sets`
+            WHERE database = $database
+              AND execution_id = $execution_id
+              AND result_set_id = $result_set_id
+              AND row_id >= $offset
+              AND (accumulated_size IS NULL OR accumulated_size <= $max_accumulated_size)
+            ORDER BY database, execution_id, result_set_id, row_id
+            LIMIT $limit;
+        )";
+
+        NYdb::TParamsBuilder params;
+        params
+            .AddParam("$database")
+                .Utf8(Database)
+                .Build()
+            .AddParam("$execution_id")
+                .Utf8(ExecutionId)
+                .Build()
+            .AddParam("$result_set_id")
+                .Int32(ResultSetIndex)
+                .Build()
+            .AddParam("$offset")
+                .Int64(Offset)
+                .Build()
+            .AddParam("$limit")
+                .Uint64(std::min(RowsLimit, MAX_NUMBER_ROWS_IN_BATCH))
+                .Build()
+            .AddParam("$max_accumulated_size")
+                .Int64(StartAccumulatedSize + std::min(SizeLimit, MAX_BATCH_SIZE))
+                .Build();
+
+        RunDataQuery(sql, &params);
+        SetQueryResultHandler(&TGetScriptExecutionResultQueryActor::OnResultsFetched);
+    }
+
+    void OnResultsFetched() {
+        if (ResultSets.size() != 1) {
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
+            return;
+        }
+
+        NYdb::TResultSetParser result(ResultSets[0]);
+
+        if (result.RowsCount() == 0) {
+            if (ResultSet.rows_size() > 0) {
+                Finish();
+            } else {
+                Finish(Ydb::StatusIds::BAD_REQUEST, "Failed to fetch script result due to size limit");
+            }
+            return;
+        }
+
+        i64 lastRowId = 0;
+        while (result.TryNextRow()) {
+            const TMaybe<i64> rowId = result.ColumnParser("row_id").GetOptionalInt64();
+            if (!rowId) {
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result set row id is null");
+                return;
+            }
+            lastRowId = *rowId;
+
+            const TMaybe<TString> serializedRow = result.ColumnParser("result_set").GetOptionalString();
+
+            if (!serializedRow) {
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result set row is null");
+                return;
+            }
+
+            if (serializedRow->Empty()) {
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result set row is empty");
+                return;
+            }
+
+            StartAccumulatedSize += serializedRow->size();
+            SizeLimit -= serializedRow->size();
+            if (!ResultSet.add_rows()->ParseFromString(*serializedRow)) {
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result set row is corrupted");
+                return;
+            }
+        }
+
+        if (lastRowId >= MaxRowId) {
+            HasMoreResults = false;
+            Finish();
+            return;
+        }
+
+        Offset += result.RowsCount();
+        RowsLimit -= result.RowsCount();
+
+        if (RowsLimit <= 0 || SizeLimit <= 0 || TInstant::Now() + TDuration::Seconds(5) + GetAverageTime() >= Deadline) {
+            Finish();
+            return;
+        }
+
+        FetchScriptResults();
     }
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
-        Response.SetStatus(status);
-        if (status != Ydb::StatusIds::SUCCESS) {
-            Response.MutableResultSet()->Clear();
-        }
-        if (issues) {
-            NYql::IssuesToMessage(issues, Response.MutableIssues());
-        }
-        Send(Owner, new TEvFetchScriptResultsQueryResponse(Truncated, std::move(Response)));
-    }
-
-private:
-    const TString Database;
-    const TString ExecutionId;
-    const i32 ResultSetIndex;
-    const i64 Offset;
-    const i64 Limit;
-    bool Truncated = false;
-    NKikimrKqp::TEvFetchScriptResultsResponse Response;
-};
-
-class TGetScriptExecutionResultActor : public TActorBootstrapped<TGetScriptExecutionResultActor> {
-public:
-    TGetScriptExecutionResultActor(const NActors::TActorId& replyActorId, const TString& database, const TString& executionId, i32 resultSetIndex, i64 offset, i64 limit)
-        : ReplyActorId(replyActorId), Database(database), ExecutionId(executionId), ResultSetIndex(resultSetIndex), Offset(offset), Limit(limit)
-    {
-        Response = MakeHolder<TEvKqp::TEvFetchScriptResultsResponse>();
-    }
-
-    void CreateFetchScriptExecutionResultQuery() {
-        Register(new TGetScriptExecutionResultQuery(Database, ExecutionId, ResultSetIndex, Offset, Limit));
-    }
-
-    void Bootstrap() {
-        CreateFetchScriptExecutionResultQuery();
-        Become(&TGetScriptExecutionResultActor::StateFunc);
-    }
-
-    STRICT_STFUNC(StateFunc,
-        hFunc(TEvFetchScriptResultsQueryResponse, Handle);
-    )
-
-    void RecordResults(NKikimrKqp::TEvFetchScriptResultsResponse&& results) {
-        if (!Response->Record.has_status()) {
-            Response->Record = std::move(results);
-            return;
-        }
-
-        const auto& rows = results.GetResultSet().get_arr_rows();
-        Response->Record.mutable_resultset()->mutable_rows()->Add(rows.begin(), rows.end());
-    }
-
-    void Handle(TEvFetchScriptResultsQueryResponse::TPtr& ev) {
-        if (ev->Get()->Results.GetStatus() != Ydb::StatusIds::SUCCESS) {
-            Response->Record = std::move(ev->Get()->Results);
-            Reply();
-            return;
-        }
-
-        i64 rowsCount = ev->Get()->Results.GetResultSet().rows_size();
-        RecordResults(std::move(ev->Get()->Results));
-
-        if (ev->Get()->Truncated) {
-            Offset += rowsCount;
-            Limit -= rowsCount;
-            CreateFetchScriptExecutionResultQuery();
+        if (status == Ydb::StatusIds::SUCCESS) {
+            Send(Owner, new TEvFetchScriptResultsResponse(status, std::move(ResultSet), HasMoreResults, std::move(issues)));
         } else {
-            Reply();
+            Send(Owner, new TEvFetchScriptResultsResponse(status, std::nullopt, true, std::move(issues)));
         }
     }
 
-    void Reply() {
-        Send(ReplyActorId, std::move(Response));
-        PassAway();
-    }
-
 private:
-    const NActors::TActorId ReplyActorId;
     const TString Database;
     const TString ExecutionId;
     const i32 ResultSetIndex;
     i64 Offset;
-    i64 Limit;
-    THolder<TEvKqp::TEvFetchScriptResultsResponse> Response;
+    i64 RowsLimit;
+    i64 SizeLimit;
+    const TInstant Deadline;
+
+    i64 MaxRowId = 0;
+    i64 StartAccumulatedSize = 0;
+
+    Ydb::ResultSet ResultSet;
+    bool HasMoreResults = true;
+};
+
+class TGetScriptExecutionResultActor : public TActorBootstrapped<TGetScriptExecutionResultActor> {
+public:
+    TGetScriptExecutionResultActor(const TActorId& replyActorId, const TString& database, const TString& executionId, i32 resultSetIndex, i64 offset, i64 rowsLimit, i64 sizeLimit, TInstant operationDeadline)
+        : ReplyActorId(replyActorId), Database(database), ExecutionId(executionId), ResultSetIndex(resultSetIndex), Offset(offset), RowsLimit(rowsLimit), SizeLimit(sizeLimit), OperationDeadline(operationDeadline)
+    {
+        Y_ENSURE(RowsLimit >= 0);
+        Y_ENSURE(SizeLimit >= 0);
+    }
+
+    void Bootstrap() {
+        Register(new TGetScriptExecutionResultQueryActor(Database, ExecutionId, ResultSetIndex, Offset, RowsLimit, SizeLimit, OperationDeadline));
+        Become(&TGetScriptExecutionResultActor::StateFunc);
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvFetchScriptResultsResponse, Handle);
+    )
+
+    void Handle(TEvFetchScriptResultsResponse::TPtr& ev) {
+        Send(ev->Forward(ReplyActorId));
+        PassAway();
+    }
+
+private:
+    const TActorId ReplyActorId;
+    const TString Database;
+    const TString ExecutionId;
+    const i32 ResultSetIndex;
+    const i64 Offset;
+    const i64 RowsLimit;
+    const i64 SizeLimit;
+    const TInstant OperationDeadline;
 };
 
 class TSaveScriptExternalEffectActor : public TQueryBase {
@@ -2457,7 +2468,9 @@ public:
             DECLARE $issues AS JsonDocument;
             DECLARE $plan AS JsonDocument;
             DECLARE $stats AS JsonDocument;
-            DECLARE $ast AS Text;
+            DECLARE $ast AS Optional<Text>;
+            DECLARE $ast_compressed AS Optional<String>;
+            DECLARE $ast_compression_method AS Optional<Text>;
             DECLARE $operation_ttl AS Interval;
             DECLARE $customer_supplied_id AS Text;
             DECLARE $user_token AS Text;
@@ -2475,6 +2488,8 @@ public:
                 end_ts = CurrentUtcTimestamp(),
                 stats = $stats,
                 ast = $ast,
+                ast_compressed = $ast_compressed,
+                ast_compression_method = $ast_compression_method,
                 expire_at = IF($operation_ttl > CAST(0 AS Interval), CurrentUtcTimestamp() + $operation_ttl, NULL),
                 customer_supplied_id = IF($applicate_script_external_effect_required, $customer_supplied_id, NULL),
                 user_token = IF($applicate_script_external_effect_required, $user_token, NULL),
@@ -2493,6 +2508,16 @@ public:
             NGRpcService::FillQueryStats(queryStats, *Request.QueryStats);
             NProtobufJson::Proto2Json(queryStats, statsJson, NProtobufJson::TProto2JsonConfig());
             serializedStats = NJson::WriteJson(statsJson);
+        }
+
+        TMaybe<TString> ast;
+        TMaybe<TString> astCompressed;
+        TMaybe<TString> astCompressionMethod;
+        if (Request.QueryAst && Request.QueryAstCompressionMethod) {
+            astCompressed = *Request.QueryAst;
+            astCompressionMethod = *Request.QueryAstCompressionMethod;
+        } else {
+            ast = Request.QueryAst.value_or("");
         }
 
         NYdb::TParamsBuilder params;
@@ -2522,7 +2547,13 @@ public:
                 .JsonDocument(serializedStats)
                 .Build()
             .AddParam("$ast")
-                .Utf8(Request.QueryAst.value_or(""))
+                .OptionalUtf8(ast)
+                .Build()
+            .AddParam("$ast_compressed")
+                .OptionalString(astCompressed)
+                .Build()
+            .AddParam("$ast_compression_method")
+                .OptionalUtf8(astCompressionMethod)
                 .Build()
             .AddParam("$operation_ttl")
                 .Interval(static_cast<i64>(OperationTtl.MicroSeconds()))
@@ -2788,8 +2819,8 @@ NActors::IActor* CreateScriptExecutionCreatorActor(TEvKqp::TEvScriptRequest::TPt
     return new TCreateScriptExecutionActor(std::move(ev), queryServiceConfig, counters, maxRunTime);
 }
 
-NActors::IActor* CreateScriptExecutionsTablesCreator(THolder<NActors::IEventBase> resultEvent) {
-    return new TScriptExecutionsTablesCreator(std::move(resultEvent));
+NActors::IActor* CreateScriptExecutionsTablesCreator() {
+    return new TScriptExecutionsTablesCreator();
 }
 
 NActors::IActor* CreateForgetScriptExecutionOperationActor(TEvForgetScriptExecutionOperation::TPtr ev) {
@@ -2820,8 +2851,8 @@ NActors::IActor* CreateSaveScriptExecutionResultActor(const NActors::TActorId& r
     return new TSaveScriptExecutionResultActor(runScriptActorId, database, executionId, resultSetId, expireAt, firstRow, accumulatedSize, std::move(resultSet));
 }
 
-NActors::IActor* CreateGetScriptExecutionResultActor(const NActors::TActorId& replyActorId, const TString& database, const TString& executionId, i32 resultSetIndex, i64 offset, i64 limit) {
-    return new TGetScriptExecutionResultActor(replyActorId, database, executionId, resultSetIndex, offset, limit);
+NActors::IActor* CreateGetScriptExecutionResultActor(const NActors::TActorId& replyActorId, const TString& database, const TString& executionId, i32 resultSetIndex, i64 offset, i64 rowsLimit, i64 sizeLimit, TInstant operationDeadline) {
+    return new TGetScriptExecutionResultActor(replyActorId, database, executionId, resultSetIndex, offset, rowsLimit, sizeLimit, operationDeadline);
 }
 
 NActors::IActor* CreateSaveScriptExternalEffectActor(TEvSaveScriptExternalEffectRequest::TPtr ev) {

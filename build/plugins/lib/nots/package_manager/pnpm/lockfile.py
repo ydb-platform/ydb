@@ -118,7 +118,9 @@ class PnpmLockfile(BaseLockfile):
 
         for key, meta in iteritems(packages):
             if meta.get("requiresBuild"):
-                requires_build_packages.append(key[1:])  # strip leading slash from key
+                # /expect-webdriverio@4.1.3(typescript@5.1.6)
+                pkg = key[1:].split("(")[0]
+                requires_build_packages.append(pkg)
 
         return requires_build_packages
 

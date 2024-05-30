@@ -1,10 +1,5 @@
 LIBRARY()
 
-OWNER(
-    monster
-    g:kikimr
-)
-
 SRCS(
     aggregator.h
     aggregator.cpp
@@ -13,6 +8,7 @@ SRCS(
     schema.h
     schema.cpp
     tx_configure.cpp
+    tx_delete_query_response.cpp
     tx_init.cpp
     tx_init_schema.cpp
     tx_navigate.cpp

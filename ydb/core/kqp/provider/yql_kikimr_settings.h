@@ -8,6 +8,7 @@
 
 namespace NKikimrConfig {
     enum TTableServiceConfig_EIndexAutoChooseMode : int;
+    enum TTableServiceConfig_EBlockChannelsMode : int;
 }
 
 namespace NYql {
@@ -165,6 +166,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool OldLookupJoinBehaviour = true;
     bool EnableOlapSink = false;
     bool EnableOltpSink = false;
+    NKikimrConfig::TTableServiceConfig_EBlockChannelsMode BlockChannelsMode;
 };
 
 }

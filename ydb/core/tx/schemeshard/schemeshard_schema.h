@@ -1758,13 +1758,25 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
-    struct View : Table<108> {
-        struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
-        struct AlterVersion : Column<2, NScheme::NTypeIds::Uint64> {};
-        struct QueryText : Column<3, NScheme::NTypeIds::String> {};
+    struct View: Table<108> {
+        struct PathId: Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        struct AlterVersion: Column<2, NScheme::NTypeIds::Uint64> {};
+        struct QueryText: Column<3, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<PathId>;
         using TColumns = TableColumns<PathId, AlterVersion, QueryText>;
+    };
+
+    struct BackgroundSessions: Table<109> {
+        struct ClassName: Column<1, NScheme::NTypeIds::String> {};
+        struct Identifier: Column<2, NScheme::NTypeIds::String> {};
+        struct StatusChannel: Column<3, NScheme::NTypeIds::String> {};
+        struct LogicDescription: Column<4, NScheme::NTypeIds::String> {};
+        struct Progress: Column<5, NScheme::NTypeIds::String> {};
+        struct State: Column<6, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<ClassName, Identifier>;
+        using TColumns = TableColumns<ClassName, Identifier, StatusChannel, LogicDescription, Progress, State>;
     };
 
     using TTables = SchemaTables<
@@ -1874,7 +1886,8 @@ struct Schema : NIceDb::Schema {
         ExternalDataSource,
         PersQueueGroupStats,
         BuildColumnOperationSettings,
-        View
+        View,
+        BackgroundSessions
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

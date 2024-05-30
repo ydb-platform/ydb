@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import logging
+import os
 import pytest
 import time
 
@@ -18,6 +19,7 @@ class TestRestartQuery(TestYdsBase):
         [fq.QueryContent.QueryType.ANALYTICS, fq.QueryContent.QueryType.STREAMING],
         ids=["analytics", "streaming"]
     )
+    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
     def test_restart_runtime_errors(self, kikimr_many_retries, client_many_retries, query_type):
         streaming_query = query_type == fq.QueryContent.QueryType.STREAMING
         unique_suffix = "_1" if streaming_query else "_2"

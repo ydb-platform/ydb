@@ -10477,45 +10477,27 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             NLs::NoMaxPartitionsCount
                             });
 
-        // request without token
+        // request direct alter of forbidden fields of indexImplTable
         TestAlterTable(runtime, ++txId, "/MyRoot/table/indexByValue/", R"(
-                        Name: "indexImplTable"
-                        PartitionConfig {
-                            PartitioningPolicy {
-                                MinPartitionsCount: 1
-                                SizeToSplit: 100502
-                                FastSplitSettings {
-                                    SizeThreshold: 100502
-                                    RowCountThreshold: 100502
-                                }
-                            }
+                Name: "indexImplTable"
+                KeyColumnNames: ["key", "value"]
+                PartitionConfig {
+                    PartitioningPolicy {
+                        MinPartitionsCount: 1
+                        SizeToSplit: 100502
+                        FastSplitSettings {
+                            SizeThreshold: 100502
+                            RowCountThreshold: 100502
                         }
-                    )", {NKikimrScheme::StatusNameConflict});
-
-        {  // request with not a super user token
-            auto request = AlterTableRequest(++txId, "/MyRoot/table/indexByValue/", R"(
-                        Name: "indexImplTable"
-                        PartitionConfig {
-                            PartitioningPolicy {
-                                MinPartitionsCount: 1
-                                SizeToSplit: 100501
-                                FastSplitSettings {
-                                    SizeThreshold: 100501
-                                    RowCountThreshold: 100501
-                                }
-                            }
-                        }
-               )");
-
-            auto wellCookedToken = NACLib::TUserToken(TVector<TString>{"not-a-root@builtin"});
-            request->Record.SetUserToken(wellCookedToken.SerializeAsString());
-            TActorId sender = runtime.AllocateEdgeActor();
-            ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, request);
-            TestModificationResults(runtime, txId, {TEvSchemeShard::EStatus::StatusNameConflict});
-        }
+                    }
+                }
+            )",
+            {TEvSchemeShard::EStatus::StatusNameConflict}
+        );
+        env.TestWaitNotification(runtime, txId);
 
         {
-            auto request = AlterTableRequest(++txId, "/MyRoot/table/indexByValue/", R"(
+            TestAlterTable(runtime, ++txId, "/MyRoot/table/indexByValue/", R"(
                         Name: "indexImplTable"
                         PartitionConfig {
                             PartitioningPolicy {
@@ -10527,13 +10509,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                 }
                             }
                         }
-               )");
-            auto wellCookedToken = NACLib::TUserToken(TVector<TString>{"true-root@builtin"});
-            request->Record.SetUserToken(wellCookedToken.SerializeAsString());
-            TActorId sender = runtime.AllocateEdgeActor();
-            ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, request);
-            TestModificationResults(runtime, txId, {TEvSchemeShard::EStatus::StatusAccepted});
-
+               )"
+            );
             env.TestWaitNotification(runtime, txId);
         }
 

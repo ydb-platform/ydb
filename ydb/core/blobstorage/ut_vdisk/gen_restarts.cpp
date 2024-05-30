@@ -49,7 +49,7 @@ void ChaoticWriteRestartWrite(const TChaoticWriteRestartWriteSettings &settings,
     UNIT_ASSERT(success1);
     Conf.Shutdown();
 
-    Conf.Prepare(settings.WriteRunSetup.get(), false);
+    Conf.Prepare(settings.SecondWriteRunSetup.get(), false);
     auto cls2 = std::make_shared<TPutHandleClassGenerator>(settings.Cls);
     TChaoticManyPutsTest x(settings.Parallel, 1, settings.MsgSize, cls2, settings.WorkingTime,
         settings.RequestTimeout);

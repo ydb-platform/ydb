@@ -59,6 +59,7 @@ struct TDqSettings {
         static constexpr ui32 CostBasedOptimizationLevel = 0;
         static constexpr ui32 MaxDPccpDPTableSize = 16400U;
         static constexpr ui64 MaxAttachmentsSize = 2_GB;
+        static constexpr bool SplitStageOnDqReplicate = true;
     };
 
     using TPtr = std::shared_ptr<TDqSettings>;
@@ -131,6 +132,7 @@ struct TDqSettings {
     NCommon::TConfSetting<bool, false> SplitStageOnDqReplicate;
 
     NCommon::TConfSetting<ui64, false> _MaxAttachmentsSize;
+    NCommon::TConfSetting<bool, false> DisableCheckpoints;
 
     // This options will be passed to executor_actor and worker_actor
     template <typename TProtoConfig>
@@ -183,6 +185,7 @@ struct TDqSettings {
         SAVE_SETTING(ExportStats);
         SAVE_SETTING(TaskRunnerStats);
         SAVE_SETTING(SpillingEngine);
+        SAVE_SETTING(DisableCheckpoints);
 #undef SAVE_SETTING
     }
 

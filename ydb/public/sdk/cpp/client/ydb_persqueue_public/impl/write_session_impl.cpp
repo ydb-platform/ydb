@@ -1,7 +1,6 @@
 #include "write_session_impl.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/log_lazy.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/log_lazy.h>
 
 #include <library/cpp/string_utils/url/url.h>
 
@@ -12,32 +11,7 @@
 
 namespace NYdb::NPersQueue {
 
-using ::NMonitoring::TDynamicCounterPtr;
-using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
-
 const TDuration UPDATE_TOKEN_PERIOD = TDuration::Hours(1);
-
-namespace NCompressionDetails {
-    THolder<IOutputStream> CreateCoder(ECodec codec, TBuffer& result, int quality);
-}
-
-#define HISTOGRAM_SETUP NMonitoring::ExplicitHistogram({0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100})
-TWriterCounters::TWriterCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters) {
-    Errors = counters->GetCounter("errors", true);
-    CurrentSessionLifetimeMs = counters->GetCounter("currentSessionLifetimeMs", false);
-    BytesWritten = counters->GetCounter("bytesWritten", true);
-    MessagesWritten = counters->GetCounter("messagesWritten", true);
-    BytesWrittenCompressed = counters->GetCounter("bytesWrittenCompressed", true);
-    BytesInflightUncompressed = counters->GetCounter("bytesInflightUncompressed", false);
-    BytesInflightCompressed = counters->GetCounter("bytesInflightCompressed", false);
-    BytesInflightTotal = counters->GetCounter("bytesInflightTotal", false);
-    MessagesInflight = counters->GetCounter("messagesInflight", false);
-
-    TotalBytesInflightUsageByTime = counters->GetHistogram("totalBytesInflightUsageByTime", HISTOGRAM_SETUP);
-    UncompressedBytesInflightUsageByTime = counters->GetHistogram("uncompressedBytesInflightUsageByTime", HISTOGRAM_SETUP);
-    CompressedBytesInflightUsageByTime = counters->GetHistogram("compressedBytesInflightUsageByTime", HISTOGRAM_SETUP);
-}
-#undef HISTOGRAM_SETUP
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TWriteSessionImpl

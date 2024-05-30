@@ -28,7 +28,7 @@ public:
         NSchemeShard::TTopicTabletInfo::TKeyRange KeyRange;
     };
 
-private:   
+private:
     struct TBalancerConfig {
         TBalancerConfig(
             NKikimrPQ::TUpdateBalancerConfig& config
@@ -36,7 +36,7 @@ private:
             : PathId(config.GetPathId())
             , PathVersion(config.GetVersion())
             , PartitionGraph(MakePartitionGraph(config))
-            , PartitionCountLimit(config.GetTabletConfig().GetPartitionStrategy().GetMaxPartitionCount())
+            , MaxActivePartitions(config.GetTabletConfig().GetPartitionStrategy().GetMaxPartitionCount())
             , MinActivePartitions(config.GetTabletConfig().GetPartitionStrategy().GetMinPartitionCount())
             , CurPartitions(config.PartitionsSize()) {
         }
@@ -44,7 +44,7 @@ private:
         ui64 PathId;
         int PathVersion;
         TPartitionGraph PartitionGraph;
-        ui64 PartitionCountLimit;
+        ui64 MaxActivePartitions;
         ui64 MinActivePartitions;
         ui64 CurPartitions;
     };
@@ -59,14 +59,14 @@ public:
     void UpdateBalancerConfig(NKikimrPQ::TUpdateBalancerConfig& config);
     void UpdateDatabasePath(const TString& dbPath);
     void Die(const TActorContext& ctx);
-    
+
     static TString GetRangeMid(const TString& from, const TString& to);
 
 private:
     using TPartitionSplit = NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionSplit;
     using TPartitionMerge = NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionMerge;
 
-    std::pair<std::vector<TPartitionSplit>, std::vector<TPartitionMerge>> BuildScaleRequest();
+    std::pair<std::vector<TPartitionSplit>, std::vector<TPartitionMerge>> BuildScaleRequest(const TActorContext& ctx);
 
 public:
     static const ui64 TRY_SCALE_REQUEST_WAKE_UP_TAG = 10;
@@ -74,7 +74,7 @@ public:
 private:
     static const ui32 MIN_SCALE_REQUEST_REPEAT_SECONDS_TIMEOUT = 10;
     static const ui32 MAX_SCALE_REQUEST_REPEAT_SECONDS_TIMEOUT = 1000;
-    
+
     const TString TopicName;
     TString DatabasePath = "";
     TActorId CurrentScaleRequest;

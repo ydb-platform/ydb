@@ -4,7 +4,7 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/ut_utils.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/trace_lazy.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/trace_lazy.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/ut/ut_utils/trace.h>
 
@@ -688,7 +688,7 @@ namespace NYdb::NTopic::NTests {
 
             ReadSession.WaitAllMessages();
 
-            for (const auto& info : ReadSession.ReceivedMessages) {
+            for (const auto& info : ReadSession.Impl->ReceivedMessages) {
                 if (info.Data == "message_1.1") {
                     UNIT_ASSERT_EQUAL(0, info.PartitionId);
                     UNIT_ASSERT_EQUAL(2, info.SeqNo);

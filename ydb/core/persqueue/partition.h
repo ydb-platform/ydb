@@ -101,6 +101,7 @@ struct TTransaction {
     //Data Tx
     THolder<TEvPQ::TEvGetWriteInfoResponse> WriteInfo;
     bool WriteInfoApplied = false;
+    TString Message;
     ECommitState State = ECommitState::Pending;
 };
 
@@ -125,6 +126,12 @@ public:
 private:
     static const ui32 MAX_ERRORS_COUNT_TO_STORE = 10;
 
+    enum EDeletePartitionState {
+        DELETION_NOT_INITED = 0,
+        DELETION_INITED = 1,
+        DELETION_IN_PROCESS = 2,
+    };
+
 private:
     struct THasDataReq;
     struct THasDataDeadline;
@@ -137,7 +144,8 @@ private:
     bool LastOffsetHasBeenCommited(const TUserInfo& userInfo) const;
 
     void ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error);
-    void ReplyPropose(const TActorContext& ctx, const NKikimrPQ::TEvProposeTransaction& event, NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode);
+    void ReplyPropose(const TActorContext& ctx, const NKikimrPQ::TEvProposeTransaction& event, NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode,
+                      NKikimrPQ::TError::EKind kind, const TString& reason);
     void ReplyErrorForStoredWrites(const TActorContext& ctx);
 
     void ReplyGetClientOffsetOk(const TActorContext& ctx, const ui64 dst, const i64 offset, const TInstant writeTimestamp, const TInstant createTimestamp);
@@ -328,7 +336,9 @@ private:
                             NPersQueue::NErrorCode::EErrorCode errorCode,
                             const TString& error);
     void ScheduleReplyPropose(const NKikimrPQ::TEvProposeTransaction& event,
-                              NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode);
+                              NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode,
+                              NKikimrPQ::TError::EKind kind,
+                              const TString& reason);
     void ScheduleReplyCommitDone(ui64 step, ui64 txId);
     void ScheduleDropPartitionLabeledCounters(const TString& group);
     void SchedulePartitionConfigChanged();
@@ -355,7 +365,9 @@ private:
                                             NPersQueue::NErrorCode::EErrorCode errorCode,
                                             const TString& error);
     THolder<TEvPersQueue::TEvProposeTransactionResult> MakeReplyPropose(const NKikimrPQ::TEvProposeTransaction& event,
-                                                                        NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode);
+                                                                        NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode,
+                                                                        NKikimrPQ::TError::EKind kind,
+                                                                        const TString& reason);
     THolder<TEvPQ::TEvTxCommitDone> MakeCommitDone(ui64 step, ui64 txId);
 
     bool BeginTransaction(const TEvPQ::TEvProposePartitionConfig& event);
@@ -409,6 +421,12 @@ private:
 
     void Handle(TEvPQ::TEvProcessChangeOwnerRequests::TPtr& ev, const TActorContext& ctx);
     void StartProcessChangeOwnerRequests(const TActorContext& ctx);
+
+    void CommitWriteOperations(const TActorContext& ctx);
+
+    void HandleOnInit(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorContext& ctx);
+
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -491,6 +509,10 @@ private:
             HFuncTraced(NReadQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
             HFuncTraced(NReadQuoterEvents::TEvQuotaCountersUpdated, Handle);
             HFuncTraced(TEvPQ::TEvGetWriteInfoRequest, Handle);
+
+            HFuncTraced(TEvPQ::TEvGetWriteInfoResponse, Handle);
+            HFuncTraced(TEvPQ::TEvGetWriteInfoError, Handle);
+            HFuncTraced(TEvPQ::TEvDeletePartition, HandleOnInit);
             IgnoreFunc(TEvPQ::TEvTxBatchComplete);
         default:
             if (!Initializer.Handle(ev)) {
@@ -554,6 +576,7 @@ private:
             HFuncTraced(NReadQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
             HFuncTraced(NReadQuoterEvents::TEvQuotaCountersUpdated, Handle);
             HFuncTraced(TEvPQ::TEvProcessChangeOwnerRequests, Handle);
+            HFuncTraced(TEvPQ::TEvDeletePartition, Handle);
             IgnoreFunc(TEvPQ::TEvTxBatchComplete);
         default:
             ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
@@ -675,7 +698,7 @@ private:
 
 
     [[nodiscard]] EProcessResult PreProcessImmediateTx(const NKikimrPQ::TEvProposeTransaction& tx);
-    void ExecImmediateTx(const NKikimrPQ::TEvProposeTransaction& tx);
+    void ExecImmediateTx(const TTransaction& tx);
 
     EProcessResult PreProcessRequest(TRegisterMessageGroupMsg& msg);
     EProcessResult PreProcessRequest(TDeregisterMessageGroupMsg& msg);
@@ -862,6 +885,23 @@ private:
     bool ClosedInternalPartition = false;
 
     bool IsSupportive() const;
+
+    EDeletePartitionState DeletePartitionState = DELETION_NOT_INITED;
+
+    void ScheduleDeletePartitionDone();
+    void ScheduleNegativeReplies();
+    void AddCmdDeleteRangeForAllKeys(TEvKeyValue::TEvRequest& request);
+
+    void ScheduleNegativeReply(const TEvPQ::TEvSetClientInfo& event);
+    void ScheduleNegativeReply(const TEvPersQueue::TEvProposeTransaction& event);
+    void ScheduleNegativeReply(const TTransaction& tx);
+    void ScheduleNegativeReply(const TMessage& msg);
+
+    void OnHandleWriteResponse(const TActorContext& ctx);
+
+    void ScheduleTransactionCompleted(const NKikimrPQ::TEvProposeTransaction& tx);
+
+    void DestroyActor(const TActorContext& ctx);
 };
 
 } // namespace NKikimr::NPQ

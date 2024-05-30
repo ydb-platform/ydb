@@ -18,7 +18,7 @@ void TBaseChangeSender::LazyCreateSender(THashMap<ui64, TSender>& senders, ui64 
     for (const auto& [order, broadcast] : Broadcasting) {
         if (AddBroadcastPartition(order, partitionId)) {
             // re-enqueue record to send it in the correct order
-            Enqueued.insert(broadcast.Record);
+            Enqueued.insert(ReEnqueue(broadcast.Record));
         }
     }
 }
@@ -95,21 +95,22 @@ void TBaseChangeSender::EnqueueRecords(TVector<TEvChangeExchange::TEvEnqueueReco
     RequestRecords();
 }
 
-bool TBaseChangeSender::RequestRecords(bool forceAtLeastOne) {
+bool TBaseChangeSender::RequestRecords() {
     if (!Enqueued) {
         return false;
     }
 
     auto it = Enqueued.begin();
-    TVector<TRequestedRecord> records;
+    TVector<TIncompleteRecord> records;
 
+    bool exceeded = false;
     while (it != Enqueued.end()) {
         if (MemUsage && (MemUsage + it->BodySize) > MemLimit) {
-            if (!forceAtLeastOne) {
+            if (!it->ReEnqueued || exceeded) {
                 break;
             }
 
-            forceAtLeastOne = false;
+            exceeded = true;
         }
 
         MemUsage += it->BodySize;
@@ -165,15 +166,10 @@ void TBaseChangeSender::SendRecords() {
     THashSet<ui64> registrations;
     bool needToResolve = false;
 
-    // used to avoid deadlock between RequestRecords & SendRecords
-    bool processedAtLeastOne = false;
-
     while (it != PendingSent.end()) {
         if (Enqueued && Enqueued.begin()->Order <= it->first) {
             break;
         }
-
-        processedAtLeastOne = true;
 
         if (PendingBody && PendingBody.begin()->Order <= it->first) {
             break;
@@ -232,7 +228,7 @@ void TBaseChangeSender::SendRecords() {
         Resolver->Resolve();
     }
 
-    RequestRecords(!processedAtLeastOne);
+    RequestRecords();
 }
 
 void TBaseChangeSender::ForgetRecords(TVector<ui64>&& records) {
@@ -314,12 +310,12 @@ void TBaseChangeSender::SendPreparedRecords(ui64 partitionId) {
 
 void TBaseChangeSender::ReEnqueueRecords(const TSender& sender) {
     for (const auto& record : sender.Pending) {
-        Enqueued.insert(record);
+        Enqueued.insert(ReEnqueue(record));
     }
 
     for (const auto& record : sender.Prepared) {
         if (!record->IsBroadcast()) {
-            Enqueued.emplace(record->GetOrder(), record->GetBody().size());
+            Enqueued.insert(ReEnqueue(record->GetOrder(), record->GetBody().size()));
             MemUsage -= record->GetBody().size();
         }
     }

@@ -258,10 +258,6 @@ public:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusTabletKillRequest>(&NGRpcProxy::TGRpcClient::TabletKillRequest, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_TABLET_STATE_REQUEST:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusTabletStateRequest>(&NGRpcProxy::TGRpcClient::TabletStateRequest, promise, request);
-        case NMsgBusProxy::MTYPE_CLIENT_LOAD_REQUEST:
-            return ExecuteGRpcRequest<NMsgBusProxy::TBusBsTestLoadRequest>(&NGRpcProxy::TGRpcClient::BlobStorageLoadRequest, promise, request);
-        case NMsgBusProxy::MTYPE_CLIENT_GET_REQUEST:
-            return ExecuteGRpcRequest<NMsgBusProxy::TBusBsGetRequest>(&NGRpcProxy::TGRpcClient::BlobStorageGetRequest, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_DB_SCHEMA:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusDbSchema, NMsgBusProxy::TBusDbResponse>(&NGRpcProxy::TGRpcClient::DbSchema, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_DB_OPERATION:

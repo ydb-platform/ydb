@@ -1,0 +1,209 @@
+package NKikimrSSA;
+option java_package = "ru.yandex.kikimr.proto";
+
+// Program to pushdown to ColumnShard
+//
+// > 'SELECT y, z WHERE x > 10'
+// PROJECTION x, y, z
+// ASSIGN tmp = x > 10
+// FILTER BY tmp
+// PROJECTION y, z
+//
+// > 'SELECT min(x), sum(y) GROUP BY z'
+// PROJECTION x, y, z
+// ASSIGN agg1 = min(x)
+// ASSIGN agg2 = sum(y)
+// GROUP BY z
+// PROJECTION agg1, agg2
+//
+message TProgram {
+    message TColumn {
+        optional uint64 Id = 1;
+        optional string Name = 2;
+    }
+
+    message TConstant {
+        oneof value {
+            bool Bool = 1;
+            int32 Int32 = 2;
+            uint32 Uint32 = 3;
+            int64 Int64 = 4;
+            uint64 Uint64 = 5;
+            float Float = 6;
+            double Double = 7;
+            bytes Bytes = 8;
+            string Text = 9;
+            int32 Int8 = 10;
+            uint32 Uint8 = 11;
+            int32 Int16 = 12;
+            uint32 Uint16 = 13;
+            uint64 Timestamp = 14;
+        }
+    }
+
+    message TBloomFilterChecker {
+        repeated uint64 HashValues = 1;
+    }
+
+    message TOlapIndexChecker {
+        optional uint32 IndexId = 1;
+        optional string ClassName = 2;
+
+        message TCompositeChecker {
+            repeated TOlapIndexChecker ChildrenCheckers = 1;
+        }
+
+        oneof Implementation {
+            TBloomFilterChecker BloomFilter = 40;
+            TCompositeChecker Composite = 41;
+        }
+    }
+
+    message TParameter {
+        optional string Name = 1;
+    }
+
+    enum EFunctionType {
+        SIMPLE_ARROW = 1;
+        YQL_KERNEL = 2;
+    }
+
+    message TAssignment {
+        enum EFunction {
+            FUNC_UNSPECIFIED = 0;
+            FUNC_CMP_EQUAL = 1;
+            FUNC_CMP_NOT_EQUAL = 2;
+            FUNC_CMP_LESS = 3;
+            FUNC_CMP_LESS_EQUAL = 4;
+            FUNC_CMP_GREATER = 5;
+            FUNC_CMP_GREATER_EQUAL = 6;
+            FUNC_IS_NULL = 7;
+            FUNC_STR_LENGTH = 8;
+            FUNC_STR_MATCH = 9;
+            FUNC_BINARY_NOT = 10;
+            FUNC_BINARY_AND = 11;
+            FUNC_BINARY_OR = 12;
+            FUNC_BINARY_XOR = 13;
+            FUNC_MATH_ADD = 14;
+            FUNC_MATH_SUBTRACT = 15;
+            FUNC_MATH_MULTIPLY = 16;
+            FUNC_MATH_DIVIDE = 17;
+            FUNC_CAST_TO_BOOLEAN = 18;
+            FUNC_CAST_TO_INT8 = 19;
+            FUNC_CAST_TO_INT16 = 20;
+            FUNC_CAST_TO_INT32 = 21;
+            FUNC_CAST_TO_INT64 = 22;
+            FUNC_CAST_TO_UINT8 = 23;
+            FUNC_CAST_TO_UINT16 = 24;
+            FUNC_CAST_TO_UINT32 = 25;
+            FUNC_CAST_TO_UINT64 = 26;
+            FUNC_CAST_TO_FLOAT = 27;
+            FUNC_CAST_TO_DOUBLE = 28;
+            FUNC_CAST_TO_BINARY = 29;
+            FUNC_CAST_TO_FIXED_SIZE_BINARY = 30;
+            FUNC_CAST_TO_TIMESTAMP = 31;
+            FUNC_STR_MATCH_LIKE = 32;
+            FUNC_STR_STARTS_WITH = 33;
+            FUNC_STR_ENDS_WITH = 34;
+            FUNC_STR_MATCH_IGNORE_CASE = 35;
+            FUNC_STR_STARTS_WITH_IGNORE_CASE = 36;
+            FUNC_STR_ENDS_WITH_IGNORE_CASE = 37;
+        }
+
+        message TFunction {
+            optional uint32 Id = 1; // EFunction
+            repeated TColumn Arguments = 2;
+            optional EFunctionType FunctionType = 3 [ default = SIMPLE_ARROW ];
+            optional uint32 KernelIdx = 4;
+            optional uint32 YqlOperationId = 5; // TKernelRequestBuilder::EBinaryOp
+        }
+
+        message TExternalFunction {
+            optional string Name = 1;
+            repeated TColumn Arguments = 2;
+        }
+
+        optional TColumn Column = 1;
+        oneof expression {
+            TFunction Function = 2;
+            TExternalFunction ExternalFunction = 3;
+            TConstant Constant = 4;
+            bool Null = 5;
+            TParameter Parameter = 6;
+        }
+    }
+
+    message TAggregateAssignment {
+        enum EAggregateFunction {
+            AGG_UNSPECIFIED = 0;
+            AGG_SOME = 1;
+            AGG_COUNT = 2;
+            AGG_MIN = 3;
+            AGG_MAX = 4;
+            AGG_SUM = 5;
+            //AGG_AVG = 6;
+            //AGG_VAR = 7;
+            //AGG_COVAR = 8;
+            //AGG_STDDEV = 9;
+            //AGG_CORR = 10;
+            //AGG_ARG_MIN = 11;
+            //AGG_ARG_MAX = 12;
+            //AGG_COUNT_DISTINCT = 13;
+            //AGG_QUANTILES = 14;
+            //AGG_TOP_COUNT = 15;
+            //AGG_TOP_SUM = 16;
+        }
+
+        message TAggregateFunction {
+            optional uint32 Id = 1; // EAggregateFunction
+            repeated TColumn Arguments = 2;
+            optional string Variant = 3; // i.e. POP/SAMP for AGG_VAR, AGG_COVAR, AGG_STDDEV
+            optional EFunctionType FunctionType = 4 [ default = SIMPLE_ARROW ];
+            optional uint32 KernelIdx = 5;
+            // TODO: Parameters, i.e. N for topK(N)(arg)
+        }
+
+        optional TColumn Column = 1;
+        optional TAggregateFunction Function = 2;
+    }
+
+    message TProjection {
+        repeated TColumn Columns = 1;
+    }
+
+    message TFilter {
+        // Predicate should be a bool column:
+        // true - keep the row
+        // false - remove the row
+        optional TColumn Predicate = 1;
+    }
+
+    message TGroupBy {
+        repeated TAggregateAssignment Aggregates = 1;
+        repeated TColumn KeyColumns = 2;
+    }
+
+    message TCommand {
+        oneof line {
+            TAssignment Assign = 1;
+            TProjection Projection = 2;
+            TFilter Filter = 3;
+            TGroupBy GroupBy = 4;
+            // TODO: ORDER BY, LIMIT
+        }
+    }
+
+    repeated TCommand Command = 1;
+    optional uint32 Version = 2;
+    optional bytes Kernels = 3;
+}
+
+message TOlapProgram {
+    // Store OLAP program in serialized format in case we do not need to deserialize it in TScanTaskMeta
+    // Note: when this message exists the program must be present.
+    optional bytes Program = 1;
+    // RecordBatch deserialization require arrow::Schema, thus store it here
+    optional bytes ParametersSchema = 2;
+    optional bytes Parameters = 3;
+    optional TProgram.TOlapIndexChecker IndexChecker = 4;
+}

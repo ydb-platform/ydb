@@ -404,10 +404,10 @@ namespace NYql::NDq {
             TActorBootstrapped<TGenericReadActor>::PassAway();
         }
 
-        void SaveState(const NDqProto::TCheckpoint&, NDqProto::TSourceState&) final {
+        void SaveState(const NDqProto::TCheckpoint&, TSourceState&) final {
         }
 
-        void LoadState(const NDqProto::TSourceState&) final {
+        void LoadState(const TSourceState&) final {
         }
 
         void CommitState(const NDqProto::TCheckpoint&) final {

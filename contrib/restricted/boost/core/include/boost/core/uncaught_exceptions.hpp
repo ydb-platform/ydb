@@ -88,11 +88,6 @@
     )
 namespace __cxxabiv1 {
 struct __cxa_eh_globals;
-#if defined(__OpenBSD__)
-extern "C" __cxa_eh_globals* __cxa_get_globals();
-#else
-extern "C" __cxa_eh_globals* __cxa_get_globals() BOOST_NOEXCEPT_OR_NOTHROW __attribute__((__const__));
-#endif
 } // namespace __cxxabiv1
 #endif
 #endif

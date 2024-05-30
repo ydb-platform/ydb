@@ -1579,7 +1579,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
             auto db = kikimr->GetQueryClient();
             auto queryExecutionOperation = db.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_UNEQUAL_C(queryExecutionOperation.GetStatus(), EStatus::SUCCESS, queryExecutionOperation.GetIssues().ToString());
+            UNIT_ASSERT_EQUAL_C(queryExecutionOperation.GetStatus(), EStatus::BAD_REQUEST, static_cast<int>(queryExecutionOperation.GetStatus()) << ", " << queryExecutionOperation.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(queryExecutionOperation.GetIssues().ToString(), "\"/Root/external_table\" is expected to be external data source");
         }
 
@@ -1600,7 +1600,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
             auto db = kikimr->GetQueryClient();
             auto queryExecutionOperation = db.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_UNEQUAL_C(queryExecutionOperation.GetStatus(), EStatus::SUCCESS, queryExecutionOperation.GetIssues().ToString());
+            UNIT_ASSERT_EQUAL_C(queryExecutionOperation.GetStatus(), EStatus::BAD_REQUEST, static_cast<int>(queryExecutionOperation.GetStatus()) << ", " << queryExecutionOperation.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(queryExecutionOperation.GetIssues().ToString(), "\"/Root/external_table\" is expected to be external data source");
         }
     }
@@ -1729,10 +1729,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStatus, EExecStatus::Completed);
 
         // Validate query results
-        const size_t fetchLimit = std::min(1000ul, 10_MB / rowContent.size());
-
         TFetchScriptResultsSettings settings;
-        settings.RowsLimit(fetchLimit);
+        settings.RowsLimit(0);
         size_t rowsFetched = 0;
         while (true) {
             TFetchScriptResultsResult results = queryClient.FetchScriptResults(scriptExecutionOperation.Id(), 0, settings).ExtractValueSync();
@@ -1751,12 +1749,11 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             }
 
             settings.FetchToken(results.GetNextFetchToken());
-            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), fetchLimit);
         }
         UNIT_ASSERT_VALUES_EQUAL(rowsFetched, numberRows);
 
         // Test forget operation
-        TInstant forgetOperationTimeout = TInstant::Now() + NSan::PlainOrUnderSanitizer(TDuration::Minutes(4), TDuration::Minutes(20));
+        TInstant forgetOperationTimeout = TInstant::Now() + NSan::PlainOrUnderSanitizer(TDuration::Minutes(5), TDuration::Minutes(20));
         NYdb::NOperation::TOperationClient operationClient(kikimr->GetDriver());
         while (TInstant::Now() < forgetOperationTimeout) {
             auto status = operationClient.Forget(scriptExecutionOperation.Id()).ExtractValueSync();
@@ -1768,10 +1765,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
             if (status.GetStatus() == NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED) {
                 // Wait until last forget is not finished
-                Sleep(TDuration::Seconds(1));
+                Sleep(TDuration::Seconds(30));
             }
         }
-        UNIT_ASSERT_C(false, "Forget operation retry limit exceeded");
+        UNIT_ASSERT_C(false, "Forget operation timeout");
     }
 
     Y_UNIT_TEST(ExecuteScriptWithLargeStrings) {

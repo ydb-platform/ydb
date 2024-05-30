@@ -21,7 +21,7 @@ try:
     from collections.abc import Mapping
 except ImportError:
     from collections import Mapping
-from datetime import datetime, timedelta
+import datetime
 from itertools import chain
 from functools import wraps
 
@@ -103,7 +103,7 @@ class YtError(Exception):
         if "host" not in self.attributes:
             self.attributes["host"] = self._get_fqdn()
         if "datetime" not in self.attributes:
-            self.attributes["datetime"] = datetime_to_string(datetime.utcnow())
+            self.attributes["datetime"] = datetime_to_string(utcnow())
 
     def simplify(self):
         """Transforms error (with inner errors) to standard python dict."""
@@ -520,7 +520,7 @@ def _pretty_format_full_errors(error, attribute_length_limit):
     origin_cpp_keys = ["pid", "tid", "fid"]
     if all(key in attributes for key in origin_keys):
         date = attributes["datetime"]
-        if isinstance(date, datetime):
+        if isinstance(date, datetime.datetime):
             date = date.strftime("%y-%m-%dT%H:%M:%S.%fZ")
         value = "{0} on {1}".format(attributes["host"], date)
         if all(key in attributes for key in origin_cpp_keys):
@@ -713,7 +713,7 @@ def touch(path):
 
 
 def date_string_to_datetime(date):
-    return datetime.strptime(date, YT_DATETIME_FORMAT_STRING)
+    return datetime.datetime.strptime(date, YT_DATETIME_FORMAT_STRING)
 
 
 def date_string_to_timestamp(date):
@@ -727,8 +727,15 @@ def date_string_to_timestamp_mcs(time_str):
 
 def datetime_to_string(date, is_local=False):
     if is_local:
-        date = datetime.utcfromtimestamp(time.mktime(date.timetuple()))
+        date = datetime.datetime.utcfromtimestamp(time.mktime(date.timetuple()))
     return date.strftime(YT_DATETIME_FORMAT_STRING)
+
+
+def utcnow():
+    if sys.version_info >= (3, 12, ):
+        return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+    else:
+        return datetime.datetime.utcnow()
 
 
 def make_non_blocking(fd):
@@ -848,8 +855,8 @@ def wait(predicate, error_message=None, iter=None, sleep_backoff=None, timeout=N
             index += 1
             time.sleep(sleep_backoff)
     else:
-        start_time = datetime.now()
-        while datetime.now() - start_time < timedelta(seconds=timeout):
+        start_time = datetime.datetime.now()
+        while datetime.datetime.now() - start_time < datetime.timedelta(seconds=timeout):
             if check_predicate():
                 return
             time.sleep(sleep_backoff)

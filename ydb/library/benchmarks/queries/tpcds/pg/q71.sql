@@ -35,7 +35,7 @@ select i_brand_id brand_id, i_brand brand,t_hour,t_minute,
    and time_sk = t_time_sk
    and (t_meal_time = 'breakfast' or t_meal_time = 'dinner')
  group by i_brand, i_brand_id,t_hour,t_minute
- order by ext_price desc nulls last, i_brand_id nulls first
+ order by ext_price desc nulls first, i_brand_id nulls first, t_hour,t_minute
  limit 1000
  ;
 

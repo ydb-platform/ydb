@@ -407,6 +407,10 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvStatTableCreationResponse::
         PendingSaveStatistics = false;
         SaveStatisticsToTable();
     }
+    if (PendingDeleteStatistics) {
+        PendingDeleteStatistics = false;
+        DeleteStatisticsFromTable();
+    }
 }
 
 void TStatisticsAggregator::Initialize() {
@@ -451,7 +455,7 @@ void TStatisticsAggregator::NextRange() {
     record.MutableTableId()->SetTableId(ScanTableId.PathId.LocalPathId);
     record.SetStartKey(StartKey.GetBuffer());
 
-    Send(MakePipePeNodeCacheID(false),
+    Send(MakePipePerNodeCacheID(false),
         new TEvPipeCache::TEvForward(request.release(), range.DataShardId, true),
         IEventHandle::FlagTrackDelivery);
 }
@@ -482,6 +486,17 @@ void TStatisticsAggregator::SaveStatisticsToTable() {
 
     Register(CreateSaveStatisticsQuery(ScanTableId.PathId, EStatType::COUNT_MIN_SKETCH,
         std::move(columnNames), std::move(data)));
+}
+
+void TStatisticsAggregator::DeleteStatisticsFromTable() {
+    if (!IsStatisticsTableCreated) {
+        PendingDeleteStatistics = true;
+        return;
+    }
+
+    PendingDeleteStatistics = false;
+
+    Register(CreateDeleteStatisticsQuery(ScanTableId.PathId));
 }
 
 void TStatisticsAggregator::ScheduleNextScan() {
@@ -521,6 +536,54 @@ void TStatisticsAggregator::PersistScanTableId(NIceDb::TNiceDb& db) {
 
 void TStatisticsAggregator::PersistScanStartTime(NIceDb::TNiceDb& db) {
     PersistSysParam(db, Schema::SysParam_ScanStartTime, ToString(ScanStartTime.MicroSeconds()));
+}
+
+void TStatisticsAggregator::ResetScanState(NIceDb::TNiceDb& db) {
+    ScanTableId.PathId = TPathId();
+    PersistScanTableId(db);
+
+    for (auto& [tag, _] : CountMinSketches) {
+        db.Table<Schema::Statistics>().Key(tag).Delete();
+    }
+    CountMinSketches.clear();
+
+    ShardRanges.clear();
+
+    KeyColumnTypes.clear();
+    Columns.clear();
+    ColumnNames.clear();
+}
+
+void TStatisticsAggregator::RescheduleScanTable(NIceDb::TNiceDb& db) {
+    if (ScanTablesByTime.empty()) {
+        return;
+    }
+    auto& topTable = ScanTablesByTime.top();
+    auto pathId = topTable.PathId;
+    if (pathId == ScanTableId.PathId) {
+        TScanTable scanTable;
+        scanTable.PathId = pathId;
+        scanTable.SchemeShardId = topTable.SchemeShardId;
+        scanTable.LastUpdateTime = ScanStartTime;
+
+        ScanTablesByTime.pop();
+        ScanTablesByTime.push(scanTable);
+
+        db.Table<Schema::ScanTables>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+            NIceDb::TUpdate<Schema::ScanTables::LastUpdateTime>(ScanStartTime.MicroSeconds()));
+    }
+}
+
+void TStatisticsAggregator::DropScanTable(NIceDb::TNiceDb& db) {
+    if (ScanTablesByTime.empty()) {
+        return;
+    }
+    auto& topTable = ScanTablesByTime.top();
+    auto pathId = topTable.PathId;
+    if (pathId == ScanTableId.PathId) {
+        ScanTablesByTime.pop();
+        db.Table<Schema::ScanTables>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
+    }
 }
 
 template <typename T, typename S>

@@ -19,6 +19,7 @@ default:
   feature_federated_queries: true
 #  feature_topic_settings_reset: true
 #  feature_logbroker: true
+  feature_view: true
   ydb-full-name: YDB
   ydb-short-name: YDB
   yandex-cloud: Yandex.Cloud

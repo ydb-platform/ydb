@@ -377,9 +377,9 @@
     ],
     "test.test[blocks-combine_all_min_filter--Peephole]": [
         {
-            "checksum": "d27675c425a3ee56bbae2fb29fc89b06",
-            "size": 2635,
-            "uri": "https://{canondata_backend}/1925842/296101947392be5259cffc170eedcf89b9e629c5/resource.tar.gz#test.test_blocks-combine_all_min_filter--Peephole_/opt.yql"
+            "checksum": "012fec12ecffda3666e22e71721c7c3b",
+            "size": 2726,
+            "uri": "https://{canondata_backend}/1903280/39fec0b0465af080d2ba2a952e63aae96c90f119/resource.tar.gz#test.test_blocks-combine_all_min_filter--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-combine_all_min_filter--Plan]": [
@@ -1649,6 +1649,27 @@
             "checksum": "84abe58d39f4b7aa73d262275a8909b3",
             "size": 4625,
             "uri": "https://{canondata_backend}/1899731/c92a452de9406ab0662eb9deef9f0799dbd3673d/resource.tar.gz#test.test_pg-dates_to_pg-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[pg-join_brackets2-default.txt-Debug]": [
+        {
+            "checksum": "80215971690080345dbe3358d6688b16",
+            "size": 11517,
+            "uri": "https://{canondata_backend}/1925842/67d08f5fa101e62588eca626439b44c5e0d1cdbc/resource.tar.gz#test.test_pg-join_brackets2-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[pg-join_brackets2-default.txt-Plan]": [
+        {
+            "checksum": "c1f2d837c3623c81dd596a9877913fb8",
+            "size": 948,
+            "uri": "https://{canondata_backend}/1925842/67d08f5fa101e62588eca626439b44c5e0d1cdbc/resource.tar.gz#test.test_pg-join_brackets2-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[pg-join_brackets2-default.txt-Results]": [
+        {
+            "checksum": "f349c152bcd79323acdbbfdfbc0405b1",
+            "size": 2471,
+            "uri": "https://{canondata_backend}/1925842/67d08f5fa101e62588eca626439b44c5e0d1cdbc/resource.tar.gz#test.test_pg-join_brackets2-default.txt-Results_/results.txt"
         }
     ],
     "test.test[pg-join_using8-default.txt-Debug]": [

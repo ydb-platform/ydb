@@ -3580,7 +3580,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         txState->TxType != TTxState::TxDropSequence &&
                         txState->TxType != TTxState::TxCreateReplication &&
                         txState->TxType != TTxState::TxAlterReplication &&
-                        txState->TxType != TTxState::TxDropReplication)
+                        txState->TxType != TTxState::TxDropReplication &&
+                        txState->TxType != TTxState::TxDropReplicationCascade)
                     {
                         Y_VERIFY_S(txState->TxType == TTxState::TxCopyTable, "Only CopyTable Tx can have participating shards from a different table"
                                        << ", txId: " << operationId.GetTxId()
@@ -3994,6 +3995,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 break;
             case ETabletType::GraphShard:
                 Self->TabletCounters->Simple()[COUNTER_GRAPHSHARD_COUNT].Add(1);
+                break;
+            case ETabletType::BackupController:
+                Self->TabletCounters->Simple()[COUNTER_BACKUP_CONTROLLER_TABLET_COUNT].Add(1);
                 break;
             default:
                 LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -4793,6 +4797,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 if (!rowset.Next()) {
                     return false;
                 }
+            }
+        }
+
+        {
+            if (!Self->BackgroundSessionsManager->LoadIdempotency(txc)) {
+                return false;
             }
         }
 

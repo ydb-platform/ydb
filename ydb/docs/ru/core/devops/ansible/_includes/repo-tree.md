@@ -1,5 +1,5 @@
 ```text
-├── 8-nodes-block-4-2 / 9-nodes-mirror-3-dc
+├── 3-nodes-mirror-3-dc / 9-nodes-mirror-3-dc / 8-nodes-block-4-2
 │   ├── ansible.cfg #Конфигурационный файл Ansible, который содержит настройки подключения к серверам и опции структуры проекта.
 │   ├── ansible_vault_password_file #Пароль для пользователя root.
 │   ├── creds #Переменные окружения, задающие имя пользователя и пароль для YDB.

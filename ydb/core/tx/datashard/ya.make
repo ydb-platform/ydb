@@ -68,6 +68,7 @@ SRCS(
     datashard__read_columns.cpp
     datashard__s3_download_txs.cpp
     datashard__s3_upload_txs.cpp
+    datashard__object_storage_listing.cpp
     datashard__kqp_scan.cpp
     datashard__snapshot_txs.cpp
     datashard__stats.cpp
@@ -300,6 +301,7 @@ RECURSE_FOR_TESTS(
     ut_locks
     ut_minikql
     ut_minstep
+    ut_object_storage_listing
     ut_order
     ut_range_ops
     ut_read_iterator
@@ -310,8 +312,8 @@ RECURSE_FOR_TESTS(
     ut_sequence
     ut_snapshot
     ut_stats
+    ut_trace
     ut_upload_rows
     ut_volatile
     ut_write
-    ut_trace
 )

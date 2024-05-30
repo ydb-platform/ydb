@@ -136,7 +136,6 @@ class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
             EvOnRequestTimeout,
             EvCloseIdleSessions,
             EvResourcesSnapshot,
-            EvScriptExecutionsTableCreationFinished,
         };
 
         struct TEvReadyToPublishResources : public TEventLocal<TEvReadyToPublishResources, EEv::EvReadyToPublishResources> {};
@@ -168,10 +167,6 @@ class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
 
             TEvResourcesSnapshot(TVector<NKikimrKqp::TKqpNodeResources>&& snapshot)
                 : Snapshot(std::move(snapshot)) {}
-        };
-
-        struct TEvScriptExecutionsTablesCreationFinished : public NActors::TEventLocal<TEvScriptExecutionsTablesCreationFinished, EvScriptExecutionsTableCreationFinished> {
-            TEvScriptExecutionsTablesCreationFinished() = default;
         };
     };
 
@@ -403,7 +398,7 @@ public:
         SendWhiteboardRequest();
 
         if (AppData()->TenantName.empty() || !SelfDataCenterId) {
-            KQP_PROXY_LOG_E("Cannot start publishing usage, tenants: " << AppData()->TenantName << ", " <<  SelfDataCenterId.value_or("empty"));
+            KQP_PROXY_LOG_I("Cannot start publishing usage, tenants: " << AppData()->TenantName << ", " <<  SelfDataCenterId.value_or("empty"));
             return;
         }
 
@@ -583,10 +578,10 @@ public:
 
         if (CheckRequestDeadline(requestInfo, deadline, result) &&
             CreateNewSessionWorker(requestInfo, TString(DefaultKikimrPublicClusterName), true, request.GetDatabase(),
-                request.GetApplicationName(), event.GetSupportsBalancing(), event.GetPgWire(),
+                event.GetSupportsBalancing(), event.GetPgWire(),
                 event.GetClientAddress(), event.GetUserSID(), event.GetClientUserAgent(), event.GetClientSdkBuildInfo(),
                 event.GetClientPID(),
-                event.GetApplicationName(), result))
+                event.GetApplicationName(), event.GetUserName(), result))
         {
             auto& response = *responseEv->Record.MutableResponse();
             response.SetSessionId(result.Value->SessionId);
@@ -619,7 +614,7 @@ public:
         if (ev->Get()->GetSessionId().empty()) {
             TProcessResult<TKqpSessionInfo*> result;
             if (!CreateNewSessionWorker(requestInfo, TString(DefaultKikimrPublicClusterName), false,
-                database, {}, false, false, "", "", "", "", "", "", result))
+                database, false, false, "", "", "", "", "", "", Nothing(), result))
             {
                 ReplyProcessError(result.YdbStatus, result.Error, requestId);
                 return;
@@ -1320,7 +1315,7 @@ public:
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse, Handle);
             hFunc(TEvKqp::TEvCreateSessionResponse, ForwardEvent);
             hFunc(TEvPrivate::TEvCloseIdleSessions, Handle);
-            hFunc(TEvPrivate::TEvScriptExecutionsTablesCreationFinished, Handle);
+            hFunc(TEvScriptExecutionsTablesCreationFinished, Handle);
             hFunc(NKqp::TEvForgetScriptExecutionOperation, Handle);
             hFunc(NKqp::TEvGetScriptExecutionOperation, Handle);
             hFunc(NKqp::TEvListScriptExecutionOperations, Handle);
@@ -1415,11 +1410,12 @@ private:
     }
 
     bool CreateNewSessionWorker(const TKqpRequestInfo& requestInfo, const TString& cluster, bool longSession,
-        const TString& database, const TMaybe<TString>& applicationName, bool supportsBalancing, bool pgWire,
+        const TString& database, bool supportsBalancing, bool pgWire,
         const TString& clientHost, const TString& clientSid, const TString& userAgent,
         const TString& sdkBuildInfo,
         const TString& clientPid,
         const TString& clientApplicationName,
+        const TMaybe<TString>& clientUserName,
         TProcessResult<TKqpSessionInfo*>& result)
     {
         if (!database.empty() && AppData()->TenantName.empty()) {
@@ -1458,7 +1454,7 @@ private:
 
         auto dbCounters = Counters->GetDbCounters(database);
 
-        TKqpWorkerSettings workerSettings(cluster, database, applicationName, TableServiceConfig, QueryServiceConfig, dbCounters);
+        TKqpWorkerSettings workerSettings(cluster, database, clientApplicationName, clientUserName, TableServiceConfig, QueryServiceConfig, dbCounters);
         workerSettings.LongSession = longSession;
 
         auto config = CreateConfig(KqpSettings, workerSettings);
@@ -1581,11 +1577,16 @@ private:
         switch (ScriptExecutionsCreationStatus) {
             case EScriptExecutionsCreationStatus::NotStarted:
                 ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::Pending;
-                Register(CreateScriptExecutionsTablesCreator(MakeHolder<TEvPrivate::TEvScriptExecutionsTablesCreationFinished>()), TMailboxType::HTSwap, AppData()->SystemPoolId);
+                Register(CreateScriptExecutionsTablesCreator(), TMailboxType::HTSwap, AppData()->SystemPoolId);
                 [[fallthrough]];
             case EScriptExecutionsCreationStatus::Pending:
                 if (DelayedEventsQueue.size() < 10000) {
-                    DelayedEventsQueue.emplace_back(std::move(ev));
+                    DelayedEventsQueue.push_back({
+                        .Event = std::move(ev),
+                        .ResponseBuilder = [](Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
+                            return new TResponse(status, std::move(issues));
+                        }
+                    });
                 } else {
                     NYql::TIssues issues;
                     issues.AddIssue("Too many queued requests");
@@ -1597,10 +1598,25 @@ private:
         }
     }
 
-    void Handle(TEvPrivate::TEvScriptExecutionsTablesCreationFinished::TPtr&) {
+    void Handle(TEvScriptExecutionsTablesCreationFinished::TPtr& ev) {
         ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::Finished;
+
+        NYql::TIssue rootIssue;
+        if (!ev->Get()->Success) {
+            ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::NotStarted;
+            rootIssue.SetMessage("Failed to create script execution tables");
+            for (const NYql::TIssue& issue : ev->Get()->Issues) {
+                rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
+            }
+        }
+
         while (!DelayedEventsQueue.empty()) {
-            Send(std::move(DelayedEventsQueue.front()));
+            auto delayedEvent = std::move(DelayedEventsQueue.front());
+            if (ev->Get()->Success) {
+                Send(std::move(delayedEvent.Event));
+            } else {
+                Send(delayedEvent.Event->Sender, delayedEvent.ResponseBuilder(Ydb::StatusIds::INTERNAL_ERROR, {rootIssue}));
+            }
             DelayedEventsQueue.pop_front();
         }
     }
@@ -1764,8 +1780,12 @@ private:
         Pending,
         Finished,
     };
+    struct TDelayedEvent {
+        THolder<IEventHandle> Event;
+        std::function<IEventBase*(Ydb::StatusIds::StatusCode, NYql::TIssues)> ResponseBuilder;
+    };
     EScriptExecutionsCreationStatus ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::NotStarted;
-    std::deque<THolder<IEventHandle>> DelayedEventsQueue;
+    std::deque<TDelayedEvent> DelayedEventsQueue;
     bool IsLookupByRmScheduled = false;
     TActorId KqpTempTablesAgentActor;
 };

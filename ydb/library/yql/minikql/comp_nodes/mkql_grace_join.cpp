@@ -20,7 +20,6 @@
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 
 #include <chrono>
-#include <format>
 #include <limits>
 
 namespace NKikimr {
@@ -280,12 +279,6 @@ void TGraceJoinPacker::Pack()  {
         case NUdf::EDataSlot::Interval64:
             WriteUnaligned<i64>(buffPtr, value.Get<i64>()); break;
 
-        case NUdf::EDataSlot::Uuid:
-        {
-            auto str = TuplePtrs[i]->AsStringRef();
-            TupleStrings[offset] = str.Data();
-            TupleStrSizes[offset] = str.Size();
-        }
         case NUdf::EDataSlot::TzDate:
         {
             WriteUnaligned<ui16>(buffPtr, value.Get<ui16>());
@@ -400,10 +393,6 @@ void TGraceJoinPacker::UnPack()  {
             value = NUdf::TUnboxedValuePod(ReadUnaligned<i64>(buffPtr)); break;
         case NUdf::EDataSlot::Interval64:
             value = NUdf::TUnboxedValuePod(ReadUnaligned<i64>(buffPtr)); break;
-        case NUdf::EDataSlot::Uuid:
-        {
-            value = MakeString(NUdf::TStringRef(TupleStrings[offset], TupleStrSizes[offset]));
-        }
         case NUdf::EDataSlot::TzDate:
         {
             value = NUdf::TUnboxedValuePod(ReadUnaligned<ui16>(buffPtr));
@@ -566,6 +555,387 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
 
 }
 
+class TGraceJoinSpillingSupportState : public TComputationValue<TGraceJoinSpillingSupportState> {
+    using TBase = TComputationValue<TGraceJoinSpillingSupportState>;
+    enum class EOperatingMode {
+        InMemory,
+        Spilling,
+        ProcessSpilled
+    };
+public:
+
+    TGraceJoinSpillingSupportState(TMemoryUsageInfo* memInfo,
+        IComputationWideFlowNode* flowLeft, IComputationWideFlowNode* flowRight,
+        EJoinKind joinKind,  EAnyJoinSettings anyJoinSettings, const std::vector<ui32>& leftKeyColumns, const std::vector<ui32>& rightKeyColumns,
+        const std::vector<ui32>& leftRenames, const std::vector<ui32>& rightRenames,
+        const std::vector<TType*>& leftColumnsTypes, const std::vector<TType*>& rightColumnsTypes, const THolderFactory & holderFactory,
+        const bool isSelfJoin)
+    :  TBase(memInfo)
+    ,   FlowLeft(flowLeft)
+    ,   FlowRight(flowRight)
+    ,   JoinKind(joinKind)
+    ,   LeftKeyColumns(leftKeyColumns)
+    ,   RightKeyColumns(rightKeyColumns)
+    ,   LeftRenames(leftRenames)
+    ,   RightRenames(rightRenames)
+    ,   LeftPacker(std::make_unique<TGraceJoinPacker>(leftColumnsTypes, leftKeyColumns, holderFactory, (anyJoinSettings == EAnyJoinSettings::Left || anyJoinSettings == EAnyJoinSettings::Both)))
+    ,   RightPacker(std::make_unique<TGraceJoinPacker>(rightColumnsTypes, rightKeyColumns, holderFactory, (anyJoinSettings == EAnyJoinSettings::Right || anyJoinSettings == EAnyJoinSettings::Both)))
+    ,   JoinedTablePtr(std::make_unique<GraceJoin::TTable>())
+    ,   JoinCompleted(std::make_unique<bool>(false))
+    ,   PartialJoinCompleted(std::make_unique<bool>(false))
+    ,   HaveMoreLeftRows(std::make_unique<bool>(true))
+    ,   HaveMoreRightRows(std::make_unique<bool>(true))
+    ,   JoinedTuple(std::make_unique<std::vector<NUdf::TUnboxedValue*>>() )
+    ,   IsSelfJoin_(isSelfJoin)
+    ,   SelfJoinSameKeys_(isSelfJoin && (leftKeyColumns == rightKeyColumns))
+    {
+        if (JoinKind == EJoinKind::Full || JoinKind == EJoinKind::Exclusion || IsSelfJoin_) {
+            LeftPacker->BatchSize = std::numeric_limits<ui64>::max();
+            RightPacker->BatchSize = std::numeric_limits<ui64>::max();
+        }
+    }
+
+    EFetchResult FetchValues(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
+        while (true) {
+            switch(GetMode()) {
+                case EOperatingMode::InMemory: {
+                    auto r = DoCalculateInMemory(ctx, output);
+                    if (GetMode() == EOperatingMode::InMemory) {
+                        return r;
+                    }
+                    break;
+                }
+                case EOperatingMode::Spilling: {
+                    DoCalculateWithSpilling(ctx);
+                    if (GetMode() == EOperatingMode::Spilling) {
+                        return EFetchResult::Yield;
+                    }
+                    break;
+                }
+                case EOperatingMode::ProcessSpilled: {
+                    return ProcessSpilledData(ctx, output);
+                }
+
+            }
+        }
+        Y_UNREACHABLE();
+    }
+
+private:
+    EOperatingMode GetMode() const {
+        return Mode;
+    }
+
+    bool HasMemoryForProcessing() const {
+        return !TlsAllocState->IsMemoryYellowZoneEnabled();
+    }
+
+    bool IsSwitchToSpillingModeCondition() const {
+        return false;
+        // TODO: YQL-18033
+        // return !HasMemoryForProcessing();
+    }
+
+
+    void SwitchMode(EOperatingMode mode, TComputationContext& ctx) {
+        switch(mode) {
+            case EOperatingMode::InMemory: {
+                MKQL_ENSURE(false, "Internal logic error");
+                break;
+            }
+            case EOperatingMode::Spilling: {
+                MKQL_ENSURE(EOperatingMode::InMemory == Mode, "Internal logic error");
+                auto spiller = ctx.SpillerFactory->CreateSpiller();
+                RightPacker->TablePtr->InitializeBucketSpillers(spiller);
+                LeftPacker->TablePtr->InitializeBucketSpillers(spiller);
+                break;
+            }
+            case EOperatingMode::ProcessSpilled: {
+                MKQL_ENSURE(EOperatingMode::Spilling == Mode, "Internal logic error");
+                break;
+            }
+
+        }
+        Mode = mode;
+    }
+
+    bool FetchAndPackData(TComputationContext& ctx) {
+        const NKikimr::NMiniKQL::EFetchResult resultLeft = FlowLeft->FetchValues(ctx, LeftPacker->TuplePtrs.data());
+        NKikimr::NMiniKQL::EFetchResult resultRight;
+
+        if (IsSelfJoin_) {
+            resultRight = resultLeft;
+            if (!SelfJoinSameKeys_) {
+                std::copy_n(LeftPacker->TupleHolder.begin(), LeftPacker->TotalColumnsNum, RightPacker->TupleHolder.begin());
+            }
+        } else {
+            resultRight = FlowRight->FetchValues(ctx, RightPacker->TuplePtrs.data());
+        }
+
+        if (resultLeft == EFetchResult::One) {
+            if (LeftPacker->TuplesPacked == 0) {
+                LeftPacker->StartTime = std::chrono::system_clock::now();
+            }
+            LeftPacker->Pack();
+            LeftPacker->TablePtr->AddTuple(LeftPacker->TupleIntVals.data(), LeftPacker->TupleStrings.data(), LeftPacker->TupleStrSizes.data(), LeftPacker->IColumnsHolder.data());
+        }
+
+        if (resultRight == EFetchResult::One) {
+            if (RightPacker->TuplesPacked == 0) {
+                RightPacker->StartTime = std::chrono::system_clock::now();
+            }
+
+            if ( !SelfJoinSameKeys_ ) {
+                RightPacker->Pack();
+                RightPacker->TablePtr->AddTuple(RightPacker->TupleIntVals.data(), RightPacker->TupleStrings.data(), RightPacker->TupleStrSizes.data(), RightPacker->IColumnsHolder.data());
+            }
+        }
+
+        if (resultLeft == EFetchResult::Finish ) {
+            *HaveMoreLeftRows = false;
+        }
+
+
+        if (resultRight == EFetchResult::Finish ) {
+            *HaveMoreRightRows = false;
+        }
+
+        if ((resultLeft == EFetchResult::Yield && (!*HaveMoreRightRows || resultRight == EFetchResult::Yield)) ||
+            (resultRight == EFetchResult::Yield && !*HaveMoreLeftRows))
+        {
+            return true;
+        }
+        return false;
+    }
+
+    void UnpackJoinedData(NUdf::TUnboxedValue*const* output) {
+        LeftPacker->UnPack();
+        RightPacker->UnPack();
+
+        auto &valsLeft = LeftPacker->TupleHolder;
+        auto &valsRight = RightPacker->TupleHolder;
+
+        for (size_t i = 0; i < LeftRenames.size() / 2; i++) {
+            auto & valPtr = output[LeftRenames[2 * i + 1]];
+            if ( valPtr ) {
+                *valPtr = valsLeft[LeftRenames[2 * i]];
+            }
+        }
+
+        for (size_t i = 0; i < RightRenames.size() / 2; i++) {
+            auto & valPtr = output[RightRenames[2 * i + 1]];
+            if ( valPtr ) {
+                *valPtr = valsRight[RightRenames[2 * i]];
+            }
+        }
+    }
+
+    EFetchResult DoCalculateInMemory(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
+        // Collecting data for join and perform join (batch or full)
+        while (!*JoinCompleted ) {
+
+            if ( *PartialJoinCompleted) {
+                // Returns join results (batch or full)
+                while (JoinedTablePtr->NextJoinedData(LeftPacker->JoinTupleData, RightPacker->JoinTupleData)) {
+                    UnpackJoinedData(output);
+                    return EFetchResult::One;
+                }
+
+                // Resets batch state for batch join
+                if (!*HaveMoreRightRows) {
+                    *PartialJoinCompleted = false;
+                    LeftPacker->TuplesBatchPacked = 0;
+                    LeftPacker->TablePtr->Clear(); // Clear table content, ready to collect data for next batch
+                    JoinedTablePtr->Clear();
+                    JoinedTablePtr->ResetIterator();
+                }
+
+
+                if (!*HaveMoreLeftRows ) {
+                    *PartialJoinCompleted = false;
+                    RightPacker->TuplesBatchPacked = 0;
+                    RightPacker->TablePtr->Clear(); // Clear table content, ready to collect data for next batch
+                    JoinedTablePtr->Clear();
+                    JoinedTablePtr->ResetIterator();
+                }
+            }
+
+            if (!*HaveMoreRightRows && !*HaveMoreLeftRows) {
+                *JoinCompleted = true;
+                break;
+            }
+
+            bool isYield = FetchAndPackData(ctx);
+            if (ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
+                SwitchMode(EOperatingMode::Spilling, ctx);
+                return EFetchResult::Yield;
+            }
+            if (isYield) return EFetchResult::Yield;
+
+            if (!*HaveMoreRightRows && !*PartialJoinCompleted && LeftPacker->TuplesBatchPacked >= LeftPacker->BatchSize ) {
+                *PartialJoinCompleted = true;
+                JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
+                JoinedTablePtr->ResetIterator();
+            }
+
+            if (!*HaveMoreLeftRows && !*PartialJoinCompleted && RightPacker->TuplesBatchPacked >= RightPacker->BatchSize ) {
+                *PartialJoinCompleted = true;
+                JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
+                JoinedTablePtr->ResetIterator();
+
+            }
+
+            if (!*HaveMoreRightRows && !*HaveMoreLeftRows && !*PartialJoinCompleted) {
+                *PartialJoinCompleted = true;
+                LeftPacker->StartTime = std::chrono::system_clock::now();
+                RightPacker->StartTime = std::chrono::system_clock::now();
+                if ( SelfJoinSameKeys_ ) {
+                    JoinedTablePtr->Join(*LeftPacker->TablePtr, *LeftPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
+                } else {
+                    JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
+                }
+                JoinedTablePtr->ResetIterator();
+                LeftPacker->EndTime = std::chrono::system_clock::now();
+                RightPacker->EndTime = std::chrono::system_clock::now();
+            }
+
+        }
+
+        return EFetchResult::Finish;
+    }
+
+    bool TryToReduceMemoryAndWait() {
+        bool isWaitingLeftForReduce = LeftPacker->TablePtr->TryToReduceMemoryAndWait();
+        bool isWaitingRightForReduce = RightPacker->TablePtr->TryToReduceMemoryAndWait();
+
+        return isWaitingLeftForReduce || isWaitingRightForReduce;
+    }
+
+    void UpdateSpilling() {
+        LeftPacker->TablePtr->UpdateSpilling();
+        RightPacker->TablePtr->UpdateSpilling();
+    }
+
+    bool HasRunningAsyncOperation() const {
+        return LeftPacker->TablePtr->HasRunningAsyncIoOperation() || RightPacker->TablePtr->HasRunningAsyncIoOperation();
+    }
+
+    bool IsProcessingFinished() {
+        return LeftPacker->TablePtr->IsProcessingFinished() || RightPacker->TablePtr->IsProcessingFinished();
+    }
+
+void DoCalculateWithSpilling(TComputationContext& ctx) {
+    UpdateSpilling();
+
+    if (!HasMemoryForProcessing()) {
+        bool isWaitingForReduce = TryToReduceMemoryAndWait();
+        if (isWaitingForReduce) return;
+    }
+
+    while (*HaveMoreLeftRows || *HaveMoreRightRows) {
+        bool isYield = FetchAndPackData(ctx);
+        if (isYield) return;
+    }
+
+    if (!*HaveMoreLeftRows && !*HaveMoreRightRows) {
+        UpdateSpilling();
+        if (HasRunningAsyncOperation() || !IsProcessingFinished()) return;
+        if (!IsSpillingFinalized) {
+            LeftPacker->TablePtr->FinalizeSpilling();
+            RightPacker->TablePtr->FinalizeSpilling();
+            IsSpillingFinalized = true;
+
+            if (HasRunningAsyncOperation()) return;
+        }
+        SwitchMode(EOperatingMode::ProcessSpilled, ctx);
+        return;
+    }
+}
+
+EFetchResult ProcessSpilledData(TComputationContext&, NUdf::TUnboxedValue*const* output) {
+    while (NextBucketToJoin != GraceJoin::NumberOfBuckets) {
+        UpdateSpilling();
+
+        if (HasRunningAsyncOperation()) return EFetchResult::Yield;
+
+        if (!LeftPacker->TablePtr->IsBucketInMemory(NextBucketToJoin)) {
+            LeftPacker->TablePtr->StartLoadingBucket(NextBucketToJoin);
+        }
+
+        if (!RightPacker->TablePtr->IsBucketInMemory(NextBucketToJoin)) {
+            RightPacker->TablePtr->StartLoadingBucket(NextBucketToJoin);
+        } 
+
+        if (LeftPacker->TablePtr->IsBucketInMemory(NextBucketToJoin) && RightPacker->TablePtr->IsBucketInMemory(NextBucketToJoin)) {
+            if (*PartialJoinCompleted) {
+                while (JoinedTablePtr->NextJoinedData(LeftPacker->JoinTupleData, RightPacker->JoinTupleData)) {
+                    UnpackJoinedData(output);
+
+                    return EFetchResult::One;
+                }
+
+                LeftPacker->TuplesBatchPacked = 0;
+                LeftPacker->TablePtr->ClearBucket(NextBucketToJoin); // Clear content of returned bucket
+
+                RightPacker->TuplesBatchPacked = 0;
+                RightPacker->TablePtr->ClearBucket(NextBucketToJoin); // Clear content of returned bucket
+
+                JoinedTablePtr->Clear();
+                JoinedTablePtr->ResetIterator();
+                *PartialJoinCompleted = false;
+
+                NextBucketToJoin++;
+            } else {
+                LeftPacker->TablePtr->PrepareBucket(NextBucketToJoin);
+                RightPacker->TablePtr->PrepareBucket(NextBucketToJoin);
+                *PartialJoinCompleted = true;
+                LeftPacker->StartTime = std::chrono::system_clock::now();
+                RightPacker->StartTime = std::chrono::system_clock::now();
+                if ( SelfJoinSameKeys_ ) {
+                    JoinedTablePtr->Join(*LeftPacker->TablePtr, *LeftPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows, NextBucketToJoin, NextBucketToJoin+1);
+                } else {
+                    JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows, NextBucketToJoin, NextBucketToJoin+1);
+                }
+                
+                JoinedTablePtr->ResetIterator();
+                LeftPacker->EndTime = std::chrono::system_clock::now();
+                RightPacker->EndTime = std::chrono::system_clock::now();
+            }
+
+        }
+    }
+    return EFetchResult::Finish;
+}
+
+private:
+    EOperatingMode Mode = EOperatingMode::InMemory;
+
+    IComputationWideFlowNode* const FlowLeft;
+    IComputationWideFlowNode* const FlowRight;
+
+    const EJoinKind JoinKind;
+    const std::vector<ui32> LeftKeyColumns;
+    const std::vector<ui32> RightKeyColumns;
+    const std::vector<ui32> LeftRenames;
+    const std::vector<ui32> RightRenames;
+    const std::vector<TType *> LeftColumnsTypes;
+    const std::vector<TType *> RightColumnsTypes;
+    const std::unique_ptr<TGraceJoinPacker> LeftPacker;
+    const std::unique_ptr<TGraceJoinPacker> RightPacker;
+    const std::unique_ptr<GraceJoin::TTable> JoinedTablePtr;
+    const std::unique_ptr<bool> JoinCompleted;
+    const std::unique_ptr<bool> PartialJoinCompleted;
+    const std::unique_ptr<bool> HaveMoreLeftRows;
+    const std::unique_ptr<bool> HaveMoreRightRows;
+    const std::unique_ptr<std::vector<NUdf::TUnboxedValue*>> JoinedTuple;
+    const bool IsSelfJoin_;
+    const bool SelfJoinSameKeys_;
+
+    bool IsSpillingFinalized = false;
+
+    ui32 NextBucketToJoin = 0;
+};
+
 class TGraceJoinState : public TComputationValue<TGraceJoinState> {
 using TBase = TComputationValue<TGraceJoinState>;
 public:
@@ -649,10 +1019,18 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
 
         EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output)  const {
             if (!state.HasValue()) {
-                MakeState(ctx, state);
+                if (!ctx.ExecuteLLVM) {
+                    MakeSpillingSupportState(ctx, state);
+                } else {
+                    MakeState(ctx, state);
+                }
+            }
+            
+            if (ctx.ExecuteLLVM) {
+                return static_cast<TGraceJoinState*>(state.AsBoxed().Get())->FetchValues(ctx, output);
             }
 
-            return static_cast<TGraceJoinState*>(state.AsBoxed().Get())->FetchValues(ctx, output);
+            return static_cast<TGraceJoinSpillingSupportState*>(state.AsBoxed().Get())->FetchValues(ctx, output);
         }
 #ifndef MKQL_DISABLE_CODEGEN
     ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
@@ -740,6 +1118,13 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
 
         void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
             state = ctx.HolderFactory.Create<TGraceJoinState>(
+                FlowLeft, FlowRight, JoinKind, AnyJoinSettings_, LeftKeyColumns, RightKeyColumns,
+                LeftRenames, RightRenames, LeftColumnsTypes, RightColumnsTypes,
+                ctx.HolderFactory, IsSelfJoin_);
+        }
+
+        void MakeSpillingSupportState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
+            state = ctx.HolderFactory.Create<TGraceJoinSpillingSupportState>(
                 FlowLeft, FlowRight, JoinKind, AnyJoinSettings_, LeftKeyColumns, RightKeyColumns,
                 LeftRenames, RightRenames, LeftColumnsTypes, RightColumnsTypes,
                 ctx.HolderFactory, IsSelfJoin_);

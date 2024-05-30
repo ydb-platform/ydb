@@ -33,6 +33,31 @@ inline size_t CalcBlockLen(size_t maxBlockItemSize) {
 bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type);
 bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& type);
 
+template<NUdf::EDataSlot slot>
+std::shared_ptr<arrow::DataType> MakeTzLayoutArrowType() {
+    static_assert(slot == NUdf::EDataSlot::TzDate || slot == NUdf::EDataSlot::TzDatetime || slot == NUdf::EDataSlot::TzTimestamp, 
+        "Expected tz date type slot");
+
+    if constexpr (slot == NUdf::EDataSlot::TzDate) {
+        return arrow::uint16();
+    }
+    if constexpr (slot == NUdf::EDataSlot::TzDatetime) {
+        return arrow::uint32();
+    }
+    if constexpr (slot == NUdf::EDataSlot::TzTimestamp) {
+        return arrow::uint64();
+    }
+}
+
+template<NUdf::EDataSlot slot>
+std::shared_ptr<arrow::StructType> MakeTzDateArrowType() {
+    std::vector<std::shared_ptr<arrow::Field>> fields {
+        std::make_shared<arrow::Field>("datetime", MakeTzLayoutArrowType<slot>()),
+        std::make_shared<arrow::Field>("timezoneId", arrow::uint16()),
+    };
+    return std::make_shared<arrow::StructType>(fields);
+}
+
 class TArrowType : public NUdf::IArrowType {
 public:
     TArrowType(const std::shared_ptr<arrow::DataType>& type)
@@ -163,8 +188,8 @@ public:
     void Unused2() override;
     void Unused3() override;
 
-    NUdf::IFunctionTypeInfoBuilder15& SupportsBlocks() override;
-    NUdf::IFunctionTypeInfoBuilder15& IsStrict() override;
+    NUdf::IFunctionTypeInfoBuilder15& SupportsBlocksImpl() override;
+    NUdf::IFunctionTypeInfoBuilder15& IsStrictImpl() override;
     const NUdf::IBlockTypeHelper& IBlockTypeHelper() const override;
 
     bool GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef& value) const override;

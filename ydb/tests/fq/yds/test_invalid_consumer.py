@@ -3,8 +3,6 @@
 
 import logging
 import os
-import pytest
-import time
 
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 

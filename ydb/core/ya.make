@@ -1,5 +1,6 @@
 RECURSE(
     actorlib_impl
+    backup
     base
     blob_depot
     blobstorage

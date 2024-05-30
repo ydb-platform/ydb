@@ -593,11 +593,11 @@ void TPDisk::ProcessLogReadQueue() {
         case ERequestType::RequestLogReadContinue:
         {
             TLogReadContinue *read = static_cast<TLogReadContinue*>(req);
-            read->CompletionAction->CostNs = DriveModel.TimeForSizeNs(read->Size, read->Offset / Format.ChunkSize,
-                    TDriveModel::OP_TYPE_READ);
-            auto traceId = read->SpanStack.GetTraceId();
-            BlockDevice->PreadAsync(read->Data, read->Size, read->Offset, read->CompletionAction,
-                    read->ReqId, &traceId); // ??? TraceId
+            if (auto ptr = read->CompletionAction.lock()) {
+                ptr->CostNs = DriveModel.TimeForSizeNs(read->Size, read->Offset / Format.ChunkSize, TDriveModel::OP_TYPE_READ);
+                auto traceId = read->SpanStack.GetTraceId();
+                BlockDevice->PreadAsync(read->Data, read->Size, read->Offset, ptr.get(), read->ReqId, &traceId); // ??? TraceId
+            }
             break;
         }
         case ERequestType::RequestLogSectorRestore:
@@ -946,8 +946,7 @@ void TPDisk::LogWrite(TLogWrite &evLog, TVector<ui32> &logChunksToCommit) {
     }
     Y_ABORT_UNLESS(CommonLogger->NextChunks.empty());
 
-    evLog.Result.Reset(new NPDisk::TEvLogResult(NKikimrProto::OK,
-                GetStatusFlags(evLog.Owner, evLog.OwnerGroupType), nullptr));
+    evLog.Result.Reset(new NPDisk::TEvLogResult(NKikimrProto::OK, GetStatusFlags(OwnerSystem, evLog.OwnerGroupType), nullptr));
     Y_ABORT_UNLESS(evLog.Result.Get());
     evLog.Result->Results.push_back(NPDisk::TEvLogResult::TRecord(evLog.Lsn, evLog.Cookie));
 }

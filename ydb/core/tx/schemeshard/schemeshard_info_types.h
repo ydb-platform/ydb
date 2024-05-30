@@ -1467,6 +1467,13 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         return TTabletId(ProcessingParams.GetStatisticsAggregator());
     }
 
+    TTabletId GetTenantBackupControllerID() const {
+        if (!ProcessingParams.HasBackupController()) {
+            return InvalidTabletId;
+        }
+        return TTabletId(ProcessingParams.GetBackupController());
+    }
+
     TTabletId GetTenantGraphShardID() const {
         if (!ProcessingParams.HasGraphShard()) {
             return InvalidTabletId;

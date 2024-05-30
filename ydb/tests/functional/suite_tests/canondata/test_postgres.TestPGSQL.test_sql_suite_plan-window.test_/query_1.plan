@@ -34,12 +34,6 @@
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "ExternalPlanNodeId": 4
-                                                    },
-                                                    {
-                                                        "ExternalPlanNodeId": 4
-                                                    },
-                                                    {
                                                         "InternalOperatorId": 1
                                                     }
                                                 ],

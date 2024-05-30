@@ -136,6 +136,7 @@ template <typename TFunc>
         case NScheme::NTypeIds::Uint16:
             return callback(TTypeWrapper<arrow::UInt16Type>());
         case NScheme::NTypeIds::Int32:
+        case NScheme::NTypeIds::Date32:
             return callback(TTypeWrapper<arrow::Int32Type>());
         case NScheme::NTypeIds::Datetime:
         case NScheme::NTypeIds::Uint32:
@@ -165,6 +166,7 @@ template <typename TFunc>
         case NScheme::NTypeIds::Decimal:
             return callback(TTypeWrapper<arrow::Decimal128Type>());
 
+        case NScheme::NTypeIds::Datetime64:
         case NScheme::NTypeIds::Timestamp64:
         case NScheme::NTypeIds::Interval64:
             return callback(TTypeWrapper<arrow::Int64Type>());
@@ -214,6 +216,8 @@ inline bool IsPrimitiveYqlType(const NScheme::TTypeInfo& typeInfo) {
         case NScheme::NTypeIds::Double:
         case NScheme::NTypeIds::Timestamp:
         case NScheme::NTypeIds::Interval:
+        case NScheme::NTypeIds::Date32:
+        case NScheme::NTypeIds::Datetime64:
         case NScheme::NTypeIds::Timestamp64:
         case NScheme::NTypeIds::Interval64:
             return true;

@@ -183,6 +183,7 @@ namespace NKikimr::NStorage {
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, {}, nullptr, 0));
             Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateDelete(pdiskId));
             LocalPDisks.erase(it);
+            PDiskRestartInFlight.erase(pdiskId);
 
             // mark vdisks still living over this PDisk as destroyed ones
             for (auto it = LocalVDisks.lower_bound({LocalNodeId, pdiskId, 0}); it != LocalVDisks.end() &&
@@ -224,6 +225,11 @@ namespace NKikimr::NStorage {
     }
 
     void TNodeWarden::OnPDiskRestartFinished(ui32 pdiskId, NKikimrProto::EReplyStatus status) {
+        if (PDiskRestartInFlight.erase(pdiskId) == 0) {
+            // There was no restart in progress.
+            return;
+        }
+
         const TPDiskKey pdiskKey(LocalNodeId, pdiskId);
 
         const TVSlotId from(pdiskKey.NodeId, pdiskKey.PDiskId, 0);
@@ -267,16 +273,30 @@ namespace NKikimr::NStorage {
     void TNodeWarden::DoRestartLocalPDisk(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk) {
         ui32 pdiskId = pdisk.GetPDiskID();
 
-        const TActorId actorId = MakeBlobStoragePDiskID(LocalNodeId, pdiskId);
+        STLOG(PRI_NOTICE, BS_NODE, NW75, "DoRestartLocalPDisk", (PDiskId, pdiskId));
+
+        const auto [_, inserted] = PDiskRestartInFlight.emplace(pdiskId);
+
+        if (!inserted) {
+            STLOG(PRI_NOTICE, BS_NODE, NW76, "Restart already in progress", (PDiskId, pdiskId));
+            // Restart is already in progress.
+            return;
+        }
 
         auto it = LocalPDisks.find(TPDiskKey(LocalNodeId, pdiskId));
         if (it == LocalPDisks.end()) {
+            PDiskRestartInFlight.erase(pdiskId);
+
+            STLOG(PRI_NOTICE, BS_NODE, NW77, "Restart state carried from previous start, just starting", (PDiskId, pdiskId));
+
             // This can happen if warden didn't handle pdisk's restart before node's restart.
             // In this case, PDisk has EntityStatus::RESTART instead of EntityStatus::INITIAL.
             StartLocalPDisk(pdisk);
             SendPDiskReport(pdiskId, NKikimrBlobStorage::TEvControllerNodeReport::PD_RESTARTED);
             return;
         }
+
+        const TActorId actorId = MakeBlobStoragePDiskID(LocalNodeId, pdiskId);
 
         TIntrusivePtr<TPDiskConfig> pdiskConfig = CreatePDiskConfig(it->second.Record);
 
@@ -313,6 +333,12 @@ namespace NKikimr::NStorage {
             const TPDiskKey key(pdisk);
 
             switch (entityStatus) {
+                case NKikimrBlobStorage::RESTART:
+                    if (auto it = LocalPDisks.find({pdisk.GetNodeID(), pdisk.GetPDiskID()}); it != LocalPDisks.end()) {
+                        it->second.Record = pdisk;
+                    }
+                    DoRestartLocalPDisk(pdisk);
+                    [[fallthrough]];
                 case NKikimrBlobStorage::INITIAL:
                 case NKikimrBlobStorage::CREATE: {
                     const auto [it, inserted] = pdiskMap.try_emplace(key, nullptr);
@@ -323,22 +349,8 @@ namespace NKikimr::NStorage {
                     it->second->ClearEntityStatus();
                     break;
                 }
-
                 case NKikimrBlobStorage::DESTROY:
-                    if (const auto it = pdiskMap.find(key); it != pdiskMap.end()) {
-                        pdiskMap.erase(it);
-                    }
-                    break;
-
-                case NKikimrBlobStorage::RESTART:
-                    if (auto it = LocalPDisks.find({pdisk.GetNodeID(), pdisk.GetPDiskID()}); it != LocalPDisks.end()) {
-                        it->second.Record = pdisk;
-                    }
-                    if (auto it = pdiskMap.find(key); it != pdiskMap.end()) {
-                        it->second->CopyFrom(pdisk);
-                        it->second->ClearEntityStatus();
-                    }
-                    DoRestartLocalPDisk(pdisk);
+                    pdiskMap.erase(key);
                     break;
             }
         }

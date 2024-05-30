@@ -441,21 +441,7 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TReadSettings& /*cmd*/, TStatus& status) {
-        auto settings = status.MutableSettings();
-
-        settings->AddDefaultMaxSlots(Self.DefaultMaxSlots);
-        settings->AddEnableSelfHeal(Self.SelfHealEnable);
-        settings->AddEnableDonorMode(Self.DonorMode);
-        settings->AddScrubPeriodicitySeconds(Self.ScrubPeriodicity.Seconds());
-        settings->AddPDiskSpaceMarginPromille(Self.PDiskSpaceMarginPromille);
-        settings->AddGroupReserveMin(Self.GroupReserveMin);
-        settings->AddGroupReservePartPPM(Self.GroupReservePart);
-        settings->AddMaxScrubbedDisksAtOnce(Self.MaxScrubbedDisksAtOnce);
-        settings->AddPDiskSpaceColorBorder(Self.PDiskSpaceColorBorder);
-        settings->AddEnableGroupLayoutSanitizer(Self.GroupLayoutSanitizerEnabled);
-        // TODO:
-        // settings->AddSerialManagementStage(Self.SerialManagementStage);
-        settings->AddAllowMultipleRealmsOccupation(Self.AllowMultipleRealmsOccupation);
+        Self.SerializeSettings(status.MutableSettings());
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TQueryBaseConfig& cmd, TStatus& status) {
@@ -525,6 +511,8 @@ namespace NKikimr::NBsController {
         });
 
         if (!virtualGroupsOnly) {
+            const TMonotonic mono = TActivationContext::Monotonic();
+
             // apply static group
             for (const auto& [pdiskId, pdisk] : StaticPDisks) {
                 if (PDisks.Find(pdiskId)) {
@@ -564,11 +552,11 @@ namespace NKikimr::NBsController {
                     x->MutableVDiskMetrics()->ClearVDiskId();
                 }
                 x->SetStatus(NKikimrBlobStorage::EVDiskStatus_Name(vslot.VDiskStatus));
+                x->SetReady(vslot.ReadySince <= mono);
             }
             if (const auto& s = Self.StorageConfig; s.HasBlobStorageConfig()) {
                 if (const auto& bsConfig = s.GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
                     const auto& ss = bsConfig.GetServiceSet();
-                    const TMonotonic mono = TActivationContext::Monotonic();
                     for (const auto& group : ss.GetGroups()) {
                         auto *x = pb->AddGroup();
                         x->SetGroupId(group.GetGroupID());
@@ -662,6 +650,7 @@ namespace NKikimr::NBsController {
         for (auto& [nodeId, node] : nodes) {
             pb->AddNode()->Swap(&node);
         }
+        Self.SerializeSettings(pb->MutableSettings());
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TDropDonorDisk& cmd, TStatus& /*status*/) {

@@ -75,17 +75,6 @@ TYPath StripAttributes(const TYPath& path)
     return path;
 }
 
-TString ToStringLiteral(const TYPath& path)
-{
-    TStringBuilder builder;
-    for (TTokenizer tokenizer(path); tokenizer.GetType() != ETokenType::EndOfStream; tokenizer.Advance()) {
-        builder.AppendString(tokenizer.GetType() == ETokenType::Literal
-            ? tokenizer.GetLiteralValue()
-            : TString(tokenizer.GetToken()));
-    }
-    return builder.Flush();
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NYPath

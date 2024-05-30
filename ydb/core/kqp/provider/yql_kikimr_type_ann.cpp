@@ -1306,6 +1306,11 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                             if (!ParseConstraintNode(ctx, columnMeta, columnTuple, constraint, SessionCtx->Config(), needEval, true)) {
                                 return TStatus::Error;
                             }
+
+                            if (needEval) {
+                                ctx.Step.Repeat(TExprStep::ExprEval);
+                                return TStatus(TStatus::Repeat, true);
+                            }
                         }
                     }
 
@@ -1356,12 +1361,34 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                             << " Column: \"" << name << "\" does not exist"));
                         return TStatus::Error;
                     }
-                    auto families = columnTuple.Item(1);
-                    if (families.Cast<TCoAtomList>().Size() > 1) {
-                        ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
-                            << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
-                            << " Column: \"" << name
-                            << "\". Several column families for a single column are not yet supported"));
+                    auto alterColumnList = columnTuple.Item(1).Cast<TExprList>();
+                    auto alterColumnAction = TString(alterColumnList.Item(0).Cast<TCoAtom>());
+                    if (alterColumnAction == "setDefault") {
+                        auto setDefault = alterColumnList.Item(1).Cast<TCoAtomList>();
+                        auto func = TString(setDefault.Item(0).Cast<TCoAtom>());
+                        auto arg = TString(setDefault.Item(1).Cast<TCoAtom>());
+                        if (func != "nextval") {
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
+                                TStringBuilder() << "Unsupported function to set default: " << func));
+                            return TStatus::Error;
+                        }
+                        if (setDefault.Size() > 2) {
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
+                                TStringBuilder() << "Function nextval has exactly one argument"));
+                            return TStatus::Error;
+                        }
+                    } else if (alterColumnAction == "setFamily") {
+                        auto families = alterColumnList.Item(1).Cast<TCoAtomList>();
+                        if (families.Size() > 1) {
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                                << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                << " Column: \"" << name
+                                << "\". Several column families for a single column are not yet supported"));
+                            return TStatus::Error;
+                        }
+                    } else {
+                        ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
+                                TStringBuilder() << "Unsupported action to alter column"));
                         return TStatus::Error;
                     }
                 }
@@ -1406,7 +1433,8 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                     && name != "setTableSettings"
                     && name != "addChangefeed"
                     && name != "dropChangefeed"
-                    && name != "renameIndexTo")
+                    && name != "renameIndexTo"
+                    && name != "alterIndex")
             {
                 ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
                     TStringBuilder() << "Unknown alter table action: " << name));
@@ -1480,7 +1508,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
         return true;
     }
 
-    static bool CheckCreateSequenceSettings(const TCoNameValueTupleList& settings, TExprContext& ctx) {
+    static bool CheckSequenceSettings(const TCoNameValueTupleList& settings, TExprContext& ctx) {
         const static std::unordered_set<TString> sequenceSettingNames =
             {"start", "increment", "cache", "minvalue", "maxvalue", "cycle"};
         for (const auto& setting : settings) {
@@ -1509,7 +1537,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleCreateSequence(TKiCreateSequence node, TExprContext& ctx) override {
-        if(!CheckCreateSequenceSettings(node.SequenceSettings(), ctx)) {
+        if(!CheckSequenceSettings(node.SequenceSettings(), ctx)) {
             return TStatus::Error;
         }
 
@@ -1541,6 +1569,21 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             auto name = setting.Name().Value();
             ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                 TStringBuilder() << "Unknown drop sequence setting: " << name));
+            return TStatus::Error;
+        }
+
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    virtual TStatus HandleAlterSequence(TKiAlterSequence node, TExprContext& ctx) override {
+        if(!CheckSequenceSettings(node.SequenceSettings(), ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!node.Settings().Empty()) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+                << "Unsupported sequence settings"));
             return TStatus::Error;
         }
 
@@ -1618,8 +1661,10 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             "endpoint",
             "database",
             "token",
+            "token_secret_name",
             "user",
             "password",
+            "password_secret_name",
         };
 
         if (!CheckReplicationSettings(node.ReplicationSettings(), supportedSettings, ctx)) {

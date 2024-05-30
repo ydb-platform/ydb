@@ -158,14 +158,14 @@ void TPeriodicExecutorBase<TInvocationTimePolicy>::PostCallback()
 {
     GuardedInvoke(
         Invoker_,
-        [weakThis = MakeWeak(this)] {
-            if (auto strongThis = weakThis.Lock()) {
-                strongThis->RunCallback();
+        [this, weakThis = MakeWeak(this)] {
+            if (auto this_ = weakThis.Lock()) {
+                RunCallback();
             }
         },
-        [weakThis = MakeWeak(this)] {
-            if (auto strongThis = weakThis.Lock()) {
-                strongThis->OnCallbackCancelled();
+        [this, weakThis = MakeWeak(this)] {
+            if (auto this_ = weakThis.Lock()) {
+                OnCallbackCancelled();
             }
         });
 }

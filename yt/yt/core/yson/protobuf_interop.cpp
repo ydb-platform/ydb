@@ -78,7 +78,7 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const NLogging::TLogger Logger("ProtobufInterop");
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "ProtobufInterop");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -540,20 +540,20 @@ public:
         }
 
         switch (GetType()) {
-            case FieldDescriptor::TYPE_INT32:
             case FieldDescriptor::TYPE_FIXED32:
             case FieldDescriptor::TYPE_UINT32:
                 consumer->OnStringScalar("uint32");
                 break;
-            case FieldDescriptor::TYPE_INT64:
             case FieldDescriptor::TYPE_FIXED64:
             case FieldDescriptor::TYPE_UINT64:
                 consumer->OnStringScalar("uint64");
                 break;
+            case FieldDescriptor::TYPE_INT32:
             case FieldDescriptor::TYPE_SINT32:
             case FieldDescriptor::TYPE_SFIXED32:
                 consumer->OnStringScalar("int32");
                 break;
+            case FieldDescriptor::TYPE_INT64:
             case FieldDescriptor::TYPE_SINT64:
             case FieldDescriptor::TYPE_SFIXED64:
                 consumer->OnStringScalar("int64");

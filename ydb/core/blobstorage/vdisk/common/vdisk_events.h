@@ -3121,4 +3121,14 @@ namespace NKikimr {
 
     struct TEvPermitGarbageCollection : TEventLocal<TEvPermitGarbageCollection, TEvBlobStorage::EvPermitGarbageCollection> {};
 
+    ////////////////////////////////////////////////////////////////////////////
+    // TEvMinHugeBlobSizeUpdate
+    ////////////////////////////////////////////////////////////////////////////
+    class TEvMinHugeBlobSizeUpdate : public TEventLocal<TEvMinHugeBlobSizeUpdate, TEvBlobStorage::EvMinHugeBlobSizeUpdate> {
+    public:
+        ui32 MinREALHugeBlobInBytes;
+
+        TEvMinHugeBlobSizeUpdate(ui32 minREALHugeBlobInBytes) : MinREALHugeBlobInBytes(minREALHugeBlobInBytes) {  
+        };
+    };
 } // NKikimr

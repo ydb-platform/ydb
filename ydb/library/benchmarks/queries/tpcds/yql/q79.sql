@@ -3,7 +3,7 @@
 -- NB: Subquerys
 -- start query 1 in stream 0 using template query79.tpl and seed 2031708268
 select
-  c_last_name,c_first_name,substring(cast(s_city as string),1,30) bla,ss_ticket_number,amt,profit
+  c_last_name,c_first_name,substring(cast(s_city as string),0,30) bla,ss_ticket_number,amt,profit
   from
    (select store_sales.ss_ticket_number ss_ticket_number
           ,store_sales.ss_customer_sk ss_customer_sk

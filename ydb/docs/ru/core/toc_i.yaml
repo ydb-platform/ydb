@@ -27,6 +27,10 @@ items:
   include:
     mode: link
     path: reference/toc_p.yaml
+- name: Рецепты
+  include:
+    mode: link
+    path: recipes/toc_p.yaml
 - name: Вопросы и ответы
   include:
     mode: link
@@ -36,7 +40,9 @@ items:
     mode: link
     path: downloads/toc_p.yaml
 - name: Публичные материалы
-  href: public-talks.md
+  include:
+    mode: link
+    path: public-materials/toc_p.yaml
 - name: Список изменений
   include:
     mode: link

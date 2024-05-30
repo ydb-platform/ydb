@@ -41,6 +41,17 @@ TTxDataFromSource::TTxDataFromSource(NColumnShard::TColumnShard* self, const std
     , PortionsByPathId(portionsByPathId)
     , SourceTabletId(sourceTabletId)
 {
+    for (auto&& i : PortionsByPathId) {
+        for (ui32 p = 0; p < i.second.GetPortions().size();) {
+            if (Session->TryTakePortionBlobs(Self->GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex(), i.second.GetPortions()[p])) {
+                ++p;
+            } else {
+                i.second.MutablePortions()[p] = std::move(i.second.MutablePortions().back());
+                i.second.MutablePortions()[p].ResetShardingVersion();
+                i.second.MutablePortions().pop_back();
+            }
+        }
+    }
 }
 
 }

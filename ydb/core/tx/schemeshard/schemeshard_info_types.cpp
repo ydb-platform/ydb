@@ -269,20 +269,51 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 return nullptr;
             }
 
-            if (!columnFamily) {
+            if (!columnFamily && !col.HasDefaultFromSequence()) {
                 errStr = Sprintf("Nothing to alter for column '%s'", colName.data());
                 return nullptr;
             }
 
-            if (col.DefaultValue_case() != NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET) {
-                errStr = Sprintf("Cannot alter default for column '%s'", colName.c_str());
-                return nullptr;
+            if (col.HasDefaultFromSequence()) {
+                if (!localSequences.contains(col.GetDefaultFromSequence())) {
+                    errStr = Sprintf("Column '%s' cannot use an unknown sequence '%s'", colName.c_str(), col.GetDefaultFromSequence().c_str());
+                    return nullptr;
+                }
+            } else {
+                if (col.DefaultValue_case() != NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET) {
+                    errStr = Sprintf("Cannot set default from literal for column '%s'", colName.c_str());
+                    return nullptr;
+                }
             }
 
             ui32 colId = colName2Id[colName];
+            const TTableInfo::TColumn& sourceColumn = source->Columns[colId];
+
+            if (col.HasDefaultFromSequence()) {
+                if (sourceColumn.PType.GetTypeId() != NScheme::NTypeIds::Int64 
+                        && NPg::PgTypeIdFromTypeDesc(sourceColumn.PType.GetTypeDesc()) != INT8OID) {
+                    TString sequenceType = sourceColumn.PType.GetTypeId() == NScheme::NTypeIds::Pg 
+                        ? NPg::PgTypeNameFromTypeDesc(NPg::TypeDescFromPgTypeId(INT8OID)) 
+                        : NScheme::TypeName(NScheme::NTypeIds::Int64);
+                    errStr = Sprintf(
+                        "Sequence value type '%s' must be equal to the column type '%s'", sequenceType.c_str(),
+                        NScheme::TypeName(sourceColumn.PType, sourceColumn.PTypeMod).c_str());
+                    return nullptr;
+                }
+            }
+
             TTableInfo::TColumn& column = alterData->Columns[colId];
-            column = source->Columns[colId];
-            column.Family = columnFamily->GetId();
+            column = sourceColumn;
+            if (columnFamily) {
+                column.Family = columnFamily->GetId();
+            }
+            if (col.HasDefaultFromSequence()) {
+                column.DefaultKind = ETableColumnDefaultKind::FromSequence;
+                column.DefaultValue = col.GetDefaultFromSequence();
+            } else if (col.HasDefaultFromLiteral()) {
+                column.DefaultKind = ETableColumnDefaultKind::FromLiteral;
+                column.DefaultValue = col.GetDefaultFromLiteral().SerializeAsString();
+            }
         } else {
             if (colName2Id.contains(colName)) {
                 errStr = Sprintf("Column '%s' specified more than once", colName.data());
@@ -409,14 +440,18 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     if (op.HasReplicationConfig()) {
         const auto& cfg = op.GetReplicationConfig();
 
-        if (source) {
-            errStr = "Cannot alter replication config";
-            return nullptr;
-        }
-
         switch (cfg.GetMode()) {
         case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE:
+            if (cfg.HasConsistency() && cfg.GetConsistency() != NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_UNKNOWN) {
+                errStr = "Cannot set replication consistency";
+                return nullptr;
+            }
+            break;
         case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY:
+            if (source) {
+                errStr = "Cannot set replication mode";
+                return nullptr;
+            }
             break;
         default:
             errStr = "Unknown replication mode";
@@ -1334,6 +1369,8 @@ void TTableInfo::FinishAlter() {
             //oldCol->CreateVersion = col.second.CreateVersion;
             oldCol->DeleteVersion = col.second.DeleteVersion;
             oldCol->Family = col.second.Family;
+            oldCol->DefaultKind = col.second.DefaultKind;
+            oldCol->DefaultValue = col.second.DefaultValue;
         } else {
             Columns[col.first] = col.second;
             if (col.second.KeyOrder != (ui32)-1) {

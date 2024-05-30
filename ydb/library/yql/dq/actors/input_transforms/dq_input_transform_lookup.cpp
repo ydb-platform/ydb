@@ -112,8 +112,8 @@ private: //IDqComputeActorAsyncInput
     }
 
         //No checkpointg required
-    void SaveState(const NYql::NDqProto::TCheckpoint&, NYql::NDqProto::TSourceState&) final {}
-    void LoadState(const NYql::NDqProto::TSourceState&) final {}
+    void SaveState(const NYql::NDqProto::TCheckpoint&, NYql::NDq::TSourceState&) final {}
+    void LoadState(const NYql::NDq::TSourceState&) final {}
     void CommitState(const NYql::NDqProto::TCheckpoint&) final {}
 
     void PassAway() final {
@@ -226,7 +226,14 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
     Y_ABORT_UNLESS(leftJoinColumnIndexes.size() == leftJoinColumns.size());
     auto rightJoinColumnIndexes  = GetJoinColumnIndexes(rightRowType, rightJoinColumns);
     Y_ABORT_UNLESS(rightJoinColumnIndexes.size() == rightJoinColumns.size());
-    
+    auto columnOrder = CategorizeOutputRowItems(
+        outputRowType, 
+        settings.GetLeftLabel(),
+        settings.GetRightLabel(),
+        {settings.GetLeftJoinKeyNames().cbegin(), settings.GetLeftJoinKeyNames().cend()},
+        {settings.GetRightJoinKeyNames().cbegin(), settings.GetRightJoinKeyNames().cend()}
+    );
+
     auto actor = new TInputTransformStreamLookup(
         args.Alloc,
         args.HolderFactory,
@@ -236,13 +243,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
         std::move(settings),
         std::move(leftJoinColumnIndexes),
         std::move(rightJoinColumnIndexes),
-        CategorizeOutputRowItems(
-            outputRowType, 
-            settings.GetLeftLabel(),
-            settings.GetRightLabel(),
-            {settings.GetLeftJoinKeyNames().cbegin(), settings.GetLeftJoinKeyNames().cend()},
-            {settings.GetRightJoinKeyNames().cbegin(), settings.GetRightJoinKeyNames().cend()}
-        )
+        std::move(columnOrder)
     );
     return {actor, actor};
 }

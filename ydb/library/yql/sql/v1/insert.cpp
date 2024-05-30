@@ -428,7 +428,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return {};
+        return new TEraseColumnsNode(GetPos(), Columns);
     }
 
 private:

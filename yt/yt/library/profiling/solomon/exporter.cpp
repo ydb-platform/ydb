@@ -617,6 +617,8 @@ void TSolomonExporter::DoHandleShard(
 {
     TPromise<TSharedRef> responsePromise = NewPromise<TSharedRef>();
 
+    auto Logger = NProfiling::Logger.WithTag("Shard: %v", name);
+
     try {
         auto format = NMonitoring::EFormat::JSON;
         if (auto accept = req->GetHeaders()->Find("Accept")) {

@@ -13,7 +13,7 @@ Y_UNIT_TEST_SUITE(PartitionStats) {
 
     TTestActorRuntime::TEgg MakeEgg()
     {
-        return { new TAppData(0, 0, 0, 0, { }, nullptr, nullptr, nullptr, nullptr), nullptr, nullptr };
+        return { new TAppData(0, 0, 0, 0, { }, nullptr, nullptr, nullptr, nullptr), nullptr, nullptr, {} };
     }
 
     void WaitForBootstrap(TTestActorRuntime &runtime) {

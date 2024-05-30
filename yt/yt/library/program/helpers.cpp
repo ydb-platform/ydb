@@ -85,7 +85,7 @@ private:
             return;
         }
 
-        YT_LOG_INFO("Changing tcmalloc memory limit (Limit: %v, IsHard: %v)",
+        YT_LOG_INFO("Changing tcmalloc memory limit (Limit: %v, Hard: %v)",
             proposed.limit,
             proposed.hard);
 
@@ -122,7 +122,7 @@ private:
 
         TAllocatorMemoryLimit proposed;
         proposed.limit = *heapLimitConfig->ContainerMemoryRatio * totalMemory;
-        proposed.hard = heapLimitConfig->IsHard;
+        proposed.hard = heapLimitConfig->Hard;
 
         return proposed;
     }

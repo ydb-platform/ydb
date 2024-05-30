@@ -114,9 +114,11 @@ struct TEvStateStorage::TEvReplicaProbeDisconnected : public TEventLocal<TEvRepl
 
 struct TEvStateStorage::TEvResolveReplicas : public TEventLocal<TEvResolveReplicas, EvResolveReplicas> {
     const ui64 TabletID;
+    const bool Subscribe;
 
-    TEvResolveReplicas(ui64 tabletId)
+    TEvResolveReplicas(ui64 tabletId, bool subscribe = false)
         : TabletID(tabletId)
+        , Subscribe(subscribe)
     {}
 };
 

@@ -207,7 +207,7 @@ NUdf::TUnboxedValuePod TBlockFuncNode::DoCalculate(TComputationContext& ctx) con
     std::vector<arrow::Datum> argDatums;
     for (ui32 i = 0; i < ArgsNodes.size(); ++i) {
         argDatums.emplace_back(TArrowBlock::From(ArgsNodes[i]->GetValue(ctx)).GetDatum());
-        Y_DEBUG_ABORT_UNLESS(ArgsValuesDescr[i] == argDatums.back().descr());
+        ARROW_DEBUG_CHECK_DATUM_TYPES(ArgsValuesDescr[i], argDatums.back().descr());
     }
 
     if (ScalarOutput) {

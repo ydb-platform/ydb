@@ -110,6 +110,7 @@
 #include <ydb/services/persqueue_v1/persqueue.h>
 #include <ydb/services/persqueue_v1/topic.h>
 #include <ydb/services/rate_limiter/grpc_service.h>
+#include <ydb/services/replication/grpc_service.h>
 #include <ydb/services/ydb/ydb_clickhouse_internal.h>
 #include <ydb/services/ydb/ydb_dummy.h>
 #include <ydb/services/ydb/ydb_export.h>
@@ -121,6 +122,7 @@
 #include <ydb/services/ydb/ydb_scheme.h>
 #include <ydb/services/ydb/ydb_scripting.h>
 #include <ydb/services/ydb/ydb_table.h>
+#include <ydb/services/ydb/ydb_object_storage.h>
 
 #include <ydb/core/fq/libs/init/init.h>
 
@@ -211,6 +213,7 @@ public:
 
         const auto& securityConfig(Config.GetDomainsConfig().GetSecurityConfig());
         appData->EnforceUserTokenRequirement = securityConfig.GetEnforceUserTokenRequirement();
+        appData->EnforceUserTokenCheckRequirement = securityConfig.GetEnforceUserTokenCheckRequirement();
         if (securityConfig.AdministrationAllowedSIDsSize() > 0) {
             TVector<TString> administrationAllowedSIDs(securityConfig.GetAdministrationAllowedSIDs().begin(), securityConfig.GetAdministrationAllowedSIDs().end());
             appData->AdministrationAllowedSIDs = std::move(administrationAllowedSIDs);
@@ -562,6 +565,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["topic"] = &hasTopic;
         TServiceCfg hasPQCD = services.empty();
         names["pqcd"] = &hasPQCD;
+        TServiceCfg hasObjectStorage = services.empty();
+        names["object_storage"] = &hasObjectStorage;
         TServiceCfg hasClickhouseInternal = services.empty();
         names["clickhouse_internal"] = &hasClickhouseInternal;
         TServiceCfg hasRateLimiter = false;
@@ -586,6 +591,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["query_service"] = &hasQueryService;
         TServiceCfg hasKeyValue = services.empty();
         names["keyvalue"] = &hasKeyValue;
+        TServiceCfg hasReplication = services.empty();
+        names["replication"] = &hasReplication;
 
         std::unordered_set<TString> enabled;
         for (const auto& name : services) {
@@ -724,6 +731,11 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
                 AppData->InFlightLimiterRegistry, grpcRequestProxies[0], hasClickhouseInternal.IsRlAllowed()));
         }
 
+        if (hasObjectStorage) {
+            server.AddService(new NGRpcService::TGRpcYdbObjectStorageService(ActorSystem.Get(), Counters,
+                grpcRequestProxies[0], hasObjectStorage.IsRlAllowed()));
+        }
+
         if (hasScripting) {
             server.AddService(new NGRpcService::TGRpcYdbScriptingService(ActorSystem.Get(), Counters,
                 grpcRequestProxies[0], hasScripting.IsRlAllowed()));
@@ -860,6 +872,11 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         if (hasKeyValue) {
             server.AddService(new NGRpcService::TKeyValueGRpcService(ActorSystem.Get(), Counters,
                 grpcRequestProxies[0]));
+        }
+
+        if (hasReplication) {
+            server.AddService(new NGRpcService::TGRpcReplicationService(ActorSystem.Get(), Counters,
+                grpcRequestProxies[0], hasReplication.IsRlAllowed()));
         }
 
         if (ModuleFactories) {
@@ -1431,7 +1448,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     }
     if (serviceMask.EnableTabletResolver) {
         sil->AddServiceInitializer(new TTabletResolverInitializer(runConfig));
-        sil->AddServiceInitializer(new TTabletPipePeNodeCachesInitializer(runConfig));
+        sil->AddServiceInitializer(new TTabletPipePerNodeCachesInitializer(runConfig));
     }
     if (serviceMask.EnableTabletMonitoringProxy) {
         sil->AddServiceInitializer(new TTabletMonitoringProxyInitializer(runConfig));
@@ -1531,6 +1548,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 
     if (serviceMask.EnableExternalIndex) {
         sil->AddServiceInitializer(new TExternalIndexInitializer(runConfig));
+    }
+
+    if (serviceMask.EnableCompDiskLimiter) {
+        sil->AddServiceInitializer(new TCompDiskLimiterInitializer(runConfig));
     }
 
     if (serviceMask.EnableScanConveyor) {

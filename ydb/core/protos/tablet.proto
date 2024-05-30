@@ -49,14 +49,15 @@ message TTabletTypes {
         BlobDepot = 39;
         StatisticsAggregator = 40;
         GraphShard = 41;
+        BackupController = 42;
 
         // when adding a new tablet type and keeping parse compatibility with the old version
         // rename existing reserved item to desired one, and add new reserved item to
         // the end of reserved list
-        Reserved42 = 42;
         Reserved43 = 43;
         Reserved44 = 44;
         Reserved45 = 45;
+        Reserved46 = 46;
 
         UserTypeStart = 255;
         TypeInvalid = -1;

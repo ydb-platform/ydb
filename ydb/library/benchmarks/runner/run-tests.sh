@@ -76,17 +76,17 @@ ${ydb_path}/ydb/library/benchmarks/gen_queries/gen_queries \
 outdir=results-`date -u +%Y%m%dT%H%M%S`-${variant}-${datasize}-$tasks
 if false; then
 echo LLVM && \
-command time ${script_path}/runner/runner ${ql}-${datasize}-$tasks/${variant} ${ql}-${datasize}-$tasks/bindings.json $outdir ${dq_path}/dqrun-unspilled -s --fs-cfg ${dq_path}/examples/fs.conf --gateways-cfg $script_path/runner/test-gateways.conf --udfs-dir ${ydb_path}/ydb/library/yql/udfs/common/
+command time ${script_path}/runner/runner --query-dir ${ql}-${datasize}-$tasks/${variant} --bindings ${ql}-${datasize}-$tasks/bindings.json --result-dir $outdir ${dq_path}/dqrun-unspilled -s --fs-cfg ${dq_path}/examples/fs.conf --gateways-cfg $script_path/runner/test-gateways.conf --udfs-dir ${ydb_path}/ydb/library/yql/udfs/common/
 (cd ${dq_path} && git describe --always --dirty) > $outdir/${ql}-${datasize}-$tasks/${variant}/commit
 fi
 if false; then
 echo main NO LLVM && \
-command time ${script_path}/runner/runner ${qX}-${datasize}-$tasks/${variant} ${qX}-${datasize}-$tasks/${variant}/bindings.json $outdir ${dq_path}/dqrun-unspilled --enable-spilling -s --fs-cfg ${dq_path}/examples/fs.conf --gateways-cfg $script_path/runner/test-gateways.conf --udfs-dir ${ydb_path}/ydb/library/yql/udfs/common/
+command time ${script_path}/runner/runner --query-dir ${qX}-${datasize}-$tasks/${variant} --bindings ${qX}-${datasize}-$tasks/${variant}/bindings.json --result-dir $outdir ${dq_path}/dqrun-unspilled --enable-spilling -s --fs-cfg ${dq_path}/examples/fs.conf --gateways-cfg $script_path/runner/test-gateways.conf --udfs-dir ${ydb_path}/ydb/library/yql/udfs/common/
 (cd ${dq_path}; cat dqrun-unspilled.commit) > $outdir/${qX}-${datasize}-$tasks/${variant}/commit
 fi
 echo Spilling && \
-command time ${script_path}/runner/runner ${qs}-${datasize}-$tasks/${variant} ${qs}-${datasize}-$tasks/${variant}/bindings.json $outdir ${dq_path}/dqrun -s --enable-spilling --fs-cfg ${dq_path}/examples/fs.conf --gateways-cfg $script_path/runner/test-gateways.conf --udfs-dir ${ydb_path}/ydb/library/yql/udfs/common/
+command time ${script_path}/runner/runner --query-dir ${qs}-${datasize}-$tasks/${variant} --bindings ${qs}-${datasize}-$tasks/${variant}/bindings.json --result-dir $outdir ${dq_path}/dqrun -s --enable-spilling --fs-cfg ${dq_path}/examples/fs.conf --gateways-cfg $script_path/runner/test-gateways.conf --udfs-dir ${ydb_path}/ydb/library/yql/udfs/common/
 (cd ${dq_path} && git describe --always --dirty) > $outdir/${qs}-${datasize}-$tasks/${variant}/commit
 echo main NO LLVM no enable spilling && \
-command time ${script_path}/runner/runner ${q}-${datasize}-$tasks/${variant} ${q}-${datasize}-$tasks/${variant}/bindings.json $outdir ${dq_path}/dqrun-unspilled -s --fs-cfg ${dq_path}/examples/fs.conf --gateways-cfg $script_path/runner/test-gateways.conf --udfs-dir ${ydb_path}/ydb/library/yql/udfs/common/
+command time ${script_path}/runner/runner --query-dir ${q}-${datasize}-$tasks/${variant} --bindings ${q}-${datasize}-$tasks/${variant}/bindings.json --result-dir $outdir ${dq_path}/dqrun-unspilled -s --fs-cfg ${dq_path}/examples/fs.conf --gateways-cfg $script_path/runner/test-gateways.conf --udfs-dir ${ydb_path}/ydb/library/yql/udfs/common/
 (cd ${dq_path}; cat dqrun-unspilled.commit) > $outdir/${q}-${datasize}-$tasks/${variant}/commit

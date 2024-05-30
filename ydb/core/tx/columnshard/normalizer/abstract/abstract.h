@@ -52,10 +52,11 @@ namespace NKikimr::NOlap {
 
     enum class ENormalizerSequentialId : ui32 {
         Granules = 1,
+        CleanGranuleId,
         Chunks,
         PortionsCleaner,
         TablesCleaner,
-        PortionsMetadata,
+        PortionsMetadata
     };
 
     class TNormalizationContext {

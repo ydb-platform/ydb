@@ -128,6 +128,7 @@ public:
         Tenant->IsExternalSysViewProcessor = Self->FeatureFlags.GetEnableSystemViews();
         Tenant->IsExternalStatisticsAggregator = Self->FeatureFlags.GetEnableStatistics();
         Tenant->IsExternalBackupController = Self->FeatureFlags.GetEnableBackupService();
+        Tenant->IsGraphShardEnabled = Self->FeatureFlags.GetEnableGraphShard();
 
         if (rec.options().disable_external_subdomain()) {
             Tenant->IsExternalSubdomain = false;
@@ -249,6 +250,7 @@ public:
                     tenant->HostedTenants.emplace(Tenant);
 
                     Tenant->IsExternalHive = false;
+                    Tenant->IsGraphShardEnabled = false;
                     Tenant->Coordinators = 1;
                     Tenant->SlotsAllocationConfirmed = true;
                 } else {

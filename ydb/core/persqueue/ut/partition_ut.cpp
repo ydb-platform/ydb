@@ -42,6 +42,17 @@ struct TCreatePartitionParams {
 
 }
 
+class TFakePartitionActor : public TActor<TFakePartitionActor> {
+    STFUNC(StateFunc) {
+        Y_UNUSED(ev);
+    }
+
+public:
+    TFakePartitionActor()
+        : TActor(&TThis::StateFunc)
+    {}
+};
+
 class TPartitionTestWrapper {
 public:
     TPartitionTestWrapper(TInitMetaStep* metaStep)
@@ -95,8 +106,13 @@ void TPartitionTestWrapper::LoadMeta(const NKikimrPQ::TPartitionCounterData& cou
 
 
 Y_UNIT_TEST_SUITE(TPartitionTests) {
+using TSrcIdMap = THashMap<TString, std::pair<ui64, ui64>>;
+
+class TPartitionTxTestHelper;
+using TCreatePartitionParams = NHelpers::TCreatePartitionParams;
 
 class TPartitionFixture : public NUnitTest::TBaseFixture {
+friend class TPartitionTxTestHelper;
 protected:
     struct TUserInfoMatcher {
         TMaybe<TString> Consumer;
@@ -177,7 +193,6 @@ protected:
         TVector<TTxOperationMatcher> TxOps;
     };
 
-    using TCreatePartitionParams = NHelpers::TCreatePartitionParams;
     using TCreateConsumerParams = NHelpers::TCreateConsumerParams;
     using TConfigParams = NHelpers::TConfigParams;
 
@@ -273,8 +288,11 @@ protected:
 
     void CmdChangeOwner(ui64 cookie, const TString& sourceId, TDuration duration, TString& ownerCookie);
 
-    void SetWriteInfoObserver(bool success, const NPQ::TSourceIdMap& srcIdInfo = {}, const TActorId& sender = {});
     void EmulateKVTablet();
+    TActorId CreateFakePartition() const;
+    bool WaitWriteInfoRequest(const TActorId& supportivePart);
+    void SendEvent(IEventBase* event);
+    void SendEvent(IEventBase* event, const TActorId& from, const TActorId& to);
 
     TMaybe<TTestContext> Ctx;
     TMaybe<TFinalizer> Finalizer;
@@ -285,6 +303,7 @@ protected:
     NKikimrPQ::TPQTabletConfig Config;
 
     TAutoPtr<TTabletCountersBase> TabletCounters;
+
 };
 
 void TPartitionFixture::SetUp(NUnitTest::TTestContext&)
@@ -294,6 +313,10 @@ void TPartitionFixture::SetUp(NUnitTest::TTestContext&)
 
     Ctx->Prepare();
     Ctx->Runtime->SetScheduledLimit(5'000);
+}
+
+TActorId TPartitionFixture::CreateFakePartition() const {
+    return Ctx->Runtime->Register(new TFakePartitionActor());
 }
 
 void TPartitionFixture::TearDown(NUnitTest::TTestContext&)
@@ -422,6 +445,14 @@ void TPartitionFixture::SetOffset(const TString& clientId,
     WaitProxyResponse({.Cookie = cookie});
 }
 
+void TPartitionFixture::SendEvent(IEventBase* event) {
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event));
+}
+
+void TPartitionFixture::SendEvent(IEventBase* event, const TActorId& from, const TActorId& to) {
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(to, from, event));
+}
+
 void TPartitionFixture::SendCreateSession(ui64 cookie,
                                           const TString& clientId,
                                           const TString& sessionId,
@@ -468,7 +499,7 @@ void TPartitionFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
 {
     auto event = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>();
     UNIT_ASSERT(event != nullptr);
-
+    Cerr << "Got cmd write: \n" << event->Record.DebugString() << Endl;
     for (unsigned i = 0; i < event->Record.CmdWriteSize(); ++i) {
         auto& cmd = event->Record.GetCmdWrite(i);
         TString key = cmd.GetKey();
@@ -497,6 +528,7 @@ void TPartitionFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
 
             bool match = false;
             for (auto& [_, userInfo] : matcher.UserInfos) {
+                Cerr << "Matcher for user info: " << userInfo.Consumer << Endl;
                 if (userInfo.Session && ud.HasSession()) {
                     if (*userInfo.Session != ud.GetSession()) {
                         continue;
@@ -592,6 +624,7 @@ void TPartitionFixture::SendWrite
         (const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, const TString& data,
         bool ignoreQuotaDeadline, ui64 seqNo
 ) {
+    Cerr << "SendWrite\n";
     TEvPQ::TEvWrite::TMsg msg;
     msg.SourceId = "SourceId";
     msg.SeqNo = seqNo ? seqNo : messageNo;
@@ -618,6 +651,7 @@ void TPartitionFixture::SendWrite
 
 void TPartitionFixture::SendChangeOwner(const ui64 cookie, const TString& owner, const TActorId& pipeClient, const bool force)
 {
+    Cerr << "Send change owner\n";
     auto event = MakeHolder<TEvPQ::TEvChangeOwner>(cookie, owner, pipeClient, Ctx->Edge, force, true);
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
@@ -625,27 +659,6 @@ void TPartitionFixture::SendChangeOwner(const ui64 cookie, const TString& owner,
 void TPartitionFixture::SendGetWriteInfo() {
     auto event = MakeHolder<TEvPQ::TEvGetWriteInfoRequest>();
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
-}
-
-void TPartitionFixture::SetWriteInfoObserver(bool success, const NPQ::TSourceIdMap& srcIdInfo, const TActorId& sender) {
-    Ctx->Runtime->SetObserverFunc(
-        [=, this](TAutoPtr<IEventHandle>& ev) {
-            if (auto* msg = ev->CastAsLocal<TEvPQ::TEvGetWriteInfoRequest>()) {
-                Cerr << "Captured getWriteInfo event from " << ev->Sender.ToString() << Endl;
-                if (!success) {
-                    Ctx->Runtime->Send(new IEventHandle(
-                        ev->Sender, sender,
-                        new TEvPQ::TEvGetWriteInfoError(0, "")
-                    ));
-                } else {
-                    auto* reply = new TEvPQ::TEvGetWriteInfoResponse();
-                    reply->SrcIdInfo = srcIdInfo;
-                    Ctx->Runtime->Send(new IEventHandle(ev->Sender, sender, reply));
-                }
-                return TTestActorRuntimeBase::EEventAction::DROP;
-            }
-            return TTestActorRuntimeBase::EEventAction::PROCESS;
-    });
 }
 
 void TPartitionFixture::WaitProxyResponse(const TProxyResponseMatcher& matcher)
@@ -688,6 +701,7 @@ void TPartitionFixture::WaitErrorResponse(const TErrorMatcher& matcher)
     }
 
     if (matcher.Error) {
+
         UNIT_ASSERT_VALUES_EQUAL(*matcher.Error, event->Error);
     }
 }
@@ -1023,10 +1037,12 @@ void TPartitionFixture::ShadowPartitionCountersTest(bool isFirstClass) {
 
     ui64 cookie = 1;
 
+    Cerr << "Change owner" << Endl;
     SendChangeOwner(cookie, "owner1", Ctx->Edge, true);
     auto ownerEvent = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(1));
     UNIT_ASSERT(ownerEvent != nullptr);
     auto ownerCookie = ownerEvent->Response->GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
+    Cerr << "Got owner" << Endl;
 
     TAutoPtr<IEventHandle> handle;
     std::function<bool(const TEvPQ::TEvProxyResponse&)> truth = [&](const TEvPQ::TEvProxyResponse& e) { return cookie == e.Cookie; };
@@ -1077,6 +1093,7 @@ void TPartitionFixture::ShadowPartitionCountersTest(bool isFirstClass) {
     });
 
     for (auto i = 0u; i != 10; i++) {
+        Cerr << "Send write: " << i << Endl;
         SendWrite(++cookie, i, ownerCookie, 100 + i, data, false, i + 1);
         auto eventErr = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvError>(TDuration::Seconds(1));
         if(eventErr != nullptr) {
@@ -1150,8 +1167,9 @@ void TPartitionFixture::TestWriteSubDomainOutOfSpace(TDuration quotaWaitDuration
     ui64 cookie = 1;
     ui64 messageNo = 0;
     TString ownerCookie;
-
+    Cerr << "CmdChangeOwner\n";
     CmdChangeOwner(cookie, "owner1", TDuration::Seconds(1), ownerCookie);
+    Cerr << "DoneChangeOwner\n";
 
     TAutoPtr<IEventHandle> handle;
     std::function<bool(const TEvPQ::TEvProxyResponse&)> truth = [&](const TEvPQ::TEvProxyResponse& e) {
@@ -1164,6 +1182,7 @@ void TPartitionFixture::TestWriteSubDomainOutOfSpace(TDuration quotaWaitDuration
     SendWrite(++cookie, messageNo, ownerCookie, (messageNo + 1) * 100, data, ignoreQuotaDeadline);
     messageNo++;
 
+    Cerr << "Wait KV Request\n";
     WaitKeyValueRequest(kvCookie); // the partition saves the TEvPQ::TEvWrite event
     SendDiskStatusResponse(&kvCookie);
 
@@ -1183,8 +1202,9 @@ void TPartitionFixture::TestWriteSubDomainOutOfSpace(TDuration quotaWaitDuration
 
     // SudDomain quota available - second message will be processed..
     SendSubDomainStatus(false);
-
+    Cerr << "Wait KV Request\n";
     WaitKeyValueRequest(kvCookie); // the partition saves the TEvPQ::TEvWrite event
+    Cerr << "Send KV response\n";
     SendDiskStatusResponse(&kvCookie);
 
     {
@@ -1192,6 +1212,374 @@ void TPartitionFixture::TestWriteSubDomainOutOfSpace(TDuration quotaWaitDuration
         UNIT_ASSERT(event != nullptr);
         UNIT_ASSERT_EQUAL(NMsgBusProxy::MSTATUS_OK, event->Response->GetStatus());
     }
+}
+
+struct TTestUserAct {
+    TSrcIdMap SourceIds = {};
+    TString ClientId = {};
+    std::pair<ui64, ui64> OffsetRange = {0, 0};
+    ui64 Offset = 0;
+    bool IsImmediateTx;
+    ui64 TxId;
+    TString OwnerCookie = {};
+    ui64 MessageNo = {};
+    TActorId SupportivePartitionId = {};
+};
+
+class TPartitionTxTestHelper {
+private:
+    auto AddWriteTxImpl(const TSrcIdMap& srcIdsAffected, ui64 txId, ui64 step);
+
+    void AddWriteInfoObserver(bool success, const NPQ::TSourceIdMap& srcIdInfo, const TActorId& supportivePart);
+    void SendWriteInfoResponseImpl(const TActorId& supportiveId, const TActorId& partitionId, bool status);
+    void WaitTxPredicateReplyImpl(ui64 txId, bool status);
+
+    THashMap<ui64, TTestUserAct> UserActs;
+    TPartitionFixture* Fixture;
+    ui64 NextActId = 0;
+    ui64 TxStep = 0;
+    ui64 LastBatchSize = 0;
+    THashMap<TActorId, bool> ExpectedWriteInfoRequests;
+    TQueue<std::pair<TActorId, TActorId>> RecievedWriteInfoRequests;
+    TAdaptiveLock Lock;
+    THashMap<TActorId, NPQ::TSourceIdMap> WriteInfoData;
+
+public:
+    TPartitionTxTestHelper(TPartitionFixture* fixture, ui64 txStep = 1, TMaybe<TCreatePartitionParams> params = {})
+        : Fixture(fixture)
+        , TxStep(txStep)
+    {
+        Fixture->Ctx->Runtime->GetAppData(0).PQConfig.MutableQuotingConfig()->SetEnableQuoting(false);
+        Fixture->Ctx->Runtime->SetObserverFunc([this](TAutoPtr<IEventHandle>& ev) {
+            if (auto* msg = ev->CastAsLocal<TEvPQ::TEvGetWriteInfoRequest>()) {
+                with_lock(this->Lock) {
+                    Cerr << "Emplace write info request to: " << ev->Recipient.ToString() << Endl;
+                    RecievedWriteInfoRequests.emplace(ev->Recipient, ev->Sender);
+                }
+            } else if (auto* msg = ev->CastAsLocal<TEvPQ::TEvTxBatchComplete>()) {
+                with_lock(Lock) {
+                    LastBatchSize = msg->BatchSize;
+                }
+            }
+            return TTestActorRuntimeBase::EEventAction::PROCESS;
+        });
+        const TPartitionId partition{0};
+        if (params.Defined()) {
+            Fixture->CreatePartition(*params);
+        } else {
+            Fixture->CreatePartition({.Partition=partition, .Begin=0, .End=1, .PlanStep = 0});
+        }
+    }
+
+    ui64 AddAndSendNormalWrite(const TString& srcId, ui64 startSeqnNo, ui64 lastSeqNo, const TString& ownerCookie,
+                               ui64 messageNo);
+    ui64 MakeAndSendWriteTx(const TSrcIdMap& srcIdsAffected, ui64 txId);
+    ui64 MakeAndSendImmediateTx(const TSrcIdMap& srcIdsAffected, ui64 txId);
+    ui64 MakeAndSendNormalOffsetCommit(const TString& clientId, ui64 offset, const TString& session);
+    ui64 MakeAndSendTxOffsetCommit(const TString& client,ui64 begin, ui64 end, ui64 txId);
+    ui64 MakeAndSendImmediateTxOffsetCommit(const TString& client,ui64 begin, ui64 end, ui64 txId);
+
+    void SendTxCommit(ui64 userActId);
+    void SendTxRollback(ui64 userActId);
+    void WaitWriteInfoRequest(ui64 userActId, bool autoRespond = false);
+    void SendWriteInfoResponse(ui64 userActId, bool status = true);
+    void WaitTxPredicateReply(ui64 userActId);
+    void WaitTxPredicateFailure(ui64 userActId);
+    void ExpectNoTxPredicateReply();
+    void WaitKvRequest();
+    void ExpectNoKvRequest();
+    void SendKvResponse();
+    void WaitCommitDone(ui64 userActId);
+    void WaitImmediateTxComplete(ui64 userActId, bool status);
+    void ExpectNoCommitDone();
+    void ExpectNoBatchCompletion();
+    void WaitBatchCompletion(ui64 userActsCount);
+    void ResetBatchCompletion();
+
+    TString GetOwnerCookie(const TString& srcId, const TActorId& pipe);
+};
+
+ui64 TPartitionTxTestHelper::MakeAndSendNormalOffsetCommit(const TString& client, ui64 offset, const TString& session) {
+    TTestUserAct act{.ClientId = client, .Offset = offset, .IsImmediateTx = false, .TxId = 0};
+    auto id = NextActId++;
+    Fixture->SendSetOffset(id, client, offset, session);
+    UserActs.emplace(id, std::move(act));
+    return id;
+}
+
+ui64 TPartitionTxTestHelper::MakeAndSendImmediateTxOffsetCommit(const TString& client,ui64 begin, ui64 end, ui64 txId) {
+    auto id = NextActId++;
+    TTestUserAct act{.ClientId = client, .OffsetRange = {begin, end}, .IsImmediateTx = true, .TxId = txId};
+    Fixture->SendProposeTransactionRequest(0,begin, end, client, "topic-path", true, txId);
+    UserActs.emplace(id, std::move(act));
+    return id;
+}
+
+ui64 TPartitionTxTestHelper::MakeAndSendTxOffsetCommit(const TString& client,ui64 begin, ui64 end, ui64 txId) {
+    auto id = NextActId++;
+    TTestUserAct act{.ClientId = client, .OffsetRange = {begin, end}, .IsImmediateTx = false, .TxId = txId};
+    auto event = MakeHolder<TEvPQ::TEvTxCalcPredicate>(TxStep, txId);
+    event->AddOperation(client, begin, end);
+    Fixture->SendEvent(event.Release());
+    UserActs.emplace(id, std::move(act));
+    return id;
+}
+
+void TPartitionTxTestHelper::WaitTxPredicateReplyImpl(ui64 userActId, bool status) {
+    auto txId = UserActs.find(userActId)->second.TxId;
+    auto event = Fixture->Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvTxCalcPredicateResult>(TDuration::Seconds(1));
+    UNIT_ASSERT(event != nullptr);
+    UNIT_ASSERT_VALUES_EQUAL(event->TxId, txId);
+    UNIT_ASSERT_VALUES_EQUAL(event->Predicate, status);
+}
+
+void TPartitionTxTestHelper::SendWriteInfoResponseImpl(const TActorId& supportiveId, const TActorId& partitionId, bool status) {
+    if (!status) {
+        Fixture->SendEvent(
+            new TEvPQ::TEvGetWriteInfoError(0, ""), supportiveId, partitionId
+        );
+        return;
+    }
+    NPQ::TSourceIdMap SrcIds;
+    auto* reply = new TEvPQ::TEvGetWriteInfoResponse();
+    auto iter = this->WriteInfoData.find(supportiveId);
+    Y_ABORT_UNLESS(!iter.IsEnd());
+    reply->SrcIdInfo = iter->second;
+    Fixture->SendEvent(reply, supportiveId, partitionId);
+}
+
+auto TPartitionTxTestHelper::AddWriteTxImpl(const TSrcIdMap& srcIdsAffected, ui64 txId, ui64 step) {
+    auto id = NextActId++;
+    TTestUserAct act{.IsImmediateTx = (step != 0), .TxId = txId, .SupportivePartitionId = Fixture->CreateFakePartition()};
+    NPQ::TSourceIdMap srcIdMap;
+
+    for (const auto& [key, val] : srcIdsAffected) {
+        TSourceIdInfo srcInfo{val.second, val.second, TInstant::Zero()};
+        srcInfo.MinSeqNo = val.first;
+        srcIdMap.emplace(key, std::move(srcInfo));
+    }
+    auto iter = UserActs.insert(std::make_pair(id, act)).first;
+
+    with_lock(Lock) {
+        WriteInfoData.emplace(act.SupportivePartitionId, std::move(srcIdMap));
+    }
+    return iter;
+}
+
+void TPartitionTxTestHelper::WaitWriteInfoRequest(ui64 userActId, bool autoRespond) {
+    auto iter = UserActs.find(userActId);
+    Y_ABORT_UNLESS(!iter.IsEnd());
+    const auto& act = iter->second;
+    Cerr << "Wait write info for user act " << userActId << " (" << act.SupportivePartitionId.ToString() << ")" << Endl;
+
+    auto checkIfRecieved = [&]() {
+        TActorId parentPartitionId, supportiveId;
+        with_lock(Lock) {
+            if (RecievedWriteInfoRequests.size()) {
+                std::tie(supportiveId, parentPartitionId) = RecievedWriteInfoRequests.front();
+                RecievedWriteInfoRequests.pop();
+            }
+        }
+        if (!parentPartitionId) {
+            return false;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(supportiveId, act.SupportivePartitionId);
+        if (autoRespond) {
+            SendWriteInfoResponseImpl(supportiveId, parentPartitionId, true);
+        }
+        return true;
+    };
+    if (checkIfRecieved()) {
+        return;
+    }
+    Fixture->Ctx->Runtime->DispatchEvents();
+    auto res = checkIfRecieved();
+    UNIT_ASSERT(res);
+}
+
+void TPartitionTxTestHelper::SendWriteInfoResponse(ui64 userActId, bool status) {
+    Cerr << "Send write info response for user act " << userActId << Endl;
+    auto actIter = UserActs.find(userActId);
+    Y_ABORT_UNLESS(!actIter.IsEnd());
+
+    SendWriteInfoResponseImpl(actIter->second.SupportivePartitionId, Fixture->ActorId, status);
+}
+
+void TPartitionTxTestHelper::WaitTxPredicateReply(ui64 userActId) {
+    return WaitTxPredicateReplyImpl(userActId, true);
+}
+
+void TPartitionTxTestHelper::WaitTxPredicateFailure(ui64 userActId) {
+    return WaitTxPredicateReplyImpl(userActId, false);
+}
+
+void TPartitionTxTestHelper::ExpectNoKvRequest() {
+    auto event = Fixture->Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>(TDuration::Seconds(1));
+    UNIT_ASSERT(event == nullptr);
+}
+
+void TPartitionTxTestHelper::SendTxCommit(ui64 userActId) {
+    auto actIter = UserActs.find(userActId);
+    Cerr << "Send tx commit for tx " << actIter->second.TxId << Endl;
+    Fixture->SendCommitTx(TxStep, actIter->second.TxId);
+}
+
+void TPartitionTxTestHelper::SendTxRollback(ui64 userActId) {
+    auto actIter = UserActs.find(userActId);
+    Cerr << "Send tx rollboack for tx " << actIter->second.TxId << Endl;
+    Fixture->SendRollbackTx(TxStep, actIter->second.TxId);
+}
+
+void TPartitionTxTestHelper::WaitCommitDone(ui64 userActId) {
+    auto actIter = UserActs.find(userActId);
+    Cerr << "Wait tx committed for tx " << actIter->second.TxId << Endl;
+    auto event = Fixture->Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvTxCommitDone>(TDuration::Seconds(1));
+    UNIT_ASSERT(event != nullptr);
+    UNIT_ASSERT_VALUES_EQUAL(event->TxId, actIter->second.TxId);
+}
+
+void TPartitionTxTestHelper::WaitImmediateTxComplete(ui64 userActId, bool status) {
+    auto actIter = UserActs.find(userActId);
+    Cerr << "Wait immediate tx complete " << actIter->second.TxId << Endl;
+    auto event = Fixture->Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvProposeTransactionResult>(TDuration::Seconds(1));
+    UNIT_ASSERT(event != nullptr);
+    UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTxId(), actIter->second.TxId);
+    Cerr << "Got propose resutl: " << event->Record.DebugString() << Endl;
+    if (status) {
+        UNIT_ASSERT(event->Record.GetStatus() == NKikimrPQ::TEvProposeTransactionResult::COMPLETE);
+    } else {
+        UNIT_ASSERT(event->Record.GetStatus() != NKikimrPQ::TEvProposeTransactionResult::COMPLETE);
+    }
+}
+void TPartitionTxTestHelper::ExpectNoCommitDone() {
+    Cerr << "Wait for no tx committed\n";
+    auto event = Fixture->Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvTxCommitDone>(TDuration::Seconds(1));
+    UNIT_ASSERT(event == nullptr);
+}
+
+
+void TPartitionTxTestHelper::ExpectNoTxPredicateReply() {
+    auto event = Fixture->Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvTxCalcPredicateResult>(TDuration::Seconds(1));
+    if (event != nullptr) {
+        Cerr << "Got tx predicate reply for " << event->TxId << Endl;
+        UNIT_FAIL("");
+    }
+}
+
+void TPartitionTxTestHelper::ExpectNoBatchCompletion() {
+    Fixture->Ctx->Runtime->DispatchEvents();
+    ui64 batchSize = 0;
+    with_lock(Lock) {
+        batchSize = LastBatchSize;
+    }
+    UNIT_ASSERT_VALUES_EQUAL(batchSize, 0);
+}
+
+void TPartitionTxTestHelper::WaitBatchCompletion(ui64 actsCount) {
+    ui64 batchSize = 0;
+    with_lock(Lock) {
+        batchSize = LastBatchSize;
+    }
+    if (!batchSize) {
+        Fixture->Ctx->Runtime->DispatchEvents();
+        with_lock(Lock) {
+           batchSize = LastBatchSize;
+        }
+    }
+    with_lock(Lock) {
+        LastBatchSize = 0;
+    }
+    UNIT_ASSERT_VALUES_EQUAL(actsCount, batchSize);
+}
+
+void TPartitionTxTestHelper::WaitKvRequest() {
+    TMaybe<ui64> cookie;
+    Fixture->WaitKeyValueRequest(cookie);
+}
+
+void TPartitionTxTestHelper::SendKvResponse() {
+    TMaybe<ui64> c;
+    return Fixture->SendDiskStatusResponse(&c);
+}
+
+ui64 TPartitionTxTestHelper::AddAndSendNormalWrite(
+        const TString& srcId, ui64 startSeqnNo, ui64 lastSeqNo, const TString& ownerCookie, ui64 messageNo
+) {
+    auto id = NextActId++;
+    TTestUserAct act {
+        .SourceIds = {{srcId, {startSeqnNo, lastSeqNo}}},
+        .IsImmediateTx = false,
+        .TxId = 0,
+        .OwnerCookie = ownerCookie,
+        .MessageNo = messageNo
+    };
+    TString data = "data to write";
+    auto makeMsg = [&](const TString& srcId, ui64 seqNo) {
+        TEvPQ::TEvWrite::TMsg msg;
+        msg.SourceId = srcId;
+        msg.SeqNo = seqNo;
+        msg.PartNo = 0;
+        msg.TotalParts = 1;
+        msg.TotalSize = data.size();
+        msg.CreateTimestamp = TMonotonic::Now().Seconds();
+        msg.WriteTimestamp = TMonotonic::Now().Seconds();
+        msg.ReceiveTimestamp = TMonotonic::Now().Seconds();
+        msg.DisableDeduplication = false;
+        msg.Data = data;
+        msg.Data = data;
+        msg.UncompressedSize = data.size();
+        msg.External = false;
+        msg.IgnoreQuotaDeadline = false;
+        return msg;
+    };
+    TVector<TEvPQ::TEvWrite::TMsg> msgs;
+
+    for (const auto& [sourceId, seqNoRange] : act.SourceIds) {
+        for (auto seqNo = seqNoRange.first; seqNo <= seqNoRange.second; seqNo++) {
+            msgs.push_back(makeMsg( sourceId, seqNo));
+        }
+    }
+    auto event = MakeHolder<TEvPQ::TEvWrite>(id, messageNo, ownerCookie, id * 10, std::move(msgs), false, std::nullopt);
+    Fixture->SendEvent(event.Release());
+    UserActs.emplace(id, act);
+    return id;
+}
+
+ui64 TPartitionTxTestHelper::MakeAndSendWriteTx(const TSrcIdMap& srcIdsAffected, ui64 txId) {
+    auto actIter = AddWriteTxImpl(srcIdsAffected, txId, TxStep);
+    auto event = MakeHolder<TEvPQ::TEvTxCalcPredicate>(TxStep, txId);
+    event->SupportivePartitionActor = actIter->second.SupportivePartitionId;
+
+    Fixture->SendEvent(event.Release());
+    return actIter->first;;
+}
+
+ui64 TPartitionTxTestHelper::MakeAndSendImmediateTx(const TSrcIdMap& srcIdsAffected, ui64 txId) {
+    auto actIter = AddWriteTxImpl(srcIdsAffected, txId, 0);
+
+    auto event = MakeHolder<TEvPersQueue::TEvProposeTransaction>();
+
+    ActorIdToProto(Fixture->Ctx->Edge, event->Record.MutableSourceActor());
+    auto* body = event->Record.MutableData();
+    body->SetImmediate(true);
+    ActorIdToProto(actIter->second.SupportivePartitionId, event->Record.MutableSupportivePartitionActor());
+    event->Record.SetTxId(txId);
+    Fixture->SendEvent(event.Release());
+    return actIter->first;
+
+}
+TString TPartitionTxTestHelper::GetOwnerCookie(const TString& srcId, const TActorId& pipe) {
+    Fixture->SendChangeOwner(1, srcId, pipe, true);
+    auto event = Fixture->Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(1));
+    UNIT_ASSERT(event != nullptr);
+    return event->Response->GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
+}
+
+void TPartitionTxTestHelper::ResetBatchCompletion() {
+    Fixture->Ctx->Runtime->DispatchEvents();
+    with_lock(Lock) {
+        LastBatchSize = 0;
+    };
 }
 
 Y_UNIT_TEST_F(Batching, TPartitionFixture)
@@ -1401,6 +1789,7 @@ Y_UNIT_TEST_F(CommitOffsetRanges, TPartitionFixture)
                                   client,
                                   "topic-path",
                                   true,
+
                                   6);
 
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
@@ -1658,11 +2047,12 @@ Y_UNIT_TEST_F(ChangeConfig, TPartitionFixture)
                     .Config={.Consumers={
                     {.Consumer="client-1", .Offset=0, .Session="session-1"},
                     {.Consumer="client-2", .Offset=0, .Session="session-2"},
-                    {.Consumer="client-3", .Offset=0, .Session="session-3"}
+                    {.Consumer="client-3", .Offset=0, .Session="session-3"},
                     }}
-                    });
+    });
 
     SendCalcPredicate(step, txId_1, "client-1", 0, 2);
+    Cerr << "Send change config\n";
     SendChangePartitionConfig({.Version=2,
                               .Consumers={
                               {.Consumer="client-1", .Generation=0},
@@ -1675,21 +2065,39 @@ Y_UNIT_TEST_F(ChangeConfig, TPartitionFixture)
 
     WaitCalcPredicateResult({.Step=step, .TxId=txId_1, .Partition=TPartitionId(partition), .Predicate=true});
     SendCommitTx(step, txId_1);
+    Cerr << "Wait cmd write (initial)\n";
+    WaitCmdWrite({.Count=8,
+                 .PlanStep=step, .TxId=txId_1,
+                 .UserInfos={
+                    {1, {.Consumer="client-1", .Session="session-1", .Offset=2}},
+                 },
+                 });
+
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    Cerr << "Wait commit 1 done\n";
+    WaitCommitTxDone({.TxId=txId_1, .Partition=TPartitionId(partition)});
 
     //
     // update config
     //
+    // WaitCmdWrite({.Count=8,
+    //              .PlanStep=step, .TxId=txId_1,
+    //              .UserInfos={
+    //              {1, {.Consumer="client-1", .Session="session-1", .Offset=2}},
+    //              },
+    // });
+    Cerr << "Wait cmd write (change config)\n";
     WaitCmdWrite({.Count=8,
                  .PlanStep=step, .TxId=txId_1,
                  .UserInfos={
-                 {1, {.Consumer="client-1", .Session="session-1", .Offset=2}},
+                 {1, {.Consumer="client-1", .Session="session-1", .Offset=2, .ReadRuleGeneration=0}},
                  {3, {.Consumer="client-3", .Session="", .Offset=0, .ReadRuleGeneration=7}}
                  },
                  .DeleteRanges={
                  {0, {.Partition=3, .Consumer="client-2"}}
                  }});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-
+    Cerr << "Wait config changed\n";
     WaitPartitionConfigChanged({.Partition=TPartitionId(partition)});
 
     //
@@ -1754,7 +2162,7 @@ Y_UNIT_TEST_F(ReserveSubDomainOutOfSpace, TPartitionFixture)
                     {.Version=2, .Consumers={{.Consumer="client-1"}}});
 
     SendSubDomainStatus(true);
-
+    //EmulateKVTablet();
     ui64 cookie = 1;
     ui64 messageNo = 0;
     TString ownerCookie;
@@ -1802,7 +2210,6 @@ Y_UNIT_TEST_F(WriteSubDomainOutOfSpace, TPartitionFixture)
                     // tablet configuration
                     //
                     {.Version=2, .Consumers={{.Consumer="client-1"}}});
-
     TMaybe<ui64> kvCookie;
 
     SendSubDomainStatus(true);
@@ -1943,6 +2350,7 @@ Y_UNIT_TEST_F(GetPartitionWriteInfoError, TPartitionFixture) {
     ui64 cookie = 1;
 
     SendChangeOwner(cookie, "owner1", Ctx->Edge, true);
+    EmulateKVTablet();
     auto ownerEvent = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(1));
     UNIT_ASSERT(ownerEvent != nullptr);
     auto ownerCookie = ownerEvent->Response->GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
@@ -2007,35 +2415,26 @@ Y_UNIT_TEST_F(ShadowPartitionCountersRestore, TPartitionFixture) {
 
 Y_UNIT_TEST_F(DataTxCalcPredicateOk, TPartitionFixture)
 {
-    const TPartitionId partition{0};
-    CreatePartition({.Partition=partition, .Begin=0, .End=10});
-
+    TPartitionTxTestHelper helper(this);
     CreateSession("client", "session");
     i64 cookie = 1;
 
-    const ui64 step = 12345;
     ui64 txId_1 = 67890;
     ui64 txId_2 = txId_1 + 1;
     ui64 txId_3 = txId_2 + 1;
 
+
+    auto tx1 = helper.MakeAndSendWriteTx({}, txId_1);
+    helper.WaitWriteInfoRequest(tx1, true);
     Cerr << "Wait first predicate result " << Endl;
-    TActorId support1 = TActorId{2, 3};
-    TActorId support2 = TActorId{3, 3};
-    SetWriteInfoObserver(true, {}, support1);
-    SendCalcPredicate(step, txId_1, {}, 0, 0, support1);
-    WaitCalcPredicateResult({.Step=step, .TxId=txId_1, .Partition=partition, .Predicate=true});
+    helper.WaitTxPredicateReply(tx1);
 
-    TSourceIdInfo info {10, 10, TInstant::Zero()};
-    info.MinSeqNo = 1;
-    TSourceIdMap srcIds = {{"src1", info}};
-
-    SetWriteInfoObserver(true, srcIds, support1);
-    SendCalcPredicate(step, txId_2, {}, 0, 0, support1);
-    SendCommitTx(step, txId_1);
+    auto tx2 = helper.MakeAndSendWriteTx({{"src1", {1, 10}}}, txId_2);
+    helper.WaitWriteInfoRequest(tx2, true);
+    helper.SendTxCommit(tx1);
     Cerr << "Wait second predicate result " << Endl;
-    WaitCalcPredicateResult({.Step=step, .TxId=txId_2, .Partition=partition, .Predicate=true});
-    SendCommitTx(step, txId_2);
-    Cerr << "Wait kv request for second tx\n";
+    helper.WaitTxPredicateReply(tx2);;
+    helper.SendTxCommit(tx2);
     EmulateKVTablet();
 
     TString data = "data for write";
@@ -2051,95 +2450,428 @@ Y_UNIT_TEST_F(DataTxCalcPredicateOk, TPartitionFixture)
     EmulateKVTablet();
     WaitProxyResponse({.Cookie=cookie});
 
-    info.MinSeqNo = 6;
-    srcIds.insert(std::make_pair("SourceId", info));
-
     Cerr << "Wait third predicate result " << Endl;
-    SetWriteInfoObserver(true, srcIds, support1);
-    SendCalcPredicate(step, txId_3, {}, 0, 0, support1);
-    WaitCalcPredicateResult({.Step=step, .TxId=txId_3, .Partition=partition, .Predicate=true});
-    SendCommitTx(step, txId_3);
+    auto tx3 = helper.MakeAndSendWriteTx({{"src1", {1, 10}}, {"SourceId", {6, 10}}}, txId_3);
+    helper.WaitWriteInfoRequest(tx3, true);
+    helper.WaitTxPredicateReply(tx3);
+    helper.SendTxCommit(tx3);
 }
 
 Y_UNIT_TEST_F(DataTxCalcPredicateError, TPartitionFixture)
 {
-    const TPartitionId partition{0};
-    CreatePartition({.Partition=partition, .Begin=0, .End=10});
-
-    CreateSession("client", "session");
     i64 cookie = 1;
-
+    TPartitionTxTestHelper helper(this);
     SendChangeOwner(cookie, "owner1", Ctx->Edge, true);
     auto ownerEvent = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(1));
     UNIT_ASSERT(ownerEvent != nullptr);
     auto ownerCookie = ownerEvent->Response->GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
 
-    const ui64 step = 12345;
     ui64 txId_1 = 67890;
     ui64 txId_2 = txId_1 + 1;
-    TActorId support1 = TActorId{1, "123"};
-
-    Cerr << "Wait first predicate result " << Endl;
-    SetWriteInfoObserver(false, {}, support1);
-    SendCalcPredicate(step, txId_1, {}, 0, 0, support1);
-    WaitCalcPredicateResult({.Step=step, .TxId=txId_1, .Partition=partition, .Predicate=false});
-    SendRollbackTx(step, txId_1);
-    Cerr << "Wait tx write request\n";
-    EmulateKVTablet();
-
-    TSourceIdInfo info {10, 10, TInstant::Zero()};
-    info.MinSeqNo = 1;
-    TSourceIdMap srcIds = {{"src1", info}};
 
     TString data = "data for write";
     Cerr << "Send write\n";
-    SendWrite(++cookie, 0, ownerCookie, 11, data, false, 5);
+    SendWrite(++cookie, 0, ownerCookie, 11, data, false, 4);
     Cerr << "Wait write response\n";
-    EmulateKVTablet();
+    helper.WaitKvRequest();
+    helper.SendKvResponse();
     WaitProxyResponse({.Cookie=cookie});
 
-    info.MinSeqNo = 3;
-    srcIds.insert(std::make_pair("SourceId", info));
-
     Cerr << "Wait second predicate result " << Endl;
-    SetWriteInfoObserver(true, srcIds, support1);
-    SendCalcPredicate(step, txId_2, {}, 0, 0, support1);
-    WaitCalcPredicateResult({.Step=step, .TxId=txId_2, .Partition=partition, .Predicate=false});
+    auto tx2 = helper.MakeAndSendWriteTx({{"src1", {3, 10}}, {"SourceId", {3, 10}}}, txId_2);
+    helper.WaitWriteInfoRequest(tx2, true);
+    helper.WaitTxPredicateFailure(tx2);
 }
 
 
 Y_UNIT_TEST_F(DataTxCalcPredicateOrder, TPartitionFixture)
 {
-    const TPartitionId partition{0};
-    CreatePartition({.Partition=partition, .Begin=0, .End=10});
-
-    CreateSession("client", "session");
+    TPartitionTxTestHelper helper(this);
     TMaybe<ui64> cookie;
 
-    const ui64 step = 12345;
     ui64 txId_1 = 67890;
-    //ui64 txId_2 = txId_1 + 1;
+    ui64 txId_2 = txId_1 + 1;
     //ui64 txId_3 = txId_2 + 1;
-
+    TActorId support1 = CreateFakePartition();
+    TActorId support2 = CreateFakePartition();
+    Cerr << "support1: " << support1.ToString() << Endl;
+    Cerr << "support2: " << support2.ToString() << Endl;
     Cerr << "Wait first predicate result " << Endl;
 
-    TSourceIdInfo info {10, 10, TInstant::Zero()};
-    info.MinSeqNo = 1;
-    info.SeqNo = 10;
-    TSourceIdMap srcIds = {{"src1", info}};
+    auto tx1 = helper.MakeAndSendWriteTx({{"src1", {1, 10}}}, txId_1);
+    helper.WaitWriteInfoRequest(tx1, true);
+    helper.WaitTxPredicateReply(tx1);
 
-    SetWriteInfoObserver(true, srcIds);
-    SendCalcPredicate(step, txId_1, {}, 0, 0, Ctx->Edge);
-    WaitCalcPredicateResult({.Step=step, .TxId=txId_1, .Partition=partition, .Predicate=true});
-    info.MinSeqNo = 11;
-    info.SeqNo = 20;
-    srcIds = {{"src1", info}};
-    SetWriteInfoObserver(true, srcIds);
-    SendCalcPredicate(step, txId_1, {}, 0, 0, Ctx->Edge);
+    auto tx2 = helper.MakeAndSendWriteTx({{"src1", {11, 20}}}, txId_2);
+    helper.SendTxCommit(tx1);
+    helper.WaitWriteInfoRequest(tx2, true);
+    helper.WaitTxPredicateReply(tx2);
+    helper.SendTxCommit(tx2);
+
     WaitKeyValueRequest(cookie);
-    WaitCalcPredicateResult({.Ok = false});
+    SendDiskStatusResponse(&cookie);
+    helper.WaitCommitDone(tx1);
+    helper.WaitCommitDone(tx2);
 }
 
-} // End of suite
+Y_UNIT_TEST_F(NonConflictingActsBatchOk, TPartitionFixture) {
+    auto txHelper = TPartitionTxTestHelper(this);
+    const TPartitionId partition{0};
+    CreatePartition({.Partition=partition, .Begin=0, .End=1, .PlanStep = 0});
+
+    ui64 txId1 = 1, txId2 = 3, txId3 = 5;
+    ui64 immTxId1 = 2, immTxId2 = 4;
+    auto ownerSrc3 = txHelper.GetOwnerCookie("src3", TActorId(ui64(1), 1u));
+    auto ownerSrc4 = txHelper.GetOwnerCookie("src4", TActorId((2), 1u));
+    txHelper.ResetBatchCompletion();
+    txHelper.ResetBatchCompletion();
+
+    auto tx1 = txHelper.MakeAndSendWriteTx({{"src1", {1, 3}}}, txId1);
+    txHelper.AddAndSendNormalWrite("src3", 7, 12, ownerSrc3, 0);
+    auto immTx1 = txHelper.MakeAndSendImmediateTx({{"src4", {1, 7}}}, immTxId1);
+    txHelper.AddAndSendNormalWrite("src4", 7, 12, ownerSrc4, 0); // Conflict with imm tx = allowed
+    auto immTx2 = txHelper.MakeAndSendImmediateTx({{"src4", {12, 15}}}, immTxId2); // Immediate txs confilict - allowed;
+    txHelper.ExpectNoTxPredicateReply();
+    txHelper.ExpectNoKvRequest();
+    auto tx2 = txHelper.MakeAndSendWriteTx({{"src-other", {4, 6}}}, txId2);
+    auto tx3 = txHelper.MakeAndSendWriteTx({{"src2", {4, 6}}}, txId3);
+
+    txHelper.WaitWriteInfoRequest(tx1);
+    txHelper.WaitWriteInfoRequest(immTx1, true);
+    txHelper.WaitWriteInfoRequest(immTx2, true);
+    txHelper.WaitWriteInfoRequest(tx2);
+    txHelper.WaitWriteInfoRequest(tx3);
+
+    txHelper.SendWriteInfoResponse(tx3);
+
+    txHelper.ExpectNoBatchCompletion();
+    txHelper.SendWriteInfoResponse(tx1);
+    txHelper.WaitTxPredicateReply(tx1);
+    txHelper.SendWriteInfoResponse(tx2);
+    txHelper.WaitTxPredicateReply(tx2);
+    txHelper.WaitTxPredicateReply(tx3);
+
+    txHelper.WaitBatchCompletion(5 + 6 + 6); //5 tx or immediate tx + 2 normal writes with 2 messages each;
+
+    txHelper.SendTxCommit(tx3);
+    txHelper.SendTxRollback(tx2);
+    txHelper.ExpectNoKvRequest();
+    txHelper.SendTxCommit(tx1);
+    txHelper.WaitKvRequest();
+    txHelper.SendKvResponse();
+    txHelper.WaitCommitDone(tx1);
+    txHelper.WaitImmediateTxComplete(immTx1, true);
+    txHelper.WaitImmediateTxComplete(immTx2, true);
+    txHelper.WaitCommitDone(tx3);
+}
+
+Y_UNIT_TEST_F(ConflictingActsInSeveralBatches, TPartitionFixture) {
+    auto txHelper = TPartitionTxTestHelper(this);
+    const TPartitionId partition{0};
+    CreatePartition({.Partition=partition, .Begin=0, .End=1, .PlanStep = 0});
+    ui64 txId1 = 1, txId2 = 2, txId3 = 3, txId5 = 5, immTxId1 = 6;
+
+    auto ownerSrc1 = txHelper.GetOwnerCookie("src1", TActorId(ui64(1), 1u));
+    auto ownerSrc4 = txHelper.GetOwnerCookie("src4", TActorId((2), 1u));
+
+    auto tx1 = txHelper.MakeAndSendWriteTx({{"src1", {1, 3}}}, txId1);
+    auto tx2 = txHelper.MakeAndSendWriteTx({{"src2", {4, 6}}}, txId2);
+    auto tx3 = txHelper.MakeAndSendWriteTx({{"src1", {4, 6}}}, txId3);
+
+    txHelper.AddAndSendNormalWrite("src1", 7, 12, ownerSrc1, 0);
+    txHelper.AddAndSendNormalWrite("src4", 1, 2, ownerSrc4, 0);
+    auto tx5 = txHelper.MakeAndSendWriteTx({{"src4", {4, 5}}}, txId5);
+    txHelper.AddAndSendNormalWrite("src4", 7, 12, ownerSrc4, 1);
+    auto immTx1 = txHelper.MakeAndSendImmediateTx({{"src4", {13, 15}}}, immTxId1);
+
+    txHelper.WaitWriteInfoRequest(tx1, true);
+    txHelper.WaitWriteInfoRequest(tx2, true);
+    txHelper.WaitWriteInfoRequest(tx3, true);
+    txHelper.WaitWriteInfoRequest(tx5, true);
+    txHelper.WaitWriteInfoRequest(immTx1, true);
+
+    txHelper.WaitTxPredicateReply(tx1);
+    txHelper.WaitTxPredicateReply(tx2);
+    txHelper.WaitBatchCompletion(2);
+
+    txHelper.SendTxCommit(tx1);
+    txHelper.SendTxRollback(tx2);
+    txHelper.ExpectNoKvRequest();
+
+    txHelper.WaitTxPredicateReply(tx3);
+    txHelper.WaitBatchCompletion(1);
+    txHelper.SendTxCommit(tx3);
+    //2 Normal writes with src1 & src4
+    txHelper.WaitBatchCompletion(6 + 2); // Normal writes produce 1 act for each message
+    txHelper.ExpectNoTxPredicateReply();
+    txHelper.WaitKvRequest();
+    txHelper.SendKvResponse();
+
+    txHelper.WaitTxPredicateReply(tx5);
+    txHelper.WaitBatchCompletion(1);
+    txHelper.SendTxCommit(tx5);
+
+    txHelper.WaitBatchCompletion(1 + 6); //Normal write & immTx for src4;
+
+    txHelper.WaitKvRequest();
+    txHelper.SendKvResponse();
+    txHelper.WaitCommitDone(tx1);
+    txHelper.WaitCommitDone(tx3);
+    txHelper.WaitCommitDone(tx5);
+    txHelper.WaitImmediateTxComplete(immTx1, true);
+}
+
+Y_UNIT_TEST_F(ConflictingTxIsAborted, TPartitionFixture) {
+    auto txHelper = TPartitionTxTestHelper(this);
+    auto ownerSrc2 = txHelper.GetOwnerCookie("src2", TActorId(ui64(1), 1u));
+
+    // Part 1 - with anoter TX
+    ui64 txId1 = 2, txId2 = 4, txId3 = 6;
+    auto tx1 = txHelper.MakeAndSendWriteTx({{"src1", {1, 3}}}, txId1);
+    auto tx2 = txHelper.MakeAndSendWriteTx({{"src1", {2, 4}}}, txId2);
+
+    txHelper.WaitWriteInfoRequest(tx1, true);
+    txHelper.WaitWriteInfoRequest(tx2, true);
+
+    txHelper.WaitBatchCompletion(1);
+
+    txHelper.SendTxCommit(tx1);
+    txHelper.ExpectNoKvRequest();
+
+    txHelper.WaitTxPredicateFailure(tx2);
+    txHelper.WaitKvRequest();
+    txHelper.SendKvResponse();
+    txHelper.WaitCommitDone(tx1);
+
+    //Part 2 - with immediate tx - different batch;
+    txHelper.AddAndSendNormalWrite("src2", 7, 12, ownerSrc2, 0);
+    auto tx3 = txHelper.MakeAndSendWriteTx({{"src2", {12, 15}}}, txId3);
+    Y_UNUSED(tx3);
+    txHelper.WaitBatchCompletion(1);
+    txHelper.WaitKvRequest();
+    txHelper.SendKvResponse();
+    txHelper.ExpectNoCommitDone();
+}
+
+Y_UNIT_TEST_F(ConflictingTxProceedAfterRollback, TPartitionFixture) {
+    auto txHelper = TPartitionTxTestHelper(this);
+    ui64 txId1 = 2, txId2 = 4;
+    ui64 immTxId = 5;
+    auto tx1 = txHelper.MakeAndSendWriteTx({{"src1", {1, 3}}, {"src2", {5, 10}}}, txId1);
+    auto tx2 = txHelper.MakeAndSendWriteTx({{"src1", {2, 4}}}, txId2);
+    auto immTx = txHelper.MakeAndSendImmediateTx({{"src2", {3, 12}}}, immTxId);
+
+    txHelper.WaitWriteInfoRequest(tx1, true);
+    txHelper.WaitWriteInfoRequest(tx2, true);
+    txHelper.WaitWriteInfoRequest(immTx, true);
+    txHelper.WaitTxPredicateReply(tx1);
+
+    txHelper.WaitBatchCompletion(1);
+
+    txHelper.SendTxRollback(tx1);
+    txHelper.ExpectNoKvRequest();
+
+    txHelper.WaitTxPredicateReply(tx2);
+    txHelper.WaitBatchCompletion(2);
+    txHelper.SendTxCommit(tx2);
+
+    txHelper.WaitKvRequest();
+    txHelper.SendKvResponse();
+    txHelper.WaitCommitDone(tx2);
+    txHelper.WaitImmediateTxComplete(immTx, true);
+}
+
+Y_UNIT_TEST_F(NonConflictingCommitsBatch, TPartitionFixture) {
+    TCreatePartitionParams params{
+        .Partition=TPartitionId{1},
+        .Begin=0, .End=50,
+        .Config={.Version=1, .Consumers={{.Consumer="client1", .Offset=0}, {.Consumer="client2", .Offset=0},
+            {.Consumer="client4", .Offset=0}}}
+    };
+    auto txHelper = TPartitionTxTestHelper(this, 1, std::move(params));
+    const TString client = "client4";
+    const TString session = "session4";
+    CreateSession(client, session);
+
+    //Just block processing so every message arrives before batching starts
+    ui64 txId = 1;
+    auto txTmp = txHelper.MakeAndSendWriteTx({}, txId++);
+    txHelper.MakeAndSendNormalOffsetCommit(client, 5, session);
+    auto tx1 = txHelper.MakeAndSendTxOffsetCommit("client4", 0, 5, txId++);
+    auto tx2 = txHelper.MakeAndSendTxOffsetCommit("client2", 0, 5, txId++);
+    txHelper.MakeAndSendNormalOffsetCommit(client, 10, session);
+    auto txImm1 = txHelper.MakeAndSendImmediateTxOffsetCommit("client4", 0, 15, txId++);
+    txHelper.WaitWriteInfoRequest(txTmp, true);
+    txHelper.WaitTxPredicateReply(txTmp);
+    txHelper.SendTxRollback(txTmp);
+
+    txHelper.WaitTxPredicateReply(tx1);
+    txHelper.WaitTxPredicateReply(tx2);
+
+    txHelper.WaitBatchCompletion(5 + 1 /*tmpTx*/);
+    txHelper.SendTxCommit(tx1);
+    txHelper.SendTxCommit(tx2);
+    txHelper.WaitKvRequest();
+    txHelper.SendKvResponse();
+
+    txHelper.WaitCommitDone(tx1);
+    txHelper.WaitCommitDone(tx2);
+    txHelper.WaitImmediateTxComplete(txImm1, false);
+}
+
+Y_UNIT_TEST_F(ConflictingCommitsInSeveralBatches, TPartitionFixture) {
+    const TString client = "client1";
+    TCreatePartitionParams params{
+        .Partition=TPartitionId{1},
+        .Begin=0, .End=50,
+        .Config={.Version=1, .Consumers={{.Consumer=client, .Offset=0}, {.Consumer="client2", .Offset=0},
+            {.Consumer="client4", .Offset=0}}}
+    };
+    auto txHelper = TPartitionTxTestHelper(this, 1, std::move(params));
+    const TString session = "session1";
+    CreateSession(client, session);
+
+    ui64 txId = 1;
+    //Just block processing so every message arrives before batching starts
+    auto txTmp = txHelper.MakeAndSendWriteTx({}, txId++);
+
+    txHelper.MakeAndSendNormalOffsetCommit(client, 2, session);
+    auto tx1 = txHelper.MakeAndSendTxOffsetCommit(client, 2, 5, txId++);
+    auto tx2 = txHelper.MakeAndSendTxOffsetCommit(client, 5, 10, txId++);
+    txHelper.MakeAndSendNormalOffsetCommit(client, 20, session);
+
+    txHelper.WaitWriteInfoRequest(txTmp, true);
+    txHelper.WaitTxPredicateReply(txTmp);
+    txHelper.SendTxRollback(txTmp);
+
+    txHelper.ExpectNoTxPredicateReply();
+    txHelper.WaitBatchCompletion(1);
+    txHelper.WaitKvRequest();
+    txHelper.SendKvResponse();
+
+    txHelper.WaitBatchCompletion(1);
+    txHelper.WaitTxPredicateReply(tx1);
+    txHelper.WaitBatchCompletion(1);
+
+    txHelper.SendTxCommit(tx1);
+    txHelper.ExpectNoKvRequest();
+
+    txHelper.WaitTxPredicateReply(tx2);
+    txHelper.SendTxCommit(tx2);
+    txHelper.WaitBatchCompletion(1);
+    txHelper.ExpectNoKvRequest();
+
+    txHelper.WaitBatchCompletion(1);
+    txHelper.WaitKvRequest();
+    txHelper.SendKvResponse();
+    txHelper.WaitCommitDone(tx1);
+    txHelper.WaitCommitDone(tx2);
+
+    auto txImm1 = txHelper.MakeAndSendImmediateTxOffsetCommit("client2", 0, 5, txId++);
+    auto txImm2 = txHelper.MakeAndSendImmediateTxOffsetCommit("client2", 5, 10, txId++);
+
+    txHelper.WaitBatchCompletion(1);
+    txHelper.WaitBatchCompletion(1);
+    txHelper.WaitKvRequest();
+    txHelper.SendKvResponse();
+    txHelper.WaitImmediateTxComplete(txImm1, true);
+    txHelper.WaitImmediateTxComplete(txImm2, true);
+}
+
+Y_UNIT_TEST_F(ConflictingCommitFails, TPartitionFixture) {
+    const TString client = "client1", client2 = "client2";
+    TCreatePartitionParams params{
+        .Partition=TPartitionId{1},
+        .Begin=0, .End=50,
+        .Config={.Version=1, .Consumers={{.Consumer=client, .Offset=0}, {.Consumer=client2, .Offset=0}}}
+    };
+    auto txHelper = TPartitionTxTestHelper(this, 1, std::move(params));
+    const TString session = "session1", session2 = "session2";
+    CreateSession(client, session);
+    CreateSession(client2, session2);
+    ui64 txId = 1;
+    auto txTmp = txHelper.MakeAndSendWriteTx({}, txId++);
+
+    auto tx1 = txHelper.MakeAndSendTxOffsetCommit(client, 0, 5, txId++);
+    auto tx2 = txHelper.MakeAndSendTxOffsetCommit(client, 0, 3, txId++);
+
+    txHelper.WaitWriteInfoRequest(txTmp, true);
+    txHelper.WaitTxPredicateReply(txTmp);
+    txHelper.SendTxRollback(txTmp);
+
+    txHelper.WaitTxPredicateReply(tx1);
+    txHelper.WaitBatchCompletion(1 + 1);
+
+    txHelper.SendTxCommit(tx1);
+    txHelper.WaitTxPredicateFailure(tx2);
+
+    txHelper.WaitKvRequest();
+    txHelper.SendKvResponse();
+    txHelper.WaitCommitDone(tx1);
+    txHelper.ExpectNoCommitDone();
+
+    //Part2
+    txTmp = txHelper.MakeAndSendWriteTx({}, txId++);
+
+    txHelper.MakeAndSendNormalOffsetCommit(client2, 3, session2);
+    auto tx3 = txHelper.MakeAndSendTxOffsetCommit(client2, 0, 3, txId++);
+
+    txHelper.WaitWriteInfoRequest(txTmp, true);
+    txHelper.WaitTxPredicateReply(txTmp);
+    txHelper.SendTxRollback(txTmp);
+
+    txHelper.ExpectNoTxPredicateReply();
+    txHelper.WaitBatchCompletion(2);
+    txHelper.WaitKvRequest();
+    txHelper.SendKvResponse();
+    txHelper.WaitTxPredicateFailure(tx3);
+    txHelper.WaitBatchCompletion(1);
+    txHelper.ExpectNoKvRequest();
+
+    //Part3
+    txTmp = txHelper.MakeAndSendWriteTx({}, txId++);
+
+    auto immTx3_1 = txHelper.MakeAndSendImmediateTxOffsetCommit(client2, 3, 6, txId++);
+    auto immTx3_2 = txHelper.MakeAndSendImmediateTxOffsetCommit(client2, 4, 7, txId++);
+
+    txHelper.WaitWriteInfoRequest(txTmp, true);
+    txHelper.WaitTxPredicateReply(txTmp);
+    txHelper.SendTxRollback(txTmp);
+
+    txHelper.WaitKvRequest();
+    txHelper.SendKvResponse();
+    txHelper.WaitImmediateTxComplete(immTx3_1, true);
+    txHelper.WaitImmediateTxComplete(immTx3_2, false);
+}
+
+Y_UNIT_TEST_F(ConflictingCommitProccesAfterRollback, TPartitionFixture) {
+    const TString client = "client1";
+    TCreatePartitionParams params{
+        .Partition=TPartitionId{1},
+        .Begin=0, .End=50,
+        .Config={.Version=1, .Consumers={{.Consumer=client, .Offset=0}}}
+    };
+    auto txHelper = TPartitionTxTestHelper(this, 1, std::move(params));
+    ui64 txId = 1;
+    auto tx1 = txHelper.MakeAndSendTxOffsetCommit(client, 0, 5, txId++);
+    auto tx2 = txHelper.MakeAndSendTxOffsetCommit(client, 0, 3, txId++);
+
+    txHelper.WaitTxPredicateReply(tx1);
+    txHelper.WaitBatchCompletion(1);
+
+    txHelper.SendTxRollback(tx1);
+    txHelper.ExpectNoKvRequest();
+
+    txHelper.WaitTxPredicateReply(tx2);
+    txHelper.WaitBatchCompletion(1);
+    txHelper.SendTxCommit(tx2);
+
+    txHelper.WaitKvRequest();
+    txHelper.SendKvResponse();
+    txHelper.WaitCommitDone(tx2);
+    txHelper.ExpectNoCommitDone();
+}
+
+} // Test suite
 
 } // namespace

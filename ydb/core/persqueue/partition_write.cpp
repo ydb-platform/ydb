@@ -110,6 +110,7 @@ void TPartition::ProcessChangeOwnerRequest(TAutoPtr<TEvPQ::TEvChangeOwner> ev, c
     }
 
     if (it->second.NeedResetOwner || ev->Force) { //change owner
+
         Y_ABORT_UNLESS(ReservedSize >= it->second.ReservedSize);
         ReservedSize -= it->second.ReservedSize;
 
@@ -200,8 +201,6 @@ void TPartition::UpdateWriteBufferIsFullState(const TInstant& now) {
     WriteBufferIsFullCounter.UpdateWorkingTime(now);
     WriteBufferIsFullCounter.UpdateState(ReservedSize + WriteInflightSize + WriteCycleSize >= Config.GetPartitionConfig().GetBorderWriteInflightSize());
 }
-
-
 
 void TPartition::Handle(TEvPQ::TEvReserveBytes::TPtr& ev, const TActorContext& ctx) {
     PQ_LOG_T("TPartition::HandleOnWrite TEvReserveBytes.");
@@ -471,9 +470,13 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     if (!HaveWriteMsg) {
         return;
     }
+    HaveWriteMsg = false;
 
     TxAffectedSourcesIds.clear();
     WriteAffectedSourcesIds.clear();
+    TxAffectedConsumers.clear();
+    SetOffsetAffectedConsumers.clear();
+    WriteInfosToTx.clear();
 
     ui64 prevEndOffset = EndOffset;
 
@@ -501,11 +504,6 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     for (auto& avg : AvgQuotaBytes) {
         avg.Update(WriteNewSize, now);
     }
-    if (SplitMergeEnabled(Config)) {
-        SplitMergeAvgWriteBytes->Update(WriteNewSize, now);
-        auto needScaling = CheckScaleStatus(ctx);
-        ChangeScaleStatusIfNeeded(needScaling);
-    }
 
     WriteCycleSize = 0;
     WriteNewSize = 0;
@@ -530,28 +528,8 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     ProcessTimestampsForNewData(prevEndOffset, ctx);
 }
 
-NKikimrPQ::EScaleStatus TPartition::CheckScaleStatus(const TActorContext& /*ctx*/) {
-    auto const writeSpeedUsagePercent = SplitMergeAvgWriteBytes->GetValue() * 100.0 / Config.GetPartitionStrategy().GetScaleThresholdSeconds() / TotalPartitionWriteSpeed;
-
-    if (writeSpeedUsagePercent >= Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent()) {
-        return NKikimrPQ::EScaleStatus::NEED_SPLIT;
-    } else if (writeSpeedUsagePercent <= Config.GetPartitionStrategy().GetScaleDownPartitionWriteSpeedThresholdPercent()) {
-        return NKikimrPQ::EScaleStatus::NEED_MERGE;
-    }
-    return NKikimrPQ::EScaleStatus::NORMAL;
-}
-
-void TPartition::ChangeScaleStatusIfNeeded(NKikimrPQ::EScaleStatus scaleStatus) {
-    if (scaleStatus == ScaleStatus || LastScaleRequestTime + TDuration::Seconds(SCALE_REQUEST_REPEAT_MIN_SECONDS) > TInstant::Now()) {
-        return;
-    }
-    Send(Tablet, new TEvPQ::TEvPartitionScaleStatusChanged(Partition.OriginalPartitionId, scaleStatus));
-    LastScaleRequestTime = TInstant::Now();
-    ScaleStatus = scaleStatus;
-}
-
 void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& ctx) {
-    PQ_LOG_T("TPartition::HandleOnWrite TEvWrite.");
+    PQ_LOG_T("TPartition::HandleOnWrite");
 
     if (!CanEnqueue()) {
         ReplyError(ctx, ev->Get()->Cookie, InactivePartitionErrorCode,
@@ -668,6 +646,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
     // TODO: remove decReservedSize == 0
     Y_ABORT_UNLESS(size <= decReservedSize || decReservedSize == 0);
     UpdateWriteBufferIsFullState(ctx.Now());
+
 }
 
 void TPartition::HandleOnIdle(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const TActorContext& ctx)
@@ -813,7 +792,6 @@ void TPartition::ProcessChangeOwnerRequests(const TActorContext& ctx) {
         }
         WaitToChangeOwner.pop_front();
     }
-
     HandlePendingRequests(ctx);
 }
 
@@ -836,8 +814,11 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TRegisterMessageGroupMs
                            "Disk is full");
         return EProcessResult::ContinueDrop;
     }
-
-    return EProcessResult::ContinueAutoCommit;
+    if (TxAffectedSourcesIds.contains(msg.Body.SourceId)) {
+        return EProcessResult::Blocked;
+    }
+    WriteAffectedSourcesIds.insert(msg.Body.SourceId);
+    return EProcessResult::Continue;
 }
 
 void TPartition::ExecRequest(TRegisterMessageGroupMsg& msg, ProcessParameters& parameters) {
@@ -860,7 +841,11 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TDeregisterMessageGroup
                            "Disk is full");
         return EProcessResult::ContinueDrop;
     }
-    return EProcessResult::ContinueAutoCommit;
+    if (TxAffectedSourcesIds.contains(msg.Body.SourceId)) {
+        return EProcessResult::Blocked;
+    }
+    WriteAffectedSourcesIds.insert(msg.Body.SourceId);
+    return EProcessResult::Continue;
 }
 
 void TPartition::ExecRequest(TDeregisterMessageGroupMsg& msg, ProcessParameters& parameters) {
@@ -875,7 +860,20 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TSplitMessageGroupMsg& 
                            "Disk is full");
         return EProcessResult::ContinueDrop;
     }
-    return EProcessResult::ContinueAutoCommit;
+    for (auto& body : msg.Registrations) {
+        if (TxAffectedSourcesIds.contains(body.SourceId)) {
+            return EProcessResult::Blocked;
+        }
+        WriteAffectedSourcesIds.insert(body.SourceId);
+    }
+    for (auto& body : msg.Deregistrations) {
+        if (TxAffectedSourcesIds.contains(body.SourceId)) {
+            return EProcessResult::Blocked;
+        }
+        WriteAffectedSourcesIds.insert(body.SourceId);
+    }
+    return EProcessResult::Continue;
+
 }
 
 
@@ -896,18 +894,18 @@ void TPartition::ExecRequest(TSplitMessageGroupMsg& msg, ProcessParameters& para
 }
 
 TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
-        if (DiskIsFull) {
-            ScheduleReplyError(p.Cookie,
-                               NPersQueue::NErrorCode::WRITE_ERROR_DISK_IS_FULL,
-                               "Disk is full");
-            return EProcessResult::ContinueDrop;
-        }
+    if (DiskIsFull) {
+        ScheduleReplyError(p.Cookie,
+                            NPersQueue::NErrorCode::WRITE_ERROR_DISK_IS_FULL,
+                            "Disk is full");
+        return EProcessResult::ContinueDrop;
+    }
 
-        if (TxAffectedSourcesIds.contains(p.Msg.SourceId)) {
-            return EProcessResult::Blocked;
-        }
-        WriteAffectedSourcesIds.insert(p.Msg.SourceId);
-        return EProcessResult::ContinueAutoCommit;
+    if (TxAffectedSourcesIds.contains(p.Msg.SourceId)) {
+        return EProcessResult::Blocked;
+    }
+    WriteAffectedSourcesIds.insert(p.Msg.SourceId);
+    return EProcessResult::Continue;
 }
 
 bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request) {
@@ -953,6 +951,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                         << ". Writing seqNo: " << sourceId.UpdatedSeqNo()
                         << ". EndOffset: " << EndOffset << ". CurOffset: " << curOffset << ". Offset: " << poffset
             );
+
 
             TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ALREADY].Increment(1);
             MsgsDiscarded.Inc();
@@ -1397,7 +1396,7 @@ void TPartition::RemoveMessages(TMessageQueue& src, TMessageQueue& dst)
 void TPartition::RemoveMessagesToQueue(TMessageQueue& requests)
 {
     for (auto& r : requests) {
-        UserActionAndTransactionEvents.emplace_back(ECommitState::Pending, std::move(r));
+        UserActionAndTransactionEvents.emplace_back(std::move(r));
     }
     requests.clear();
 }
@@ -1433,7 +1432,6 @@ void TPartition::HandlePendingRequests(const TActorContext& ctx)
     if (WaitingForPreviousBlobQuota() || WaitingForSubDomainQuota(ctx)) {
         return;
     }
-
     if (RequestBlobQuota()) {
         return;
     }

@@ -46,17 +46,18 @@ enum class ECommitState {
 struct TTransaction {
 
     explicit TTransaction(TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> tx,
-                          TMaybe<bool> predicate = Nothing()) :
-        Tx(tx),
-        Predicate(predicate)
+                          TMaybe<bool> predicate = Nothing())
+        : Tx(tx)
+        , Predicate(predicate)
+        , SupportivePartitionActor(tx->SupportivePartitionActor)
     {
         Y_ABORT_UNLESS(Tx);
     }
 
     TTransaction(TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> changeConfig,
-                 bool sendReply) :
-        ChangeConfig(changeConfig),
-        SendReply(sendReply)
+                 bool sendReply)
+        : ChangeConfig(changeConfig)
+        , SendReply(sendReply)
     {
         Y_ABORT_UNLESS(ChangeConfig);
     }
@@ -68,12 +69,34 @@ struct TTransaction {
         Y_ABORT_UNLESS(ProposeConfig);
     }
 
+    explicit TTransaction(TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction> proposeTx)
+        : ProposeTransaction(proposeTx)
+        , State(ECommitState::Committed)
+    {
+        if (proposeTx->Record.HasSupportivePartitionActor()) {
+            SupportivePartitionActor = ActorIdFromProto(proposeTx->Record.GetSupportivePartitionActor());
+        }
+        Y_ABORT_UNLESS(ProposeTransaction);
+    }
+
+    TMaybe<ui64> GetTxId() const {
+        if (Tx) {
+            return Tx->TxId;
+        } else if (ProposeConfig) {
+            return ProposeConfig->TxId;
+        }
+        return {};
+    }
+
     TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> Tx;
     TMaybe<bool> Predicate;
+    TActorId SupportivePartitionActor;
+
 
     TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> ChangeConfig;
     bool SendReply;
     TSimpleSharedPtr<TEvPQ::TEvProposePartitionConfig> ProposeConfig;
+    TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction> ProposeTransaction;
 
     //Data Tx
     THolder<TEvPQ::TEvGetWriteInfoResponse> WriteInfo;
@@ -273,7 +296,7 @@ private:
     void PushFrontDistrTx(TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> event);
     void PushBackDistrTx(TSimpleSharedPtr<TEvPQ::TEvProposePartitionConfig> event);
 
-    // void RemoveDistrTx(auto& txIterator);
+    void RequestWriteInfoIfRequired();
 
     void ProcessDistrTxs(const TActorContext& ctx);
     void ProcessDistrTx(const TActorContext& ctx);
@@ -343,7 +366,10 @@ private:
 
     void BeginChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& config,
                                     const TActorContext& ctx);
+    void ExecChangePartitionConfig();
+
     void OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx);
+
     void EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
                                   NPersQueue::TTopicConverterPtr topicConverter,
                                   const TActorContext& ctx);
@@ -465,6 +491,7 @@ private:
             HFuncTraced(NReadQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
             HFuncTraced(NReadQuoterEvents::TEvQuotaCountersUpdated, Handle);
             HFuncTraced(TEvPQ::TEvGetWriteInfoRequest, Handle);
+            IgnoreFunc(TEvPQ::TEvTxBatchComplete);
         default:
             if (!Initializer.Handle(ev)) {
                 ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
@@ -527,6 +554,7 @@ private:
             HFuncTraced(NReadQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
             HFuncTraced(NReadQuoterEvents::TEvQuotaCountersUpdated, Handle);
             HFuncTraced(TEvPQ::TEvProcessChangeOwnerRequests, Handle);
+            IgnoreFunc(TEvPQ::TEvTxBatchComplete);
         default:
             ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
             break;
@@ -535,8 +563,7 @@ private:
 
 private:
     enum class EProcessResult {
-        ContinueWaitCommit,
-        ContinueAutoCommit,
+        Continue,
         ContinueDrop,
         Break,
         NotReady,
@@ -578,8 +605,9 @@ private:
 
     THashSet<TString> TxAffectedSourcesIds;
     THashSet<TString> WriteAffectedSourcesIds;
-    THashSet<TString> TxAffectedClients;
-    THashSet<TString> SetOffsetAffectedClients;
+    THashSet<TString> TxAffectedConsumers;
+    THashSet<TString> SetOffsetAffectedConsumers;
+    THashSet<TString> SetOffsetConsumersCurrBatch; //Same as
 
     ui32 MaxBlobSize;
     const ui32 TotalLevels = 4;
@@ -630,21 +658,17 @@ private:
     // template <class T> T& GetCurrentEvent();
     //TSimpleSharedPtr<TTransaction>& GetCurrentTransaction();
 
-    template <class T> void EnsureUserActionAndTransactionEventsFrontIs() const;
-
     EProcessResult PreProcessUserActionOrTransaction(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>& event);
     EProcessResult PreProcessUserActionOrTransaction(TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction>& event);
     EProcessResult PreProcessUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& tx);
     EProcessResult PreProcessUserActionOrTransaction(TMessage& msg);
 
-    void ExecUserActionOrTransaction(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>& event, TEvKeyValue::TEvRequest* request,
-                                     bool committed);
+    bool ExecUserActionOrTransaction(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>& event, TEvKeyValue::TEvRequest* request);
 
-    void ExecUserActionOrTransaction(TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction>& event,
-                                     TEvKeyValue::TEvRequest* request, bool committed);
-    void ExecUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& tx, TEvKeyValue::TEvRequest* request,
-                                     bool committed);
-    void ExecUserActionOrTransaction(TMessage& msg, TEvKeyValue::TEvRequest* request, bool committed);
+    bool ExecUserActionOrTransaction(TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction>& event,
+                                     TEvKeyValue::TEvRequest* request);
+    bool ExecUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& tx, TEvKeyValue::TEvRequest* request);
+    bool ExecUserActionOrTransaction(TMessage& msg, TEvKeyValue::TEvRequest* request);
 
     [[nodiscard]] EProcessResult PreProcessUserAct(TEvPQ::TEvSetClientInfo& act, const TActorContext& ctx);
     void CommitUserAct(TEvPQ::TEvSetClientInfo& act);
@@ -673,7 +697,6 @@ private:
     bool HaveCheckDisk = false;
     bool HaveDrop = false;
     bool HeadCleared = false;
-    bool TxOrUserActProcessed = false;
     TMaybe<TPartitionSourceManager::TModificationBatch> SourceIdBatch;
     TMaybe<ProcessParameters> Parameters;
     THolder<TEvKeyValue::TEvRequest> PersistRequest;
@@ -685,23 +708,15 @@ private:
     void BeginAppendHeadWithNewWrites(const TActorContext& ctx);
     void EndAppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
 
-    void SwitchToCommitState();
-
     //
     // user actions and transactions
     //
     struct TUserActionAndTransactionEvent {
-        ECommitState State = ECommitState::Pending;
         std::variant<TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>,             // user actions
-                     TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction>, // immediate transaction
+//                     TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction>, // immediate transaction
                      TSimpleSharedPtr<TTransaction>,                        // distributed transaction or update config
                      TMessage> Event;
     };
-    // using TUserActionAndTransactionEvent =
-    //     std::variant<TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>,             // user actions
-    //                  TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction>, // immediate transaction
-    //                  TSimpleSharedPtr<TTransaction>,                        // distributed transaction or update config
-    //                  TMessage>;
 
     std::deque<TUserActionAndTransactionEvent> UserActionAndTransactionEvents;
     std::deque<TUserActionAndTransactionEvent> UserActionAndTxPendingCommit;
@@ -715,13 +730,22 @@ private:
     TVector<std::pair<TActorId, std::unique_ptr<IEventBase>>> Replies;
     THashSet<TString> AffectedUsers;
     bool KVWriteInProgress = false;
-    bool WaitingForCommit = false;
     TMaybe<ui64> PlanStep;
     TMaybe<ui64> TxId;
     bool TxIdHasChanged = false;
     TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> ChangeConfig;
+    TVector<THolder<TEvPQ::TEvSetClientInfo>> ChangeConfigActs;
+    bool ChangingConfig = false;
     bool SendChangeConfigReply = true;
     TMessageQueue Responses;
+    ui64 CurrentBatchSize = 0;
+
+    enum class ETxBatchingState{
+        PreProcessing,
+        Executing,
+        Finishing
+    };
+    ETxBatchingState BatchingState = ETxBatchingState::PreProcessing;
     //
     //
     //

@@ -175,6 +175,48 @@ bool TSubDomainInfo::CheckDiskSpaceQuotas(IQuotaCounters* counters) {
     return false;
 }
 
+void TSubDomainInfo::CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskSpaceQuotas& quotas) {
+    if (quotas.HardQuota != 0) {
+        counters->ChangeDiskSpaceHardQuotaBytes(quotas.HardQuota);
+    }
+    if (quotas.SoftQuota != 0) {
+        counters->ChangeDiskSpaceSoftQuotaBytes(quotas.SoftQuota);
+    }
+    for (const auto& [poolKind, poolQuotas] : quotas.StoragePoolsQuotas) {
+        if (poolQuotas.SoftQuota != 0) {
+            counters->AddDiskSpaceSoftQuotaBytes(GetUserFacingStorageType(poolKind), poolQuotas.SoftQuota);
+        }
+    }
+}
+
+void TSubDomainInfo::CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskSpaceQuotas& prev, const TDiskSpaceQuotas& next) {
+    i64 hardDelta = next.HardQuota - prev.HardQuota;
+    if (hardDelta != 0) {
+        counters->ChangeDiskSpaceHardQuotaBytes(hardDelta);
+    }
+    i64 softDelta = next.SoftQuota - prev.SoftQuota;
+    if (softDelta != 0) {
+        counters->ChangeDiskSpaceSoftQuotaBytes(softDelta);
+    }
+    for (const auto& [poolKind, newPoolQuotas] : next.StoragePoolsQuotas) {
+        const auto* oldPoolQuotas = prev.StoragePoolsQuotas.FindPtr(poolKind);
+        ui64 addend = newPoolQuotas.SoftQuota - (oldPoolQuotas ? oldPoolQuotas->SoftQuota : 0u);
+        if (addend != 0u) {
+            counters->AddDiskSpaceSoftQuotaBytes(GetUserFacingStorageType(poolKind), addend);
+        }
+    }
+    for (const auto& [poolKind, oldPoolQuotas] : prev.StoragePoolsQuotas) {
+        if (const auto* newPoolQuotas = next.StoragePoolsQuotas.FindPtr(poolKind);
+            !newPoolQuotas
+        ) {
+            ui64 addend = -oldPoolQuotas.SoftQuota;
+            if (addend != 0u) {
+                counters->AddDiskSpaceSoftQuotaBytes(GetUserFacingStorageType(poolKind), addend);
+            }
+        }
+    }
+}
+
 void TSubDomainInfo::AggrDiskSpaceUsage(IQuotaCounters* counters, const TPartitionStats& newAggr, const TPartitionStats& oldAggr) {
     DiskSpaceUsage.Tables.DataSize += (newAggr.DataSize - oldAggr.DataSize);
     counters->ChangeDiskSpaceTablesDataBytes(newAggr.DataSize - oldAggr.DataSize);
@@ -189,21 +231,21 @@ void TSubDomainInfo::AggrDiskSpaceUsage(IQuotaCounters* counters, const TPartiti
 
     for (const auto& [poolKind, newStoragePoolStats] : newAggr.StoragePoolsStats) {
         const auto* oldStats = oldAggr.StoragePoolsStats.FindPtr(poolKind);
-        const i64 dataSizeIncrement = newStoragePoolStats.DataSize - (oldStats ? oldStats->DataSize : 0u);
-        const i64 indexSizeIncrement = newStoragePoolStats.IndexSize - (oldStats ? oldStats->IndexSize : 0u);
+        const ui64 dataSizeIncrement = newStoragePoolStats.DataSize - (oldStats ? oldStats->DataSize : 0u);
+        const ui64 indexSizeIncrement = newStoragePoolStats.IndexSize - (oldStats ? oldStats->IndexSize : 0u);
         auto& [dataSize, indexSize] = DiskSpaceUsage.StoragePoolsUsage[poolKind];
         dataSize += dataSizeIncrement;
         indexSize += indexSizeIncrement;
-        counters->ChangeDiskSpaceTables(GetUserFacingStorageType(poolKind), dataSizeIncrement, indexSizeIncrement);
+        counters->AddDiskSpaceTables(GetUserFacingStorageType(poolKind), dataSizeIncrement, indexSizeIncrement);
     }
     for (const auto& [poolKind, oldStoragePoolStats] : oldAggr.StoragePoolsStats) {
         if (const auto* newStats = newAggr.StoragePoolsStats.FindPtr(poolKind); !newStats) {
-            const i64 dataSizeDecrement = oldStoragePoolStats.DataSize;
-            const i64 indexSizeDecrement = oldStoragePoolStats.IndexSize;
+            const ui64 dataSizeDecrement = oldStoragePoolStats.DataSize;
+            const ui64 indexSizeDecrement = oldStoragePoolStats.IndexSize;
             auto& [dataSize, indexSize] = DiskSpaceUsage.StoragePoolsUsage[poolKind];
             dataSize -= dataSizeDecrement;
             indexSize -= indexSizeDecrement;
-            counters->ChangeDiskSpaceTables(GetUserFacingStorageType(poolKind), -dataSizeDecrement, -indexSizeDecrement);
+            counters->AddDiskSpaceTables(GetUserFacingStorageType(poolKind), -dataSizeDecrement, -indexSizeDecrement);
         }
     }
 }

@@ -116,7 +116,8 @@ class Factory:
             schema=schema,
             select_what=SelectWhat.asterisk(schema.columns),
             select_where=None,
-            data_out=[
+            data_in=None,
+            data_out_=[
                 [
                     1,
                     False,

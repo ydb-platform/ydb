@@ -222,8 +222,6 @@ public:
         return IsMemoryYellowZoneReached;
     }
 
-    static void* AllocImpl(size_t size, size_t ahead, ui64& extraPages, ui8*& extraPage);
-    
 protected:
     void* Alloc(size_t size);
     void Free(void* ptr, size_t size) noexcept;

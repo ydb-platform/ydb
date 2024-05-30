@@ -4,6 +4,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/security/certificate_check/cert_auth_utils.h>
 #include <ydb/services/ydb/ydb_dummy.h>
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 
@@ -41,6 +42,32 @@ struct TKikimrTestWithAuth : TKikimrTestSettings {
 
 struct TKikimrTestWithAuthAndSsl : TKikimrTestWithAuth {
     static constexpr bool SSL = true;
+};
+
+struct TKikimrTestWithServerCert : TKikimrTestWithAuthAndSsl {
+    static constexpr bool SSL = true;
+
+    static const TCertAndKey& GetCACertAndKey() {
+        static const TCertAndKey ca = GenerateCA(TProps::AsCA());
+        return ca;
+    }
+
+    static const TCertAndKey& GetServerCert() {
+        static const TCertAndKey server = GenerateSignedCert(GetCACertAndKey(), TProps::AsServer());
+        return server;
+    }
+
+    static TString GetCaCrt() {
+        return GetCACertAndKey().Certificate.c_str();
+    }
+
+    static TString GetServerCrt() {
+        return GetServerCert().Certificate.c_str();
+    }
+
+    static TString GetServerKey() {
+        return GetServerCert().PrivateKey.c_str();
+    }
 };
 
 struct TKikimrTestNoSystemViews : TKikimrTestSettings {

@@ -1,12 +1,19 @@
 #pragma once
 
+#include <ydb/core/protos/config.pb.h>
 #include <util/generic/string.h>
 #include <util/datetime/base.h>
-
-#include <string>
-#include <vector>
+#include "dynamic_node_auth_processor.h"
 
 namespace NKikimr {
+struct TCertificateAuthValues {
+    NKikimrConfig::TClientCertificateAuthorization ClientCertificateAuthorization;
+    TString ServerCertificateFilePath;
+};
+
+TDynamicNodeAuthorizationParams GetDynamicNodeAuthorizationParams(const NKikimrConfig::TClientCertificateAuthorization& clientCertificateAuth);
+NKikimrConfig::TClientCertificateAuthorization::TSubjectTerm MakeSubjectTerm(const TString& name, const TVector<TString>& values, const TVector<TString>& suffixes = {});
+
 struct TCertAndKey {
     std::string Certificate;
     std::string PrivateKey;

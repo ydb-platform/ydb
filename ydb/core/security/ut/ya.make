@@ -17,7 +17,6 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     ticket_parser_ut.cpp
     ldap_utils_ut.cpp
-    cert_utils_ut.cpp
 )
 
 END()

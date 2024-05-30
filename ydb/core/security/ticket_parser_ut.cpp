@@ -12,7 +12,7 @@
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <util/system/tempfile.h>
 
-#include "cert_utils_ut.h"
+#include <ydb/core/security/certificate_check/cert_auth_utils.h>
 #include "ldap_auth_provider.h"
 #include "ticket_parser.h"
 
@@ -593,18 +593,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT(!result->Error.empty());
         UNIT_ASSERT(result->Token == nullptr);
         UNIT_ASSERT_VALUES_EQUAL(result->Error.Message, "Ticket is empty");
-    }
-
-    NKikimrConfig::TClientCertificateAuthorization::TSubjectTerm MakeSubjectTerm(TString name, const TVector<TString>& values, const TVector<TString>& suffixes = {}) {
-        NKikimrConfig::TClientCertificateAuthorization::TSubjectTerm term;
-        term.SetShortName(name);
-        for (const auto& val: values) {
-            *term.MutableValues()->Add() = val;
-        }
-        for (const auto& suf: suffixes) {
-            *term.MutableSuffixes()->Add() = suf;
-        }
-        return term;
     }
 
     Y_UNIT_TEST(TicketFromCertificateCheckIssuerGood) {

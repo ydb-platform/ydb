@@ -4,7 +4,6 @@
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
-#include <ydb/core/grpc_services/auth_processor/dynamic_node_auth_processor.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/nameservice.h>

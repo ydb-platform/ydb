@@ -10,7 +10,6 @@ SRCS(
     ticket_parser.h
     ldap_auth_provider.cpp
     ldap_utils.cpp
-    cert_auth_utils.cpp
 )
 
 IF(OS_LINUX OR OS_DARWIN)
@@ -50,4 +49,8 @@ END()
 
 RECURSE_FOR_TESTS(
     ut
+)
+
+RECURSE(
+    certificate_check
 )

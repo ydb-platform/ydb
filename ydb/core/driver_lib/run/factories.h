@@ -5,7 +5,7 @@
 #include <ydb/core/persqueue/actor_persqueue_client_iface.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/base/grpc_service_factory.h>
-#include <ydb/core/security/cert_auth_utils.h>
+#include <ydb/core/security/certificate_check/cert_auth_utils.h>
 
 #include <ydb/core/ymq/actor/auth_factory.h>
 #include <ydb/core/http_proxy/auth_factory.h>

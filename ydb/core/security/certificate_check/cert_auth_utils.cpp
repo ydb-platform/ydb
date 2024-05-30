@@ -1,5 +1,3 @@
-#include "cert_gen.h"
-
 #include <openssl/bio.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
@@ -15,9 +13,48 @@
 #include <iostream>
 #include <memory>
 #include <stdexcept>
+#include "cert_auth_utils.h"
 
+namespace NKikimr {
 
-using namespace NTest;
+TDynamicNodeAuthorizationParams GetDynamicNodeAuthorizationParams(const NKikimrConfig::TClientCertificateAuthorization &clientCertificateAuth) {
+    TDynamicNodeAuthorizationParams certAuthConf;
+    if (!clientCertificateAuth.HasDynamicNodeAuthorization()) {
+        return certAuthConf;
+    }
+
+    const auto& dynNodeAuth = clientCertificateAuth.GetDynamicNodeAuthorization();
+    TDynamicNodeAuthorizationParams::TDistinguishedName distinguishedName;
+    for (const auto& term: dynNodeAuth.GetSubjectTerms()) {
+        auto name = TDynamicNodeAuthorizationParams::TRelativeDistinguishedName(term.GetShortName());
+        for (const auto& value: term.GetValues()) {
+            name.AddValue(value);
+        }
+        for (const auto& suffix: term.GetSuffixes()) {
+            name.AddSuffix(suffix);
+        }
+        distinguishedName.AddRelativeDistinguishedName(std::move(name));
+    }
+    if (!distinguishedName.RelativeDistinguishedNames.empty()) {
+        certAuthConf.AddCertSubjectDescription(distinguishedName);
+    }
+    certAuthConf.CanCheckNodeByAttributeCN = dynNodeAuth.GetCanCheckNodeHostByCN();
+    certAuthConf.NeedCheckIssuer = dynNodeAuth.GetNeedCheckIssuer();
+    certAuthConf.SidName = dynNodeAuth.GetSidName();
+    return certAuthConf;
+}
+
+NKikimrConfig::TClientCertificateAuthorization::TSubjectTerm MakeSubjectTerm(const TString& name, const TVector<TString>& values, const TVector<TString>& suffixes) {
+    NKikimrConfig::TClientCertificateAuthorization::TSubjectTerm term;
+    term.SetShortName(name);
+    for (const auto& val: values) {
+        *term.MutableValues()->Add() = val;
+    }
+    for (const auto& suf: suffixes) {
+        *term.MutableSuffixes()->Add() = suf;
+    }
+    return term;
+}
 
 namespace {
 
@@ -403,8 +440,6 @@ X509Ptr SingRequest(X509REQPtr& request, X509Ptr& rootCert, PKeyPtr& rootKey, co
 
 }
 
-namespace NTest {
-
 TCertAndKey GenerateCA(const TProps& props) {
     auto keys = GenerateKeys();
     auto cert = GenerateSelfSignedCertificate(keys, props);
@@ -496,4 +531,4 @@ TProps TProps::AsClientServer() {
 
 TProps& TProps::WithValid(TDuration duration) { SecondsValid = duration.Seconds(); return *this; }
 
-}
+}  //namespace NKikimr

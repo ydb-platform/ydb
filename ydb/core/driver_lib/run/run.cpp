@@ -1,6 +1,5 @@
 #include "auto_config_initializer.h"
 #include "run.h"
-#include "cert_auth_props.h"
 #include "service_initializer.h"
 #include "kikimr_services_initializers.h"
 

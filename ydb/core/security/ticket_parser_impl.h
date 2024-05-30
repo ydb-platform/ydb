@@ -1,14 +1,15 @@
 #pragma once
 #include "ticket_parser_log.h"
 #include "ldap_auth_provider.h"
-#include "cert_auth_utils.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/mon/mon.h>
-#include <ydb/core/grpc_services/auth_processor/dynamic_node_auth_processor.h>
+#include <ydb/core/security/certificate_check/dynamic_node_auth_processor.h>
+#include <ydb/core/security/certificate_check/cert_check.h>
+#include <ydb/core/security/certificate_check/cert_auth_utils.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
@@ -256,8 +257,9 @@ protected:
     using IActorOps::Schedule;
 
     NKikimrProto::TAuthConfig Config;
-    const TDynamicNodeAuthorizationParams DynamicNodeAuthorizationParams;
-    const TString ServerCertificate;
+    // const TDynamicNodeAuthorizationParams DynamicNodeAuthorizationParams;
+    // const TString ServerCertificate;
+    const TCertificateChecker CertificateChecker;
     TDuration ExpireTime = TDuration::Hours(24); // after what time ticket will expired and removed from cache
 
     template <typename TTokenRecord>
@@ -2156,11 +2158,8 @@ public:
 
     TTicketParserImpl(const NKikimrProto::TAuthConfig& authConfig, const TCertificateAuthValues& certificateAuthValues)
         : Config(authConfig)
-        , DynamicNodeAuthorizationParams(GetDynamicNodeAuthorizationParams(certificateAuthValues.ClientCertificateAuthorization))
-        , ServerCertificate((certificateAuthValues.ServerCertificateFilePath ? ReadFile(certificateAuthValues.ServerCertificateFilePath) : ""))
-        {
-            Cerr << "++++++++: " << ServerCertificate << Endl;
-        }
+        , CertificateChecker(certificateAuthValues)
+        {}
 };
 
 }

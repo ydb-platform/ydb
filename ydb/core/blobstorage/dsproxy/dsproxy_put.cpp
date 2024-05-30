@@ -45,7 +45,6 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
 
     bool IsManyPuts = false;
 
-    TInstant Deadline;
     ui64 RequestsSent = 0;
     ui64 ResponsesReceived = 0;
     ui64 MaxSaneRequests = 0;
@@ -468,7 +467,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
             ev->Bunch.emplace_back(new IEventHandle(
                 TActorId() /*recipient*/,
                 item.Recipient,
-                put = new TEvBlobStorage::TEvPut(item.BlobId, TRcBuf(item.Buffer), Deadline, HandleClass, Tactic),
+                put = new TEvBlobStorage::TEvPut(item.BlobId, TRcBuf(item.Buffer), item.Deadline, HandleClass, Tactic),
                 0 /*flags*/,
                 item.Cookie,
                 nullptr /*forwardOnNondelivery*/,
@@ -506,7 +505,6 @@ public:
                 ev->RestartCounter, std::move(span), nullptr)
         , PutImpl(info, state, ev, mon, enableRequestMod3x3ForMinLatecy, source, cookie, Span.GetTraceId())
         , WaitingVDiskResponseCount(info->GetTotalVDisksNum())
-        , Deadline(ev->Deadline)
         , HandleClass(ev->HandleClass)
         , ReportedBytes(0)
         , TimeStatsEnabled(timeStatsEnabled)
@@ -550,7 +548,6 @@ public:
         , PutImpl(info, state, events, mon, handleClass, tactic, enableRequestMod3x3ForMinLatecy)
         , WaitingVDiskResponseCount(info->GetTotalVDisksNum())
         , IsManyPuts(true)
-        , Deadline(TInstant::Zero())
         , HandleClass(handleClass)
         , ReportedBytes(0)
         , TimeStatsEnabled(timeStatsEnabled)
@@ -565,7 +562,6 @@ public:
         Y_DEBUG_ABORT_UNLESS(events.size() <= MaxBatchedPutRequests);
         for (auto &ev : events) {
             auto& msg = *ev->Get();
-            Deadline = Max(Deadline, msg.Deadline);
             if (msg.Orbit.HasShuttles()) {
                 RootCauseTrack.IsOn = true;
             }
@@ -594,7 +590,6 @@ public:
             << " BlobIDs# " << BlobIdSequenceToString()
             << " HandleClass# " << NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)
             << " Tactic# " << TEvBlobStorage::TEvPut::TacticName(Tactic)
-            << " Deadline# " << Deadline
             << " RestartCounter# " << RestartCounter);
 
         StartTime = TActivationContext::Monotonic();
@@ -647,19 +642,21 @@ public:
         return true;
     }
 
-    void Handle(TKikimrEvents::TEvWakeup::TPtr &ev) {
-        Y_UNUSED(ev);
+    void HandleWakeup() {
         A_LOG_WARN_S("BPP14", "Wakeup "
             << " ActorId# " << SelfId()
             << " Group# " << Info->GroupID
             << " BlobIDs# " << BlobIdSequenceToString()
             << " Not answered in "
             << (TActivationContext::Monotonic() - StartTime) << " seconds");
-        if (TInstant::Now() > Deadline) {
-            ErrorReason = "Deadline exceeded";
-            ReplyAndDie(NKikimrProto::DEADLINE);
-            return;
+        const TInstant now = TActivationContext::Now();
+        TPutImpl::TPutResultVec putResults;
+        for (size_t blobIdx = 0; blobIdx < PutImpl.Blobs.size(); ++blobIdx) {
+            if (!PutImpl.Blobs[blobIdx].Replied && now > PutImpl.Blobs[blobIdx].Deadline) {
+                PutImpl.PrepareOneReply(NKikimrProto::DEADLINE, blobIdx, LogCtx, "Deadline timer hit", putResults);
+            }
         }
+        ReplyAndDieWithLastResponse(putResults);
         Schedule(TDuration::MilliSeconds(DsPutWakeupMs), new TKikimrEvents::TEvWakeup);
     }
 
@@ -740,7 +737,7 @@ public:
             hFunc(TEvBlobStorage::TEvVMultiPutResult, Handle);
             hFunc(TEvAccelerate, Handle);
             cFunc(TEvBlobStorage::EvResume, ResumeBootstrap);
-            hFunc(TKikimrEvents::TEvWakeup, Handle);
+            cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
 
             default:
                 Y_DEBUG_ABORT("unexpected event Type# 0x%08" PRIx32, type);

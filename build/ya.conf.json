@@ -1823,6 +1823,10 @@
             }
         },
         "python3": {
+            "params": {
+                "match_root": "YMAKE_PYTHON3",
+                "use_bundle": true
+            },
             "platforms": [
                 {
                     "default": true,

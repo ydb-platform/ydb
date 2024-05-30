@@ -118,6 +118,7 @@
                                                                                             "CounterID",
                                                                                             "EventDate"
                                                                                         ],
+                                                                                        "Scan": "Parallel",
                                                                                         "SsaProgram": {
                                                                                             "Command": [
                                                                                                 {
@@ -378,6 +379,7 @@
                                                                                     "CounterID",
                                                                                     "EventDate"
                                                                                 ],
+                                                                                "Scan": "Parallel",
                                                                                 "SsaProgram": {
                                                                                     "Command": [
                                                                                         {

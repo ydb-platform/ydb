@@ -552,7 +552,7 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsCommonSensePath()
-                .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
+                .FailOnRestrictedCreateInTempZone();
 
             if (checks) {
                 if (parentPath->IsTable()) {

@@ -216,7 +216,7 @@ public:
                 .NotUnderDeleting()
                 .IsCommonSensePath()
                 .IsLikeDirectory()
-                .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
+                .FailOnRestrictedCreateInTempZone();
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());

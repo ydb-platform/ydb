@@ -24,8 +24,9 @@ inline TPath::TChecker IsParentPathValid(const TPath& parentPath, const TTxTrans
         .IsLikeDirectory();
 
     if (isCreate) {
-        checks.FailOnRestrictedCreateInTempZone(tx.GetAllowCreateInTempDir());
+        checks.FailOnRestrictedCreateInTempZone();
     }
+    Y_UNUSED(tx);
 
     return std::move(checks);
 }

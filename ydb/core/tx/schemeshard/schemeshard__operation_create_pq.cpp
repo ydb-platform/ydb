@@ -313,7 +313,7 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
-                .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
+                .FailOnRestrictedCreateInTempZone();
 
             if (checks) {
                 if (parentPath.Base()->IsCdcStream()) {

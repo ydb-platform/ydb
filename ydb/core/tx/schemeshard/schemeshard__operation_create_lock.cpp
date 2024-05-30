@@ -125,7 +125,7 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsLikeDirectory()
-                .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
+                .FailOnRestrictedCreateInTempZone();
 
             if (op.GetAllowIndexImplLock()) {
                 checks.IsInsideTableIndexPath();

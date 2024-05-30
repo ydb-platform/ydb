@@ -49,26 +49,16 @@ else
     xpragma=""
 fi
 
-qs=1spilling
-ql=2llvm-on
-qX=0main
+qs=2spilling
+ql=3llvm-on
+qX=1main
+q=1main-no-enable-spilling
 
 [ -f ${ql}-${datasize}-$tasks/$variant/bindings.json ] ||
 ${ydb_path}/ydb/library/benchmarks/gen_queries/gen_queries \
         --output ${ql}-${datasize}-$tasks --variant ${variant} --syntax yql --dataset-size $datasize \
         $xpragma \
         #
-
-[ -f ${qX}-${datasize}-$tasks/$variant/bindings.json ] ||
-${ydb_path}/ydb/library/benchmarks/gen_queries/gen_queries \
-        --output ${qX}-${datasize}-$tasks --variant ${variant} --syntax yql --dataset-size $datasize \
-    --pragma dq.MaxTasksPerStage=$tasks \
-    --pragma dq.ComputeActorType="async" \
-    --pragma config.flags=LLVM_OFF \
-    $xpragma \
-# --pragma dq.UseFinalizeByKey=true \
-# --pragma dq.UseOOBTransport=true \
-#
 
 [ -f ${qs}-${datasize}-$tasks/$variant/bindings.json ] ||
 ${ydb_path}/ydb/library/benchmarks/gen_queries/gen_queries \
@@ -80,12 +70,19 @@ ${ydb_path}/ydb/library/benchmarks/gen_queries/gen_queries \
     $xpragma \
 # --pragma dq.UseOOBTransport=true \
 #
+[ -e ${qX}-${datasize}-$tasks ] || ln -s ${qs}-${datasize}-$tasks ${qX}-${datasize}-$tasks
+[ -e ${q}-${datasize}-$tasks ] || ln -s ${qs}-${datasize}-$tasks ${q}-${datasize}-$tasks
+
 outdir=results-`date -u +%Y%m%dT%H%M%S`-${variant}-${datasize}-$tasks
 if false; then
 echo LLVM && \
 command time ${script_path}/runner/runner ${ql}-${datasize}-$tasks/${variant} ${ql}-${datasize}-$tasks/bindings.json $outdir ${dq_path}/dqrun-unspilled -s --fs-cfg ${dq_path}/examples/fs.conf --gateways-cfg $script_path/runner/test-gateways.conf --udfs-dir ${ydb_path}/ydb/library/yql/udfs/common/
 fi
-echo NO LLVM && \
+if false; then
+echo main NO LLVM && \
 command time ${script_path}/runner/runner ${qX}-${datasize}-$tasks/${variant} ${qX}-${datasize}-$tasks/${variant}/bindings.json $outdir ${dq_path}/dqrun-unspilled --enable-spilling -s --fs-cfg ${dq_path}/examples/fs.conf --gateways-cfg $script_path/runner/test-gateways.conf --udfs-dir ${ydb_path}/ydb/library/yql/udfs/common/
+fi
 echo Spilling && \
 command time ${script_path}/runner/runner ${qs}-${datasize}-$tasks/${variant} ${qs}-${datasize}-$tasks/${variant}/bindings.json $outdir ${dq_path}/dqrun -s --enable-spilling --fs-cfg ${dq_path}/examples/fs.conf --gateways-cfg $script_path/runner/test-gateways.conf --udfs-dir ${ydb_path}/ydb/library/yql/udfs/common/
+echo main NO LLVM no enable spilling && \
+command time ${script_path}/runner/runner ${q}-${datasize}-$tasks/${variant} ${q}-${datasize}-$tasks/${variant}/bindings.json $outdir ${dq_path}/dqrun-unspilled -s --fs-cfg ${dq_path}/examples/fs.conf --gateways-cfg $script_path/runner/test-gateways.conf --udfs-dir ${ydb_path}/ydb/library/yql/udfs/common/

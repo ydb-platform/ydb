@@ -19,73 +19,51 @@ class TCallbackContext {
 public:
     class TBorrowed {
     public:
-        TBorrowed() {}
-
-        explicit TBorrowed(const TCallbackContext& parent)
-            : Mutex(parent.Mutex)
-            , Die(parent.Die)
-            , AllDied(parent.AllDied)
-            , LockCounter(parent.LockCounter)
+        explicit TBorrowed(TCallbackContext* parent)
+            : Parent(parent)
         {
-            ++*LockCounter;
-            Ptr = parent.GuardedObjectPtr.get();
+            if (!Parent) return;
+
+            ++Parent->BorrowCounter;
+            Ptr = Parent->GuardedObjectPtr.get();
         }
 
         ~TBorrowed() {
-            if (!Mutex) return;
-            std::lock_guard lock(*Mutex);
-            --*LockCounter;
-            if (*Die) {
-                AllDied->notify_one();
+            if (!Parent) return;
+
+            std::lock_guard lock(Parent->Mutex);
+            --Parent->BorrowCounter;
+            if (Parent->Die && Parent->BorrowCounter == 0) {
+                Parent->AllDied.notify_one();
             }
         }
 
-        TGuardedObject* operator->() {
-            return Ptr;
-        }
-
-        const TGuardedObject* operator->() const {
-            return Ptr;
-        }
-
-        operator bool() {
-            return Ptr;
-        }
+        TGuardedObject* operator->() { return Ptr; }
+        const TGuardedObject* operator->() const { return Ptr; }
+        operator bool() { return Ptr; }
 
     private:
-        std::shared_ptr<std::mutex> Mutex;
-        std::shared_ptr<std::atomic<bool>> Die;
-        std::shared_ptr<std::condition_variable> AllDied;
+        TCallbackContext* Parent;
         TGuardedObject* Ptr = nullptr;
-        std::shared_ptr<size_t> LockCounter;
     };
 
 public:
     explicit TCallbackContext(std::shared_ptr<TGuardedObject> ptr)
-        : Mutex(std::make_shared<std::mutex>())
-        , Die(std::make_shared<std::atomic<bool>>(false))
-        , AllDied(std::make_shared<std::condition_variable>())
-        , GuardedObjectPtr(std::move(ptr))
-        , LockCounter(std::make_shared<size_t>())
-        {}
+        : GuardedObjectPtr(std::move(ptr)) {}
 
     TBorrowed LockShared() {
-        std::lock_guard lock(*Mutex);
-        if (*Die) {
-            return TBorrowed();
-        }
-        return TBorrowed(*this);
+        std::lock_guard lock(Mutex);
+        return TBorrowed(Die ? nullptr : this);
     }
 
 // TODO change section below to private after removing pqv1 read session implementation
 // (relation of 1 owner : n impls)
 public:
     void Cancel() {
-        std::unique_lock lock(*Mutex);
-        *Die = true;
-        std::shared_ptr<TGuardedObject> waste;
-        AllDied->wait(lock, [this] { return *LockCounter == 0; });
-        std::swap(waste, GuardedObjectPtr);
+        std::unique_lock lock(Mutex);
+        Die = true;
+        AllDied.wait(lock, [this] { return BorrowCounter == 0; });
+        GuardedObjectPtr.reset();
     }
 
     std::shared_ptr<TGuardedObject> TryGet() const {
@@ -97,11 +75,11 @@ public:
 
 private:
 
-    std::shared_ptr<std::mutex> Mutex;
-    std::shared_ptr<std::atomic<bool>> Die;
-    std::shared_ptr<std::condition_variable> AllDied;
+    std::mutex Mutex;
     std::shared_ptr<TGuardedObject> GuardedObjectPtr;
-    std::shared_ptr<size_t> LockCounter;
+    size_t BorrowCounter = 0;
+    std::condition_variable AllDied;
+    bool Die = false;
 };
 
 template<typename T>

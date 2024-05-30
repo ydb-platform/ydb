@@ -7222,6 +7222,18 @@ void TSchemeShard::ChangeDiskSpaceTablesTotalBytes(i64 delta) {
     TabletCounters->Simple()[COUNTER_DISK_SPACE_TABLES_TOTAL_BYTES].Add(delta);
 }
 
+void TSchemeShard::AddDiskSpaceTables(EUserFacingStorageType storageType, ui64 data, ui64 index) {
+    if (storageType == EUserFacingStorageType::Ssd) {
+        TabletCounters->Simple()[COUNTER_DISK_SPACE_TABLES_DATA_BYTES_ON_SSD].Add(data);
+        TabletCounters->Simple()[COUNTER_DISK_SPACE_TABLES_INDEX_BYTES_ON_SSD].Add(index);
+        TabletCounters->Simple()[COUNTER_DISK_SPACE_TABLES_TOTAL_BYTES_ON_SSD].Add(data + index);
+    } else if (storageType == EUserFacingStorageType::Hdd) {
+        TabletCounters->Simple()[COUNTER_DISK_SPACE_TABLES_DATA_BYTES_ON_HDD].Add(data);
+        TabletCounters->Simple()[COUNTER_DISK_SPACE_TABLES_INDEX_BYTES_ON_HDD].Add(index);
+        TabletCounters->Simple()[COUNTER_DISK_SPACE_TABLES_TOTAL_BYTES_ON_HDD].Add(data + index);
+    }
+}
+
 void TSchemeShard::ChangeDiskSpaceTopicsTotalBytes(ui64 value) {
     TabletCounters->Simple()[COUNTER_DISK_SPACE_TOPICS_TOTAL_BYTES].Set(value);
 }
@@ -7236,6 +7248,14 @@ void TSchemeShard::ChangeDiskSpaceHardQuotaBytes(i64 delta) {
 
 void TSchemeShard::ChangeDiskSpaceSoftQuotaBytes(i64 delta) {
     TabletCounters->Simple()[COUNTER_DISK_SPACE_SOFT_QUOTA_BYTES].Add(delta);
+}
+
+void TSchemeShard::AddDiskSpaceSoftQuotaBytes(EUserFacingStorageType storageType, ui64 addend) {
+    if (storageType == EUserFacingStorageType::Ssd) {
+        TabletCounters->Simple()[COUNTER_DISK_SPACE_SOFT_QUOTA_BYTES_ON_SSD].Add(addend);
+    } else if (storageType == EUserFacingStorageType::Hdd) {
+        TabletCounters->Simple()[COUNTER_DISK_SPACE_SOFT_QUOTA_BYTES_ON_HDD].Add(addend);
+    }
 }
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvLogin::TPtr &ev, const TActorContext &ctx) {

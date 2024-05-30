@@ -32,7 +32,6 @@ public:
 
     enum class EDstState: ui8 {
         Creating,
-        Syncing,
         Ready,
         Alter,
         Done,

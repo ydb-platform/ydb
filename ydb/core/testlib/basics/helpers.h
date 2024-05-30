@@ -44,7 +44,7 @@ namespace NFake {
     void SetupBSNodeWarden(TTestActorRuntime& runtime, ui32 nodeIndex, TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig);
     void SetupTabletResolver(TTestActorRuntime& runtime, ui32 nodeIndex);
     void SetupTabletPipePerNodeCaches(TTestActorRuntime& runtime, ui32 nodeIndex, bool forceFollowers = false);
-    void SetupResourceBroker(TTestActorRuntime& runtime, ui32 nodeIndex);
+    void SetupResourceBroker(TTestActorRuntime& runtime, ui32 nodeIndex, const NKikimrResourceBroker::TResourceBrokerConfig& resourceBrokerConfig);
     void SetupSharedPageCache(TTestActorRuntime& runtime, ui32 nodeIndex, NFake::TCaches caches);
     void SetupNodeWhiteboard(TTestActorRuntime& runtime, ui32 nodeIndex);
     void SetupMonitoringProxy(TTestActorRuntime& runtime, ui32 nodeIndex);

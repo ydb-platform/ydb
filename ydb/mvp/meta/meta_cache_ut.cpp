@@ -128,7 +128,7 @@ Y_UNIT_TEST_SUITE(MetaCache) {
             Y_UNUSED(id);
             cb({
                 .ForwardUrl = TStringBuilder() << LocalEndpoint << ":" << port2,
-                .Deadline = TInstant::Now() + TDuration::Seconds(60)
+                .Deadline = TInstant::Now() + TDuration::Seconds(600)
             });
             return true;
         }));
@@ -160,7 +160,7 @@ Y_UNIT_TEST_SUITE(MetaCache) {
         // ignoring request
 
         // waiting for the timeout
-        actorSystem.SimulateSleep(TDuration::Seconds(60));
+        actorSystem.SimulateSleep(TDuration::Seconds(120));
 
         // receiving retried response on server1
         NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request2 = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);

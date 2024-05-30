@@ -24,6 +24,7 @@ SRCS(
     json_local_rpc.h
     json_getblob.h
     json_graph.h
+    json_handlers_pdisk.cpp
     json_handlers_vdisk.cpp
     json_handlers_viewer.cpp
     json_healthcheck.h

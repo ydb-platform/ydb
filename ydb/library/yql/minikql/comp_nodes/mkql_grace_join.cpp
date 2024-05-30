@@ -820,6 +820,10 @@ private:
         return LeftPacker->TablePtr->HasRunningAsyncIoOperation() || RightPacker->TablePtr->HasRunningAsyncIoOperation();
     }
 
+    bool IsProcessingFinished() {
+        return LeftPacker->TablePtr->IsProcessingFinished() || RightPacker->TablePtr->IsProcessingFinished();
+    }
+
 void DoCalculateWithSpilling(TComputationContext& ctx) {
     UpdateSpilling();
 
@@ -835,7 +839,7 @@ void DoCalculateWithSpilling(TComputationContext& ctx) {
 
     if (!*HaveMoreLeftRows && !*HaveMoreRightRows) {
         UpdateSpilling();
-        if (HasRunningAsyncOperation()) return;
+        if (HasRunningAsyncOperation() || !IsProcessingFinished()) return;
         if (!IsSpillingFinalized) {
             LeftPacker->TablePtr->FinalizeSpilling();
             RightPacker->TablePtr->FinalizeSpilling();

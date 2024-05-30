@@ -668,7 +668,7 @@ private:
             return peepHoleStatus;
         }
 
-        auto guard = Guard(SessionCtx->Query().QueryData->GetAllocState()->Alloc);
+        auto guard = Guard(*SessionCtx->Query().QueryData->GetAllocState()->Alloc);
 
         auto input = Build<TDqPhyStage>(ctx, pos)
             .Inputs()

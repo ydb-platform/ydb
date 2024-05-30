@@ -926,9 +926,12 @@ message TAlterContinuousBackup {
     message TStop {
     }
 
+    message TTakeIncrementalBackup {
+    }
+
     oneof Action {
         TStop Stop = 2;
-        // TODO(innokentii): something like TakeIncremental
+        TTakeIncrementalBackup TakeIncrementalBackup = 3;
     }
 }
 

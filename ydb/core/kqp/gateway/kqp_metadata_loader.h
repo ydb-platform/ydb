@@ -11,6 +11,11 @@
 
 namespace NKikimr::NKqp {
 
+// only exposed to be unit-tested
+NExternalSource::TAuth MakeAuth(const NYql::TExternalSource& metadata);
+std::shared_ptr<NExternalSource::TMetadata> ConvertToExternalSourceMetadata(const NYql::TKikimrTableMetadata& tableMetadata);
+bool EnrichMetadata(NYql::TKikimrTableMetadata& tableMetadata, const NExternalSource::TMetadata& dynamicMetadata);
+
 class TKqpTableMetadataLoader : public NYql::IKikimrGateway::IKqpTableMetadataLoader {
 public:
 

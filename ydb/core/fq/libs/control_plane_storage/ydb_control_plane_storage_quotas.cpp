@@ -95,7 +95,28 @@ void TYdbControlPlaneStorageActor::Handle(TEvQuotaService::TQuotaUsageRequest::T
         }
     );
 
-    Exec(DbPool, executable, TablePathPrefix);
+    Exec(DbPool, executable, TablePathPrefix).Apply([=, this](const auto& future) {
+        bool success = true;
+        NYql::TIssues issues;
+        try {
+            auto status = future.GetValue();
+            issues.AddIssues(executable->Issues);
+            issues.AddIssues(executable->InternalIssues);
+            success = status.IsSuccess();
+        } catch (...) {
+            success = false;
+            issues.AddIssue(CurrentExceptionMessage());
+        }
+        if (!success) {
+            for (auto& it : this->QueryQuotaRequests) {
+                auto ev = it.second;
+                this->Send(ev->Sender, new TEvQuotaService::TQuotaUsageResponse(SUBJECT_TYPE_CLOUD, it.first, QUOTA_ANALYTICS_COUNT_LIMIT, issues));
+                this->Send(ev->Sender, new TEvQuotaService::TQuotaUsageResponse(SUBJECT_TYPE_CLOUD, it.first, QUOTA_STREAMING_COUNT_LIMIT, issues));
+            }
+            this->QueryQuotaRequests.clear();
+            this->QuotasUpdating = false;
+        }
+    });
 }
 
 void TYdbControlPlaneStorageActor::Handle(TEvQuotaService::TQuotaLimitChangeRequest::TPtr& ev) {

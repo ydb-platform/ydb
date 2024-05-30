@@ -612,7 +612,7 @@ private:
             StageId = taskMeta.GetStageId();
 
             NDq::TDqTaskSettings settings(&ev->Get()->Task);
-            TaskRunner = Factory->GetOld(*Alloc.get(), settings, TraceId);
+            TaskRunner = Factory->GetOld(Alloc, settings, TraceId);
         } catch (...) {
             TString message = "Could not create TaskRunner for " + ToString(taskId) + " on node " + ToString(replyTo.NodeId()) + ", error: " + CurrentExceptionMessage();
             Send(replyTo, TEvDq::TEvAbortExecution::Unavailable(message), 0, cookie); // retries, fallback on retries limit

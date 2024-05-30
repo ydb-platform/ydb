@@ -11,9 +11,9 @@
 namespace NKikimr::NViewer {
 
 void InitVDiskJsonHandlers(TJsonHandlers& jsonHandlers) {
-    jsonHandlers.AddHandler("/vdisk/json/vdiskstat", new TJsonHandler<TJsonVDiskStat>);
-    jsonHandlers.AddHandler("/vdisk/json/getblob", new TJsonHandler<TJsonGetBlob>);
-    jsonHandlers.AddHandler("/vdisk/json/blobindexstat", new TJsonHandler<TJsonBlobIndexStat>);
+    jsonHandlers.AddHandler("/vdisk/vdiskstat", new TJsonHandler<TJsonVDiskStat>);
+    jsonHandlers.AddHandler("/vdisk/getblob", new TJsonHandler<TJsonGetBlob>);
+    jsonHandlers.AddHandler("/vdisk/blobindexstat", new TJsonHandler<TJsonBlobIndexStat>);
 }
 
 }

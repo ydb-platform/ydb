@@ -8,6 +8,9 @@ inputs:
     required: true
     default: "relwithdebinfo"
     description: "debug, relwithdebinfo, release-asan, release-tsan, release, release-cmake14"
+  put_build_results_to_cache:
+    required: false
+    default: "true"
   bazel_remote_uri:
     required: false
     description: "bazel-remote endpoint"
@@ -68,7 +71,7 @@ runs:
           extra_params+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
         fi
         
-        if [ ! -z "${{ inputs.bazel_remote_username }}" ]; then
+        if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
           extra_params+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
           extra_params+=(--bazel-remote-password "${{ inputs.bazel_remote_password }}")
           extra_params+=(--bazel-remote-put --dist-cache-evict-bins --add-result .o --add-result .a)

@@ -119,6 +119,10 @@ public:
     bool IsInMemory() const;
     bool IsExtractionRequired() const;
 
+    bool IsProcessingFinished() const {
+        return NextVectorToProcess == ENextVectorToProcess::None;
+    }
+
 private:
     void ProcessBucketSpilling();
     template <class T>
@@ -284,6 +288,8 @@ public:
 
     // Checks if there any async operation running. If return value is true it's safe to return Yield.
     bool HasRunningAsyncIoOperation() const;
+
+    bool IsProcessingFinished() const;
 
     // Checks if bucket fully loaded to memory and may be joined.
     bool IsBucketInMemory(ui32 bucket) const;

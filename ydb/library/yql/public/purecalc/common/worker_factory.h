@@ -23,6 +23,7 @@ namespace NYql {
             const TUserDataTable& UserData;
             const THashMap<TString, TString>& Modules;
             TString LLVMSettings;
+            EBlockEngineMode BlockEngineMode;
             NKikimr::NUdf::ICountersProvider* CountersProvider_;
             ETranslationMode TranslationMode_;
             ui16 SyntaxVersion_;
@@ -41,6 +42,7 @@ namespace NYql {
                 const TUserDataTable& UserData,
                 const THashMap<TString, TString>& Modules,
                 TString LLVMSettings,
+                EBlockEngineMode BlockEngineMode,
                 NKikimr::NUdf::ICountersProvider* CountersProvider,
                 ETranslationMode translationMode,
                 ui16 syntaxVersion,
@@ -58,6 +60,7 @@ namespace NYql {
                 , UserData(UserData)
                 , Modules(Modules)
                 , LLVMSettings(std::move(LLVMSettings))
+                , BlockEngineMode(BlockEngineMode)
                 , CountersProvider_(CountersProvider)
                 , TranslationMode_(translationMode)
                 , SyntaxVersion_(syntaxVersion)
@@ -86,6 +89,7 @@ namespace NYql {
             TVector<THashSet<TString>> AllColumns_;
             TVector<THashSet<TString>> UsedColumns_;
             TString LLVMSettings_;
+            EBlockEngineMode BlockEngineMode_;
             NKikimr::NUdf::ICountersProvider* CountersProvider_;
             ui64 NativeYtTypeFlags_;
             TMaybe<ui64> DeterministicTimeProviderSeed_;

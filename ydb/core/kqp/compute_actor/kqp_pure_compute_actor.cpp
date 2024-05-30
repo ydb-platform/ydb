@@ -69,7 +69,7 @@ void TKqpComputeActor::DoBootstrap() {
         settings.ReadRanges.push_back(readRange);
     }
 
-    auto taskRunner = MakeDqTaskRunner(TBase::GetAllocator(), execCtx, settings, logger);
+    auto taskRunner = MakeDqTaskRunner(TBase::GetAllocatorPtr(), execCtx, settings, logger);
     SetTaskRunner(taskRunner);
 
     auto wakeup = [this]{ ContinueExecute(); };

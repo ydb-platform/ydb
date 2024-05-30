@@ -35,6 +35,7 @@ message TReplicationConfig {
         message TTarget {
             optional string SrcPath = 1;
             optional string DstPath = 2;
+            optional string SrcStreamName = 3;
         }
 
         repeated TTarget Targets = 1;

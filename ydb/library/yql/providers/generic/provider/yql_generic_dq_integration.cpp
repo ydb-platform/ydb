@@ -170,8 +170,14 @@ namespace NYql {
                         case NYql::NConnector::NApi::POSTGRESQL:
                             sourceType = "PostgreSqlGeneric";
                             break;
+                        case NYql::NConnector::NApi::MYSQL:
+                            sourceType = "MySqlGeneric";
+                            break;
                         case NYql::NConnector::NApi::YDB:
                             sourceType = "YdbGeneric";
+                            break;
+                        case NYql::NConnector::NApi::GREENPLUM:
+                            sourceType = "GreenplumGeneric";
                             break;
                         default:
                             ythrow yexception() << "Data source kind is unknown or not specified";
@@ -204,8 +210,14 @@ namespace NYql {
                         case NConnector::NApi::POSTGRESQL:
                             properties["SourceType"] = "PostgreSql";
                             break;
+                        case NConnector::NApi::MYSQL:
+                            properties["SourceType"] = "MySql";
+                            break;
                         case NConnector::NApi::YDB:
                             properties["SourceType"] = "Ydb";
+                            break;
+                        case NConnector::NApi::GREENPLUM:
+                            properties["SourceType"] = "Greenplum";
                             break;
                         case NConnector::NApi::DATA_SOURCE_KIND_UNSPECIFIED:
                             break;

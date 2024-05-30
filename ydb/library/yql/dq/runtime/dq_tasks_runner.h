@@ -409,8 +409,8 @@ public:
 };
 
 TIntrusivePtr<IDqTaskRunner> MakeDqTaskRunner(
-    NKikimr::NMiniKQL::TScopedAlloc& alloc,
-    const TDqTaskRunnerContext& ctx,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, 
+    const TDqTaskRunnerContext& ctx, 
     const TDqTaskRunnerSettings& settings,
     const TLogFunc& logFunc
 );

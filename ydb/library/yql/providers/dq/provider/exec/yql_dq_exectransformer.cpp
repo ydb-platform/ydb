@@ -124,9 +124,9 @@ public:
             ? CreateDeterministicRandomProvider(1)
             : State->RandomProvider;
 
-        TScopedAlloc alloc(
-            __LOCATION__,
-            NKikimr::TAlignedPagePoolCounters(),
+        auto alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(
+            __LOCATION__, 
+            NKikimr::TAlignedPagePoolCounters(), 
             State->FunctionRegistry->SupportsSizedAllocators(),
             false);
         NDq::TDqTaskRunnerContext executionContext;

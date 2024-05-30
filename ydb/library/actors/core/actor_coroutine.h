@@ -156,7 +156,7 @@ namespace NActors {
 
     protected: // Actor System compatibility section
         const TActorContext& GetActorContext() const { return TActivationContext::AsActorContext(); }
-        TActorSystem *GetActorSystem() const { return GetActorContext().ExecutorThread.ActorSystem; }
+        TActorSystem *GetActorSystem() const;
         TInstant Now() const { return GetActorContext().Now(); }
         TMonotonic Monotonic() const { return GetActorContext().Monotonic(); }
 

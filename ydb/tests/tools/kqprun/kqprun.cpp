@@ -94,6 +94,19 @@ void RunScript(const TExecutionOptions& executionOptions, const NKqpRun::TRunner
         }
     }
 
+    if (runnerOptions.YdbSettings.MonitoringEnabled) {
+        Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Started reading commands" << colors.Default() << Endl;
+        while (true) {
+            TString command;
+            Cin >> command;
+
+            if (command == "exit") {
+                break;
+            }
+            Cerr << colors.Red() << TInstant::Now().ToIsoStringLocal() << " Invalid command '" << command << "'" << colors.Default() << Endl;
+        }
+    }
+
     Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Finalization of kqp runner..." << colors.Default() << Endl;
 }
 
@@ -269,6 +282,11 @@ void RunMain(int argc, const char* argv[]) {
         .RequiredArgument("INT")
         .DefaultValue(runnerOptions.YdbSettings.NodeCount)
         .StoreResult(&runnerOptions.YdbSettings.NodeCount);
+    options.AddLongOption('M', "monitoring", "Enable embedded UI access and run kqprun as deamon")
+        .Optional()
+        .NoArgument()
+        .DefaultValue(runnerOptions.YdbSettings.MonitoringEnabled)
+        .SetFlag(&runnerOptions.YdbSettings.MonitoringEnabled);
 
     options.AddLongOption('u', "udf", "Load shared library with UDF by given path")
         .Optional()
@@ -292,7 +310,7 @@ void RunMain(int argc, const char* argv[]) {
 
     // Execution options
 
-    if (!schemeQueryFile && scriptQueryFiles.empty()) {
+    if (!schemeQueryFile && scriptQueryFiles.empty() && !runnerOptions.YdbSettings.MonitoringEnabled) {
         ythrow yexception() << "Nothing to execute";
     }
 

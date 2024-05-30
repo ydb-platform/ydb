@@ -84,9 +84,6 @@ public:
             SourceIdWriter.RegisterSourceId(sourceId, std::forward<Args>(args)...);
         }
         void DeregisterSourceId(const TString& sourceId);
-        const TSourceIdMap& GetModifiedSourceIds() const {
-            return SourceIdWriter.GetSourceIdsToWrite();
-        };
 
     private:
         TPartitionSourceManager& GetManager() const;

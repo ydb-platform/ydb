@@ -518,6 +518,11 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
         avg.Update(WriteNewSize, now);
     }
 
+    if (SplitMergeEnabled(Config)) {
+        SplitMergeAvgWriteBytes->Update(WriteNewSize, now);
+        auto needScaling = CheckScaleStatus(ctx);
+        ChangeScaleStatusIfNeeded(needScaling);
+    }
     WriteCycleSize = 0;
     WriteNewSize = 0;
     WriteNewSizeInternal = 0;
@@ -581,7 +586,7 @@ void TPartition::ChangeScaleStatusIfNeeded(NKikimrPQ::EScaleStatus scaleStatus) 
 }
 
 void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& ctx) {
-    PQ_LOG_T("TPartition::HandleOnWrite");
+    PQ_LOG_T("TPartition::TEvWrite");
 
     if (!CanEnqueue()) {
         ReplyError(ctx, ev->Get()->Cookie, InactivePartitionErrorCode,
@@ -1004,7 +1009,6 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                         << ". EndOffset: " << EndOffset << ". CurOffset: " << curOffset << ". Offset: " << poffset
             );
 
-
             TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ALREADY].Increment(1);
             MsgsDiscarded.Inc();
             TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ALREADY].Increment(p.Msg.Data.size());
@@ -1015,15 +1019,9 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         }
 
         TString().swap(p.Msg.Data);
+
         return true;
     }
-        if (p.Msg.PartNo == 0) { //create new PartitionedBlob
-            //there could be parts from previous owner, clear them
-            if (!parameters.OldPartsCleared) {
-                parameters.OldPartsCleared = true;
-
-                NPQ::AddCmdDeleteRange(*request, TKeyPrefix::TypeTmpData, Partition);
-            }
 
     if (const auto& hbVersion = p.Msg.HeartbeatVersion) {
         if (!sourceId.SeqNo()) {
@@ -1049,7 +1047,8 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         );
 
         sourceId.Update(THeartbeat{*hbVersion, p.Msg.Data});
-        return false;
+
+        return true;
     }
 
     if (poffset < curOffset) { //too small offset
@@ -1086,12 +1085,8 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         //there could be parts from previous owner, clear them
         if (!parameters.OldPartsCleared) {
             parameters.OldPartsCleared = true;
-            auto del = request->Record.AddCmdDeleteRange();
-            auto range = del->MutableRange();
-            TKeyPrefix from(TKeyPrefix::TypeTmpData, Partition);
-            range->SetFrom(from.Data(), from.Size());
-            TKeyPrefix to(TKeyPrefix::TypeTmpData, TPartitionId(Partition.InternalPartitionId + 1));
-            range->SetTo(to.Data(), to.Size());
+
+            NPQ::AddCmdDeleteRange(*request, TKeyPrefix::TypeTmpData, Partition);
         }
 
         if (PartitionedBlob.HasFormedBlobs()) {
@@ -1563,9 +1558,7 @@ void TPartition::EndProcessWrites(TEvKeyValue::TEvRequest* request, const TActor
     }
 
     SourceIdBatch->FillRequest(request);
-    for (const auto& [srcId, _] : SourceIdBatch->GetModifiedSourceIds()) {
-        WriteAffectedSourcesIds.insert(srcId);
-    }
+
     std::pair<TKey, ui32> res = GetNewWriteKey(HeadCleared);
     const auto& key = res.first;
 

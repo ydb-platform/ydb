@@ -154,6 +154,7 @@ def ydbcli_db_schema_exec(node, operation_proto):
     command = subprocess.run(args, capture_output=True)
     assert command.returncode == 0, command.stderr.decode("utf-8")
 
+
 def alter_database_quotas(node, database_path, database_quotas):
     logger.debug(f"adding storage quotas to db {database_path}")
     alter_proto = """ModifyScheme {
@@ -173,6 +174,7 @@ def alter_database_quotas(node, database_path, database_quotas):
 
     ydbcli_db_schema_exec(node, alter_proto)
 
+
 def create_table(session, table):
     session.execute_scheme(
         f"""
@@ -186,6 +188,7 @@ def create_table(session, table):
         """
     )
 
+
 def alter_partition_config(client, table, partition_config):
     response = client.send_and_poll_request(
         AlterTableRequest(os.path.dirname(table), os.path.basename(table))
@@ -193,6 +196,7 @@ def alter_partition_config(client, table, partition_config):
         .protobuf
     )
     assert_that(response, ProtobufWithStatusMatcher(MessageBusStatus.MSTATUS_OK))
+
 
 def insert_data(session, table):
     session.transaction().execute(
@@ -209,11 +213,14 @@ def insert_data(session, table):
         commit_tx=True,
     )
 
+
 def drop_table(session, table):
     session.drop_table(table)
 
+
 def describe(client, path):
     return client.describe(path, token="")
+
 
 def check_disk_quota_exceedance(client, database, retries, sleep_duration):
     for attempt in range(retries):
@@ -231,6 +238,7 @@ def check_disk_quota_exceedance(client, database, retries, sleep_duration):
         time.sleep(sleep_duration)
 
     assert False, "database did not move into DiskQuotaExceeded state"
+
 
 def check_counters(mon_port, sensors_to_check, retries, sleep_duration):
     for attempt in range(retries + 1):
@@ -261,7 +269,7 @@ def check_counters(mon_port, sensors_to_check, retries, sleep_duration):
     )
 
 
-class TestStorageCounters():
+class TestStorageCounters:
     def test_storage_counters(self, ydb_cluster, ydb_database, ydb_client_session):
         database_path = ydb_database
         node = ydb_cluster.nodes[1]

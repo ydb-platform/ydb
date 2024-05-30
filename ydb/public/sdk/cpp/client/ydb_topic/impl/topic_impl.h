@@ -80,6 +80,11 @@ public:
 
         request.mutable_partitioning_settings()->set_min_active_partitions(settings.PartitioningSettings_.GetMinActivePartitions());
         request.mutable_partitioning_settings()->set_partition_count_limit(settings.PartitioningSettings_.GetPartitionCountLimit());
+        request.mutable_partitioning_settings()->set_max_active_partitions(settings.PartitioningSettings_.GetMaxActivePartitions());
+        request.mutable_partitioning_settings()->mutable_autoscaling_settings()->set_strategy(static_cast<Ydb::Topic::AutoscalingStrategy>(settings.PartitioningSettings_.GetAutoscalingSettings().GetStrategy()));
+        request.mutable_partitioning_settings()->mutable_autoscaling_settings()->mutable_partition_write_speed()->mutable_threshold_time()->set_seconds(settings.PartitioningSettings_.GetAutoscalingSettings().GetThresholdTime().Seconds());
+        request.mutable_partitioning_settings()->mutable_autoscaling_settings()->mutable_partition_write_speed()->set_scale_up_threshold_percent(settings.PartitioningSettings_.GetAutoscalingSettings().GetScaleUpThresholdPercent());
+        request.mutable_partitioning_settings()->mutable_autoscaling_settings()->mutable_partition_write_speed()->set_scale_down_threshold_percent(settings.PartitioningSettings_.GetAutoscalingSettings().GetScaleDownThresholdPercent());
 
         request.mutable_retention_period()->set_seconds(settings.RetentionPeriod_.Seconds());
 
@@ -118,8 +123,26 @@ public:
         request.set_path(path);
 
         if (settings.AlterPartitioningSettings_) {
-            request.mutable_alter_partitioning_settings()->set_set_min_active_partitions(settings.AlterPartitioningSettings_->GetMinActivePartitions());
-            request.mutable_alter_partitioning_settings()->set_set_partition_count_limit(settings.AlterPartitioningSettings_->GetPartitionCountLimit());
+            if (settings.AlterPartitioningSettings_->MinActivePartitions_) {
+                request.mutable_alter_partitioning_settings()->set_set_min_active_partitions(*settings.AlterPartitioningSettings_->MinActivePartitions_);
+            }
+            if (settings.AlterPartitioningSettings_->MaxActivePartitions_) {
+                request.mutable_alter_partitioning_settings()->set_set_max_active_partitions(*settings.AlterPartitioningSettings_->MaxActivePartitions_);
+            }
+            if (settings.AlterPartitioningSettings_->AutoscalingSettings_) {
+                if (settings.AlterPartitioningSettings_->AutoscalingSettings_->Strategy_) {
+                    request.mutable_alter_partitioning_settings()->mutable_alter_autoscaling_settings()->set_set_strategy(static_cast<Ydb::Topic::AutoscalingStrategy>(*settings.AlterPartitioningSettings_->AutoscalingSettings_->Strategy_));
+                }
+                if (settings.AlterPartitioningSettings_->AutoscalingSettings_->ScaleDownThresholdPercent_) {
+                    request.mutable_alter_partitioning_settings()->mutable_alter_autoscaling_settings()->mutable_set_partition_write_speed()->set_set_scale_down_threshold_percent(*settings.AlterPartitioningSettings_->AutoscalingSettings_->ScaleDownThresholdPercent_);
+                }
+                if (settings.AlterPartitioningSettings_->AutoscalingSettings_->ScaleUpThresholdPercent_) {
+                    request.mutable_alter_partitioning_settings()->mutable_alter_autoscaling_settings()->mutable_set_partition_write_speed()->set_set_scale_up_threshold_percent(*settings.AlterPartitioningSettings_->AutoscalingSettings_->ScaleUpThresholdPercent_);
+                }
+                if (settings.AlterPartitioningSettings_->AutoscalingSettings_->ThresholdTime_) {
+                    request.mutable_alter_partitioning_settings()->mutable_alter_autoscaling_settings()->mutable_set_partition_write_speed()->mutable_set_threshold_time()->set_seconds(settings.AlterPartitioningSettings_->AutoscalingSettings_->ThresholdTime_->Seconds());
+                }
+            }
         }
         if (settings.SetRetentionPeriod_) {
             request.mutable_set_retention_period()->set_seconds(settings.SetRetentionPeriod_->Seconds());

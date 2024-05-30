@@ -1759,9 +1759,9 @@
     ],
     "test.test[pg-join_using_multiple1-default.txt-Debug]": [
         {
-            "checksum": "6376b1d10bb210ebd0d814112ad5e5ac",
-            "size": 1287,
-            "uri": "https://{canondata_backend}/1031349/f821c647f55e979b0705a1aad7862a9544b0c7dc/resource.tar.gz#test.test_pg-join_using_multiple1-default.txt-Debug_/opt.yql"
+            "checksum": "7bd05b9d146104bb29fdcc71d59d678f",
+            "size": 1308,
+            "uri": "https://{canondata_backend}/1881367/21fc5f88b1d267261bdbfdd12ef05512f977280e/resource.tar.gz#test.test_pg-join_using_multiple1-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg-join_using_multiple1-default.txt-Plan]": [
@@ -2175,6 +2175,27 @@
             "checksum": "15cda461d1b819ed8d3adfc5c33c3820",
             "size": 965,
             "uri": "https://{canondata_backend}/1871102/ae8b5d002551349280cb6bef50e922859b127b33/resource.tar.gz#test.test_pg-tpcds-q93-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[pg-with_rec_trivial-default.txt-Debug]": [
+        {
+            "checksum": "859b0055fb49024e1962e537f7e4959c",
+            "size": 308,
+            "uri": "https://{canondata_backend}/1937001/a7b1c00e12e5204fbc893f1eb40f6959b16eebe8/resource.tar.gz#test.test_pg-with_rec_trivial-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[pg-with_rec_trivial-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1937001/a7b1c00e12e5204fbc893f1eb40f6959b16eebe8/resource.tar.gz#test.test_pg-with_rec_trivial-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[pg-with_rec_trivial-default.txt-Results]": [
+        {
+            "checksum": "c184a1ef73693a0d67b02ead5bc5ea1a",
+            "size": 727,
+            "uri": "https://{canondata_backend}/1937001/a7b1c00e12e5204fbc893f1eb40f6959b16eebe8/resource.tar.gz#test.test_pg-with_rec_trivial-default.txt-Results_/results.txt"
         }
     ],
     "test.test[pg_catalog-pg_proc-default.txt-Debug]": [

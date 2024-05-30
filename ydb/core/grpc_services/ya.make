@@ -67,6 +67,7 @@ SRCS(
     rpc_read_rows.cpp
     rpc_remove_directory.cpp
     rpc_rename_tables.cpp
+    rpc_replication.cpp
     rpc_rollback_transaction.cpp
     rpc_scheme_base.cpp
     rpc_stream_execute_scan_query.cpp
@@ -114,6 +115,7 @@ PEERDIR(
     ydb/core/io_formats/ydb_dump
     ydb/core/kesus/tablet
     ydb/core/kqp/common
+    ydb/core/kqp/session_actor
     ydb/core/protos
     ydb/core/scheme
     ydb/core/sys_view

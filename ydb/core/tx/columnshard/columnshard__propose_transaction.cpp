@@ -11,6 +11,8 @@ using namespace NTabletFlatExecutor;
 class TTxProposeTransaction : public NTabletFlatExecutor::TTransactionBase<TColumnShard> {
 private:
     using TBase = NTabletFlatExecutor::TTransactionBase<TColumnShard>;
+    std::optional<TTxController::TTxInfo> TxInfo;
+
 public:
     TTxProposeTransaction(TColumnShard* self, TEvColumnShard::TEvProposeTransaction::TPtr& ev)
         : TBase(self)
@@ -29,6 +31,7 @@ public:
         const auto txKind = record.GetTxKind();
         const ui64 txId = record.GetTxId();
         const auto& txBody = record.GetTxBody();
+        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("tablet_id", Self->TabletID())("tx_id", txId)("this", (ui64)this);
 
         if (txKind == NKikimrTxColumnShard::TX_KIND_TTL) {
             auto proposeResult = ProposeTtlDeprecated(txBody);
@@ -55,8 +58,15 @@ public:
             TMessageSeqNo seqNo;
             seqNo.DeserializeFromProto(Ev->Get()->Record.GetSeqNo()).Validate();
             msgSeqNo = seqNo;
+        } else if (txKind == NKikimrTxColumnShard::TX_KIND_SCHEMA) {
+            // deprecated. alive while all branches in SS not updated in new flow
+            NKikimrTxColumnShard::TSchemaTxBody schemaTxBody;
+            if (schemaTxBody.ParseFromString(txBody)) {
+                msgSeqNo = SeqNoFromProto(schemaTxBody.GetSeqNo());
+            }
         }
-        TxOperator = Self->GetProgressTxController().StartProposeOnExecute(TTxController::TBasicTxInfo(txKind, txId), txBody, Ev->Get()->GetSource(), Ev->Cookie, msgSeqNo, txc);
+        TxInfo.emplace(txKind, txId, Ev->Get()->GetSource(), Ev->Cookie, msgSeqNo);
+        TxOperator = Self->GetProgressTxController().StartProposeOnExecute(*TxInfo, txBody, txc);
         return true;
     }
 
@@ -66,16 +76,20 @@ public:
             return;
         }
         AFL_VERIFY(!!TxOperator);
+        AFL_VERIFY(!!TxInfo);
         const ui64 txId = record.GetTxId();
-        if (Ev->Sender != TxOperator->GetTxInfo().Source) {
-            return;
-        }
+        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("tablet_id", Self->TabletID())("tx_id", txId)("this", (ui64)this);
         if (TxOperator->IsFail()) {
             TxOperator->SendReply(*Self, ctx);
-        } else if (TxOperator->IsAsync()) {
-            Self->GetProgressTxController().StartProposeOnComplete(txId, ctx);
         } else {
-            Self->GetProgressTxController().FinishProposeOnComplete(txId, ctx);
+            if (!TxOperator->CheckTxInfoForReply(*TxInfo)) {
+                return;
+            }
+            if (TxOperator->IsAsync()) {
+                Self->GetProgressTxController().StartProposeOnComplete(txId, ctx);
+            } else {
+                Self->GetProgressTxController().FinishProposeOnComplete(txId, ctx);
+            }
         }
 
         Self->TryRegisterMediatorTimeCast();

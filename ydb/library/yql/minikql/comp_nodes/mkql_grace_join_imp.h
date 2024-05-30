@@ -9,6 +9,8 @@
 namespace NKikimr {
 namespace NMiniKQL {
 namespace GraceJoin {
+
+class TTableBucketSpiller;
         
 const ui64 BitsForNumberOfBuckets = 5; // 2^5 = 32
 const ui64 BucketsMask = (0x00000001 << BitsForNumberOfBuckets)  - 1;
@@ -93,6 +95,74 @@ struct TColTypeInterface {
     const THolderFactory& HolderFactory; // To use during unpacking 
 };
 
+// Class that spills bucket data.
+// If, after saving, data has accumulated in the bucket again, you can spill it again.
+// After restoring the entire bucket, it will contain all the data saved over different iterations.
+class TTableBucketSpiller {
+public:
+    TTableBucketSpiller(ISpiller::TPtr spiller, size_t sizeLimit);
+
+    // Takes the bucket and immediately starts spilling. Spilling continues until an async operation occurs.
+    void SpillBucket(TTableBucket&& bucket);
+    // Starts bucket restoration after spilling. Restores and unites all the buckets from different iterations. Will pause in case of async operation.
+    void StartBucketRestoration();
+    // Extracts bucket restored from spilling. This bucket will contain all the data from different iterations of spilling.
+    TTableBucket&& ExtractBucket();
+
+    // Updates the states of spillers. This update should be called after async operation completion to resume spilling/resoration.
+    void Update();
+    // Flushes all the data from inner spillers. Should be called when no more data is expected for spilling.
+    void Finalize();
+    // Checks if spillers are waiting for any running async operation. No calls other than update are allowed when the method returns true.
+    bool HasRunningAsyncIoOperation() const;
+
+    bool IsInMemory() const;
+    bool IsExtractionRequired() const;
+
+    bool IsProcessingFinished() const {
+        return NextVectorToProcess == ENextVectorToProcess::None;
+    }
+
+private:
+    void ProcessBucketSpilling();
+    template <class T>
+    void AppendVector(std::vector<T, TMKQLAllocator<T>>& first, std::vector<T, TMKQLAllocator<T>>&& second) const;
+    void ProcessBucketRestoration();
+
+private:
+    enum class EState {
+        Spilling,
+        Restoring,
+        InMemory
+    };
+
+    enum class ENextVectorToProcess {
+        KeyAndVals,
+        DataIntVals,
+        StringsValues,
+        StringsOffsets,
+        InterfaceValues,
+        InterfaceOffsets,
+
+        None
+    };
+
+    TVectorSpillerAdapter<ui64, TMKQLAllocator<ui64>> StateUi64Adapter;
+    TVectorSpillerAdapter<ui32, TMKQLAllocator<ui32>> StateUi32Adapter;
+    TVectorSpillerAdapter<char, TMKQLAllocator<char>> StateCharAdapter;
+
+    EState State = EState::InMemory;
+    ENextVectorToProcess NextVectorToProcess = ENextVectorToProcess::None;
+
+    ui64 SpilledBucketsCount = 0;
+
+    bool IsFinalizing = false;
+
+    TTableBucket CurrentBucket;
+
+    bool IsBucketOwnedBySpiller = false;
+};
+
 
 // Class which represents single table data stored in buckets
 class TTable {
@@ -125,6 +195,8 @@ class TTable {
     std::vector<TTableBucket> TableBuckets;
     // Statistics for buckets. Total number of tuples inside a single bucket and offsets.
     std::vector<TTableBucketStats> TableBucketsStats;
+
+    std::vector<TTableBucketSpiller> TableBucketsSpillers;
 
     // Temporary vector for tuples manipulation;
     std::vector<ui64> TempTuple;
@@ -194,11 +266,42 @@ public:
     // Joins two tables and stores join result in table data. Tuples of joined table could be received by
     // joined table iterator.  Life time of t1, t2 should be greater than lifetime of joined table
     // hasMoreLeftTuples, hasMoreRightTuples is true if join is partial and more rows are coming.  For final batch hasMoreLeftTuples = false, hasMoreRightTuples = false
-    void Join(TTable& t1, TTable& t2, EJoinKind joinKind = EJoinKind::Inner, bool hasMoreLeftTuples = false, bool hasMoreRightTuples = false );
-
+    void Join(TTable& t1, TTable& t2, EJoinKind joinKind = EJoinKind::Inner, bool hasMoreLeftTuples = false, bool hasMoreRightTuples = false, ui32 fromBucket = 0, ui32 toBucket = NumberOfBuckets);
 
     // Returns next jointed tuple data. Returs true if there are more tuples
     bool NextJoinedData(TupleData& td1, TupleData& td2);
+
+    // Creates buckets that support spilling.
+    void InitializeBucketSpillers(ISpiller::TPtr spiller);
+
+    // Calculates approximate size of a bucket. Used for spilling to determine the largest bucket.
+    ui64 GetSizeOfBucket(ui64 bucket) const;
+
+    // This functions wind the largest bucket and spills it to the disk.
+    bool TryToReduceMemoryAndWait();
+
+    // Update state of spilling. Must be called during each DoCalculate.
+    void UpdateSpilling();
+
+    // Flushes all the spillers.
+    void FinalizeSpilling();
+
+    // Checks if there any async operation running. If return value is true it's safe to return Yield.
+    bool HasRunningAsyncIoOperation() const;
+
+    bool IsProcessingFinished() const;
+
+    // Checks if bucket fully loaded to memory and may be joined.
+    bool IsBucketInMemory(ui32 bucket) const;
+
+    // Starts loading spilled bucket to memory.
+    void StartLoadingBucket(ui32 bucket);
+
+    // Prepares bucket for joining after spilling and restoring back.
+    void PrepareBucket(ui64 bucket);
+
+    // Clears all the data related to a single bucket
+    void ClearBucket(ui64 bucket);
 
     // Clears table content
     void Clear();
@@ -213,64 +316,7 @@ public:
 
 };
 
-// Class that spills bucket data.
-// If, after saving, data has accumulated in the bucket again, you can spill it again.
-// After restoring the entire bucket, it will contain all the data saved over different iterations.
-class TTableBucketSpiller {
-public:
-    TTableBucketSpiller(ISpiller::TPtr spiller, size_t sizeLimit);
 
-    // Takes the bucket and immediately starts spilling. Spilling continues until an async operation occurs.
-    void SpillBucket(TTableBucket&& bucket);
-    // Starts bucket restoration after spilling. Restores and unites all the buckets from different iterations. Will pause in case of async operation.
-    void StartBucketRestoration();
-    // Extracts bucket restored from spilling. This bucket will contain all the data from different iterations of spilling.
-    TTableBucket&& ExtractBucket();
-
-    // Updates the states of spillers. This update should be called after async operation completion to resume spilling/resoration.
-    void Update();
-    // Flushes all the data from inner spillers. Should be called when no more data is expected for spilling.
-    void Finalize();
-    // Checks if spillers are waiting for any running async operation. No calls other than update are allowed when the method returns true.
-    bool HasRunningAsyncIoOperation() const;
-
-private:
-    void ProcessBucketSpilling();
-    template <class T>
-    void AppendVector(std::vector<T, TMKQLAllocator<T>>& first, std::vector<T, TMKQLAllocator<T>>&& second) const;
-    void ProcessBucketRestoration();
-
-private:
-    enum class EState {
-        Spilling,
-        Restoring,
-        InMemory
-    };
-
-    enum class ENextVectorToProcess {
-        KeyAndVals,
-        DataIntVals,
-        StringsValues,
-        StringsOffsets,
-        InterfaceValues,
-        InterfaceOffsets,
-
-        None
-    };
-
-    TVectorSpillerAdapter<ui64, TMKQLAllocator<ui64>> StateUi64Adapter;
-    TVectorSpillerAdapter<ui32, TMKQLAllocator<ui32>> StateUi32Adapter;
-    TVectorSpillerAdapter<char, TMKQLAllocator<char>> StateCharAdapter;
-
-    EState State = EState::InMemory;
-    ENextVectorToProcess NextVectorToProcess = ENextVectorToProcess::None;
-
-    ui64 SpilledBucketsCount = 0;
-
-    bool IsFinalizing = false;
-
-    TTableBucket CurrentBucket;
-};
 
 
 

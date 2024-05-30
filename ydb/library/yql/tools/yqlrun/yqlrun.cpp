@@ -411,6 +411,7 @@ int Main(int argc, const char *argv[])
     opts.AddHelpOption();
     opts.AddLongOption('p', "program", "program file").StoreResult<TString>(&programFile);
     opts.AddLongOption('s', "sql", "program is SQL query").NoArgument();
+    opts.AddLongOption("pg", "program has PG syntax").NoArgument();
     opts.AddLongOption('t', "table", "table@file").AppendTo(&tablesMappingList);
     opts.AddLongOption('C', "cluster", "set cluster to service mapping").RequiredArgument("name@service").Handler(new TStoreMappingFunctor(&clusterMapping));
     opts.AddLongOption("ndebug", "should be at first argument, do not show debug info in error output").NoArgument();
@@ -677,10 +678,11 @@ int Main(int argc, const char *argv[])
         program->SetParametersYson(parameters);
     }
 
-    if (res.Has("sql")) {
+    if (res.Has("sql") || res.Has("pg")) {
         google::protobuf::Arena arena;
         NSQLTranslation::TTranslationSettings settings;
         settings.Arena = &arena;
+        settings.PgParser = res.Has("pg");
         settings.ClusterMapping = clusterMapping;
         settings.Flags = sqlFlags;
         settings.SyntaxVersion = syntaxVersion;

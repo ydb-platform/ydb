@@ -27,6 +27,7 @@
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
+#include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 
 namespace NYql {
 namespace {
@@ -505,6 +506,96 @@ namespace {
             }
         }
     }
+
+    bool IsPartitioningSetting(TStringBuf name) {
+        return name == "autoPartitioningBySize"
+            || name == "partitionSizeMb"
+            || name == "autoPartitioningByLoad"
+            || name == "minPartitions"
+            || name == "maxPartitions";
+    }
+
+    [[nodiscard]] bool ParsePartitioningSettings(
+        Ydb::Table::PartitioningSettings& partitioningSettings,
+        const TCoNameValueTuple& setting,
+        TExprContext& ctx
+    ) {
+        auto name = setting.Name().Value();
+        if (name == "autoPartitioningBySize") {
+            auto val = to_lower(setting.Value().Cast<TCoAtom>().StringValue());
+            if (val == "enabled") {
+                partitioningSettings.set_partitioning_by_size(Ydb::FeatureFlag::ENABLED);
+            } else if (val == "disabled") {
+                partitioningSettings.set_partitioning_by_size(Ydb::FeatureFlag::DISABLED);
+            } else {
+                ctx.AddError(
+                    TIssue(ctx.GetPosition(setting.Value().Cast<TCoAtom>().Pos()),
+                           TStringBuilder() << "Unknown feature flag '" << val << "' for auto partitioning by size"
+                    )
+                );
+                return false;
+            }
+        } else if (name == "partitionSizeMb") {
+            ui64 value = FromString<ui64>(
+                setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+            );
+            if (value) {
+                partitioningSettings.set_partition_size_mb(value);
+            } else {
+                ctx.AddError(
+                    TIssue(ctx.GetPosition(setting.Name().Pos()),
+                           "Can't set preferred partition size to 0. "
+                           "To disable auto partitioning by size use 'SET AUTO_PARTITIONING_BY_SIZE DISABLED'"
+                    )
+                );
+                return false;
+            }
+        } else if (name == "autoPartitioningByLoad") {
+            auto val = to_lower(setting.Value().Cast<TCoAtom>().StringValue());
+            if (val == "enabled") {
+                partitioningSettings.set_partitioning_by_load(Ydb::FeatureFlag::ENABLED);
+            } else if (val == "disabled") {
+                partitioningSettings.set_partitioning_by_load(Ydb::FeatureFlag::DISABLED);
+            } else {
+                ctx.AddError(
+                    TIssue(ctx.GetPosition(setting.Value().Cast<TCoAtom>().Pos()),
+                           TStringBuilder() << "Unknown feature flag '" << val << "' for auto partitioning by load"
+                    )
+                );
+                return false;
+            }
+        } else if (name == "minPartitions") {
+            ui64 value = FromString<ui64>(
+                setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+            );
+            if (value) {
+                partitioningSettings.set_min_partitions_count(value);
+            } else {
+                ctx.AddError(
+                    TIssue(ctx.GetPosition(setting.Name().Pos()),
+                           "Can't set min partition count to 0"
+                    )
+                );
+                return false;
+            }
+        } else if (name == "maxPartitions") {
+            ui64 value = FromString<ui64>(
+                setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+            );
+            if (value) {
+                partitioningSettings.set_max_partitions_count(value);
+            } else {
+                ctx.AddError(
+                    TIssue(ctx.GetPosition(setting.Name().Pos()),
+                           "Can't set max partition count to 0"
+                    )
+                );
+                return false;
+            }
+        }
+
+        return true;
+    }
 }
 
 class TKiSinkPlanInfoTransformer : public TGraphTransformerBase {
@@ -577,7 +668,7 @@ private:
             return peepHoleStatus;
         }
 
-        auto guard = Guard(SessionCtx->Query().QueryData->GetAllocState()->Alloc);
+        auto guard = Guard(*SessionCtx->Query().QueryData->GetAllocState()->Alloc);
 
         auto input = Build<TDqPhyStage>(ctx, pos)
             .Inputs()
@@ -1227,15 +1318,33 @@ public:
                         auto columnTuple = item.Cast<TExprList>();
                         auto columnName = columnTuple.Item(0).Cast<TCoAtom>();
                         alter_columns->set_name(TString(columnName));
-
-                        auto families = columnTuple.Item(1).Cast<TCoAtomList>();
-                        if (families.Size() > 1) {
-                            ctx.AddError(TIssue(ctx.GetPosition(families.Pos()),
-                                "Unsupported number of families"));
+                        auto alterColumnList = columnTuple.Item(1).Cast<TExprList>();
+                        auto alterColumnAction = TString(alterColumnList.Item(0).Cast<TCoAtom>());
+                        if (alterColumnAction == "setDefault") {
+                            auto setDefault = alterColumnList.Item(1).Cast<TCoAtomList>();
+                            auto func = TString(setDefault.Item(0).Cast<TCoAtom>());
+                            auto arg = TString(setDefault.Item(1).Cast<TCoAtom>());
+                            if (func != "nextval") {
+                                ctx.AddError(TIssue(ctx.GetPosition(setDefault.Pos()),
+                                    TStringBuilder() << "Unsupported function to set default: " << func));
+                                return SyncError();
+                            }
+                            auto fromSequence = alter_columns->mutable_from_sequence();
+                            fromSequence->set_name(arg);
+                        } else if (alterColumnAction == "setFamily") {
+                            auto families = alterColumnList.Item(1).Cast<TCoAtomList>();
+                            if (families.Size() > 1) {
+                                ctx.AddError(TIssue(ctx.GetPosition(families.Pos()),
+                                    "Unsupported number of families"));
+                                return SyncError();
+                            }
+                            for (auto family : families) {
+                                alter_columns->set_family(TString(family.Value()));
+                            }
+                        } else {
+                            ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
+                                    TStringBuilder() << "Unsupported action to alter column"));
                             return SyncError();
-                        }
-                        for (auto family : families) {
-                            alter_columns->set_family(TString(family.Value()));
                         }
                     }
                 } else if (name == "addColumnFamilies" || name == "alterColumnFamilies") {
@@ -1290,71 +1399,10 @@ public:
                             alterTableRequest.set_set_compaction_policy(TString(
                                 setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
                             ));
-                        } else if (name == "autoPartitioningBySize") {
-                            auto partitioningSettings = alterTableRequest.mutable_alter_partitioning_settings();
-                            auto val = to_lower(TString(setting.Value().Cast<TCoAtom>().Value()));
-                            if (val == "enabled") {
-                                partitioningSettings->set_partitioning_by_size(Ydb::FeatureFlag::ENABLED);
-                            } else if (val == "disabled") {
-                                partitioningSettings->set_partitioning_by_size(Ydb::FeatureFlag::DISABLED);
-                            } else {
-                                auto errText = TStringBuilder() << "Unknown feature flag '"
-                                    << val
-                                    << "' for auto partitioning by size";
-                                ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Cast<TCoAtom>().Pos()),
-                                    errText));
-                                return SyncError();
-                            }
-                        } else if (name == "partitionSizeMb") {
-                            ui64 value = FromString<ui64>(
-                                setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
-                                );
-                            if (value) {
-                                auto partitioningSettings = alterTableRequest.mutable_alter_partitioning_settings();
-                                partitioningSettings->set_partition_size_mb(value);
-                            } else {
-                                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                                    "Can't set preferred partition size to 0. "
-                                    "To disable auto partitioning by size use 'SET AUTO_PARTITIONING_BY_SIZE DISABLED'"));
-                                return SyncError();
-                            }
-                        } else if (name == "autoPartitioningByLoad") {
-                            auto partitioningSettings = alterTableRequest.mutable_alter_partitioning_settings();
-                            TString val = to_lower(TString(setting.Value().Cast<TCoAtom>().Value()));
-                            if (val == "enabled") {
-                                partitioningSettings->set_partitioning_by_load(Ydb::FeatureFlag::ENABLED);
-                            } else if (val == "disabled") {
-                                partitioningSettings->set_partitioning_by_load(Ydb::FeatureFlag::DISABLED);
-                            } else {
-                                auto errText = TStringBuilder() << "Unknown feature flag '"
-                                    << val
-                                    << "' for auto partitioning by load";
-                                ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Cast<TCoAtom>().Pos()),
-                                    errText));
-                                return SyncError();
-                            }
-                        } else if (name == "minPartitions") {
-                            ui64 value = FromString<ui64>(
-                                setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
-                                );
-                            if (value) {
-                                auto partitioningSettings = alterTableRequest.mutable_alter_partitioning_settings();
-                                partitioningSettings->set_min_partitions_count(value);
-                            } else {
-                                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                                    "Can't set min partition count to 0"));
-                                return SyncError();
-                            }
-                        } else if (name == "maxPartitions") {
-                            ui64 value = FromString<ui64>(
-                                setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
-                                );
-                            if (value) {
-                                auto partitioningSettings = alterTableRequest.mutable_alter_partitioning_settings();
-                                partitioningSettings->set_max_partitions_count(value);
-                            } else {
-                                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                                    "Can't set max partition count to 0"));
+                        } else if (IsPartitioningSetting(name)) {
+                            if (!ParsePartitioningSettings(
+                                *alterTableRequest.mutable_alter_partitioning_settings(), setting, ctx
+                            )) {
                                 return SyncError();
                             }
                         } else if (name == "keyBloomFilter") {
@@ -1475,6 +1523,49 @@ public:
                             break;
                         default:
                             YQL_ENSURE(false, "Unknown index type: " << (ui32)add_index->type_case());
+                    }
+                } else if (name == "alterIndex") {
+                    if (maybeAlter.Cast().Actions().Size() > 1) {
+                        ctx.AddError(
+                            TIssue(ctx.GetPosition(action.Name().Pos()),
+                                   "ALTER INDEX action cannot be combined with any other ALTER TABLE action"
+                            )
+                        );
+                        return SyncError();
+                    }
+                    auto listNode = action.Value().Cast<TCoNameValueTupleList>();
+                    for (const auto& indexSetting : listNode) {
+                        auto settingName = indexSetting.Name().Value();
+                        if (settingName == "indexName") {
+                            auto indexName = indexSetting.Value().Cast<TCoAtom>().StringValue();
+                            auto indexTablePath = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(table.Metadata->Name, indexName);
+                            alterTableRequest.set_path(std::move(indexTablePath));
+                        } else if (settingName == "tableSettings") {
+                            auto tableSettings = indexSetting.Value().Cast<TCoNameValueTupleList>();
+                            for (const auto& tableSetting : tableSettings) {
+                                if (IsPartitioningSetting(tableSetting.Name().Value())) {
+                                    if (!ParsePartitioningSettings(
+                                        *alterTableRequest.mutable_alter_partitioning_settings(), tableSetting, ctx
+                                    )) {
+                                        return SyncError();
+                                    }
+                                } else {
+                                    ctx.AddError(
+                                        TIssue(ctx.GetPosition(tableSetting.Name().Pos()),
+                                               TStringBuilder() << "Unknown index table setting: " << name
+                                        )
+                                    );
+                                    return SyncError();
+                                }
+                            }
+                        } else {
+                            ctx.AddError(
+                                TIssue(ctx.GetPosition(indexSetting.Name().Pos()),
+                                       TStringBuilder() << "Unknown alter index setting: " << settingName
+                                )
+                            );
+                            return SyncError();
+                        }
                     }
                 } else if (name == "dropIndex") {
                     auto nameNode = action.Value().Cast<TCoAtom>();

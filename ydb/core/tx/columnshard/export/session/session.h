@@ -1,10 +1,11 @@
 #pragma once
-#include "task.h"
 #include "cursor.h"
+#include "task.h"
+
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
-#include <ydb/core/tx/columnshard/export/protos/task.pb.h>
 #include <ydb/core/tx/columnshard/export/protos/cursor.pb.h>
+#include <ydb/core/tx/columnshard/export/protos/task.pb.h>
 
 namespace NKikimr::NColumnShard {
 class TColumnShard;
@@ -76,6 +77,7 @@ private:
         return result;
     }
     static const inline TFactory::TRegistrator<TSession> Registrator = TFactory::TRegistrator<TSession>(GetClassNameStatic());
+
 public:
     std::optional<ui64> GetTxId() const {
         return Task->GetTxId();
@@ -86,7 +88,7 @@ public:
     virtual bool IsFinished() const override {
         return Status == EStatus::Finished;
     }
-    virtual bool IsReadyForRemove() const override {
+    virtual bool IsReadyForRemoveOnFinished() const override {
         return Status == EStatus::Aborted;
     }
 
@@ -147,6 +149,5 @@ public:
         AFL_VERIFY(Status == EStatus::Started);
         Status = EStatus::Finished;
     }
-
 };
-}
+}   // namespace NKikimr::NOlap::NExport

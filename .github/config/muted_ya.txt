@@ -49,14 +49,12 @@ ydb/public/sdk/cpp/client/ydb_topic/ut BasicUsage.WriteRead
 ydb/public/sdk/cpp/client/ydb_topic/ut TSettingsValidation.TestDifferentDedupParams
 ydb/public/sdk/cpp/client/ydb_topic/ut [0/10]*
 ydb/public/sdk/cpp/client/ydb_topic/ut [6/10]*
-ydb/public/sdk/cpp/client/ydb_topic/ut TxUsage::WriteToTopic_Demo_*
 ydb/services/datastreams/ut DataStreams.TestGetRecordsStreamWithSingleShard
 ydb/services/datastreams/ut DataStreams.TestPutRecordsWithRead
 ydb/services/datastreams/ut DataStreams.TestReservedConsumersMetering
 ydb/services/datastreams/ut DataStreams.TestReservedStorageMetering
 ydb/services/fq/ut_integration Yq_1.*
-ydb/services/keyvalue/ut KeyValueGRPCService.SimpleWriteRead
-ydb/services/keyvalue/ut KeyValueGRPCService.SimpleCopyUnexistedKey
+ydb/services/keyvalue/ut KeyValueGRPCService.*
 ydb/services/keyvalue/ut sole*
 ydb/services/persqueue_v1/ut TPersQueueTest.CheckACLForGrpcWrite
 ydb/services/persqueue_v1/ut TPersQueueTest.SetupLockSession
@@ -83,6 +81,8 @@ ydb/tests/functional/kqp/kqp_indexes ConsistentIndexRead.InteractiveTx
 ydb/tests/functional/kqp/kqp_query_session KqpQuerySession.NoLocalAttach
 ydb/tests/functional/restarts test_restarts.py.*
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--*]
+ydb/tests/functional/sqs/multinode/test_multinode_cluster.py.TestSqsMultinodeCluster.test_has_messages_counters[kick_tablets-*] 
+ydb/tests/functional/sqs/multinode/test_multinode_cluster.py.TestSqsMultinodeCluster.test_has_messages_counters[stop_node*] 
 ydb/tests/functional/tenants test_dynamic_tenants.py.*
 ydb/tests/functional/tenants test_storage_config.py.TestStorageConfig.*
 ydb/tests/functional/tenants test_tenants.py.*

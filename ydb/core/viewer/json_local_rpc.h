@@ -192,13 +192,15 @@ public:
 
     void ReplyAndPassAway() {
         TStringStream json;
-        TString headers = Viewer->GetHTTPOKJSON(Event->Get());
         if (DescribeResult) {
             if (!DescribeResult->Status->IsSuccess()) {
-                headers = Viewer->GetHTTPBADREQUEST(Event->Get(), {}, "Bad Request");
                 if (DescribeResult->Status->GetStatus() == NYdb::EStatus::UNAUTHORIZED) {
-                    headers = Viewer->GetHTTPFORBIDDEN(Event->Get());
+                    Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPFORBIDDEN(Event->Get()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+                } else {
+                    Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPBADREQUEST(Event->Get()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
                 }
+                PassAway();
+                return;
             } else {
                 TProtoToJson::ProtoToJson(json, *(DescribeResult->Message), JsonSettings);
             }
@@ -206,7 +208,7 @@ public:
             json << "null";
         }
 
-        Send(Event->Sender, new NMon::TEvHttpInfoRes(headers + json.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), json.Str()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         PassAway();
     }
 
@@ -231,55 +233,111 @@ using TJsonDescribeConsumer = TJsonLocalRpc<Ydb::Topic::DescribeConsumerRequest,
 
 template <>
 struct TJsonRequestParameters<TJsonDescribeTopic> {
-    static TString GetParameters() {
-        return R"___([{"name":"path","in":"query","description":"schema path","required":false,"type":"string"},
-                      {"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
-                      {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"},
-                      {"name":"database_path","in":"query","description":"database path","required":false,"type":"string"},
-                      {"name":"include_stats","in":"query","description":"include stat flag","required":false,"type":"bool"}])___";
+    static YAML::Node GetParameters() {
+        return YAML::Load(R"___(
+            - name: path
+              in: query
+              description: schema path
+              required: false
+              type: string
+            - name: enums
+              in: query
+              description: convert enums to strings
+              required: false
+              type: boolean
+            - name: ui64
+              in: query
+              description: return ui64 as number
+              required: false
+              type: boolean
+            - name: timeout
+              in: query
+              description: timeout in ms
+              required: false
+              type: integer
+            - name: database_path
+              in: query
+              description: database path
+              required: false
+              type: string
+            - name: include_stats
+              in: query
+              description: include stat flag
+              required: false
+              type: bool
+        )___");
     }
 };
 
 template <>
 struct TJsonRequestSummary<TJsonDescribeTopic> {
     static TString GetSummary() {
-        return "\"Topic schema detailed information\"";
+        return "Topic schema detailed information";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonDescribeTopic> {
     static TString GetDescription() {
-        return "\"Returns detailed information about topic\"";
+        return "Returns detailed information about topic";
     }
 };
 
 
 template <>
 struct TJsonRequestParameters<TJsonDescribeConsumer> {
-    static TString GetParameters() {
-        return R"___([{"name":"path","in":"query","description":"schema path","required":false,"type":"string"},
-                      {"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
-                      {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"},
-                      {"name":"database_path","in":"query","description":"database path","required":false,"type":"string"},
-                      {"name":"consumer","in":"query","description":"consumer name","required":false,"type":"string"},
-                      {"name":"include_stats","in":"query","description":"include stat flag","required":false,"type":"bool"}])___";
+    static YAML::Node GetParameters() {
+        return YAML::Load(R"___(
+            - name: path
+              in: query
+              description: schema path
+              required: false
+              type: string
+            - name: enums
+              in: query
+              description: convert enums to strings
+              required: false
+              type: boolean
+            - name: ui64
+              in: query
+              description: return ui64 as number
+              required: false
+              type: boolean
+            - name: timeout
+              in: query
+              description: timeout in ms
+              required: false
+              type: integer
+            - name: database_path
+              in: query
+              description: database path
+              required: false
+              type: string
+            - name: consumer
+              in: query
+              description: consumer name
+              required: false
+              type: string
+            - name: include_stats
+              in: query
+              description: include stat flag
+              required: false
+              type: bool
+        )___");
     }
 };
 
 template <>
 struct TJsonRequestSummary<TJsonDescribeConsumer> {
     static TString GetSummary() {
-        return "\"Topic's consumer detailed information\"";
+        return "Topic's consumer detailed information";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonDescribeConsumer> {
     static TString GetDescription() {
-        return "\"Returns detailed information about topic's consumer\"";
+        return "Returns detailed information about topic's consumer";
     }
 };
 

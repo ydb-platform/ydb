@@ -87,7 +87,7 @@ public:
         AFL_VERIFY(StepForExecute <= GetTxData().GetTransactions().size());
         return StepForExecute == GetTxData().GetTransactions().size();
     }
-    virtual bool IsReadyForRemove() const override {
+    virtual bool IsReadyForRemoveOnFinished() const override {
         return true;
     }
 };

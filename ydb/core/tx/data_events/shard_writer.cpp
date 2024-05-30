@@ -41,7 +41,7 @@ namespace NKikimr::NEvWrite {
         , DedupId(dedupId)
         , DataForShard(data)
         , ExternalController(externalController)
-        , LeaderPipeCache(MakePipePeNodeCacheID(false))
+        , LeaderPipeCache(MakePipePerNodeCacheID(false))
         , ActorSpan(parentSpan.BuildChildrenSpan("ShardWriter"))
     {
     }

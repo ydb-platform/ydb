@@ -71,7 +71,7 @@ namespace NKikimr {
                         NKikimrProto::TKeyConfig();
         };
 
-        return { app, Mine.Release(), keyGenerator};
+        return { app, Mine.Release(), keyGenerator, std::move(Icb) };
     }
 
     void TAppPrepare::AddDomain(TDomainsInfo::TDomain* domain)
@@ -199,5 +199,12 @@ namespace NKikimr {
     void TAppPrepare::SetAwsRegion(const TString& value)
     {
         AwsCompatibilityConfig.SetAwsRegion(value);
+    }
+
+    void TAppPrepare::InitIcb(ui32 numNodes)
+    {
+        for (ui32 i = 0; i < numNodes; ++i) {
+            Icb.emplace_back(new TControlBoard);
+        }
     }
 }

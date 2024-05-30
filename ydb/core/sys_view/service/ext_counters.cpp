@@ -23,6 +23,8 @@ class TExtCountersUpdaterActor
     TCounterPtr MemoryUsedBytes;
     TCounterPtr MemoryLimitBytes;
     TCounterPtr StorageUsedBytes;
+    TCounterPtr StorageUsedBytesOnSsd;
+    TCounterPtr StorageUsedBytesOnHdd;
     TVector<TCounterPtr> CpuUsedCorePercents;
     TVector<TCounterPtr> CpuLimitCorePercents;
     THistogramPtr ExecuteLatencyMs;
@@ -54,6 +56,10 @@ public:
             "resources.memory.limit_bytes", false);
         StorageUsedBytes = ydbGroup->GetNamedCounter("name",
             "resources.storage.used_bytes", false);
+        StorageUsedBytesOnSsd = ydbGroup->GetNamedCounter("name",
+            "resources.storage.used_bytes.ssd", false);
+        StorageUsedBytesOnHdd = ydbGroup->GetNamedCounter("name",
+            "resources.storage.used_bytes.hdd", false);
 
         auto poolCount = Config.Pools.size();
         CpuUsedCorePercents.resize(poolCount);
@@ -109,6 +115,12 @@ private:
         }
         if (StorageUsedBytes->Val() != 0) {
             metrics->AddMetric("resources.storage.used_bytes", StorageUsedBytes->Val());
+        }
+        if (StorageUsedBytesOnSsd->Val() != 0) {
+            metrics->AddMetric("resources.storage.used_bytes.ssd", StorageUsedBytesOnSsd->Val());
+        }
+        if (StorageUsedBytesOnHdd->Val() != 0) {
+            metrics->AddMetric("resources.storage.used_bytes.hdd", StorageUsedBytesOnHdd->Val());
         }
         if (!Config.Pools.empty()) {
             double cpuUsage = 0;

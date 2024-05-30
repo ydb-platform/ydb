@@ -262,10 +262,7 @@ void ResizeHashTable(KeysHashTable &t, ui64 newSlots){
 
 // Joins two tables and returns join result in joined table. Tuples of joined table could be received by
 // joined table iterator
-void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLeftTuples, bool hasMoreRightTuples ) {
-
-
-
+void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLeftTuples, bool hasMoreRightTuples, ui32 fromBucket, ui32 toBucket ) {
     if ( hasMoreLeftTuples )
         LeftTableBatch_ = true;
 
@@ -298,8 +295,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
     std::vector<JoinTuplesIds, TMKQLAllocator<JoinTuplesIds, EMemorySubPool::Temporary>> joinResults;
 
 
-    for (ui64 bucket = 0; bucket < NumberOfBuckets; bucket++) {
-
+    for (ui64 bucket = fromBucket; bucket < toBucket; bucket++) {
         joinResults.clear();
         TTableBucket * bucket1 = &JoinTable1->TableBuckets[bucket];
         TTableBucket * bucket2 = &JoinTable2->TableBuckets[bucket];
@@ -1110,25 +1106,109 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
  }
 
 void TTable::Clear() {
+    for (ui64 bucket = 0; bucket < NumberOfBuckets; bucket++) {
+        ClearBucket(bucket);
+    }
+}
 
-        for (ui64 bucket = 0; bucket < NumberOfBuckets; bucket++) {
-            TTableBucket & tb = TableBuckets[bucket];
-            tb.KeyIntVals.clear();
-            tb.DataIntVals.clear();
-            tb.StringsOffsets.clear();
-            tb.StringsValues.clear();
-            tb.InterfaceValues.clear();
-            tb.InterfaceOffsets.clear();
-            tb.JoinIds.clear();
-            tb.RightIds.clear();
+void TTable::ClearBucket(ui64 bucket) {
+    TTableBucket & tb = TableBuckets[bucket];
+    tb.KeyIntVals.clear();
+    tb.DataIntVals.clear();
+    tb.StringsOffsets.clear();
+    tb.StringsValues.clear();
+    tb.InterfaceValues.clear();
+    tb.InterfaceOffsets.clear();
+    tb.JoinIds.clear();
+    tb.RightIds.clear();
 
-            TTableBucketStats & tbs = TableBucketsStats[bucket];
-            tbs.TuplesNum = 0;
-            tbs.KeyIntValsTotalSize = 0;
-            tbs.StringValuesTotalSize = 0;
+    TTableBucketStats & tbs = TableBucketsStats[bucket];
+    tbs.TuplesNum = 0;
+    tbs.KeyIntValsTotalSize = 0;
+    tbs.StringValuesTotalSize = 0;
+}
+
+void TTable::InitializeBucketSpillers(ISpiller::TPtr spiller) {
+    for (size_t i = 0; i < NumberOfBuckets; ++i) {
+        TableBucketsSpillers.emplace_back(spiller, 5_MB);
+    }
+}
+
+ui64 TTable::GetSizeOfBucket(ui64 bucket) const {
+    return TableBuckets[bucket].KeyIntVals.size() * sizeof(ui64)
+    + TableBuckets[bucket].DataIntVals.size() * sizeof(ui64)
+    + TableBuckets[bucket].StringsValues.size()
+    + TableBuckets[bucket].StringsOffsets.size() * sizeof(ui32)
+    + TableBuckets[bucket].InterfaceValues.size()
+    + TableBuckets[bucket].InterfaceOffsets.size() * sizeof(ui32);
+}
+
+bool TTable::TryToReduceMemoryAndWait() {
+    i32 largestBucketIndex = 0;
+    ui64 largestBucketSize = 0;
+    for (ui32 bucket = 0; bucket < NumberOfBuckets; ++bucket) {
+        if (TableBucketsSpillers[bucket].HasRunningAsyncIoOperation() || !TableBucketsSpillers[bucket].IsProcessingFinished()) return true;
+
+        ui64 bucketSize = GetSizeOfBucket(bucket);
+        if (bucketSize > largestBucketSize) {
+            largestBucketSize = bucketSize;
+            largestBucketIndex = bucket;
         }
+    }
 
+    if (!largestBucketSize) return false;
+    TableBucketsSpillers[largestBucketIndex].SpillBucket(std::move(TableBuckets[largestBucketIndex]));
+    TableBuckets[largestBucketIndex] = TTableBucket{};
 
+    return TableBucketsSpillers[largestBucketIndex].HasRunningAsyncIoOperation();
+}
+
+void TTable::UpdateSpilling() {
+    for (ui64 i = 0; i < NumberOfBuckets; ++i) {
+        TableBucketsSpillers[i].Update();
+    }
+}
+
+void TTable::FinalizeSpilling() {
+    MKQL_ENSURE(!HasRunningAsyncIoOperation(), "Internal logic error");
+
+    for (ui32 bucket = 0; bucket < NumberOfBuckets; ++bucket) {
+        if (!TableBucketsSpillers[bucket].IsInMemory()) {
+            TableBucketsSpillers[bucket].SpillBucket(std::move(TableBuckets[bucket]));
+            TableBuckets[bucket] = TTableBucket{};
+            TableBucketsSpillers[bucket].Finalize();
+        }
+    }
+}
+
+bool TTable::HasRunningAsyncIoOperation() const {
+    for (ui32 bucket = 0; bucket < NumberOfBuckets; ++bucket) {
+        if (TableBucketsSpillers[bucket].HasRunningAsyncIoOperation()) return true;
+    }
+    return false;
+}
+
+bool TTable::IsProcessingFinished() const {
+    for (ui32 bucket = 0; bucket < NumberOfBuckets; ++bucket) {
+        if (!TableBucketsSpillers[bucket].IsProcessingFinished()) return false;
+    }
+    return true;
+}
+
+bool TTable::IsBucketInMemory(ui32 bucket) const {
+    return TableBucketsSpillers[bucket].IsInMemory();
+}
+
+void TTable::StartLoadingBucket(ui32 bucket) {
+    MKQL_ENSURE(!TableBucketsSpillers[bucket].IsInMemory(), "Internal logic error");
+    if (!TableBucketsSpillers[bucket].IsProcessingFinished()) return;
+
+    TableBucketsSpillers[bucket].StartBucketRestoration();
+}
+
+void TTable::PrepareBucket(ui64 bucket) {
+    if (!TableBucketsSpillers[bucket].IsExtractionRequired()) return;
+    TableBuckets[bucket] = std::move(TableBucketsSpillers[bucket].ExtractBucket());
 }
 
 // Creates new table with key columns and data columns
@@ -1212,6 +1292,7 @@ void TTableBucketSpiller::Finalize() {
 void TTableBucketSpiller::SpillBucket(TTableBucket&& bucket) {
     MKQL_ENSURE(NextVectorToProcess == ENextVectorToProcess::None, "Internal logic error");
     State = EState::Spilling;
+    IsBucketOwnedBySpiller = true;
 
     CurrentBucket = std::move(bucket);
     NextVectorToProcess = ENextVectorToProcess::KeyAndVals;
@@ -1222,6 +1303,7 @@ void TTableBucketSpiller::SpillBucket(TTableBucket&& bucket) {
 TTableBucket&& TTableBucketSpiller::ExtractBucket() {
     MKQL_ENSURE(State == EState::InMemory, "Internal logic error");
     MKQL_ENSURE(SpilledBucketsCount == 0, "Internal logic error");
+    IsBucketOwnedBySpiller = false;
     return std::move(CurrentBucket);
 }
 
@@ -1229,6 +1311,14 @@ bool TTableBucketSpiller::HasRunningAsyncIoOperation() const {
     return StateUi64Adapter.HasRunningAsyncIoOperation()
         || StateUi32Adapter.HasRunningAsyncIoOperation()
         || StateCharAdapter.HasRunningAsyncIoOperation();
+}
+
+bool TTableBucketSpiller::IsInMemory() const {
+    return State == EState::InMemory;
+}
+
+bool TTableBucketSpiller::IsExtractionRequired() const {
+    return IsBucketOwnedBySpiller;
 }
 
 void TTableBucketSpiller::StartBucketRestoration() {

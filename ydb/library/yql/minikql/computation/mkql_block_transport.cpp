@@ -150,7 +150,7 @@ public:
         DoResetMetadata();
     }
 
-    std::shared_ptr<arrow::ArrayData> MakeDefaultValue(ui64 blockLen, ui64 offset) {
+    std::shared_ptr<arrow::ArrayData> MakeDefaultValue(ui64 blockLen, ui64 offset) const {
         std::shared_ptr<arrow::Buffer> nulls;
         i64 nullsCount = 0;
         if (IsNullable()) {
@@ -176,7 +176,7 @@ template<size_t ObjectSize, bool Nullable>
 class TFixedSizeBlockSerializer final : public IBlockSerializer {
 public:
     TFixedSizeBlockSerializer() = default;
-private:
+
     size_t ArrayMetadataCount() const final {
         return Nullable ? 3 : 1;
     }
@@ -389,16 +389,10 @@ private:
     const std::unique_ptr<TBlockDeserializerBase> Inner_;
 };
 
-template<bool Nullable>
-class TTupleBlockSerializer final : public IBlockSerializer {
-public:
-    explicit TTupleBlockSerializer(TVector<std::unique_ptr<IBlockSerializer>>&& children)
-        : Children_(std::move(children))
-    {
-    }
-private:
+template<bool Nullable, typename TDerived>
+class TTupleBlockSerializerBase : public IBlockSerializer {
     size_t ArrayMetadataCount() const final {
-        size_t result = GetChildMetaCount();
+        size_t result = static_cast<const TDerived*>(this)->GetChildrenMetaCount();
         if constexpr (Nullable) {
             result += 2;
         }
@@ -410,14 +404,12 @@ private:
             StoreNullsSizes(data, metaSink);
         }
         if (data.GetNullCount() == data.length) {
-            auto childCount = GetChildMetaCount();
+            auto childCount = static_cast<const TDerived*>(this)->GetChildrenMetaCount();
             for (size_t i = 0; i < childCount; ++i) {
                 metaSink(0);
             }
         } else {
-            for (size_t i = 0; i < Children_.size(); ++i) {
-                Children_[i]->StoreMetadata(*data.child_data[i], metaSink);
-            }
+            static_cast<const TDerived*>(this)->StoreChildrenMetadata(data.child_data, metaSink);
         }
     }
 
@@ -426,13 +418,19 @@ private:
             StoreNulls(data, dst);
         }
         if (data.GetNullCount() != data.length) {
-            for (size_t i = 0; i < Children_.size(); ++i) {
-                Children_[i]->StoreArray(*data.child_data[i], dst);
-            }
+            static_cast<const TDerived*>(this)->StoreChildrenArrays(data.child_data, dst);
         }
     }
+};
 
-    size_t GetChildMetaCount() const {
+template<bool Nullable>
+class TTupleBlockSerializer final : public TTupleBlockSerializerBase<Nullable, TTupleBlockSerializer<Nullable>> {
+public:
+    TTupleBlockSerializer(TVector<std::unique_ptr<IBlockSerializer>>&& children)
+        : Children_(std::move(children))
+    {}
+
+    size_t GetChildrenMetaCount() const {
         size_t result = 0;
         for (const auto& child : Children_) {
             result += child->ArrayMetadataCount();
@@ -440,7 +438,49 @@ private:
         return result;
     }
 
+    void StoreChildrenMetadata(const std::vector<std::shared_ptr<arrow::ArrayData>>& child_data, 
+        const IBlockSerializer::TMetadataSink& metaSink) const {
+
+        for (size_t i = 0; i < Children_.size(); ++i) {
+            Children_[i]->StoreMetadata(*child_data[i], metaSink);
+        }
+    }
+
+    void StoreChildrenArrays(const std::vector<std::shared_ptr<arrow::ArrayData>>& child_data, TRope& dst) const {
+        for (size_t i = 0; i < Children_.size(); ++i) {
+            Children_[i]->StoreArray(*child_data[i], dst);
+        }
+    }
+
+private:
     const TVector<std::unique_ptr<IBlockSerializer>> Children_;
+};
+
+template<typename TDate, bool Nullable>
+class TTzDateBlockSerializer final : public TTupleBlockSerializerBase<Nullable, TTzDateBlockSerializer<TDate, Nullable>> {
+public:
+    TTzDateBlockSerializer() = default;
+
+    size_t GetChildrenMetaCount() const {
+        return DateSerialiser_.ArrayMetadataCount() + TzSerialiser_.ArrayMetadataCount();
+    }
+
+    void StoreChildrenMetadata(const std::vector<std::shared_ptr<arrow::ArrayData>>& child_data, 
+        const IBlockSerializer::TMetadataSink& metaSink) const {
+        DateSerialiser_.StoreMetadata(*child_data[0], metaSink);
+        TzSerialiser_.StoreMetadata(*child_data[1], metaSink);
+    }
+
+    void StoreChildrenArrays(const std::vector<std::shared_ptr<arrow::ArrayData>>& child_data, TRope& dst) const {
+        DateSerialiser_.StoreArray(*child_data[0], dst);
+        TzSerialiser_.StoreArray(*child_data[1], dst);
+    }
+
+private:
+    using TDateLayout = typename NUdf::TDataType<TDate>::TLayout;
+
+    TFixedSizeBlockSerializer<sizeof(TDateLayout), false> DateSerialiser_;
+    TFixedSizeBlockSerializer<sizeof(NYql::NUdf::TTimezoneId), false> TzSerialiser_;
 };
 
 template<bool Nullable>
@@ -494,6 +534,53 @@ private:
     const TVector<std::unique_ptr<TBlockDeserializerBase>> Children_;
 };
 
+template<typename TDate, bool Nullable>
+class TTzDateBlockDeserializer final : public TBlockDeserializerBase {
+public:
+    TTzDateBlockDeserializer() = default;
+
+private:
+    void DoLoadMetadata(const TMetadataSource& metaSource) final {
+        DateDeserialiser_.LoadMetadata(metaSource);
+        TzDeserialiser_.LoadMetadata(metaSource);
+    }
+
+    std::shared_ptr<arrow::ArrayData> DoMakeDefaultValue(const std::shared_ptr<arrow::Buffer>& nulls, i64 nullsCount, ui64 blockLen, ui64 offset) const final {
+        std::vector<std::shared_ptr<arrow::ArrayData>> childData;
+        childData.emplace_back(DateDeserialiser_.MakeDefaultValue(blockLen, offset));
+        childData.emplace_back(TzDeserialiser_.MakeDefaultValue(blockLen, offset));
+        return arrow::ArrayData::Make(ArrowType_, blockLen, {nulls}, std::move(childData), nullsCount, offset);
+    }
+
+    std::shared_ptr<arrow::ArrayData> DoLoadArray(TRope& src, const std::shared_ptr<arrow::Buffer>& nulls, i64 nullsCount, ui64 blockLen, ui64 offset) final {
+        std::vector<std::shared_ptr<arrow::ArrayData>> childData;
+        childData.emplace_back(DateDeserialiser_.LoadArray(src, blockLen, offset));
+        childData.emplace_back(TzDeserialiser_.LoadArray(src, blockLen, offset));
+        return arrow::ArrayData::Make(ArrowType_, blockLen, {nulls}, std::move(childData), nullsCount, offset);
+    }
+
+    void DoResetMetadata() final {
+        DateDeserialiser_.ResetMetadata();
+        TzDeserialiser_.ResetMetadata();
+    }
+
+    bool IsNullable() const final {
+        return Nullable;
+    }
+
+    void SetArrowType(const std::shared_ptr<arrow::DataType>& type) final {
+        YQL_ENSURE(type->fields().size() == 2);
+        ArrowType_ = type;
+        DateDeserialiser_.SetArrowType(type->field(0)->type());
+        TzDeserialiser_.SetArrowType(type->field(1)->type());
+    }
+
+    using TDateLayout = typename NUdf::TDataType<TDate>::TLayout;
+
+    TFixedSizeBlockDeserializer<sizeof(TDateLayout), false> DateDeserialiser_;
+    TFixedSizeBlockDeserializer<sizeof(NYql::NUdf::TTimezoneId), false> TzDeserialiser_;
+};
+
 struct TSerializerTraits {
     using TResult = IBlockSerializer;
     template <bool Nullable>
@@ -503,6 +590,9 @@ struct TSerializerTraits {
     template <typename TStringType, bool Nullable, NUdf::EDataSlot TOriginal = NUdf::EDataSlot::String>
     using TStrings = TStringBlockSerializer<TStringType, Nullable>;
     using TExtOptional = TExtOptionalBlockSerializer;
+    template<typename TTzDateType, bool Nullable>
+    using TTzDate = TTzDateBlockSerializer<TTzDateType, Nullable>;
+
 
     static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
         Y_UNUSED(pgBuilder);
@@ -516,6 +606,16 @@ struct TSerializerTraits {
         Y_UNUSED(isOptional);
         ythrow yexception() << "Serializer not implemented for block resources";
     }
+
+    template<typename TTzDateType>
+    static std::unique_ptr<TResult> MakeTzDate(bool isOptional) {
+        if (isOptional) {
+            return std::make_unique<TTzDate<TTzDateType, true>>();
+        }
+        else {
+            return std::make_unique<TTzDate<TTzDateType, false>>();
+        }
+    }
 };
 
 struct TDeserializerTraits {
@@ -527,6 +627,8 @@ struct TDeserializerTraits {
     template <typename TStringType, bool Nullable, NUdf::EDataSlot TOriginal = NUdf::EDataSlot::String>
     using TStrings = TStringBlockDeserializer<TStringType, Nullable>;
     using TExtOptional = TExtOptionalBlockDeserializer;
+    template<typename TTzDateType, bool Nullable>
+    using TTzDate = TTzDateBlockDeserializer<TTzDateType, Nullable>;
 
     static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
         Y_UNUSED(pgBuilder);
@@ -539,6 +641,16 @@ struct TDeserializerTraits {
     static std::unique_ptr<TResult> MakeResource(bool isOptional) {
         Y_UNUSED(isOptional);
         ythrow yexception() << "Deserializer not implemented for block resources";
+    }
+
+    template<typename TTzDateType>
+    static std::unique_ptr<TResult> MakeTzDate(bool isOptional) {
+        if (isOptional) {
+            return std::make_unique<TTzDate<TTzDateType, true>>();
+        }
+        else {
+            return std::make_unique<TTzDate<TTzDateType, false>>();
+        }
     }
 };
 

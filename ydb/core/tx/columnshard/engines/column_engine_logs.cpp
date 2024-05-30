@@ -162,6 +162,13 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db) {
     Loaded = true;
     THashMap<ui64, ui64> granuleToPathIdDecoder;
     {
+        TMemoryProfileGuard g("TTxInit/LoadShardingInfo");
+        if (!VersionedIndex.LoadShardingInfo(db)) {
+            return false;
+        }
+    }
+
+    {
         TMemoryProfileGuard g("TTxInit/LoadColumns");
         auto guard = GranulesStorage->GetStats()->StartPackModification();
         if (!LoadColumns(db)) {
@@ -291,7 +298,6 @@ std::shared_ptr<TCleanupTablesColumnEngineChanges> TColumnEngineForLogs::StartCl
 
     ui64 txSize = 0;
     const ui64 txSizeLimit = TGlobalLimits::TxWriteLimitBytes / 4;
-    THashSet<ui64> pathsToRemove;
     for (ui64 pathId : pathsToDrop) {
         if (!HasDataInPathId(pathId)) {
             changes->TablesToDrop.emplace(pathId);
@@ -300,9 +306,6 @@ std::shared_ptr<TCleanupTablesColumnEngineChanges> TColumnEngineForLogs::StartCl
         if (txSize > txSizeLimit) {
             break;
         }
-    }
-    for (auto&& i : pathsToRemove) {
-        pathsToDrop.erase(i);
     }
     if (changes->TablesToDrop.empty()) {
         return nullptr;
@@ -322,6 +325,7 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
     ui32 skipLocked = 0;
     ui32 portionsFromDrop = 0;
     bool limitExceeded = false;
+    THashSet<TPortionAddress> uniquePortions;
     for (ui64 pathId : pathsToDrop) {
         auto g = GranulesStorage->GetGranuleOptional(pathId);
         if (!g) {
@@ -339,6 +343,8 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
                 limitExceeded = true;
                 break;
             }
+            const auto inserted = uniquePortions.emplace(info->GetAddress()).second;
+            Y_ABORT_UNLESS(inserted);
             changes->PortionsToDrop.push_back(*info);
             ++portionsFromDrop;
         }
@@ -356,14 +362,17 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
                 ++i;
                 continue;
             }
-            Y_ABORT_UNLESS(it->second[i].CheckForCleanup(snapshot));
-            if (txSize + it->second[i].GetTxVolume() < txSizeLimit || changes->PortionsToDrop.empty()) {
-                txSize += it->second[i].GetTxVolume();
-            } else {
-                limitExceeded = true;
-                break;
+            const auto inserted = uniquePortions.emplace(it->second[i].GetAddress()).second;
+            if (inserted) {
+                Y_ABORT_UNLESS(it->second[i].CheckForCleanup(snapshot));
+                if (txSize + it->second[i].GetTxVolume() < txSizeLimit || changes->PortionsToDrop.empty()) {
+                    txSize += it->second[i].GetTxVolume();
+                } else {
+                    limitExceeded = true;
+                    break;
+                }
+                changes->PortionsToDrop.push_back(std::move(it->second[i]));
             }
-            changes->PortionsToDrop.push_back(std::move(it->second[i]));
             if (i + 1 < it->second.size()) {
                 it->second[i] = std::move(it->second.back());
             }
@@ -443,10 +452,6 @@ bool TColumnEngineForLogs::ApplyChangesOnExecute(IDbWrapper& db, std::shared_ptr
         db.WriteCounter(LAST_TX_ID, LastSnapshot.GetTxId());
     }
     return true;
-}
-
-void TColumnEngineForLogs::EraseTable(const ui64 pathId) {
-    GranulesStorage->EraseTable(pathId);
 }
 
 void TColumnEngineForLogs::UpsertPortion(const TPortionInfo& portionInfo, const TPortionInfo* exInfo) {

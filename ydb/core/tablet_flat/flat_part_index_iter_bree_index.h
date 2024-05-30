@@ -274,6 +274,18 @@ public:
         return State.back().BeginKey.Iter().At(index);
     }
 
+    void GetKeyCells(TSmallVec<TCell>& keyCells) const override {
+        keyCells.clear();
+
+        Y_ABORT_UNLESS(IsLeaf());
+
+        auto iter = State.back().BeginKey.Iter();
+        for (TPos pos : xrange(iter.Count())) {
+            Y_UNUSED(pos);
+            keyCells.push_back(iter.Next());
+        }
+    }
+
 private:
     template<typename TSeek>
     EReady DoSeek(TSeek seek) {

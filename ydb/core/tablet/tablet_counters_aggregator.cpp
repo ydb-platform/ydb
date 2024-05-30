@@ -770,8 +770,12 @@ private:
         TCounterPtr ColumnShardBulkUpsertRows_;
         TCounterPtr ColumnShardBulkUpsertBytes_;
         TCounterPtr ResourcesStorageUsedBytes;
+        TCounterPtr ResourcesStorageUsedBytesOnSsd;
+        TCounterPtr ResourcesStorageUsedBytesOnHdd;
         TCounterPtr ResourcesStorageLimitBytes;
         TCounterPtr ResourcesStorageTableUsedBytes;
+        TCounterPtr ResourcesStorageTableUsedBytesOnSsd;
+        TCounterPtr ResourcesStorageTableUsedBytesOnHdd;
         TCounterPtr ResourcesStorageTopicUsedBytes;
         TCounterPtr ResourcesStreamUsedShards;
         TCounterPtr ResourcesStreamLimitShards;
@@ -806,6 +810,8 @@ private:
         TCounterPtr ColumnShardUpsertBytesWritten_;
 
         TCounterPtr DiskSpaceTablesTotalBytes;
+        TCounterPtr DiskSpaceTablesTotalBytesOnSsd;
+        TCounterPtr DiskSpaceTablesTotalBytesOnHdd;
         TCounterPtr DiskSpaceTopicsTotalBytes;
         TCounterPtr DiskSpaceSoftQuotaBytes;
 
@@ -860,10 +866,18 @@ private:
 
             ResourcesStorageUsedBytes = ydbGroup->GetNamedCounter("name",
                 "resources.storage.used_bytes", false);
+            ResourcesStorageUsedBytesOnSsd = ydbGroup->GetNamedCounter("name",
+                "resources.storage.used_bytes.ssd", false);
+            ResourcesStorageUsedBytesOnHdd = ydbGroup->GetNamedCounter("name",
+                "resources.storage.used_bytes.hdd", false);
             ResourcesStorageLimitBytes = ydbGroup->GetNamedCounter("name",
                 "resources.storage.limit_bytes", false);
             ResourcesStorageTableUsedBytes = ydbGroup->GetNamedCounter("name",
                 "resources.storage.table.used_bytes", false);
+            ResourcesStorageTableUsedBytesOnSsd = ydbGroup->GetNamedCounter("name",
+                "resources.storage.table.used_bytes.ssd", false);
+            ResourcesStorageTableUsedBytesOnHdd = ydbGroup->GetNamedCounter("name",
+                "resources.storage.table.used_bytes.hdd", false);
             ResourcesStorageTopicUsedBytes = ydbGroup->GetNamedCounter("name",
                 "resources.storage.topic.used_bytes", false);
 
@@ -930,6 +944,8 @@ private:
                 auto appGroup = schemeshardGroup->GetSubgroup("category", "app");
 
                 DiskSpaceTablesTotalBytes = appGroup->GetCounter("SUM(SchemeShard/DiskSpaceTablesTotalBytes)");
+                DiskSpaceTablesTotalBytesOnSsd = appGroup->GetCounter("SUM(SchemeShard/DiskSpaceTablesTotalBytesOnSsd)");
+                DiskSpaceTablesTotalBytesOnHdd = appGroup->GetCounter("SUM(SchemeShard/DiskSpaceTablesTotalBytesOnHdd)");
                 DiskSpaceTopicsTotalBytes = appGroup->GetCounter("SUM(SchemeShard/DiskSpaceTopicsTotalBytes)");
                 DiskSpaceSoftQuotaBytes = appGroup->GetCounter("SUM(SchemeShard/DiskSpaceSoftQuotaBytes)");
 
@@ -973,12 +989,18 @@ private:
             if (DiskSpaceTablesTotalBytes) {
                 ResourcesStorageLimitBytes->Set(DiskSpaceSoftQuotaBytes->Val());
                 ResourcesStorageTableUsedBytes->Set(DiskSpaceTablesTotalBytes->Val());
+                ResourcesStorageTableUsedBytesOnSsd->Set(DiskSpaceTablesTotalBytesOnSsd->Val());
+                ResourcesStorageTableUsedBytesOnHdd->Set(DiskSpaceTablesTotalBytesOnHdd->Val());
                 ResourcesStorageTopicUsedBytes->Set(DiskSpaceTopicsTotalBytes->Val());
 
                 if (AppData()->FeatureFlags.GetEnableTopicDiskSubDomainQuota()) {
                     ResourcesStorageUsedBytes->Set(ResourcesStorageTableUsedBytes->Val() + ResourcesStorageTopicUsedBytes->Val());
+                    ResourcesStorageUsedBytesOnSsd->Set(ResourcesStorageTableUsedBytesOnSsd->Val());
+                    ResourcesStorageUsedBytesOnHdd->Set(ResourcesStorageTableUsedBytesOnHdd->Val());
                 } else {
                     ResourcesStorageUsedBytes->Set(ResourcesStorageTableUsedBytes->Val());
+                    ResourcesStorageUsedBytesOnSsd->Set(ResourcesStorageTableUsedBytesOnSsd->Val());
+                    ResourcesStorageUsedBytesOnHdd->Set(ResourcesStorageTableUsedBytesOnHdd->Val());
                 }
 
                 auto quota = StreamShardsQuota->Val();

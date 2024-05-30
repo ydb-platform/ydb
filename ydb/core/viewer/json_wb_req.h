@@ -133,29 +133,82 @@ public:
 
 template <typename RequestType, typename ResponseType>
 struct TJsonRequestParameters<TJsonWhiteboardRequest<RequestType, ResponseType>> {
-    static TString GetParameters() {
-        return R"___([{"name":"node_id","in":"query","description":"node identifier","required":false,"type":"integer"},)___"
-               R"___({"name":"merge","in":"query","description":"merge information from nodes","required":false,"type":"boolean"},)___"
-               R"___({"name":"group","in":"query","description":"group information by field","required":false,"type":"string"},)___"
-               R"___({"name":"all","in":"query","description":"return all possible key combinations (for enums only)","required":false,"type":"boolean"},)___"
-               R"___({"name":"filter","in":"query","description":"filter information by field","required":false,"type":"string"},)___"
-               R"___({"name":"alive","in":"query","description":"request from alive (connected) nodes only","required":false,"type":"boolean"},)___"
-               R"___({"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},)___"
-               R"___({"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},)___"
-               R"___({"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"},)___"
-               R"___({"name":"retries","in":"query","description":"number of retries","required":false,"type":"integer"},)___"
-               R"___({"name":"retry_period","in":"query","description":"retry period in ms","required":false,"type":"integer","default":500},)___"
-               R"___({"name":"static","in":"query","description":"request from static nodes only","required":false,"type":"boolean"},)___"
-               R"___({"name":"since","in":"query","description":"filter by update time","required":false,"type":"string"}])___";
+    static YAML::Node GetParameters() {
+            return YAML::Load(R"___(
+                    - name: node_id
+                      in: query
+                      description: node identifier
+                      required: false
+                      type: integer
+                    - name: merge
+                      in: query
+                      description: merge information from nodes
+                      required: false
+                      type: boolean
+                    - name: group
+                      in: query
+                      description: group information by field
+                      required: false
+                      type: string
+                    - name: all
+                      in: query
+                      description: return all possible key combinations (for enums only)
+                      required: false
+                      type: boolean
+                    - name: filter
+                      in: query
+                      description: filter information by field
+                      required: false
+                      type: string
+                    - name: alive
+                      in: query
+                      description: request from alive (connected) nodes only
+                      required: false
+                      type: boolean
+                    - name: enums
+                      in: query
+                      description: convert enums to strings
+                      required: false
+                      type: boolean
+                    - name: ui64
+                      in: query
+                      description: return ui64 as number
+                      required: false
+                      type: boolean
+                    - name: timeout
+                      in: query
+                      description: timeout in ms
+                      required: false
+                      type: integer
+                    - name: retries
+                      in: query
+                      description: number of retries
+                      required: false
+                      type: integer
+                    - name: retry_period
+                      in: query
+                      description: retry period in ms
+                      required: false
+                      type: integer
+                      default: 500
+                    - name: static
+                      in: query
+                      description: request from static nodes only
+                      required: false
+                      type: boolean
+                    - name: since
+                      in: query
+                      description: filter by update time
+                      required: false
+                      type: string
+            )___");
     }
 };
 
 template <typename RequestType, typename ResponseType>
 struct TJsonRequestSchema<TJsonWhiteboardRequest<RequestType, ResponseType>> {
-    static TString GetSchema() {
-        TStringStream stream;
-        TProtoToJson::ProtoToJsonSchema<typename ResponseType::ProtoRecordType>(stream);
-        return stream.Str();
+    static YAML::Node GetSchema() {
+        return TProtoToYaml::ProtoToYamlSchema<typename ResponseType::ProtoRecordType>();
     }
 };
 

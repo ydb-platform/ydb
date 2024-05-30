@@ -1614,9 +1614,9 @@
     ],
     "test.test[pg-join_using_multiple3-default.txt-Debug]": [
         {
-            "checksum": "060e6c46f8d9b6b962159c140b9e7544",
-            "size": 1788,
-            "uri": "https://{canondata_backend}/1924537/3d9e624e7c2a771b2a2c11064f1d7a13ed1d94c6/resource.tar.gz#test.test_pg-join_using_multiple3-default.txt-Debug_/opt.yql"
+            "checksum": "19653694e7169c3f816e3d87126e17cf",
+            "size": 1757,
+            "uri": "https://{canondata_backend}/1917492/f3963127899d7169b99347ed7cfd9d53e55ec413/resource.tar.gz#test.test_pg-join_using_multiple3-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg-join_using_multiple3-default.txt-Plan]": [
@@ -1967,6 +1967,27 @@
             "checksum": "eef43866a048d4aee9fe2788b2d089c5",
             "size": 1628,
             "uri": "https://{canondata_backend}/937458/419a96ea577b829313b24bc6972184dd67aa552e/resource.tar.gz#test.test_pg-wide_top_sort--Results_/results.txt"
+        }
+    ],
+    "test.test[pg-with_rec_distinct-default.txt-Debug]": [
+        {
+            "checksum": "e26d365dc8a1768f4c023db4844c86d4",
+            "size": 1267,
+            "uri": "https://{canondata_backend}/1936842/c5f10916dd4d339c0cae0e29c445f057e714fe63/resource.tar.gz#test.test_pg-with_rec_distinct-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[pg-with_rec_distinct-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1936842/c5f10916dd4d339c0cae0e29c445f057e714fe63/resource.tar.gz#test.test_pg-with_rec_distinct-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[pg-with_rec_distinct-default.txt-Results]": [
+        {
+            "checksum": "c184a1ef73693a0d67b02ead5bc5ea1a",
+            "size": 727,
+            "uri": "https://{canondata_backend}/1936842/c5f10916dd4d339c0cae0e29c445f057e714fe63/resource.tar.gz#test.test_pg-with_rec_distinct-default.txt-Results_/results.txt"
         }
     ],
     "test.test[pg_catalog-pg_auth_members-default.txt-Debug]": [

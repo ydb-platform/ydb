@@ -657,6 +657,12 @@ private:
         auto& subjectMap = QuotaCacheMap[subjectType];
         auto it = subjectMap.find(subjectId);
 
+        if (!ev->Get()->Success) {
+            LOG_E("TQuotaUsageResponse error for subject type: " << subjectType << ", subject id: " << subjectId << ", metrics name: " << metricName << ", issues: " << ev->Get()->Issues.ToOneLineString());
+            Send(ev->Sender, new TEvQuotaService::TQuotaUsageRequest(subjectType, subjectId, metricName)); // retry
+            return;
+        }
+
         if (it == subjectMap.end()) {
             // if quotas are not cached - ignore usage update
             return;

@@ -67,6 +67,10 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                 return Error(NKikimrScheme::StatusSchemeError, "Empty domain info");
             }
 
+            if (entry.SecurityObject) {
+                Owner = entry.SecurityObject->GetOwnerSID();
+            }
+
             DomainKey = entry.DomainInfo->DomainKey;
             Resolve(DomainKey);
         } else {
@@ -211,6 +215,10 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     void CreateDst() {
         auto ev = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
         *ev->Record.AddTransaction() = TxBody;
+
+        if (Owner) {
+            ev->Record.SetOwner(Owner);
+        }
 
         Send(PipeCache, new TEvPipeCache::TEvForward(ev.Release(), SchemeShardId, true));
         Become(&TThis::StateCreateDst);
@@ -554,6 +562,7 @@ private:
 
     TPathId DomainKey;
     TString Database;
+    TString Owner;
     TTableProfiles TableProfiles;
     ui64 TxId = 0;
     NKikimrSchemeOp::TModifyScheme TxBody;

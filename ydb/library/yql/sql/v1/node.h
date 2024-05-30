@@ -669,6 +669,8 @@ namespace NSQLTranslationV1 {
     typedef TIntrusivePtr<TWindowSpecification> TWindowSpecificationPtr;
     typedef TMap<TString, TWindowSpecificationPtr> TWinSpecs;
 
+    TWinSpecs CloneContainer(const TWinSpecs& specs);
+
     void WarnIfAliasFromSelectIsUsedInGroupBy(TContext& ctx, const TVector<TNodePtr>& selectTerms, const TVector<TNodePtr>& groupByTerms,
         const TVector<TNodePtr>& groupByExprTerms);
     bool ValidateAllNodesForAggregation(TContext& ctx, const TVector<TNodePtr>& nodes);
@@ -1022,6 +1024,7 @@ namespace NSQLTranslationV1 {
         EType Type;
         TVector<TIdentifier> IndexColumns;
         TVector<TIdentifier> DataColumns;
+        TTableSettings TableSettings;
     };
 
     struct TChangefeedSettings {
@@ -1072,22 +1075,22 @@ namespace NSQLTranslationV1 {
         TVector<TFamilyEntry> AlterColumnFamilies;
         TTableSettings TableSettings;
         TVector<TIndexDescription> AddIndexes;
+        TVector<TIndexDescription> AlterIndexes;
         TVector<TIdentifier> DropIndexes;
+        TMaybe<std::pair<TIdentifier, TIdentifier>> RenameIndexTo;
         TMaybe<TIdentifier> RenameTo;
         TVector<TChangefeedDescription> AddChangefeeds;
         TVector<TChangefeedDescription> AlterChangefeeds;
         TVector<TIdentifier> DropChangefeeds;
-        TMaybe<std::pair<TIdentifier, TIdentifier>> RenameIndexTo;
         ETableType TableType = ETableType::Table;
 
         bool IsEmpty() const {
             return AddColumns.empty() && DropColumns.empty() && AlterColumns.empty()
                 && AddColumnFamilies.empty() && AlterColumnFamilies.empty()
                 && !TableSettings.IsSet()
-                && AddIndexes.empty() && DropIndexes.empty()
+                && AddIndexes.empty() && AlterIndexes.empty() && DropIndexes.empty() && !RenameIndexTo.Defined()
                 && !RenameTo.Defined()
-                && AddChangefeeds.empty() && AlterChangefeeds.empty() && DropChangefeeds.empty()
-                && !RenameIndexTo.Defined();
+                && AddChangefeeds.empty() && AlterChangefeeds.empty() && DropChangefeeds.empty();
         }
     };
 

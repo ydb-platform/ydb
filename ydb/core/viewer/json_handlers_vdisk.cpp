@@ -10,11 +10,10 @@
 
 namespace NKikimr::NViewer {
 
-template <>
-void TVDiskJsonHandlers::Init() {
-    JsonHandlers["vdisk/json/vdiskstat"] = new TJsonHandler<TJsonVDiskStat>;
-    JsonHandlers["vdisk/json/getblob"] = new TJsonHandler<TJsonGetBlob>;
-    JsonHandlers["vdisk/json/blobindexstat"] = new TJsonHandler<TJsonBlobIndexStat>;
+void InitVDiskJsonHandlers(TJsonHandlers& jsonHandlers) {
+    jsonHandlers.AddHandler("/vdisk/vdiskstat", new TJsonHandler<TJsonVDiskStat>);
+    jsonHandlers.AddHandler("/vdisk/getblob", new TJsonHandler<TJsonGetBlob>);
+    jsonHandlers.AddHandler("/vdisk/blobindexstat", new TJsonHandler<TJsonBlobIndexStat>);
 }
 
 }

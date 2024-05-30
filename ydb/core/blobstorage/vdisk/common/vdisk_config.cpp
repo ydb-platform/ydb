@@ -63,6 +63,8 @@ namespace NKikimr {
         SyncLogAdvisedIndexedBlockSize = ui32(1) << ui32(20);       // 1 MB
         SyncLogMaxMemAmount = ui64(64) << ui64(20);                 // 64 MB
 
+        MaxSyncLogChunkSize = ui32(16) << ui32(10);                 // 32 Kb
+
         ReplTimeInterval = TDuration::Seconds(60);                  // 60 seconds
         ReplRequestTimeout = TDuration::Seconds(10);                // 10 seconds
         ReplPlanQuantum = TDuration::MilliSeconds(100);             // 100 ms

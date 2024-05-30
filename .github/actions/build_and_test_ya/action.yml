@@ -42,6 +42,9 @@ inputs:
   put_build_results_to_cache:
     type: boolean
     default: true
+  additional_ya_make_args:
+    type: string
+    default: ""
   secs:
     type: string
     default: ""
@@ -66,7 +69,17 @@ runs:
         check_url=$(curl -s $jobs_url | jq --arg n "$BUILD_PRESET" -r '.jobs[] | select(.name | contains($n)) | .html_url')
         
         echo "Pre-commit [check]($check_url) for $(git rev-parse HEAD) has started." | .github/scripts/tests/comment-pr.py --rewrite
-    
+
+        curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+          https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
+          -d '{"state":"pending","description":"The check has been started","context":"build_${{inputs.build_preset}}"}'
+
+        if [[ "${{inputs.run_tests}}" == "true" ]];then
+          curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
+            -d '{"state":"pending","description":"The check has been started","context":"test_${{inputs.build_preset}}"}'
+        fi
+   
     - name: Prepare s3cmd
       uses: ./.github/actions/s3cmd
       with:
@@ -77,6 +90,20 @@ runs:
         folder_prefix: ya-
         build_preset: ${{ inputs.build_preset }}
 
+    - name: Generate ya.make with affected test suites and modules list
+      if: inputs.increment == 'true'
+      uses: ./.github/actions/graph_compare
+ 
+    - name: Change target in case of incremental (tests)
+      id: test_run_choice
+      shell: bash
+      run: |
+        if [ "${{ inputs.increment }}" == "true" ]; then
+          echo "target=." >> $GITHUB_OUTPUT
+        else
+          echo "target=${{ inputs.build_target }}" >> $GITHUB_OUTPUT
+        fi
+
     - name: Build
       uses: ./.github/actions/build_ya
       id: build
@@ -85,25 +112,11 @@ runs:
         build_target: ${{ inputs.build_target }}
         build_preset: ${{ inputs.build_preset }}
         bazel_remote_uri: ${{  fromJSON( inputs.vars ).REMOTE_CACHE_URL || '' }}
-        bazel_remote_username: ${{ inputs.put_build_results_to_cache &&  fromJSON( inputs.secs ).REMOTE_CACHE_USERNAME || '' }}
-        bazel_remote_password: ${{ inputs.put_build_results_to_cache &&  fromJSON( inputs.secs ).REMOTE_CACHE_PASSWORD || '' }}
+        bazel_remote_username: ${{ fromJSON( inputs.secs ).REMOTE_CACHE_USERNAME || '' }}
+        bazel_remote_password: ${{ fromJSON( inputs.secs ).REMOTE_CACHE_PASSWORD || '' }}
+        put_build_results_to_cache: ${{ inputs.put_build_results_to_cache }}
         link_threads: ${{ inputs.link_threads }}
-
-    - name: Generate ya.make with affected test suites list
-      if: inputs.run_tests == 'true' && inputs.increment == 'true'
-      uses: ./.github/actions/graph_compare
- 
-    - name: Check if there's a list of tests to run
-      id: test_run_choice
-      shell: bash
-      run: |
-        if [ -f ya.make ];then
-          echo "target='.'" >> $GITHUB_OUTPUT
-          echo "Listed test targets: "
-          cat ya.make
-        else
-          echo "target=${{ inputs.build_target }}" >> $GITHUB_OUTPUT
-        fi
+        additional_ya_make_args: ${{ inputs.additional_ya_make_args }}
 
     - name: Run tests
       uses: ./.github/actions/test_ya
@@ -117,6 +130,7 @@ runs:
         testman_url: ${{  fromJSON( inputs.vars ).TESTMO_URL }}
         testman_project_id: ${{  fromJSON( inputs.vars ).TESTMO_PROJECT_ID }}
         link_threads: ${{ inputs.link_threads }}
+        additional_ya_make_args: ${{ inputs.additional_ya_make_args }}
         test_threads: ${{ inputs.test_threads }}
         
     - name: Notify about failed build

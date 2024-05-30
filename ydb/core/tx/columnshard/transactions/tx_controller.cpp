@@ -76,7 +76,7 @@ bool TTxController::Load(NTabletFlatExecutor::TTransactionContext& txc) {
     return true;
 }
 
-TTxController::ITransactionOperator::TPtr TTxController::GetTxOperator(const ui64 txId) {
+TTxController::ITransactionOperator::TPtr TTxController::GetTxOperator(const ui64 txId) const {
     auto it = Operators.find(txId);
     if(it == Operators.end()) {
         return nullptr;
@@ -84,7 +84,7 @@ TTxController::ITransactionOperator::TPtr TTxController::GetTxOperator(const ui6
     return it->second;
 }
 
-TTxController::ITransactionOperator::TPtr TTxController::GetVerifiedTxOperator(const ui64 txId) {
+TTxController::ITransactionOperator::TPtr TTxController::GetVerifiedTxOperator(const ui64 txId) const {
     auto it = Operators.find(txId);
     AFL_VERIFY(it != Operators.end())("tx_id", txId);
     return it->second;
@@ -285,12 +285,10 @@ void TTxController::OnTabletInit() {
     }
 }
 
-std::shared_ptr<TTxController::ITransactionOperator> TTxController::StartProposeOnExecute(const TTxController::TBasicTxInfo& txInfo, const TString& txBody, const TActorId source, const ui64 cookie, 
-    const std::optional<TMessageSeqNo>& seqNo, NTabletFlatExecutor::TTransactionContext& txc) {
+std::shared_ptr<TTxController::ITransactionOperator> TTxController::StartProposeOnExecute(const TTxController::TTxInfo& txInfo, const TString& txBody, NTabletFlatExecutor::TTransactionContext& txc) {
     NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("method", "TTxController::StartProposeOnExecute")("tx_info", txInfo.DebugString());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "start");
-    std::shared_ptr<TTxController::ITransactionOperator> txOperator(TTxController::ITransactionOperator::TFactory::Construct(txInfo.TxKind,
-        TTxController::TTxInfo(txInfo.TxKind, txInfo.TxId, source, cookie, seqNo)));
+    std::shared_ptr<TTxController::ITransactionOperator> txOperator(TTxController::ITransactionOperator::TFactory::Construct(txInfo.TxKind, txInfo));
     AFL_VERIFY(!!txOperator);
     if (!txOperator->Parse(Owner, txBody)) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse txOperator");
@@ -359,14 +357,9 @@ void TTxController::FinishProposeOnComplete(const ui64 txId, const TActorContext
     txOperator->SendReply(Owner, ctx);
 }
 
-bool TTxController::ITransactionOperator::SwitchState(const EStatus from, const EStatus to) {
-    if (!Status || Status == from) {
-        Status = to;
-        return true;
-    } else {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("real_state", *Status)("expected", from);
-        return false;
-    }
+void TTxController::ITransactionOperator::SwitchStateVerified(const EStatus from, const EStatus to) {
+    AFL_VERIFY(!Status || *Status == from)("error", "incorrect expected status")("real_state", *Status)("expected", from)("details", DebugString());
+    Status = to;
 }
 
 }

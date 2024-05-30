@@ -39,6 +39,7 @@ SRCS(
     tx_create_dst_result.cpp
     tx_create_replication.cpp
     tx_create_stream_result.cpp
+    tx_describe_replication.cpp
     tx_discovery_targets_result.cpp
     tx_drop_dst_result.cpp
     tx_drop_replication.cpp

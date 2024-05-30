@@ -148,7 +148,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         AFL_VERIFY(startCount == 30);
 
         for (auto&& i : csController->GetShardActualIds()) {
-            kikimr.GetTestServer().GetRuntime()->Send(MakePipePeNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
+            kikimr.GetTestServer().GetRuntime()->Send(MakePipePerNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
                 new TEvents::TEvPoisonPill(), i, false));
         }
 

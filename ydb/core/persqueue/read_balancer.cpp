@@ -511,7 +511,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
             Y_ABORT_UNLESS(p.GetPartition() >= prevNextPartitionId && p.GetPartition() < NextPartitionId || NextPartitionId == 0);
 
             partitionsInfo[p.GetPartition()] = {p.GetTabletId(), {}};
-            if (SplitMergeEnabled(TabletConfig)) {
+            if (SplitMergeEnabled(TabletConfig) && p.HasKeyRange()) {
                 partitionsInfo[p.GetPartition()].KeyRange.DeserializeFromProto(p.GetKeyRange());
             }
 
@@ -540,13 +540,13 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     }
     PartitionsInfo = std::unordered_map<ui32, TPartitionInfo>(partitionsInfo.rbegin(), partitionsInfo.rend());
 
+    Balancer->UpdateConfig(newPartitionsIds, deletedPartitions, ctx);
+
     Execute(new TTxWrite(this, std::move(deletedPartitions), std::move(newPartitions), std::move(newTablets), std::move(newGroups), std::move(reallocatedTablets)), ctx);
 
     if (SubDomainPathId && (!WatchingSubDomainPathId || *WatchingSubDomainPathId != *SubDomainPathId)) {
         StartWatchingSubDomainPathId();
     }
-
-    Balancer->UpdateConfig(newPartitionsIds, deletedPartitions, ctx);
 
     UpdateConfigCounters();
 }

@@ -1,10 +1,5 @@
 UNITTEST_FOR(ydb/core/http_proxy)
 
-OWNER(
-    g:kikimr
-    g:logbroker
-)
-
 SIZE(MEDIUM)
 
 FORK_SUBTESTS()

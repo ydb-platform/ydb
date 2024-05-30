@@ -120,8 +120,8 @@ public:
         return Name.GetLiteral() ? &Full : nullptr;
     }
 
-    TNodePtr BuildKeys(TContext&, ITableKeys::EBuildKeysMode) override {
-        auto path = Name.Build(); // ToDo Need some prefix here?
+    TNodePtr BuildKeys(TContext& ctx, ITableKeys::EBuildKeysMode) override {
+        const auto path = ctx.GetPrefixedPath(Service, Cluster, Name);
         if (!path) {
             return nullptr;
         }
@@ -152,7 +152,125 @@ static INode::TPtr CreateIndexType(TIndexDescription::EType type, const INode& n
     }
 }
 
-static INode::TPtr CreateIndexDesc(const TIndexDescription& index, const INode& node) {
+enum class ETableSettingsParsingMode {
+    Create,
+    Alter
+};
+
+static INode::TPtr CreateTableSettings(const TTableSettings& tableSettings, ETableSettingsParsingMode parsingMode, const INode& node) {
+    // short aliases for member function calls
+    auto Y = [&node](auto&&... args) { return node.Y(std::forward<decltype(args)>(args)...); };
+    auto Q = [&node](auto&&... args) { return node.Q(std::forward<decltype(args)>(args)...); };
+    auto L = [&node](auto&&... args) { return node.L(std::forward<decltype(args)>(args)...); };
+
+    auto settings = Y();
+
+    if (tableSettings.DataSourcePath) {
+        settings = L(settings, Q(Y(Q("data_source_path"), tableSettings.DataSourcePath)));
+    }
+    if (tableSettings.Location) {
+        if (tableSettings.Location.IsSet()) {
+            settings = L(settings, Q(Y(Q("location"), tableSettings.Location.GetValueSet())));
+        } else {
+            Y_ENSURE(parsingMode != ETableSettingsParsingMode::Create, "Can't reset LOCATION in create mode");
+            settings = L(settings, Q(Y(Q("location"))));
+        }
+    }
+    for (const auto& resetableParam : tableSettings.ExternalSourceParameters) {
+        Y_ENSURE(resetableParam, "Empty parameter");
+        if (resetableParam.IsSet()) {
+            const auto& [id, value] = resetableParam.GetValueSet();
+            settings = L(settings, Q(Y(Q(id.Name), value)));
+        } else {
+            Y_ENSURE(parsingMode != ETableSettingsParsingMode::Create,
+                     "Can't reset " << resetableParam.GetValueReset().Name << " in create mode"
+            );
+            settings = L(settings, Q(Y(Q(resetableParam.GetValueReset().Name))));
+        }
+    }
+    if (tableSettings.CompactionPolicy) {
+        settings = L(settings, Q(Y(Q("compactionPolicy"), tableSettings.CompactionPolicy)));
+    }
+    if (tableSettings.AutoPartitioningBySize) {
+        const auto& ref = tableSettings.AutoPartitioningBySize.GetRef();
+        settings = L(settings, Q(Y(Q("autoPartitioningBySize"), BuildQuotedAtom(ref.Pos, ref.Name))));
+    }
+    if (tableSettings.UniformPartitions && parsingMode == ETableSettingsParsingMode::Create) {
+        settings = L(settings, Q(Y(Q("uniformPartitions"), tableSettings.UniformPartitions)));
+    }
+    if (tableSettings.PartitionAtKeys && parsingMode == ETableSettingsParsingMode::Create) {
+        auto keysDesc = Y();
+        for (const auto& key : tableSettings.PartitionAtKeys) {
+            auto columnsDesc = Y();
+            for (auto column : key) {
+                columnsDesc = L(columnsDesc, column);
+            }
+            keysDesc = L(keysDesc, Q(columnsDesc));
+        }
+        settings = L(settings, Q(Y(Q("partitionAtKeys"), Q(keysDesc))));
+    }
+    if (tableSettings.PartitionSizeMb) {
+        settings = L(settings, Q(Y(Q("partitionSizeMb"), tableSettings.PartitionSizeMb)));
+    }
+    if (tableSettings.AutoPartitioningByLoad) {
+        const auto& ref = tableSettings.AutoPartitioningByLoad.GetRef();
+        settings = L(settings, Q(Y(Q("autoPartitioningByLoad"), BuildQuotedAtom(ref.Pos, ref.Name))));
+    }
+    if (tableSettings.MinPartitions) {
+        settings = L(settings, Q(Y(Q("minPartitions"), tableSettings.MinPartitions)));
+    }
+    if (tableSettings.MaxPartitions) {
+        settings = L(settings, Q(Y(Q("maxPartitions"), tableSettings.MaxPartitions)));
+    }
+    if (tableSettings.KeyBloomFilter) {
+        const auto& ref = tableSettings.KeyBloomFilter.GetRef();
+        settings = L(settings, Q(Y(Q("keyBloomFilter"), BuildQuotedAtom(ref.Pos, ref.Name))));
+    }
+    if (tableSettings.ReadReplicasSettings) {
+        settings = L(settings, Q(Y(Q("readReplicasSettings"), tableSettings.ReadReplicasSettings)));
+    }
+    if (const auto& ttl = tableSettings.TtlSettings) {
+        if (ttl.IsSet()) {
+            const auto& ttlSettings = ttl.GetValueSet();
+            auto opts = Y();
+
+            opts = L(opts, Q(Y(Q("columnName"), BuildQuotedAtom(ttlSettings.ColumnName.Pos, ttlSettings.ColumnName.Name))));
+            opts = L(opts, Q(Y(Q("expireAfter"), ttlSettings.Expr)));
+
+            if (ttlSettings.ColumnUnit) {
+                opts = L(opts, Q(Y(Q("columnUnit"), Q(ToString(*ttlSettings.ColumnUnit)))));
+            }
+
+            settings = L(settings, Q(Y(Q("setTtlSettings"), Q(opts))));
+        } else {
+            YQL_ENSURE(parsingMode != ETableSettingsParsingMode::Create, "Can't reset TTL settings in create mode");
+            settings = L(settings, Q(Y(Q("resetTtlSettings"), Q(Y()))));
+        }
+    }
+    if (const auto& tiering = tableSettings.Tiering) {
+        if (tiering.IsSet()) {
+            settings = L(settings, Q(Y(Q("setTiering"), tiering.GetValueSet())));
+        } else {
+            YQL_ENSURE(parsingMode != ETableSettingsParsingMode::Create, "Can't reset TIERING in create mode");
+            settings = L(settings, Q(Y(Q("resetTiering"), Q(Y()))));
+        }
+    }
+    if (tableSettings.StoreExternalBlobs) {
+        const auto& ref = tableSettings.StoreExternalBlobs.GetRef();
+        settings = L(settings, Q(Y(Q("storeExternalBlobs"), BuildQuotedAtom(ref.Pos, ref.Name))));
+    }
+    if (tableSettings.StoreType && parsingMode == ETableSettingsParsingMode::Create) {
+        const auto& ref = tableSettings.StoreType.GetRef();
+        settings = L(settings, Q(Y(Q("storeType"), BuildQuotedAtom(ref.Pos, ref.Name))));
+    }
+    if (tableSettings.PartitionByHashFunction && parsingMode == ETableSettingsParsingMode::Create) {
+        settings = L(settings, Q(Y(Q("partitionByHashFunction"), tableSettings.PartitionByHashFunction)));
+    }
+
+    return settings;
+}
+
+static INode::TPtr CreateIndexDesc(const TIndexDescription& index, ETableSettingsParsingMode parsingMode, const INode& node) {
     auto indexColumns = node.Y();
     for (const auto& col : index.IndexColumns) {
         indexColumns = node.L(indexColumns, BuildQuotedAtom(col.Pos, col.Name));
@@ -163,10 +281,32 @@ static INode::TPtr CreateIndexDesc(const TIndexDescription& index, const INode& 
     }
     const auto& indexType = node.Y(node.Q("indexType"), CreateIndexType(index.Type, node));
     const auto& indexName = node.Y(node.Q("indexName"), BuildQuotedAtom(index.Name.Pos, index.Name.Name));
-    return node.Y(node.Q(indexName),
-                  node.Q(indexType),
-                  node.Q(node.Y(node.Q("indexColumns"), node.Q(indexColumns))),
-                  node.Q(node.Y(node.Q("dataColumns"), node.Q(dataColumns))));
+    auto indexNode = node.Y(
+        node.Q(indexName),
+        node.Q(indexType),
+        node.Q(node.Y(node.Q("indexColumns"), node.Q(indexColumns))),
+        node.Q(node.Y(node.Q("dataColumns"), node.Q(dataColumns)))
+    );
+    if (index.TableSettings.IsSet()) {
+        const auto& tableSettings = node.Y(
+            node.Q("tableSettings"),
+            node.Q(CreateTableSettings(index.TableSettings, parsingMode, node))
+        );
+        indexNode = node.L(indexNode, tableSettings);
+    }
+    return indexNode;
+}
+
+static INode::TPtr CreateAlterIndex(const TIndexDescription& index, const INode& node) {
+    const auto& indexName = node.Y(node.Q("indexName"), BuildQuotedAtom(index.Name.Pos, index.Name.Name));
+    const auto& tableSettings = node.Y(
+        node.Q("tableSettings"),
+        node.Q(CreateTableSettings(index.TableSettings, ETableSettingsParsingMode::Alter, node))
+    );
+    return node.Y(
+        node.Q(indexName),
+        node.Q(tableSettings)
+    );
 }
 
 static INode::TPtr CreateChangefeedDesc(const TChangefeedDescription& desc, const INode& node) {
@@ -1033,7 +1173,7 @@ public:
         }
 
         for (const auto& index : Params.Indexes) {
-            const auto& desc = CreateIndexDesc(index, *this);
+            const auto& desc = CreateIndexDesc(index, ETableSettingsParsingMode::Create, *this);
             opts = L(opts, Q(Y(Q("index"), Q(desc))));
         }
 
@@ -1043,96 +1183,9 @@ public:
         }
 
         if (Params.TableSettings.IsSet()) {
-            auto settings = Y();
-
-            if (Params.TableSettings.DataSourcePath) {
-                settings = L(settings, Q(Y(Q("data_source_path"), Params.TableSettings.DataSourcePath)));
-            }
-            if (Params.TableSettings.Location) {
-                Y_ENSURE(Params.TableSettings.Location.IsSet(), "Can't reset LOCATION in create mode");
-                settings = L(settings, Q(Y(Q("location"), Params.TableSettings.Location.GetValueSet())));
-            }
-            for (const auto& resetableParam: Params.TableSettings.ExternalSourceParameters) {
-                Y_ENSURE(resetableParam, "Empty parameter");
-                Y_ENSURE(resetableParam.IsSet(), "Can't reset " << resetableParam.GetValueReset().Name << " in create mode");
-                const auto& [id, value] = resetableParam.GetValueSet();
-                settings = L(settings, Q(Y(Q(id.Name), value)));
-            }
-            if (Params.TableSettings.CompactionPolicy) {
-                settings = L(settings, Q(Y(Q("compactionPolicy"), Params.TableSettings.CompactionPolicy)));
-            }
-            if (Params.TableSettings.AutoPartitioningBySize) {
-                const auto& ref = Params.TableSettings.AutoPartitioningBySize.GetRef();
-                settings = L(settings, Q(Y(Q("autoPartitioningBySize"), BuildQuotedAtom(ref.Pos, ref.Name))));
-            }
-            if (Params.TableSettings.UniformPartitions) {
-                settings = L(settings, Q(Y(Q("uniformPartitions"), Params.TableSettings.UniformPartitions)));
-            }
-            if (Params.TableSettings.PartitionAtKeys) {
-                auto keysDesc = Y();
-                for (const auto& key : Params.TableSettings.PartitionAtKeys) {
-                    auto columnsDesc = Y();
-                    for (auto column : key) {
-                        columnsDesc = L(columnsDesc, column);
-                    }
-                    keysDesc = L(keysDesc, Q(columnsDesc));
-                }
-                settings = L(settings, Q(Y(Q("partitionAtKeys"), Q(keysDesc))));
-            }
-            if (Params.TableSettings.PartitionSizeMb) {
-                settings = L(settings, Q(Y(Q("partitionSizeMb"), Params.TableSettings.PartitionSizeMb)));
-            }
-            if (Params.TableSettings.AutoPartitioningByLoad) {
-                const auto& ref = Params.TableSettings.AutoPartitioningByLoad.GetRef();
-                settings = L(settings, Q(Y(Q("autoPartitioningByLoad"), BuildQuotedAtom(ref.Pos, ref.Name))));
-            }
-            if (Params.TableSettings.MinPartitions) {
-                settings = L(settings, Q(Y(Q("minPartitions"), Params.TableSettings.MinPartitions)));
-            }
-            if (Params.TableSettings.MaxPartitions) {
-                settings = L(settings, Q(Y(Q("maxPartitions"), Params.TableSettings.MaxPartitions)));
-            }
-            if (Params.TableSettings.KeyBloomFilter) {
-                const auto& ref = Params.TableSettings.KeyBloomFilter.GetRef();
-                settings = L(settings, Q(Y(Q("keyBloomFilter"), BuildQuotedAtom(ref.Pos, ref.Name))));
-            }
-            if (Params.TableSettings.ReadReplicasSettings) {
-                settings = L(settings, Q(Y(Q("readReplicasSettings"), Params.TableSettings.ReadReplicasSettings)));
-            }
-            if (const auto& ttl = Params.TableSettings.TtlSettings) {
-                if (ttl.IsSet()) {
-                    const auto& ttlSettings = ttl.GetValueSet();
-                    auto opts = Y();
-
-                    opts = L(opts, Q(Y(Q("columnName"), BuildQuotedAtom(ttlSettings.ColumnName.Pos, ttlSettings.ColumnName.Name))));
-                    opts = L(opts, Q(Y(Q("expireAfter"), ttlSettings.Expr)));
-
-                    if (ttlSettings.ColumnUnit) {
-                        opts = L(opts, Q(Y(Q("columnUnit"), Q(ToString(*ttlSettings.ColumnUnit)))));
-                    }
-
-                    settings = L(settings, Q(Y(Q("setTtlSettings"), Q(opts))));
-                } else {
-                    YQL_ENSURE(false, "Can't reset TTL settings");
-                }
-            }
-            if (Params.TableSettings.Tiering) {
-                YQL_ENSURE(Params.TableSettings.Tiering.IsSet(), "Can't reset TIERING in create mode");
-                settings = L(settings, Q(Y(Q("setTiering"), Params.TableSettings.Tiering.GetValueSet())));
-            }
-            if (Params.TableSettings.StoreExternalBlobs) {
-                const auto& ref = Params.TableSettings.StoreExternalBlobs.GetRef();
-                settings = L(settings, Q(Y(Q("storeExternalBlobs"), BuildQuotedAtom(ref.Pos, ref.Name))));
-            }
-            if (Params.TableSettings.StoreType) {
-                const auto& ref = Params.TableSettings.StoreType.GetRef();
-                settings = L(settings, Q(Y(Q("storeType"), BuildQuotedAtom(ref.Pos, ref.Name))));
-            }
-            if (Params.TableSettings.PartitionByHashFunction) {
-                settings = L(settings, Q(Y(Q("partitionByHashFunction"), Params.TableSettings.PartitionByHashFunction)));
-            }
-
-            opts = L(opts, Q(Y(Q("tableSettings"), Q(settings))));
+            opts = L(opts, Q(Y(Q("tableSettings"), Q(
+                CreateTableSettings(Params.TableSettings, ETableSettingsParsingMode::Create, *this)
+            ))));
         }
 
         switch (Params.TableType) {
@@ -1282,7 +1335,8 @@ public:
                 for (const auto& family : col.Families) {
                     familiesDesc = L(familiesDesc, BuildQuotedAtom(family.Pos, family.Name));
                 }
-                columnDesc = L(columnDesc, Q(familiesDesc));
+
+                columnDesc = L(columnDesc, Q(Y(Q("setFamily"), Q(familiesDesc))));
                 columns = L(columns, Q(columnDesc));
             }
             actions = L(actions, Q(Y(Q("alterColumns"), Q(columns))));
@@ -1321,98 +1375,24 @@ public:
         }
 
         if (Params.TableSettings.IsSet()) {
-            auto settings = Y();
-            if (Params.TableSettings.DataSourcePath) {
-                settings = L(settings, Q(Y(Q("data_source_path"), Params.TableSettings.DataSourcePath)));
-            }
-            if (Params.TableSettings.Location) {
-                if (Params.TableSettings.Location.IsSet()) {
-                    settings = L(settings, Q(Y(Q("location"), Params.TableSettings.Location.GetValueSet())));
-                } else {
-                    settings = L(settings, Q(Y(Q("location"))));
-                }
-            }
-            for (const auto& resetableParam: Params.TableSettings.ExternalSourceParameters) {
-                Y_ENSURE(resetableParam, "Empty parameter");
-                if (resetableParam.IsSet()) {
-                    const auto& [id, value] = resetableParam.GetValueSet();
-                    settings = L(settings, Q(Y(Q(id.Name), value)));
-                } else {
-                    settings = L(settings, Q(Y(Q(resetableParam.GetValueReset().Name))));
-                }
-            }
-            if (Params.TableSettings.CompactionPolicy) {
-                settings = L(settings, Q(Y(Q("compactionPolicy"), Params.TableSettings.CompactionPolicy)));
-            }
-            if (Params.TableSettings.AutoPartitioningBySize) {
-                const auto& ref = Params.TableSettings.AutoPartitioningBySize.GetRef();
-                settings = L(settings, Q(Y(Q("autoPartitioningBySize"), BuildQuotedAtom(ref.Pos, ref.Name))));
-            }
-            if (Params.TableSettings.PartitionSizeMb) {
-                settings = L(settings, Q(Y(Q("partitionSizeMb"), Params.TableSettings.PartitionSizeMb)));
-            }
-            if (Params.TableSettings.AutoPartitioningByLoad) {
-                const auto& ref = Params.TableSettings.AutoPartitioningByLoad.GetRef();
-                settings = L(settings, Q(Y(Q("autoPartitioningByLoad"), BuildQuotedAtom(ref.Pos, ref.Name))));
-            }
-            if (Params.TableSettings.MinPartitions) {
-                settings = L(settings, Q(Y(Q("minPartitions"), Params.TableSettings.MinPartitions)));
-            }
-            if (Params.TableSettings.MaxPartitions) {
-                settings = L(settings, Q(Y(Q("maxPartitions"), Params.TableSettings.MaxPartitions)));
-            }
-            if (Params.TableSettings.KeyBloomFilter) {
-                const auto& ref = Params.TableSettings.KeyBloomFilter.GetRef();
-                settings = L(settings, Q(Y(Q("keyBloomFilter"), BuildQuotedAtom(ref.Pos, ref.Name))));
-            }
-            if (Params.TableSettings.ReadReplicasSettings) {
-                settings = L(settings, Q(Y(Q("readReplicasSettings"), Params.TableSettings.ReadReplicasSettings)));
-            }
-            if (const auto& ttl = Params.TableSettings.TtlSettings) {
-                if (ttl.IsSet()) {
-                    const auto& ttlSettings = ttl.GetValueSet();
-                    auto opts = Y();
-
-                    opts = L(opts, Q(Y(Q("columnName"), BuildQuotedAtom(ttlSettings.ColumnName.Pos, ttlSettings.ColumnName.Name))));
-                    opts = L(opts, Q(Y(Q("expireAfter"), ttlSettings.Expr)));
-
-                    if (ttlSettings.ColumnUnit) {
-                        opts = L(opts, Q(Y(Q("columnUnit"), Q(ToString(*ttlSettings.ColumnUnit)))));
-                    }
-
-                    settings = L(settings, Q(Y(Q("setTtlSettings"), Q(opts))));
-                } else {
-                    settings = L(settings, Q(Y(Q("resetTtlSettings"), Q(Y()))));
-                }
-            }
-            if (const auto& tiering = Params.TableSettings.Tiering) {
-                if (tiering.IsSet()) {
-                    settings = L(settings, Q(Y(Q("setTiering"), tiering.GetValueSet())));
-                } else {
-                    settings = L(settings, Q(Y(Q("resetTiering"), Q(Y()))));
-                }
-            }
-            if (Params.TableSettings.StoreExternalBlobs) {
-                const auto& ref = Params.TableSettings.StoreExternalBlobs.GetRef();
-                settings = L(settings, Q(Y(Q("storeExternalBlobs"), BuildQuotedAtom(ref.Pos, ref.Name))));
-            }
-            actions = L(actions, Q(Y(Q("setTableSettings"), Q(settings))));
+            actions = L(actions, Q(Y(Q("setTableSettings"), Q(
+                CreateTableSettings(Params.TableSettings, ETableSettingsParsingMode::Alter, *this)
+            ))));
         }
 
         for (const auto& index : Params.AddIndexes) {
-            const auto& desc = CreateIndexDesc(index, *this);
+            const auto& desc = CreateIndexDesc(index, ETableSettingsParsingMode::Alter, *this);
             actions = L(actions, Q(Y(Q("addIndex"), Q(desc))));
+        }
+
+        for (const auto& index : Params.AlterIndexes) {
+            const auto& desc = CreateAlterIndex(index, *this);
+            actions = L(actions, Q(Y(Q("alterIndex"), Q(desc))));
         }
 
         for (const auto& id : Params.DropIndexes) {
             auto indexName = BuildQuotedAtom(id.Pos, id.Name);
             actions = L(actions, Q(Y(Q("dropIndex"), indexName)));
-        }
-
-        if (Params.RenameTo) {
-            auto destination = ctx.GetPrefixedPath(Scoped->CurrService, Scoped->CurrCluster,
-                                                   TDeferredAtom(Params.RenameTo->Pos, Params.RenameTo->Name));
-            actions = L(actions, Q(Y(Q("renameTo"), destination)));
         }
 
         if (Params.RenameIndexTo) {
@@ -1425,6 +1405,12 @@ public:
             desc = L(desc, Q(Y(Q("dst"), dst)));
 
             actions = L(actions, Q(Y(Q("renameIndexTo"), Q(desc))));
+        }
+
+        if (Params.RenameTo) {
+            auto destination = ctx.GetPrefixedPath(Scoped->CurrService, Scoped->CurrCluster,
+                                                   TDeferredAtom(Params.RenameTo->Pos, Params.RenameTo->Name));
+            actions = L(actions, Q(Y(Q("renameTo"), destination)));
         }
 
         for (const auto& cf : Params.AddChangefeeds) {

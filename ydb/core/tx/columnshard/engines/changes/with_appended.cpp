@@ -1,4 +1,5 @@
 #include "with_appended.h"
+
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
@@ -39,7 +40,7 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
             auto& portionInfo = portionBuilder.GetPortionResult();
             switch (portionInfo.GetMeta().Produced) {
                 case NOlap::TPortionMeta::EProduced::UNSPECIFIED:
-                    Y_ABORT_UNLESS(false); // unexpected
+                    Y_ABORT_UNLESS(false);   // unexpected
                 case NOlap::TPortionMeta::EProduced::INSERTED:
                     self->IncCounter(NColumnShard::COUNTER_INDEXING_PORTIONS_WRITTEN);
                     break;
@@ -135,8 +136,6 @@ std::vector<TWritePortionInfoWithBlobs> TChangesWithAppend::MakeAppendedPortions
             auto b = batch->Slice(recordIdx, slice.GetRecordsCount());
             out.emplace_back(TWritePortionInfoWithBlobs::BuildByBlobs(slice.GroupChunksByBlobs(groups), pathId, resultSchema->GetVersion(), snapshot, SaverContext.GetStoragesManager()));
             out.back().FillStatistics(resultSchema->GetIndexInfo());
-            NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(resultSchema->GetIndexInfo().GetReplaceKey()));
-            NArrow::TMinMaxSpecialKeys snapshotKeys(b, TIndexInfo::ArrowSchemaSnapshot());
             out.back().GetPortionConstructor().AddMetadata(*resultSchema, b);
             out.back().GetPortionConstructor().MutableMeta().SetTierName(IStoragesManager::DefaultStorageId);
             recordIdx += slice.GetRecordsCount();
@@ -149,4 +148,4 @@ std::vector<TWritePortionInfoWithBlobs> TChangesWithAppend::MakeAppendedPortions
 void TChangesWithAppend::DoStart(NColumnShard::TColumnShard& /*self*/) {
 }
 
-}
+}   // namespace NKikimr::NOlap

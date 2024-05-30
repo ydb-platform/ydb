@@ -64,7 +64,7 @@ public:
         AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "start_scanner")("info", state.ToString(keyColumnTypes))
             ("range", DebugPrintRanges(keyColumnTypes, ranges, *AppData()->TypeRegistry))("subscribed", subscribed);
 
-        NActors::TActivationContext::AsActorContext().Send(MakePipePeNodeCacheID(false),
+        NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(false),
             new TEvPipeCache::TEvForward(ev.release(), TabletId, !subscribed), IEventHandle::FlagTrackDelivery);
     }
 
@@ -74,7 +74,7 @@ public:
             auto abortEv = std::make_unique<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::CANCELLED, message ? message : "stop from fetcher");
             NActors::TActivationContext::AsActorContext().Send(*ActorId, std::move(abortEv));
             if (finalFlag) {
-                NActors::TActivationContext::AsActorContext().Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvUnlink(TabletId));
+                NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(TabletId));
                 NActors::TActivationContext::AsActorContext().Send(TActivationContext::InterconnectProxy(ActorId->NodeId()), new TEvents::TEvUnsubscribe());
             }
             ActorId = {};

@@ -40,7 +40,7 @@ protected:
     }
     virtual void DoFinished(const TString& /*sessionId*/) const override {
 //        auto ev = std::make_unique<TBlobsTransferFinished>(sessionId);
-//        NActors::TActivationContext::AsActorContext().Send(MakePipePeNodeCacheID(false),
+//        NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(false),
 //            new TEvPipeCache::TEvForward(ev.release(), (ui64)TabletId, true), IEventHandle::FlagTrackDelivery, ReplyId);
     }
     virtual TString GetClassName() const override {

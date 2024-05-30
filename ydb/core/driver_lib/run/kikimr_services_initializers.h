@@ -143,9 +143,9 @@ public:
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
-class TTabletPipePeNodeCachesInitializer : public IKikimrServicesInitializer {
+class TTabletPipePerNodeCachesInitializer : public IKikimrServicesInitializer {
 public:
-    TTabletPipePeNodeCachesInitializer(const TKikimrRunConfig& runConfig);
+    TTabletPipePerNodeCachesInitializer(const TKikimrRunConfig& runConfig);
 
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
@@ -389,6 +389,12 @@ public:
 private:
     std::shared_ptr<TModuleFactories> Factories;
     IGlobalObjectStorage& GlobalObjects;
+};
+
+class TCompDiskLimiterInitializer: public IKikimrServicesInitializer {
+public:
+    TCompDiskLimiterInitializer(const TKikimrRunConfig& runConfig);
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
 class TCompConveyorInitializer: public IKikimrServicesInitializer {

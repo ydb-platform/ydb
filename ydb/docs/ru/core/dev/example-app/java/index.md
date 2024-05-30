@@ -27,8 +27,8 @@ git clone https://github.com/ydb-platform/ydb-java-examples
 
 Основные параметры инициализации драйвера
 * Cтрока подключения с информацией об [эндпоинте](../../../concepts/connect.md#endpoint) и [базе данных](../../../concepts/connect.md#database). Единственный обязательный параметр.
-* Провайдер [аутенфикации](../../../reference/ydb-sdk/recipes/auth.md##auth-provider). В случае отсутствия прямого указания будет использоваться [анонимное подключение](../../../concepts/auth.md).
-* Настройки [пула сессий](../../../reference/ydb-sdk/recipes/session-pool-limit.md)
+* Провайдер [аутенфикации](../../../recipes/ydb-sdk/auth.md##auth-provider). В случае отсутствия прямого указания будет использоваться [анонимное подключение](../../../concepts/auth.md).
+* Настройки [пула сессий](../../../recipes/ydb-sdk/session-pool-limit.md)
 
 Фрагмент кода приложения для инициализации драйвера:
 

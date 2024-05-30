@@ -52,15 +52,15 @@ public:
         return storage;
     }
 
-    NYql::NDqProto::TComputeActorState MakeState(NYql::NUdf::TUnboxedValuePod&& value) {
+    NYql::NDq::TComputeActorState MakeState(NYql::NUdf::TUnboxedValuePod&& value) {
         TString result;
         NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(result, value.AsStringRef());
-        NYql::NDqProto::TComputeActorState state;
-        state.MutableMiniKqlProgram()->MutableData()->MutableStateData()->SetBlob(result);
+        NYql::NDq::TComputeActorState state;
+        state.MiniKqlProgram.ConstructInPlace().Data.Blob = result;
         return state;
     }
 
-    NYql::NDqProto::TComputeActorState MakeStateFromBlob(size_t blobSize) {
+    NYql::NDq::TComputeActorState MakeStateFromBlob(size_t blobSize) {
         TString blob;
         blob.reserve(blobSize);
         for (size_t i = 0; i < blobSize; ++i) {
@@ -69,7 +69,7 @@ public:
         return MakeState(NKikimr::NMiniKQL::TOutputSerializer::MakeSimpleBlobState(blob, 0));
     }
 
-    NYql::NDqProto::TComputeActorState MakeIncrementState(size_t miniKqlPStateSize) {
+    NYql::NDq::TComputeActorState MakeIncrementState(size_t miniKqlPStateSize) {
         std::map<TString, TString> map;
         size_t itemCount = 4;
         for (size_t i = 0; i < itemCount; ++i) {
@@ -78,7 +78,7 @@ public:
         return MakeState(NKikimr::NMiniKQL::TOutputSerializer::MakeSnapshotState(map, 0));
     }
 
-    NYql::NDqProto::TComputeActorState MakeIncrementState(
+    NYql::NDq::TComputeActorState MakeIncrementState(
         const std::map<TString, TString>& snapshot,
         const std::map<TString, TString>& increment,
         const std::set<TString>& deleted)
@@ -94,13 +94,14 @@ public:
         ui64 taskId,
         const TString& graphId,
         const TCheckpointId& checkpointId,
-        const NYql::NDqProto::TComputeActorState& state)
+        const NYql::NDq::TComputeActorState& state)
     {
-        auto issues = storage->SaveState(taskId, graphId, checkpointId, state).GetValueSync();
+        auto [size, issues] = storage->SaveState(taskId, graphId, checkpointId, state).GetValueSync();
         UNIT_ASSERT_C(issues.Empty(), issues.ToString());
+        UNIT_ASSERT(size > 0);
     }
 
-    NYql::NDqProto::TComputeActorState GetState(
+    NYql::NDq::TComputeActorState GetState(
         TStateStoragePtr storage,
         const ui64 taskId,
         const TString& graphId,
@@ -112,16 +113,43 @@ public:
         return states[0];
     }
 
-    void ShouldSaveGetStateImpl(const char* tablePrefix, const NYql::NDqProto::TComputeActorState& state) {
+    void ShouldSaveGetStateImpl(const char* tablePrefix, const NYql::NDq::TComputeActorState& state) {
         auto storage = GetStateStorage(tablePrefix);
-        auto issues = storage->SaveState(1, "graph1", CheckpointId1, state).GetValueSync();
+        auto [size, issues] = storage->SaveState(1, "graph1", CheckpointId1, state).GetValueSync();
         UNIT_ASSERT_C(issues.Empty(), issues.ToString());
+        UNIT_ASSERT(size > 0);
 
         auto [states, getIssues] = storage->GetState({1}, "graph1", CheckpointId1).GetValueSync();
         UNIT_ASSERT_C(getIssues.Empty(), getIssues.ToString());
         UNIT_ASSERT(!states.empty());
-        UNIT_ASSERT(google::protobuf::util::MessageDifferencer::Equals(state, states[0]));
+        CheckEquals(state, states[0]);
     }
+
+    void CheckEquals(const NYql::NDq::TComputeActorState& state1, const NYql::NDq::TComputeActorState& state2) {
+        UNIT_ASSERT_VALUES_EQUAL(state1.MiniKqlProgram.Empty(), state2.MiniKqlProgram.Empty());
+        if (state1.MiniKqlProgram) {
+            UNIT_ASSERT_VALUES_EQUAL(state1.MiniKqlProgram->Data.Blob, state2.MiniKqlProgram->Data.Blob);
+            UNIT_ASSERT_VALUES_EQUAL(state1.MiniKqlProgram->Data.Version, state2.MiniKqlProgram->Data.Version);
+            UNIT_ASSERT_VALUES_EQUAL(state1.MiniKqlProgram->RuntimeVersion, state2.MiniKqlProgram->RuntimeVersion);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(state1.Sources.size(), state2.Sources.size());
+        UNIT_ASSERT(std::equal(std::begin(state1.Sources), std::end(state1.Sources), std::begin(state2.Sources), std::end(state2.Sources),
+            [](const NYql::NDq::TSourceState& state1, const NYql::NDq::TSourceState& state2) {
+                UNIT_ASSERT_VALUES_EQUAL(state1.InputIndex, state2.InputIndex);
+                UNIT_ASSERT_VALUES_EQUAL(state1.Data.size(), state2.Data.size());
+                return true;
+            }));
+        
+        UNIT_ASSERT_VALUES_EQUAL(state1.Sinks.size(), state2.Sinks.size());
+        UNIT_ASSERT(std::equal(std::begin(state1.Sinks), std::end(state1.Sinks), std::begin(state2.Sinks), std::end(state2.Sinks),
+            [](const NYql::NDq::TSinkState& state1, const NYql::NDq::TSinkState& state2) {
+                UNIT_ASSERT_VALUES_EQUAL(state1.OutputIndex, state2.OutputIndex);
+                UNIT_ASSERT_VALUES_EQUAL(state1.Data.Blob, state2.Data.Blob);
+                UNIT_ASSERT_VALUES_EQUAL(state1.Data.Version, state2.Data.Version);
+                return true;
+            }));
+    }
+
 private:
     NKikimr::NMiniKQL::TScopedAlloc Alloc;
     NKikimr::TActorSystemStub ActorSystemStub;
@@ -147,8 +175,8 @@ Y_UNIT_TEST_SUITE(TStateStorageTest) {
         auto state2 = NKikimr::NMiniKQL::TOutputSerializer::MakeSimpleBlobState(TString(20, 'b'), 0);
         NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(result, state1.AsStringRef());
         NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(result, state2.AsStringRef());
-        NYql::NDqProto::TComputeActorState state;
-        state.MutableMiniKqlProgram()->MutableData()->MutableStateData()->SetBlob(result);
+        NYql::NDq::TComputeActorState state;
+        state.MiniKqlProgram.ConstructInPlace().Data.Blob = result;
         ShouldSaveGetStateImpl("TStateStorageTestShouldSaveGetState", state);
     }
 
@@ -300,8 +328,9 @@ Y_UNIT_TEST_SUITE(TStateStorageTest) {
     Y_UNIT_TEST_F(ShouldIssueErrorOnNonExistentState, TFixture) {
         auto storage = GetStateStorage("TStateStorageTestShouldIssueErrorOnNonExistentState");
 
-        auto issues = storage->SaveState(1, "graph1", CheckpointId1, MakeStateFromBlob(4)).GetValueSync();
+        auto [size, issues] = storage->SaveState(1, "graph1", CheckpointId1, MakeStateFromBlob(4)).GetValueSync();
         UNIT_ASSERT(issues.Empty());
+        UNIT_ASSERT(size > 0);
 
         auto getResult = storage->GetState({1}, "graph1", CheckpointId1).GetValueSync();
         UNIT_ASSERT(getResult.second.Empty());
@@ -321,32 +350,33 @@ Y_UNIT_TEST_SUITE(TStateStorageTest) {
         auto state3 = MakeStateFromBlob(YdbRowSizeLimit * 6);
         auto state4 = MakeIncrementState(YdbRowSizeLimit * 3);
 
-        auto issues = storage->SaveState(1, "graph1", CheckpointId1, state1).GetValueSync();
+        auto [size, issues] = storage->SaveState(1, "graph1", CheckpointId1, state1).GetValueSync();
         UNIT_ASSERT(issues.Empty());
-        issues = storage->SaveState(42, "graph1", CheckpointId1, state2).GetValueSync();
+        UNIT_ASSERT(size > 0);
+        issues = storage->SaveState(42, "graph1", CheckpointId1, state2).GetValueSync().second;
         UNIT_ASSERT(issues.Empty());
-        issues = storage->SaveState(7, "graph1", CheckpointId1, state3).GetValueSync();
+        issues = storage->SaveState(7, "graph1", CheckpointId1, state3).GetValueSync().second;
         UNIT_ASSERT(issues.Empty());
-        issues = storage->SaveState(13, "graph1", CheckpointId1, state4).GetValueSync();
+        issues = storage->SaveState(13, "graph1", CheckpointId1, state4).GetValueSync().second;
         UNIT_ASSERT(issues.Empty());
 
         auto [states, getIssues] = storage->GetState({1, 42, 7, 13}, "graph1", CheckpointId1).GetValueSync();
         UNIT_ASSERT_C(getIssues.Empty(), getIssues.ToString());
         UNIT_ASSERT_VALUES_EQUAL(states.size(), 4);
 
-        UNIT_ASSERT(google::protobuf::util::MessageDifferencer::Equals(state1, states[0]));
-        UNIT_ASSERT(google::protobuf::util::MessageDifferencer::Equals(state2, states[1]));
-        UNIT_ASSERT(google::protobuf::util::MessageDifferencer::Equals(state3, states[2]));
-        UNIT_ASSERT(google::protobuf::util::MessageDifferencer::Equals(state4, states[3]));
+        CheckEquals(state1, states[0]);
+        CheckEquals(state2, states[1]);
+        CheckEquals(state3, states[2]);
+        CheckEquals(state4, states[3]);
 
         // in different order
         auto [states2, getIssues2] = storage->GetState({42, 1, 13, 7}, "graph1", CheckpointId1).GetValueSync();
         UNIT_ASSERT(getIssues2.Empty());
         UNIT_ASSERT_VALUES_EQUAL(states2.size(), 4);
-        UNIT_ASSERT(google::protobuf::util::MessageDifferencer::Equals(state2, states2[0]));
-        UNIT_ASSERT(google::protobuf::util::MessageDifferencer::Equals(state1, states2[1]));
-        UNIT_ASSERT(google::protobuf::util::MessageDifferencer::Equals(state4, states2[2]));
-        UNIT_ASSERT(google::protobuf::util::MessageDifferencer::Equals(state3, states2[3]));
+        CheckEquals(state2, states2[0]);
+        CheckEquals(state1, states2[1]);
+        CheckEquals(state4, states2[2]);
+        CheckEquals(state3, states2[3]);
     }
 
     Y_UNIT_TEST_F(ShouldLoadLastSnapshot, TFixture)
@@ -360,7 +390,7 @@ Y_UNIT_TEST_SUITE(TStateStorageTest) {
         SaveState(storage, 1, "graph1", CheckpointId2, state2);
 
         auto state = GetState(storage, 1, "graph1", CheckpointId2);
-        UNIT_ASSERT(google::protobuf::util::MessageDifferencer::Equals(state, state2));
+        CheckEquals(state, state2);
     }
 
     Y_UNIT_TEST_F(ShouldNotGetNonExistendSnaphotState, TFixture)
@@ -392,7 +422,7 @@ Y_UNIT_TEST_SUITE(TStateStorageTest) {
         auto expected = MakeIncrementState({{"key1", "value1-new"}, {"key3", "value3"}, {"key4", value4}}, {}, {});
 
         auto actual = GetState(storage, 1, "graph1", CheckpointId3);
-        UNIT_ASSERT(google::protobuf::util::MessageDifferencer::Equals(expected, actual));
+        CheckEquals(expected, actual);
     }
 
 };

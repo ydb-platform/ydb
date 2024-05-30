@@ -179,7 +179,7 @@ private:
         }
 
         auto watermarkInjectedToOutputs = false;
-        THolder<NDqProto::TMiniKqlProgramState> mkqlProgramState;
+        THolder<TMiniKqlProgramState> mkqlProgramState;
         if (res == ERunStatus::PendingInput || res == ERunStatus::Finished) {
             if (shouldHandleWatermark) {
                 const auto watermarkRequested = ev->Get()->WatermarkRequest->Watermark;
@@ -196,12 +196,12 @@ private:
             }
 
             if (ev->Get()->CheckpointRequest.Defined() && ReadyToCheckpoint()) {
-                mkqlProgramState = MakeHolder<NDqProto::TMiniKqlProgramState>();
+                mkqlProgramState = MakeHolder<TMiniKqlProgramState>();
                 try {
-                    mkqlProgramState->SetRuntimeVersion(NDqProto::RUNTIME_VERSION_YQL_1_0);
-                    NDqProto::TStateData::TData& data = *mkqlProgramState->MutableData()->MutableStateData();
-                    data.SetVersion(TDqComputeActorCheckpoints::ComputeActorCurrentStateVersion);
-                    data.SetBlob(TaskRunner->Save());
+                    mkqlProgramState->RuntimeVersion = NDqProto::RUNTIME_VERSION_YQL_1_0;
+                    TStateData& data = mkqlProgramState->Data;
+                    data.Version = TDqComputeActorCheckpoints::ComputeActorCurrentStateVersion;
+                    data.Blob = TaskRunner->Save();
                     // inject barriers
                     // todo:(whcrc) barriers are injected even if source state save failed
                     for (const auto& channelId : ev->Get()->CheckpointRequest->ChannelIds) {
@@ -405,7 +405,7 @@ private:
     void OnDqTask(TEvTaskRunnerCreate::TPtr& ev) {
         ParentId = ev->Sender;
         auto settings = NDq::TDqTaskSettings(&ev->Get()->Task);
-        TaskRunner = Factory(*Alloc.get(), settings, ev->Get()->StatsMode, [this](const TString& message) {
+        TaskRunner = Factory(Alloc, settings, ev->Get()->StatsMode, [this](const TString& message) {
             LOG_D(message);
         });
 
@@ -423,7 +423,11 @@ private:
 
         auto guard = TaskRunner->BindAllocator(MemoryQuota ? TMaybe<ui64>(MemoryQuota->GetMkqlMemoryLimit()) : Nothing());
         if (MemoryQuota) {
-            MemoryQuota->TrySetIncreaseMemoryLimitCallback(guard.GetMutex());
+            if (settings.GetEnableSpilling()) {
+                MemoryQuota->TrySetIncreaseMemoryLimitCallbackWithRSSControl(guard.GetMutex());
+            } else {
+                MemoryQuota->TrySetIncreaseMemoryLimitCallback(guard.GetMutex());
+            }   
         }
 
         TaskRunner->Prepare(settings, ev->Get()->MemoryLimits, *ev->Get()->ExecCtx);

@@ -1,7 +1,5 @@
 PY3_LIBRARY()
 
-    SUBSCRIBER(iddqd)
-
     PY_SRCS (
         allure_utils.py
         results_processor.py

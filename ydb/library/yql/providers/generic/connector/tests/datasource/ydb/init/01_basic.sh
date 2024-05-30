@@ -45,8 +45,8 @@ set -ex
       (10, 20);
     COMMIT;
 
-    CREATE TABLE primitives (
-      id Int32 NOT NULL,
+    CREATE TABLE primitive_types_NATIVE (
+      col_00_id Int32 NOT NULL,
       col_01_bool Bool NOT NULL,
       col_02_int8 Int8 NOT NULL,
       col_03_int16 Int16 NOT NULL,
@@ -63,14 +63,15 @@ set -ex
       col_14_date Date NOT NULL,
       col_15_datetime Datetime NOT NULL,
       col_16_timestamp Timestamp NOT NULL,
-      PRIMARY KEY (id)
+      PRIMARY KEY (col_00_id)
     );
     COMMIT;
     INSERT INTO
-    primitives (id, col_01_bool, col_02_int8, col_03_int16, col_04_int32, col_05_int64, col_06_uint8, col_07_uint16,
-                col_08_uint32, col_09_uint64, col_10_float, col_11_double, col_12_string, col_13_utf8,
-                col_14_date, col_15_datetime, col_16_timestamp)
-    VALUES (1, false, 2, 3, 4, 5, 6, 7, 8, 9, 10.10f, 11.11f "аз", "az",
+    primitive_types_NATIVE 
+                (col_00_id, col_01_bool, col_02_int8, col_03_int16, col_04_int32, col_05_int64, col_06_uint8, 
+                col_07_uint16, col_08_uint32, col_09_uint64, col_10_float, col_11_double, col_12_string,
+                col_13_utf8, col_14_date, col_15_datetime, col_16_timestamp)
+    VALUES (1, false, 2, 3, 4, 5, 6, 7, 8, 9, 10.10f, 11.11f, "аз", "az",
             Date("1988-11-20"), Datetime("1988-11-20T12:55:28Z"), Timestamp("1988-11-20T12:55:28.111Z")),
            (2, true, -2, -3, -4, -5, 6, 7, 8, 9, -10.10f, -11.11f, "буки", "buki",
             Date("2024-05-27"), Datetime("2024-05-27T18:43:32Z"), Timestamp("2024-05-27T18:43:32.123456Z"));

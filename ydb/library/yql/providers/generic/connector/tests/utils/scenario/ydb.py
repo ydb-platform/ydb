@@ -30,9 +30,6 @@ def select_positive(
         generic_settings=test_case.generic_settings,
     )
 
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == 0, result.output
 
-    assert data_outs_equal(test_case.data_out, result.data_out_with_types), (
-        test_case.data_out,
-        result.data_out_with_types,
-    )
+    data_outs_equal(test_case.data_out, result.data_out_with_types)

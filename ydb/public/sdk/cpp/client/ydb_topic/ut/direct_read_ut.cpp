@@ -734,9 +734,7 @@ TSingleClusterReadSessionImpl<false>* TDirectReadSessionImplTestSetup::GetContro
             "client-session-id-1",
             "",
             Log,
-            [](TDuration, std::function<void()> cb) {
-                cb();
-            },
+            [](TDuration, std::function<void()> cb) { cb(); },
             MockReadProcessorFactory,
             GetEventsQueue(),
             FakeContext,
@@ -1100,6 +1098,48 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
 
         setup.AddDirectReadResponse(TMockDirectReadSessionProcessor::TServerReadInfo()
             .StopDirectReadPartitionSession(Ydb::StatusIds::OVERLOADED, TPartitionSessionId(1)));
+
+        gotClosedEvent.GetFuture().Wait();
+    }
+
+    Y_UNIT_TEST(RetryPartitionSession) {
+        TDirectReadSessionImplTestSetup setup;
+        size_t nRetries = 2;
+        setup.ReadSessionSettings.RetryPolicy(NYdb::NTopic::IRetryPolicy::GetFixedIntervalPolicy(
+            TDuration::MilliSeconds(1), TDuration::MilliSeconds(1), nRetries));
+
+        auto gotClosedEvent = NThreading::NewPromise();
+        TPartitionSessionId partitionSessionId = 1;
+
+        {
+            ::testing::InSequence sequence;
+
+            EXPECT_CALL(*setup.MockDirectReadProcessorFactory, OnCreateProcessor(_))
+                .WillOnce([&]() { setup.MockDirectReadProcessorFactory->CreateProcessor(setup.MockDirectReadProcessor); });
+
+            EXPECT_CALL(*setup.MockDirectReadProcessor, OnInitDirectReadRequest(_))
+                .Times(1);
+            EXPECT_CALL(*setup.MockDirectReadProcessor, OnStartDirectReadPartitionSessionRequest(_))
+                .Times(1 + nRetries);
+        }
+
+        auto session = setup.GetDirectReadSession({
+            .OnAbortSession = [&gotClosedEvent](TSessionClosedEvent&&) { gotClosedEvent.SetValue(); },
+            .OnSchedule = [](TDuration, std::function<void()> cb) { cb(); },
+        });
+
+        session->Start();
+        setup.MockDirectReadProcessorFactory->Wait();
+
+        session->AddPartitionSession({ .PartitionSessionId = partitionSessionId, .Location = {2, 3} });
+
+        setup.AddDirectReadResponse(TMockDirectReadSessionProcessor::TServerReadInfo()
+            .InitDirectReadResponse());
+
+        for (size_t i = 0; i < 1 + nRetries; ++i) {
+            setup.AddDirectReadResponse(TMockDirectReadSessionProcessor::TServerReadInfo()
+                .StopDirectReadPartitionSession(Ydb::StatusIds::OVERLOADED, TPartitionSessionId(partitionSessionId)));
+        }
 
         gotClosedEvent.GetFuture().Wait();
     }

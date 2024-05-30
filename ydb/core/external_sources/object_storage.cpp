@@ -2,9 +2,12 @@
 #include "object_storage.h"
 #include "validation_functions.h"
 
+#include <ydb/core/kqp/gateway/actors/kqp_ic_gateway_actors.h>
 #include <ydb/core/protos/external_sources.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/providers/s3/credentials/credentials.h>
 #include <ydb/library/yql/providers/s3/path_generator/yql_s3_path_generator.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
@@ -20,9 +23,10 @@ namespace NKikimr::NExternalSource {
 namespace {
 
 struct TObjectStorageExternalSource : public IExternalSource {
-    explicit TObjectStorageExternalSource(const std::vector<TRegExMatch>& hostnamePatterns, size_t pathsLimit)
+    explicit TObjectStorageExternalSource(const std::vector<TRegExMatch>& hostnamePatterns, NActors::TActorSystem* actorSystem, size_t pathsLimit)
         : HostnamePatterns(hostnamePatterns)
         , PathsLimit(pathsLimit)
+        , ActorSystem(actorSystem)
     {}
 
     virtual TString Pack(const NKikimrExternalSources::TSchema& schema,
@@ -255,6 +259,20 @@ struct TObjectStorageExternalSource : public IExternalSource {
         return issues;
     }
 
+    struct TMetadataResult : NYql::NCommon::TOperationResult {
+        std::shared_ptr<TMetadata> Metadata;
+    };
+
+    virtual NThreading::TFuture<std::shared_ptr<TMetadata>> LoadDynamicMetadata(std::shared_ptr<TMetadata> meta) override {
+        Y_UNUSED(ActorSystem);
+        // TODO: implement
+        return NThreading::MakeFuture(std::move(meta));
+    }
+
+    virtual bool CanLoadDynamicMetadata() const override {
+        return false;
+    }
+
 private:
     static bool IsValidIntervalUnit(const TString& unit) {
         static constexpr std::array<std::string_view, 7> IntervalUnits = {
@@ -474,12 +492,14 @@ private:
 private:
     const std::vector<TRegExMatch> HostnamePatterns;
     const size_t PathsLimit;
+    NActors::TActorSystem* ActorSystem = nullptr;
 };
 
 }
 
-IExternalSource::TPtr CreateObjectStorageExternalSource(const std::vector<TRegExMatch>& hostnamePatterns, size_t pathsLimit) {
-    return MakeIntrusive<TObjectStorageExternalSource>(hostnamePatterns, pathsLimit);
+
+IExternalSource::TPtr CreateObjectStorageExternalSource(const std::vector<TRegExMatch>& hostnamePatterns, NActors::TActorSystem* actorSystem, size_t pathsLimit) {
+    return MakeIntrusive<TObjectStorageExternalSource>(hostnamePatterns, actorSystem, pathsLimit);
 }
 
 NYql::TIssues Validate(const FederatedQuery::Schema& schema, const FederatedQuery::ObjectStorageBinding::Subset& objectStorage, size_t pathsLimit) {

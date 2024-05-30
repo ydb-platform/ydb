@@ -31,7 +31,7 @@ if [ "X${rebuild-0}" != X0 ]; then
     branch=`git branch --show-current`
     base=`git describe --always ${branch}-base`
     git checkout $base
-    (cd ${dq_path} && $ya_path/ya make --build relwithdebinfo && cp -L $dq_path/dqrun $dq_path/dqrun-unspilled)
+    (cd ${dq_path} && $ya_path/ya make --build relwithdebinfo && git describe --always --dirty >$dq_path/dqrun-unspilled.commit && cp -L $dq_path/dqrun $dq_path/dqrun-unspilled)
     git checkout @{-1}
     (cd ${dq_path} && $ya_path/ya make --build relwithdebinfo)
     (cd ${ydb_path}/ydb/library/yql/udfs/common && $ya_path/ya make --build relwithdebinfo datetime datetime2 string re2 set math unicode_base)
@@ -77,12 +77,16 @@ outdir=results-`date -u +%Y%m%dT%H%M%S`-${variant}-${datasize}-$tasks
 if false; then
 echo LLVM && \
 command time ${script_path}/runner/runner ${ql}-${datasize}-$tasks/${variant} ${ql}-${datasize}-$tasks/bindings.json $outdir ${dq_path}/dqrun-unspilled -s --fs-cfg ${dq_path}/examples/fs.conf --gateways-cfg $script_path/runner/test-gateways.conf --udfs-dir ${ydb_path}/ydb/library/yql/udfs/common/
+(cd ${dq_path} && git describe --always --dirty) > $outdir/${ql}-${datasize}-$tasks/${variant}/commit
 fi
 if false; then
 echo main NO LLVM && \
 command time ${script_path}/runner/runner ${qX}-${datasize}-$tasks/${variant} ${qX}-${datasize}-$tasks/${variant}/bindings.json $outdir ${dq_path}/dqrun-unspilled --enable-spilling -s --fs-cfg ${dq_path}/examples/fs.conf --gateways-cfg $script_path/runner/test-gateways.conf --udfs-dir ${ydb_path}/ydb/library/yql/udfs/common/
+(cd ${dq_path}; cat dqrun-unspilled.commit) > $outdir/${qX}-${datasize}-$tasks/${variant}/commit
 fi
 echo Spilling && \
 command time ${script_path}/runner/runner ${qs}-${datasize}-$tasks/${variant} ${qs}-${datasize}-$tasks/${variant}/bindings.json $outdir ${dq_path}/dqrun -s --enable-spilling --fs-cfg ${dq_path}/examples/fs.conf --gateways-cfg $script_path/runner/test-gateways.conf --udfs-dir ${ydb_path}/ydb/library/yql/udfs/common/
+(cd ${dq_path} && git describe --always --dirty) > $outdir/${qs}-${datasize}-$tasks/${variant}/commit
 echo main NO LLVM no enable spilling && \
 command time ${script_path}/runner/runner ${q}-${datasize}-$tasks/${variant} ${q}-${datasize}-$tasks/${variant}/bindings.json $outdir ${dq_path}/dqrun-unspilled -s --fs-cfg ${dq_path}/examples/fs.conf --gateways-cfg $script_path/runner/test-gateways.conf --udfs-dir ${ydb_path}/ydb/library/yql/udfs/common/
+(cd ${dq_path}; cat dqrun-unspilled.commit) > $outdir/${q}-${datasize}-$tasks/${variant}/commit

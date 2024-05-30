@@ -26,21 +26,21 @@ namespace {
         template <class TRowSet>
         TChunkData(const TRowSet& rowset) {
             using Schema = NColumnShard::Schema;
-            PlanStep = rowset.GetValue<Schema::IndexColumns::PlanStep>();
-            TxId = rowset.GetValue<Schema::IndexColumns::TxId>();
-            PortionId = rowset.GetValue<Schema::IndexColumns::Portion>();
-            GranuleId = rowset.GetValue<Schema::IndexColumns::Granule>();
-            Chunk = rowset.GetValue<Schema::IndexColumns::Chunk>();
-            Index = rowset.GetValue<Schema::IndexColumns::Index>();
-            ColumnIdx = rowset.GetValue<Schema::IndexColumns::ColumnIdx>();
+            PlanStep = rowset.template GetValue<Schema::IndexColumns::PlanStep>();
+            TxId = rowset.template GetValue<Schema::IndexColumns::TxId>();
+            PortionId = rowset.template GetValue<Schema::IndexColumns::Portion>();
+            GranuleId = rowset.template GetValue<Schema::IndexColumns::Granule>();
+            Chunk = rowset.template GetValue<Schema::IndexColumns::Chunk>();
+            Index = rowset.template GetValue<Schema::IndexColumns::Index>();
+            ColumnIdx = rowset.template GetValue<Schema::IndexColumns::ColumnIdx>();
 
-            XPlanStep = rowset.GetValue<Schema::IndexColumns::XPlanStep>();
-            XTxId = rowset.GetValue<Schema::IndexColumns::XTxId>();
-            Blob = rowset.GetValue<Schema::IndexColumns::Blob>();
-            Metadata = rowset.GetValue<Schema::IndexColumns::Metadata>();
-            Offset = rowset.GetValue<Schema::IndexColumns::Offset>();
-            Size = rowset.GetValue<Schema::IndexColumns::Size>();
-            PathId = rowset.GetValue<Schema::IndexColumns::PathId>();
+            XPlanStep = rowset.template GetValue<Schema::IndexColumns::XPlanStep>();
+            XTxId = rowset.template GetValue<Schema::IndexColumns::XTxId>();
+            Blob = rowset.template GetValue<Schema::IndexColumns::Blob>();
+            Metadata = rowset.template GetValue<Schema::IndexColumns::Metadata>();
+            Offset = rowset.template GetValue<Schema::IndexColumns::Offset>();
+            Size = rowset.template GetValue<Schema::IndexColumns::Size>();
+            PathId = rowset.template GetValue<Schema::IndexColumns::PathId>();
         }
     };
 }
@@ -70,10 +70,10 @@ public:
                     NIceDb::TUpdate<Schema::IndexColumns::PathId>(key.PathId),
                     NIceDb::TUpdate<Schema::IndexColumns::Blob>(key.Blob),
                     NIceDb::TUpdate<Schema::IndexColumns::Metadata>(key.Metadata),
-                    NIceDb::TUpdate<Schema::IndexColumns::Metadata>(key.Offset),
-                    NIceDb::TUpdate<Schema::IndexColumns::Metadata>(key.Size),
-                    NIceDb::TUpdate<Schema::IndexColumns::Metadata>(key.XPlanStep),
-                    NIceDb::TUpdate<Schema::IndexColumns::Metadata>(key.XTxId)
+                    NIceDb::TUpdate<Schema::IndexColumns::Offset>(key.Offset),
+                    NIceDb::TUpdate<Schema::IndexColumns::Size>(key.Size),
+                    NIceDb::TUpdate<Schema::IndexColumns::XPlanStep>(key.XPlanStep),
+                    NIceDb::TUpdate<Schema::IndexColumns::XTxId>(key.XTxId)
 
                 );
         }
@@ -96,6 +96,7 @@ public:
 
         std::vector<INormalizerChanges::TPtr> tasks;
         ui64 fullChunksCount = 0;
+        THashSet<ui64> portionIds;
         {
             auto rowset = db.Table<Schema::IndexColumns>().Select();
             if (!rowset.IsReady()) {
@@ -106,6 +107,7 @@ public:
 
             while (!rowset.EndOfSet()) {
                 if (rowset.GetValue<Schema::IndexColumns::Granule>() || rowset.GetValue<Schema::IndexColumns::Index>()) {
+                    AFL_VERIFY(portionIds.emplace(rowset.GetValue<Schema::IndexColumns::Portion>()).second);
                     TChunkData key(rowset);
 
                     changes->AddChunk(std::move(key));
@@ -115,6 +117,7 @@ public:
                     if (chunksCount == 10000) {
                         tasks.emplace_back(changes);
                         changes.reset(new TNormalizerResult());
+                        controller.GetCounters().CountObjects(chunksCount);
                         chunksCount = 0;
                     }
                 }
@@ -126,6 +129,7 @@ public:
 
             if (chunksCount > 0) {
                 tasks.emplace_back(changes);
+                controller.GetCounters().CountObjects(chunksCount);
             }
         }
         ACFL_INFO("normalizer", "TGranulesNormalizer")("message", TStringBuilder() << fullChunksCount << " chunks found");

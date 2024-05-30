@@ -1335,9 +1335,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnDirectReadDone(
     Ydb::Topic::StreamReadMessage::ReadResponse r;
     r.set_bytes_size(response.ByteSizeLong());
     auto* data = r.add_partition_data();
-
-    // TODO(qyryq) Eliminate copying.
-    data->CopyFrom(response.partition_data());
+    data->Swap(response.mutable_partition_data());
 
     TClientMessage<false> req;
     auto& ack = *req.mutable_direct_read_ack();

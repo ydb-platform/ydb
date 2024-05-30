@@ -1,7 +1,7 @@
 #include "mkql_skip.h"
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
-#include <ydb/library/yql/minikql/comp_nodes/mkql_simple_codegen.h>
+#include <ydb/library/yql/minikql/computation/mkql_simple_codegen.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 
 namespace NKikimr {

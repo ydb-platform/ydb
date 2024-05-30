@@ -14,6 +14,7 @@ using TChild = TBtreeIndexNode::TChild;
 using TColumns = TBtreeIndexNode::TColumns;
 using TCells = NPage::TCells;
 using TCellsIterable = TBtreeIndexNode::TCellsIterable;
+using TCellsIter = TBtreeIndexNode::TCellsIter;
 
 const static TCellsIterable EmptyKey(static_cast<const char*>(nullptr), TColumns());
 
@@ -21,20 +22,17 @@ class TTableHistogramBuilderBtreeIndex {
 public:
     struct TNodeState {
         TPageId PageId;
+        TCellsIterable BeginKey;
         TRowId BeginRowId;
         TRowId EndRowId;
-        TCellsIterable BeginKey;
-        TCellsIterable EndKey;
         ui64 BeginDataSize;
         ui64 EndDataSize;
-        std::optional<TBtreeIndexNode> Node;
 
-        TNodeState(TPageId pageId, TRowId beginRowId, TRowId endRowId, TCellsIterable beginKey, TCellsIterable endKey, ui64 beginDataSize, ui64 endDataSize)
+        TNodeState(TPageId pageId, TCellsIterable beginKey, TRowId beginRowId, TRowId endRowId, ui64 beginDataSize, ui64 endDataSize)
             : PageId(pageId)
+            , BeginKey(beginKey)
             , BeginRowId(beginRowId)
             , EndRowId(endRowId)
-            , BeginKey(beginKey)
-            , EndKey(endKey)
             , BeginDataSize(beginDataSize)
             , EndDataSize(endDataSize)
         {
@@ -62,6 +60,7 @@ private:
 public:
     TTableHistogramBuilderBtreeIndex(const TSubset& subset, IPages* env)
         : Subset(subset)
+        , KeyDefaults(*Subset.Scheme->Keys)
         , Env(env)
     {
     }
@@ -69,13 +68,14 @@ public:
     template <typename TGetSize>
     bool Build(THistogram& histogram, ui64 resolution, ui64 totalSize) {
         Resolution = resolution;
+        LoadedNodes.clear();
 
         TVector<TPartNodes> parts;
 
         for (const auto& part : Subset.Flatten) {
             auto& meta = part->IndexPages.GetBTree({});
             parts.emplace_back(part.Part.Get(), TVector<TNodeState>{
-                {meta.PageId, 0, meta.RowCount, EmptyKey, EmptyKey, 0, meta.GetTotalDataSize()}
+                {meta.PageId, EmptyKey, 0, meta.RowCount, 0, meta.GetTotalDataSize()}
             });
         }
 
@@ -106,7 +106,7 @@ private:
             Y_DEBUG_ABORT("Invalid part states");
             return true;
         }
-        auto& biggestPart = parts[biggestPartSize];
+        auto& biggestPart = parts[biggestPartIndex];
 
         // FIXME: load the biggest node if its size more than half
         if (biggestPart.Nodes.size() == 1) {
@@ -127,19 +127,43 @@ private:
             return true;
         }
 
-        ui64 splitSize = 0; // TODO: beginSize?
+        const auto cmp = [this](const TNodeState& left, const TCellsIterable& right) {
+            return CompareKeys(left.BeginKey.Iter(), right.Iter()) < 0;
+        };
+
+        ui64 splitSize = 0;
         ui64 leftSize = 0, rightSize = 0;
+
+        TVector<TPartNodes> leftParts, rightParts;
+        for (const auto& part : parts) {
+            auto iter = std::lower_bound(part.Nodes.begin(), part.Nodes.end(), splitKey, cmp);
+
+            TVector<TNodeState> leftNodes(part.Nodes.begin(), iter);
+            TVector<TNodeState> rightNodes(iter, part.Nodes.end());
+
+            // check end key????
+            if (leftNodes && (!rightNodes || CompareKeys(splitKey.Iter(), rightNodes.front().BeginKey.Iter()) < 0)) {
+                auto splitNode = leftNodes.back();
+                leftNodes.pop_back();
+
+                splitSize += TGetSize::Get(splitNode);
+            }
+
+            if (leftNodes) {
+                leftParts.emplace_back(part.Part, std::move(leftNodes));
+                leftSize += GetPartSize<TGetSize>(leftParts.back());
+            }
+            if (rightNodes) {
+                rightParts.emplace_back(part.Part, std::move(rightNodes));
+                rightSize += GetPartSize<TGetSize>(rightParts.back());
+            }
+        }
 
         // TODO: don't copy nodes?
 
-        TVector<TPartNodes> leftParts, rightParts;
-        // for (const auto& part : parts) {
-
-        // }
-
         ready &= BuildHistogramRecursive<TGetSize>(histogram, leftParts, beginSize, beginSize + leftSize, depth + 1);
         
-        AddBucket(histogram, splitKey, splitSize);
+        AddBucket(histogram, splitKey, beginSize + leftSize + splitSize / 2);
 
         ready &= BuildHistogramRecursive<TGetSize>(histogram, rightParts, SafeDiff(endSize, rightSize), endSize, depth + 1);
 
@@ -149,15 +173,21 @@ private:
     template <typename TGetSize>
     void FindBiggestPart(const TVector<TPartNodes>& parts, size_t& biggestPartIndex, ui64& biggestPartSize) {
         for (auto index : xrange(parts.size())) {
-            ui64 size = 0;
-            for (const auto& node : parts[index].Nodes) {
-                size += TGetSize::Get(node);
-            }
+            ui64 size = GetPartSize<TGetSize>(parts[index]);
             if (size > biggestPartSize) {
                 biggestPartSize = size;
                 biggestPartIndex = index;
             }
         }
+    }
+
+    template <typename TGetSize>
+    ui64 GetPartSize(const TPartNodes part) {
+        ui64 size = 0;
+        for (const auto& node : part.Nodes) {
+            size += TGetSize::Get(node);
+        }
+        return size;
     }
 
     template <typename TGetSize>
@@ -191,8 +221,8 @@ private:
         }
 
         // Extend with default values if needed
-        for (TPos index = splitKeyCells.size(); index < Subset.Scheme->Keys->Defs.size(); ++index) {
-            splitKeyCells.push_back(Subset.Scheme->Keys->Defs[index]);
+        for (TPos index = splitKeyCells.size(); index < KeyDefaults.Defs.size(); ++index) {
+            splitKeyCells.push_back(KeyDefaults.Defs[index]);
         }
 
         TString serializedSplitKey = TSerializedCellVec::Serialize(splitKeyCells);
@@ -200,45 +230,64 @@ private:
         histogram.push_back({serializedSplitKey, value});
     }
 
-    bool TryLoadNode(const TPart* part, TNodeState& node, TVector<TNodeState>& list) const noexcept {
+    bool TryLoadNode(const TPart* part, const TNodeState& node, TVector<TNodeState>& list) {
         auto page = Env->TryGetPage(part, node.PageId, {});
         if (!page) {
             return false;
         }
 
-        node.Node.emplace(*page);
+        LoadedNodes.emplace_back(*page);
+        auto &loadedNode = LoadedNodes.back();
         auto& groupInfo = part->Scheme->GetLayout({});
 
         TRowId currentBeginRowId = node.BeginRowId;
-        const TCellsIterable& currentBeginKey = node.BeginKey;
         ui64 currentBeginDataSize = node.BeginDataSize;
-        for (auto pos : xrange(node.Node->GetChildrenCount())) {
-            auto& child = node.Node->GetChild(pos);
-
-            TCellsIterable endKey = pos < node.Node->GetKeysCount() ? node.Node->GetKeyCellsIterable(pos, groupInfo.ColsKeyIdx) : node.EndKey;
+        for (auto pos : xrange(loadedNode.GetChildrenCount())) {
+            auto& child = loadedNode.GetChild(pos);
 
             list.emplace_back(child.PageId, 
+                pos ? loadedNode.GetKeyCellsIterable(pos - 1, groupInfo.ColsKeyData) : node.BeginKey, 
                 currentBeginRowId, child.RowCount, 
-                currentBeginKey, endKey, 
                 currentBeginDataSize, child.GetTotalDataSize());
+
+            currentBeginRowId = list.back().EndRowId;
+            currentBeginDataSize = list.back().EndDataSize;
         }
 
         return true;
     }
 
 private:
-    ui64 AbsDifference(ui64 a, ui64 b) {
+    int CompareKeys(TCellsIter left, TCellsIter right) const {
+        size_t end = Max(left.Count(), right.Count());
+        Y_DEBUG_ABORT_UNLESS(end <= KeyDefaults.Size(), "Key schema is smaller than compared keys");
+
+        
+        for (size_t pos = 0; pos < end; ++pos) {
+            const auto& leftCell = pos < left.Count() ? left.Next() : KeyDefaults.Defs[pos];
+            const auto& rightCell = pos < right.Count() ? right.Next() : KeyDefaults.Defs[pos];
+            if (int cmp = CompareTypedCells(leftCell, rightCell, KeyDefaults.Types[pos])) {
+                return cmp;
+            }
+        }
+
+        return 0;
+    }
+
+    ui64 AbsDifference(ui64 a, ui64 b) const {
         return static_cast<ui64>(std::abs(static_cast<i64>(a) - static_cast<i64>(b)));
     }
 
-    ui64 SafeDiff(ui64 a, ui64 b) {
+    ui64 SafeDiff(ui64 a, ui64 b) const {
         return a - Min(a, b);
     }
 
 private:
     const TSubset& Subset;
+    const TKeyCellDefaults& KeyDefaults;
     IPages* const Env;
     ui64 Resolution;
+    TDeque<TBtreeIndexNode> LoadedNodes; // keep nodes to use TCellsIterable key refs
 };
 
 }
@@ -249,7 +298,9 @@ inline bool BuildStatsHistogramsBTreeIndex(const TSubset& subset, TStats& stats,
     TTableHistogramBuilderBtreeIndex builder(subset, env);
 
     ready &= builder.Build<TTableHistogramBuilderBtreeIndex::TGetRowCount>(stats.RowCountHistogram, rowCountResolution, stats.RowCount);
-    ready &= builder.Build<TTableHistogramBuilderBtreeIndex::TGetDataSize>(stats.DataSizeHistogram, dataSizeResolution, stats.DataSize.Size);
+
+    Y_UNUSED(dataSizeResolution);
+    // ready &= builder.Build<TTableHistogramBuilderBtreeIndex::TGetDataSize>(stats.DataSizeHistogram, dataSizeResolution, stats.DataSize.Size);
 
     return ready;
 }

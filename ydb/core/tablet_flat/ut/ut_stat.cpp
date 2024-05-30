@@ -557,10 +557,18 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
 
         Cerr << "Checking " << (mode == FlatIndex ? "Flat" : (mode == MixedIndex ? "Mixed" : "BTree")) << ":" << Endl;
 
-        TStats stats;
-        TTouchEnv env;
-        ui64 rowCountResolution = 1, dataSizeResolution = 1;
+        ui64 totalRows = 0, totalBytes = 0;
+        {
+            TVector<TCell> emptyKey;
+            CalcDataBefore(subset, TSerializedCellVec(emptyKey), totalBytes, totalRows);
+        }
 
+        ui64 rowCountResolution = totalRows / 10;
+        ui64 dataSizeResolution = totalBytes / 10;
+
+        TTouchEnv env;
+        env.Faulty = false; // TODO: check faulty
+        TStats stats;
         auto buildStats = [&]() {
             if (mode == BTreeIndex) {
                 return NTable::BuildStatsBTreeIndex(subset, stats, rowCountResolution, dataSizeResolution, &env);
@@ -569,15 +577,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
             }
         };
 
-        env.Faulty = false;
-        buildStats();
-        ui64 totalRows = stats.RowCount, totalBytes = stats.DataSize.Size;
-        rowCountResolution = totalRows / 10;
-        dataSizeResolution = totalBytes / 10;
-
         const ui32 attempts = 10;
-        env = {};
-        env.Faulty = false;
         for (ui32 attempt : xrange(attempts)) {
             if (buildStats()) {
                 break;

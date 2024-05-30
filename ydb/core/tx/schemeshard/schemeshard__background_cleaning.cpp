@@ -54,8 +54,8 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCleaning(const TPathI
         return NOperationQueue::EStartStatus::EOperationRemove;
     }
 
-    auto tempTableIt = it->second.find(pathId);
-    if (tempTableIt == it->second.end()) {
+    auto tempDirIt = it->second.find(pathId);
+    if (tempDirIt == it->second.end()) {
         return NOperationQueue::EStartStatus::EOperationRemove;
     }
 
@@ -82,7 +82,7 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCleaning(const TPathI
         });
     auto& state = stateIter->second;
 
-    for (const auto& tablePathId : traverseResult.Objects) {
+    for (const auto& objectPathId : traverseResult.Objects) {
         const auto txId = GetCachedTxId(ctx);
         if (txId == InvalidTxId) {
             LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Out of txIds "
@@ -100,23 +100,23 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCleaning(const TPathI
         auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), TabletID());
         auto& record = propose->Record;
 
-        auto tablePath = TPath::Init(tablePathId, this);
+        auto objectPath = TPath::Init(objectPathId, this);
 
         auto& modifyScheme = *record.AddTransaction();
-        modifyScheme.SetWorkingDir(tablePath.Parent().PathString());
+        modifyScheme.SetWorkingDir(objectPath.Parent().PathString());
         modifyScheme.SetInternal(true);
 
-        switch (tablePath.Base()->PathType) {
+        switch (objectPath.Base()->PathType) {
             case NKikimrSchemeOp::EPathType::EPathTypeInvalid:
                 LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Error in RunBackgroundCleaning "
                     "for temp dir# " << JoinPath({info->WorkingDir, info->Name})
-                    << " invalid path: `" << tablePath.PathString() << "`");
+                    << " invalid path: `" << objectPath.PathString() << "`");
                 return NOperationQueue::EStartStatus::EOperationRemove;
             case NKikimrSchemeOp::EPathType::EPathTypeDir:
                 LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Internal error in RunBackgroundCleaning "
                     "for temp dir# " << JoinPath({info->WorkingDir, info->Name})
                     << " : Dir is not expected here `"
-                    << tablePath.PathString() << "`");
+                    << objectPath.PathString() << "`");
                 return NOperationQueue::EStartStatus::EOperationRemove;
             case NKikimrSchemeOp::EPathType::EPathTypeTable:
                 modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
@@ -128,49 +128,49 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCleaning(const TPathI
                 LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Internal error in RunBackgroundCleaning "
                     "for temp dir# " << JoinPath({info->WorkingDir, info->Name})
                     << " : SubDomain is not expected here `"
-                    << tablePath.PathString() << "`");
+                    << objectPath.PathString() << "`");
                 return NOperationQueue::EStartStatus::EOperationRemove;
             case NKikimrSchemeOp::EPathType::EPathTypeRtmrVolume:
                 LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Internal error in RunBackgroundCleaning "
                     "for temp dir# " << JoinPath({info->WorkingDir, info->Name})
                     << " : RtmrVolume is not expected here `"
-                    << tablePath.PathString() << "`");
+                    << objectPath.PathString() << "`");
                 return NOperationQueue::EStartStatus::EOperationRemove;
             case NKikimrSchemeOp::EPathType::EPathTypeBlockStoreVolume:
                 LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Internal error in RunBackgroundCleaning "
                     "for temp dir# " << JoinPath({info->WorkingDir, info->Name})
                     << " : BlockStoreVolume is not expected here `"
-                    << tablePath.PathString() << "`");
+                    << objectPath.PathString() << "`");
                 return NOperationQueue::EStartStatus::EOperationRemove;
             case NKikimrSchemeOp::EPathType::EPathTypeKesus:
                 LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Internal error in RunBackgroundCleaning "
                     "for temp dir# " << JoinPath({info->WorkingDir, info->Name})
                     << " : Kesus is not expected here `"
-                    << tablePath.PathString() << "`");
+                    << objectPath.PathString() << "`");
                 return NOperationQueue::EStartStatus::EOperationRemove;
             case NKikimrSchemeOp::EPathType::EPathTypeSolomonVolume:
                 LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Internal error in RunBackgroundCleaning "
                     "for temp dir# " << JoinPath({info->WorkingDir, info->Name})
                     << " : SolomonVolume is not expected here `"
-                    << tablePath.PathString() << "`");
+                    << objectPath.PathString() << "`");
                 return NOperationQueue::EStartStatus::EOperationRemove;
             case NKikimrSchemeOp::EPathType::EPathTypeTableIndex:
                 LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Internal error in RunBackgroundCleaning "
                     "for temp dir# " << JoinPath({info->WorkingDir, info->Name})
                     << " : TableIndex is not expected here `"
-                    << tablePath.PathString() << "`");
+                    << objectPath.PathString() << "`");
                 return NOperationQueue::EStartStatus::EOperationRemove;
             case NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain:
                 LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Internal error in RunBackgroundCleaning "
                     "for temp dir# " << JoinPath({info->WorkingDir, info->Name})
                     << " : ExtSubDomain is not expected here `"
-                    << tablePath.PathString() << "`");
+                    << objectPath.PathString() << "`");
                 return NOperationQueue::EStartStatus::EOperationRemove;
             case NKikimrSchemeOp::EPathType::EPathTypeFileStore:
                 LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Internal error in RunBackgroundCleaning "
                     "for temp dir# " << JoinPath({info->WorkingDir, info->Name})
                     << " : FileStore is not expected here `"
-                    << tablePath.PathString() << "`");
+                    << objectPath.PathString() << "`");
                 return NOperationQueue::EStartStatus::EOperationRemove;
             case NKikimrSchemeOp::EPathType::EPathTypeColumnStore:
                 modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropColumnStore);
@@ -182,7 +182,7 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCleaning(const TPathI
                 LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Internal error in RunBackgroundCleaning "
                     "for temp dir# " << JoinPath({info->WorkingDir, info->Name})
                     << " : CdcStream is not expected here `"
-                    << tablePath.PathString() << "`");
+                    << objectPath.PathString() << "`");
                 return NOperationQueue::EStartStatus::EOperationRemove;
             case NKikimrSchemeOp::EPathType::EPathTypeSequence:
                 modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropSequence);
@@ -191,13 +191,13 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCleaning(const TPathI
                 LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Internal error in RunBackgroundCleaning "
                     "for temp dir# " << JoinPath({info->WorkingDir, info->Name})
                     << " : Replication is not expected here `"
-                    << tablePath.PathString() << "`");
+                    << objectPath.PathString() << "`");
                 return NOperationQueue::EStartStatus::EOperationRemove;
             case NKikimrSchemeOp::EPathType::EPathTypeBlobDepot:
                 LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Internal error in RunBackgroundCleaning "
                     "for temp dir# " << JoinPath({info->WorkingDir, info->Name})
                     << " : BlobDepot is not expected here `"
-                    << tablePath.PathString() << "`");
+                    << objectPath.PathString() << "`");
                 return NOperationQueue::EStartStatus::EOperationRemove;
             case NKikimrSchemeOp::EPathType::EPathTypeExternalTable:
                 modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropExternalTable);
@@ -211,7 +211,7 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCleaning(const TPathI
         }
 
         auto& drop = *modifyScheme.MutableDrop();
-        drop.SetName(tablePath.LeafName());
+        drop.SetName(objectPath.LeafName());
 
         ++state.ObjectsToDrop;
 
@@ -382,16 +382,16 @@ void TSchemeShard::RetryNodeSubscribe(ui32 nodeId) {
         for (const auto& ownerActorId: nodeState.Owners) {
             auto& tempDirsByOwner = TempDirsState.TempDirsByOwner;
 
-            auto itTempTables = tempDirsByOwner.find(ownerActorId);
-            if (itTempTables == tempDirsByOwner.end()) {
+            auto itTempDirs = tempDirsByOwner.find(ownerActorId);
+            if (itTempDirs == tempDirsByOwner.end()) {
                 continue;
             }
 
-            auto& currentTempTables = itTempTables->second;
-            for (auto& pathId: currentTempTables) {
+            auto& currentTempDirs = itTempDirs->second;
+            for (auto& pathId: currentTempDirs) {
                 EnqueueBackgroundCleaning(pathId);
             }
-            tempDirsByOwner.erase(itTempTables);
+            tempDirsByOwner.erase(itTempDirs);
         }
         nodeStates.erase(it);
 

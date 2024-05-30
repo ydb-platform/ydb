@@ -142,9 +142,6 @@ struct TEvKqp {
 
     using TEvAbortExecution = NYql::NDq::TEvDq::TEvAbortExecution;
 
-    struct TEvFetchScriptResultsResponse : public TEventPB<TEvFetchScriptResultsResponse, NKikimrKqp::TEvFetchScriptResultsResponse, TKqpEvents::EvFetchScriptResultsResponse> {
-    };
-
     struct TEvCancelScriptExecutionRequest : public TEventPB<TEvCancelScriptExecutionRequest, NKikimrKqp::TEvCancelScriptExecutionRequest, TKqpEvents::EvCancelScriptExecutionRequest> {
     };
 

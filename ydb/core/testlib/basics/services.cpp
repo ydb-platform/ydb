@@ -105,11 +105,16 @@ namespace NPDisk {
             TActorSetupCmd(CreatePipePerNodeCache(persistentPipeConfig), TMailboxType::Revolving, 0), nodeIndex);
     }
 
-    void SetupResourceBroker(TTestActorRuntime& runtime, ui32 nodeIndex)
+    void SetupResourceBroker(TTestActorRuntime& runtime, ui32 nodeIndex, const NKikimrResourceBroker::TResourceBrokerConfig& resourceBrokerConfig)
     {
+        NKikimrResourceBroker::TResourceBrokerConfig config = NResourceBroker::MakeDefaultConfig();
+        if (resourceBrokerConfig.IsInitialized()) {
+            NResourceBroker::MergeConfigUpdates(config, resourceBrokerConfig);
+        }
+
         runtime.AddLocalService(NResourceBroker::MakeResourceBrokerID(),
             TActorSetupCmd(
-                NResourceBroker::CreateResourceBrokerActor(NResourceBroker::MakeDefaultConfig(), runtime.GetDynamicCounters(0)),
+                NResourceBroker::CreateResourceBrokerActor(config, runtime.GetDynamicCounters(0)),
                 TMailboxType::Revolving, 0),
             nodeIndex);
     }
@@ -360,7 +365,7 @@ namespace NPDisk {
 
             SetupTabletResolver(runtime, nodeIndex);
             SetupTabletPipePerNodeCaches(runtime, nodeIndex, forceFollowers);
-            SetupResourceBroker(runtime, nodeIndex);
+            SetupResourceBroker(runtime, nodeIndex, app.ResourceBrokerConfig);
             SetupSharedPageCache(runtime, nodeIndex, caches);
             SetupBlobCache(runtime, nodeIndex);
             SetupSysViewService(runtime, nodeIndex);

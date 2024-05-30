@@ -80,7 +80,6 @@ public:
 
     void ReplyAndPassAway() {
         TStringStream json;
-        TString headers = Viewer->GetHTTPOKJSON(Event->Get());
         if (DescribeResult != nullptr) {
             //TProtoToJson::ProtoToJson(json, DescribeResult->GetRecord(), JsonSettings);
             const auto& pbRecord(DescribeResult->GetRecord());
@@ -155,8 +154,9 @@ public:
 
             switch (DescribeResult->GetRecord().GetStatus()) {
             case NKikimrScheme::StatusAccessDenied:
-                headers = Viewer->GetHTTPFORBIDDEN(Event->Get());
-                break;
+                Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPFORBIDDEN(Event->Get()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+                PassAway();
+                return;
             default:
                 break;
             }
@@ -164,7 +164,7 @@ public:
             json << "null";
         }
 
-        Send(Event->Sender, new NMon::TEvHttpInfoRes(headers + json.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), json.Str()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         PassAway();
     }
 

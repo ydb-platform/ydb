@@ -103,6 +103,7 @@ PEERDIR(
     ydb/services/persqueue_cluster_discovery
     ydb/services/persqueue_v1
     ydb/services/rate_limiter
+    ydb/services/replication
     ydb/services/monitoring
     ydb/services/metadata/ds_table
     ydb/services/bg_tasks/ds_table

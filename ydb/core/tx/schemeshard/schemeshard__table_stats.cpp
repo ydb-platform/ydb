@@ -173,8 +173,8 @@ TPartitionStats TTxStoreTableStats::PrepareStats(const TActorContext& ctx,
             indexSize += channelStats.GetIndexSize();
         } else {
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "PrepareStats: the subdomain has no info about the datashard's channel "
-                            << channelStats.GetChannel()
+                        "PrepareStats: SchemeShard has no info on DataShard "
+                            << rec.GetDatashardId() << " channel " << channelStats.GetChannel() << " binding"
             );
         }
     }

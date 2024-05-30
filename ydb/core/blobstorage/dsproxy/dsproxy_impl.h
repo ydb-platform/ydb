@@ -22,6 +22,7 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
         EvConfigureQueryTimeout,
         EvEstablishingSessionTimeout,
         Ev5min,
+        EvCheckDeadlines,
     };
 
     struct TEvUpdateResponsiveness : TEventLocal<TEvUpdateResponsiveness, EvUpdateResponsiveness> {};
@@ -61,7 +62,8 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     TIntrusivePtr<TStoragePoolCounters> StoragePoolCounters;
     TIntrusivePtr<TGroupSessions> Sessions;
     TDeque<std::unique_ptr<IEventHandle>> InitQueue;
-    THashSet<TActorId, TActorId::THash> ActiveRequests;
+    std::multimap<TInstant, TActorId> DeadlineMap;
+    THashMap<TActorId, std::multimap<TInstant, TActorId>::iterator, TActorId::THash> ActiveRequests;
     ui64 UnconfiguredBufferSize = 0;
     const bool IsEjected;
     bool ForceWaitAllDrives;
@@ -250,6 +252,8 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     void Handle(TEvStopBatchingGetRequests::TPtr& ev);
 
     // todo: in-fly tracking for cancelation and
+    void PushRequest(IActor *actor, TInstant deadline);
+    void CheckDeadlines();
     void HandleNormal(TEvBlobStorage::TEvGet::TPtr &ev);
     void HandleNormal(TEvBlobStorage::TEvPut::TPtr &ev);
     void HandleNormal(TEvBlobStorage::TEvBlock::TPtr &ev);
@@ -356,6 +360,7 @@ public:
         IgnoreFunc(TEvConfigureQueryTimeout);
         IgnoreFunc(TEvEstablishingSessionTimeout);
         fFunc(Ev5min, Handle5min);
+        cFunc(EvCheckDeadlines, CheckDeadlines);
     )
 
 #define HANDLE_EVENTS(HANDLER) \

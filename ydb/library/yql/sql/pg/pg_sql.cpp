@@ -920,7 +920,7 @@ public:
                     }
 
                     AddFrom(*p, fromList);
-                    joinOps.push_back(QL());
+                    joinOps.push_back(QL(QL(QA("push"))));
                 } else {
                     TTraverseNodeStack traverseNodeStack;
                     traverseNodeStack.push({ node, false });
@@ -936,6 +936,7 @@ public:
                             }
                             AddFrom(*p, fromList);
                             traverseNodeStack.pop();
+                            oneJoinGroup.push_back(QL(QA("push")));
                         } else {
                             auto join = CAST_NODE(JoinExpr, top.first);
                             if (!join->larg || !join->rarg) {
@@ -954,18 +955,8 @@ public:
                             }
 
                             if (!top.second) {
-                                if (NodeTag(join->rarg) != T_JoinExpr) {
-                                    traverseNodeStack.push({ join->rarg, false });
-                                }
-                                if (NodeTag(join->larg) != T_JoinExpr) {
-                                    traverseNodeStack.push({ join->larg, false });
-                                }
-                                if (NodeTag(join->rarg) == T_JoinExpr) {
-                                    traverseNodeStack.push({ join->rarg, false });
-                                }
-                                if (NodeTag(join->larg) == T_JoinExpr) {
-                                    traverseNodeStack.push({ join->larg, false });
-                                }
+                                traverseNodeStack.push({ join->rarg, false });
+                                traverseNodeStack.push({ join->larg, false });
                                 top.second = true;
                             } else {
                                 TString op;
@@ -4778,18 +4769,21 @@ public:
         }
 
         auto lst = CAST_NODE(List, value->rexpr);
-        TVector<TAstNode*> listItems;
-        listItems.push_back(A("AsList"));
+
+        TVector<TAstNode*> children;
+        children.reserve(2 + ListLength(lst));
+
+        children.push_back(A("PgIn"));
+        children.push_back(lhs);
         for (int item = 0; item < ListLength(lst); ++item) {
             auto cell = ParseExpr(ListNodeNth(lst, item), settings);
             if (!cell) {
                 return nullptr;
             }
-
-            listItems.push_back(cell);
+            children.push_back(cell);
         }
 
-        auto ret = L(A("PgIn"), lhs, VL(listItems.data(), listItems.size()));
+        auto ret = VL(children.data(), children.size());
         if (op[0] == '<') {
             ret = L(A("PgNot"), ret);
         }

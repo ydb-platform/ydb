@@ -192,13 +192,15 @@ public:
 
     void ReplyAndPassAway() {
         TStringStream json;
-        TString headers = Viewer->GetHTTPOKJSON(Event->Get());
         if (DescribeResult) {
             if (!DescribeResult->Status->IsSuccess()) {
-                headers = Viewer->GetHTTPBADREQUEST(Event->Get(), {}, "Bad Request");
                 if (DescribeResult->Status->GetStatus() == NYdb::EStatus::UNAUTHORIZED) {
-                    headers = Viewer->GetHTTPFORBIDDEN(Event->Get());
+                    Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPFORBIDDEN(Event->Get()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+                } else {
+                    Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPBADREQUEST(Event->Get()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
                 }
+                PassAway();
+                return;
             } else {
                 TProtoToJson::ProtoToJson(json, *(DescribeResult->Message), JsonSettings);
             }
@@ -206,7 +208,7 @@ public:
             json << "null";
         }
 
-        Send(Event->Sender, new NMon::TEvHttpInfoRes(headers + json.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), json.Str()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         PassAway();
     }
 

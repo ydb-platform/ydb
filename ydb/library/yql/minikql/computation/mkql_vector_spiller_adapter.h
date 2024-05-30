@@ -1,5 +1,6 @@
 #pragma once
 
+#include <format>
 #include <queue>
 
 #include <ydb/library/yql/minikql/defs.h>
@@ -115,7 +116,7 @@ public:
     ///State will be changed to DataREady without any async read operation. ExtractVector is expected
     ///to be called immediately.
     void RequestNextVector() {
-        MKQL_ENSURE(State == EState::AcceptingDataRequests, "Internal logic error");
+        MKQL_ENSURE(State == EState::AcceptingDataRequests, std::format("[MISHA] Actual {}\n", (int)State));
         MKQL_ENSURE(CurrentVector.empty(), "Internal logic error");
         MKQL_ENSURE(!StoredChunksElementsCount.empty(), "Internal logic error");
 

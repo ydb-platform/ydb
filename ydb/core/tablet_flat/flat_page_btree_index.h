@@ -245,9 +245,14 @@ namespace NKikimr::NTable::NPage {
                 return Iter().CompareTo(key, keyDefaults);
             }
 
+            explicit operator bool() const noexcept
+            {
+                return Count() > 0;
+            }
+
         private:
-            const TIsNullBitmap* const IsNullBitmap;
-            const TColumns Columns;
+            const TIsNullBitmap* IsNullBitmap;
+            TColumns Columns;
             const char* Ptr;
         };
 

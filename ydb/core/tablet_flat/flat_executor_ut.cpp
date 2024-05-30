@@ -5068,10 +5068,6 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
         TRowsModel rows;
         const ui32 rowsCount = 1024;
 
-        auto &appData = env->GetAppData();
-        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(false);
-        appData.FeatureFlags.SetEnableLocalDBFlatIndex(true);
-
         env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
             return new TTestFlatTablet(env.Edge, tablet, info);
         });
@@ -5095,42 +5091,6 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
 
         env.SendSync(new NFake::TEvExecute{ new TTxCalculateReadSize(sizes, 300, 700) });
         UNIT_ASSERT_VALUES_EQUAL(sizes, (TVector<ui64>{4133766, 4133766}));
-    }
-
-    Y_UNIT_TEST(CalculateReadSize_BTreeIndex) {
-        TMyEnvBase env;
-        TRowsModel rows;
-        const ui32 rowsCount = 1024;
-
-        auto &appData = env->GetAppData();
-        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(true);
-        appData.FeatureFlags.SetEnableLocalDBFlatIndex(false);
-
-        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
-            return new TTestFlatTablet(env.Edge, tablet, info);
-        });
-        env.WaitForWakeUp();
-        ZeroSharedCache(env);
-
-        auto policy = MakeIntrusive<TCompactionPolicy>();
-        policy->MinBTreeIndexNodeSize = 128;
-        env.SendSync(rows.MakeScheme(std::move(policy)));
-
-        env.SendSync(rows.MakeRows(rowsCount, 10*1024));
-        
-        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
-        env.WaitFor<NFake::TEvCompacted>();
-
-        TVector<ui64> sizes;
-        
-        env.SendSync(new NFake::TEvExecute{ new TTxCalculateReadSize(sizes, 0, 1) });
-        UNIT_ASSERT_VALUES_EQUAL(sizes, (TVector<ui64>{0, 0, 0, 0, 20566, 20566}));
-
-        env.SendSync(new NFake::TEvExecute{ new TTxCalculateReadSize(sizes, 100, 200) });
-        UNIT_ASSERT_VALUES_EQUAL(sizes, (TVector<ui64>{0, 0, 0, 0, 1048866, 1048866}));
-
-        env.SendSync(new NFake::TEvExecute{ new TTxCalculateReadSize(sizes, 300, 700) });
-        UNIT_ASSERT_VALUES_EQUAL(sizes, (TVector<ui64>{0, 0, 0, 0, 4133766, 4133766}));
     }
 
     Y_UNIT_TEST(TestPrechargeAndSeek) {

@@ -518,7 +518,6 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                 new NPDisk::TEvYardInit(2, vDiskID, testCtx.TestCtx.PDiskGuid),
                 NKikimrProto::OK);
 
-        //ui32 errors = 0;
         ui32 lsn = 2;
         TRcBuf logData = TRcBuf(PrepareData(4096));
 
@@ -527,6 +526,10 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                         logData, TLsnSeg(lsn, lsn), nullptr));
             if (i == 100) {
                 testCtx.GracefulPDiskRestart(false);
+            }
+            if (i == 600) {
+                const auto evInitRes = testCtx.Recv<TEvBlobStorage::TEvNotifyWardenPDiskRestarted>();
+                UNIT_ASSERT_VALUES_EQUAL(NKikimrProto::EReplyStatus::OK, evInitRes->Status);
             }
             ++lsn;
         }
@@ -540,7 +543,6 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                 Ctest << "TEvLogResult status is error" << Endl;
             }
         }
-        testCtx.Recv<TEvBlobStorage::TEvNotifyWardenPDiskRestarted>();
     }
 
     Y_UNIT_TEST(CommitDeleteChunks) {

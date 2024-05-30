@@ -5,6 +5,28 @@
 
 namespace NKikimr {
 
+    void TBlobStorageGroupProxy::PushRequest(IActor *actor, TInstant deadline) {
+        const TActorId actorId = Register(actor);
+        if (deadline != TInstant::Max()) {
+            ActiveRequests.try_emplace(actorId, DeadlineMap.emplace(deadline, actorId));
+        } else {
+            ActiveRequests.try_emplace(actorId);
+        }
+    }
+
+    void TBlobStorageGroupProxy::CheckDeadlines() {
+        const TInstant now = TActivationContext::Now();
+        std::multimap<TInstant, TActorId>::iterator it;
+        for (it = DeadlineMap.begin(); it != DeadlineMap.end() && it->first <= now; ++it) {
+            TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvDeadline, 0, it->second, SelfId(), nullptr, 0));
+            auto jt = ActiveRequests.find(it->second);
+            Y_ABORT_UNLESS(jt != ActiveRequests.end());
+            jt->second = {};
+        }
+        DeadlineMap.erase(DeadlineMap.begin(), it);
+        TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(EvCheckDeadlines, 0, SelfId(), {}, nullptr, 0));
+    }
+
     void TBlobStorageGroupProxy::HandleNormal(TEvBlobStorage::TEvGet::TPtr &ev) {
         if (IsLimitedKeyless && !ev->Get()->PhantomCheck) {
             ErrorDescription = "Created as LIMITED without keys. It happens when tenant keys are missing on the node.";
@@ -20,13 +42,11 @@ namespace NKikimr {
         EnsureMonitoring(true);
         LWTRACK(DSProxyGetHandle, ev->Get()->Orbit);
         EnableWilsonTracing(ev, Mon->GetSamplePPM);
-        TActorId reqID;
         if (ev->Get()->IsIndexOnly) {
             Mon->EventIndexRestoreGet->Inc();
-            reqID = Register(
-                CreateBlobStorageGroupIndexRestoreGetRequest(Info, Sessions->GroupQueues, ev->Sender, Mon,
-                    ev->Get(), ev->Cookie, std::move(ev->TraceId), {}, TActivationContext::Now(), StoragePoolCounters));
-            ActiveRequests.insert(reqID);
+            PushRequest(CreateBlobStorageGroupIndexRestoreGetRequest(Info, Sessions->GroupQueues, ev->Sender, Mon,
+                ev->Get(), ev->Cookie, std::move(ev->TraceId), {}, TActivationContext::Now(), StoragePoolCounters),
+                ev->Get()->Deadline);
         } else {
             TLogoBlobID lastBlobId;
             const ui32 querySize = ev->Get()->QuerySize;
@@ -58,17 +78,14 @@ namespace NKikimr {
 
             if (differentBlobCount == 1 || isSmall) {
                 Mon->EventGet->Inc();
-                reqID = Register(
-                    CreateBlobStorageGroupGetRequest(Info, Sessions->GroupQueues, ev->Sender, Mon,
-                        ev->Get(), ev->Cookie, std::move(ev->TraceId), TNodeLayoutInfoPtr(NodeLayoutInfo),
-                        kind, TActivationContext::Now(), StoragePoolCounters));
-                ActiveRequests.insert(reqID);
+                PushRequest(CreateBlobStorageGroupGetRequest(Info, Sessions->GroupQueues, ev->Sender, Mon,
+                    ev->Get(), ev->Cookie, std::move(ev->TraceId), TNodeLayoutInfoPtr(NodeLayoutInfo),
+                    kind, TActivationContext::Now(), StoragePoolCounters), ev->Get()->Deadline);
             } else {
                 Mon->EventMultiGet->Inc();
-                reqID = Register(
-                    CreateBlobStorageGroupMultiGetRequest(Info, Sessions->GroupQueues, ev->Sender, Mon,
-                        ev->Get(), ev->Cookie, std::move(ev->TraceId), kind, TActivationContext::Now(), StoragePoolCounters));
-                ActiveRequests.insert(reqID);
+                PushRequest(CreateBlobStorageGroupMultiGetRequest(Info, Sessions->GroupQueues, ev->Sender, Mon,
+                    ev->Get(), ev->Cookie, std::move(ev->TraceId), kind, TActivationContext::Now(), StoragePoolCounters),
+                    ev->Get()->Deadline);
             }
         }
     }
@@ -138,21 +155,19 @@ namespace NKikimr {
             TAppData *app = NKikimr::AppData(TActivationContext::AsActorContext());
             bool enableRequestMod3x3ForMinLatency = app->FeatureFlags.GetEnable3x3RequestsForMirror3DCMinLatencyPut();
             // TODO(alexvru): MinLatency support
-            const TActorId reqID = Register(
-                    CreateBlobStorageGroupPutRequest(Info, Sessions->GroupQueues, ev->Sender, Mon,
-                        ev->Get(), ev->Cookie, std::move(ev->TraceId), Mon->TimeStats.IsEnabled(),
-                        PerDiskStats, kind, TActivationContext::Now(), StoragePoolCounters,
-                        enableRequestMod3x3ForMinLatency));
-            ActiveRequests.insert(reqID);
+            PushRequest(CreateBlobStorageGroupPutRequest(Info, Sessions->GroupQueues, ev->Sender, Mon,
+                ev->Get(), ev->Cookie, std::move(ev->TraceId), Mon->TimeStats.IsEnabled(),
+                PerDiskStats, kind, TActivationContext::Now(), StoragePoolCounters,
+                enableRequestMod3x3ForMinLatency), ev->Get()->Deadline);
         }
     }
 
     void TBlobStorageGroupProxy::HandleNormal(TEvBlobStorage::TEvBlock::TPtr &ev) {
         EnsureMonitoring(ev->Get()->IsMonitored);
         Mon->EventBlock->Inc();
-        const TActorId reqID = Register(CreateBlobStorageGroupBlockRequest(Info, Sessions->GroupQueues, ev->Sender, Mon,
-                ev->Get(), ev->Cookie, std::move(ev->TraceId), TActivationContext::Now(), StoragePoolCounters));
-        ActiveRequests.insert(reqID);
+        PushRequest(CreateBlobStorageGroupBlockRequest(Info, Sessions->GroupQueues, ev->Sender, Mon,
+            ev->Get(), ev->Cookie, std::move(ev->TraceId), TActivationContext::Now(), StoragePoolCounters),
+            ev->Get()->Deadline);
     }
 
     void TBlobStorageGroupProxy::HandleNormal(TEvBlobStorage::TEvPatch::TPtr &ev) {
@@ -164,11 +179,9 @@ namespace NKikimr {
         EnsureMonitoring(true);
         Mon->EventPatch->Inc();
         TInstant now = TActivationContext::Now();
-        const TActorId reqId = Register(
-                CreateBlobStorageGroupPatchRequest(Info, Sessions->GroupQueues, ev->Sender, Mon,
-                        ev->Get(), ev->Cookie, std::move(ev->TraceId), now,
-                        StoragePoolCounters, EnableVPatch.Update(now)));
-        ActiveRequests.insert(reqId);
+        PushRequest(CreateBlobStorageGroupPatchRequest(Info, Sessions->GroupQueues, ev->Sender, Mon,
+            ev->Get(), ev->Cookie, std::move(ev->TraceId), now, StoragePoolCounters, EnableVPatch.Update(now)),
+            ev->Get()->Deadline);
     }
 
     void TBlobStorageGroupProxy::HandleNormal(TEvBlobStorage::TEvDiscover::TPtr &ev) {
@@ -187,9 +200,8 @@ namespace NKikimr {
             : Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3of4
             ? CreateBlobStorageGroupMirror3of4DiscoverRequest
             : CreateBlobStorageGroupDiscoverRequest;
-        const TActorId reqID = Register(callback(Info, Sessions->GroupQueues, ev->Sender, Mon,
-            ev->Get(), ev->Cookie, std::move(ev->TraceId), TActivationContext::Now(), StoragePoolCounters));
-        ActiveRequests.insert(reqID);
+        PushRequest(callback(Info, Sessions->GroupQueues, ev->Sender, Mon, ev->Get(), ev->Cookie, std::move(ev->TraceId),
+            TActivationContext::Now(), StoragePoolCounters), ev->Get()->Deadline);
     }
 
     void TBlobStorageGroupProxy::HandleNormal(TEvBlobStorage::TEvRange::TPtr &ev) {
@@ -200,10 +212,9 @@ namespace NKikimr {
         }
         EnsureMonitoring(true);
         Mon->EventRange->Inc();
-        const TActorId reqID = Register(
-            CreateBlobStorageGroupRangeRequest(Info, Sessions->GroupQueues, ev->Sender, Mon,
-                ev->Get(), ev->Cookie, std::move(ev->TraceId), TActivationContext::Now(), StoragePoolCounters));
-        ActiveRequests.insert(reqID);
+        PushRequest(CreateBlobStorageGroupRangeRequest(Info, Sessions->GroupQueues, ev->Sender, Mon,
+            ev->Get(), ev->Cookie, std::move(ev->TraceId), TActivationContext::Now(), StoragePoolCounters),
+            ev->Get()->Deadline);
     }
 
     void TBlobStorageGroupProxy::HandleNormal(TEvBlobStorage::TEvCollectGarbage::TPtr &ev) {
@@ -211,16 +222,14 @@ namespace NKikimr {
 
         if (!ev->Get()->IsMultiCollectAllowed || ev->Get()->PerGenerationCounterStepSize() == 1) {
             Mon->EventCollectGarbage->Inc();
-            const TActorId reqID = Register(CreateBlobStorageGroupCollectGarbageRequest(Info, Sessions->GroupQueues,
+            PushRequest(CreateBlobStorageGroupCollectGarbageRequest(Info, Sessions->GroupQueues,
                 ev->Sender, Mon, ev->Get(), ev->Cookie, std::move(ev->TraceId), TActivationContext::Now(),
-                StoragePoolCounters));
-            ActiveRequests.insert(reqID);
+                StoragePoolCounters), ev->Get()->Deadline);
         } else {
             Mon->EventMultiCollect->Inc();
-            const TActorId reqID = Register(CreateBlobStorageGroupMultiCollectRequest(Info, Sessions->GroupQueues,
+            PushRequest(CreateBlobStorageGroupMultiCollectRequest(Info, Sessions->GroupQueues,
                 ev->Sender, Mon, ev->Get(), ev->Cookie, std::move(ev->TraceId), TActivationContext::Now(),
-                StoragePoolCounters));
-            ActiveRequests.insert(reqID);
+                StoragePoolCounters), ev->Get()->Deadline);
         }
     }
 
@@ -232,17 +241,17 @@ namespace NKikimr {
         }
         EnsureMonitoring(true);
         Mon->EventStatus->Inc();
-        const TActorId reqID = Register(CreateBlobStorageGroupStatusRequest(Info, Sessions->GroupQueues, ev->Sender, Mon,
-            ev->Get(), ev->Cookie, std::move(ev->TraceId), TActivationContext::Now(), StoragePoolCounters));
-        ActiveRequests.insert(reqID);
+        PushRequest(CreateBlobStorageGroupStatusRequest(Info, Sessions->GroupQueues, ev->Sender, Mon,
+            ev->Get(), ev->Cookie, std::move(ev->TraceId), TActivationContext::Now(), StoragePoolCounters),
+            ev->Get()->Deadline);
     }
 
     void TBlobStorageGroupProxy::HandleNormal(TEvBlobStorage::TEvAssimilate::TPtr &ev) {
         EnsureMonitoring(true);
         Mon->EventAssimilate->Inc();
-        const TActorId reqID = Register(CreateBlobStorageGroupAssimilateRequest(Info, Sessions->GroupQueues, ev->Sender,
-            Mon, ev->Get(), ev->Cookie, std::move(ev->TraceId), TActivationContext::Now(), StoragePoolCounters));
-        ActiveRequests.insert(reqID);
+        PushRequest(CreateBlobStorageGroupAssimilateRequest(Info, Sessions->GroupQueues, ev->Sender,
+            Mon, ev->Get(), ev->Cookie, std::move(ev->TraceId), TActivationContext::Now(), StoragePoolCounters),
+            TInstant::Max());
     }
 
     void TBlobStorageGroupProxy::Handle(TEvDeathNote::TPtr ev) {
@@ -253,7 +262,12 @@ namespace NKikimr {
         if (wasEmpty && !ResponsivenessTracker.IsEmpty()) {
             ScheduleUpdateResponsiveness();
         }
-        ActiveRequests.erase(ev->Sender);
+        const auto it = ActiveRequests.find(ev->Sender);
+        Y_ABORT_UNLESS(it != ActiveRequests.end());
+        if (it->second != std::multimap<TInstant, TActorId>::iterator()) {
+            DeadlineMap.erase(it->second);
+        }
+        ActiveRequests.erase(it);
     }
 
     void TBlobStorageGroupProxy::Handle(TEvBlobStorage::TEvBunchOfEvents::TPtr ev) {
@@ -270,18 +284,15 @@ namespace NKikimr {
                 bool enableRequestMod3x3ForMinLatency = app->FeatureFlags.GetEnable3x3RequestsForMirror3DCMinLatencyPut();
                 // TODO(alexvru): MinLatency support
                 if (batchedPuts.Queue.size() == 1) {
-                    const TActorId reqID = Register(
-                        CreateBlobStorageGroupPutRequest(Info, Sessions->GroupQueues, batchedPuts.Queue.front()->Sender,
-                            Mon, batchedPuts.Queue.front()->Get(), batchedPuts.Queue.front()->Cookie,
-                            std::move(batchedPuts.Queue.front()->TraceId), Mon->TimeStats.IsEnabled(), PerDiskStats, kind,
-                            TActivationContext::Now(), StoragePoolCounters, enableRequestMod3x3ForMinLatency));
-                    ActiveRequests.insert(reqID);
+                    auto& ev = batchedPuts.Queue.front();
+                    PushRequest(CreateBlobStorageGroupPutRequest(Info, Sessions->GroupQueues, ev->Sender,
+                        Mon, ev->Get(), ev->Cookie, std::move(ev->TraceId), Mon->TimeStats.IsEnabled(), PerDiskStats,
+                        kind, TActivationContext::Now(), StoragePoolCounters, enableRequestMod3x3ForMinLatency),
+                        ev->Get()->Deadline);
                 } else {
-                    const TActorId reqID = Register(
-                        CreateBlobStorageGroupPutRequest(Info, Sessions->GroupQueues,
-                            Mon, batchedPuts.Queue, Mon->TimeStats.IsEnabled(), PerDiskStats, kind, TActivationContext::Now(),
-                            StoragePoolCounters, handleClass, tactic, enableRequestMod3x3ForMinLatency));
-                    ActiveRequests.insert(reqID);
+                    PushRequest(CreateBlobStorageGroupPutRequest(Info, Sessions->GroupQueues,
+                        Mon, batchedPuts.Queue, Mon->TimeStats.IsEnabled(), PerDiskStats, kind, TActivationContext::Now(),
+                        StoragePoolCounters, handleClass, tactic, enableRequestMod3x3ForMinLatency), TInstant::Max());
                 }
             } else {
                 for (auto it = batchedPuts.Queue.begin(); it != batchedPuts.Queue.end(); ++it) {

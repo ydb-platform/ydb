@@ -389,12 +389,11 @@ private:
 
     void Handle(NKikimrKqp::TEvQueryResponse& record) {
         if (Event) {
-            TStringBuilder out;
             NJson::TJsonValue jsonResponse;
             if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
-                MakeOkReply(out, jsonResponse, record);
+                MakeOkReply(jsonResponse, record);
             } else {
-                MakeErrorReply(out, jsonResponse, record);
+                MakeErrorReply(jsonResponse, record);
             }
 
             if (Schema == ESchemaType::Classic && Stats.empty() && (Action.empty() || Action == "execute")) {
@@ -406,9 +405,8 @@ private:
             config.ValidateUtf8 = false;
             config.WriteNanAsString = true;
             NJson::WriteJson(&stream, &jsonResponse, config);
-            out << stream.Str();
 
-            ReplyAndPassAway(out);
+            ReplyAndPassAway(stream.Str());
         } else {
             TEvViewer::TEvViewerResponse* response = new TEvViewer::TEvViewerResponse();
             response->Record.MutableQueryResponse()->CopyFrom(record);
@@ -471,8 +469,7 @@ private:
     }
 
 private:
-    void MakeErrorReply(TStringBuilder& out, NJson::TJsonValue& jsonResponse, NKikimrKqp::TEvQueryResponse& record) {
-        out << Viewer->GetHTTPBADREQUEST(Event->Get(), "application/json");
+    void MakeErrorReply(NJson::TJsonValue& jsonResponse, NKikimrKqp::TEvQueryResponse& record) {
         NJson::TJsonValue& jsonIssues = jsonResponse["issues"];
 
         // find first deepest error
@@ -493,7 +490,7 @@ private:
         }
     }
 
-    void MakeOkReply(TStringBuilder& out, NJson::TJsonValue& jsonResponse, NKikimrKqp::TEvQueryResponse& record) {
+    void MakeOkReply(NJson::TJsonValue& jsonResponse, NKikimrKqp::TEvQueryResponse& record) {
         const auto& response = record.GetResponse();
 
         if (response.ResultsSize() > 0 || response.YdbResultsSize() > 0) {
@@ -512,7 +509,7 @@ private:
                 Ydb::Issue::IssueMessage* issue = record.MutableResponse()->AddQueryIssues();
                 issue->set_message(Sprintf("Convert error: %s", ex.what()));
                 issue->set_severity(NYql::TSeverityIds::S_ERROR);
-                MakeErrorReply(out, jsonResponse, record);
+                MakeErrorReply(jsonResponse, record);
                 return;
             }
         }

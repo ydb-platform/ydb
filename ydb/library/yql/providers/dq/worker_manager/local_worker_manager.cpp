@@ -129,9 +129,11 @@ private:
                     continue;
                 }
 
-                for (const auto& workerInfo: workersInfo.WorkerActors) {
-                    if (workerInfo.TaskId == taskId) {
-                        ev->Forward(workerInfo.ActorId);
+                for (size_t i = 0; i < workersInfo.WorkerActors.ActorIds.size(); i++) {
+                    auto workerTaskId = workersInfo.WorkerActors.TaskIds[i];
+                    auto actorId = workersInfo.WorkerActors.ActorIds[i];
+                    if (workerTaskId == taskId) {
+                        ev->Forward(actorId);
                         return;
                     }
                 }
@@ -170,18 +172,20 @@ private:
             html << "<td></td><td></td><td></td>";
             html << "</tr>\n";
 
-            for (const auto& workerInfo: workersInfo.WorkerActors) {
+            for (size_t i = 0; i < workersInfo.WorkerActors.ActorIds.size(); i++) {
+                auto workerTaskId = workersInfo.WorkerActors.TaskIds[i];
+                auto actorId = workersInfo.WorkerActors.ActorIds[i];
                 html << "<tr>";
                 html << "<td>" << ResourceId << "</td>";
                 html << "<td>" << workersInfo.Sender.ToString() << "</td>";
                 html << "<td>" << workersInfo.Deadline.ToString() << "</td>";
                 html << "<td>" << (traceId ? *traceId : "<unknown>") << "</td>";
-                html << "<td>" << workerInfo.ActorId.ToString() << "</td>";
-                html << "<td>" << workerInfo.TaskId <<"</td>";
+                html << "<td>" << actorId.ToString() << "</td>";
+                html << "<td>" << workerTaskId <<"</td>";
                 html << "<td>";
                 html << "<form method='get'>";
                 html << "<p>TxId:<input name='tx_id' type='hidden' value='" << (traceId ? *traceId : "<unknown>") << "'/></p>";
-                html << "<p>TaskId:<input name='task_id' type='hidden' value='" <<workerInfo.TaskId << "'/></p>";
+                html << "<p>TaskId:<input name='task_id' type='hidden' value='" << workerTaskId << "'/></p>";
                 html << "<button name='get' type='submit'><b>Detailed</b></button>";
                 html << "</form>";
                 html <<"</td>";
@@ -345,8 +349,9 @@ private:
         auto& allocationInfo = AllocatedWorkers[resourceId];
         allocationInfo.TxId = traceId;
 
-        if (allocationInfo.WorkerActors.empty()) {
-            allocationInfo.WorkerActors.reserve(count);
+        if (allocationInfo.WorkerActors.ActorIds.empty()) {
+            allocationInfo.WorkerActors.ActorIds.reserve(count);
+            allocationInfo.WorkerActors.TaskIds.reserve(count);
             allocationInfo.Sender = ev->Sender;
             if (ev->Get()->Record.GetFreeWorkerAfterMs()) {
                 allocationInfo.Deadline =
@@ -390,16 +395,17 @@ private:
                         Options.TaskRunnerActorFactory,
                         Options.AsyncIoFactory));
                 }
-                allocationInfo.WorkerActors.emplace_back(RegisterChild(
+                allocationInfo.WorkerActors.ActorIds.emplace_back(RegisterChild(
                     actor.Release(), createComputeActor ? NYql::NDq::TEvDq::TEvAbortExecution::Unavailable("Aborted by LWM").Release() : nullptr
-                ), taskId);
+                ));
+                allocationInfo.WorkerActors.TaskIds.emplace_back(taskId);
             }
 
             Options.Counters.ActiveWorkers->Add(count);
         }
 
         Send(ev->Sender,
-            MakeHolder<TEvAllocateWorkersResponse>(resourceId, allocationInfo.WorkerActors),
+            MakeHolder<TEvAllocateWorkersResponse>(resourceId, allocationInfo.WorkerActors.ActorIds),
             IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
             ev->Cookie);
         Subscribe(ev->Sender.NodeId());
@@ -419,13 +425,13 @@ private:
     void DropTaskCounters(const auto& info) {
         auto traceId = std::get<TString>(info.TxId);
         if (auto it = TaskCountersMap.find(traceId); it != TaskCountersMap.end()) {
-            if (it->second.ReferenceCount <= info.WorkerActors.size()) {
+            if (it->second.ReferenceCount <= info.WorkerActors.ActorIds.size()) {
                 if (TaskCounters) {
                     TaskCounters->RemoveSubgroup("operation", traceId);
                 }
                 TaskCountersMap.erase(it);
             } else {
-                it->second.ReferenceCount -= info.WorkerActors.size();
+                it->second.ReferenceCount -= info.WorkerActors.ActorIds.size();
             }
         }
     }
@@ -434,8 +440,8 @@ private:
         YQL_CLOG(DEBUG, ProviderDq) << "Free Group " << id;
         auto it = AllocatedWorkers.find(id);
         if (it != AllocatedWorkers.end()) {
-            for (const auto& workerInfo : it->second.WorkerActors) {
-                UnregisterChild(workerInfo.ActorId);
+            for (const auto& actorId : it->second.WorkerActors.ActorIds) {
+                UnregisterChild(actorId);
             }
 
             if (sender && it->second.Sender != sender) {
@@ -447,7 +453,7 @@ private:
                 DropTaskCounters(it->second);
             }
 
-            Options.Counters.ActiveWorkers->Sub(it->second.WorkerActors.size());
+            Options.Counters.ActiveWorkers->Sub(it->second.WorkerActors.ActorIds.size());
             AllocatedWorkers.erase(it);
         }
     }
@@ -471,11 +477,11 @@ private:
 
     struct TAllocationInfo {
         struct TWorkerInfo {
-            NActors::TActorId ActorId;
-            ui64 TaskId = 0;
+            TVector<NActors::TActorId> ActorIds;
+            TVector<ui64> TaskIds;
         };
 
-        TVector<TWorkerInfo> WorkerActors;
+        TWorkerInfo WorkerActors;
         NActors::TActorId Sender;
         TInstant Deadline;
         NDq::TTxId TxId;

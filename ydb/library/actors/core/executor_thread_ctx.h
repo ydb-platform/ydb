@@ -60,11 +60,15 @@ namespace NActors {
 
         template <typename TDerived, typename TWaitState>
         void Spin(ui64 spinThresholdCycles, std::atomic<bool> *stopFlag) {
-            ui64 start = GetCycleCountFast();
             bool doSpin = true;
+            NHPTimer::STime hpnow = GetCycleCountFast();
+            NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
+            TlsThreadContext->ElapsingActorActivity.store(TlsThreadContext->ActorSystemSpinIndex, std::memory_order_release);
+            TlsThreadContext->WorkerCtx->AddElapsedCycles(TlsThreadContext->ActorSystemIndex, hpnow - hpprev);
             while (true) {
                 for (ui32 j = 0; doSpin && j < 12; ++j) {
-                    if (GetCycleCountFast() >= (start + spinThresholdCycles)) {
+                    hpnow = GetCycleCountFast();
+                    if (hpnow >= i64(hpprev + spinThresholdCycles)) {
                         doSpin = false;
                         break;
                     }
@@ -74,6 +78,10 @@ namespace NActors {
                             SpinLockPause();
                         } else {
                             static_cast<TDerived*>(this)->AfterWakeUp(state);
+                            hpnow = GetCycleCountFast();
+                            hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
+                            TlsThreadContext->ElapsingActorActivity.store(TlsThreadContext->ActorSystemIndex, std::memory_order_release);
+                            TlsThreadContext->WorkerCtx->AddElapsedCycles(TlsThreadContext->ActorSystemSpinIndex, hpnow - hpprev);
                             doSpin = false;
                             break;
                         }
@@ -100,8 +108,8 @@ namespace NActors {
 
             NHPTimer::STime hpnow = GetCycleCountFast();
             NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
-            TlsThreadContext->ElapsingActorActivity.store(Max<ui64>(), std::memory_order_release);
-            TlsThreadContext->WorkerCtx->AddElapsedCycles(TlsThreadContext->ActorSystemIndex, hpnow - hpprev);
+            ui32 prevActivity = TlsThreadContext->ElapsingActorActivity.exchange(Max<ui64>(), std::memory_order_acq_rel);
+            TlsThreadContext->WorkerCtx->AddElapsedCycles(prevActivity, hpnow - hpprev);
             do {
                 if (WaitingPad.Park()) // interrupted
                     return true;

@@ -49,6 +49,7 @@ namespace NActors {
         , TimePerMailbox(timePerMailbox)
         , EventsPerMailbox(eventsPerMailbox)
         , ActorSystemIndex(TActorTypeOperator::GetActorSystemIndex())
+        , ActorSystemSpinIndex(TActorTypeOperator::GetActorSystemSpinIndex())
     {
         Ctx.Switch(
             ExecutorPool,
@@ -77,6 +78,7 @@ namespace NActors {
         , SoftProcessingDurationTs(softProcessingDurationTs)
         , SharedStats(poolCount)
         , ActorSystemIndex(TActorTypeOperator::GetActorSystemIndex())
+        , ActorSystemSpinIndex(TActorTypeOperator::GetActorSystemSpinIndex())
     {
         Ctx.Switch(
             ExecutorPool,
@@ -511,6 +513,7 @@ namespace NActors {
 
         TlsThreadCtx.WorkerCtx = &Ctx;
         TlsThreadCtx.ActorSystemIndex = ActorSystemIndex;
+        TlsThreadCtx.ActorSystemSpinIndex = ActorSystemSpinIndex;
         TlsThreadCtx.ElapsingActorActivity = ActorSystemIndex;
         NHPTimer::STime now = GetCycleCountFast();
         TlsThreadCtx.StartOfProcessingEventTS = now;
@@ -549,6 +552,7 @@ namespace NActors {
 
         TlsThreadCtx.WorkerCtx = &Ctx;
         TlsThreadCtx.ActorSystemIndex = ActorSystemIndex;
+        TlsThreadCtx.ActorSystemSpinIndex = ActorSystemSpinIndex;
         TlsThreadCtx.ElapsingActorActivity = ActorSystemIndex;
         NHPTimer::STime now = GetCycleCountFast();
         TlsThreadCtx.StartOfProcessingEventTS = now;

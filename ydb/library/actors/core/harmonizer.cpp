@@ -374,6 +374,9 @@ private:
     std::atomic<double> AvgAwakeningTimeUs = 0;
     std::atomic<double> AvgWakingUpTimeUs = 0;
 
+    ui32 HarmonizerActivityIndex = TActorTypeOperator::GetActorSystemHarmonizerIndex();
+    ui32 ActorSystemActivityIndex = TActorTypeOperator::GetActorSystemIndex();
+
     void PullStats(ui64 ts);
     void HarmonizeImpl(ui64 ts);
     void CalculatePriorityOrder();
@@ -758,6 +761,11 @@ void THarmonizer::Harmonize(ui64 ts) {
     ui64 previousNextHarmonizeTs = NextHarmonizeTs.exchange(ts + Us2Ts(1'000'000ull));
     LWPROBE(TryToHarmonizeSuccess, ts, NextHarmonizeTs, previousNextHarmonizeTs);
 
+    NHPTimer::STime hpnow = GetCycleCountFast();
+    NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
+    TlsThreadContext->ElapsingActorActivity.store(HarmonizerActivityIndex, std::memory_order_release);
+    TlsThreadContext->WorkerCtx->AddElapsedCycles(ActorSystemActivityIndex, hpnow - hpprev);
+
     if (PriorityOrder.empty()) {
         CalculatePriorityOrder();
     }
@@ -765,6 +773,10 @@ void THarmonizer::Harmonize(ui64 ts) {
     PullStats(ts);
     HarmonizeImpl(ts);
 
+    hpnow = GetCycleCountFast();
+    hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
+    TlsThreadContext->ElapsingActorActivity.store(ActorSystemActivityIndex, std::memory_order_release);
+    TlsThreadContext->WorkerCtx->AddElapsedCycles(HarmonizerActivityIndex, hpnow - hpprev);
     Lock.Release();
 }
 

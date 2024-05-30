@@ -2063,14 +2063,8 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
         YQL_ENSURE(outputItemType->IsStruct(), "Row type is not struct");
         const auto structType = static_cast<TStructType*>(outputItemType);
 
-        if (params.GetFormat() == "parquet") {
-            YQL_ENSURE(params.GetArrow(), "Only arrow blocks format is supported for \"parquet\"");
-        } else if (params.GetFormat() != "json_each_row") {
-            YQL_ENSURE(!params.GetArrow(), "Arrow blocks format is supported for \"" << params.GetFormat() << '\"');
-        }
-
         const auto readSpec = std::make_shared<TReadSpec>();
-        readSpec->Arrow = params.GetArrow();
+        readSpec->Arrow = params.GetFormat() == "parquet";
         readSpec->ParallelRowGroupCount = params.GetParallelRowGroupCount();
         readSpec->RowGroupReordering = params.GetRowGroupReordering();
         readSpec->ParallelDownloadCount = params.GetParallelDownloadCount();

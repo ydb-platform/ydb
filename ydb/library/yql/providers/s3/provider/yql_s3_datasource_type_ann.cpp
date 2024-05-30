@@ -337,7 +337,7 @@ public:
     }
 
     TStatus HandleS3ParseSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 6U, 7U, ctx)) {
+        if (!EnsureMinMaxArgsCount(*input, 5U, 6U, ctx)) {
             return TStatus::Error;
         }
 
@@ -362,11 +362,6 @@ public:
             return TStatus::Error;
         }
 
-        if (!EnsureAtom(*input->Child(TS3ParseSettings::idx_Arrow), ctx))
-        {
-            return TStatus::Error;
-        }
-
         const auto& rowTypeNode = *input->Child(TS3ParseSettings::idx_RowType);
         if (!EnsureType(rowTypeNode, ctx)) {
             return TStatus::Error;
@@ -384,7 +379,7 @@ public:
         }
 
         const TTypeAnnotationNode* itemType = nullptr;
-        if (FromString<bool>(input->Child(TS3ParseSettings::idx_Arrow)->Content())) {
+        if (input->Child(TS3ParseSettings::idx_Format)->Content() == "parquet") {
             std::unordered_set<TString> extraColumnNames(extraColumnsType->GetSize());
             for (const auto& extraColumn : extraColumnsType->GetItems()) {
                 extraColumnNames.insert(TString{extraColumn->GetName()});

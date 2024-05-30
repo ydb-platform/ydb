@@ -601,7 +601,7 @@ Y_UNIT_TEST_SUITE(TStoragePoolsStatsPersistence) {
         TTestBasicRuntime runtime;
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
-        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
 
         TTestEnvOptions opts;
         opts.DisableStatsBatching(true);
@@ -662,7 +662,7 @@ Y_UNIT_TEST_SUITE(TStoragePoolsStatsPersistence) {
         UNIT_ASSERT_VALUES_EQUAL(NKikimr::CompactTable(runtime, datashard, ResolveTableId(runtime, "/MyRoot/SomeTable")).GetStatus(),
                                  NKikimrTxDataShard::TEvCompactTableResult::OK
         );
-        // we wait for at least 1 part count, because it means that the table has been compacted
+        // we wait for at least 1 part count, because it signals that the stats have been recalculated after compaction
         WaitTableStats(runtime, datashard, 1, rowsCount).GetTableStats();
 
         auto checkUsage = [&poolsKinds](ui64 totalUsage, const auto& poolUsage) {

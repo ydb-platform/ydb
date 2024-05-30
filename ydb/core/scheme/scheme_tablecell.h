@@ -659,21 +659,17 @@ public:
 
     bool IsEmpty() const;
 
-    struct TOutputBatch {
-        ui64 Memory = 0;
-        TString Data;
-    };
-
-    TOutputBatch Flush(bool force);
-
-    ui64 AddRow(TVector<TCell>&& cells);
-
-private:
     struct TBatch {
         ui64 Memory = 0;
         ui64 MemorySerialized = 0;
         TVector<TCell> Data;
     };
+
+    TBatch Flush(bool force);
+
+    ui64 AddRow(TArrayRef<TCell> cells);
+
+private:
     std::deque<TBatch> Batches;
 
     ui16 ColCount;

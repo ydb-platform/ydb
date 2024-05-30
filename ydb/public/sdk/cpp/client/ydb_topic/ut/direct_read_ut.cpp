@@ -560,6 +560,23 @@ struct TMockDirectReadSessionProcessor : public TMockProcessorFactory<TDirectRea
     std::queue<std::future<void>> CallbackFutures;
 };
 
+class TMockRetryPolicy : public IRetryPolicy {
+public:
+    MOCK_METHOD(IRetryPolicy::IRetryState::TPtr, CreateRetryState, (), (const, override));
+    TMaybe<TDuration> Delay;
+};
+
+class TMockRetryState : public IRetryPolicy::IRetryState {
+public:
+    TMockRetryState(std::shared_ptr<TMockRetryPolicy> policy)
+        : Policy(policy) {}
+
+    TMaybe<TDuration> GetNextRetryDelay(EStatus) {
+        return Policy->Delay;
+    }
+private:
+    std::shared_ptr<TMockRetryPolicy> Policy;
+};
 
 // Class for testing read session impl with mocks.
 class TDirectReadSessionImplTestSetup {
@@ -617,6 +634,7 @@ public:
     TLog Log = CreateLogBackend("cerr");
     std::shared_ptr<TReadSessionEventsQueue<false>> EventsQueue;
     std::shared_ptr<TFakeContext> FakeContext = std::make_shared<TFakeContext>();
+    std::shared_ptr<TMockRetryPolicy> MockRetryPolicy = std::make_shared<TMockRetryPolicy>();
     std::shared_ptr<TMockReadProcessorFactory> MockReadProcessorFactory = std::make_shared<TMockReadProcessorFactory>();
     std::shared_ptr<TMockDirectReadProcessorFactory> MockDirectReadProcessorFactory = std::make_shared<TMockDirectReadProcessorFactory>();
     TIntrusivePtr<TMockReadSessionProcessor> MockReadProcessor = MakeIntrusive<TMockReadSessionProcessor>();
@@ -1142,6 +1160,105 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
         }
 
         gotClosedEvent.GetFuture().Wait();
+    }
+
+    Y_UNIT_TEST(ResetRetryStateOnSuccess) {
+        /*
+        Test that the client creates a new retry state on the first error after a successful response.
+
+        With the default retry policy (exponential backoff), retry delays grow after each unsuccessful request.
+        After the first successful request retry state should be reset, so the delay after another unsuccessful request will be small.
+
+        E.g. if the exponential backoff policy is used, and minDelay is 1ms, and scaleFactor is 1000, then the following should happen:
+
+        client -> server: InitDirectReadRequest
+        client <-- server: InitDirectReadResponse
+        client -> server: StartDirectReadPartitionSessionRequest
+        client <- server: StopDirectReadPartitionSession(OVERLOADED)
+        note over client: Wait 1 ms
+        client -> server: StartDirectReadPartitionSessionRequest
+        client <-- server: StartDirectReadPartitionSessionResponse
+        note over client: Reset RetryState
+        client <- server: StopDirectReadPartitionSession(OVERLOADED)
+        note over client: Wait 1 ms, not 1 second
+        client -> server: StartDirectReadPartitionSessionRequest
+        */
+
+        TDirectReadSessionImplTestSetup setup;
+        setup.ReadSessionSettings.RetryPolicy(setup.MockRetryPolicy);
+
+        auto gotFinalStart = NThreading::NewPromise();
+        TPartitionSessionId partitionSessionId = 1;
+
+        {
+            ::testing::InSequence sequence;
+
+            // Create TDirectReadSession::RetryState
+            EXPECT_CALL(*setup.MockRetryPolicy, CreateRetryState())
+                .Times(1);
+
+            EXPECT_CALL(*setup.MockDirectReadProcessorFactory, OnCreateProcessor(_))
+                .WillOnce([&]() { setup.MockDirectReadProcessorFactory->CreateProcessor(setup.MockDirectReadProcessor); });
+
+            EXPECT_CALL(*setup.MockDirectReadProcessor, OnInitDirectReadRequest(_))
+                .Times(1);
+            EXPECT_CALL(*setup.MockDirectReadProcessor, OnStartDirectReadPartitionSessionRequest(_))
+                .Times(1);
+
+            // The client receives StopDirectReadPartitionSession, create TDirectReadSession::PartitionSessions[i].RetryState
+            EXPECT_CALL(*setup.MockRetryPolicy, CreateRetryState())
+                .WillOnce(Return(std::make_unique<TMockRetryState>(setup.MockRetryPolicy)));
+
+            EXPECT_CALL(*setup.MockDirectReadProcessor, OnStartDirectReadPartitionSessionRequest(_))
+                .Times(1);
+
+            // The client receives StartDirectReadPartitionSessionResponse, resets retry state,
+            // then receives StopDirectReadPartitionSession and has to create a new retry state.
+            EXPECT_CALL(*setup.MockRetryPolicy, CreateRetryState())
+                .WillOnce(Return(std::make_unique<TMockRetryState>(setup.MockRetryPolicy)));
+
+            EXPECT_CALL(*setup.MockDirectReadProcessor, OnStartDirectReadPartitionSessionRequest(_))
+                .WillOnce([&]() { gotFinalStart.SetValue(); });
+        }
+
+        auto session = setup.GetDirectReadSession({
+            .OnSchedule = [](TDuration, std::function<void()> cb) { cb(); },
+        });
+
+        session->Start();
+        setup.MockDirectReadProcessorFactory->Wait();
+
+        session->AddPartitionSession({ .PartitionSessionId = partitionSessionId, .Location = {2, 3} });
+
+        setup.AddDirectReadResponse(TMockDirectReadSessionProcessor::TServerReadInfo()
+            .InitDirectReadResponse());
+
+        setup.MockRetryPolicy->Delay = TDuration::MilliSeconds(1);
+
+        setup.AddDirectReadResponse(TMockDirectReadSessionProcessor::TServerReadInfo()
+            .StopDirectReadPartitionSession(Ydb::StatusIds::OVERLOADED, partitionSessionId));
+
+        setup.AddDirectReadResponse(TMockDirectReadSessionProcessor::TServerReadInfo()
+            .StartDirectReadPartitionSessionResponse(partitionSessionId));
+
+        setup.AddDirectReadResponse(TMockDirectReadSessionProcessor::TServerReadInfo()
+            .StopDirectReadPartitionSession(Ydb::StatusIds::OVERLOADED, partitionSessionId));
+
+        gotFinalStart.GetFuture().Wait();
+    }
+
+    Y_UNIT_TEST(PartitionSessionRetryStateRetainsOnReconnects) {
+        /*
+        We need to retain retry states of separate partition sessions
+        even after reestablishing the whole connection to a node.
+
+        E.g. partition session receives StopDirectReadPartitionSession
+        and we need to send StartDirectReadPartitionSessionRequest in 5 minutes due to the retry policy.
+
+        But in the meantime, the session loses connection to the server and reconnects within several seconds.
+
+        We must not send that StartDirectReadPartitionSessionRequest right away, but wait ~5 minutes.
+        */
     }
 
 } // Y_UNIT_TEST_SUITE(DirectReadSession)

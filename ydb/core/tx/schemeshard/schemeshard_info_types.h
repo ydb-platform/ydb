@@ -1281,6 +1281,12 @@ struct TSchemeQuotas : public TVector<TSchemeQuota> {
     mutable size_t LastKnownSize = 0;
 };
 
+enum class EUserFacingStorageType {
+    Ssd,
+    Hdd,
+    Ignored
+};
+
 struct IQuotaCounters {
     virtual void ChangeStreamShardsCount(i64 delta) = 0;
     virtual void ChangeStreamShardsQuota(i64 delta) = 0;
@@ -1289,6 +1295,7 @@ struct IQuotaCounters {
     virtual void ChangeDiskSpaceTablesDataBytes(i64 delta) = 0;
     virtual void ChangeDiskSpaceTablesIndexBytes(i64 delta) = 0;
     virtual void ChangeDiskSpaceTablesTotalBytes(i64 delta) = 0;
+    virtual void ChangeDiskSpaceTables(EUserFacingStorageType storageType, i64 dataDelta, i64 indexDelta) = 0;
     virtual void ChangeDiskSpaceTopicsTotalBytes(ui64 value) = 0;
     virtual void ChangeDiskSpaceQuotaExceeded(i64 delta) = 0;
     virtual void ChangeDiskSpaceHardQuotaBytes(i64 delta) = 0;

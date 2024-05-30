@@ -22,6 +22,7 @@ public:
 
     enum class EState: ui8 {
         Ready,
+        Done,
         Removing,
         Error = 255
     };
@@ -72,12 +73,16 @@ public:
         virtual const TString& GetIssue() const = 0;
         virtual void SetIssue(const TString& value) = 0;
 
-        virtual void Progress(TReplication::TPtr replication, const TActorContext& ctx) = 0;
+        virtual void Progress(const TActorContext& ctx) = 0;
         virtual void Shutdown(const TActorContext& ctx) = 0;
 
     protected:
-        virtual IActor* CreateWorkerRegistar(TReplication::TPtr replication, const TActorContext& ctx) const = 0;
+        virtual IActor* CreateWorkerRegistar(const TActorContext& ctx) const = 0;
     };
+
+    friend class TTargetBase;
+    void AddPendingAlterTarget(ui64 id);
+    void RemovePendingAlterTarget(ui64 id);
 
     struct TDropOp {
         TActorId Sender;
@@ -114,6 +119,8 @@ public:
 
     void SetTenant(const TString& value);
     const TString& GetTenant() const;
+
+    bool CheckAlterDone() const;
 
     void SetDropOp(const TActorId& sender, const std::pair<ui64, ui32>& opId);
     const std::optional<TDropOp>& GetDropOp() const;

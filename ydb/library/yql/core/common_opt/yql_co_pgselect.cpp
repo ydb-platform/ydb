@@ -4093,23 +4093,6 @@ TExprNode::TPtr ExpandPgLike(const TExprNode::TPtr& node, TExprContext& ctx, TOp
         .Build();
 }
 
-TExprNode::TPtr ExpandPgIn(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-    Y_UNUSED(optCtx);
-    return ctx.Builder(node->Pos())
-        .Callable("ToPg")
-            .Callable(0, "SqlIn")
-                .Add(0, node->ChildPtr(1))
-                .Add(1, node->ChildPtr(0))
-                .List(2)
-                    .List(0)
-                        .Atom(0, "ansi")
-                    .Seal()
-                .Seal()
-            .Seal()
-        .Seal()
-        .Build();
-}
-
 TExprNode::TPtr ExpandPgBetween(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
     Y_UNUSED(optCtx);
     const bool isSym = node->IsCallable("PgBetweenSym");

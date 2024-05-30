@@ -1,10 +1,10 @@
 Registering pre-existing tables
-	student
-	emp
+	onek
 	onek2
+	emp
+	student
 	stud_emp
 	int8_tbl
-	onek
 <sql-statement>
 --
 -- SELECT
@@ -267,6 +267,14 @@ select * from onek,
     -stdin-:<main>:4:12: Error: SubLinks are not allowed in: VALUES
     	  (values ((select i from
 	           ^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	-- a more complex case
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	-- a more complex case
+	^
 <sql-statement>
 -- try VALUES in a subquery
 select * from onek

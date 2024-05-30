@@ -385,12 +385,28 @@ void TMessage::Serialize(IKafkaProtocolWriter* writer, int /*apiVersion*/) const
     writer->WriteBytes(Value);
 }
 
+void TMessage::Deserialize(IKafkaProtocolReader* reader, int /*apiVersion*/)
+{
+    Crc = reader->ReadInt32();
+    MagicByte = reader->ReadByte();
+    Attributes = reader->ReadByte();
+    Key = reader->ReadBytes();
+    Value = reader->ReadBytes();
+}
+
 void TRecord::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
 {
     writer->WriteInt64(Offset);
     writer->StartBytes();
     Message.Serialize(writer, apiVersion);
     writer->FinishBytes();
+}
+
+void TRecord::Deserialize(IKafkaProtocolReader* reader, int apiVersion)
+{
+    Offset = reader->ReadInt64();
+    reader->ReadInt32();
+    Message.Deserialize(reader, apiVersion);
 }
 
 void TRspFetchResponsePartition::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
@@ -455,6 +471,64 @@ void TRspSaslAuthenticate::Serialize(IKafkaProtocolWriter* writer, int /*apiVers
     writer->WriteErrorCode(ErrorCode);
     writer->WriteNullableString(ErrorMessage);
     writer->WriteBytes(AuthBytes);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TReqProduceTopicDataPartitionData::Deserialize(IKafkaProtocolReader* reader, int apiVersion)
+{
+    Index = reader->ReadInt32();
+    auto bytesCount = reader->StartReadBytes();
+    while (reader->GetReadBytesCount() < bytesCount) {
+        TRecord record;
+        record.Deserialize(reader, apiVersion);
+
+        Records.push_back(std::move(record));
+    }
+    reader->FinishReadBytes();
+}
+
+void TReqProduceTopicData::Deserialize(IKafkaProtocolReader* reader, int apiVersion)
+{
+    Name = reader->ReadString();
+    PartitionData.resize(reader->ReadInt32());
+    for (auto& partitionDataItem : PartitionData) {
+        partitionDataItem.Deserialize(reader, apiVersion);
+    }
+}
+
+void TReqProduce::Deserialize(IKafkaProtocolReader* reader, int apiVersion)
+{
+    Acks = reader->ReadInt16();
+    TimeoutMs = reader->ReadInt32();
+    TopicData.resize(reader->ReadInt32());
+    for (auto& topicDataItem : TopicData) {
+        topicDataItem.Deserialize(reader, apiVersion);
+    }
+}
+
+void TRspProduceResponsePartitionResponse::Serialize(IKafkaProtocolWriter* writer, int /*apiVersion*/) const
+{
+    writer->WriteInt32(Index);
+    writer->WriteErrorCode(ErrorCode);
+    writer->WriteInt64(BaseOffset);
+}
+
+void TRspProduceResponse::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
+{
+    writer->WriteString(Name);
+    writer->WriteInt32(PartitionResponses.size());
+    for (const auto& response : PartitionResponses) {
+        response.Serialize(writer, apiVersion);
+    }
+}
+
+void TRspProduce::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
+{
+    writer->WriteInt32(Responses.size());
+    for (const auto& response : Responses) {
+        response.Serialize(writer, apiVersion);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -110,6 +110,28 @@ public:
         Offset_ += length;
     }
 
+    i32 StartReadBytes() override
+    {
+        auto count = ReadInt32();
+        BytesBegins_.push_back(Offset_);
+        return count;
+    }
+
+    i32 GetReadBytesCount() override
+    {
+        if (!BytesBegins_.empty()) {
+            return Offset_ - BytesBegins_.back();
+        }
+        return 0;
+    }
+
+    void FinishReadBytes() override
+    {
+        if (!BytesBegins_.empty()) {
+            return BytesBegins_.pop_back();
+        }
+    }
+
     TSharedRef GetSuffix() const override
     {
         return Data_.Slice(Offset_, Data_.Size());
@@ -132,6 +154,8 @@ public:
 private:
     const TSharedRef Data_;
     i64 Offset_ = 0;
+
+    std::vector<i64> BytesBegins_;
 
     template <typename T>
     T DoReadInt()

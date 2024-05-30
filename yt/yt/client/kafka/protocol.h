@@ -28,6 +28,10 @@ struct IKafkaProtocolReader
     virtual TGUID ReadUuid() = 0;
     virtual void ReadString(TString* result, int length) = 0;
 
+    virtual i32 StartReadBytes() = 0;
+    virtual i32 GetReadBytesCount() = 0;
+    virtual void FinishReadBytes() = 0;
+
     virtual TSharedRef GetSuffix() const = 0;
 
     //! Returns true if input is fully consumed and false otherwise.

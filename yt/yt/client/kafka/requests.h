@@ -12,6 +12,7 @@ namespace NYT::NKafka {
 
 DEFINE_ENUM(ERequestType,
     ((None)               (-1))
+    ((Produce)            (0))
     ((Fetch)              (1))
     ((ListOffsets)        (2)) // Unimplemented.
     ((Metadata)           (3))
@@ -380,6 +381,8 @@ struct TMessage
     TString Value;
 
     void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
+
+    void Deserialize(IKafkaProtocolReader* reader, int apiVersion);
 };
 
 struct TRecord
@@ -389,6 +392,8 @@ struct TRecord
     TMessage Message;
 
     void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
+
+    void Deserialize(IKafkaProtocolReader* reader, int apiVersion);
 };
 
 struct TRspFetchResponsePartition
@@ -457,6 +462,62 @@ struct TRspSaslAuthenticate
     EErrorCode ErrorCode = EErrorCode::None;
     std::optional<TString> ErrorMessage;
     TString AuthBytes;
+
+    void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TReqProduceTopicDataPartitionData
+{
+    int32_t Index = 0;
+    std::vector<TRecord> Records;
+
+    void Deserialize(IKafkaProtocolReader* reader, int apiVersion);
+};
+
+struct TReqProduceTopicData
+{
+    TString Name;
+    std::vector<TReqProduceTopicDataPartitionData> PartitionData;
+
+    void Deserialize(IKafkaProtocolReader* reader, int apiVersion);
+};
+
+struct TReqProduce
+{
+    int16_t Acks = 0;
+    int32_t TimeoutMs = 0;
+    std::vector<TReqProduceTopicData> TopicData;
+
+    void Deserialize(IKafkaProtocolReader* reader, int apiVersion);
+
+    static ERequestType GetRequestType()
+    {
+        return ERequestType::Produce;
+    }
+};
+
+struct TRspProduceResponsePartitionResponse
+{
+    int32_t Index = 0;
+    EErrorCode ErrorCode = EErrorCode::None;
+    int64_t BaseOffset = 0;
+
+    void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
+};
+
+struct TRspProduceResponse
+{
+    TString Name;
+    std::vector<TRspProduceResponsePartitionResponse> PartitionResponses;
+
+    void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
+};
+
+struct TRspProduce
+{
+    std::vector<TRspProduceResponse> Responses;
 
     void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
 };

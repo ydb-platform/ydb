@@ -502,6 +502,11 @@ select jsonb '"10-03-2017"' @? '$.datetime("dd-mm-yyyy")';
  t
 (1 row)
 
+set time zone '+00';
+set time zone '+10';
+set time zone default;
+set time zone '+00';
+set time zone default;
 SELECT jsonb '[{"a": 1}, {"a": 2}]' @? '$[*].a ? (@ > 1)';
  ?column? 
 ----------

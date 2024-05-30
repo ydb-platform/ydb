@@ -231,6 +231,7 @@ TSingleClusterReadSessionImpl<UseMigrationProtocol>::TSingleClusterReadSessionIm
     const TString& sessionId,
     const TString& clusterName,
     const TLog& log,
+    std::function<void(TDuration delay, std::function<void()> callback)> scheduleCallback,
     std::shared_ptr<IReadSessionConnectionProcessorFactory<UseMigrationProtocol>> connectionFactory,
     std::shared_ptr<TReadSessionEventsQueue<UseMigrationProtocol>> eventsQueue,
     NYdbGrpc::IQueueClientContextPtr clientContext,
@@ -245,6 +246,7 @@ TSingleClusterReadSessionImpl<UseMigrationProtocol>::TSingleClusterReadSessionIm
     , Log(log)
     , NextPartitionStreamId(partitionStreamIdStart)
     , PartitionStreamIdStep(partitionStreamIdStep)
+    , ScheduleCallback(scheduleCallback)
     , ConnectionFactory(std::move(connectionFactory))
     , DirectConnectionFactory(std::move(directConnectionFactory))
     , EventsQueue(std::move(eventsQueue))
@@ -1367,13 +1369,18 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
         DirectReadSessionManager = std::make_shared<TDirectReadSessionManager>(
             ServerSessionId,
             Settings,
-            [this](Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&& response, TDeferredActions<false>& deferred) {
-                if (auto s = this->SelfContext->LockShared()) {
-                    this->OnDirectReadDone(std::move(response), deferred);
-                }
-            },
-            [this](TSessionClosedEvent&& closeEvent) {
-                this->AbortSession(std::move(closeEvent));
+            TDirectReadSessionCallbacks {
+                .OnDirectReadDone = [context = this->SelfContext](Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&& response, TDeferredActions<false>& deferred) {
+                    if (auto s = context->LockShared()) {
+                        s->OnDirectReadDone(std::move(response), deferred);
+                    }
+                },
+                .OnAbortSession = [context = this->SelfContext](TSessionClosedEvent&& closeEvent) {
+                    if (auto s = context->LockShared()) {
+                        s->AbortSession(std::move(closeEvent));
+                    }
+                },
+                .OnSchedule = ScheduleCallback,
             },
             ClientContext->CreateContext(),
             DirectConnectionFactory,

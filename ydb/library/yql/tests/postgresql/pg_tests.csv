@@ -1,6 +1,6 @@
 testcase,statements,successful,ratio
 aggregates,416,129,31.01
-alter_table,1679,233,13.88
+alter_table,1679,164,9.77
 arrays,410,148,36.1
 bit,115,90,78.26
 boolean,93,87,93.55

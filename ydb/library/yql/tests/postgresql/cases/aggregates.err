@@ -2852,7 +2852,7 @@ ALTER TABLE tenk1 set (parallel_workers = 4);
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	-- force use of parallelism
 	^
 <sql-statement>

@@ -1257,6 +1257,9 @@ SELECT
     -stdin-:<main>:6:6: Error: alternative is not implemented yet : 138
     	    (ARRAY[(0, 0), (1, 1)]),
 	     ^
+    -stdin-:<main>:2:5: Error: alternative is not implemented yet : 138
+    	    array_position(ids, (1, 1)),
+	    ^
 <sql-statement>
 -- operators
 SELECT a FROM arrtest WHERE b = ARRAY[[[113,142],[1,147]]];
@@ -1406,6 +1409,14 @@ SELECT array_agg(x) || array_agg(x) FROM (VALUES (ROW(1,2)), (ROW(3,4))) v(x);
     -stdin-:<main>:1:1: Error: alternative is not implemented yet : 138
     	SELECT array_agg(x) || array_agg(x) FROM (VALUES (ROW(1,2)), (ROW(3,4))) v(x);
 	^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	SELECT array_agg(x) || array_agg(x) FROM (VALUES (ROW(1,2)), (ROW(3,4))) v(x);
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	SELECT array_agg(x) || array_agg(x) FROM (VALUES (ROW(1,2)), (ROW(3,4))) v(x);
+	^
 <sql-statement>
 SELECT ROW(1,2) || array_agg(x) FROM (VALUES (ROW(3,4)), (ROW(5,6))) v(x);
 </sql-statement>
@@ -1414,6 +1425,9 @@ SELECT ROW(1,2) || array_agg(x) FROM (VALUES (ROW(3,4)), (ROW(5,6))) v(x);
     -stdin-:<main>:1:1: Error: alternative is not implemented yet : 138
     	SELECT ROW(1,2) || array_agg(x) FROM (VALUES (ROW(3,4)), (ROW(5,6))) v(x);
 	^
+    -stdin-:<main>:1:17: Error: alternative is not implemented yet : 138
+    	SELECT ROW(1,2) || array_agg(x) FROM (VALUES (ROW(3,4)), (ROW(5,6))) v(x);
+	                ^
 <sql-statement>
 SELECT * FROM array_op_test WHERE i @> '{32}' ORDER BY seqno;
 </sql-statement>
@@ -1671,7 +1685,7 @@ select 33 * any (44);
         -stdin-:<main>:1:11: Error: At function: PgAnyOp
         	select 33 * any (44);
 	          ^
-            -stdin-:<main>:1:11: Error: ydb/library/yql/parser/pg_catalog/catalog.cpp:2120: Condition violated: `fromTypePtr'
+            -stdin-:<main>:1:11: Error: ydb/library/yql/parser/pg_catalog/catalog.cpp:2143: Condition violated: `fromTypePtr'
             	select 33 * any (44);
 	          ^
 <sql-statement>

@@ -411,6 +411,14 @@ SELECT * FROM (SELECT 1 INTO f) bar;
     -stdin-:<main>:1:1: Error: SelectStmt: not supported intoClause
     	SELECT * FROM (SELECT 1 INTO f) bar;
 	^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	SELECT * FROM (SELECT 1 INTO f) bar;
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	SELECT * FROM (SELECT 1 INTO f) bar;
+	^
 <sql-statement>
 CREATE VIEW foo AS SELECT 1 INTO b;
 </sql-statement>

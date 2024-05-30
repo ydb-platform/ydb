@@ -286,9 +286,10 @@ ui64 TPartition::MeteringDataSize(const TActorContext& /*ctx*/) const {
     // We assume that DataKyesBody contains an up-to-date set of blobs, their relevance is
     // maintained by the background process. However, the last block may contain several irrelevant
     // messages. Because of them, we throw out the size of the entire blob.
-    ui64 size = Size() - DataKeysBody[0].Size;
-    Y_DEBUG_ABORT_UNLESS(size >= 0, "Metering data size must be positive");
-    return std::max<ui64>(size, 0);
+    auto size = Size();
+    auto lastBlobSize = DataKeysBody[0].Size;
+    Y_DEBUG_ABORT_UNLESS(size >= lastBlobSize, "Metering data size must be positive");
+    return size >= lastBlobSize ? size - lastBlobSize : 0;
 }
 
 ui64 TPartition::ReserveSize() const {
@@ -308,7 +309,9 @@ ui64 TPartition::GetUsedStorage(const TActorContext& ctx) {
     const auto duration = now - LastUsedStorageMeterTimestamp;
     LastUsedStorageMeterTimestamp = now;
 
-    ui64 size = std::max<ui64>(MeteringDataSize(ctx) - ReserveSize(), 0);
+    auto dataSize = MeteringDataSize(ctx);
+    auto reservedSize = ReserveSize();
+    ui64 size = dataSize > reservedSize ? dataSize - reservedSize : 0;
     return size * duration.MilliSeconds() / 1000 / 1_MB; // mb*seconds
 }
 

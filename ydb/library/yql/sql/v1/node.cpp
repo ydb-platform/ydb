@@ -409,204 +409,204 @@ void INode::DoAdd(TNodePtr node) {
 }
 
 bool IProxyNode::IsNull() const {
-    return Parent->IsNull();
+    return Inner->IsNull();
 }
 
 bool IProxyNode::IsLiteral() const {
-    return Parent->IsNull();
+    return Inner->IsNull();
 }
 
 TString IProxyNode::GetLiteralType() const {
-    return Parent->GetLiteralType();
+    return Inner->GetLiteralType();
 }
 
 TString IProxyNode::GetLiteralValue() const {
-    return Parent->GetLiteralValue();
+    return Inner->GetLiteralValue();
 }
 
 bool IProxyNode::IsIntegerLiteral() const {
-    return Parent->IsIntegerLiteral();
+    return Inner->IsIntegerLiteral();
 }
 
 INode::TPtr IProxyNode::ApplyUnaryOp(TContext& ctx, TPosition pos, const TString& opName) const {
-    return Parent->ApplyUnaryOp(ctx, pos, opName);
+    return Inner->ApplyUnaryOp(ctx, pos, opName);
 }
 
 bool IProxyNode::IsAsterisk() const {
-    return Parent->IsAsterisk();
+    return Inner->IsAsterisk();
 }
 
 const TString* IProxyNode::SubqueryAlias() const {
-    return Parent->SubqueryAlias();
+    return Inner->SubqueryAlias();
 }
 
 TString IProxyNode::GetOpName() const {
-    return Parent->GetOpName();
+    return Inner->GetOpName();
 }
 
 const TString* IProxyNode::GetLiteral(const TString& type) const {
-    return Parent->GetLiteral(type);
+    return Inner->GetLiteral(type);
 }
 
 const TString* IProxyNode::GetColumnName() const {
-    return Parent->GetColumnName();
+    return Inner->GetColumnName();
 }
 
 void IProxyNode::AssumeColumn() {
-    Parent->AssumeColumn();
+    Inner->AssumeColumn();
 }
 
 const TString* IProxyNode::GetSourceName() const {
-    return Parent->GetSourceName();
+    return Inner->GetSourceName();
 }
 
 const TString* IProxyNode::GetAtomContent() const {
-    return Parent->GetAtomContent();
+    return Inner->GetAtomContent();
 }
 
 bool IProxyNode::IsOptionalArg() const {
-    return Parent->IsOptionalArg();
+    return Inner->IsOptionalArg();
 }
 
 size_t IProxyNode::GetTupleSize() const {
-    return Parent->GetTupleSize();
+    return Inner->GetTupleSize();
 }
 
 INode::TPtr IProxyNode::GetTupleElement(size_t index) const {
-    return Parent->GetTupleElement(index);
+    return Inner->GetTupleElement(index);
 }
 
 ITableKeys* IProxyNode::GetTableKeys() {
-    return Parent->GetTableKeys();
+    return Inner->GetTableKeys();
 }
 
 ISource* IProxyNode::GetSource() {
-    return Parent->GetSource();
+    return Inner->GetSource();
 }
 
 TVector<INode::TPtr>* IProxyNode::ContentListPtr() {
-    return Parent->ContentListPtr();
+    return Inner->ContentListPtr();
 }
 
 TAggregationPtr IProxyNode::GetAggregation() const {
-    return Parent->GetAggregation();
+    return Inner->GetAggregation();
 }
 
 void IProxyNode::CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) {
-    Parent->CollectPreaggregateExprs(ctx, src, exprs);
+    Inner->CollectPreaggregateExprs(ctx, src, exprs);
 }
 
 INode::TPtr IProxyNode::WindowSpecFunc(const TPtr& type) const {
-    return Parent->WindowSpecFunc(type);
+    return Inner->WindowSpecFunc(type);
 }
 
 bool IProxyNode::SetViewName(TContext& ctx, TPosition pos, const TString& view) {
-    return Parent->SetViewName(ctx, pos, view);
+    return Inner->SetViewName(ctx, pos, view);
 }
 
 bool IProxyNode::SetPrimaryView(TContext& ctx, TPosition pos) {
-    return Parent->SetPrimaryView(ctx, pos);
+    return Inner->SetPrimaryView(ctx, pos);
 }
 
 bool IProxyNode::UsedSubquery() const {
-    return Parent->UsedSubquery();
+    return Inner->UsedSubquery();
 }
 
 bool IProxyNode::IsSelect() const {
-    return Parent->IsSelect();
+    return Inner->IsSelect();
 }
 
 bool IProxyNode::HasSelectResult() const {
-    return Parent->HasSelectResult();
+    return Inner->HasSelectResult();
 }
 
 const TString* IProxyNode::FuncName() const {
-    return Parent->FuncName();
+    return Inner->FuncName();
 }
 
 const TString* IProxyNode::ModuleName() const {
-    return Parent->ModuleName();
+    return Inner->ModuleName();
 }
 
 bool IProxyNode::HasSkip() const {
-    return Parent->HasSkip();
+    return Inner->HasSkip();
 }
 
 TColumnNode* IProxyNode::GetColumnNode() {
-    return Parent->GetColumnNode();
+    return Inner->GetColumnNode();
 }
 
 const TColumnNode* IProxyNode::GetColumnNode() const {
-    return static_cast<const INode*>(Parent.Get())->GetColumnNode();
+    return static_cast<const INode*>(Inner.Get())->GetColumnNode();
 }
 
 TTupleNode* IProxyNode::GetTupleNode() {
-    return Parent->GetTupleNode();
+    return Inner->GetTupleNode();
 }
 
 const TTupleNode* IProxyNode::GetTupleNode() const {
-    return static_cast<const INode*>(Parent.Get())->GetTupleNode();
+    return static_cast<const INode*>(Inner.Get())->GetTupleNode();
 }
 
 TCallNode* IProxyNode::GetCallNode() {
-    return Parent->GetCallNode();
+    return Inner->GetCallNode();
 }
 
 const TCallNode* IProxyNode::GetCallNode() const {
-    return static_cast<const INode*>(Parent.Get())->GetCallNode();
+    return static_cast<const INode*>(Inner.Get())->GetCallNode();
 }
 
 TStructNode* IProxyNode::GetStructNode() {
-    return Parent->GetStructNode();
+    return Inner->GetStructNode();
 }
 
 const TStructNode* IProxyNode::GetStructNode() const {
-    return static_cast<const INode*>(Parent.Get())->GetStructNode();
+    return static_cast<const INode*>(Inner.Get())->GetStructNode();
 }
 
 TAccessNode* IProxyNode::GetAccessNode() {
-    return Parent->GetAccessNode();
+    return Inner->GetAccessNode();
 }
 
 const TAccessNode* IProxyNode::GetAccessNode() const {
-    return static_cast<const INode*>(Parent.Get())->GetAccessNode();
+    return static_cast<const INode*>(Inner.Get())->GetAccessNode();
 }
 
 TLambdaNode* IProxyNode::GetLambdaNode() {
-    return Parent->GetLambdaNode();
+    return Inner->GetLambdaNode();
 }
 
 const TLambdaNode* IProxyNode::GetLambdaNode() const {
-    return static_cast<const INode*>(Parent.Get())->GetLambdaNode();
+    return static_cast<const INode*>(Inner.Get())->GetLambdaNode();
 }
 
 TUdfNode* IProxyNode::GetUdfNode() {
-    return Parent->GetUdfNode();
+    return Inner->GetUdfNode();
 }
 
 const TUdfNode* IProxyNode::GetUdfNode() const {
-    return static_cast<const INode*>(Parent.Get())->GetUdfNode();
+    return static_cast<const INode*>(Inner.Get())->GetUdfNode();
 }
 
 void IProxyNode::DoUpdateState() const {
-    State.Set(ENodeState::CountHint, Parent->GetCountHint());
-    State.Set(ENodeState::Const, Parent->IsConstant());
-    State.Set(ENodeState::MaybeConst, Parent->MaybeConstant());
-    State.Set(ENodeState::Aggregated, Parent->IsAggregated());
-    State.Set(ENodeState::AggregationKey, Parent->IsAggregationKey());
-    State.Set(ENodeState::OverWindow, Parent->IsOverWindow());
+    State.Set(ENodeState::CountHint, Inner->GetCountHint());
+    State.Set(ENodeState::Const, Inner->IsConstant());
+    State.Set(ENodeState::MaybeConst, Inner->MaybeConstant());
+    State.Set(ENodeState::Aggregated, Inner->IsAggregated());
+    State.Set(ENodeState::AggregationKey, Inner->IsAggregationKey());
+    State.Set(ENodeState::OverWindow, Inner->IsOverWindow());
 }
 
 void IProxyNode::DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const {
-    Parent->VisitTree(func, visited);
+    Inner->VisitTree(func, visited);
 }
 
 bool IProxyNode::DoInit(TContext& ctx, ISource* src) {
-    return Parent->Init(ctx, src);
+    return Inner->Init(ctx, src);
 }
 
 void IProxyNode::DoAdd(TPtr node) {
-    Parent->Add(node);
+    Inner->Add(node);
 }
 
 void MergeHints(TTableHints& base, const TTableHints& overrides) {
@@ -3296,8 +3296,8 @@ public:
     }
 
     TPtr DoClone() const final {
-        // do not clone parent here
-        return new TNamedExprReferenceNode(Parent, Name, TupleIndex);
+        // do not clone Inner here
+        return new TNamedExprReferenceNode(Inner, Name, TupleIndex);
     }
 
 private:
@@ -3325,11 +3325,11 @@ public:
     }
 
     TAstNode* Translate(TContext& ctx) const override {
-        return Parent->Translate(ctx);
+        return Inner->Translate(ctx);
     }
 
     TPtr DoClone() const final {
-        return new TInitWithFakeSourceProxyNode(Parent->Clone());
+        return new TInitWithFakeSourceProxyNode(Inner->Clone());
     }
 
 private:

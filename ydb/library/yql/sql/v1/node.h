@@ -278,7 +278,7 @@ namespace NSQLTranslationV1 {
     public:
         IProxyNode(TPosition pos, const TNodePtr& parent)
             : INode(pos)
-            , Parent(parent)
+            , Inner(parent)
         {}
 
     protected:
@@ -344,7 +344,7 @@ namespace NSQLTranslationV1 {
         virtual void DoAdd(TPtr node) override;
 
     protected:
-        const TNodePtr Parent;
+        const TNodePtr Inner;
     };
 
     using TTableHints = TMap<TString, TVector<TNodePtr>>;

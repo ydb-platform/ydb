@@ -1160,7 +1160,7 @@ You can read messages without a [commit](#no-commit) as well. In this case, all 
 
 Information about which messages have already been processed can be [saved on the client side](#client-commit) by sending the starting consumer offset to the server when creating a new connection. This does not change the consumer offset on the server.
 
-You can use [transactions](#read-tx). In this case, the reading offset will change only when the transaction is commited. When you connect again, all uncommited messages will be read.
+Data from topics can be read in the context of [transactions](#read-tx). In this case, the reading offset will only advance when the transaction is committed. On reconnect, all uncommitted messages will be read again.
 
 {% list tabs %}
 
@@ -1569,7 +1569,7 @@ Reading progress is usually saved on a server for each Consumer. However, such p
 
 - C++
 
-  Before reading messages, the client code must pass a reference to the transaction object to the settings of the reading session.
+  Before reading messages, the client code must pass a transaction object reference to the reading session settings.
 
   ```cpp
       ReadSession->WaitEvent().Wait(TDuration::Seconds(1));
@@ -1594,7 +1594,7 @@ Reading progress is usually saved on a server for each Consumer. However, such p
 
 {% note warning %}
 
-  When processing `events`, you do not need to explicitly confirm processing for events of the `TDataReceivedEvent`.
+  When processing `events`, you do not need to confirm processing for `TDataReceivedEvent` events explicitly.
 
 {% endnote %}
 

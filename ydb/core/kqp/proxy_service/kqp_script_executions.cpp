@@ -507,7 +507,7 @@ public:
 
     void StartScriptFinalization(EFinalizationStatus finalizationStatus, const TString& executionId, const TString& database, TMaybe<Ydb::StatusIds::StatusCode> status, TMaybe<Ydb::Query::ExecStatus> execStatus, NYql::TIssues issues) {
         ExecutionId = executionId;
-        KQP_PROXY_LOG_D("[" << OperationName << "] ExecutionId: " << ExecutionId << ", try to finalize script execution operation, finalization action: " << finalizationStatus);
+        KQP_PROXY_LOG_D("[" << OperationName << "] ExecutionId: " << ExecutionId << ", try to finalize script execution operation, finalization action: " << static_cast<i32>(finalizationStatus));
 
         if (!status || !execStatus) {
             issues.AddIssue("Finalization is not complete");

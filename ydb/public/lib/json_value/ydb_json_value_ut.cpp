@@ -533,15 +533,15 @@ Y_UNIT_TEST_SUITE(JsonValueTest) {
             .AddMember("Interval64")
                 .Interval64(1)
             .AddMember("Date32")
-                .Date32(-123)
-            .AddMember("Value")
-                .Int32(-100)
-            .AddMember("Description")
-                .EmptyOptional(EPrimitiveType::Utf8)
+                .Date32(-1024)
+            .AddMember("Datetime64")
+                .Datetime64(-123456789)
+            .AddMember("Timestamp64")
+                .Timestamp64(-123456789000100LL)
             .EndStruct()
             .Build();
         const TString jsonString = FormatValueJson(value, EBinaryStringEncoding::Unicode);
-        UNIT_ASSERT_NO_DIFF(jsonString, R"({"Interval64":1,"Date32":"1969-08-31","Value":-100,"Description":null})");
+        UNIT_ASSERT_NO_DIFF(jsonString, R"({"Interval64":1,"Date32":"1967-03-14","Datetime64":"1966-02-02T02:26:51Z","Timestamp64":"1966-02-02T02:26:50.999900Z"})");
         TValue resultValue = JsonToYdbValue(jsonString, value.GetType(), EBinaryStringEncoding::Unicode);
         UNIT_ASSERT_NO_DIFF(
             TProtoAccessor::GetProto(value).DebugString(),

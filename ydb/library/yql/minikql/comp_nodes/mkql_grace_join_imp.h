@@ -113,8 +113,6 @@ public:
     void Update();
     // Flushes all the data from inner spillers. Should be called when no more data is expected for spilling.
     void Finalize();
-    // Checks if spillers are waiting for any running async operation. No calls other than update are allowed when the method returns true.
-    bool HasRunningAsyncIoOperation() const;
     // Is bucket in memory. False if spilled.
     bool IsInMemory() const;
     // Is bucket loaded to memory but still owned by spilled.

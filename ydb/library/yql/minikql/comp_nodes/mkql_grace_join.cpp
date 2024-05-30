@@ -637,6 +637,7 @@ private:
     }
 
     void SwitchMode(EOperatingMode mode, TComputationContext& ctx) {
+        std::cerr << std::format("[MISHA] Switching {}->{}\n", (int)Mode, (int)mode);
         switch(mode) {
             case EOperatingMode::InMemory: {
                 MKQL_ENSURE(false, "Internal logic error");

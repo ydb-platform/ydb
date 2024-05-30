@@ -1,4 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
+#include <unordered_map>
+#include <vector>
+
 #include "cert_auth_utils.h"
 
 namespace NKikimr {
@@ -25,79 +28,105 @@ Y_UNIT_TEST_SUITE(TCertificateAuthUtilsTest) {
             .AddRelativeDistinguishedName(TDynamicNodeAuthorizationParams::TRelativeDistinguishedName("ST").AddValue("MSK"))
             .AddRelativeDistinguishedName(TDynamicNodeAuthorizationParams::TRelativeDistinguishedName("L").AddValue("MSK"))
             .AddRelativeDistinguishedName(TDynamicNodeAuthorizationParams::TRelativeDistinguishedName("O").AddValue("YA"))
-            .AddRelativeDistinguishedName(TDynamicNodeAuthorizationParams::TRelativeDistinguishedName("OU").AddValue("UtTest"))
+            .AddRelativeDistinguishedName(TDynamicNodeAuthorizationParams::TRelativeDistinguishedName("OU").AddValue("UtTest").AddValue("OtherUnit"))
             .AddRelativeDistinguishedName(TDynamicNodeAuthorizationParams::TRelativeDistinguishedName("CN").AddValue("localhost").AddSuffix(".yandex.ru"));
             authParams.AddCertSubjectDescription(dn);
 
             {
-                TMap<TString, TString> subjectTerms;
-                subjectTerms["C"] = "RU";
-                subjectTerms["ST"] = "MSK";
-                subjectTerms["L"] = "MSK";
-                subjectTerms["O"] = "YA";
-                subjectTerms["OU"] = "UtTest";
-                subjectTerms["CN"] = "localhost";
+                std::unordered_map<TString, std::vector<TString>> subjectTerms;
+                subjectTerms["C"].push_back("RU");
+                subjectTerms["ST"].push_back("MSK");
+                subjectTerms["L"].push_back("MSK");
+                subjectTerms["O"].push_back("YA");
+                subjectTerms["OU"].push_back("UtTest");
+                subjectTerms["CN"].push_back("localhost");
 
                 UNIT_ASSERT(authParams.IsSubjectDescriptionMatched(subjectTerms));
             }
 
             {
-                TMap<TString, TString> subjectTerms;
-                subjectTerms["C"] = "RU";
-                subjectTerms["ST"] = "MSK";
-                subjectTerms["L"] = "MSK";
-                subjectTerms["O"] = "YA";
-                subjectTerms["OU"] = "UtTest";
-                subjectTerms["CN"] = "test.yandex.ru";
+                std::unordered_map<TString, std::vector<TString>> subjectTerms;
+                subjectTerms["C"].push_back("RU");
+                subjectTerms["ST"].push_back("MSK");
+                subjectTerms["L"].push_back("MSK");
+                subjectTerms["O"].push_back("YA");
+                subjectTerms["OU"].push_back("UtTest");
+                subjectTerms["OU"].push_back("OtherUnit");
+                subjectTerms["CN"].push_back("localhost");
 
                 UNIT_ASSERT(authParams.IsSubjectDescriptionMatched(subjectTerms));
             }
 
             {
-                TMap<TString, TString> subjectTerms;
-                subjectTerms["C"] = "RU";
-                subjectTerms["ST"] = "MSK";
-                subjectTerms["L"] = "MSK";
-                subjectTerms["O"] = "YA";
-                subjectTerms["OU"] = "UtTest";
-                subjectTerms["CN"] = "test.yandex.ru";
-                subjectTerms["ELSE"] = "WhatEver";
-
-                UNIT_ASSERT(authParams.IsSubjectDescriptionMatched(subjectTerms));
-            }
-
-            {
-                TMap<TString, TString> subjectTerms;
-                subjectTerms["C"] = "WRONG";
-                subjectTerms["ST"] = "MSK";
-                subjectTerms["L"] = "MSK";
-                subjectTerms["O"] = "YA";
-                subjectTerms["OU"] = "UtTest";
-                subjectTerms["CN"] = "test.yandex.ru";
+                std::unordered_map<TString, std::vector<TString>> subjectTerms;
+                subjectTerms["C"].push_back("RU");
+                subjectTerms["ST"].push_back("MSK");
+                subjectTerms["L"].push_back("MSK");
+                subjectTerms["O"].push_back("YA");
+                subjectTerms["OU"].push_back("UtTest");
+                subjectTerms["OU"].push_back("WrongUnit");
+                subjectTerms["CN"].push_back("localhost");
 
                 UNIT_ASSERT(!authParams.IsSubjectDescriptionMatched(subjectTerms));
             }
 
             {
-                TMap<TString, TString> subjectTerms;
-                subjectTerms["C"] = "RU";
-                subjectTerms["ST"] = "MSK";
-                subjectTerms["L"] = "MSK";
-                subjectTerms["O"] = "YA";
-                subjectTerms["OU"] = "UtTest";
-                subjectTerms["CN"] = "test.not-yandex.ru";
+                std::unordered_map<TString, std::vector<TString>> subjectTerms;
+                subjectTerms["C"].push_back("RU");
+                subjectTerms["ST"].push_back("MSK");
+                subjectTerms["L"].push_back("MSK");
+                subjectTerms["O"].push_back("YA");
+                subjectTerms["OU"].push_back("UtTest");
+                subjectTerms["CN"].push_back("test.yandex.ru");
+
+                UNIT_ASSERT(authParams.IsSubjectDescriptionMatched(subjectTerms));
+            }
+
+            {
+                std::unordered_map<TString, std::vector<TString>> subjectTerms;
+                subjectTerms["C"].push_back("RU");
+                subjectTerms["ST"].push_back("MSK");
+                subjectTerms["L"].push_back("MSK");
+                subjectTerms["O"].push_back("YA");
+                subjectTerms["OU"].push_back("UtTest");
+                subjectTerms["CN"].push_back("test.yandex.ru");
+                subjectTerms["ELSE"].push_back("WhatEver");
+
+                UNIT_ASSERT(authParams.IsSubjectDescriptionMatched(subjectTerms));
+            }
+
+            {
+                std::unordered_map<TString, std::vector<TString>> subjectTerms;
+                subjectTerms["C"].push_back("WRONG");
+                subjectTerms["ST"].push_back("MSK");
+                subjectTerms["L"].push_back("MSK");
+                subjectTerms["O"].push_back("YA");
+                subjectTerms["OU"].push_back("UtTest");
+                subjectTerms["CN"].push_back("test.yandex.ru");
 
                 UNIT_ASSERT(!authParams.IsSubjectDescriptionMatched(subjectTerms));
             }
 
             {
-                TMap<TString, TString> subjectTerms;
+                std::unordered_map<TString, std::vector<TString>> subjectTerms;
+                subjectTerms["C"].push_back("RU");
+                subjectTerms["ST"].push_back("MSK");
+                subjectTerms["L"].push_back("MSK");
+                subjectTerms["O"].push_back("YA");
+                subjectTerms["OU"].push_back("UtTest");
+                subjectTerms["CN"].push_back("test.not-yandex.ru");
+
+                UNIT_ASSERT(!authParams.IsSubjectDescriptionMatched(subjectTerms));
+            }
+
+            {
+                std::unordered_map<TString, std::vector<TString>> subjectTerms;
                 //subjectTerms["C"] = "RU";
-                subjectTerms["ST"] = "MSK";
-                subjectTerms["L"] = "MSK";
-                subjectTerms["O"] = "YA";
-                subjectTerms["OU"] = "UtTest";
-                subjectTerms["CN"] = "test.yandex.ru";
+                subjectTerms["ST"].push_back("MSK");
+                subjectTerms["L"].push_back("MSK");
+                subjectTerms["O"].push_back("YA");
+                subjectTerms["OU"].push_back("UtTest");
+                subjectTerms["CN"].push_back("test.yandex.ru");
 
                 UNIT_ASSERT(!authParams.IsSubjectDescriptionMatched(subjectTerms));
             }

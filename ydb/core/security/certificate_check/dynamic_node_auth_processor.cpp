@@ -126,37 +126,46 @@ TDynamicNodeAuthorizationParams::operator bool() const {
     return !CertSubjectsDescriptions.empty();
 }
 
-bool TDynamicNodeAuthorizationParams::IsSubjectDescriptionMatched(const TMap<TString, TString>& subjectDescription) const {
+bool TDynamicNodeAuthorizationParams::IsSubjectDescriptionMatched(const std::unordered_map<TString, std::vector<TString>>& subjectDescription) const {
     for (const auto& description: CertSubjectsDescriptions) {
         bool isDescriptionMatched = false;
         for (const auto& name: description.RelativeDistinguishedNames) {
-            //Cerr << "+++ Check " << name.Attribute << Endl;
+            Cerr << "+++ Check " << name.Attribute << Endl;
             isDescriptionMatched = false;
             auto fieldIt = subjectDescription.find(name.Attribute);
             if (fieldIt == subjectDescription.cend()) {
                 break;
             }
 
-            const auto& attributeValue = fieldIt->second;
-            for (const auto& value: name.Values) {
-                //Cerr << value << " <-> " << attributeValue << Endl;
-                if (value == attributeValue) {
-                    isDescriptionMatched = true;
-                    break;
-                }
-            }
-            if (!isDescriptionMatched) {
-                for (const auto& suffix: name.Suffixes) {
-                    //Cerr << suffix << " <-> " << attributeValue << Endl;
-                    if (attributeValue.EndsWith(suffix)) {
-                        isDescriptionMatched = true;
+            const auto& attributeValues = fieldIt->second;
+            bool attributeMatched = false;
+            for (const auto& attributeValue : attributeValues) {
+                attributeMatched = false;
+                for (const auto& value: name.Values) {
+                    Cerr << value << " <-> " << attributeValue << Endl;
+                    if (value == attributeValue) {
+                        attributeMatched = true;
                         break;
                     }
                 }
+                if (!attributeMatched) {
+                    for (const auto& suffix: name.Suffixes) {
+                        Cerr << suffix << " <-> " << attributeValue << Endl;
+                        if (attributeValue.EndsWith(suffix)) {
+                            attributeMatched = true;
+                            break;
+                        }
+                    }
+                }
+                if (!attributeMatched) {
+                    break;
+                }
             }
-            if (!isDescriptionMatched) {
+            if (!attributeMatched) {
+                isDescriptionMatched = false;
                 break;
             }
+            isDescriptionMatched = true;
         }
 
         if (isDescriptionMatched) {

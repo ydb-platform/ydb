@@ -7,9 +7,9 @@
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/mon/mon.h>
-#include <ydb/core/security/certificate_check/dynamic_node_auth_processor.h>
+// #include <ydb/core/security/certificate_check/dynamic_node_auth_processor.h>
 #include <ydb/core/security/certificate_check/cert_check.h>
-#include <ydb/core/security/certificate_check/cert_auth_utils.h>
+// #include <ydb/core/security/certificate_check/cert_auth_utils.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
@@ -673,71 +673,25 @@ private:
             return false;
         }
         CounterTicketsCertificate->Inc();
-        X509CertificateReader::X509Ptr x509clientCert = X509CertificateReader::ReadCertAsPEM(record.Ticket);
-        if (!x509clientCert) {
-            SetError(key, record, { .Message = "Cannot create token from certificate. Cannot read client certificate", .Retryable = false });
+        TCertificateChecker::TCertificateCheckResult certificateCheckResult = CertificateChecker.Check(record.Ticket);
+        if (!certificateCheckResult.Error.empty()) {
+            TEvTicketParser::TError error;
+            error.Message = "Cannot create token from certificate. " + certificateCheckResult.Error.Message;
+            error.Retryable = certificateCheckResult.Error.Retryable;
+            SetError(key, record, error);
             return false;
         }
-
-        X509CertificateReader::X509Ptr x509serverCert = X509CertificateReader::ReadCertAsPEM(ServerCertificate);
-        if (!x509serverCert) {
-            SetError(key, record, { .Message = "Cannot create token from certificate. Cannot read server certificate", .Retryable = false });
-            return false;
-        }
-        std::vector<TString> userGroups;
-        TStringBuilder subjectDn;
-        // Validate certificate
-        if (DynamicNodeAuthorizationParams) {
-            if (DynamicNodeAuthorizationParams.NeedCheckIssuer) {
-                const auto& clientIssuerDn = X509CertificateReader::ReadIssuerTerms(x509clientCert);
-                const auto& serverIssuerDn = X509CertificateReader::ReadIssuerTerms(x509serverCert);
-                if (clientIssuerDn != serverIssuerDn) {
-                    SetError(key, record, { .Message = "Cannot create token from certificate. Client certificate and server certificate have different issuers", .Retryable = false });
-                    return false;
-                }
-            }
-            TMap<TString, TString> subjectDescription;
-            for (const auto& [attribute, value] : X509CertificateReader::ReadAllSubjectTerms(x509clientCert)) {
-                subjectDn << attribute << "=" << value << ",";
-                subjectDescription[attribute] = value;
-            }
-            if (subjectDn.empty()) {
-                SetError(key, record, { .Message = "Cannot create token from certificate. Cannot extract subject from client certificate", .Retryable = false });
-                return false;
-            }
-            if (!DynamicNodeAuthorizationParams.IsSubjectDescriptionMatched(subjectDescription)) {
-                SetError(key, record, { .Message = "Cannot create token from certificate. Client certificate failed verification", .Retryable = false });
-                return false;
-            }
-            userGroups.push_back(DynamicNodeAuthorizationParams.SidName + "@" + Config.GetCertificateAuthenticationDomain());
-        } else {
-            const auto& clientIssuerDn = X509CertificateReader::ReadIssuerTerms(x509clientCert);
-            const auto& serverIssuerDn = X509CertificateReader::ReadIssuerTerms(x509serverCert);
-            if (clientIssuerDn != serverIssuerDn) {
-                SetError(key, record, { .Message = "Cannot create token from certificate. Client certificate and server certificate have different issuers", .Retryable = false });
-                return false;
-            }
-            for (const auto& [attribute, value] : X509CertificateReader::ReadAllSubjectTerms(x509clientCert)) {
-                subjectDn << attribute << "=" << value << ",";
-            }
-            if (subjectDn.empty()) {
-                SetError(key, record, { .Message = "Cannot create token from certificate. Cannot extract subject from client certificate", .Retryable = false });
-                return false;
-            }
-            userGroups.push_back(TString(DEFAULT_REGISTER_NODE_CERT_USER) + "@" + Config.GetCertificateAuthenticationDomain());
-        }
-
-        subjectDn.remove(subjectDn.size() - 1);
-        subjectDn << "@" << Config.GetCertificateAuthenticationDomain();
+        TStringBuilder userSid;
+        userSid << certificateCheckResult.UserSid << "@" << Config.GetCertificateAuthenticationDomain();
         NACLib::TUserToken::TUserTokenInitFields userTokenInitFields {
             .OriginalUserToken = record.Ticket,
-            .UserSID = subjectDn,
+            .UserSID = userSid,
             .AuthType = record.GetAuthType()
         };
         auto userToken = MakeIntrusive<NACLib::TUserToken>(std::move(userTokenInitFields));
-        for (const auto& group : userGroups) {
-            userToken->AddGroupSID(group);
-        }
+        TStringBuilder group;
+        group << certificateCheckResult.Group << "@" << Config.GetCertificateAuthenticationDomain();
+        userToken->AddGroupSID(group);
         SetToken(key, record, userToken);
         return true;
     }

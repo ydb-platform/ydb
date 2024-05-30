@@ -630,7 +630,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         const auto& groups = result->Token->GetGroupSIDs();
         const std::unordered_set<TString> groupsSet(groups.cbegin(), groups.cend());
         const TString expectedGroup = TString(DEFAULT_REGISTER_NODE_CERT_USER) + "@cert";
-        UNIT_ASSERT_C(groupsSet.contains(expectedGroup), "Groups should contain" + expectedGroup);
+        UNIT_ASSERT_C(groupsSet.contains(expectedGroup), "Groups should contain " + expectedGroup);
     }
 
     Y_UNIT_TEST(TicketFromCertificateCheckIssuerBad) {
@@ -667,7 +667,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT_C(!result->Error.empty(), "Expected return error message");
-        UNIT_ASSERT_STRINGS_EQUAL(result->Error.Message, "Cannot create token from certificate. Client certificate and server certificate have different issuers");
+        UNIT_ASSERT_STRINGS_EQUAL(result->Error.Message, "Cannot create token from certificate. Client`s certificate and server`s certificate have different issuers");
         UNIT_ASSERT(result->Token == nullptr);
     }
 
@@ -803,7 +803,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT_C(!result->Error.empty(), "Expected return error message");
-        UNIT_ASSERT_STRINGS_EQUAL(result->Error.Message, "Cannot create token from certificate. Client certificate and server certificate have different issuers");
+        UNIT_ASSERT_STRINGS_EQUAL(result->Error.Message, "Cannot create token from certificate. Client`s certificate and server`s certificate have different issuers");
         UNIT_ASSERT(result->Token == nullptr);
     }
 

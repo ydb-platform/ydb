@@ -182,10 +182,11 @@ private:
                 return result;
             }
             const auto& pemCert = nodeAuthValues.front();
-            TMap<TString, TString> subjectDescription;
+            std::unordered_map<TString, std::vector<TString>> subjectDescription;
             X509CertificateReader::X509Ptr x509cert = X509CertificateReader::ReadCertAsPEM(pemCert);
-            for(const auto& term: X509CertificateReader::ReadSubjectTerms(x509cert)) {
-                subjectDescription.insert(term);
+            for(const auto& [attribute, value]: X509CertificateReader::ReadSubjectTerms(x509cert)) {
+                auto& attributeValues = subjectDescription[attribute];
+                attributeValues.push_back(value);
             }
 
             if (!DynamicNodeAuthorizationParams.IsSubjectDescriptionMatched(subjectDescription)) {

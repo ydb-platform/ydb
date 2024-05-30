@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     cert_auth_utils.cpp
     dynamic_node_auth_processor.cpp
+    cert_check.cpp
 )
 
 
@@ -12,7 +13,7 @@ PEERDIR(
     # ydb/library/grpc/actor_client
     # library/cpp/monlib/service/pages
     # library/cpp/openssl/io
-    # ydb/core/base
+    ydb/core/base
     ydb/core/protos
     # ydb/library/aclib
     # ydb/library/aclib/protos

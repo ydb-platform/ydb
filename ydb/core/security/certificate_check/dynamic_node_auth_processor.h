@@ -4,6 +4,9 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
+#include <unordered_map>
+#include <vector>
+
 namespace NKikimr {
 
 struct TDynamicNodeAuthorizationParams {
@@ -24,7 +27,7 @@ struct TDynamicNodeAuthorizationParams {
     };
 
     operator bool () const;
-    bool IsSubjectDescriptionMatched(const TMap<TString, TString>& subjectDescription) const;
+    bool IsSubjectDescriptionMatched(const std::unordered_map<TString, std::vector<TString>>& subjectDescription) const;
     TDynamicNodeAuthorizationParams& AddCertSubjectDescription(const TDistinguishedName& description) {
         CertSubjectsDescriptions.push_back(description);
         return *this;

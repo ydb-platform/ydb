@@ -277,7 +277,7 @@ void TPartition::EmplaceResponse(TMessage&& message, const TActorContext& ctx) {
     );
 }
 
-ui64 TPartition::MeteringDataSize(const TActorContext& /*ctx*/) const {
+ui64 TPartition::MeteringDataSize() const {
     if (DataKeysBody.size() <= 1) {
         // tiny optimization - we do not meter very small queues up to 16MB
         return 0;
@@ -296,20 +296,19 @@ ui64 TPartition::ReserveSize() const {
     return TopicPartitionReserveSize(Config);
 }
 
-ui64 TPartition::StorageSize(const TActorContext& ctx) const {
-    return std::max<ui64>(MeteringDataSize(ctx), ReserveSize());
+ui64 TPartition::StorageSize(const TActorContext&) const {
+    return std::max<ui64>(MeteringDataSize(), ReserveSize());
 }
 
-ui64 TPartition::UsedReserveSize(const TActorContext& ctx) const {
-    return std::min<ui64>(MeteringDataSize(ctx), ReserveSize());
+ui64 TPartition::UsedReserveSize(const TActorContext&) const {
+    return std::min<ui64>(MeteringDataSize(), ReserveSize());
 }
 
-ui64 TPartition::GetUsedStorage(const TActorContext& ctx) {
-    const auto now = ctx.Now();
+ui64 TPartition::GetUsedStorage(const TInstant& now) {
     const auto duration = now - LastUsedStorageMeterTimestamp;
     LastUsedStorageMeterTimestamp = now;
 
-    auto dataSize = MeteringDataSize(ctx);
+    auto dataSize = MeteringDataSize();
     auto reservedSize = ReserveSize();
     ui64 size = dataSize > reservedSize ? dataSize - reservedSize : 0;
     return size * duration.MilliSeconds() / 1000 / 1_MB; // mb*seconds
@@ -338,7 +337,7 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
     ctx.Schedule(WAKE_TIMEOUT, new TEvents::TEvWakeup());
     ctx.Send(Tablet, new TEvPQ::TEvPartitionCounters(Partition, TabletCounters));
 
-    ui64 usedStorage = GetUsedStorage(ctx);
+    ui64 usedStorage = GetUsedStorage(ctx.Now());
     if (usedStorage > 0) {
         ctx.Send(Tablet, new TEvPQ::TEvMetering(EMeteringJson::UsedStorageV1, usedStorage));
     }
@@ -778,7 +777,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
 
         result.SetReadBytesQuota(maxQuota);
 
-        result.SetPartitionSize(MeteringDataSize(ctx));
+        result.SetPartitionSize(MeteringDataSize());
         result.SetUsedReserveSize(UsedReserveSize(ctx));
 
         result.SetLastWriteTimestampMs(WriteTimestamp.MilliSeconds());

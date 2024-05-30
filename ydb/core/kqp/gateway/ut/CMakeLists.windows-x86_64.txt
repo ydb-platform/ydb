@@ -12,40 +12,62 @@
 # by maintainers. Any complex modifications which can't be easily ported back to the ya build
 # system may be rejected.
 
-add_subdirectory(actors)
-add_subdirectory(behaviour)
-add_subdirectory(local_rpc)
-add_subdirectory(ut)
-add_subdirectory(utils)
 
-add_library(core-kqp-gateway)
+add_executable(ydb-core-kqp-gateway-ut)
 
-target_compile_options(core-kqp-gateway PRIVATE
+target_compile_options(ydb-core-kqp-gateway-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 
-target_link_libraries(core-kqp-gateway PUBLIC
-  contrib-libs-linux-headers
+target_link_libraries(ydb-core-kqp-gateway-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
-  library-actors-core
-  ydb-core-actorlib_impl
-  ydb-core-base
-  core-kqp-common
-  core-kqp-provider
-  core-kqp-query_data
-  kqp-gateway-actors
-  gateway-behaviour-tablestore
-  gateway-behaviour-table
-  gateway-behaviour-external_data_source
-  gateway-behaviour-view
-  kqp-gateway-utils
-  providers-result-expr_nodes
+  library-cpp-cpuid_check
+  cpp-testing-gtest
+  cpp-testing-gtest_main
+  core-kqp-gateway
+  yql-parser-pg_wrapper
+  udf-service-stub
+  ydb-services-metadata
 )
 
-target_sources(core-kqp-gateway PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/kqp_gateway.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/kqp_ic_gateway.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/kqp_metadata_loader.cpp
+target_sources(ydb-core-kqp-gateway-ut PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/ut/metadata_conversion.cpp
 )
+
+add_test(
+  NAME
+  ydb-core-kqp-gateway-ut
+  COMMAND
+  ydb-core-kqp-gateway-ut
+)
+
+set_property(
+  TEST
+  ydb-core-kqp-gateway-ut
+  PROPERTY
+  LABELS
+  SMALL
+)
+
+set_property(
+  TEST
+  ydb-core-kqp-gateway-ut
+  PROPERTY
+  PROCESSORS
+  1
+)
+
+set_property(
+  TEST
+  ydb-core-kqp-gateway-ut
+  PROPERTY
+  ENVIRONMENT
+)
+
+target_allocator(ydb-core-kqp-gateway-ut
+  system_allocator
+)
+
+vcs_info(ydb-core-kqp-gateway-ut)
 

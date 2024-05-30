@@ -26,6 +26,7 @@ target_link_libraries(gateway-behaviour-external_data_source PUBLIC
   services-metadata-abstract
   services-metadata-secret
   kqp-gateway-actors
+  core-kqp-federated_query
   kqp-gateway-utils
   behaviour-tablestore-operations
 )
@@ -50,6 +51,7 @@ target_link_libraries(gateway-behaviour-external_data_source.global PUBLIC
   services-metadata-abstract
   services-metadata-secret
   kqp-gateway-actors
+  core-kqp-federated_query
   kqp-gateway-utils
   behaviour-tablestore-operations
 )

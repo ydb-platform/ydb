@@ -32,6 +32,7 @@ target_link_libraries(ydb-core-kqp-provider-ut PUBLIC
   core-client-minikql_result_lib
   kqp-ut-common
   yql-sql-pg_dummy
+  cpp-testing-gmock_in_unittest
 )
 
 target_link_options(ydb-core-kqp-provider-ut PRIVATE
@@ -45,6 +46,7 @@ target_link_options(ydb-core-kqp-provider-ut PRIVATE
 target_sources(ydb-core-kqp-provider-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_gateway_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_provider_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/provider/read_attributes_utils_ut.cpp
 )
 
 set_property(

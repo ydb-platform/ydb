@@ -81,7 +81,7 @@ TDirectReadSessionCbContextPtr TDirectReadSessionManager::CreateDirectReadSessio
 }
 
 void TDirectReadSessionManager::Close() {
-    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Close");
+    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Close");
     for (auto& [_, nodeSession] : NodeSessions) {
         nodeSession->Cancel();
     }
@@ -89,7 +89,7 @@ void TDirectReadSessionManager::Close() {
 
 void TDirectReadSessionManager::StartPartitionSession(TDirectReadPartitionSession&& partitionSession) {
     auto nodeId = partitionSession.Location.GetNodeId();
-    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "StartPartitionSession " << partitionSession);
+    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "StartPartitionSession " << partitionSession);
     TDirectReadSessionCbContextPtr& session = NodeSessions[nodeId];
     if (!session) {
         session = CreateDirectReadSession(nodeId);
@@ -101,7 +101,7 @@ void TDirectReadSessionManager::StartPartitionSession(TDirectReadPartitionSessio
 }
 
 void TDirectReadSessionManager::DeleteNodeSessionIfEmpty(TNodeId id) {
-    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "DeleteNodeSessionIfEmpty " << id);
+    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "DeleteNodeSessionIfEmpty " << id);
 
     auto it = NodeSessions.find(id);
     Y_ABORT_UNLESS(it != NodeSessions.end());
@@ -118,15 +118,15 @@ void TDirectReadSessionManager::DeleteNodeSessionIfEmpty(TNodeId id) {
     }
 
     if (erase) {
-        LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "DeleteNodeSessionIfEmpty deleted node " << id);
+        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "DeleteNodeSessionIfEmpty deleted node " << id);
         NodeSessions.erase(it);
     } else {
-        LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "DeleteNodeSessionIfEmpty did not delete node " << id << " as it is not empty");
+        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "DeleteNodeSessionIfEmpty did not delete node " << id << " as it is not empty");
     }
 }
 
 void TDirectReadSessionManager::DeletePartitionSession(TPartitionSessionId id, TNodeSessionsMap::iterator it) {
-    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "DeletePartitionSession " << id);
+    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "DeletePartitionSession " << id);
 
     if (auto session = it->second->LockShared()) {
         session->DeletePartitionSession(id);
@@ -145,6 +145,7 @@ void TDirectReadSessionManager::UpdatePartitionSession(TPartitionSessionId id, T
     auto sessionIt = NodeSessions.find(oldNodeId);
     Y_ABORT_UNLESS(sessionIt != NodeSessions.end());
 
+    // TODO(qyryq) Delete the "same node" special case.
     if (oldNodeId == newLocation.GetNodeId()) {
         if (auto s = sessionIt->second->LockShared()) {
             s->UpdatePartitionSessionGeneration(id, newLocation);
@@ -234,6 +235,7 @@ void TDirectReadSession::UpdatePartitionSessionGeneration(TPartitionSessionId id
         it->second = {
             .PartitionSessionId = id,
             .Location = location,
+            // TODO(qyryq) Reset RetryState?
             .RetryState = std::move(it->second.RetryState),
         };
 
@@ -247,14 +249,14 @@ void TDirectReadSession::DeletePartitionSession(TPartitionSessionId id) {
     }
 }
 
-void TDirectReadSession::Abort(TSessionClosedEvent&& closeEvent) {
-    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Abort");
+void TDirectReadSession::AbortImpl(TSessionClosedEvent&& closeEvent) {
+    Y_ABORT_UNLESS(Lock.IsLocked());
+
+    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Abort");
     bool doCallback = false;
-    with_lock (Lock) {
-        if (State < EState::CLOSING) {
-            State = EState::CLOSED;
-            doCallback = true;
-        }
+    if (State < EState::CLOSING) {
+        State = EState::CLOSED;
+        doCallback = true;
     }
     if (doCallback) {
         Callbacks.OnAbortSession(std::move(closeEvent));
@@ -316,7 +318,7 @@ void TDirectReadSession::OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t c
         ReadSessionSettings.Counters_->Errors->Inc();
 
         if (!Reconnect(errorStatus)) {
-            Abort(std::move(errorStatus));
+            AbortImpl(std::move(errorStatus));
         }
     }
 }
@@ -326,7 +328,7 @@ void TDirectReadSession::SendStartDirectReadPartitionSessionImpl(TPartitionSessi
     auto it = PartitionSessions.find(id);
 
     if (it == PartitionSessions.end()) {
-        LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "SendStartDirectReadPartitionSessionImpl no partition session found, id=" << id);
+        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "SendStartDirectReadPartitionSessionImpl no partition session found, id=" << id);
         return;
     }
 
@@ -340,7 +342,7 @@ void TDirectReadSession::SendStartDirectReadPartitionSessionImpl(TDirectReadPart
     // In other cases adding the session to PartitionSessions is enough,
     // the request will be sent from OnReadDoneImpl(InitDirectReadResponse).
     if (State != EState::WORKING || partitionSession.State != TDirectReadPartitionSession::EState::CREATED) {
-        LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "SendStartDirectReadPartitionSessionImpl bail out, State=" << State
+        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "SendStartDirectReadPartitionSessionImpl bail out, State=" << State
                                                 << " partitionSession.State=" << partitionSession.State);
         return;
     }
@@ -348,7 +350,7 @@ void TDirectReadSession::SendStartDirectReadPartitionSessionImpl(TDirectReadPart
     if (status.Ok()) {
         partitionSession.State = TDirectReadPartitionSession::EState::STARTING;
 
-        LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "SendStartDirectReadPartitionSessionImpl send request");
+        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "SendStartDirectReadPartitionSessionImpl send request");
 
         TDirectReadClientMessage req;
         auto& start = *req.mutable_start_direct_read_partition_session_request();
@@ -365,11 +367,11 @@ void TDirectReadSession::SendStartDirectReadPartitionSessionImpl(TDirectReadPart
     }
     TMaybe<TDuration> delay = partitionSession.RetryState->GetNextRetryDelay(status.Status);
     if (!delay.Defined()) {
-        Abort(std::move(status));
+        AbortImpl(std::move(status));
         return;
     }
 
-    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "SendStartDirectReadPartitionSessionImpl retry in " << delay);
+    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "SendStartDirectReadPartitionSessionImpl retry in " << delay);
 
     Callbacks.OnSchedule(
         *delay,
@@ -388,7 +390,7 @@ void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::Ini
 
     State = EState::WORKING;
 
-    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Got InitDirectReadResponse " << response.ShortDebugString());
+    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Got InitDirectReadResponse " << response.ShortDebugString());
 
     RetryState = nullptr;
 
@@ -402,18 +404,20 @@ void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::Ini
 
 void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::StartDirectReadPartitionSessionResponse&& response, TDeferredActions<false>&) {
     Y_ABORT_UNLESS(Lock.IsLocked());
-    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Got StartDirectReadPartitionSessionResponse " << response.ShortDebugString());
+    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Got StartDirectReadPartitionSessionResponse " << response.ShortDebugString());
 
     auto partitionSessionId = response.partition_session_id();
     auto it = PartitionSessions.find(partitionSessionId);
     Y_ABORT_UNLESS(it != PartitionSessions.end());
-    it->second.RetryState = nullptr;
-    it->second.State = TDirectReadPartitionSession::EState::STARTED;
+    auto& partitionSession = it->second;
+
+    partitionSession.RetryState = nullptr;
+    partitionSession.State = TDirectReadPartitionSession::EState::STARTED;
 }
 
 void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::StopDirectReadPartitionSession&& response, TDeferredActions<false>&) {
     Y_ABORT_UNLESS(Lock.IsLocked());
-    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Got StopDirectReadPartitionSession " << response.ShortDebugString());
+    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Got StopDirectReadPartitionSession " << response.ShortDebugString());
 
     auto partitionSessionId = response.partition_session_id();
     auto it = PartitionSessions.find(partitionSessionId);
@@ -431,7 +435,7 @@ void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::Sto
 
 void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&& response, TDeferredActions<false>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
-    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Got DirectReadResponse " << response.ShortDebugString());
+    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Got DirectReadResponse " << response.ShortDebugString());
 
     auto it = PartitionSessions.find(response.partition_session_id());
     Y_ABORT_UNLESS(it != PartitionSessions.end());
@@ -443,7 +447,7 @@ void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::Dir
 void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::UpdateTokenResponse&& response, TDeferredActions<false>&) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
-    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Got UpdateTokenResponse " << response.ShortDebugString());
+    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Got UpdateTokenResponse " << response.ShortDebugString());
 }
 
 void TDirectReadSession::WriteToProcessorImpl(TDirectReadClientMessage&& req) {
@@ -546,7 +550,7 @@ void TDirectReadSession::OnConnect(
     if (!st.Ok()) {
         ReadSessionSettings.Counters_->Errors->Inc();
         if (!Reconnect(st)) {
-            Abort(TSessionClosedEvent(
+            AbortImpl(TSessionClosedEvent(
                 st.Status,
                 MakeIssueWithSubIssues(
                     TStringBuilder() << "Failed to establish connection to server \"" << st.Endpoint << "\". Attempts done: " << ConnectionAttemptsDone,

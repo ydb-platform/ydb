@@ -127,7 +127,7 @@ private:
     void SendStartDirectReadPartitionSessionImpl(TDirectReadPartitionSession&, TPlainStatus&&);
     void SendStartDirectReadPartitionSessionImpl(TPartitionSessionId, TPlainStatus&&);
 
-    void Abort(TSessionClosedEvent&& closeEvent);
+    void AbortImpl(TSessionClosedEvent&& closeEvent);
 
     TStringBuilder GetLogPrefix() const;
 

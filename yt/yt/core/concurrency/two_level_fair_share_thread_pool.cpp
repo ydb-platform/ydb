@@ -538,7 +538,8 @@ private:
             }
         }
 
-        YT_LOG_TRACE("Buckets: %v",
+        YT_LOG_TRACE(
+            "Buckets: %v",
             MakeFormattableView(
                 xrange(size_t(0), IdToPool_.size()),
                 [&] (auto* builder, auto index) {

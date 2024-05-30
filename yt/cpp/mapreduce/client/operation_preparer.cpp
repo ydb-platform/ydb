@@ -575,7 +575,8 @@ TMaybe<TString> TJobPreparer::GetItemFromCypressCache(const TString& md5Signatur
         GetCachePath(),
         TGetFileFromCacheOptions());
     if (maybePath) {
-        YT_LOG_DEBUG("File is already in cache (FileName: %v)",
+        YT_LOG_DEBUG(
+            "File is already in cache (FileName: %v, FilePath: %v)",
             fileName,
             *maybePath);
     }

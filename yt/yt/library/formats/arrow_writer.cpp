@@ -696,7 +696,8 @@ void SerializeDoubleColumn(
     YT_VERIFY(column->Values->BaseValue == 0);
     YT_VERIFY(!column->Values->ZigZagEncoded);
 
-    YT_LOG_DEBUG("Adding double column (ColumnId: %v, StartIndex: %v, ValueCount: %v)",
+    YT_LOG_DEBUG(
+        "Adding double column (ColumnId: %v, StartIndex: %v, ValueCount: %v, Rle: %v)",
         column->Id,
         column->StartIndex,
         column->ValueCount,
@@ -725,7 +726,8 @@ void SerializeFloatColumn(
     YT_VERIFY(column->Values->BaseValue == 0);
     YT_VERIFY(!column->Values->ZigZagEncoded);
 
-    YT_LOG_DEBUG("Adding float column (ColumnId: %v, StartIndex: %v, ValueCount: %v)",
+    YT_LOG_DEBUG(
+        "Adding float column (ColumnId: %v, StartIndex: %v, ValueCount: %v, Rle: %v)",
         column->Id,
         column->StartIndex,
         column->ValueCount,

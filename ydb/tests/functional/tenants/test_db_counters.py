@@ -133,7 +133,7 @@ class TestKqpCounters(BaseDbCounters):
         self.check_db_counters(sensors_to_check, 'kqp')
 
 
-@pytest.fixture(scope='function')
+@pytest.fixture(scope="function")
 def ydb_database(ydb_cluster, ydb_root, ydb_safe_test_name):
     database = os.path.join(ydb_root, ydb_safe_test_name)
 

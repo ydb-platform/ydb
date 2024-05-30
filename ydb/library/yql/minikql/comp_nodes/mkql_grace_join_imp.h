@@ -115,20 +115,17 @@ public:
     void Finalize();
     // Checks if spillers are waiting for any running async operation. No calls other than update are allowed when the method returns true.
     bool HasRunningAsyncIoOperation() const;
-
+    // Is bucket in memory. False if spilled.
     bool IsInMemory() const;
+    // Is bucket loaded to memory but still owned by spilled.
+    // ExtractBucket must be called if true.
     bool IsExtractionRequired() const;
-
-    bool IsProcessingSpilling() const {
-        return State == EState::Spilling;
-    }
-    bool IsAcceptingDataRequests() const {
-        return State == EState::AcceptingDataRequests;
-    }
-
-    bool IsRestoring() const {
-        return State == EState::Restoring;
-    }
+    // Is there any bucket that is being spilled right now.
+    bool IsProcessingSpilling() const;
+    // Is spiller ready to start loading new bucket.
+    bool IsAcceptingDataRequests() const;
+    // Is there any bucket that is being restored right now.
+    bool IsRestoring() const;
 
 private:
     void ProcessBucketSpilling();
@@ -297,18 +294,19 @@ public:
     // Flushes all the spillers.
     void FinalizeSpilling();
 
-    // Checks if there any async operation running. If return value is true it's safe to return Yield.
-    bool HasRunningAsyncIoOperation() const;
-
+    // Checks if spilling has any running save operation
     bool IsSpillingFinished() const;
 
+    // Checks if spilling ready for requesting buckets for restoration.
     bool IsSpillingAcceptingDataRequests() const;
 
+    // Checks is spilling has any running load operation
     bool IsRestoringSpilledBuckets() const;
 
     // Checks if bucket fully loaded to memory and may be joined.
     bool IsBucketInMemory(ui32 bucket) const;
 
+    // Checks if extraction of bucket is required
     bool IsSpilledBucketWaitingForExtraction(ui32 bucket) const;
 
     // Starts loading spilled bucket to memory.

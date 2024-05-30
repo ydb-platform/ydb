@@ -1333,9 +1333,20 @@ bool TTableBucketSpiller::IsExtractionRequired() const {
     return State == EState::WaitingForExtraction;
 }
 
+bool TTableBucketSpiller::IsProcessingSpilling() const {
+    return State == EState::Spilling;
+}
+
+bool TTableBucketSpiller::IsAcceptingDataRequests() const {
+    return State == EState::AcceptingDataRequests;
+}
+
+bool TTableBucketSpiller::IsRestoring() const {
+    return State == EState::Restoring;
+}
+
 void TTableBucketSpiller::StartBucketRestoration() {
     MKQL_ENSURE(State == EState::AcceptingDataRequests, "Internal logic error");
-    if (NextVectorToProcess != ENextVectorToProcess::None) return;
     MKQL_ENSURE(NextVectorToProcess == ENextVectorToProcess::None, "Internal logic error");
 
     NextVectorToProcess = ENextVectorToProcess::KeyAndVals;

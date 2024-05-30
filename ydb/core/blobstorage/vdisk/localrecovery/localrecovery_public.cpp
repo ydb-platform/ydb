@@ -501,6 +501,14 @@ namespace NKikimr {
                 LocRecCtx->HullDbRecovery = std::make_shared<THullDbRecovery>(hullCtx);
                 LocRecCtx->HullCtx = hullCtx;
 
+                NPDisk::EDeviceType trueMediaType = LocRecCtx->PDiskCtx->Dsk->TrueMediaType;
+
+                LocRecCtx->HullCtx->VCtx->CostTracker.reset(new TBsCostTracker(
+                        LocRecCtx->HullCtx->VCtx->Top->GType, trueMediaType,
+                        LocRecCtx->HullCtx->VCtx->VDiskCounters,
+                        Config->CostMetricsParametersByMedia[trueMediaType]
+                ));
+
                 // store reported owned chunks
                 LocRecCtx->ReportedOwnedChunks = std::move(m->OwnedChunks);
 

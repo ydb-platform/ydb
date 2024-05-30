@@ -506,9 +506,9 @@ public:
     }
 
     void StartScriptFinalization(EFinalizationStatus finalizationStatus, const TString& executionId, const TString& database, TMaybe<Ydb::StatusIds::StatusCode> status, TMaybe<Ydb::Query::ExecStatus> execStatus, NYql::TIssues issues) {
+        ExecutionId = executionId;
         KQP_PROXY_LOG_D("[" << OperationName << "] ExecutionId: " << ExecutionId << ", try to finalize script execution operation, finalization action: " << finalizationStatus);
 
-        ExecutionId = executionId;
         if (!status || !execStatus) {
             issues.AddIssue("Finalization is not complete");
         }
@@ -520,9 +520,9 @@ public:
     }
 
     void StartLeaseChecking(TActorId runScriptActorId, const TString& executionId, const TString& database) {
-        KQP_PROXY_LOG_W("[" << OperationName << "] ExecutionId: " << ExecutionId << ", script execution lease is expired, start lese checking");
-
         ExecutionId = executionId;
+        KQP_PROXY_LOG_W("[" << OperationName << "] ExecutionId: " << ExecutionId << ", script execution lease is expired, start lease checking");
+
         ScriptFinalizeRequest = std::make_unique<TEvScriptFinalizeRequest>(EFinalizationStatus::FS_ROLLBACK, executionId, database, Ydb::StatusIds::UNAVAILABLE, Ydb::Query::EXEC_STATUS_ABORTED, NYql::TIssues{ NYql::TIssue("Lease expired") });
 
         Schedule(CHECK_ALIVE_REQUEST_TIMEOUT, new TEvents::TEvWakeup());

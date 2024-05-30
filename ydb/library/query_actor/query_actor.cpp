@@ -147,7 +147,7 @@ void TQueryBase::Bootstrap() {
     }
 
     if (SessionId) {
-        LOG_D("Bootstrap. Database: " << Database << ", SeeionId: " << SessionId);
+        LOG_D("Bootstrap. Database: " << Database << ", SessionId: " << SessionId);
         RunQuery();
     } else {
         LOG_D("Bootstrap. Database: " << Database);

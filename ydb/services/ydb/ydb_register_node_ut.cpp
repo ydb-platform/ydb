@@ -146,7 +146,7 @@ NDiscovery::TNodeRegistrationSettings GetNodeRegistrationSettings() {
 
 Y_UNIT_TEST_SUITE(TRegisterNodeOverDiscoveryService) {
 
-Y_UNIT_TEST(TestRegisterNodeViaDiscovery_ServerWithCertVerification_ClientWithCorrectCerts) {
+Y_UNIT_TEST(ServerWithCertVerification_ClientWithCorrectCerts) {
     TKikimrServerWithCertVerification server;
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
@@ -190,7 +190,7 @@ Y_UNIT_TEST(TestRegisterNodeViaDiscovery_ServerWithCertVerification_ClientWithCo
     UNIT_ASSERT_C(resultWithWrongToken.IsSuccess(), resultWithWrongToken.GetIssues().ToOneLineString());
 }
 
-Y_UNIT_TEST(TestRegisterNodeViaDiscovery_ServerWithCertVerification_ClientProvidesEmptyClientCerts) {
+Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesEmptyClientCerts) {
     TKikimrServerWithCertVerification server;
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
@@ -237,7 +237,7 @@ Y_UNIT_TEST(TestRegisterNodeViaDiscovery_ServerWithCertVerification_ClientProvid
     UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Access denied without user token");
 }
 
-Y_UNIT_TEST(TestRegisterNodeViaDiscovery_ServerWithoutCertVerification_ClientProvidesCorrectCerts) {
+Y_UNIT_TEST(ServerWithoutCertVerification_ClientProvidesCorrectCerts) {
     TKikimrServerWithOutCertVerification server;
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
@@ -284,7 +284,7 @@ Y_UNIT_TEST(TestRegisterNodeViaDiscovery_ServerWithoutCertVerification_ClientPro
     UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Access denied without user token");
 }
 
-Y_UNIT_TEST(TestRegisterNodeViaDiscovery_ServerWithoutCertVerification_ClientProvidesEmptyClientCerts) {
+Y_UNIT_TEST(ServerWithoutCertVerification_ClientProvidesEmptyClientCerts) {
     TKikimrServerWithOutCertVerification server;
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
@@ -331,7 +331,7 @@ Y_UNIT_TEST(TestRegisterNodeViaDiscovery_ServerWithoutCertVerification_ClientPro
     UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Access denied without user token");
 }
 
-Y_UNIT_TEST(TestRegisterNodeViaDiscovery_ServerWithCertVerification_ClientDoesNotProvideCorrectCerts) {
+Y_UNIT_TEST(ServerWithCertVerification_ClientDoesNotProvideCorrectCerts) {
     TKikimrServerWithCertVerificationAndWrongIdentity server;
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
@@ -378,7 +378,7 @@ Y_UNIT_TEST(TestRegisterNodeViaDiscovery_ServerWithCertVerification_ClientDoesNo
     UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Cannot create token from certificate. Client certificate failed verification");
 }
 
-Y_UNIT_TEST(TestRegisterNodeViaDiscovery_ServerWithCertVerification_ClientDoesNotProvideAnyCerts) {
+Y_UNIT_TEST(ServerWithCertVerification_ClientDoesNotProvideAnyCerts) {
     TKikimrServerWithCertVerification server;
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
@@ -420,7 +420,7 @@ Y_UNIT_TEST(TestRegisterNodeViaDiscovery_ServerWithCertVerification_ClientDoesNo
     UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "failed to connect to all addresses");
 }
 
-Y_UNIT_TEST(TestRegisterNodeViaDiscovery_ServerWithCertVerification_ClientProvidesServerCerts) {
+Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesServerCerts) {
     TKikimrServerWithCertVerification server;
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
@@ -467,7 +467,7 @@ Y_UNIT_TEST(TestRegisterNodeViaDiscovery_ServerWithCertVerification_ClientProvid
     UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "failed to connect to all addresses");
 }
 
-Y_UNIT_TEST(TestRegisterNodeViaDiscovery_ServerWithCertVerification_ClientProvidesCorruptedCert) {
+Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesCorruptedCert) {
     TKikimrServerWithCertVerification server;
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
@@ -519,7 +519,7 @@ Y_UNIT_TEST(TestRegisterNodeViaDiscovery_ServerWithCertVerification_ClientProvid
     UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "empty address list");
 }
 
-Y_UNIT_TEST(TestRegisterNodeViaDiscovery_ServerWithCertVerification_ClientProvidesCorruptedPrivatekey) {
+Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesCorruptedPrivatekey) {
     TKikimrServerWithCertVerification server;
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
@@ -571,7 +571,7 @@ Y_UNIT_TEST(TestRegisterNodeViaDiscovery_ServerWithCertVerification_ClientProvid
     UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "empty address list");
 }
 
-Y_UNIT_TEST(TestRegisterNodeViaDiscovery_ServerWithCertVerification_ClientProvidesExpiredCert) {
+Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesExpiredCert) {
     TKikimrServerWithCertVerification server;
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
@@ -621,7 +621,7 @@ Y_UNIT_TEST(TestRegisterNodeViaDiscovery_ServerWithCertVerification_ClientProvid
     UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "failed to connect to all addresses");
 }
 
-Y_UNIT_TEST(TestRegisterNodeViaDiscovery_ServerWithOutCertVerification_ClientProvidesExpiredCert) {
+Y_UNIT_TEST(ServerWithOutCertVerification_ClientProvidesExpiredCert) {
     TKikimrServerWithOutCertVerification server;
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
@@ -671,7 +671,7 @@ Y_UNIT_TEST(TestRegisterNodeViaDiscovery_ServerWithOutCertVerification_ClientPro
     UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Access denied without user token");
 }
 
-Y_UNIT_TEST(TestRegisterNodeViaDiscovery_ServerWithCertVerification_ClientDoesNotProvideClientCerts) {
+Y_UNIT_TEST(ServerWithCertVerification_ClientDoesNotProvideClientCerts) {
     TKikimrServerWithCertVerification server;
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
@@ -768,7 +768,7 @@ THolder<NClient::TRegistrationResult> TryToRegisterDynamicNode(
 
 Y_UNIT_TEST_SUITE(TRegisterNodeOverLegacyService) {
 
-Y_UNIT_TEST(TestRegisterNodeViaLegacy_ServerWithCertVerification_ClientWithCorrectCerts) {
+Y_UNIT_TEST(ServerWithCertVerification_ClientWithCorrectCerts) {
     TKikimrServerWithCertVerification server;
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
@@ -786,7 +786,7 @@ Y_UNIT_TEST(TestRegisterNodeViaLegacy_ServerWithCertVerification_ClientWithCorre
     Cerr << "Register node result " << resp->Record().ShortUtf8DebugString() << Endl;
 }
 
-Y_UNIT_TEST(TestRegisterNodeViaLegacy_ServerWithCertVerification_ClientProvidesEmptyClientCerts) {
+Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesEmptyClientCerts) {
     TKikimrServerWithCertVerification server;
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
@@ -805,7 +805,7 @@ Y_UNIT_TEST(TestRegisterNodeViaLegacy_ServerWithCertVerification_ClientProvidesE
     Cerr << "Register node result " << resp->Record().ShortUtf8DebugString() << Endl;
 }
 
-Y_UNIT_TEST(TestRegisterNodeViaLegacy_ServerWithoutCertVerification_ClientProvidesCorrectCerts) {
+Y_UNIT_TEST(ServerWithoutCertVerification_ClientProvidesCorrectCerts) {
     TKikimrServerWithOutCertVerification server;
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
@@ -823,7 +823,7 @@ Y_UNIT_TEST(TestRegisterNodeViaLegacy_ServerWithoutCertVerification_ClientProvid
     Cerr << "Register node result " << resp->Record().ShortUtf8DebugString() << Endl;
 }
 
-Y_UNIT_TEST(TestRegisterNodeViaLegacy_ServerWithoutCertVerification_ClientProvidesEmptyClientCerts) {
+Y_UNIT_TEST(ServerWithoutCertVerification_ClientProvidesEmptyClientCerts) {
     TKikimrServerWithOutCertVerification server;
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
@@ -841,7 +841,7 @@ Y_UNIT_TEST(TestRegisterNodeViaLegacy_ServerWithoutCertVerification_ClientProvid
     Cerr << "Register node result " << resp->Record().ShortUtf8DebugString() << Endl;
 }
 
-Y_UNIT_TEST(TestRegisterNodeViaLegacy_ServerWithCertVerification_ClientDoesNotProvideCorrectCerts) {
+Y_UNIT_TEST(ServerWithCertVerification_ClientDoesNotProvideCorrectCerts) {
     TKikimrServerWithCertVerificationAndWrongIdentity server;
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;

@@ -291,7 +291,7 @@ private:
     }
 
     static TInstant GetCompileTime() {
-        static TInstant instantTime(timeval{.tv_sec = GetCompileTimeSeconds(), .tv_usec = 0});
+        static TInstant instantTime(TInstant::Seconds(GetCompileTimeSeconds()));
         return instantTime;
     }
 

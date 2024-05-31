@@ -681,7 +681,7 @@ private:
 
         if (!ev->Get()->Success) {
             LOG_E("TQuotaUsageResponse error for subject type: " << subjectType << ", subject id: " << subjectId << ", metrics name: " << metricName << ", issues: " << ev->Get()->Issues.ToOneLineString());
-            Send(ev->Sender, new TEvQuotaService::TQuotaUsageRequest(subjectType, subjectId, metricName)); // retry
+            Send(ev->Sender, new TEvQuotaService::TQuotaUsageRequest(subjectType, subjectId, metricName)); // retry. TODO: it may be useful to report the error to the user
             return;
         }
 

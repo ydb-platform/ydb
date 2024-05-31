@@ -15,8 +15,10 @@ static constexpr const char TagStoredVector[] = "StoredVector";
 
 static constexpr const char TagFloatVector[] = "FloatVector";
 using TFloatVector = TTagged<const char*, TagFloatVector>;
-static constexpr const char TagByteVector[] = "ByteVector";
-using TByteVector = TTagged<const char*, TagByteVector>;
+static constexpr const char TagInt8Vector[] = "Int8Vector";
+using TInt8Vector = TTagged<const char*, TagInt8Vector>;
+static constexpr const char TagUint8Vector[] = "Uint8Vector";
+using TUint8Vector = TTagged<const char*, TagUint8Vector>;
 static constexpr const char TagBitVector[] = "BitVector";
 using TBitVector = TTagged<const char*, TagBitVector>;
 
@@ -24,7 +26,11 @@ SIMPLE_STRICT_UDF(TToBinaryStringFloat, TFloatVector(TAutoMap<TListType<float>>)
     return TKnnVectorSerializer<float>::Serialize(valueBuilder, args[0]);
 }
 
-SIMPLE_STRICT_UDF(TToBinaryStringByte, TByteVector(TAutoMap<TListType<float>>)) {
+SIMPLE_STRICT_UDF(TToBinaryStringInt8, TInt8Vector(TAutoMap<TListType<i8>>)) {
+    return TKnnVectorSerializer<i8>::Serialize(valueBuilder, args[0]);
+}
+
+SIMPLE_STRICT_UDF(TToBinaryStringUint8, TUint8Vector(TAutoMap<TListType<ui8>>)) {
     return TKnnVectorSerializer<ui8>::Serialize(valueBuilder, args[0]);
 }
 
@@ -121,14 +127,18 @@ public:
 
         auto argType = argsTuple.GetElementType(0);
         auto argTag = GetArg(*typeInfoHelper, argType, builder);
-        if (!ValidTag(argTag, {TagStoredVector, TagFloatVector, TagByteVector})) {
-            builder.SetError("Expected argument is string from ToBinaryString[Float|Byte]");
+        if (!ValidTag(argTag, {TagStoredVector, TagFloatVector, TagInt8Vector, TagUint8Vector})) {
+            builder.SetError("Expected argument is string from ToBinaryString[Float|Int8|Uint8]");
             return true;
         }
 
         builder.UserType(userType);
         builder.Args(1)->Add(argType).Flags(ICallablePayload::TArgumentFlags::AutoMap);
-        builder.Returns<TOptional<TListType<float>>>().IsStrict();
+        if (ValidTag(argTag, {TagFloatVector, TagInt8Vector, TagUint8Vector}) && argType == argsTuple.GetElementType(0)) {
+            builder.Returns<TListType<float>>().IsStrict();
+        } else {
+            builder.Returns<TOptional<TListType<float>>>().IsStrict();
+        }
 
         if (!typesOnly) {
             builder.Implementation(new TFloatFromBinaryString(builder));
@@ -166,9 +176,9 @@ public:
         auto arg1Type = argsTuple.GetElementType(1);
         auto arg1Tag = Base::GetArg(*typeInfoHelper, arg1Type, builder);
 
-        if (!Base::ValidTag(arg0Tag, {TagStoredVector, TagFloatVector, TagByteVector, TagBitVector}) ||
-            !Base::ValidTag(arg1Tag, {TagStoredVector, TagFloatVector, TagByteVector, TagBitVector})) {
-            builder.SetError("Expected arguments are strings from ToBinaryString[Float|Byte|Bit]");
+        if (!Base::ValidTag(arg0Tag, {TagStoredVector, TagFloatVector, TagInt8Vector, TagUint8Vector, TagBitVector}) ||
+            !Base::ValidTag(arg1Tag, {TagStoredVector, TagFloatVector, TagInt8Vector, TagUint8Vector, TagBitVector})) {
+            builder.SetError("Expected arguments are strings from ToBinaryString[Float|Int8|Uint8|Bit]");
             return true;
         }
 
@@ -282,7 +292,8 @@ public:
 
 SIMPLE_MODULE(TKnnModule,
               TToBinaryStringFloat,
-              TToBinaryStringByte,
+              TToBinaryStringInt8,
+              TToBinaryStringUint8,
               TToBinaryStringBit,
               TFloatFromBinaryString,
               TInnerProductSimilarity,

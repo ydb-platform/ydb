@@ -59,6 +59,11 @@
             "uri": "file://test.test_InnerProductSimilarity_/results.txt"
         }
     ],
+    "test.test[Int8Serialization]": [
+        {
+            "uri": "file://test.test_Int8Serialization_/results.txt"
+        }
+    ],
     "test.test[LazyListSerialization]": [
         {
             "uri": "file://test.test_LazyListSerialization_/results.txt"

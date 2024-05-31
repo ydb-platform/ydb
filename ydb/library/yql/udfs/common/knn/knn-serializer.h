@@ -12,21 +12,21 @@
 using namespace NYql;
 using namespace NYql::NUdf;
 
-template <typename T>
+template <typename TTo, typename TFrom = TTo>
 class TKnnVectorSerializer {
 public:
     static TUnboxedValue Serialize(const IValueBuilder* valueBuilder, const TUnboxedValue x) {
         auto serialize = [&](IOutputStream& outStream) {
-            EnumerateVector(x, [&](float from) {
-                T to = static_cast<T>(from);
-                outStream.Write(&to, sizeof(T));
+            EnumerateVector<TFrom>(x, [&](TFrom from) {
+                TTo to = static_cast<TTo>(from);
+                outStream.Write(&to, sizeof(TTo));
             });
-            const auto format = Format<T>;
+            const auto format = Format<TTo>;
             outStream.Write(&format, HeaderLen);
         };
 
         if (x.HasFastListLength()) {
-            auto str = valueBuilder->NewStringNotFilled(x.GetListLength() * sizeof(T) + HeaderLen);
+            auto str = valueBuilder->NewStringNotFilled(x.GetListLength() * sizeof(TTo) + HeaderLen);
             auto strRef = str.AsStringRef();
             TMemoryOutput memoryOutput(strRef.Data(), strRef.Size());
 
@@ -50,22 +50,22 @@ public:
         auto res = valueBuilder->NewArray(vector.size(), items);
 
         for (auto element : vector) {
-            *items++ = TUnboxedValuePod{static_cast<float>(element)};
+            *items++ = TUnboxedValuePod{static_cast<TFrom>(element)};
         }
 
         return res.Release();
     }
 
-    static TArrayRef<const T> GetArray(const TStringRef& str) {
+    static TArrayRef<const TTo> GetArray(const TStringRef& str) {
         const char* buf = str.Data();
         const size_t len = str.Size() - HeaderLen;
 
-        if (Y_UNLIKELY(len % sizeof(T) != 0))
+        if (Y_UNLIKELY(len % sizeof(TTo) != 0))
             return {};
 
-        const ui32 count = len / sizeof(T);
+        const ui32 count = len / sizeof(TTo);
 
-        return {reinterpret_cast<const T*>(buf), count};
+        return {reinterpret_cast<const TTo*>(buf), count};
     }
 };
 
@@ -81,7 +81,7 @@ public:
             ui64 accumulator = 0;
             ui8 filledBits = 0;
 
-            EnumerateVector(x, [&](float element) {
+            EnumerateVector<float>(x, [&](float element) {
                 if (element > 0)
                     accumulator |= 1;
 
@@ -161,25 +161,10 @@ public:
         switch (format) {
             case EFormat::FloatVector:
                 return TKnnVectorSerializer<float>::Deserialize(valueBuilder, str);
+            case EFormat::Int8Vector:
+                return TKnnVectorSerializer<i8, float>::Deserialize(valueBuilder, str);
             case EFormat::Uint8Vector:
-                return TKnnVectorSerializer<ui8>::Deserialize(valueBuilder, str);
-            case EFormat::BitVector:
-            default:
-                return {};
-        }
-    }
-
-    template <typename T>
-    static const TArrayRef<const T> GetArray(const TStringRef& str) {
-        if (Y_UNLIKELY(str.Size() == 0))
-            return {};
-
-        const ui8 format = str.Data()[str.Size() - HeaderLen];
-        switch (format) {
-            case EFormat::FloatVector:
-                return TKnnVectorSerializer<T>::GetArray(str);
-            case EFormat::Uint8Vector:
-                return TKnnVectorSerializer<T>::GetArray(str);
+                return TKnnVectorSerializer<ui8, float>::Deserialize(valueBuilder, str);
             case EFormat::BitVector:
             default:
                 return {};

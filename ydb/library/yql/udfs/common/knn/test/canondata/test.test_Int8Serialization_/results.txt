@@ -11,7 +11,7 @@
                                 "column0";
                                 [
                                     "TaggedType";
-                                    "Uint8Vector";
+                                    "Int8Vector";
                                     [
                                         "DataType";
                                         "String"
@@ -23,7 +23,7 @@
                 ];
                 "Data" = [
                     [
-                        "\1\2\3\4\5\3"
+                        "\1\2\3\4\5\2"
                     ]
                 ]
             }

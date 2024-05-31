@@ -65,7 +65,7 @@ SpacesInContainerLiterals: true
 SpaceBeforeAssignmentOperators: true
 ContinuationIndentWidth: 4
 CommentPragmas:  '^ IWYU pragma:'
-ForEachMacros:   [
+ForEachMacros: [
     foreach,
     Q_FOREACH,
     BOOST_FOREACH,
@@ -80,8 +80,8 @@ DisableFormat:   false
 SortIncludes: false
 IndentPPDirectives: BeforeHash
 
-NamespaceMacros: [Y_UNIT_TEST_SUITE, Y_UNIT_TEST]
 SpaceBeforeInheritanceColon: false
+NamespaceMacros: [Y_UNIT_TEST_SUITE, Y_UNIT_TEST]
 AttributeMacros: [Y_PRINTF_FORMAT, Y_NO_SANITIZE, Y_FORCE_INLINE, Y_NO_INLINE, Y_WARN_UNUSED_RESULT, Y_HIDDEN, Y_PUBLIC, Y_PURE_FUNCTION]
 IndentExternBlock: Indent
 TypenameMacros: [Y_THREAD, Y_STATIC_THREAD, Y_POD_THREAD, Y_POD_STATIC_THREAD]

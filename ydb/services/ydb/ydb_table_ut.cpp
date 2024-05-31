@@ -1540,14 +1540,15 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             CREATE TABLE `Root/Test` (
                 Key Uint64 NOT NULL,
                 Value String,
+                Amount Decimal(22,9) NOT NULL,
                 PRIMARY KEY (Key)
             );
         )___").ExtractValueSync();
         UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
         result = session.ExecuteDataQuery(R"___(
-            UPSERT INTO `Root/Test` (Key, Value) VALUES (0u, "Zero");
-            UPSERT INTO `Root/Test` (Key, Value) VALUES (1u, "One");
+            UPSERT INTO `Root/Test` (Key, Value, Amount) VALUES (0u, "Zero", UNWRAP(CAST("0.11" AS Decimal(22, 9))));
+            UPSERT INTO `Root/Test` (Key, Value, Amount) VALUES (1u, "One", UNWRAP(CAST("1.11" AS Decimal(22, 9))));
         )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
@@ -1568,7 +1569,28 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             UNIT_ASSERT_VALUES_EQUAL(streamPart.GetStatus(), EStatus::SUCCESS);
 
             auto str = NYdb::FormatResultSetYson(streamPart.ExtractPart());
-            UNIT_ASSERT_VALUES_EQUAL(str, "[[[1u];[\"One\"]]]");
+            UNIT_ASSERT_VALUES_EQUAL(str, "[[[1u];[\"One\"];[\"1.11\"]]]");
+        }
+
+        {
+            TValueBuilder valueFrom;
+            valueFrom.BeginTuple()
+                .AddElement()
+                    .Uint64(1)
+                .EndTuple();
+
+            auto settings = TReadTableSettings()
+                .Ordered()
+                .ReturnNotNullAsOptional(false)
+                .From(TKeyBound::Inclusive(valueFrom.Build()));
+
+            auto it = session.ReadTable("Root/Test", settings).ExtractValueSync();
+
+            TReadTableResultPart streamPart = it.ReadNext().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(streamPart.GetStatus(), EStatus::SUCCESS);
+
+            auto str = NYdb::FormatResultSetYson(streamPart.ExtractPart());
+            UNIT_ASSERT_VALUES_EQUAL(str, "[[1u;[\"One\"];\"1.11\"]]");
         }
 
         {
@@ -1589,7 +1611,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             UNIT_ASSERT_VALUES_EQUAL_C(streamPart.GetStatus(), EStatus::SUCCESS, streamPart.GetIssues().ToString());
 
             auto str = NYdb::FormatResultSetYson(streamPart.ExtractPart());
-            UNIT_ASSERT_VALUES_EQUAL(str, "[[[1u];[\"One\"]]]");
+            UNIT_ASSERT_VALUES_EQUAL(str, "[[[1u];[\"One\"];[\"1.11\"]]]");
         }
 
         {
@@ -1610,7 +1632,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             UNIT_ASSERT_VALUES_EQUAL_C(streamPart.GetStatus(), EStatus::SUCCESS, streamPart.GetIssues().ToString());
 
             auto str = NYdb::FormatResultSetYson(streamPart.ExtractPart());
-            UNIT_ASSERT_VALUES_EQUAL(str, "[[[1u];[\"One\"]]]");
+            UNIT_ASSERT_VALUES_EQUAL(str, "[[[1u];[\"One\"];[\"1.11\"]]]");
         }
 
         {
@@ -1631,7 +1653,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             UNIT_ASSERT_VALUES_EQUAL_C(streamPart.GetStatus(), EStatus::SUCCESS, streamPart.GetIssues().ToString());
 
             auto str = NYdb::FormatResultSetYson(streamPart.ExtractPart());
-            UNIT_ASSERT_VALUES_EQUAL(str, "[[[0u];[\"Zero\"]];[[1u];[\"One\"]]]");
+            UNIT_ASSERT_VALUES_EQUAL(str, "[[[0u];[\"Zero\"];[\"0.11\"]];[[1u];[\"One\"];[\"1.11\"]]]");
         }
 
         {
@@ -1643,6 +1665,27 @@ R"___(<main>: Error: Transaction not found: , code: 2015
 
             auto settings = TReadTableSettings()
                 .Ordered()
+                .From(TKeyBound::Exclusive(valueFrom.Build()));
+
+            auto it = session.ReadTable("Root/Test", settings).ExtractValueSync();
+
+            TReadTableResultPart streamPart = it.ReadNext().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(streamPart.GetStatus(), EStatus::SUCCESS);
+
+            auto str = NYdb::FormatResultSetYson(streamPart.ExtractPart());
+            UNIT_ASSERT_VALUES_EQUAL(str, "[]");
+        }
+
+        {
+            TValueBuilder valueFrom;
+            valueFrom.BeginTuple()
+                .AddElement()
+                    .Uint64(1)
+                .EndTuple();
+
+            auto settings = TReadTableSettings()
+                .Ordered()
+                .ReturnNotNullAsOptional(false)
                 .From(TKeyBound::Exclusive(valueFrom.Build()));
 
             auto it = session.ReadTable("Root/Test", settings).ExtractValueSync();

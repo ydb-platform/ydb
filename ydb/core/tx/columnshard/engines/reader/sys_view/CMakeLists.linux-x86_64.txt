@@ -16,6 +16,7 @@ add_subdirectory(abstract)
 add_subdirectory(chunks)
 add_subdirectory(constructor)
 add_subdirectory(granules)
+add_subdirectory(optimizer)
 add_subdirectory(portions)
 
 add_library(engines-reader-sys_view INTERFACE)
@@ -29,5 +30,6 @@ target_link_libraries(engines-reader-sys_view INTERFACE
   reader-sys_view-chunks
   reader-sys_view-constructor
   reader-sys_view-granules
+  reader-sys_view-optimizer
 )
 

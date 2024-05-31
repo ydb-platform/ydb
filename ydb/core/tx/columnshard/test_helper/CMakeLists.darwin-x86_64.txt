@@ -26,9 +26,9 @@ target_link_libraries(tx-columnshard-test_helper PUBLIC
   libs-apache-arrow
   library-actors-core
   columnshard-blobs_action-bs
-  columnshard-blobs_action-tier
   core-tx-columnshard
   ydb-core-wrappers
+  columnshard-blobs_action-tier
 )
 
 target_sources(tx-columnshard-test_helper PRIVATE

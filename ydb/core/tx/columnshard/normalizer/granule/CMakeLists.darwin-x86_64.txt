@@ -34,5 +34,6 @@ target_link_libraries(columnshard-normalizer-granule.global PUBLIC
 
 target_sources(columnshard-normalizer-granule.global PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/granule/normalizer.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/granule/clean_granule.cpp
 )
 

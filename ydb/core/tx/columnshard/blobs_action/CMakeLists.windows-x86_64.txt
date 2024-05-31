@@ -19,7 +19,6 @@ add_subdirectory(counters)
 add_subdirectory(events)
 add_subdirectory(protos)
 add_subdirectory(storages_manager)
-add_subdirectory(tier)
 add_subdirectory(transaction)
 
 add_library(tx-columnshard-blobs_action)

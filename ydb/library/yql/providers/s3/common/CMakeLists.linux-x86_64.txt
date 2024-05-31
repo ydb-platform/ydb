@@ -15,15 +15,30 @@
 
 add_library(providers-s3-common)
 
+target_compile_options(providers-s3-common PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_include_directories(providers-s3-common PRIVATE
+  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Foundation/include
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base/pcg-random
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src
+)
+
 target_link_libraries(providers-s3-common PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  core-kqp-common
+  providers-common-http_gateway
+  providers-s3-events
   yql-public-issue
   public-issue-protos
 )
 
 target_sources(providers-s3-common PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/common/source_context.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/common/util.cpp
 )
 

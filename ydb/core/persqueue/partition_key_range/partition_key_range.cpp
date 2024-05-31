@@ -17,22 +17,6 @@ TString MiddleOf(const TString& from, const TString& to) {
         return static_cast<unsigned char>(str[i]);
     };
 
-    auto GetMiddle = [](ui16 a, ui16 b) {
-        if (a == 0xFF) {
-            return std::pair<ui16, bool>{0xFF, false};
-        }
-        if (a + 1 < b) {
-            return std::pair<ui16, bool>{(a + b) / 2, true};
-        }
-        if (b < a) {
-            ui16 n = (a + b + 0x100) / 2;
-            return std::pair<ui16, bool>{(n < 0x100) ? n : 0xFF, true};
-        }
-
-        return std::pair<ui16, bool>{a, false};
-    };
-
-
     TStringBuilder result;
     if (from.empty() && to.empty()) {
         result << static_cast<unsigned char>(0x7F);
@@ -40,18 +24,44 @@ TString MiddleOf(const TString& from, const TString& to) {
     }
 
     bool splitted = false;
+    bool diffFound = false;
 
     size_t maxSize = std::max(from.size(), to.size());
     for (size_t i = 0; i < maxSize; ++i) {
         ui16 f = GetChar(from, i, 0);
         ui16 t = GetChar(to, i, 0xFF);
 
+        if (f != t) {
+            diffFound = true;
+        }
+
         if (!splitted) {
-            auto [n, s] = GetMiddle(f, t);
-            result << static_cast<unsigned char>(n);
-            splitted = s;
+            if (!diffFound) {
+                result << static_cast<unsigned char>(f);
+                continue;
+            }
+
+            if (f < t) {
+                auto m = (f + t) / 2u;
+                result << static_cast<unsigned char>(m);
+                splitted = m != f;
+                continue;
+            }
+            auto n = (f + t + 0x100u) / 2u;
+            if (n < 0x100) {
+                result << static_cast<unsigned char>(n);
+                splitted = n != f;
+                continue;
+            }
+
+            result.pop_back();
+
+            ui16 prev = GetChar(from, i - 1, 0);
+            result << static_cast<unsigned char>(prev + 1u);
+            result << static_cast<unsigned char>(n - 0x100u);
+            splitted = true;
         } else {
-            auto n = (f + t) / 2u;
+            auto n = f < t ? (f + t) / 2u : std::min<ui16>(0xFFu, (f + t + 0x100u) / 2u);
             result << static_cast<unsigned char>(n);
             break;
         }

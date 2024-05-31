@@ -688,6 +688,31 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             auto res = NKikimr::NPQ::MiddleOf(AsString({0x01, 0xFF}), AsString({0x02, 0x00}));
             UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "01 FF FF");
         }
+
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x03, 0xFF}), AsString({0x04, 0x20}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "04 0F");
+        }
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x03, 0x40}), AsString({0x04, 0x40}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "03 C0");
+        }
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x03, 0x20}), AsString({0x04, 0x10}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "03 98");
+        }
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x04, 0xFF, 0xFF}), AsString({0x05, 0x20}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "05 0F FF");
+        }
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x03, 0x40, 0x7F}), AsString({0x04, 0x40}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "03 C0 BF");
+        }
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x03, 0x40, 0x30}), AsString({0x04, 0x40, 0x20}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "03 C0 A8");
+        }
     }
 }
 

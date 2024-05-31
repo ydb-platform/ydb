@@ -192,4 +192,17 @@ std::shared_ptr<NKikimr::NSharding::IGranuleShardingLogic> TConsistencySharding6
     }
 }
 
+ui64 TSpecificShardingInfo::GetUnifiedDistributionBorder(const ui32 idx, const ui64 shardsCount) const {
+    AFL_VERIFY(idx <= shardsCount);
+    if (idx == shardsCount) {
+        return Max<ui64>();
+    }
+#ifdef KIKIMR_DISABLE_WINDOWS
+    AFL_VERIFY(false)("error", "windows implementation doesn't works");
+    return 0;
+#else
+    return Max<ui64>() * (1.0 * idx / shardsCount);
+#endif
+}
+
 }

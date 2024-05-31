@@ -450,6 +450,27 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     Path = std::move(record.GetPath());
     TxId = record.GetTxId();
     TabletConfig = std::move(record.GetTabletConfig());
+
+    if (!TabletConfig.GetAllPartitions().size()) {
+        for (auto& p : record.GetPartitions()) {
+            auto* ap = TabletConfig.AddAllPartitions();
+            ap->SetPartitionId(p.GetPartition());
+            ap->SetTabletId(p.GetTabletId());
+            ap->SetCreateVersion(p.GetCreateVersion());
+            ap->MutableKeyRange()->SetFromBound(p.GetKeyRange().GetFromBound());
+            ap->MutableKeyRange()->SetToBound(p.GetKeyRange().GetToBound());
+            ap->SetStatus(p.GetStatus());
+            ap->MutableParentPartitionIds()->Reserve(p.GetParentPartitionIds().size());
+            for (const auto parent : p.GetParentPartitionIds()) {
+                ap->MutableParentPartitionIds()->AddAlreadyReserved(parent);
+            }
+            ap->MutableChildPartitionIds()->Reserve(p.GetChildPartitionIds().size());
+            for (const auto children : p.GetChildPartitionIds()) {
+                ap->MutableChildPartitionIds()->AddAlreadyReserved(children);
+            }
+        }
+    }
+
     Migrate(TabletConfig);
 
     SchemeShardId = record.GetSchemeShardId();
@@ -832,7 +853,7 @@ void TPersQueueReadBalancer::UpdateConfigCounters() {
         return;
     }
 
-    size_t inactiveCount = std::count_if(TabletConfig.GetPartitions().begin(), TabletConfig.GetPartitions().end(), [](auto& p) {
+    size_t inactiveCount = std::count_if(TabletConfig.GetAllPartitions().begin(), TabletConfig.GetAllPartitions().end(), [](auto& p) {
         return p.GetStatus() == NKikimrPQ::ETopicPartitionStatus::Inactive;
     });
 

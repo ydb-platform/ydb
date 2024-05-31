@@ -1730,9 +1730,9 @@
     ],
     "test.test[pg-join_tree_order-default.txt-Debug]": [
         {
-            "checksum": "9d7dd29ae9ec55cb1f1801d0b6ceb958",
+            "checksum": "f9170d61052df37ac69914ce0bd95a81",
             "size": 1028,
-            "uri": "https://{canondata_backend}/1942100/636230304ba87d5b90b5566e93fadf7c12da6a8e/resource.tar.gz#test.test_pg-join_tree_order-default.txt-Debug_/opt.yql_patched"
+            "uri": "https://{canondata_backend}/1031349/f9e5528e64f4bcdb4154fd10489bc2c93c9230cf/resource.tar.gz#test.test_pg-join_tree_order-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-join_tree_order-default.txt-Plan]": [

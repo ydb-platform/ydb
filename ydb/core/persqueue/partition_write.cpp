@@ -1619,7 +1619,7 @@ bool TPartition::WaitingForPreviousBlobQuota() const {
     return TopicQuotaRequestCookie != 0;
 }
 
-bool TPartition::WaitingForSubDomainQuota(const TActorContext& ctx, const ui64 withSize) const {
+bool TPartition::WaitingForSubDomainQuota(const TActorContext& /*ctx*/, const ui64 withSize) const {
     if (!SubDomainOutOfSpace || !AppData()->FeatureFlags.GetEnableTopicDiskSubDomainQuota()) {
         return false;
     }
@@ -1629,7 +1629,7 @@ bool TPartition::WaitingForSubDomainQuota(const TActorContext& ctx, const ui64 w
         return withSize > 0 || Size() > 0;
     }
 
-    return MeteringDataSize(ctx) + withSize > ReserveSize();
+    return MeteringDataSize() + withSize > ReserveSize();
 }
 
 void TPartition::RequestBlobQuota(size_t quotaSize)

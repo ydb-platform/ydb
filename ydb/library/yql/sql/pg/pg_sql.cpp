@@ -2503,7 +2503,7 @@ public:
 
         setItemOptions.push_back(QL(QA("result"), QVL(CreatePgStarResultItem())));
         setItemOptions.push_back(QL(QA("from"), QVL(fromList.data(), fromList.size())));
-        setItemOptions.push_back(QL(QA("join_ops"), QVL(QL())));
+        setItemOptions.push_back(QL(QA("join_ops"), QVL(QL(QL(QA("push"))))));
 
         NYql::TAstNode* lambda = nullptr;
         if (whereFilter) {

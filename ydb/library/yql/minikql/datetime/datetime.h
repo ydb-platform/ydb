@@ -21,7 +21,6 @@ struct TTMStorage {
     unsigned int Second : 6;
     unsigned int Microsecond : 20;
     unsigned int TimezoneId : 16;
-    ui8 Reserved[2];
 
     TTMStorage() {
         Zero(*this);

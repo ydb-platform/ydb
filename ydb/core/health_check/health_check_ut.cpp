@@ -77,6 +77,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         } else {
             domain->mutable_databasequotas()->set_data_size_hard_quota(quota);
         }
+        domain->SetShardsLimit(quota);
+        domain->SetShardsInside(size);
     }
 
     void AddGroupsInControllerSelectGroupsResult(TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr* ev,  int groupCount) {
@@ -488,6 +490,50 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         int storageIssuesCount = 0;
         for (const auto& issue_log : result->Result.Getissue_log()) {
             if (issue_log.type() == "STORAGE" && issue_log.reason_size() == 0 && issue_log.status() == status) {
+                storageIssuesCount++;
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(storageIssuesCount, storageIssuesNumber);
+    }
+
+    void ShardsQuotaTest(ui64 usage, ui64 quota, ui64 storageIssuesNumber, Ydb::Monitoring::StatusFlag::Status status = Ydb::Monitoring::StatusFlag::GREEN) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(2)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvSchemeShard::EvDescribeSchemeResult: {
+                    auto *x = reinterpret_cast<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
+                    ChangeDescribeSchemeResult(x, usage, quota);
+                    break;
+                }
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+
+        auto *request = new NHealthCheck::TEvSelfCheckRequest;
+        runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
+        NHealthCheck::TEvSelfCheckResult* result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle);
+
+        int storageIssuesCount = 0;
+        for (const auto& issue_log : result->Result.Getissue_log()) {
+            Ctest << issue_log.ShortDebugString() << Endl;
+            if (issue_log.type() == "COMPUTE_QUOTA" && issue_log.reason_size() == 0 && issue_log.status() == status) {
                 storageIssuesCount++;
             }
         }
@@ -1764,6 +1810,26 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
     Y_UNIT_TEST(AfterHiveSyncPeriodReportsTabletsState) {
         HiveSyncTest(false);
+    }
+
+    Y_UNIT_TEST(ShardsLimit999) {
+        ShardsQuotaTest(999, 1000, 1, Ydb::Monitoring::StatusFlag::RED);
+    }
+
+    Y_UNIT_TEST(ShardsLimit995) {
+        ShardsQuotaTest(995, 1000, 1, Ydb::Monitoring::StatusFlag::ORANGE);
+    }
+
+    Y_UNIT_TEST(ShardsLimit905) {
+        ShardsQuotaTest(905, 1000, 1, Ydb::Monitoring::StatusFlag::YELLOW);
+    }
+
+    Y_UNIT_TEST(ShardsLimit800) {
+        ShardsQuotaTest(805, 1000, 0, Ydb::Monitoring::StatusFlag::GREEN);
+    }
+
+    Y_UNIT_TEST(ShardsNoLimit) {
+        ShardsQuotaTest(105, 0, 0, Ydb::Monitoring::StatusFlag::GREEN);
     }
 }
 }

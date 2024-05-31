@@ -38,5 +38,6 @@ target_sources(public-udf-arrow PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/arrow/block_item_hasher.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/arrow/block_item_comparator.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/arrow/block_type_helper.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/udf/arrow/memory_pool.cpp
 )
 

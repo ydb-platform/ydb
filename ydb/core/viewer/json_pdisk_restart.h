@@ -4,6 +4,7 @@
 #include <ydb/library/actors/core/mon.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/viewer/json/json.h>
+#include <ydb/core/util/wildcard.h>
 #include <library/cpp/json/json_writer.h>
 #include "viewer.h"
 #include "json_pipe_req.h"
@@ -38,12 +39,11 @@ protected:
     ui32 Retries = 0;
     TDuration RetryPeriod = TDuration::MilliSeconds(500);
 
-    std::unique_ptr<TEvBlobStorage::TEvAskWardenRestartPDiskResult> Response;
+    std::unique_ptr<TEvBlobStorage::TEvControllerConfigResponse> Response;
 
     ui32 NodeId = 0;
     ui32 PDiskId = 0;
-
-    TActorId SessionId;
+    bool Force = false;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -59,6 +59,7 @@ public:
         const auto& params(Event->Get()->Request.GetParams());
         NodeId = FromStringWithDefault<ui32>(params.Get("node_id"), 0);
         PDiskId = FromStringWithDefault<ui32>(params.Get("pdisk_id"), Max<ui32>());
+        Force = FromStringWithDefault<bool>(params.Get("force"), false);
 
         if (PDiskId == Max<ui32>()) {
             TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(
@@ -89,21 +90,15 @@ public:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvBlobStorage::TEvAskWardenRestartPDiskResult, Handle);
+            hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
             cFunc(TEvRetryNodeRequest::EventType, HandleRetry);
             cFunc(TEvents::TEvUndelivered::EventType, Undelivered);
-            hFunc(TEvInterconnect::TEvNodeConnected, Connected);
-            hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
 
     void SendRequest() {
-        auto request = MakeHolder<TEvBlobStorage::TEvAskWardenRestartPDisk>(PDiskId);
-        TBase::SendRequest(MakeBlobStorageNodeWardenID(NodeId),
-                           request.Release(),
-                           IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
-                           NodeId);
+        RequestBSControllerPDiskRestart(NodeId, PDiskId, Force);
     }
 
     bool RetryRequest() {
@@ -122,18 +117,7 @@ public:
         }
     }
 
-    void Connected(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
-        SessionId = ev->Sender;
-    }
-
-    void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr&) {
-        SessionId = {};
-        if (!RetryRequest()) {
-            TBase::RequestDone();
-        }
-    }
-
-    void Handle(TEvBlobStorage::TEvAskWardenRestartPDiskResult::TPtr& ev) {
+    void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& ev) {
         Response.reset(ev->Release().Release());
         ReplyAndPassAway();
     }
@@ -149,22 +133,45 @@ public:
     }
 
     void PassAway() override {
-        if (SessionId) {
-            TBase::Send(SessionId, new TEvents::TEvUnsubscribe());
-        }
         TBase::PassAway();
+    }
+
+    void TryToTranslateFromBSC2Human(TString& bscError, bool& forceRetryPossible) {
+        if (IsMatchesWildcard(bscError, "GroupId# * ExpectedStatus# *")) {
+            TStringBuf groupId = TStringBuf(bscError).After(' ').Before(' ');
+            TStringBuf expectedStatus = TStringBuf(bscError).After('#').After('#').After(' ');
+            if (expectedStatus == "DEGRADED") {
+                bscError = TStringBuilder() << "Calling this operation will cause at least group " << groupId << " to go into a degraded state";
+                forceRetryPossible = true;
+                return;
+            }
+            if (expectedStatus == "DISINTEGRATED") {
+                bscError = TStringBuilder() << "Calling this operation will cause at least group " << groupId << " to go into a dead state";
+                return;
+            }
+        }
+        forceRetryPossible = false;
     }
 
     void ReplyAndPassAway() {
         NJson::TJsonValue json;
         if (Response != nullptr) {
-            json["result"] = Response->RestartAllowed;
-            if (Response->Details) {
-                json["error"] = Response->Details;
+            if (Response->Record.GetResponse().GetSuccess()) {
+                json["result"] = true;
+            } else {
+                json["result"] = false;
+                TString error = Response->Record.GetResponse().GetErrorDescription();
+                bool forceRetryPossible = false;
+                TryToTranslateFromBSC2Human(error, forceRetryPossible);
+                json["error"] = error;
+                if (forceRetryPossible) {
+                    json["forceRetryPossible"] = true;
+                }
             }
+            json["debugMessage"] = Response->Record.ShortDebugString();
         } else {
             json["result"] = false;
-            json["error"] = "No response was received from the NodeWarden";
+            json["error"] = "No response was received from BSC";
         }
         TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), NJson::WriteJson(json)), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         PassAway();
@@ -196,17 +203,11 @@ YAML::Node TJsonRequestSwagger<TJsonPDiskRestart>::GetSwagger() {
             description: timeout in ms
             required: false
             type: integer
-          - name: retries
+          - name: force
             in: query
-            description: number of retries
+            description: attempt forced operation, ignore warnings
             required: false
-            type: integer
-          - name: retry_period
-            in: query
-            description: retry period in ms
-            required: false
-            type: integer
-            default: 500
+            type: boolean
           responses:
             200:
               description: OK
@@ -219,6 +220,9 @@ YAML::Node TJsonRequestSwagger<TJsonPDiskRestart>::GetSwagger() {
                   error:
                     type: string
                     description: details about failed operation
+                  forceRetryPossible:
+                    type: boolean
+                    description: if true, operation can be retried with force flag
             400:
               description: Bad Request
             403:

@@ -62,6 +62,12 @@ one_time_waiter = OneTimeWaiter(
         "column_selection_col2_COL1_NATIVE",
         "column_selection_col2_NATIVE",
         "column_selection_col3_NATIVE",
+        "primitive_types_NATIVE",
+        "optional_types_NATIVE",
+        "constant_NATIVE",
+        "count_NATIVE",
+        "pushdown_NATIVE",
+        "unsupported_types_NATIVE",
     ]
 )
 

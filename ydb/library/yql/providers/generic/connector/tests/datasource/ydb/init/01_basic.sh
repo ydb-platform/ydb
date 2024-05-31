@@ -135,6 +135,15 @@ set -ex
       (2, "two"),
       (3, "three");
     COMMIT;
+
+    -- As of 2024.05.31, INTERVAL type is not supported, so we use it to check behavior of connector
+    -- when reading table containing usupported type columns.
+    CREATE TABLE unsupported_types_NATIVE (col_00_id Int32, col_01_interval INTERVAL, PRIMARY KEY (col_00_id));
+    COMMIT;
+    INSERT INTO unsupported_types_NATIVE (col_00_id, col_01_interval) VALUES
+      (1, DATE("2024-01-01") - DATE("2023-01-01")),
+      (2, DATE("2022-01-01") - DATE("2023-01-01"));
+    COMMIT;
   '
 
 echo $(date +"%T.%6N") "SUCCESS"

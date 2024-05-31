@@ -444,6 +444,47 @@ class Factory:
             )
         ]
 
+    def _unsupported_types(self) -> Sequence[TestCase]:
+        schema = Schema(
+            columns=ColumnList(
+                Column(
+                    name='col_00_id',
+                    ydb_type=makeYdbTypeFromTypeID(Type.INT32),
+                    data_source_type=DataSourceType(ydb=types_ydb.Int32().to_non_nullable()),
+                ),
+                Column(
+                    name='col_01_interval',
+                    ydb_type=makeYdbTypeFromTypeID(Type.BOOL),
+                    data_source_type=DataSourceType(ydb=types_ydb.Bool().to_non_nullable()),
+                ),
+            ),
+        )
+
+        test_case_name = 'unsupported_types'
+
+        tc = TestCase(
+            name_=test_case_name,
+            schema=schema,
+            select_what=SelectWhat.asterisk(schema.columns),
+            select_where=None,
+            data_in=None,
+            # Interval type is not supported, so the second column will be ommited
+            data_out_=[
+                [
+                    1,
+                ],
+                [
+                    2,
+                ],
+            ],
+            data_source_kind=EDataSourceKind.YDB,
+            protocol=EProtocol.NATIVE,
+            pragmas=dict(),
+            check_output_schema=True,
+        )
+
+        return [tc]
+
     def make_test_cases(self) -> Sequence[TestCase]:
         return list(
             itertools.chain(
@@ -453,5 +494,6 @@ class Factory:
                 # self._constant(),
                 # self._count(),
                 self._pushdown(),
+                self._unsupported_types(),
             )
         )

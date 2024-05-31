@@ -632,12 +632,19 @@ public:
 
         std::shared_ptr<TPortionInfo> oldestPortion = GetOldestPortion(true);
         if (oldestPortion) {
-            result.InsertValue("oldest", oldestPortion->RecordSnapshotMin().DebugString());
+            auto& info = result.InsertValue("oldest", NJson::JSON_MAP);
+            info.InsertValue("snapshot", oldestPortion->RecordSnapshotMin().DebugJson());
+            info.InsertValue("bytes", oldestPortion->GetTotalBlobBytes());
+            info.InsertValue("id", oldestPortion->GetPortionId());
         }
         std::shared_ptr<TPortionInfo> youngestPortion = GetYoungestPortion(true);
         if (youngestPortion) {
-            result.InsertValue("youngest", youngestPortion->RecordSnapshotMin().DebugString());
+            auto& info = result.InsertValue("youngest", NJson::JSON_MAP);
+            info.InsertValue("snapshot", youngestPortion->RecordSnapshotMin().DebugJson());
+            info.InsertValue("bytes", youngestPortion->GetTotalBlobBytes());
+            info.InsertValue("id", youngestPortion->GetPortionId());
         }
+
         return result;
     }
 };
@@ -690,6 +697,8 @@ public:
         description.InsertValue("others", Others.DebugJson());
         if (MainPortion) {
             description.InsertValue("main_portion", MainPortion->GetPortionId());
+            description.InsertValue("snapshot_max", MainPortion->RecordSnapshotMax().DebugJson());
+            description.InsertValue("bytes", MainPortion->GetTotalBlobBytes());
         }
         result.SetDetails(description.GetStringRobust());
         return result;

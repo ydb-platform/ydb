@@ -84,6 +84,7 @@ class NonNullable(Type):
     '''
     See https://ydb.tech/docs/ru/yql/reference/types/optional#tipy-dannyh,-dopuskayushie-znachenie-null
     '''
+
     primitive: PrimitiveType
 
     def __init__(self, primitive: PrimitiveType):

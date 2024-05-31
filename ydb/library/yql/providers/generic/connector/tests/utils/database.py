@@ -59,7 +59,7 @@ class Database:
             case EDataSourceKind.POSTGRESQL:
                 return 'table does not exist'
             case EDataSourceKind.YDB:
-                raise Exception(f"Fix me first in YQ-3315")
+                raise Exception("Fix me first in YQ-3315")
             case _:
                 raise Exception(f'invalid data source: {self.kind}')
 

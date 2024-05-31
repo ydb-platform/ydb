@@ -204,7 +204,7 @@ ALTER TABLE series_with_families ALTER FAMILY default SET DATA "hdd";
 
 ## Изменение дополнительных параметров таблицы {#additional-alter}
 
-Большинство параметров таблицы в YDB, приведенных на странице [описания таблицы]({{ concept_table }}), можно изменить командой ```ALTER```.
+Большинство параметров таблицы в {{ ydb-short-name }}, приведенных на странице [описания таблицы]({{ concept_table }}), можно изменить командой `ALTER`.
 
 В общем случае команда для изменения любого параметра таблицы выглядит следующим образом:
 
@@ -218,6 +218,18 @@ ALTER TABLE table_name SET (key = value);
 
 ```sql
 ALTER TABLE series SET (AUTO_PARTITIONING_BY_SIZE = DISABLED);
+```
+
+С помощью команды `ALTER` также можно изменить параметры `TTL` таблицы. Например, увеличить интервал отсрочки удаления записи:
+```sql
+ALTER TABLE table_name 
+SET (TTL = Interval("PT10S") ON column_name);
+```
+
+Если требуется удалить `TTL` таблицы — сделать это можно следующей командой:
+```sql
+ALTER TABLE my_table_3 
+RESET (TTL);
 ```
 
 ## Сброс дополнительных параметров таблицы {#additional-reset}

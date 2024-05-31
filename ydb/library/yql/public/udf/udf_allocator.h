@@ -5,6 +5,12 @@
 #include <cstddef>
 #include <limits>
 
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 37)
+extern "C" void* UdfArrowAllocate(ui64 size);
+extern "C" void* UdfArrowReallocate(const void* mem, ui64 prevSize, ui64 size);
+extern "C" void UdfArrowFree(const void* mem, ui64 size);
+#endif
+
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
 extern "C" void* UdfAllocateWithSize(ui64 size);
 extern "C" void UdfFreeWithSize(const void* mem, ui64 size);

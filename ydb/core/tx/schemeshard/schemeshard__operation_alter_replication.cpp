@@ -58,6 +58,7 @@ public:
                 PathIdFromPathId(pathId, ev->Record.MutablePathId());
                 ev->Record.MutableOperationId()->SetTxId(ui64(OperationId.GetTxId()));
                 ev->Record.MutableOperationId()->SetPartId(ui32(OperationId.GetSubTxId()));
+                ev->Record.MutableConfig()->CopyFrom(alterData->Description.GetConfig());
                 if (alterData->Description.GetState().GetStateCase() != context.SS->Replications.at(pathId)->Description.GetState().GetStateCase()) {
                     ev->Record.MutableSwitchState()->CopyFrom(alterData->Description.GetState());
                 }

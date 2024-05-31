@@ -37,6 +37,12 @@ public:
             return true;
         }
 
+        Replication->SetConfig(record.GetConfig());
+        NIceDb::TNiceDb db(txc.DB);
+        db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
+            NIceDb::TUpdate<Schema::Replications::Config>(record.GetConfig().SerializeAsString())
+        );
+
         if (!record.HasSwitchState()) {
             Result->Record.SetStatus(NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
             return true;
@@ -50,7 +56,6 @@ public:
         }
 
         Result->Record.SetStatus(NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
-        NIceDb::TNiceDb db(txc.DB);
 
         bool alter = false;
         for (ui64 tid = 0; tid < Replication->GetNextTargetId(); ++tid) {

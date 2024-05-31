@@ -228,7 +228,7 @@ SET (TTL = Interval("PT10S") ON column_name);
 
 Если требуется удалить `TTL` таблицы — сделать это можно следующей командой:
 ```sql
-ALTER TABLE my_table_3 
+ALTER TABLE table_name
 RESET (TTL);
 ```
 

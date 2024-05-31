@@ -220,6 +220,18 @@ For example, this command disables automatic partitioning of the table:
 ALTER TABLE series SET (AUTO_PARTITIONING_BY_SIZE = DISABLED);
 ```
 
+Using the `ALTER` command, you can also modify the `TTL` parameters of the table. For example, to increase the delay interval for record deletion:
+```sql
+ALTER TABLE table_name 
+SET (TTL = Interval("PT10S") ON column_name);
+```
+
+If you need to remove the `TTL` from a table, you can do so with the following command:
+```sql
+ALTER TABLE table_name
+RESET (TTL);
+```
+
 ## Resetting additional table parameters {#additional-reset}
 
 Some table parameters in YDB listed on the [table description]({{ concept_table }}) page can be reset with the ```ALTER``` command.

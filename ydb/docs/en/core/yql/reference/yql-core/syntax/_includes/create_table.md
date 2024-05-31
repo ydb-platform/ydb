@@ -143,9 +143,9 @@ Here, key is the name of the parameter and value is its value.
 
 For a list of valid parameter names and values, see the [{{ backend_name }} table description]({{ concept_table }}).
 
-For example, this code will create a table with enabled automatic partitioning by partition size and the preferred size of each partition is 512 MB:
+### Examples of Creating a String Table with Additional Parameters
 
-<small>Listing 4</small>
+This code will create a table with enabled automatic partitioning by partition size and the preferred size of each partition is 512 MB:
 
 ```sql
 CREATE TABLE my_table (
@@ -158,6 +158,28 @@ WITH (
     AUTO_PARTITIONING_PARTITION_SIZE_MB = 512
 );
 ```
+
+Creating a table with enabled `TTL` for automatically removing outdated records from the table. A record is deleted when the value of one of the columns (configurable by the user) of type: `Date`, `Datetime`, or `Timestamp` becomes greater than the current time (Epoch time). The lifespan of records can be extended (globally for the entire table) by the value specified in the `Interval` function:
+```sql
+CREATE TABLE my_table (
+    id Uint64,
+    title Utf8,
+    expire_at Timestamp
+    PRIMARY KEY (id)
+)
+WITH (
+    TTL = Interval("PT0S") ON expire_at
+);
+```
+
+In the provided example, a record will be deleted as soon as the value in the `expire_at` column matches the Epoch time, since the Interval function specifies the value "PT0S" is 0 seconds.
+
+{% note info %}
+
+In the table, there can be only one TTL column. If in the TTL column has a `NULL` value, that row will never be deleted.
+
+{% endnote %}
+
 
 {% if feature_olap_tables %}#{% endif %}## Column groups {#column-family}
 

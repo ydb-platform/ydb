@@ -75,6 +75,21 @@ TEST(TReconfigurableThroughputThrottlerTest, TestNoOverflow)
         .ThrowOnError();
 }
 
+TEST(TReconfigurableThroughputThrottlerTest, FailedTest)
+{
+    auto config = NYT::New<NYT::NConcurrency::TThroughputThrottlerConfig>();
+        config->Limit = 15;
+        config->Period = TDuration::Seconds(1) / 15;
+
+    auto throttler = CreateReconfigurableThroughputThrottler(config);
+
+    for (int i = 0; i < 10; ++i) {
+        throttler->Throttle(1).Get().ThrowOnError();
+        Sleep(TDuration::Seconds(3));
+    }
+
+}
+
 TEST(TReconfigurableThroughputThrottlerTest, TestScheduleUpdate)
 {
     auto throttler = CreateReconfigurableThroughputThrottler(

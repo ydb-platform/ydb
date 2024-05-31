@@ -10,6 +10,11 @@ namespace NYT {
 
 namespace NDetail {
 
+consteval bool Contains(std::string_view sv, char symbol)
+{
+    return sv.find(symbol) != std::string_view::npos;
+}
+
 template <class... TArgs>
 consteval void TFormatAnalyser::ValidateFormat(std::string_view fmt)
 {
@@ -53,7 +58,7 @@ consteval void TFormatAnalyser::ValidateFormat(std::string_view fmt)
             return;
         }
 
-        if (specifiers[markerCount].Conversion.contains(symbol)) {
+        if (Contains(specifiers[markerCount].Conversion, symbol)) {
             // Marker has finished.
 
             markers[markerCount]
@@ -64,7 +69,7 @@ consteval void TFormatAnalyser::ValidateFormat(std::string_view fmt)
             continue;
         }
 
-        if (!specifiers[markerCount].Flags.contains(symbol)) {
+        if (!Contains(specifiers[markerCount].Flags, symbol)) {
             CrashCompilerWrongFlagSpecifier("Symbol is not a valid flag specifier; See FlagSpecifiers");
         }
     }

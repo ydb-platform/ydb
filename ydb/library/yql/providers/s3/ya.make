@@ -9,4 +9,6 @@ RECURSE(
     provider
     range_helpers
     serializations
+    settings
+    s3_dummy
 )

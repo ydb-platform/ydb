@@ -164,6 +164,7 @@ PEERDIR(
     ydb/services/persqueue_v1
     ydb/services/rate_limiter
     ydb/services/ydb
+    ydb/library/yql/providers/s3/provider
 )
 
 YQL_LAST_ABI_VERSION()

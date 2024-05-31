@@ -10,7 +10,7 @@ PEERDIR(
     ydb/core/kqp/ut/common
     ydb/library/yql/sql
     ydb/library/yql/utils/log
-
+    ydb/library/yql/providers/s3/s3_dummy
     ydb/core/testlib/basics/default
 )
 

@@ -25,6 +25,7 @@ PEERDIR(
     ydb/core/tx/columnshard/hooks/testing
     ydb/library/yql/sql/pg
     ydb/library/yql/parser/pg_wrapper
+    ydb/library/yql/providers/s3/s3_dummy
 )
 
 YQL_LAST_ABI_VERSION()

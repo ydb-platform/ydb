@@ -22,6 +22,7 @@ PEERDIR(
     ydb/core/kqp
     ydb/core/kqp/ut/common
     ydb/library/yql/sql/pg_dummy
+    ydb/library/yql/providers/s3/s3_dummy
 )
 
 YQL_LAST_ABI_VERSION()

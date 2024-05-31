@@ -82,4 +82,5 @@ SET(YDB_REPLAY_PEERDIRS
     ydb/library/yql/udfs/common/yson2
     ydb/library/yql/udfs/logs/dsv
     ydb/library/yql/sql/pg_dummy
+    ydb/library/yql/providers/s3/provider
 )

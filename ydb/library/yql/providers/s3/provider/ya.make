@@ -15,7 +15,6 @@ SRCS(
     yql_s3_phy_opt.cpp
     yql_s3_provider.cpp
     yql_s3_provider_impl.cpp
-    yql_s3_settings.cpp
 )
 
 PEERDIR(

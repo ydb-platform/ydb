@@ -29,6 +29,7 @@ PEERDIR(
     ydb/public/lib/ut_helpers
     ydb/public/sdk/cpp/client/ydb_operation
     ydb/public/sdk/cpp/client/ydb_types/operation
+    ydb/library/yql/providers/s3/s3_dummy
 )
 
 YQL_LAST_ABI_VERSION()

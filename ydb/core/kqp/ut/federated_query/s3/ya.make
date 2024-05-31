@@ -21,6 +21,7 @@ PEERDIR(
     ydb/core/kqp/ut/common
     ydb/core/kqp/ut/federated_query/common
     ydb/library/yql/sql/pg_dummy
+    ydb/library/yql/providers/s3/provider
     ydb/public/sdk/cpp/client/ydb_types/operation
 )
 

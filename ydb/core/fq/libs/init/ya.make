@@ -38,6 +38,7 @@ PEERDIR(
     ydb/library/yql/dq/transform
     ydb/library/yql/providers/common/comp_nodes
     ydb/library/yql/providers/common/metrics
+    ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/providers/dq/actors
     ydb/library/yql/providers/dq/api/protos
     ydb/library/yql/providers/dq/provider
@@ -49,9 +50,8 @@ PEERDIR(
     ydb/library/yql/providers/pq/cm_client
     ydb/library/yql/providers/pq/gateway/native
     ydb/library/yql/providers/pq/provider
-    ydb/library/yql/providers/s3/actors
     ydb/library/yql/providers/s3/proto
-    ydb/library/yql/providers/s3/provider
+    ydb/library/yql/providers/s3/settings
     ydb/library/yql/providers/solomon/async_io
     ydb/library/yql/providers/solomon/gateway
     ydb/library/yql/providers/solomon/proto

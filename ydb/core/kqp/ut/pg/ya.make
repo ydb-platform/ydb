@@ -15,6 +15,7 @@ PEERDIR(
     ydb/library/yql/sql/pg
     ydb/library/yql/parser/pg_wrapper
     ydb/public/lib/ut_helpers
+    ydb/library/yql/providers/s3/s3_dummy
 )
 
 ADDINCL(

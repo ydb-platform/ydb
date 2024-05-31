@@ -12,6 +12,7 @@ PEERDIR(
     ydb/core/testlib/default
     ydb/library/security
     ydb/public/sdk/cpp/client/ydb_table
+    ydb/library/yql/providers/s3/s3_dummy
 )
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)

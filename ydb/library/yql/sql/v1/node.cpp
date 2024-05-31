@@ -45,7 +45,7 @@ TColumnConstraints::TColumnConstraints(TNodePtr defaultExpr, bool nullable)
 
 
 TColumnSchema::TColumnSchema(TPosition pos, const TString& name, const TNodePtr& type, bool nullable,
-        TVector<TIdentifier> families, bool serial, TNodePtr defaultExpr)
+        TVector<TIdentifier> families, bool serial, TNodePtr defaultExpr, ETypeOfChange typeOfChange)
     : Pos(pos)
     , Name(name)
     , Type(type)
@@ -53,6 +53,7 @@ TColumnSchema::TColumnSchema(TPosition pos, const TString& name, const TNodePtr&
     , Families(families)
     , Serial(serial)
     , DefaultExpr(defaultExpr)
+    , TypeOfChange(typeOfChange)
 {
 }
 

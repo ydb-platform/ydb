@@ -1662,7 +1662,7 @@ bool TSqlQuery::AlterTableAlterColumn(const TRule_alter_table_alter_column& node
     TVector<TIdentifier> families;
     const auto& familyRelation = node.GetRule_family_relation5();
     families.push_back(IdEx(familyRelation.GetRule_an_id2(), *this));
-    params.AlterColumns.emplace_back(pos, name, nullptr, false, families, false, nullptr);
+    params.AlterColumns.emplace_back(pos, name, nullptr, false, families, false, nullptr, TColumnSchema::ETypeOfChange::SetFamaly);
     return true;
 }
 
@@ -1851,7 +1851,7 @@ bool TSqlQuery::AlterTableAlterColumnSetNull(const TRule_alter_table_alter_colum
         return false;
     }
 
-    params.AlterColumns.emplace_back(pos, name, nullptr, nullable, TVector<TIdentifier>(), false, nullptr);
+    params.AlterColumns.emplace_back(pos, name, nullptr, nullable, TVector<TIdentifier>(), false, nullptr, TColumnSchema::ETypeOfChange::SetNullConstraint);
     return true;
 }
 

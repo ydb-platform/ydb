@@ -3180,7 +3180,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 ALTER TABLE alterNotNull
                 ALTER COLUMN value SET NOT NULL;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(initValues.IsSuccess(), initValues.GetIssues().ToString());
+            UNIT_ASSERT_C(setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
         }
 
         {

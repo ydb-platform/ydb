@@ -10,16 +10,17 @@ ADDINCL(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
-    source_context.cpp
-    util.cpp
+    events.cpp
 )
 
 PEERDIR(
+    ydb/core/base
     ydb/core/kqp/common
+    ydb/library/yql/dq/actors/protos
+    ydb/library/yql/providers/s3/proto
     ydb/library/yql/providers/common/http_gateway
-    ydb/library/yql/providers/s3/events
     ydb/library/yql/public/issue
-    ydb/library/yql/public/issue/protos
+    ydb/library/yql/udfs/common/clickhouse/client
 )
 
 END()

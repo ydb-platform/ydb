@@ -28,6 +28,7 @@ struct TS3Settings {
     NCommon::TConfSetting<ui64, false> FileQueueBatchSizeLimit; // Limits total size of files in one PathBatch from FileQueue
     NCommon::TConfSetting<ui64, false> FileQueueBatchObjectCountLimit; // Limits count of files in one PathBatch from FileQueue
     NCommon::TConfSetting<ui64, false> FileQueuePrefetchSize;
+    NCommon::TConfSetting<bool, false> AsyncDecoding;  // Parse and decode input data at separate mailbox/thread of TaskRunner
 };
 
 struct TS3ClusterSettings {

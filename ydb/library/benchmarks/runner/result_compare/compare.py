@@ -90,7 +90,11 @@ code { white-space: pre; }
         q = data[0][i][1]
         print('<tr><td>{}'.format(html.escape(q)), end='')
         for c in range(len(data)):
-            (dirname, q, elapsed, utime, stime, maxrss, exitcode) = data[c][i]
+            try:
+                (dirname, q, elapsed, utime, stime, maxrss, exitcode) = data[c][i]
+            except Exception:
+                print('<td colspan="5">N/A')
+                continue
             if c == 0:
                 (refDirname, refQ, refElapsed, refUtime, refStime, refMaxrss, refExitcode) = data[c][i]
             outname = dirname + '/' + q + '-result.yson'

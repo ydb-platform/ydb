@@ -6,7 +6,7 @@ services:
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
       CLICKHOUSE_PASSWORD: password
       CLICKHOUSE_USER: user
-    image: clickhouse/clickhouse-server:23-alpine@sha256:b078c1cd294632afa2aeba3530e7ba2e568513da23304354f455a25fab575c06
+    image: mirror.gcr.io/clickhouse/clickhouse-server:23-alpine@sha256:b078c1cd294632afa2aeba3530e7ba2e568513da23304354f455a25fab575c06
     volumes:
     - ./clickhouse:/docker-entrypoint-initdb.d
   fq-connector-go:
@@ -25,7 +25,7 @@ services:
       POSTGRES_DB: db
       POSTGRES_PASSWORD: password
       POSTGRES_USER: user
-    image: postgres:15-bullseye@sha256:3411b9f2e5239cd7867f34fcf22fe964230f7d447a71d63c283e3593d3f84085
+    image: mirror.gcr.io/postgres:15-bullseye@sha256:3411b9f2e5239cd7867f34fcf22fe964230f7d447a71d63c283e3593d3f84085
     volumes:
     - ./postgresql:/docker-entrypoint-initdb.d
   ydb:

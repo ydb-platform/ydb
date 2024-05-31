@@ -10,6 +10,14 @@ from pathlib import Path
 
 import cyson as yson
 
+# 2024-05-28 19:23:57.817 INFO  dqrun(pid=59479, tid=0x00007A180B80B640) [default] mkql_wide_combine.cpp:439: switching Memory mode to Spilling
+RE_SPILLING = re.compile(r'mkql_([a-z_]*)\.cpp:([0-9]+): switching Memory mode to Spilling')
+SPILLING_MAP = {
+    'wide_combine': 'c',
+    'wide_top_sort': 's',
+    'grace_join': 'j',
+}
+
 
 def fmtchange(cur, ref, plus='bad', minus='good', threshold=10):
     ret = '{:.1f}'.format(cur)
@@ -51,6 +59,7 @@ def main():
 .tabnum { text-align: right; }
 .good { color: green; }
 .bad { color: red; }
+.spilling { background-color: lightgray; }
 code { white-space: pre; }
 </style></head>
 ''')
@@ -97,13 +106,25 @@ code { white-space: pre; }
                 continue
             if c == 0:
                 (refDirname, refQ, refElapsed, refUtime, refStime, refMaxrss, refExitcode) = data[c][i]
+            cls = ''
+            spilling = {}
+            with open(dirname + '/' + q + '-stderr.txt') as errf:
+                for line in errf:
+                    m = re.search(RE_SPILLING, line)
+                    if m:
+                        cls = 'spilling'
+                        spilling_type = SPILLING_MAP[m.group(1)]
+                        spilling[spilling_type] = spilling.get(spilling_type, 0) + 1
             outname = dirname + '/' + q + '-result.yson'
+            print('<td class="{}">'.format(cls))
             if exitcode < 0:
-                print('<td><span class="signal" title="{}">SIG</span>'.format(html.escape(signal.strsignal(-exitcode), quote=True)))
+                print('<span class="signal" title="{}">SIG</span>'.format(html.escape(signal.strsignal(-exitcode), quote=True)))
             elif exitcode > 0:
-                print('<td><span class="errcode" title="{}">ERR</span>'.format(exitcode))
+                print('<span class="errcode" title="{}">ERR</span>'.format(exitcode))
             else:
-                print('<td><span class="ok">OK</span>')
+                print('<span class="ok">OK</span>')
+            if spilling:
+                print('+' + ''.join(sorted(spilling.keys())))
             if c == 0:
                 print('<td class="tabnum">{:.1f}<td class="tabnum">{:.1f}<td class="tabnum">{:.1f}'.format(elapsed, utime, maxrss/1024))
             else:

@@ -253,7 +253,6 @@ private:
             if (swagger.IsNull()) {
                 auto get = path["get"];
                 get["tags"].push_back(tag);
-                get["produces"].push_back("application/json");
                 if (auto summary = handler->GetRequestSummary()) {
                     get["summary"] = summary;
                 }
@@ -263,7 +262,7 @@ private:
                 get["parameters"] = handler->GetRequestParameters();
                 auto responses = get["responses"];
                 auto response200 = responses["200"];
-                response200["schema"] = handler->GetResponseJsonSchema();
+                response200["content"]["application/json"]["schema"] = handler->GetResponseJsonSchema();
             } else {
                 path = swagger;
             }

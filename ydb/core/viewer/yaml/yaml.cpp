@@ -31,7 +31,7 @@ YAML::Node TProtoToYaml::ProtoToYamlSchema(const ::google::protobuf::Descriptor*
             auto property = properties[fieldDescriptor->name()];
             if (fieldDescriptor->is_repeated()) {
                 property["type"] = "array";
-                property = property["items"];
+                property.reset(property["items"]);
             }
             if (fieldDescriptor->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) {
                 if (fieldDescriptor->message_type()->full_name() == google::protobuf::Timestamp::descriptor()->full_name()) {

@@ -124,7 +124,7 @@ public:
         TVSlotReadyTimestampQ::iterator VSlotReadyTimestampIter;
 
     public:
-        NKikimrBlobStorage::EVDiskStatus Status = NKikimrBlobStorage::EVDiskStatus::INIT_PENDING;
+        NKikimrBlobStorage::EVDiskStatus Status = NKikimrBlobStorage::EVDiskStatus::ERROR;
         bool IsReady = false;
         bool OnlyPhantomsRemain = false;
 

@@ -636,44 +636,47 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     Y_UNIT_TEST(MidOfRange) {
-        TString a = "a";
-        TString b = "c";
-        auto res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(a,b);
+        auto AsString = [](std::vector<ui16> vs) {
+            TStringBuilder a;
+            for (auto v : vs) {
+                a << static_cast<unsigned char>(v);
+            }
+            return a;
+        };
 
-        b = "b";
-        res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(a,b);
-        UNIT_ASSERT(a < res);
-        UNIT_ASSERT(b > res);
+        auto ToHex = [](const TString& value) {
+            return TStringBuilder() << HexText(TBasicStringBuf(value));
+        };
 
-        a = {};
-        b = "b";
-        res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(a,b);
-        UNIT_ASSERT(a < res);
-        UNIT_ASSERT(b > res);
+        {
+            auto res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid("", "");
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "7F");
+        }
 
-        a = "a";
-        b = {};
-        res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(a,b);
-        UNIT_ASSERT(a < res);
-        UNIT_ASSERT(b != res);
+        {
+            auto res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid("", AsString({0x7F}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "3F");
+        }
 
-        a = "aa";
-        b = {};
-        res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(a,b);
-        UNIT_ASSERT(a < res);
-        UNIT_ASSERT(b != res);
+        {
+            auto res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(AsString({0x7F}), "");
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "BF");
+        }
 
-        a = "aaa";
-        b = "b";
-        res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(a,b);
-        UNIT_ASSERT(a < res);
-        UNIT_ASSERT(b > res);
+        {
+            auto res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(AsString({0x7F}), AsString({0xBF}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "9F");
+        }
 
-        a = "aaa";
-        b = "aab";
-        res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(a,b);
-        UNIT_ASSERT(a < res);
-        UNIT_ASSERT(b > res);
+        {
+            auto res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(AsString({0x01}), AsString({0x02}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "01 FF");
+        }
+
+        {
+            auto res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(AsString({0x01, 0xFF}), AsString({0x02, 0x00}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "01 FF FF");
+        }
     }
 }
 

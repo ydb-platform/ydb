@@ -55,6 +55,10 @@ void TPartitionScaleManager::TrySendScaleRequest(const TActorContext& ctx) {
 using TPartitionSplit = NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionSplit;
 using TPartitionMerge = NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionMerge;
 
+const TString ToHex(const TString& value) {
+    return TStringBuilder() << HexText(TBasicStringBuf(value));
+}
+
 std::pair<std::vector<TPartitionSplit>, std::vector<TPartitionMerge>> TPartitionScaleManager::BuildScaleRequest(const TActorContext& ctx) {
     std::vector<TPartitionSplit> splitsToApply;
     std::vector<TPartitionMerge> mergesToApply;
@@ -71,10 +75,14 @@ std::pair<std::vector<TPartitionSplit>, std::vector<TPartitionMerge>> TPartition
             auto mid = GetRangeMid(from, to);
             if (mid.empty()) {
                 itSplit = PartitionsToSplit.erase(itSplit);
-                LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, "TPartitionScaleManager::BuildScaleRequest wrong partition key range. Can't get mid. Topic# " << TopicName << ", partition# " << partitionId);
+                LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                        "TPartitionScaleManager::BuildScaleRequest wrong partition key range. Can't get mid. Topic# " << TopicName << ", partition# " << partitionId);
                 continue;
             }
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, "TPartitionScaleManager::BuildScaleRequest partition split ranges. From# '" << from << "'. To# '" << to << "'. Mid# '" << mid <<"'. Topic# " << TopicName << ". Partition# " << partitionId);
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                    "TPartitionScaleManager::BuildScaleRequest partition split ranges. From# '" << ToHex(from)
+                    << "'. To# '" << ToHex(to) << "'. Mid# '" << ToHex(mid)
+                    << "'. Topic# " << TopicName << ". Partition# " << partitionId);
 
             TPartitionSplit split;
             split.set_partition(partition.Id);
@@ -95,7 +103,8 @@ void TPartitionScaleManager::HandleScaleRequestResult(TPartitionScaleRequest::TE
     RequestInflight = false;
     LastResponseTime = ctx.Now();
     auto result = ev->Get();
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, "TPartitionScaleManager::HandleScaleRequestResult scale request result: " << result->Status << ". Topic# " << TopicName);
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+            "TPartitionScaleManager::HandleScaleRequestResult scale request result: " << result->Status << ". Topic# " << TopicName);
     if (result->Status == TEvTxUserProxy::TResultStatus::ExecComplete) {
         TrySendScaleRequest(ctx);
     } else {
@@ -119,28 +128,59 @@ void TPartitionScaleManager::UpdateDatabasePath(const TString& dbPath) {
     DatabasePath = dbPath;
 }
 
+std::pair<ui16, bool> Mid(ui16 a, ui16 b) {
+    if (a == 0xFF) {
+        return {0xFF, false};
+    }
+    if (a + 1 < b) {
+        return {(a + b) / 2, true};
+    }
+    if (b < a) {
+        ui16 n = (a + b + 0x100) / 2;
+        return {(n < 0x100) ? n : 0xFF, true};
+    }
+
+    return {a, false};
+}
+
 TString TPartitionScaleManager::GetRangeMid(const TString& from, const TString& to) {
     if (from > to && to.size() != 0) {
         return "";
     }
 
-    TStringBuilder result;
+    auto GetChar = [](const TString& str, size_t i, unsigned char defaultValue) {
+        if (i >= str.size()) {
+            return defaultValue;
+        }
+        return static_cast<unsigned char>(str[i]);
+    };
 
-    unsigned char fromPadding = 0;
-    unsigned char toPadding = 255;
+    TStringBuilder result;
+    if (from.empty() && to.empty()) {
+        result << static_cast<unsigned char>(0x7F);
+        return result;
+    }
+
+    bool splitted = false;
 
     size_t maxSize = std::max(from.size(), to.size());
     for (size_t i = 0; i < maxSize; ++i) {
-        ui16 fromChar = i < from.size() ? static_cast<ui16>(from[i]) : fromPadding;
-        unsigned char toChar = i < to.size() ? static_cast<unsigned char>(to[i]) : toPadding;
+        ui16 f = GetChar(from, i, 0);
+        ui16 t = GetChar(to, i, 0xFF);
 
-        ui16 sum = fromChar + toChar;
-
-        result += static_cast<unsigned char>(sum / 2);
+        if (!splitted) {
+            auto [n, s] = Mid(f, t);
+            result << static_cast<unsigned char>(n);
+            splitted = s;
+        } else {
+            auto n = (f + t) / 2;
+            result << static_cast<unsigned char>(n);
+            break;
+        }
     }
 
     if (result == from) {
-        result += static_cast<unsigned char>(127);
+        result << static_cast<unsigned char>(0xFF);
     }
     return result;
 }

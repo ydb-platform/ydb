@@ -44,7 +44,7 @@ target_link_libraries(ydb-library-yql-providers-yt-provider-ut PUBLIC
   providers-dq-common
   providers-dq-provider
   providers-result-provider
-  yql-sql-v1
+  library-yql-sql
   minikql-invoke_builtins-llvm14
   minikql-comp_nodes-llvm14
   yql-sql-pg

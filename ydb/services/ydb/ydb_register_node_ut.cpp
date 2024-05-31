@@ -75,9 +75,9 @@ struct TKikimrServerWithCertVerification: public TBasicKikimrWithGrpcAndRootSche
 
         auto& securityConfig = *config.MutableDomainsConfig()->MutableSecurityConfig();
         securityConfig.SetEnforceUserTokenRequirement(true);
-        auto& administrationAllowedSids = *securityConfig.MutableAdministrationAllowedSIDs();
-        administrationAllowedSids.Add(BUILTIN_ACL_ROOT);
-        administrationAllowedSids.Add("C=RU,ST=MSK,L=MSK,O=YA,OU=UtTest,CN=localhost@cert");
+        // auto& administrationAllowedSids = *securityConfig.MutableAdministrationAllowedSIDs();
+        // administrationAllowedSids.Add(BUILTIN_ACL_ROOT);
+        // administrationAllowedSids.Add("C=RU,ST=MSK,L=MSK,O=YA,OU=UtTest,CN=localhost@cert");
         config.MutableFeatureFlags()->SetEnableDynamicNodeAuthorization(true);
 
         auto& dynNodeDefinition = *config.MutableClientCertificateAuthorization()->MutableDynamicNodeAuthorization();
@@ -104,9 +104,9 @@ struct TKikimrServerWithCertVerificationAndWrongIdentity : public TBasicKikimrWi
 
         auto& securityConfig = *config.MutableDomainsConfig()->MutableSecurityConfig();
         securityConfig.SetEnforceUserTokenRequirement(true);
-        auto& administrationAllowedSids = *securityConfig.MutableAdministrationAllowedSIDs();
-        administrationAllowedSids.Add(BUILTIN_ACL_ROOT);
-        administrationAllowedSids.Add("C=RU,ST=MSK,L=MSK,O=YA,OU=UtTest,CN=localhost@cert");
+        // auto& administrationAllowedSids = *securityConfig.MutableAdministrationAllowedSIDs();
+        // administrationAllowedSids.Add(BUILTIN_ACL_ROOT);
+        // administrationAllowedSids.Add("C=RU,ST=MSK,L=MSK,O=YA,OU=UtTest,CN=localhost@cert");
         config.MutableFeatureFlags()->SetEnableDynamicNodeAuthorization(true);
 
         auto& dynNodeDefinition = *config.MutableClientCertificateAuthorization()->MutableDynamicNodeAuthorization();

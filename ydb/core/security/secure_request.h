@@ -38,6 +38,10 @@ private:
         return AppData()->AdministrationAllowedSIDs;
     }
 
+    static const TVector<TString>& GetCertificateAuthAllowedSIDs() {
+        return AppData()->CertificateAuthAllowedSIDs;
+    }
+
     static const TVector<TString>& GetDefaultUserSIDs() {
         return AppData()->DefaultUserSIDs;
     }
@@ -50,26 +54,28 @@ private:
         const TEvTicketParser::TEvAuthorizeTicketResult& result(*ev->Get());
         if (!result.Error.empty()) {
             if (IsTokenRequired()) {
-                // if (result.AuthInfo.IsCertificate) {
-                //     ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
-                //         .Database = Database,
-                //         .AuthInfo = {.Ticket = AuthInfo.Token},
-                //         .PeerName = PeerName,
-                //         .Entries = Entries
-                //     }));
-                //     return;
-                // }
                 return static_cast<TDerived*>(this)->OnAccessDenied(result.Error, ctx);
             }
         } else {
             if (RequireAdminAccess) {
-                if (!GetAdministrationAllowedSIDs().empty()) {
-                    const auto& allowedSIDs(GetAdministrationAllowedSIDs());
-                    if (std::find_if(allowedSIDs.begin(), allowedSIDs.end(), [&result](const TString& sid) -> bool { return result.Token->IsExist(sid); }) == allowedSIDs.end()) {
-                        return static_cast<TDerived*>(this)->OnAccessDenied(TEvTicketParser::TError{"Administrative access denied", false}, ctx);
+                bool doesSidBelongToCertificateAuth = false;
+                if (!GetCertificateAuthAllowedSIDs().empty()) {
+                    for (const auto& sid : GetCertificateAuthAllowedSIDs()) {
+                        if (result.Token->IsExist(sid)) {
+                            doesSidBelongToCertificateAuth = true;
+                            break;
+                        }
                     }
                 }
-                UserAdmin = true;
+                if (!doesSidBelongToCertificateAuth) {
+                    if (!GetAdministrationAllowedSIDs().empty()) {
+                        const auto& allowedSIDs(GetAdministrationAllowedSIDs());
+                        if (std::find_if(allowedSIDs.begin(), allowedSIDs.end(), [&result](const TString& sid) -> bool { return result.Token->IsExist(sid); }) == allowedSIDs.end()) {
+                            return static_cast<TDerived*>(this)->OnAccessDenied(TEvTicketParser::TError{"Administrative access denied", false}, ctx);
+                        }
+                    }
+                    UserAdmin = true;
+                }
             }
         }
         AuthorizeTicketResult = ev.Get()->Release();

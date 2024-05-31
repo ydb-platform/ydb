@@ -240,6 +240,12 @@ namespace Tests {
             appData.EnforceUserTokenCheckRequirement = securityConfig.GetEnforceUserTokenCheckRequirement();
             TVector<TString> administrationAllowedSIDs(securityConfig.GetAdministrationAllowedSIDs().begin(), securityConfig.GetAdministrationAllowedSIDs().end());
             appData.AdministrationAllowedSIDs = std::move(administrationAllowedSIDs);
+            TVector<TString> certificateAuthAllowedSIDs {TString(DEFAULT_REGISTER_NODE_CERT_USER) + "@" + Settings->AuthConfig.GetCertificateAuthenticationDomain()};
+            const auto& certUserSid = Settings->AppConfig->GetClientCertificateAuthorization().GetDynamicNodeAuthorization().GetSidName();
+            if (!certUserSid.empty()) {
+                certificateAuthAllowedSIDs.push_back(certUserSid);
+            }
+            appData.CertificateAuthAllowedSIDs = std::move(certificateAuthAllowedSIDs);
             appData.DomainsConfig.MergeFrom(Settings->AppConfig->GetDomainsConfig());
             appData.ColumnShardConfig.MergeFrom(Settings->AppConfig->GetColumnShardConfig());
             appData.PersQueueGetReadSessionsInfoWorkerFactory = Settings->PersQueueGetReadSessionsInfoWorkerFactory.get();
@@ -806,7 +812,8 @@ namespace Tests {
             }
             IActor* ticketParser = Settings->CreateTicketParser(Settings->AuthConfig, {
                 .ClientCertificateAuthorization = Settings->AppConfig->GetClientCertificateAuthorization(),
-                .ServerCertificateFilePath = Settings->ServerCertFilePath
+                .ServerCertificateFilePath = Settings->ServerCertFilePath,
+                .Domain = Settings->AuthConfig.GetCertificateAuthenticationDomain()
             });
             TActorId ticketParserId = Runtime->Register(ticketParser, nodeIdx);
             Runtime->RegisterService(MakeTicketParserID(), ticketParserId, nodeIdx);

@@ -32,6 +32,7 @@ private:
 
     const TDynamicNodeAuthorizationParams DynamicNodeAuthorizationParams;
     const TString ServerCertificate;
+    const TString Domain;
 
 public:
     TCertificateChecker(const TCertificateAuthValues& certificateAuthValues);
@@ -48,6 +49,7 @@ private:
     TEvTicketParser::TError CheckClientSubject(const std::vector<std::pair<TString, TString>>& subjectDn) const;
     TCertificateCheckResult DefaultCheckClientCertificate(const TPemCertificates& pemCertificates) const;
     TCertificateCheckResult CheckClientCertificate(const TPemCertificates& pemCertificates) const;
+    TString GetDefaultGroup() const;
 };
 
 } // namespace Nkikimr

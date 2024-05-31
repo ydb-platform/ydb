@@ -234,6 +234,14 @@ public:
 
         appData->CompactionConfig = Config.GetCompactionConfig();
         appData->BackgroundCleaningConfig = Config.GetBackgroundCleaningConfig();
+
+        TVector<TString> certificateAuthAllowedSIDs {TString(DEFAULT_REGISTER_NODE_CERT_USER) + "@" + Config.GetAuthConfig().GetCertificateAuthenticationDomain()};
+        const auto& clientCertificateAuthorization(Config.GetClientCertificateAuthorization());
+        const auto& certSidName = clientCertificateAuthorization.GetDynamicNodeAuthorization().GetSidName();
+        if (!certSidName.empty()) {
+            certificateAuthAllowedSIDs.push_back(certSidName);
+        }
+        appData->CertificateAuthAllowedSIDs = std::move(certificateAuthAllowedSIDs);
     }
 };
 

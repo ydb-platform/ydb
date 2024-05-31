@@ -681,17 +681,13 @@ private:
             SetError(key, record, error);
             return false;
         }
-        TStringBuilder userSid;
-        userSid << certificateCheckResult.UserSid << "@" << Config.GetCertificateAuthenticationDomain();
         NACLib::TUserToken::TUserTokenInitFields userTokenInitFields {
             .OriginalUserToken = record.Ticket,
-            .UserSID = userSid,
+            .UserSID = certificateCheckResult.UserSid,
             .AuthType = record.GetAuthType()
         };
         auto userToken = MakeIntrusive<NACLib::TUserToken>(std::move(userTokenInitFields));
-        TStringBuilder group;
-        group << certificateCheckResult.Group << "@" << Config.GetCertificateAuthenticationDomain();
-        userToken->AddGroupSID(group);
+        userToken->AddGroupSID(certificateCheckResult.Group);
         SetToken(key, record, userToken);
         return true;
     }

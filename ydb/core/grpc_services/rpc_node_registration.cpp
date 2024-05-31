@@ -217,20 +217,19 @@ private:
     // }
 
     bool CheckAccess() const {
-        if (AppData()->FeatureFlags.GetEnableDynamicNodeAuthorization()) {
-            if (AppData()->AdministrationAllowedSIDs.empty()) {
+        if (AppData()->EnforceUserTokenRequirement) {
+            if (AppData()->CertificateAuthAllowedSIDs.empty()) {
+                Cerr << "+++ CertificateAuthAllowedSIDs is empty" << Endl;
                 return true;
             }
-
             const auto& serializedToken = Request->GetSerializedToken();
             Cerr << "+++ serializedToken: " << serializedToken << Endl;
-            for (const auto& sid : AppData()->AdministrationAllowedSIDs) {
+            for (const auto& sid : AppData()->CertificateAuthAllowedSIDs) {
                 NACLib::TUserToken token(serializedToken);
                 if (token.IsExist(sid)) {
                     return true;
                 }
             }
-
             return false;
         }
         return true;

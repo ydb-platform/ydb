@@ -16,6 +16,7 @@ TString TCertificateChecker::ReadFile(const TString& fileName) {
 TCertificateChecker::TCertificateChecker(const TCertificateAuthValues& certificateAuthValues)
     : DynamicNodeAuthorizationParams(GetDynamicNodeAuthorizationParams(certificateAuthValues.ClientCertificateAuthorization))
     , ServerCertificate((certificateAuthValues.ServerCertificateFilePath ? ReadFile(certificateAuthValues.ServerCertificateFilePath) : ""))
+    , Domain(certificateAuthValues.Domain)
 {
     Cerr << "++++++++: " << ServerCertificate << Endl;
 }
@@ -82,6 +83,7 @@ TString TCertificateChecker::CreateUserSidFromSubjectDn(const std::vector<std::p
         userSid << attribute << "=" << value << ",";
     }
     userSid.remove(userSid.size() - 1);
+    userSid << "@" << Domain;
     return userSid;
 }
 
@@ -111,7 +113,7 @@ TCertificateChecker::TCertificateCheckResult TCertificateChecker::DefaultCheckCl
         return result;
     }
     result.UserSid = CreateUserSidFromSubjectDn(readClientSubjectResult.SubjectDn);
-    result.Group = DEFAULT_REGISTER_NODE_CERT_USER;
+    result.Group = GetDefaultGroup();
     return result;
 }
 
@@ -136,8 +138,12 @@ TCertificateChecker::TCertificateCheckResult TCertificateChecker::CheckClientCer
         return result;
     }
     result.UserSid = CreateUserSidFromSubjectDn(readClientSubjectResult.SubjectDn);
-    result.Group = (DynamicNodeAuthorizationParams.SidName.empty() ? DEFAULT_REGISTER_NODE_CERT_USER : DynamicNodeAuthorizationParams.SidName);
+    result.Group = (DynamicNodeAuthorizationParams.SidName.empty() ? GetDefaultGroup() : DynamicNodeAuthorizationParams.SidName);
     return result;
+}
+
+TString TCertificateChecker::GetDefaultGroup() const {
+    return TString(DEFAULT_REGISTER_NODE_CERT_USER) + "@" + Domain;
 }
 
 } // namespace NKikimr

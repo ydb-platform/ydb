@@ -1637,9 +1637,13 @@ void TSecurityServicesInitializer::InitializeServices(NActors::TActorSystemSetup
         IActor* ticketParser = nullptr;
         auto grpcConfig = Config.GetGRpcConfig();
         if (Factories && Factories->CreateTicketParser) {
-            ticketParser = Factories->CreateTicketParser(Config.GetAuthConfig(), {.ClientCertificateAuthorization = Config.GetClientCertificateAuthorization(), .ServerCertificateFilePath = grpcConfig.GetCert()});
+            ticketParser = Factories->CreateTicketParser(Config.GetAuthConfig(), {.ClientCertificateAuthorization = Config.GetClientCertificateAuthorization(),
+                                                                                  .ServerCertificateFilePath = grpcConfig.GetCert(),
+                                                                                  .Domain = Config.GetAuthConfig().GetCertificateAuthenticationDomain()});
         } else {
-            ticketParser = CreateTicketParser(Config.GetAuthConfig(), {.ClientCertificateAuthorization = Config.GetClientCertificateAuthorization(), .ServerCertificateFilePath = grpcConfig.GetCert()});
+            ticketParser = CreateTicketParser(Config.GetAuthConfig(), {.ClientCertificateAuthorization = Config.GetClientCertificateAuthorization(),
+                                                                                   .ServerCertificateFilePath = grpcConfig.GetCert(),
+                                                                                   .Domain = Config.GetAuthConfig().GetCertificateAuthenticationDomain()});
         }
         if (ticketParser) {
             setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeTicketParserID(),

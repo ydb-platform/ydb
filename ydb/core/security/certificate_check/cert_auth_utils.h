@@ -9,6 +9,7 @@ namespace NKikimr {
 struct TCertificateAuthValues {
     NKikimrConfig::TClientCertificateAuthorization ClientCertificateAuthorization;
     TString ServerCertificateFilePath;
+    TString Domain;
 };
 
 TDynamicNodeAuthorizationParams GetDynamicNodeAuthorizationParams(const NKikimrConfig::TClientCertificateAuthorization& clientCertificateAuth);

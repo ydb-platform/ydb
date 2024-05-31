@@ -29,11 +29,11 @@ namespace {
 
     struct TWriteActorBackoffSettings {
         TDuration StartRetryDelay = TDuration::MilliSeconds(200);
-        TDuration MaxRetryDelay = TDuration::Seconds(20);
+        TDuration MaxRetryDelay = TDuration::Seconds(30);
         double UnsertaintyRatio = 0.5;
         double Multiplier = 2.0;
 
-        ui64 MaxWriteAttempts = 16;
+        ui64 MaxWriteAttempts = 32;
     };
 
     const TWriteActorBackoffSettings* BackoffSettings() {
@@ -297,7 +297,7 @@ private:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
-        YQL_ENSURE(!SchemeRequest);
+        YQL_ENSURE(!SchemeRequest || InconsistentTx);
         auto* request = ev->Get()->Request.Get();
 
         if (request->ErrorCount > 0) {
@@ -356,11 +356,12 @@ private:
                     << SchemeEntry->TableId.PathId.ToString() << "`."
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << ".");
-            RuntimeError(
-                TStringBuilder() << "Got INTERNAL ERROR for table `"
-                    << SchemeEntry->TableId.PathId.ToString() << "`.",
-                NYql::NDqProto::StatusIds::INTERNAL_ERROR,
-                getIssues());
+            //RuntimeError(
+            //    TStringBuilder() << "Got INTERNAL ERROR for table `"
+            //        << SchemeEntry->TableId.PathId.ToString() << "`.",
+            //    NYql::NDqProto::StatusIds::INTERNAL_ERROR,
+            //    getIssues());
+            ResolveTable();
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED: {

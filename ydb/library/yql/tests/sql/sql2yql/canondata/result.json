@@ -5046,6 +5046,20 @@
             "uri": "https://{canondata_backend}/1937027/973c239492ba32946806ddc66cf0af4b38c06ae8/resource.tar.gz#test_sql2yql.test_dq-precompute_parallel_/sql.yql"
         }
     ],
+    "test_sql2yql.test[dq-precompute_parallel_indep]": [
+        {
+            "checksum": "decf219a1091da410ee315ad657f3fd4",
+            "size": 3402,
+            "uri": "https://{canondata_backend}/1903885/e05277820455e95dc3443a43a34b1956971f88cf/resource.tar.gz#test_sql2yql.test_dq-precompute_parallel_indep_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[dq-precompute_parallel_mix]": [
+        {
+            "checksum": "c557f52fe0852d86a73c69134c80e332",
+            "size": 4230,
+            "uri": "https://{canondata_backend}/1937027/08c3c9c6866171c02a77702fcc07f26f028f4001/resource.tar.gz#test_sql2yql.test_dq-precompute_parallel_mix_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[dq-precompute_result]": [
         {
             "checksum": "043145e8db2d44a158f122c3a724e034",
@@ -23671,6 +23685,20 @@
             "checksum": "a74e8fa8c6146322ecb5b746c4899e0c",
             "size": 217,
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_dq-precompute_parallel_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[dq-precompute_parallel_indep]": [
+        {
+            "checksum": "5ee71b61a11efee1059774aa4478b4fc",
+            "size": 215,
+            "uri": "https://{canondata_backend}/1903885/e05277820455e95dc3443a43a34b1956971f88cf/resource.tar.gz#test_sql_format.test_dq-precompute_parallel_indep_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[dq-precompute_parallel_mix]": [
+        {
+            "checksum": "ef7b7571431f5c4e198b4df24fab006a",
+            "size": 322,
+            "uri": "https://{canondata_backend}/1937027/08c3c9c6866171c02a77702fcc07f26f028f4001/resource.tar.gz#test_sql_format.test_dq-precompute_parallel_mix_/formatted.sql"
         }
     ],
     "test_sql_format.test[dq-precompute_result]": [

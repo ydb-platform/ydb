@@ -13,6 +13,6 @@ $vector1 = Knn::ToBinaryStringInt8([1ut, 2ut, 3ut]);
 $vector2 = Knn::ToBinaryStringInt8([4ut, 5ut, 6ut]);
 
 select Knn::CosineDistance($vector1, $vector2);
-select Knn::CosineDistance($vector1, "\u0004\u0005\u0006\u0002");
-select Knn::CosineDistance("\u0001\u0002\u0003\u0002", $vector2);
-select Knn::CosineDistance("\u0001\u0002\u0003\u0002", "\u0004\u0005\u0006\u0002");
+select Knn::CosineDistance($vector1, "\u0004\u0005\u0006\u0003");
+select Knn::CosineDistance("\u0001\u0002\u0003\u0003", $vector2);
+select Knn::CosineDistance("\u0001\u0002\u0003\u0003", "\u0004\u0005\u0006\u0003");

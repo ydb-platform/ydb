@@ -14,6 +14,8 @@
 #include <ydb/library/yql/public/udf/arrow/block_reader.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
+#include <arrow/api.h>
+
 #ifdef THROW
 #undef THROW
 #endif
@@ -532,6 +534,54 @@ TColumnConverter BuildColumnConverter(const std::string& columnName, const std::
         THROW_ARROW_NOT_OK(res.status());
         return std::move(res).ValueOrDie();
     };
+}
+
+void BuildColumnConverters(std::shared_ptr<arrow::Schema> outputSchema, std::shared_ptr<arrow::Schema> dataSchema,
+    std::vector<int>& columnIndices, std::vector<TColumnConverter>& columnConverters,
+    std::unordered_map<TStringBuf, NKikimr::NMiniKQL::TType*, THash<TStringBuf>> rowTypes, const NDB::FormatSettings& settings) {
+
+    for (int i = 0; i < dataSchema->num_fields(); ++i) {
+        switch (dataSchema->field(i)->type()->id()) {
+        case arrow::Type::LIST:
+            throw parquet::ParquetException(TStringBuilder() << "File contains LIST field "
+                << dataSchema->field(i)->name() << " and can't be parsed");
+        case arrow::Type::STRUCT:
+            throw parquet::ParquetException(TStringBuilder() << "File contains STRUCT field "
+                << dataSchema->field(i)->name() << " and can't be parsed");
+        default:
+            ;
+        }
+    }
+
+    columnConverters.reserve(outputSchema->num_fields());
+    for (int i = 0; i < outputSchema->num_fields(); ++i) {
+        const auto& targetField = outputSchema->field(i);
+        auto srcFieldIndex = dataSchema->GetFieldIndex(targetField->name());
+        if (srcFieldIndex == -1) {
+            throw parquet::ParquetException(TStringBuilder() << "Missing field: " << targetField->name());
+        };
+        auto targetType = targetField->type();
+        auto originalType = dataSchema->field(srcFieldIndex)->type();
+        if (originalType->layout().has_dictionary) {
+            throw parquet::ParquetException(TStringBuilder() << "Unsupported dictionary encoding is used for field: "
+                << targetField->name() << ", type: " << originalType->ToString());
+        }
+        columnIndices.push_back(srcFieldIndex);
+        auto rowSpecColumnIt = rowTypes.find(targetField->name());
+        YQL_ENSURE(rowSpecColumnIt != rowTypes.end(), "Column " << targetField->name() << " not found in row spec");
+        columnConverters.emplace_back(BuildColumnConverter(targetField->name(), originalType, targetType, rowSpecColumnIt->second, settings));
+    }
+}
+
+std::shared_ptr<arrow::RecordBatch> ConvertArrowColumns(std::shared_ptr<arrow::RecordBatch> batch, std::vector<TColumnConverter>& columnConverters) {
+    auto columns = batch->columns();
+    for (size_t i = 0; i < columnConverters.size(); ++i) {
+        auto converter = columnConverters[i];
+        if (converter) {
+            columns[i] = converter(columns[i]);
+        }
+    }
+    return arrow::RecordBatch::Make(batch->schema(), batch->num_rows(), columns);
 }
 
 } // namespace NYql::NDq

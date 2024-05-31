@@ -820,7 +820,7 @@ private:
 };
 
 class TForgetScriptExecutionOperationQueryActor : public TQueryBase {
-    static constexpr i64 MAX_NUMBER_ROWS_IN_BATCH = 100000;
+    static constexpr i32 MAX_NUMBER_ROWS_IN_BATCH = 100000;
 
 public:
     TForgetScriptExecutionOperationQueryActor(const TString& executionId, const TString& database, TInstant operationDeadline)
@@ -877,12 +877,12 @@ public:
 
         result.TryNextRow();
 
-        TMaybe<i64> maxResultSetId = result.ColumnParser("max_result_set_id").GetOptionalInt32();
+        TMaybe<i32> maxResultSetId = result.ColumnParser("max_result_set_id").GetOptionalInt32();
         if (!maxResultSetId) {
             Finish();
             return;
         }
-        NumberRowsInBatch = std::max(MAX_NUMBER_ROWS_IN_BATCH / (*maxResultSetId + 1), 1l);
+        NumberRowsInBatch = std::max(MAX_NUMBER_ROWS_IN_BATCH / (*maxResultSetId + 1), 1);
 
         TMaybe<i64> maxRowId = result.ColumnParser("max_row_id").GetOptionalInt64();
         if (!maxRowId) {

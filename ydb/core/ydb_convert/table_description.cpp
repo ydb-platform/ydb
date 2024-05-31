@@ -381,9 +381,6 @@ static Ydb::Type* AddColumn(Ydb::Table::ColumnMeta* newColumn, const TColumn& co
         pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
         pg->set_typlen(0);
         pg->set_typmod(0);
-        if (column.GetNotNull()) {
-            newColumn->set_not_null(column.GetNotNull());
-        }
     } else {
         NYql::NProto::TypeIds protoType;
         if (!NYql::NProto::TypeIds_Parse(column.GetType(), &protoType)) {
@@ -405,6 +402,10 @@ static Ydb::Type* AddColumn(Ydb::Table::ColumnMeta* newColumn, const TColumn& co
             NMiniKQL::ExportPrimitiveTypeToProto(protoType, *columnType);
         }
     }
+    if (column.GetNotNull()) {
+        newColumn->set_not_null(column.GetNotNull());
+    }
+
     return columnType;
 }
 
@@ -422,9 +423,6 @@ Ydb::Type* AddColumn<NKikimrSchemeOp::TColumnDescription>(Ydb::Table::ColumnMeta
         pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
         pg->set_typlen(0);
         pg->set_typmod(0);
-        if (column.GetNotNull()) {
-            newColumn->set_not_null(column.GetNotNull());
-        }
     } else {
         NYql::NProto::TypeIds protoType;
         if (!NYql::NProto::TypeIds_Parse(column.GetType(), &protoType)) {
@@ -445,6 +443,9 @@ Ydb::Type* AddColumn<NKikimrSchemeOp::TColumnDescription>(Ydb::Table::ColumnMeta
         } else {
             NMiniKQL::ExportPrimitiveTypeToProto(protoType, *columnType);
         }
+    }
+    if (column.GetNotNull()) {
+        newColumn->set_not_null(column.GetNotNull());
     }
     switch (column.GetDefaultValueCase()) {
         case NKikimrSchemeOp::TColumnDescription::kDefaultFromLiteral: {

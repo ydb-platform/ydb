@@ -16,6 +16,7 @@ SRCS(
     run_ydb.cpp
     supported_codecs.cpp
     supported_codecs_fixture.cpp
+    ydb-dump.cpp
 )
 
 PEERDIR(

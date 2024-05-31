@@ -184,8 +184,6 @@ YAML::Node TJsonRequestSwagger<TJsonPDiskRestart>::GetSwagger() {
         post:
           tags:
           - pdisk
-          produces:
-          - application/json
           summary: Restart PDisk
           description: Restart PDisk on the specified node
           parameters:
@@ -211,18 +209,20 @@ YAML::Node TJsonRequestSwagger<TJsonPDiskRestart>::GetSwagger() {
           responses:
             200:
               description: OK
-              schema:
-                type: object
-                properties:
-                  result:
-                    type: boolean
-                    description: was operation successful or not
-                  error:
-                    type: string
-                    description: details about failed operation
-                  forceRetryPossible:
-                    type: boolean
-                    description: if true, operation can be retried with force flag
+              content:
+                application/json:
+                  schema:
+                    type: object
+                    properties:
+                      result:
+                        type: boolean
+                        description: was operation successful or not
+                      error:
+                        type: string
+                        description: details about failed operation
+                      forceRetryPossible:
+                        type: boolean
+                        description: if true, operation can be retried with force flag
             400:
               description: Bad Request
             403:

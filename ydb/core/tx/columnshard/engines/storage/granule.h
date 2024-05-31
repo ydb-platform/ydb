@@ -162,6 +162,10 @@ public:
         ActualizationIndex->RefreshTiering(tiering, context);
     }
 
+    std::vector<NStorageOptimizer::TTaskDescription> GetOptimizerTasksDescription() const {
+        return OptimizerPlanner->GetTasksDescription();
+    }
+
     void RefreshScheme() {
         NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
         ActualizationIndex->RefreshScheme(context);
@@ -249,8 +253,6 @@ public:
             OptimizerPlanner->Actualize(currentInstant);
         }
     }
-
-    bool InCompaction() const;
 
     bool IsErasable() const {
         return Activity.empty() && Portions.empty();

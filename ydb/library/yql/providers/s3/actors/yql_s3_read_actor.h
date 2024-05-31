@@ -14,7 +14,7 @@ namespace NYql::NDq {
 struct TS3ReadActorFactoryConfig;
 
 NActors::IActor* CreateS3FileQueueActor(
-        TTxId  txId,
+        TTxId txId,
         NS3Details::TPathList paths,
         size_t prefetchSize,
         ui64 fileSizeLimit,

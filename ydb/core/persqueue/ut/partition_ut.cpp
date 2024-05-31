@@ -28,6 +28,7 @@ namespace NHelpers {
 struct TConfigParams {
     ui64 Version = 0;
     TVector<TCreateConsumerParams> Consumers;
+    NKikimrPQ::TPQTabletConfig::EMeteringMode MeteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS;
 };
 
 struct TCreatePartitionParams {
@@ -320,7 +321,9 @@ TPartition* TPartitionFixture::CreatePartitionActor(const TPartitionId& id,
     TabletCounters = counters->GetSecondTabletCounters().Release();
 
     Config = MakeConfig(config.Version,
-                        config.Consumers);
+                        config.Consumers,
+                        1,
+                        config.MeteringMode);
     Config.SetLocalDC(true);
 
     NPersQueue::TTopicNamesConverterFactory factory(true, "/Root/PQ", "dc1");
@@ -681,7 +684,9 @@ void TPartitionFixture::SendConfigResponse(const TConfigParams& config)
 
         TString out;
         Y_ABORT_UNLESS(MakeConfig(config.Version,
-                            config.Consumers).SerializeToString(&out));
+                            config.Consumers,
+                            1,
+                            config.MeteringMode).SerializeToString(&out));
 
         read->SetValue(out);
     }
@@ -930,7 +935,9 @@ void TPartitionFixture::WaitCommitTxDone(const TCommitTxDoneMatcher& matcher)
 void TPartitionFixture::SendChangePartitionConfig(const TConfigParams& config)
 {
     auto event = MakeHolder<TEvPQ::TEvChangePartitionConfig>(TopicConverter, MakeConfig(config.Version,
-                                                                                        config.Consumers));
+                                                                                        config.Consumers,
+                                                                                        1,
+                                                                                        config.MeteringMode));
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -1968,6 +1975,31 @@ Y_UNIT_TEST_F(ShadowPartitionCountersRestore, TPartitionFixture) {
     initializer.Reset();
 
 }
+
+Y_UNIT_TEST_F(GetUsedStorage, TPartitionFixture) {
+    auto* actor = CreatePartition({
+                    .Partition=TPartitionId{2, 10, 100'001},
+                    .Begin=0, .End=10,
+                    //
+                    // partition configuration
+                    //
+                    .Config={.Version=1, .Consumers={}, .MeteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY}
+                    },
+                    //
+                    // tablet configuration
+                    //
+                    {.Version=2, .Consumers={}, .MeteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY}
+    );
+
+    auto now = TInstant::Now();
+
+    // Check integer overflow when reserved size great than used size
+    // LOGBROKER-9105
+    auto usedStorage = actor->GetUsedStorage(now + TDuration::Minutes(1));
+    UNIT_ASSERT_VALUES_EQUAL(0, usedStorage);
+
+
+} // GetPartitionWriteInfoErrors
 
 } // End of suite
 

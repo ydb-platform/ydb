@@ -9,15 +9,7 @@ from concurrent.futures import ProcessPoolExecutor
 HEADER_COMPILE_TIME_TO_SHOW = 0.5  # sec
 
 
-def sanitize_path(path: str, base_dir: str) -> str:
-    prefixes_to_remove = [
-        base_dir,
-        os.path.abspath(base_dir),
-    ]
-
-    for prefix in prefixes_to_remove:
-        path = path.removeprefix(prefix)
-
+def sanitize_path(path: str, base_src_dir: str) -> str:
     ya_build_path_chunk = ".ya/build/build_root"
     if ya_build_path_chunk in path:
         # remove path to before .ya
@@ -27,8 +19,12 @@ def sanitize_path(path: str, base_dir: str) -> str:
         splitted = path.split(os.sep)
         del splitted[3:5]
         path = os.sep.join(splitted)
+    else:
+        if not base_src_dir.endswith("/"):
+            base_src_dir += "/"
+        path = path.removeprefix(base_src_dir)
 
-    return "root" + "/" + path
+    return "src/" + path
 
 
 def get_compile_duration_and_cpp_path(time_trace_path: str) -> tuple[float, str, str]:
@@ -91,7 +87,7 @@ def enrich_names_with_sec(tree):
     tree["name"] = tree["name"] + " " + "{:_} ms".format(tree["data"]["$area"])
 
 
-def build_include_tree(path: str, build_output_dir: str) -> list:
+def build_include_tree(path: str, build_output_dir: str, base_src_dir: str) -> list:
     with open(path) as f:
         obj = json.load(f)
 
@@ -121,11 +117,11 @@ def build_include_tree(path: str, build_output_dir: str) -> list:
             path_to_time[last_path] = prev + (time_stamp - last_time_stamp) / 1000 / 1000
 
         if ev == 1:
-            current_includes_stack.append(sanitize_path(path, build_output_dir))
+            current_includes_stack.append(sanitize_path(path, base_src_dir))
             if duration > HEADER_COMPILE_TIME_TO_SHOW * 1000 * 1000:
                 result.append((current_includes_stack[:], duration))
         else:
-            assert current_includes_stack[-1] == sanitize_path(path, build_output_dir)
+            assert current_includes_stack[-1] == sanitize_path(path, base_src_dir)
             current_includes_stack.pop()
         last_time_stamp = time_stamp
 
@@ -144,29 +140,49 @@ def gather_time_traces(build_output_dir: str) -> list[str]:
     return time_trace_paths
 
 
-def generate_cpp_bloat(build_output_dir: str) -> dict:
+def generate_cpp_bloat(build_output_dir: str, result_dir: str, base_src_dir: str) -> dict:
     time_trace_paths = gather_time_traces(build_output_dir)
 
     result = []
     with ProcessPoolExecutor() as executor:
         res = executor.map(get_compile_duration_and_cpp_path, time_trace_paths)
         for duration, path, time_trace_path in res:
-            path = sanitize_path(path, base_dir=build_output_dir)
+            path = sanitize_path(path, base_src_dir)
             result.append((duration, path, time_trace_path))
 
     result.sort()
 
     tree = {"name": "/"}
 
+    cpp_compilation_times = []
+    total_compilation_time = 0.0
+
     for duration, path, time_trace_path in result:
         splitted = path.split(os.sep)
         chunks = list(zip(splitted, (len(splitted) - 1) * ["dir"] + ["cpp"]))
         add_to_tree(chunks, int(duration * 1000), tree)
-        include_tree = build_include_tree(time_trace_path, build_output_dir)
+        include_tree = build_include_tree(time_trace_path, build_output_dir, base_src_dir)
         for inc_path, inc_duration in include_tree:
             additional_chunks = list(zip(inc_path, "h" * len(inc_path)))
             add_to_tree(chunks + additional_chunks, inc_duration / 1000, tree)
         print("{} -> {:.2f}s".format(path, duration))
+        cpp_compilation_times.append(
+            {
+                "path": path,
+                "time_s": duration,
+            }
+        )
+        total_compilation_time += duration
+
+    os.makedirs(result_dir, exist_ok=True)
+
+    human_readable_output = {
+        "total_compilation_time": total_compilation_time,
+        "cpp_compilation_times": cpp_compilation_times,
+    }
+
+    with open(os.path.join(result_dir, "output.json"), "w") as f:
+        json.dump(human_readable_output, f, indent=4)
 
     propogate_area(tree)
     enrich_names_with_sec(tree)
@@ -222,7 +238,7 @@ def parse_includes(path: str) -> list[tuple[int, str]]:
     return path_to_time
 
 
-def generate_header_bloat(build_output_dir: str) -> dict:
+def generate_header_bloat(build_output_dir: str, result_dir: str, base_src_dir: str) -> dict:
     time_trace_paths = gather_time_traces(build_output_dir)
 
     path_to_stat = {}  # header path -> (total_duration, count)
@@ -230,7 +246,7 @@ def generate_header_bloat(build_output_dir: str) -> dict:
         res = executor.map(parse_includes, time_trace_paths)
         for fn_res in res:
             for path, duration in fn_res.items():
-                path = sanitize_path(path, build_output_dir)
+                path = sanitize_path(path, base_src_dir)
                 if path not in path_to_stat:
                     path_to_stat[path] = [0, 0]
                 path_to_stat[path][0] += duration
@@ -300,11 +316,14 @@ def main():
         actions.append(("header build time impact", generate_header_bloat, args.html_dir_headers))
 
     current_script_dir = os.path.dirname(os.path.realpath(__file__))
+    base_src_dir = os.path.normpath(os.path.join(current_script_dir, "../../.."))
+    # check we a in root of source tree
+    assert os.path.isfile(os.path.join(base_src_dir, "AUTHORS"))
     html_dir = os.path.join(current_script_dir, "html")
 
     for description, fn, output_path in actions:
         print("Performing '{}'".format(description))
-        tree = fn(args.build_dir)
+        tree = fn(args.build_dir, output_path, base_src_dir)
 
         shutil.copytree(html_dir, output_path, dirs_exist_ok=True)
         with open(os.path.join(output_path, "bloat.json"), "w") as f:

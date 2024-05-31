@@ -5,6 +5,7 @@ import html
 import math
 import argparse
 import re
+import sys
 from pathlib import Path
 
 import cyson as yson
@@ -60,24 +61,28 @@ code { white-space: pre; }
     print('<tr><th>')
     for dirname, filelist in zip(rdirs, filelists):
         for name in filelist:
-            with open(name) as f:
-                coldata = []
-                cmdline = f.readline()
-                print('<th colspan="5"><span title="{}">{}</span>'.format(html.escape(cmdline, quote=True), html.escape(name[len(dirname) + 1:])))
-                for line in f:
-                    line = line.split('\t')
-                    (q, utime, stime, maxrss, exitcode, elapsed) = line[:6]
-                    utime = float(utime)
-                    stime = float(stime)
-                    maxrss = int(maxrss)
-                    exitcode = int(exitcode)
-                    elapsed = int(elapsed)*1e-9
-                    if len(data):
-                        # assert data[0][len(coldata)][0] == q
-                        if data[0][len(coldata)][0] != q:
-                            pass
-                    coldata += [[dirname, q, elapsed, utime, stime, maxrss, exitcode]]
-                data += [coldata]
+            try:
+                with open(name) as f:
+                    coldata = []
+                    cmdline = f.readline()
+                    print('<th colspan="5"><span title="{}">{}</span>'.format(html.escape(cmdline, quote=True), html.escape(name[len(dirname) + 1:])))
+                    for line in f:
+                        line = line.split('\t')
+                        (q, utime, stime, maxrss, exitcode, elapsed) = line[:6]
+                        utime = float(utime)
+                        stime = float(stime)
+                        maxrss = int(maxrss)
+                        exitcode = int(exitcode)
+                        elapsed = int(elapsed)*1e-9
+                        if len(data):
+                            # assert data[0][len(coldata)][0] == q
+                            if data[0][len(coldata)][0] != q:
+                                pass
+                        coldata += [[dirname, q, elapsed, utime, stime, maxrss, exitcode]]
+                    data += [coldata]
+            except Exception:
+                print(name, file=sys.stderr)
+                raise
     print('<tr><th>Testcase' + '<th>Status<th>Real time, s<th>User time, s<th>RSS, MB<th>'*len(data) + '</tr>')
     refDatas = [None]*len(data[0])
     refTypes = [None]*len(data[0])

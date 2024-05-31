@@ -1,6 +1,5 @@
 import datetime
 import itertools
-from dataclasses import replace
 from typing import Sequence
 
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
@@ -16,7 +15,6 @@ from ydb.library.yql.providers.generic.connector.tests.utils.schema import (
     SelectWhere,
     makeYdbTypeFromTypeID,
     makeOptionalYdbTypeFromTypeID,
-    makeOptionalYdbTypeFromYdbType,
 )
 
 from ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_positive_common import TestCase

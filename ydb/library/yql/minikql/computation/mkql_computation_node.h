@@ -4,7 +4,6 @@
 #include "mkql_spiller_factory.h"
 
 #include <ydb/library/yql/minikql/defs.h>
-#include <ydb/library/yql/minikql/arrow/mkql_memory_pool.h>
 #include <ydb/library/yql/minikql/mkql_node.h>
 #include <ydb/library/yql/minikql/mkql_node_visitor.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>

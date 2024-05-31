@@ -138,13 +138,18 @@ class Factory:
                     ydb_type=makeOptionalYdbTypeFromTypeID(Type.UTF8),
                     data_source_type=DataSourceType(pg=postgresql.Text()),
                 ),
-                Column(  # TODO: maybe refactor: in fq-connector-go col_23_timestamp, col_24_date
+                Column(  # TODO: maybe refactor in fq-connector-go col_23_timestamp, col_24_date
                     name='col_23_date',
                     ydb_type=makeOptionalYdbTypeFromTypeID(Type.DATE),
                     data_source_type=DataSourceType(pg=postgresql.Date()),
                 ),
                 Column(
                     name='col_24_timestamp',
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.TIMESTAMP),
+                    data_source_type=DataSourceType(pg=postgresql.TimestampWithoutTimeZone()),
+                ),
+                Column(
+                    name='col_25_json',
                     ydb_type=makeOptionalYdbTypeFromTypeID(Type.TIMESTAMP),
                     data_source_type=DataSourceType(pg=postgresql.TimestampWithoutTimeZone()),
                 ),

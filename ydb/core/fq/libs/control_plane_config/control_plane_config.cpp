@@ -13,6 +13,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actor.h>
 
+#include <ydb/core/fq/libs/common/util.h>
 #include <ydb/library/db_pool/db_pool.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
@@ -163,7 +164,7 @@ private:
             },
             "ReadTenants", true
         ).Process(SelfId(),
-            [=, this](TTenantExecuter& executer) {
+            [=, this, actorSystem=NActors::TActivationContext::ActorSystem()](TTenantExecuter& executer) {
                 if (executer.State->CommonVTenants.size()) {
                     std::sort(executer.State->CommonVTenants.begin(), executer.State->CommonVTenants.end());
                 }
@@ -172,9 +173,9 @@ private:
                 this->TenantInfo = executer.State;
 
                 if (refreshed) {
-                    CPC_LOG_D("LOADED TenantInfo: State CHANGED at " << this->TenantInfo->StateTime);
+                    CPC_LOG_AS_D(*actorSystem, "LOADED TenantInfo: State CHANGED at " << this->TenantInfo->StateTime);
                 } else {
-                    CPC_LOG_T("LOADED TenantInfo: State NOT changed");
+                    CPC_LOG_AS_T(*actorSystem, "LOADED TenantInfo: State NOT changed");
                 }
 
                 if (refreshed) {
@@ -203,14 +204,26 @@ private:
                         );
                     }
 
-                    Exec(DbPool, executable, TablePathPrefix);
+                    Exec(DbPool, executable, TablePathPrefix).Apply([executable, actorSystem](const auto& future) {
+                        auto issues = GetIssuesFromYdbStatus(executable, future);
+                        if (issues) {
+                            CPC_LOG_AS_E(*actorSystem, "UpdateState in case of LoadTenantsAndMapping finished with error: " << issues->ToOneLineString());
+                            // Nothing to do. We will retry it in the next Wakeup
+                        }
+                    });
                 }
 
                 LoadInProgress = false;
             }
         );
 
-        Exec(DbPool, executable, TablePathPrefix);
+        Exec(DbPool, executable, TablePathPrefix).Apply([this, executable, actorSystem=NActors::TActivationContext::ActorSystem()](const auto& future) {
+            auto issues = GetIssuesFromYdbStatus(executable, future);
+            if (issues) {
+                CPC_LOG_AS_E(*actorSystem, "LoadTenantsAndMapping finished with error: " << issues->ToOneLineString());
+                LoadInProgress = false;
+            }
+        });
     }
 
     void ReflectTenantChanges(TTenantInfo::TPtr oldInfo) {

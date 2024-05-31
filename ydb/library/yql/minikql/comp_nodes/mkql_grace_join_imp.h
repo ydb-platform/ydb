@@ -172,6 +172,7 @@ private:
 
 // Class which represents single table data stored in buckets
 class TTable {
+    ui64 TotalSpilled = 0;
     ui64 NumberOfKeyIntColumns = 0; // Key int columns always first and padded to sizeof(ui64).
     ui64 NumberOfKeyStringColumns = 0; // String key columns go after key int columns
     ui64 NumberOfKeyIColumns = 0; // Number of interface - provided key columns

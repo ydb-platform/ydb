@@ -148,6 +148,11 @@ class Factory:
                     ydb_type=makeOptionalYdbTypeFromTypeID(Type.TIMESTAMP),
                     data_source_type=DataSourceType(pg=postgresql.TimestampWithoutTimeZone()),
                 ),
+                Column(
+                    name='col_25_json',
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.TIMESTAMP),
+                    data_source_type=DataSourceType(pg=postgresql.TimestampWithoutTimeZone()),
+                ),
                 # TODO: YQ-2297
                 # Column(
                 #     name='col_25_time',

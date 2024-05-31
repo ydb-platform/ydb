@@ -1838,7 +1838,7 @@ public:
 
     bool DoInit(TContext& ctx, ISource* src) override {
         if (!src || src->IsFake()) {
-            ctx.Error(Pos) << "TableRow requires data source";
+            ctx.Error(Pos) << TStringBuilder() << (Join ? "Join" : "") << "TableRow requires data source";
             return false;
         }
 

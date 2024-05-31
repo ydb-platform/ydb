@@ -967,7 +967,7 @@ TCallDirectRow::TCallDirectRow(TPosition pos, const TString& opName, const TVect
 {}
 
 bool TCallDirectRow::DoInit(TContext& ctx, ISource* src) {
-    if (!src) {
+    if (!src || (ctx.CompactNamedExprs && src->IsFake())) {
         ctx.Error(Pos) << "Unable to use function: " << OpName << " without source";
         return false;
     }

@@ -6773,11 +6773,24 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
 }
 
 Y_UNIT_TEST_SUITE(CompactNamedExprs) {
-    Y_UNIT_TEST(TableRowInWrongContext) {
-        ExpectFailWithError(
-            "pragma CompactNamedExprs;\n"
-            "$foo = TableRow();\n"
-            "select $foo from plato.Input;\n",
-            "<main>:2:8: Error: TableRow requires data source\n");
+    Y_UNIT_TEST(SourceCallablesInWrongContext) {
+        TString query = R"(
+            pragma CompactNamedExprs;
+            $foo = %s();
+            select $foo from plato.Input;
+        )";
+
+        THashMap<TString, TString> errs = {
+            {"TableRow", "<main>:3:20: Error: TableRow requires data source\n"},
+            {"JoinTableRow", "<main>:3:20: Error: JoinTableRow requires data source\n"},
+            {"TableRecordIndex", "<main>:3:20: Error: Unable to use function: TableRecord without source\n"},
+            {"TablePath", "<main>:3:20: Error: Unable to use function: TablePath without source\n"},
+            {"SystemMetadata", "<main>:3:20: Error: Unable to use function: SystemMetadata without source\n"},
+        };
+
+        for (TString callable : { "TableRow", "JoinTableRow", "TableRecordIndex", "TablePath", "SystemMetadata"}) {
+            auto req = Sprintf(query.c_str(), callable.c_str());
+            ExpectFailWithError(req, errs[callable]);
+        }
     }
 }

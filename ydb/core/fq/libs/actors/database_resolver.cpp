@@ -166,6 +166,8 @@ private:
             if (ev->Get()->Error.empty() && (ev->Get()->Response && ev->Get()->Response->Status == "200")) {
                 errorMessage = HandleSuccessfulResponse(ev, *requestIter, result);
             } else {
+                Cout << "HEADERS" << ev->Get()->Response->Headers << Endl;
+                Cout << "HEADERS" << ev->Get()->Response->Header << Endl;
                 errorMessage = HandleFailedResponse(ev, *requestIter);
             }
         }
@@ -421,6 +423,42 @@ public:
 
             return TDatabaseDescription{"", endpoint.first, endpoint.second, "", useTls};
         };
+        Parsers[NYql::EDatabaseType::Greenplum] = [](
+            NJson::TJsonValue& databaseInfo,
+            const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator,
+            bool useTls,
+            NConnector::NApi::EProtocol protocol
+            ) {
+            NYql::IMdbEndpointGenerator::TEndpoint endpoint;
+            TVector<TString> aliveHosts;
+
+            for (const auto& host : databaseInfo.GetMap().at("hosts").GetArraySafe()) {
+                const auto& hostMap = host.GetMap();
+
+                if (hostMap.at("health").GetString() != "ALIVE") {
+                    // Host is not alive, skip it
+                    continue;
+                }
+
+                // If the host is alive, add it to the list of alive hosts
+                aliveHosts.push_back(hostMap.at("name").GetString());
+            }
+    
+            if (aliveHosts.empty()) {
+                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE Greenplum hosts found";
+            }
+
+            NYql::IMdbEndpointGenerator::TParams params = {
+                .DatabaseType = NYql::EDatabaseType::Greenplum,
+                .MdbHost = aliveHosts[std::rand() % static_cast<int>(aliveHosts.size())],
+                .UseTls = useTls,
+                .Protocol = protocol,
+            };
+
+            endpoint = mdbEndpointGenerator->ToEndpoint(params);
+
+            return TDatabaseDescription{"", endpoint.first, endpoint.second, "", useTls};
+        };
     }
 
     static constexpr char ActorName[] = "YQ_DATABASE_RESOLVER";
@@ -500,12 +538,19 @@ private:
                     url = TUrlBuilder(ev->Get()->YdbMvpEndpoint + "/database")
                             .AddUrlParam("databaseId", databaseId)
                             .Build();
-                } else if (IsIn({NYql::EDatabaseType::ClickHouse, NYql::EDatabaseType::PostgreSQL }, databaseType)) {
+                } else if (IsIn({NYql::EDatabaseType::ClickHouse, NYql::EDatabaseType::PostgreSQL}, databaseType)) {
                     YQL_ENSURE(ev->Get()->MdbGateway, "empty MDB Gateway");
                     url = TUrlBuilder(
                         ev->Get()->MdbGateway + "/managed-" + NYql::DatabaseTypeLowercase(databaseType) + "/v1/clusters/")
                             .AddPathComponent(databaseId)
                             .AddPathComponent("hosts")
+                            .Build();
+                } else if (NYql::EDatabaseType::Greenplum == databaseType) {
+                    YQL_ENSURE(ev->Get()->MdbGateway, "empty MDB Gateway");
+                    url = TUrlBuilder(
+                        ev->Get()->MdbGateway + "/managed-" + NYql::DatabaseTypeLowercase(databaseType) + "/v1/clusters/")
+                            .AddPathComponent(databaseId)
+                            .AddPathComponent("master-hosts")
                             .Build();
                 }
 

@@ -37,6 +37,7 @@ PenaltyExcessCharacter: 1000000
 PenaltyReturnTypeOnItsOwnLine: 60
 PointerAlignment: Left
 SpacesBeforeTrailingComments: 1
+SpacesInSquareBrackets: false
 Cpp11BracedListStyle: true
 Standard:        c++20
 IndentWidth:     4

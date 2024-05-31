@@ -37,6 +37,7 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--blacklist-file', default=[], action='append', help='File with query name regexp that will be skipped for comparison')
+    parser.add_argument('--verbose', '-v', action='count', default=0)
     parser.add_argument('resultdir', nargs='+', help='Directories for comparison')
 
     args = parser.parse_args()
@@ -108,23 +109,24 @@ code { white-space: pre; }
                 (refDirname, refQ, refElapsed, refUtime, refStime, refMaxrss, refExitcode) = data[c][i]
             cls = ''
             spilling = {}
-            with open(dirname + '/' + q + '-stderr.txt') as errf:
-                for line in errf:
-                    m = re.search(RE_SPILLING, line)
-                    if m:
-                        cls = 'spilling'
-                        spilling_type = SPILLING_MAP[m.group(1)]
-                        spilling[spilling_type] = spilling.get(spilling_type, 0) + 1
+            if args.verbose > 0:
+                with open(dirname + '/' + q + '-stderr.txt') as errf:
+                    for line in errf:
+                        m = re.search(RE_SPILLING, line)
+                        if m:
+                            cls = 'spilling'
+                            spilling_type = m.group(1)
+                            spilling[spilling_type] = spilling.get(spilling_type, 0) + 1
             outname = dirname + '/' + q + '-result.yson'
             print('<td class="{}">'.format(cls))
             if exitcode < 0:
-                print('<span class="signal" title="{}">SIG</span>'.format(html.escape(signal.strsignal(-exitcode), quote=True)))
+                print('<span class="signal {}" title="{}">SIG</span>'.format(cls, html.escape(signal.strsignal(-exitcode), quote=True)))
             elif exitcode > 0:
-                print('<span class="errcode" title="{}">ERR</span>'.format(exitcode))
+                print('<span class="errcode {}" title="{}">ERR</span>'.format(cls, exitcode))
             else:
-                print('<span class="ok">OK</span>')
-            if spilling:
-                print('+' + ''.join(sorted(spilling.keys())))
+                print('<span class="ok {}">OK</span>'.format(cls))
+            if spilling and args.verbose > 1:
+                print('<span title="{}">+{}</span>'.format(', '.join('{}*{}'.format(t, spilling[t]) for t in spilling), ''.join(map(lambda t: SPILLING_MAP[t], sorted(spilling.keys())))))
             if c == 0:
                 print('<td class="tabnum">{:.1f}<td class="tabnum">{:.1f}<td class="tabnum">{:.1f}'.format(elapsed, utime, maxrss/1024))
             else:

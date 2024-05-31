@@ -25,6 +25,7 @@ target_link_libraries(dq-provider-exec PUBLIC
   cpp-yson-node
   library-cpp-svnversion
   cpp-digest-md5
+  cpp-threading-future
   public-lib-yson_value
   cpp-client-ydb_driver
   library-yql-core

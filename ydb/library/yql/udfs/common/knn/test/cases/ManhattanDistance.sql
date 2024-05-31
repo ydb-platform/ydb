@@ -7,8 +7,8 @@ select Knn::ManhattanDistance($vector1, $vector2);
 select Knn::ManhattanDistance($vector1, $vector1);
 
 --orthogonal vectors
-$orthogonal_vector1 = Knn::ToBinaryStringByte([1.0f, 0.0f]);
-$orthogonal_vector2 = Knn::ToBinaryStringByte([0.0f, 2.0f]);
+$orthogonal_vector1 = Knn::ToBinaryStringUint8([1ut, 0ut]);
+$orthogonal_vector2 = Knn::ToBinaryStringUint8([0ut, 2ut]);
 select Knn::ManhattanDistance($orthogonal_vector1, $orthogonal_vector2);
 
 --float vector
@@ -17,8 +17,8 @@ $float_vector2 = Knn::ToBinaryStringFloat([4.0f, 5.0f, 6.0f]);
 select Knn::ManhattanDistance($float_vector1, $float_vector2);
 
 --byte vector
-$byte_vector1 = Knn::ToBinaryStringByte([1.0f, 2.0f, 3.0f]);
-$byte_vector2 = Knn::ToBinaryStringByte([4.0f, 5.0f, 6.0f]);
+$byte_vector1 = Knn::ToBinaryStringUint8([1ut, 2ut, 3ut]);
+$byte_vector2 = Knn::ToBinaryStringUint8([4ut, 5ut, 6ut]);
 select Knn::ManhattanDistance($byte_vector1, $byte_vector2);
 
 --bit vector

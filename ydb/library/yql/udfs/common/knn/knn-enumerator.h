@@ -7,18 +7,18 @@
 using namespace NYql;
 using namespace NYql::NUdf;
 
-template <typename TCallback>
+template <typename T, typename TCallback>
 void EnumerateVector(const TUnboxedValuePod vector, TCallback&& callback) {
     const auto* elements = vector.GetElements();
     if (elements) {
         for (auto& value : TArrayRef{elements, vector.GetListLength()}) {
-            callback(value.Get<float>());
+            callback(value.Get<T>());
         }
     } else {
         TUnboxedValue value;
         const auto it = vector.GetListIterator();
         while (it.Next(value)) {
-            callback(value.Get<float>());
+            callback(value.Get<T>());
         }
     }
 }

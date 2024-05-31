@@ -74,8 +74,8 @@ inline TDistanceResult VectorFuncImpl(const auto* v1, const auto* v2, auto len1,
 
 template <typename T, typename Func>
 inline auto VectorFunc(const TStringRef& str1, const TStringRef& str2, Func&& func) {
-    const TArrayRef<const T> v1 = TKnnSerializerFacade::GetArray<T>(str1);
-    const TArrayRef<const T> v2 = TKnnSerializerFacade::GetArray<T>(str2);
+    const TArrayRef<const T> v1 = TKnnVectorSerializer<T>::GetArray(str1);
+    const TArrayRef<const T> v2 = TKnnVectorSerializer<T>::GetArray(str2);
     return VectorFuncImpl(v1.data(), v2.data(), v1.size(), v2.size(), std::forward<Func>(func));
 }
 
@@ -95,6 +95,10 @@ inline TDistanceResult KnnManhattanDistance(const TStringRef& str1, const TStrin
     switch (format1) {
         case EFormat::FloatVector:
             return VectorFunc<float>(str1, str2, [](const float* v1, const float* v2, size_t len) {
+                return ::L1Distance(v1, v2, len);
+            });
+        case EFormat::Int8Vector:
+            return VectorFunc<i8>(str1, str2, [](const i8* v1, const i8* v2, size_t len) {
                 return ::L1Distance(v1, v2, len);
             });
         case EFormat::Uint8Vector:
@@ -125,6 +129,10 @@ inline TDistanceResult KnnEuclideanDistance(const TStringRef& str1, const TStrin
             return VectorFunc<float>(str1, str2, [](const float* v1, const float* v2, size_t len) {
                 return ::L2Distance(v1, v2, len);
             });
+        case EFormat::Int8Vector:
+            return VectorFunc<i8>(str1, str2, [](const i8* v1, const i8* v2, size_t len) {
+                return ::L2Distance(v1, v2, len);
+            });
         case EFormat::Uint8Vector:
             return VectorFunc<ui8>(str1, str2, [](const ui8* v1, const ui8* v2, size_t len) {
                 return ::L2Distance(v1, v2, len);
@@ -151,6 +159,10 @@ inline TDistanceResult KnnDotProduct(const TStringRef& str1, const TStringRef& s
     switch (format1) {
         case EFormat::FloatVector:
             return VectorFunc<float>(str1, str2, [](const float* v1, const float* v2, size_t len) {
+                return ::DotProduct(v1, v2, len);
+            });
+        case EFormat::Int8Vector:
+            return VectorFunc<i8>(str1, str2, [](const i8* v1, const i8* v2, size_t len) {
                 return ::DotProduct(v1, v2, len);
             });
         case EFormat::Uint8Vector:
@@ -187,6 +199,14 @@ inline TDistanceResult KnnCosineSimilarity(const TStringRef& str1, const TString
             return VectorFunc<float>(str1, str2, [&](const float* v1, const float* v2, size_t len) {
                 const auto res = ::TriWayDotProduct(v1, v2, len);
                 return compute(res.LL, res.LR, res.RR);
+            });
+        case EFormat::Int8Vector:
+            return VectorFunc<i8>(str1, str2, [&](const i8* v1, const i8* v2, size_t len) {
+                // TODO We can optimize it if we will iterate over both vector at the same time, look to the float implementation
+                const i64 ll = ::DotProduct(v1, v1, len);
+                const i64 lr = ::DotProduct(v1, v2, len);
+                const i64 rr = ::DotProduct(v2, v2, len);
+                return compute(ll, lr, rr);
             });
         case EFormat::Uint8Vector:
             return VectorFunc<ui8>(str1, str2, [&](const ui8* v1, const ui8* v2, size_t len) {

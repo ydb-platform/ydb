@@ -1,5 +1,5 @@
 select Knn::ToBinaryStringFloat(Nothing(List<Float>?)) is null;
-select Knn::ToBinaryStringByte(Nothing(List<Float>?)) is null;
+select Knn::ToBinaryStringUint8(Nothing(List<Uint8>?)) is null;
 select Knn::ToBinaryStringBit(Nothing(List<Float>?)) is null;
 select Knn::FloatFromBinaryString(Nothing(String?)) is null;
 select Knn::CosineDistance(Nothing(String?), Nothing(String?)) is null;

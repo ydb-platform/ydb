@@ -1,5 +1,5 @@
 select Knn::ToBinaryStringFloat(null) is null;
-select Knn::ToBinaryStringByte(null) is null;
+select Knn::ToBinaryStringUint8(null) is null;
 select Knn::ToBinaryStringBit(null) is null;
 select Knn::FloatFromBinaryString(null) is null;
 select Knn::CosineDistance(null, null) is null;

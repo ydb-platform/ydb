@@ -8,6 +8,7 @@
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/defs.h>
 #include <ydb/library/yql/utils/cast.h>
+#include <ydb/library/yql/utils/log/log.h>
 
 #include <ydb/library/yql/utils/sort.h>
 
@@ -444,6 +445,8 @@ private:
                 case EFetchResult::One:
                     if (Put()) {
                         if (ctx.SpillerFactory && !HasMemoryForProcessing()) {
+                            YQL_LOG(DEBUG) << "switching Memory mode to Spilling";
+
                             SwitchMode(EOperatingMode::Spilling, ctx);
                             return EFetchResult::Yield;
                         }
@@ -481,6 +484,9 @@ private:
         }
         ResetFields();
         auto nextMode = (IsReadFromChannelFinished() ? EOperatingMode::ProcessSpilled : EOperatingMode::InMemory);
+
+        YQL_LOG(DEBUG) << (nextMode ==  EOperatingMode::ProcessSpilled ? "switching to ProcessSpilled" :  "switching to Memory mode");
+
         SwitchMode(nextMode, ctx);
         return EFetchResult::Yield;
     }

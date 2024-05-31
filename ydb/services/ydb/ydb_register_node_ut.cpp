@@ -49,76 +49,127 @@ using namespace NYdb::NScheme;
 
 namespace {
 
-struct TKikimrServerWithOutCertVerification : TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithServerCert> {
+struct TKikimrServerForTestNodeRegistration : TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithServerCert> {
     using TBase = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithServerCert>;
 
-    TKikimrServerWithOutCertVerification()
-        : TBase(GetAppConfig())
+    struct TServerInitialization {
+        bool EnforceUserToken = false;
+        bool EnableDynamicNodeAuth = false;
+        bool EnableWrongIdentity = false;
+        bool SetNodeAuthValues = false;
+    };
+
+    TKikimrServerForTestNodeRegistration(const TServerInitialization& serverInitialization)
+        : TBase(GetAppConfig(serverInitialization))
     {}
 
-    static NKikimrConfig::TAppConfig GetAppConfig() {
-        auto config = NKikimrConfig::TAppConfig();
-        config.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
-        return config;
-    }
-};
-
-struct TKikimrServerWithCertVerification: public TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithServerCert> {
-    using TBase = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithServerCert>;
-
-    TKikimrServerWithCertVerification()
-        : TBase(GetAppConfig())
-    {}
-
-    static NKikimrConfig::TAppConfig GetAppConfig() {
+private:
+    static NKikimrConfig::TAppConfig GetAppConfig(const TServerInitialization& serverInitialization) {
         auto config = NKikimrConfig::TAppConfig();
 
         auto& securityConfig = *config.MutableDomainsConfig()->MutableSecurityConfig();
-        securityConfig.SetEnforceUserTokenRequirement(true);
+        if (serverInitialization.EnforceUserToken) {
+            securityConfig.SetEnforceUserTokenRequirement(true);
+        }
         // auto& administrationAllowedSids = *securityConfig.MutableAdministrationAllowedSIDs();
         // administrationAllowedSids.Add(BUILTIN_ACL_ROOT);
         // administrationAllowedSids.Add("C=RU,ST=MSK,L=MSK,O=YA,OU=UtTest,CN=localhost@cert");
-        config.MutableFeatureFlags()->SetEnableDynamicNodeAuthorization(true);
+        if (serverInitialization.EnableDynamicNodeAuth) {
+            config.MutableFeatureFlags()->SetEnableDynamicNodeAuthorization(true);
+        }
 
-        auto& dynNodeDefinition = *config.MutableClientCertificateAuthorization()->MutableDynamicNodeAuthorization();
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("C", {"RU"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("L", {"MSK"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("O", {"YA"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("OU", {"UtTest"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("CN", {"localhost"}, {".yandex.ru"});
+        if (serverInitialization.SetNodeAuthValues) {
+            auto& dynNodeDefinition = *config.MutableClientCertificateAuthorization()->MutableDynamicNodeAuthorization();
+            if (serverInitialization.EnableWrongIdentity) {
+                *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("C", {"WRONG"});
+            } else {
+                *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("C", {"RU"});
+            }
+            *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
+            *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("L", {"MSK"});
+            *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("O", {"YA"});
+            *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("OU", {"UtTest"});
+            *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("CN", {"localhost"}, {".yandex.ru"});
+        }
 
         return config;
     }
 };
 
-struct TKikimrServerWithCertVerificationAndWrongIdentity : public TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithServerCert> {
-    using TBase = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithServerCert>;
+// struct TKikimrServerWithOutCertVerification : TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithServerCert> {
+//     using TBase = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithServerCert>;
 
-    TKikimrServerWithCertVerificationAndWrongIdentity()
-        : TBase(GetAppConfig())
-    {}
+//     TKikimrServerWithOutCertVerification()
+//         : TBase(GetAppConfig())
+//     {}
 
-    static NKikimrConfig::TAppConfig GetAppConfig() {
-        auto config = NKikimrConfig::TAppConfig();
+//     static NKikimrConfig::TAppConfig GetAppConfig() {
+//         auto config = NKikimrConfig::TAppConfig();
+//         config.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
+//         return config;
+//     }
+// };
 
-        auto& securityConfig = *config.MutableDomainsConfig()->MutableSecurityConfig();
-        securityConfig.SetEnforceUserTokenRequirement(true);
-        // auto& administrationAllowedSids = *securityConfig.MutableAdministrationAllowedSIDs();
-        // administrationAllowedSids.Add(BUILTIN_ACL_ROOT);
-        // administrationAllowedSids.Add("C=RU,ST=MSK,L=MSK,O=YA,OU=UtTest,CN=localhost@cert");
-        config.MutableFeatureFlags()->SetEnableDynamicNodeAuthorization(true);
+// struct TKikimrServerWithCertVerification: public TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithServerCert> {
+//     using TBase = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithServerCert>;
 
-        auto& dynNodeDefinition = *config.MutableClientCertificateAuthorization()->MutableDynamicNodeAuthorization();
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("C", {"WRONG"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("L", {"MSK"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("O", {"YA"});
-        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("OU", {"UtTest"});
+//     TKikimrServerWithCertVerification()
+//         : TBase(GetAppConfig())
+//     {}
 
-        return config;
-    }
-};
+//     static NKikimrConfig::TAppConfig GetAppConfig() {
+//         auto config = NKikimrConfig::TAppConfig();
+
+//         auto& securityConfig = *config.MutableDomainsConfig()->MutableSecurityConfig();
+//         securityConfig.SetEnforceUserTokenRequirement(true);
+//         // auto& administrationAllowedSids = *securityConfig.MutableAdministrationAllowedSIDs();
+//         // administrationAllowedSids.Add(BUILTIN_ACL_ROOT);
+//         // administrationAllowedSids.Add("C=RU,ST=MSK,L=MSK,O=YA,OU=UtTest,CN=localhost@cert");
+//         config.MutableFeatureFlags()->SetEnableDynamicNodeAuthorization(true);
+
+//         auto& dynNodeDefinition = *config.MutableClientCertificateAuthorization()->MutableDynamicNodeAuthorization();
+//         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("C", {"RU"});
+//         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
+//         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("L", {"MSK"});
+//         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("O", {"YA"});
+//         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("OU", {"UtTest"});
+//         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("CN", {"localhost"}, {".yandex.ru"});
+
+//         return config;
+//     }
+// };
+
+// struct TKikimrServerWithCertVerificationAndWrongIdentity : public TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithServerCert> {
+//     using TBase = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithServerCert>;
+
+//     TKikimrServerWithCertVerificationAndWrongIdentity()
+//         : TBase(GetAppConfig())
+//     {}
+
+//     static NKikimrConfig::TAppConfig GetAppConfig() {
+//         auto config = NKikimrConfig::TAppConfig();
+
+//         auto& securityConfig = *config.MutableDomainsConfig()->MutableSecurityConfig();
+//         securityConfig.SetEnforceUserTokenRequirement(true);
+//         // auto& administrationAllowedSids = *securityConfig.MutableAdministrationAllowedSIDs();
+//         // administrationAllowedSids.Add(BUILTIN_ACL_ROOT);
+//         // administrationAllowedSids.Add("C=RU,ST=MSK,L=MSK,O=YA,OU=UtTest,CN=localhost@cert");
+//         config.MutableFeatureFlags()->SetEnableDynamicNodeAuthorization(true);
+
+//         auto& dynNodeDefinition = *config.MutableClientCertificateAuthorization()->MutableDynamicNodeAuthorization();
+//         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("C", {"WRONG"});
+//         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
+//         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("L", {"MSK"});
+//         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("O", {"YA"});
+//         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("OU", {"UtTest"});
+
+//         return config;
+//     }
+// };
+
+} // namespace
+
+Y_UNIT_TEST_SUITE(TRegisterNodeOverDiscoveryService) {
 
 NDiscovery::TNodeRegistrationSettings GetNodeRegistrationSettings() {
     NDiscovery::TNodeRegistrationSettings settings;
@@ -142,339 +193,341 @@ NDiscovery::TNodeRegistrationSettings GetNodeRegistrationSettings() {
     return settings;
 }
 
-} // namespace
-
-Y_UNIT_TEST_SUITE(TRegisterNodeOverDiscoveryService) {
-
-Y_UNIT_TEST(ServerWithCertVerification_ClientWithCorrectCerts) {
-    TKikimrServerWithCertVerification server;
-    ui16 grpc = server.GetPort();
-    TString location = TStringBuilder() << "localhost:" << grpc;
-
+void SetLogPriority(TKikimrServerForTestNodeRegistration& server) {
     server.GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
     server.GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
+}
 
-    const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
-    const TCertAndKey clientServerCert = GenerateSignedCert(caCert, TProps::AsClientServer());
-
-    TDriverConfig config;
-    config.UseSecureConnection(caCert.Certificate.c_str())
-          .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
-          .SetEndpoint(location);
-
-    // Request with certificate only
+NDiscovery::TNodeRegistrationResult RegisterNode(const TDriverConfig& config) {
     auto connection = NYdb::TDriver(config);
     NYdb::NDiscovery::TDiscoveryClient discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connection);
     const auto result = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
     connection.Stop(true);
+    return result;
+}
 
+void CheckGood(const NDiscovery::TNodeRegistrationResult& result) {
     UNIT_ASSERT_C(!result.IsTransportError(), result.GetIssues().ToOneLineString());
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+}
 
-    // Request with certificate and correct token
-    auto connectionWithToken = NYdb::TDriver(config.SetAuthToken(BUILTIN_ACL_ROOT));
-    discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connectionWithToken);
-    const auto resultWithToken = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
-    connectionWithToken.Stop(true);
+void CheckAccessDeniedWithoutUserToken(const NDiscovery::TNodeRegistrationResult& result, const TString& expectedError) {
+    UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
+    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
+    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), expectedError);
+}
 
-    UNIT_ASSERT_C(!resultWithToken.IsTransportError(), resultWithToken.GetIssues().ToOneLineString());
-    UNIT_ASSERT_C(resultWithToken.IsSuccess(), resultWithToken.GetIssues().ToOneLineString());
+Y_UNIT_TEST(ServerWithCertVerification_ClientWithCorrectCerts) {
+    const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
+    const TCertAndKey clientServerCert = GenerateSignedCert(caCert, TProps::AsClientServer());
+    {
+        TKikimrServerForTestNodeRegistration server({
+            .EnforceUserToken = true,
+            .EnableDynamicNodeAuth = true,
+            .SetNodeAuthValues = true
+        });
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
 
-    // Request with certificate and wrong token
-    auto connectionWithWrongToken = NYdb::TDriver(config.SetAuthToken("wrong_token"));
-    discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connectionWithWrongToken);
-    const auto resultWithWrongToken = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
-    connectionWithWrongToken.Stop(true);
+        SetLogPriority(server);
 
-    UNIT_ASSERT_C(!resultWithWrongToken.IsTransportError(), resultWithWrongToken.GetIssues().ToOneLineString());
-    UNIT_ASSERT_C(resultWithWrongToken.IsSuccess(), resultWithWrongToken.GetIssues().ToOneLineString());
+        TDriverConfig config;
+        config.UseSecureConnection(caCert.Certificate.c_str())
+            .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
+            .SetEndpoint(location);
+
+        CheckGood(RegisterNode(config));
+        CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
+        CheckGood(RegisterNode(config.SetAuthToken("wrong_token")));
+    }
+    {
+        TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
+            .EnableDynamicNodeAuth = true,
+            .SetNodeAuthValues = true
+        });
+        ui16 grpc = serverDoesNotRequireToken.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        SetLogPriority(serverDoesNotRequireToken);
+
+        TDriverConfig config;
+        config.UseSecureConnection(caCert.Certificate.c_str())
+            .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
+            .SetEndpoint(location);
+
+        CheckGood(RegisterNode(config));
+        CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
+        CheckGood(RegisterNode(config.SetAuthToken("wrong_token")));
+    }
 }
 
 Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesEmptyClientCerts) {
-    TKikimrServerWithCertVerification server;
-    ui16 grpc = server.GetPort();
-    TString location = TStringBuilder() << "localhost:" << grpc;
-
-    server.GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
-    server.GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
-
     const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
     const TCertAndKey noCert;
+    {
+        TKikimrServerForTestNodeRegistration server({
+            .EnforceUserToken = true,
+            .EnableDynamicNodeAuth = true,
+            .SetNodeAuthValues = true
+        });
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
 
-    TDriverConfig config;
-    config.UseSecureConnection(caCert.Certificate.c_str())
-          .UseClientCertificate(noCert.Certificate.c_str(),noCert.PrivateKey.c_str())
-          .SetEndpoint(location);
+        SetLogPriority(server);
 
-    // Request with certificate only
-    auto connection = NYdb::TDriver(config);
-    NYdb::NDiscovery::TDiscoveryClient discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connection);
-    const auto result = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
-    connection.Stop(true);
+        TDriverConfig config;
+        config.UseSecureConnection(caCert.Certificate.c_str())
+            .UseClientCertificate(noCert.Certificate.c_str(),noCert.PrivateKey.c_str())
+            .SetEndpoint(location);
 
-    UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Access denied without user token");
+        const TString expectedError = "Access denied without user token";
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config), expectedError);
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+    }
+    {
+        TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
+            .EnforceUserToken = false,
+            .EnableDynamicNodeAuth = true,
+            .SetNodeAuthValues = true
+        });
+        ui16 grpc = serverDoesNotRequireToken.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
 
-    // Request with certificate and correct token
-    auto connectionWithToken = NYdb::TDriver(config.SetAuthToken(BUILTIN_ACL_ROOT));
-    discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connectionWithToken);
-    const auto resultWithToken = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
-    connectionWithToken.Stop(true);
+        SetLogPriority(serverDoesNotRequireToken);
 
-    UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Access denied without user token");
+        TDriverConfig config;
+        config.UseSecureConnection(caCert.Certificate.c_str())
+            .UseClientCertificate(noCert.Certificate.c_str(),noCert.PrivateKey.c_str())
+            .SetEndpoint(location);
 
-    // Request with certificate and wrong token
-    auto connectionWithWrongToken = NYdb::TDriver(config.SetAuthToken("wrong_token"));
-    discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connectionWithWrongToken);
-    const auto resultWithWrongToken = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
-    connectionWithWrongToken.Stop(true);
-
-    UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Access denied without user token");
+        CheckGood(RegisterNode(config));
+        CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
+        CheckGood(RegisterNode(config.SetAuthToken("wrong_token")));
+    }
 }
 
 Y_UNIT_TEST(ServerWithoutCertVerification_ClientProvidesCorrectCerts) {
-    TKikimrServerWithOutCertVerification server;
-    ui16 grpc = server.GetPort();
-    TString location = TStringBuilder() << "localhost:" << grpc;
-
-    server.GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
-    server.GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
-
     const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
     const TCertAndKey clientServerCert = GenerateSignedCert(caCert, TProps::AsClientServer());
+    {
+        TKikimrServerForTestNodeRegistration server({
+            .EnforceUserToken = true,
+        });
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
 
-    TDriverConfig config;
-    config.UseSecureConnection(caCert.Certificate.c_str())
-          .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
-          .SetEndpoint(location);
+        SetLogPriority(server);
 
-    // Request with certificate only
-    auto connection = NYdb::TDriver(config);
-    NYdb::NDiscovery::TDiscoveryClient discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connection);
-    const auto result = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
-    connection.Stop(true);
+        TDriverConfig config;
+        config.UseSecureConnection(caCert.Certificate.c_str())
+            .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
+            .SetEndpoint(location);
 
-    UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Access denied without user token");
+        const TString expectedError = "Access denied without user token";
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config), expectedError);
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+    }
+    {
+        TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
+            .EnforceUserToken = false
+        });
+        ui16 grpc = serverDoesNotRequireToken.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
 
-    // Request with certificate and correct token
-    auto connectionWithToken = NYdb::TDriver(config.SetAuthToken(BUILTIN_ACL_ROOT));
-    discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connectionWithToken);
-    const auto resultWithToken = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
-    connectionWithToken.Stop(true);
+        SetLogPriority(serverDoesNotRequireToken);
 
-    UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Access denied without user token");
+        TDriverConfig config;
+        config.UseSecureConnection(caCert.Certificate.c_str())
+            .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
+            .SetEndpoint(location);
 
-    // Request with certificate and wrong token
-    auto connectionWithWrongToken = NYdb::TDriver(config.SetAuthToken("wrong_token"));
-    discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connectionWithWrongToken);
-    const auto resultWithWrongToken = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
-    connectionWithWrongToken.Stop(true);
-
-    UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Access denied without user token");
+        CheckGood(RegisterNode(config));
+        CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
+        CheckGood(RegisterNode(config.SetAuthToken("wrong_token")));
+    }
 }
 
 Y_UNIT_TEST(ServerWithoutCertVerification_ClientProvidesEmptyClientCerts) {
-    TKikimrServerWithOutCertVerification server;
-    ui16 grpc = server.GetPort();
-    TString location = TStringBuilder() << "localhost:" << grpc;
-
-    server.GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
-    server.GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
-
     const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
     const TCertAndKey noCert;
+    {
+        TKikimrServerForTestNodeRegistration server({
+            .EnforceUserToken = true,
+        });
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
 
-    TDriverConfig config;
-    config.UseSecureConnection(caCert.Certificate.c_str())
-          .UseClientCertificate(noCert.Certificate.c_str(),noCert.PrivateKey.c_str())
-          .SetEndpoint(location);
+        SetLogPriority(server);
 
-    // Request with certificate only
-    auto connection = NYdb::TDriver(config);
-    NYdb::NDiscovery::TDiscoveryClient discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connection);
-    const auto result = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
-    connection.Stop(true);
+        TDriverConfig config;
+        config.UseSecureConnection(caCert.Certificate.c_str())
+            .UseClientCertificate(noCert.Certificate.c_str(),noCert.PrivateKey.c_str())
+            .SetEndpoint(location);
 
-    UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Access denied without user token");
+        const TString expectedError = "Access denied without user token";
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config), expectedError);
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+    }
+    {
+        TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
+            .EnforceUserToken = false
+        });
+        ui16 grpc = serverDoesNotRequireToken.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
 
-    // Request with certificate and correct token
-    auto connectionWithToken = NYdb::TDriver(config.SetAuthToken(BUILTIN_ACL_ROOT));
-    discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connectionWithToken);
-    const auto resultWithToken = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
-    connectionWithToken.Stop(true);
+        SetLogPriority(serverDoesNotRequireToken);
 
-    UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Access denied without user token");
+        TDriverConfig config;
+        config.UseSecureConnection(caCert.Certificate.c_str())
+            .UseClientCertificate(noCert.Certificate.c_str(),noCert.PrivateKey.c_str())
+            .SetEndpoint(location);
 
-    // Request with certificate and wrong token
-    auto connectionWithWrongToken = NYdb::TDriver(config.SetAuthToken("wrong_token"));
-    discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connectionWithWrongToken);
-    const auto resultWithWrongToken = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
-    connectionWithWrongToken.Stop(true);
-
-    UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Access denied without user token");
+        CheckGood(RegisterNode(config));
+        CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
+        CheckGood(RegisterNode(config.SetAuthToken("wrong_token")));
+    }
 }
 
-Y_UNIT_TEST(ServerWithCertVerification_ClientDoesNotProvideCorrectCerts) {
-    TKikimrServerWithCertVerificationAndWrongIdentity server;
-    ui16 grpc = server.GetPort();
-    TString location = TStringBuilder() << "localhost:" << grpc;
-
-    server.GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
-    server.GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
-
+Y_UNIT_TEST(ServerWithCertVerification_ClientProvideIncorrectCerts) {
     const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
     const TCertAndKey clientServerCert = GenerateSignedCert(caCert, TProps::AsClientServer());
+    {
+        TKikimrServerForTestNodeRegistration server({
+            .EnforceUserToken = true,
+            .EnableDynamicNodeAuth = true,
+            .EnableWrongIdentity = true,
+            .SetNodeAuthValues = true,
+        });
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
 
-    TDriverConfig config;
-    config.UseSecureConnection(caCert.Certificate.c_str())
-          .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
-          .SetEndpoint(location);
+        SetLogPriority(server);
 
-    // Request with certificate only
-    auto connection = NYdb::TDriver(config);
-    NYdb::NDiscovery::TDiscoveryClient discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connection);
-    const auto result = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
-    connection.Stop(true);
+        TDriverConfig config;
+        config.UseSecureConnection(caCert.Certificate.c_str())
+            .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
+            .SetEndpoint(location);
 
-    UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Cannot create token from certificate. Client certificate failed verification");
+        const TString expectedError = "Cannot create token from certificate. Client certificate failed verification";
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config), expectedError);
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+    }
+    {
+        TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
+            .EnforceUserToken = false,
+            .EnableDynamicNodeAuth = true,
+            .EnableWrongIdentity = true,
+            .SetNodeAuthValues = true,
+        });
+        ui16 grpc = serverDoesNotRequireToken.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
 
-    // Request with certificate and correct token
-    auto connectionWithToken = NYdb::TDriver(config.SetAuthToken(BUILTIN_ACL_ROOT));
-    discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connectionWithToken);
-    const auto resultWithToken = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
-    connectionWithToken.Stop(true);
+        SetLogPriority(serverDoesNotRequireToken);
 
-    UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Cannot create token from certificate. Client certificate failed verification");
+        TDriverConfig config;
+        config.UseSecureConnection(caCert.Certificate.c_str())
+            .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
+            .SetEndpoint(location);
 
-    // Request with certificate and wrong token
-    auto connectionWithWrongToken = NYdb::TDriver(config.SetAuthToken("wrong_token"));
-    discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connectionWithWrongToken);
-    const auto resultWithWrongToken = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
-    connectionWithWrongToken.Stop(true);
-
-    UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Cannot create token from certificate. Client certificate failed verification");
+        CheckGood(RegisterNode(config));
+        CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
+        CheckGood(RegisterNode(config.SetAuthToken("wrong_token")));
+    }
 }
 
 Y_UNIT_TEST(ServerWithCertVerification_ClientDoesNotProvideAnyCerts) {
-    TKikimrServerWithCertVerification server;
-    ui16 grpc = server.GetPort();
-    TString location = TStringBuilder() << "localhost:" << grpc;
+    {
+        TKikimrServerForTestNodeRegistration server({
+            .EnforceUserToken = true,
+            .EnableDynamicNodeAuth = true,
+            .SetNodeAuthValues = true
+        });
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
 
-    server.GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
-    server.GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
+        SetLogPriority(server);
 
-    TDriverConfig config;
-    config.SetEndpoint(location);
+        TDriverConfig config;
+        config.SetEndpoint(location);
 
-    // Request with certificate only
-    auto connection = NYdb::TDriver(config);
-    NYdb::NDiscovery::TDiscoveryClient discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connection);
-    const auto result = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
-    connection.Stop(true);
+        const TString expectedError = "failed to connect to all addresses";
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config), expectedError);
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+    }
+    {
+        TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
+            .EnforceUserToken = false,
+            .EnableDynamicNodeAuth = true,
+            .SetNodeAuthValues = true
+        });
+        ui16 grpc = serverDoesNotRequireToken.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
 
-    UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "failed to connect to all addresses");
+        SetLogPriority(serverDoesNotRequireToken);
 
-    // Request with certificate and correct token
-    auto connectionWithToken = NYdb::TDriver(config.SetAuthToken(BUILTIN_ACL_ROOT));
-    discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connectionWithToken);
-    const auto resultWithToken = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
-    connectionWithToken.Stop(true);
+        TDriverConfig config;
+        config.SetEndpoint(location);
 
-    UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "failed to connect to all addresses");
-
-    // Request with certificate and wrong token
-    auto connectionWithWrongToken = NYdb::TDriver(config.SetAuthToken("wrong_token"));
-    discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connectionWithWrongToken);
-    const auto resultWithWrongToken = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
-    connectionWithWrongToken.Stop(true);
-
-    UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "failed to connect to all addresses");
+        const TString expectedError = "failed to connect to all addresses";
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config), expectedError);
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+    }
 }
 
 Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesServerCerts) {
-    TKikimrServerWithCertVerification server;
-    ui16 grpc = server.GetPort();
-    TString location = TStringBuilder() << "localhost:" << grpc;
-
-    server.GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
-    server.GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
-
     const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
     const TCertAndKey& serverCert = GenerateSignedCert(caCert, TProps::AsServer()); // client or client-server is allowed, not just server
+    {
+        TKikimrServerForTestNodeRegistration server({
+            .EnforceUserToken = true,
+            .EnableDynamicNodeAuth = true,
+            .SetNodeAuthValues = true
+        });
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
 
-    TDriverConfig config;
-    config.UseSecureConnection(caCert.Certificate.c_str())
-          .UseClientCertificate(serverCert.Certificate.c_str(),serverCert.PrivateKey.c_str())
-          .SetEndpoint(location);
+        SetLogPriority(server);
 
-    // Request with certificate only
-    auto connection = NYdb::TDriver(config);
-    NYdb::NDiscovery::TDiscoveryClient discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connection);
-    const auto result = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
-    connection.Stop(true);
+        TDriverConfig config;
+        config.UseSecureConnection(caCert.Certificate.c_str())
+            .UseClientCertificate(serverCert.Certificate.c_str(),serverCert.PrivateKey.c_str())
+            .SetEndpoint(location);
 
-    UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "failed to connect to all addresses");
+        const TString expectedError = "failed to connect to all addresses";
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config), expectedError);
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+    }
+    {
+        TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
+            .EnforceUserToken = false,
+            .EnableDynamicNodeAuth = true,
+            .SetNodeAuthValues = true
+        });
+        ui16 grpc = serverDoesNotRequireToken.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
 
-    // Request with certificate and correct token
-    auto connectionWithToken = NYdb::TDriver(config.SetAuthToken(BUILTIN_ACL_ROOT));
-    discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connectionWithToken);
-    const auto resultWithToken = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
-    connectionWithToken.Stop(true);
+        SetLogPriority(serverDoesNotRequireToken);
 
-    UNIT_ASSERT_C(resultWithToken.IsTransportError(), resultWithToken.GetIssues().ToOneLineString());
-    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "failed to connect to all addresses");
+        TDriverConfig config;
+        config.UseSecureConnection(caCert.Certificate.c_str())
+            .UseClientCertificate(serverCert.Certificate.c_str(),serverCert.PrivateKey.c_str())
+            .SetEndpoint(location);
 
-    // Request with certificate and wrong token
-    auto connectionWithWrongToken = NYdb::TDriver(config.SetAuthToken("wrong_token"));
-    discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connectionWithWrongToken);
-    const auto resultWithWrongToken = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
-    connectionWithWrongToken.Stop(true);
-
-    UNIT_ASSERT_C(resultWithWrongToken.IsTransportError(), resultWithWrongToken.GetIssues().ToOneLineString());
-    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "failed to connect to all addresses");
+        const TString expectedError = "failed to connect to all addresses";
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config), expectedError);
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+    }
 }
 
 Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesCorruptedCert) {
-    TKikimrServerWithCertVerification server;
-    ui16 grpc = server.GetPort();
-    TString location = TStringBuilder() << "localhost:" << grpc;
-
-    server.GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
-    server.GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
-
     const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
     TCertAndKey clientServerCert = GenerateSignedCert(caCert, TProps::AsClientServer());
     if (clientServerCert.Certificate[50] != 'a') {
@@ -482,51 +535,51 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesCorruptedCert) {
     } else {
         clientServerCert.Certificate[50] = 'b';
     }
+    {
+        TKikimrServerForTestNodeRegistration server({
+            .EnforceUserToken = true,
+            .EnableDynamicNodeAuth = true,
+            .SetNodeAuthValues = true
+        });
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
 
-    TDriverConfig config;
-    config.UseSecureConnection(caCert.Certificate.c_str())
-          .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
-          .SetEndpoint(location);
+        SetLogPriority(server);
 
-    // Request with certificate only
-    auto connection = NYdb::TDriver(config);
-    NYdb::NDiscovery::TDiscoveryClient discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connection);
-    const auto result = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
-    connection.Stop(true);
+        TDriverConfig config;
+        config.UseSecureConnection(caCert.Certificate.c_str())
+            .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
+            .SetEndpoint(location);
 
-    UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "empty address list");
+        const TString expectedError = "empty address list";
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config), expectedError);
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+    }
+    {
+        TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
+            .EnforceUserToken = false,
+            .EnableDynamicNodeAuth = true,
+            .SetNodeAuthValues = true
+        });
+        ui16 grpc = serverDoesNotRequireToken.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
 
-    // Request with certificate and correct token
-    auto connectionWithToken = NYdb::TDriver(config.SetAuthToken(BUILTIN_ACL_ROOT));
-    discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connectionWithToken);
-    const auto resultWithToken = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
-    connectionWithToken.Stop(true);
+        SetLogPriority(serverDoesNotRequireToken);
 
-    UNIT_ASSERT_C(resultWithToken.IsTransportError(), resultWithToken.GetIssues().ToOneLineString());
-    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "empty address list");
+        TDriverConfig config;
+        config.UseSecureConnection(caCert.Certificate.c_str())
+            .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
+            .SetEndpoint(location);
 
-    // Request with certificate and wrong token
-    auto connectionWithWrongToken = NYdb::TDriver(config.SetAuthToken("wrong_token"));
-    discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connectionWithWrongToken);
-    const auto resultWithWrongToken = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
-    connectionWithWrongToken.Stop(true);
-
-    UNIT_ASSERT_C(resultWithWrongToken.IsTransportError(), resultWithWrongToken.GetIssues().ToOneLineString());
-    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "empty address list");
+        const TString expectedError = "empty address list";
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config), expectedError);
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+    }
 }
 
 Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesCorruptedPrivatekey) {
-    TKikimrServerWithCertVerification server;
-    ui16 grpc = server.GetPort();
-    TString location = TStringBuilder() << "localhost:" << grpc;
-
-    server.GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
-    server.GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
-
     const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
     TCertAndKey clientServerCert = GenerateSignedCert(caCert, TProps::AsClientServer());
     if (clientServerCert.PrivateKey[20] != 'a') {
@@ -534,186 +587,231 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesCorruptedPrivatekey) {
     } else {
         clientServerCert.Certificate[20] = 'b';
     }
+    {
+        TKikimrServerForTestNodeRegistration server({
+            .EnforceUserToken = true,
+            .EnableDynamicNodeAuth = true,
+            .SetNodeAuthValues = true
+        });
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
 
-    TDriverConfig config;
-    config.UseSecureConnection(caCert.Certificate.c_str())
-          .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
-          .SetEndpoint(location);
+        SetLogPriority(server);
 
-    // Request with certificate only
-    auto connection = NYdb::TDriver(config);
-    NYdb::NDiscovery::TDiscoveryClient discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connection);
-    const auto result = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
-    connection.Stop(true);
+        TDriverConfig config;
+        config.UseSecureConnection(caCert.Certificate.c_str())
+            .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
+            .SetEndpoint(location);
 
-    UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "empty address list");
+        const TString expectedError = "empty address list";
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config), expectedError);
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+    }
+    {
+        TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
+            .EnforceUserToken = false,
+            .EnableDynamicNodeAuth = true,
+            .SetNodeAuthValues = true
+        });
+        ui16 grpc = serverDoesNotRequireToken.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
 
-    // Request with certificate and correct token
-    auto connectionWithToken = NYdb::TDriver(config.SetAuthToken(BUILTIN_ACL_ROOT));
-    discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connectionWithToken);
-    const auto resultWithToken = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
-    connectionWithToken.Stop(true);
+        SetLogPriority(serverDoesNotRequireToken);
 
-    UNIT_ASSERT_C(resultWithToken.IsTransportError(), resultWithToken.GetIssues().ToOneLineString());
-    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "empty address list");
+        TDriverConfig config;
+        config.UseSecureConnection(caCert.Certificate.c_str())
+            .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
+            .SetEndpoint(location);
 
-    // Request with certificate and wrong token
-    auto connectionWithWrongToken = NYdb::TDriver(config.SetAuthToken("wrong_token"));
-    discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connectionWithWrongToken);
-    const auto resultWithWrongToken = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
-    connectionWithWrongToken.Stop(true);
-
-    UNIT_ASSERT_C(resultWithWrongToken.IsTransportError(), resultWithWrongToken.GetIssues().ToOneLineString());
-    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "empty address list");
+        const TString expectedError = "empty address list";
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config), expectedError);
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+    }
 }
 
 Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesExpiredCert) {
-    TKikimrServerWithCertVerification server;
-    ui16 grpc = server.GetPort();
-    TString location = TStringBuilder() << "localhost:" << grpc;
-
-    server.GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
-    server.GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
-
     const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
     const TCertAndKey clientServerCert = GenerateSignedCert(caCert, TProps::AsClientServer().WithValid(TDuration::Seconds(2)));
+    {
+        TKikimrServerForTestNodeRegistration server({
+            .EnforceUserToken = true,
+            .EnableDynamicNodeAuth = true,
+            .SetNodeAuthValues = true
+        });
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
 
-    // wait until cert expires
-    Sleep(TDuration::Seconds(10));
+        SetLogPriority(server);
 
-    TDriverConfig config;
-    config.UseSecureConnection(caCert.Certificate.c_str())
-          .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
-          .SetEndpoint(location);
+        // wait until cert expires
+        Sleep(TDuration::Seconds(10));
 
-    // Request with certificate only
-    auto connection = NYdb::TDriver(config);
-    NYdb::NDiscovery::TDiscoveryClient discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connection);
-    const auto result = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
-    connection.Stop(true);
+        TDriverConfig config;
+        config.UseSecureConnection(caCert.Certificate.c_str())
+            .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
+            .SetEndpoint(location);
 
-    UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "failed to connect to all addresses");
+        const TString expectedError = "failed to connect to all addresses";
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config), expectedError);
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+    }
+    {
+        TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
+            .EnforceUserToken = false,
+            .EnableDynamicNodeAuth = true,
+            .SetNodeAuthValues = true
+        });
+        ui16 grpc = serverDoesNotRequireToken.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
 
-    // Request with certificate and correct token
-    auto connectionWithToken = NYdb::TDriver(config.SetAuthToken(BUILTIN_ACL_ROOT));
-    discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connectionWithToken);
-    const auto resultWithToken = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
-    connectionWithToken.Stop(true);
+        SetLogPriority(serverDoesNotRequireToken);
 
-    UNIT_ASSERT_C(resultWithToken.IsTransportError(), resultWithToken.GetIssues().ToOneLineString());
-    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "failed to connect to all addresses");
+        // wait until cert expires
+        Sleep(TDuration::Seconds(10));
 
-    // Request with certificate and wrong token
-    auto connectionWithWrongToken = NYdb::TDriver(config.SetAuthToken("wrong_token"));
-    discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connectionWithWrongToken);
-    const auto resultWithWrongToken = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
-    connectionWithWrongToken.Stop(true);
+        TDriverConfig config;
+        config.UseSecureConnection(caCert.Certificate.c_str())
+            .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
+            .SetEndpoint(location);
 
-    UNIT_ASSERT_C(resultWithWrongToken.IsTransportError(), resultWithWrongToken.GetIssues().ToOneLineString());
-    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "failed to connect to all addresses");
+        const TString expectedError = "failed to connect to all addresses";
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config), expectedError);
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+    }
 }
 
 Y_UNIT_TEST(ServerWithOutCertVerification_ClientProvidesExpiredCert) {
-    TKikimrServerWithOutCertVerification server;
-    ui16 grpc = server.GetPort();
-    TString location = TStringBuilder() << "localhost:" << grpc;
-
-    server.GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
-    server.GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
-
     const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
     const TCertAndKey clientServerCert = GenerateSignedCert(caCert, TProps::AsClientServer().WithValid(TDuration::Seconds(2)));
+    {
+        TKikimrServerForTestNodeRegistration server({
+            .EnforceUserToken = true,
+        });
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
 
-    // wait until cert expires
-    Sleep(TDuration::Seconds(10));
+        SetLogPriority(server);
 
-    TDriverConfig config;
-    config.UseSecureConnection(caCert.Certificate.c_str())
-          .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
-          .SetEndpoint(location);
+        // wait until cert expires
+        Sleep(TDuration::Seconds(10));
 
-    // Request with certificate only
-    auto connection = NYdb::TDriver(config);
-    NYdb::NDiscovery::TDiscoveryClient discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connection);
-    const auto result = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
-    connection.Stop(true);
+        TDriverConfig config;
+        config.UseSecureConnection(caCert.Certificate.c_str())
+            .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
+            .SetEndpoint(location);
 
-    UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Access denied without user token");
+        const TString expectedError = "Access denied without user token";
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config), expectedError);
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+    }
+    {
+        TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
+            .EnforceUserToken = false,
+        });
+        ui16 grpc = serverDoesNotRequireToken.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
 
-    // Request with certificate and correct token
-    auto connectionWithToken = NYdb::TDriver(config.SetAuthToken(BUILTIN_ACL_ROOT));
-    discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connectionWithToken);
-    const auto resultWithToken = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
-    connectionWithToken.Stop(true);
+        SetLogPriority(serverDoesNotRequireToken);
 
-    UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Access denied without user token");
+        // wait until cert expires
+        Sleep(TDuration::Seconds(10));
 
-    // Request with certificate and wrong token
-    auto connectionWithWrongToken = NYdb::TDriver(config.SetAuthToken("wrong_token"));
-    discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connectionWithWrongToken);
-    const auto resultWithWrongToken = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
-    connectionWithWrongToken.Stop(true);
+        TDriverConfig config;
+        config.UseSecureConnection(caCert.Certificate.c_str())
+            .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
+            .SetEndpoint(location);
 
-    UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Access denied without user token");
+        CheckGood(RegisterNode(config));
+        CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
+        CheckGood(RegisterNode(config.SetAuthToken("wrong_token")));
+    }
 }
 
 Y_UNIT_TEST(ServerWithCertVerification_ClientDoesNotProvideClientCerts) {
-    TKikimrServerWithCertVerification server;
-    ui16 grpc = server.GetPort();
-    TString location = TStringBuilder() << "localhost:" << grpc;
-
-    server.GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
-    server.GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
-
     const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
+    {
+        TKikimrServerForTestNodeRegistration server({
+            .EnforceUserToken = true,
+            .EnableDynamicNodeAuth = true,
+            .SetNodeAuthValues = true
+        });
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
 
-    TDriverConfig config;
-    config.UseSecureConnection(caCert.Certificate.c_str())
-          .SetEndpoint(location);
+        SetLogPriority(server);
 
-    // Request with certificate only
-    auto connection = NYdb::TDriver(config);
-    NYdb::NDiscovery::TDiscoveryClient discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connection);
-    const auto result = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
-    connection.Stop(true);
+        TDriverConfig config;
+        config.UseSecureConnection(caCert.Certificate.c_str())
+            .SetEndpoint(location);
 
-    UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Access denied without user token");
+        const TString expectedError = "Access denied without user token";
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config), expectedError);
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+    }
+    {
+        TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
+            .EnforceUserToken = false,
+            .EnableDynamicNodeAuth = true,
+            .SetNodeAuthValues = true
+        });
+        ui16 grpc = serverDoesNotRequireToken.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
 
-    // Request with certificate and correct token
-    auto connectionWithToken = NYdb::TDriver(config.SetAuthToken(BUILTIN_ACL_ROOT));
-    discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connectionWithToken);
-    const auto resultWithToken = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
-    connectionWithToken.Stop(true);
+        SetLogPriority(serverDoesNotRequireToken);
 
-    UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Access denied without user token");
+        TDriverConfig config;
+        config.UseSecureConnection(caCert.Certificate.c_str())
+            .SetEndpoint(location);
 
-    // Request with certificate and wrong token
-    auto connectionWithWrongToken = NYdb::TDriver(config.SetAuthToken("wrong_token"));
-    discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connectionWithWrongToken);
-    const auto resultWithWrongToken = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
-    connectionWithWrongToken.Stop(true);
+        CheckGood(RegisterNode(config));
+        CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
+        CheckGood(RegisterNode(config.SetAuthToken("wrong_token")));
+    }
+}
 
-    UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Access denied without user token");
+Y_UNIT_TEST(ServerWithoutCertVerification_ClientDoesNotProvideClientCerts) {
+    const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
+    {
+        TKikimrServerForTestNodeRegistration server({
+            .EnforceUserToken = true,
+        });
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        SetLogPriority(server);
+
+        TDriverConfig config;
+        config.UseSecureConnection(caCert.Certificate.c_str())
+            .SetEndpoint(location);
+
+        const TString expectedError = "Access denied without user token";
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config), expectedError);
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
+        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+    }
+    {
+        TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
+            .EnforceUserToken = false,
+        });
+        ui16 grpc = serverDoesNotRequireToken.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        SetLogPriority(serverDoesNotRequireToken);
+
+        TDriverConfig config;
+        config.UseSecureConnection(caCert.Certificate.c_str())
+            .SetEndpoint(location);
+
+        CheckGood(RegisterNode(config));
+        CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
+        CheckGood(RegisterNode(config.SetAuthToken("wrong_token")));
+    }
 }
 
 }
@@ -769,7 +867,11 @@ THolder<NClient::TRegistrationResult> TryToRegisterDynamicNode(
 Y_UNIT_TEST_SUITE(TRegisterNodeOverLegacyService) {
 
 Y_UNIT_TEST(ServerWithCertVerification_ClientWithCorrectCerts) {
-    TKikimrServerWithCertVerification server;
+    TKikimrServerForTestNodeRegistration server({
+        .EnforceUserToken = true,
+        .EnableDynamicNodeAuth = true,
+        .SetNodeAuthValues = true
+    });
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
 
@@ -787,7 +889,11 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientWithCorrectCerts) {
 }
 
 Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesEmptyClientCerts) {
-    TKikimrServerWithCertVerification server;
+    TKikimrServerForTestNodeRegistration server({
+        .EnforceUserToken = true,
+        .EnableDynamicNodeAuth = true,
+        .SetNodeAuthValues = true
+    });
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
 
@@ -806,7 +912,9 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesEmptyClientCerts) {
 }
 
 Y_UNIT_TEST(ServerWithoutCertVerification_ClientProvidesCorrectCerts) {
-    TKikimrServerWithOutCertVerification server;
+    TKikimrServerForTestNodeRegistration server({
+        .EnforceUserToken = true,
+    });
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
 
@@ -824,7 +932,9 @@ Y_UNIT_TEST(ServerWithoutCertVerification_ClientProvidesCorrectCerts) {
 }
 
 Y_UNIT_TEST(ServerWithoutCertVerification_ClientProvidesEmptyClientCerts) {
-    TKikimrServerWithOutCertVerification server;
+    TKikimrServerForTestNodeRegistration server({
+        .EnforceUserToken = true,
+    });
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
 
@@ -842,7 +952,12 @@ Y_UNIT_TEST(ServerWithoutCertVerification_ClientProvidesEmptyClientCerts) {
 }
 
 Y_UNIT_TEST(ServerWithCertVerification_ClientDoesNotProvideCorrectCerts) {
-    TKikimrServerWithCertVerificationAndWrongIdentity server;
+    TKikimrServerForTestNodeRegistration server({
+        .EnforceUserToken = true,
+        .EnableDynamicNodeAuth = true,
+        .EnableWrongIdentity = true,
+        .SetNodeAuthValues = true
+    });
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
 

@@ -150,10 +150,6 @@ TGranuleMeta::TGranuleMeta(const ui64 pathId, const TGranulesStorage& owner, con
 
 }
 
-bool TGranuleMeta::InCompaction() const {
-    return Activity.contains(EActivity::GeneralCompaction);
-}
-
 std::shared_ptr<TPortionInfo> TGranuleMeta::UpsertPortionOnLoad(TPortionInfo&& portion) {
     auto portionId = portion.GetPortionId();
     auto emplaceInfo = Portions.emplace(portionId, std::make_shared<TPortionInfo>(std::move(portion)));

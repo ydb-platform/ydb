@@ -623,6 +623,30 @@ public:
             return BucketInfo.DebugString();
         }
     }
+
+    NJson::TJsonValue DebugJson() const {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("actuals_count", Actuals.size());
+        result.InsertValue("pre_actuals_count", PreActuals.size());
+        result.InsertValue("futures_count", Futures.size());
+
+        std::shared_ptr<TPortionInfo> oldestPortion = GetOldestPortion(true);
+        if (oldestPortion) {
+            auto& info = result.InsertValue("oldest", NJson::JSON_MAP);
+            info.InsertValue("snapshot", oldestPortion->RecordSnapshotMin().DebugJson());
+            info.InsertValue("bytes", oldestPortion->GetTotalBlobBytes());
+            info.InsertValue("id", oldestPortion->GetPortionId());
+        }
+        std::shared_ptr<TPortionInfo> youngestPortion = GetYoungestPortion(true);
+        if (youngestPortion) {
+            auto& info = result.InsertValue("youngest", NJson::JSON_MAP);
+            info.InsertValue("snapshot", youngestPortion->RecordSnapshotMin().DebugJson());
+            info.InsertValue("bytes", youngestPortion->GetTotalBlobBytes());
+            info.InsertValue("id", youngestPortion->GetPortionId());
+        }
+
+        return result;
+    }
 };
 
 class TPortionsBucket: public TMoveOnly {
@@ -656,6 +680,30 @@ private:
             NYDBTest::TControllers::GetColumnShardController()->GetLagForCompactionBeforeTierings(TDuration::Minutes(60)));
     }
 public:
+    TTaskDescription GetTaskDescription() const {
+        TTaskDescription result(MainPortion ? MainPortion->GetPortionId() : 0);
+        result.SetWeight(GetWeight());
+        if (MainPortion) {
+            result.SetStart(MainPortion->IndexKeyStart().DebugString());
+        } else {
+            result.SetStart("NO_BORDER");
+        }
+        if (NextBorder) {
+            result.SetFinish(NextBorder->DebugString());
+        } else {
+            result.SetFinish("NO_BORDER");
+        }
+        NJson::TJsonValue description;
+        description.InsertValue("others", Others.DebugJson());
+        if (MainPortion) {
+            description.InsertValue("main_portion", MainPortion->GetPortionId());
+            description.InsertValue("snapshot_max", MainPortion->RecordSnapshotMax().DebugJson());
+            description.InsertValue("bytes", MainPortion->GetTotalBlobBytes());
+        }
+        result.SetDetails(description.GetStringRobust());
+        return result;
+    }
+
     class TModificationGuard: TNonCopyable {
     private:
         TPortionsBucket& Owner;
@@ -1077,6 +1125,14 @@ public:
         }
     }
 
+    std::vector<TTaskDescription> GetTasksDescription() const {
+        std::vector<TTaskDescription> result;
+        for (auto&& i : Buckets) {
+            result.emplace_back(i.second->GetTaskDescription());
+        }
+        return result;
+    }
+
     void AddPortion(const std::shared_ptr<TPortionInfo>& portion, const TInstant now) {
         if (portion->GetTotalBlobBytes() < NYDBTest::TControllers::GetColumnShardController()->GetSmallPortionSizeDetector(SmallPortionDetectSizeLimit)) {
             Counters->SmallPortions->AddPortion(portion);
@@ -1129,6 +1185,9 @@ private:
     std::shared_ptr<TCounters> Counters;
     TPortionBuckets Buckets;
     const std::shared_ptr<IStoragesManager> StoragesManager;
+    virtual std::vector<TTaskDescription> DoGetTasksDescription() const override {
+        return Buckets.GetTasksDescription();
+    }
 
 protected:
     virtual bool DoIsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const override {

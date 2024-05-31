@@ -1,4 +1,6 @@
-#include "ydb/core/persqueue/partition_scale_manager.h"
+#include "partition_scale_manager.h"
+
+#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -72,7 +74,7 @@ std::pair<std::vector<TPartitionSplit>, std::vector<TPartitionMerge>> TPartition
         if (BalancerConfig.PartitionGraph.GetPartition(partitionId)->Children.empty()) {
             auto from = partition.KeyRange.FromBound ? *partition.KeyRange.FromBound : "";
             auto to = partition.KeyRange.ToBound ?*partition.KeyRange.ToBound : "";
-            auto mid = GetRangeMid(from, to);
+            auto mid = MiddleOf(from, to);
             if (mid.empty()) {
                 itSplit = PartitionsToSplit.erase(itSplit);
                 LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
@@ -126,63 +128,6 @@ void TPartitionScaleManager::UpdateBalancerConfig(NKikimrPQ::TUpdateBalancerConf
 
 void TPartitionScaleManager::UpdateDatabasePath(const TString& dbPath) {
     DatabasePath = dbPath;
-}
-
-std::pair<ui16, bool> Mid(ui16 a, ui16 b) {
-    if (a == 0xFF) {
-        return {0xFF, false};
-    }
-    if (a + 1 < b) {
-        return {(a + b) / 2, true};
-    }
-    if (b < a) {
-        ui16 n = (a + b + 0x100) / 2;
-        return {(n < 0x100) ? n : 0xFF, true};
-    }
-
-    return {a, false};
-}
-
-TString TPartitionScaleManager::GetRangeMid(const TString& from, const TString& to) {
-    if (from > to && to.size() != 0) {
-        return "";
-    }
-
-    auto GetChar = [](const TString& str, size_t i, unsigned char defaultValue) {
-        if (i >= str.size()) {
-            return defaultValue;
-        }
-        return static_cast<unsigned char>(str[i]);
-    };
-
-    TStringBuilder result;
-    if (from.empty() && to.empty()) {
-        result << static_cast<unsigned char>(0x7F);
-        return result;
-    }
-
-    bool splitted = false;
-
-    size_t maxSize = std::max(from.size(), to.size());
-    for (size_t i = 0; i < maxSize; ++i) {
-        ui16 f = GetChar(from, i, 0);
-        ui16 t = GetChar(to, i, 0xFF);
-
-        if (!splitted) {
-            auto [n, s] = Mid(f, t);
-            result << static_cast<unsigned char>(n);
-            splitted = s;
-        } else {
-            auto n = (f + t) / 2;
-            result << static_cast<unsigned char>(n);
-            break;
-        }
-    }
-
-    if (result == from) {
-        result << static_cast<unsigned char>(0xFF);
-    }
-    return result;
 }
 
 } // namespace NPQ

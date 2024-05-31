@@ -3,6 +3,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_topic/ut/ut_utils/topic_sdk_test_setup.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/partition_scale_manager.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_env.h>
@@ -649,32 +650,42 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         };
 
         {
-            auto res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid("", "");
+            auto res = NKikimr::NPQ::MiddleOf("", "");
             UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "7F");
         }
 
         {
-            auto res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid("", AsString({0x7F}));
+            auto res = NKikimr::NPQ::MiddleOf("", AsString({0x7F}));
             UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "3F");
         }
 
         {
-            auto res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(AsString({0x7F}), "");
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x7F}), "");
             UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "BF");
         }
 
         {
-            auto res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(AsString({0x7F}), AsString({0xBF}));
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x7F}), AsString({0xBF}));
             UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "9F");
         }
 
         {
-            auto res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(AsString({0x01}), AsString({0x02}));
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x01}), AsString({0x02}));
             UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "01 FF");
         }
 
         {
-            auto res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(AsString({0x01, 0xFF}), AsString({0x02, 0x00}));
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x01, 0x7F}), AsString({0x02}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "01 BF");
+        }
+
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x02}), AsString({0x03, 0x7F}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "02 3F");
+        }
+
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x01, 0xFF}), AsString({0x02, 0x00}));
             UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "01 FF FF");
         }
     }

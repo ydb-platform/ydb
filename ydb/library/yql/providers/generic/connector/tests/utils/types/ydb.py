@@ -80,6 +80,10 @@ class Timestamp(PrimitiveType):
     pass
 
 
+class Interval(PrimitiveType):
+    pass
+
+
 class NonNullable(Type):
     '''
     See https://ydb.tech/docs/ru/yql/reference/types/optional#tipy-dannyh,-dopuskayushie-znachenie-null

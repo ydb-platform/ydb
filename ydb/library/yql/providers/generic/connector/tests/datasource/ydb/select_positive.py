@@ -336,7 +336,7 @@ class Factory:
 
     def _constant(self) -> Sequence[TestCase]:
         '''
-        In this test case set we check SELECT 42 from a ch table.
+        In this test case set we check SELECT 42 from YDB table.
         '''
 
         schema = Schema(
@@ -377,7 +377,7 @@ class Factory:
 
     def _count(self) -> Sequence[TestCase]:
         '''
-        In this test case set we check SELECT COUNT(*) from a ch table.
+        In this test case set we check SELECT COUNT(*) from YDB table.
         '''
 
         schema = Schema(
@@ -421,7 +421,7 @@ class Factory:
                 Column(
                     name='col_01_string',
                     ydb_type=makeYdbTypeFromTypeID(Type.INT32),
-                    data_source_type=DataSourceType(ydb=types_ydb.Int32().to_non_nullable()),
+                    data_source_type=DataSourceType(ydb=types_ydb.Int32()),
                 ),
             ),
         )
@@ -455,7 +455,7 @@ class Factory:
                 Column(
                     name='col_01_interval',
                     ydb_type=makeYdbTypeFromTypeID(Type.BOOL),
-                    data_source_type=DataSourceType(ydb=types_ydb.Bool().to_non_nullable()),
+                    data_source_type=DataSourceType(ydb=types_ydb.Interval()),
                 ),
             ),
         )

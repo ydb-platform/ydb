@@ -111,7 +111,7 @@ set -ex
             NULL, NULL, NULL);
     COMMIT;
 
-    CREATE TABLE constant_NATIVE (col_00_id Int32, PRIMARY KEY (col_00_id));
+    CREATE TABLE constant_NATIVE (col_00_id Int32 NOT NULL, PRIMARY KEY (col_00_id));
     COMMIT;
     INSERT INTO constant_NATIVE (col_00_id) VALUES
       (1),
@@ -119,7 +119,7 @@ set -ex
       (3);
     COMMIT;
 
-    CREATE TABLE count_NATIVE (col_00_id Int32, PRIMARY KEY (col_00_id));
+    CREATE TABLE count_NATIVE (col_00_id Int32 NOT NULL, PRIMARY KEY (col_00_id));
     COMMIT;
     INSERT INTO count_NATIVE (col_00_id) VALUES
       (1),
@@ -128,7 +128,7 @@ set -ex
       (4);
     COMMIT;
 
-    CREATE TABLE pushdown_NATIVE (col_00_id Int32, col_01_string String, PRIMARY KEY (col_00_id));
+    CREATE TABLE pushdown_NATIVE (col_00_id Int32 NOT NULL, col_01_string String, PRIMARY KEY (col_00_id));
     COMMIT;
     INSERT INTO pushdown_NATIVE (col_00_id, col_01_string) VALUES
       (1, "one"),
@@ -138,7 +138,7 @@ set -ex
 
     -- As of 2024.05.31, INTERVAL type is not supported, so we use it to check behavior of connector
     -- when reading table containing usupported type columns.
-    CREATE TABLE unsupported_types_NATIVE (col_00_id Int32, col_01_interval INTERVAL, PRIMARY KEY (col_00_id));
+    CREATE TABLE unsupported_types_NATIVE (col_00_id Int32 NOT NULL, col_01_interval INTERVAL, PRIMARY KEY (col_00_id));
     COMMIT;
     INSERT INTO unsupported_types_NATIVE (col_00_id, col_01_interval) VALUES
       (1, DATE("2024-01-01") - DATE("2023-01-01")),

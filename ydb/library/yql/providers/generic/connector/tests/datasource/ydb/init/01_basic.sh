@@ -127,6 +127,14 @@ set -ex
       (3),
       (4);
     COMMIT;
+
+    CREATE TABLE pushdown_NATIVE (col_00_id Int32, col_01_string String, PRIMARY KEY (col_00_id));
+    COMMIT;
+    INSERT INTO pushdown_NATIVE (col_00_id, col_01_string) VALUES
+      (1, "one"),
+      (2, "two"),
+      (3, "three");
+    COMMIT;
   '
 
 echo $(date +"%T.%6N") "SUCCESS"

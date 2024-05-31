@@ -412,57 +412,39 @@ class Factory:
 
         return [tc]
 
-    # def _pushdown(self) -> TestCase:
-    #    schema = Schema(
-    #        columns=ColumnList(
-    #            Column(
-    #                name='col_int32',
-    #                ydb_type=Type.INT32,
-    #                data_source_type=DataSourceType(ydb=clickhouse.Int32()),
-    #            ),
-    #            Column(
-    #                name='col_string',
-    #                ydb_type=Type.UTF8,
-    #                data_source_type=DataSourceType(ydb=clickhouse.String()),
-    #            ),
-    #        ),
-    #    )
+    def _pushdown(self) -> TestCase:
+        schema = Schema(
+            columns=ColumnList(
+                Column(
+                    name='col_00_id',
+                    ydb_type=makeYdbTypeFromTypeID(Type.INT32),
+                    data_source_type=DataSourceType(ydb=types_ydb.Int32().to_non_nullable()),
+                ),
+                Column(
+                    name='col_01_string',
+                    ydb_type=makeYdbTypeFromTypeID(Type.INT32),
+                    data_source_type=DataSourceType(ydb=types_ydb.Int32().to_non_nullable()),
+                ),
+            ),
+        )
 
-    #    data_in = [
-    #        [
-    #            1,
-    #            'one',
-    #        ],
-    #        [
-    #            2,
-    #            'two',
-    #        ],
-    #        [
-    #            3,
-    #            'three',
-    #        ],
-    #    ]
+        data_out = [
+            ['one'],
+        ]
 
-    #    data_out = [
-    #        ['one'],
-    #    ]
-
-    #    data_source_kind = EDataSourceKind.CLICKHOUSE
-    #    test_case_name = 'pushdown'
-
-    #    return [
-    #        TestCase(
-    #            name_=test_case_name,
-    #            data_in=data_in,
-    #            data_out_=data_out,
-    #            pragmas=dict({'generic.UsePredicatePushdown': 'true'}),
-    #            select_what=SelectWhat(SelectWhat.Item(name='col_string')),
-    #            select_where=SelectWhere('col_int32 = 1'),
-    #            data_source_kind=data_source_kind,
-    #            protocol=EProtocol.NATIVE,
-    #            schema=schema,
-    #        )
-    #    ]
+        return [
+            TestCase(
+                name_='pushdown',
+                data_in=None,
+                data_out_=data_out,
+                pragmas=dict({'generic.UsePredicatePushdown': 'true'}),
+                select_what=SelectWhat(SelectWhat.Item(name='col_01_string')),
+                select_where=SelectWhere('col_00_id = 1'),
+                data_source_kind=EDataSourceKind.YDB,
+                protocol=EProtocol.NATIVE,
+                schema=schema,
+            )
+        ]
 
     def make_test_cases(self) -> Sequence[TestCase]:
         return list(
@@ -472,6 +454,6 @@ class Factory:
                 # FIXME: YQ-3314
                 # self._constant(),
                 # self._count(),
-                # self._pushdown(),
+                self._pushdown(),
             )
         )

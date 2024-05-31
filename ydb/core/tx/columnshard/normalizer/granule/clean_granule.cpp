@@ -96,7 +96,6 @@ public:
 
         std::vector<INormalizerChanges::TPtr> tasks;
         ui64 fullChunksCount = 0;
-        THashSet<ui64> portionIds;
         {
             auto rowset = db.Table<Schema::IndexColumns>().Select();
             if (!rowset.IsReady()) {
@@ -107,7 +106,6 @@ public:
 
             while (!rowset.EndOfSet()) {
                 if (rowset.GetValue<Schema::IndexColumns::Granule>() || rowset.GetValue<Schema::IndexColumns::Index>()) {
-                    AFL_VERIFY(portionIds.emplace(rowset.GetValue<Schema::IndexColumns::Portion>()).second);
                     TChunkData key(rowset);
 
                     changes->AddChunk(std::move(key));

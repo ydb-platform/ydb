@@ -159,7 +159,7 @@ WITH (
 );
 ```
 
-Creating a table with enabled `TTL` for automatically removing outdated records from the table. A record is deleted when the value of one of the columns (configurable by the user) of type: `Date`, `Datetime`, or `Timestamp` becomes greater than the current time (Epoch time). The lifespan of records can be extended (globally for the entire table) by the value specified in the `Interval` function:
+Creating a table with enabled [TTL](../../../../concepts/ttl.md) for automatically removing outdated records from the table. A record is deleted when the value of one of the columns (configurable by the user) of type: `Date`, `Datetime`, or `Timestamp` becomes greater than the current time (Epoch time). The lifespan of records can be extended (globally for the entire table) by the value specified in the `Interval` function:
 ```sql
 CREATE TABLE my_table (
     id Uint64,

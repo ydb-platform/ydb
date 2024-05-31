@@ -1160,7 +1160,7 @@ bool TTable::TryToReduceMemoryAndWait() {
     TableBucketsSpillers[largestBucketIndex].SpillBucket(std::move(TableBuckets[largestBucketIndex]));
     TableBuckets[largestBucketIndex] = TTableBucket{};
 
-    return TableBucketsSpillers[largestBucketIndex].HasRunningAsyncIoOperation();
+    return TableBucketsSpillers[largestBucketIndex].IsProcessingSpilling();
 }
 
 void TTable::UpdateSpilling() {
@@ -1319,12 +1319,6 @@ TTableBucket&& TTableBucketSpiller::ExtractBucket() {
     return std::move(CurrentBucket);
 }
 
-bool TTableBucketSpiller::HasRunningAsyncIoOperation() const {
-    return StateUi64Adapter.HasRunningAsyncIoOperation()
-        || StateUi32Adapter.HasRunningAsyncIoOperation()
-        || StateCharAdapter.HasRunningAsyncIoOperation();
-}
-
 bool TTableBucketSpiller::IsInMemory() const {
     return State == EState::InMemory;
 }
@@ -1358,37 +1352,37 @@ void TTableBucketSpiller::ProcessBucketSpilling() {
     while (NextVectorToProcess != ENextVectorToProcess::None) {
         switch (NextVectorToProcess) {
             case ENextVectorToProcess::KeyAndVals:
-                if (StateUi64Adapter.HasRunningAsyncIoOperation() || !StateUi64Adapter.IsAcceptingData()) return;
+                if (!StateUi64Adapter.IsAcceptingData()) return;
 
                 StateUi64Adapter.AddData(std::move(CurrentBucket.KeyIntVals));
                 NextVectorToProcess = ENextVectorToProcess::DataIntVals;
                 break;
             case ENextVectorToProcess::DataIntVals:
-                if (StateUi64Adapter.HasRunningAsyncIoOperation() || !StateUi64Adapter.IsAcceptingData()) return;
+                if (!StateUi64Adapter.IsAcceptingData()) return;
 
                 StateUi64Adapter.AddData(std::move(CurrentBucket.DataIntVals));
                 NextVectorToProcess = ENextVectorToProcess::StringsValues;
                 break;
             case ENextVectorToProcess::StringsValues:
-                if (StateCharAdapter.HasRunningAsyncIoOperation() || !StateCharAdapter.IsAcceptingData()) return;
+                if (!StateCharAdapter.IsAcceptingData()) return;
 
                 StateCharAdapter.AddData(std::move(CurrentBucket.StringsValues));
                 NextVectorToProcess = ENextVectorToProcess::StringsOffsets;
                 break;
             case ENextVectorToProcess::StringsOffsets:
-                if (StateUi32Adapter.HasRunningAsyncIoOperation() || !StateUi32Adapter.IsAcceptingData()) return;
+                if (!StateUi32Adapter.IsAcceptingData()) return;
 
                 StateUi32Adapter.AddData(std::move(CurrentBucket.StringsOffsets));
                 NextVectorToProcess = ENextVectorToProcess::InterfaceValues;
                 break;
             case ENextVectorToProcess::InterfaceValues:
-                if (StateCharAdapter.HasRunningAsyncIoOperation() || !StateCharAdapter.IsAcceptingData()) return;
+                if (!StateCharAdapter.IsAcceptingData()) return;
 
                 StateCharAdapter.AddData(std::move(CurrentBucket.InterfaceValues));
                 NextVectorToProcess = ENextVectorToProcess::InterfaceOffsets;
                 break;
             case ENextVectorToProcess::InterfaceOffsets:
-                if (StateUi32Adapter.HasRunningAsyncIoOperation() || !StateUi32Adapter.IsAcceptingData()) return;
+                if (!StateUi32Adapter.IsAcceptingData()) return;
 
                 StateUi32Adapter.AddData(std::move(CurrentBucket.InterfaceOffsets));
                 NextVectorToProcess = ENextVectorToProcess::None;
@@ -1433,71 +1427,85 @@ void TTableBucketSpiller::ProcessBucketRestoration() {
     while (NextVectorToProcess != ENextVectorToProcess::None) {
         switch (NextVectorToProcess) {
             case ENextVectorToProcess::KeyAndVals:
-                if (StateUi64Adapter.HasRunningAsyncIoOperation()) return;
-
-                if (!StateUi64Adapter.IsDataReady()) {
-                    StateUi64Adapter.RequestNextVector();
-                    if (StateUi64Adapter.HasRunningAsyncIoOperation()) return;
+                if (StateUi64Adapter.IsDataReady()) {
+                    AppendVector(CurrentBucket.KeyIntVals, StateUi64Adapter.ExtractVector());
+                    NextVectorToProcess = ENextVectorToProcess::DataIntVals;
+                    break;
                 }
-                AppendVector(CurrentBucket.KeyIntVals, StateUi64Adapter.ExtractVector());
-                NextVectorToProcess = ENextVectorToProcess::DataIntVals;
-                break;
+
+                if (StateUi64Adapter.IsAcceptingDataRequests()) {
+                    StateUi64Adapter.RequestNextVector();
+                    break;
+                }
+                return;
             case ENextVectorToProcess::DataIntVals:
-                if (StateUi64Adapter.HasRunningAsyncIoOperation()) return;
+                if (StateUi64Adapter.IsDataReady()) {
+                    AppendVector(CurrentBucket.DataIntVals, StateUi64Adapter.ExtractVector());
+                    NextVectorToProcess = ENextVectorToProcess::StringsValues;
+                    break;
+                }
 
-                if (!StateUi64Adapter.IsDataReady()) {
+                if (StateUi64Adapter.IsAcceptingDataRequests()) {
                     StateUi64Adapter.RequestNextVector();
-                    if (StateUi64Adapter.HasRunningAsyncIoOperation()) return;
+                    break;
                 }
-                AppendVector(CurrentBucket.DataIntVals, StateUi64Adapter.ExtractVector());
-                NextVectorToProcess = ENextVectorToProcess::StringsValues;
-                break;
+                return;
             case ENextVectorToProcess::StringsValues:
-                if (StateCharAdapter.HasRunningAsyncIoOperation()) return;
-
-                if (!StateCharAdapter.IsDataReady()) {
-                    StateCharAdapter.RequestNextVector();
-                    if (StateCharAdapter.HasRunningAsyncIoOperation()) return;
+                if (StateCharAdapter.IsDataReady()) {
+                    AppendVector(CurrentBucket.StringsValues, StateCharAdapter.ExtractVector());
+                    NextVectorToProcess = ENextVectorToProcess::StringsOffsets;
+                    break;
                 }
-                AppendVector(CurrentBucket.StringsValues, StateCharAdapter.ExtractVector());
-                NextVectorToProcess = ENextVectorToProcess::StringsOffsets;
-                break;
+
+                if (StateCharAdapter.IsAcceptingDataRequests()) {
+                    StateCharAdapter.RequestNextVector();
+                    break;
+                }
+                return;
             case ENextVectorToProcess::StringsOffsets:
-                if (StateUi32Adapter.HasRunningAsyncIoOperation()) return;
-
-                if (!StateUi32Adapter.IsDataReady()) {
-                    StateUi32Adapter.RequestNextVector();
-                    if (StateUi32Adapter.HasRunningAsyncIoOperation()) return;
+                if (StateUi32Adapter.IsDataReady()) {
+                    AppendVector(CurrentBucket.StringsOffsets, StateUi32Adapter.ExtractVector());
+                    NextVectorToProcess = ENextVectorToProcess::InterfaceValues;
+                    break;
                 }
-                AppendVector(CurrentBucket.StringsOffsets, StateUi32Adapter.ExtractVector());
-                NextVectorToProcess = ENextVectorToProcess::InterfaceValues;
-                break;
+
+                if (StateUi32Adapter.IsAcceptingDataRequests()) {
+                    StateUi32Adapter.RequestNextVector();
+                    break;
+                }
+                return;
             case ENextVectorToProcess::InterfaceValues:
-                if (StateCharAdapter.HasRunningAsyncIoOperation()) return;
+                if (StateCharAdapter.IsDataReady()) {
+                    AppendVector(CurrentBucket.InterfaceValues, StateCharAdapter.ExtractVector());
+                    NextVectorToProcess = ENextVectorToProcess::InterfaceOffsets;
+                    break;
+                }
 
-                if (!StateCharAdapter.IsDataReady()) {
+                if (StateCharAdapter.IsAcceptingDataRequests()) {
                     StateCharAdapter.RequestNextVector();
-                    if (StateCharAdapter.HasRunningAsyncIoOperation()) return;
+                    break;
                 }
-                AppendVector(CurrentBucket.InterfaceValues, StateCharAdapter.ExtractVector());
-                NextVectorToProcess = ENextVectorToProcess::InterfaceOffsets;
-                break;
+                return;
             case ENextVectorToProcess::InterfaceOffsets:
-                if (StateUi32Adapter.HasRunningAsyncIoOperation()) return;
+                if (StateUi32Adapter.IsDataReady()) {
+                    AppendVector(CurrentBucket.InterfaceOffsets, StateUi32Adapter.ExtractVector());
+                    
+                    SpilledBucketsCount--;
+                    if (SpilledBucketsCount == 0) {
+                        NextVectorToProcess = ENextVectorToProcess::None;
+                        State = EState::WaitingForExtraction;
+                    } else {
+                        NextVectorToProcess = ENextVectorToProcess::KeyAndVals;
+                    }
+                    
+                    break;
+                }
 
-                if (!StateUi32Adapter.IsDataReady()) {
+                if (StateUi32Adapter.IsAcceptingDataRequests()) {
                     StateUi32Adapter.RequestNextVector();
-                    if (StateUi32Adapter.HasRunningAsyncIoOperation()) return;
+                    break;
                 }
-                AppendVector(CurrentBucket.InterfaceOffsets, StateUi32Adapter.ExtractVector());
-                SpilledBucketsCount--;
-                if (SpilledBucketsCount == 0) {
-                    NextVectorToProcess = ENextVectorToProcess::None;
-                    State = EState::WaitingForExtraction;
-                } else {
-                    NextVectorToProcess = ENextVectorToProcess::KeyAndVals;
-                }
-                break;
+                return;
             default:
                 return;
 

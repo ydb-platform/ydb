@@ -2,7 +2,7 @@ from typing import List
 from math import isclose
 
 
-def rows_equal(expected: List, actual: List):
+def assert_rows_equal(expected: List, actual: List):
     assert len(expected) == len(actual)
 
     for i in range(len(expected)):
@@ -13,9 +13,9 @@ def rows_equal(expected: List, actual: List):
         assert expected[i] == actual[i], (f"Error at position {i}", expected, actual)
 
 
-def data_outs_equal(
+def assert_data_outs_equal(
     expected: List,
     actual: List,
 ):
     assert len(expected) == len(actual)
-    all(map(rows_equal, expected, actual))
+    all(map(assert_rows_equal, expected, actual))

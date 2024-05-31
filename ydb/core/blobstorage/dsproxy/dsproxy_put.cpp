@@ -136,7 +136,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
         ++AccelerateRequestsSent;
         Action(true);
 //        *(IsMultiPutMode ? Mon->NodeMon->AccelerateEvVMultiPutCount : Mon->NodeMon->AccelerateEvVPutCount) += v.size();
-        AccelerateIfNeeded();
+        TryToScheduleNextAcceleration();
     }
 
     void HandleIncarnation(TMonotonic timestamp, ui32 orderNumber, ui64 incarnationGuid) {
@@ -270,7 +270,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
             if (Action()) {
                 return;
             }
-            AccelerateIfNeeded();
+            TryToScheduleNextAcceleration();
             SanityCheck(); // May Die
         }
     }
@@ -360,11 +360,11 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
         if (Action()) {
             return;
         }
-        AccelerateIfNeeded();
+        TryToScheduleNextAcceleration();
         SanityCheck(); // May Die
     }
 
-    void AccelerateIfNeeded() {
+    void TryToScheduleNextAcceleration() {
         if (!IsAccelerateScheduled && AccelerateRequestsSent < 2) {
             if (WaitingVDiskCount > 0 && WaitingVDiskCount <= 2 && RequestsSent > 1) {
                 ui64 timeToAccelerateUs = Max<ui64>(1, PutImpl.GetTimeToAccelerateNs(LogCtx, 2 - AccelerateRequestsSent) / 1000);

@@ -66,7 +66,7 @@ struct TDiskDelayPrediction {
     ui32 DiskIdx;
 
     bool operator<(const TDiskDelayPrediction& other) const {
-        return PredictedNs < other.PredictedNs;
+        return PredictedNs > other.PredictedNs;
     }
 };
 

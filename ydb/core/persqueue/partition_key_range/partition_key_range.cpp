@@ -6,10 +6,6 @@ namespace NKikimr {
 namespace NPQ {
 
 TString MiddleOf(const TString& from, const TString& to) {
-    if (from > to && to.size() != 0) {
-        return "";
-    }
-
     auto GetChar = [](const TString& str, size_t i, unsigned char defaultValue) {
         if (i >= str.size()) {
             return defaultValue;
@@ -27,6 +23,7 @@ TString MiddleOf(const TString& from, const TString& to) {
     bool diffFound = false;
 
     size_t maxSize = std::max(from.size(), to.size());
+    result.reserve(maxSize + 1);
     for (size_t i = 0; i < maxSize; ++i) {
         ui16 f = GetChar(from, i, 0);
         ui16 t = GetChar(to, i, 0xFF);
@@ -82,7 +79,7 @@ TString MiddleOf(const TString& from, const TString& to) {
     }
 
     if (result == from) {
-        result << static_cast<unsigned char>(0xFFu);
+        result << static_cast<unsigned char>(diffFound ? 0xFFu: 0x7Fu);
     }
 
     return result;

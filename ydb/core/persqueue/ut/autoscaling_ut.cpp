@@ -713,6 +713,10 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             auto res = NKikimr::NPQ::MiddleOf(AsString({0x03, 0x40, 0x30}), AsString({0x04, 0x40, 0x20}));
             UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "03 C0 A8");
         }
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x01, 0xFF, 0xFF, 0xFF}), AsString({0x02, 0x00, 0x00, 0x10}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "02 00 00 07");
+        }
     }
 }
 

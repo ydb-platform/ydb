@@ -54,10 +54,24 @@ TString MiddleOf(const TString& from, const TString& to) {
                 continue;
             }
 
-            result.pop_back();
+            for(size_t j = i; j > 0;) {
+                --j;
+                result.pop_back();
 
-            ui16 prev = GetChar(from, i - 1, 0);
-            result << static_cast<unsigned char>(prev + 1u);
+                ui16 prev = GetChar(from, j, 0);
+                if (prev == 0xFFu) {
+                    continue;
+                }
+
+                ++j;
+                result << static_cast<unsigned char>(prev + 1u);
+
+                for (; j < i; ++j) {
+                    result << static_cast<unsigned char>(0u);
+                }
+
+                break;
+            }
             result << static_cast<unsigned char>(n - 0x100u);
             splitted = true;
         } else {

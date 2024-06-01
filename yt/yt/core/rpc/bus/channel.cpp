@@ -51,10 +51,14 @@ class TBusChannel
     : public IChannel
 {
 public:
-    explicit TBusChannel(IBusClientPtr client)
+    TBusChannel(
+        IBusClientPtr client,
+        IMemoryUsageTrackerPtr memoryUsageTracker)
         : Client_(std::move(client))
+        , MemoryUsageTracker_(std::move(memoryUsageTracker))
     {
         YT_VERIFY(Client_);
+        YT_VERIFY(MemoryUsageTracker_);
     }
 
     const TString& GetEndpointDescription() const override
@@ -151,6 +155,7 @@ private:
     using TClientRequestControlPtr = TIntrusivePtr<TClientRequestControl>;
 
     const IBusClientPtr Client_;
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_;
 
     TSingleShotCallbackList<void(const TError&)> Terminated_;
 
@@ -198,7 +203,9 @@ private:
 
             bucket.Sessions.reserve(options.MultiplexingParallelism);
             while (bucket.Sessions.size() <= index) {
-                auto session = New<TSession>(options.MultiplexingBand);
+                auto session = New<TSession>(
+                    options.MultiplexingBand,
+                    MemoryUsageTracker_);
                 auto messageHandler = New<TMessageHandler>(session);
 
                 auto bus = Client_->CreateBus(
@@ -282,9 +289,14 @@ private:
         : public IMessageHandler
     {
     public:
-        explicit TSession(EMultiplexingBand band)
+        TSession(
+            EMultiplexingBand band,
+            IMemoryUsageTrackerPtr memoryUsageTracker)
             : TosLevel_(TTcpDispatcher::Get()->GetTosLevelForBand(band))
-        { }
+            , MemoryUsageTracker_(std::move(memoryUsageTracker))
+        {
+            YT_VERIFY(MemoryUsageTracker_);
+        }
 
         void Initialize(IBusPtr bus)
         {
@@ -627,6 +639,7 @@ private:
 
     private:
         const TTosLevel TosLevel_;
+        const IMemoryUsageTrackerPtr MemoryUsageTracker_;
 
         IBusPtr Bus_;
         std::atomic<bool> BusReady_ = false;
@@ -899,11 +912,24 @@ private:
                     error = FromProto<TError>(header.error());
                 }
                 if (error.IsOK()) {
-                    NotifyResponse(
-                        requestId,
-                        requestControl,
-                        responseHandler,
-                        std::move(message));
+                    message = TrackMemory(MemoryUsageTracker_, std::move(message));
+                    if (MemoryUsageTracker_->IsExceeded()) {
+                        auto error = TError(
+                            NRpc::EErrorCode::MemoryOverflow,
+                            "Response is dropped due to high memory pressure");
+                        requestControl->ProfileError(error);
+                        NotifyError(
+                            requestControl,
+                            responseHandler,
+                            TStringBuf("Response is dropped due to high memory pressure"),
+                            error);
+                    } else {
+                        NotifyResponse(
+                            requestId,
+                            requestControl,
+                            responseHandler,
+                            std::move(message));
+                    }
                 } else {
                     requestControl->ProfileError(error);
                     if (error.GetCode() == EErrorCode::PoisonPill) {
@@ -1235,11 +1261,16 @@ private:
     };
 };
 
-IChannelPtr CreateBusChannel(IBusClientPtr client)
+IChannelPtr CreateBusChannel(
+    IBusClientPtr client,
+    IMemoryUsageTrackerPtr memoryUsageTracker)
 {
     YT_VERIFY(client);
+    YT_VERIFY(memoryUsageTracker);
 
-    return New<TBusChannel>(std::move(client));
+    return New<TBusChannel>(
+        std::move(client),
+        std::move(memoryUsageTracker));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1253,7 +1284,9 @@ public:
         IMemoryUsageTrackerPtr memoryUsageTracker)
         : Config_(ConvertToNode(std::move(config)))
         , MemoryUsageTracker_(std::move(memoryUsageTracker))
-    { }
+    {
+        YT_VERIFY(MemoryUsageTracker_);
+    }
 
     IChannelPtr CreateChannel(const TString& address) override
     {
@@ -1263,7 +1296,9 @@ public:
             std::move(config),
             GetYTPacketTranscoderFactory(),
             MemoryUsageTracker_);
-        return CreateBusChannel(std::move(client));
+        return CreateBusChannel(
+            std::move(client),
+            MemoryUsageTracker_);
     }
 
 private:
@@ -1303,7 +1338,9 @@ public:
             std::move(config),
             GetYTPacketTranscoderFactory(),
             MemoryUsageTracker_);
-        return CreateBusChannel(std::move(client));
+        return CreateBusChannel(
+            std::move(client),
+            MemoryUsageTracker_);
     }
 
 private:

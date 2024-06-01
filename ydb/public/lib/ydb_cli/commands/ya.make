@@ -9,6 +9,7 @@ SRCS(
     topic_read_scenario.cpp
     topic_write_scenario.cpp
     topic_readwrite_scenario.cpp
+    tpcc_workload.cpp
     tpch.cpp
     query_workload.cpp
     ydb_admin.cpp

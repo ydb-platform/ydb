@@ -1,6 +1,7 @@
 #include "ydb_workload.h"
 
 #include "click_bench.h"
+#include "tpcc_workload.h"
 #include "tpch.h"
 #include "topic_workload/topic_workload.h"
 #include "transfer_workload/transfer_workload.h"
@@ -51,6 +52,7 @@ TCommandWorkload::TCommandWorkload()
     AddCommand(std::make_unique<TCommandWorkloadTopic>());
     AddCommand(std::make_unique<TCommandWorkloadTransfer>());
     AddCommand(std::make_unique<TCommandTpch>());
+    AddCommand(std::make_unique<TCommandTPCCWorkload>());
     AddCommand(std::make_unique<TCommandQueryWorkload>());
     for (const auto& key: NYdbWorkload::TWorkloadFactory::GetRegisteredKeys()) {
         AddCommand(std::make_unique<TWorkloadCommandRoot>(key.c_str()));

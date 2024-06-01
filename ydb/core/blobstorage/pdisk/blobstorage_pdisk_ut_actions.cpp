@@ -2758,14 +2758,7 @@ void TTestRedZoneSurvivability::TestFSM(const TActorContext &ctx) {
     case 30:
     {
         //TEST_RESPONSE(EvLogResult, ERROR);
-        TEST_PDISK_STATUS(ui32(NKikimrBlobStorage::StatusIsValid)
-            | ui32(NKikimrBlobStorage::StatusDiskSpaceCyan)
-            | ui32(NKikimrBlobStorage::StatusDiskSpaceRed)
-            | ui32(NKikimrBlobStorage::StatusDiskSpaceOrange)
-            | ui32(NKikimrBlobStorage::StatusDiskSpacePreOrange)
-            | ui32(NKikimrBlobStorage::StatusDiskSpaceLightOrange)
-            | ui32(NKikimrBlobStorage::StatusDiskSpaceYellowStop)
-            | ui32(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove));
+        TEST_PDISK_STATUS(ui32(NKikimrBlobStorage::StatusIsValid));
         VERBOSE_COUT(" Sending TEvLog to delete a chunk");
         NPDisk::TCommitRecord commitRecord;
         TRcBuf commitData = TRcBuf(TString("hello"));
@@ -2790,7 +2783,10 @@ void TTestRedZoneSurvivability::TestFSM(const TActorContext &ctx) {
     case 50:
     {
         TEST_RESPONSE(EvLogResult, OK);
-        TEST_PDISK_STATUS(ui32(NKikimrBlobStorage::StatusIsValid));
+        TEST_PDISK_STATUS(ui32(NKikimrBlobStorage::StatusIsValid)
+            | ui32(NKikimrBlobStorage::StatusDiskSpaceCyan)
+            | ui32(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)
+            | ui32(NKikimrBlobStorage::StatusDiskSpaceYellowStop));
 
         VERBOSE_COUT(" Sending TEvLog to log 3 * ChunkSize bytes");
         TRcBuf largeData = TRcBuf(PrepareData(ChunkSize * 3));
@@ -2800,7 +2796,10 @@ void TTestRedZoneSurvivability::TestFSM(const TActorContext &ctx) {
     case 60:
     {
         TEST_RESPONSE(EvLogResult, OK);
-        TEST_PDISK_STATUS(ui32(NKikimrBlobStorage::StatusIsValid));
+        TEST_PDISK_STATUS(ui32(NKikimrBlobStorage::StatusIsValid)
+            | ui32(NKikimrBlobStorage::StatusDiskSpaceCyan)
+            | ui32(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)
+            | ui32(NKikimrBlobStorage::StatusDiskSpaceYellowStop));
 
         VERBOSE_COUT(" Sending TEvLog to cut log");
         NPDisk::TCommitRecord commitRecord;

@@ -1319,9 +1319,11 @@ struct TEvCheckSpaceResult : public TEventLocal<TEvCheckSpaceResult, TEvBlobStor
     ui32 NumSlots; // number of VSlots over PDisk
     double Occupancy = 0;
     TString ErrorReason;
+    TStatusFlags LogStatusFlags;
 
     TEvCheckSpaceResult(NKikimrProto::EReplyStatus status, TStatusFlags statusFlags, ui32 freeChunks,
-            ui32 totalChunks, ui32 usedChunks, ui32 numSlots, const TString &errorReason)
+            ui32 totalChunks, ui32 usedChunks, ui32 numSlots, const TString &errorReason,
+            TStatusFlags logStatusFlags = {})
         : Status(status)
         , StatusFlags(statusFlags)
         , FreeChunks(freeChunks)
@@ -1329,6 +1331,7 @@ struct TEvCheckSpaceResult : public TEventLocal<TEvCheckSpaceResult, TEvBlobStor
         , UsedChunks(usedChunks)
         , NumSlots(numSlots)
         , ErrorReason(errorReason)
+        , LogStatusFlags(logStatusFlags)
     {}
 
     TString ToString() const {
@@ -1340,6 +1343,7 @@ struct TEvCheckSpaceResult : public TEventLocal<TEvCheckSpaceResult, TEvBlobStor
         str << " UsedChunks# " << UsedChunks;
         str << " NumSlots# " << NumSlots;
         str << " ErrorReason# \"" << ErrorReason << "\"";
+        str << " LogStatusFlags# " << StatusFlagsToString(LogStatusFlags);
         str << "}";
         return str.Str();
     }

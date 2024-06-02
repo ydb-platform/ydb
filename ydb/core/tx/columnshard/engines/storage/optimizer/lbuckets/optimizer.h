@@ -462,7 +462,8 @@ public:
         }
     }
 
-    void Actualize(const TInstant currentInstant) {
+    [[nodiscard]] TInstant Actualize(const TInstant currentInstant) {
+        TInstant result = TInstant::Max();
         auto border = GetFutureBorder();
         if (border) {
             for (auto&& i : Futures) {
@@ -470,6 +471,8 @@ public:
                     for (auto&& p : i.second) {
                         AFL_VERIFY(AddPreActual(p.second));
                     }
+                } else {
+                    result = std::min(result, i.first + FutureDetector);
                 }
             }
             while (Futures.size() && currentInstant - Futures.begin()->first >= FutureDetector) {
@@ -501,6 +504,7 @@ public:
                 AFL_VERIFY(RemoveActual(i));
             }
         }
+        return result;
     }
 
     void SplitTo(TPortionsPool& dest, const NArrow::TReplaceKey& destStart) {
@@ -626,6 +630,7 @@ private:
     const std::shared_ptr<TCounters> Counters;
     mutable std::optional<i64> LastWeight;
     TPortionsPool Others;
+    TInstant NextActualizeInstant = TInstant::Zero();
     std::optional<NArrow::TReplaceKey> NextBorder;
 
     void MoveNextBorderTo(TPortionsBucket& dest) {
@@ -652,11 +657,11 @@ private:
 public:
     class TModificationGuard: TNonCopyable {
     private:
-        const TPortionsBucket& Owner;
+        TPortionsBucket& Owner;
         const bool IsEmptyOthers = false;
         const bool HasNextBorder = false;
     public:
-        TModificationGuard(const TPortionsBucket& owner)
+        TModificationGuard(TPortionsBucket& owner)
             : Owner(owner)
             , IsEmptyOthers(Owner.Others.ActualsEmpty())
             , HasNextBorder(Owner.NextBorder)
@@ -666,6 +671,7 @@ public:
 
         ~TModificationGuard() {
             AFL_VERIFY_DEBUG(Owner.Validate());
+            Owner.NextActualizeInstant = TInstant::Zero();
             if (!Owner.MainPortion) {
                 return;
             }
@@ -790,6 +796,7 @@ public:
         std::optional<TInstant> stopInstant;
         const ui64 memLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetCompactionMemoryLimit() : 512 * 1024 * 1024;
         std::vector<std::shared_ptr<TPortionInfo>> portions = Others.GetOptimizerTaskPortions(memLimit, stopPoint);
+        bool forceMergeForTests = false;
         if (nextBorder) {
             if (MainPortion) {
                 portions.emplace_back(MainPortion);
@@ -799,10 +806,16 @@ public:
             }
         } else {
             if (MainPortion) {
-                for (auto&& i : portions) {
-                    if (MainPortion->CrossPKWith(*i)) {
-                        portions.emplace_back(MainPortion);
-                        break;
+                if (portions.size() == 1) {
+                    AFL_VERIFY(NYDBTest::TControllers::GetColumnShardController()->GetCompactionControl() == NYDBTest::EOptimizerCompactionWeightControl::Force);
+                    forceMergeForTests = true;
+                    portions.emplace_back(MainPortion);
+                } else {
+                    for (auto&& i : portions) {
+                        if (MainPortion->CrossPKWith(*i)) {
+                            portions.emplace_back(MainPortion);
+                            break;
+                        }
                     }
                 }
             }
@@ -826,9 +839,9 @@ public:
         auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, portions, saverContext);
         if (MainPortion) {
             NArrow::NMerger::TSortableBatchPosition pos(MainPortion->IndexKeyStart().ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false);
-            result->AddCheckPoint(pos, true, false);
+            result->AddCheckPoint(pos, false, false);
         }
-        if (!nextBorder && MainPortion) {
+        if (!nextBorder && MainPortion && !forceMergeForTests) {
             NArrow::NMerger::TSortableBatchPosition pos(MainPortion->IndexKeyEnd().ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false);
             result->AddCheckPoint(pos, true, false);
         }
@@ -843,15 +856,15 @@ public:
         auto gChartsThis = StartModificationGuard();
         if (NextBorder && MainPortion) {
             AFL_VERIFY(portion->CrossPKWith(MainPortion->IndexKeyStart(), *NextBorder));
+#ifndef NDEBUG
             auto oldPortionInfo = GetOldestPortion(true);
             auto youngPortionInfo = GetYoungestPortion(true);
             AFL_VERIFY(oldPortionInfo && youngPortionInfo);
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)
-                ("event", "other_not_final")("delta", youngPortionInfo->RecordSnapshotMax().GetPlanStep() - oldPortionInfo->RecordSnapshotMax().GetPlanStep())
-                ("main", MainPortion->DebugString(true))
-                ("current", portion->DebugString(true))
-                ("oldest", oldPortionInfo->DebugString(true))("young", youngPortionInfo->DebugString(true))
-                ("bucket_from", MainPortion->IndexKeyStart().DebugString())("bucket_to", NextBorder->DebugString());
+            ("event", "other_not_final")("delta", youngPortionInfo->RecordSnapshotMax().GetPlanStep() - oldPortionInfo->RecordSnapshotMax().GetPlanStep())
+                ("main", MainPortion->DebugString(true))("current", portion->DebugString(true))("oldest", oldPortionInfo->DebugString(true))
+                ("young", youngPortionInfo->DebugString(true))("bucket_from", MainPortion->IndexKeyStart().DebugString())("bucket_to", NextBorder->DebugString());
+#endif
         }
         Others.Add(portion, now);
     }
@@ -869,8 +882,11 @@ public:
     }
 
     void Actualize(const TInstant currentInstant) {
+        if (currentInstant < NextActualizeInstant) {
+            return;
+        }
         auto gChartsThis = StartModificationGuard();
-        Others.Actualize(currentInstant);
+        NextActualizeInstant = Others.Actualize(currentInstant);
         RebuildOptimizedFeature(currentInstant);
     }
 

@@ -99,7 +99,7 @@ template <typename TTrait> struct TTupleLayoutFallback : public TTupleLayout {
     std::vector<TColumnDesc> FixedNPOTColumns_; // Remaining fixed-size columns
     std::vector<TColumnDesc> VariableColumns_;  // Variable-size columns only
     using TSimdI8 = typename TTrait::TSimdI8;
-    template <class T> using TSimd = TTrait::template TSimd8<T>;
+    template <class T> using TSimd = typename TTrait::template TSimd8<T>;
 
     static constexpr ui8 kSIMDMaxCols = 8;
     static constexpr ui8 kSIMDMaxInnerLoopSize = 8;

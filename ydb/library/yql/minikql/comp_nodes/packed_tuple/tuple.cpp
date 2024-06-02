@@ -498,7 +498,8 @@ void TTupleLayoutFallback<NSimd::TSimdFallbackTraits>::Pack(
             }
 
             if (anyOverflow && col.Role == EColumnRole::Key) {
-                hash = CalculateCRC32<TTraits>((ui8 *)&size, sizeof(ui32), hash);
+                hash =
+                    CalculateCRC32<TTraits>((ui8 *)&size, sizeof(ui32), hash);
                 hash = CalculateCRC32<TTraits>(data, size, hash);
             }
         }
@@ -703,7 +704,8 @@ void TTupleLayoutFallback<TTraits>::Pack(
                 }
             };
 
-            const size_t first_full_byte = (8u - start) & 7;
+            const size_t first_full_byte =
+                std::min((8ul - start) & 7, cur_block_size);
             size_t block_row_ind = 0;
 
             const auto simple_mask_transpose = [&](const size_t until) {
@@ -795,7 +797,8 @@ void TTupleLayoutFallback<TTraits>::Pack(
                                 col.DataSize - (size + 1));
                 }
                 if (anyOverflow && col.Role == EColumnRole::Key) {
-                    hash = CalculateCRC32<TTraits>((ui8 *)&size, sizeof(ui32), hash);
+                    hash = CalculateCRC32<TTraits>((ui8 *)&size, sizeof(ui32),
+                                                   hash);
                     hash = CalculateCRC32<TTraits>(data, size, hash);
                 }
             }
@@ -879,11 +882,13 @@ void TTupleLayoutFallback<TTraits>::Unpack(
                 }
             };
 
-            const size_t first_full_byte = (8u - start) & 7;
+            const size_t first_full_byte =
+                std::min((8ul - start) & 7, cur_block_size);
             size_t block_row_ind = 0;
 
             const auto simple_mask_transpose = [&](const size_t until) {
-                for (size_t col_ind = 0; col_ind != cols; ++col_ind) {
+                for (size_t col_ind = 0;
+                     block_row_ind != until && col_ind != cols; ++col_ind) {
                     auto col_bitmask =
                         bitmasks[col_ind][0] & ~((0xFF << (block_row_ind & 7)) ^
                                                  (0xFF << (until & 7)));
@@ -967,19 +972,27 @@ void TTupleLayoutFallback<TTraits>::Unpack(
     }
 }
 
-template
-__attribute__((target("avx2")))
-void TTupleLayoutFallback<NSimd::TSimdAVX2Traits>::Pack(const ui8** columns, const ui8** isValidBitmask, ui8 * res, std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start, ui32 count) const;
-template
-__attribute__((target("sse4.2")))
-void TTupleLayoutFallback<NSimd::TSimdSSE42Traits>::Pack(const ui8** columns, const ui8** isValidBitmask, ui8 * res, std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start, ui32 count) const;
+template __attribute__((target("avx2"))) void
+TTupleLayoutFallback<NSimd::TSimdAVX2Traits>::Pack(
+    const ui8 **columns, const ui8 **isValidBitmask, ui8 *res,
+    std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
+    ui32 count) const;
+template __attribute__((target("sse4.2"))) void
+TTupleLayoutFallback<NSimd::TSimdSSE42Traits>::Pack(
+    const ui8 **columns, const ui8 **isValidBitmask, ui8 *res,
+    std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
+    ui32 count) const;
 
-template
-__attribute__((target("avx2")))
-void TTupleLayoutFallback<NSimd::TSimdAVX2Traits>::Unpack(ui8 **columns, ui8 **isValidBitmask, const ui8 *res, const std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start, ui32 count) const;
-template
-__attribute__((target("sse4.2")))
-void TTupleLayoutFallback<NSimd::TSimdSSE42Traits>::Unpack(ui8 **columns, ui8 **isValidBitmask, const ui8 *res, const std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start, ui32 count) const;
+template __attribute__((target("avx2"))) void
+TTupleLayoutFallback<NSimd::TSimdAVX2Traits>::Unpack(
+    ui8 **columns, ui8 **isValidBitmask, const ui8 *res,
+    const std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
+    ui32 count) const;
+template __attribute__((target("sse4.2"))) void
+TTupleLayoutFallback<NSimd::TSimdSSE42Traits>::Unpack(
+    ui8 **columns, ui8 **isValidBitmask, const ui8 *res,
+    const std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
+    ui32 count) const;
 
 } // namespace NPackedTuple
 } // namespace NMiniKQL

@@ -9,14 +9,13 @@
 namespace NYql {
 
 enum class EDatabaseType {
-  Ydb,
-  ClickHouse,
-  DataStreams,
-  ObjectStorage,
-  PostgreSQL,
-  YT,
-  MySQL,
-  MicrosoftSqlServer
+    Ydb,
+    ClickHouse,
+    DataStreams,
+    ObjectStorage,
+    PostgreSQL,
+    YT,
+    MsSqlServer
 };
 
 inline EDatabaseType DatabaseTypeFromDataSourceKind(NConnector::NApi::EDataSourceKind dataSourceKind) {
@@ -28,7 +27,7 @@ inline EDatabaseType DatabaseTypeFromDataSourceKind(NConnector::NApi::EDataSourc
         case NConnector::NApi::EDataSourceKind::YDB:
             return EDatabaseType::Ydb;
         case NConnector::NApi::EDataSourceKind::MS_SQL_SERVER:
-          return EDatabaseType::MicrosoftSqlServer;
+          return EDatabaseType::MsSqlServer;
         default:
             ythrow yexception() << "Unknown data source kind: " << NConnector::NApi::EDataSourceKind_Name(dataSourceKind);
     }
@@ -42,7 +41,7 @@ inline NConnector::NApi::EDataSourceKind DatabaseTypeToDataSourceKind(EDatabaseT
             return  NConnector::NApi::EDataSourceKind::CLICKHOUSE;
         case EDatabaseType::Ydb:
             return  NConnector::NApi::EDataSourceKind::YDB;
-        case EDatabaseType::MicrosoftSqlServer:
+        case EDatabaseType::MsSqlServer:
             return NConnector::NApi::EDataSourceKind::MS_SQL_SERVER;
         default:
             ythrow yexception() << "Unknown database type: " << ToString(databaseType);

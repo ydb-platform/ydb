@@ -3,6 +3,7 @@
 #include "ut_helpers.h"
 #include "walle.h"
 #include "cms_ut_common.h"
+#include "ydb/public/api/protos/draft/ydb_maintenance.pb.h"
 
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/base/ticket_parser.h>
@@ -2066,6 +2067,112 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         // Wall-E soft maintainance task can continue
         env.CheckWalleCheckTask("task-1", TStatus::ALLOW, env.GetNodeId(2));
+    }
+
+    Y_UNIT_TEST(RequestDecomissionDevice) {
+        TCmsTestEnv env(8);
+        
+        std::unique_ptr<NKikimr::NCms::TEvCms::TEvCreateMaintenanceTaskRequest> req = std::make_unique<NKikimr::NCms::TEvCms::TEvCreateMaintenanceTaskRequest>();
+
+        Ydb::Maintenance::CreateMaintenanceTaskRequest* rec = req->Record.MutableRequest();
+
+        req->Record.SetUserSID("user");
+
+        auto* options = rec->mutable_task_options();
+        options->set_availability_mode(::Ydb::Maintenance::AVAILABILITY_MODE_STRONG);
+
+        auto* actionGroup = rec->add_action_groups();
+        auto* action = actionGroup->Addactions();
+        auto* lockAction = action->mutable_lock_action();
+
+        auto* scope = lockAction->mutable_scope();
+
+        auto* pdiskId = scope->mutable_pdisk_id();
+        auto disk = env.PDiskId(0);
+        pdiskId->set_nodeid(disk.NodeId);
+        pdiskId->set_pdiskid(disk.DiskId);
+        lockAction->mutable_duration()->set_nanos(60000000);
+
+        env.SendToCms(req.release());
+
+        env.SimulateSleep(TDuration::Seconds(60));
+
+        auto response = env.GrabEdgeEvent<TEvCms::TEvMaintenanceTaskResponse>();
+
+        Cout << response->ToString() << Endl;
+
+        // env.CheckPermissionRequest("user", false, false, false, true, TStatus::NO_SUCH_DEVICE,
+                                //    MakeAction(TAction::REPLACE_DEVICES, "::1", 60000000, "/dev/bad/device/path"));
+
+        // auto rec1 = env.CheckPermissionRequest
+        //     ("user", false, false, false, true, TStatus::ALLOW,
+        //      MakeAction(TAction::REPLACE_DEVICES, 1, 60000000, env.PDiskName(0)));
+        // UNIT_ASSERT_VALUES_EQUAL(rec1.PermissionsSize(), 1);
+        // auto id1 = rec1.GetPermissions(0).GetId();
+
+        // // Disallow conflicting PDisk.
+        // env.CheckPermissionRequest("user", false, false, false, true, TStatus::DISALLOW_TEMP,
+        //                            MakeAction(TAction::REPLACE_DEVICES, 1, 60000000, env.PDiskName(1)));
+    
+        // // Disallow locked PDisk.
+        // env.CheckPermissionRequest("user", false, false, false, true, TStatus::DISALLOW_TEMP,
+        //                            MakeAction(TAction::REPLACE_DEVICES, 1, 60000000, env.PDiskName(0)));
+
+        // // Disallow VDisk on locked PDisk.
+        // env.CheckPermissionRequest("user", false, false, false, true, TStatus::DISALLOW_TEMP,
+        //                            MakeAction(TAction::REPLACE_DEVICES, 1, 60000000, "vdisk-1-1-0-0-0"));
+
+        // // Disallow conflicting VDisk.
+        // env.CheckPermissionRequest("user", false, false, false, true, TStatus::DISALLOW_TEMP,
+        //                            MakeAction(TAction::REPLACE_DEVICES, 1, 60000000, "vdisk-1-1-0-1-0"));
+
+        // // Unlock PDisk.
+        // env.CheckDonePermission("user", id1);
+
+        // // Lock VDisks.
+        // auto rec2 = env.CheckPermissionRequest
+        //     ("user", false, false, false, true, TStatus::ALLOW,
+        //      MakeAction(TAction::REPLACE_DEVICES, 1, 60000000,
+        //                 "vdisk-0-1-0-0-0", "vdisk-1-1-0-1-0", "vdisk-2-1-0-2-0"));
+        // UNIT_ASSERT_VALUES_EQUAL(rec2.PermissionsSize(), 1);
+        // id1 = rec2.GetPermissions(0).GetId();
+
+        // // Disallow conflicting VDisk.
+        // env.CheckPermissionRequest("user", false, false, false, true, TStatus::DISALLOW_TEMP,
+        //                            MakeAction(TAction::REPLACE_DEVICES, 1, 60000000, "vdisk-1-1-0-3-0"));
+
+        // // Disallow locked VDisk.
+        // env.CheckPermissionRequest("user", false, false, false, true, TStatus::DISALLOW_TEMP,
+        //                            MakeAction(TAction::REPLACE_DEVICES, 1, 60000000, "vdisk-1-1-0-1-0"));
+
+        // // Disallow conflicting PDisk.
+        // env.CheckPermissionRequest("user", false, false, false, true, TStatus::DISALLOW_TEMP,
+        //                            MakeAction(TAction::REPLACE_DEVICES, 1, 60000000, env.PDiskName(0)));
+
+        // // Lock VDisks.
+        // auto rec3 = env.CheckPermissionRequest
+        //     ("user", false, false, false,  true, TStatus::ALLOW,
+        //      MakeAction(TAction::REPLACE_DEVICES, 1, 60000000, "vdisk-3-1-0-1-0"));
+        // UNIT_ASSERT_VALUES_EQUAL(rec3.PermissionsSize(), 1);
+        // auto id2 = rec3.GetPermissions(0).GetId();
+
+        // // Unlock VDisks.
+        // env.CheckDonePermission("user", false, TStatus::OK, id1, id2);
+
+        // // Impossible action.
+        // env.CheckPermissionRequest("user", false, false, false, true, TStatus::DISALLOW,
+        //                            MakeAction(TAction::REPLACE_DEVICES, 1, 60000000,
+        //                                       env.PDiskName(0), env.PDiskName(1)));
+
+        // // Impossible action.
+        // env.CheckPermissionRequest("user", false, false, false, true, TStatus::DISALLOW,
+        //                            MakeAction(TAction::REPLACE_DEVICES, 1, 60000000,
+        //                                       env.PDiskName(0), "vdisk-3-1-0-1-0"));
+
+        // // Impossible action.
+        // env.CheckPermissionRequest("user", false, false, false, true, TStatus::DISALLOW,
+        //                            MakeAction(TAction::REPLACE_DEVICES, 1, 60000000,
+        //                                       "vdisk-3-1-0-1-0", "vdisk-3-1-0-5-0"));
     }
 }
 

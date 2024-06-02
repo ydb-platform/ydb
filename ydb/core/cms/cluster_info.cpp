@@ -677,6 +677,18 @@ void TClusterInfo::ApplyActionWithoutLog(const NKikimrCms::TAction &action)
             }
         }
         break;
+    case TAction::DECOMISSION_DISK:
+        for (const auto &device : action.GetDevices()) {
+            if (HasPDisk(device)) {
+                auto pdisk = &PDiskRef(device);
+                for (auto &nodeGroup: NodeRef(pdisk->NodeId).NodeGroups) {
+                    if (!nodeGroup->IsNodeLocked(pdisk->NodeId)) {
+                        nodeGroup->LockNode(pdisk->NodeId);
+                    }
+                }
+            }
+        }
+        break;
 
     default:
         break;
@@ -726,6 +738,20 @@ TSet<TLockableItem *> TClusterInfo::FindLockedItems(const NKikimrCms::TAction &a
                 item = &PDiskRef(device);
             else if (HasVDisk(device))
                 item = &VDiskRef(device);
+
+            if (item)
+                res.insert(item);
+            else if (ctx)
+                LOG_ERROR(*ctx, NKikimrServices::CMS, "FindLockedItems: unknown device %s", device.data());
+        }
+        break;
+
+    case TAction::DECOMISSION_DISK:
+        for (const auto &device : action.GetDevices()) {
+            TLockableItem *item = nullptr;
+
+            if (HasPDisk(device))
+                item = &PDiskRef(device);
 
             if (item)
                 res.insert(item);
@@ -1053,6 +1079,18 @@ void TOperationLogManager::ApplyAction(const NKikimrCms::TAction &action,
                         AddNodeLockOperation(vdisk->NodeId, nodeGroup);
                     }
                 }     
+            }
+        }
+        break;
+    case TAction::DECOMISSION_DISK:
+        for (const auto &device : action.GetDevices()) {
+            if (clusterState->HasPDisk(device)) {
+                auto pdisk = &clusterState->PDisk(device);
+                for (auto &nodeGroup: clusterState->NodeRef(pdisk->NodeId).NodeGroups) {
+                    if (!nodeGroup->IsNodeLocked(pdisk->NodeId)) {
+                        AddNodeLockOperation(pdisk->NodeId, nodeGroup);
+                    }
+                }       
             }
         }
         break;

@@ -452,6 +452,7 @@ public:
         bool ShouldBeSettledBySelfHeal() const {
             return Status == NKikimrBlobStorage::EDriveStatus::FAULTY
                 || Status == NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED
+                || Status == NKikimrBlobStorage::EDriveStatus::READONLY_FAULTY
                 || DecommitStatus == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_IMMINENT;
         }
 
@@ -468,7 +469,8 @@ public:
 
         bool BadInTermsOfSelfHeal() const {
             return Status == NKikimrBlobStorage::EDriveStatus::FAULTY
-                || Status == NKikimrBlobStorage::EDriveStatus::INACTIVE;
+                || Status == NKikimrBlobStorage::EDriveStatus::INACTIVE
+                || Status == NKikimrBlobStorage::EDriveStatus::READONLY_FAULTY;
         }
 
         auto GetSelfHealStatusTuple() const {

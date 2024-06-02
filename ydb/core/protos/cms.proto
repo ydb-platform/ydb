@@ -108,6 +108,7 @@ message TAction {
     REPLACE_DEVICES = 8;
     REMOVE_DEVICES = 9;
     REBOOT_HOST = 10; // Same as SHUTDOWN_HOST, but forcibly allowed if host is down
+    DECOMISSION_DISK = 11;
   }
 
   optional EType     Type = 1;

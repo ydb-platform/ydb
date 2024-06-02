@@ -195,7 +195,7 @@ private:
         Finished = finished;
         EgressStats.Resume();
 
-        CA_LOG_D("New data: size=" << size << ", finished=" << finished << ".");
+        CA_LOG_D("New data: size=" << size << ", finished=" << finished << "." << "freespace=" << ShardedWriteController->GetMemory());
 
         YQL_ENSURE(ShardedWriteController);
         try {
@@ -208,6 +208,7 @@ private:
                 CurrentExceptionMessage(),
                 NYql::NDqProto::StatusIds::INTERNAL_ERROR);
         }
+        CA_LOG_D("ADDED New data: freespace=" << ShardedWriteController->GetMemory());
 
         ProcessBatches();
     }

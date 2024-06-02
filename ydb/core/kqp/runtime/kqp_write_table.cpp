@@ -493,7 +493,7 @@ public:
                     Columns[index].PType,
                     row.GetElement(index),
                     TypeEnv,
-                    /* copy */ true);
+                    /* copy */ false);
             }
             AddRow(cells, GetKeyRange());
 

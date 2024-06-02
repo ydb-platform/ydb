@@ -388,7 +388,7 @@ private:
             << ", interval end# " << intervalEnd
             << ", query count# " << record.GetMetrics().HashesSize());
 
-        Send(MakePipePeNodeCacheID(false),
+        Send(MakePipePerNodeCacheID(false),
             new TEvPipeCache::TEvForward(summary.Release(), processorId, true),
             IEventHandle::FlagTrackDelivery);
     }
@@ -521,7 +521,7 @@ private:
             << ", is retrying# " << dbCounters.IsRetrying
             << ", is labeled# " << isLabeled);
 
-        Send(MakePipePeNodeCacheID(false),
+        Send(MakePipePerNodeCacheID(false),
             new TEvPipeCache::TEvForward(sendEv.Release(), processorId, true),
             IEventHandle::FlagTrackDelivery);
     }
@@ -991,7 +991,7 @@ private:
     }
 
     void PassAway() override {
-        Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
+        Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
         TBase::PassAway();
     }
 

@@ -392,7 +392,7 @@ public:
             case TSchemeCacheNavigate::EKind::KindExtSubdomain:
                 return true;
             case TSchemeCacheNavigate::EKind::KindPath:
-                return entry.CreateStep == 0;
+                return entry.Self->Info.GetPathId() == NSchemeShard::RootPathId;
             default:
                 return false;
         }

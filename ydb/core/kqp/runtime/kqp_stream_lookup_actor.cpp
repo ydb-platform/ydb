@@ -23,7 +23,7 @@ namespace NKqp {
 namespace {
 
 static constexpr TDuration SCHEME_CACHE_REQUEST_TIMEOUT = TDuration::Seconds(10);
-NActors::TActorId MainPipeCacheId = NKikimr::MakePipePeNodeCacheID(false);
+NActors::TActorId MainPipeCacheId = NKikimr::MakePipePerNodeCacheID(false);
 
 class TKqpStreamLookupActor : public NActors::TActorBootstrapped<TKqpStreamLookupActor>, public NYql::NDq::IDqComputeActorAsyncInput {
 public:

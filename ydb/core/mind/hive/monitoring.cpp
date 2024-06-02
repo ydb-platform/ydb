@@ -477,7 +477,7 @@ public:
     }
 
     void RenderHTMLPage(IOutputStream &out) {
-        // out << "<script>$('.container').css('width', 'auto');</script>";
+        out << "<script>$('.container').css('width', 'auto');</script>";
         out << "<table class='table table-sortable'>";
         out << "<thead>";
         out << "<tr>";

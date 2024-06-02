@@ -32,7 +32,7 @@ private:
         auto* blobIds = BlobIdsByTablets.Find((TTabletId)ev->Cookie);
         AFL_VERIFY(blobIds);
         auto evResend = std::make_unique<NEvents::TEvDeleteSharedBlobs>(TBase::SelfId(), ev->Cookie, OperatorId, *blobIds);
-        NActors::TActivationContext::AsActorContext().Send(MakePipePeNodeCacheID(false),
+        NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(false),
             new TEvPipeCache::TEvForward(evResend.release(), ev->Cookie, true), IEventHandle::FlagTrackDelivery, ev->Cookie);
     }
 protected:
@@ -61,7 +61,7 @@ public:
         } else {
             for (auto&& i : BlobIdsByTablets) {
                 auto ev = std::make_unique<NEvents::TEvDeleteSharedBlobs>(TBase::SelfId(), (ui64)SelfTabletId, OperatorId, i.second);
-                NActors::TActivationContext::AsActorContext().Send(MakePipePeNodeCacheID(false),
+                NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(false),
                     new TEvPipeCache::TEvForward(ev.release(), (ui64)i.first, true), IEventHandle::FlagTrackDelivery, (ui64)i.first);
             }
         }

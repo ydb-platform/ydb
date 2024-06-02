@@ -571,6 +571,36 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetThresholdTime().Seconds(), alterThreshold);
     }
 
+    Y_UNIT_TEST(ControlPlane_AutoscalingWithStorageSizeRetention) {
+        auto autoscalingTestTopic = "autoscalit-topic";
+        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicClient client = setup.MakeClient();
+
+        TCreateTopicSettings createSettings;
+        createSettings
+            .RetentionStorageMb(1024)
+            .BeginConfigurePartitioningSettings()
+                .BeginConfigureAutoscalingSettings()
+                .Strategy(EAutoscalingStrategy::ScaleUp)
+                .EndConfigureAutoscalingSettings()
+            .EndConfigurePartitioningSettings();
+        auto result = client.CreateTopic(autoscalingTestTopic, createSettings).GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::BAD_REQUEST);
+
+        createSettings.RetentionStorageMb(0);
+        result = client.CreateTopic(autoscalingTestTopic, createSettings).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+
+        TAlterTopicSettings alterSettings;
+        alterSettings
+            .SetRetentionStorageMb(1024);
+
+        result = client.AlterTopic(autoscalingTestTopic, alterSettings).GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::BAD_REQUEST);
+    }
+
     Y_UNIT_TEST(PartitionSplit_AutosplitByLoad) {
         TTopicSdkTestSetup setup = CreateSetup();
         TTopicClient client = setup.MakeClient();
@@ -624,7 +654,6 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         a = "a";
         b = {};
         res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(a,b);
-        Cerr << "\n SAVDBG " << res << "\n";
         UNIT_ASSERT(a < res);
         UNIT_ASSERT(b != res);
 

@@ -194,10 +194,7 @@ public:
     {
         InitializeYqlLogger();
         InitializeServer();
-
-        if (Settings_.NodeCount > 1) {
-            WaitResourcesPublishing();
-        }
+        WaitResourcesPublishing();
 
         if (Settings_.MonitoringEnabled) {
             Cout << CoutColors_.Cyan() << "Monitoring port: " << CoutColors_.Default() << Server_->GetRuntime()->GetMonPort() << Endl;

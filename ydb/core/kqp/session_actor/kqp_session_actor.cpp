@@ -284,7 +284,7 @@ public:
         }
         QueryState->TxCtx = std::move(txCtx);
         QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
-        QueryState->TxId = txId;
+        QueryState->TxId.SetValue(txId);
         if (!CheckTransactionLocks(/*tx*/ nullptr)) {
             return;
         }
@@ -680,7 +680,7 @@ public:
     }
 
     void BeginTx(const Ydb::Table::TransactionSettings& settings) {
-        QueryState->TxId = UlidGen.Next();
+        QueryState->TxId.SetValue(UlidGen.Next());
         QueryState->TxCtx = MakeIntrusive<TKqpTransactionContext>(false, AppData()->FunctionRegistry,
             AppData()->TimeProvider, AppData()->RandomProvider, Config->EnableKqpImmediateEffects);
 
@@ -704,7 +704,7 @@ public:
         QueryState->TxCtx->SetIsolationLevel(settings);
         QueryState->TxCtx->OnBeginQuery();
 
-        if (!Transactions.CreateNew(QueryState->TxId, QueryState->TxCtx)) {
+        if (!Transactions.CreateNew(QueryState->TxId.GetValue(), QueryState->TxCtx)) {
             std::vector<TIssue> issues{
                 YqlIssue({}, TIssuesIds::KIKIMR_TOO_MANY_TRANSACTIONS)};
             ythrow TRequestFail(Ydb::StatusIds::BAD_SESSION,
@@ -717,21 +717,23 @@ public:
         Counters->ReportBeginTransaction(Settings.DbCounters, Transactions.EvictedTx, Transactions.Size(), Transactions.ToBeAbortedSize());
     }
 
-    static const Ydb::Table::TransactionControl& GetImpliedTxControl() {
-        auto create = []() -> Ydb::Table::TransactionControl {
-            Ydb::Table::TransactionControl control;
-            control.mutable_begin_tx()->mutable_serializable_read_write();
-            control.set_commit_tx(true);
-            return control;
-        };
-        static const Ydb::Table::TransactionControl control = create();
+    Ydb::Table::TransactionControl GetTxControlWithImplicitTx() {
+        if (!QueryState->ImplicitTxId) {
+            Ydb::Table::TransactionSettings settings;
+            settings.mutable_serializable_read_write();
+            BeginTx(settings);
+            QueryState->ImplicitTxId = QueryState->TxId;
+        }
+        Ydb::Table::TransactionControl control;
+        control.set_commit_tx(QueryState->ProcessingLastStatement() && QueryState->ProcessingLastStatementPart());
+        control.set_tx_id(QueryState->ImplicitTxId->GetValue().GetHumanStr());
         return control;
     }
 
     bool PrepareQueryTransaction() {
         const bool hasTxControl = QueryState->HasTxControl();
-        if (hasTxControl || QueryState->HasImpliedTx()) {
-            const auto& txControl = hasTxControl ? QueryState->GetTxControl() : GetImpliedTxControl();
+        if (hasTxControl || QueryState->HasImplicitTx()) {
+            const auto& txControl = hasTxControl ? QueryState->GetTxControl() : GetTxControlWithImplicitTx();
 
             QueryState->Commit = txControl.commit_tx();
             switch (txControl.tx_selector_case()) {
@@ -744,14 +746,16 @@ public:
                     }
                     QueryState->TxCtx = txCtx;
                     QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
-                    QueryState->TxId = txId;
+                    if (hasTxControl) {
+                        QueryState->TxId.SetValue(txId);
+                    }
                     break;
                 }
                 case Ydb::Table::TransactionControl::kBeginTx: {
                     BeginTx(txControl.begin_tx());
                     break;
-               }
-               case Ydb::Table::TransactionControl::TX_SELECTOR_NOT_SET:
+                }
+                case Ydb::Table::TransactionControl::TX_SELECTOR_NOT_SET:
                     ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST)
                         << "wrong TxControl: tx_selector must be set";
                     break;
@@ -1539,7 +1543,7 @@ public:
 
     void FillTxInfo(NKikimrKqp::TQueryResponse* response) {
         YQL_ENSURE(QueryState);
-        response->MutableTxMeta()->set_id(QueryState->TxId.GetHumanStr());
+        response->MutableTxMeta()->set_id(QueryState->TxId.GetValue().GetHumanStr());
 
         if (QueryState->TxCtx) {
             auto txInfo = QueryState->TxCtx->GetInfo();
@@ -1612,8 +1616,8 @@ public:
 
         if (QueryState->Commit) {
             ResetTxState();
-            Transactions.ReleaseTransaction(QueryState->TxId);
-            QueryState->TxId = TTxId();
+            Transactions.ReleaseTransaction(QueryState->TxId.GetValue());
+            QueryState->TxId.Reset();
         }
 
         FillTxInfo(response);
@@ -1958,7 +1962,7 @@ public:
             auto& txCtx = QueryState->TxCtx;
             if (txCtx->IsInvalidated()) {
                 Transactions.AddToBeAborted(txCtx);
-                Transactions.ReleaseTransaction(QueryState->TxId);
+                Transactions.ReleaseTransaction(QueryState->TxId.GetValue());
             }
             DiscardPersistentSnapshot(txCtx->SnapshotHandle);
         }

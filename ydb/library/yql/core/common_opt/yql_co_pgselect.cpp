@@ -947,6 +947,9 @@ TUsedColumns GatherUsedColumns(const TExprNode::TPtr& result, const TExprNode::T
         for (ui32 i = 0; i < groupTuple->ChildrenSize(); ++i) {
             auto join = groupTuple->Child(i);
             auto joinType = join->Child(0)->Content();
+            if (joinType == "push") {
+                continue;
+            }
             if (join->ChildrenSize() > 2) {
                 Y_ENSURE(join->ChildrenSize() > 3, "Excepted at least 4 args there");
                 Y_ENSURE(join->Child(1)->IsAtom(), "Supported only USING clause there");
@@ -957,7 +960,9 @@ TUsedColumns GatherUsedColumns(const TExprNode::TPtr& result, const TExprNode::T
                     if (lr->Child(0)->IsAtom()) {
                         usedColumns.insert(std::make_pair(TString(lr->Child(0)->Content()), std::make_pair(Max<ui32>(), TString())));
                     }
-                    usedColumns.insert(std::make_pair(TString(lr->Child(1)->Content()), std::make_pair(Max<ui32>(), TString())));
+                    if (lr->Child(1)->IsAtom()) {
+                        usedColumns.insert(std::make_pair(TString(lr->Child(1)->Content()), std::make_pair(Max<ui32>(), TString())));
+                    }
                     joinUsingColumns.emplace_back(ToString(groupNo), join->Child(2)->Child(col)->Content());
                 }
                 continue;
@@ -1441,7 +1446,7 @@ TExprNode::TPtr BuildSingleInputPredicateJoin(TPositionHandle pos, TStringBuf jo
     }
 }
 
-bool GatherJoinInputs(const TExprNode& root, const TExprNode& row, ui32 rightInputIndex, const THashMap<TString, ui32>& memberToInput,
+bool GatherJoinInputs(const TExprNode& root, const TExprNode& row, const THashSet<ui32>& rightInputIndexes, const THashMap<TString, ui32>& memberToInput,
     bool& hasLeftInput, bool& hasRightInput) {
     hasLeftInput = false;
     hasRightInput = false;
@@ -1460,7 +1465,7 @@ bool GatherJoinInputs(const TExprNode& root, const TExprNode& row, ui32 rightInp
         auto name = p->Child(1)->Content();
         auto inputPtr = memberToInput.FindPtr(name);
         YQL_ENSURE(inputPtr);
-        if (*inputPtr == rightInputIndex) {
+        if (rightInputIndexes.contains(*inputPtr)) {
             hasRightInput = true;
         } else {
             hasLeftInput = true;
@@ -1538,23 +1543,43 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
 
     ui32 inputIndex = 0;
     for (ui32 groupNo = 0; groupNo < joinOps->Tail().ChildrenSize(); ++groupNo) {
-        groupForIndex.push_back(groupNo);
         auto groupTuple = joinOps->Tail().Child(groupNo);
         if (groupTuple->ChildrenSize() == 0) {
             joinGroups.push_back(cleanedInputs[inputIndex++]);
             continue;
         }
-
-        auto current = cleanedInputs[inputIndex++];
+        TVector<TExprNode::TPtr> stack;
+        TVector<THashSet<ui32>> stackInputIdxs;
         for (ui32 i = 0; i < groupTuple->ChildrenSize(); ++i) {
-            groupForIndex.push_back(groupNo);
-            auto with = cleanedInputs[inputIndex++];
             // current = join current & with
             auto join = groupTuple->Child(i);
             auto joinType = join->Child(0)->Content();
+            if (joinType == "push") {
+                stackInputIdxs.emplace_back();
+                stackInputIdxs.back().emplace(inputIndex);
+                stack.push_back(cleanedInputs[inputIndex++]);
+                groupForIndex.push_back(groupNo);
+                continue;
+            }
+            auto with = stack.back();
+            stack.pop_back();
+            auto current = stack.back();
+            stack.pop_back();
+
+            auto rightIdxs = stackInputIdxs.back();
+            stackInputIdxs.pop_back();
+            auto leftIdxs = stackInputIdxs.back();
+            stackInputIdxs.pop_back();
+
+            THashSet<ui32> newIndexes = rightIdxs;
+            for (auto e: leftIdxs) {
+                newIndexes.emplace(e);
+            }
+            
             auto cartesian = JoinColumns(pos, current, with, nullptr, {}, ctx);
             if (joinType == "cross") {
-                current = cartesian;
+                stackInputIdxs.emplace_back(std::move(newIndexes));
+                stack.push_back(cartesian);
                 continue;
             }
             if (join->ChildrenSize() > 2) {
@@ -1566,14 +1591,51 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
                 TExprNode::TListType leftColumns;
                 TExprNode::TListType rightColumns;
                 TExprNode::TListType toRemove;
+                auto buildRenameLambda = [&ctx, &pos] (const TExprNode::TPtr& newName, const TExprNode::TPtr& oldName) {
+                    return ctx.Builder(pos)
+                        .Lambda()
+                            .Param("row")
+                            .Callable(0, "RemoveMember")
+                                .Callable(0, "AddMember")
+                                    .Arg(0, "row")
+                                    .Add(1, newName)
+                                    .Callable(2, "Member")
+                                        .Arg(0, "row")
+                                        .Add(1, oldName)
+                                    .Seal()
+                                .Seal()
+                                .Add(1, oldName)
+                            .Seal()
+                        .Seal().Build();
+                };
+
                 for (auto& col: join->Child(3)->ChildrenList()) {
                     if (col->Child(0)->IsAtom()) {
                         leftColumns.push_back(col->Child(0));
                     } else {
-                        toRemove.push_back(col->Child(0)->Child(0));
-                        leftColumns.push_back(col->Child(0)->Child(0));
+                        auto pname = col->Child(0)->Child(0);
+                        auto lname = ctx.Builder(pos).Atom(TString("_left_.") + pname->Content()).Build();
+                        left = ctx.Builder(pos)
+                            .Callable("OrderedMap")
+                                .Add(0, left)
+                                .Add(1, buildRenameLambda(lname, pname))
+                            .Seal().Build();
+                        toRemove.push_back(lname);
+                        leftColumns.push_back(lname);
                     }
-                    rightColumns.push_back(col->Child(1));
+                    if (col->Child(1)->IsAtom()) {
+                        rightColumns.push_back(col->Child(1));
+                    } else {
+                        auto pname = col->Child(1)->Child(0);
+                        auto lname = ctx.Builder(pos).Atom(TString("_right_.") + pname->Content()).Build();
+                        right = ctx.Builder(pos)
+                            .Callable("OrderedMap")
+                                .Add(0, right)
+                                .Add(1, buildRenameLambda(lname, pname))
+                            .Seal().Build();
+                        toRemove.push_back(lname);
+                        rightColumns.push_back(lname);
+                    }
                 }
                 current = BuildEquiJoin(pos, joinType, left, right, leftColumns, rightColumns, ctx);
                 auto secondStruct = ctx.Builder(pos)
@@ -1634,21 +1696,25 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
                         .Seal()
                     .Seal()
                     .Build();
+                stackInputIdxs.emplace_back(std::move(newIndexes));
+                stack.push_back(current);
                 continue;
             }
 
             auto predicate = join->Tail().TailPtr();
             if (!IsDepended(predicate->Tail(), predicate->Head().Head())) {
-                current = BuildConstPredicateJoin(pos, joinType, predicate, cartesian, current, with, ctx);
+                stackInputIdxs.emplace_back(std::move(newIndexes));
+                stack.push_back(BuildConstPredicateJoin(pos, joinType, predicate, cartesian, current, with, ctx));
                 continue;
             }
 
             // collect inputs from predicate
             bool hasLeftInput;
             bool hasRightInput;
-            if (GatherJoinInputs(predicate->Tail(), predicate->Head().Head(), inputIndex - 1, memberToInput, hasLeftInput, hasRightInput)) {
+            if (GatherJoinInputs(predicate->Tail(), predicate->Head().Head(), rightIdxs, memberToInput, hasLeftInput, hasRightInput)) {
                 if (hasLeftInput && !hasRightInput) {
-                    current = BuildSingleInputPredicateJoin(pos, joinType, predicate, current, with, ctx);
+                    stackInputIdxs.emplace_back(std::move(newIndexes));
+                    stack.push_back(BuildSingleInputPredicateJoin(pos, joinType, predicate, current, with, ctx));
                     continue;
                 } else if (!hasLeftInput && hasRightInput) {
                     auto reverseJoinType = joinType;
@@ -1658,7 +1724,8 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
                         reverseJoinType = "left";
                     }
 
-                    current = BuildSingleInputPredicateJoin(pos, reverseJoinType, predicate, with, current, ctx);
+                    stackInputIdxs.emplace_back(std::move(newIndexes));
+                    stack.push_back(BuildSingleInputPredicateJoin(pos, reverseJoinType, predicate, with, current, ctx));
                     continue;
                 } else if (hasLeftInput && hasRightInput) {
                     TExprNode::TListType andTerms;
@@ -1676,7 +1743,7 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
                             continue;
                         }
 
-                        YQL_ENSURE(GatherJoinInputs(*andTerm, predicate->Head().Head(), inputIndex - 1, memberToInput, hasLeftInput, hasRightInput));
+                        YQL_ENSURE(GatherJoinInputs(*andTerm, predicate->Head().Head(), rightIdxs, memberToInput, hasLeftInput, hasRightInput));
                         if (!hasLeftInput && !hasRightInput) {
                             bad = true;
                             break;
@@ -1702,7 +1769,7 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
                         if (left->IsCallable("Member") && &left->Head() == &predicate->Head().Head()) {
                             auto inputPtr = memberToInput.FindPtr(left->Child(1)->Content());
                             YQL_ENSURE(inputPtr);
-                            leftOnLeft = (*inputPtr < inputIndex - 1);
+                            leftOnLeft = leftIdxs.contains(*inputPtr);
                             (leftOnLeft ? leftColumns : rightColumns).push_back(left->ChildPtr(1));
                         } else {
                             bad = true;
@@ -1713,7 +1780,7 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
                         if (right->IsCallable("Member") && &right->Head() == &predicate->Head().Head()) {
                             auto inputPtr = memberToInput.FindPtr(right->Child(1)->Content());
                             YQL_ENSURE(inputPtr);
-                            rightOnRight = (*inputPtr == inputIndex - 1);
+                            rightOnRight = rightIdxs.contains(*inputPtr);
                             (rightOnRight ? rightColumns : leftColumns).push_back(right->ChildPtr(1));
                         } else {
                             bad = true;
@@ -1784,7 +1851,8 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
                                 .Build();
                         }
 
-                        current = joined;
+                        stackInputIdxs.emplace_back(std::move(newIndexes));
+                        stack.push_back(joined);
                         continue;
                     }
                 }
@@ -1792,34 +1860,38 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
 
             auto filteredCartesian = BuildFilter(pos, cartesian, predicate, {}, {}, ctx, optCtx);
             if (joinType == "inner") {
-                current = filteredCartesian;
+                stackInputIdxs.emplace_back(std::move(newIndexes));
+                stack.push_back(filteredCartesian);
             } else if (joinType == "left") {
-                current = ctx.Builder(pos)
+                stackInputIdxs.emplace_back(std::move(newIndexes));
+                stack.push_back(ctx.Builder(pos)
                     .Callable("UnionAll")
                         .Add(0, filteredCartesian)
                         .Add(1, BuildMinus(pos, current, with, predicate, ctx))
                     .Seal()
-                    .Build();
+                    .Build());
             } else if (joinType == "right") {
-                current = ctx.Builder(pos)
+                stackInputIdxs.emplace_back(std::move(newIndexes));
+                stack.push_back(ctx.Builder(pos)
                     .Callable("UnionAll")
                         .Add(0, filteredCartesian)
                         .Add(1, BuildMinus(pos, with, current, predicate, ctx))
                     .Seal()
-                    .Build();
+                    .Build());
             } else {
                 YQL_ENSURE(joinType == "full");
-                current = ctx.Builder(pos)
+                stackInputIdxs.emplace_back(std::move(newIndexes));
+                stack.push_back(ctx.Builder(pos)
                     .Callable("UnionAll")
                         .Add(0, filteredCartesian)
                         .Add(1, BuildMinus(pos, current, with, predicate, ctx))
                         .Add(2, BuildMinus(pos, with, current, predicate, ctx))
                     .Seal()
-                    .Build();
+                    .Build());
             }
         }
-
-        joinGroups.push_back(current);
+        Y_ENSURE(stack.size() == 1, "Expected stack.size() == 1 after all joins");
+        joinGroups.push_back(stack.back());
     }
 
     return { groupForIndex, joinGroups };
@@ -4015,23 +4087,6 @@ TExprNode::TPtr ExpandPgLike(const TExprNode::TPtr& node, TExprContext& ctx, TOp
                     .Seal()
                 .Seal()
                 .Callable(2, "Null")
-                .Seal()
-            .Seal()
-        .Seal()
-        .Build();
-}
-
-TExprNode::TPtr ExpandPgIn(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-    Y_UNUSED(optCtx);
-    return ctx.Builder(node->Pos())
-        .Callable("ToPg")
-            .Callable(0, "SqlIn")
-                .Add(0, node->ChildPtr(1))
-                .Add(1, node->ChildPtr(0))
-                .List(2)
-                    .List(0)
-                        .Atom(0, "ansi")
-                    .Seal()
                 .Seal()
             .Seal()
         .Seal()

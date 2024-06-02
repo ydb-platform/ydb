@@ -259,7 +259,7 @@ namespace NKikimr {
             std::optional<ui64> *pdiskGuid) {
         TGuard<TMutex> guard(VaultMutex);
         TFileHandle lock(VaultLockFile, OpenAlways);
-        if (!lock.IsOpen() || flock(lock, LOCK_EX) == -1) {
+        if (!lock.IsOpen() || lock.Flock(LOCK_EX)) {
             return NPDisk::EPDiskMetadataOutcome::ERROR;
         }
 
@@ -321,7 +321,7 @@ namespace NKikimr {
             std::optional<ui64> *pdiskGuid) {
         TGuard<TMutex> guard(VaultMutex);
         TFileHandle lock(VaultLockFile, OpenAlways);
-        if (!lock.IsOpen() || flock(lock, LOCK_EX) == -1) {
+        if (!lock.IsOpen() || lock.Flock(LOCK_EX)) {
             return NPDisk::EPDiskMetadataOutcome::ERROR;
         }
 

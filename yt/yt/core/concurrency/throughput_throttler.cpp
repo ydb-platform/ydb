@@ -315,7 +315,7 @@ private:
     {
         auto timePassed = current - lastUpdated;
 
-        if (limit > 1) {
+        if (limit * period.SecondsFloat() > 1) {
             // Preventing arithmetic overflows by reducing time interval.
             timePassed = std::min(period, timePassed);
         }

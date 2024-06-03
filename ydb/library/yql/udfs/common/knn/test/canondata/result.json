@@ -1,4 +1,9 @@
 {
+    "test.test[BitSerialization]": [
+        {
+            "uri": "file://test.test_BitSerialization_/results.txt"
+        }
+    ],
     "test.test[CosineDistance]": [
         {
             "uri": "file://test.test_CosineDistance_/results.txt"
@@ -9,14 +14,54 @@
             "uri": "file://test.test_CosineSimilarity_/results.txt"
         }
     ],
-    "test.test[DeserializationError]": [
+    "test.test[ErrorDistanceInvalidFormat]": [
         {
-            "uri": "file://test.test_DeserializationError_/results.txt"
+            "uri": "file://test.test_ErrorDistanceInvalidFormat_/results.txt"
+        }
+    ],
+    "test.test[ErrorDistanceSameFormat]": [
+        {
+            "uri": "file://test.test_ErrorDistanceSameFormat_/results.txt"
+        }
+    ],
+    "test.test[ErrorDistanceSameSize]": [
+        {
+            "uri": "file://test.test_ErrorDistanceSameSize_/results.txt"
+        }
+    ],
+    "test.test[ErrorDistanceSameTag]": [
+        {
+            "uri": "file://test.test_ErrorDistanceSameTag_/extracted"
+        }
+    ],
+    "test.test[ErrorFloatFromBinaryStringBitVector]": [
+        {
+            "uri": "file://test.test_ErrorFloatFromBinaryStringBitVector_/extracted"
+        }
+    ],
+    "test.test[ErrorFloatFromBinaryStringEmpty]": [
+        {
+            "uri": "file://test.test_ErrorFloatFromBinaryStringEmpty_/results.txt"
+        }
+    ],
+    "test.test[ErrorFloatFromBinaryStringInvalid]": [
+        {
+            "uri": "file://test.test_ErrorFloatFromBinaryStringInvalid_/results.txt"
+        }
+    ],
+    "test.test[EuclideanDistance]": [
+        {
+            "uri": "file://test.test_EuclideanDistance_/results.txt"
         }
     ],
     "test.test[InnerProductSimilarity]": [
         {
             "uri": "file://test.test_InnerProductSimilarity_/results.txt"
+        }
+    ],
+    "test.test[Int8Serialization]": [
+        {
+            "uri": "file://test.test_Int8Serialization_/results.txt"
         }
     ],
     "test.test[LazyListSerialization]": [
@@ -27,6 +72,26 @@
     "test.test[ListSerialization]": [
         {
             "uri": "file://test.test_ListSerialization_/results.txt"
+        }
+    ],
+    "test.test[ManhattanDistance]": [
+        {
+            "uri": "file://test.test_ManhattanDistance_/results.txt"
+        }
+    ],
+    "test.test[NullForwarding]": [
+        {
+            "uri": "file://test.test_NullForwarding_/results.txt"
+        }
+    ],
+    "test.test[OptionalAutoUnpacking]": [
+        {
+            "uri": "file://test.test_OptionalAutoUnpacking_/results.txt"
+        }
+    ],
+    "test.test[Uint8Serialization]": [
+        {
+            "uri": "file://test.test_Uint8Serialization_/results.txt"
         }
     ]
 }

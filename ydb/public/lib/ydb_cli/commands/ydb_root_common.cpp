@@ -16,14 +16,15 @@
 #include "ydb_workload.h"
 
 #include <ydb/public/lib/ydb_cli/commands/interactive/interactive_cli.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/credentials/oauth2_token_exchange/credentials.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/credentials/oauth2_token_exchange/from_file.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/credentials/oauth2_token_exchange/jwt_token_source.h>
 
 #include <util/folder/path.h>
 #include <util/folder/dirut.h>
 #include <util/string/strip.h>
 #include <util/string/builder.h>
 #include <util/system/env.h>
-
-#include <contrib/libs/jwt-cpp/include/jwt-cpp/jwt.h>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -99,41 +100,14 @@ void TClientCommandRootCommon::SetCredentialsGetter(TConfig& config) {
         }
 
         if (config.UseOauth2TokenExchange) {
-            if (config.Oauth2TokenExchangeParams) {
-                return CreateOauth2TokenExchangeCredentialsProviderFactory(config.BuildOauth2TokenExchangeParams());
+            if (config.Oauth2KeyFile) {
+                return CreateOauth2TokenExchangeFileCredentialsProviderFactory(config.Oauth2KeyFile, config.IamEndpoint);
             }
         }
 
         return CreateInsecureCredentialsProviderFactory();
     };
 }
-
-template <class TAlg>
-void ApplyAsymmetricAlg(TJwtTokenSourceParams* params, const TString& privateKey) {
-    // Alg with first param as public key, second param as private key
-    params->SigningAlgorithm<TAlg>(std::string{}, privateKey);
-}
-
-template <class TAlg>
-void ApplyHmacAlg(TJwtTokenSourceParams* params, const TString& key) {
-    // Alg with first param as key
-    params->SigningAlgorithm<TAlg>(key);
-}
-
-const TMap<TString, void(*)(TJwtTokenSourceParams*, const TString& privateKey)> JwtAlgorithmsFactory = {
-    {"RS256", &ApplyAsymmetricAlg<jwt::algorithm::rs256>},
-    {"RS384", &ApplyAsymmetricAlg<jwt::algorithm::rs384>},
-    {"RS512", &ApplyAsymmetricAlg<jwt::algorithm::rs512>},
-    {"ES256", &ApplyAsymmetricAlg<jwt::algorithm::es256>},
-    {"ES384", &ApplyAsymmetricAlg<jwt::algorithm::es384>},
-    {"ES512", &ApplyAsymmetricAlg<jwt::algorithm::es512>},
-    {"PS256", &ApplyAsymmetricAlg<jwt::algorithm::ps256>},
-    {"PS384", &ApplyAsymmetricAlg<jwt::algorithm::ps384>},
-    {"PS512", &ApplyAsymmetricAlg<jwt::algorithm::ps512>},
-    {"HS256", &ApplyHmacAlg<jwt::algorithm::hs256>},
-    {"HS384", &ApplyHmacAlg<jwt::algorithm::hs384>},
-    {"HS512", &ApplyHmacAlg<jwt::algorithm::hs512>},
-};
 
 void TClientCommandRootCommon::Config(TConfig& config) {
     FillConfig(config);
@@ -254,58 +228,68 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         TJwtTokenSourceParams defaultJwtParams;
         NColorizer::TColors colors = NColorizer::AutoColors(Cout);
 
-        TStringBuilder supportedJwtAlgorithms;
-        for (const auto& [alg, _] : JwtAlgorithmsFactory) {
-            if (supportedJwtAlgorithms) {
-                supportedJwtAlgorithms << ", ";
-            }
-            supportedJwtAlgorithms << colors.BoldColor() << alg << colors.OldColor();
-        }
-
 #define FIELD(name) "    " << colors.BoldColor() << name << colors.OldColor() << ": "
 #define TYPE(type) "[" << colors.YellowColor() << type << colors.OldColor() << "] "
 #define TYPE2(type1, type2) "[" << colors.YellowColor() << type1 << colors.OldColor() << " | " << colors.YellowColor() << type2 << colors.OldColor() << "] "
 #define DEFAULT(value) " (default: " << colors.CyanColor() << value << colors.OldColor() << ")"
 
         TStringBuilder oauth2TokenExchangeHelp;
-        oauth2TokenExchangeHelp << "OAuth 2.0 token exchange credentials parameters (json)" << Endl
-            << "  Parameters search order:" << Endl
+        oauth2TokenExchangeHelp << "OAuth 2.0 RFC8693 token exchange credentials parameters json file" << Endl;
+        if (config.HelpCommandVerbosiltyLevel <= 1) {
+            oauth2TokenExchangeHelp << "  Use -hh option to see file format description" << Endl;
+        }
+        oauth2TokenExchangeHelp
+            << "  Parameters file search order:" << Endl
             << "    1. This option" << Endl
             << "    2. Profile specified with --profile option" << Endl
-            << "    3. \"YDB_OAUTH2_TOKEN_EXCHANGE\" environment variable" << Endl
+            << "    3. \"YDB_OAUTH2_KEY_FILE\" environment variable" << Endl
             << "    4. Active configuration profile" << Endl << Endl
-            << "  You can read detaled information about OAuth 2.0 token exchange protocol and its options" << Endl
-            << "    in the page: https://www.rfc-editor.org/rfc/rfc8693" << Endl
-            << Endl
-            << "  Value for this option must have json format with the following fields:" << Endl
-            << FIELD("grant-type") "          " TYPE("string") "Grant type option" DEFAULT(defaultParams.GrantType_) << Endl
-            << FIELD("resource") "            " TYPE("string") "Resource option" << Endl
-            << FIELD("audience") "            " TYPE2("string", "list of strings") "Audience option for token exchange request" << Endl
-            << FIELD("scope") "               " TYPE2("string", "list of strings") "Scope option" << Endl
-            << FIELD("requested-token-type") "" TYPE("string") "Requested token type option" DEFAULT(defaultParams.RequestedTokenType_) << Endl
-            << FIELD("subject-token") "       " TYPE("token_source_json") "Subject token options (optional)" << Endl
-            << FIELD("actor-token") "         " TYPE("token_source_json") "Actor token options (optional)" << Endl
-            << Endl
-            << "  Fields of " << colors.BoldColor() << "token_source_json" << colors.OldColor() << " (JWT):" << Endl
-            << FIELD("type") "                " TYPE("string") "Token source type. Set " << colors.BoldColor() << "JWT" << colors.OldColor() << Endl
-            << FIELD("alg") "                 " TYPE("string") "Algorithm for JWT signature. Supported algorithms: " << supportedJwtAlgorithms << Endl
-            << FIELD("private-key-file") "    " TYPE("string") "Path of (private) key file in PEM format for JWT signature ('~' is supported)" << Endl
-            << FIELD("kid") "                 " TYPE("string") "Key id JWT standard claim" << Endl
-            << FIELD("iss") "                 " TYPE("string") "Issuer JWT standard claim" << Endl
-            << FIELD("sub") "                 " TYPE("string") "Subject JWT standard claim" << Endl
-            << FIELD("aud") "                 " TYPE2("string", "list of strings") "Audience JWT standard claim" << Endl
-            << FIELD("jti") "                 " TYPE("string") "JWT ID JWT standard claim" << Endl
-            << FIELD("ttl") "                 " TYPE("string") "Token TTL" DEFAULT(defaultJwtParams.TokenTtl_) << Endl
-            << Endl
-            << "  Fields of " << colors.BoldColor() << "token_source_json" << colors.OldColor() << " (Fixed):" << Endl
-            << FIELD("type") "                " TYPE("string") "Token source type. Set " << colors.BoldColor() << "FIXED" << colors.OldColor() << Endl
-            << FIELD("token") "               " TYPE("string") "Token value" << Endl
-            << FIELD("token-type") "          " TYPE("string") "Token type value. It will become subject_token_type/actor_token_type parameter in token exchange request (https://www.rfc-editor.org/rfc/rfc8693)" << Endl
-            << Endl
+            << "  Detailed information about OAuth 2.0 token exchange protocol: https://www.rfc-editor.org/rfc/rfc8693" << Endl
+            << "  Detailed description about file parameters: https://ydb.tech/docs/en/reference/ydb-cli/connect" << Endl
+            << Endl;
+
+        if (config.HelpCommandVerbosiltyLevel >= 2) {
+            TStringBuilder supportedJwtAlgorithms;
+            for (const TString& alg : GetSupportedOauth2TokenExchangeJwtAlgorithms()) {
+                if (supportedJwtAlgorithms) {
+                    supportedJwtAlgorithms << ", ";
+                }
+                supportedJwtAlgorithms << colors.BoldColor() << alg << colors.OldColor();
+            }
+
+            oauth2TokenExchangeHelp
+                << "  Fields of json file:" << Endl
+                << FIELD("grant-type") "          " TYPE("string") "Grant type option" DEFAULT(defaultParams.GrantType_) << Endl
+                << FIELD("res") "                 " TYPE("string") "Resource option (optional)" << Endl
+                << FIELD("aud") "                 " TYPE2("string", "list of strings") "Audience option for token exchange request (optional)" << Endl
+                << FIELD("scope") "               " TYPE2("string", "list of strings") "Scope option (optional)" << Endl
+                << FIELD("requested-token-type") "" TYPE("string") "Requested token type option" DEFAULT(defaultParams.RequestedTokenType_) << Endl
+                << FIELD("subject-credentials") " " TYPE("creds_json") "Subject credentials options (optional)" << Endl
+                << FIELD("actor-credentials") "   " TYPE("creds_json") "Actor credentials options (optional)" << Endl
+                << Endl
+                << "  Fields of " << colors.BoldColor() << "creds_json" << colors.OldColor() << " (JWT):" << Endl
+                << FIELD("type") "                " TYPE("string") "Token source type. Set " << colors.BoldColor() << "JWT" << colors.OldColor() << Endl
+                << FIELD("alg") "                 " TYPE("string") "Algorithm for JWT signature. Supported algorithms: " << supportedJwtAlgorithms << Endl
+                << FIELD("private-key") "         " TYPE("string") "(Private) key in PEM format for JWT signature" << Endl
+                << FIELD("kid") "                 " TYPE("string") "Key id JWT standard claim (optional)" << Endl
+                << FIELD("iss") "                 " TYPE("string") "Issuer JWT standard claim (optional)" << Endl
+                << FIELD("sub") "                 " TYPE("string") "Subject JWT standard claim (optional)" << Endl
+                << FIELD("aud") "                 " TYPE2("string", "list of strings") "Audience JWT standard claim (optional)" << Endl
+                << FIELD("jti") "                 " TYPE("string") "JWT ID JWT standard claim (optional)" << Endl
+                << FIELD("ttl") "                 " TYPE("string") "Token TTL" DEFAULT(defaultJwtParams.TokenTtl_) << Endl
+                << Endl
+                << "  Fields of " << colors.BoldColor() << "creds_json" << colors.OldColor() << " (FIXED):" << Endl
+                << FIELD("type") "                " TYPE("string") "Token source type. Set " << colors.BoldColor() << "FIXED" << colors.OldColor() << Endl
+                << FIELD("token") "               " TYPE("string") "Token value" << Endl
+                << FIELD("token-type") "          " TYPE("string") "Token type value. It will become subject_token_type/actor_token_type parameter in token exchange request (https://www.rfc-editor.org/rfc/rfc8693)" << Endl
+                << Endl;
+        }
+
+        oauth2TokenExchangeHelp
             << "  Note that additionally you need to set " << colors.BoldColor() << "--iam-endpoint" << colors.OldColor() << " option" << Endl
             << "    in url format (SCHEMA://HOST:PORT/PATH) to configure endpoint.";
 
-        opts.AddLongOption("oauth2-token-exchange", oauth2TokenExchangeHelp).RequiredArgument("JSON").StoreResult(&Oauth2TokenExchangeParamsJson);
+        opts.AddLongOption("oauth2-key-file", oauth2TokenExchangeHelp).RequiredArgument("PATH").StoreResult(&Oauth2KeyFile);
 
 #undef DEFAULT
 #undef TYPE2
@@ -660,6 +644,9 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
         return true;
     }
     bool knownMethod = false;
+    if (config.UseOauth2TokenExchange) {
+        knownMethod |= (authMethod == "oauth2-key-file");
+    }
     if (config.UseIamAuth) {
         knownMethod |= (authMethod == "iam-token" || authMethod == "yc-token" || authMethod == "sa-key-file" ||
                         authMethod == "token-file" || authMethod == "yc-token-file");
@@ -715,6 +702,22 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
         }
         if (IsVerbose()) {
             config.ConnectionParams["token"].push_back({fileContent, GetProfileSource(profile, explicitOption)});
+        }
+    } else if (authMethod == "oauth2-key-file") {
+        TString filePath = authData.as<TString>();
+        if (filePath.StartsWith("~")) {
+            filePath = HomeDir + filePath.substr(1);
+        }
+        if (!IsAuthSet && (explicitOption || !Profile)) {
+            if (IsVerbose()) {
+                PrintSettingFromProfile("oauth2 key file (oauth2-key-file)", profile, explicitOption);
+            }
+            config.Oauth2KeyFile = filePath;
+            config.ChosenAuthMethod = "oauth2-key-file";
+            IsAuthSet = true;
+        }
+        if (IsVerbose()) {
+            config.ConnectionParams["oauth2-key-file"].push_back({filePath, GetProfileSource(profile, explicitOption)});
         }
     } else if (authMethod == "yc-token") {
         if (!IsAuthSet && (explicitOption || !Profile)) {
@@ -831,7 +834,8 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
     size_t explicitAuthMethodCount = (size_t)(config.ParseResult->Has("iam-token-file")) + (size_t)(config.ParseResult->Has("token-file"))
         + (size_t)(!YCTokenFile.empty())
         + (size_t)UseMetadataCredentials + (size_t)(!SaKeyFile.empty())
-        + (size_t)(!UserName.empty() || !PasswordFile.empty() || DoNotAskForPassword);
+        + (size_t)(!UserName.empty() || !PasswordFile.empty() || DoNotAskForPassword)
+        + (size_t)(!Oauth2KeyFile.empty());
 
     switch (explicitAuthMethodCount) {
     case 1:
@@ -842,6 +846,13 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
             if (IsVerbose()) {
                 Cerr << "Using token from file provided with explicit option" << Endl;
                 config.ConnectionParams["token"].push_back({config.SecurityToken, "file provided with explicit --token-file option"});
+            }
+        } else if (Oauth2KeyFile) {
+            config.Oauth2KeyFile = Oauth2KeyFile;
+            config.ChosenAuthMethod = "oauth2-key-file";
+            if (IsVerbose()) {
+                Cerr << "Using oauth2 key file provided with --oauth2-key-file option" << Endl;
+                config.ConnectionParams["oauth2-key-file"].push_back({config.Oauth2KeyFile, "explicit --oauth2-key-file option"});
             }
         } else if (config.ParseResult->Has("iam-token-file")) {
             config.SecurityToken = ReadFromFile(TokenFile, "token");
@@ -900,6 +911,24 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
         // Priority 2. No explicit auth methods. Checking configuration profile given via --profile option.
         if (GetCredentialsFromProfile(Profile, config, true) && !IsVerbose()) {
             break;
+        }
+
+        if (config.UseOauth2TokenExchange) {
+            TString envOauth2KeyFile = GetEnv("YDB_OAUTH2_KEY_FILE");
+            if (!envOauth2KeyFile.empty()) {
+                if (!IsAuthSet) {
+                    if (IsVerbose()) {
+                        Cerr << "Using oauth2 key file from YDB_OAUTH2_KEY_FILE env variable" << Endl;
+                    }
+                    config.ChosenAuthMethod = "oauth2-key-file";
+                    config.Oauth2KeyFile = envOauth2KeyFile;
+                    IsAuthSet = true;
+                }
+                if (!IsVerbose()) {
+                    break;
+                }
+                config.ConnectionParams["oauth2-key-file"].push_back({envOauth2KeyFile, "YDB_OAUTH2_KEY_FILE enviroment variable"});
+            }
         }
 
         // Priority 3. No auth methods from --profile either. Checking environment variables.
@@ -1062,6 +1091,9 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
         }
         if (UseMetadataCredentials) {
             str << " UseMetadataCredentials (true)";
+        }
+        if (Oauth2KeyFile) {
+            str << " OAuth2KeyFile (" << Oauth2KeyFile << ")";
         }
 
         MisuseErrors.push_back(TStringBuilder() << str << ". Choose exactly one of them");

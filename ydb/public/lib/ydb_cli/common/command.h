@@ -3,8 +3,7 @@
 #include "common.h"
 
 #include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/oauth2_token_exchange/credentials.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/oauth2_token_exchange/jwt_token_source.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/credentials/oauth2_token_exchange/from_file.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/colorizer/colors.h>
@@ -62,7 +61,7 @@ public:
                 return Value;
             }
 
-            bool  GetIsSet() const {
+            bool GetIsSet() const {
                 return IsSet;
             }
 
@@ -105,10 +104,10 @@ public:
         TMap<TString, TVector<TConnectionParam>> ConnectionParams;
         bool EnableSsl = false;
         bool IsNetworkIntensive = false;
-        TMaybe<TOauth2TokenExchangeParams> Oauth2TokenExchangeParams;
-        TOauth2TokenExchangeParams BuildOauth2TokenExchangeParams() const; // Builds final TOauth2TokenExchangeParams from Oauth2TokenExchangeParams and IamEndpoint
+        TString Oauth2KeyFile;
 
         EVerbosityLevel VerbosityLevel = EVerbosityLevel::NONE;
+        size_t HelpCommandVerbosiltyLevel = 1; // No options -h or one - 1, -hh - 2, -hhh - 3 etc
 
         bool JsonUi64AsText = false;
         bool JsonBinaryAsBase64 = false;
@@ -147,6 +146,7 @@ public:
             , InitialArgV(argv)
             , Opts(nullptr)
             , ParseResult(nullptr)
+            , HelpCommandVerbosiltyLevel(ParseHelpCommandVerbosilty(argc, argv))
             , TabletId(0)
         {
             CredentialsGetter = [](const TClientCommand::TConfig& config) {
@@ -154,8 +154,8 @@ public:
                     return CreateOAuthCredentialsProviderFactory(config.SecurityToken);
                 }
                 if (config.UseOauth2TokenExchange) {
-                    if (config.Oauth2TokenExchangeParams) {
-                        return CreateOauth2TokenExchangeCredentialsProviderFactory(config.BuildOauth2TokenExchangeParams());
+                    if (config.Oauth2KeyFile) {
+                        return CreateOauth2TokenExchangeFileCredentialsProviderFactory(config.Oauth2KeyFile, config.IamEndpoint);
                     }
                 }
                 return CreateInsecureCredentialsProviderFactory();
@@ -165,6 +165,8 @@ public:
         bool HasHelpCommand() const {
             return HasArgs({ "--help" }) || HasArgs({ "-h" }) || HasArgs({ "-?" }) || HasArgs({ "--help-ex" });
         }
+
+        static size_t ParseHelpCommandVerbosilty(int argc, char** argv);
 
         bool IsVerbose() const {
             return VerbosityLevel != EVerbosityLevel::NONE;

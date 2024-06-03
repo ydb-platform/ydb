@@ -1,6 +1,6 @@
 #include "jwt_token_source.h"
 
-#include <contrib/libs/jwt-cpp/include/jwt-cpp/jwt.h>
+#include <jwt-cpp/jwt.h>
 
 #include <chrono>
 #include <set>

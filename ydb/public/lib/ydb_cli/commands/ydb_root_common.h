@@ -78,8 +78,7 @@ private:
     const TClientSettings& Settings;
     TVector<TString> MisuseErrors;
 
-    TMaybe<TOauth2TokenExchangeParams> Oauth2TokenExchangeParams;
-    TString Oauth2TokenExchangeParamsJson;
+    TString Oauth2KeyFile;
 
     bool IsAddressSet = false;
     bool IsDatabaseSet = false;

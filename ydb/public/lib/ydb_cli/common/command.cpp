@@ -106,7 +106,7 @@ TClientCommand::TClientCommand(
 {
     HideOption("svnrevision");
     Opts.AddHelpOption('h');
-    ChangeOptionDescription("help", "Print usage");
+    ChangeOptionDescription("help", "Print usage, -hh for more detailed help");
     auto terminalWidth = GetTerminalWidth();
     size_t lineLength = terminalWidth ? *terminalWidth : Max<size_t>();
     Opts.SetWrap(Max(Opts.Wrap_, static_cast<ui32>(lineLength)));
@@ -127,11 +127,30 @@ ELogPriority TClientCommand::TConfig::VerbosityLevelToELogPriority(TClientComman
     }
 }
 
-TOauth2TokenExchangeParams TClientCommand::TConfig::BuildOauth2TokenExchangeParams() const {
-    Y_ASSERT(Oauth2TokenExchangeParams);
-    TOauth2TokenExchangeParams params = *Oauth2TokenExchangeParams;
-    params.TokenEndpoint(IamEndpoint);
-    return params;
+size_t TClientCommand::TConfig::ParseHelpCommandVerbosilty(int argc, char** argv) {
+    size_t cnt = 0;
+    for (int i = 0; i < argc; ++i) {
+        TStringBuf arg = argv[i];
+        if (arg == "--help") {
+            ++cnt;
+            continue;
+        }
+        if (arg.StartsWith("--")) { // other option
+            continue;
+        }
+        if (arg.StartsWith("-")) { // char options
+            for (size_t i = 1; i < arg.size(); ++i) {
+                if (arg[i] == 'h') {
+                    ++cnt;
+                }
+            }
+        }
+    }
+
+    if (!cnt) {
+        cnt = 1;
+    }
+    return cnt;
 }
 
 TClientCommand::TOptsParseOneLevelResult::TOptsParseOneLevelResult(TConfig& config) {

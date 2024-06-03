@@ -25,7 +25,9 @@ static std::vector<TString> NamesOnly(const std::vector<TNameTypeInfo>& columns)
 TIndexInfo::TIndexInfo(const TString& name)
     : NTable::TScheme::TTableSchema()
     , Name(name)
-{}
+{
+    CompactionPlannerConstructor = std::make_shared<NStorageOptimizer::NLBuckets::TOptimizerPlannerConstructor>();
+}
 
 bool TIndexInfo::CheckCompatible(const TIndexInfo& other) const {
     if (!other.GetPrimaryKey()->Equals(GetPrimaryKey())) {
@@ -327,7 +329,7 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
             auto container = NStorageOptimizer::TOptimizerPlannerConstructorContainer::BuildFromProto(schema.GetOptions().GetCompactionPlannerConstructor());
             CompactionPlannerConstructor = container.DetachResult().GetObjectPtrVerified();
         } else {
-            CompactionPlannerConstructor = std::make_shared<NStorageOptimizer::NLBuckets::TOptimizerPlannerConstructor>();
+            AFL_VERIFY(!!CompactionPlannerConstructor);
         }
     }
 

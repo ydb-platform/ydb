@@ -13054,6 +13054,13 @@
             "uri": "https://{canondata_backend}/1881367/79a71c1478c556da1931a7565c12bdd14cc63567/resource.tar.gz#test_sql2yql.test_pg-select_win_min_null_/sql.yql"
         }
     ],
+    "test_sql2yql.test[pg-select_win_nth_value]": [
+        {
+            "checksum": "a8bf895bace1d89545c7ff4eddeb6d55",
+            "size": 1581,
+            "uri": "https://{canondata_backend}/1871182/567779c73d6cc9df23501e596c52b2adf09b5b7b/resource.tar.gz#test_sql2yql.test_pg-select_win_nth_value_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[pg-select_win_partition_sort]": [
         {
             "checksum": "bd5985cc249fcf7c6c8a2ac90c4aa62a",
@@ -18337,6 +18344,13 @@
             "checksum": "5e7b2e509d9aacb61b30046dffdc308e",
             "size": 3038,
             "uri": "https://{canondata_backend}/1784117/d56ae82ad9d30397a41490647be1bd2124718f98/resource.tar.gz#test_sql2yql.test_window-win_func_mutable_resource_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[window-win_func_nth_value]": [
+        {
+            "checksum": "3a5e4b674976ea289495d9d1470f8d5e",
+            "size": 4014,
+            "uri": "https://{canondata_backend}/1937367/f9c5e2ce003fa874f20946cc39a5807e02d6b085/resource.tar.gz#test_sql2yql.test_window-win_func_nth_value_/sql.yql"
         }
     ],
     "test_sql2yql.test[window-win_func_on_cloned_source]": [
@@ -33996,6 +34010,13 @@
             "checksum": "3137020d49857b4d8d1737627b8cc12b",
             "size": 295,
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_window-win_func_mutable_resource_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[window-win_func_nth_value]": [
+        {
+            "checksum": "02c4b839b33915cb2711a14a46e05956",
+            "size": 547,
+            "uri": "https://{canondata_backend}/1937367/f9c5e2ce003fa874f20946cc39a5807e02d6b085/resource.tar.gz#test_sql_format.test_window-win_func_nth_value_/formatted.sql"
         }
     ],
     "test_sql_format.test[window-win_func_on_cloned_source]": [

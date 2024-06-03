@@ -160,11 +160,7 @@ public:
 
         builder.UserType(userType);
         builder.Args(1)->Add(argType).Flags(ICallablePayload::TArgumentFlags::AutoMap);
-        if (argType == argsTuple.GetElementType(0)) {
-            builder.Returns<TBitVector>().IsStrict();
-        } else {
-            builder.Returns<TOptional<TBitVector>>().IsStrict();
-        }
+        builder.Returns<TBitVector>().IsStrict();
 
         if (!typesOnly) {
             if (type == EType::Double) {

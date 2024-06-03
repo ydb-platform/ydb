@@ -1,5 +1,6 @@
 #include "datashard_impl.h"
 #include "datashard_txs.h"
+#include "datashard_locks_db.h"
 #include "probes.h"
 
 #include <ydb/core/base/interconnect_channels.h>
@@ -1620,7 +1621,9 @@ TUserTable::TPtr TDataShard::MoveUserTable(TOperation::TPtr op, const NKikimrTxD
     newTableInfo->StatsUpdateInProgress = false;
     newTableInfo->StatsNeedUpdate = true;
 
-    RemoveUserTable(prevId);
+    TDataShardLocksDb locksDb(*this, txc);
+
+    RemoveUserTable(prevId, &locksDb);
     AddUserTable(newId, newTableInfo);
 
     for (auto& [_, record] : ChangesQueue) {

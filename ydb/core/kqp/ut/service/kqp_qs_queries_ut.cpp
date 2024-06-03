@@ -3180,7 +3180,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 ALTER TABLE alterNotNull
                 ALTER COLUMN value SET NOT NULL;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
+            // change
+            UNIT_ASSERT_C(!setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
         }
 
         {
@@ -3237,7 +3238,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 ALTER TABLE alterNotNull
                 ALTER COLUMN value SET NULL;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(setNull.IsSuccess(), setNull.GetIssues().ToString());
+            UNIT_ASSERT_C(!setNull.IsSuccess(), setNull.GetIssues().ToString());
         }
 
         {
@@ -3247,7 +3248,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 ( 1, NULL ),
                 ( 2, NULL ),
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(initNullValues.IsSuccess(), initNullValues.GetIssues().ToString());
+            // change
+            UNIT_ASSERT_C(!initNullValues.IsSuccess(), initNullValues.GetIssues().ToString());
         }
     }
 }

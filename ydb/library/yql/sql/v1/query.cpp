@@ -1327,13 +1327,15 @@ public:
         }
 
         if (Params.AlterColumns) {
-            std::cerr << "====================================" << std::endl;
             auto columns = Y();
             for (auto& col : Params.AlterColumns) {
                 if (col.TypeOfChange == TColumnSchema::ETypeOfChange::SetNullConstraint) {
                     auto columnDesc = Y();
                     columnDesc = L(columnDesc, BuildQuotedAtom(Pos, col.Name));
                     auto type = col.Type;
+                    // std::cerr << "======================================================" << std::endl;
+                    // std::cerr << "heloooooooo)" << std::endl;
+                    // std::cerr << "======================================================" << std::endl;
 
                     if (type) {
                         if (col.Nullable) {
@@ -1369,8 +1371,6 @@ public:
                 }
             }
             actions = L(actions, Q(Y(Q("alterColumns"), Q(columns))));
-
-            std::cerr << "====================================" << std::endl;
         }
 
         if (Params.AddColumnFamilies) {

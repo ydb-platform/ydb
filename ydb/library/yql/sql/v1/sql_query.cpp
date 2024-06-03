@@ -1837,17 +1837,14 @@ bool TSqlQuery::AlterTableAlterIndex(const TRule_alter_table_alter_index& node, 
 bool TSqlQuery::AlterTableAlterColumnSetNull(const TRule_alter_table_alter_column_set_null& node, TAlterTableParameters& params) {
     TString name = Id(node.GetRule_an_id3(), *this);
     const TPosition pos(Context().Pos());
-    auto tokenId = node.GetBlock5().GetAlt1().GetToken1().GetId(); // null | not null
+    auto blockNull = node.GetBlock5();
     bool nullable;
 
-    switch (tokenId) {
-    case SQLv1LexerTokens::TOKEN_NULL:
+    if (blockNull.HasAlt1()) { // null
         nullable = true;
-        break;
-    case SQLv1LexerTokens::TOKEN_NOTNULL:
+    } else if (blockNull.HasAlt2()) { // not null
         nullable = false;
-        break;
-    default:
+    } else {
         return false;
     }
 

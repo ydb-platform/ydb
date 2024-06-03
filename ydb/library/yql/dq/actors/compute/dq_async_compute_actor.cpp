@@ -228,7 +228,7 @@ private:
         for (const auto& [id, info]: InputChannelsMap) {
             html << "<h4>Input Channel Id: " << id << "</h4>";
             html << "LogPrefix: " << info.LogPrefix << "<br />";
-            html << "ChannalId: " << info.ChannelId << "<br />";
+            html << "ChannelId: " << info.ChannelId << "<br />";
             html << "SrcStageId: " << info.SrcStageId << "<br />";
             html << "HasPeer: " << info.HasPeer << "<br />";
             html << "PendingWatermarks: " << !info.PendingWatermarks.empty() << " " << (info.PendingWatermarks.empty() ? TString{} : info.PendingWatermarks.back().ToString()) << "<br />";
@@ -238,7 +238,7 @@ private:
             html << "FreeSpace: " << info.FreeSpace << "<br />";
             html << "IsPaused: " << info.IsPaused() << "<br />";
             if (info.Channel) {
-                html << "DqInputChannel.ChannalId: " << info.Channel->GetChannelId() << "<br />";
+                html << "DqInputChannel.ChannelId: " << info.Channel->GetChannelId() << "<br />";
                 html << "DqInputChannel.FreeSpace: " << info.Channel->GetFreeSpace() << "<br />";
                 html << "DqInputChannel.StoredBytes: " << info.Channel->GetStoredBytes() << "<br />";
                 html << "DqInputChannel.Empty: " << info.Channel->Empty() << "<br />";
@@ -282,7 +282,7 @@ private:
         html << "<h3>OutputChannels</h3>";
         for (const auto& [id, info]: OutputChannelsMap) {
             html << "<h4>Input Channel Id: " << id << "</h4>";
-            html << "ChannalId: " << info.ChannelId << "<br />";
+            html << "ChannelId: " << info.ChannelId << "<br />";
             html << "DstStageId: " << info.DstStageId << "<br />";
             html << "HasPeer: " << info.HasPeer << "<br />";
             html << "Finished: " << info.Finished << "<br />";
@@ -300,7 +300,7 @@ private:
             }
 
             if (info.Channel) {
-                html << "DqOutputChannel.ChannalId: " << info.Channel->GetChannelId() << "<br />";
+                html << "DqOutputChannel.ChannelId: " << info.Channel->GetChannelId() << "<br />";
                 html << "DqOutputChannel.ValuesCount: " << info.Channel->GetValuesCount() << "<br />";
                 html << "DqOutputChannel.IsFull: " << info.Channel->IsFull() << "<br />";
                 html << "DqOutputChannel.HasData: " << info.Channel->HasData() << "<br />";

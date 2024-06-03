@@ -151,8 +151,8 @@ class Factory:
                 ),
                 Column(
                     name='col_25_json',
-                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.TIMESTAMP),
-                    data_source_type=DataSourceType(pg=postgresql.TimestampWithoutTimeZone()),
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.JSON),
+                    data_source_type=DataSourceType(pg=postgresql.Json()),
                 ),
                 # TODO: YQ-2297
                 # Column(

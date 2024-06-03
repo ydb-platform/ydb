@@ -64,10 +64,10 @@ public:
         bool enableChunkCombining = IsChunkCombiningEnabled();
 
         auto storeDep = [&opDeps, &opDepsOrder](const TYtOutput& out, const TExprNode* reader, const TExprNode* sec, const TExprNode* path) {
-            const auto realOp = GetRealOperation(out.Operation()).Raw();
-            auto& res = opDeps[realOp];
+            const auto op = out.Operation().Raw();
+            auto& res = opDeps[op];
             if (res.empty()) {
-                opDepsOrder.push_back(realOp);
+                opDepsOrder.push_back(op);
             }
             res.emplace_back(reader, sec, out.Raw(), path);
         };
@@ -900,7 +900,19 @@ private:
             }
             if (!unorderedOuts.Empty()) {
                 if (orderedOuts.Empty() || !writer->IsCallable(OPS_WITH_SORTED_OUTPUT)) {
-                    TExprNode::TPtr newOp = MakeUnorderedOp(*writer, unorderedOuts, ctx);
+                    TExprNode::TPtr newOp;
+                    if (const auto mayTry = TExprBase(writer).Maybe<TYtTryFirst>()) {
+                        TExprNode::TPtr newOpFirst = MakeUnorderedOp(mayTry.Cast().First().Ref(), unorderedOuts, ctx);
+                        TExprNode::TPtr newOpSecond = MakeUnorderedOp(mayTry.Cast().Second().Ref(), unorderedOuts, ctx);
+                        if (newOpFirst || newOpSecond) {
+                            newOp = Build<TYtTryFirst>(ctx, writer->Pos())
+                                .First(newOpFirst ? std::move(newOpFirst) : mayTry.Cast().First().Ptr())
+                                .Second(newOpSecond ? std::move(newOpSecond) : mayTry.Cast().Second().Ptr())
+                                .Done().Ptr();
+                        }
+                    } else {
+                        newOp = MakeUnorderedOp(*writer, unorderedOuts, ctx);
+                    }
                     if (newOp) {
                         newOps[writer] = newOp;
                     }
@@ -1561,7 +1573,7 @@ private:
         TNodeOnNodeOwnedMap newOps;
         for (auto& x: opDeps) {
             auto writer = x.first;
-            if (const size_t outCount = TYtOutputOpBase(writer).Output().Size(); outCount > 1 && writer->GetState() != TExprNode::EState::ExecutionComplete
+            if (const size_t outCount = GetRealOperation(TExprBase(writer)).Output().Size(); outCount > 1 && writer->GetState() != TExprNode::EState::ExecutionComplete
                 && writer->GetState() != TExprNode::EState::ExecutionInProgress
                 && (!writer->HasResult() || writer->GetResult().Type() != TExprNode::World)
                 && ProcessedUnusedOuts.find(writer->UniqueId()) == ProcessedUnusedOuts.end())
@@ -1571,7 +1583,19 @@ private:
                     usedOuts.Set(FromString<size_t>(std::get<2>(item)->Child(TYtOutput::idx_OutIndex)->Content()));
                 }
                 if (!usedOuts.Empty() && usedOuts.Count() < outCount) {
-                    TExprNode::TPtr newOp = SuppressUnusedOuts(*writer, usedOuts, ctx);
+                    TExprNode::TPtr newOp;
+                    if (const auto mayTry = TExprBase(writer).Maybe<TYtTryFirst>()) {
+                        const auto opSecond = mayTry.Cast().Second().Raw();
+                        TExprNode::TPtr newOpSecond = SuppressUnusedOuts(*opSecond, usedOuts, ctx);
+                        if (newOpSecond) {
+                            newOp = Build<TYtTryFirst>(ctx, writer->Pos())
+                                .First(mayTry.Cast().First().Ptr())
+                                .Second(std::move(newOpSecond))
+                                .Done().Ptr();
+                        }
+                    } else {
+                        newOp = SuppressUnusedOuts(*writer, usedOuts, ctx);
+                    }
                     newOps[writer] = newOp;
                     TVector<size_t> remappedIndicies(outCount, Max<size_t>());
                     size_t newIndex = 0;
@@ -1634,7 +1658,7 @@ private:
                 continue;
             }
 
-            const TYtOutputOpBase operation(x.first);
+            const TYtOutputOpBase operation = GetRealOperation(TExprBase(x.first));
             const bool canUpdateOp = !operation.Ref().StartsExecution() && !operation.Ref().HasResult() && !operation.Maybe<TYtCopy>();
             const bool canChangeNativeTypeForOp = !operation.Maybe<TYtMerge>() && !operation.Maybe<TYtSort>();
 
@@ -1954,7 +1978,7 @@ private:
         TNodeOnNodeOwnedMap newOps;
         for (auto& x: opDeps) {
             auto writer = x.first;
-            const TYtOutputOpBase op(writer);
+            const TYtOutputOpBase op = GetRealOperation(TExprBase(writer));
             if (const size_t outCount = op.Output().Size(); outCount > 1 && !BeingExecuted(*writer)
                 && (!op.Maybe<TYtMapReduce>() || GetMapDirectOutputsCount(op.Maybe<TYtMapReduce>().Cast()) == 0) // TODO: optimize this case
                 && ProcessedMultiOuts.find(writer->UniqueId()) == ProcessedMultiOuts.end())

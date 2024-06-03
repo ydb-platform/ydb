@@ -15,7 +15,7 @@ namespace NKikimr::NDataShard {
             : Owner(owner)
             , SrcTabletId(srcTabletId)
             , PathId(pathId)
-            , PipeCache(MakePipePeNodeCacheID(false))
+            , PipeCache(MakePipePerNodeCacheID(false))
             , Result(new TEvPrivate::TEvReplicationSourceOffsets(srcTabletId, pathId))
         { }
 

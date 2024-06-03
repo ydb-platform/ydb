@@ -1,5 +1,7 @@
 #include "ydb_setup.h"
 
+#include <library/cpp/colorizer/colors.h>
+
 #include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 
@@ -112,12 +114,19 @@ private:
     NKikimr::Tests::TServerSettings GetServerSettings() {
         ui32 msgBusPort = PortManager_.GetPort();
 
-        NKikimr::Tests::TServerSettings serverSettings(msgBusPort);
+        NKikimr::Tests::TServerSettings serverSettings(msgBusPort, Settings_.AppConfig.GetAuthConfig(), Settings_.AppConfig.GetPQConfig());
         serverSettings.SetNodeCount(Settings_.NodeCount);
 
         serverSettings.SetDomainName(Settings_.DomainName);
         serverSettings.SetAppConfig(Settings_.AppConfig);
         serverSettings.SetFeatureFlags(Settings_.AppConfig.GetFeatureFlags());
+        serverSettings.SetControls(Settings_.AppConfig.GetImmediateControlsConfig());
+        serverSettings.SetCompactionConfig(Settings_.AppConfig.GetCompactionConfig());
+        serverSettings.PQClusterDiscoveryConfig = Settings_.AppConfig.GetPQClusterDiscoveryConfig();
+        serverSettings.NetClassifierConfig = Settings_.AppConfig.GetNetClassifierConfig();
+
+        const auto& kqpSettings = Settings_.AppConfig.GetKQPConfig().GetSettings();
+        serverSettings.SetKqpSettings({kqpSettings.begin(), kqpSettings.end()});
 
         serverSettings.SetCredentialsFactory(std::make_shared<TStaticSecuredCredentialsFactory>(Settings_.YqlToken));
         serverSettings.SetComputationFactory(Settings_.ComputationFactory);
@@ -126,6 +135,10 @@ private:
 
         SetLoggerSettings(serverSettings);
         SetFunctionRegistry(serverSettings);
+
+        if (Settings_.MonitoringEnabled) {
+            serverSettings.InitKikimrRunConfig();
+        }
 
         return serverSettings;
     }
@@ -177,12 +190,14 @@ private:
 public:
     explicit TImpl(const TYdbSetupSettings& settings)
         : Settings_(settings)
+        , CoutColors_(NColorizer::AutoColors(Cout))
     {
         InitializeYqlLogger();
         InitializeServer();
+        WaitResourcesPublishing();
 
-        if (Settings_.NodeCount > 1) {
-            WaitResourcesPublishing();
+        if (Settings_.MonitoringEnabled) {
+            Cout << CoutColors_.Cyan() << "Monitoring port: " << CoutColors_.Default() << Server_->GetRuntime()->GetMonPort() << Endl;
         }
     }
 
@@ -302,6 +317,7 @@ private:
 
 private:
     TYdbSetupSettings Settings_;
+    NColorizer::TColors CoutColors_;
 
     THolder<NKikimr::Tests::TServer> Server_;
     THolder<NKikimr::Tests::TClient> Client_;

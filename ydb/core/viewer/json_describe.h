@@ -232,7 +232,6 @@ public:
 
     void ReplyAndPassAway() {
         TStringStream json;
-        TString headers = Viewer->GetHTTPOKJSON(Event->Get());
         if (SchemeShardResult != nullptr && SchemeShardResult->GetRecord().GetStatus() == NKikimrScheme::EStatus::StatusSuccess) {
             DescribeResult = GetSchemeShardDescribeSchemeInfo();
         } else if (CacheResult != nullptr) {
@@ -264,7 +263,9 @@ public:
             const auto *descriptor = NKikimrScheme::EStatus_descriptor();
             auto accessDeniedStatus = descriptor->FindValueByNumber(NKikimrScheme::StatusAccessDenied)->name();
             if (DescribeResult->GetStatus() == accessDeniedStatus) {
-                headers = Viewer->GetHTTPFORBIDDEN(Event->Get());
+                Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPFORBIDDEN(Event->Get()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+                PassAway();
+                return;
             }
             TProtoToJson::ProtoToJson(json, *DescribeResult, JsonSettings);
             DecodeExternalTableContent(json);
@@ -272,7 +273,7 @@ public:
             json << "null";
         }
 
-        Send(Event->Sender, new NMon::TEvHttpInfoRes(headers + json.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), json.Str()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         PassAway();
     }
 

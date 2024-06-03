@@ -87,6 +87,8 @@ class TPartition : public TActorBootstrapped<TPartition> {
 public:
     const TString& TopicName() const;
 
+    ui64 GetUsedStorage(const TInstant& ctx);
+
 private:
     static const ui32 MAX_ERRORS_COUNT_TO_STORE = 10;
     static const ui32 SCALE_REQUEST_REPEAT_MIN_SECONDS = 60;
@@ -252,8 +254,6 @@ private:
                                                    const ui32 maxSize, const ui64 readTimestampMs, ui32* rcount,
                                                    ui32* rsize, ui64* insideHeadOffset, ui64 lastOffset);
 
-    ui64 GetUsedStorage(const TActorContext& ctx);
-
     TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> MakeHasDataInfoResponse(ui64 lagSize, const TMaybe<ui64>& cookie, bool readingFinished = false);
 
     void ProcessTxsAndUserActs(const TActorContext& ctx);
@@ -401,7 +401,7 @@ public:
     }
 
     // The size of the data realy was persisted in the storage by the partition
-    ui64 MeteringDataSize(const TActorContext& ctx) const;
+    ui64 MeteringDataSize() const;
     // The size of the storage that was reserved by the partition
     ui64 ReserveSize() const;
     // The size of the storage that usud by the partition. That included combination of the reserver and realy persisted data.

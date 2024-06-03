@@ -201,7 +201,9 @@ namespace {
 
     class TRoaringDeserialize: public TBoxedValue {
     public:
-        TRoaringDeserialize() {
+        TRoaringDeserialize(TSourcePosition pos)
+            : Pos_(pos)
+        {
         }
 
         static TStringRef Name() {
@@ -212,8 +214,13 @@ namespace {
         TUnboxedValue Run(const IValueBuilder* valueBuilder,
                           const TUnboxedValuePod* args) const override {
             Y_UNUSED(valueBuilder);
-            return TUnboxedValuePod(new TRoaringWrapper(args[0].AsStringRef()));
+            try {
+                return TUnboxedValuePod(new TRoaringWrapper(args[0].AsStringRef()));
+            } catch (const std::exception& e) {
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            }
         }
+        TSourcePosition Pos_;
     };
 
     class TRoaringSerialize: public TBoxedValue {
@@ -303,7 +310,7 @@ namespace {
                     builder.Returns<TResource<RoaringResourceName>>().Args()->Add<TAutoMap<char*>>();
 
                     if (!typesOnly) {
-                        builder.Implementation(new TRoaringDeserialize());
+                        builder.Implementation(new TRoaringDeserialize(builder.GetSourcePosition()));
                     }
                 } else if (TRoaringSerialize::Name() == name) {
                     builder.Returns(builder.SimpleType<char*>())

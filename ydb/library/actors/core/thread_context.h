@@ -30,18 +30,25 @@ namespace NActors {
         bool IsCurrentRecipientAService = false;
         TMPMCRingQueue<20>::EPopMode ActivationPopMode = TMPMCRingQueue<20>::EPopMode::ReallySlow;
 
-        std::atomic<i64> StartOfElapsingTime = 0;
-        std::atomic<ui64> ElapsingActorActivity = 0;
+        std::atomic<i64> StartOfProcessingEventTS = GetCycleCountFast();
+        std::atomic<i64> ActivationStartTS = 0;
+        std::atomic<ui64> ElapsingActorActivity = Max<ui64>();
         TWorkerContext *WorkerCtx = nullptr;
         ui32 ActorSystemIndex = 0;
 
-        ui64 UpdateStartOfElapsingTime(i64 newValue) {
-            i64 oldValue = StartOfElapsingTime.load(std::memory_order_acquire);
+        TThreadContext() {
+            i64 now = GetCycleCountFast();
+            StartOfProcessingEventTS = now;
+            ActivationStartTS = now;
+        }
+
+        ui64 UpdateStartOfProcessingEventTS(i64 newValue) {
+            i64 oldValue = StartOfProcessingEventTS.load(std::memory_order_acquire);
             for (;;) {
                 if (newValue - oldValue <= 0) {
                     break;
                 }
-                if (StartOfElapsingTime.compare_exchange_strong(oldValue, newValue, std::memory_order_acq_rel)) {
+                if (StartOfProcessingEventTS.compare_exchange_strong(oldValue, newValue, std::memory_order_acq_rel)) {
                     break;
                 }
             }

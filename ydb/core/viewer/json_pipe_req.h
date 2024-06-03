@@ -6,6 +6,7 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/statestorage.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -158,6 +159,18 @@ protected:
 
     void RequestBSControllerSelectGroups(THolder<TEvBlobStorage::TEvControllerSelectGroups> request) {
         TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+        SendRequestToPipe(pipeClient, request.Release());
+    }
+
+    void RequestBSControllerPDiskRestart(ui32 nodeId, ui32 pdiskId, bool force = false) {
+        TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+        THolder<TEvBlobStorage::TEvControllerConfigRequest> request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto* restartPDisk = request->Record.MutableRequest()->AddCommand()->MutableRestartPDisk();
+        restartPDisk->MutableTargetPDiskId()->SetNodeId(nodeId);
+        restartPDisk->MutableTargetPDiskId()->SetPDiskId(pdiskId);
+        if (force) {
+            request->Record.MutableRequest()->SetIgnoreDegradedGroupsChecks(true);
+        }
         SendRequestToPipe(pipeClient, request.Release());
     }
 

@@ -13,6 +13,7 @@ public:
     virtual TString GetRequestSummary() = 0;
     virtual TString GetRequestDescription() = 0;
     virtual YAML::Node GetRequestParameters() = 0;
+    virtual YAML::Node GetRequestSwagger() = 0;
 };
 
 template <typename ActorRequestType>
@@ -41,15 +42,20 @@ public:
         static YAML::Node parameters = TJsonRequestParameters<ActorRequestType>::GetParameters();
         return parameters;
     }
+
+    YAML::Node GetRequestSwagger() override {
+        static YAML::Node swagger = TJsonRequestSwagger<ActorRequestType>::GetSwagger();
+        return swagger;
+    }
 };
 
 struct TJsonHandlers {
     std::vector<TString> JsonHandlersList;
-    THashMap<TString, TAutoPtr<TJsonHandlerBase>> JsonHandlersIndex;
+    THashMap<TString, std::shared_ptr<TJsonHandlerBase>> JsonHandlersIndex;
 
-    void AddHandler(const TString& name, TAutoPtr<TJsonHandlerBase> handler) {
+    void AddHandler(const TString& name, TJsonHandlerBase* handler) {
         JsonHandlersList.push_back(name);
-        JsonHandlersIndex[name] = std::move(handler);
+        JsonHandlersIndex[name] = std::shared_ptr<TJsonHandlerBase>(handler);
     }
 
     TJsonHandlerBase* FindHandler(const TString& name) const {
@@ -57,7 +63,7 @@ struct TJsonHandlers {
         if (it == JsonHandlersIndex.end()) {
             return nullptr;
         }
-        return it->second.Get();
+        return it->second.get();
     }
 };
 

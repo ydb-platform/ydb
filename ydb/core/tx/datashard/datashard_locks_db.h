@@ -12,40 +12,8 @@ private:
 public:
     using TBase::TBase;
 
-    void PersistRemoveLock(ui64 lockId) override {
-        // We remove lock changes unless it's managed by volatile tx manager
-        bool isVolatile = Self.GetVolatileTxManager().FindByCommitTxId(lockId);
-        if (!isVolatile) {
-            for (auto& pr : Self.GetUserTables()) {
-                auto tid = pr.second->LocalTid;
-                // Removing the lock also removes any uncommitted data
-                if (DB.HasOpenTx(tid, lockId)) {
-                    DB.RemoveTx(tid, lockId);
-                    Self.GetConflictsCache().GetTableCache(tid).RemoveUncommittedWrites(lockId, DB);
-                }
-            }
-        }
-
-        using Schema = TDataShard::Schema;
-        NIceDb::TNiceDb db(DB);
-        db.Table<typename Schema::Locks>().Key(lockId).Delete();
-        HasChanges_ = true;
-
-        if (!isVolatile) {
-            Self.ScheduleRemoveLockChanges(lockId);
-        }
-    }
-
-    bool MayAddLock(ui64 lockId) override {
-        for (auto& pr : Self.GetUserTables()) {
-            auto tid = pr.second->LocalTid;
-            // We cannot start a new lockId if it has any uncompacted data
-            if (DB.HasTxData(tid, lockId)) {
-                return false;
-            }
-        }
-        return true;
-    }
+    void PersistRemoveLock(ui64 lockId) override;
+    bool MayAddLock(ui64 lockId) override;
 };
 
 } // namespace NKikimr::NDataShard

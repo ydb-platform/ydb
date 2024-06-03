@@ -13,6 +13,7 @@
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/protos/resource_broker.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 
@@ -106,6 +107,7 @@ namespace NKikimr {
         NKikimrConfig::TS3ProxyResolverConfig S3ProxyResolverConfig;
         NKikimrConfig::TGraphConfig GraphConfig;
         NKikimrConfig::TImmediateControlsConfig ImmediateControlsConfig;
+        NKikimrResourceBroker::TResourceBrokerConfig ResourceBrokerConfig;
         std::vector<TIntrusivePtr<NKikimr::TControlBoard>> Icb;
 
     private:

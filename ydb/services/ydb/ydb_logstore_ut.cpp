@@ -333,10 +333,11 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             auto res = schemaClient.ListDirectory("/Root/LogStore/.sys").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
             auto children = res.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 4);
             UNIT_ASSERT_VALUES_EQUAL(children[0].Name, "store_primary_index_granule_stats");
-            UNIT_ASSERT_VALUES_EQUAL(children[1].Name, "store_primary_index_portion_stats");
-            UNIT_ASSERT_VALUES_EQUAL(children[2].Name, "store_primary_index_stats");
+            UNIT_ASSERT_VALUES_EQUAL(children[1].Name, "store_primary_index_optimizer_stats");
+            UNIT_ASSERT_VALUES_EQUAL(children[2].Name, "store_primary_index_portion_stats");
+            UNIT_ASSERT_VALUES_EQUAL(children[3].Name, "store_primary_index_stats");
         }
 
         {
@@ -353,10 +354,11 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             auto res = schemaClient.ListDirectory("/Root/LogStore/log1/.sys").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
             auto children = res.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 4);
             UNIT_ASSERT_VALUES_EQUAL(children[0].Name, "primary_index_granule_stats");
-            UNIT_ASSERT_VALUES_EQUAL(children[1].Name, "primary_index_portion_stats");
-            UNIT_ASSERT_VALUES_EQUAL(children[2].Name, "primary_index_stats");
+            UNIT_ASSERT_VALUES_EQUAL(children[1].Name, "primary_index_optimizer_stats");
+            UNIT_ASSERT_VALUES_EQUAL(children[2].Name, "primary_index_portion_stats");
+            UNIT_ASSERT_VALUES_EQUAL(children[3].Name, "primary_index_stats");
         }
 
         {

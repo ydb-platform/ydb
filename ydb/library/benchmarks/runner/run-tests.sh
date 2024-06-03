@@ -16,6 +16,10 @@ fi
 : ${tasks=${3:-1}}
 : ${script_path=${0%/*}}
 : ${ydb_path=$script_path/../../../..}
+if [ -w /proc/self/oom_score_adj ]; then
+    # tests sometimes run into OOM; mark ourself as preferred victim
+    echo 500 > /proc/self/oom_score_adj
+fi
 set -x
 dq_path=${ydb_path}/ydb/library/yql/tools/dqrun
 if [ -z "${ya_path}" ]; then

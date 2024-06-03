@@ -1,6 +1,6 @@
 # Создание таблицы
 
-С помощью конструкции [CREATE TABLE](../../yql/reference/syntax/create_table.md) можно создавать [строковые](../../concepts/datamodel/table.md#strokovye-tablicy) и [колоночные таблицы](../../concepts/datamodel/table.md../../concepts/datamodel/table.md#strokovye-tablicy):
+С помощью конструкции [CREATE TABLE](../../yql/reference/syntax/create_table.md) можно создавать [строковые](../../concepts/datamodel/table.md#strokovye-tablicy) и [колоночные таблицы](../../concepts/datamodel/table.md#column-tables):
 
 {% list tabs %}
 
@@ -44,7 +44,7 @@
     COMMIT;                            
     ```
 
-    Детальная спецификация колоночной таблицы изложена в этой [статье](../../concepts/datamodel/table.md../../concepts/datamodel/table.md#strokovye-tablicy).
+    Детальная спецификация колоночной таблицы изложена в этой [статье](../../concepts/datamodel/table.md#column-tables).
 
 {% endlist %}
 

@@ -401,32 +401,6 @@ public:
         }
     }
 
-    // virtual EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
-    //     while (true) {
-    //         switch(GetMode()) {
-    //             case EOperatingMode::InMemory: {
-    //                 auto r = DoCalculateInMemory(ctx, output);
-    //                 if (GetMode() == TSpillingSupportState::EOperatingMode::InMemory) {
-    //                     return r;
-    //                 }
-    //                 break;
-    //             }
-    //             case EOperatingMode::Spilling: {
-    //                 DoCalculateWithSpilling(ctx);
-    //                 if (GetMode() == EOperatingMode::Spilling) {
-    //                     return EFetchResult::Yield;
-    //                 }
-    //                 break;
-    //             }
-    //             case EOperatingMode::ProcessSpilled: {
-    //                 return ProcessSpilledData(output);
-    //             }
-
-    //         }
-    //     }
-    //     Y_UNREACHABLE();
-    // }
-
     bool IsReadyToContinue() {
         switch (GetMode()) {
             case EOperatingMode::InMemory:
@@ -463,85 +437,6 @@ public:
     NUdf::TUnboxedValue*const* GetFields() const {
         return Fields.data();
     }
-
-    // EFetchResult DoCalculateInMemory(TComputationContext& , NUdf::TUnboxedValue*const* ) {
-        //         case EFetchResult::One:
-        //             if (Put()) {
-        //                 if (ctx.SpillerFactory && !HasMemoryForProcessing()) {
-        //                     SwitchMode(EOperatingMode::Spilling);
-        //                     return EFetchResult::Yield;
-        //                 }
-        //             }
-        //             continue;
-        //         case EFetchResult::Yield:
-        //             return EFetchResult::Yield;
-        //         case EFetchResult::Finish:
-        //         {
-        //             if (!SpilledStates.empty()) {
-        //                 SwitchMode(EOperatingMode::Spilling);
-        //                 return EFetchResult::Yield;
-        //             }
-        //             Seal();
-        //             break;
-        //         }
-        //     }
-        // }
-
-        // if (auto extract = Extract()) {
-        //     for (const auto index : Indexes)
-        //         if (const auto to = output[index])
-        //             *to = std::move(*extract++);
-        //         else
-        //             ++extract;
-        //     return EFetchResult::One;
-        // }
-
-    //     return EFetchResult::Finish;
-    // }
-
-    // EFetchResult DoCalculateWithSpilling(TComputationContext& ctx) {
-    //     if (!SpillState()) {
-    //         return EFetchResult::Yield;
-    //     }
-    //     ResetFields();
-    //     auto nextMode = (IsReadFromChannelFinished() ? EOperatingMode::ProcessSpilled : EOperatingMode::InMemory);
-    //     SwitchMode(nextMode);
-    //     return EFetchResult::Yield;
-    // }
-
-    // EFetchResult ProcessSpilledData(NUdf::TUnboxedValue*const* output) {
-    //     if (SpilledUnboxedValuesIterators.empty()) {
-    //         return EFetchResult::Finish;
-    //     }
-
-    //     for (auto &spilledUnboxedValuesIterator : SpilledUnboxedValuesIterators) {
-    //         if (!spilledUnboxedValuesIterator.CheckForInit()) {
-    //             return EFetchResult::Yield;
-    //         }
-    //     }
-    //     if (!IsHeapBuilt) {
-    //         std::make_heap(SpilledUnboxedValuesIterators.begin(), SpilledUnboxedValuesIterators.end());
-    //         IsHeapBuilt = true;
-    //     } else {
-    //         std::push_heap(SpilledUnboxedValuesIterators.begin(), SpilledUnboxedValuesIterators.end());
-    //     }
-
-    //     std::pop_heap(SpilledUnboxedValuesIterators.begin(), SpilledUnboxedValuesIterators.end());
-    //     auto &currentIt = SpilledUnboxedValuesIterators.back();
-    //     NKikimr::NUdf::TUnboxedValue* res = currentIt.GetValue();
-    //     for (const auto index : Indexes)
-    //     {
-    //         if (const auto to = output[index])
-    //             *to = std::move(*res++);
-    //         else
-    //             ++res;
-    //     }
-    //     currentIt.Pop();
-    //     if (currentIt.IsFinished()) {
-    //         SpilledUnboxedValuesIterators.pop_back();
-    //     }
-    //     return EFetchResult::One;
-    // }
 
     void Put() {
         if constexpr (!HasCount) {

@@ -10,12 +10,8 @@
                             [
                                 "column0";
                                 [
-                                    "TaggedType";
-                                    "FloatVector";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
+                                    "DataType";
+                                    "Bool"
                                 ]
                             ]
                         ]
@@ -23,44 +19,7 @@
                 ];
                 "Data" = [
                     [
-                        [
-                            "mpmZPzMzE0CamVlAAACQQDMzs0AB"
-                        ]
-                    ]
-                ]
-            }
-        ]
-    };
-    {
-        "Write" = [
-            {
-                "Type" = [
-                    "ListType";
-                    [
-                        "StructType";
-                        [
-                            [
-                                "column0";
-                                [
-                                    "ListType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
-                                ]
-                            ]
-                        ]
-                    ]
-                ];
-                "Data" = [
-                    [
-                        [
-                            "1.2";
-                            "2.3";
-                            "3.4";
-                            "4.5";
-                            "5.6"
-                        ]
+                        %true
                     ]
                 ]
             }
@@ -103,12 +62,8 @@
                             [
                                 "column0";
                                 [
-                                    "TaggedType";
-                                    "BitVector";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
+                                    "DataType";
+                                    "Bool"
                                 ]
                             ]
                         ]
@@ -116,7 +71,7 @@
                 ];
                 "Data" = [
                     [
-                        "@\0\n"
+                        %true
                     ]
                 ]
             }
@@ -133,12 +88,8 @@
                             [
                                 "column0";
                                 [
-                                    "TaggedType";
-                                    "BitVector";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
+                                    "DataType";
+                                    "Bool"
                                 ]
                             ]
                         ]
@@ -146,7 +97,7 @@
                 ];
                 "Data" = [
                     [
-                        "@\0\n"
+                        %true
                     ]
                 ]
             }
@@ -163,12 +114,8 @@
                             [
                                 "column0";
                                 [
-                                    "TaggedType";
-                                    "BitVector";
-                                    [
-                                        "DataType";
-                                        "String"
-                                    ]
+                                    "DataType";
+                                    "Bool"
                                 ]
                             ]
                         ]
@@ -176,7 +123,7 @@
                 ];
                 "Data" = [
                     [
-                        "@\0\n"
+                        %true
                     ]
                 ]
             }
@@ -193,11 +140,62 @@
                             [
                                 "column0";
                                 [
-                                    "TaggedType";
-                                    "BitVector";
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        %true
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        %true
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "OptionalType";
                                     [
                                         "DataType";
-                                        "String"
+                                        "Bool"
                                     ]
                                 ]
                             ]
@@ -206,7 +204,9 @@
                 ];
                 "Data" = [
                     [
-                        "@\0\n"
+                        [
+                            %true
+                        ]
                     ]
                 ]
             }

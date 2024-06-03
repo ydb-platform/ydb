@@ -11,7 +11,7 @@
                                 "column0";
                                 [
                                     "TaggedType";
-                                    "FloatVector";
+                                    "Uint8Vector";
                                     [
                                         "DataType";
                                         "String"
@@ -23,44 +23,7 @@
                 ];
                 "Data" = [
                     [
-                        [
-                            "mpmZPzMzE0CamVlAAACQQDMzs0AB"
-                        ]
-                    ]
-                ]
-            }
-        ]
-    };
-    {
-        "Write" = [
-            {
-                "Type" = [
-                    "ListType";
-                    [
-                        "StructType";
-                        [
-                            [
-                                "column0";
-                                [
-                                    "ListType";
-                                    [
-                                        "DataType";
-                                        "Float"
-                                    ]
-                                ]
-                            ]
-                        ]
-                    ]
-                ];
-                "Data" = [
-                    [
-                        [
-                            "1.2";
-                            "2.3";
-                            "3.4";
-                            "4.5";
-                            "5.6"
-                        ]
+                        "\1\2\3\4\5\2"
                     ]
                 ]
             }
@@ -103,11 +66,10 @@
                             [
                                 "column0";
                                 [
-                                    "TaggedType";
-                                    "BitVector";
+                                    "ListType";
                                     [
                                         "DataType";
-                                        "String"
+                                        "Float"
                                     ]
                                 ]
                             ]
@@ -116,7 +78,13 @@
                 ];
                 "Data" = [
                     [
-                        "@\0\n"
+                        [
+                            "1";
+                            "2";
+                            "3";
+                            "4";
+                            "5"
+                        ]
                     ]
                 ]
             }
@@ -133,11 +101,10 @@
                             [
                                 "column0";
                                 [
-                                    "TaggedType";
-                                    "BitVector";
+                                    "OptionalType";
                                     [
                                         "DataType";
-                                        "String"
+                                        "Float"
                                     ]
                                 ]
                             ]
@@ -146,7 +113,9 @@
                 ];
                 "Data" = [
                     [
-                        "@\0\n"
+                        [
+                            "0.025368094"
+                        ]
                     ]
                 ]
             }
@@ -163,11 +132,10 @@
                             [
                                 "column0";
                                 [
-                                    "TaggedType";
-                                    "BitVector";
+                                    "OptionalType";
                                     [
                                         "DataType";
-                                        "String"
+                                        "Float"
                                     ]
                                 ]
                             ]
@@ -176,7 +144,9 @@
                 ];
                 "Data" = [
                     [
-                        "@\0\n"
+                        [
+                            "0.025368094"
+                        ]
                     ]
                 ]
             }
@@ -193,11 +163,10 @@
                             [
                                 "column0";
                                 [
-                                    "TaggedType";
-                                    "BitVector";
+                                    "OptionalType";
                                     [
                                         "DataType";
-                                        "String"
+                                        "Float"
                                     ]
                                 ]
                             ]
@@ -206,7 +175,40 @@
                 ];
                 "Data" = [
                     [
-                        "@\0\n"
+                        [
+                            "0.025368094"
+                        ]
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Float"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            "0.025368094"
+                        ]
                     ]
                 ]
             }

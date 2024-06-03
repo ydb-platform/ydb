@@ -2515,7 +2515,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         );
     }
 
-    Y_UNIT_TEST(AlterTableAlterColumnSetNull) {
+    Y_UNIT_TEST(AlterTableAlterColumnSetNotNullAstCorrect) {
         auto reqSetNotNull = SqlToYql(R"(
             USE plato;
             CREATE TABLE tableName (
@@ -2528,6 +2528,22 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             ALTER TABLE tableName ALTER COLUMN val SET NOT NULL;
         )");
 
+        UNIT_ASSERT(reqSetNotNull.IsOk());
+        UNIT_ASSERT(reqSetNotNull.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            Y_UNUSED(word);
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(
+                R"(let world (Write! world sink (Key '('tablescheme (String '"tableName"))) (Void) '('('mode 'alter) '('actions '('('alterColumns '('('"val" '('columnConstrains '('('not_null)))))))))))"
+            ));
+        };
+
+        TWordCountHive elementStat({TString("\'mode \'alter")});
+        VerifyProgram(reqSetNotNull, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'mode \'alter"]);
+    }
+
+    Y_UNIT_TEST(AlterTableAlterColumnSetNullAstCorrect) {
         auto reqSetNull = SqlToYql(R"(
             USE plato;
             CREATE TABLE tableName (
@@ -2540,8 +2556,20 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             ALTER TABLE tableName ALTER COLUMN val SET NULL;
         )");
 
-        UNIT_ASSERT(reqSetNotNull.IsOk());
         UNIT_ASSERT(reqSetNull.IsOk());
+        UNIT_ASSERT(reqSetNull.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            Y_UNUSED(word);
+
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(
+                R"(let world (Write! world sink (Key '('tablescheme (String '"tableName"))) (Void) '('('mode 'alter) '('actions '('('alterColumns '('('"val" '('columnConstrains '('('null)))))))))))"
+            ));
+        };
+
+        TWordCountHive elementStat({TString("\'mode \'alter")});
+        VerifyProgram(reqSetNull, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'mode \'alter"]);
     }
 
     Y_UNIT_TEST(OptionalAliases) {

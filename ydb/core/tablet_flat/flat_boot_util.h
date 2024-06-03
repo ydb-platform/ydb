@@ -3,8 +3,6 @@
 #include <util/system/yassert.h>
 #include <util/generic/ylimits.h>
 
-#include <ydb/core/base/blobstorage.h>
-
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 namespace NBoot {

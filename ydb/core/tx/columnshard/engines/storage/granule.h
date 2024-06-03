@@ -198,7 +198,7 @@ public:
         LastCompactionInstant = TMonotonic::Now();
     }
 
-    void BuildActualizationTasks(NActualizer::TTieringProcessContext& context) const;
+    void BuildActualizationTasks(NActualizer::TTieringProcessContext& context, const TDuration actualizationLag) const;
 
     std::shared_ptr<TColumnEngineChanges> GetOptimizationTask(std::shared_ptr<TGranuleMeta> self, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
         return OptimizerPlanner->GetOptimizationTask(self, locksManager);
@@ -246,8 +246,8 @@ public:
         return OptimizerPlanner->IsLocked(dataLocksManager);
     }
 
-    void ActualizeOptimizer(const TInstant currentInstant) const {
-        if (currentInstant - OptimizerPlanner->GetActualizationInstant() >= NYDBTest::TControllers::GetColumnShardController()->GetCompactionActualizationLag(TDuration::Seconds(1))) {
+    void ActualizeOptimizer(const TInstant currentInstant, const TDuration recalcLag) const {
+        if (currentInstant - OptimizerPlanner->GetActualizationInstant() >= recalcLag) {
             OptimizerPlanner->Actualize(currentInstant);
         }
     }

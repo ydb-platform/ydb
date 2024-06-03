@@ -158,8 +158,8 @@ std::shared_ptr<TPortionInfo> TGranuleMeta::UpsertPortionOnLoad(TPortionInfo&& p
     return emplaceInfo.first->second;
 }
 
-void TGranuleMeta::BuildActualizationTasks(NActualizer::TTieringProcessContext& context) const {
-    if (context.Now - LastActualizations < TDuration::Seconds(1)) {
+void TGranuleMeta::BuildActualizationTasks(NActualizer::TTieringProcessContext& context, const TDuration actualizationLag) const {
+    if (context.Now - LastActualizations < actualizationLag) {
         return;
     }
     NActualizer::TExternalTasksContext extTasks(Portions);

@@ -230,6 +230,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
                 auto txId = tx.GetTxId();
                 auto txPtr = MakeSimpleShared<TTransaction>(std::move(tx));
                 UserActionAndTxPendingCommit.emplace_back(txPtr);
+                BatchingState = ETxBatchingState::Executing;
                 if (txId.Defined()) {
                     TransactionsInflight.insert(std::make_pair(*txId, txPtr));
                 }
@@ -1037,6 +1038,10 @@ void TPartition::WriteInfoResponseHandler(
 TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) {
     bool isImmediate = (tx.ProposeTransaction != nullptr);
     Y_ABORT_UNLESS(tx.WriteInfo);
+    Y_ABORT_UNLESS(!tx.WriteInfoApplied);
+    if (!tx.Predicate.GetOrElse(true)) {
+        return EProcessResult::Continue;
+    }
     auto& srcIdInfo = tx.WriteInfo->SrcIdInfo;
 
     EProcessResult ret = EProcessResult::Continue;
@@ -1062,6 +1067,8 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
             continue;
         if (s.second.MinSeqNo <= existing->second.SeqNo) {
             tx.Predicate = false;
+            tx.Message = TStringBuilder() << "MinSeqNo violation failure on " << s.first;
+            tx.WriteInfoApplied = true;
             break;
         }
     }
@@ -1839,7 +1846,7 @@ void TPartition::RunPersist() {
         OnProcessTxsAndUserActsWriteComplete(ActorContext());
         AnswerCurrentWrites(ctx);
         AnswerCurrentReplies(ctx);
-	HaveWriteMsg = false;
+	    HaveWriteMsg = false;
     }
     PersistRequest = nullptr;
 }
@@ -1856,30 +1863,31 @@ void TPartition::AnswerCurrentReplies(const TActorContext& ctx)
 TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t)
 {
     auto result = EProcessResult::Continue;
-    if (!t->Predicate.GetOrElse(true)) {
-        t->State = ECommitState::Aborted;
-        ReplyToProposeOrPredicate(t, true);
-        return EProcessResult::Continue;
-    }
-    if (t->SupportivePartitionActor && !t->WriteInfo) {
+    if (t->SupportivePartitionActor && !t->WriteInfo) { // Pending for write info
         return EProcessResult::NotReady;
     }
-    if (t->WriteInfo && !t->WriteInfoApplied) {
+    if (t->WriteInfo && !t->WriteInfoApplied) { //Recieved write info but not applied
         result = ApplyWriteInfoResponse(*t);
+        if (!t->WriteInfoApplied) { // Tried to apply write info but couldn't - TX must be blocked.
+            Y_ABORT_UNLESS(result != EProcessResult::Continue);
+            return result;
+        }
     }
-    if (t->SupportivePartitionActor && !t->WriteInfoApplied) {
-        Y_ABORT_UNLESS(result != EProcessResult::Continue);
-        return result;
-    }
-    if (t->ProposeTransaction) {
+    if (t->ProposeTransaction) { // Immediate TX
+        if (!t->Predicate.GetOrElse(true)) {
+            t->State = ECommitState::Aborted;
+            return EProcessResult::Continue;
+        }
+        t->Predicate.ConstructInPlace(true);
         return PreProcessImmediateTx(t->ProposeTransaction->Record);
 
-    } else if (t->Tx) {
-        if (t->SupportivePartitionActor && !t->WriteInfo) {
-            return EProcessResult::NotReady;
+    } else if (t->Tx) { // Distributed TX
+        if (t->Predicate.Defined()) { // Predicate defined - either failed previously or Tx created with predicate defined.
+            ReplyToProposeOrPredicate(t, true);
+            return EProcessResult::Continue;
         }
-        result = BeginTransaction(*t->Tx, t->Predicate.ConstructInPlace());
-        if (result == EProcessResult::Continue) {
+        result = BeginTransaction(*t->Tx, t->Predicate);
+        if (t->Predicate.Defined()) {
             ReplyToProposeOrPredicate(t, true);
         }
         return result;
@@ -1887,7 +1895,6 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimple
         if (!FirstEvent) {
             return EProcessResult::Blocked;
         }
-
         t->Predicate = BeginTransaction(*t->ProposeConfig);
         ChangingConfig = true;
         PendingPartitionConfig = GetPartitionConfig(t->ProposeConfig->Config);
@@ -1943,11 +1950,11 @@ bool TPartition::ExecUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t, 
     return true;
 }
 
-TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx, bool& predicate)
+TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx, TMaybe<bool>& predicate)
 {
     const auto& ctx = ActorContext();
     THashSet<TString> consumers;
-    predicate = true;
+    bool ok = true;
     for (auto& operation : tx.Operations) {
         const TString& consumer = operation.GetConsumer();
         if (TxAffectedConsumers.contains(consumer)) {
@@ -1961,7 +1968,7 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
                         "Partition " << Partition <<
                         " Consumer '" << consumer << "' has been removed");
-            predicate = false;
+            ok = false;
             break;
         }
 
@@ -1969,7 +1976,7 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
                         "Partition " << Partition <<
                         " Unknown consumer '" << consumer << "'");
-            predicate = false;
+            ok = false;
             break;
         }
 
@@ -1983,7 +1990,7 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
                         " Bad request (invalid range) " <<
                         " Begin " << operation.GetBegin() <<
                         " End " << operation.GetEnd());
-            predicate = false;
+            ok = false;
         } else if (userInfo.Offset != (i64)operation.GetBegin()) {
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
                         "Partition " << Partition <<
@@ -1991,7 +1998,7 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
                         " Bad request (gap) " <<
                         " Offset " << userInfo.Offset <<
                         " Begin " << operation.GetBegin());
-            predicate = false;
+            ok = false;
         } else if (operation.GetEnd() > EndOffset) {
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
                         "Partition " << Partition <<
@@ -1999,10 +2006,10 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
                         " Bad request (behind the last offset) " <<
                         " EndOffset " << EndOffset <<
                         " End " << operation.GetEnd());
-            predicate = false;
+            ok = false;
         }
 
-        if (!predicate) {
+        if (!ok) {
             if (!isAffectedConsumer) {
                 AffectedUsers.erase(consumer);
             }
@@ -2010,10 +2017,10 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
         }
         consumers.insert(consumer);
     }
-    if (!predicate) {
-        return EProcessResult::Continue;
+    if (ok) {
+        TxAffectedConsumers.insert(consumers.begin(), consumers.end());
     }
-    TxAffectedConsumers.insert(consumers.begin(), consumers.end());
+    predicate = ok;
     return EProcessResult::Continue;
 }
 
@@ -2106,7 +2113,6 @@ void TPartition::RollbackTransaction(TSimpleSharedPtr<TTransaction>& t)
 
     if (t->Tx) {
         Y_ABORT_UNLESS(t->Predicate.Defined());
-
         ChangePlanStepAndTxId(t->Tx->Step, t->Tx->TxId);
     } else if (t->ProposeConfig) {
         Y_ABORT_UNLESS(t->Predicate.Defined());
@@ -2335,8 +2341,6 @@ TPartition::EProcessResult TPartition::PreProcessImmediateTx(const NKikimrPQ::TE
                                  "the consumer has been deleted");
             return EProcessResult::ContinueDrop;
         }
-        TUserInfoBase& userInfo = GetOrCreatePendingUser(user);
-
         if (operation.GetBegin() > operation.GetEnd()) {
             ScheduleReplyPropose(tx,
                                  NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST,
@@ -2344,29 +2348,11 @@ TPartition::EProcessResult TPartition::PreProcessImmediateTx(const NKikimrPQ::TE
                                  "incorrect offset range (begin > end)");
             return EProcessResult::ContinueDrop;
         }
-
-        if (userInfo.Offset != (i64)operation.GetBegin()) {
-            ScheduleReplyPropose(tx,
-                                 NKikimrPQ::TEvProposeTransactionResult::ABORTED,
-                                 NKikimrPQ::TError::BAD_REQUEST,
-                                 "incorrect offset range (gap)");
-            return EProcessResult::ContinueDrop;
-        } else if (operation.GetEnd() > EndOffset) {
-            ScheduleReplyPropose(tx,
-                                 NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST,
-                                 NKikimrPQ::TError::BAD_REQUEST,
-                                 "incorrect offset range (commit to the future)");
-            return EProcessResult::ContinueDrop;
-        }
-        if (TxAffectedConsumers.contains(user) || SetOffsetConsumersCurrBatch.contains(user)) {
-            return EProcessResult::Blocked;
-        }
         consumers.insert(user);
     }
     SetOffsetConsumersCurrBatch.insert(consumers.begin(), consumers.end());
     SetOffsetAffectedConsumers.insert(consumers.begin(), consumers.end());
     WriteKeysSizeEstimate += consumers.size();
-
     return EProcessResult::Continue;
 }
 
@@ -2379,11 +2365,11 @@ void TPartition::ExecImmediateTx(const TTransaction& t)
 
 
     //ToDo - check, this probably wouldn't work any longer.
-    if (t.Predicate.GetRef()) {
+    if (!t.Predicate.GetRef()) {
         ScheduleReplyPropose(record,
                              NKikimrPQ::TEvProposeTransactionResult::ABORTED,
-                             NKikimrPQ::TError::INTERNAL,
-                             "not an empty list of keys");
+                             NKikimrPQ::TError::BAD_REQUEST,
+                             t.Message);
         return;
     }
     for (auto& operation : record.GetData().GetOperations()) {
@@ -2393,7 +2379,6 @@ void TPartition::ExecImmediateTx(const TTransaction& t)
         Y_ABORT_UNLESS(operation.GetEnd() <= (ui64)Max<i64>(), "Unexpected end offset: %" PRIu64, operation.GetEnd());
 
         const TString& user = operation.GetConsumer();
-
         if (!PendingUsersInfo.contains(user) && AffectedUsers.contains(user)) {
             ScheduleReplyPropose(record,
                                  NKikimrPQ::TEvProposeTransactionResult::ABORTED,
@@ -2428,7 +2413,6 @@ void TPartition::ExecImmediateTx(const TTransaction& t)
         }
         userInfo.Offset = operation.GetEnd();
     }
-
     ScheduleReplyPropose(record,
                          NKikimrPQ::TEvProposeTransactionResult::COMPLETE,
                          NKikimrPQ::TError::OK,
@@ -2455,7 +2439,6 @@ bool TPartition::ExecUserActionOrTransaction(
 
 TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TMessage& msg)
 {
-    //ToDo: !! Calculate properly and add keys size
     if (WriteCycleSize >= MAX_WRITE_CYCLE_SIZE) {
         return EProcessResult::Blocked;
     }
@@ -2888,6 +2871,7 @@ void TPartition::AddCmdWriteUserInfos(NKikimrClient::TKeyValueRequest& request)
 
         if (TUserInfoBase* userInfo = GetPendingUserIfExists(user)) {
             auto *ui = UsersInfoStorage->GetIfExists(user);
+
             AddCmdWrite(request,
                         ikey, ikeyDeprecated,
                         userInfo->Offset, userInfo->Generation, userInfo->Step,

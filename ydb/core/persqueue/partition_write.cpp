@@ -489,8 +489,9 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     WriteAffectedSourcesIds.clear();
     TxAffectedConsumers.clear();
     SetOffsetAffectedConsumers.clear();
-    WriteInfosToTx.clear();
-
+    if (UserActionAndTransactionEvents.empty()) {
+        WriteInfosToTx.clear();
+    }
     ui64 prevEndOffset = EndOffset;
 
     ui32 totalLatencyMs = (ctx.Now() - WriteCycleStartTime).MilliSeconds();
@@ -957,7 +958,6 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
                             "Disk is full");
         return EProcessResult::ContinueDrop;
     }
-
     if (TxAffectedSourcesIds.contains(p.Msg.SourceId)) {
         return EProcessResult::Blocked;
     }
@@ -1019,7 +1019,6 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         }
 
         TString().swap(p.Msg.Data);
-
         return true;
     }
 
@@ -1258,7 +1257,6 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     }
 
     TString().swap(p.Msg.Data);
-
     return true;
 }
 
@@ -1488,7 +1486,6 @@ void TPartition::HandlePendingRequests(const TActorContext& ctx)
     if (RequestBlobQuota()) {
         return;
     }
-
     RemoveMessagesToQueue(PendingRequests);
     ProcessTxsAndUserActs(ctx);
 }

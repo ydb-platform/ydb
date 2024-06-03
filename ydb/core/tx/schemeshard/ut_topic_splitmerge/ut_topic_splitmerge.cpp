@@ -117,14 +117,13 @@ void CreateTopic(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, const ui
     env.TestWaitNotification(runtime, txId);
 }
 
-void SplitPartition(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, const ui32 partition, TString boundary,
+void ModifyTopic(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, std::function<void(::NKikimrSchemeOp::TPersQueueGroupDescription& scheme)> modificator,
                     const TVector<TExpectedResult>& expectedResults = {{TEvSchemeShard::EStatus::StatusAccepted}}) {
     ::NKikimrSchemeOp::TPersQueueGroupDescription scheme;
     scheme.SetName("Topic1");
     scheme.MutablePQTabletConfig()->MutablePartitionConfig();
-    auto* split = scheme.AddSplit();
-    split->SetPartition(partition);
-    split->SetSplitBoundary(boundary);
+
+    modificator(scheme);
 
     TStringBuilder sb;
     sb << scheme;
@@ -136,24 +135,25 @@ void SplitPartition(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, const
     env.TestWaitNotification(runtime, txId);
 }
 
+void SplitPartition(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, const ui32 partition, TString boundary,
+                    const TVector<TExpectedResult>& expectedResults = {{TEvSchemeShard::EStatus::StatusAccepted}}) {
+
+    ModifyTopic(runtime, env, txId, [&](auto& scheme) {
+        auto* split = scheme.AddSplit();
+        split->SetPartition(partition);
+        split->SetSplitBoundary(boundary);
+    }, expectedResults);
+}
+
 void MergePartition(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, const ui32 partition,
                     const ui32 adjacentPartition,
                     const TVector<TExpectedResult>& expectedResults = {{TEvSchemeShard::EStatus::StatusAccepted}}) {
-    ::NKikimrSchemeOp::TPersQueueGroupDescription scheme;
-    scheme.SetName("Topic1");
-    scheme.MutablePQTabletConfig()->MutablePartitionConfig();
-    auto* merge = scheme.AddMerge();
-    merge->SetPartition(partition);
-    merge->SetAdjacentPartition(adjacentPartition);
 
-    TStringBuilder sb;
-    sb << scheme;
-    TString scheme_ = sb.substr(1, sb.size() - 2);
-
-    Cerr << scheme_ << Endl;
-
-    TestAlterPQGroup(runtime, ++txId, "/MyRoot/USER_1", scheme_, expectedResults);
-    env.TestWaitNotification(runtime, txId);
+    ModifyTopic(runtime, env, txId, [&](auto& scheme) {
+        auto* merge = scheme.AddMerge();
+        merge->SetPartition(partition);
+        merge->SetAdjacentPartition(adjacentPartition);
+    }, expectedResults);
 }
 
 auto DescribeTopic(TTestBasicRuntime& runtime, TString path = "/MyRoot/USER_1/Topic1", ui64 ss = TTestTxConfig::SchemeShard) {
@@ -232,7 +232,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergeTest) {
         CreateSubDomain(runtime, env, ++txId);
         CreateTopic(runtime, env, ++txId, 1);
 
-        auto topic = DescribeTopic(runtime); 
+        auto topic = DescribeTopic(runtime);
         auto partition = topic.GetPartitions()[0];
 
         UNIT_ASSERT_C(NKikimrPQ::ETopicPartitionStatus::Active == partition.GetStatus(),
@@ -330,6 +330,53 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergeTest) {
         ValidatePartitionChildren(partition1, {});
         ValidatePartitionChildren(partition2, {});
     } // Y_UNIT_TEST(SplitWithOnePartition)
+
+    Y_UNIT_TEST(SplitTwoPartitions) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        CreateSubDomain(runtime, env, ++txId);
+        CreateTopic(runtime, env, ++txId, 2);
+
+        const unsigned char b0[] = {0x3F};
+        TString boundary0((char*)b0, sizeof(b0));
+
+        const unsigned char b1[] = {0xBF};
+        TString boundary1((char*)b1, sizeof(b1));
+
+        ModifyTopic(runtime, env, txId, [&](auto& scheme) {
+            {
+                auto* split = scheme.AddSplit();
+                split->SetPartition(0);
+                split->SetSplitBoundary(boundary0);
+            }
+            {
+                auto* split = scheme.AddSplit();
+                split->SetPartition(1);
+                split->SetSplitBoundary(boundary1);
+            }
+        });
+
+        auto topic = DescribeTopic(runtime);
+        auto partition0 = topic.GetPartitions()[0];
+        auto partition1 = topic.GetPartitions()[1];
+        auto partition2 = topic.GetPartitions()[2];
+        auto partition3 = topic.GetPartitions()[3];
+        auto partition4 = topic.GetPartitions()[4];
+        auto partition5 = topic.GetPartitions()[5];
+
+        ValidatePartitionParents(partition0, {});
+        ValidatePartitionParents(partition1, {});
+        ValidatePartitionParents(partition2, {0});
+        ValidatePartitionParents(partition3, {0});
+        ValidatePartitionParents(partition4, {1});
+        ValidatePartitionParents(partition5, {1});
+
+        ValidatePartitionChildren(partition0, {2, 3});
+        ValidatePartitionChildren(partition1, {4, 5});
+    } // Y_UNIT_TEST(SplitTwoPartition)
 
     Y_UNIT_TEST(SplitWithManyPartition) {
         TTestBasicRuntime runtime;

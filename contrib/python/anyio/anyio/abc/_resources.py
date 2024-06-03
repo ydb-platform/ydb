@@ -11,8 +11,8 @@ class AsyncResource(metaclass=ABCMeta):
     """
     Abstract base class for all closeable asynchronous resources.
 
-    Works as an asynchronous context manager which returns the instance itself on enter, and calls
-    :meth:`aclose` on exit.
+    Works as an asynchronous context manager which returns the instance itself on enter,
+    and calls :meth:`aclose` on exit.
     """
 
     async def __aenter__(self: T) -> T:

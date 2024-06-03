@@ -91,6 +91,8 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, RegisterQueueConsumer);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, UnregisterQueueConsumer);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ListQueueConsumerRegistrations);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, CreateQueueProducerSession);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, RemoveQueueProducerSession);
 
     // Scheduler pools
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, TransferPoolResources);
@@ -159,6 +161,8 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, MigrateReplicationCards);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, SuspendChaosCells);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ResumeChaosCells);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, SuspendTabletCells);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ResumeTabletCells);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, AddMaintenance);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, RemoveMaintenance);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, DisableChunkLocations);

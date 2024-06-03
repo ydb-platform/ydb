@@ -154,6 +154,9 @@ void Serialize(const TBooleanFormula& booleanFormula, NYson::IYsonConsumer* cons
 void Deserialize(TBooleanFormula& booleanFormula, NYTree::INodePtr node);
 void Deserialize(TBooleanFormula& booleanFormula, NYson::TYsonPullParserCursor* cursor);
 
+TString ToString(const TBooleanFormula& booleanFormula);
+void FormatValue(TStringBuilderBase* builder, const TBooleanFormula& booleanFormula, TStringBuf /*format*/);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TTimeFormula

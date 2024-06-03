@@ -15,7 +15,7 @@ using namespace NYson;
 using namespace NYTree;
 
 //! Used only for YT_LOG_FATAL below.
-static const TLogger Logger("TableClientComparator");
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "TableClientComparator");
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -398,6 +398,11 @@ public:
         const TRefCountedPtr& owner,
         std::function<double()> reader) const;
 
+    //! AddProducer is used to batch sensor reports.
+    /*!
+     *  If many producers of the same profiler report a metric (whether it's a counter or a gauge) with the same set of tags,
+     *  the resulting value registered in the profiler will be a sum of the values reported by each producer.
+     */
     void AddProducer(
         const TString& prefix,
         const ISensorProducerPtr& producer) const;

@@ -75,7 +75,7 @@ private:
         // administrationAllowedSids.Add(BUILTIN_ACL_ROOT);
         // administrationAllowedSids.Add("C=RU,ST=MSK,L=MSK,O=YA,OU=UtTest,CN=localhost@cert");
         if (serverInitialization.EnableDynamicNodeAuth) {
-            config.MutableFeatureFlags()->SetEnableDynamicNodeAuthorization(true);
+            config.MutableClientCertificateAuthorization()->SetRequestClientCertificate(true);
         }
 
         if (serverInitialization.SetNodeAuthValues) {
@@ -95,77 +95,6 @@ private:
         return config;
     }
 };
-
-// struct TKikimrServerWithOutCertVerification : TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithServerCert> {
-//     using TBase = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithServerCert>;
-
-//     TKikimrServerWithOutCertVerification()
-//         : TBase(GetAppConfig())
-//     {}
-
-//     static NKikimrConfig::TAppConfig GetAppConfig() {
-//         auto config = NKikimrConfig::TAppConfig();
-//         config.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
-//         return config;
-//     }
-// };
-
-// struct TKikimrServerWithCertVerification: public TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithServerCert> {
-//     using TBase = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithServerCert>;
-
-//     TKikimrServerWithCertVerification()
-//         : TBase(GetAppConfig())
-//     {}
-
-//     static NKikimrConfig::TAppConfig GetAppConfig() {
-//         auto config = NKikimrConfig::TAppConfig();
-
-//         auto& securityConfig = *config.MutableDomainsConfig()->MutableSecurityConfig();
-//         securityConfig.SetEnforceUserTokenRequirement(true);
-//         // auto& administrationAllowedSids = *securityConfig.MutableAdministrationAllowedSIDs();
-//         // administrationAllowedSids.Add(BUILTIN_ACL_ROOT);
-//         // administrationAllowedSids.Add("C=RU,ST=MSK,L=MSK,O=YA,OU=UtTest,CN=localhost@cert");
-//         config.MutableFeatureFlags()->SetEnableDynamicNodeAuthorization(true);
-
-//         auto& dynNodeDefinition = *config.MutableClientCertificateAuthorization()->MutableDynamicNodeAuthorization();
-//         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("C", {"RU"});
-//         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
-//         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("L", {"MSK"});
-//         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("O", {"YA"});
-//         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("OU", {"UtTest"});
-//         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("CN", {"localhost"}, {".yandex.ru"});
-
-//         return config;
-//     }
-// };
-
-// struct TKikimrServerWithCertVerificationAndWrongIdentity : public TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithServerCert> {
-//     using TBase = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithServerCert>;
-
-//     TKikimrServerWithCertVerificationAndWrongIdentity()
-//         : TBase(GetAppConfig())
-//     {}
-
-//     static NKikimrConfig::TAppConfig GetAppConfig() {
-//         auto config = NKikimrConfig::TAppConfig();
-
-//         auto& securityConfig = *config.MutableDomainsConfig()->MutableSecurityConfig();
-//         securityConfig.SetEnforceUserTokenRequirement(true);
-//         // auto& administrationAllowedSids = *securityConfig.MutableAdministrationAllowedSIDs();
-//         // administrationAllowedSids.Add(BUILTIN_ACL_ROOT);
-//         // administrationAllowedSids.Add("C=RU,ST=MSK,L=MSK,O=YA,OU=UtTest,CN=localhost@cert");
-//         config.MutableFeatureFlags()->SetEnableDynamicNodeAuthorization(true);
-
-//         auto& dynNodeDefinition = *config.MutableClientCertificateAuthorization()->MutableDynamicNodeAuthorization();
-//         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("C", {"WRONG"});
-//         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
-//         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("L", {"MSK"});
-//         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("O", {"YA"});
-//         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("OU", {"UtTest"});
-
-//         return config;
-//     }
-// };
 
 } // namespace
 
@@ -244,6 +173,50 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientWithCorrectCerts) {
         TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
             .EnableDynamicNodeAuth = true,
             .SetNodeAuthValues = true
+        });
+        ui16 grpc = serverDoesNotRequireToken.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        SetLogPriority(serverDoesNotRequireToken);
+
+        TDriverConfig config;
+        config.UseSecureConnection(caCert.Certificate.c_str())
+            .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
+            .SetEndpoint(location);
+
+        CheckGood(RegisterNode(config));
+        CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
+        CheckGood(RegisterNode(config.SetAuthToken("wrong_token")));
+    }
+}
+
+Y_UNIT_TEST(ServerWithIssuerVerification_ClientWithSameIssuer) {
+    const TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
+    const TCertAndKey clientServerCert = GenerateSignedCert(caCert, TProps::AsClientServer());
+    {
+        TKikimrServerForTestNodeRegistration server({
+            .EnforceUserToken = true,
+            .EnableDynamicNodeAuth = true,
+            .SetNodeAuthValues = false
+        });
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        SetLogPriority(server);
+
+        TDriverConfig config;
+        config.UseSecureConnection(caCert.Certificate.c_str())
+            .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
+            .SetEndpoint(location);
+
+        CheckGood(RegisterNode(config));
+        CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
+        CheckGood(RegisterNode(config.SetAuthToken("wrong_token")));
+    }
+    {
+        TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
+            .EnableDynamicNodeAuth = true,
+            .SetNodeAuthValues = false
         });
         ui16 grpc = serverDoesNotRequireToken.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;

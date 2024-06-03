@@ -678,7 +678,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         ui16 grpcPort = tp.GetPort(2135);
         auto settings = TServerSettings(kikimrPort);
         settings.SetDomainName("Root");
-        settings.SetEnableDynamicNodeAuthorization(true);
+        // settings.SetEnableDynamicNodeAuthorization(true);
         auto& dynNodeDefinition = *settings.AppConfig->MutableClientCertificateAuthorization()->MutableDynamicNodeAuthorization();
         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("C", {"RU"});
         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
@@ -725,7 +725,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         ui16 grpcPort = tp.GetPort(2135);
         auto settings = TServerSettings(kikimrPort);
         settings.SetDomainName("Root");
-        settings.SetEnableDynamicNodeAuthorization(true);
+        // settings.SetEnableDynamicNodeAuthorization(true);
         auto& dynNodeDefinition = *settings.AppConfig->MutableClientCertificateAuthorization()->MutableDynamicNodeAuthorization();
         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("C", {"RU"});
         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
@@ -776,7 +776,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         ui16 grpcPort = tp.GetPort(2135);
         auto settings = TServerSettings(kikimrPort);
         settings.SetDomainName("Root");
-        settings.SetEnableDynamicNodeAuthorization(true);
+        // settings.SetEnableDynamicNodeAuthorization(true);
         auto& dynNodeDefinition = *settings.AppConfig->MutableClientCertificateAuthorization()->MutableDynamicNodeAuthorization();
         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("C", {"RU"});
         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
@@ -823,7 +823,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         ui16 grpcPort = tp.GetPort(2135);
         auto settings = TServerSettings(kikimrPort);
         settings.SetDomainName("Root");
-        settings.SetEnableDynamicNodeAuthorization(true);
+        // settings.SetEnableDynamicNodeAuthorization(true);
         auto& dynNodeDefinition = *settings.AppConfig->MutableClientCertificateAuthorization()->MutableDynamicNodeAuthorization();
         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("C", {"RU"});
         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
@@ -869,7 +869,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         ui16 grpcPort = tp.GetPort(2135);
         auto settings = TServerSettings(kikimrPort);
         settings.SetDomainName("Root");
-        settings.SetEnableDynamicNodeAuthorization(true);
+        // settings.SetEnableDynamicNodeAuthorization(true);
         auto& dynNodeDefinition = *settings.AppConfig->MutableClientCertificateAuthorization()->MutableDynamicNodeAuthorization();
         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("C", {"RU"});
         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
@@ -912,7 +912,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         ui16 grpcPort = tp.GetPort(2135);
         auto settings = TServerSettings(kikimrPort);
         settings.SetDomainName("Root");
-        settings.SetEnableDynamicNodeAuthorization(true);
+        // settings.SetEnableDynamicNodeAuthorization(true);
         auto& dynNodeDefinition = *settings.AppConfig->MutableClientCertificateAuthorization()->MutableDynamicNodeAuthorization();
         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("C", {"RU"});
         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});

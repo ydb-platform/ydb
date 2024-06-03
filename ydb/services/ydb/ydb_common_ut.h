@@ -158,7 +158,7 @@ public:
             sslData.Cert = TestSettings::GetServerCrt();
             sslData.Key = TestSettings::GetServerKey();
             sslData.Root =TestSettings::GetCaCrt();
-            sslData.DoRequestClientCertificate = appConfig.GetFeatureFlags().GetEnableDynamicNodeAuthorization() && appConfig.GetClientCertificateAuthorization().HasDynamicNodeAuthorization();
+            sslData.DoRequestClientCertificate = appConfig.GetClientCertificateAuthorization().GetRequestClientCertificate();
 
             grpcOption.SetSslData(sslData);
         }

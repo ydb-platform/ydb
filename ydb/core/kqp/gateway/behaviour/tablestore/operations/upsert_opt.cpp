@@ -16,14 +16,12 @@ TConclusionStatus TUpsertOptionsOperation::DoDeserialize(NYql::TObjectSettingsIm
             return TConclusionStatus::Fail("incorrect class name for compaction planner:" + *className);
         }
 
+        NJson::TJsonValue jsonData = NJson::JSON_MAP;
         auto fValue = features.Extract("COMPACTION_PLANNER.FEATURES");
-        if (!fValue) {
-            return TConclusionStatus::Fail("can't find parameter FEATURES for compaction planner (COMPACTION_PLANNER.FEATURES)");
-        }
-
-        NJson::TJsonValue jsonData;
-        if (!NJson::ReadJsonFastTree(*fValue, &jsonData)) {
-            return TConclusionStatus::Fail("incorrect json in request COMPACTION_PLANNER.FEATURES parameter");
+        if (fValue) {
+            if (!NJson::ReadJsonFastTree(*fValue, &jsonData)) {
+                return TConclusionStatus::Fail("incorrect json in request COMPACTION_PLANNER.FEATURES parameter");
+            }
         }
         auto result = CompactionPlannerConstructor->DeserializeFromJson(jsonData);
         if (result.IsFail()) {

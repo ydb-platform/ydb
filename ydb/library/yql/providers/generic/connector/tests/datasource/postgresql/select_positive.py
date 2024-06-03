@@ -150,8 +150,8 @@ class Factory:
                 ),
                 Column(
                     name='col_25_json',
-                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.TIMESTAMP),
-                    data_source_type=DataSourceType(pg=postgresql.TimestampWithoutTimeZone()),
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.JSON),
+                    data_source_type=DataSourceType(pg=postgresql.Json()),
                 ),
                 # TODO: YQ-2297
                 # Column(
@@ -227,7 +227,7 @@ class Factory:
                     'buki',
                     datetime.date(1988, 11, 20),
                     datetime.datetime(1988, 11, 20, 12, 00, 00),
-                    '{ "TODO" : "unicode }',
+                    '{ "TODO" : "unicode" }',
                     # TODO: support time in YQ-2297
                 ],
                 [

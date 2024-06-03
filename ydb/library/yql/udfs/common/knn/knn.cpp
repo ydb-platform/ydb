@@ -8,8 +8,18 @@
 #include <util/generic/queue.h>
 #include <util/stream/format.h>
 
+#include <format>
+
 using namespace NYql;
 using namespace NYql::NUdf;
+
+template <>
+struct std::formatter<TStringRef>: std::formatter<std::string_view> {
+    template <typename FormatContext>
+    auto format(const TStringRef& param, FormatContext& fc) const {
+        return std::formatter<std::string_view>::format(std::string_view{param.Data(), param.Size()}, fc);
+    }
+};
 
 static constexpr const char TagStoredVector[] = "StoredVector";
 
@@ -274,7 +284,7 @@ public:
         }
 
         if (arg0Tag != arg1Tag && arg0Tag != TagStoredVector && arg1Tag != TagStoredVector) {
-            builder.SetError("Expected arguments should have same tags");
+            builder.SetError(std::format("Expected arguments should have same tags, but '{}' not equal to '{}'", arg0Tag, arg1Tag));
             return true;
         }
 

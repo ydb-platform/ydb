@@ -6,6 +6,6 @@
         <tmp_path>/program.sql:<main>:6:13: Error: At function: Apply, At function: Udf, At Knn.CosineDistance
         	select Knn::CosineDistance($vector1, $vector2);
 	            ^
-            <tmp_path>/program.sql:<main>:6:13: Error: Failed to find UDF function: Knn.CosineDistance, reason: Error: Module: Knn, function: CosineDistance, error: Expected arguments should have same tags
+            <tmp_path>/program.sql:<main>:6:13: Error: Failed to find UDF function: Knn.CosineDistance, reason: Error: Module: Knn, function: CosineDistance, error: Expected arguments should have same tags, but 'FloatVector' not equal to 'Uint8Vector'
             	select Knn::CosineDistance($vector1, $vector2);
 	            ^

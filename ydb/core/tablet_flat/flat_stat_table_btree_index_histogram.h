@@ -20,40 +20,94 @@ const static TCellsIterable EmptyKey(static_cast<const char*>(nullptr), TColumns
 
 class TTableHistogramBuilderBtreeIndex {
 public:
-    struct TNodeState {
+    struct TNodeState : public TIntrusiveListItem<TNodeState> {
         TPageId PageId;
         TCellsIterable BeginKey, EndKey;
-        TRowId BeginRowId, EndRowId;
-        ui64 BeginDataSize, EndDataSize;
+        ui64 BeginSize, EndSize;
 
-        TNodeState(TPageId pageId, TCellsIterable beginKey, TCellsIterable endKey, TRowId beginRowId, TRowId endRowId, ui64 beginDataSize, ui64 endDataSize)
+        TNodeState(TPageId pageId, TCellsIterable beginKey, TCellsIterable endKey, TRowId beginSize, TRowId endSize)
             : PageId(pageId)
             , BeginKey(beginKey)
             , EndKey(endKey)
-            , BeginRowId(beginRowId)
-            , EndRowId(endRowId)
-            , BeginDataSize(beginDataSize)
-            , EndDataSize(endDataSize)
+            , BeginSize(beginSize)
+            , EndSize(endSize)
         {
+        }
+
+        ui64 GetSize() const noexcept {
+            return EndSize - BeginSize;
         }
     };
 
     struct TGetRowCount {
-        static ui64 Get(const TNodeState& node) noexcept {
-            return node.EndRowId - node.BeginRowId;
+        static ui64 Get(const TChild& child) noexcept {
+            return child.RowCount;
         }
     };
 
     struct TGetDataSize {
-        static ui64 Get(const TNodeState& node) noexcept {
-            return node.EndDataSize - node.BeginDataSize;
+        static ui64 Get(const TChild& child) noexcept {
+            return child.GetTotalDataSize();
         }
     };
 
 private:
     struct TPartNodes {
+        TPartNodes(const TPart* part, size_t index) 
+            : Part(part)
+            , Index(index)
+        {
+        }
+
+        TPartNodes ForkNew() const noexcept {
+            return TPartNodes(Part, Index);
+        }
+
+        const TPart* GetPart() const noexcept {
+            return Part;
+        }
+
+        size_t GetIndex() const noexcept {
+            return Index;
+        }
+
+        size_t GetCount() const noexcept {
+            return Count;
+        }
+
+        ui64 GetSize() const noexcept {
+            return Size;
+        }
+
+        const TIntrusiveList<TNodeState>& GetNodes() const noexcept {
+            return Nodes;
+        }
+
+        TNodeState* PopFront() noexcept {
+            auto result = Nodes.PopFront();
+            
+            Count--;
+            Size -= result->GetSize();
+            
+            return result;
+        }
+
+        void PushBack(TNodeState* item) noexcept {
+            Count++;
+            Size += item->GetSize();
+            Nodes.PushBack(item);
+        }
+
+        bool operator < (const TPartNodes& other) const noexcept {
+            return Size < other.Size;
+        }
+
+    private:
         const TPart* Part;
-        TVector<TNodeState> Nodes;
+        size_t Index;
+        size_t Count = 0;
+        ui64 Size = 0;
+        TIntrusiveList<TNodeState> Nodes;
     };
 
 public:
@@ -67,18 +121,21 @@ public:
     template <typename TGetSize>
     bool Build(THistogram& histogram, ui64 resolution, ui64 totalSize) {
         Resolution = resolution;
-        LoadedNodes.clear();
 
         TVector<TPartNodes> parts;
 
-        for (const auto& part : Subset.Flatten) {
+        for (auto index : xrange(Subset.Flatten.size())) {
+            auto& part = Subset.Flatten[index];
             auto& meta = part->IndexPages.GetBTree({});
-            parts.emplace_back(part.Part.Get(), TVector<TNodeState>{
-                {meta.PageId, EmptyKey, EmptyKey, 0, meta.RowCount, 0, meta.GetTotalDataSize()}
-            });
+            parts.emplace_back(part.Part.Get(), index);
+            LoadedStateNodes.emplace_back(meta.PageId, EmptyKey, EmptyKey, 0, TGetSize::Get(meta));
+            parts.back().PushBack(&LoadedStateNodes.back());
         }
 
         auto ready = BuildHistogramRecursive<TGetSize>(histogram, parts, 0, totalSize, 0);
+
+        LoadedBTreeNodes.clear();
+        LoadedStateNodes.clear();
 
         return ready;
     }
@@ -93,24 +150,22 @@ private:
             return true;
         }
 
-        size_t biggestPartIndex = Max<size_t>();
-        ui64 biggestPartSize = 0;
-        FindBiggestPart<TGetSize>(parts, biggestPartIndex, biggestPartSize);
-        if (Y_UNLIKELY(biggestPartIndex == Max<size_t>())) {
+        auto biggestPart = std::max_element(parts.begin(), parts.end());
+        if (Y_UNLIKELY(biggestPart == parts.end())) {
             Y_DEBUG_ABORT("Invalid part states");
             return true;
         }
-        auto& biggestPart = parts[biggestPartIndex];
+        Y_ABORT_UNLESS(biggestPart->GetCount());
 
         // FIXME: load the biggest node if its size more than a half
-        if (biggestPart.Nodes.size() == 1) {
-            auto node = biggestPart.Nodes.front();
-            biggestPart.Nodes.clear();
-            if (!TryLoadNode(biggestPart.Part, node, biggestPart.Nodes)) {
+        if (biggestPart->GetCount() == 1) {
+            if (!TryLoadNode<TGetSize>(biggestPart->GetPart(), *biggestPart->PopFront(), [&biggestPart](TNodeState& child) {
+                biggestPart->PushBack(&child);
+            })) {
                 return false;
             }
         }
-        TCellsIterable splitKey = FindMiddlePartKey<TGetSize>(biggestPart, biggestPartSize);
+        TCellsIterable splitKey = FindMiddlePartKey(*biggestPart);
 
         if (Y_UNLIKELY(!splitKey)) {
             // Note: an extremely rare scenario when we can't split biggest SST
@@ -122,32 +177,71 @@ private:
         }
 
         ui64 leftSize = 0, middleSize = 0, rightSize = 0;
-        TVector<TNodeState> middleNodes;
-
         TVector<TPartNodes> leftParts, middleParts, rightParts;
-        for (const auto& part : parts) {
-            leftParts.emplace_back(part.Part, TVector<TNodeState>());
-            middleParts.emplace_back(part.Part, TVector<TNodeState>());
-            rightParts.emplace_back(part.Part, TVector<TNodeState>());
 
-            for (const auto& node : part.Nodes) {
+        for (auto& part : parts) {
+            auto& leftNodes = PushNextPartNodes(part, leftParts);
+            auto& middleNodes = PushNextPartNodes(part, middleParts);
+            auto& rightNodes = PushNextPartNodes(part, rightParts);
+
+            while (part.GetCount()) {
+                auto& node = *part.PopFront();
                 if (node.EndKey && CompareKeys(node.EndKey, splitKey) <= 0) {
-                    leftSize += TGetSize::Get(node);
-                    leftParts.back().Nodes.push_back(node);
+                    leftNodes.PushBack(&node);
                 } else if (node.BeginKey && CompareKeys(node.BeginKey, splitKey) >= 0) {
-                    rightSize += TGetSize::Get(node);
-                    rightParts.back().Nodes.push_back(node);
+                    rightNodes.PushBack(&node);
                 } else {
-                    middleSize += TGetSize::Get(node);
-                    middleParts.back().Nodes.push_back(node);
+                    middleNodes.PushBack(&node);
                 }
             }
+
+            leftSize += leftNodes.GetSize();
+            middleSize += middleNodes.GetSize();
+            rightSize += rightNodes.GetSize();
+            
+            Y_DEBUG_ABORT_UNLESS(middleNodes.GetCount() <= 1);
         }
         
-        // TODO: clear parts
+        if (middleSize > Resolution / 2) {
+            std::make_heap(middleParts.begin(), middleParts.end());
 
-        // TODO: process middleNodes
-        Y_ABORT_UNLESS(middleSize <= Resolution / 2);
+            while (middleSize > Resolution / 2 && middleParts.size()) {
+                std::pop_heap(middleParts.begin(), middleParts.end());
+                auto& part = middleParts.back();
+                auto& leftNodes = GetNextPartNodes(part, leftParts);
+                auto& middleNodes = part;
+                auto& rightNodes = GetNextPartNodes(part, rightParts);
+                
+                leftSize -= leftNodes.GetSize();
+                middleSize -= middleNodes.GetSize();
+                rightSize -= rightNodes.GetSize();
+
+                auto count = part.GetCount();
+                for (auto index : xrange(count)) {
+                    Y_UNUSED(index);
+                    if (!TryLoadNode<TGetSize>(part.GetPart(), *part.PopFront(), [&](TNodeState& node) {
+                        if (node.EndKey && CompareKeys(node.EndKey, splitKey) <= 0) {
+                            leftNodes.PushBack(&node);
+                        } else if (node.BeginKey && CompareKeys(node.BeginKey, splitKey) >= 0) {
+                            rightNodes.PushBack(&node);
+                        } else {
+                            middleNodes.PushBack(&node);
+                        }
+                    })) {
+                        return false;
+                    }
+                }
+
+                leftSize += leftNodes.GetSize();
+                middleSize += middleNodes.GetSize();
+                rightSize += rightNodes.GetSize();
+
+                Y_DEBUG_ABORT_UNLESS(middleNodes.GetCount() <= 1);
+
+                // TODO: add to heap
+
+            }
+        }
 
         // TODO: don't copy nodes?
 
@@ -164,41 +258,20 @@ private:
         return ready;
     }
 
-    template <typename TGetSize>
-    void FindBiggestPart(const TVector<TPartNodes>& parts, size_t& biggestPartIndex, ui64& biggestPartSize) {
-        for (auto index : xrange(parts.size())) {
-            ui64 size = GetPartSize<TGetSize>(parts[index]);
-            if (size > biggestPartSize) {
-                biggestPartSize = size;
-                biggestPartIndex = index;
-            }
-        }
-    }
-
-    template <typename TGetSize>
-    ui64 GetPartSize(const TPartNodes part) {
-        ui64 size = 0;
-        for (const auto& node : part.Nodes) {
-            size += TGetSize::Get(node);
-        }
-        return size;
-    }
-
-    template <typename TGetSize>
-    TCellsIterable FindMiddlePartKey(const TPartNodes& part, ui64& partSize) {
-        Y_ABORT_UNLESS(part.Nodes);
+    TCellsIterable FindMiddlePartKey(const TPartNodes& part) {
+        Y_ABORT_UNLESS(part.GetCount());
         
         TCellsIterable splitKey = EmptyKey;
         ui64 splitSize = 0, currentSize = 0;
-        const ui64 middleSize = partSize / 2;
+        const ui64 middleSize = part.GetSize() / 2;
         
-        for (const auto& node : part.Nodes) {
+        for (const auto& node : part.GetNodes()) {
             if (!splitKey || AbsDifference(currentSize, middleSize) < AbsDifference(splitSize, middleSize)) {
                 splitKey = node.BeginKey;
                 splitSize = currentSize;
             }
 
-            currentSize += TGetSize::Get(node);
+            currentSize += node.GetSize();
         }
 
         return splitKey;
@@ -224,32 +297,44 @@ private:
         histogram.push_back({serializedSplitKey, value});
     }
 
-    bool TryLoadNode(const TPart* part, const TNodeState& node, TVector<TNodeState>& list) {
+    template <typename TGetSize>
+    bool TryLoadNode(const TPart* part, const TNodeState& node, const auto& addNode) {
+        // TODO: track level
         auto page = Env->TryGetPage(part, node.PageId, {});
         if (!page) {
             return false;
         }
 
-        LoadedNodes.emplace_back(*page);
-        auto &loadedNode = LoadedNodes.back();
+        LoadedBTreeNodes.emplace_back(*page);
+        auto &bTreeNode = LoadedBTreeNodes.back();
         auto& groupInfo = part->Scheme->GetLayout({});
 
-        TRowId currentBeginRowId = node.BeginRowId;
-        ui64 currentBeginDataSize = node.BeginDataSize;
-        for (auto pos : xrange(loadedNode.GetChildrenCount())) {
-            auto& child = loadedNode.GetChild(pos);
+        ui64 currentBeginSize = node.BeginSize;
+        for (auto pos : xrange(bTreeNode.GetChildrenCount())) {
+            auto& child = bTreeNode.GetChild(pos);
 
-            list.emplace_back(child.PageId, 
-                pos ? loadedNode.GetKeyCellsIterable(pos - 1, groupInfo.ColsKeyData) : node.BeginKey,
-                pos < loadedNode.GetKeysCount() ? loadedNode.GetKeyCellsIterable(pos, groupInfo.ColsKeyData) : node.EndKey,
-                currentBeginRowId, child.RowCount, 
-                currentBeginDataSize, child.GetTotalDataSize());
+            LoadedStateNodes.emplace_back(child.PageId, 
+                pos ? bTreeNode.GetKeyCellsIterable(pos - 1, groupInfo.ColsKeyData) : node.BeginKey,
+                pos < bTreeNode.GetKeysCount() ? bTreeNode.GetKeyCellsIterable(pos, groupInfo.ColsKeyData) : node.EndKey,
+                currentBeginSize, TGetSize::Get(child));
 
-            currentBeginRowId = list.back().EndRowId;
-            currentBeginDataSize = list.back().EndDataSize;
+            currentBeginSize = LoadedStateNodes.back().EndSize;
+
+            addNode(LoadedStateNodes.back());
         }
 
         return true;
+    }
+
+    TPartNodes& PushNextPartNodes(const TPartNodes& part, TVector<TPartNodes>& list) const {
+        Y_ABORT_UNLESS(part.GetIndex() == list.size());
+        list.push_back(part.ForkNew());
+        return list.back();
+    }
+
+    TPartNodes& GetNextPartNodes(const TPartNodes& part, TVector<TPartNodes>& list) const {
+        Y_ABORT_UNLESS(part.GetPart() == list[part.GetIndex()].GetPart());
+        return list[part.GetIndex()];
     }
 
 private:
@@ -283,7 +368,8 @@ private:
     const TKeyCellDefaults& KeyDefaults;
     IPages* const Env;
     ui64 Resolution;
-    TDeque<TBtreeIndexNode> LoadedNodes; // keep nodes to use TCellsIterable key refs
+    TDeque<TBtreeIndexNode> LoadedBTreeNodes; // keep nodes to use TCellsIterable key refs
+    TDeque<TNodeState> LoadedStateNodes; // keep nodes to use TIntrusiveList
 };
 
 }

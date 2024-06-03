@@ -517,7 +517,6 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
             CalcDataBefore(subset, key, actualBytes, actualRows);
             ui64 actualValue = isBytes ? actualBytes : actualRows;
 
-            UNIT_ASSERT_GT(bucket.Value, prevValue);
             ui64 delta = bucket.Value - prevValue, actualDelta = actualValue - prevActualValue;
             Cerr << "    " << FormatPercent(delta, total) << " (actual " << FormatPercent(actualDelta, total) << ")" << Endl;
             VerifyPercent(delta, total, 20);
@@ -535,6 +534,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
             Cerr << FormatPercent(bucketError, total) << " error)" << Endl;
             VerifyPercent(bucketError, total, 10);
 
+            UNIT_ASSERT_GT(bucket.Value, prevValue);
             prevValue = bucket.Value;
             prevActualValue = actualValue;
         }

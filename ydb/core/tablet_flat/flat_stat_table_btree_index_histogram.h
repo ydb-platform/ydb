@@ -59,10 +59,6 @@ private:
         {
         }
 
-        TPartNodes ForkNew() const noexcept {
-            return TPartNodes(Part, Index);
-        }
-
         const TPart* GetPart() const noexcept {
             return Part;
         }
@@ -225,7 +221,7 @@ private:
                 auto& middleNodes = middleParts.back();
                 auto& leftNodes = GetNextPartNodes(middleNodes, leftParts);
                 auto& rightNodes = GetNextPartNodes(middleNodes, rightParts);
-                auto rightBuffer = middleNodes.ForkNew();
+                TIntrusiveList<TNodeState> rightNodesBuffer;
                 
                 leftSize -= leftNodes.GetSize();
                 middleSize -= middleNodes.GetSize();
@@ -238,7 +234,7 @@ private:
                         if (node.EndKey && CompareKeys(node.EndKey, splitKey) <= 0) {
                             leftNodes.PushBack(&node);
                         } else if (node.BeginKey && CompareKeys(node.BeginKey, splitKey) >= 0) {
-                            rightBuffer.PushBack(&node);
+                            rightNodesBuffer.PushBack(&node);
                         } else {
                             middleNodes.PushBack(&node);
                         }
@@ -247,8 +243,8 @@ private:
                     }
                 }
 
-                while (rightBuffer.GetCount()) { // should be reversed
-                    rightNodes.PushFront(rightBuffer.PopBack());
+                while (!rightNodesBuffer.Empty()) { // should be reversed
+                    rightNodes.PushFront(rightNodesBuffer.PopBack());
                 }
 
                 leftSize += leftNodes.GetSize();
@@ -347,7 +343,7 @@ private:
 
     TPartNodes& PushNextPartNodes(const TPartNodes& part, TVector<TPartNodes>& list) const {
         Y_ABORT_UNLESS(part.GetIndex() == list.size());
-        list.push_back(part.ForkNew());
+        list.emplace_back(part.GetPart(), part.GetIndex());
         return list.back();
     }
 

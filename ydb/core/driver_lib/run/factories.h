@@ -25,6 +25,8 @@
 #include <unordered_set>
 #include <vector>
 
+#include "config.h"
+
 namespace NKikimr {
 
 // A way to parameterize YDB binary, we do it via a set of factories
@@ -57,6 +59,8 @@ struct TModuleFactories {
     std::vector<NKikimr::NMiniKQL::TComputationNodeFactory> AdditionalComputationNodeFactories;
 
     std::unique_ptr<NWilson::IGrpcSigner>(*WilsonGrpcSignerFactory)(const NKikimrConfig::TTracingConfig::TBackendConfig::TAuthConfig&);
+
+    std::function<void (TKikimrRunConfig& config)> ModuleDefaults;
 
     ~TModuleFactories();
 };

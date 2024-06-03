@@ -390,6 +390,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvDescribe::TPtr &ev, const T
     } else {
         THolder<TEvPersQueue::TEvDescribeResponse> res{new TEvPersQueue::TEvDescribeResponse};
         res->Record.MutableConfig()->CopyFrom(TabletConfig);
+        res->Record.MutableConfig()->ClearAllPartitions();
         res->Record.SetVersion(Version);
         res->Record.SetTopicName(Topic);
         res->Record.SetPartitionPerTablet(MaxPartsPerTablet);
@@ -457,8 +458,9 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
             ap->SetPartitionId(p.GetPartition());
             ap->SetTabletId(p.GetTabletId());
             ap->SetCreateVersion(p.GetCreateVersion());
-            ap->MutableKeyRange()->SetFromBound(p.GetKeyRange().GetFromBound());
-            ap->MutableKeyRange()->SetToBound(p.GetKeyRange().GetToBound());
+            if (p.HasKeyRange()) {
+                ap->MutableKeyRange()->CopyFrom(p.GetKeyRange());
+            }
             ap->SetStatus(p.GetStatus());
             ap->MutableParentPartitionIds()->Reserve(p.GetParentPartitionIds().size());
             for (const auto parent : p.GetParentPartitionIds()) {

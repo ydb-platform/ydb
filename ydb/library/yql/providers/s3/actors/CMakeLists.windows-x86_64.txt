@@ -28,8 +28,8 @@ target_include_directories(providers-s3-actors PRIVATE
 target_link_libraries(providers-s3-actors PUBLIC
   contrib-libs-cxxsupp
   yutil
-  contrib-libs-fmt
   libs-apache-arrow
+  contrib-libs-fmt
   libs-poco-Util
   library-actors-http
   cpp-protobuf-util
@@ -58,10 +58,10 @@ target_link_libraries(providers-s3-actors PUBLIC
 )
 
 target_sources(providers-s3-actors PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/raw_read_actor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_actors_util.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_applicator_actor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_sink_factory.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_raw_read_actor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_source_factory.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_write_actor.cpp
 )

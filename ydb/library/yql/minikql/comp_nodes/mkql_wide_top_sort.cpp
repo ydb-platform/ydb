@@ -412,6 +412,9 @@ public:
                 }
                 ResetFields();
                 auto nextMode = (IsReadFromChannelFinished() ? EOperatingMode::ProcessSpilled : EOperatingMode::InMemory);
+
+                YQL_LOG(INFO) << (nextMode == EOperatingMode::ProcessSpilled ? "Switching to ProcessSpilled" : "Switching to Memory mode");
+
                 SwitchMode(nextMode);
                 return true;
             }
@@ -442,6 +445,12 @@ public:
         if constexpr (!HasCount) {
             ResetFields();
             if (Ctx.SpillerFactory && !HasMemoryForProcessing()) {
+                const auto used = TlsAllocState->GetUsed();
+                const auto limit = TlsAllocState->GetLimit();
+
+                YQL_LOG(INFO) << "Yellow zone reached " << (used*100/limit) << "%=" << used << "/" << limit;
+                YQL_LOG(INFO) << "Switching Memory mode to Spilling";
+
                 SwitchMode(EOperatingMode::Spilling);
             }
             return;

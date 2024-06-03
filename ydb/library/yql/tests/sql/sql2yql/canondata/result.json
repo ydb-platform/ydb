@@ -2241,9 +2241,9 @@
     ],
     "test_sql2yql.test[aggregate-group_by_rollup_grouping_hum]": [
         {
-            "checksum": "cee052ae0f5665666ac9295ad15d0a6d",
-            "size": 7308,
-            "uri": "https://{canondata_backend}/1942278/beab6e829114ea03a5df7881bc0d363cdf567406/resource.tar.gz#test_sql2yql.test_aggregate-group_by_rollup_grouping_hum_/sql.yql"
+            "checksum": "00a492807658102553f3b98142b215be",
+            "size": 7560,
+            "uri": "https://{canondata_backend}/1936947/a21ecf863255ddca1b96365dab953533651483f7/resource.tar.gz#test_sql2yql.test_aggregate-group_by_rollup_grouping_hum_/sql.yql"
         }
     ],
     "test_sql2yql.test[aggregate-group_by_rollup_grouping_hum_bind]": [
@@ -2636,6 +2636,13 @@
             "checksum": "44f9a8447b4d827cc993641fb4d42027",
             "size": 2076,
             "uri": "https://{canondata_backend}/1937027/973c239492ba32946806ddc66cf0af4b38c06ae8/resource.tar.gz#test_sql2yql.test_aggregate-table_row_aggregation_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[aggregate-yql-18511]": [
+        {
+            "checksum": "cca030f77b003f0ee9f627e04304fad1",
+            "size": 21501,
+            "uri": "https://{canondata_backend}/1689644/9f0cb0061bf69b8a694d5c2f0375cda28d1cca57/resource.tar.gz#test_sql2yql.test_aggregate-yql-18511_/sql.yql"
         }
     ],
     "test_sql2yql.test[ansi_idents-basic_columns]": [
@@ -21102,6 +21109,13 @@
             "checksum": "6c6c2c67e691700950490251acfc6157",
             "size": 210,
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_aggregate-table_row_aggregation_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[aggregate-yql-18511]": [
+        {
+            "checksum": "df8e0cf815bdc93797f7c8a221c52a96",
+            "size": 2024,
+            "uri": "https://{canondata_backend}/1689644/9f0cb0061bf69b8a694d5c2f0375cda28d1cca57/resource.tar.gz#test_sql_format.test_aggregate-yql-18511_/formatted.sql"
         }
     ],
     "test_sql_format.test[ansi_idents-basic_columns]": [

@@ -154,8 +154,8 @@ class Factory:
                 ),
                 Column(
                     name='col_25_json',
-                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.TIMESTAMP),
-                    data_source_type=DataSourceType(pg=postgresql.TimestampWithoutTimeZone()),
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.JSON),
+                    data_source_type=DataSourceType(pg=postgresql.Json()),
                 ),
                 # TODO: YQ-2297
                 # Column(
@@ -234,11 +234,7 @@ class Factory:
                     'buki', 
                     datetime.date(1988, 11, 20),
                     datetime.datetime(1988, 11, 20, 12, 00, 00),
-<<<<<<< HEAD
                     '{ "TODO" : "unicode" }',
-=======
-                    '{ "TODO" : "unicode }',
->>>>>>> adding json support for external datasource postgres
                     # TODO: support time in YQ-2297
                 ],
                 [
@@ -520,16 +516,10 @@ class Factory:
                 data_in=data_in,
                 data_out_=data_out_1,
                 protocol=EProtocol.NATIVE,
-<<<<<<< HEAD
                 select_what=SelectWhat(SelectWhat.Item(name='JSON_QUERY(col_json, "$.friends[0]")', kind='expr')),
                 select_where=None,
                 data_source_kind=data_source_kind,
                 pragmas=dict(),
-=======
-                select_what=SelectWhat(SelectWhat.Item(name='JSON_QUERY($col_json, "$.friends[0]")', kind='expr')),
-                select_where=None,
-                data_source_kind=data_source_kind,
->>>>>>> adding json support for external datasource postgres
                 schema=schema,
             ),
         ]

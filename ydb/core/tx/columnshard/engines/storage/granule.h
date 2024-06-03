@@ -150,6 +150,7 @@ private:
     std::shared_ptr<TGranulesStat> Stats;
     std::shared_ptr<NStorageOptimizer::IOptimizerPlanner> OptimizerPlanner;
     std::shared_ptr<NActualizer::TGranuleActualizationIndex> ActualizationIndex;
+    mutable TInstant LastActualizations = TInstant::Zero();
     std::map<NArrow::TReplaceKey, THashMap<ui64, std::shared_ptr<TPortionInfo>>> PortionsByPK;
 
     void OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> portionBefore);
@@ -198,8 +199,12 @@ public:
     }
 
     void BuildActualizationTasks(NActualizer::TTieringProcessContext& context) const {
+        if (context.Now - LastActualizations < TDuration::Seconds(1)) {
+            return;
+        }
         NActualizer::TExternalTasksContext extTasks(Portions);
         ActualizationIndex->ExtractActualizationTasks(context, extTasks);
+        LastActualizations = context.Now;
     }
 
     std::shared_ptr<TColumnEngineChanges> GetOptimizationTask(std::shared_ptr<TGranuleMeta> self, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {

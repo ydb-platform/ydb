@@ -24,7 +24,8 @@ TString MiddleOf(const TString& from, const TString& to) {
 
     size_t maxSize = std::max(from.size(), to.size());
     result.reserve(maxSize + 1);
-    for (size_t i = 0; i < maxSize; ++i) {
+    size_t i = 0;
+    for (; i < maxSize; ++i) {
         ui16 f = GetChar(from, i, 0);
         ui16 t = GetChar(to, i, 0xFF);
 
@@ -51,8 +52,7 @@ TString MiddleOf(const TString& from, const TString& to) {
                 continue;
             }
 
-            for(size_t j = i; j > 0;) {
-                --j;
+            for(size_t j = i - 1; j >= 0; --j) {
                 result.pop_back();
 
                 ui16 prev = GetChar(from, j, 0);
@@ -60,10 +60,8 @@ TString MiddleOf(const TString& from, const TString& to) {
                     continue;
                 }
 
-                ++j;
                 result << static_cast<unsigned char>(prev + 1u);
-
-                for (; j < i; ++j) {
+                for (++j; j < i; ++j) {
                     result << static_cast<unsigned char>(0u);
                 }
 
@@ -79,7 +77,11 @@ TString MiddleOf(const TString& from, const TString& to) {
     }
 
     if (result == from) {
-        result << static_cast<unsigned char>(diffFound ? 0xFFu: 0x7Fu);
+        size_t j = splitted ? i : maxSize - 1;
+        ui16 f = GetChar(from, j, 0);
+        ui16 t = GetChar(to, j, 0xFF);
+
+        result << static_cast<unsigned char>((f - t) & 1 ? 0xFFu: 0x7Fu);
     }
 
     return result;

@@ -1,8 +1,8 @@
 #include <ydb/library/yql/providers/s3/events/events.h>
 
-#include "raw_read_actor.h"
-#include "source_queue.h"
-#include "yql_s3_actors_util.cpp"
+#include "yql_s3_actors_util.h"
+#include "yql_s3_raw_read_actor.h"
+#include "yql_s3_source_queue.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
@@ -10,7 +10,7 @@
 
 #include <ydb/library/yql/dq/actors/compute/retry_queue.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/providers/s3/common/util.cpp>
+#include <ydb/library/yql/providers/s3/common/util.h>
 
 #include <library/cpp/string_utils/quote/quote.h>
 

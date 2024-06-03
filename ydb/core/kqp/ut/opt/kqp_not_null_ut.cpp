@@ -1967,7 +1967,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         };
 
         const THashMap<std::string_view, bool> columnNonNullability = {
-            {"Key1", false},
+            {"Key1", true},
             {"Key2", false},
             {"Value1", false},
             {"Value2", false},
@@ -2004,7 +2004,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         UNIT_ASSERT_C(describeTableResult.IsSuccess(), describeTableResult.GetIssues().ToString());
         const THashMap<std::string_view, bool> columnNonNullability = {
             {"1", false},
-            {"2", false},
+            {"2", true},
             {"3", false},
             {"4", true},
         };

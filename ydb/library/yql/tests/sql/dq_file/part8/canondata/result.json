@@ -1118,9 +1118,9 @@
     ],
     "test.test[expr-untag-default.txt-Debug]": [
         {
-            "checksum": "310e86bfe8a7d8641f357474c73b19dc",
-            "size": 365,
-            "uri": "https://{canondata_backend}/1777230/65685e9d54d416f54450defb84f83fe3b04456b0/resource.tar.gz#test.test_expr-untag-default.txt-Debug_/opt.yql_patched"
+            "checksum": "c59f2903cc11d2b792ac17a3dda3a3f0",
+            "size": 508,
+            "uri": "https://{canondata_backend}/1814674/30771d6d06c81affd1305529445a0377b856ae73/resource.tar.gz#test.test_expr-untag-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[expr-untag-default.txt-Plan]": [

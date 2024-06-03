@@ -641,7 +641,7 @@ private:
         TYsonString ConsumeInputValue() override
         {
             YT_VERIFY(Request_.InputStream);
-            auto syncInputStream = CreateSyncAdapter(Request_.InputStream);
+            auto syncInputStream = CreateSyncAdapter(CreateCopyingAdapter(Request_.InputStream));
 
             auto producer = CreateProducerForFormat(
                 GetInputFormat(),

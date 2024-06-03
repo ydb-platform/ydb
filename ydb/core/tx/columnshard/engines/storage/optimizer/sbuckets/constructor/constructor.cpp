@@ -1,0 +1,57 @@
+#include "constructor.h"
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/sbuckets/optimizer/optimizer.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/sbuckets/logic/one_head/logic.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/sbuckets/logic/slices/logic.h>
+
+namespace NKikimr::NOlap::NStorageOptimizer::NSBuckets {
+
+NKikimr::TConclusion<std::shared_ptr<NKikimr::NOlap::NStorageOptimizer::IOptimizerPlanner>> TOptimizerPlannerConstructor::DoBuildPlanner(const TBuildContext& context) const {
+    std::shared_ptr<IOptimizationLogic> logic;
+    if (LogicName == "one_head") {
+        logic = std::make_shared<TOneHeadLogic>();
+    } else if (LogicName == "slice") {
+        logic = std::make_shared<TTimeSliceLogic>();
+    } else {
+        AFL_VERIFY(false)("ln", LogicName);
+    }
+    return std::make_shared<TOptimizerPlanner>(context.GetPathId(), context.GetStorages(), context.GetPKSchema(), logic);
+}
+
+bool TOptimizerPlannerConstructor::DoIsEqualTo(const IOptimizerPlannerConstructor& item) const {
+    const auto* itemClass = dynamic_cast<const TOptimizerPlannerConstructor*>(&item);
+    AFL_VERIFY(itemClass);
+    return LogicName == itemClass->LogicName;
+}
+
+void TOptimizerPlannerConstructor::DoSerializeToProto(TProto& proto) const {
+    proto.MutableSBuckets()->SetLogicName(LogicName);
+}
+
+bool TOptimizerPlannerConstructor::DoDeserializeFromProto(const TProto& proto) {
+    if (!proto.HasSBuckets()) {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse s-buckets optimizer from proto")("proto", proto.DebugString());
+        return false;
+    }
+    LogicName = proto.GetSBuckets().GetLogicName();
+    if (LogicName == "") {
+        LogicName = "one_head";
+    } else if (LogicName != "one_head" && LogicName != "slice") {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "incorrect s-buckets optimizer logic name")("proto", proto.DebugString());
+        return false;
+    }
+    return true;
+}
+
+NKikimr::TConclusionStatus TOptimizerPlannerConstructor::DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) {
+    TString logicNameFromJson;
+    if (!jsonInfo["logic_name"].GetString(&logicNameFromJson)) {
+        return TConclusionStatus::Fail("no logic_name info in json description");
+    }
+    if (logicNameFromJson != "one_head" && logicNameFromJson != "slice") {
+        return TConclusionStatus::Fail("incorrect logic_type: " + logicNameFromJson + "; have to be one of [one_head, slice]");
+    }
+    LogicName = logicNameFromJson;
+    return TConclusionStatus::Success();
+}
+
+} // namespace NKikimr::NOlap::NStorageOptimizer::NSBuckets

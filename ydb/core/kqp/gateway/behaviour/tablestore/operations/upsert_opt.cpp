@@ -11,6 +11,26 @@ TConclusionStatus TUpsertOptionsOperation::DoDeserialize(NYql::TObjectSettingsIm
     }
     SchemeNeedActualization = *value;
     ExternalGuaranteeExclusivePK = features.Extract<bool>("EXTERNAL_GUARANTEE_EXCLUSIVE_PK");
+    if (const auto className = features.Extract<TString>("COMPACTION_PLANNER.CLASS_NAME")) {
+        if (!CompactionPlannerConstructor.Initialize(*className)) {
+            return TConclusionStatus::Fail("incorrect class name for compaction planner:" + *className);
+        }
+
+        auto fValue = features.Extract("COMPACTION_PLANNER.FEATURES");
+        if (!fValue) {
+            return TConclusionStatus::Fail("can't find parameter FEATURES for compaction planner (COMPACTION_PLANNER.FEATURES)");
+        }
+
+        NJson::TJsonValue jsonData;
+        if (!NJson::ReadJsonFastTree(*fValue, &jsonData)) {
+            return TConclusionStatus::Fail("incorrect json in request COMPACTION_PLANNER.FEATURES parameter");
+        }
+        auto result = CompactionPlannerConstructor->DeserializeFromJson(jsonData);
+        if (result.IsFail()) {
+            return result;
+        }
+    }
+
     return TConclusionStatus::Success();
 }
 
@@ -19,7 +39,9 @@ void TUpsertOptionsOperation::DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTab
     if (ExternalGuaranteeExclusivePK) {
         schemaData.MutableOptions()->SetExternalGuaranteeExclusivePK(*ExternalGuaranteeExclusivePK);
     }
-    
+    if (CompactionPlannerConstructor.HasObject()) {
+        CompactionPlannerConstructor.SerializeToProto(*schemaData.MutableOptions()->MutableCompactionPlannerConstructor());
+    }
 }
 
 }

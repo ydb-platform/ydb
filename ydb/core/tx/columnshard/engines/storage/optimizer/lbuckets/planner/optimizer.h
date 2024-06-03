@@ -17,13 +17,18 @@
 #include <util/generic/hash_set.h>
 #include <util/system/types.h>
 
-namespace NKikimr::NOlap::NStorageOptimizer::NBuckets {
+namespace NKikimr::NOlap::NStorageOptimizer::NLBuckets {
 
 static const ui64 SmallPortionDetectSizeLimit = 1 << 20;
 
 TDuration GetCommonFreshnessCheckDuration() {
     static const TDuration CommonFreshnessCheckDuration = TDuration::Seconds(300);
     return NYDBTest::TControllers::GetColumnShardController()->GetOptimizerFreshnessCheckDuration(CommonFreshnessCheckDuration);
+}
+
+TDuration GetCommonGuaranteeFreshnessCheckDuration() {
+    static const TDuration CommonFreshnessCheckDuration = TDuration::Seconds(1200);
+    return CommonFreshnessCheckDuration;
 }
 
 class TSimplePortionsGroupInfo {
@@ -409,6 +414,7 @@ public:
             if (txSizeLimit + i->GetTxVolume() > TGlobalLimits::TxWriteLimitBytes / 2) {
                 break;
             }
+            txSizeLimit += i->GetTxVolume();
             if (predictor->AddPortion(*i) > sizeLimit && result.size() > 1) {
                 break;
             }
@@ -421,16 +427,12 @@ public:
 
     void Add(const std::shared_ptr<TPortionInfo>& portion, const TInstant now) {
         portion->RemoveRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized);
-        auto portionMaxSnapshotInstant = TInstant::MilliSeconds(portion->RecordSnapshotMax().GetPlanStep());
-        if (now - portionMaxSnapshotInstant < FutureDetector) {
+        if (now < portion->RecordSnapshotMin().GetPlanInstant() + FutureDetector) {
             AFL_VERIFY(AddFuture(portion));
+        } else if (now < portion->RecordSnapshotMax().GetPlanInstant() + FutureDetector) {
+            AFL_VERIFY(AddPreActual(portion));
         } else {
-            auto b = GetFutureBorder();
-            if (!b || portion->IndexKeyEnd() < *b) {
-                AFL_VERIFY(AddActual(portion));
-            } else {
-                AFL_VERIFY(AddPreActual(portion));
-            }
+            AFL_VERIFY(AddActual(portion));
         }
     }
 
@@ -465,10 +467,9 @@ public:
 
     [[nodiscard]] TInstant Actualize(const TInstant currentInstant) {
         TInstant result = TInstant::Max();
-        auto border = GetFutureBorder();
-        if (border) {
+        {
             for (auto&& i : Futures) {
-                if (currentInstant - i.first >= FutureDetector) {
+                if (i.first + FutureDetector <= currentInstant) {
                     for (auto&& p : i.second) {
                         AFL_VERIFY(AddPreActual(p.second));
                     }
@@ -476,33 +477,20 @@ public:
                     result = std::min(result, i.first + FutureDetector);
                 }
             }
-            while (Futures.size() && currentInstant - Futures.begin()->first >= FutureDetector) {
+            while (Futures.size() && Futures.begin()->first + FutureDetector <= currentInstant) {
                 RemoveFutures(Futures.begin()->first);
             }
         }
-        border = GetFutureBorder();
         {
             std::vector<std::shared_ptr<TPortionInfo>> remove;
             for (auto&& p : PreActuals) {
-                if (!border || p.second->IndexKeyEnd() < *border) {
+                if (p.second->RecordSnapshotMax().GetPlanInstant() + FutureDetector < currentInstant) {
                     AFL_VERIFY(AddActual(p.second));
                     remove.emplace_back(p.second);
                 }
             }
             for (auto&& i : remove) {
                 AFL_VERIFY(RemovePreActual(i));
-            }
-        }
-        {
-            std::vector<std::shared_ptr<TPortionInfo>> remove;
-            for (auto&& p : Actuals) {
-                if (border && *border <= p.second->IndexKeyEnd()) {
-                    AFL_VERIFY(AddPreActual(p.second));
-                    remove.emplace_back(p.second);
-                }
-            }
-            for (auto&& i : remove) {
-                AFL_VERIFY(RemoveActual(i));
             }
         }
         return result;
@@ -593,13 +581,13 @@ public:
         if (NYDBTest::TControllers::GetColumnShardController()->GetCompactionControl() == NYDBTest::EOptimizerCompactionWeightControl::Disable) {
             return 0;
         }
-        const ui64 weight = (10000000000.0 * count - sumBytes) * (isFinal ? 1 : 10);
+        const ui64 weight = 10000000000.0 * count - sumBytes;
         if (isForce) {
             return (count > 1) ? weight : 0;
         }
 
         if (count > 1 && (sumBytes > 32 * 1024 * 1024 || !isFinal || count > 100 || recordsCount > 100000)) {
-            return (10000000000.0 * count - sumBytes) * (isFinal ? 1 : 10);
+            return 10000000000.0 * count - sumBytes;
         } else {
             return 0;
         }
@@ -624,11 +612,12 @@ public:
         }
     }
 
-    NJson::TJsonValue DebugJson() const {
+    NJson::TJsonValue DebugJson(const std::optional<TInstant> baseInstant) const {
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("actuals_count", Actuals.size());
         result.InsertValue("pre_actuals_count", PreActuals.size());
         result.InsertValue("futures_count", Futures.size());
+        result.InsertValue("bytes", BucketInfo.GetBytes());
 
         std::shared_ptr<TPortionInfo> oldestPortion = GetOldestPortion(true);
         if (oldestPortion) {
@@ -645,6 +634,30 @@ public:
             info.InsertValue("id", youngestPortion->GetPortionId());
         }
 
+        if (baseInstant) {
+            std::map<ui32, ui32> counters;
+            ui64 delta = 30;
+            for (i32 i = 0; i < 10; ++i) {
+                counters.emplace(delta, 0);
+                delta *= 2;
+            }
+            ui64 max = 0;
+            for (auto&& i : Actuals) {
+                auto it = counters.upper_bound((i.second->RecordSnapshotMax().GetPlanInstant() - *baseInstant).Seconds());
+                if (it == counters.end()) {
+                    ++max;
+                } else {
+                    ++it->second;
+                }
+            }
+            auto& diffJson = result.InsertValue("diff", NJson::JSON_ARRAY);
+            for (auto&& i : counters) {
+                diffJson.AppendValue(::ToString(i.first) + "s:" + ::ToString(i.second));
+            }
+            if (max) {
+                diffJson.AppendValue("max:" + ::ToString(max));
+            }
+        }
         return result;
     }
 };
@@ -694,12 +707,14 @@ public:
             result.SetFinish("NO_BORDER");
         }
         NJson::TJsonValue description;
-        description.InsertValue("others", Others.DebugJson());
+        std::optional<TInstant> baseInstant;
         if (MainPortion) {
+            baseInstant = MainPortion->RecordSnapshotMax().GetPlanInstant();
             description.InsertValue("main_portion", MainPortion->GetPortionId());
             description.InsertValue("snapshot_max", MainPortion->RecordSnapshotMax().DebugJson());
             description.InsertValue("bytes", MainPortion->GetTotalBlobBytes());
         }
+        description.InsertValue("others", Others.DebugJson(baseInstant));
         result.SetDetails(description.GetStringRobust());
         return result;
     }
@@ -881,8 +896,9 @@ public:
                 return nullptr;
             }
         }
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("stop_instant", stopInstant)("size", size)("next", NextBorder ? NextBorder->DebugString() : "")
-            ("count", portions.size())("info", Others.DebugString())("event", "start_optimization")("stop_point", stopPoint ? stopPoint->DebugString() : "");
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("stop_instant", stopInstant)("size", size)("next", NextBorder ? NextBorder->DebugString() : "")
+            ("count", portions.size())("info", Others.DebugString())("event", "start_optimization")("stop_point", stopPoint ? stopPoint->DebugString() : "")
+            ("main_portion", MainPortion ? MainPortion->GetPortionId() : 0);
         TSaverContext saverContext(storagesManager);
         auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, portions, saverContext);
         if (MainPortion) {
@@ -1175,6 +1191,10 @@ public:
             NArrow::NMerger::TSortableBatchPosition pos(i.second->GetPortion()->IndexKeyStart().ToBatch(PrimaryKeysSchema), 0, PrimaryKeysSchema->field_names(), {}, false);
             result.emplace_back(pos);
         }
+        if (Buckets.size()) {
+            NArrow::NMerger::TSortableBatchPosition pos(Buckets.rbegin()->second->GetPortion()->IndexKeyEnd().ToBatch(PrimaryKeysSchema), 0, PrimaryKeysSchema->field_names(), {}, false);
+            result.emplace_back(pos);
+        }
         return result;
     }
 };
@@ -1237,6 +1257,7 @@ protected:
     }
 
 public:
+    
     virtual std::vector<NArrow::NMerger::TSortableBatchPosition> GetBucketPositions() const override {
         return Buckets.GetBucketPositions();
     }
@@ -1249,4 +1270,4 @@ public:
     }
 };
 
-}   // namespace NKikimr::NOlap::NStorageOptimizer::NBuckets
+}   // namespace NKikimr::NOlap::NStorageOptimizer::NLBuckets

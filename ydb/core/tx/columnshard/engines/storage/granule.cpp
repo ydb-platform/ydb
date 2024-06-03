@@ -1,6 +1,7 @@
 #include "granule.h"
 #include "storage.h"
-#include "optimizer/lbuckets/optimizer.h"
+#include "optimizer/lbuckets/planner/optimizer.h"
+#include "optimizer/sbuckets/optimizer/optimizer.h"
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
@@ -145,8 +146,11 @@ TGranuleMeta::TGranuleMeta(const ui64 pathId, const TGranulesStorage& owner, con
     , Counters(counters)
     , PortionInfoGuard(owner.GetCounters().BuildPortionBlobsGuard())
     , Stats(owner.GetStats())
+    , StoragesManager(owner.GetStoragesManager())
 {
-    OptimizerPlanner = std::make_shared<NStorageOptimizer::NBuckets::TOptimizerPlanner>(PathId, owner.GetStoragesManager(), versionedIndex.GetLastSchema()->GetIndexInfo().GetReplaceKey());
+    NStorageOptimizer::IOptimizerPlannerConstructor::TBuildContext context(PathId, owner.GetStoragesManager(), versionedIndex.GetLastSchema()->GetIndexInfo().GetPrimaryKey());
+    OptimizerPlanner = versionedIndex.GetLastSchema()->GetIndexInfo().GetCompactionPlannerConstructor()->BuildPlanner(context).DetachResult();
+    AFL_VERIFY(!!OptimizerPlanner);
     ActualizationIndex = std::make_shared<NActualizer::TGranuleActualizationIndex>(PathId, versionedIndex);
 
 }
@@ -165,6 +169,13 @@ void TGranuleMeta::BuildActualizationTasks(NActualizer::TTieringProcessContext& 
     NActualizer::TExternalTasksContext extTasks(Portions);
     ActualizationIndex->ExtractActualizationTasks(context, extTasks);
     LastActualizations = context.GetActualInstant();
+}
+
+void TGranuleMeta::ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& constructor, std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema) {
+    NStorageOptimizer::IOptimizerPlannerConstructor::TBuildContext context(PathId, storages, pkSchema);
+    OptimizerPlanner = constructor->BuildPlanner(context).DetachResult();
+    AFL_VERIFY(!!OptimizerPlanner);
+    OptimizerPlanner->ModifyPortions(Portions, {});
 }
 
 } // namespace NKikimr::NOlap

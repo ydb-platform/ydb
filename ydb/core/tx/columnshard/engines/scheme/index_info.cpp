@@ -2,6 +2,8 @@
 #include "statistics/abstract/operator.h"
 
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/lbuckets/constructor/constructor.h>
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
@@ -321,6 +323,12 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
     {
         SchemeNeedActualization = schema.GetOptions().GetSchemeNeedActualization();
         ExternalGuaranteeExclusivePK = schema.GetOptions().GetExternalGuaranteeExclusivePK();
+        if (schema.GetOptions().HasCompactionPlannerConstructor()) {
+            auto container = NStorageOptimizer::TOptimizerPlannerConstructorContainer::BuildFromProto(schema.GetOptions().GetCompactionPlannerConstructor());
+            CompactionPlannerConstructor = container.DetachResult().GetObjectPtrVerified();
+        } else {
+            CompactionPlannerConstructor = std::make_shared<NStorageOptimizer::NLBuckets::TOptimizerPlannerConstructor>();
+        }
     }
 
     if (schema.HasDefaultCompression()) {
@@ -469,6 +477,11 @@ NSplitter::TEntityGroups TIndexInfo::GetEntityGroupsByStorageId(const TString& s
         group->AddEntity(i);
     }
     return groups;
+}
+
+std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> TIndexInfo::GetCompactionPlannerConstructor() const {
+    AFL_VERIFY(!!CompactionPlannerConstructor);
+    return CompactionPlannerConstructor;
 }
 
 } // namespace NKikimr::NOlap

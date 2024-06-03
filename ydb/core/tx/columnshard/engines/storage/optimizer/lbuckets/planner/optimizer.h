@@ -21,15 +21,7 @@ namespace NKikimr::NOlap::NStorageOptimizer::NLBuckets {
 
 static const ui64 SmallPortionDetectSizeLimit = 1 << 20;
 
-TDuration GetCommonFreshnessCheckDuration() {
-    static const TDuration CommonFreshnessCheckDuration = TDuration::Seconds(300);
-    return NYDBTest::TControllers::GetColumnShardController()->GetOptimizerFreshnessCheckDuration(CommonFreshnessCheckDuration);
-}
-
-TDuration GetCommonGuaranteeFreshnessCheckDuration() {
-    static const TDuration CommonFreshnessCheckDuration = TDuration::Seconds(1200);
-    return CommonFreshnessCheckDuration;
-}
+TDuration GetCommonFreshnessCheckDuration();
 
 class TSimplePortionsGroupInfo {
 private:

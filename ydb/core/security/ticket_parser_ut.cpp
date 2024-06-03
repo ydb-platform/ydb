@@ -718,6 +718,104 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT_C(groupsSet.contains(expectedGroup), "Groups should contain: " + expectedGroup);
     }
 
+    Y_UNIT_TEST(TicketFromCertificateWithValidationDifferentIssuersGood) {
+        using namespace Tests;
+        TPortManager tp;
+        ui16 kikimrPort = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(kikimrPort);
+        settings.SetDomainName("Root");
+        settings.SetEnableDynamicNodeAuthorization(true);
+        auto& dynNodeDefinition = *settings.AppConfig->MutableClientCertificateAuthorization()->MutableDynamicNodeAuthorization();
+        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("C", {"RU"});
+        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
+        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("L", {"MSK"});
+        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("O", {"YA"});
+        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("OU", {"UtTest"});
+        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("CN", {"localhost"}, {".test.ut.ru"});
+        dynNodeDefinition.SetNeedCheckIssuer(false);
+        dynNodeDefinition.SetSidName("test.Register.Node.Group@cert");
+
+        const TCertAndKey caForServerCert = GenerateCA(TProps::AsCA());
+        const TCertAndKey serverCert = GenerateSignedCert(caForServerCert, TProps::AsServer());
+        TProps caPropertiesForClientCert = TProps::AsCA();
+        caPropertiesForClientCert.Organization = "Other org";
+        const TCertAndKey caForClientCert = GenerateCA(caPropertiesForClientCert);
+        const TCertAndKey clientCert = GenerateSignedCert(caForClientCert, TProps::AsClient());
+
+        TTempFileHandle serverCertificateFile;
+        serverCertificateFile.Write(serverCert.Certificate.data(), serverCert.Certificate.size());
+        settings.ServerCertFilePath = serverCertificateFile.Name();
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        server.GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
+        server.GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
+        TClient client(settings);
+        NClient::TKikimr kikimr(client.GetClientConfig());
+        client.InitRootScheme();
+        TTestActorRuntime* runtime = server.GetRuntime();
+
+        TString clientCertificateContent(clientCert.Certificate);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({.AuthInfo = {.Ticket = clientCertificateContent, .IsCertificate = true}})), 0);
+
+        TAutoPtr<IEventHandle> handle;
+        TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+        UNIT_ASSERT_C(result->Error.empty(), result->Error);
+        UNIT_ASSERT_C(result->Token->IsExist("C=RU,ST=MSK,L=MSK,O=YA,OU=UtTest,CN=localhost@cert"), result->Token->ShortDebugString());
+        const auto& groups = result->Token->GetGroupSIDs();
+        const std::unordered_set<TString> groupsSet(groups.cbegin(), groups.cend());
+        const TString expectedGroup = dynNodeDefinition.GetSidName();
+        UNIT_ASSERT_C(groupsSet.contains(expectedGroup), "Groups should contain: " + expectedGroup);
+    }
+
+    Y_UNIT_TEST(TicketFromCertificateWithValidationDifferentIssuersBad) {
+        using namespace Tests;
+        TPortManager tp;
+        ui16 kikimrPort = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(kikimrPort);
+        settings.SetDomainName("Root");
+        settings.SetEnableDynamicNodeAuthorization(true);
+        auto& dynNodeDefinition = *settings.AppConfig->MutableClientCertificateAuthorization()->MutableDynamicNodeAuthorization();
+        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("C", {"RU"});
+        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
+        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("L", {"MSK"});
+        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("O", {"YA"});
+        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("OU", {"UtTest"});
+        *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("CN", {"localhost"}, {".test.ut.ru"});
+        dynNodeDefinition.SetSidName("test.Register.Node.Group@cert");
+
+        const TCertAndKey caForServerCert = GenerateCA(TProps::AsCA());
+        const TCertAndKey serverCert = GenerateSignedCert(caForServerCert, TProps::AsServer());
+        TProps caPropertiesForClientCert = TProps::AsCA();
+        caPropertiesForClientCert.Organization = "Other org";
+        const TCertAndKey caForClientCert = GenerateCA(caPropertiesForClientCert);
+        const TCertAndKey clientCert = GenerateSignedCert(caForClientCert, TProps::AsClient());
+
+        TTempFileHandle serverCertificateFile;
+        serverCertificateFile.Write(serverCert.Certificate.data(), serverCert.Certificate.size());
+        settings.ServerCertFilePath = serverCertificateFile.Name();
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        server.GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
+        server.GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
+        TClient client(settings);
+        NClient::TKikimr kikimr(client.GetClientConfig());
+        client.InitRootScheme();
+        TTestActorRuntime* runtime = server.GetRuntime();
+
+        TString clientCertificateContent(clientCert.Certificate);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({.AuthInfo = {.Ticket = clientCertificateContent, .IsCertificate = true}})), 0);
+
+        TAutoPtr<IEventHandle> handle;
+        TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+        UNIT_ASSERT_C(!result->Error.empty(), "Expected return error message");
+        UNIT_ASSERT_STRINGS_EQUAL(result->Error.Message, "Cannot create token from certificate. Client`s certificate and server`s certificate have different issuers");
+        UNIT_ASSERT(result->Token == nullptr);
+    }
+
     Y_UNIT_TEST(TicketFromCertificateWithValidationDefaultGroupGood) {
         using namespace Tests;
         TPortManager tp;

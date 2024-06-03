@@ -18,7 +18,15 @@ Y_UNIT_TEST_SUITE(TPipeCacheTest) {
         };
 
         struct TEvHelloRequest : public TEventLocal<TEvHelloRequest, EvHelloRequest> {};
-        struct TEvHelloResponse : public TEventLocal<TEvHelloResponse, EvHelloResponse> {};
+        struct TEvHelloResponse : public TEventLocal<TEvHelloResponse, EvHelloResponse> {
+            TActorId ServerId;
+            TActorId ClientId;
+
+            TEvHelloResponse(const TActorId& serverId, const TActorId& clientId)
+                : ServerId(serverId)
+                , ClientId(clientId)
+            {}
+        };
     };
 
     class TCustomTablet : public TActor<TCustomTablet>, public NTabletFlatExecutor::TTabletExecutedFlat {
@@ -35,14 +43,31 @@ Y_UNIT_TEST_SUITE(TPipeCacheTest) {
 
         STFUNC(StateWork) {
             switch (ev->GetTypeRewrite()) {
+                hFunc(TEvTabletPipe::TEvServerConnected, Handle);
+                hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
                 HFunc(TEvCustomTablet::TEvHelloRequest, Handle);
             default:
                 HandleDefaultEvents(ev, SelfId());
             }
         }
 
+        void Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev) {
+            auto* msg = ev->Get();
+            Y_ABORT_UNLESS(!ServerToClient.contains(msg->ServerId));
+            ServerToClient[msg->ServerId] = msg->ClientId;
+        }
+
+        void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev) {
+            auto* msg = ev->Get();
+            Y_ABORT_UNLESS(ServerToClient.contains(msg->ServerId));
+            ServerToClient.erase(msg->ServerId);
+        }
+
         void Handle(TEvCustomTablet::TEvHelloRequest::TPtr& ev, const TActorContext& ctx) {
-            ctx.Send(ev->Sender, new TEvCustomTablet::TEvHelloResponse);
+            auto serverId = ev->Recipient;
+            Y_ABORT_UNLESS(ServerToClient.contains(serverId));
+            auto clientId = ServerToClient.at(serverId);
+            ctx.Send(ev->Sender, new TEvCustomTablet::TEvHelloResponse(serverId, clientId));
         }
 
         void OnDetach(const TActorContext& ctx) override {
@@ -62,6 +87,9 @@ Y_UNIT_TEST_SUITE(TPipeCacheTest) {
             Become(&TThis::StateWork);
             SignalTabletActive(ctx);
         }
+
+    private:
+        THashMap<TActorId, TActorId> ServerToClient;
     };
 
 
@@ -136,6 +164,123 @@ Y_UNIT_TEST_SUITE(TPipeCacheTest) {
         auto ev2 = runtime.GrabEdgeEventRethrow<TEvPipeCache::TEvGetTabletNodeResult>(sender);
         UNIT_ASSERT_VALUES_EQUAL(ev2->Get()->TabletId, TTestTxConfig::TxTablet0);
         UNIT_ASSERT_VALUES_EQUAL(ev2->Get()->NodeId, runtime.GetNodeId(0));
+    }
+
+    Y_UNIT_TEST(TestAutoConnect) {
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::Dummy),
+            [](const TActorId& tablet, TTabletStorageInfo* info) {
+                return new TCustomTablet(tablet, info);
+            });
+
+        auto config = MakeIntrusive<TPipePeNodeCacheConfig>();
+        auto cacheActor = runtime.Register(CreatePipePeNodeCache(config));
+
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        size_t observedRequests = 0;
+        auto observeRequests = runtime.AddObserver<TEvCustomTablet::TEvHelloRequest>(
+            [&](TEvCustomTablet::TEvHelloRequest::TPtr&) {
+                ++observedRequests;
+            });
+
+        TActorId client1;
+        {
+            runtime.Send(new IEventHandle(cacheActor, sender, new TEvPipeCache::TEvForward(
+                new TEvCustomTablet::TEvHelloRequest,
+                TTestTxConfig::TxTablet0, {
+                    .Subscribe = true,
+                    .SubscribeCookie = 1,
+                })), 0, true);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvCustomTablet::TEvHelloResponse>(sender);
+            client1 = ev->Get()->ClientId;
+            UNIT_ASSERT_VALUES_EQUAL(observedRequests, 1u);
+        }
+
+        // Resubscribe which will also change cookie
+        {
+            runtime.Send(new IEventHandle(cacheActor, sender, new TEvPipeCache::TEvForward(
+                new TEvCustomTablet::TEvHelloRequest,
+                TTestTxConfig::TxTablet0, {
+                    .Subscribe = true,
+                    .SubscribeCookie = 2,
+                })), 0, true);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvCustomTablet::TEvHelloResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->ClientId, client1);
+            UNIT_ASSERT_VALUES_EQUAL(observedRequests, 2u);
+        }
+
+        // Test forward without auto-connect or subscribe will use pipe that is currently subscribed
+        {
+            runtime.Send(new IEventHandle(cacheActor, sender, new TEvPipeCache::TEvForward(
+                new TEvCustomTablet::TEvHelloRequest,
+                TTestTxConfig::TxTablet0, {
+                    .AutoConnect = false,
+                    .Subscribe = false,
+                })), 0, true);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvCustomTablet::TEvHelloResponse>(sender, TDuration::Seconds(1));
+            UNIT_ASSERT(ev);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->ClientId, client1);
+            UNIT_ASSERT_VALUES_EQUAL(observedRequests, 3u);
+        }
+
+        // Test that killing the client triggers TEvDeliveryProblem with Cookie==2
+        {
+            runtime.Send(new IEventHandle(client1, sender, new TEvents::TEvPoison), 0, true);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvPipeCache::TEvDeliveryProblem>(sender, TDuration::Seconds(1));
+            UNIT_ASSERT(ev);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, 2u);
+        }
+
+        // Test forward without auto-connect or subscribe will not create a new client
+        {
+            runtime.Send(new IEventHandle(cacheActor, sender, new TEvPipeCache::TEvForward(
+                new TEvCustomTablet::TEvHelloRequest,
+                TTestTxConfig::TxTablet0, {
+                    .AutoConnect = false,
+                    .Subscribe = false,
+                })), 0, true);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvCustomTablet::TEvHelloResponse>(sender, TDuration::Seconds(1));
+            UNIT_ASSERT(!ev);
+            UNIT_ASSERT_VALUES_EQUAL(observedRequests, 3u);
+        }
+
+        // Test forward with auto-connect but without subscribe will create and use a new client
+        TActorId client2;
+        {
+            runtime.Send(new IEventHandle(cacheActor, sender, new TEvPipeCache::TEvForward(
+                new TEvCustomTablet::TEvHelloRequest,
+                TTestTxConfig::TxTablet0, {
+                    .Subscribe = false,
+                })), 0, true);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvCustomTablet::TEvHelloResponse>(sender, TDuration::Seconds(1));
+            UNIT_ASSERT(ev);
+            client2 = ev->Get()->ClientId;
+            UNIT_ASSERT(client2 != client1);
+            UNIT_ASSERT_VALUES_EQUAL(observedRequests, 4u);
+        }
+
+        // Test forward without auto-connect or subscribe will not use pipe that is active but not subscribed
+        {
+            runtime.Send(new IEventHandle(cacheActor, sender, new TEvPipeCache::TEvForward(
+                new TEvCustomTablet::TEvHelloRequest,
+                TTestTxConfig::TxTablet0, {
+                    .AutoConnect = false,
+                    .Subscribe = false,
+                })), 0, true);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvCustomTablet::TEvHelloResponse>(sender, TDuration::Seconds(1));
+            UNIT_ASSERT(!ev);
+            UNIT_ASSERT_VALUES_EQUAL(observedRequests, 4u);
+        }
+
+        // Test that killing the new client does not trigger TEvDeliveryProblem
+        {
+            runtime.Send(new IEventHandle(client2, sender, new TEvents::TEvPoison), 0, true);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvPipeCache::TEvDeliveryProblem>(sender, TDuration::Seconds(1));
+            UNIT_ASSERT(!ev);
+        }
     }
 }
 

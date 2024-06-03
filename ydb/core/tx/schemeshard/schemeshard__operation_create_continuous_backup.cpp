@@ -68,7 +68,7 @@ TVector<ISubOperation::TPtr> CreateNewContinuousBackup(TOperationId opId, const 
 
     TVector<ISubOperation::TPtr> result;
 
-    NCdc::DoCreateStream(createCdcStreamOp, opId, workingDirPath, tablePath, acceptExisted, false, result);
+    NCdc::DoCreateStream(createCdcStreamOp, opId, workingDirPath, tablePath, acceptExisted, false, {}, result);
     NCdc::DoCreatePqPart(opId, streamPath, NBackup::CB_CDC_STREAM_NAME, table, createCdcStreamOp, boundaries, acceptExisted, result);
 
     return result;

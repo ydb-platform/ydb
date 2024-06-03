@@ -11,6 +11,8 @@ Video recordings from conferences and webinars. The materials are divided by cat
 
     {% include [Conf42](./_includes/conferences/2024/Conf42.md) %}
 
+    {% include [Devworld](./_includes/conferences/2024/Devworld.md) %}
+
   - 2023
 
     {% include [HighLoad](./_includes/conferences/2023/HighLoad.md) %}

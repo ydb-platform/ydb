@@ -47,6 +47,7 @@ class TJsonTenantInfo : public TViewerPipeClient<TJsonTenantInfo> {
     bool SystemTablets = false;
     bool Storage = false;
     bool Nodes = false;
+    bool Users = false;
     bool OffloadMerge = false;
     THashMap<TString, std::vector<TNodeId>> TenantNodes;
     THashMap<TString, NKikimrViewer::TEvViewerResponse> OffloadMergedTabletStateResponse;
@@ -103,6 +104,7 @@ public:
         SystemTablets = FromStringWithDefault<bool>(params.Get("system_tablets"), Tablets); // Tablets here is by design
         Storage = FromStringWithDefault<bool>(params.Get("storage"), Storage);
         Nodes = FromStringWithDefault<bool>(params.Get("nodes"), Nodes);
+        Users = FromStringWithDefault<bool>(params.Get("users"), Users);
         User = params.Get("user");
         Path = params.Get("path");
         OffloadMerge = FromStringWithDefault<bool>(params.Get("offload_merge"), OffloadMerge);
@@ -521,16 +523,18 @@ public:
                     continue;
                 }
                 std::unordered_set<TString> users;
-                if (entry.SecurityObject) {
-                    users.emplace(entry.SecurityObject->GetOwnerSID());
-                    for (const NACLibProto::TACE& ace : entry.SecurityObject->GetACL().GetACE()) {
-                        if (ace.GetAccessType() == (ui32)NACLib::EAccessType::Allow) {
-                            users.emplace(ace.GetSID());
+                if(!User.empty() || Users) {
+                    if (entry.SecurityObject) {
+                        users.emplace(entry.SecurityObject->GetOwnerSID());
+                        for (const NACLibProto::TACE& ace : entry.SecurityObject->GetACL().GetACE()) {
+                            if (ace.GetAccessType() == (ui32)NACLib::EAccessType::Allow) {
+                                users.emplace(ace.GetSID());
+                            }
                         }
                     }
-                }
-                if (!IsValidOwner(users)) {
-                    continue;
+                    if (!IsValidOwner(users)) {
+                        continue;
+                    }
                 }
                 NKikimrViewer::TTenant& tenant = *Result.AddTenantInfo();
                 auto itTenantByPath = TenantByPath.find(path);

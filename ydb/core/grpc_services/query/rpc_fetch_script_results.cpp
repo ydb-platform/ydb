@@ -25,6 +25,7 @@ using TEvFetchScriptResultsRequest = TGrpcRequestNoOperationCall<Ydb::Query::Fet
     Ydb::Query::FetchScriptResultsResponse>;
 
 constexpr i64 MAX_ROWS_LIMIT = 1000;
+constexpr i64 MAX_SIZE_LIMIT = 60_MB;
 
 class TFetchScriptResultsRPC : public TRpcRequestActor<TFetchScriptResultsRPC, TEvFetchScriptResultsRequest, false> {
 public:
@@ -45,7 +46,7 @@ public:
             return;
         }
 
-        if (req->rows_limit() <= 0) {
+        if (req->rows_limit() < 0) {
             Reply(Ydb::StatusIds::BAD_REQUEST, "Invalid rows limit");
             return;
         }
@@ -70,28 +71,27 @@ public:
             return;
         }
 
-        Register(NKqp::CreateGetScriptExecutionResultActor(SelfId(), DatabaseName, ExecutionId, req->result_set_index(), RowsOffset, req->rows_limit() + 1));
+        Register(NKqp::CreateGetScriptExecutionResultActor(SelfId(), DatabaseName, ExecutionId, req->result_set_index(), RowsOffset, req->rows_limit(), req->rows_limit() ? 0 : MAX_SIZE_LIMIT, Request->GetDeadline()));
 
         Become(&TFetchScriptResultsRPC::StateFunc);
     }
 
 private:
     STRICT_STFUNC(StateFunc,
-        hFunc(NKqp::TEvKqp::TEvFetchScriptResultsResponse, Handle);
+        hFunc(NKqp::TEvFetchScriptResultsResponse, Handle);
     )
 
-    void Handle(NKqp::TEvKqp::TEvFetchScriptResultsResponse::TPtr& ev) {
+    void Handle(NKqp::TEvFetchScriptResultsResponse::TPtr& ev) {
         Ydb::Query::FetchScriptResultsResponse resp;
-        resp.set_status(ev->Get()->Record.GetStatus());
-        resp.mutable_issues()->Swap(ev->Get()->Record.MutableIssues());
-        resp.set_result_set_index(static_cast<i64>(ev->Get()->Record.GetResultSetIndex()));
-        if (ev->Get()->Record.HasResultSet()) {
-            resp.mutable_result_set()->Swap(ev->Get()->Record.MutableResultSet());
-
-            const auto* userReq = GetProtoRequest();
-            if (resp.mutable_result_set()->rows_size() == userReq->rows_limit() + 1) {
-                resp.mutable_result_set()->mutable_rows()->DeleteSubrange(userReq->rows_limit(), 1);
-                resp.set_next_fetch_token(ToString(RowsOffset + userReq->rows_limit()));
+        resp.set_status(ev->Get()->Status);
+        resp.set_result_set_index(static_cast<i64>(GetProtoRequest()->result_set_index()));
+        if (ev->Get()->Issues) {
+            NYql::IssuesToMessage(ev->Get()->Issues, resp.mutable_issues());
+        }
+        if (ev->Get()->ResultSet) {
+            resp.mutable_result_set()->Swap(&(*ev->Get()->ResultSet));
+            if (ev->Get()->HasMoreResults) {
+                resp.set_next_fetch_token(ToString(RowsOffset + resp.result_set().rows_size()));
             }
         }
         Reply(resp.status(), std::move(resp));

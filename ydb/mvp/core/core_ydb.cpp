@@ -11,6 +11,42 @@ NJson::TJsonWriterConfig GetDefaultJsonWriterConfig() {
 
 NJson::TJsonReaderConfig NMVP::THandlerActorYdb::JsonReaderConfig;
 NJson::TJsonWriterConfig NMVP::THandlerActorYdb::JsonWriterConfig = GetDefaultJsonWriterConfig();
+TMap<std::pair<TStringBuf, TStringBuf>, TYdbUnitResources> DefaultUnitResources =
+    {
+        {
+            {
+                "compute",
+                "slot"
+            },
+            {
+                10.0,
+                (ui64)50*1024*1024*1024,
+                0
+            }
+        },
+        {
+            {
+                "storage",
+                "hdd"
+            },
+            {
+                0,
+                0,
+                (ui64)500*1024*1024*1024
+            }
+        },
+        {
+            {
+                "storage",
+                "ssd"
+            },
+            {
+                0,
+                0,
+                (ui64)100*1024*1024*1024
+            }
+        }
+    };
 TString TYdbLocation::UserToken;
 TString TYdbLocation::CaCertificate;
 TString TYdbLocation::SslCertificate;

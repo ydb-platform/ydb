@@ -1379,7 +1379,7 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
     case TRule_alter_table_action::kAltAlterTableAction6: {
         // SET (uncompat)
         const auto& setRule = node.GetAlt_alter_table_action6().GetRule_alter_table_set_table_setting_uncompat1();
-        if (!AlterTableSetTableSetting(setRule, params)) {
+        if (!AlterTableSetTableSetting(setRule, params.TableSettings, params.TableType)) {
             return false;
         }
         break;
@@ -1387,7 +1387,7 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
     case TRule_alter_table_action::kAltAlterTableAction7: {
         // SET (compat)
         const auto& setRule = node.GetAlt_alter_table_action7().GetRule_alter_table_set_table_setting_compat1();
-        if (!AlterTableSetTableSetting(setRule, params)) {
+        if (!AlterTableSetTableSetting(setRule, params.TableSettings, params.TableType)) {
             return false;
         }
         break;
@@ -1395,7 +1395,7 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
     case TRule_alter_table_action::kAltAlterTableAction8: {
         // RESET
         const auto& setRule = node.GetAlt_alter_table_action8().GetRule_alter_table_reset_table_setting1();
-        if (!AlterTableResetTableSetting(setRule, params)) {
+        if (!AlterTableResetTableSetting(setRule, params.TableSettings, params.TableType)) {
             return false;
         }
         break;
@@ -1460,6 +1460,14 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
         AlterTableRenameIndexTo(renameTo, params);
         break;
     }
+    case TRule_alter_table_action::kAltAlterTableAction16: {
+        // ALTER INDEX
+        const auto& rule = node.GetAlt_alter_table_action16().GetRule_alter_table_alter_index1();
+        if (!AlterTableAlterIndex(rule, params)) {
+            return false;
+        }
+        break;
+    }
 
     case TRule_alter_table_action::ALT_NOT_SET:
         AltNotImplemented("alter_table_action", node);
@@ -1495,7 +1503,7 @@ bool TSqlQuery::AlterExternalTableAction(const TRule_alter_external_table_action
     case TRule_alter_external_table_action::kAltAlterExternalTableAction3: {
         // SET (uncompat)
         const auto& setRule = node.GetAlt_alter_external_table_action3().GetRule_alter_table_set_table_setting_uncompat1();
-        if (!AlterTableSetTableSetting(setRule, params)) {
+        if (!AlterTableSetTableSetting(setRule, params.TableSettings, params.TableType)) {
             return false;
         }
         break;
@@ -1503,7 +1511,7 @@ bool TSqlQuery::AlterExternalTableAction(const TRule_alter_external_table_action
     case TRule_alter_external_table_action::kAltAlterExternalTableAction4: {
         // SET (compat)
         const auto& setRule = node.GetAlt_alter_external_table_action4().GetRule_alter_table_set_table_setting_compat1();
-        if (!AlterTableSetTableSetting(setRule, params)) {
+        if (!AlterTableSetTableSetting(setRule, params.TableSettings, params.TableType)) {
             return false;
         }
         break;
@@ -1511,7 +1519,7 @@ bool TSqlQuery::AlterExternalTableAction(const TRule_alter_external_table_action
     case TRule_alter_external_table_action::kAltAlterExternalTableAction5: {
         // RESET
         const auto& setRule = node.GetAlt_alter_external_table_action5().GetRule_alter_table_reset_table_setting1();
-        if (!AlterTableResetTableSetting(setRule, params)) {
+        if (!AlterTableResetTableSetting(setRule, params.TableSettings, params.TableType)) {
             return false;
         }
         break;
@@ -1603,44 +1611,58 @@ bool TSqlQuery::AlterTableAlterFamily(const TRule_alter_table_alter_column_famil
     return true;
 }
 
-bool TSqlQuery::AlterTableSetTableSetting(const TRule_alter_table_set_table_setting_uncompat& node,
-        TAlterTableParameters& params)
-{
-    if (!StoreTableSettingsEntry(IdEx(node.GetRule_an_id2(), *this), node.GetRule_table_setting_value3(),
-        params.TableSettings, params.TableType, true)) {
-        return false;
-    }
-    return true;
+bool TSqlQuery::AlterTableSetTableSetting(
+    const TRule_alter_table_set_table_setting_uncompat& node, TTableSettings& tableSettings, ETableType tableType
+) {
+    return StoreTableSettingsEntry(
+        IdEx(node.GetRule_an_id2(), *this),
+        node.GetRule_table_setting_value3(),
+        tableSettings,
+        tableType,
+        true
+    );
 }
 
-bool TSqlQuery::AlterTableSetTableSetting(const TRule_alter_table_set_table_setting_compat& node,
-        TAlterTableParameters& params)
-{
+bool TSqlQuery::AlterTableSetTableSetting(
+    const TRule_alter_table_set_table_setting_compat& node, TTableSettings& tableSettings, ETableType tableType
+) {
+    const auto storeSetting = [&](const TRule_alter_table_setting_entry& entry) {
+        return StoreTableSettingsEntry(
+            IdEx(entry.GetRule_an_id1(), *this),
+            entry.GetRule_table_setting_value3(),
+            tableSettings,
+            tableType,
+            true
+        );
+    };
+
     const auto& firstEntry = node.GetRule_alter_table_setting_entry3();
-    if (!StoreTableSettingsEntry(IdEx(firstEntry.GetRule_an_id1(), *this), firstEntry.GetRule_table_setting_value3(),
-        params.TableSettings, params.TableType, true)) {
+    if (!storeSetting(firstEntry)) {
         return false;
     }
-    for (auto& block : node.GetBlock4()) {
+    for (const auto& block : node.GetBlock4()) {
         const auto& entry = block.GetRule_alter_table_setting_entry2();
-        if (!StoreTableSettingsEntry(IdEx(entry.GetRule_an_id1(), *this), entry.GetRule_table_setting_value3(),
-            params.TableSettings, params.TableType, true)) {
+        if (!storeSetting(entry)) {
             return false;
         }
     }
     return true;
 }
 
-bool TSqlQuery::AlterTableResetTableSetting(const TRule_alter_table_reset_table_setting& node,
-        TAlterTableParameters& params)
-{
+bool TSqlQuery::AlterTableResetTableSetting(
+    const TRule_alter_table_reset_table_setting& node, TTableSettings& tableSettings, ETableType tableType
+) {
+    const auto resetSetting = [&](const TRule_an_id& id) {
+        return ResetTableSettingsEntry(IdEx(id, *this), tableSettings, tableType);
+    };
+
     const auto& firstEntry = node.GetRule_an_id3();
-    if (!ResetTableSettingsEntry(IdEx(firstEntry, *this), params.TableSettings, params.TableType)) {
+    if (!resetSetting(firstEntry)) {
         return false;
     }
-    for (auto& block : node.GetBlock4()) {
+    for (const auto& block : node.GetBlock4()) {
         const auto& entry = block.GetRule_an_id2();
-        if (!ResetTableSettingsEntry(IdEx(entry, *this), params.TableSettings, params.TableType)) {
+        if (!resetSetting(entry)) {
             return false;
         }
     }
@@ -1667,6 +1689,46 @@ void TSqlQuery::AlterTableRenameIndexTo(const TRule_alter_table_rename_index_to&
     auto dst = IdEx(node.GetRule_an_id5(), *this);
 
     params.RenameIndexTo = std::make_pair(src, dst);
+}
+
+bool TSqlQuery::AlterTableAlterIndex(const TRule_alter_table_alter_index& node, TAlterTableParameters& params) {
+    const auto indexName = IdEx(node.GetRule_an_id3(), *this);
+    params.AlterIndexes.emplace_back(indexName);
+    TTableSettings& indexTableSettings = params.AlterIndexes.back().TableSettings;
+
+    const auto& action = node.GetRule_alter_table_alter_index_action4();
+
+    switch (action.Alt_case()) {
+    case TRule_alter_table_alter_index_action::kAltAlterTableAlterIndexAction1: {
+        // SET setting value
+        const auto& rule = action.GetAlt_alter_table_alter_index_action1().GetRule_alter_table_set_table_setting_uncompat1();
+        if (!AlterTableSetTableSetting(rule, indexTableSettings, params.TableType)) {
+            return false;
+        }
+        break;
+    }
+    case TRule_alter_table_alter_index_action::kAltAlterTableAlterIndexAction2: {
+        // SET (setting1 = value1, ...)
+        const auto& rule = action.GetAlt_alter_table_alter_index_action2().GetRule_alter_table_set_table_setting_compat1();
+        if (!AlterTableSetTableSetting(rule, indexTableSettings, params.TableType)) {
+            return false;
+        }
+        break;
+    }
+    case TRule_alter_table_alter_index_action::kAltAlterTableAlterIndexAction3: {
+        // RESET (setting1, ...)
+        const auto& rule = action.GetAlt_alter_table_alter_index_action3().GetRule_alter_table_reset_table_setting1();
+        if (!AlterTableResetTableSetting(rule, indexTableSettings, params.TableType)) {
+            return false;
+        }
+        break;
+    }
+    case TRule_alter_table_alter_index_action::ALT_NOT_SET:
+        AltNotImplemented("alter_table_alter_index_action", action);
+        return false;
+    }
+
+    return true;
 }
 
 bool TSqlQuery::AlterTableAddChangefeed(const TRule_alter_table_add_changefeed& node, TAlterTableParameters& params) {

@@ -101,6 +101,7 @@ public:
 };
 
 class TPortionInfoConstructor;
+class TGranuleShardingInfo;
 
 class TPortionInfo {
 public:
@@ -120,6 +121,7 @@ private:
     TSnapshot MinSnapshotDeprecated = TSnapshot::Zero();  // {PlanStep, TxId} is min snapshot for {Granule, Portion}
     TSnapshot RemoveSnapshot = TSnapshot::Zero(); // {XPlanStep, XTxId} is snapshot where the blob has been removed (i.e. compacted into another one)
     std::optional<ui64> SchemaVersion;
+    std::optional<ui64> ShardingVersion;
 
     TPortionMeta Meta;
     YDB_READONLY_DEF(std::vector<TIndexChunk>, Indexes);
@@ -171,6 +173,16 @@ private:
     }
 public:
     ui64 GetMinMemoryForReadColumns(const std::optional<std::set<ui32>>& columnIds) const;
+
+    bool NeedShardingFilter(const TGranuleShardingInfo& shardingInfo) const;
+
+    const std::optional<ui64>& GetShardingVersionOptional() const {
+        return ShardingVersion;
+    }
+
+    ui64 GetShardingVersionDef(const ui64 verDefault) const {
+        return ShardingVersion.value_or(verDefault);
+    }
 
     void SetRemoveSnapshot(const TSnapshot& snap) {
         AFL_VERIFY(!RemoveSnapshot.Valid());
@@ -436,6 +448,10 @@ public:
 
     TPortionAddress GetAddress() const {
         return TPortionAddress(PathId, Portion);
+    }
+
+    void ResetShardingVersion() {
+        ShardingVersion.reset();
     }
 
     void SetPathId(const ui64 pathId) {

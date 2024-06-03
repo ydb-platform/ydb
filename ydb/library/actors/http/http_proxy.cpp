@@ -131,53 +131,55 @@ protected:
             TString addressPart;
             TIpPort portPart = 0;
             CrackAddress(host, addressPart, portPart);
-            if (IsIPv6(addressPart)) {
-                if (it == Hosts.end()) {
-                    it = Hosts.emplace(host, THostEntry()).first;
+            // TODO(xenoxeno): move to another, possible blocking actor
+            try {
+                TNetworkAddress addr(addressPart, portPart);
+                auto pAddr = addr.Begin();
+                while (pAddr != addr.End() && pAddr->ai_family != AF_INET && pAddr->ai_family != AF_INET6) {
+                    ++pAddr;
                 }
-                it->second.Address = std::make_shared<TSockAddrInet6>(addressPart.data(), portPart);
-                it->second.DeadlineTime = ctx.Now() + HostsTimeToLive;
-            } else if (IsIPv4(addressPart)) {
-                if (it == Hosts.end()) {
-                    it = Hosts.emplace(host, THostEntry()).first;
-                }
-                it->second.Address = std::make_shared<TSockAddrInet>(addressPart.data(), portPart);
-                it->second.DeadlineTime = ctx.Now() + HostsTimeToLive;
-            } else {
-                // TODO(xenoxeno): move to another, possible blocking actor
-                try {
-                    TNetworkAddress addr(addressPart, portPart);
-                    auto pAddr = addr.Begin();
-                    while (pAddr != addr.End() && pAddr->ai_family != AF_INET && pAddr->ai_family != AF_INET6) {
-                        ++pAddr;
-                    }
-                    if (pAddr == addr.End()) {
-                        ctx.Send(event->Sender, new TEvHttpProxy::TEvResolveHostResponse("Invalid address family resolved"));
-                        return;
-                    }
-                    THttpConfig::SocketAddressType address;
-                    switch (pAddr->ai_family) {
-                        case AF_INET:
-                            address = std::make_shared<TSockAddrInet>();
-                            break;
-                        case AF_INET6:
-                            address = std::make_shared<TSockAddrInet6>();
-                            break;
-                    }
-                    if (address) {
-                        memcpy(address->SockAddr(), pAddr->ai_addr, pAddr->ai_addrlen);
-                        LOG_DEBUG_S(ctx, HttpLog, "Host " << host << " resolved to " << address->ToString());
-                        if (it == Hosts.end()) {
-                            it = Hosts.emplace(host, THostEntry()).first;
-                        }
-                        it->second.Address = address;
-                        it->second.DeadlineTime = ctx.Now() + HostsTimeToLive;
-                    }
-                }
-                catch (const yexception& e) {
-                    ctx.Send(event->Sender, new TEvHttpProxy::TEvResolveHostResponse(e.what()));
+                if (pAddr == addr.End()) {
+                    ctx.Send(event->Sender, new TEvHttpProxy::TEvResolveHostResponse("Invalid address family resolved"));
                     return;
                 }
+                THttpConfig::SocketAddressType address;
+                switch (pAddr->ai_family) {
+                    case AF_INET:
+                        address = std::make_shared<TSockAddrInet>();
+                        break;
+                    case AF_INET6:
+                        address = std::make_shared<TSockAddrInet6>();
+                        break;
+                }
+                if (address) {
+                    memcpy(address->SockAddr(), pAddr->ai_addr, pAddr->ai_addrlen);
+                    LOG_DEBUG_S(ctx, HttpLog, "Host " << host << " resolved to " << address->ToString());
+                    if (it == Hosts.end()) {
+                        it = Hosts.emplace(host, THostEntry()).first;
+                    }
+                    it->second.Address = address;
+                    it->second.DeadlineTime = ctx.Now() + HostsTimeToLive;
+                }
+            }
+            catch (const TNetworkResolutionError& e) {
+                if (it != Hosts.end()) {
+                    ctx.Send(event->Sender, new TEvHttpProxy::TEvResolveHostResponse(it->first, it->second.Address));
+                    return;
+                } else {
+                    ctx.Send(event->Sender,
+                        new TEvHttpProxy::TEvResolveHostResponse(
+                            TStringBuilder()
+                                << "Resolution failed and no stale cached value has been found to fallback.\n"
+                                << "Resolution error: "
+                                << e.what()
+                        )
+                    );
+                    return;
+                }
+            }
+            catch (const yexception& e) {
+                ctx.Send(event->Sender, new TEvHttpProxy::TEvResolveHostResponse(e.what()));
+                return;
             }
         }
         ctx.Send(event->Sender, new TEvHttpProxy::TEvResolveHostResponse(it->first, it->second.Address));

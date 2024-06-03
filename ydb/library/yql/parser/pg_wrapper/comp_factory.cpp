@@ -399,8 +399,8 @@ public:
                 ApplyFillers(AllPgTablesFillers, Y_ARRAY_SIZE(AllPgTablesFillers), PgTablesFillers_);
             } else if (Table_ == "pg_roles") {
                 static const std::pair<const char*, TPgRolesFiller> AllPgRolesFillers[] = {
-                    {"rolname", [](ui32 index) { 
-                        return PointerDatumToPod((Datum)MakeFixedString(index == 1 ? "postgres" : *PGGetGUCSetting("ydb_user"), NAMEDATALEN)); 
+                    {"rolname", [](ui32 index) {
+                        return PointerDatumToPod((Datum)MakeFixedString(index == 1 ? "postgres" : *PGGetGUCSetting("ydb_user"), NAMEDATALEN));
                     }},
                     {"oid", [](ui32) { return ScalarDatumToPod(ObjectIdGetDatum(1)); }},
                     {"rolbypassrls", [](ui32) { return ScalarDatumToPod(BoolGetDatum(true)); }},
@@ -489,7 +489,7 @@ public:
                 };
 
                 ApplyFillers(AllPgLanguageFillers, Y_ARRAY_SIZE(AllPgLanguageFillers), PgLanguageFillers_);
-            }            
+            }
         } else {
             if (Table_ == "tables") {
                 static const std::pair<const char*, TTablesFiller> AllTablesFillers[] = {
@@ -799,7 +799,7 @@ public:
                 });
 
                 for (const auto& t : tables) {
-                    const ui32 amOid = (t.Kind == NPg::ERelKind::Relation) ? btreeAmOid : 0;                    
+                    const ui32 amOid = (t.Kind == NPg::ERelKind::Relation) ? btreeAmOid : 0;
                     NUdf::TUnboxedValue* items;
                     auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgClassFillers_.size(), items);
                     for (ui32 i = 0; i < PgClassFillers_.size(); ++i) {
@@ -1168,7 +1168,7 @@ protected:
     const TVector<TType*> ArgTypes;
     const TStructType* StructType;
     TVector<NPg::TTypeDesc> ArgDesc;
-    
+
     TPgArgsExprBuilder ArgsExprBuilder;
 };
 
@@ -1312,7 +1312,7 @@ private:
 
                     rsInfo.expectedDesc = BlessTupleDesc(rsInfo.expectedDesc);
                 }
-                
+
                 TupleSlot = MakeSingleTupleTableSlot(rsInfo.expectedDesc, &TTSOpsMinimalTuple);
                 for (ui32 i = 0; i < args.size(); ++i) {
                     const auto& value = args[i];
@@ -1383,7 +1383,7 @@ private:
                     FinishAndFree();
                     return false;
                 }
-                
+
                 slot_getallattrs(TupleSlot);
                 if (RetTypeDesc.TypeId == RECORDOID) {
                     if (StructType) {
@@ -2003,7 +2003,7 @@ NUdf::TUnboxedValuePod ConvertToPgValue(NUdf::TUnboxedValuePod value, TMaybe<NUd
         auto res = Timestamp2Pg(value.Get<ui64>());
         return ScalarDatumToPod(res);
     }
-    case NUdf::EDataSlot::Interval: 
+    case NUdf::EDataSlot::Interval:
     case NUdf::EDataSlot::Interval64: {
         auto res = Interval2Pg(value.Get<i64>());
         return PointerDatumToPod(PointerGetDatum(res));
@@ -2244,7 +2244,7 @@ public:
 
         if constexpr (Slot == NUdf::EDataSlot::Decimal) {
             auto decimalType = static_cast<TDataDecimalType*>(ArgType);
-            return PointerDatumToPod(NumericGetDatum(DecimalToPgNumeric(value, 
+            return PointerDatumToPod(NumericGetDatum(DecimalToPgNumeric(value,
                 decimalType->GetParams().first, decimalType->GetParams().second)));
         } else {
             return ConvertToPgValue<Slot>(value);
@@ -2941,7 +2941,7 @@ struct TToPgExec {
             *res = builder.Build(true);
             break;
         }
-        case NUdf::EDataSlot::Json: 
+        case NUdf::EDataSlot::Json:
         {
             NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
             NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::binary(), *ctx->memory_pool(), length);
@@ -2964,7 +2964,7 @@ struct TToPgExec {
             *res = builder.Build(true);
             break;
         }
-        case NUdf::EDataSlot::JsonDocument: 
+        case NUdf::EDataSlot::JsonDocument:
         {
             NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
             NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::binary(), *ctx->memory_pool(), length);
@@ -2985,7 +2985,7 @@ struct TToPgExec {
 
             *res = builder.Build(true);
             break;
-        }        
+        }
         default:
             ythrow yexception() << "Unsupported type: " << NUdf::GetDataTypeInfo(SourceDataSlot).Name;
         }
@@ -4013,16 +4013,26 @@ arrow::Datum MakePgScalar(NKikimr::NMiniKQL::TPgType* type, const NUdf::TBlockIt
     );
 }
 
-TMaybe<ui32> ConvertToPgType(NUdf::EDataSlot slot) {
+ui32 ConvertToPgType(NUdf::EDataSlot slot) {
     switch (slot) {
     case NUdf::EDataSlot::Bool:
         return BOOLOID;
+    case NUdf::EDataSlot::Int8:
+        return INT2OID;
+    case NUdf::EDataSlot::Uint8:
+        return INT2OID;
     case NUdf::EDataSlot::Int16:
         return INT2OID;
+    case NUdf::EDataSlot::Uint16:
+        return INT4OID;
     case NUdf::EDataSlot::Int32:
         return INT4OID;
+    case NUdf::EDataSlot::Uint32:
+        return INT8OID;
     case NUdf::EDataSlot::Int64:
         return INT8OID;
+    case NUdf::EDataSlot::Uint64:
+        return NUMERICOID;
     case NUdf::EDataSlot::Float:
         return FLOAT4OID;
     case NUdf::EDataSlot::Double:
@@ -4031,8 +4041,40 @@ TMaybe<ui32> ConvertToPgType(NUdf::EDataSlot slot) {
         return BYTEAOID;
     case NUdf::EDataSlot::Utf8:
         return TEXTOID;
-    default:
-        return Nothing();
+    case NUdf::EDataSlot::Yson:
+        return BYTEAOID;
+    case NUdf::EDataSlot::Json:
+        return JSONOID;
+    case NUdf::EDataSlot::Uuid:
+        return UUIDOID;
+    case NUdf::EDataSlot::Date:
+        return DATEOID;
+    case NUdf::EDataSlot::Datetime:
+        return TIMESTAMPOID;
+    case NUdf::EDataSlot::Timestamp:
+        return TIMESTAMPOID;
+    case NUdf::EDataSlot::Interval:
+        return INTERVALOID;
+    case NUdf::EDataSlot::TzDate:
+        return TEXTOID;
+    case NUdf::EDataSlot::TzDatetime:
+        return TEXTOID;
+    case NUdf::EDataSlot::TzTimestamp:
+        return TEXTOID;
+    case NUdf::EDataSlot::Decimal:
+        return NUMERICOID;
+    case NUdf::EDataSlot::DyNumber:
+        return NUMERICOID;
+    case NUdf::EDataSlot::JsonDocument:
+        return JSONBOID;
+    case NUdf::EDataSlot::Date32:
+        return DATEOID;
+    case NUdf::EDataSlot::Datetime64:
+        return TIMESTAMPOID;
+    case NUdf::EDataSlot::Timestamp64:
+        return TIMESTAMPOID;
+    case NUdf::EDataSlot::Interval64:
+        return INTERVALOID;
     }
 }
 
@@ -4053,7 +4095,15 @@ TMaybe<NUdf::EDataSlot> ConvertFromPgType(ui32 typeId) {
     case BYTEAOID:
         return NUdf::EDataSlot::String;
     case TEXTOID:
+    case VARCHAROID:
+    case CSTRINGOID:
         return NUdf::EDataSlot::Utf8;
+    case DATEOID:
+        return NUdf::EDataSlot::Date32;
+    case TIMESTAMPOID:
+        return NUdf::EDataSlot::Timestamp64;
+    case UUIDOID:
+        return NUdf::EDataSlot::Uuid;
     }
 
     return Nothing();

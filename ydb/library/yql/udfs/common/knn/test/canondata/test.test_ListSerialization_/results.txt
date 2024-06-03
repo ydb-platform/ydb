@@ -91,5 +91,125 @@
                 ]
             }
         ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        "@\0\n"
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        "@\0\n"
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        "@\0\n"
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "TaggedType";
+                                    "BitVector";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        "@\0\n"
+                    ]
+                ]
+            }
+        ]
     }
 ]

@@ -74,6 +74,7 @@ public:
 // The tail encoded as ui64 or ui32, ui16, ui8 respectively.
 // After these we write count of not written bits in last byte that we need to respect.
 // So length of vector in bits is 8 * ((count of written bytes) - 1 (format) - 1 (for x)) - x (count of bits not written in last byte).
+template <typename TFrom>
 class TKnnBitVectorSerializer {
 public:
     static TUnboxedValue Serialize(const IValueBuilder* valueBuilder, const TUnboxedValue x) {
@@ -81,7 +82,7 @@ public:
             ui64 accumulator = 0;
             ui8 filledBits = 0;
 
-            EnumerateVector<float>(x, [&](float element) {
+            EnumerateVector<TFrom>(x, [&](TFrom element) {
                 if (element > 0)
                     accumulator |= 1;
 
@@ -109,10 +110,10 @@ public:
                 }
                 filledBits -= sizeof(T) * 8;
             };
-            tailWriteIf.operator()<ui64>();
-            tailWriteIf.operator()<ui32>();
-            tailWriteIf.operator()<ui16>();
-            tailWriteIf.operator()<ui8>();
+            tailWriteIf.template operator()<ui64>();
+            tailWriteIf.template operator()<ui32>();
+            tailWriteIf.template operator()<ui16>();
+            tailWriteIf.template operator()<ui8>();
 
             Y_ASSERT(filledBits < 8);
             write(static_cast<ui8>(7 - filledBits));
@@ -136,19 +137,6 @@ public:
             return valueBuilder->NewString(str);
         }
     }
-
-    struct TArray {
-        const ui64* data = nullptr;
-        ui64 bitLen = 0;
-    };
-
-    static TArray GetArray(const TStringRef& str) {
-        if (Y_UNLIKELY(str.Size() < 2))
-            return {};
-        const char* buf = str.Data();
-        const ui64 len = 8 * (str.Size() - HeaderLen - 1) - static_cast<ui8>(buf[str.Size() - HeaderLen - 1]);
-        return {reinterpret_cast<const ui64*>(buf), len};
-    }
 };
 
 class TKnnSerializerFacade {
@@ -169,5 +157,18 @@ public:
             default:
                 return {};
         }
+    }
+
+    struct TBitArray {
+        const ui64* data = nullptr;
+        ui64 bitLen = 0;
+    };
+
+    static TBitArray GetBitArray(const TStringRef& str) {
+        if (Y_UNLIKELY(str.Size() < 2))
+            return {};
+        const char* buf = str.Data();
+        const ui64 len = 8 * (str.Size() - HeaderLen - 1) - static_cast<ui8>(buf[str.Size() - HeaderLen - 1]);
+        return {reinterpret_cast<const ui64*>(buf), len};
     }
 };

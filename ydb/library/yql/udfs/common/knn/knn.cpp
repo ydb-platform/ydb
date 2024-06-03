@@ -34,10 +34,6 @@ SIMPLE_STRICT_UDF(TToBinaryStringUint8, TUint8Vector(TAutoMap<TListType<ui8>>)) 
     return TKnnVectorSerializer<ui8>::Serialize(valueBuilder, args[0]);
 }
 
-SIMPLE_STRICT_UDF(TToBinaryStringBit, TBitVector(TAutoMap<TListType<float>>)) {
-    return TKnnBitVectorSerializer::Serialize(valueBuilder, args[0]);
-}
-
 template <typename Derived>
 class TMultiSignatureBase: public TBoxedValue {
 public:
@@ -93,6 +89,105 @@ protected:
 
 private:
     TSourcePosition Pos_;
+};
+
+template <typename TFrom>
+class TToBinaryStringBitImpl: public TMultiSignatureBase<TToBinaryStringBitImpl<TFrom>> {
+public:
+    using TMultiSignatureBase<TToBinaryStringBitImpl<TFrom>>::TMultiSignatureBase;
+
+    static const TStringRef& Name() {
+        static auto name = TStringRef::Of("ToBinaryStringBit");
+        return name;
+    }
+
+    TUnboxedValue RunImpl(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
+        return TKnnBitVectorSerializer<TFrom>::Serialize(valueBuilder, args[0]);
+    }
+};
+
+class TToBinaryStringBit: public TMultiSignatureBase<TToBinaryStringBit> {
+public:
+    using TMultiSignatureBase::TMultiSignatureBase;
+
+    static const TStringRef& Name() {
+        static auto name = TStringRef::Of("ToBinaryStringBit");
+        return name;
+    }
+
+    static bool DeclareSignature(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {
+        if (Name() != name) {
+            return false;
+        }
+
+        auto typeInfoHelper = builder.TypeInfoHelper();
+        Y_ENSURE(userType);
+        TTupleTypeInspector tuple{*typeInfoHelper, userType};
+        Y_ENSURE(tuple);
+        Y_ENSURE(tuple.GetElementsCount() > 0);
+        TTupleTypeInspector argsTuple{*typeInfoHelper, tuple.GetElementType(0)};
+        Y_ENSURE(argsTuple);
+        if (argsTuple.GetElementsCount() != 1) {
+            builder.SetError("Expected one argument");
+            return true;
+        }
+
+        auto argType = argsTuple.GetElementType(0);
+        if (const auto kind = typeInfoHelper->GetTypeKind(argType); kind == ETypeKind::Null) {
+            argType = builder.SimpleType<TListType<float>>();
+        }
+        if (const TOptionalTypeInspector optional{*typeInfoHelper, argType}; optional) {
+            argType = optional.GetItemType();
+        }
+        auto type = EType::None;
+        if (const TListTypeInspector list{*typeInfoHelper, argType}; list) {
+            if (const TDataTypeInspector data{*typeInfoHelper, list.GetItemType()}; data) {
+                if (data.GetTypeId() == TDataType<double>::Id) {
+                    type = EType::Double;
+                } else if (data.GetTypeId() == TDataType<float>::Id) {
+                    type = EType::Float;
+                } else if (data.GetTypeId() == TDataType<ui8>::Id) {
+                    type = EType::Uint8;
+                } else if (data.GetTypeId() == TDataType<i8>::Id) {
+                    type = EType::Int8;
+                }
+            }
+        }
+        if (type == EType::None) {
+            builder.SetError("Expected argument is List<Double|Float|Uint8|Int8>");
+            return true;
+        }
+
+        builder.UserType(userType);
+        builder.Args(1)->Add(argType).Flags(ICallablePayload::TArgumentFlags::AutoMap);
+        if (argType == argsTuple.GetElementType(0)) {
+            builder.Returns<TBitVector>().IsStrict();
+        } else {
+            builder.Returns<TOptional<TBitVector>>().IsStrict();
+        }
+
+        if (!typesOnly) {
+            if (type == EType::Double) {
+                builder.Implementation(new TToBinaryStringBitImpl<double>(builder));
+            } else if (type == EType::Float) {
+                builder.Implementation(new TToBinaryStringBitImpl<float>(builder));
+            } else if (type == EType::Uint8) {
+                builder.Implementation(new TToBinaryStringBitImpl<ui8>(builder));
+            } else if (type == EType::Int8) {
+                builder.Implementation(new TToBinaryStringBitImpl<i8>(builder));
+            }
+        }
+        return true;
+    }
+
+private:
+    enum class EType {
+        None,
+        Double,
+        Float,
+        Uint8,
+        Int8,
+    };
 };
 
 class TFloatFromBinaryString: public TMultiSignatureBase<TFloatFromBinaryString> {

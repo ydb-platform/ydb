@@ -233,7 +233,8 @@ namespace NKikimr {
             TVectorType m = handoff[handoffNodeId].ToVector(); // map of handoff replicas on this node
             TVectorType mainVec = main.ToVector();
             TVectorType toMove = m - mainVec;   // what we can send to main replicas
-            TVectorType toDel = m & mainVec;    // what we can delete
+            TVectorType deleted = GetVDiskHandoffDeletedVec(top, vdisk, id);
+            TVectorType toDel = m & mainVec & ~deleted;  // not deleted, what we can to delete
             return TPairOfVectors(toMove, toDel);
         }
     }

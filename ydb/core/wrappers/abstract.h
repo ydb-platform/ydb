@@ -6,6 +6,7 @@
 #include <ydb/core/wrappers/events/list_objects.h>
 #include <ydb/core/wrappers/events/object_exists.h>
 #include <ydb/core/wrappers/events/get_object.h>
+#include <ydb/library/actors/core/actorsystem.h>
 #include <util/generic/ptr.h>
 
 namespace NKikimr::NWrappers {

@@ -7,6 +7,7 @@
 
 #include <util/datetime/base.h>
 #include <util/generic/buffer.h>
+#include <util/generic/maybe.h>
 
 namespace NYql::NDq {
 

@@ -81,8 +81,8 @@ inline auto VectorFunc(const TStringRef& str1, const TStringRef& str2, Func&& fu
 
 template <typename Func>
 inline auto BitVectorFunc(const TStringRef& str1, const TStringRef& str2, Func&& func) {
-    auto [v1, bitLen1] = TKnnBitVectorSerializer::GetArray(str1);
-    auto [v2, bitLen2] = TKnnBitVectorSerializer::GetArray(str2);
+    auto [v1, bitLen1] = TKnnSerializerFacade::GetBitArray(str1);
+    auto [v2, bitLen2] = TKnnSerializerFacade::GetBitArray(str2);
     return VectorFuncImpl(v1, v2, bitLen1, bitLen2, std::forward<Func>(func));
 }
 

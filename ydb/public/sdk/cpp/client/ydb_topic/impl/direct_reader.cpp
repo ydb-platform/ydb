@@ -217,17 +217,20 @@ bool TDirectReadSession::Empty() const {
 }
 
 void TDirectReadSession::AddPartitionSession(TDirectReadPartitionSession&& session) {
+    TDeferredActions<false> deferred;
     with_lock (Lock) {
         Y_ABORT_UNLESS(State < EState::CLOSING);
 
         auto [it, inserted] = PartitionSessions.emplace(session.PartitionSessionId, std::move(session));
+        // TODO(qyryq) Abort? Ignore new? Replace old? Anything else?
         Y_ABORT_UNLESS(inserted);
 
-        SendStartDirectReadPartitionSessionImpl(it->second, TPlainStatus());
+        SendStartDirectReadPartitionSessionImpl(it->second, TPlainStatus(), deferred);
     }
 }
 
 void TDirectReadSession::UpdatePartitionSessionGeneration(TPartitionSessionId id, TPartitionLocation location) {
+    TDeferredActions<false> deferred;
     with_lock (Lock) {
         auto it = PartitionSessions.find(id);
         Y_ABORT_UNLESS(it != PartitionSessions.end());
@@ -240,7 +243,7 @@ void TDirectReadSession::UpdatePartitionSessionGeneration(TPartitionSessionId id
             .RetryState = std::move(it->second.RetryState),
         };
 
-        SendStartDirectReadPartitionSessionImpl(it->second, TPlainStatus());
+        SendStartDirectReadPartitionSessionImpl(it->second, TPlainStatus(), deferred);
     }
 }
 
@@ -328,7 +331,7 @@ void TDirectReadSession::OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t c
     }
 }
 
-void TDirectReadSession::SendStartDirectReadPartitionSessionImpl(TPartitionSessionId id, TPlainStatus&& status, bool delayedCall) {
+void TDirectReadSession::SendStartDirectReadPartitionSessionImpl(TPartitionSessionId id, TPlainStatus&& status, TDeferredActions<false>& deferred, bool delayedCall) {
     Y_ABORT_UNLESS(Lock.IsLocked());
     auto it = PartitionSessions.find(id);
 
@@ -337,10 +340,10 @@ void TDirectReadSession::SendStartDirectReadPartitionSessionImpl(TPartitionSessi
         return;
     }
 
-    SendStartDirectReadPartitionSessionImpl(it->second, std::move(status), delayedCall);
+    SendStartDirectReadPartitionSessionImpl(it->second, std::move(status), deferred, delayedCall);
 }
 
-void TDirectReadSession::SendStartDirectReadPartitionSessionImpl(TDirectReadPartitionSession& partitionSession, TPlainStatus&& status, bool delayedCall) {
+void TDirectReadSession::SendStartDirectReadPartitionSessionImpl(TDirectReadPartitionSession& partitionSession, TPlainStatus&& status, TDeferredActions<false>& deferred, bool delayedCall) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     if (State < EState::WORKING && partitionSession.State == TDirectReadPartitionSession::EState::DELAYED && delayedCall) {
@@ -385,14 +388,20 @@ void TDirectReadSession::SendStartDirectReadPartitionSessionImpl(TDirectReadPart
 
     partitionSession.State = TDirectReadPartitionSession::EState::DELAYED;
     LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "SendStartDirectReadPartitionSessionImpl retry in " << delay);
-    Callbacks.OnSchedule(
-        *delay,
-        [id = partitionSession.PartitionSessionId, cbContext = this->SelfContext]() {
-            if (auto s = cbContext->LockShared()) {
-                with_lock (s->Lock) {
-                    s->SendStartDirectReadPartitionSessionImpl(id, TPlainStatus(), /* delayedCall = */ true);
+
+    deferred.DeferStartCallback(
+        [schedule = Callbacks.OnSchedule, delay = *delay, cbContext = this->SelfContext, id = partitionSession.PartitionSessionId]() {
+            schedule(
+                delay,
+                [id, cbContext]() {
+                    if (auto s = cbContext->LockShared()) {
+                        TDeferredActions<false> deferred;
+                        with_lock (s->Lock) {
+                            s->SendStartDirectReadPartitionSessionImpl(id, TPlainStatus(), deferred, /* delayedCall = */ true);
+                        }
+                    }
                 }
-            }
+            );
         }
     );
 }
@@ -410,10 +419,8 @@ void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::Ini
 
     // Successful init. Send StartDirectReadPartitionSession requests.
     for (auto& [id, session] : PartitionSessions) {
-        SendStartDirectReadPartitionSessionImpl(session, TPlainStatus());
+        SendStartDirectReadPartitionSessionImpl(session, TPlainStatus(), deferred);
     }
-
-    ReadFromProcessorImpl(deferred);
 }
 
 void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::StartDirectReadPartitionSessionResponse&& response, TDeferredActions<false>&) {
@@ -435,7 +442,7 @@ void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::Sta
     partitionSession.RetryState = nullptr;
 }
 
-void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::StopDirectReadPartitionSession&& response, TDeferredActions<false>&) {
+void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::StopDirectReadPartitionSession&& response, TDeferredActions<false>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
     LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Got StopDirectReadPartitionSession " << response.ShortDebugString());
 
@@ -448,7 +455,7 @@ void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::Sto
     auto& partitionSession = it->second;
     partitionSession.State = TDirectReadPartitionSession::EState::IDLE;
 
-    SendStartDirectReadPartitionSessionImpl(partitionSession, std::move(errorStatus));
+    SendStartDirectReadPartitionSessionImpl(partitionSession, std::move(errorStatus), deferred);
 
     // TODO(qyryq) Send status/issues to the control session?
 }

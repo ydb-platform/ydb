@@ -5,6 +5,7 @@
 #include <ydb/core/base/defs.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 
+#include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>
 
 #include <memory>
@@ -72,6 +73,10 @@ public:
 
         virtual const TString& GetIssue() const = 0;
         virtual void SetIssue(const TString& value) = 0;
+
+        virtual void AddWorker(ui64 id) = 0;
+        virtual void RemoveWorker(ui64 id) = 0;
+        virtual const THashSet<ui64>& GetWorkers() const = 0;
 
         virtual void Progress(const TActorContext& ctx) = 0;
         virtual void Shutdown(const TActorContext& ctx) = 0;

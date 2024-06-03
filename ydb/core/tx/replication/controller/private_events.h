@@ -6,6 +6,7 @@
 #include <ydb/core/base/events.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/core/tx/replication/common/worker_id.h>
 
 namespace NKikimr::NReplication::NController {
 
@@ -20,9 +21,10 @@ struct TEvPrivate {
         EvDropReplication,
         EvResolveTenantResult,
         EvUpdateTenantNodes,
-        EvRunWorkers,
+        EvProcessQueues,
         EvResolveSecretResult,
         EvAlterDstResult,
+        EvRemoveWorker,
 
         EvEnd,
     };
@@ -160,7 +162,7 @@ struct TEvPrivate {
         TString ToString() const override;
     };
 
-    struct TEvRunWorkers: public TEventLocal<TEvRunWorkers, EvRunWorkers> {
+    struct TEvProcessQueues: public TEventLocal<TEvProcessQueues, EvProcessQueues> {
     };
 
     struct TEvResolveSecretResult: public TEventLocal<TEvResolveSecretResult, EvResolveSecretResult> {
@@ -179,6 +181,13 @@ struct TEvPrivate {
     struct TEvAlterDstResult: public TGenericSchemeResult<TEvAlterDstResult, EvAlterDstResult> {
         explicit TEvAlterDstResult(ui64 rid, ui64 tid,
             NKikimrScheme::EStatus status = NKikimrScheme::StatusSuccess, const TString& error = {});
+        TString ToString() const override;
+    };
+
+    struct TEvRemoveWorker: public TEventLocal<TEvRemoveWorker, EvRemoveWorker> {
+        const TWorkerId Id;
+
+        explicit TEvRemoveWorker(ui64 rid, ui64 tid, ui64 wid);
         TString ToString() const override;
     };
 

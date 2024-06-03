@@ -2685,17 +2685,19 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             {"password_secret_name", "bar_secret_name"},
         };
 
-        for (const auto& [k, v] : settings) {
-            auto req = Sprintf(reqTpl, k.c_str(), v.c_str());
+        for (const auto& setting : settings) {
+            auto& key = setting.first;
+            auto& value = setting.second;
+            auto req = Sprintf(reqTpl, key.c_str(), value.c_str());
             auto res = SqlToYql(req);
             UNIT_ASSERT(res.Root);
             
-            TVerifyLineFunc verifyLine = [&k, &v](const TString& word, const TString& line) {
+            TVerifyLineFunc verifyLine = [&key, &value](const TString& word, const TString& line) {
                 if (word == "Write") {
                     UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("MyReplication"));
                     UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("alter"));
-                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(k));
-                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(v));
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(key));
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(value));
                 }
             };
 

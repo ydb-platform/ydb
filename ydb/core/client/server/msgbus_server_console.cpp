@@ -30,16 +30,18 @@ public:
         : TBase(msg)
         , Request(request)
     {
-        typename TBase::TAuthInfo authInfo;
+        // typename TBase::TAuthInfo authInfo;
         const auto& clientCertificates = msg.FindClientCert();
         if (!clientCertificates.empty()) {
-            authInfo.Credentials = TString(clientCertificates.front());
-            authInfo.IsCertificate = true;
+            AuthInfo.Credentials = TString(clientCertificates.front());
+            AuthInfo.IsCertificate = true;
         } else {
-            authInfo.Credentials = request.GetSecurityToken();
+            AuthInfo.Credentials = request.GetSecurityToken();
         }
-        TBase::SetAuthInfo(std::move(authInfo));
-        TBase::SetRequireAdminAccess(true);
+        TBase::SetAuthInfo(std::move(AuthInfo));
+        if (!Request.HasGetNodeConfigRequest()) {
+            TBase::SetRequireAdminAccess(true);
+        }
 
     }
 
@@ -116,6 +118,10 @@ public:
             request->Record.CopyFrom(Request.GetGetNodeConfigItemsRequest());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasGetNodeConfigRequest()) {
+            if (!CheckAccessGetNodeConfig()) {
+                ReplyWithErrorAndDie(Ydb::StatusIds::UNAUTHORIZED, "Cannot get node config. Access denied. Node is not authorized", ctx);
+                return;
+            }
             auto request = MakeHolder<TEvConsole::TEvGetNodeConfigRequest>();
             request->Record.CopyFrom(Request.GetGetNodeConfigRequest());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
@@ -344,10 +350,40 @@ public:
         }
     }
 
+    bool CheckToken(const TString& serializedToken, const TVector<TString>& allowedSids) const {
+        Cerr << "+++ serializedToken: " << serializedToken << Endl;
+        for (const auto& sid : allowedSids) {
+            NACLib::TUserToken token(serializedToken);
+            if (token.IsExist(sid)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool CheckAccessGetNodeConfig() const {
+        if (AppData()->EnforceUserTokenRequirement && AuthInfo.IsCertificate) {
+            if (AppData()->CertificateAuthAllowedSIDs.empty()) {
+                Cerr << "+++ CertificateAuthAllowedSIDs is empty" << Endl;
+                return true;
+            }
+            const auto& serializedToken = TBase::GetSerializedToken();
+            return CheckToken(serializedToken, AppData()->CertificateAuthAllowedSIDs);
+        } else if (!AuthInfo.IsCertificate) {
+            if (AppData()->AdministrationAllowedSIDs.empty()) {
+                return true;
+            }
+            const auto& serializedToken = TBase::GetSerializedToken();
+            return CheckToken(serializedToken, AppData()->AdministrationAllowedSIDs);
+        }
+        return true;
+    }
+
 private:
     NKikimrClient::TConsoleRequest Request;
     NKikimrClient::TConsoleResponse Response;
     TActorId ConsolePipe;
+    typename TBase::TAuthInfo AuthInfo;
 };
 
 } // namespace

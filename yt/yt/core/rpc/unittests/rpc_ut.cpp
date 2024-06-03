@@ -789,12 +789,12 @@ TYPED_TEST(TRpcTest, RequestQueueSizeLimit)
 
     // Concurrency byte limit + queue byte size limit = 10 + 20 = 30.
     // First 30 requests must be successful, 31st request must be failed.
-    for (int i = 0; i < 30; ++i) {
+    for (int i = 0; i <= 30; ++i) {
         proxies.push_back(TTestProxy(this->CreateChannel()));
         proxies[i].SetDefaultTimeout(TDuration::Seconds(60.0));
     }
 
-    for (int i = 0; i < 30; ++i) {
+    for (int i = 0; i <= 30; ++i) {
         auto req = proxies[i].SlowCall();
         futures.push_back(req->Invoke().AsVoid());
     }

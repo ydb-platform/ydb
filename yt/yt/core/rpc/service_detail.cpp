@@ -1389,13 +1389,13 @@ void TRequestQueue::ConfigureWeightThrottler(const TThroughputThrottlerConfigPtr
 
 bool TRequestQueue::IsQueueSizeLimitExceeded() const
 {
-    return QueueSize_.load(std::memory_order::relaxed) >=
+    return QueueSize_.load(std::memory_order::relaxed) >
         RuntimeInfo_->QueueSizeLimit.load(std::memory_order::relaxed);
 }
 
 bool TRequestQueue::IsQueueByteSizeLimitExceeded() const
 {
-    return QueueByteSize_.load(std::memory_order::relaxed) >=
+    return QueueByteSize_.load(std::memory_order::relaxed) >
         RuntimeInfo_->QueueByteSizeLimit.load(std::memory_order::relaxed);
 }
 

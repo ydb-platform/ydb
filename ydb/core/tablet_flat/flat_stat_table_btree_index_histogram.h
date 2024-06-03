@@ -92,6 +92,21 @@ private:
             return result;
         }
 
+        TNodeState* PopBack() noexcept {
+            auto result = Nodes.PopBack();
+            
+            Count--;
+            Size -= result->GetSize();
+            
+            return result;
+        }
+
+        void PushFront(TNodeState* item) noexcept {
+            Count++;
+            Size += item->GetSize();
+            Nodes.PushFront(item);
+        }
+
         void PushBack(TNodeState* item) noexcept {
             Count++;
             Size += item->GetSize();
@@ -207,23 +222,23 @@ private:
 
             while (middleSize > Resolution / 2 && middleParts.size()) {
                 std::pop_heap(middleParts.begin(), middleParts.end());
-                auto& part = middleParts.back();
-                auto& leftNodes = GetNextPartNodes(part, leftParts);
-                auto& middleNodes = part;
-                auto& rightNodes = GetNextPartNodes(part, rightParts);
+                auto& middleNodes = middleParts.back();
+                auto& leftNodes = GetNextPartNodes(middleNodes, leftParts);
+                auto& rightNodes = GetNextPartNodes(middleNodes, rightParts);
+                auto rightBuffer = middleNodes.ForkNew();
                 
                 leftSize -= leftNodes.GetSize();
                 middleSize -= middleNodes.GetSize();
                 rightSize -= rightNodes.GetSize();
 
-                auto count = part.GetCount();
+                auto count = middleNodes.GetCount();
                 for (auto index : xrange(count)) {
                     Y_UNUSED(index);
-                    if (!TryLoadNode<TGetSize>(part.GetPart(), *part.PopFront(), [&](TNodeState& node) {
+                    if (!TryLoadNode<TGetSize>(middleNodes.GetPart(), *middleNodes.PopFront(), [&](TNodeState& node) {
                         if (node.EndKey && CompareKeys(node.EndKey, splitKey) <= 0) {
                             leftNodes.PushBack(&node);
                         } else if (node.BeginKey && CompareKeys(node.BeginKey, splitKey) >= 0) {
-                            rightNodes.PushBack(&node);
+                            rightBuffer.PushBack(&node);
                         } else {
                             middleNodes.PushBack(&node);
                         }
@@ -232,13 +247,17 @@ private:
                     }
                 }
 
+                while (rightBuffer.GetCount()) { // should be reversed
+                    rightNodes.PushFront(rightBuffer.PopBack());
+                }
+
                 leftSize += leftNodes.GetSize();
                 middleSize += middleNodes.GetSize();
                 rightSize += rightNodes.GetSize();
 
                 Y_DEBUG_ABORT_UNLESS(middleNodes.GetCount() <= 1);
 
-                // TODO: add to heap
+                // TODO: add back to heap
 
             }
         }

@@ -289,7 +289,6 @@ struct TMockReadSessionProcessor : public TMockProcessorFactory<Ydb::Topic::Stre
             Y_UNREACHABLE();
         }
     }
-
     MOCK_METHOD(void, OnInitRequest, (const Ydb::Topic::StreamReadMessage::InitRequest&), ());
     MOCK_METHOD(void, OnReadRequest, (const Ydb::Topic::StreamReadMessage::ReadRequest&), ());
     MOCK_METHOD(void, OnDirectReadAck, (const Ydb::Topic::StreamReadMessage::DirectReadAck&), ());
@@ -1247,10 +1246,10 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
         gotFinalStart.GetFuture().Wait();
     }
 
-    Y_UNIT_TEST(PartitionSessionRetryStateRetainsOnReconnects) {
+    Y_UNIT_TEST(PartitionSessionRetainsRetryStateOnReconnects) {
         /*
         We need to retain retry states of separate partition sessions
-        even after reestablishing the whole connection to a node.
+        even after reestablishing the connection to a node.
 
         E.g. partition session receives StopDirectReadPartitionSession
         and we need to send StartDirectReadPartitionSessionRequest in 5 minutes due to the retry policy.
@@ -1258,7 +1257,133 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
         But in the meantime, the session loses connection to the server and reconnects within several seconds.
 
         We must not send that StartDirectReadPartitionSessionRequest right away, but wait ~5 minutes.
+
+        client -> server: InitDirectReadRequest
+        client <-- server: InitDirectReadResponse
+        client -> server: StartDirectReadPartitionSessionRequest
+        client <- server: StopDirectReadPartitionSession(OVERLOADED)
+        note over client: Wait N seconds before sending Start again
+        ... Connection lost, client reconnects to the server ...
+        client -> server: InitDirectReadRequest
+        client <-- server: InitDirectReadResponse
+        note over client: Still has to wait ~N seconds
+        client -> server: StartDirectReadPartitionSessionRequest
         */
+
+        TDirectReadSessionImplTestSetup setup;
+        setup.ReadSessionSettings.RetryPolicy(setup.MockRetryPolicy);
+
+        auto gotFinalStart = NThreading::NewPromise();
+        auto calledRead = NThreading::NewPromise();
+        TPartitionSessionId partitionSessionId = 1;
+        auto secondProcessor = MakeIntrusive<TMockDirectReadSessionProcessor>();
+        auto delay = TDuration::Seconds(300);
+
+        {
+            ::testing::InSequence sequence;
+
+            // Create TDirectReadSession::RetryState
+            EXPECT_CALL(*setup.MockRetryPolicy, CreateRetryState())
+                .Times(1);
+
+            EXPECT_CALL(*setup.MockDirectReadProcessorFactory, OnCreateProcessor(1))
+                .WillOnce([&]() { setup.MockDirectReadProcessorFactory->CreateProcessor(setup.MockDirectReadProcessor); });
+
+            EXPECT_CALL(*setup.MockDirectReadProcessor, OnInitDirectReadRequest(_))
+                .Times(1);
+
+            EXPECT_CALL(*setup.MockDirectReadProcessor, OnStartDirectReadPartitionSessionRequest(_))
+                .Times(1);
+
+            // The client receives StopDirectReadPartitionSession, create TDirectReadSession::PartitionSessions[i].RetryState
+            EXPECT_CALL(*setup.MockRetryPolicy, CreateRetryState())
+                .WillOnce(Return(std::make_unique<TMockRetryState>(setup.MockRetryPolicy)));
+
+            // The client loses connection, create TDirectReadSession.RetryState
+            EXPECT_CALL(*setup.MockRetryPolicy, CreateRetryState())
+                .WillOnce(Return(std::make_unique<TMockRetryState>(setup.MockRetryPolicy)));
+
+            // The connection is lost at this point, the client tries to reconnect.
+            EXPECT_CALL(*setup.MockDirectReadProcessorFactory, OnCreateProcessor(2))
+                .WillOnce([&]() { setup.MockDirectReadProcessorFactory->CreateProcessor(secondProcessor); });
+
+            EXPECT_CALL(*secondProcessor, OnInitDirectReadRequest(_))
+                .Times(1);
+
+            // The client waits `delay` seconds before sending the StartDirectReadPartitionSessionRequest.
+
+            EXPECT_CALL(*secondProcessor, OnStartDirectReadPartitionSessionRequest(_))
+                .WillOnce([&]() { gotFinalStart.SetValue(); });
+        }
+
+        std::function<void()> callback;
+
+        auto session = setup.GetDirectReadSession({
+            .OnSchedule = [&](TDuration d, std::function<void()> cb) {
+                UNIT_ASSERT_EQUAL(delay, d);
+                callback = cb;
+            },
+        });
+
+        session->Start();
+        setup.MockDirectReadProcessorFactory->Wait();
+
+        session->AddPartitionSession({ .PartitionSessionId = partitionSessionId, .Location = {2, 3} });
+
+        setup.AddDirectReadResponse(TMockDirectReadSessionProcessor::TServerReadInfo()
+            .InitDirectReadResponse());
+
+        setup.MockRetryPolicy->Delay = delay;
+
+        setup.AddDirectReadResponse(TMockDirectReadSessionProcessor::TServerReadInfo()
+            .StopDirectReadPartitionSession(Ydb::StatusIds::OVERLOADED, partitionSessionId));
+
+        // Besides logs, these durations don't really affect anything in tests.
+        setup.MockRetryPolicy->Delay = TDuration::Seconds(1);
+
+        setup.AddDirectReadResponse(TMockDirectReadSessionProcessor::TServerReadInfo()
+            .Failure());
+
+        secondProcessor->AddServerResponse(TMockDirectReadSessionProcessor::TServerReadInfo()
+            .InitDirectReadResponse());
+
+        callback();
+
+        gotFinalStart.GetFuture().Wait();
+
+        secondProcessor->Wait();
+        secondProcessor->Validate();
+    }
+
+    /*
+    TODO(qyryq) Тест как PartitionSessionRetainsRetryStateOnReconnects, только в момент вызова колбэка TDirectReadSession.State < WORKING
+    колбэк не сработает, а после получения InitDirectReadResponse сессия должна сама отправить Start-запрос
+    */
+
+    Y_UNIT_TEST(RetryExpires) {
+        /*
+        If there are pending StartDirectReadPartitionSession requests that were delayed due to previous errors,
+        and the entire session then loses connection for an extended period of time (greater than the callback delays),
+        the following process should be followed:
+
+        When the session finally reconnects, the pending Start requests should be sent immediately.
+        This is because their callbacks have already been fired, but the requests were not sent due to the lack of connection.
+
+        client -> server: InitDirectReadRequest
+        client <-- server: InitDirectReadResponse
+        client -> server: StartDirectReadPartitionSessionRequest
+        client <- server: StopDirectReadPartitionSession(OVERLOADED)
+        note over client: Wait 1 second before sending Start again
+        ... Connection lost ...
+        note over client: Callback to send the Start request fires to no purpose
+        ... Connection reestablished in 1 minute ...
+        client -> server: InitDirectReadRequest
+        client <-- server: InitDirectReadResponse
+        note over client: Send the Start request immediately
+        client -> server: StartDirectReadPartitionSessionRequest
+        */
+
+
     }
 
 } // Y_UNIT_TEST_SUITE(DirectReadSession)

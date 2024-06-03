@@ -25,12 +25,13 @@ void Out<NYdb::NTopic::TDirectReadPartitionSession::EState>(IOutputStream& o, NY
     #define DIRECT_READ_SESSION_STATE_NAME_OUT(state) case NYdb::NTopic::TDirectReadPartitionSession::EState::state: o << #state; break;
 
     switch (state) {
-    DIRECT_READ_SESSION_STATE_NAME_OUT(CREATED)
+    DIRECT_READ_SESSION_STATE_NAME_OUT(IDLE)
     DIRECT_READ_SESSION_STATE_NAME_OUT(STARTING)
-    DIRECT_READ_SESSION_STATE_NAME_OUT(STARTED)
+    DIRECT_READ_SESSION_STATE_NAME_OUT(WORKING)
+    DIRECT_READ_SESSION_STATE_NAME_OUT(DELAYED)
     }
 
-    #undef DIRECT_READ_SESSION_STATE_NAME_OUT
+#undef DIRECT_READ_SESSION_STATE_NAME_OUT
 }
 
 
@@ -276,7 +277,9 @@ void TDirectReadSession::OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t c
         }
 
         if (connectionGeneration != ConnectionGeneration) {
-            return; // Message from previous connection. Ignore.
+            // TODO(qyryq) Test it.
+            // Message from previous connection. Ignore.
+            return;
         }
 
         if (errorStatus.Ok()) {
@@ -325,7 +328,7 @@ void TDirectReadSession::OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t c
     }
 }
 
-void TDirectReadSession::SendStartDirectReadPartitionSessionImpl(TPartitionSessionId id, TPlainStatus&& status) {
+void TDirectReadSession::SendStartDirectReadPartitionSessionImpl(TPartitionSessionId id, TPlainStatus&& status, bool delayedCall) {
     Y_ABORT_UNLESS(Lock.IsLocked());
     auto it = PartitionSessions.find(id);
 
@@ -334,33 +337,38 @@ void TDirectReadSession::SendStartDirectReadPartitionSessionImpl(TPartitionSessi
         return;
     }
 
-    SendStartDirectReadPartitionSessionImpl(it->second, std::move(status));
+    SendStartDirectReadPartitionSessionImpl(it->second, std::move(status), delayedCall);
 }
 
-void TDirectReadSession::SendStartDirectReadPartitionSessionImpl(TDirectReadPartitionSession& partitionSession, TPlainStatus&& status) {
+void TDirectReadSession::SendStartDirectReadPartitionSessionImpl(TDirectReadPartitionSession& partitionSession, TPlainStatus&& status, bool delayedCall) {
     Y_ABORT_UNLESS(Lock.IsLocked());
+
+    if (State < EState::WORKING && partitionSession.State == TDirectReadPartitionSession::EState::DELAYED && delayedCall) {
+        // It's time to send a delayed Start-request, but there is no working connection at the moment.
+        // Reset the partition session state, so the request is sent as soon as the connection is reestablished.
+        partitionSession.State = TDirectReadPartitionSession::EState::IDLE;
+        partitionSession.RetryState = nullptr;
+        return;
+    }
 
     // Send the StartDirectReadPartitionSession request only if we're already connected.
     // In other cases adding the session to PartitionSessions is enough,
     // the request will be sent from OnReadDoneImpl(InitDirectReadResponse).
-    if (State != EState::WORKING || partitionSession.State != TDirectReadPartitionSession::EState::CREATED) {
+    bool sendOrSchedule = State == EState::WORKING && (
+            partitionSession.State == TDirectReadPartitionSession::EState::IDLE && !delayedCall ||
+            partitionSession.State == TDirectReadPartitionSession::EState::DELAYED && delayedCall);
+
+    if (!sendOrSchedule) {
         LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "SendStartDirectReadPartitionSessionImpl bail out, State=" << State
-                                                << " partitionSession.State=" << partitionSession.State);
+                                                 << " partitionSession.State=" << partitionSession.State
+                                                 << " delayedCall=" << delayedCall);
         return;
     }
 
     if (status.Ok()) {
         partitionSession.State = TDirectReadPartitionSession::EState::STARTING;
-
         LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "SendStartDirectReadPartitionSessionImpl send request");
-
-        TDirectReadClientMessage req;
-        auto& start = *req.mutable_start_direct_read_partition_session_request();
-        start.set_partition_session_id(partitionSession.PartitionSessionId);
-        start.set_last_direct_read_id(partitionSession.LastDirectReadId);
-        start.set_generation(partitionSession.Location.GetGeneration());
-        WriteToProcessorImpl(std::move(req));
-
+        WriteToProcessorImpl(partitionSession.MakeStartRequest());
         return;
     }
 
@@ -373,13 +381,17 @@ void TDirectReadSession::SendStartDirectReadPartitionSessionImpl(TDirectReadPart
         return;
     }
 
-    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "SendStartDirectReadPartitionSessionImpl retry in " << delay);
+    // TODO(qyryq) What if the delay is zero? Schedule or call SendStartDirectReadPartitionSessionImpl right away?
 
+    partitionSession.State = TDirectReadPartitionSession::EState::DELAYED;
+    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "SendStartDirectReadPartitionSessionImpl retry in " << delay);
     Callbacks.OnSchedule(
         *delay,
         [id = partitionSession.PartitionSessionId, cbContext = this->SelfContext]() {
             if (auto s = cbContext->LockShared()) {
-                s->SendStartDirectReadPartitionSessionImpl(id, TPlainStatus());
+                with_lock (s->Lock) {
+                    s->SendStartDirectReadPartitionSessionImpl(id, TPlainStatus(), /* delayedCall = */ true);
+                }
             }
         }
     );
@@ -409,12 +421,18 @@ void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::Sta
     LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Got StartDirectReadPartitionSessionResponse " << response.ShortDebugString());
 
     auto partitionSessionId = response.partition_session_id();
+    // TODO(qyryq) Check response.generation().
     auto it = PartitionSessions.find(partitionSessionId);
+
+    // TODO(qyryq) If the control session stops the partition session,
+    //             and then we get a late Start-response, the iterator will point to the end.
+    //             In that case, we simply need to return here.
     Y_ABORT_UNLESS(it != PartitionSessions.end());
+
     auto& partitionSession = it->second;
 
+    partitionSession.State = TDirectReadPartitionSession::EState::WORKING;
     partitionSession.RetryState = nullptr;
-    partitionSession.State = TDirectReadPartitionSession::EState::STARTED;
 }
 
 void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::StopDirectReadPartitionSession&& response, TDeferredActions<false>&) {
@@ -428,7 +446,7 @@ void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::Sto
     TPlainStatus errorStatus = MakeErrorFromProto(response);
 
     auto& partitionSession = it->second;
-    partitionSession.State = TDirectReadPartitionSession::EState::CREATED;
+    partitionSession.State = TDirectReadPartitionSession::EState::IDLE;
 
     SendStartDirectReadPartitionSessionImpl(partitionSession, std::move(errorStatus));
 
@@ -477,8 +495,8 @@ void TDirectReadSession::ReadFromProcessorImpl(TDeferredActions<false>& deferred
                          serverMessage = ServerMessage,
                          connectionGeneration = ConnectionGeneration,
                          connection = Connection](NYdbGrpc::TGrpcStatus&& grpcStatus) {
-            if (auto borrowedSelf = cbContext->LockShared()) {
-                borrowedSelf->OnReadDone(std::move(grpcStatus), connectionGeneration);
+            if (auto s = cbContext->LockShared()) {
+                s->OnReadDone(std::move(grpcStatus), connectionGeneration);
             }
         };
 
@@ -564,7 +582,8 @@ void TDirectReadSession::OnConnect(
 }
 
 bool TDirectReadSession::Reconnect(const TPlainStatus& status) {
-    State = EState::CONNECTING;
+    // TODO(qyryq) Are concurrent calls possible here?
+
     TDuration delay = TDuration::Zero();
 
     // Previous operations contexts.
@@ -597,8 +616,17 @@ bool TDirectReadSession::Reconnect(const TPlainStatus& status) {
             ::NYdb::NTopic::Cancel(connectTimeoutContext);
             return false;
         }
+
+        State = EState::CONNECTING;
+        for (auto& [_, partitionSession] : PartitionSessions) {
+            if (partitionSession.State >= TDirectReadPartitionSession::EState::STARTING) {
+                partitionSession.State = TDirectReadPartitionSession::EState::IDLE;
+                partitionSession.RetryState = nullptr;
+            }
+        }
+
         Connection = nullptr;
-        // WaitingReadResponse = false;
+        // TODO(qyryq) WaitingReadResponse = false;
         ServerMessage = std::make_shared<TDirectReadServerMessage>();
         ++ConnectionGeneration;
 

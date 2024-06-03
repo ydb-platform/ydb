@@ -2164,8 +2164,22 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto result = db.ExecuteQuery(R"(
                 CREATE TABLE TestDdlDml1 (
                     Key Uint64,
-                    Value1 String,
-                    Value2 String,
+                    PRIMARY KEY (Key)
+                );
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetIssues().ToOneLineString().Contains("Scheme operations cannot be executed inside transaction"));
+        }
+
+        {
+            // DDl with explicit transaction
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE TestDdlDml1 (
+                    Key Uint64,
+                    PRIMARY KEY (Key)
+                );
+                CREATE TABLE TestDdlDml2 (
+                    Key Uint64,
                     PRIMARY KEY (Key)
                 );
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
@@ -2178,8 +2192,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto result = db.ExecuteQuery(R"(
                 CREATE TABLE TestDdlDml1 (
                     Key Uint64,
-                    Value1 String,
-                    Value2 String,
                     PRIMARY KEY (Key)
                 );
             )", TTxControl::NoTx()).ExtractValueSync();
@@ -2192,8 +2204,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 SELECT * FROM TestDdlDml1;
                 CREATE TABLE TestDdlDml2 (
                     Key Uint64,
-                    Value1 String,
-                    Value2 String,
                     PRIMARY KEY (Key)
                 );
                 SELECT * FROM TestDdlDml2;

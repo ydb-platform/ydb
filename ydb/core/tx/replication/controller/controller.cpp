@@ -309,7 +309,7 @@ void TController::Handle(TEvService::TEvStatus::TPtr& ev, const TActorContext& c
             continue;
         }
 
-        auto* worker = EnsureWorker(id);
+        auto* worker = GetOrCreateWorker(id);
         if (worker->HasSession()) {
             if (const auto sessionId = worker->GetSession(); sessionId != nodeId) {
                 Y_ABORT_UNLESS(Sessions.contains(sessionId));
@@ -366,7 +366,7 @@ void TController::Handle(TEvService::TEvRunWorker::TPtr& ev, const TActorContext
         return;
     }
 
-    auto* worker = EnsureWorker(id, cmd);
+    auto* worker = GetOrCreateWorker(id, cmd);
     if (!worker->HasCommand()) {
         worker->SetCommand(cmd);
     }
@@ -404,7 +404,7 @@ bool TController::IsValidWorker(const TWorkerId& id) const {
     return true;
 }
 
-TWorkerInfo* TController::EnsureWorker(const TWorkerId& id, NKikimrReplication::TRunWorkerCommand* cmd) {
+TWorkerInfo* TController::GetOrCreateWorker(const TWorkerId& id, NKikimrReplication::TRunWorkerCommand* cmd) {
     auto it = Workers.find(id);
     if (it == Workers.end()) {
         it = Workers.emplace(id, cmd).first;

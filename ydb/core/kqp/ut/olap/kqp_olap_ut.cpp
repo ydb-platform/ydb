@@ -2605,8 +2605,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 1100000, 300100000, 10000);
         {
             auto alterQuery = TStringBuilder() <<
-                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, COMPACTION_PLANNER.CLASS_NAME=`s-buckets`,
-                    COMPACTION_PLANNER.FEATURES=`{"logic_name" : "slices"}`);
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`s-buckets`,
+                    `COMPACTION_PLANNER.FEATURES`=`{"logic_name" : "slices"}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
@@ -2616,8 +2616,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 1300000, 300300000, 10000);
         {
             auto alterQuery = TStringBuilder() <<
-                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, COMPACTION_PLANNER.CLASS_NAME=`s-buckets`,
-                    COMPACTION_PLANNER.FEATURES=`{"logic_name" : "one_head"}`);
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`s-buckets`,
+                    `COMPACTION_PLANNER.FEATURES`=`{"logic_name" : "one_head"}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
@@ -2627,7 +2627,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 2000000, 200000000, 70000);
         {
             auto alterQuery = TStringBuilder() <<
-                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, COMPACTION_PLANNER.CLASS_NAME=`l-buckets`);
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`l-buckets`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
@@ -2635,7 +2635,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
 
         {
-            auto alterQuery = TStringBuilder() << "(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, COMPACTION_PLANNER.CLASS_NAME=`error-buckets`);";
+            auto alterQuery = TStringBuilder() << "(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`error-buckets`);";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::GENERIC_ERROR, alterResult.GetIssues().ToString());

@@ -9,7 +9,7 @@ NKikimr::TConclusion<std::shared_ptr<NKikimr::NOlap::NStorageOptimizer::IOptimiz
     std::shared_ptr<IOptimizationLogic> logic;
     if (LogicName == "one_head") {
         logic = std::make_shared<TOneHeadLogic>();
-    } else if (LogicName == "slice") {
+    } else if (LogicName == "slices") {
         logic = std::make_shared<TTimeSliceLogic>();
     } else {
         AFL_VERIFY(false)("ln", LogicName);
@@ -35,7 +35,7 @@ bool TOptimizerPlannerConstructor::DoDeserializeFromProto(const TProto& proto) {
     LogicName = proto.GetSBuckets().GetLogicName();
     if (LogicName == "") {
         LogicName = "one_head";
-    } else if (LogicName != "one_head" && LogicName != "slice") {
+    } else if (LogicName != "one_head" && LogicName != "slices") {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "incorrect s-buckets optimizer logic name")("proto", proto.DebugString());
         return false;
     }
@@ -47,8 +47,8 @@ NKikimr::TConclusionStatus TOptimizerPlannerConstructor::DoDeserializeFromJson(c
     if (!jsonInfo["logic_name"].GetString(&logicNameFromJson)) {
         return TConclusionStatus::Fail("no logic_name info in json description");
     }
-    if (logicNameFromJson != "one_head" && logicNameFromJson != "slice") {
-        return TConclusionStatus::Fail("incorrect logic_type: " + logicNameFromJson + "; have to be one of [one_head, slice]");
+    if (logicNameFromJson != "one_head" && logicNameFromJson != "slices") {
+        return TConclusionStatus::Fail("incorrect logic_type: " + logicNameFromJson + "; have to be one of [one_head, slices]");
     }
     LogicName = logicNameFromJson;
     return TConclusionStatus::Success();

@@ -75,6 +75,7 @@ namespace NSQLTranslationV1 {
         virtual bool SetSamplingOptions(TContext& ctx, TPosition pos, ESampleClause clause, ESampleMode mode, TNodePtr samplingRate, TNodePtr samplingSeed);
         virtual bool SetTableHints(TContext& ctx, TPosition pos, const TTableHints& hints, const TTableHints& contextHints);
         virtual bool AddGrouping(TContext& ctx, const TVector<TString>& columns, TString& groupingColumn);
+        virtual size_t GetGroupingColumnsCount() const;
         virtual TNodePtr BuildFilter(TContext& ctx, const TString& label);
         virtual TNodePtr BuildFilterLambda();
         virtual TNodePtr BuildFlattenByColumns(const TString& label);

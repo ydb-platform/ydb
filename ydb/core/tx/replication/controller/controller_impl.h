@@ -80,19 +80,27 @@ private:
     void Handle(TEvPrivate::TEvResolveSecretResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvUpdateTenantNodes::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvRunWorkers::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvProcessQueues::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvRemoveWorker::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDiscovery::TEvDiscoveryData::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDiscovery::TEvError::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvStatus::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvRunWorker::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx);
 
     void CreateSession(ui32 nodeId, const TActorContext& ctx);
     void DeleteSession(ui32 nodeId, const TActorContext& ctx);
     void CloseSession(ui32 nodeId, const TActorContext& ctx);
-    void ScheduleRunWorkers();
-    void RunWorker(ui32 nodeId, const TWorkerId& id, const NKikimrReplication::TRunWorkerCommand& cmd);
+    void ScheduleProcessQueues();
+    void ProcessBootQueue(const TActorContext& ctx);
+    void ProcessStopQueue(const TActorContext& ctx);
+    bool IsValidWorker(const TWorkerId& id) const;
+    TWorkerInfo* EnsureWorker(const TWorkerId& id, NKikimrReplication::TRunWorkerCommand* cmd = nullptr);
+    void BootWorker(ui32 nodeId, const TWorkerId& id, const NKikimrReplication::TRunWorkerCommand& cmd);
     void StopWorker(ui32 nodeId, const TWorkerId& id);
+    void RemoveWorker(const TWorkerId& id, const TActorContext& ctx);
+    void MaybeRemoveWorker(const TWorkerId& id, const TActorContext& ctx);
 
     // local transactions
     class TTxInitSchema;
@@ -143,8 +151,8 @@ private:
         return replication;
     }
 
-    TReplication::TPtr Find(ui64 id);
-    TReplication::TPtr Find(const TPathId& pathId);
+    TReplication::TPtr Find(ui64 id) const;
+    TReplication::TPtr Find(const TPathId& pathId) const;
     void Remove(ui64 id);
 
 private:
@@ -158,9 +166,12 @@ private:
     TNodesManager NodesManager;
     THashMap<ui32, TSessionInfo> Sessions;
     THashMap<TWorkerId, TWorkerInfo> Workers;
-    THashSet<TWorkerId> WorkersToRun;
+    THashSet<TWorkerId> BootQueue;
+    THashSet<std::pair<TWorkerId, ui32>> StopQueue;
+    THashSet<TWorkerId> RemoveQueue;
 
-    bool RunWorkersScheduled = false;
+    bool ProcessQueuesScheduled = false;
+    static constexpr ui32 ProcessBatchLimit = 100;
 
 }; // TController
 

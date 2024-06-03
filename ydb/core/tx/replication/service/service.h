@@ -4,6 +4,7 @@
 #include <ydb/core/base/events.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/common/sensitive_event_pb.h>
+#include <ydb/core/tx/replication/common/worker_id.h>
 
 namespace NKikimr::NReplication {
 
@@ -15,6 +16,7 @@ struct TEvService {
         EvStatus,
         EvRunWorker,
         EvStopWorker,
+        EvWorkerStatus,
 
         EvEnd,
     };
@@ -40,6 +42,15 @@ struct TEvService {
 
     struct TEvStopWorker: public TEventPB<TEvStopWorker, NKikimrReplication::TEvStopWorker, EvStopWorker> {
         TEvStopWorker() = default;
+    };
+
+    struct TEvWorkerStatus: public TEventPB<TEvWorkerStatus, NKikimrReplication::TEvWorkerStatus, EvWorkerStatus> {
+        TEvWorkerStatus() = default;
+
+        explicit TEvWorkerStatus(const TWorkerId& id, NKikimrReplication::TEvWorkerStatus::EStatus status) {
+            id.Serialize(*Record.MutableWorker());
+            Record.SetStatus(status);
+        }
     };
 };
 

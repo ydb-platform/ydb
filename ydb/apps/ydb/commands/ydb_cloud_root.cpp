@@ -101,7 +101,7 @@ int TYCloudClientCommandRoot::Run(TConfig& config) {
 int NewYCloudClient(int argc, char** argv) {
     NYdb::NConsoleClient::TClientSettings settings;
     settings.EnableSsl = true;
-    settings.UseOAuthToken = true;
+    settings.UseAccessToken = true;
     settings.UseDefaultTokenFile = false;
     settings.UseIamAuth = true;
     settings.UseStaticCredentials = true;

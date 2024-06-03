@@ -127,7 +127,7 @@ public:
         TString ChosenAuthMethod;
 
         TString ProfileFile;
-        bool UseOAuthToken = true;
+        bool UseAccessToken = true;
         bool UseIamAuth = false;
         bool UseStaticCredentials = false;
         bool UseOauth2TokenExchange = false;

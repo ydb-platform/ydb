@@ -553,11 +553,11 @@ void TCommandProfileCommon::SetupProfileAuthentication(bool existingProfile, con
                 }
         );
     }
-    if (config.UseOAuthToken) {
+    if (config.UseAccessToken) {
         picker.AddOption(
-                "Set new OAuth token (ydb-token)",
+                "Set new access token (ydb-token)",
                 [&profile, &profileName]() {
-                    SetAuthMethod("ydb-token", "OAuth YDB token", profile, profileName);
+                    SetAuthMethod("ydb-token", "YDB token", profile, profileName);
                 }
         );
     }

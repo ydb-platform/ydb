@@ -55,8 +55,8 @@ TClientCommandRootCommon::TClientCommandRootCommon(const TString& name, const TC
 void TClientCommandRootCommon::ValidateSettings() {
     if (!Settings.EnableSsl.Defined()) {
         Cerr << "Missing ssl enabling flag in client settings" << Endl;
-    } else if (!Settings.UseOAuthToken.Defined()) {
-        Cerr << "Missing OAuth token usage flag in client settings" << Endl;
+    } else if (!Settings.UseAccessToken.Defined()) {
+        Cerr << "Missing access token usage flag in client settings" << Endl;
     } else if (!Settings.UseDefaultTokenFile.Defined()) {
         Cerr << "Missing default token file usage flag in client settings" << Endl;
     } else if (!Settings.UseIamAuth.Defined()) {
@@ -78,7 +78,7 @@ void TClientCommandRootCommon::ValidateSettings() {
 }
 
 void TClientCommandRootCommon::FillConfig(TConfig& config) {
-    config.UseOAuthToken = Settings.UseOAuthToken.GetRef();
+    config.UseAccessToken = Settings.UseAccessToken.GetRef();
     config.UseIamAuth = Settings.UseIamAuth.GetRef();
     config.UseStaticCredentials = Settings.UseStaticCredentials.GetRef();
     config.UseOauth2TokenExchange = Settings.UseOauth2TokenExchange.GetRef();
@@ -187,9 +187,9 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         opts.AddLongOption("sa-key-file", saKeyHelp).RequiredArgument("PATH").StoreResult(&SaKeyFile);
     }
 
-    if (config.UseOAuthToken) {
+    if (config.UseAccessToken) {
         TStringBuilder tokenHelp;
-        tokenHelp << "OAuth token file" << Endl
+        tokenHelp << "Access token file" << Endl
             << "  Token search order:" << Endl
             << "    1. This option" << Endl
             << "    2. Profile specified with --profile option" << Endl
@@ -651,7 +651,7 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
         knownMethod |= (authMethod == "iam-token" || authMethod == "yc-token" || authMethod == "sa-key-file" ||
                         authMethod == "token-file" || authMethod == "yc-token-file");
     }
-    if (config.UseOAuthToken) {
+    if (config.UseAccessToken) {
         knownMethod |= (authMethod == "ydb-token" || authMethod == "token-file");
     }
     if (config.UseStaticCredentials) {
@@ -772,7 +772,7 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
     } else if (authMethod == "ydb-token") {
         if (!IsAuthSet && (explicitOption || !Profile)) {
             if (IsVerbose()) {
-                PrintSettingFromProfile("OAuth token (ydb-token)", profile, explicitOption);
+                PrintSettingFromProfile("Access token (ydb-token)", profile, explicitOption);
             }
             config.SecurityToken = authData.as<TString>();
             config.ChosenAuthMethod = "token";
@@ -993,12 +993,12 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
                 config.ConnectionParams["sa-key-file"].push_back({envSaKeyFile, "SA_KEY_FILE enviroment variable"});
             }
         }
-        if (config.UseOAuthToken) {
+        if (config.UseAccessToken) {
             TString envYdbToken = GetEnv("YDB_TOKEN");
             if (!envYdbToken.empty()) {
                 if (!IsAuthSet) {
                     if (IsVerbose()) {
-                        Cerr << "Using OAuth token from YDB_TOKEN env variable" << Endl;
+                        Cerr << "Using access token from YDB_TOKEN env variable" << Endl;
                     }
                     config.ChosenAuthMethod = "token";
                     config.SecurityToken = envYdbToken;

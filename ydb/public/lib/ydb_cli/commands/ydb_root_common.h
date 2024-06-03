@@ -9,8 +9,8 @@ namespace NConsoleClient {
 struct TClientSettings {
     // Whether to use secure connection or not
     TMaybe<bool> EnableSsl;
-    // Whether to use OAuth token in auth options or not
-    TMaybe<bool> UseOAuthToken;
+    // Whether to use access token in auth options or not
+    TMaybe<bool> UseAccessToken;
     // Whether to use default token file in auth options or not
     TMaybe<bool> UseDefaultTokenFile;
     // Whether to use IAM authentication (Yandex.Cloud) or not

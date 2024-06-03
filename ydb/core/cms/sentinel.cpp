@@ -170,7 +170,6 @@ bool TPDiskStatus::IsNewStatusGood() const {
         case EPDiskStatus::FAULTY:
         case EPDiskStatus::BROKEN:
         case EPDiskStatus::TO_BE_REMOVED:
-        case EPDiskStatus::READONLY_FAULTY:
         case EPDiskStatus::EDriveStatus_INT_MIN_SENTINEL_DO_NOT_USE_:
         case EPDiskStatus::EDriveStatus_INT_MAX_SENTINEL_DO_NOT_USE_:
             return false;

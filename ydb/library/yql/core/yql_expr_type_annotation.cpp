@@ -3462,6 +3462,19 @@ bool EnsureTaggedType(const TExprNode& node, TExprContext& ctx) {
     return true;
 }
 
+bool EnsureTaggedType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
+    if (HasError(&type, ctx)) {
+        return false;
+    }
+
+    if (type.GetKind() != ETypeAnnotationKind::Tagged) {
+        ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected tagged type, but got: " << type));
+        return false;
+    }
+
+    return true;
+}
+
 bool EnsureOneOrTupleOfDataOrOptionalOfData(const TExprNode& node, TExprContext& ctx) {
     if (HasError(node.GetTypeAnn(), ctx)) {
         return false;

@@ -26,10 +26,16 @@ namespace NKikimr::NExternalSource {
 namespace {
 
 struct TObjectStorageExternalSource : public IExternalSource {
-    explicit TObjectStorageExternalSource(const std::vector<TRegExMatch>& hostnamePatterns, NActors::TActorSystem* actorSystem, size_t pathsLimit)
+    explicit TObjectStorageExternalSource(const std::vector<TRegExMatch>& hostnamePatterns,
+                                          NActors::TActorSystem* actorSystem,
+                                          size_t pathsLimit,
+                                          std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> credentialsFactory,
+                                          bool enableInfer)
         : HostnamePatterns(hostnamePatterns)
         , PathsLimit(pathsLimit)
         , ActorSystem(actorSystem)
+        , CredentialsFactory(std::move(credentialsFactory))
+        , EnableInfer(enableInfer)
     {}
 
     virtual TString Pack(const NKikimrExternalSources::TSchema& schema,
@@ -283,6 +289,13 @@ struct TObjectStorageExternalSource : public IExternalSource {
             authInfo.AwsAccessKey = awsAuth.AccessKey;
             authInfo.AwsAccessSecret = awsAuth.SecretAccessKey;
             authInfo.AwsRegion = awsAuth.Region;
+        } else if (std::holds_alternative<NAuth::TServiceAccount>(meta->Auth)) {
+            if (!CredentialsFactory) {
+                
+            }
+            auto& saAuth = std::get<NAuth::TServiceAccount>(meta->Auth);
+            NYql::GetAuthInfo(CredentialsFactory, "");
+            authInfo.Token = CredentialsFactory->Create(saAuth.ServiceAccountId, saAuth.ServiceAccountIdSignature)->CreateProvider()->GetAuthInfo();
         }
 
         auto s3FetcherId = ActorSystem->Register(NObjectStorage::CreateS3FetcherActor(
@@ -299,7 +312,6 @@ struct TObjectStorageExternalSource : public IExternalSource {
         meta->Attributes.erase("withinfer");
 
         auto promise = NThreading::NewPromise<TMetadataResult>();
-        // <void(NThreading::TPromise<TResult>, TResponse&&)
         auto schemaToMetadata = [meta](NThreading::TPromise<TMetadataResult> metaPromise, NObjectStorage::TEvInferredFileSchema&& response) {
             meta->Changed = true;
             meta->Schema.clear_column();
@@ -308,7 +320,6 @@ struct TObjectStorageExternalSource : public IExternalSource {
                 destColumn = column;
             }
             TMetadataResult result;
-            Cout << "Response successful" << Endl;
             result.SetSuccess();
             result.Metadata = meta;
             metaPromise.SetValue(std::move(result));
@@ -319,17 +330,18 @@ struct TObjectStorageExternalSource : public IExternalSource {
             promise,
             std::move(schemaToMetadata)
         ));
-        // TODO: implement
+
         return promise.GetFuture().Apply([](const NThreading::TFuture<TMetadataResult>& result) {
-            if (result.GetValue().Success()) {
-                return result.GetValue().Metadata;
+            auto& value = result.GetValue();
+            if (value.Success()) {
+                return value.Metadata;
             }
-            ythrow TExternalSourceException{} << result.GetValue().Issues().ToOneLineString();
+            ythrow TExternalSourceException{} << value.Issues().ToOneLineString();
         });
     }
 
     virtual bool CanLoadDynamicMetadata() const override {
-        return true;
+        return EnableInfer;
     }
 
 private:
@@ -552,13 +564,19 @@ private:
     const std::vector<TRegExMatch> HostnamePatterns;
     const size_t PathsLimit;
     NActors::TActorSystem* ActorSystem = nullptr;
+    std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> CredentialsFactory;
+    const bool EnableInfer = false;
 };
 
 }
 
 
-IExternalSource::TPtr CreateObjectStorageExternalSource(const std::vector<TRegExMatch>& hostnamePatterns, NActors::TActorSystem* actorSystem, size_t pathsLimit) {
-    return MakeIntrusive<TObjectStorageExternalSource>(hostnamePatterns, actorSystem, pathsLimit);
+IExternalSource::TPtr CreateObjectStorageExternalSource(const std::vector<TRegExMatch>& hostnamePatterns,
+                                                        NActors::TActorSystem* actorSystem,
+                                                        size_t pathsLimit,
+                                                        std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> credentialsFactory,
+                                                        bool enableInfer) {
+    return MakeIntrusive<TObjectStorageExternalSource>(hostnamePatterns, actorSystem, pathsLimit, std::move(credentialsFactory), enableInfer);
 }
 
 NYql::TIssues Validate(const FederatedQuery::Schema& schema, const FederatedQuery::ObjectStorageBinding::Subset& objectStorage, size_t pathsLimit) {

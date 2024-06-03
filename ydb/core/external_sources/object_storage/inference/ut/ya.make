@@ -8,7 +8,7 @@ PEERDIR(
 )
 
 SRCS(
-    arrow_inference.cpp
+    arrow_inference_ut.cpp
 )
 
 END()

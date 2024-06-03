@@ -6,6 +6,7 @@
 #include <util/generic/guid.h>
 #include <util/system/types.h>
 #include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/events.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
@@ -13,7 +14,7 @@
 namespace NKikimr::NExternalSource::NObjectStorage {
 
 enum EEventTypes : ui32 {
-    EvBegin, // TODO: where to start from?
+    EvBegin = NActors::TEvents::ES_PRIVATE,
 
     EvFileError,
 

@@ -714,7 +714,6 @@ public:
                                     .Category(ctx.NewAtom(node->Pos(), source->GetName()))
                                     .FreeArgs()
                                         .Add(readArgs[1]->ChildrenList()[1])
-                                        .Add(BuildExternalTableSettings(node->Pos(), ctx, tableDesc.Metadata->Columns, source, tableDesc.Metadata->ExternalSource.TableContent))
                                     .Build()
                                     .Done().Ptr();
                     readArgs[2] = ctx.NewCallable(node->Pos(), "MrTableConcat", { readArgs[2] });

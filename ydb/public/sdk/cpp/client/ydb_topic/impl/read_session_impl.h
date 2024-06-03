@@ -142,7 +142,11 @@ public:
         DoActions();
     }
 
+    // TODO(qyryq) Extract a separate TDeferredDirectReadActions class?
     void DeferReadFromProcessor(const typename IDirectReadConnection::TPtr& processor, TDirectReadServerMessage* dst, typename IDirectReadConnection::TReadCallback callback);
+    // TODO(qyryq) Come up with better names: DeferStartCallback, DirectReadStartCallback, DirectReadStart
+    void DeferStartCallback(std::function<void()> callback);
+
     void DeferReadFromProcessor(const typename IProcessor<UseMigrationProtocol>::TPtr& processor, TServerMessage<UseMigrationProtocol>* dst, typename IProcessor<UseMigrationProtocol>::TReadCallback callback);
     void DeferStartExecutorTask(const typename IAExecutor<UseMigrationProtocol>::TPtr& executor, typename IAExecutor<UseMigrationProtocol>::TFunction task);
     void DeferAbortSession(TCallbackContextPtr<UseMigrationProtocol> cbContext, TASessionClosedEvent<UseMigrationProtocol>&& closeEvent);
@@ -159,6 +163,7 @@ private:
 
     void Read();
     void DirectRead();
+    void DirectReadStart();
     void StartExecutorTasks();
     void AbortSession();
     void Reconnect();
@@ -172,9 +177,10 @@ private:
     typename IProcessor<UseMigrationProtocol>::TReadCallback ReadCallback;
 
     // Direct read.
-    typename IDirectReadConnection::TPtr DirectConnection;
+    IDirectReadConnection::TPtr DirectConnection;
     TDirectReadServerMessage* DirectReadDst = nullptr;
-    typename IDirectReadConnection::TReadCallback DirectReadCallback;
+    IDirectReadConnection::TReadCallback DirectReadCallback;
+    std::function<void()> DirectReadStartCallback;
 
     // Executor tasks.
     std::vector<std::pair<typename IAExecutor<UseMigrationProtocol>::TPtr, typename IAExecutor<UseMigrationProtocol>::TFunction>> ExecutorsTasks;

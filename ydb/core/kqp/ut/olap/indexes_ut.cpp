@@ -167,8 +167,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             CompareYson(result, R"([[20000u;]])");
         }
 
-        AFL_VERIFY(initCount + updatesCount + 3 /*tablets count*/ * 3 /*2 * normalizers + main_load*/ ==
-            (ui64)csController->GetActualizationRefreshSchemeCount().Val())("start", startCount)("count", csController->GetActualizationRefreshSchemeCount().Val());
+        AFL_VERIFY(updatesCount + 3 /*tablets count*/ * 3 /*2 * normalizers + main_load*/ ==
+            (ui64)csController->GetActualizationRefreshSchemeCount().Val())("updates", updatesCount)("count", csController->GetActualizationRefreshSchemeCount().Val());
     }
 
     Y_UNIT_TEST(Indexes) {

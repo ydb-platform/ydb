@@ -9,9 +9,8 @@ from concurrent.futures import ProcessPoolExecutor
 
 HEADER_COMPILE_TIME_TO_SHOW = 0.5  # sec
 
-
 def sanitize_path(path: str, base_src_dir: str) -> str:
-    
+    home_dir = os.environ["HOME"]
     ya_build_path_chunk = ".ya/build/build_root"
     ya_tools_path_chunk = ".ya/tools"
     if ya_build_path_chunk in path:
@@ -34,6 +33,7 @@ def sanitize_path(path: str, base_src_dir: str) -> str:
         if not base_src_dir.endswith("/"):
             base_src_dir += "/"
         path = path.removeprefix(base_src_dir)
+        path = path.removeprefix(home_dir)
 
     return "src/" + path
 
@@ -201,13 +201,13 @@ def generate_cpp_bloat(build_output_dir: str, result_dir: str, base_src_dir: str
     return tree
 
 
-def parse_includes(path: str, base_src_dir: str) -> tuple[list[tuple[int, str]], dict]:
-    print("Processing includes in {}".format(path))
+def parse_includes(trace_path: str, base_src_dir: str) -> tuple[list[tuple[int, str]], dict]:
+    print("Processing includes in {}".format(trace_path))
 
-    with open(path) as f:
+    with open(trace_path) as f:
         obj = json.load(f)
 
-    cpp_file = "N\\A"
+    cpp_file = None
     include_events = []  # (time, +-1, path)
 
     for event in obj["traceEvents"]:
@@ -221,13 +221,16 @@ def parse_includes(path: str, base_src_dir: str) -> tuple[list[tuple[int, str]],
 
         if event["name"] == "OptModule":
             cpp_file = event["args"]["detail"]
-    
+
     include_events.sort(key=lambda event: (event[0], -event[1]))
 
     path_to_time = {}
     current_includes_stack = [(cpp_file, 0)]
     last_time_stamp = 0
     time_parts = {}  # header/cpp -> (header -> (cnt, total time))
+    if cpp_file is None:
+        print("Can't determine cpp file for {}".format(trace_path))
+        return path_to_time, time_parts
 
     for time_stamp, ev, path in include_events:
         if current_includes_stack:

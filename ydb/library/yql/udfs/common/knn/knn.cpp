@@ -138,7 +138,7 @@ public:
         TTupleTypeInspector argsTuple{*typeInfoHelper, tuple.GetElementType(0)};
         Y_ENSURE(argsTuple);
         if (argsTuple.GetElementsCount() != 1) {
-            builder.SetError("Expected one argument");
+            builder.SetError("One argument is expected");
             return true;
         }
 
@@ -164,7 +164,7 @@ public:
             }
         }
         if (type == EType::None) {
-            builder.SetError("Expected argument is List<Double|Float|Uint8|Int8>");
+            builder.SetError("'List<Double|Float|Uint8|Int8>' is expected");
             return true;
         }
 
@@ -222,14 +222,14 @@ public:
         TTupleTypeInspector argsTuple{*typeInfoHelper, tuple.GetElementType(0)};
         Y_ENSURE(argsTuple);
         if (argsTuple.GetElementsCount() != 1) {
-            builder.SetError("Expected one argument");
+            builder.SetError("One argument is expected");
             return true;
         }
 
         auto argType = argsTuple.GetElementType(0);
         auto argTag = GetArg(*typeInfoHelper, argType, builder);
         if (!ValidTag(argTag, {TagStoredVector, TagFloatVector, TagInt8Vector, TagUint8Vector})) {
-            builder.SetError("Expected argument is string from ToBinaryString[Float|Int8|Uint8]");
+            builder.SetError("A result from 'ToBinaryString[Float|Int8|Uint8]' is expected as an argument");
             return true;
         }
 
@@ -268,7 +268,7 @@ public:
         TTupleTypeInspector argsTuple{*typeInfoHelper, tuple.GetElementType(0)};
         Y_ENSURE(argsTuple);
         if (argsTuple.GetElementsCount() != 2) {
-            builder.SetError("Expected two arguments");
+            builder.SetError("Two arguments are expected");
             return true;
         }
 
@@ -279,12 +279,12 @@ public:
 
         if (!Base::ValidTag(arg0Tag, {TagStoredVector, TagFloatVector, TagInt8Vector, TagUint8Vector, TagBitVector}) ||
             !Base::ValidTag(arg1Tag, {TagStoredVector, TagFloatVector, TagInt8Vector, TagUint8Vector, TagBitVector})) {
-            builder.SetError("Expected arguments are strings from ToBinaryString[Float|Int8|Uint8|Bit]");
+            builder.SetError("A result from 'ToBinaryString[Float|Int8|Uint8]' is expected as an argument");
             return true;
         }
 
         if (arg0Tag != arg1Tag && arg0Tag != TagStoredVector && arg1Tag != TagStoredVector) {
-            builder.SetError(std::format("Expected arguments should have same tags, but '{}' not equal to '{}'", arg0Tag, arg1Tag));
+            builder.SetError(std::format("Arguments should have same tags, but '{}' is not equal to '{}'", arg0Tag, arg1Tag));
             return true;
         }
 

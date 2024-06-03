@@ -4,6 +4,7 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/engines/changes/actualization/construction/context.h>
 
 namespace NKikimr::NOlap {
 

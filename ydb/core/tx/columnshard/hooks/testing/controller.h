@@ -18,6 +18,8 @@ private:
     YDB_ACCESSOR(std::optional<TDuration>, StatsReportInterval, std::nullopt);
     YDB_ACCESSOR(std::optional<ui64>, GuaranteeIndexationStartBytesLimit, 0);
     YDB_ACCESSOR(std::optional<TDuration>, OptimizerFreshnessCheckDuration, TDuration::Zero());
+    YDB_ACCESSOR_DEF(std::optional<TDuration>, CompactionActualizationLag);
+    YDB_ACCESSOR_DEF(std::optional<TDuration>, TasksActualizationLag);
     EOptimizerCompactionWeightControl CompactionControl = EOptimizerCompactionWeightControl::Force;
 
     YDB_ACCESSOR(std::optional<ui64>, OverrideReduceMemoryIntervalLimit, 1024);
@@ -131,9 +133,18 @@ protected:
         return LagForCompactionBeforeTierings.value_or(def);
     }
 
+    virtual TDuration GetCompactionActualizationLag(const TDuration def) const override {
+        return CompactionActualizationLag.value_or(def);
+    }
+
+
     virtual bool IsBackgroundEnabled(const EBackground id) const override {
         TGuard<TMutex> g(Mutex);
         return !DisabledBackgrounds.contains(id);
+    }
+
+    virtual TDuration GetActualizationTasksLag(const TDuration d) const override {
+        return TasksActualizationLag.value_or(d);
     }
 
     virtual void DoOnTabletInitCompleted(const ::NKikimr::NColumnShard::TColumnShard& shard) override;

@@ -703,7 +703,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
             const ui64 numRows = 1000;
             const ui64 txCount = 20;
-            const ui32 tsIncrement = 2;
+            const ui32 tsIncrement = 1;
             for (ui64 txId = 1; txId <= txCount; ++txId) {
                 TString testBlob = MakeTestBlob((txId - 1) * numRows * tsIncrement, txId * numRows * tsIncrement, tsIncrement);
                 auto blobRange = MakeBlobRange(++step, testBlob.size());
@@ -753,6 +753,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             NOlap::TTiering tiering;
             AFL_VERIFY(tiering.Add(NOlap::TTierInfo::MakeTtl(TDuration::MicroSeconds(TInstant::Now().MicroSeconds() - txCount / 2 * numRows * tsIncrement), "timestamp")));
             pathTtls.emplace(pathId, std::move(tiering));
+            //if this check flaps consider to slightly increase tsIncrement value above
+            //it it fails regularly it' a problem to investigate
             Ttl(engine, db, pathTtls, txCount / 2 );
 
             // read + load + read

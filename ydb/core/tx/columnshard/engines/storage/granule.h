@@ -198,14 +198,7 @@ public:
         LastCompactionInstant = TMonotonic::Now();
     }
 
-    void BuildActualizationTasks(NActualizer::TTieringProcessContext& context) const {
-        if (context.Now - LastActualizations < TDuration::Seconds(1)) {
-            return;
-        }
-        NActualizer::TExternalTasksContext extTasks(Portions);
-        ActualizationIndex->ExtractActualizationTasks(context, extTasks);
-        LastActualizations = context.Now;
-    }
+    void BuildActualizationTasks(NActualizer::TTieringProcessContext& context) const;
 
     std::shared_ptr<TColumnEngineChanges> GetOptimizationTask(std::shared_ptr<TGranuleMeta> self, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
         return OptimizerPlanner->GetOptimizationTask(self, locksManager);

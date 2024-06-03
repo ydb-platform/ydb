@@ -157,4 +157,13 @@ std::shared_ptr<TPortionInfo> TGranuleMeta::UpsertPortionOnLoad(TPortionInfo&& p
     return emplaceInfo.first->second;
 }
 
+void TGranuleMeta::BuildActualizationTasks(NActualizer::TTieringProcessContext& context) const {
+    if (context.Now - LastActualizations < TDuration::Seconds(1)) {
+        return;
+    }
+    NActualizer::TExternalTasksContext extTasks(Portions);
+    ActualizationIndex->ExtractActualizationTasks(context, extTasks);
+    LastActualizations = context.Now;
+}
+
 } // namespace NKikimr::NOlap

@@ -8,7 +8,6 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/statestorage.h>
-#include <ydb/core/tx/replication/common/worker_id.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -49,6 +48,8 @@ public:
     void RegisterWorker(IActorOps* ops, const TWorkerId& id, IActor* actor) {
         auto res = Workers.emplace(id, ops->Register(actor));
         Y_ABORT_UNLESS(res.second);
+
+        ops->Send(ActorId, new TEvService::TEvWorkerStatus(id, NKikimrReplication::TEvWorkerStatus::RUNNING));
     }
 
     void StopWorker(IActorOps* ops, const TWorkerId& id) {
@@ -57,6 +58,8 @@ public:
 
         ops->Send(it->second, new TEvents::TEvPoison());
         Workers.erase(it);
+
+        ops->Send(ActorId, new TEvService::TEvWorkerStatus(id, NKikimrReplication::TEvWorkerStatus::STOPPED));
     }
 
     void SendStatus(IActorOps* ops) const {

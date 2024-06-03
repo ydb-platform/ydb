@@ -2515,6 +2515,35 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         );
     }
 
+    Y_UNIT_TEST(AlterTableAlterColumnSetNull) {
+        auto reqSetNotNull = SqlToYql(R"(
+            USE plato;
+            CREATE TABLE tableName (
+                id Uint32,
+                val Uint32,
+                PRIMARY KEY (id)
+            );
+
+            COMMIT;
+            ALTER TABLE tableName ALTER COLUMN val SET NOT NULL;
+        )");
+
+        auto reqSetNull = SqlToYql(R"(
+            USE plato;
+            CREATE TABLE tableName (
+                id Uint32,
+                val Uint32 NOT NULL,
+                PRIMARY KEY (id)
+            );
+
+            COMMIT;
+            ALTER TABLE tableName ALTER COLUMN val SET NULL;
+        )");
+
+        UNIT_ASSERT(reqSetNotNull.IsOk());
+        UNIT_ASSERT(reqSetNull.IsOk());
+    }
+
     Y_UNIT_TEST(OptionalAliases) {
         UNIT_ASSERT(SqlToYql("USE plato; SELECT foo FROM (SELECT key foo FROM Input);").IsOk());
         UNIT_ASSERT(SqlToYql("USE plato; SELECT a.x FROM Input1 a JOIN Input2 b ON a.key = b.key;").IsOk());

@@ -5,7 +5,7 @@
 #include <util/string/cast.h>
 #include <ydb/library/yql/providers/generic/connector/api/common/data_source.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
-
+ 
 namespace NYql {
 
 enum class EDatabaseType {

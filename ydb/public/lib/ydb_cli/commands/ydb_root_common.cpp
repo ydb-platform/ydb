@@ -68,7 +68,7 @@ void TClientCommandRootCommon::ValidateSettings() {
     } else if (!Settings.MentionUserAccount.Defined()) {
         Cerr << "Missing user account mentioning flag in client settings" << Endl;
     } else if (!Settings.UseOauth2TokenExchange.Defined()) {
-        Cerr << "Missing oauth 2.0 token exchange credentials usage flag in client settings" << Endl;
+        Cerr << "Missing OAuth 2.0 token exchange credentials usage flag in client settings" << Endl;
     } else if (!Settings.YdbDir) {
         Cerr << "Missing YDB directory in client settings" << Endl;
     } else {

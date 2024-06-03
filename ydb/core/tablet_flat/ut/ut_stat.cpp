@@ -543,10 +543,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
             UNIT_ASSERT_GT(total, prevValue);
             ui64 delta = total - prevValue, actualDelta = total - prevActualValue;
             Cerr << "    " << FormatPercent(delta, total) << " (actual " << FormatPercent(actualDelta, total) << ")" << Endl;
-            // TODO: implement B-Tree index histogram
-            if (histogram.size()) {
-                VerifyPercent(delta, total, 20);
-            }
+            VerifyPercent(delta, total, 20);
         }
     }
 

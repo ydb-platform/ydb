@@ -404,8 +404,8 @@ namespace NKikimr::NTable::NPage {
             Y_ABORT_UNLESS(key);
             Y_UNUSED(seek);
 
-            return (!beginKey.Count() || beginKey.CompareTo(key, keyDefaults) <= 0)
-                && (!endKey.Count() || endKey.CompareTo(key, keyDefaults) > 0);
+            return (!beginKey || beginKey.CompareTo(key, keyDefaults) <= 0)
+                && (!endKey || endKey.CompareTo(key, keyDefaults) > 0);
         }
 
         /**
@@ -435,8 +435,8 @@ namespace NKikimr::NTable::NPage {
 
             // ESeek::Upper can skip a page with given key
             const bool endKeyExclusive = seek != ESeek::Upper;
-            return (!beginKey.Count() || beginKey.CompareTo(key, keyDefaults) <= 0)
-                && (!endKey.Count() || endKey.CompareTo(key, keyDefaults) >= endKeyExclusive);
+            return (!beginKey || beginKey.CompareTo(key, keyDefaults) <= 0)
+                && (!endKey || endKey.CompareTo(key, keyDefaults) >= endKeyExclusive);
         }
 
         /**

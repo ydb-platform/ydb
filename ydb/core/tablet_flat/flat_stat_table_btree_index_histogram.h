@@ -22,15 +22,14 @@ class TTableHistogramBuilderBtreeIndex {
 public:
     struct TNodeState {
         TPageId PageId;
-        TCellsIterable BeginKey;
-        TRowId BeginRowId;
-        TRowId EndRowId;
-        ui64 BeginDataSize;
-        ui64 EndDataSize;
+        TCellsIterable BeginKey, EndKey;
+        TRowId BeginRowId, EndRowId;
+        ui64 BeginDataSize, EndDataSize;
 
-        TNodeState(TPageId pageId, TCellsIterable beginKey, TRowId beginRowId, TRowId endRowId, ui64 beginDataSize, ui64 endDataSize)
+        TNodeState(TPageId pageId, TCellsIterable beginKey, TCellsIterable endKey, TRowId beginRowId, TRowId endRowId, ui64 beginDataSize, ui64 endDataSize)
             : PageId(pageId)
             , BeginKey(beginKey)
+            , EndKey(endKey)
             , BeginRowId(beginRowId)
             , EndRowId(endRowId)
             , BeginDataSize(beginDataSize)
@@ -75,16 +74,11 @@ public:
         for (const auto& part : Subset.Flatten) {
             auto& meta = part->IndexPages.GetBTree({});
             parts.emplace_back(part.Part.Get(), TVector<TNodeState>{
-                {meta.PageId, EmptyKey, 0, meta.RowCount, 0, meta.GetTotalDataSize()}
+                {meta.PageId, EmptyKey, EmptyKey, 0, meta.RowCount, 0, meta.GetTotalDataSize()}
             });
         }
 
         auto ready = BuildHistogramRecursive<TGetSize>(histogram, parts, 0, totalSize, 0);
-
-        // Note: some values may exceed total due to different calculation approaches
-        for (auto& bucket : histogram) {
-            bucket.Value = Min(bucket.Value, totalSize);
-        }
 
         return ready;
     }
@@ -108,7 +102,7 @@ private:
         }
         auto& biggestPart = parts[biggestPartIndex];
 
-        // FIXME: load the biggest node if its size more than half
+        // FIXME: load the biggest node if its size more than a half
         if (biggestPart.Nodes.size() == 1) {
             auto node = biggestPart.Nodes.front();
             biggestPart.Nodes.clear();
@@ -127,43 +121,43 @@ private:
             return true;
         }
 
-        const auto cmp = [this](const TNodeState& left, const TCellsIterable& right) {
-            return CompareKeys(left.BeginKey.Iter(), right.Iter()) < 0;
-        };
+        ui64 leftSize = 0, middleSize = 0, rightSize = 0;
+        TVector<TNodeState> middleNodes;
 
-        ui64 splitSize = 0;
-        ui64 leftSize = 0, rightSize = 0;
-
-        TVector<TPartNodes> leftParts, rightParts;
+        TVector<TPartNodes> leftParts, middleParts, rightParts;
         for (const auto& part : parts) {
-            auto iter = std::lower_bound(part.Nodes.begin(), part.Nodes.end(), splitKey, cmp);
+            leftParts.emplace_back(part.Part, TVector<TNodeState>());
+            middleParts.emplace_back(part.Part, TVector<TNodeState>());
+            rightParts.emplace_back(part.Part, TVector<TNodeState>());
 
-            TVector<TNodeState> leftNodes(part.Nodes.begin(), iter);
-            TVector<TNodeState> rightNodes(iter, part.Nodes.end());
-
-            // check end key????
-            if (leftNodes && (!rightNodes || CompareKeys(splitKey.Iter(), rightNodes.front().BeginKey.Iter()) < 0)) {
-                auto splitNode = leftNodes.back();
-                leftNodes.pop_back();
-
-                splitSize += TGetSize::Get(splitNode);
-            }
-
-            if (leftNodes) {
-                leftParts.emplace_back(part.Part, std::move(leftNodes));
-                leftSize += GetPartSize<TGetSize>(leftParts.back());
-            }
-            if (rightNodes) {
-                rightParts.emplace_back(part.Part, std::move(rightNodes));
-                rightSize += GetPartSize<TGetSize>(rightParts.back());
+            for (const auto& node : part.Nodes) {
+                if (node.EndKey && CompareKeys(node.EndKey, splitKey) <= 0) {
+                    leftSize += TGetSize::Get(node);
+                    leftParts.back().Nodes.push_back(node);
+                } else if (node.BeginKey && CompareKeys(node.BeginKey, splitKey) >= 0) {
+                    rightSize += TGetSize::Get(node);
+                    rightParts.back().Nodes.push_back(node);
+                } else {
+                    middleSize += TGetSize::Get(node);
+                    middleParts.back().Nodes.push_back(node);
+                }
             }
         }
+        
+        // TODO: clear parts
+
+        // TODO: process middleNodes
+        Y_ABORT_UNLESS(middleSize <= Resolution / 2);
 
         // TODO: don't copy nodes?
 
         ready &= BuildHistogramRecursive<TGetSize>(histogram, leftParts, beginSize, beginSize + leftSize, depth + 1);
         
-        AddBucket(histogram, splitKey, beginSize + leftSize + splitSize / 2);
+        ui64 splitValue = beginSize + leftSize + middleSize / 2;
+        // TODO:
+        // splitValue = Min(splitValue, endSize);
+        // splitValue = Max(splitValue, beginSize);
+        AddBucket(histogram, splitKey, splitValue);
 
         ready &= BuildHistogramRecursive<TGetSize>(histogram, rightParts, SafeDiff(endSize, rightSize), endSize, depth + 1);
 
@@ -246,7 +240,8 @@ private:
             auto& child = loadedNode.GetChild(pos);
 
             list.emplace_back(child.PageId, 
-                pos ? loadedNode.GetKeyCellsIterable(pos - 1, groupInfo.ColsKeyData) : node.BeginKey, 
+                pos ? loadedNode.GetKeyCellsIterable(pos - 1, groupInfo.ColsKeyData) : node.BeginKey,
+                pos < loadedNode.GetKeysCount() ? loadedNode.GetKeyCellsIterable(pos, groupInfo.ColsKeyData) : node.EndKey,
                 currentBeginRowId, child.RowCount, 
                 currentBeginDataSize, child.GetTotalDataSize());
 
@@ -258,7 +253,8 @@ private:
     }
 
 private:
-    int CompareKeys(TCellsIter left, TCellsIter right) const {
+    int CompareKeys(const TCellsIterable& left_, const TCellsIterable& right_) const {
+        auto left = left_.Iter(), right = right_.Iter();
         size_t end = Max(left.Count(), right.Count());
         Y_DEBUG_ABORT_UNLESS(end <= KeyDefaults.Size(), "Key schema is smaller than compared keys");
 
@@ -298,9 +294,7 @@ inline bool BuildStatsHistogramsBTreeIndex(const TSubset& subset, TStats& stats,
     TTableHistogramBuilderBtreeIndex builder(subset, env);
 
     ready &= builder.Build<TTableHistogramBuilderBtreeIndex::TGetRowCount>(stats.RowCountHistogram, rowCountResolution, stats.RowCount);
-
-    Y_UNUSED(dataSizeResolution);
-    // ready &= builder.Build<TTableHistogramBuilderBtreeIndex::TGetDataSize>(stats.DataSizeHistogram, dataSizeResolution, stats.DataSize.Size);
+    ready &= builder.Build<TTableHistogramBuilderBtreeIndex::TGetDataSize>(stats.DataSizeHistogram, dataSizeResolution, stats.DataSize.Size);
 
     return ready;
 }

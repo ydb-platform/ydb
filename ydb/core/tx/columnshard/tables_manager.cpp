@@ -269,7 +269,7 @@ bool TTablesManager::RegisterSchemaPreset(const TSchemaPreset& schemaPreset, NIc
     return true;
 }
 
-void TTablesManager::AddSchemaVersion(const ui32 presetId, const NOlap::TSnapshot& version, const NKikimrSchemeOp::TColumnTableSchema& schema, NIceDb::TNiceDb& db) {
+void TTablesManager::AddSchemaVersion(const ui32 presetId, const NOlap::TSnapshot& version, const NKikimrSchemeOp::TColumnTableSchema& schema, NIceDb::TNiceDb& db, std::shared_ptr<TTiersManager>& manager) {
     Y_ABORT_UNLESS(SchemaPresetsIds.contains(presetId));
 
     TSchemaPreset::TSchemaPresetVersionInfo versionInfo;
@@ -284,6 +284,9 @@ void TTablesManager::AddSchemaVersion(const ui32 presetId, const NOlap::TSnapsho
             PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, StoragesManager, version, schema);
             for (auto&& i : Tables) {
                 PrimaryIndex->RegisterTable(i.first);
+            }
+            if (manager->IsReady()) {
+                PrimaryIndex->OnTieringModified(manager, Ttl, {});
             }
         } else {
             PrimaryIndex->RegisterSchemaVersion(version, schema);
@@ -310,10 +313,10 @@ void TTablesManager::AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& 
         if (SchemaPresetsIds.empty()) {
             TSchemaPreset fakePreset;
             Y_ABORT_UNLESS(RegisterSchemaPreset(fakePreset, db));
-            AddSchemaVersion(fakePreset.GetId(), version, versionInfo.GetSchema(), db);
+            AddSchemaVersion(fakePreset.GetId(), version, versionInfo.GetSchema(), db, manager);
         } else {
             Y_ABORT_UNLESS(SchemaPresetsIds.contains(fakePreset.GetId()));
-            AddSchemaVersion(fakePreset.GetId(), version, versionInfo.GetSchema(), db);
+            AddSchemaVersion(fakePreset.GetId(), version, versionInfo.GetSchema(), db, manager);
         }
     }
 

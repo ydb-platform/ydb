@@ -92,32 +92,44 @@ public:
 
     void InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData);
 
+    void Initialize(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
+        TString peerName = GrpcRequestBaseCtx_->GetPeerName();
+        TBase::SetPeerName(peerName);
+        InitializeAttributes(schemeData);
+        TBase::SetDatabase(CheckedDatabaseName_);
+        InitializeAuditSettings(schemeData);
+    }
+
     TGrpcRequestCheckActor(
         const TActorId& owner,
         const TSchemeBoardEvents::TDescribeSchemeResult& schemeData,
         TIntrusivePtr<TSecurityObject> securityObject,
         TAutoPtr<TEventHandle<TEvent>> request,
         IGRpcProxyCounters::TPtr counters,
-        bool skipCheckConnectRigths,
+        bool skipCheckConnectRights,
         const IFacilityProvider* facilityProvider)
         : Owner_(owner)
         , Request_(std::move(request))
         , Counters_(counters)
         , SecurityObject_(std::move(securityObject))
         , GrpcRequestBaseCtx_(Request_->Get())
-        , SkipCheckConnectRigths_(skipCheckConnectRigths)
+        , SkipCheckConnectRights_(skipCheckConnectRights)
         , FacilityProvider_(facilityProvider)
         , Span_(TWilsonGrpc::RequestCheckActor, GrpcRequestBaseCtx_->GetWilsonTraceId(), "RequestCheckActor")
     {
+        typename TBase::TAuthInfo authInfo;
         TMaybe<TString> authToken = GrpcRequestBaseCtx_->GetYdbToken();
         if (authToken) {
-            TString peerName = GrpcRequestBaseCtx_->GetPeerName();
-            TBase::SetSecurityToken(authToken.GetRef());
-            TBase::SetPeerName(peerName);
-            InitializeAttributes(schemeData);
-            TBase::SetDatabase(CheckedDatabaseName_);
-            InitializeAuditSettings(schemeData);
+            authInfo.Token = authToken.GetRef();
         }
+        auto& certAuth = authInfo.CertAuth;
+        certAuth.NeedAuthByCertificate = GrpcRequestBaseCtx_->NeedAuthByCertificate();
+        const auto& clientCertificates = GrpcRequestBaseCtx_->FindClientCertPropertyValues();
+        if (!clientCertificates.empty()) {
+            certAuth.ClientCertificate = TString(clientCertificates.front());
+        }
+        TBase::SetAuthInfo(std::move(authInfo));
+        Initialize(schemeData);
     }
 
     void Bootstrap(const TActorContext& ctx) {
@@ -467,7 +479,7 @@ private:
     }
 
     std::pair<bool, std::optional<NYql::TIssue>> CheckConnectRight() {
-        if (SkipCheckConnectRigths_) {
+        if (SkipCheckConnectRights_) {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
                         "Skip check permission connect db, AllowYdbRequestsWithoutDatabase is off, there is no db provided from user"
                         << ", database: " << CheckedDatabaseName_
@@ -485,7 +497,7 @@ private:
             return {false, std::nullopt};
         }
 
-        if (!TBase::GetSecurityToken()) {
+        if (!TBase::GetAuthInfo().IsExists()) {
             if (!TBase::IsTokenRequired()) {
                 LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
                             "Skip check permission connect db, token is not required, there is no token provided"
@@ -535,7 +547,7 @@ private:
     TString CheckedDatabaseName_;
     IRequestProxyCtx* GrpcRequestBaseCtx_;
     NRpcService::TRlConfig* RlConfig = nullptr;
-    bool SkipCheckConnectRigths_ = false;
+    bool SkipCheckConnectRights_ = false;
     std::vector<std::pair<TString, TString>> Attributes_;
     const IFacilityProvider* FacilityProvider_;
     bool DmlAuditEnabled_ = false;
@@ -592,10 +604,10 @@ IActor* CreateGrpcRequestCheckActor(
     TIntrusivePtr<TSecurityObject> securityObject,
     TAutoPtr<TEventHandle<TEvent>> request,
     IGRpcProxyCounters::TPtr counters,
-    bool skipCheckConnectRigths,
+    bool skipCheckConnectRights,
     const IFacilityProvider* facilityProvider) {
 
-    return new TGrpcRequestCheckActor<TEvent>(owner, schemeData, std::move(securityObject), std::move(request), counters, skipCheckConnectRigths, facilityProvider);
+    return new TGrpcRequestCheckActor<TEvent>(owner, schemeData, std::move(securityObject), std::move(request), counters, skipCheckConnectRights, facilityProvider);
 }
 
 }

@@ -43,7 +43,7 @@ NActors::IEventHandle* GetAuthorizeTicketResult(const NActors::TActorId& owner) 
         return new NActors::IEventHandle(
             owner,
             owner,
-            new NKikimr::TEvTicketParser::TEvAuthorizeTicketResult(TString(), {
+            new NKikimr::TEvTicketParser::TEvAuthorizeTicketResult({.Ticket = TString()}, {
                 .Message = "No security credentials were provided",
                 .Retryable = false
             })
@@ -53,7 +53,7 @@ NActors::IEventHandle* GetAuthorizeTicketResult(const NActors::TActorId& owner) 
         return new NActors::IEventHandle(
             owner,
             owner,
-            new NKikimr::TEvTicketParser::TEvAuthorizeTicketResult(TString(), token)
+            new NKikimr::TEvTicketParser::TEvAuthorizeTicketResult({.Ticket = TString()}, token)
         );
     } else {
         return nullptr;
@@ -65,7 +65,7 @@ IEventHandle* GetAuthorizeTicketHandle(const NActors::TActorId& owner, const TSt
         NKikimr::MakeTicketParserID(),
         owner,
         new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
-            .Ticket = ticket,
+            .AuthInfo = {.Ticket = ticket},
             .Entries = GetEntries(ticket),
         }),
         IEventHandle::FlagTrackDelivery

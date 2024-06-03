@@ -53,6 +53,7 @@ struct X509CertificateReader {
 
     static X509Ptr ReadCertAsPEM(const TStringBuf& cert);
     static TVector<std::pair<TString, TString>> ReadSubjectTerms(const X509Ptr& x509);
+    static TVector<std::pair<TString, TString>> ReadAllSubjectTerms(const X509Ptr& x509);
 private:
     static std::pair<TString, TString> GetTermFromX509Name(X509_NAME* name, int nid);
 };

@@ -594,6 +594,30 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT_VALUES_EQUAL(result->Error.Message, "Ticket is empty");
     }
 
+    Y_UNIT_TEST(TicketFromCertificate) {
+        using namespace Tests;
+        TPortManager tp;
+        ui16 kikimrPort = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(kikimrPort);
+        settings.SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        server.GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
+        server.GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
+        TClient client(settings);
+        NClient::TKikimr kikimr(client.GetClientConfig());
+        client.InitRootScheme();
+        TTestActorRuntime* runtime = server.GetRuntime();
+
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({.AuthInfo = {.Ticket = certificateContent, .IsCertificate = true}})), 0);
+
+        TAutoPtr<IEventHandle> handle;
+        TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+        UNIT_ASSERT_C(result->Error.empty(), result->Error);
+        UNIT_ASSERT_C(result->Token->IsExist("C=RU,ST=Moscow,L=Moscow,O=Yandex,CN=test-server@cert"), result->Token->ShortDebugString());
+    }
+
     Y_UNIT_TEST(LdapFetchGroupsWithDefaultGroupAttributeGood) {
         TString login = "ldapuser";
         TString password = "ldapUserPassword";
@@ -992,7 +1016,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT_C(result->Error.empty(), result->Error);
         UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.AuthorizeCount.load(), 0);
         UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.AuthenticateCount.load(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(result->Ticket, userToken);
+        UNIT_ASSERT_VALUES_EQUAL(result->AuthInfo.Ticket, userToken);
         UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), userToken + "@as");
     }
 

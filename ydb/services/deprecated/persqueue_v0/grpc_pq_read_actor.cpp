@@ -778,7 +778,7 @@ void TReadSessionActor::HandleDescribeTopicsResponse(TEvDescribeTopicsResponse::
 
     ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
             .Database = Database,
-            .Ticket = ticket,
+            .AuthInfo = {.Ticket = ticket},
             .PeerName = PeerName,
             .Entries = entries
         }));
@@ -793,7 +793,7 @@ void TReadSessionActor::CreateInitAndAuthActor(const TActorContext& ctx) {
 }
 
 void TReadSessionActor::Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const TActorContext& ctx) {
-    TString ticket = ev->Get()->Ticket;
+    TString ticket = ev->Get()->AuthInfo.Ticket;
     TString maskedTicket = ticket.size() > 5 ? (ticket.substr(0, 5) + "***" + ticket.substr(ticket.size() - 5)) : "***";
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "CheckACL ticket " << maskedTicket << " got result from TICKET_PARSER response: error: " << ev->Get()->Error << " user: "
                             << (ev->Get()->Error.empty() ? ev->Get()->Token->GetUserSID() : ""));

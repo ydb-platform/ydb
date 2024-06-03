@@ -1,23 +1,21 @@
-from typing import List, Any
+from typing import List
 from math import isclose
 
 
-def values_equal(expected: Any, actual: Any) -> bool:
-    if type(expected) is float:
-        return isclose(expected, actual, abs_tol=1e-5)
+def assert_rows_equal(expected: List, actual: List):
+    assert len(expected) == len(actual)
 
-    return expected == actual
+    for i in range(len(expected)):
+        if type(expected[i]) is float:
+            assert isclose(expected[i], actual[i], abs_tol=1e-5)
+            continue
 
-
-def rows_equal(expected: List, actual: List) -> bool:
-    if len(expected) != len(actual):
-        return False
-
-    return all(map(values_equal, expected, actual))
+        assert expected[i] == actual[i], (f"Error at position {i}", expected, actual)
 
 
-def data_outs_equal(expected: List, actual: List) -> bool:
-    if len(expected) != len(actual):
-        return False
-
-    return all(map(rows_equal, expected, actual))
+def assert_data_outs_equal(
+    expected: List,
+    actual: List,
+):
+    assert len(expected) == len(actual)
+    all(map(assert_rows_equal, expected, actual))

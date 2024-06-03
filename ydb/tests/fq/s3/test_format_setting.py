@@ -972,6 +972,46 @@ Pear;15;33'''
         data = client.get_result_data(query_id, limit=50)
         assert len(data.result.result_set.rows) == 1, "invalid count rows"
 
+        # string -> Timestamp
+
+        # 2024-04-02T12:01:00.000Z
+        data = [['apple'], ['2024-04-02 12:01:00']]
+
+        # Define the schema for the data
+        schema = pa.schema([
+            ('fruit', pa.string()),
+            ('ts', pa.string())
+        ])
+
+        table = pa.Table.from_arrays(data, schema=schema)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        assert len(data.result.result_set.rows) == 1, "invalid count rows"
+
+        # utf8 -> Timestamp
+
+        # 2024-04-02T12:01:00.000Z
+        data = [['apple'], ['2024-04-02 12:01:00']]
+
+        # Define the schema for the data
+        schema = pa.schema([
+            ('fruit', pa.string()),
+            ('ts', pa.utf8())
+        ])
+
+        table = pa.Table.from_arrays(data, schema=schema)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        assert len(data.result.result_set.rows) == 1, "invalid count rows"
+
         # timestamp[s] -> Timestamp
 
         # 2024-04-02T12:01:00.000Z
@@ -1704,6 +1744,328 @@ Pear;15;33'''
                 "invalid row: " || Unwrap(`fruit`) || " " || Unwrap(CAST(`ts` as String))
             ) AS value FROM $result;
             '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        assert len(data.result.result_set.rows) == 1, "invalid count rows"
+
+    @yq_all
+    def test_parquet_converters_to_string(self, kikimr, s3, client, unique_prefix):
+        # timestamp[ms] -> String
+        # 2024-04-02T12:01:00.000000Z
+        data = [['apple'], [1712059260000]]
+
+        # Define the schema for the data
+        schema = pa.schema([
+            ('fruit', pa.string()),
+            ('ts', pa.timestamp('ms'))
+        ])
+
+        table = pa.Table.from_arrays(data, schema=schema)
+        filename = 'test_parquet_converters_to_string.parquet'
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
+
+        kikimr.control_plane.wait_bootstrap(1)
+        storage_connection_name = unique_prefix + "hcpp"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f'''
+            $result = SELECT
+                `fruit`, `ts`
+            FROM
+                `{storage_connection_name}`.`/{filename}`
+            WITH (FORMAT="parquet",
+                SCHEMA=(
+                `fruit` Utf8 NOT NULL,
+                `ts` String
+                ));
+
+            SELECT Ensure(
+                0,
+                `fruit` = "apple" and `ts` = "2024-04-02T12:01:00.000000Z",
+                "invalid row: " || Unwrap(`fruit`) || " " || Unwrap(CAST(`ts` as String))
+            ) AS value FROM $result;
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        assert len(data.result.result_set.rows) == 1, "invalid count rows"
+
+        # timestamp[us] -> String
+
+        # 2024-04-02T12:01:00.000000Z
+        data = [['apple'], [1712059260000000]]
+
+        # Define the schema for the data
+        schema = pa.schema([
+            ('fruit', pa.string()),
+            ('ts', pa.timestamp('us'))
+        ])
+
+        table = pa.Table.from_arrays(data, schema=schema)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        assert len(data.result.result_set.rows) == 1, "invalid count rows"
+
+        # timestamp[s] -> String
+
+        # 2024-04-02T12:01:00.000000Z
+        data = [['apple'], [1712059260]]
+
+        # Define the schema for the data
+        schema = pa.schema([
+            ('fruit', pa.string()),
+            ('ts', pa.timestamp('s'))
+        ])
+
+        table = pa.Table.from_arrays(data, schema=schema)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        assert len(data.result.result_set.rows) == 1, "invalid count rows"
+
+        # timestamp[ns] -> String
+
+        # 2024-04-02T12:01:00.000000Z
+        data = [['apple'], [1712059260000000000]]
+
+        # Define the schema for the data
+        schema = pa.schema([
+            ('fruit', pa.string()),
+            ('ts', pa.timestamp('ns'))
+        ])
+
+        table = pa.Table.from_arrays(data, schema=schema)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        assert len(data.result.result_set.rows) == 1, "invalid count rows"
+
+        # date64 -> String
+
+        # 2024-04-02T00:00:00.000000Z
+        data = [['apple'], [1712016000000]]
+
+        # Define the schema for the data
+        schema = pa.schema([
+            ('fruit', pa.string()),
+            ('ts', pa.date64())
+        ])
+
+        table = pa.Table.from_arrays(data, schema=schema)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
+
+        sql = f'''
+            $result = SELECT
+                `fruit`, `ts`
+            FROM
+                `{storage_connection_name}`.`/{filename}`
+            WITH (FORMAT="parquet",
+                SCHEMA=(
+                `fruit` Utf8 NOT NULL,
+                `ts` String
+                ));
+            SELECT Ensure(
+                0,
+                `fruit` = "apple" and `ts` = "2024-04-02T00:00:00.000000Z",
+                "invalid row: " || Unwrap(`fruit`) || " " || Unwrap(CAST(`ts` as String))
+            ) AS value FROM $result;
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        assert len(data.result.result_set.rows) == 1, "invalid count rows"
+
+        # date32 -> String
+
+        # 2024-04-02T00:00:00.000000Z
+        data = [['apple'], [19815]]
+
+        # Define the schema for the data
+        schema = pa.schema([
+            ('fruit', pa.string()),
+            ('ts', pa.date32())
+        ])
+
+        table = pa.Table.from_arrays(data, schema=schema)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        assert len(data.result.result_set.rows) == 1, "invalid count rows"
+
+    @yq_all
+    def test_parquet_converters_to_utf8(self, kikimr, s3, client, unique_prefix):
+        # timestamp[ms] -> Utf8
+        # 2024-04-02T12:01:00.000000Z
+        data = [['apple'], [1712059260000]]
+
+        # Define the schema for the data
+        schema = pa.schema([
+            ('fruit', pa.string()),
+            ('ts', pa.timestamp('ms'))
+        ])
+
+        table = pa.Table.from_arrays(data, schema=schema)
+        filename = 'test_parquet_converters_to_utf8.parquet'
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
+
+        kikimr.control_plane.wait_bootstrap(1)
+        storage_connection_name = unique_prefix + "hcpp"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f'''
+            $result = SELECT
+                `fruit`, `ts`
+            FROM
+                `{storage_connection_name}`.`/{filename}`
+            WITH (FORMAT="parquet",
+                SCHEMA=(
+                `fruit` Utf8 NOT NULL,
+                `ts` Utf8
+                ));
+
+            SELECT Ensure(
+                0,
+                `fruit` = "apple" and `ts` = "2024-04-02T12:01:00.000000Z",
+                "invalid row: " || Unwrap(`fruit`) || " " || Unwrap(CAST(`ts` as String))
+            ) AS value FROM $result;
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        assert len(data.result.result_set.rows) == 1, "invalid count rows"
+
+        # timestamp[us] -> Utf8
+
+        # 2024-04-02T12:01:00.000000Z
+        data = [['apple'], [1712059260000000]]
+
+        # Define the schema for the data
+        schema = pa.schema([
+            ('fruit', pa.string()),
+            ('ts', pa.timestamp('us'))
+        ])
+
+        table = pa.Table.from_arrays(data, schema=schema)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        assert len(data.result.result_set.rows) == 1, "invalid count rows"
+
+        # timestamp[s] -> Utf8
+
+        # 2024-04-02T12:01:00.000000Z
+        data = [['apple'], [1712059260]]
+
+        # Define the schema for the data
+        schema = pa.schema([
+            ('fruit', pa.string()),
+            ('ts', pa.timestamp('s'))
+        ])
+
+        table = pa.Table.from_arrays(data, schema=schema)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        assert len(data.result.result_set.rows) == 1, "invalid count rows"
+
+        # timestamp[ns] -> Utf8
+
+        # 2024-04-02T12:01:00.000000Z
+        data = [['apple'], [1712059260000000000]]
+
+        # Define the schema for the data
+        schema = pa.schema([
+            ('fruit', pa.string()),
+            ('ts', pa.timestamp('ns'))
+        ])
+
+        table = pa.Table.from_arrays(data, schema=schema)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        assert len(data.result.result_set.rows) == 1, "invalid count rows"
+
+        # date64 -> Utf8
+
+        # 2024-04-02T00:00:00.000000Z
+        data = [['apple'], [1712016000000]]
+
+        # Define the schema for the data
+        schema = pa.schema([
+            ('fruit', pa.string()),
+            ('ts', pa.date64())
+        ])
+
+        table = pa.Table.from_arrays(data, schema=schema)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
+
+        sql = f'''
+            $result = SELECT
+                `fruit`, `ts`
+            FROM
+                `{storage_connection_name}`.`/{filename}`
+            WITH (FORMAT="parquet",
+                SCHEMA=(
+                `fruit` Utf8 NOT NULL,
+                `ts` Utf8
+                ));
+            SELECT Ensure(
+                0,
+                `fruit` = "apple" and `ts` = "2024-04-02T00:00:00.000000Z",
+                "invalid row: " || Unwrap(`fruit`) || " " || Unwrap(CAST(`ts` as String))
+            ) AS value FROM $result;
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        assert len(data.result.result_set.rows) == 1, "invalid count rows"
+
+        # date32 -> Utf8
+
+        # 2024-04-02T00:00:00.000000Z
+        data = [['apple'], [19815]]
+
+        # Define the schema for the data
+        schema = pa.schema([
+            ('fruit', pa.string()),
+            ('ts', pa.date32())
+        ])
+
+        table = pa.Table.from_arrays(data, schema=schema)
+        pq.write_table(table, yatest_common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest_common.work_path())
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)

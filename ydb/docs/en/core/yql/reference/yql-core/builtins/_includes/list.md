@@ -599,7 +599,7 @@ FROM my_table;
 
 Select top values from the list. `ListTopSort*` additionally sorts the returned values. The smallest values are selected by default. Thus, the functions without a suffix are the aliases to `*Asc` functions, while `*Desc` functions return the largest values.
 
-ListTopSort is more effective that consecutive ListTop and ListSort (because ListTop can partially sort the list in order to find needed values), however ListTop is more effective than ListTopSort when the order of the result is not important.
+`ListTopSort` is more effective than consecutive `ListTop` and `ListSort` because `ListTop` can partially sort the list to find needed values. However, `ListTop` is more effective than `ListTopSort` when the result order is unimportant.
 
 Arguments:
 

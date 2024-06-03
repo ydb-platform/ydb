@@ -175,7 +175,14 @@ void TGranuleMeta::ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOpti
     NStorageOptimizer::IOptimizerPlannerConstructor::TBuildContext context(PathId, storages, pkSchema);
     OptimizerPlanner = constructor->BuildPlanner(context).DetachResult();
     AFL_VERIFY(!!OptimizerPlanner);
-    OptimizerPlanner->ModifyPortions(Portions, {});
+    THashMap<ui64, std::shared_ptr<TPortionInfo>> portions;
+    for (auto&& i : Portions) {
+        if (i.second->HasRemoveSnapshot()) {
+            continue;
+        }
+        portions.emplace(i.first, i.second);
+    }
+    OptimizerPlanner->ModifyPortions(portions, {});
 }
 
 } // namespace NKikimr::NOlap

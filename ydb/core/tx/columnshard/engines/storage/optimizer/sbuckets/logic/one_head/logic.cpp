@@ -52,7 +52,9 @@ std::vector<std::shared_ptr<NKikimr::NOlap::TPortionInfo>> TOneHeadLogic::GetPor
             }
         }
     }
-    *stopPoints = splitKeys;
+    if (stopPoints) {
+        *stopPoints = splitKeys;
+    }
     return result;
 }
 

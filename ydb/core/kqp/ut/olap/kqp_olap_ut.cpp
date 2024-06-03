@@ -2653,7 +2653,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             TString result = StreamResultToYson(it);
             Cout << result << Endl;
-            CompareYson(result, R"([[230000u;]])");
+            CompareYson(result, R"([[120000u;]])");
         }
 
     }

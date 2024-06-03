@@ -103,7 +103,8 @@ private:
     void SeenBlob(const TLogoBlobID& id);
 
     inline NBoot::TResult& Result() const noexcept { return *Result_; }
-    inline NBoot::TBack& State() const noexcept {return *State_; }
+    inline NBoot::TBack& State() const noexcept { return *State_; }
+
 public:
     TExecutorBootLogic(IOps*, const TActorId&, TTabletStorageInfo *info, ui64 maxBytesInFly);
     ~TExecutorBootLogic();

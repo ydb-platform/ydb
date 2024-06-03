@@ -6,7 +6,6 @@
 #include <util/generic/set.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/tablet_flat/flat_executor.pb.h>
-#include <ranges>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {

@@ -177,6 +177,7 @@ public:
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
             request.mutable_txcontrol()->mutable_begin_tx()->mutable_serializable_read_write();
+            request.mutable_txcontrol()->set_commit_tx(true);
             request.SetKeepSession(false);
         } else if (Action == "explain-query") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
@@ -190,6 +191,7 @@ public:
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
             request.mutable_txcontrol()->mutable_begin_tx()->mutable_serializable_read_write();
+            request.mutable_txcontrol()->set_commit_tx(true);
             request.SetKeepSession(false);
         } else if (Action == "explain" || Action == "explain-ast" || Action == "explain-data") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
@@ -387,12 +389,11 @@ private:
 
     void Handle(NKikimrKqp::TEvQueryResponse& record) {
         if (Event) {
-            TStringBuilder out;
             NJson::TJsonValue jsonResponse;
             if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
-                MakeOkReply(out, jsonResponse, record);
+                MakeOkReply(jsonResponse, record);
             } else {
-                MakeErrorReply(out, jsonResponse, record);
+                MakeErrorReply(jsonResponse, record);
             }
 
             if (Schema == ESchemaType::Classic && Stats.empty() && (Action.empty() || Action == "execute")) {
@@ -404,9 +405,8 @@ private:
             config.ValidateUtf8 = false;
             config.WriteNanAsString = true;
             NJson::WriteJson(&stream, &jsonResponse, config);
-            out << stream.Str();
 
-            ReplyAndPassAway(out);
+            ReplyAndPassAway(stream.Str());
         } else {
             TEvViewer::TEvViewerResponse* response = new TEvViewer::TEvViewerResponse();
             response->Record.MutableQueryResponse()->CopyFrom(record);
@@ -469,8 +469,7 @@ private:
     }
 
 private:
-    void MakeErrorReply(TStringBuilder& out, NJson::TJsonValue& jsonResponse, NKikimrKqp::TEvQueryResponse& record) {
-        out << Viewer->GetHTTPBADREQUEST(Event->Get(), "application/json");
+    void MakeErrorReply(NJson::TJsonValue& jsonResponse, NKikimrKqp::TEvQueryResponse& record) {
         NJson::TJsonValue& jsonIssues = jsonResponse["issues"];
 
         // find first deepest error
@@ -491,7 +490,7 @@ private:
         }
     }
 
-    void MakeOkReply(TStringBuilder& out, NJson::TJsonValue& jsonResponse, NKikimrKqp::TEvQueryResponse& record) {
+    void MakeOkReply(NJson::TJsonValue& jsonResponse, NKikimrKqp::TEvQueryResponse& record) {
         const auto& response = record.GetResponse();
 
         if (response.ResultsSize() > 0 || response.YdbResultsSize() > 0) {
@@ -510,7 +509,7 @@ private:
                 Ydb::Issue::IssueMessage* issue = record.MutableResponse()->AddQueryIssues();
                 issue->set_message(Sprintf("Convert error: %s", ex.what()));
                 issue->set_severity(NYql::TSeverityIds::S_ERROR);
-                MakeErrorReply(out, jsonResponse, record);
+                MakeErrorReply(jsonResponse, record);
                 return;
             }
         }

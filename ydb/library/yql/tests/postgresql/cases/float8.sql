@@ -176,6 +176,17 @@ SELECT '9223372036854773760'::float8::int8;
 SELECT '9223372036854775807'::float8::int8;
 SELECT '-9223372036854775808.5'::float8::int8;
 SELECT '-9223372036854780000'::float8::int8;
+-- test exact cases for trigonometric functions in degrees
+SELECT x,
+       sind(x),
+       sind(x) IN (-1,-0.5,0,0.5,1) AS sind_exact
+FROM (VALUES (0), (30), (90), (150), (180),
+      (210), (270), (330), (360)) AS t(x);
+SELECT x,
+       cosd(x),
+       cosd(x) IN (-1,-0.5,0,0.5,1) AS cosd_exact
+FROM (VALUES (0), (60), (90), (120), (180),
+      (240), (270), (300), (360)) AS t(x);
 SELECT x,
        tand(x),
        tand(x) IN ('-Infinity'::float8,-1,0,
@@ -185,3 +196,13 @@ SELECT x,
                    1,'Infinity'::float8) AS cotd_exact
 FROM (VALUES (0), (45), (90), (135), (180),
       (225), (270), (315), (360)) AS t(x);
+SELECT x,
+       atand(x),
+       atand(x) IN (-90,-45,0,45,90) AS atand_exact
+FROM (VALUES ('-Infinity'::float8), (-1), (0), (1),
+      ('Infinity'::float8)) AS t(x);
+SELECT x, y,
+       atan2d(y, x),
+       atan2d(y, x) IN (-90,0,90,180) AS atan2d_exact
+FROM (SELECT 10*cosd(a), 10*sind(a)
+      FROM generate_series(0, 360, 90) AS t(a)) AS t(x,y);

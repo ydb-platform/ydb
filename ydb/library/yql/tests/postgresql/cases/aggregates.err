@@ -1,13 +1,13 @@
 Registering pre-existing tables
+	onek
+	int4_tbl
 	INT4_TBL
-	student
+	tenk1
 	VARCHAR_TBL
 	aggtest
-	int4_tbl
+	student
 	varchar_tbl
 	int8_tbl
-	onek
-	tenk1
 <sql-statement>
 --
 -- AGGREGATES
@@ -265,20 +265,12 @@ FROM regr_test WHERE x IN (10,20,30,80);
 </sql-statement>
 -stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
     	SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
 	^
-        -stdin-:<main>: Error: At function: PgSetItem
-        
-            -stdin-:<main>:1:1: Error: At function: PgWhere
-            	SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
+        -stdin-:<main>:1:1: Error: Duplicated member: sum
+        	SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
 	^
-                -stdin-:<main>:2:24: Error: At function: PgIn
-                	FROM regr_test WHERE x IN (10,20,30,80);
-	                       ^
-                    -stdin-:<main>:2:24: Error: Mismatch of types in IN expressions: float8 is not equal to int4
-                    	FROM regr_test WHERE x IN (10,20,30,80);
-	                       ^
 <sql-statement>
 SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
 FROM regr_test;
@@ -303,40 +295,24 @@ FROM regr_test WHERE x IN (10,20,30);
 </sql-statement>
 -stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
     	SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
 	^
-        -stdin-:<main>: Error: At function: PgSetItem
-        
-            -stdin-:<main>:1:1: Error: At function: PgWhere
-            	SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
+        -stdin-:<main>:1:1: Error: Duplicated member: sum
+        	SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
 	^
-                -stdin-:<main>:2:24: Error: At function: PgIn
-                	FROM regr_test WHERE x IN (10,20,30);
-	                       ^
-                    -stdin-:<main>:2:24: Error: Mismatch of types in IN expressions: float8 is not equal to int4
-                    	FROM regr_test WHERE x IN (10,20,30);
-	                       ^
 <sql-statement>
 SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
 FROM regr_test WHERE x IN (80,100);
 </sql-statement>
 -stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
     	SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
 	^
-        -stdin-:<main>: Error: At function: PgSetItem
-        
-            -stdin-:<main>:1:1: Error: At function: PgWhere
-            	SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
+        -stdin-:<main>:1:1: Error: Duplicated member: sum
+        	SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
 	^
-                -stdin-:<main>:2:24: Error: At function: PgIn
-                	FROM regr_test WHERE x IN (80,100);
-	                       ^
-                    -stdin-:<main>:2:24: Error: Mismatch of types in IN expressions: float8 is not equal to int4
-                    	FROM regr_test WHERE x IN (80,100);
-	                       ^
 <sql-statement>
 SELECT float8_combine('{3,60,200}'::float8[], '{0,0,0}'::float8[]);
 </sql-statement>
@@ -2876,7 +2852,7 @@ ALTER TABLE tenk1 set (parallel_workers = 4);
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	-- force use of parallelism
 	^
 <sql-statement>
@@ -3054,110 +3030,373 @@ select v||'a', case v||'a' when 'aa' then 1 else 0 end, count(*)
   from unnest(array['a','b']) u(v)
  group by v||'a' order by 1;
 </sql-statement>
-VERIFY failed (2024-03-25T09:29:02.920375Z): Value is not boxed
-  ydb/library/yql/public/udf/udf_value_inl.h:379
-  AsBoxed(): requirement IsBoxed() failed
-NPrivate::InternalPanicImpl(int, char const*, char const*, int, int, int, TBasicStringBuf<char, std::__y1::char_traits<char> >, char const*, unsigned long)+600 (0x99989F8)
-NPrivate::Panic(NPrivate::TStaticBuf const&, int, char const*, char const*, char const*, ...)+285 (0x998E95D)
-NYql::TPgResolvedCall<false>::DoCalculate(NKikimr::NMiniKQL::TComputationContext&) const+1131 (0xEBD844B)
-NKikimr::NMiniKQL::TMutableComputationNode<NYql::TPgResolvedCall<false> >::GetValue(NKikimr::NMiniKQL::TComputationContext&) const+31 (0xEBD7ADF)
-??+0 (0x7F08D454ACAB)
-??+0 (0x7F08D454AE14)
-??+0 (0x1179EABF)
-??+0 (0x1179E31F)
-??+0 (0x118ED0EC)
-??+0 (0x118ECC74)
-??+0 (0x7F08D4549F3F)
-??+0 (0x7F08D45492AD)
-??+0 (0x11829E58)
-??+0 (0x117E4F89)
-??+0 (0x117E49A4)
-??+0 (0x7F08D454806C)
-??+0 (0x111C0AA8)
-??+0 (0x118D0F1F)
-??+0 (0x118D00CF)
-??+0 (0xF400BD7)
-NYql::TComputationGraphProxy::GetValue()+23 (0xF3E0137)
-NYql::NFile::TYtFileGateway::ExecuteResult(NYql::NFile::TSession&, NYson::TYsonWriter&, NYql::NNodes::TExprBase, NYql::TExprContext&, NYql::IYtGateway::TResOrPullOptions&&, TVector<TBasicString<char, std::__y1::char_traits<char> >, std::__y1::allocator<TBasicString<char, std::__y1::char_traits<char> > > > const&) const+1930 (0xF3B390A)
-NYql::NFile::TYtFileGateway::ResOrPull(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, NYql::TExprContext&, NYql::IYtGateway::TResOrPullOptions&&)+881 (0xF39E1E1)
-??+0 (0xE573A25)
-??+0 (0xE57705A)
-NYql::TExecTransformerBase::CallbackTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+1098 (0xE57B2DA)
-NYql::TAsyncCallbackTransformer<NYql::TExecTransformerBase>::DoTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+37 (0xE576715)
-NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+152 (0xB0A99A8)
-??+0 (0xC6EE740)
-??+0 (0xC6E34EB)
-NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+152 (0xB0A99A8)
-??+0 (0xC7DA35F)
-??+0 (0xC7DEBD0)
-??+0 (0xC7D9E82)
-??+0 (0xC7DEA6C)
-??+0 (0xC7D9E82)
-??+0 (0xC7D6984)
-NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+152 (0xB0A99A8)
-??+0 (0xB0AA175)
-NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+152 (0xB0A99A8)
-NYql::AsyncTransformStepImpl(NYql::IGraphTransformer&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, bool, bool, TBasicStringBuf<char, std::__y1::char_traits<char> > const&)+290 (0xB0A8412)
-NYql::AsyncTransform(NYql::IGraphTransformer&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, bool)+66 (0xB0A8D72)
-NYql::TProgram::AsyncTransformWithFallback(bool)+81 (0xBFEFC11)
-??+0 (0xC001380)
-NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)+3119 (0xBFEDBDF)
-??+0 (0xBFEACBA)
-NYql::TProgram::Run(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)+129 (0xBFECF71)
-Main(int, char**)+6488 (0x9876608)
-main+343 (0x9878FD7)
-__libc_start_main+243 (0x7F08D4330083)
-??+0 (0x980A029)
-__GI_raise at ../sysdeps/unix/sysv/linux/raise.c:48:0
-__GI_abort at /build/glibc-wuryBv/glibc-2.31/stdlib/abort.c:79:0
-NPrivate::InternalPanicImpl(int, char const*, char const*, int, int, int, TBasicStringBuf<char, std::__y1::char_traits<char> >, char const*, unsigned long) at /-S/util/system/yassert.cpp:90:0
-NPrivate::Panic(NPrivate::TStaticBuf const&, int, char const*, char const*, char const*, ...) at /-S/util/system/yassert.cpp:55:0
-NYql::TPgResolvedCall<false>::DoCalculate(NKikimr::NMiniKQL::TComputationContext&) const at /-S/ydb/library/yql/parser/pg_wrapper/comp_factory.cpp:1145:0
-NKikimr::NMiniKQL::TMutableComputationNode<NYql::TPgResolvedCall<false> >::GetValue(NKikimr::NMiniKQL::TComputationContext&) const at /-S/ydb/library/yql/minikql/computation/mkql_computation_node_impl.h:214:0
-??? at ???:0:0
-??? at ???:0:0
-NKikimr::NMiniKQL::(anonymous namespace)::TMapWrapper<NKikimr::NMiniKQL::(anonymous namespace)::THashedMultiMapAccumulator, false>::DoCalculate(NKikimr::NMiniKQL::TComputationContext&) const at /-B/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_todict.cpp:1356:0
-NKikimr::NMiniKQL::TMutableComputationNode<NKikimr::NMiniKQL::(anonymous namespace)::TMapWrapper<NKikimr::NMiniKQL::(anonymous namespace)::THashedMultiMapAccumulator, false> >::GetValue(NKikimr::NMiniKQL::TComputationContext&) const at /-S/ydb/library/yql/minikql/computation/mkql_computation_node_impl.h:214:0
-NKikimr::NMiniKQL::(anonymous namespace)::TDictHalfsWrapper<false>::DoCalculate(NKikimr::NMiniKQL::TComputationContext&) const at /-B/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_dictitems.cpp:265:0
-NKikimr::NMiniKQL::TMutableComputationNode<NKikimr::NMiniKQL::(anonymous namespace)::TDictHalfsWrapper<false> >::GetValue(NKikimr::NMiniKQL::TComputationContext&) const at /-S/ydb/library/yql/minikql/computation/mkql_computation_node_impl.h:217:0
-??? at ???:0:0
-??? at ???:0:0
-NKikimr::NMiniKQL::TCodegeneratorRootNode<NKikimr::NMiniKQL::TMutableCodegeneratorNode<NKikimr::NMiniKQL::(anonymous namespace)::TCollectFlowWrapper>, true>::GetValue(NKikimr::NMiniKQL::TComputationContext&) const at /-B/ydb/library/yql/minikql/comp_nodes/llvm14/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h:845:0
-NKikimr::NMiniKQL::(anonymous namespace)::TWithContextWrapper::DoCalculate(NKikimr::NMiniKQL::TComputationContext&) const at /-B/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_withcontext.cpp:33:0
-NKikimr::NMiniKQL::TMutableComputationNode<NKikimr::NMiniKQL::(anonymous namespace)::TWithContextWrapper>::GetValue(NKikimr::NMiniKQL::TComputationContext&) const at /-S/ydb/library/yql/minikql/computation/mkql_computation_node_impl.h:217:0
-??? at ???:0:0
-NKikimr::NMiniKQL::TCodegeneratorRootNode<NKikimr::NMiniKQL::TMutableCodegeneratorNode<NKikimr::NMiniKQL::(anonymous namespace)::TListMapWrapper>, true>::GetValue(NKikimr::NMiniKQL::TComputationContext&) const at /-B/ydb/library/yql/minikql/comp_nodes/llvm14/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h:845:0
-NKikimr::NMiniKQL::(anonymous namespace)::TAlgoBaseWrapper<NKikimr::NMiniKQL::(anonymous namespace)::TAlgoWrapper, true>::DoCalculate(NKikimr::NMiniKQL::TComputationContext&) const at /-B/ydb/library/yql/minikql/comp_nodes/llvm14/mkql_sort.cpp:340:0
-NKikimr::NMiniKQL::TMutableComputationNode<NKikimr::NMiniKQL::(anonymous namespace)::TAlgoBaseWrapper<NKikimr::NMiniKQL::(anonymous namespace)::TAlgoWrapper, true> >::GetValue(NKikimr::NMiniKQL::TComputationContext&) const at /-S/ydb/library/yql/minikql/computation/mkql_computation_node_impl.h:214:0
-NKikimr::NMiniKQL::(anonymous namespace)::TComputationGraph::GetValue() at /-B/ydb/library/yql/minikql/computation/llvm14/mkql_computation_node_graph.cpp:623:0
-NYql::TComputationGraphProxy::GetValue() at /-S/ydb/library/yql/providers/yt/lib/lambda_builder/lambda_builder.cpp:116:0
-NYql::NFile::TYtFileGateway::ExecuteResult(NYql::NFile::TSession&, NYson::TYsonWriter&, NYql::NNodes::TExprBase, NYql::TExprContext&, NYql::IYtGateway::TResOrPullOptions&&, TVector<TBasicString<char, std::__y1::char_traits<char> >, std::__y1::allocator<TBasicString<char, std::__y1::char_traits<char> > > > const&) const at /-S/ydb/library/yql/providers/yt/gateway/file/yql_yt_file.cpp:1201:0
-NYql::NFile::TYtFileGateway::ResOrPull(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, NYql::TExprContext&, NYql::IYtGateway::TResOrPullOptions&&) at /-S/ydb/library/yql/providers/yt/gateway/file/yql_yt_file.cpp:644:0
-NYql::(anonymous namespace)::TYtDataSourceExecTransformer::HandleResOrPull(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, NYql::TExprContext&) at /-S/ydb/library/yql/providers/yt/provider/yql_yt_datasource_exec.cpp:181:0
-std::__y1::__function::__func<std::__y1::function<std::__y1::pair<NYql::IGraphTransformer::TStatus, NThreading::TFuture<std::__y1::function<NYql::IGraphTransformer::TStatus (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> > > (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> NYql::TExecTransformerBase::Hndl<NYql::(anonymous namespace)::TYtDataSourceExecTransformer>(std::__y1::pair<NYql::IGraphTransformer::TStatus, NThreading::TFuture<std::__y1::function<NYql::IGraphTransformer::TStatus (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> > > (NYql::(anonymous namespace)::TYtDataSourceExecTransformer::*)(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, NYql::TExprContext&))::'lambda'(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&), std::__y1::allocator<std::__y1::function<std::__y1::pair<NYql::IGraphTransformer::TStatus, NThreading::TFuture<std::__y1::function<NYql::IGraphTransformer::TStatus (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> > > (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> NYql::TExecTransformerBase::Hndl<NYql::(anonymous namespace)::TYtDataSourceExecTransformer>(std::__y1::pair<NYql::IGraphTransformer::TStatus, NThreading::TFuture<std::__y1::function<NYql::IGraphTransformer::TStatus (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> > > (NYql::(anonymous namespace)::TYtDataSourceExecTransformer::*)(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, NYql::TExprContext&))::'lambda'(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)>, std::__y1::pair<NYql::IGraphTransformer::TStatus, NThreading::TFuture<std::__y1::function<NYql::IGraphTransformer::TStatus (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> > > (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)>::operator()(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/contrib/libs/cxxsupp/libcxx/include/__functional/function.h:363:0
-NYql::TExecTransformerBase::CallbackTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/ydb/library/yql/providers/common/transform/yql_exec.cpp:27:0
-NYql::TAsyncCallbackTransformer<NYql::TExecTransformerBase>::DoTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/ydb/library/yql/core/yql_graph_transformer.h:332:0
-NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/ydb/library/yql/core/yql_graph_transformer.h:160:0
-NYql::IGraphTransformer::TStatus NYql::(anonymous namespace)::TResultCallableExecutionTransformer::HandleFillOrPull<NYql::NNodes::NGenerated::TResultStub<NYql::NNodes::TExprBase, NYql::NNodes::NGenerated::TResOrPullBaseStub<NYql::NNodes::TExprBase, NYql::NNodes::TCallable, NYql::NNodes::TCoAtom, NYql::NNodes::NGenerated::TCoNameValueTupleListStub<NYql::NNodes::TExprBase, NYql::NNodes::TListBase, NYql::NNodes::NGenerated::TCoNameValueTupleStub<NYql::NNodes::TExprBase, NYql::NNodes::TCoAtom> > > > >(NYql::NNodes::TExprBase, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, NYql::IDataProvider&) at /-S/ydb/library/yql/providers/result/provider/yql_result_provider.cpp:609:0
-NYql::(anonymous namespace)::TResultCallableExecutionTransformer::DoTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/ydb/library/yql/providers/result/provider/yql_result_provider.cpp:248:0
-NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/ydb/library/yql/core/yql_graph_transformer.h:160:0
-NYql::(anonymous namespace)::TExecutionTransformer::ExecuteNode(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, unsigned int) at /-S/ydb/library/yql/core/yql_execution.cpp:274:0
-NYql::(anonymous namespace)::TExecutionTransformer::ExecuteChildren(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, unsigned int) at /-S/ydb/library/yql/core/yql_execution.cpp:340:0
-NYql::(anonymous namespace)::TExecutionTransformer::ExecuteNode(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, unsigned int) at /-S/ydb/library/yql/core/yql_execution.cpp:285:0
-NYql::(anonymous namespace)::TExecutionTransformer::ExecuteChildren(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, unsigned int) at /-S/ydb/library/yql/core/yql_execution.cpp:321:0
-NYql::(anonymous namespace)::TExecutionTransformer::ExecuteNode(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, unsigned int) at /-S/ydb/library/yql/core/yql_execution.cpp:285:0
-NYql::(anonymous namespace)::TExecutionTransformer::DoTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/ydb/library/yql/core/yql_execution.cpp:77:0
-NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/ydb/library/yql/core/yql_graph_transformer.h:160:0
-NYql::(anonymous namespace)::TCompositeGraphTransformer::DoTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/ydb/library/yql/core/yql_graph_transformer.cpp:47:0
-NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) at /-S/ydb/library/yql/core/yql_graph_transformer.h:160:0
-NYql::AsyncTransformStepImpl(NYql::IGraphTransformer&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, bool, bool, TBasicStringBuf<char, std::__y1::char_traits<char> > const&) at /-S/ydb/library/yql/core/yql_graph_transformer.cpp:312:0
-NYql::AsyncTransform(NYql::IGraphTransformer&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, bool) at /-S/ydb/library/yql/core/yql_graph_transformer.cpp:364:0
-NYql::TProgram::AsyncTransformWithFallback(bool) at /-S/ydb/library/yql/core/facade/yql_facade.cpp:1153:0
-NThreading::TFuture<NThreading::NImpl::TFutureType<NThreading::NImpl::TFutureCallResult<NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0, void>::TType>::TType> NThreading::TFuture<void>::Apply<NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0>(NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)::$_0&&) const::'lambda'(NThreading::TFuture<void> const&)::operator()(NThreading::TFuture<void> const&) at /-S/library/cpp/threading/future/core/future-inl.h:726:0
-NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool) at /-S/ydb/library/yql/core/facade/yql_facade.cpp:1018:0
-NYql::IGraphTransformer::TStatus NYql::(anonymous namespace)::SyncExecution<TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool, TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*&, IOutputStream*&, IOutputStream*&, bool&>(NYql::TProgram*, NThreading::TFuture<NYql::IGraphTransformer::TStatus> (NYql::TProgram::*)(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool), TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*&, IOutputStream*&, IOutputStream*&, bool&) at /-S/ydb/library/yql/core/facade/yql_facade.cpp:69:0
-NYql::TProgram::Run(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool) at /-S/ydb/library/yql/core/facade/yql_facade.cpp:953:0
-Main(int, char**) at /-S/ydb/library/yql/tools/pgrun/pgrun.cpp:1301:0
-main at /-S/ydb/library/yql/tools/pgrun/pgrun.cpp:1341:0
-__libc_start_main at ../csu/libc-start.c:308:0
-??? at ???:0:0
+<sql-statement>
+select v||'a', case when v||'a' = 'aa' then 1 else 0 end, count(*)
+  from unnest(array['a','b']) u(v)
+ group by v||'a' order by 1;
+</sql-statement>
+<sql-statement>
+-- Make sure that generation of HashAggregate for uniqification purposes
+-- does not lead to array overflow due to unexpected duplicate hash keys
+-- see CAFeeJoKKu0u+A_A9R9316djW-YW3-+Gtgvy3ju655qRHR3jtdA@mail.gmail.com
+set enable_memoize to off;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_memoize
+    	-- Make sure that generation of HashAggregate for uniqification purposes
+	^
+<sql-statement>
+explain (costs off)
+  select 1 from tenk1
+   where (hundred, thousand) in (select twothousand, twothousand from onek);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+reset enable_memoize;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
+    	reset enable_memoize;
+	^
+<sql-statement>
+--
+-- Hash Aggregation Spill tests
+--
+set enable_sort=false;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_sort
+    	--
+	^
+<sql-statement>
+set work_mem='64kB';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: work_mem
+    	set work_mem='64kB';
+	^
+<sql-statement>
+select unique1, count(*), sum(twothousand) from tenk1
+group by unique1
+having sum(fivethous) > 4975
+order by sum(twothousand);
+</sql-statement>
+<sql-statement>
+set work_mem to default;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 1
+    	set work_mem to default;
+	^
+<sql-statement>
+set enable_sort to default;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 1
+    	set enable_sort to default;
+	^
+<sql-statement>
+--
+-- Compare results between plans using sorting and plans using hash
+-- aggregation. Force spilling in both cases by setting work_mem low.
+--
+set work_mem='64kB';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: work_mem
+    	--
+	^
+<sql-statement>
+create table agg_data_2k as
+select g from generate_series(0, 1999) g;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	create table agg_data_2k as
+	^
+<sql-statement>
+analyze agg_data_2k;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 275
+    	analyze agg_data_2k;
+	^
+<sql-statement>
+create table agg_data_20k as
+select g from generate_series(0, 19999) g;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	create table agg_data_20k as
+	^
+<sql-statement>
+analyze agg_data_20k;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 275
+    	analyze agg_data_20k;
+	^
+<sql-statement>
+-- Produce results with sorting.
+set enable_hashagg = false;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_hashagg
+    	-- Produce results with sorting.
+	^
+<sql-statement>
+set jit_above_cost = 0;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: jit_above_cost
+    	set jit_above_cost = 0;
+	^
+<sql-statement>
+explain (costs off)
+select g%10000 as c1, sum(g::numeric) as c2, count(*) as c3
+  from agg_data_20k group by g%10000;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+create table agg_group_1 as
+select g%10000 as c1, sum(g::numeric) as c2, count(*) as c3
+  from agg_data_20k group by g%10000;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	create table agg_group_1 as
+	^
+<sql-statement>
+create table agg_group_2 as
+select * from
+  (values (100), (300), (500)) as r(a),
+  lateral (
+    select (g/2)::numeric as c1,
+           array_agg(g::numeric) as c2,
+	   count(*) as c3
+    from agg_data_2k
+    where g < r.a
+    group by g/2) as s;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	create table agg_group_2 as
+	^
+<sql-statement>
+set jit_above_cost to default;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 1
+    	set jit_above_cost to default;
+	^
+<sql-statement>
+create table agg_group_3 as
+select (g/2)::numeric as c1, sum(7::int4) as c2, count(*) as c3
+  from agg_data_2k group by g/2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	create table agg_group_3 as
+	^
+<sql-statement>
+create table agg_group_4 as
+select (g/2)::numeric as c1, array_agg(g::numeric) as c2, count(*) as c3
+  from agg_data_2k group by g/2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	create table agg_group_4 as
+	^
+<sql-statement>
+-- Produce results with hash aggregation
+set enable_hashagg = true;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_hashagg
+    	-- Produce results with hash aggregation
+	^
+<sql-statement>
+set enable_sort = false;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_sort
+    	set enable_sort = false;
+	^
+<sql-statement>
+set jit_above_cost = 0;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: jit_above_cost
+    	set jit_above_cost = 0;
+	^
+<sql-statement>
+explain (costs off)
+select g%10000 as c1, sum(g::numeric) as c2, count(*) as c3
+  from agg_data_20k group by g%10000;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+create table agg_hash_1 as
+select g%10000 as c1, sum(g::numeric) as c2, count(*) as c3
+  from agg_data_20k group by g%10000;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	create table agg_hash_1 as
+	^
+<sql-statement>
+create table agg_hash_2 as
+select * from
+  (values (100), (300), (500)) as r(a),
+  lateral (
+    select (g/2)::numeric as c1,
+           array_agg(g::numeric) as c2,
+	   count(*) as c3
+    from agg_data_2k
+    where g < r.a
+    group by g/2) as s;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	create table agg_hash_2 as
+	^
+<sql-statement>
+set jit_above_cost to default;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 1
+    	set jit_above_cost to default;
+	^
+<sql-statement>
+create table agg_hash_3 as
+select (g/2)::numeric as c1, sum(7::int4) as c2, count(*) as c3
+  from agg_data_2k group by g/2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	create table agg_hash_3 as
+	^
+<sql-statement>
+create table agg_hash_4 as
+select (g/2)::numeric as c1, array_agg(g::numeric) as c2, count(*) as c3
+  from agg_data_2k group by g/2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	create table agg_hash_4 as
+	^
+<sql-statement>
+set enable_sort = true;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_sort
+    	set enable_sort = true;
+	^
+<sql-statement>
+set work_mem to default;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 1
+    	set work_mem to default;
+	^
+<sql-statement>
+-- Compare group aggregation results to hash aggregation results
+(select * from agg_hash_1 except select * from agg_group_1)
+  union all
+(select * from agg_group_1 except select * from agg_hash_1);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.agg_group_1
+    
+<sql-statement>
+(select * from agg_hash_2 except select * from agg_group_2)
+  union all
+(select * from agg_group_2 except select * from agg_hash_2);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.agg_group_2
+    
+<sql-statement>
+(select * from agg_hash_3 except select * from agg_group_3)
+  union all
+(select * from agg_group_3 except select * from agg_hash_3);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.agg_hash_3
+    
+<sql-statement>
+(select * from agg_hash_4 except select * from agg_group_4)
+  union all
+(select * from agg_group_4 except select * from agg_hash_4);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.agg_hash_4
+    
+<sql-statement>
+drop table agg_group_1;
+</sql-statement>
+<sql-statement>
+drop table agg_group_2;
+</sql-statement>
+<sql-statement>
+drop table agg_group_3;
+</sql-statement>
+<sql-statement>
+drop table agg_group_4;
+</sql-statement>
+<sql-statement>
+drop table agg_hash_1;
+</sql-statement>
+<sql-statement>
+drop table agg_hash_2;
+</sql-statement>
+<sql-statement>
+drop table agg_hash_3;
+</sql-statement>
+<sql-statement>
+drop table agg_hash_4;
+</sql-statement>

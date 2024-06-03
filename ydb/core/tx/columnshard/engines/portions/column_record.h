@@ -165,6 +165,7 @@ public:
     TString DebugString() const {
         return TStringBuilder()
             << "column_id:" << ColumnId << ";"
+            << "chunk_idx:" << Chunk << ";"
             << "blob_range:" << BlobRange.ToString() << ";"
             ;
     }

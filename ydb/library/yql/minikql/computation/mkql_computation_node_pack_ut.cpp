@@ -7,6 +7,7 @@
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
+#include <ydb/library/yql/public/udf/arrow/memory_pool.h>
 #include <ydb/library/yql/public/udf/arrow/util.h>
 
 #include <library/cpp/random_provider/random_provider.h>
@@ -61,7 +62,7 @@ protected:
         , PgmBuilder(Env, *FunctionRegistry)
         , MemInfo("Memory")
         , HolderFactory(Alloc.Ref(), MemInfo, FunctionRegistry.Get())
-        , ArrowPool_(arrow::default_memory_pool())
+        , ArrowPool_(NYql::NUdf::GetYqlMemoryPool())
     {
     }
 

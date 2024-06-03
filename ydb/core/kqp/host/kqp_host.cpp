@@ -1064,7 +1064,7 @@ public:
         SessionCtx->SetTempTables(std::move(tempTablesState));
 
         if (FederatedQuerySetup) {
-            ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory({}, FederatedQuerySetup->S3GatewayConfig.GetGeneratorPathsLimit());
+            ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory({}, ActorSystem, FederatedQuerySetup->S3GatewayConfig.GetGeneratorPathsLimit());
         }
     }
 

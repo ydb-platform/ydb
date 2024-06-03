@@ -77,6 +77,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         } else {
             domain->mutable_databasequotas()->set_data_size_hard_quota(quota);
         }
+        domain->SetShardsLimit(quota);
+        domain->SetShardsInside(size);
     }
 
     void AddGroupsInControllerSelectGroupsResult(TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr* ev,  int groupCount) {
@@ -136,6 +138,61 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             groupId++;
         }
     };
+
+    void AddGroupsToSysViewResponse(NSysView::TEvSysView::TEvGetGroupsResponse::TPtr* ev, size_t groupCount = 1, bool addStatic = true) {
+        auto& record = (*ev)->Get()->Record;
+        auto entrySample = record.entries(0);
+        record.clear_entries();
+
+        auto addGroup = [&](size_t groupId, size_t poolId) {
+            auto* entry = record.add_entries();
+            entry->CopyFrom(entrySample);
+            entry->mutable_key()->set_groupid(groupId);
+            entry->mutable_info()->set_erasurespeciesv2(NHealthCheck::TSelfCheckRequest::BLOCK_4_2);
+            entry->mutable_info()->set_storagepoolid(poolId);
+        };
+
+        if (addStatic) {
+            addGroup(0, 0);
+        }
+
+        auto groupId = GROUP_START_ID;
+        for (size_t i = 0; i < groupCount; ++i) {
+            addGroup(groupId++, 1);
+        }
+    }
+
+    void AddVSlotsToSysViewResponse(NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr* ev, size_t groupCount,
+                                    const TVector<NKikimrBlobStorage::EVDiskStatus>& vdiskStatuses) {
+        auto& record = (*ev)->Get()->Record;
+        auto entrySample = record.entries(0);
+        record.clear_entries();
+
+        auto groupId = GROUP_START_ID;
+        const auto *descriptor = NKikimrBlobStorage::EVDiskStatus_descriptor();
+        for (size_t i = 0; i < groupCount; ++i) {
+            auto vslotId = VCARD_START_ID;
+            for (auto status: vdiskStatuses) {
+                auto* entry = record.add_entries();
+                entry->CopyFrom(entrySample);
+                entry->mutable_key()->set_vslotid(vslotId);
+                entry->mutable_info()->set_groupid(groupId);
+                entry->mutable_info()->set_failrealm(vslotId);
+                entry->mutable_info()->set_statusv2(descriptor->FindValueByNumber(status)->name());
+                entry->mutable_info()->set_vdisk(vslotId);
+                ++vslotId;
+            }
+            ++groupId;
+        }
+    }
+
+    void AddStoragePoolsToSysViewResponse(NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr* ev) {
+        auto& record = (*ev)->Get()->Record;
+        record.clear_entries();
+        auto* entry = record.add_entries();
+        entry->mutable_key()->set_storagepoolid(1);
+        entry->mutable_info()->set_name(STORAGE_POOL_NAME);
+    }
 
     void AddGroupVSlotInControllerConfigResponseWithStaticGroup(TEvBlobStorage::TEvControllerConfigResponse::TPtr* ev,
         const NKikimrBlobStorage::TGroupStatus::E groupStatus, const TVector<NKikimrBlobStorage::EVDiskStatus>& vdiskStatuses)
@@ -224,7 +281,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         }
     }
 
-    Ydb::Monitoring::SelfCheckResult RequestHc(int const groupNumber, int const vdiscPerGroupNumber, bool const isMergeRecords = false, bool const largeSizeVdisksIssues = false) {
+    Ydb::Monitoring::SelfCheckResult RequestHc(size_t const groupNumber, size_t const vdiscPerGroupNumber, bool const isMergeRecords = false, bool const largeSizeVdisksIssues = false) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -262,6 +319,21 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                         auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
                         SetLongHostValue(x);
                     }
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetVSlotsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr*>(&ev);
+                    AddVSlotsToSysViewResponse(x, groupNumber, {vdiscPerGroupNumber, NKikimrBlobStorage::EVDiskStatus::ERROR});
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetGroupsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetGroupsResponse::TPtr*>(&ev);
+                    AddGroupsToSysViewResponse(x, groupNumber, false);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetStoragePoolsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr*>(&ev);
+                    AddStoragePoolsToSysViewResponse(x);
                     break;
                 }
             }
@@ -344,6 +416,21 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     AddGroupVSlotInControllerConfigResponseWithStaticGroup(x, groupStatus, vdiskStatuses);
                     break;
                 }
+                case NSysView::TEvSysView::EvGetVSlotsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr*>(&ev);
+                    AddVSlotsToSysViewResponse(x, 1, vdiskStatuses);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetGroupsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetGroupsResponse::TPtr*>(&ev);
+                    AddGroupsToSysViewResponse(x);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetStoragePoolsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr*>(&ev);
+                    AddStoragePoolsToSysViewResponse(x);
+                    break;
+                }
             }
 
             return TTestActorRuntime::EEventAction::PROCESS;
@@ -410,6 +497,50 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         UNIT_ASSERT_VALUES_EQUAL(storageIssuesCount, storageIssuesNumber);
     }
 
+    void ShardsQuotaTest(ui64 usage, ui64 quota, ui64 storageIssuesNumber, Ydb::Monitoring::StatusFlag::Status status = Ydb::Monitoring::StatusFlag::GREEN) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(2)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvSchemeShard::EvDescribeSchemeResult: {
+                    auto *x = reinterpret_cast<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
+                    ChangeDescribeSchemeResult(x, usage, quota);
+                    break;
+                }
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+
+        auto *request = new NHealthCheck::TEvSelfCheckRequest;
+        runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
+        NHealthCheck::TEvSelfCheckResult* result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle);
+
+        int storageIssuesCount = 0;
+        for (const auto& issue_log : result->Result.Getissue_log()) {
+            Ctest << issue_log.ShortDebugString() << Endl;
+            if (issue_log.type() == "COMPUTE_QUOTA" && issue_log.reason_size() == 0 && issue_log.status() == status) {
+                storageIssuesCount++;
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(storageIssuesCount, storageIssuesNumber);
+    }
+
     Y_UNIT_TEST(OneIssueListing) {
         ListingTest(1, 1);
     }
@@ -438,7 +569,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         ListingTest(100, 100, true);
     }
 
-    Y_UNIT_TEST(YellowroupIssueWhenPartialGroupStatus) {
+    Y_UNIT_TEST(YellowGroupIssueWhenPartialGroupStatus) {
         auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, {NKikimrBlobStorage::ERROR});
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1);
     }
@@ -449,19 +580,21 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     }
 
     Y_UNIT_TEST(OrangeGroupIssueWhenDegradedGroupStatus) {
-        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::DEGRADED, {});
+        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::DEGRADED, {2, NKikimrBlobStorage::ERROR});
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1);
     }
 
     Y_UNIT_TEST(RedGroupIssueWhenDisintegratedGroupStatus) {
-        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::DISINTEGRATED, {});
+        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::DISINTEGRATED, {3, NKikimrBlobStorage::ERROR});
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1);
     }
 
+    /* HC currently infers group status on its own, so it's never unknown
     Y_UNIT_TEST(RedGroupIssueWhenUnknownGroupStatus) {
         auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::UNKNOWN, {});
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1);
     }
+    */
 
     Y_UNIT_TEST(StorageLimit95) {
         StorageTest(95, 100, 1, Ydb::Monitoring::StatusFlag::RED);
@@ -639,6 +772,22 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     AddGroupVSlotInControllerConfigResponseWithStaticGroup(x, NKikimrBlobStorage::TGroupStatus::FULL, vdiskStatuses);
                     break;
                 }
+                case NSysView::TEvSysView::EvGetVSlotsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr*>(&ev);
+                    TVector<NKikimrBlobStorage::EVDiskStatus> vdiskStatuses = { NKikimrBlobStorage::EVDiskStatus::READY };
+                    AddVSlotsToSysViewResponse(x, 1, vdiskStatuses);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetGroupsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetGroupsResponse::TPtr*>(&ev);
+                    AddGroupsToSysViewResponse(x);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetStoragePoolsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr*>(&ev);
+                    AddStoragePoolsToSysViewResponse(x);
+                    break;
+                }
                 case TEvWhiteboard::EvSystemStateResponse: {
                     auto *x = reinterpret_cast<TEvWhiteboard::TEvSystemStateResponse::TPtr*>(&ev);
                     ClearLoadAverage(x);
@@ -725,6 +874,22 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     AddGroupVSlotInControllerConfigResponseWithStaticGroup(x, NKikimrBlobStorage::TGroupStatus::FULL, vdiskStatuses);
                     break;
                 }
+                case NSysView::TEvSysView::EvGetVSlotsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr*>(&ev);
+                    TVector<NKikimrBlobStorage::EVDiskStatus> vdiskStatuses = { NKikimrBlobStorage::EVDiskStatus::READY };
+                    AddVSlotsToSysViewResponse(x, 1, vdiskStatuses);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetGroupsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetGroupsResponse::TPtr*>(&ev);
+                    AddGroupsToSysViewResponse(x);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetStoragePoolsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr*>(&ev);
+                    AddStoragePoolsToSysViewResponse(x);
+                    break;
+                }
                 case TEvWhiteboard::EvSystemStateResponse: {
                     auto *x = reinterpret_cast<TEvWhiteboard::TEvSystemStateResponse::TPtr*>(&ev);
                     ClearLoadAverage(x);
@@ -793,10 +958,10 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 }
                 case NConsole::TEvConsole::EvGetTenantStatusResponse: {
                     auto *x = reinterpret_cast<NConsole::TEvConsole::TEvGetTenantStatusResponse::TPtr*>(&ev);
-                    if (firstConsoleResponse) {
-                        firstConsoleResponse = false;
+                    if (!firstConsoleResponse) {
                         ChangeGetTenantStatusResponse(x, "/Root/serverless");
                     } else {
+                        firstConsoleResponse = false;
                         ChangeGetTenantStatusResponse(x, "/Root/shared");
                     }
                     break;
@@ -820,6 +985,22 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerConfigResponse::TPtr*>(&ev);
                     TVector<NKikimrBlobStorage::EVDiskStatus> vdiskStatuses = { NKikimrBlobStorage::EVDiskStatus::READY };
                     AddGroupVSlotInControllerConfigResponseWithStaticGroup(x, NKikimrBlobStorage::TGroupStatus::FULL, vdiskStatuses);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetVSlotsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr*>(&ev);
+                    TVector<NKikimrBlobStorage::EVDiskStatus> vdiskStatuses = { NKikimrBlobStorage::EVDiskStatus::READY };
+                    AddVSlotsToSysViewResponse(x, 1, vdiskStatuses);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetGroupsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetGroupsResponse::TPtr*>(&ev);
+                    AddGroupsToSysViewResponse(x);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetStoragePoolsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr*>(&ev);
+                    AddStoragePoolsToSysViewResponse(x);
                     break;
                 }
             }
@@ -908,6 +1089,22 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     AddGroupVSlotInControllerConfigResponseWithStaticGroup(x, NKikimrBlobStorage::TGroupStatus::FULL, vdiskStatuses);
                     break;
                 }
+                case NSysView::TEvSysView::EvGetVSlotsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr*>(&ev);
+                    TVector<NKikimrBlobStorage::EVDiskStatus> vdiskStatuses = { NKikimrBlobStorage::EVDiskStatus::READY };
+                    AddVSlotsToSysViewResponse(x, 1, vdiskStatuses);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetGroupsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetGroupsResponse::TPtr*>(&ev);
+                    AddGroupsToSysViewResponse(x);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetStoragePoolsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr*>(&ev);
+                    AddStoragePoolsToSysViewResponse(x);
+                    break;
+                }
                 case TEvWhiteboard::EvSystemStateResponse: {
                     auto *x = reinterpret_cast<TEvWhiteboard::TEvSystemStateResponse::TPtr*>(&ev);
                     ClearLoadAverage(x);
@@ -985,6 +1182,22 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerConfigResponse::TPtr*>(&ev);
                     TVector<NKikimrBlobStorage::EVDiskStatus> vdiskStatuses = { NKikimrBlobStorage::EVDiskStatus::READY };
                     AddGroupVSlotInControllerConfigResponseWithStaticGroup(x, NKikimrBlobStorage::TGroupStatus::FULL, vdiskStatuses);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetVSlotsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr*>(&ev);
+                    TVector<NKikimrBlobStorage::EVDiskStatus> vdiskStatuses = { NKikimrBlobStorage::EVDiskStatus::READY };
+                    AddVSlotsToSysViewResponse(x, 1, vdiskStatuses);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetGroupsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetGroupsResponse::TPtr*>(&ev);
+                    AddGroupsToSysViewResponse(x);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetStoragePoolsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr*>(&ev);
+                    AddStoragePoolsToSysViewResponse(x);
                     break;
                 }
                 case TEvWhiteboard::EvSystemStateResponse: {
@@ -1082,6 +1295,22 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerConfigResponse::TPtr*>(&ev);
                     TVector<NKikimrBlobStorage::EVDiskStatus> vdiskStatuses = { NKikimrBlobStorage::EVDiskStatus::READY };
                     AddGroupVSlotInControllerConfigResponseWithStaticGroup(x, NKikimrBlobStorage::TGroupStatus::FULL, vdiskStatuses);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetVSlotsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr*>(&ev);
+                    TVector<NKikimrBlobStorage::EVDiskStatus> vdiskStatuses = { NKikimrBlobStorage::EVDiskStatus::READY };
+                    AddVSlotsToSysViewResponse(x, 1, vdiskStatuses);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetGroupsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetGroupsResponse::TPtr*>(&ev);
+                    AddGroupsToSysViewResponse(x);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetStoragePoolsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr*>(&ev);
+                    AddStoragePoolsToSysViewResponse(x);
                     break;
                 }
                 case TEvWhiteboard::EvSystemStateResponse: {
@@ -1212,6 +1441,22 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerConfigResponse::TPtr*>(&ev);
                     TVector<NKikimrBlobStorage::EVDiskStatus> vdiskStatuses = { NKikimrBlobStorage::EVDiskStatus::READY };
                     AddGroupVSlotInControllerConfigResponseWithStaticGroup(x, NKikimrBlobStorage::TGroupStatus::FULL, vdiskStatuses);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetVSlotsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr*>(&ev);
+                    TVector<NKikimrBlobStorage::EVDiskStatus> vdiskStatuses = { NKikimrBlobStorage::EVDiskStatus::READY };
+                    AddVSlotsToSysViewResponse(x, 1, vdiskStatuses);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetGroupsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetGroupsResponse::TPtr*>(&ev);
+                    AddGroupsToSysViewResponse(x);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetStoragePoolsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr*>(&ev);
+                    AddStoragePoolsToSysViewResponse(x);
                     break;
                 }
                 case TEvWhiteboard::EvSystemStateResponse: {
@@ -1351,6 +1596,22 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     AddGroupVSlotInControllerConfigResponseWithStaticGroup(x, NKikimrBlobStorage::TGroupStatus::FULL, vdiskStatuses);
                     break;
                 }
+                case NSysView::TEvSysView::EvGetVSlotsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr*>(&ev);
+                    TVector<NKikimrBlobStorage::EVDiskStatus> vdiskStatuses = { NKikimrBlobStorage::EVDiskStatus::READY };
+                    AddVSlotsToSysViewResponse(x, 1, vdiskStatuses);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetGroupsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetGroupsResponse::TPtr*>(&ev);
+                    AddGroupsToSysViewResponse(x);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetStoragePoolsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr*>(&ev);
+                    AddStoragePoolsToSysViewResponse(x);
+                    break;
+                }
                 case TEvWhiteboard::EvSystemStateResponse: {
                     auto *x = reinterpret_cast<TEvWhiteboard::TEvSystemStateResponse::TPtr*>(&ev);
                     ClearLoadAverage(x);
@@ -1387,7 +1648,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools().size(), 0);
     }
 
-    Y_UNIT_TEST(NoBscConfigResponse) {
+    Y_UNIT_TEST(NoBscResponse) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -1407,7 +1668,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         dynamicNameserviceConfig->MaxDynamicNodeId = runtime.GetNodeId(server.StaticNodes() + server.DynamicNodes() - 1);
 
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerConfigResponse) {
+            auto type = ev->GetTypeRewrite();
+            if (EventSpaceBegin(TKikimrEvents::ES_SYSTEM_VIEW) <= type && type <= EventSpaceEnd(TKikimrEvents::ES_SYSTEM_VIEW)) {
                 return TTestActorRuntime::EEventAction::DROP;
             }
 
@@ -1548,6 +1810,26 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
     Y_UNIT_TEST(AfterHiveSyncPeriodReportsTabletsState) {
         HiveSyncTest(false);
+    }
+
+    Y_UNIT_TEST(ShardsLimit999) {
+        ShardsQuotaTest(999, 1000, 1, Ydb::Monitoring::StatusFlag::RED);
+    }
+
+    Y_UNIT_TEST(ShardsLimit995) {
+        ShardsQuotaTest(995, 1000, 1, Ydb::Monitoring::StatusFlag::ORANGE);
+    }
+
+    Y_UNIT_TEST(ShardsLimit905) {
+        ShardsQuotaTest(905, 1000, 1, Ydb::Monitoring::StatusFlag::YELLOW);
+    }
+
+    Y_UNIT_TEST(ShardsLimit800) {
+        ShardsQuotaTest(805, 1000, 0, Ydb::Monitoring::StatusFlag::GREEN);
+    }
+
+    Y_UNIT_TEST(ShardsNoLimit) {
+        ShardsQuotaTest(105, 0, 0, Ydb::Monitoring::StatusFlag::GREEN);
     }
 }
 }

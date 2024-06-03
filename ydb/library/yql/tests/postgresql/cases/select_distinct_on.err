@@ -1,7 +1,7 @@
 Registering pre-existing tables
+	int4_tbl
 	INT4_TBL
 	tmp
-	int4_tbl
 <sql-statement>
 --
 -- SELECT_DISTINCT_ON

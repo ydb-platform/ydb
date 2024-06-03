@@ -60,8 +60,6 @@ public:
     void UpdateDatabasePath(const TString& dbPath);
     void Die(const TActorContext& ctx);
 
-    static TString GetRangeMid(const TString& from, const TString& to);
-
 private:
     using TPartitionSplit = NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionSplit;
     using TPartitionMerge = NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionMerge;

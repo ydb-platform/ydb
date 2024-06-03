@@ -137,4 +137,5 @@ message TFeatureFlags {
     optional bool EnableDynamicNodeNameGeneration = 122 [default = false];
     optional bool EnableBackupService = 123 [default = false];
     optional bool EnableVolatileTransactionArbiters = 124 [default = false];
+    optional bool EnableGraphShard = 125 [default = false];
 }

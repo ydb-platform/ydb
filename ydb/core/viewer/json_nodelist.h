@@ -101,10 +101,6 @@ struct TJsonRequestSchema<TJsonNodeList> {
                         type: string
                     Port:
                         type: integer
-                required:
-                    - Id
-                    - Address
-                    - Port
             )___");
     }
 };

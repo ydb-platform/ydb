@@ -100,9 +100,7 @@ ui64 TPutImpl::GetTimeToAccelerateNs(TLogContext &logCtx) {
 
 TString TPutImpl::DumpFullState() const {
     TStringStream str;
-    str << "{Deadline# " << Deadline;
-    str << Endl;
-    str << " Info# " << Info->ToString();
+    str << "{Info# " << Info->ToString();
     str << Endl;
     str << " Blackboard# " << Blackboard.ToString();
     str << Endl;

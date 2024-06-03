@@ -56,6 +56,7 @@ namespace NKikimr::NOlap {
         PortionsCleaner,
         TablesCleaner,
         PortionsMetadata,
+        CleanGranuleId
     };
 
     class TNormalizationContext {

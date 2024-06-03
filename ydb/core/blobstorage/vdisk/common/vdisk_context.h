@@ -206,7 +206,7 @@ namespace NKikimr {
 
         void UpdateCostModel(std::unique_ptr<TCostModel>&& newCostModel) {
             CostModel = std::move(newCostModel);
-            if (CostModel) {
+            if (CostModel && CostTracker) {
                 CostTracker->UpdateCostModel(*CostModel);
             }
         }

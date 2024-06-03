@@ -942,7 +942,6 @@ struct TEnvironmentSetup {
     void SetIcbControl(ui32 nodeId, TString controlName, ui64 value) {
         if (nodeId == 0) {
             for (nodeId = 1; nodeId <= Settings.NodeCount; ++nodeId) {
-                Cerr << "Set " << nodeId << " " << controlName << " " << value << Endl;
                 auto it = IcbControls.find({nodeId, controlName});
                 Y_ABORT_UNLESS(it != IcbControls.end());
                 it->second = value;

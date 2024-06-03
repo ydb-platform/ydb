@@ -265,7 +265,7 @@ void TestDiskTimeAvailableScaling() {
     i64 test1 = env->AggregateVDiskCounters(env->StoragePoolName, groupSize, groupSize, groupId, pdiskLayout,
             "advancedCost", "DiskTimeAvailable");
 
-    env->SetIcbControl(0, "DiskTimeAvailableNVME", 2'000);
+    env->SetIcbControl(0, "VDiskControls.DiskTimeAvailableScaleNVME", 2'000);
     env->Sim(TDuration::Minutes(5));
 
     i64 test2 = env->AggregateVDiskCounters(env->StoragePoolName, groupSize, groupSize, groupId, pdiskLayout,

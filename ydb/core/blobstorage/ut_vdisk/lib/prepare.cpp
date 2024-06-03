@@ -256,6 +256,7 @@ bool TDefaultVDiskSetup::SetUp(TAllVDisks::TVDiskInstance &vdisk, TAllPDisks *pd
         modifier(vdisk.Cfg.Get());
     }
     vdisk.Cfg->RunRepl = runRepl;
+    vdisk.Cfg->UseCostTracker = false;
 
     return true;
 }

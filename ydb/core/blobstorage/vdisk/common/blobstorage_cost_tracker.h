@@ -349,7 +349,7 @@ public:
     }
 
     void CountRequest(ui64 cost) {
-        AtomicSet(BucketCapacity, GetDiskTimeAvailableScale() * BurstThresholdNs);
+        AtomicSet(BucketCapacity, GetDiskTimeAvailableScale() * BurstThresholdNs.Update(TAppData::TimeProvider->Now()));
         Bucket.UseAndFill(cost);
         BurstDetector.Set(!Bucket.IsAvail(), SeqnoBurstDetector.fetch_add(1));
     }

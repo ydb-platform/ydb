@@ -220,6 +220,7 @@ namespace NKikimr {
         TControlWrapper EnableVPatch = true;
 
         ///////////// COST METRICS SETTINGS ////////////////
+        bool UseCostTracker = true;
         TCostMetricsParametersByMedia CostMetricsParametersByMedia;
 
         ///////////// FEATURE FLAGS ////////////////////////

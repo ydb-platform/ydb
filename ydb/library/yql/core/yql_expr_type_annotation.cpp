@@ -6013,14 +6013,7 @@ bool ExtractPgType(const TTypeAnnotationNode* type, ui32& pgType, bool& convertT
         }
 
         auto slot = unpacked->Cast<TDataExprType>()->GetSlot();
-        auto convertedTypeId = ConvertToPgType(slot);
-        if (!convertedTypeId) {
-            ctx.AddError(TIssue(ctx.GetPosition(pos),
-                TStringBuilder() << "Type is not compatible to PG: " << slot));
-            return false;
-        }
-
-        pgType = *convertedTypeId;
+        pgType = ConvertToPgType(slot);
         convertToPg = true;
         return true;
     } else if (type->GetKind() != ETypeAnnotationKind::Pg) {

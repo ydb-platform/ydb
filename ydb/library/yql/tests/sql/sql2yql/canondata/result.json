@@ -11416,6 +11416,13 @@
             "uri": "https://{canondata_backend}/1881367/79a71c1478c556da1931a7565c12bdd14cc63567/resource.tar.gz#test_sql2yql.test_pg-aggregate_scalar_minus_zero_/sql.yql"
         }
     ],
+    "test_sql2yql.test[pg-all_data]": [
+        {
+            "checksum": "e2e983a696817fe3cbebcbbf79264fd1",
+            "size": 623,
+            "uri": "https://{canondata_backend}/1923547/71449caaa5e8f922123c2ecb09c80f8f3f5583e8/resource.tar.gz#test_sql2yql.test_pg-all_data_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[pg-avg_float_clone_init_value]": [
         {
             "checksum": "3e4ae01664c5195d9a1254f4f2c02787",

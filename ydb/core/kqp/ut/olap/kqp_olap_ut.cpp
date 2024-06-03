@@ -2601,8 +2601,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         csController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
 
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 10000);
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1100000, 300100000, 10000);
         {
             auto alterQuery = TStringBuilder() <<
                 R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`s-buckets`,
@@ -2612,8 +2610,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1200000, 300200000, 10000);
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1300000, 300300000, 10000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 10000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1100000, 300100000, 10000);
+        csController->WaitCompactions(TDuration::Seconds(5));
         {
             auto alterQuery = TStringBuilder() <<
                 R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`s-buckets`,
@@ -2623,8 +2622,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1400000, 300400000, 10000);
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 2000000, 200000000, 70000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1200000, 300200000, 10000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1300000, 300300000, 10000);
+        csController->WaitCompactions(TDuration::Seconds(5));
+
         {
             auto alterQuery = TStringBuilder() <<
                 R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`l-buckets`);
@@ -2633,6 +2634,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1400000, 300400000, 10000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 2000000, 200000000, 70000);
+        csController->WaitCompactions(TDuration::Seconds(5));
 
         {
             auto alterQuery = TStringBuilder() << "(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`error-buckets`);";

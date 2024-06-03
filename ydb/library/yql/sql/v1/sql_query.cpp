@@ -54,10 +54,13 @@ static bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
         "token_secret_name",
         "user",
         "password",
-        "password_secret_name"
+        "password_secret_name",
     };
 
-    TSet<TString> stateSettings = {"state", "failover_mode"};
+    TSet<TString> stateSettings = {
+        "state",
+        "failover_mode",
+    };
 
     const auto keyName = to_lower(key.Name);
     if (!configSettings.count(keyName) && !stateSettings.count(keyName)) {

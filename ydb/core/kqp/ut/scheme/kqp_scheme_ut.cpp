@@ -5624,21 +5624,18 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
 
-        while (true) {
-            const auto result = repl.DescribeReplication("/Root/replication").ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            while (true) {
+                const auto result = repl.DescribeReplication("/Root/replication").ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-            const auto& desc = result.GetReplicationDescription();
-            switch (desc.GetState()) {
-            case TReplicationDescription::EState::Done:
-                return;
-            default:
-                continue;
+                const auto& desc = result.GetReplicationDescription();
+                if (desc.GetState() == TReplicationDescription::EState::Done) {
+                    break;
+                }
+
+                Sleep(TDuration::Seconds(1));
             }
-
-            Sleep(TDuration::Seconds(1));
         }
 
 

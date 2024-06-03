@@ -107,7 +107,7 @@ public:
     const TPathId& GetPathId() const;
     const TActorId& GetYdbProxy() const;
     ui64 GetSchemeShardId() const;
-    void SetConfig(const NKikimrReplication::TReplicationConfig& config, TString issue = {});
+    void SetConfig(NKikimrReplication::TReplicationConfig&& config);
     const NKikimrReplication::TReplicationConfig& GetConfig() const;
     void SetState(EState state, TString issue = {});
     EState GetState() const;

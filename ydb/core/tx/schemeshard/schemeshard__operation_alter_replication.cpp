@@ -362,39 +362,39 @@ public:
         }
 
         if (op.HasConfig()) {
-            const auto conf = op.GetConfig();
-            auto& confRes = *(alterData->Description.MutableConfig());
+            const auto newConf = op.GetConfig();
+            auto& oldConf = *(alterData->Description.MutableConfig());
 
-            if (conf.HasSrcConnectionParams()) {
-                const auto param = conf.GetSrcConnectionParams();
-                auto& paramRes = *(confRes.MutableSrcConnectionParams());
-                if (param.HasEndpoint()) {
-                    paramRes.SetEndpoint(param.GetEndpoint());
+            if (newConf.HasSrcConnectionParams()) {
+                const auto newParam = newConf.GetSrcConnectionParams();
+                auto& oldParam = *(oldConf.MutableSrcConnectionParams());
+                if (newParam.HasEndpoint()) {
+                    oldParam.SetEndpoint(newParam.GetEndpoint());
                 }
-                if (param.HasDatabase()) {
-                    paramRes.SetDatabase(param.GetDatabase());
+                if (newParam.HasDatabase()) {
+                    oldParam.SetDatabase(newParam.GetDatabase());
                 }
-                if (param.HasStaticCredentials()) {
-                    if (param.GetStaticCredentials().HasUser()) {
-                        paramRes.MutableStaticCredentials()->SetUser(param.GetStaticCredentials().GetUser());
+                if (newParam.HasStaticCredentials()) {
+                    if (newParam.GetStaticCredentials().HasUser()) {
+                        oldParam.MutableStaticCredentials()->SetUser(newParam.GetStaticCredentials().GetUser());
                     }
-                    if (param.GetStaticCredentials().HasPassword()) {
-                        paramRes.MutableStaticCredentials()->SetPassword(param.GetStaticCredentials().GetPassword());
-                        paramRes.MutableStaticCredentials()->SetPasswordSecretName({});
+                    if (newParam.GetStaticCredentials().HasPassword()) {
+                        oldParam.MutableStaticCredentials()->SetPassword(newParam.GetStaticCredentials().GetPassword());
+                        oldParam.MutableStaticCredentials()->ClearPasswordSecretName();
                     }
-                    if (param.GetStaticCredentials().HasPasswordSecretName()) {
-                        paramRes.MutableStaticCredentials()->SetPasswordSecretName(param.GetStaticCredentials().GetPasswordSecretName());
-                        paramRes.MutableStaticCredentials()->SetPassword({});
+                    if (newParam.GetStaticCredentials().HasPasswordSecretName()) {
+                        oldParam.MutableStaticCredentials()->SetPasswordSecretName(newParam.GetStaticCredentials().GetPasswordSecretName());
+                        oldParam.MutableStaticCredentials()->ClearPassword();
                     }
                 }
-                if (param.HasOAuthToken()) {
-                    if (param.GetOAuthToken().HasToken()) {
-                        paramRes.MutableOAuthToken()->SetToken(param.GetOAuthToken().GetToken());
-                        paramRes.MutableOAuthToken()->SetTokenSecretName({});
+                if (newParam.HasOAuthToken()) {
+                    if (newParam.GetOAuthToken().HasToken()) {
+                        oldParam.MutableOAuthToken()->SetToken(newParam.GetOAuthToken().GetToken());
+                        oldParam.MutableOAuthToken()->ClearTokenSecretName();
                     }
-                    if (param.GetOAuthToken().HasTokenSecretName()) {
-                        paramRes.MutableOAuthToken()->SetTokenSecretName(param.GetOAuthToken().GetTokenSecretName());
-                        paramRes.MutableOAuthToken()->SetToken({});
+                    if (newParam.GetOAuthToken().HasTokenSecretName()) {
+                        oldParam.MutableOAuthToken()->SetTokenSecretName(newParam.GetOAuthToken().GetTokenSecretName());
+                        oldParam.MutableOAuthToken()->ClearToken();
                     }
                 }
             }

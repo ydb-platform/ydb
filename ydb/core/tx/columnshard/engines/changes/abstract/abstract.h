@@ -213,7 +213,6 @@ protected:
     virtual void DoStart(NColumnShard::TColumnShard& self) = 0;
     virtual TConclusionStatus DoConstructBlobs(TConstructionContext& context) noexcept = 0;
     virtual void OnAbortEmergency() {
-
     }
 
     TBlobsAction BlobsAction;

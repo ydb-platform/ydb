@@ -58,8 +58,13 @@ namespace NKikimr::NOlap {
         if (NColumnShard::Schema::GetSpecialValue(db, NColumnShard::Schema::EValueIds::LastNormalizerSequentialId, lastNormalizerId)) {
             // We want to rerun all normalizers in case of binary rollback
             if (lastNormalizerId <= GetLastNormalizerSequentialId()) {
+                AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("last_normalizer_id", lastNormalizerId)("event", "restored");
                 LastAppliedNormalizerId = lastNormalizerId;
+            } else {
+                AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("last_normalizer_id", LastAppliedNormalizerId)("event", "not_restored");
             }
+        } else {
+            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("last_normalizer_id", LastAppliedNormalizerId)("event", "have not info");
         }
     }
 

@@ -53,7 +53,7 @@ void TColumnEngineChanges::WriteIndexOnComplete(NColumnShard::TColumnShard* self
 
 void TColumnEngineChanges::Compile(TFinalizationContext& context) noexcept {
     AFL_VERIFY(Stage != EStage::Aborted);
-    AFL_VERIFY(Stage == EStage::Constructed);
+    AFL_VERIFY(Stage == EStage::Constructed)("real", Stage);
 
     DoCompile(context);
     DoOnAfterCompile();
@@ -100,6 +100,9 @@ void TColumnEngineChanges::AbortEmergency(const TString& reason) {
     } else {
         Stage = EStage::Aborted;
         AbortedReason = reason;
+        if (!!LockGuard) {
+            LockGuard->AbortLock();
+        }
         OnAbortEmergency();
     }
 }

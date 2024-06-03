@@ -28,6 +28,9 @@ public:
         {
 
         }
+
+        void AbortLock();
+
         ~TGuard();
 
         void Release(TManager& manager);

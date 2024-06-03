@@ -387,8 +387,8 @@ bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
         }
     }
 
-    // NIceDb::TNiceDb db(txc.DB);
-    // Self->NormalizerController.InitControllerState(db);
+    NIceDb::TNiceDb db(txc.DB);
+    Self->NormalizerController.InitControllerState(db);
 
     // Enable compression for the SmallBlobs table
     const auto* smallBlobsDefaultColumnFamily = txc.DB.GetScheme().DefaultFamilyFor(Schema::SmallBlobs::TableId);

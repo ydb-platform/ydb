@@ -1332,27 +1332,16 @@ public:
                 if (col.TypeOfChange == TColumnSchema::ETypeOfChange::SetNullConstraint) {
                     auto columnDesc = Y();
                     columnDesc = L(columnDesc, BuildQuotedAtom(Pos, col.Name));
-                    auto type = col.Type;
-                    // std::cerr << "======================================================" << std::endl;
-                    // std::cerr << "heloooooooo)" << std::endl;
-                    // std::cerr << "======================================================" << std::endl;
 
-                    if (type) {
-                        if (col.Nullable) {
-                            type = Y("AsOptionalType", type);
-                        }
+                    auto columnConstraints = Y();
 
-                        columnDesc = L(columnDesc, type);
-
-                        auto columnConstraints = Y();
-
-                        if (!col.Nullable) {
-                            columnConstraints = L(columnConstraints, Q(Y(Q("not_null"))));
-                        }
-
-                        columnDesc = L(columnDesc, Q(Y(Q("columnConstrains"), Q(columnConstraints))));
+                    if (!col.Nullable) {
+                        columnConstraints = L(columnConstraints, Q(Y(Q("not_null"))));
+                    } else {
+                        columnConstraints = L(columnConstraints, Q(Y(Q("null"))));
                     }
 
+                    columnDesc = L(columnDesc, Q(Y(Q("columnConstrains"), Q(columnConstraints))));
                     columns = L(columns, Q(columnDesc));
                 } else if (col.TypeOfChange == TColumnSchema::ETypeOfChange::SetFamaly) {
                     auto columnDesc = Y();

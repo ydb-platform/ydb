@@ -56,18 +56,42 @@ struct TDirectReadSessionCallbacks {
 
 struct TDirectReadPartitionSession {
     enum class EState {
-        CREATED,  // TODO(qyryq) IDLE?
-        STARTING,
-        STARTED
+        IDLE,
+        DELAYED,  // Got an error, SendStartDirectReadPartitionSessionImpl will be called later
+        STARTING, // Sent StartDirectReadPartitionSessionRequest, waiting for response
+        WORKING   // Got StartDirectReadPartitionSessionResponse
+
+        /*
+        +---------------------+
+        |                     |
+        |  +-------+          |
+        v  v       |          |
+        IDLE--->DELAYED--->STARTING--->WORKING
+        ^ |                   ^           |
+        | |                   |           |
+        | +-------------------+           |
+        |                                 |
+        +---------------------------------+
+                   on errors
+        */
     };
 
     TPartitionSessionId PartitionSessionId;
     TPartitionLocation Location;
-    EState State = EState::CREATED;
+    EState State = EState::IDLE;
     IRetryPolicy::IRetryState::TPtr RetryState = {};
     TDirectReadId LastDirectReadId = 0;
 
     // TODO(qyryq) min read id, partition id, done read id?
+
+    TDirectReadClientMessage MakeStartRequest() const {
+        TDirectReadClientMessage req;
+        auto& start = *req.mutable_start_direct_read_partition_session_request();
+        start.set_partition_session_id(PartitionSessionId);
+        start.set_last_direct_read_id(LastDirectReadId);
+        start.set_generation(Location.GetGeneration());
+        return req;
+    }
 };
 
 // One TDirectReadSession instance comprises multiple TDirectReadPartitionSessions.
@@ -124,8 +148,9 @@ private:
         const NYdbGrpc::IQueueClientContextPtr& connectTimeoutContext
     );
 
-    void SendStartDirectReadPartitionSessionImpl(TDirectReadPartitionSession&, TPlainStatus&&);
-    void SendStartDirectReadPartitionSessionImpl(TPartitionSessionId, TPlainStatus&&);
+    // delayedCall may be true only if the method is called from a scheduled callback.
+    void SendStartDirectReadPartitionSessionImpl(TDirectReadPartitionSession&, TPlainStatus&&, bool delayedCall = false);
+    void SendStartDirectReadPartitionSessionImpl(TPartitionSessionId, TPlainStatus&&, bool delayedCall = false);
 
     void AbortImpl(TSessionClosedEvent&& closeEvent);
 

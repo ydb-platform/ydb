@@ -105,7 +105,7 @@ void TTieringActualizer::DoRemovePortion(const ui64 portionId) {
 void TTieringActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext& /*internalContext*/) {
     THashSet<ui64> portionIds;
     for (auto&& [address, addressPortions] : PortionIdByWaitDuration) {
-        if (addressPortions.GetPortions().size() && tasksContext.Now < addressPortions.GetPortions().begin()->first) {
+        if (addressPortions.GetPortions().size() && tasksContext.GetActualInstant() < addressPortions.GetPortions().begin()->first) {
             Counters.SkipEvictionForLimit->Add(1);
             continue;
         }
@@ -114,7 +114,7 @@ void TTieringActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, co
             continue;
         }
         for (auto&& [wInstant, portions] : addressPortions.GetPortions()) {
-            if (tasksContext.Now < wInstant) {
+            if (tasksContext.GetActualInstant() < wInstant) {
                 break;
             }
             bool limitEnriched = false;
@@ -126,7 +126,7 @@ void TTieringActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, co
                         continue;
                     }
                 }
-                auto info = BuildActualizationInfo(*portion, tasksContext.Now);
+                auto info = BuildActualizationInfo(*portion, tasksContext.GetActualInstant());
                 AFL_VERIFY(info);
                 auto portionScheme = portion->GetSchema(VersionedIndex);
                 TPortionEvictionFeatures features(portionScheme, info->GetTargetScheme(), portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
@@ -153,9 +153,9 @@ void TTieringActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, co
             std::shared_ptr<NColumnShard::TValueAggregationClient> waitDurationSignal;
             std::shared_ptr<NColumnShard::TValueAggregationClient> queueSizeSignal;
             if (i.first.WriteIs(NTiering::NCommon::DeleteTierName)) {
-                i.second.CorrectSignals(waitQueueDelete, waitDurationDelete, tasksContext.Now);
+                i.second.CorrectSignals(waitQueueDelete, waitDurationDelete, tasksContext.GetActualInstant());
             } else {
-                i.second.CorrectSignals(waitQueueEvict, waitDurationEvict, tasksContext.Now);
+                i.second.CorrectSignals(waitQueueEvict, waitDurationEvict, tasksContext.GetActualInstant());
             }
         }
         Counters.DifferenceWaitToDelete->SetValue(waitDurationDelete);

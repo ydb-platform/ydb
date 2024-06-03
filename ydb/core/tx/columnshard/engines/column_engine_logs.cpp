@@ -421,6 +421,7 @@ std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::Star
                 g->StartActualizationIndex();
             }
             g->RefreshTiering(i.second);
+            context.ResetActualInstantForTest();
             g->BuildActualizationTasks(context, actualizationLag);
         }
     }

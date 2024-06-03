@@ -149,8 +149,8 @@ private:
     );
 
     // delayedCall may be true only if the method is called from a scheduled callback.
-    void SendStartDirectReadPartitionSessionImpl(TDirectReadPartitionSession&, TPlainStatus&&, bool delayedCall = false);
-    void SendStartDirectReadPartitionSessionImpl(TPartitionSessionId, TPlainStatus&&, bool delayedCall = false);
+    void SendStartDirectReadPartitionSessionImpl(TDirectReadPartitionSession&, TPlainStatus&&, TDeferredActions<false>&, bool delayedCall = false);
+    void SendStartDirectReadPartitionSessionImpl(TPartitionSessionId, TPlainStatus&&, TDeferredActions<false>&, bool delayedCall = false);
 
     void AbortImpl(TSessionClosedEvent&& closeEvent);
 

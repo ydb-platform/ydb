@@ -179,7 +179,7 @@ namespace NYql {
                         case NYql::NConnector::NApi::GREENPLUM:
                             sourceType = "GreenplumGeneric";
                         case NYql::NConnector::NApi::MS_SQL_SERVER:
-                            sourceType = "MsSqlServerGeneric";
+                            sourceType = "MsSQLServerGeneric";
                             break;
                         default:
                             ythrow yexception() << "Data source kind is unknown or not specified";
@@ -222,7 +222,7 @@ namespace NYql {
                             properties["SourceType"] = "Greenplum";
                             break;
                         case NConnector::NApi::MS_SQL_SERVER:
-                            properties["SourceType"] = "MsSqlServer";
+                            properties["SourceType"] = "MsSQLServer";
                             break;
                         case NConnector::NApi::DATA_SOURCE_KIND_UNSPECIFIED:
                             break;

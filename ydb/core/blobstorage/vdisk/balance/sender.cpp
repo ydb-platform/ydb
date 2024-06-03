@@ -108,75 +108,13 @@ namespace {
         }
     };
 
-    struct TSenderMngr {
-        enum EState {
-            EInit,
-            EReadParts,
-            ESendParts,
-            ECompleteBatch,
-            EPassAway
-        };
-
-        EState State = EInit;
-
-        const TDuration SendTimeout = TDuration::Seconds(10);
-        TInstant SendPartsStart;
-        ui32 ToSendPartsCount = 0;
-        ui32 SentPartsCount = 0;
-        ui32 PartsLeft = 0;
-        ui64 Epoch = 0;
-
-        void StartReadNewBatch() {
-            Y_VERIFY(State == EInit || State == ECompleteBatch, "Invalid state");
-            State = EReadParts;
-        }
-
-        ui64 StartSendParts(TInstant now, ui32 count, ui32 partsLeft) {
-            Y_VERIFY(State == EReadParts, "Invalid state");
-            State = ESendParts;
-            SendPartsStart = now;
-            ToSendPartsCount = count;
-            PartsLeft = partsLeft;
-            return Epoch;
-        }
-
-        void PartSent(ui64 epoch, ui32 cnt=1) {
-            if (epoch != Epoch) {
-                return;
-            }
-            Y_VERIFY(State == ESendParts, "Invalid state");
-            SentPartsCount += cnt;
-        }
-
-        NActors::TEvents::TEvCompleted* IsSendingFinished(ui32 epoch, TInstant now) {
-            if (epoch != Epoch) {
-                return nullptr;
-            }
-            Y_VERIFY(State == ESendParts, "Invalid state");
-            if (SentPartsCount == ToSendPartsCount || now > SendPartsStart + SendTimeout) {
-                State = PartsLeft == 0 ? EPassAway : ECompleteBatch;
-                ToSendPartsCount = 0;
-                SentPartsCount = 0;
-                ++Epoch;
-                return new NActors::TEvents::TEvCompleted(SENDER_ID, PartsLeft);
-            }
-            return nullptr;
-        }
-
-        bool IsPassAway() {
-            Y_VERIFY(State == ECompleteBatch || State == EPassAway, "Invalid state");
-            return State == EPassAway;
-        }
-    };
-
-
     class TSender : public TActorBootstrapped<TSender> {
         TActorId NotifyId;
         TQueueActorMapPtr QueueActorMapPtr;
         std::shared_ptr<TBalancingCtx> Ctx;
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
         TReader Reader;
-        TSenderMngr Mngr;
+        TWaiter Mngr;
 
         struct TStats {
             ui32 PartsRead = 0;
@@ -186,7 +124,7 @@ namespace {
         TStats Stats;
 
         void ScheduleJobQuant() {
-            Mngr.StartReadNewBatch();
+            Mngr.Init();
             Reader.ScheduleJobQuant(SelfId());
             // if all parts are already in memory, we could process results right now
             TryProcessResults();
@@ -195,7 +133,7 @@ namespace {
         void TryProcessResults() {
             if (auto [batch, partsLeft] = Reader.TryGetResults(); batch.has_value()) {
                 Stats.PartsRead += batch->size();
-                ui64 epoch = Mngr.StartSendParts(TlsActivationContext->Now(), batch->size(), partsLeft);
+                ui64 epoch = Mngr.StartJob(TlsActivationContext->Now(), batch->size(), partsLeft);
                 SendParts(std::move(*batch), epoch);
                 Schedule(Mngr.SendTimeout, new NActors::TEvents::TEvCompleted(epoch));
             }
@@ -206,7 +144,7 @@ namespace {
         }
 
         void TryCompleteBatch(ui64 epoch) {
-            if (auto ev = Mngr.IsSendingFinished(epoch, TlsActivationContext->Now()); ev != nullptr) {
+            if (auto ev = Mngr.IsJobDone(epoch, TlsActivationContext->Now()); ev != nullptr) {
                 Send(NotifyId, ev);
                 if (Mngr.IsPassAway()) {
                     PassAway();
@@ -285,7 +223,7 @@ namespace {
                 STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB14, VDISKP(Ctx->VCtx, "Put done"), (Msg, ev->Get()->ToString()));
             }
             ui64 epoch = ev->Get()->Record.GetCookie();
-            Mngr.PartSent(epoch);
+            Mngr.PartJobDone(epoch);
             TryCompleteBatch(epoch);
         }
 
@@ -303,7 +241,7 @@ namespace {
             }
             ui64 epoch = ev->Get()->Record.GetCookie();
             TryCompleteBatch(epoch);
-            Mngr.PartSent(epoch, items.size());
+            Mngr.PartJobDone(epoch, items.size());
         }
 
         void PassAway() override {

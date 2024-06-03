@@ -79,5 +79,47 @@ namespace NBalancing {
         Parts.resize(GType.TotalPartCount());
     }
 
+    void TWaiter::Init() {
+        Y_VERIFY(State == EInit || State == ECompleteJob, "Invalid state");
+        State = EInit;
+    }
+
+    ui64 TWaiter::StartJob(TInstant now, ui32 count, ui32 partsLeft) {
+        Y_VERIFY(State == EInit, "Invalid state");
+        State = EStartJob;
+        SendPartsStart = now;
+        ToSendPartsCount = count;
+        PartsLeft = partsLeft;
+        return Epoch;
+    }
+
+    void TWaiter::PartJobDone(ui64 epoch, ui32 cnt) {
+        if (epoch != Epoch) {
+            return;
+        }
+        Y_VERIFY(State == EStartJob, "Invalid state");
+        SentPartsCount += cnt;
+    }
+
+    NActors::TEvents::TEvCompleted* TWaiter::IsJobDone(ui32 epoch, TInstant now) {
+        if (epoch != Epoch) {
+            return nullptr;
+        }
+        Y_VERIFY(State == EStartJob, "Invalid state");
+        if (SentPartsCount == ToSendPartsCount || now > SendPartsStart + SendTimeout) {
+            State = PartsLeft == 0 ? EPassAway : ECompleteJob;
+            ToSendPartsCount = 0;
+            SentPartsCount = 0;
+            ++Epoch;
+            return new NActors::TEvents::TEvCompleted(SENDER_ID, PartsLeft);
+        }
+        return nullptr;
+    }
+
+    bool TWaiter::IsPassAway() {
+        Y_VERIFY(State == ECompleteJob || State == EPassAway, "Invalid state");
+        return State == EPassAway;
+    }
+
 } // NBalancing
 } // NKikimr

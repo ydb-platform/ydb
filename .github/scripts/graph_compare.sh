@@ -46,7 +46,7 @@ echo Number of modules:
 cat $workdir/modules | wc -l
 
 echo Filter only modules in ydb
-cat $workdir/modules | grep "^ydb" > $workdir/modules2
+cat $workdir/modules | { grep "^ydb" || true; } > $workdir/modules2
 
 echo Number of modules:
 cat $workdir/modules2 | wc -l

@@ -1,3 +1,4 @@
+#include "flat_dbase_sz_env.h"
 #include "flat_executor_ut_common.h"
 
 namespace NKikimr {
@@ -4979,6 +4980,41 @@ Y_UNIT_TEST_SUITE(TFlatTableSnapshotWithCommits) {
 
 Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
 
+    struct TTxCalculateReadSize : public ITransaction {
+        ui32 Attempt = 0;
+        TVector<ui64>& ReadSizes;
+        ui64 MinKey, MaxKey;
+        
+        TTxCalculateReadSize(TVector<ui64>& readSizes, ui64 minKey, ui64 maxKey)
+            : ReadSizes(readSizes)
+            , MinKey(minKey)
+            , MaxKey(maxKey)
+        {
+            ReadSizes.clear();
+        }
+
+
+        bool Execute(TTransactionContext &txc, const TActorContext &) override
+        {
+            UNIT_ASSERT_LE(++Attempt, 10);
+
+            const auto minKey = NScheme::TInt64::TInstance(MinKey);
+            const auto maxKey = NScheme::TInt64::TInstance(MaxKey);
+            const TVector<NTable::TTag> tags{ { TRowsModel::ColumnKeyId, TRowsModel::ColumnValueId } };
+
+            auto sizeEnv = txc.DB.CreateSizeEnv();
+            txc.DB.CalculateReadSize(sizeEnv, TRowsModel::TableId, { minKey }, { maxKey }, tags, 0, 0, 0);
+            ReadSizes.push_back(sizeEnv.GetSize());
+
+            return txc.DB.Precharge(TRowsModel::TableId,  { minKey }, { maxKey }, tags, 0, 0, 0);
+        }
+
+        void Complete(const TActorContext &ctx) override
+        {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+    };
+
     struct TTxPrechargeAndSeek : public ITransaction {
         ui32 Attempt = 0;
         bool Pinned = false;
@@ -5019,6 +5055,43 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
     };
+
+    void ZeroSharedCache(TMyEnvBase &env) {
+        env.Env.GetMemObserver()->NotifyStat({1, 1, 1});
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(NSharedCache::EvMem, 1));
+        env->DispatchEvents(options);
+    }
+
+    Y_UNIT_TEST(CalculateReadSize_FlatIndex) {
+        TMyEnvBase env;
+        TRowsModel rows;
+        const ui32 rowsCount = 1024;
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+        ZeroSharedCache(env);
+
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy(), false));
+
+        env.SendSync(rows.MakeRows(rowsCount, 10*1024));
+        
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        TVector<ui64> sizes;
+        
+        env.SendSync(new NFake::TEvExecute{ new TTxCalculateReadSize(sizes, 0, 1) });
+        UNIT_ASSERT_VALUES_EQUAL(sizes, (TVector<ui64>{20566, 20566}));
+
+        env.SendSync(new NFake::TEvExecute{ new TTxCalculateReadSize(sizes, 100, 200) });
+        UNIT_ASSERT_VALUES_EQUAL(sizes, (TVector<ui64>{1048866, 1048866}));
+
+        env.SendSync(new NFake::TEvExecute{ new TTxCalculateReadSize(sizes, 300, 700) });
+        UNIT_ASSERT_VALUES_EQUAL(sizes, (TVector<ui64>{4133766, 4133766}));
+    }
 
     Y_UNIT_TEST(TestPrechargeAndSeek) {
         TMyEnvBase env;

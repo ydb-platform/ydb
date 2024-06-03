@@ -266,6 +266,12 @@ TSelectRowVersionResult TDatabase::SelectRowVersion(
     return Require(table)->SelectRowVersion(key, Env, readFlags, visible, observer);
 }
 
+TSizeEnv TDatabase::CreateSizeEnv()
+{
+    return TSizeEnv(Env);
+}
+
+
 void TDatabase::CalculateReadSize(TSizeEnv& env, ui32 table, TRawVals minKey, TRawVals maxKey,
                                   TTagsRef tags, ui64 flg, ui64 items, ui64 bytes,
                                   EDirection direction, TRowVersion snapshot)

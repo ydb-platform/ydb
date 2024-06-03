@@ -1374,11 +1374,6 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
         secondProcessor->Validate();
     }
 
-    /*
-    TODO(qyryq) Тест как PartitionSessionRetainsRetryStateOnReconnects, только в момент вызова колбэка TDirectReadSession.State < WORKING
-    колбэк не сработает, а после получения InitDirectReadResponse сессия должна сама отправить Start-запрос
-    */
-
     Y_UNIT_TEST(RetryWithoutConnectionResetsPartitionSession) {
         /*
         If there are pending StartDirectReadPartitionSession requests that were delayed due to previous errors,

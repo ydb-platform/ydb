@@ -184,20 +184,9 @@ namespace NKikimr::NStorage {
             vdiskConfig->MaxSyncLogChunksInFlight = MaxSyncLogChunksInFlightSSD;
         }
 
-        vdiskConfig->FeatureFlags = Cfg->FeatureFlags;
+        vdiskConfig->CostMetricsParametersByMedia = CostMetricsParametersByMedia;
 
-        if (Cfg->BlobStorageConfig.HasCostMetricsSettings()) {
-            for (auto type : Cfg->BlobStorageConfig.GetCostMetricsSettings().GetVDiskTypes()) {
-                if (type.HasPDiskType() && deviceType == PDiskTypeToPDiskType(type.GetPDiskType())) {
-                    if (type.HasBurstThresholdNs()) {
-                        vdiskConfig->BurstThresholdNs = type.GetBurstThresholdNs();
-                    }
-                    if (type.HasDiskTimeAvailableScale()) {
-                        vdiskConfig->DiskTimeAvailableScale = type.GetDiskTimeAvailableScale();
-                    }
-                }
-            }
-        }
+        vdiskConfig->FeatureFlags = Cfg->FeatureFlags;
 
         if (StorageConfig.HasBlobStorageConfig() && StorageConfig.GetBlobStorageConfig().HasVDiskPerformanceSettings()) {
             for (auto &type : StorageConfig.GetBlobStorageConfig().GetVDiskPerformanceSettings().GetVDiskTypes()) {

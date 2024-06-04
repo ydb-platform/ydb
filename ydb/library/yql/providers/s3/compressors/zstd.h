@@ -20,6 +20,7 @@ private:
     std::vector<char> InBuffer, OutBuffer;
     ::ZSTD_DStream *const ZCtx_;
     size_t  Offset_;
+    size_t Size_;
     bool Finished_ = false;
 };
 

@@ -87,6 +87,7 @@ namespace NYql::NDqs {
 
             STRICT_STFUNC(Handler, {
                 HFunc(TEvQueryResponse, OnReturnResult);
+                HFunc(TEvQueryStatus, OnQueryStatus);
                 cFunc(TEvents::TEvPoison::EventType, OnPoison);
                 SFunc(TEvents::TEvBootstrap, DoBootstrap);
                 hFunc(TEvDqStats, Handle);
@@ -189,6 +190,14 @@ namespace NYql::NDqs {
                 TActivationContext::Schedule(RetryBackoff, new IEventHandle(selfId, selfId, new TEvents::TEvBootstrap(), 0));
                 Retry += 1;
                 *RetryCounter +=1 ;
+            }
+
+            void OnQueryStatus(TEvQueryStatus::TPtr& ev, const TActorContext& ctx) {
+                Y_UNUSED(ev); Y_UNUSED(ctx);
+                auto response = MakeHolder<TEvQueryStatusResponse>();
+                auto* r = response->Record.MutableResponse();
+                r->SetStatus("Executing");
+                this->Send(ev->Sender, response.Release());
             }
 
             void OnReturnResult(TEvQueryResponse::TPtr& ev, const NActors::TActorContext& ctx) {
@@ -486,6 +495,7 @@ namespace NYql::NDqs {
             }
             auto* request = dynamic_cast<const Yql::DqsProto::ExecuteGraphRequest*>(ctx->GetRequest());
             auto session = Sessions.GetSession(request->GetSession());
+            uint64_t querySeqNo = request->GetQuerySeqNo();
             if (!session) {
                 TString message = TStringBuilder()
                                 << "Bad session: "
@@ -514,7 +524,7 @@ namespace NYql::NDqs {
 
                     session->DeleteRequest(actorId);
                 });
-            session->AddRequest(actorId);
+            session->AddRequest(actorId, querySeqNo);
         });
 
         ADD_REQUEST(SvnRevision, SvnRevisionRequest, SvnRevisionResponse, {
@@ -665,7 +675,28 @@ namespace NYql::NDqs {
 
             TActorId callbackId = ActorSystem.Register(callback.Release());
 
-            ActorSystem.Send(new IEventHandle(MakeWorkerManagerActorID(ActorSystem.NodeId), callbackId, ev.Release(), IEventHandle::FlagTrackDelivery));
+            uint64_t querySeqNo = request->GetQuerySeqNo();
+            if (querySeqNo) {
+                auto session = Sessions.GetSession(request->GetSession());
+                if (!session) {
+                    TString message = TStringBuilder()
+                                    << "Bad session: "
+                                    << request->GetSession();
+                    YQL_CLOG(DEBUG, ProviderDq) << message;
+                    ctx->ReplyError(grpc::INVALID_ARGUMENT, message);
+                } else {
+                    auto actorId = session->FindActorId(querySeqNo);
+                    if (!actorId) {
+                        auto* result = google::protobuf::Arena::CreateMessage<Yql::DqsProto::QueryStatusResponse>(ctx->GetArena());
+                        result->SetStatus("Finished");
+                        ctx->Reply(result, Ydb::StatusIds::SUCCESS);
+                    } else {
+                        ActorSystem.Send(new IEventHandle(actorId, callbackId, ev.Release()));
+                    }
+                }
+            } else {
+                ActorSystem.Send(new IEventHandle(MakeWorkerManagerActorID(ActorSystem.NodeId), callbackId, ev.Release(), IEventHandle::FlagTrackDelivery));
+            }
         });
 
         ADD_REQUEST(RegisterNode, RegisterNodeRequest, RegisterNodeResponse, {

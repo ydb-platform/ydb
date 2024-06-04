@@ -10,7 +10,7 @@
 namespace NActors {
 
 
-template <EInternalActorSystemActivity type, bool IsMainActivity=true>
+template <EInternalActorSystemActivity ActivityType, bool IsMainActivity=true>
 class TInternalActorTypeGuard {
 public:
     TInternalActorTypeGuard() {
@@ -68,7 +68,7 @@ private:
     ui32 NextIndex = 0;
 };
 
-template <EInternalActorSystemActivity type>
-ui32 TInternalActorTypeGuard<type>::Index = TEnumProcessKey<TActorActivityTag, EInternalActorSystemActivity>::GetIndex(type);
+template <EInternalActorSystemActivity ActivityType, bool IsMainActivity>
+ui32 TInternalActorTypeGuard<ActivityType, IsMainActivity>::Index = TEnumProcessKey<TActorActivityTag, EInternalActorSystemActivity>::GetIndex(ActivityType);
 
 }

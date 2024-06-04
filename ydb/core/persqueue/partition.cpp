@@ -2238,6 +2238,7 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
         }
     }
 
+    ChangeConfigActs.clear();
     AnswerCurrentReplies(ctx);
 
     PendingUsersInfo.clear();

@@ -20,7 +20,8 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         bool initializeHttpGateway,
         NYql::NConnector::IClient::TPtr connectorClient,
         NYql::IDatabaseAsyncResolver::TPtr databaseAsyncResolver,
-        std::optional<NKikimrConfig::TAppConfig> appConfig)
+        std::optional<NKikimrConfig::TAppConfig> appConfig,
+        std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory)
     {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableExternalDataSources(true);
@@ -52,7 +53,8 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             .SetFeatureFlags(featureFlags)
             .SetFederatedQuerySetupFactory(federatedQuerySetupFactory)
             .SetKqpSettings({});
-
+        
+        settings.S3ActorsFactory = s3ActorsFactory;
         settings = settings.SetAppConfig(appConfig.value());
 
         return std::make_shared<TKikimrRunner>(settings);

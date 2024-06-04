@@ -12,9 +12,8 @@ SRCS(
     raw_read_actor.cpp
     yql_s3_actors_util.cpp
     yql_s3_applicator_actor.cpp
-    yql_s3_sink_factory.cpp
-    yql_s3_source_factory.cpp
     yql_s3_write_actor.cpp
+    yql_s3_actors_factory.cpp
 )
 
 PEERDIR(

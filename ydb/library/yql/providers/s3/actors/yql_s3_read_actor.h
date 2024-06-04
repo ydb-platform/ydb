@@ -8,10 +8,9 @@
 #include "ydb/library/yql/providers/s3/range_helpers/path_list_reader.h"
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory.h>
 
 namespace NYql::NDq {
-
-struct TS3ReadActorFactoryConfig;
 
 NActors::IActor* CreateS3FileQueueActor(
         TTxId txId,

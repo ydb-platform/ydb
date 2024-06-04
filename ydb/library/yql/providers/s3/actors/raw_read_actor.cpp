@@ -10,7 +10,7 @@
 
 #include <ydb/library/yql/dq/actors/compute/retry_queue.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/providers/s3/common/util.cpp>
+#include <ydb/library/yql/providers/s3/common/util.h>
 
 #include <library/cpp/string_utils/quote/quote.h>
 

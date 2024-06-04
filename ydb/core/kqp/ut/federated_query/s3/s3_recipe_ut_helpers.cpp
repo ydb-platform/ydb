@@ -20,6 +20,10 @@ namespace NTestUtils {
 
     extern const TString TEST_SCHEMA_IDS = R"(["StructType";[["key";["DataType";"Utf8";];];];])";
 
+    std::shared_ptr<NKikimr::NKqp::TKikimrRunner> MakeKikimrRunner(std::optional<NKikimrConfig::TAppConfig> appConfig) {
+        return NKikimr::NKqp::NFederatedQueryTest::MakeKikimrRunner(true, nullptr, nullptr, appConfig, std::make_shared<NYql::NDq::TS3ActorsFactory>());
+    }
+
     Aws::S3::S3Client MakeS3Client() {
         Aws::Client::ClientConfiguration s3ClientConfig;
         s3ClientConfig.endpointOverride = GetEnv("S3_ENDPOINT");

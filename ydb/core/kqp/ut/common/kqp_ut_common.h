@@ -3,6 +3,7 @@
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory.h>
 #include <ydb/library/yql/core/issue/yql_issue.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/sdk/cpp/client/ydb_query/client.h>
@@ -86,6 +87,7 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     TMaybe<NFake::TStorage> Storage = Nothing();
     NKqp::IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory = std::make_shared<NKqp::TKqpFederatedQuerySetupFactoryNoop>();
     NMonitoring::TDynamicCounterPtr CountersRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory = std::make_shared<NYql::NDq::TDefaultS3ActorsFactory>();
 
     TKikimrSettings()
     {

@@ -1,7 +1,6 @@
 #include "s3_recipe_ut_helpers.h"
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
@@ -27,7 +26,7 @@ Y_UNIT_TEST_SUITE(KqpS3PlanTest) {
     Y_UNIT_TEST(S3Source) {
         CreateBucketWithObject("test_bucket_plan_s3_source", "test_object_plan_s3_source", TEST_CONTENT);
 
-        auto kikimr = MakeKikimrRunner(true);
+        auto kikimr = NTestUtils::MakeKikimrRunner();
 
         auto tc = kikimr->GetTableClient();
         auto session = tc.CreateSession().GetValueSync().GetSession();
@@ -84,7 +83,7 @@ Y_UNIT_TEST_SUITE(KqpS3PlanTest) {
             CreateBucket("test_bucket_write", s3Client);
         }
 
-        auto kikimr = MakeKikimrRunner(true);
+        auto kikimr = NTestUtils::MakeKikimrRunner();
 
         auto tc = kikimr->GetTableClient();
         auto session = tc.CreateSession().GetValueSync().GetSession();

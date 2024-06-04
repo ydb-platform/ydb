@@ -1807,9 +1807,9 @@
     ],
     "test.test[optimizers-yql-2582_limit_for_join_input--Debug]": [
         {
-            "checksum": "96f2eb2bdc2e2ec287e5bd43fb009aaa",
-            "size": 5489,
-            "uri": "https://{canondata_backend}/995452/9dc6bba399464476af3ac8cb3b80496fa9b678dc/resource.tar.gz#test.test_optimizers-yql-2582_limit_for_join_input--Debug_/opt.yql_patched"
+            "checksum": "90d6c53cbe9d95ea10c10b17a8894d21",
+            "size": 5474,
+            "uri": "https://{canondata_backend}/1937492/7ae37c32b42bb57d4df171a62ced7ab76867a8ea/resource.tar.gz#test.test_optimizers-yql-2582_limit_for_join_input--Debug_/opt.yql_patched"
         }
     ],
     "test.test[optimizers-yql-2582_limit_for_join_input--Plan]": [

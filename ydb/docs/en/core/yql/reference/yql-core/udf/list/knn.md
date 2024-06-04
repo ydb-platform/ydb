@@ -14,7 +14,7 @@ The disadvantage is the need for a complete data search. But this disadvantage i
 Example:
 
 ```sql
-$TargetEmbedding = Knn::ToBinaryString([1.2f, 2.3f, 3.4f, 4.5f]);
+$TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
 
 SELECT id, fact, embedding FROM Facts
 WHERE user="Williams"
@@ -42,11 +42,13 @@ Distance functions return small values for close vectors, while similarity funct
 {% endnote %}
 
 Similarity functions:
-* inner product `InnerProductSimilarity` (sum of products of coordinates)
-* cosine similarity `CosineSimilarity` (inner product / vector lengths)
+* inner product `InnerProductSimilarity`, it's `dot product` for us, also known as `scalar product` (sum of products of coordinates)
+* cosine similarity `CosineSimilarity` (inner product / product of vector lengths)
 
 Distance functions:
 * cosine distance `CosineDistance` (1 - cosine similarity)
+* mahattan distance `ManhattanDistance`, also known as `L1 distance` (sum of modules of coordinate difference)
+* euclidean distance `EuclideanDistance`, also known as `L2 distance` (square root of sum of squares of coordinate difference)
 
 #### Function signatures
 
@@ -54,9 +56,21 @@ Distance functions:
 Knn::InnerProductSimilarity(String{Flags:AutoMap}, String{Flags:AutoMap})->Float?
 Knn::CosineSimilarity(String{Flags:AutoMap}, String{Flags:AutoMap})->Float?
 Knn::CosineDistance(String{Flags:AutoMap}, String{Flags:AutoMap})->Float?
+Knn::ManhattanDistance(String{Flags:AutoMap}, String{Flags:AutoMap})->Float?
+Knn::EuclideanDistance(String{Flags:AutoMap}, String{Flags:AutoMap})->Float?
 ```
 
-In case of an error, these functions return `NULL`.
+In case of different length or format, these functions return `NULL`.
+
+{% note info %}
+
+All distance and similarity functions support overloads when first or second argument
+can be `Tagged<String, "FloatVector">`, `Tagged<String, "Uint8Vector">`, `Tagged<String, "Int8Vector">`, `Tagged<String, "BitVector">`.
+
+If both arguments are `Tagged`, value of tag should be same, overwise will be error for this request.
+
+{% endnote %}
+
 
 ### Functions for converting between vector and binary representations
 
@@ -66,9 +80,18 @@ The binary representation of a vector can be persisted in a {{ ydb-short-name }}
 #### Function signatures
 
 ```sql
-Knn::ToBinaryString(List<Float>{Flags:AutoMap})->String
-Knn::FromBinaryString(String{Flags:AutoMap})->List<Float>?
+Knn::ToBinaryStringFloat(List<Float>{Flags:AutoMap})->Tagged<String, "FloatVector">
+Knn::ToBinaryStringUint8(List<Uint8>{Flags:AutoMap})->Tagged<String, "Uint8Vector">
+Knn::ToBinaryStringInt8(List<Int8>{Flags:AutoMap})->Tagged<String, "Int8Vector">
+Knn::ToBinaryStringBit(List<Double>{Flags:AutoMap})->Tagged<String, "BitVector">
+Knn::ToBinaryStringBit(List<Float>{Flags:AutoMap})->Tagged<String, "BitVector">
+Knn::ToBinaryStringBit(List<Uint8>{Flags:AutoMap})->Tagged<String, "BitVector">
+Knn::ToBinaryStringBit(List<Int8>{Flags:AutoMap})->Tagged<String, "BitVector">
+Knn::FloatFromBinaryString(String{Flags:AutoMap})->List<Float>?
 ```
+
+* `ToBinaryStringBit` -- translate to `1` all coordinates that greater than `0`, other coordinates translated to `0`.
+* `ToBinaryStringBit`, `ToBinaryStringUint8`, `ToBinaryStringInt8` -- commonly used for quantization.
 
 ## Examples
 
@@ -79,7 +102,7 @@ CREATE TABLE Facts (
     id Uint64,        // Id of fact
     user Utf8,        // User name
     fact Utf8,        // Human-readable description of a user fact
-    embedding String, // Binary representation of embedding vector (result of Knn::ToBinaryString)
+    embedding String, // Binary representation of embedding vector (result of Knn::ToBinaryStringFloat)
     PRIMARY KEY (id)
 )
 ```
@@ -91,13 +114,56 @@ UPSERT INTO Facts (id, user, fact, embedding)
 VALUES (123, "Williams", "Full name is John Williams", Knn::ToBinaryString([1.0f, 2.0f, 3.0f, 4.0f]))
 ```
 
+{% note info %}
+
+{{ ydb-short-name }} doesn't support storing `Tagged` types, so user should store them as `String`, to achive this user can use `Untag` function.
+
+{% endnote %}
+
 ### Exact vector search
 
 ```sql
-$TargetEmbedding = Knn::ToBinaryString([1.2f, 2.3f, 3.4f, 4.5f]);
+$TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
 
 SELECT * FROM Facts
 WHERE user="Williams"
 ORDER BY Knn::CosineDistance(embedding, $TargetEmbedding)
+LIMIT 10
+```
+
+```sql
+$TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
+
+SELECT * FROM Facts
+WHERE Knn::CosineDistance(embedding, $TargetEmbedding) < 0.1
+```
+
+
+### Approximate neareast neighbor vector search: quantization
+
+```sql
+CREATE TABLE Facts (
+    id Uint64 NOT NULL,
+    embedding String,
+    embedding_bit String,
+    PRIMARY KEY (id)
+);
+
+INSERT INTO my_table VALUES(
+    (1, Untag(Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]), "FloatVector"), Untag(Knn::ToBinaryStringBit([1.2f, 2.3f, 3.4f, 4.5f])), "BitVector")
+);
+```
+
+```sql
+$TargetEmbeddingBit = Knn::ToBinaryStringBit([1.2f, 2.3f, 3.4f, 4.5f]);
+$TargetEmbeddingFloat = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
+
+$Ids = SELECT id FROM Facts
+ORDER BY Knn::CosineDistance(embedding_bit, $TargetEmbeddingBit)
+LIMIT 100;
+
+SELECT * FROM Facts
+WHERE id IN $Ids
+ORDER BY Knn::CosineDistance(embedding, $TargetEmbeddingFloat)
 LIMIT 10
 ```

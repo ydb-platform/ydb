@@ -2,7 +2,6 @@ default:
   tech: false # Include technical info for developers of services supporting YQL (like YDB), not for users of those services. For instance, debug pragmas.
   backend_name: YDB
   backend_name_lower: ydb
-  ydb: true
   example_cluster: ydbtest
   feature_codegen: true
   feature_secondary_index: true
@@ -20,10 +19,11 @@ default:
 #  feature_topic_settings_reset: true
 #  feature_logbroker: true
   feature_view: true
+  ydb: YDB
+  ydb-name: YDB
   ydb-full-name: YDB
   ydb-short-name: YDB
   yandex-cloud: Yandex.Cloud
-  ydb-name: YDB
   objstorage-full-name: Yandex Object Storage
   sf-name: Cloud Functions
   concept_secondary_index: ../../../../concepts/secondary_indexes

@@ -2573,6 +2573,11 @@ TExprNode::TPtr BuildWindows(TPositionHandle pos, const TExprNode::TPtr& list, c
         .Seal()
         .Build();
 
+    auto exportsPtr = optCtx.Types->Modules->GetModule("/lib/yql/window.yql");
+    YQL_ENSURE(exportsPtr);
+    const auto& exports = exportsPtr->Symbols();
+
+    TNodeOnNodeOwnedMap deepClones;
     for (const auto& x : winCtx.Window2funcs) {
         auto winDef = window->Tail().Child(x.first);
         const auto& frameSettings = winDef->Tail();
@@ -2724,56 +2729,31 @@ TExprNode::TPtr BuildWindows(TPositionHandle pos, const TExprNode::TPtr& list, c
                             .Add(1, extractor)
                         .Seal()
                         .Build();
-                } else if (name == "first_value" || name == "last_value") {
+                } else if (name == "first_value" || name == "last_value" || name == "nth_value") {
                     auto arg = ctx.NewArgument(pos, "row");
                     auto arguments = ctx.NewArguments(pos, { arg });
-                    auto root = p.first->TailPtr();
+                    auto root = p.first->ChildPtr(3);
                     RewriteAggsPartial(root, arg, aggId, ctx, optCtx, false);
                     auto extractor = ctx.NewLambda(pos, std::move(arguments),
                         ctx.ReplaceNode(std::move(root), *p.second, arg));
 
-                    TExprNode::TPtr updater;
-                    if (name == "first_value") {
-                        updater = ctx.Builder(pos)
-                            .Lambda()
-                                .Param("item")
-                                .Param("state")
-                                .Arg("state")
-                            .Seal()
-                            .Build();
-                    } else {
-                        updater = ctx.Builder(pos)
-                            .Lambda()
-                                .Param("item")
-                                .Param("state")
-                                .Apply(extractor)
-                                    .With(0, "item")
-                                .Seal()
-                            .Seal()
-                            .Build();
+                    const auto ex = exports.find(TString(name) + "_traits_factory");
+                    YQL_ENSURE(exports.cend() != ex);
+                    auto lambda = ctx.DeepCopy(*ex->second, exportsPtr->ExprCtx(), deepClones, true, false);
+                    TNodeOnNodeOwnedMap replaces = {
+                        {lambda->Head().Child(0), listTypeNode},
+                        {lambda->Head().Child(1), extractor}
+                    };
+
+                    if (name == "nth_value") {
+                        replaces[lambda->Head().Child(2)] = ctx.NewCallable(pos, "FromPg", { p.first->ChildPtr(4) });
                     }
 
-                    value = ctx.Builder(pos)
-                        .Callable("WindowTraits")
-                            .Callable(0, "ListItemType")
-                                .Add(0, listTypeNode)
-                            .Seal()
-                            .Add(1, extractor)
-                            .Add(2, updater)
-                            .Lambda(3)
-                                .Param("item")
-                                .Param("state")
-                                .Callable("Void")
-                                .Seal()
-                            .Seal()
-                            .Lambda(4)
-                                .Param("state")
-                                .Arg("state")
-                            .Seal()
-                            .Callable(5, "Null")
-                            .Seal()
-                        .Seal()
-                        .Build();
+                    auto traits = ctx.ReplaceNodes(lambda->TailPtr(), replaces);
+                    ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
+                    auto status = ExpandApply(traits, traits, ctx);
+                    YQL_ENSURE(status != IGraphTransformer::TStatus::Error);
+                    value = traits;
                 } else {
                     ythrow yexception() << "Not supported function: " << name;
                 }

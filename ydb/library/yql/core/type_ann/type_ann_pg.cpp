@@ -754,6 +754,40 @@ IGraphTransformer::TStatus PgWindowCallWrapper(const TExprNode::TPtr& input, TEx
         } else {
             input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(arg));
         }
+    } else if (name == "nth_value") {
+        if (input->ChildrenSize() != 5) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                TStringBuilder() << "Expected two arguments in function" << name));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (input->Child(4)->GetTypeAnn() && input->Child(4)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg) {
+            auto name = input->Child(4)->GetTypeAnn()->Cast<TPgExprType>()->GetName();
+            if (name != "int4") {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(4)->Pos()), TStringBuilder() <<
+                    "Expected int4 type, but got: " << name));
+                return IGraphTransformer::TStatus::Error;
+            }
+        } else {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(4)->Pos()), TStringBuilder() <<
+                "Expected pg type, but got: " << input->Child(4)->GetTypeAnn()->GetKind()));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto name = input->Child(4)->GetTypeAnn()->Cast<TPgExprType>()->GetName();
+        if (name != "int4") {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(4)->Pos()), TStringBuilder() <<
+                "Expected pgint4 type, but got: " << name));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+
+        auto arg = input->Child(3)->GetTypeAnn();
+        if (arg->IsOptionalOrNull()) {
+            input->SetTypeAnn(arg);
+        } else {
+            input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(arg));
+        }
     } else if (name == "row_number" || name == "rank" || name == "dense_rank") {
         if (input->ChildrenSize() != 3) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),

@@ -1904,10 +1904,33 @@ public:
             auto& op = *tx.MutableAlterReplication();
             op.SetName(pathPair.second);
 
-            auto& state = *op.MutableState();
             if (const auto& done = settings.Settings.StateDone) {
+                auto& state = *op.MutableState();
                 state.MutableDone()->SetFailoverMode(
                     static_cast<NKikimrReplication::TReplicationState::TDone::EFailoverMode>(done->FailoverMode));
+            }
+
+            if (settings.Settings.ConnectionString || settings.Settings.Endpoint || settings.Settings.Database ||
+                    settings.Settings.OAuthToken || settings.Settings.StaticCredentials) {
+                auto& config = *op.MutableConfig();
+                auto& params = *config.MutableSrcConnectionParams();
+                if (const auto& connectionString = settings.Settings.ConnectionString) {
+                    const auto parseResult = NYdb::ParseConnectionString(*connectionString);
+                    params.SetEndpoint(parseResult.Endpoint);
+                    params.SetDatabase(parseResult.Database);
+                }
+                if (const auto& endpoint = settings.Settings.Endpoint) {
+                    params.SetEndpoint(*endpoint);
+                }
+                if (const auto& database = settings.Settings.Database) {
+                    params.SetDatabase(*database);
+                }
+                if (const auto& oauth = settings.Settings.OAuthToken) {
+                    oauth->Serialize(*params.MutableOAuthToken());
+                }
+                if (const auto& staticCreds = settings.Settings.StaticCredentials) {
+                    staticCreds->Serialize(*params.MutableStaticCredentials());
+                }
             }
 
             if (IsPrepare()) {

@@ -563,6 +563,7 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
                 .VDiskStatus = it->second->Status,
             });
             ScrubState.UpdateVDiskState(&*it->second);
+            SysViewChangedVSlots.insert(it->second->VSlotId);
         }
     }
     for (auto it = StaticVSlots.lower_bound(startingId); it != StaticVSlots.end() && it->first.NodeId == nodeId; ++it) {

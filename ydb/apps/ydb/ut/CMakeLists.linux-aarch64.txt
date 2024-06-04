@@ -41,6 +41,7 @@ target_sources(ydb-apps-ydb-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/apps/ydb/ut/run_ydb.cpp
   ${PROJECT_SOURCE_DIR}/ydb/apps/ydb/ut/supported_codecs.cpp
   ${PROJECT_SOURCE_DIR}/ydb/apps/ydb/ut/supported_codecs_fixture.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/apps/ydb/ut/ydb-dump.cpp
 )
 
 set_property(

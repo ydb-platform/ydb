@@ -340,6 +340,8 @@ namespace NYql {
                     auto* options = request.mutable_data_source_instance()->mutable_gp_options();
                     SetSchema(*options, clusterConfig);
                 } break;
+                case NYql::NConnector::NApi::MS_SQL_SERVER:
+                    break;
                 case NYql::NConnector::NApi::POSTGRESQL: {
                     auto* options = request.mutable_data_source_instance()->mutable_pg_options();
                     SetSchema(*options, clusterConfig);
@@ -385,6 +387,9 @@ namespace NYql {
                         break;
                     case NYql::NConnector::NApi::POSTGRESQL:
                         dbNameTarget = "postgres";
+                        break;
+                    case NYql::NConnector::NApi::MS_SQL_SERVER:
+                        dbNameTarget = "mssqlserver";
                         break;
                     default:
                         ythrow yexception() << "You must provide database name explicitly for data source kind: '"

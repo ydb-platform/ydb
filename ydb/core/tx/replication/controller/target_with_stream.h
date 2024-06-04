@@ -15,7 +15,7 @@ public:
         SetStreamState(EStreamState::Creating);
     }
 
-    void Progress(TReplication::TPtr replication, const TActorContext& ctx) override;
+    void Progress(const TActorContext& ctx) override;
     void Shutdown(const TActorContext& ctx) override;
 
 private:

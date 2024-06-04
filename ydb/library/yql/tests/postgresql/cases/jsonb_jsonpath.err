@@ -2242,11 +2242,6 @@ select jsonb_path_query('"10-03-2017 12:34:56"', '$.datetime("dd-mm-yyyy\"T\"HH2
 <sql-statement>
 set time zone '+00';
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: timezone
-    	set time zone '+00';
-	^
 <sql-statement>
 select jsonb_path_query('"10-03-2017 12:34"', '$.datetime("dd-mm-yyyy HH24:MI")');
 </sql-statement>
@@ -2346,11 +2341,6 @@ select jsonb_path_query('"12:34 -05:20"', '$.datetime("HH24:MI TZH:TZM")');
 <sql-statement>
 set time zone '+10';
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: timezone
-    	set time zone '+10';
-	^
 <sql-statement>
 select jsonb_path_query('"10-03-2017 12:34"', '$.datetime("dd-mm-yyyy HH24:MI")');
 </sql-statement>
@@ -2450,11 +2440,6 @@ select jsonb_path_query('"12:34 -05:20"', '$.datetime("HH24:MI TZH:TZM")');
 <sql-statement>
 set time zone default;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 1
-    	set time zone default;
-	^
 <sql-statement>
 select jsonb_path_query('"2017-03-10"', '$.datetime().type()');
 </sql-statement>
@@ -2586,11 +2571,6 @@ select jsonb_path_query('"12:34:56+3:10"', '$.datetime()');
 <sql-statement>
 set time zone '+00';
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: timezone
-    	set time zone '+00';
-	^
 <sql-statement>
 -- date comparison
 select jsonb_path_query(
@@ -2908,11 +2888,6 @@ select jsonb_path_query('"1000000-01-01"', '$.datetime() > "2020-01-01 12:00:00"
 <sql-statement>
 set time zone default;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 1
-    	set time zone default;
-	^
 <sql-statement>
 -- jsonpath operators
 SELECT jsonb_path_query('[{"a": 1}, {"a": 2}]', '$[*]');

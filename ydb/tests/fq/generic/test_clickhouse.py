@@ -6,7 +6,7 @@ import ydb.public.api.protos.ydb_value_pb2 as ydb
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v2
 
 from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
-from utils.settings import Settings
+from ydb.tests.fq.generic.utils.settings import Settings
 
 
 class TestClickHouse:

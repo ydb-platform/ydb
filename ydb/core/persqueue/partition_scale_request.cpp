@@ -30,11 +30,11 @@ void TPartitionScaleRequest::Bootstrap(const NActors::TActorContext &ctx) {
 void TPartitionScaleRequest::SendProposeRequest(const NActors::TActorContext &ctx) {
     auto proposal = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
     proposal->Record.SetDatabaseName(CanonizePath(DatabasePath));
-    FillProposeRequest(*proposal, DatabasePath, Topic);
+    FillProposeRequest(*proposal, DatabasePath, Topic, ctx);
     ctx.Send(MakeTxProxyID(), proposal.release());
 }
 
-void TPartitionScaleRequest::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TString& workingDir, const TString& topicName) {
+void TPartitionScaleRequest::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TString& workingDir, const TString& topicName, const NActors::TActorContext &ctx) {
     auto& modifyScheme = *proposal.Record.MutableTransaction()->MutableModifyScheme();
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup);
     modifyScheme.SetWorkingDir(workingDir);
@@ -46,11 +46,14 @@ void TPartitionScaleRequest::FillProposeRequest(TEvTxUserProxy::TEvProposeTransa
 
     NKikimrSchemeOp::TPersQueueGroupDescription groupDescription;
     groupDescription.SetName(topicName);
-
+    TStringBuilder logMessage;
+    logMessage << "TPartitionScaleRequest::FillProposeRequest trying to scale partitions. Spilts: ";
     for(const auto& split: Splits) {
         auto* newSplit = groupDescription.AddSplit();
+        logMessage << "partition: " << split.GetPartition() << " boundary: '" << split.GetSplitBoundary() << "' ";
         *newSplit = split;
     }
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, logMessage);
 
     for(const auto& merge: Merges) {
         auto* newMerge = groupDescription.AddMerge();
@@ -98,7 +101,8 @@ void TPartitionScaleRequest::Handle(TEvTxUserProxy::TEvProposeTransactionStatus:
         for (auto& issue : ev->Get()->Record.GetIssues()) {
             issues << issue.ShortDebugString() + ", ";
         }
-        Cerr << "\n SAVDGB " << issues << "\n";
+        LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, "TPartitionScaleRequest "
+            << "SchemaShard error when trying to execute a split request: " << issues);
         Send(ParentActorId, scaleRequestResult.release());
         Die(ctx);
     } else {

@@ -441,6 +441,10 @@ bool ISource::AddGrouping(TContext& ctx, const TVector<TString>& columns, TStrin
     return false;
 }
 
+size_t ISource::GetGroupingColumnsCount() const {
+    return 0;
+}
+
 TNodePtr ISource::BuildFilter(TContext& ctx, const TString& label) {
     return Filters.empty() ? nullptr : Y(ctx.UseUnordered(*this) ? "OrderedFilter" : "Filter", label, BuildFilterLambda());
 }

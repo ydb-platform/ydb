@@ -732,6 +732,7 @@ void TAsyncHttpMon::Start(TActorSystem* actorSystem) {
             "text/javascript",
             "application/javascript",
             "application/json",
+            "application/yaml",
         };
         addPort->SslCertificatePem = Config.Certificate;
         addPort->Secure = !Config.Certificate.empty();

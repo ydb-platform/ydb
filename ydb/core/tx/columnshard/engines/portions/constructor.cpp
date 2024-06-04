@@ -28,6 +28,7 @@ TPortionInfo TPortionInfoConstructor::Build(const bool needChunksNormalization) 
     if (needChunksNormalization) {
         ReorderChunks();
     }
+    NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("portion_id", GetPortionIdVerified());
     FullValidation();
 
     result.Indexes = Indexes;

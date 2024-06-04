@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     GLOBAL normalizer.cpp
+    GLOBAL clean_granule.cpp
 )
 
 PEERDIR(

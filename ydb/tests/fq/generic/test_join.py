@@ -5,7 +5,7 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_all
 
 from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
-from utils.settings import Settings
+from ydb.tests.fq.generic.utils.settings import Settings
 
 
 class TestJoin:

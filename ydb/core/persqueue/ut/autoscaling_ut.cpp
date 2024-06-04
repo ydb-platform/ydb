@@ -3,6 +3,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_topic/ut/ut_utils/topic_sdk_test_setup.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/partition_scale_manager.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_env.h>
@@ -571,6 +572,36 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetThresholdTime().Seconds(), alterThreshold);
     }
 
+    Y_UNIT_TEST(ControlPlane_AutoscalingWithStorageSizeRetention) {
+        auto autoscalingTestTopic = "autoscalit-topic";
+        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicClient client = setup.MakeClient();
+
+        TCreateTopicSettings createSettings;
+        createSettings
+            .RetentionStorageMb(1024)
+            .BeginConfigurePartitioningSettings()
+                .BeginConfigureAutoscalingSettings()
+                .Strategy(EAutoscalingStrategy::ScaleUp)
+                .EndConfigureAutoscalingSettings()
+            .EndConfigurePartitioningSettings();
+        auto result = client.CreateTopic(autoscalingTestTopic, createSettings).GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::BAD_REQUEST);
+
+        createSettings.RetentionStorageMb(0);
+        result = client.CreateTopic(autoscalingTestTopic, createSettings).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+
+        TAlterTopicSettings alterSettings;
+        alterSettings
+            .SetRetentionStorageMb(1024);
+
+        result = client.AlterTopic(autoscalingTestTopic, alterSettings).GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::BAD_REQUEST);
+    }
+
     Y_UNIT_TEST(PartitionSplit_AutosplitByLoad) {
         TTopicSdkTestSetup setup = CreateSetup();
         TTopicClient client = setup.MakeClient();
@@ -606,45 +637,90 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     Y_UNIT_TEST(MidOfRange) {
-        TString a = "a";
-        TString b = "c";
-        auto res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(a,b);
+        auto AsString = [](std::vector<ui16> vs) {
+            TStringBuilder a;
+            for (auto v : vs) {
+                a << static_cast<unsigned char>(v);
+            }
+            return a;
+        };
 
-        b = "b";
-        res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(a,b);
-        UNIT_ASSERT(a < res);
-        UNIT_ASSERT(b > res);
+        auto ToHex = [](const TString& value) {
+            return TStringBuilder() << HexText(TBasicStringBuf(value));
+        };
 
-        a = {};
-        b = "b";
-        res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(a,b);
-        UNIT_ASSERT(a < res);
-        UNIT_ASSERT(b > res);
+        {
+            auto res = NKikimr::NPQ::MiddleOf("", "");
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "7F");
+        }
 
-        a = "a";
-        b = {};
-        res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(a,b);
-        Cerr << "\n SAVDBG " << res << "\n";
-        UNIT_ASSERT(a < res);
-        UNIT_ASSERT(b != res);
+        {
+            auto res = NKikimr::NPQ::MiddleOf("", AsString({0x7F}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "3F");
+        }
 
-        a = "aa";
-        b = {};
-        res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(a,b);
-        UNIT_ASSERT(a < res);
-        UNIT_ASSERT(b != res);
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x7F}), "");
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "BF");
+        }
 
-        a = "aaa";
-        b = "b";
-        res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(a,b);
-        UNIT_ASSERT(a < res);
-        UNIT_ASSERT(b > res);
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x7F}), AsString({0xBF}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "9F");
+        }
 
-        a = "aaa";
-        b = "aab";
-        res = NKikimr::NPQ::TPartitionScaleManager::GetRangeMid(a,b);
-        UNIT_ASSERT(a < res);
-        UNIT_ASSERT(b > res);
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x01}), AsString({0x02}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "01 FF");
+        }
+
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x01, 0x7F}), AsString({0x02}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "01 BF");
+        }
+
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x02}), AsString({0x03, 0x7F}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "02 3F");
+        }
+
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x01, 0xFF}), AsString({0x02, 0x00}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "01 FF FF");
+        }
+
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x03, 0xFF}), AsString({0x04, 0x20}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "04 0F");
+        }
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x03, 0x40}), AsString({0x04, 0x40}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "03 C0");
+        }
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x03, 0x20}), AsString({0x04, 0x10}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "03 98");
+        }
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x04, 0xFF, 0xFF}), AsString({0x05, 0x20}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "05 0F FF");
+        }
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x03, 0x40, 0x7F}), AsString({0x04, 0x40}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "03 C0 BF");
+        }
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x03, 0x40, 0x30}), AsString({0x04, 0x40, 0x20}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "03 C0 A8");
+        }
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x01, 0xFF, 0xFF, 0xFF}), AsString({0x02, 0x00, 0x00, 0x10}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "02 00 00 07");
+        }
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0xFF, 0xFF}), AsString({0xFF}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "FF FF 7F");
+        }
     }
 }
 

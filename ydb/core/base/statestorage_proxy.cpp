@@ -1007,18 +1007,8 @@ public:
 };
 
 class TStateStorageProxyStub : public TActor<TStateStorageProxyStub> {
+    std::deque<std::unique_ptr<IEventHandle>> PendingQ;
 
-    void Handle(TEvStateStorage::TEvLookup::TPtr &ev) {
-        BLOG_D("ProxyStub::Handle ev: " << ev->Get()->ToString());
-        const TEvStateStorage::TEvLookup *msg = ev->Get();
-        const ui64 tabletId = msg->TabletID;
-        const ui64 cookie = msg->Cookie;
-
-        Send(ev->Sender, new TEvStateStorage::TEvInfo(
-            NKikimrProto::ERROR,
-            tabletId, cookie, TActorId(), TActorId(), 0, 0, false, 0,
-            nullptr, 0, TMap<TActorId, TActorId>()));
-    }
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::SS_PROXY_STUB;
@@ -1028,15 +1018,14 @@ public:
         : TActor(&TThis::StateFunc)
     {}
 
-    STATEFN(StateFunc) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvStateStorage::TEvLookup, Handle);
-            default:
-                BLOG_W("ProxyStub::StateFunc unexpected event type# "
-                    << ev->GetTypeRewrite()
-                    << " event: "
-                    << ev->ToString());
-                break;
+    STFUNC(StateFunc) {
+        if (ev->GetTypeRewrite() == TEvents::TSystem::Poison) {
+            for (auto& q : PendingQ) {
+                TActivationContext::Send(q->Forward(ev->Sender));
+            }
+            PassAway();
+        } else {
+            PendingQ.emplace_back(ev.Release());
         }
     }
 };

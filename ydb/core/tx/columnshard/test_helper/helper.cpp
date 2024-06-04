@@ -7,7 +7,9 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/core/wrappers/fake_storage_config.h>
 #include <ydb/core/wrappers/fake_storage.h>
+#ifndef KIKIMR_DISABLE_S3_OPS
 #include <ydb/core/tx/columnshard/blobs_action/tier/storage.h>
+#endif
 
 namespace NKikimr::NArrow::NTest {
 
@@ -80,12 +82,13 @@ std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> TTestStoragesManager::DoB
         return std::make_shared<NOlap::NBlobOperations::NBlobStorage::TOperator>(storageId, NActors::TActorId(), TabletInfo,
             1, SharedBlobsManager->GetStorageManagerGuarantee(TBase::DefaultStorageId));
     } else if (storageId == TBase::MemoryStorageId) {
+#ifndef KIKIMR_DISABLE_S3_OPS
         Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
         return std::make_shared<NOlap::NBlobOperations::NTier::TOperator>(storageId, NActors::TActorId(), std::make_shared<NWrappers::NExternalStorage::TFakeExternalStorageConfig>("fakeBucket", "fakeSecret"),
             SharedBlobsManager->GetStorageManagerGuarantee(storageId));
-    } else {
-        return nullptr;
+#endif
     }
+    return nullptr;
 }
 
 }

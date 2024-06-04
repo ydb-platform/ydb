@@ -1292,6 +1292,7 @@ private:
 class TTaskRunner: public IPipeTaskRunner {
 public:
     TTaskRunner(
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const NDqProto::TDqTask& task,
         TFilesHolder::TPtr&& filesHolder,
         THolder<TChildProcess>&& command,
@@ -1300,8 +1301,7 @@ public:
         : TraceId(traceId)
         , Task(task)
         , FilesHolder(std::move(filesHolder))
-        , Alloc(new NKikimr::NMiniKQL::TScopedAlloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true),
-            [](NKikimr::NMiniKQL::TScopedAlloc* ptr) { ptr->Acquire(); delete ptr; })
+        , Alloc(alloc)
         , AllocatedHolder(std::make_optional<TAllocatedHolder>(*Alloc, "TDqTaskRunnerProxy"))
         , Running(true)
         , Command(std::move(command))
@@ -1311,16 +1311,14 @@ public:
         , TaskId(Task.GetId())
         , StageId(stageId)
     {
-        Alloc->Release();
         StderrReader->Start();
         InitTaskMeta();
         InitChannels();
     }
 
     ~TTaskRunner() {
-        Alloc->Acquire();
+        auto guard = Guard(*Alloc);
         AllocatedHolder.reset();
-        Alloc->Release();
         Command->Kill();
         Command->Wait(TDuration::Seconds(0));
     }
@@ -1644,12 +1642,13 @@ private:
 class TDqTaskRunner: public NDq::IDqTaskRunner {
 public:
     TDqTaskRunner(
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const NDqProto::TDqTask& task,
         TFilesHolder::TPtr&& filesHolder,
         THolder<TChildProcess>&& command,
         ui64 stageId,
         const TString& traceId)
-        : Delegate(new TTaskRunner(task, std::move(filesHolder), std::move(command), stageId, traceId))
+        : Delegate(new TTaskRunner(alloc, task, std::move(filesHolder), std::move(command), stageId, traceId))
         , Task(task)
     { }
 
@@ -1929,17 +1928,17 @@ public:
         TaskScheduler.Start();
     }
 
-    ITaskRunner::TPtr GetOld(NKikimr::NMiniKQL::TScopedAlloc& alloc, const NDq::TDqTaskSettings& tmp, const TString& traceId) override {
+    ITaskRunner::TPtr GetOld(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const NDq::TDqTaskSettings& tmp, const TString& traceId) override {
         Y_UNUSED(alloc);
         Yql::DqsProto::TTaskMeta taskMeta;
         tmp.GetMeta().UnpackTo(&taskMeta);
         ui64 stageId = taskMeta.GetStageId();
         auto result = GetExecutorForTask(taskMeta.GetFiles(), taskMeta.GetSettings());
         auto [task, filesHolder] = PrepareTask(tmp, result.Get());
-        return new TTaskRunner(task, std::move(filesHolder), std::move(result), stageId, traceId);
+        return new TTaskRunner(alloc, task, std::move(filesHolder), std::move(result), stageId, traceId);
     }
 
-    TIntrusivePtr<NDq::IDqTaskRunner> Get(NKikimr::NMiniKQL::TScopedAlloc& alloc, const NDq::TDqTaskSettings& tmp, NDqProto::EDqStatsMode statsMode, const TString& traceId) override
+    TIntrusivePtr<NDq::IDqTaskRunner> Get(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const NDq::TDqTaskSettings& tmp, NDqProto::EDqStatsMode statsMode, const TString& traceId) override
     {
         Y_UNUSED(statsMode);
         Y_UNUSED(alloc);
@@ -1948,7 +1947,7 @@ public:
 
         auto result = GetExecutorForTask(taskMeta.GetFiles(), taskMeta.GetSettings());
         auto [task, filesHolder] = PrepareTask(tmp, result.Get());
-        return new TDqTaskRunner(task, std::move(filesHolder), std::move(result), taskMeta.GetStageId(), traceId);
+        return new TDqTaskRunner(alloc, task, std::move(filesHolder), std::move(result), taskMeta.GetStageId(), traceId);
     }
 
 private:

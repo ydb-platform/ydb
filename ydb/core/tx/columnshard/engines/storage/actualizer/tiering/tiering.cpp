@@ -83,9 +83,9 @@ void TTieringActualizer::DoAddPortion(const TPortionInfo& portion, const TAddExt
     if (!info) {
         return;
     }
-    AFL_VERIFY(PortionIdByWaitDuration[info->GetAddress()].AddPortion(*info, portion.GetPortionId(), addContext.GetNow() - StartInstant));
+    AFL_VERIFY(PortionIdByWaitDuration[info->GetAddress()].AddPortion(*info, portion.GetPortionId(), addContext.GetNow()));
     auto address = info->GetAddress();
-    TFindActualizationInfo findId(std::move(address), info->GetWaitDuration() + (addContext.GetNow() - StartInstant));
+    TFindActualizationInfo findId(std::move(address), info->GetWaitInstant(addContext.GetNow()));
     AFL_VERIFY(PortionsInfo.emplace(portion.GetPortionId(), std::move(findId)).second);
 }
 
@@ -105,12 +105,16 @@ void TTieringActualizer::DoRemovePortion(const ui64 portionId) {
 void TTieringActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext& /*internalContext*/) {
     THashSet<ui64> portionIds;
     for (auto&& [address, addressPortions] : PortionIdByWaitDuration) {
+        if (addressPortions.GetPortions().size() && tasksContext.GetActualInstant() < addressPortions.GetPortions().begin()->first) {
+            Counters.SkipEvictionForLimit->Add(1);
+            continue;
+        }
         if (!tasksContext.IsRWAddressAvailable(address)) {
             Counters.SkipEvictionForLimit->Add(1);
             continue;
         }
-        for (auto&& [duration, portions] : addressPortions.GetPortions()) {
-            if (duration - (tasksContext.Now - StartInstant) > TDuration::Zero()) {
+        for (auto&& [wInstant, portions] : addressPortions.GetPortions()) {
+            if (tasksContext.GetActualInstant() < wInstant) {
                 break;
             }
             bool limitEnriched = false;
@@ -122,7 +126,7 @@ void TTieringActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, co
                         continue;
                     }
                 }
-                auto info = BuildActualizationInfo(*portion, tasksContext.Now);
+                auto info = BuildActualizationInfo(*portion, tasksContext.GetActualInstant());
                 AFL_VERIFY(info);
                 auto portionScheme = portion->GetSchema(VersionedIndex);
                 TPortionEvictionFeatures features(portionScheme, info->GetTargetScheme(), portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
@@ -140,32 +144,32 @@ void TTieringActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, co
             }
         }
     }
+    if (portionIds.size()) {
+        ui64 waitDurationEvict = 0;
+        ui64 waitQueueEvict = 0;
+        ui64 waitDurationDelete = 0;
+        ui64 waitQueueDelete = 0;
+        for (auto&& i : PortionIdByWaitDuration) {
+            std::shared_ptr<NColumnShard::TValueAggregationClient> waitDurationSignal;
+            std::shared_ptr<NColumnShard::TValueAggregationClient> queueSizeSignal;
+            if (i.first.WriteIs(NTiering::NCommon::DeleteTierName)) {
+                i.second.CorrectSignals(waitQueueDelete, waitDurationDelete, tasksContext.GetActualInstant());
+            } else {
+                i.second.CorrectSignals(waitQueueEvict, waitDurationEvict, tasksContext.GetActualInstant());
+            }
+        }
+        Counters.DifferenceWaitToDelete->SetValue(waitDurationDelete);
+        Counters.DifferenceWaitToEvict->SetValue(waitDurationEvict);
+        Counters.QueueSizeToDelete->SetValue(waitQueueDelete);
+        Counters.QueueSizeToEvict->SetValue(waitQueueEvict);
+    }
     for (auto&& i : portionIds) {
         RemovePortion(i);
     }
 
-    ui64 waitDurationEvict = 0;
-    ui64 waitQueueEvict = 0;
-    ui64 waitDurationDelete = 0;
-    ui64 waitQueueDelete = 0;
-    for (auto&& i : PortionIdByWaitDuration) {
-        std::shared_ptr<NColumnShard::TValueAggregationClient> waitDurationSignal;
-        std::shared_ptr<NColumnShard::TValueAggregationClient> queueSizeSignal;
-        if (i.first.WriteIs(NTiering::NCommon::DeleteTierName)) {
-            i.second.CorrectSignals(waitQueueDelete, waitDurationDelete, tasksContext.Now - StartInstant);
-        } else {
-            i.second.CorrectSignals(waitQueueEvict, waitDurationEvict, tasksContext.Now - StartInstant);
-        }
-    }
-    Counters.DifferenceWaitToDelete->SetValue(waitDurationDelete);
-    Counters.DifferenceWaitToEvict->SetValue(waitDurationEvict);
-    Counters.QueueSizeToDelete->SetValue(waitQueueDelete);
-    Counters.QueueSizeToEvict->SetValue(waitQueueEvict);
-
 }
 
 void TTieringActualizer::Refresh(const std::optional<TTiering>& info, const TAddExternalContext& externalContext) {
-    StartInstant = externalContext.GetNow();
     Tiering = info;
     if (Tiering) {
         TieringColumnId = VersionedIndex.GetLastSchema()->GetColumnId(Tiering->GetTtlColumn());

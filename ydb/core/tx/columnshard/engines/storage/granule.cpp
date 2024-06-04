@@ -4,6 +4,7 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/engines/changes/actualization/construction/context.h>
 
 namespace NKikimr::NOlap {
 
@@ -150,15 +151,20 @@ TGranuleMeta::TGranuleMeta(const ui64 pathId, const TGranulesStorage& owner, con
 
 }
 
-bool TGranuleMeta::InCompaction() const {
-    return Activity.contains(EActivity::GeneralCompaction);
-}
-
 std::shared_ptr<TPortionInfo> TGranuleMeta::UpsertPortionOnLoad(TPortionInfo&& portion) {
     auto portionId = portion.GetPortionId();
     auto emplaceInfo = Portions.emplace(portionId, std::make_shared<TPortionInfo>(std::move(portion)));
     AFL_VERIFY(emplaceInfo.second);
     return emplaceInfo.first->second;
+}
+
+void TGranuleMeta::BuildActualizationTasks(NActualizer::TTieringProcessContext& context, const TDuration actualizationLag) const {
+    if (context.GetActualInstant() - LastActualizations < actualizationLag) {
+        return;
+    }
+    NActualizer::TExternalTasksContext extTasks(Portions);
+    ActualizationIndex->ExtractActualizationTasks(context, extTasks);
+    LastActualizations = context.GetActualInstant();
 }
 
 } // namespace NKikimr::NOlap

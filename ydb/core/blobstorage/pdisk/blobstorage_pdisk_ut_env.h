@@ -30,8 +30,8 @@ public:
 
 private:
     std::optional<TActorId> PDiskActor;
-    THolder<TTestActorRuntime> Runtime;
     std::shared_ptr<NPDisk::IIoContextFactory> IoContext;
+    THolder<TTestActorRuntime> Runtime;
     NPDisk::TPDisk *PDisk = nullptr;
 
 public:
@@ -131,11 +131,15 @@ public:
         return PDisk;
     }
     
-    void StartPDiskRestart() {
+    void GracefulPDiskRestart(bool waitForRestart = true) {
         ui32 pdiskId = GetPDisk()->PDiskId;
 
         Send(new TEvBlobStorage::TEvAskWardenRestartPDiskResult(pdiskId, MainKey, true, nullptr));
-        const auto evInitRes = Recv<TEvBlobStorage::TEvNotifyWardenPDiskRestarted>();
+
+        if (waitForRestart) {
+            const auto evInitRes = Recv<TEvBlobStorage::TEvNotifyWardenPDiskRestarted>();
+            UNIT_ASSERT_VALUES_EQUAL(NKikimrProto::EReplyStatus::OK, evInitRes->Status);
+        }
 
         if (!Settings.UsePDiskMock) {
             TActorId wellKnownPDiskActorId = MakeBlobStoragePDiskID(PDiskActor->NodeId(), pdiskId);

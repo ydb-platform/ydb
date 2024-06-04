@@ -205,6 +205,16 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxCreateContinuousBackup = 162          [(CounterOpts) = {Name: "InFlightOps/CreateContinuousBackup"}];
     COUNTER_IN_FLIGHT_OPS_TxAlterContinuousBackup = 163          [(CounterOpts) = {Name: "InFlightOps/AlterContinuousBackup"}];
     COUNTER_IN_FLIGHT_OPS_TxDropContinuousBackup = 164           [(CounterOpts) = {Name: "InFlightOps/DropContinuousBackup"}];
+    
+    COUNTER_DISK_SPACE_TABLES_DATA_BYTES_ON_SSD = 165     [(CounterOpts) = {Name: "DiskSpaceTablesDataBytesOnSsd"}];
+    COUNTER_DISK_SPACE_TABLES_INDEX_BYTES_ON_SSD = 166    [(CounterOpts) = {Name: "DiskSpaceTablesIndexBytesOnSsd"}];
+    COUNTER_DISK_SPACE_TABLES_TOTAL_BYTES_ON_SSD = 167    [(CounterOpts) = {Name: "DiskSpaceTablesTotalBytesOnSsd"}];
+    COUNTER_DISK_SPACE_TABLES_DATA_BYTES_ON_HDD = 168     [(CounterOpts) = {Name: "DiskSpaceTablesDataBytesOnHdd"}];
+    COUNTER_DISK_SPACE_TABLES_INDEX_BYTES_ON_HDD = 169    [(CounterOpts) = {Name: "DiskSpaceTablesIndexBytesOnHdd"}];
+    COUNTER_DISK_SPACE_TABLES_TOTAL_BYTES_ON_HDD = 170    [(CounterOpts) = {Name: "DiskSpaceTablesTotalBytesOnHdd"}];
+    
+    COUNTER_DISK_SPACE_SOFT_QUOTA_BYTES_ON_SSD = 171      [(CounterOpts) = {Name: "DiskSpaceSoftQuotaBytesOnSsd"}];
+    COUNTER_DISK_SPACE_SOFT_QUOTA_BYTES_ON_HDD = 172      [(CounterOpts) = {Name: "DiskSpaceSoftQuotaBytesOnHdd"}];
 }
 
 enum ECumulativeCounters {

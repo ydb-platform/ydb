@@ -83,33 +83,38 @@ namespace NPDisk {
             TActorSetupCmd(tabletResolver, TMailboxType::Revolving, 0), nodeIndex);
     }
 
-    void SetupTabletPipePeNodeCaches(TTestActorRuntime& runtime, ui32 nodeIndex, bool forceFollowers)
+    void SetupTabletPipePerNodeCaches(TTestActorRuntime& runtime, ui32 nodeIndex, bool forceFollowers)
     {
-        TIntrusivePtr<TPipePeNodeCacheConfig> leaderPipeConfig = new TPipePeNodeCacheConfig();
+        TIntrusivePtr<TPipePerNodeCacheConfig> leaderPipeConfig = new TPipePerNodeCacheConfig();
         leaderPipeConfig->PipeRefreshTime = TDuration::Zero();
 
-        TIntrusivePtr<TPipePeNodeCacheConfig> followerPipeConfig = new TPipePeNodeCacheConfig();
+        TIntrusivePtr<TPipePerNodeCacheConfig> followerPipeConfig = new TPipePerNodeCacheConfig();
         followerPipeConfig->PipeRefreshTime = TDuration::Seconds(30);
         followerPipeConfig->PipeConfig.AllowFollower = true;
         followerPipeConfig->PipeConfig.ForceFollower = forceFollowers;
 
-        TIntrusivePtr<TPipePeNodeCacheConfig> persistentPipeConfig = new TPipePeNodeCacheConfig();
+        TIntrusivePtr<TPipePerNodeCacheConfig> persistentPipeConfig = new TPipePerNodeCacheConfig();
         persistentPipeConfig->PipeRefreshTime = TDuration::Zero();
-        persistentPipeConfig->PipeConfig = TPipePeNodeCacheConfig::DefaultPersistentPipeConfig();
+        persistentPipeConfig->PipeConfig = TPipePerNodeCacheConfig::DefaultPersistentPipeConfig();
 
-        runtime.AddLocalService(MakePipePeNodeCacheID(false),
-            TActorSetupCmd(CreatePipePeNodeCache(leaderPipeConfig), TMailboxType::Revolving, 0), nodeIndex);
-        runtime.AddLocalService(MakePipePeNodeCacheID(true),
-            TActorSetupCmd(CreatePipePeNodeCache(followerPipeConfig), TMailboxType::Revolving, 0), nodeIndex);
-        runtime.AddLocalService(MakePipePeNodeCacheID(EPipePeNodeCache::Persistent),
-            TActorSetupCmd(CreatePipePeNodeCache(persistentPipeConfig), TMailboxType::Revolving, 0), nodeIndex);
+        runtime.AddLocalService(MakePipePerNodeCacheID(false),
+            TActorSetupCmd(CreatePipePerNodeCache(leaderPipeConfig), TMailboxType::Revolving, 0), nodeIndex);
+        runtime.AddLocalService(MakePipePerNodeCacheID(true),
+            TActorSetupCmd(CreatePipePerNodeCache(followerPipeConfig), TMailboxType::Revolving, 0), nodeIndex);
+        runtime.AddLocalService(MakePipePerNodeCacheID(EPipePerNodeCache::Persistent),
+            TActorSetupCmd(CreatePipePerNodeCache(persistentPipeConfig), TMailboxType::Revolving, 0), nodeIndex);
     }
 
-    void SetupResourceBroker(TTestActorRuntime& runtime, ui32 nodeIndex)
+    void SetupResourceBroker(TTestActorRuntime& runtime, ui32 nodeIndex, const NKikimrResourceBroker::TResourceBrokerConfig& resourceBrokerConfig)
     {
+        NKikimrResourceBroker::TResourceBrokerConfig config = NResourceBroker::MakeDefaultConfig();
+        if (resourceBrokerConfig.IsInitialized()) {
+            NResourceBroker::MergeConfigUpdates(config, resourceBrokerConfig);
+        }
+
         runtime.AddLocalService(NResourceBroker::MakeResourceBrokerID(),
             TActorSetupCmd(
-                NResourceBroker::CreateResourceBrokerActor(NResourceBroker::MakeDefaultConfig(), runtime.GetDynamicCounters(0)),
+                NResourceBroker::CreateResourceBrokerActor(config, runtime.GetDynamicCounters(0)),
                 TMailboxType::Revolving, 0),
             nodeIndex);
     }
@@ -359,8 +364,8 @@ namespace NPDisk {
             SetupBSNodeWarden(runtime, nodeIndex, disk.MakeWardenConf(*app.Domains, keyConfig));
 
             SetupTabletResolver(runtime, nodeIndex);
-            SetupTabletPipePeNodeCaches(runtime, nodeIndex, forceFollowers);
-            SetupResourceBroker(runtime, nodeIndex);
+            SetupTabletPipePerNodeCaches(runtime, nodeIndex, forceFollowers);
+            SetupResourceBroker(runtime, nodeIndex, app.ResourceBrokerConfig);
             SetupSharedPageCache(runtime, nodeIndex, caches);
             SetupBlobCache(runtime, nodeIndex);
             SetupSysViewService(runtime, nodeIndex);

@@ -87,6 +87,7 @@ namespace NKikimr::NBsController {
             group->SeenOperational = true;
         }
 
+        GroupFailureModelChanged.insert(group->ID);
         group->CalculateGroupStatus();
 
         NKikimrBlobDepot::TBlobDepotConfig config;
@@ -127,6 +128,7 @@ namespace NKikimr::NBsController {
             group->HiveId = cmd.HasHiveId() ? MakeMaybe(cmd.GetHiveId()) : Nothing();
             group->Database = cmd.HasDatabase() ? MakeMaybe(cmd.GetDatabase()) : Nothing();
             group->NeedAlter = true;
+            GroupFailureModelChanged.insert(group->ID);
             group->CalculateGroupStatus();
 
             NKikimrBlobDepot::TBlobDepotConfig config;

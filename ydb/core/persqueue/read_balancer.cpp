@@ -390,6 +390,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvDescribe::TPtr &ev, const T
     } else {
         THolder<TEvPersQueue::TEvDescribeResponse> res{new TEvPersQueue::TEvDescribeResponse};
         res->Record.MutableConfig()->CopyFrom(TabletConfig);
+        res->Record.MutableConfig()->ClearAllPartitions();
         res->Record.SetVersion(Version);
         res->Record.SetTopicName(Topic);
         res->Record.SetPartitionPerTablet(MaxPartsPerTablet);
@@ -450,6 +451,28 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     Path = std::move(record.GetPath());
     TxId = record.GetTxId();
     TabletConfig = std::move(record.GetTabletConfig());
+
+    if (!TabletConfig.GetAllPartitions().size()) {
+        for (auto& p : record.GetPartitions()) {
+            auto* ap = TabletConfig.AddAllPartitions();
+            ap->SetPartitionId(p.GetPartition());
+            ap->SetTabletId(p.GetTabletId());
+            ap->SetCreateVersion(p.GetCreateVersion());
+            if (p.HasKeyRange()) {
+                ap->MutableKeyRange()->CopyFrom(p.GetKeyRange());
+            }
+            ap->SetStatus(p.GetStatus());
+            ap->MutableParentPartitionIds()->Reserve(p.GetParentPartitionIds().size());
+            for (const auto parent : p.GetParentPartitionIds()) {
+                ap->MutableParentPartitionIds()->AddAlreadyReserved(parent);
+            }
+            ap->MutableChildPartitionIds()->Reserve(p.GetChildPartitionIds().size());
+            for (const auto children : p.GetChildPartitionIds()) {
+                ap->MutableChildPartitionIds()->AddAlreadyReserved(children);
+            }
+        }
+    }
+
     Migrate(TabletConfig);
 
     SchemeShardId = record.GetSchemeShardId();
@@ -511,7 +534,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
             Y_ABORT_UNLESS(p.GetPartition() >= prevNextPartitionId && p.GetPartition() < NextPartitionId || NextPartitionId == 0);
 
             partitionsInfo[p.GetPartition()] = {p.GetTabletId(), {}};
-            if (SplitMergeEnabled(TabletConfig)) {
+            if (SplitMergeEnabled(TabletConfig) && p.HasKeyRange()) {
                 partitionsInfo[p.GetPartition()].KeyRange.DeserializeFromProto(p.GetKeyRange());
             }
 
@@ -832,7 +855,7 @@ void TPersQueueReadBalancer::UpdateConfigCounters() {
         return;
     }
 
-    size_t inactiveCount = std::count_if(TabletConfig.GetPartitions().begin(), TabletConfig.GetPartitions().end(), [](auto& p) {
+    size_t inactiveCount = std::count_if(TabletConfig.GetAllPartitions().begin(), TabletConfig.GetAllPartitions().end(), [](auto& p) {
         return p.GetStatus() == NKikimrPQ::ETopicPartitionStatus::Inactive;
     });
 

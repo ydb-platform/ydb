@@ -200,6 +200,9 @@ namespace NActors {
     }
 
     ui32 TBasicExecutorPool::GetReadyActivationCommon(TWorkerContext& wctx, ui64 revolvingCounter) {
+        NHPTimer::STime hpnow = GetCycleCountFast();
+        TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION> activityGuard(hpnow);
+
         TWorkerId workerId = wctx.WorkerId;
         Y_DEBUG_ABORT_UNLESS(workerId < MaxFullThreadCount);
 
@@ -209,10 +212,9 @@ namespace NActors {
             Y_ABORT_UNLESS(wctx.SharedThread);
             wctx.SharedThread->UnsetWork();
         }
-
         if (Harmonizer) {
             LWPROBE(TryToHarmonize, PoolId, PoolName);
-            Harmonizer->Harmonize(TlsThreadContext->StartOfElapsingTime.load(std::memory_order_relaxed));
+            Harmonizer->Harmonize(hpnow);
         }
 
         TAtomic x = AtomicGet(Semaphore);
@@ -232,6 +234,7 @@ namespace NActors {
                     }
                 }
             } else {
+                TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE> activityGuard;
                 if (const ui32 activation = Activations.Pop(++revolvingCounter)) {
                     if (workerId >= 0) {
                         Threads[workerId].SetWork();
@@ -433,7 +436,7 @@ namespace NActors {
 
 
         for (i16 i = 0; i != MaxFullThreadCount; ++i) {
-            Threads[i].Thread.Reset(
+            Threads[i].Thread.reset(
                 new TExecutorThread(
                     i,
                     0, // CpuId is not used in BASIC pool
@@ -711,6 +714,7 @@ namespace NActors {
     }
 
     bool TExecutorThreadCtx::WakeUp() {
+        TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_WAKE_UP> activityGuard;
         for (ui32 i = 0; i < 2; ++i) {
             EThreadState state = GetState<EThreadState>();
             switch (state) {
@@ -739,6 +743,7 @@ namespace NActors {
     }
 
     bool TSharedExecutorThreadCtx::WakeUp() {
+        TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE> activityGuard;
         i64 requestsForWakeUp = RequestsForWakeUp.fetch_add(1, std::memory_order_acq_rel);
         if (requestsForWakeUp >= 0) {
             return false;

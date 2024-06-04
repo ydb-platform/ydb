@@ -6,33 +6,44 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-inline bool CheckStorageQuotasKinds(const Ydb::Cms::DatabaseQuotas& quotas,
-                                    const TVector<TStoragePool>& pools,
-                                    const TString& path,
-                                    TString& error
+inline bool CheckStoragePoolsInQuotas(
+    const Ydb::Cms::DatabaseQuotas& quotas,
+    const TVector<TStoragePool>& pools,
+    const TString& path,
+    TString& error
 ) {
     TVector<TString> quotedKinds;
+    quotedKinds.reserve(quotas.storage_quotas_size());
     for (const auto& storageQuota : quotas.storage_quotas()) {
         quotedKinds.emplace_back(storageQuota.unit_kind());
     }
     Sort(quotedKinds);
-    const auto uniqueEnd = Unique(quotedKinds.begin(), quotedKinds.end());
-    if (uniqueEnd != quotedKinds.end()) {
+    if (const auto equalKinds = AdjacentFind(quotedKinds);
+        equalKinds != quotedKinds.end()
+    ) {
         error = TStringBuilder()
-            << "Malformed subdomain request: storage quotas' unit kinds must be unique, but "
-            << *uniqueEnd << " appears twice in the storage quotas definition of the " << path << " subdomain.";
+            << "Malformed subdomain request: storage kinds in DatabaseQuotas must be unique, but "
+            << *equalKinds << " appears twice in the quotas definition of the " << path << " subdomain.";
         return false;
     }
 
-    for (const auto& quotedKind : quotedKinds) {
-        if (!AnyOf(pools, [&quotedKind](const TStoragePool& pool) {
-            return pool.GetKind() == quotedKind;
-        })) {
-            error = TStringBuilder()
-                << "Malformed subdomain request: cannot set a " << quotedKind << " storage quota, "
-                << "because no storage pool in the subdomain " << path << " has the specified kind.";
-            return false;
-        }
+    TVector<TString> existingKinds;
+    existingKinds.reserve(pools.size());
+    for (const auto& pool : pools) {
+        existingKinds.emplace_back(pool.GetKind());
+    }
+    Sort(existingKinds);
+    TVector<TString> unknownKinds;
+    SetDifference(quotedKinds.begin(), quotedKinds.end(),
+                  existingKinds.begin(), existingKinds.end(),
+                  std::back_inserter(unknownKinds)
+    );
+    if (!unknownKinds.empty()) {
+        error = TStringBuilder()
+            << "Malformed subdomain request: cannot set storage quotas of the following kinds: " << JoinSeq(", ", unknownKinds)
+            << ", because no storage pool in the subdomain " << path << " has the specified kinds. "
+            << "Existing storage kinds are: " << JoinSeq(", ", existingKinds);
+        return false;
     }
     return true;
 }

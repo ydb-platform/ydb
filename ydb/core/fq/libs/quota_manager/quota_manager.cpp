@@ -344,7 +344,7 @@ private:
                     cached.Usage.Limit.Value = limit;
                     cached.Usage.Limit.UpdatedAt = Now();
                     LOG_T(cached.Usage.ToString(subjectType, subjectId, metricName) << " LIMIT Changed");
-                    SyncQuota(subjectType, subjectId, metricName, cached);
+                    SyncQuota(NActors::TActivationContext::ActorSystem(), subjectType, subjectId, metricName, cached);
                 }
             }
         }
@@ -614,7 +614,7 @@ private:
             },
             "CheckQuota"
         ).Process(SelfId(),
-            [this](TSyncQuotaExecuter& executer) {
+            [this, actorSystem](TSyncQuotaExecuter& executer) {
                 if (executer.State.Refreshed) {
                     this->UpdateQuota(executer.State.SubjectType, executer.State.SubjectId, executer.State.MetricName, executer.State.Usage);
                 } else {
@@ -631,7 +631,7 @@ private:
                         cached.SyncInProgress = false;
                         if (cached.ChangedAfterSync) { // this call will be processed in a separate event
                             LOG_T(cached.Usage.ToString(executer.State.SubjectType, executer.State.SubjectId, executer.State.MetricName) << " RESYNC");
-                            this->SyncQuota(executer.State.SubjectType, executer.State.SubjectId, executer.State.MetricName, cached);
+                            this->SyncQuota(actorSystem, executer.State.SubjectType, executer.State.SubjectId, executer.State.MetricName, cached);
                         }
                     }
                 }
@@ -698,7 +698,7 @@ private:
             // if metric is not defined - ignore usage update
             itQ->second.Usage.Usage = ev->Get()->Usage;
             LOG_T(itQ->second.Usage.ToString(subjectType, subjectId, metricName) << " REFRESHED");
-            SyncQuota(subjectType, subjectId, metricName, itQ->second);
+            SyncQuota(NActors::TActivationContext::ActorSystem(), subjectType, subjectId, metricName, itQ->second);
         }
 
         if (cache.PendingUsage.size() == 0) {

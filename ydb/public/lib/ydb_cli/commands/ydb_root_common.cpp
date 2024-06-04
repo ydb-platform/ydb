@@ -913,24 +913,6 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
             break;
         }
 
-        if (config.UseOauth2TokenExchange) {
-            TString envOauth2KeyFile = GetEnv("YDB_OAUTH2_KEY_FILE");
-            if (!envOauth2KeyFile.empty()) {
-                if (!IsAuthSet) {
-                    if (IsVerbose()) {
-                        Cerr << "Using oauth2 key file from YDB_OAUTH2_KEY_FILE env variable" << Endl;
-                    }
-                    config.ChosenAuthMethod = "oauth2-key-file";
-                    config.Oauth2KeyFile = envOauth2KeyFile;
-                    IsAuthSet = true;
-                }
-                if (!IsVerbose()) {
-                    break;
-                }
-                config.ConnectionParams["oauth2-key-file"].push_back({envOauth2KeyFile, "YDB_OAUTH2_KEY_FILE enviroment variable"});
-            }
-        }
-
         // Priority 3. No auth methods from --profile either. Checking environment variables.
         if (config.UseIamAuth) {
             TString envIamToken = GetEnv("IAM_TOKEN");
@@ -1045,6 +1027,24 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
             }
             if (!IsVerbose() && (!userName.empty() || !password.empty())) {
                 break;
+            }
+        }
+
+        if (config.UseOauth2TokenExchange) {
+            TString envOauth2KeyFile = GetEnv("YDB_OAUTH2_KEY_FILE");
+            if (!envOauth2KeyFile.empty()) {
+                if (!IsAuthSet) {
+                    if (IsVerbose()) {
+                        Cerr << "Using oauth2 key file from YDB_OAUTH2_KEY_FILE env variable" << Endl;
+                    }
+                    config.ChosenAuthMethod = "oauth2-key-file";
+                    config.Oauth2KeyFile = envOauth2KeyFile;
+                    IsAuthSet = true;
+                }
+                if (!IsVerbose()) {
+                    break;
+                }
+                config.ConnectionParams["oauth2-key-file"].push_back({envOauth2KeyFile, "YDB_OAUTH2_KEY_FILE enviroment variable"});
             }
         }
 

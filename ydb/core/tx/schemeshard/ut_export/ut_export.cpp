@@ -1502,4 +1502,162 @@ partitioning_settings {
         TestGetExport(runtime, exportId, "/MyRoot");
         env.TestWaitNotification(runtime, exportId);
     }
+
+    Y_UNIT_TEST(ExportStartTime) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port));
+
+        const auto desc = TestGetExport(runtime, txId, "/MyRoot");
+        const auto& entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_PREPARING);
+        UNIT_ASSERT(entry.HasStartTime());
+        UNIT_ASSERT(!entry.HasEndTime());
+    }
+
+    Y_UNIT_TEST(CompletedExportEndTime) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port));
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(30)); // doing backup
+
+        env.TestWaitNotification(runtime, txId);
+
+        const auto desc = TestGetExport(runtime, txId, "/MyRoot");
+        const auto& entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_DONE);
+        UNIT_ASSERT(entry.HasStartTime());
+        UNIT_ASSERT(entry.HasEndTime());
+        UNIT_ASSERT_LT(entry.GetStartTime().seconds(), entry.GetEndTime().seconds());
+    }
+
+    Y_UNIT_TEST(CancelledExportEndTime) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto delayFunc = [](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() != TEvSchemeShard::EvModifySchemeTransaction) {
+                return false;
+            }
+
+            return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
+                .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpBackup;
+        };
+        
+        THolder<IEventHandle> delayed;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (delayFunc(ev)) {
+                delayed.Reset(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port));
+        const ui64 exportId = txId;
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(30)); // doing backup
+
+        if (!delayed) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&delayed](IEventHandle&) -> bool {
+                return bool(delayed);
+            });
+            runtime.DispatchEvents(opts);
+        }
+        runtime.SetObserverFunc(prevObserver);
+
+        TestCancelExport(runtime, ++txId, "/MyRoot", exportId);
+
+        auto desc = TestGetExport(runtime, exportId, "/MyRoot");
+        auto entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLATION);
+        UNIT_ASSERT(entry.HasStartTime());
+        UNIT_ASSERT(!entry.HasEndTime());
+
+        runtime.Send(delayed.Release(), 0, true);
+        env.TestWaitNotification(runtime, exportId);
+
+        desc = TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLED);
+        UNIT_ASSERT(entry.HasStartTime());
+        UNIT_ASSERT(entry.HasEndTime());
+        UNIT_ASSERT_LT(entry.GetStartTime().seconds(), entry.GetEndTime().seconds());
+    }
 }

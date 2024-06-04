@@ -2776,6 +2776,9 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
     ui64 SnapshotStep = 0;
     ui64 SnapshotTxId = 0;
 
+    TInstant StartTime = TInstant::Zero();
+    TInstant EndTime = TInstant::Zero();
+
     explicit TExportInfo(
             const ui64 id,
             const TString& uid,

@@ -2936,6 +2936,16 @@
                 "ColumnId": 13,
                 "ColumnName": "UserSID",
                 "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "StartTime",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "EndTime",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -2954,7 +2964,9 @@
                     10,
                     11,
                     12,
-                    13
+                    13,
+                    14,
+                    15
                 ],
                 "RoomID": 0,
                 "Codec": 0,

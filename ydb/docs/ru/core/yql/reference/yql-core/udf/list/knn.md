@@ -138,6 +138,41 @@ SELECT * FROM Facts
 WHERE Knn::CosineDistance(embedding, $TargetEmbedding) < $R;
 ```
 
+### Квантизация
+
+Ее может делать либо ML model, либо в YQL.
+
+Дальше идут примеры квантизации для YQL и их использование.
+
+#### Float -> Int8
+
+```sql
+$MapInt8 = ($x) -> {
+    $min = -5.0f;
+    $max =  5.0f;
+    $dist = $max - $min;
+	RETURN Cast(Math::Round(IF($x < $min, -127, IF($x > $max, 127, ($x / $dist) * 255))) As Int8)
+};
+```
+
+#### Float -> Uint8
+
+```sql
+$MapUint8 = ($x) -> {
+    $min = -5.0f;
+    $max =  5.0f;
+    $dist = $max - $min;
+	RETURN Cast(Math::Round(IF($x < $min, 0, IF($x > $max, 255, (($x - $min) / $dist) * 255))) As Uint8)
+};
+```
+
+#### Использование
+
+```sql
+$FloatList = [-1.2f, 2.3f, 3.4f, -4.7f];
+select ListMap($FloatList, $MapInt8), ListMap($Target, $MapUint8);
+```
+
 ### Приближенный поиск K ближайших векторов: квантизация
 
 ```sql

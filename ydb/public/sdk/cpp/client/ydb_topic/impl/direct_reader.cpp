@@ -46,6 +46,15 @@ void Out<NYdb::NTopic::TDirectReadPartitionSession>(IOutputStream& o, NYdb::NTop
 
 namespace NYdb::NTopic {
 
+TDirectReadClientMessage TDirectReadPartitionSession::MakeStartRequest() const {
+    TDirectReadClientMessage req;
+    auto& start = *req.mutable_start_direct_read_partition_session_request();
+    start.set_partition_session_id(PartitionSessionId);
+    start.set_last_direct_read_id(PrevDirectReadId);
+    start.set_generation(Location.GetGeneration());
+    return req;
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TDirectReadConnectionManager
 

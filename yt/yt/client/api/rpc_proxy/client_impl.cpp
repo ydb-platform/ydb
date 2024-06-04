@@ -2540,6 +2540,26 @@ TFuture<TPipelineStatus> TClient::GetPipelineStatus(
     }));
 }
 
+TFuture<TGetFlowViewResult> TClient::GetFlowView(
+    const NYPath::TYPath& pipelinePath,
+    const NYPath::TYPath& viewPath,
+    const TGetFlowViewOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.GetFlowView();
+    SetTimeoutOptions(*req, options);
+
+    req->set_pipeline_path(pipelinePath);
+    req->set_view_path(viewPath);
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetFlowViewPtr& rsp) {
+        return TGetFlowViewResult{
+            .FlowViewPart = TYsonString(rsp->flow_view_part()),
+        };
+    }));
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NRpcProxy

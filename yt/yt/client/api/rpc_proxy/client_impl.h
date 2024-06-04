@@ -549,6 +549,11 @@ public:
         const NYPath::TYPath& pipelinePath,
         const TGetPipelineStatusOptions& options) override;
 
+    TFuture<TGetFlowViewResult> GetFlowView(
+        const NYPath::TYPath& pipelinePath,
+        const NYPath::TYPath& viewPath,
+        const TGetFlowViewOptions& options) override;
+
 private:
     const TConnectionPtr Connection_;
     const NRpc::TDynamicChannelPoolPtr ChannelPool_;

@@ -187,6 +187,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, StopPipeline);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PausePipeline);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetPipelineStatus);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetFlowView);
 
     // Query tracker
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, StartQuery);

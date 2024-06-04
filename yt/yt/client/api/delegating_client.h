@@ -828,6 +828,12 @@ public:
         const TGetPipelineStatusOptions& options),
         (pipelinePath, options))
 
+    DELEGATE_METHOD(TFuture<TGetFlowViewResult>, GetFlowView, (
+        const NYPath::TYPath& pipelinePath,
+        const NYPath::TYPath& viewPath,
+        const TGetFlowViewOptions& options),
+        (pipelinePath, viewPath, options))
+
     #undef DELEGATE_METHOD
 
 protected:

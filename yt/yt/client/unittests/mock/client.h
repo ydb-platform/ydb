@@ -813,6 +813,12 @@ public:
         const TGetPipelineStatusOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<TGetFlowViewResult>, GetFlowView, (
+        const NYPath::TYPath& pipelinePath,
+        const NYPath::TYPath& viewPath,
+        const TGetFlowViewOptions& options),
+        (override));
+
 private:
     NTabletClient::ITableMountCachePtr TableMountCache_;
     NTransactionClient::ITimestampProviderPtr TimestampProvider_;

@@ -778,7 +778,23 @@ TStatus AnnotateDqReplicate(const TExprNode::TPtr& input, TExprContext& ctx) {
     if (!EnsurePersistableType(replicateInput->Pos(), *inputItemType, ctx)) {
         return TStatus::Error;
     }
-    if (!EnsureStructType(replicateInput->Pos(), *inputItemType, ctx)) {
+
+    if (inputItemType->GetKind() == ETypeAnnotationKind::Tuple) {
+        if (!EnsureTupleTypeSize(replicateInput->Pos(), inputItemType, 2, ctx)) {
+            return TStatus::Error;
+        }
+
+        auto inputTupleType = inputItemType->Cast<TTupleExprType>();
+        if (!EnsureStructType(replicateInput->Pos(), *inputTupleType->GetItems()[0], ctx)) {
+            return TStatus::Error;
+        }
+
+        bool isOptional = false;
+        const TStructExprType* structType = nullptr;
+        if (!EnsureStructOrOptionalStructType(replicateInput->Pos(), *inputTupleType->GetItems()[1], isOptional, structType, ctx)) {
+            return TStatus::Error;
+        }
+    } else if (!EnsureStructType(replicateInput->Pos(), *inputItemType, ctx)) {
         return TStatus::Error;
     }
     const TTypeAnnotationNode* lambdaInputFlowType = ctx.MakeType<TFlowExprType>(inputItemType);

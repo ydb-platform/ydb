@@ -294,9 +294,10 @@ void TBlobManager::DrainKeepTo(const TGenStep& dest, TGCContext& gcContext) {
             if (keepBlobIt->Generation() == CurrentGen) {
                 continue;
             }
-            if (!gcContext.GetSharedBlobsManager()->BuildStoreCategories({ keepUnified }).GetDirect().IsEmpty()) {
-                gcContext.MutablePerGroupGCListsInFlight()[blobGroup].DontKeepList.insert(*keepBlobIt);
+            if (gcContext.GetSharedBlobsManager()->BuildStoreCategories({ keepUnified }).GetDirect().IsEmpty()) {
+                continue;
             }
+            gcContext.MutablePerGroupGCListsInFlight()[blobGroup].DontKeepList.insert(*keepBlobIt);
         } else {
             gcContext.MutablePerGroupGCListsInFlight()[blobGroup].KeepList.insert(*keepBlobIt);
         }

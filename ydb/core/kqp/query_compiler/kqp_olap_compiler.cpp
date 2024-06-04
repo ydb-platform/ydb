@@ -202,21 +202,6 @@ public:
         return ExprContext;
     }
 
-    bool CheckYqlCompatibleArgType(const TExprBase& expression) const {
-        if (const auto maybe = expression.Maybe<TCoAtom>()) {
-            if (const auto type = GetColumnTypeByName(maybe.Cast().Value()); type->GetKind() == ETypeAnnotationKind::Data) {
-                if (const auto info = GetDataTypeInfo(type->Cast<TDataExprType>()->GetSlot()); !(info.Features & (NUdf::EDataTypeFeatures::StringType | NUdf::EDataTypeFeatures::NumericType))) {
-                    return false;
-                }
-            }
-        }
-        return true;
-    }
-
-    bool CheckYqlCompatibleArgsTypes(const TKqpOlapFilterBinaryOp& operation) const {
-        return CheckYqlCompatibleArgType(operation.Left()) && CheckYqlCompatibleArgType(operation.Right());
-    }
-
     TKernelRequestBuilder& GetKernelRequestBuilder() const {
         return *YqlKernelRequestBuilder;
     }
@@ -817,14 +802,7 @@ const TTypedColumn BuildLogicalNot(const TExprBase& arg, TKqpOlapCompileContext&
 TTypedColumn GetOrCreateColumnIdAndType(const TExprBase& node, TKqpOlapCompileContext& ctx) {
     if (const auto& maybeBinaryOp = node.Maybe<TKqpOlapFilterBinaryOp>()) {
         if constexpr (NSsa::RuntimeVersion >= 4U) {
-            if (const auto& binaryOp = maybeBinaryOp.Cast(); ctx.CheckYqlCompatibleArgsTypes(binaryOp)) {
-                return CompileYqlKernelBinaryOperation(binaryOp, ctx);
-            } else {
-                return {
-                    ConvertSafeCastToColumn(CompileSimpleArrowComparison(binaryOp, ctx), "Uint8", ctx),
-                    ctx.ExprCtx().MakeType<TBlockExprType>(ctx.ExprCtx().MakeType<TDataExprType>(EDataSlot::Bool))
-                };
-            }
+            return CompileYqlKernelBinaryOperation(maybeBinaryOp.Cast(), ctx);
         } else {
             return {
                 CompileSimpleArrowComparison(maybeBinaryOp.Cast(), ctx),
@@ -864,11 +842,7 @@ TTypedColumn GetOrCreateColumnIdAndType(const TExprBase& node, TKqpOlapCompileCo
 ui64 CompileComparison(const TKqpOlapFilterBinaryOp& comparison, TKqpOlapCompileContext& ctx)
 {
     if constexpr (NKikimr::NSsa::RuntimeVersion >= 4U) {
-        if (ctx.CheckYqlCompatibleArgsTypes(comparison)) {
-            return CompileYqlKernelBinaryOperation(comparison, ctx).Id;
-        } else {
-            return ConvertSafeCastToColumn(CompileSimpleArrowComparison(comparison, ctx), "Uint8", ctx);
-        }
+        return CompileYqlKernelBinaryOperation(comparison, ctx).Id;
     }
 
     std::string op = comparison.Operator().StringValue().c_str();

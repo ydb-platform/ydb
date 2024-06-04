@@ -831,10 +831,17 @@ void RegisterAggrMax(IBuiltinFunctionRegistry& registry);
 void RegisterAggrMin(IBuiltinFunctionRegistry& registry);
 void RegisterWith(IBuiltinFunctionRegistry& registry);
 
-
 template <typename T>
 arrow::compute::InputType GetPrimitiveInputArrowType() {
     return arrow::compute::InputType(GetPrimitiveDataType<T>(), arrow::ValueDescr::ANY);
+}
+
+template <typename T>
+arrow::compute::InputType GetInputArrowType() {
+    if constexpr (std::is_same<T, NUdf::TDataType<NUdf::TTimestamp>>())
+        return arrow::compute::InputType(std::make_shared<arrow::TimestampType>(arrow::TimeUnit::MICRO), arrow::ValueDescr::ANY);
+    else
+        return arrow::compute::InputType(GetPrimitiveDataType<typename T::TLayout>(), arrow::ValueDescr::ANY);
 }
 
 template <typename T>
@@ -1201,8 +1208,8 @@ void AddBinaryKernelPoly(TKernelFamilyBase& owner) {
     std::vector<NUdf::TDataTypeId> argTypes({ TInput1::Id, TInput2::Id });
     NUdf::TDataTypeId returnType = TOutput::Id;
 
-    arrow::compute::ScalarKernel k({ GetPrimitiveInputArrowType<TInput1Layout>(), GetPrimitiveInputArrowType<TInput2Layout>() },
-                                   GetPrimitiveOutputArrowType<TOutputLayout>(), &TExecs::Exec);
+    arrow::compute::ScalarKernel k({ GetInputArrowType<TInput1>(), GetInputArrowType<TInput2>() },
+                                GetPrimitiveOutputArrowType<TOutputLayout>(), &TExecs::Exec);
     switch (TFuncInstance::NullMode) {
         case TKernel::ENullMode::Default:
             k.null_handling = arrow::compute::NullHandling::INTERSECTION;

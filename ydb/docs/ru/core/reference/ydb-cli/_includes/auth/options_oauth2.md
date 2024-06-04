@@ -1,0 +1,3 @@
+- `--oauth2-key-file <filepath>` : используется режим аутентификации **OAuth 2.0 token exchange**, а ключ и другие параметры загружаются из [json-файла](reference/ydb-sdk/ath.md#oauth2-key-file-format), указанного в значении данной опции
+    - Для задания token endpoint необходимо использовать настройку `--iam-endpoint` (через параметр {{ ydb-short-name }} CLI, профиль либо переменную окружения) в формате `SCHEMA://HOST:PORT/PATH`
+    - [Подробнее о протоколе обмена токенов OAuth 2.0](https://www.rfc-editor.org/rfc/rfc8693)

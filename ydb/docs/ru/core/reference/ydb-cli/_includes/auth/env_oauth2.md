@@ -1,0 +1,3 @@
+- Если задано значение переменной окружения `YDB_OAUTH2_KEY_FILE`, то используется режим аутентификации **OAuth 2.0 token exchange**, а параметры для обмена токена загружаются из [json-файла](reference/ydb-sdk/ath.md#oauth2-key-file-format), имя которого указано в данной переменной
+    - Для задания token endpoint необходимо использовать настройку `--iam-endpoint` (через параметр {{ ydb-short-name }} CLI, профиль либо переменную окружения) в формате `SCHEMA://HOST:PORT/PATH`
+    - [Подробнее о протоколе обмена токенов OAuth 2.0](https://www.rfc-editor.org/rfc/rfc8693)

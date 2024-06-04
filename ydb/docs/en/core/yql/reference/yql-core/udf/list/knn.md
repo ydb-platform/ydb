@@ -4,9 +4,9 @@
 [Nearest Neighbor search](https://en.wikipedia.org/wiki/Nearest_neighbor_search) (NN) is an optimization task that consists of finding the closest point in a given dataset to a given query point. Closeness can be defined in terms of distance or similarity metrics.
 A generalization of the NN problem is the [k-NN problem](https://en.wikipedia.org/wiki/K-nearest_neighbors_algorithm), where it's required to find the `k` nearest points to the query point. This can be useful in various applications such as image classification, recommendation systems, etc.
 
-The k-NN problem solution is divided into two major subclasses of methods: exact and approximate. In this document, we will talk about the exact brute force method.
+The k-NN problem solution is divided into two major subclasses of methods: exact and approximate.
 
-This method is based on calculating the distance from the query point to every other point in the database. This algorithm, also known as the naive approach, has a complexity of `O(dn)`, where `n` is the number of points in the dataset, and `d` is its dimension.
+The exact method is based on calculating the distance from the query point to every other point in the database. This algorithm, also known as the naive approach, has a complexity of `O(dn)`, where `n` is the number of points in the dataset, and `d` is its dimension.
 
 The advantage of the method is that there is no need for additional data structures, such as specialized vector indexes.
 The disadvantage is the need for a complete data search. But this disadvantage is insignificant in cases where data has been pre-filtered, for example, by user ID.
@@ -21,6 +21,17 @@ WHERE user="Williams"
 ORDER BY Knn::CosineDistance(embedding, $TargetEmbedding)
 LIMIT 10;
 ```
+
+Before we start to talk about approximate methods, it's important to remember that you probably needed to measure is it sufficient accuracy/recall or not.
+
+There are a lot of approximate methods. In this document we will talk about scalar quantization.
+
+Scalar quantization is method to compress vectors, when coordinate mapped to space with lower size.
+{{ ydb-short-name }} support exact search for `Float`, `Int8`, `Uint8`, `Bit` vectors.
+So it's possible to apply scalar quantization from `Float` to one of these types.
+
+Scalar quantization decrease read/write time because we need to read/write less bytes in few times.
+For an example for `Float` -> `Bit` in `32` times.
 
 ## Data types
 

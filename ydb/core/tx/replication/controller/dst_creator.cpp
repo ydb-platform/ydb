@@ -572,7 +572,7 @@ private:
 
 }; // TDstCreator
 
-IActor* CreateDstCreator(TReplication::TPtr replication, ui64 targetId, const TActorContext& ctx) {
+IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorContext& ctx) {
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
     return CreateDstCreator(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(), replication->GetPathId(),

@@ -160,7 +160,7 @@ private:
 
 }; // TStreamCreator
 
-IActor* CreateStreamCreator(TReplication::TPtr replication, ui64 targetId, const TActorContext& ctx) {
+IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TActorContext& ctx) {
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
     return CreateStreamCreator(ctx.SelfID, replication->GetYdbProxy(),

@@ -83,13 +83,7 @@ void TReadSession::CreateClusterSessionsImpl(TDeferredActions<false>& deferred) 
         SessionId,
         "",
         Log,
-        [this](TDuration delay, std::function<void()> cb) {
-            Connections->ScheduleCallback(delay, [cb](bool ok) {
-                if (ok) {
-                    cb();
-                }
-            });
-        },
+        Connections,
         Client->CreateReadSessionConnectionProcessorFactory(),
         EventsQueue,
         context,

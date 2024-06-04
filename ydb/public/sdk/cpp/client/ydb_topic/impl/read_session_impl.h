@@ -1078,7 +1078,7 @@ public:
         const TString& sessionId,
         const TString& clusterName,
         const TLog& log,
-        std::function<void(TDuration delay, std::function<void()> callback)> scheduleCallback,
+        std::shared_ptr<IInternalClient> connections,
         std::shared_ptr<IReadSessionConnectionProcessorFactory<UseMigrationProtocol>> connectionFactory,
         std::shared_ptr<TReadSessionEventsQueue<UseMigrationProtocol>> eventsQueue,
         NYdbGrpc::IQueueClientContextPtr clientContext,
@@ -1264,10 +1264,10 @@ private:
 
         // Removes (partition stream, offset) from mapping.
         // Returns cookie ptr if this was the last message, otherwise nullptr.
-        typename TSingleClusterReadSessionImpl<UseMigrationProtocol>::TPartitionCookieMapping::TCookie::TPtr CommitOffset(ui64 partitionStreamId, ui64 offset);
+        TSelf::TPartitionCookieMapping::TCookie::TPtr CommitOffset(ui64 partitionStreamId, ui64 offset);
 
         // Gets and then removes committed cookie from mapping.
-        typename TSingleClusterReadSessionImpl<UseMigrationProtocol>::TPartitionCookieMapping::TCookie::TPtr RetrieveCommittedCookie(const Ydb::PersQueue::V1::CommitCookie& cookieProto);
+        TSelf::TPartitionCookieMapping::TCookie::TPtr RetrieveCommittedCookie(const Ydb::PersQueue::V1::CommitCookie& cookieProto);
 
         // Removes mapping on partition stream.
         void RemoveMapping(ui64 partitionStreamId);
@@ -1304,7 +1304,7 @@ private:
     TLog Log;
     ui64 NextPartitionStreamId;
     ui64 PartitionStreamIdStep;
-    std::function<void(TDuration delay, std::function<void()> callback)> ScheduleCallback;
+    std::shared_ptr<IInternalClient> Connections;
     std::shared_ptr<IReadSessionConnectionProcessorFactory<UseMigrationProtocol>> ConnectionFactory;
     IDirectReadConnectionFactoryPtr DirectConnectionFactory;
     std::shared_ptr<TReadSessionEventsQueue<UseMigrationProtocol>> EventsQueue;

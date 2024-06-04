@@ -333,9 +333,9 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
                 }
             }
             DrainDeleteTo(*CollectGenStepInFlight, gcContext);
-            newCollectGenSteps.clear();
         } else {
             AFL_VERIFY(std::get<0>(GCBarrierPreparation) != CurrentGen);
+            AFL_VERIFY(LastCollectedGenStep <= GCBarrierPreparation);
             CollectGenStepInFlight = std::max(GCBarrierPreparation, LastCollectedGenStep);
             DrainKeepTo(std::max(GCBarrierPreparation, LastCollectedGenStep), gcContext);
             DrainDeleteTo(*CollectGenStepInFlight, gcContext);

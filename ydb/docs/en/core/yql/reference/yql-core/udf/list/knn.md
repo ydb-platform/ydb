@@ -19,7 +19,7 @@ $TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
 SELECT id, fact, embedding FROM Facts
 WHERE user="Williams"
 ORDER BY Knn::CosineDistance(embedding, $TargetEmbedding)
-LIMIT 10
+LIMIT 10;
 ```
 
 ## Data types
@@ -99,19 +99,21 @@ Knn::FloatFromBinaryString(String{Flags:AutoMap})->List<Float>?
 
 ```sql
 CREATE TABLE Facts (
-    id Uint64,        // Id of fact
-    user Utf8,        // User name
-    fact Utf8,        // Human-readable description of a user fact
-    embedding String, // Binary representation of embedding vector (result of Knn::ToBinaryStringFloat)
+    id Uint64,        -- Id of fact
+    user Utf8,        -- User name
+    fact Utf8,        -- Human-readable description of a user fact
+    embedding String, -- Binary representation of embedding vector (result of Knn::ToBinaryStringFloat)
+    embedding_bit String, -- Binary representation of embedding vector (result of Knn::ToBinaryStringBit)
     PRIMARY KEY (id)
-)
+);
 ```
 
 ### Adding vectors
 
 ```sql
-UPSERT INTO Facts (id, user, fact, embedding) 
-VALUES (123, "Williams", "Full name is John Williams", Knn::ToBinaryString([1.0f, 2.0f, 3.0f, 4.0f]))
+$vector = CAST([1, 2, 3, 4] AS List<Float>);
+UPSERT INTO Facts (id, user, fact, embedding, embedding_bit) 
+VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryStringFloat($vector), "FloatVector"), Untag(Knn::ToBinaryStringBit($vector), "BitVector"));
 ```
 
 {% note info %}
@@ -128,14 +130,14 @@ $TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
 SELECT * FROM Facts
 WHERE user="Williams"
 ORDER BY Knn::CosineDistance(embedding, $TargetEmbedding)
-LIMIT 10
+LIMIT 10;
 ```
 
 ```sql
 $TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
 
 SELECT * FROM Facts
-WHERE Knn::CosineDistance(embedding, $TargetEmbedding) < 0.1
+WHERE Knn::CosineDistance(embedding, $TargetEmbedding) < 0.1;
 ```
 
 
@@ -165,5 +167,5 @@ LIMIT 100;
 SELECT * FROM Facts
 WHERE id IN $Ids
 ORDER BY Knn::CosineDistance(embedding, $TargetEmbeddingFloat)
-LIMIT 10
+LIMIT 10;
 ```

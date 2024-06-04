@@ -610,7 +610,7 @@ namespace NActors {
         }
         TExecutorThreadCtx& threadCtx = Threads[threadIdx];
         TExecutorThreadStats stats;
-        threadCtx.Thread->GetCurrentStats(stats);
+        threadCtx.Thread->GetCurrentStatsForHarmonizer(stats);
         return {Ts2Us(stats.SafeElapsedTicks), static_cast<double>(stats.CpuUs), stats.NotEnoughCpuExecutions};
     }
 

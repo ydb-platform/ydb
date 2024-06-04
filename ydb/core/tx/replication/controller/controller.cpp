@@ -333,7 +333,7 @@ void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorCont
         return;
     }
 
-    const auto& session = Sessions[nodeId];
+    auto& session = Sessions[nodeId];
     const auto& record = ev->Get()->Record;
     const auto id = TWorkerId::Parse(record.GetWorker());
 
@@ -344,7 +344,16 @@ void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorCont
         }
         break;
     case NKikimrReplication::TEvWorkerStatus::STOPPED:
-        MaybeRemoveWorker(id, ctx);
+        if (!MaybeRemoveWorker(id, ctx)) {
+            session.DetachWorker(id);
+            if (IsValidWorker(id)) {
+                auto* worker = GetOrCreateWorker(id);
+                worker->ClearSession();
+                if (worker->HasCommand()) {
+                    BootQueue.insert(id);
+                }
+            }
+        }
         break;
     default:
         CLOG_W(ctx, "Unknown worker status"
@@ -589,10 +598,13 @@ void TController::RemoveWorker(const TWorkerId& id, const TActorContext& ctx) {
     target->Progress(ctx);
 }
 
-void TController::MaybeRemoveWorker(const TWorkerId& id, const TActorContext& ctx) {
-    if (RemoveQueue.contains(id)) {
-        RemoveWorker(id, ctx);
+bool TController::MaybeRemoveWorker(const TWorkerId& id, const TActorContext& ctx) {
+    if (!RemoveQueue.contains(id)) {
+        return false;
     }
+
+    RemoveWorker(id, ctx);
+    return true;
 }
 
 void TController::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx) {

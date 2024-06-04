@@ -29,15 +29,23 @@ UTF8_COLUMNS = [val.lower() for val in FROM_ENV_COLUMNS] + [
     "id",
     "git_commit_message",
     "path",
+    "sub_path",
 ]
 
 DATETIME_COLUMNS = [
     "git_commit_time",
 ]
 
-UINT64_COLUMNS = []
+UINT64_COLUMNS = [
+    "inclusion_count",
+]
 
-DOUBLE_COLUMNS = ["total_compilation_time_s", "compilation_time_s"]
+DOUBLE_COLUMNS = [
+    "total_compilation_time_s",
+    "compilation_time_s",
+    "mean_compilation_time_s",
+    "total_time_s",
+]
 
 ALL_COLUMNS = UTF8_COLUMNS + DATETIME_COLUMNS + UINT64_COLUMNS
 
@@ -125,8 +133,12 @@ def main():
         with open(os.path.join(args.html_dir_cpp, "output.json")) as f:
             cpp_stats = json.load(f)
 
+        with open(os.path.join(args.html_dir_headers, "output.json")) as f:
+            header_stats = json.load(f)
+
         rows = []
 
+        # upload into cpp_compile_time
         for entry in cpp_stats["cpp_compilation_times"]:
             path = entry["path"]
             time_s = entry["time_s"]
@@ -142,6 +154,7 @@ def main():
                 DATABASE_PATH + "/code-agility/cpp_compile_time", rows, generate_column_types(row)
             )
 
+        # upload into total_compile_time
         row = copy.copy(common_parameters)
         row["id"] = str(uuid.uuid4())
         row["total_compilation_time_s"] = cpp_stats["total_compilation_time"]
@@ -149,6 +162,49 @@ def main():
         driver.table_client.bulk_upsert(
             DATABASE_PATH + "/code-agility/total_compile_time", [row], generate_column_types(row)
         )
+
+        # upload into headers_impact
+        rows = []
+        for entry in header_stats["headers_compile_duration"]:
+            path = entry["path"]
+            inclusion_count = entry["inclusion_count"]
+            mean_compilation_time_s = entry["mean_compilation_time_s"]
+            row = copy.copy(common_parameters)
+            row["id"] = str(uuid.uuid4())
+            row["path"] = sanitize_str(path)
+            row["mean_compilation_time_s"] = mean_compilation_time_s
+            row["inclusion_count"] = inclusion_count
+            rows.append(copy.copy(row))
+
+        if rows:
+            row = rows[0]
+            driver.table_client.bulk_upsert(
+                DATABASE_PATH + "/code-agility/headers_impact", rows, generate_column_types(row)
+            )
+
+        # upload into compile_breakdown
+        rows = []
+        for path in header_stats["time_breakdown"]:
+            entry = header_stats["time_breakdown"][path]
+            for sub_entry in entry:
+                sub_path = sub_entry["path"]
+                inclusion_count = sub_entry["inclusion_count"]
+                total_time_s = sub_entry["total_time_s"]
+
+                row = copy.copy(common_parameters)
+                row["id"] = str(uuid.uuid4())
+                row["path"] = path
+                row["sub_path"] = sub_path
+                row["inclusion_count"] = inclusion_count
+                row["total_time_s"] = total_time_s
+
+                rows.append(copy.copy(row))
+
+        if rows:
+            row = rows[0]
+            driver.table_client.bulk_upsert(
+                DATABASE_PATH + "/code-agility/compile_breakdown", rows, generate_column_types(row)
+            )
 
 
 if __name__ == "__main__":

@@ -259,13 +259,13 @@ void TClientCommandRootCommon::Config(TConfig& config) {
 
             oauth2TokenExchangeHelp
                 << "  Fields of json file:" << Endl
-                << FIELD("grant-type") "          " TYPE("string") "Grant type option" DEFAULT(defaultParams.GrantType_) << Endl
-                << FIELD("res") "                 " TYPE("string") "Resource option (optional)" << Endl
+                << FIELD("grant-type") "          " TYPE("string") "Grant type" DEFAULT(defaultParams.GrantType_) << Endl
+                << FIELD("res") "                 " TYPE("string") "Resource (optional)" << Endl
                 << FIELD("aud") "                 " TYPE2("string", "list of strings") "Audience option for token exchange request (optional)" << Endl
-                << FIELD("scope") "               " TYPE2("string", "list of strings") "Scope option (optional)" << Endl
-                << FIELD("requested-token-type") "" TYPE("string") "Requested token type option" DEFAULT(defaultParams.RequestedTokenType_) << Endl
-                << FIELD("subject-credentials") " " TYPE("creds_json") "Subject credentials options (optional)" << Endl
-                << FIELD("actor-credentials") "   " TYPE("creds_json") "Actor credentials options (optional)" << Endl
+                << FIELD("scope") "               " TYPE2("string", "list of strings") "Scope (optional)" << Endl
+                << FIELD("requested-token-type") "" TYPE("string") "Requested token type" DEFAULT(defaultParams.RequestedTokenType_) << Endl
+                << FIELD("subject-credentials") " " TYPE("creds_json") "Subject credentials (optional)" << Endl
+                << FIELD("actor-credentials") "   " TYPE("creds_json") "Actor credentials (optional)" << Endl
                 << Endl
                 << "  Fields of " << colors.BoldColor() << "creds_json" << colors.OldColor() << " (JWT):" << Endl
                 << FIELD("type") "                " TYPE("string") "Token source type. Set " << colors.BoldColor() << "JWT" << colors.OldColor() << Endl

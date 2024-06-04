@@ -9,6 +9,7 @@ from concurrent.futures import ProcessPoolExecutor
 
 HEADER_COMPILE_TIME_TO_SHOW = 0.5  # sec
 
+
 def sanitize_path(path: str, base_src_dir: str) -> str:
     home_dir = os.environ["HOME"]
     ya_build_path_chunk = ".ya/build/build_root"
@@ -121,7 +122,6 @@ def build_include_tree(path: str, build_output_dir: str, base_src_dir: str) -> l
     result = []
 
     for time_stamp, ev, path, duration in include_events:
-
         if current_includes_stack:
             last_path = current_includes_stack[-1]
             prev = path_to_time.get(last_path, 0)
@@ -222,21 +222,33 @@ def parse_includes(trace_path: str, base_src_dir: str) -> tuple[list[tuple[int, 
         if event["name"] == "OptModule":
             cpp_file = event["args"]["detail"]
 
-    include_events.sort(key=lambda event: (event[0], -event[1]))
-
     path_to_time = {}
-    current_includes_stack = [(cpp_file, 0)]
     last_time_stamp = 0
     time_breakdown = {}  # header/cpp -> (header -> (cnt, total time))
+
     if cpp_file is None:
         print("Can't determine cpp file for {}".format(trace_path))
         return path_to_time, time_breakdown
 
+    include_events.sort(key=lambda event: (event[0], -event[1]))
+
+    cpp_file = sanitize_path(cpp_file, base_src_dir)
+    current_includes_stack = [(cpp_file, 0)]
     for time_stamp, ev, path in include_events:
         if current_includes_stack:
             last_path, _ = current_includes_stack[-1]
             prev = path_to_time.get(last_path, 0)
             path_to_time[last_path] = prev + (time_stamp - last_time_stamp) / 1000 / 1000
+
+            # add compile breakdown for itself
+            if last_path not in time_breakdown:
+                time_breakdown[last_path] = {}
+
+            if last_path not in time_breakdown[last_path]:
+                time_breakdown[last_path][last_path] = [0, 0]
+
+            time_breakdown[last_path][last_path][0] = 1  # NB: just 1
+            time_breakdown[last_path][last_path][1] += (time_stamp - last_time_stamp) / 1000 / 1000
 
         if ev == 1:
             current_includes_stack.append((path, time_stamp))
@@ -247,13 +259,13 @@ def parse_includes(trace_path: str, base_src_dir: str) -> tuple[list[tuple[int, 
             parent_path = current_includes_stack[-1][0]
             if parent_path not in time_breakdown:
                 time_breakdown[parent_path] = {}
-            
+
             if current_path not in time_breakdown[parent_path]:
                 time_breakdown[parent_path][current_path] = [0, 0]
-            
+
             time_breakdown[parent_path][current_path][0] += 1
             time_breakdown[parent_path][current_path][1] += (time_stamp - include_ts) / 1000 / 1000
-    
+
         last_time_stamp = time_stamp
 
     return path_to_time, time_breakdown
@@ -284,14 +296,13 @@ def generate_header_bloat(build_output_dir: str, result_dir: str, base_src_dir: 
 
                     total_time_breakdown[path][subpath][0] += time_breakdown[path][subpath][0]
                     total_time_breakdown[path][subpath][1] += time_breakdown[path][subpath][1]
-                
+
         for path in total_time_breakdown:
             print("*** {}".format(path))
             for subpath in total_time_breakdown[path]:
                 count, total_time_ms = total_time_breakdown[path][subpath]
                 print("   {} -> total {:.2f}s (included {} times)".format(subpath, total_time_ms, count))
             print("")
-
 
     result = []
 
@@ -310,11 +321,13 @@ def generate_header_bloat(build_output_dir: str, result_dir: str, base_src_dir: 
         chunks = list(zip(path_chunks, (path_chunks_count - 1) * ["dir"] + ["h"]))
         add_to_tree(chunks, int(duration * 1000), tree)
         print("{} -> {:.2f}s (aggregated {} times)".format(path, duration, cnt))
-        headers_compile_duration.append({
-            "path": path,
-            "inclusion_count": cnt,
-            "mean_compilation_time_s": duration / cnt,
-        })
+        headers_compile_duration.append(
+            {
+                "path": path,
+                "inclusion_count": cnt,
+                "mean_compilation_time_s": duration / cnt,
+            }
+        )
 
     time_breakdown = {}
 
@@ -322,14 +335,15 @@ def generate_header_bloat(build_output_dir: str, result_dir: str, base_src_dir: 
         one_file_breakdown = []
         for subpath in total_time_breakdown[path]:
             inclusion_count, total_s = total_time_breakdown[path][subpath]
-            one_file_breakdown.append({
-                "path": subpath,
-                "inclusion_count": inclusion_count,
-                "total_time_s": total_s,
-            })
+            one_file_breakdown.append(
+                {
+                    "path": subpath,
+                    "inclusion_count": inclusion_count,
+                    "total_time_s": total_s,
+                }
+            )
         one_file_breakdown.sort(key=lambda val: -val["total_time_s"])
         time_breakdown[path] = one_file_breakdown
-
 
     human_readable_output = {
         "headers_compile_duration": headers_compile_duration,

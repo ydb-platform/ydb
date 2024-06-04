@@ -23,13 +23,13 @@ SRCS(
     random.cpp
 )
 
-END()
-
 IF (OS_WINDOWS)
     CFLAGS(
         -DKIKIMR_DISABLE_WINDOWS
     )
 ENDIF()
+
+END()
 
 RECURSE_FOR_TESTS(
     ut

@@ -84,14 +84,7 @@ struct TDirectReadPartitionSession {
 
     // TODO(qyryq) min read id, partition id, done read id?
 
-    TDirectReadClientMessage MakeStartRequest() const {
-        TDirectReadClientMessage req;
-        auto& start = *req.mutable_start_direct_read_partition_session_request();
-        start.set_partition_session_id(PartitionSessionId);
-        start.set_last_direct_read_id(LastDirectReadId);
-        start.set_generation(Location.GetGeneration());
-        return req;
-    }
+    TDirectReadClientMessage MakeStartRequest() const;
 };
 
 // One TDirectReadSession instance comprises multiple TDirectReadPartitionSessions.

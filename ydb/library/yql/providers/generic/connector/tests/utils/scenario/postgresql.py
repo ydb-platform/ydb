@@ -3,7 +3,7 @@ from typing import Sequence
 import ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 as data_source_pb2
 
 import ydb.library.yql.providers.generic.connector.tests.utils.artifacts as artifacts
-from ydb.library.yql.providers.generic.connector.tests.utils.comparator import data_outs_equal
+from ydb.library.yql.providers.generic.connector.tests.utils.comparator import assert_data_outs_equal
 from ydb.library.yql.providers.generic.connector.tests.utils.database import Database
 from ydb.library.yql.providers.generic.connector.tests.utils.log import make_logger, debug_with_limit
 from ydb.library.yql.providers.generic.connector.tests.utils.schema import Schema
@@ -120,10 +120,11 @@ def select_positive(
 
     assert result.returncode == 0, result.output
 
-    assert data_outs_equal(test_case.data_out, result.data_out_with_types), (
+    assert_data_outs_equal(test_case.data_out, result.data_out_with_types), (
         test_case.data_out,
         result.data_out_with_types,
     )
+
     if test_case.check_output_schema:
         assert test_case.schema == result.schema, (test_case.schema, result.schema)
 
@@ -215,7 +216,7 @@ def select_pg_schema(
 
     assert result.returncode == 0, result.output
 
-    assert data_outs_equal(test_case.data_out, result.data_out_with_types), (
+    assert_data_outs_equal(test_case.data_out, result.data_out_with_types), (
         test_case.data_out,
         result.data_out_with_types,
     )

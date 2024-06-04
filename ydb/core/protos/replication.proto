@@ -209,3 +209,14 @@ message TEvStopWorker {
     optional TControllerIdentity Controller = 1;
     optional TWorkerIdentity Worker = 2;
 }
+
+message TEvWorkerStatus {
+    enum EStatus {
+        UNKNOWN = 0;
+        RUNNING = 1;
+        STOPPED = 2;
+    }
+
+    optional TWorkerIdentity Worker = 1;
+    optional EStatus Status = 2;
+}

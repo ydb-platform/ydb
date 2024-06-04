@@ -51,6 +51,7 @@ TString AsKeyBound(const NYql::TWide<Type>& value) {
     return key;
 }
 
+TString MiddleOf(const TString& fromBound, const TString& toBound);
 
 struct TPartitionKeyRange {
     TMaybe<TSerializedCellVec> FromBound; // inclusive

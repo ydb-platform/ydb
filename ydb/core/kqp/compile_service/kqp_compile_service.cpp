@@ -759,12 +759,16 @@ private:
             NWilson::TSpan compileServiceSpan(TWilsonKqp::CompileService, ev->Get() ? std::move(ev->TraceId) : NWilson::TTraceId(), "CompileService");
 
             TKqpCompileSettings compileSettings(true, request.IsQueryActionPrepare, false, request.Deadline, TableServiceConfig.GetEnableAstCache() ? ECompileActorAction::PARSE : ECompileActorAction::COMPILE);
-            TKqpCompileRequest compileRequest(ev->Sender, request.Uid, compileResult ? *compileResult->Query : *request.Query,
+            TKqpCompileRequest compileRequest(ev->Sender, request.Uid, request.Query ? *request.Query : *compileResult->Query,
                 compileSettings, request.UserToken, dbCounters, request.GUCSettings, request.ApplicationName,
                 ev->Cookie, std::move(ev->Get()->IntrestedInResult),
                 ev->Get()->UserRequestContext,
                 ev->Get() ? std::move(ev->Get()->Orbit) : NLWTrace::TOrbit(),
                 std::move(compileServiceSpan), std::move(ev->Get()->TempTablesState));
+
+            if (TableServiceConfig.GetEnableAstCache() && request.QueryAst) {
+                return CompileByAst(*request.QueryAst, compileRequest, ctx);
+            }
 
             if (!RequestsQueue.Enqueue(std::move(compileRequest))) {
                 Counters->ReportCompileRequestRejected(dbCounters);
@@ -1138,7 +1142,7 @@ private:
             << ", message: " << e.what());
     }
 
-    void Reply(const TActorId& sender, const TVector<TQueryAst> astStatements, const TKqpQueryId query,
+    void Reply(const TActorId& sender, const TVector<TQueryAst>& astStatements, const TKqpQueryId query,
         const TActorContext& ctx, ui64 cookie, NLWTrace::TOrbit orbit, NWilson::TSpan span)
     {
         LWTRACK(KqpCompileServiceReply,
@@ -1157,7 +1161,7 @@ private:
         ctx.Send(sender, responseEv.Release(), 0, cookie);
     }
 
-    void ReplyQueryStatements(const TActorId& sender, const TVector<TQueryAst> astStatements,
+    void ReplyQueryStatements(const TActorId& sender, const TVector<TQueryAst>& astStatements,
         const TKqpQueryId query, const TActorContext& ctx, ui64 cookie, NLWTrace::TOrbit orbit, NWilson::TSpan span)
     {
         LWTRACK(KqpCompileServiceReplyStatements, orbit);

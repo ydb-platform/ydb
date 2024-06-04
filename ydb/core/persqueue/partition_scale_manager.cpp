@@ -1,4 +1,6 @@
-#include "ydb/core/persqueue/partition_scale_manager.h"
+#include "partition_scale_manager.h"
+
+#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -55,6 +57,10 @@ void TPartitionScaleManager::TrySendScaleRequest(const TActorContext& ctx) {
 using TPartitionSplit = NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionSplit;
 using TPartitionMerge = NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionMerge;
 
+const TString ToHex(const TString& value) {
+    return TStringBuilder() << HexText(TBasicStringBuf(value));
+}
+
 std::pair<std::vector<TPartitionSplit>, std::vector<TPartitionMerge>> TPartitionScaleManager::BuildScaleRequest(const TActorContext& ctx) {
     std::vector<TPartitionSplit> splitsToApply;
     std::vector<TPartitionMerge> mergesToApply;
@@ -68,13 +74,17 @@ std::pair<std::vector<TPartitionSplit>, std::vector<TPartitionMerge>> TPartition
         if (BalancerConfig.PartitionGraph.GetPartition(partitionId)->Children.empty()) {
             auto from = partition.KeyRange.FromBound ? *partition.KeyRange.FromBound : "";
             auto to = partition.KeyRange.ToBound ?*partition.KeyRange.ToBound : "";
-            auto mid = GetRangeMid(from, to);
+            auto mid = MiddleOf(from, to);
             if (mid.empty()) {
                 itSplit = PartitionsToSplit.erase(itSplit);
-                LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, "TPartitionScaleManager::BuildScaleRequest wrong partition key range. Can't get mid. Topic# " << TopicName << ", partition# " << partitionId);
+                LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                        "TPartitionScaleManager::BuildScaleRequest wrong partition key range. Can't get mid. Topic# " << TopicName << ", partition# " << partitionId);
                 continue;
             }
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, "TPartitionScaleManager::BuildScaleRequest partition split ranges. From# '" << from << "'. To# '" << to << "'. Mid# '" << mid <<"'. Topic# " << TopicName << ". Partition# " << partitionId);
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                    "TPartitionScaleManager::BuildScaleRequest partition split ranges. From# '" << ToHex(from)
+                    << "'. To# '" << ToHex(to) << "'. Mid# '" << ToHex(mid)
+                    << "'. Topic# " << TopicName << ". Partition# " << partitionId);
 
             TPartitionSplit split;
             split.set_partition(partition.Id);
@@ -95,7 +105,8 @@ void TPartitionScaleManager::HandleScaleRequestResult(TPartitionScaleRequest::TE
     RequestInflight = false;
     LastResponseTime = ctx.Now();
     auto result = ev->Get();
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, "TPartitionScaleManager::HandleScaleRequestResult scale request result: " << result->Status << ". Topic# " << TopicName);
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+            "TPartitionScaleManager::HandleScaleRequestResult scale request result: " << result->Status << ". Topic# " << TopicName);
     if (result->Status == TEvTxUserProxy::TResultStatus::ExecComplete) {
         TrySendScaleRequest(ctx);
     } else {
@@ -117,32 +128,6 @@ void TPartitionScaleManager::UpdateBalancerConfig(NKikimrPQ::TUpdateBalancerConf
 
 void TPartitionScaleManager::UpdateDatabasePath(const TString& dbPath) {
     DatabasePath = dbPath;
-}
-
-TString TPartitionScaleManager::GetRangeMid(const TString& from, const TString& to) {
-    if (from > to && to.size() != 0) {
-        return "";
-    }
-
-    TStringBuilder result;
-
-    unsigned char fromPadding = 0;
-    unsigned char toPadding = 255;
-
-    size_t maxSize = std::max(from.size(), to.size());
-    for (size_t i = 0; i < maxSize; ++i) {
-        ui16 fromChar = i < from.size() ? static_cast<ui16>(from[i]) : fromPadding;
-        unsigned char toChar = i < to.size() ? static_cast<unsigned char>(to[i]) : toPadding;
-
-        ui16 sum = fromChar + toChar;
-
-        result += static_cast<unsigned char>(sum / 2);
-    }
-
-    if (result == from) {
-        result += static_cast<unsigned char>(127);
-    }
-    return result;
 }
 
 } // namespace NPQ

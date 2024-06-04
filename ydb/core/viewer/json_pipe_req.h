@@ -162,6 +162,18 @@ protected:
         SendRequestToPipe(pipeClient, request.Release());
     }
 
+    void RequestBSControllerPDiskRestart(ui32 nodeId, ui32 pdiskId, bool force = false) {
+        TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+        THolder<TEvBlobStorage::TEvControllerConfigRequest> request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto* restartPDisk = request->Record.MutableRequest()->AddCommand()->MutableRestartPDisk();
+        restartPDisk->MutableTargetPDiskId()->SetNodeId(nodeId);
+        restartPDisk->MutableTargetPDiskId()->SetPDiskId(pdiskId);
+        if (force) {
+            request->Record.MutableRequest()->SetIgnoreDegradedGroupsChecks(true);
+        }
+        SendRequestToPipe(pipeClient, request.Release());
+    }
+
     void RequestSchemeCacheNavigate(const TString& path) {
         THolder<NSchemeCache::TSchemeCacheNavigate> request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
         NSchemeCache::TSchemeCacheNavigate::TEntry entry;

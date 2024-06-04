@@ -2,7 +2,7 @@
 #include "mkql_computation_node_holders_codegen.h"
 #include "mkql_value_builder.h"
 #include "mkql_computation_node_codegen.h" // Y_IGNORE
-#include <ydb/library/yql/minikql/arrow/mkql_memory_pool.h>
+#include <ydb/library/yql/public/udf/arrow/memory_pool.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_pattern_cache.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
@@ -580,7 +580,6 @@ public:
         HolderFactory = MakeHolder<THolderFactory>(CompOpts.AllocState, *MemInfo, patternNodes->HolderFactory->GetFunctionRegistry());
         ValueBuilder = MakeHolder<TDefaultValueBuilder>(*HolderFactory.Get(), compOpts.ValidatePolicy);
         ValueBuilder->SetSecureParamsProvider(CompOpts.SecureParamsProvider);
-        ArrowMemoryPool = MakeArrowMemoryPool(CompOpts.AllocState);
     }
 
     ~TComputationGraph() {
@@ -602,8 +601,7 @@ public:
                 ValueBuilder.Get(),
                 CompOpts,
                 PatternNodes->GetMutables(),
-                //*ArrowMemoryPool
-                *arrow::default_memory_pool()));
+                *NYql::NUdf::GetYqlMemoryPool()));
             Ctx->ExecuteLLVM = Codegen.get() != nullptr;
             ValueBuilder->SetCalleePositionHolder(Ctx->CalleePosition);
             for (auto& node : PatternNodes->GetNodes()) {
@@ -792,7 +790,6 @@ private:
     const TIntrusivePtr<TMemoryUsageInfo> MemInfo;
     THolder<THolderFactory> HolderFactory;
     THolder<TDefaultValueBuilder> ValueBuilder;
-    std::unique_ptr<arrow::MemoryPool> ArrowMemoryPool;
     THolder<TComputationContext> Ctx;
     TComputationOptsFull CompOpts;
     NYql::NCodegen::ICodegen::TSharedPtr Codegen;

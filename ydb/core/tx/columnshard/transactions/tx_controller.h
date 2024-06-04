@@ -32,6 +32,10 @@ public:
 };
 
 struct TFullTxInfo: public TBasicTxInfo {
+private:
+    using TBase = TBasicTxInfo;
+
+public:
     ui64 MaxStep = Max<ui64>();
     ui64 MinStep = 0;
     ui64 PlanStep = 0;
@@ -40,6 +44,15 @@ struct TFullTxInfo: public TBasicTxInfo {
     std::optional<TMessageSeqNo> SeqNo;
 public:
     bool operator==(const TFullTxInfo& item) const = default;
+
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << TBase::DebugString() << ";min=" << MinStep << ";max=" << MaxStep << ";plan=" << PlanStep << ";src=" << Source << ";cookie=" << Cookie;
+        if (SeqNo) {
+            sb << *SeqNo << ";";
+        }
+        return sb;
+    }
 
     TString SerializeSeqNoAsString() const {
         if (!SeqNo) {

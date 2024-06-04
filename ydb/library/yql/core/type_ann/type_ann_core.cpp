@@ -3532,27 +3532,50 @@ namespace NTypeAnnImpl {
     }
 
     IGraphTransformer::TStatus UntagWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureTaggedType(input->Head(), ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
+        if (IsNull(input->Head())) {
+            output = input->HeadPtr();
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        const TTaggedExprType* taggedType;
+        bool isOptional;
+        if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
+            auto itemType = input->Head().GetTypeAnn()->Cast<TOptionalExprType>()->GetItemType();
+            if (!EnsureTaggedType(input->Head().Pos(), *itemType, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            taggedType = itemType->Cast<TTaggedExprType>();
+            isOptional = true;
+        } else {
+            if (!EnsureTaggedType(input->Head(), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            taggedType = input->Head().GetTypeAnn()->Cast<TTaggedExprType>();
+            isOptional = false;
         }
 
         if (!EnsureAtom(input->Tail(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        auto tagType = input->Head().GetTypeAnn()->Cast<TTaggedExprType>();
-        if (tagType->GetTag() != input->Tail().Content()) {
+        if (taggedType->GetTag() != input->Tail().Content()) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Tail().Pos()), TStringBuilder() <<
-                "Expected tag: " << tagType->GetTag() << ", but got: " << input->Tail().Content()));
+                "Expected tag: " << taggedType->GetTag() << ", but got: " << input->Tail().Content()));
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(tagType->GetBaseType());
+        if (isOptional) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(taggedType->GetBaseType()));
+        } else {
+            input->SetTypeAnn(taggedType->GetBaseType());
+        }
+
         return IGraphTransformer::TStatus::Ok;
     }
 

@@ -284,6 +284,8 @@ SELECT array_to_json(ARRAY [jsonb '{"a":1}', jsonb '{"b":[2,3]}']);
 (1 row)
 
 BEGIN;
+SET LOCAL TIME ZONE 10.5;
+SET LOCAL TIME ZONE -8;
 COMMIT;
 -- jsonb extraction functions
 CREATE TEMP TABLE test_jsonb (

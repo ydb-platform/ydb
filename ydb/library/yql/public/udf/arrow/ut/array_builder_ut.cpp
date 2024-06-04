@@ -1,6 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/library/yql/public/udf/arrow/block_builder.h>
+#include <ydb/library/yql/public/udf/arrow/memory_pool.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
@@ -18,7 +19,7 @@ struct TArrayBuilderTestData {
         , Env(Alloc)
         , PgmBuilder(Env, *FunctionRegistry)
         , MemInfo("Memory")
-        , ArrowPool(arrow::default_memory_pool())
+        , ArrowPool(GetYqlMemoryPool())
     {
     }
 

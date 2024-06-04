@@ -751,6 +751,43 @@ SELECT '-9223372036854775808.5'::float8::int8;
 
 SELECT '-9223372036854780000'::float8::int8;
 ERROR:  bigint out of range
+-- test exact cases for trigonometric functions in degrees
+SELECT x,
+       sind(x),
+       sind(x) IN (-1,-0.5,0,0.5,1) AS sind_exact
+FROM (VALUES (0), (30), (90), (150), (180),
+      (210), (270), (330), (360)) AS t(x);
+  x  | sind | sind_exact 
+-----+------+------------
+   0 |    0 | t
+  30 |  0.5 | t
+  90 |    1 | t
+ 150 |  0.5 | t
+ 180 |    0 | t
+ 210 | -0.5 | t
+ 270 |   -1 | t
+ 330 | -0.5 | t
+ 360 |    0 | t
+(9 rows)
+
+SELECT x,
+       cosd(x),
+       cosd(x) IN (-1,-0.5,0,0.5,1) AS cosd_exact
+FROM (VALUES (0), (60), (90), (120), (180),
+      (240), (270), (300), (360)) AS t(x);
+  x  | cosd | cosd_exact 
+-----+------+------------
+   0 |    1 | t
+  60 |  0.5 | t
+  90 |    0 | t
+ 120 | -0.5 | t
+ 180 |   -1 | t
+ 240 | -0.5 | t
+ 270 |    0 | t
+ 300 |  0.5 | t
+ 360 |    1 | t
+(9 rows)
+
 SELECT x,
        tand(x),
        tand(x) IN ('-Infinity'::float8,-1,0,
@@ -772,4 +809,32 @@ FROM (VALUES (0), (45), (90), (135), (180),
  315 |        -1 | t          |        -1 | t
  360 |         0 | t          |  Infinity | t
 (9 rows)
+
+SELECT x,
+       atand(x),
+       atand(x) IN (-90,-45,0,45,90) AS atand_exact
+FROM (VALUES ('-Infinity'::float8), (-1), (0), (1),
+      ('Infinity'::float8)) AS t(x);
+     x     | atand | atand_exact 
+-----------+-------+-------------
+ -Infinity |   -90 | t
+        -1 |   -45 | t
+         0 |     0 | t
+         1 |    45 | t
+  Infinity |    90 | t
+(5 rows)
+
+SELECT x, y,
+       atan2d(y, x),
+       atan2d(y, x) IN (-90,0,90,180) AS atan2d_exact
+FROM (SELECT 10*cosd(a), 10*sind(a)
+      FROM generate_series(0, 360, 90) AS t(a)) AS t(x,y);
+  x  |  y  | atan2d | atan2d_exact 
+-----+-----+--------+--------------
+  10 |   0 |      0 | t
+   0 |  10 |     90 | t
+ -10 |   0 |    180 | t
+   0 | -10 |    -90 | t
+  10 |   0 |      0 | t
+(5 rows)
 

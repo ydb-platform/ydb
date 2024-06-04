@@ -250,7 +250,7 @@ class DqRunner(Runner):
             LOGGER.info('Execution succeeded: ')
             # Parse output
             with open(result_path, 'r') as f:
-                result = yson.loads(f.read().encode('ascii'))
+                result = yson.loads(f.read().encode('utf-8'))
 
             # Dqrun's data output is missing type information (everything is a string),
             # so we have to recover schema and transform the results to make them comparable with the inputs

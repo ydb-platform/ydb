@@ -33,6 +33,21 @@ namespace NKikimr::NKqp {
 // common case).
 class TKqpQueryState : public TNonCopyable {
 public:
+    class TQueryTxId {
+    public:
+        TQueryTxId() = default;
+        TQueryTxId(const TQueryTxId& other);
+        TQueryTxId& operator=(const TQueryTxId& id);
+
+        void SetValue(const TTxId& id);
+        TTxId GetValue();
+
+        void Reset();
+
+    private:
+        TMaybe<TTxId> Id;
+    };
+
     TKqpQueryState(TEvKqp::TEvQueryRequest::TPtr& ev, ui64 queryId, const TString& database, const TMaybe<TString>& applicationName,
         const TString& cluster, TKqpDbCountersPtr dbCounters, bool longSession, const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
         const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, const TString& sessionId, TMonotonic startedAt)
@@ -110,7 +125,7 @@ public:
     NWilson::TSpan KqpSessionSpan;
     ETableReadType MaxReadType = ETableReadType::Other;
 
-    TTxId TxId; // User tx
+    TQueryTxId TxId; // User tx
     bool Commit = false;
     bool Commited = false;
 
@@ -132,6 +147,7 @@ public:
     NYql::TIssues Issues;
 
     TVector<TQueryAst> Statements;
+    TMaybe<TQueryTxId> ImplicitTxId = {}; // Implicit tx for all statements
     ui32 CurrentStatementId = 0;
     ui32 StatementResultIndex = 0;
     ui32 StatementResultSize = 0;
@@ -406,7 +422,7 @@ public:
         return RequestEv->HasTxControl();
     }
 
-    bool HasImpliedTx() const; // (only for QueryService API) user has not specified TxControl in the request. In this case we behave like Begin/Commit was specified.
+    bool HasImplicitTx() const; // (only for QueryService API) user has not specified TxControl in the request. In this case we behave like Begin/Commit was specified.
 
     const ::Ydb::Table::TransactionControl& GetTxControl() const {
         return RequestEv->GetTxControl();
@@ -417,15 +433,12 @@ public:
     }
 
     void PrepareCurrentStatement() {
-        QueryData = {};
+        QueryData = std::make_shared<TQueryData>(TxCtx->TxAlloc);
         PreparedQuery = {};
         CompileResult = {};
-        TxCtx = {};
         CurrentTx = 0;
         TableVersions = {};
         MaxReadType = ETableReadType::Other;
-        Commit = false;
-        Commited = false;
         TopicOperations = {};
         ReplayMessage = {};
     }
@@ -444,7 +457,6 @@ public:
                     TxCtx->EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_UNDEFINED;
                     break;
                 default:
-                    Commit = true;
                     TxCtx->EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
             }
         }
@@ -469,6 +481,7 @@ public:
     std::unique_ptr<TEvKqp::TEvCompileRequest> BuildSplitRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr);
     std::unique_ptr<TEvKqp::TEvCompileRequest> BuildCompileSplittedRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr);
 
+    bool ProcessingLastStatementPart();
     bool PrepareNextStatementPart();
 
     const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>& GetYdbParameters() const {

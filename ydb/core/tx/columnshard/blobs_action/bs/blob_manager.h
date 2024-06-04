@@ -216,7 +216,7 @@ public:
     virtual void DeleteBlobOnExecute(const TTabletId tabletId, const TUnifiedBlobId& blobId, IBlobManagerDb& db) override;
     virtual void DeleteBlobOnComplete(const TTabletId tabletId, const TUnifiedBlobId& blobId) override;
 private:
-    std::vector<TGenStep> FindNewGCBarriers();
+    std::deque<TGenStep> FindNewGCBarriers();
     void PopGCBarriers(const TGenStep gs);
     void PopGCBarriers(const ui32 count);
 

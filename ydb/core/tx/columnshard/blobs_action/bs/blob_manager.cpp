@@ -196,13 +196,12 @@ void TBlobManager::PopGCBarriers(const TGenStep gs) {
     }
 }
 
-std::vector<TGenStep> TBlobManager::FindNewGCBarriers() {
+std::deque<TGenStep> TBlobManager::FindNewGCBarriers() {
     TGenStep newCollectGenStep = LastCollectedGenStep;
-    std::vector<TGenStep> result;
+    std::deque<TGenStep> result;
     if (AllocatedGenSteps.empty()) {
-        return { TGenStep(CurrentGen, CurrentStep) };
+        result.emplace_back(TGenStep(CurrentGen, CurrentStep));
     }
-    result.emplace_back(LastCollectedGenStep);
     for (auto& allocated : AllocatedGenSteps) {
         AFL_VERIFY(allocated->GenStep > newCollectGenStep);
         if (!allocated->Finished()) {
@@ -210,6 +209,10 @@ std::vector<TGenStep> TBlobManager::FindNewGCBarriers() {
         }
         result.emplace_back(allocated->GenStep);
         newCollectGenStep = allocated->GenStep;
+    }
+    AFL_VERIFY(result.size());
+    if (LastCollectedGenStep < result.front()) {
+        result.emplace_front(LastCollectedGenStep);
     }
     return result;
 }
@@ -319,17 +322,12 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
     }
 
     NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("action_id", TGUID::CreateTimebased().AsGuidString());
-    const std::vector<TGenStep> newCollectGenSteps = FindNewGCBarriers();
-    if (newCollectGenSteps.size()) {
-        if (AllocatedGenSteps.size()) {
-            AFL_VERIFY(newCollectGenSteps.front() > LastCollectedGenStep);
-        } else {
-            AFL_VERIFY(newCollectGenSteps.front() == LastCollectedGenStep);
-        }
-    }
+    const std::deque<TGenStep> newCollectGenSteps = FindNewGCBarriers();
+    AFL_VERIFY(newCollectGenSteps.size());
+    AFL_VERIFY(newCollectGenSteps.front() == LastCollectedGenStep);
+
     if (GCBarrierPreparation != LastCollectedGenStep) {
         if (!std::get<0>(GCBarrierPreparation)) {
-            CollectGenStepInFlight = LastCollectedGenStep;
             for (auto&& newCollectGenStep : newCollectGenSteps) {
                 DrainKeepTo(newCollectGenStep, gcContext);
                 CollectGenStepInFlight = std::max(CollectGenStepInFlight.value_or(newCollectGenStep), newCollectGenStep);

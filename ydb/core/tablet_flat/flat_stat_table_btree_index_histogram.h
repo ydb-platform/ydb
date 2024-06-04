@@ -22,11 +22,13 @@ class TTableHistogramBuilderBtreeIndex {
 public:
     struct TNodeState : public TIntrusiveListItem<TNodeState> {
         TPageId PageId;
+        ui32 Level;
         TCellsIterable BeginKey, EndKey;
         ui64 BeginSize, EndSize;
 
-        TNodeState(TPageId pageId, TCellsIterable beginKey, TCellsIterable endKey, TRowId beginSize, TRowId endSize)
+        TNodeState(TPageId pageId, ui32 level, TCellsIterable beginKey, TCellsIterable endKey, TRowId beginSize, TRowId endSize)
             : PageId(pageId)
+            , Level(level)
             , BeginKey(beginKey)
             , EndKey(endKey)
             , BeginSize(beginSize)
@@ -139,7 +141,7 @@ public:
             auto& part = Subset.Flatten[index];
             auto& meta = part->IndexPages.GetBTree({});
             parts.emplace_back(part.Part.Get(), index);
-            LoadedStateNodes.emplace_back(meta.PageId, EmptyKey, EmptyKey, 0, TGetSize::Get(meta));
+            LoadedStateNodes.emplace_back(meta.PageId, meta.LevelCount, EmptyKey, EmptyKey, 0, TGetSize::Get(meta));
             parts.back().PushBack(&LoadedStateNodes.back());
         }
 
@@ -169,22 +171,25 @@ private:
         Y_ABORT_UNLESS(biggestPart->GetCount());
 
         // FIXME: load the biggest node if its size more than a half
-        if (biggestPart->GetCount() == 1) {
+        if (biggestPart->GetCount() == 1 && biggestPart->GetNodes().Front()->Level > 0) {
             if (!TryLoadNode<TGetSize>(biggestPart->GetPart(), *biggestPart->PopFront(), [&biggestPart](TNodeState& child) {
                 biggestPart->PushBack(&child);
             })) {
                 return false;
             }
         }
-        TCellsIterable splitKey = FindMiddlePartKey(*biggestPart);
+        TCellsIterable splitKey = FindMedianPartKey(*biggestPart);
 
         if (Y_UNLIKELY(!splitKey)) {
-            // Note: an extremely rare scenario when we can't split biggest SST
+            // Note: a rare scenario when we can't split biggest SST
             // this means that we have a lot of parts which total size exceed resolution
+            // may also happen with small tables
 
-            // TODO: pick some
-            Y_DEBUG_ABORT("Unimplemented");
-            return true;
+            splitKey = FindMedianTableKey(parts);
+
+            if (!splitKey) {
+                return true;
+            }
         }
 
         ui64 leftSize = 0, middleSize = 0, rightSize = 0;
@@ -228,9 +233,15 @@ private:
                 rightSize -= rightNodes.GetSize();
 
                 auto count = middleNodes.GetCount();
+                bool hasChanges = false;
                 for (auto index : xrange(count)) {
                     Y_UNUSED(index);
-                    if (!TryLoadNode<TGetSize>(middleNodes.GetPart(), *middleNodes.PopFront(), [&](TNodeState& node) {
+                    auto& parent = *middleNodes.PopFront();
+                    if (!parent.Level) { // can't be splitted, return as-is
+                        middleNodes.PushBack(&parent);
+                        continue;
+                    }
+                    if (!TryLoadNode<TGetSize>(middleNodes.GetPart(), parent, [&](TNodeState& node) {
                         if (node.EndKey && CompareKeys(node.EndKey, splitKey) <= 0) {
                             leftNodes.PushBack(&node);
                         } else if (node.BeginKey && CompareKeys(node.BeginKey, splitKey) >= 0) {
@@ -241,6 +252,7 @@ private:
                     })) {
                         return false;
                     }
+                    hasChanges = true;
                 }
 
                 while (!rightNodesBuffer.Empty()) { // should be reversed
@@ -251,29 +263,28 @@ private:
                 middleSize += middleNodes.GetSize();
                 rightSize += rightNodes.GetSize();
 
-                Y_DEBUG_ABORT_UNLESS(middleNodes.GetCount() <= 1);
-
-                // TODO: add back to heap
-
+                if (hasChanges) { // return updated nodes to heap 
+                    Y_DEBUG_ABORT_UNLESS(middleNodes.GetCount() <= 1);
+                    std::push_heap(middleParts.begin(), middleParts.end());
+                } else { // can't be splitted, ignore
+                    middleParts.pop_back();
+                }
             }
         }
-
-        // TODO: don't copy nodes?
 
         ready &= BuildHistogramRecursive<TGetSize>(histogram, leftParts, beginSize, beginSize + leftSize, depth + 1);
         
         ui64 splitValue = beginSize + leftSize + middleSize / 2;
-        // TODO:
-        // splitValue = Min(splitValue, endSize);
-        // splitValue = Max(splitValue, beginSize);
-        AddBucket(histogram, splitKey, splitValue);
+        if (beginSize < splitValue && splitValue < endSize) {
+            AddBucket(histogram, splitKey, splitValue);
+        }
 
         ready &= BuildHistogramRecursive<TGetSize>(histogram, rightParts, SafeDiff(endSize, rightSize), endSize, depth + 1);
 
         return ready;
     }
 
-    TCellsIterable FindMiddlePartKey(const TPartNodes& part) {
+    TCellsIterable FindMedianPartKey(const TPartNodes& part) {
         Y_ABORT_UNLESS(part.GetCount());
         
         TCellsIterable splitKey = EmptyKey;
@@ -281,7 +292,8 @@ private:
         const ui64 middleSize = part.GetSize() / 2;
         
         for (const auto& node : part.GetNodes()) {
-            if (!splitKey || AbsDifference(currentSize, middleSize) < AbsDifference(splitSize, middleSize)) {
+            // Note: avoid picking the first key to make histogram keys unique
+            if (!splitKey && splitSize || AbsDifference(currentSize, middleSize) < AbsDifference(splitSize, middleSize)) {
                 splitKey = node.BeginKey;
                 splitSize = currentSize;
             }
@@ -290,6 +302,30 @@ private:
         }
 
         return splitKey;
+    }
+
+    TCellsIterable FindMedianTableKey(const TVector<TPartNodes>& parts) {
+        TVector<TCellsIterable> keys;
+        for (const auto& part : parts) {
+            for (const auto& node : part.GetNodes()) {
+                if (node.BeginKey) {
+                    keys.push_back(node.BeginKey);
+                }
+            }
+        }
+
+        // Note: avoid picking the first key to make histogram keys unique
+        auto median = keys.begin() + (keys.size() + 1) / 2;
+
+        if (median == keys.end()) {
+            return EmptyKey;
+        }
+
+        std::nth_element(keys.begin(), median, keys.end(), [this](const TCellsIterable& left, const TCellsIterable& right) {
+            return CompareKeys(left, right) < 0;
+        });
+        
+        return *median;
     }
 
     void AddBucket(THistogram& histogram, TCellsIterable key, ui64 value) {
@@ -313,9 +349,10 @@ private:
     }
 
     template <typename TGetSize>
-    bool TryLoadNode(const TPart* part, const TNodeState& node, const auto& addNode) {
-        // TODO: track level
-        auto page = Env->TryGetPage(part, node.PageId, {});
+    bool TryLoadNode(const TPart* part, const TNodeState& parent, const auto& addNode) {
+        Y_ABORT_UNLESS(parent.Level);
+
+        auto page = Env->TryGetPage(part, parent.PageId, {});
         if (!page) {
             return false;
         }
@@ -324,13 +361,13 @@ private:
         auto &bTreeNode = LoadedBTreeNodes.back();
         auto& groupInfo = part->Scheme->GetLayout({});
 
-        ui64 currentBeginSize = node.BeginSize;
+        ui64 currentBeginSize = parent.BeginSize;
         for (auto pos : xrange(bTreeNode.GetChildrenCount())) {
             auto& child = bTreeNode.GetChild(pos);
 
-            LoadedStateNodes.emplace_back(child.PageId, 
-                pos ? bTreeNode.GetKeyCellsIterable(pos - 1, groupInfo.ColsKeyData) : node.BeginKey,
-                pos < bTreeNode.GetKeysCount() ? bTreeNode.GetKeyCellsIterable(pos, groupInfo.ColsKeyData) : node.EndKey,
+            LoadedStateNodes.emplace_back(child.PageId, parent.Level - 1,
+                pos ? bTreeNode.GetKeyCellsIterable(pos - 1, groupInfo.ColsKeyData) : parent.BeginKey,
+                pos < bTreeNode.GetKeysCount() ? bTreeNode.GetKeyCellsIterable(pos, groupInfo.ColsKeyData) : parent.EndKey,
                 currentBeginSize, TGetSize::Get(child));
 
             currentBeginSize = LoadedStateNodes.back().EndSize;
@@ -354,6 +391,9 @@ private:
 
 private:
     int CompareKeys(const TCellsIterable& left_, const TCellsIterable& right_) const {
+        Y_DEBUG_ABORT_UNLESS(left_);
+        Y_DEBUG_ABORT_UNLESS(right_);
+
         auto left = left_.Iter(), right = right_.Iter();
         size_t end = Max(left.Count(), right.Count());
         Y_DEBUG_ABORT_UNLESS(end <= KeyDefaults.Size(), "Key schema is smaller than compared keys");

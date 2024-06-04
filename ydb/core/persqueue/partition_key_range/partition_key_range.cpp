@@ -6,6 +6,8 @@ namespace NKikimr {
 namespace NPQ {
 
 TString MiddleOf(const TString& from, const TString& to) {
+    Y_ABORT_UNLESS(to.empty() || from < to);
+
     auto GetChar = [](const TString& str, size_t i, unsigned char defaultValue) {
         if (i >= str.size()) {
             return defaultValue;
@@ -24,10 +26,12 @@ TString MiddleOf(const TString& from, const TString& to) {
 
     size_t maxSize = std::max(from.size(), to.size());
     result.reserve(maxSize + 1);
+
+    size_t size = std::max(from.size(), to.size());
     size_t i = 0;
-    for (; i < maxSize; ++i) {
+    for (; i < size; ++i) {
         ui16 f = GetChar(from, i, 0);
-        ui16 t = GetChar(to, i, 0xFF);
+        ui16 t = GetChar(to, i, 0);
 
         if (f != t) {
             diffFound = true;
@@ -76,12 +80,32 @@ TString MiddleOf(const TString& from, const TString& to) {
         }
     }
 
-    if (result == from) {
-        size_t j = splitted ? i : maxSize - 1;
-        ui16 f = GetChar(from, j, 0);
-        ui16 t = GetChar(to, j, 0xFF);
+    if (!splitted) {
+        for (; i < from.size() && !splitted; ++i) {
+            ui16 f = GetChar(from, i, 0);
+            if (f < 0xFF) {
+                auto n = (f + 0x100u) / 2u;
+                result << static_cast<unsigned char>(n);
+                splitted = true;
+            } else {
+                result << static_cast<unsigned char>(0xFFu);
+            }
+        }
 
-        result << static_cast<unsigned char>((f - t) & 1 ? 0xFFu: 0x7Fu);
+        for (; i < to.size() && !splitted; ++i) {
+            ui16 t = GetChar(to, i, 0);
+            auto n = t / 2u;
+            result << static_cast<unsigned char>(n);
+            splitted = !!n;
+        }
+    }
+
+    if (result == from) {
+        size_t j = maxSize - 1;
+        ui16 f = GetChar(from, j, 0);
+        ui16 t = GetChar(to, j, to.empty() ? 0xFF : 0x00);
+
+        result << static_cast<unsigned char>((f - t) & 1 ? 0x7Fu : 0xFFu);
     }
 
     return result;

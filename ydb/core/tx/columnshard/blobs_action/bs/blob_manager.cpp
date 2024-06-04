@@ -255,7 +255,7 @@ void TBlobManager::DrainDeleteTo(const TGenStep& dest, TGCContext& gcContext) {
                 return false;
             }
         }
-        return !gcContext.GetSharedBlobsManager()->BuildStoreCategories({id}).GetDirect().IsEmpty();
+        return true;
     };
     TTabletsByBlob extractedOld = BlobsToDelete.ExtractBlobs(predShared, gcContext.GetFreeSpace());
     gcContext.MutableExtractedToRemoveFromDB().Add(extractedOld);
@@ -264,9 +264,13 @@ void TBlobManager::DrainDeleteTo(const TGenStep& dest, TGCContext& gcContext) {
     TUnifiedBlobId unifiedBlobId;
     while (extractedOld.ExtractFront(tabletId, unifiedBlobId)) {
         auto logoBlobId = unifiedBlobId.GetLogoBlobId();
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("to_delete_gc", logoBlobId);
-        NBlobOperations::NBlobStorage::TGCTask::TGCLists& gl = gcContext.MutablePerGroupGCListsInFlight()[unifiedBlobId.GetDsGroup()];
-        gl.DontKeepList.insert(logoBlobId);
+        if (!gcContext.GetSharedBlobsManager()->BuildStoreCategories({ unifiedBlobId }).GetDirect().IsEmpty()) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("to_delete_gc", logoBlobId);
+            NBlobOperations::NBlobStorage::TGCTask::TGCLists& gl = gcContext.MutablePerGroupGCListsInFlight()[unifiedBlobId.GetDsGroup()];
+            gl.DontKeepList.insert(logoBlobId);
+        } else {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("to_delete_gc", logoBlobId)("skip_reason", "not_direct");
+        }
     }
 }
 

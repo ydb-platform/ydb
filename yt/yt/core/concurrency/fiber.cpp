@@ -17,7 +17,7 @@
 
 #include <util/random/random.h>
 
-#ifndef NDEBUG
+#if defined(_asan_enabled_)
     #include <yt/yt/core/misc/shutdown.h>
 #endif
 
@@ -154,9 +154,9 @@ private:
 // cause realistically this is a "problem"
 // only during the shutdown which means that
 // process is going to be killed shortly after.
-// In debug we cleanup properly so that
+// In for asan we cleanup properly so that
 // there are no actual leaks.
-#ifndef NDEBUG
+#if defined(_asan_enabled_)
     TShutdownCookie ShutdownCookie_;
 
     void InitializeShutdownCookie()
@@ -176,7 +176,7 @@ private:
     // were observed empty.
     bool GuardedProcessQueues()
     {
-#ifndef NDEBUG
+#if defined(_asan_enabled_)
         if (!ShutdownCookie_) {
             InitializeShutdownCookie();
         }

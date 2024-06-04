@@ -76,7 +76,9 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
     }
 
     void Leave(TEvWorker::TEvGone::EStatus status) {
-        LOG_I("Leave");
+        LOG_I("Leave"
+            << ": status# " << status);
+
         Send(Worker, new TEvWorker::TEvGone(status));
         PassAway();
     }

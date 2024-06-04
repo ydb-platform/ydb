@@ -36,6 +36,7 @@ namespace NBalancing {
         };
 
         EState State = EInit;
+        const ui32 ServiceId;
 
         const TDuration SendTimeout = TDuration::Seconds(10);
         TInstant SendPartsStart;
@@ -45,6 +46,7 @@ namespace NBalancing {
         ui64 Epoch = 0;
 
         void Init();
+        ui64 GetEpoch() const;
         ui64 StartJob(TInstant now, ui32 count, ui32 partsLeft);
         void PartJobDone(ui64 epoch, ui32 cnt=1);
         NActors::TEvents::TEvCompleted* IsJobDone(ui32 epoch, TInstant now);

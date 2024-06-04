@@ -116,6 +116,7 @@ namespace {
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
         TPartsRequester PartsRequester;
         ui32 OrderId = 0;
+        TWaiter Mngr;
 
         struct TStats {
             ui32 PartsRequested = 0;
@@ -125,6 +126,7 @@ namespace {
         TStats Stats;
 
         void ScheduleJobQuant() {
+            Mngr.Init();
             PartsRequester.ScheduleJobQuant(SelfId());
             TryProcessResults();
         }
@@ -137,20 +139,34 @@ namespace {
         void TryProcessResults() {
             if (auto [batch, partsLeft] = PartsRequester.TryGetResults(); batch.has_value()) {
                 Stats.PartsRequested += batch->size();
+                ui64 epoch = Mngr.GetEpoch();
+                ui32 deletedParts = 0;
                 for (auto& part: *batch) {
                     if (part.HasOnMain) {
                         ++Stats.PartsDecidedToDelete;
-                        DeleteLocal(part.Key);
+                        DeleteLocal(part.Key, epoch);
+                        ++deletedParts;
                     }
                 }
-                Send(NotifyId, new NActors::TEvents::TEvCompleted(DELETER_ID, partsLeft));
-                if (partsLeft == 0) {
+                Mngr.StartJob(TlsActivationContext->Now(), deletedParts, partsLeft);
+                Schedule(Mngr.SendTimeout, new NActors::TEvents::TEvCompleted(epoch));
+            }
+        }
+
+        void TryCompleteBatch(NActors::TEvents::TEvCompleted::TPtr ev) {
+            TryCompleteBatch(ev->Get()->Id);
+        }
+
+        void TryCompleteBatch(ui64 epoch) {
+            if (auto ev = Mngr.IsJobDone(epoch, TlsActivationContext->Now()); ev != nullptr) {
+                Send(NotifyId, ev);
+                if (Mngr.IsPassAway()) {
                     PassAway();
                 }
             }
         }
 
-        void DeleteLocal(const TLogoBlobID& key) {
+        void DeleteLocal(const TLogoBlobID& key, ui64 epoch) {
             TLogoBlobID keyWithoutPartId(key, 0);
 
             TIngress ingress;
@@ -159,13 +175,16 @@ namespace {
             STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB10, VDISKP(Ctx->VCtx, "Deleting local"), (LogoBlobID, key.ToString()),
                 (Ingress, ingress.ToString(&GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, keyWithoutPartId)));
 
-            Send(Ctx->SkeletonId, new TEvDelLogoBlobDataSyncLog(keyWithoutPartId, ingress, OrderId++));
+            Send(Ctx->SkeletonId, new TEvDelLogoBlobDataSyncLog(keyWithoutPartId, ingress, OrderId++, epoch));
         }
 
         void Handle(TEvDelLogoBlobDataSyncLogResult::TPtr ev) {
-            Y_VERIFY(ev->Get()->OrderId == Stats.PartsMarkedDeleted++);
+            Stats.PartsMarkedDeleted++;
             ++Ctx->MonGroup.MarkedReadyToDelete();
             Ctx->MonGroup.MarkedReadyToDeleteBytes() += GInfo->GetTopology().GType.PartSize(ev->Get()->Id);
+            ui64 epoch = ev->Get()->Cookie;
+            Mngr.PartJobDone(epoch);
+            TryCompleteBatch(epoch);
         }
 
         void PassAway() override {
@@ -182,6 +201,7 @@ namespace {
             hFunc(TEvBlobStorage::TEvVGetResult, Handle)
             hFunc(TEvDelLogoBlobDataSyncLogResult, Handle)
             cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)
+            hFunc(NActors::TEvents::TEvCompleted, TryCompleteBatch)
 
             hFunc(TEvVGenerationChange, Handle)
         );
@@ -198,6 +218,7 @@ namespace {
             , Ctx(ctx)
             , GInfo(ctx->GInfo)
             , PartsRequester(SelfId(), 32, std::move(parts), Ctx->VCtx->ReplNodeRequestQuoter, GInfo, queueActorMapPtr)
+            , Mngr{.ServiceId=DELETER_ID}
         {
         }
 

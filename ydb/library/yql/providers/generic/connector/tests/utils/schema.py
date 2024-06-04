@@ -78,7 +78,7 @@ class Column:
 
     @staticmethod
     def __parse_primitive_type(src: str) -> ydb_value.Type.PrimitiveTypeId:
-        match src:
+        match src:  # TODO: JSON?
             case "Bool":
                 return ydb_value.Type.BOOL
             case "Utf8":

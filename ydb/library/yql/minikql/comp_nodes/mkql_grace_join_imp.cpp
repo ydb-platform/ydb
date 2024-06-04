@@ -1159,9 +1159,8 @@ bool TTable::TryToReduceMemoryAndWait() {
     i32 largestBucketIndex = 0;
     ui64 largestBucketSize = 0;
     for (ui32 bucket = 0; bucket < NumberOfBuckets; ++bucket) {
-        if (TableBucketsSpillers[bucket].IsProcessingSpilling())  {
-            return true;
-        }
+        if (TableBucketsSpillers[bucket].IsProcessingSpilling()) return true;
+
         ui64 bucketSize = GetSizeOfBucket(bucket);
         if (bucketSize > largestBucketSize) {
             largestBucketSize = bucketSize;

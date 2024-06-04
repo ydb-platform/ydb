@@ -862,8 +862,6 @@ EFetchResult ProcessSpilledData(TComputationContext&, NUdf::TUnboxedValue*const*
         UpdateSpilling();
         if (IsRestoringSpilledBuckets()) return EFetchResult::Yield;
 
-        
-
         if (LeftPacker->TablePtr->IsSpilledBucketWaitingForExtraction(NextBucketToJoin)) {
             LeftPacker->TablePtr->PrepareBucket(NextBucketToJoin);
         }

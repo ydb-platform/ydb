@@ -2,12 +2,12 @@
 
 #include "sql_translation.h"
 
-#include <ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h>
+#include <ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv4Parser.pb.main.h>
 #include <util/string/split.h>
 
 namespace NSQLTranslationV1 {
 
-using namespace NSQLv1Generated;
+using namespace NSQLv4Generated;
 
 class TSqlQuery: public TSqlTranslation {
 public:
@@ -17,8 +17,8 @@ public:
     {
     }
 
-    TNodePtr Build(const TSQLv1ParserAST& ast);
-    TNodePtr Build(const std::vector<::NSQLv1Generated::TRule_sql_stmt_core>& ast);
+    TNodePtr Build(const TSQL41ParserAST& ast);
+    TNodePtr Build(const std::vector<::NSQLv4Generated::TRule_sql_stmt_core>& ast);
 
     bool Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& core);
 private:

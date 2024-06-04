@@ -3,12 +3,12 @@
 #include <ydb/library/yql/utils/yql_panic.h>
 
 #include <ydb/library/yql/parser/proto_ast/collect_issues/collect_issues.h>
-#include <ydb/library/yql/parser/proto_ast/gen/v1/SQLv1Lexer.h>
-#include <ydb/library/yql/parser/proto_ast/gen/v1/SQLv1Parser.h>
-#include <ydb/library/yql/parser/proto_ast/gen/v1_ansi/SQLv1Lexer.h>
-#include <ydb/library/yql/parser/proto_ast/gen/v1_ansi/SQLv1Parser.h>
+#include <ydb/library/yql/parser/proto_ast/gen/v1/SQLv4Lexer.h>
+#include <ydb/library/yql/parser/proto_ast/gen/v1/SQLv4Parser.h>
+#include <ydb/library/yql/parser/proto_ast/gen/v1_ansi/SQLv4Lexer.h>
+#include <ydb/library/yql/parser/proto_ast/gen/v1_ansi/SQLv4Parser.h>
 
-#include <ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h>
+#include <ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv4Parser.pb.main.h>
 
 #if defined(_tsan_enabled_)
 #include <util/system/mutex.h>
@@ -18,13 +18,13 @@ using namespace NYql;
 
 namespace NSQLTranslationV1 {
 
-using NALPDefault::SQLv1LexerTokens;
+using NALPDefault::SQLv4LexerTokens;
 
 #if defined(_tsan_enabled_)
     TMutex SanitizerSQLTranslationMutex;
 #endif
 
-using namespace NSQLv1Generated;
+using namespace NSQLv4Generated;
 
 google::protobuf::Message* SqlAST(const TString& query, const TString& queryName, TIssues& err, size_t maxErrors, bool ansiLexer, google::protobuf::Arena* arena) {
     YQL_ENSURE(arena);
@@ -33,10 +33,10 @@ google::protobuf::Message* SqlAST(const TString& query, const TString& queryName
 #endif
     NSQLTranslation::TErrorCollectorOverIssues collector(err, maxErrors, "");
     if (ansiLexer) {
-        NProtoAST::TProtoASTBuilder<NALPAnsi::SQLv1Parser, NALPAnsi::SQLv1Lexer> builder(query, queryName, arena);
+        NProtoAST::TProtoASTBuilder<NALPAnsi::SQLv4Parser, NALPAnsi::SQLv4Lexer> builder(query, queryName, arena);
         return builder.BuildAST(collector);
     } else {
-        NProtoAST::TProtoASTBuilder<NALPDefault::SQLv1Parser, NALPDefault::SQLv1Lexer> builder(query, queryName, arena);
+        NProtoAST::TProtoASTBuilder<NALPDefault::SQLv4Parser, NALPDefault::SQLv4Lexer> builder(query, queryName, arena);
         return builder.BuildAST(collector);
     }
 }
@@ -47,10 +47,10 @@ google::protobuf::Message* SqlAST(const TString& query, const TString& queryName
     TGuard<TMutex> grd(SanitizerSQLTranslationMutex);
 #endif
     if (ansiLexer) {
-        NProtoAST::TProtoASTBuilder<NALPAnsi::SQLv1Parser, NALPAnsi::SQLv1Lexer> builder(query, queryName, arena);
+        NProtoAST::TProtoASTBuilder<NALPAnsi::SQLv4Parser, NALPAnsi::SQLv4Lexer> builder(query, queryName, arena);
         return builder.BuildAST(err);
     } else {
-        NProtoAST::TProtoASTBuilder<NALPDefault::SQLv1Parser, NALPDefault::SQLv1Lexer> builder(query, queryName, arena);
+        NProtoAST::TProtoASTBuilder<NALPDefault::SQLv4Parser, NALPDefault::SQLv4Lexer> builder(query, queryName, arena);
         return builder.BuildAST(err);
     }
 }

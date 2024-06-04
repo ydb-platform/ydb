@@ -139,6 +139,9 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
     }
 
     void Leave(bool hardError = false) {
+        LOG_I("Leave"
+            << ": hard error# " << hardError);
+
         Send(Parent, new NChangeExchange::TEvChangeExchangePrivate::TEvGone(TabletId, hardError));
         PassAway();
     }
@@ -495,6 +498,9 @@ class TLocalTableWriter
     }
 
     void Leave(TEvWorker::TEvGone::EStatus status) {
+        LOG_I("Leave"
+            << ": status# " << status);
+
         Send(Worker, new TEvWorker::TEvGone(status));
         PassAway();
     }

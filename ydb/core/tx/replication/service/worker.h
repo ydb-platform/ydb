@@ -57,7 +57,10 @@ struct TEvWorker {
     };
 };
 
-IActor* CreateWorker(std::function<IActor*(void)>&& createReaderFn, std::function<IActor*(void)>&& createWriterFn);
+IActor* CreateWorker(
+    const TActorId& parent,
+    std::function<IActor*(void)>&& createReaderFn,
+    std::function<IActor*(void)>&& createWriterFn);
 
 }
 

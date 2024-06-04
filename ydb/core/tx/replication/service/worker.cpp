@@ -191,12 +191,15 @@ class TWorker: public TActorBootstrapped<TWorker> {
             }
             [[fallthrough]];
         default:
-            return Leave();
+            return Leave(status);
         }
     }
 
-    void Leave() {
-        // TODO: signal to parent
+    void Leave(TEvWorker::TEvGone::EStatus status) {
+        LOG_I("Leave"
+            << ": status# " << status);
+
+        Send(Parent, new TEvWorker::TEvGone(status));
         PassAway();
     }
 
@@ -213,8 +216,12 @@ public:
         return NKikimrServices::TActivity::REPLICATION_WORKER;
     }
 
-    explicit TWorker(std::function<IActor*(void)>&& createReaderFn, std::function<IActor*(void)>&& createWriterFn)
-        : Reader(std::move(createReaderFn))
+    explicit TWorker(
+            const TActorId& parent, 
+            std::function<IActor*(void)>&& createReaderFn,
+            std::function<IActor*(void)>&& createWriterFn)
+        : Parent(parent)
+        , Reader(std::move(createReaderFn))
         , Writer(std::move(createWriterFn))
     {
     }
@@ -239,14 +246,19 @@ public:
 
 private:
     static constexpr ui32 MaxAttempts = 3;
+    const TActorId Parent;
     mutable TMaybe<TString> LogPrefix;
     TActorInfo Reader;
     TActorInfo Writer;
     THolder<TEvWorker::TEvData> InFlightData;
 };
 
-IActor* CreateWorker(std::function<IActor*(void)>&& createReaderFn, std::function<IActor*(void)>&& createWriterFn) {
-    return new TWorker(std::move(createReaderFn), std::move(createWriterFn));
+IActor* CreateWorker(
+        const TActorId& parent,
+        std::function<IActor*(void)>&& createReaderFn,
+        std::function<IActor*(void)>&& createWriterFn)
+{
+    return new TWorker(parent, std::move(createReaderFn), std::move(createWriterFn));
 }
 
 }

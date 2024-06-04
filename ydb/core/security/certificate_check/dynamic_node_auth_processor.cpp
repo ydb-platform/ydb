@@ -63,10 +63,8 @@ TVector<std::pair<TString, TString>> X509CertificateReader::ReadSubjectTerms(con
     return extractions;
 }
 
-TVector<std::pair<TString, TString>> X509CertificateReader::ReadAllSubjectTerms(const X509Ptr& x509) {
+TVector<std::pair<TString, TString>> X509CertificateReader::ReadTerms(X509_NAME* name) {
     TVector<std::pair<TString, TString>> subjectTerms;
-    X509_NAME* name = X509_get_subject_name(x509.get()); // return internal pointer
-
     int entryCount = X509_NAME_entry_count(name);
     subjectTerms.reserve(entryCount);
     for (int i = 0; i < entryCount; i++) {
@@ -90,31 +88,14 @@ TVector<std::pair<TString, TString>> X509CertificateReader::ReadAllSubjectTerms(
     return subjectTerms;
 }
 
+TVector<std::pair<TString, TString>> X509CertificateReader::ReadAllSubjectTerms(const X509Ptr& x509) {
+    X509_NAME* name = X509_get_subject_name(x509.get()); // return internal pointer
+    return ReadTerms(name);
+}
+
 TVector<std::pair<TString, TString>> X509CertificateReader::ReadIssuerTerms(const X509Ptr& x509) {
-    TVector<std::pair<TString, TString>> issuerTerms;
     X509_NAME* name = X509_get_issuer_name(x509.get()); // return internal pointer
-
-    int entryCount = X509_NAME_entry_count(name);
-    issuerTerms.reserve(entryCount);
-    for (int i = 0; i < entryCount; i++) {
-        const X509_NAME_ENTRY* entry = X509_NAME_get_entry(name, i);
-        if (!entry) {
-            continue;
-        }
-        const ASN1_STRING* data = X509_NAME_ENTRY_get_data(entry);
-        if (!data) {
-            continue;
-        }
-
-        const ASN1_OBJECT* object = X509_NAME_ENTRY_get_object(entry);
-        if (!object) {
-            continue;
-        }
-        const int nid = OBJ_obj2nid(object);
-        const char* sn = OBJ_nid2sn(nid);
-        issuerTerms.push_back(std::make_pair(TString(sn, std::strlen(sn)), TString(reinterpret_cast<char*>(data->data), data->length)));
-    }
-    return issuerTerms;
+    return ReadTerms(name);
 }
 
 TDynamicNodeAuthorizationParams::TDistinguishedName& TDynamicNodeAuthorizationParams::TDistinguishedName::AddRelativeDistinguishedName(TRelativeDistinguishedName name) {
@@ -130,7 +111,6 @@ bool TDynamicNodeAuthorizationParams::IsSubjectDescriptionMatched(const std::uno
     for (const auto& description: CertSubjectsDescriptions) {
         bool isDescriptionMatched = false;
         for (const auto& name: description.RelativeDistinguishedNames) {
-            Cerr << "+++ Check " << name.Attribute << Endl;
             isDescriptionMatched = false;
             auto fieldIt = subjectDescription.find(name.Attribute);
             if (fieldIt == subjectDescription.cend()) {
@@ -142,7 +122,6 @@ bool TDynamicNodeAuthorizationParams::IsSubjectDescriptionMatched(const std::uno
             for (const auto& attributeValue : attributeValues) {
                 attributeMatched = false;
                 for (const auto& value: name.Values) {
-                    Cerr << value << " <-> " << attributeValue << Endl;
                     if (value == attributeValue) {
                         attributeMatched = true;
                         break;
@@ -150,7 +129,6 @@ bool TDynamicNodeAuthorizationParams::IsSubjectDescriptionMatched(const std::uno
                 }
                 if (!attributeMatched) {
                     for (const auto& suffix: name.Suffixes) {
-                        Cerr << suffix << " <-> " << attributeValue << Endl;
                         if (attributeValue.EndsWith(suffix)) {
                             attributeMatched = true;
                             break;

@@ -30,7 +30,6 @@ public:
         : TBase(msg)
         , Request(request)
     {
-        // typename TBase::TAuthInfo authInfo;
         const auto& clientCertificates = msg.FindClientCert();
         if (!clientCertificates.empty()) {
             AuthInfo.Credentials = TString(clientCertificates.front());
@@ -39,6 +38,7 @@ public:
             AuthInfo.Credentials = request.GetSecurityToken();
         }
         TBase::SetAuthInfo(std::move(AuthInfo));
+        // Don`t require admin access for GetNodeConfigRequest
         if (!Request.HasGetNodeConfigRequest()) {
             TBase::SetRequireAdminAccess(true);
         }
@@ -351,7 +351,6 @@ public:
     }
 
     bool CheckToken(const TString& serializedToken, const TVector<TString>& allowedSids) const {
-        Cerr << "+++ serializedToken: " << serializedToken << Endl;
         if (allowedSids.empty()) {
             return true;
         }

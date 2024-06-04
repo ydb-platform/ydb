@@ -7,9 +7,7 @@
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/mon/mon.h>
-// #include <ydb/core/security/certificate_check/dynamic_node_auth_processor.h>
 #include <ydb/core/security/certificate_check/cert_check.h>
-// #include <ydb/core/security/certificate_check/cert_auth_utils.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
@@ -257,8 +255,6 @@ protected:
     using IActorOps::Schedule;
 
     NKikimrProto::TAuthConfig Config;
-    // const TDynamicNodeAuthorizationParams DynamicNodeAuthorizationParams;
-    // const TString ServerCertificate;
     const TCertificateChecker CertificateChecker;
     TDuration ExpireTime = TDuration::Hours(24); // after what time ticket will expired and removed from cache
 
@@ -331,10 +327,7 @@ private:
             key << sign.AccessKeyId << "-" << sign.Signature << ":" << sign.StringToSign << ":"
                 << sign.Service << ":" << sign.Region << ":" << sign.SignedAt.NanoSeconds();
         } else {
-            if (request->AuthInfo.Ticket) {
-                key << request->AuthInfo.Ticket;
-            }
-            key << static_cast<int>(request->AuthInfo.IsCertificate);
+            key << request->AuthInfo.Ticket;
         }
         key << ':';
         if (request->Database) {

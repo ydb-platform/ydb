@@ -71,11 +71,9 @@ private:
         if (serverInitialization.EnforceUserToken) {
             securityConfig.SetEnforceUserTokenRequirement(true);
         }
-        // auto& administrationAllowedSids = *securityConfig.MutableAdministrationAllowedSIDs();
-        // administrationAllowedSids.Add(BUILTIN_ACL_ROOT);
-        // administrationAllowedSids.Add("C=RU,ST=MSK,L=MSK,O=YA,OU=UtTest,CN=localhost@cert");
         if (serverInitialization.EnableDynamicNodeAuth) {
             config.MutableClientCertificateAuthorization()->SetRequestClientCertificate(true);
+            config.MutableFeatureFlags()->SetEnableDynamicNodeAuthorization(true);
         }
 
         if (serverInitialization.SetNodeAuthValues) {

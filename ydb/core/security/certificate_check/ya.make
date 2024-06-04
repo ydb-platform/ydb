@@ -8,20 +8,9 @@ SRCS(
 
 
 PEERDIR(
-    # ydb/library/actors/core
-    # ydb/library/actors/http
-    # ydb/library/grpc/actor_client
-    # library/cpp/monlib/service/pages
-    # library/cpp/openssl/io
     ydb/core/base
     ydb/core/protos
-    # ydb/library/aclib
-    # ydb/library/aclib/protos
-    # ydb/library/login
-    # ydb/library/ncloud/impl
-    # ydb/library/security
-    # ydb/library/ycloud/api
-    # ydb/library/ycloud/impl
+    ydb/public/lib/ydb_cli/common
     contrib/libs/openssl
 )
 

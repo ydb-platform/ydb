@@ -7,7 +7,6 @@
 #include <ydb/library/grpc/server/grpc_server.h>
 
 #include <ydb/core/grpc_services/base/base_service.h>
-// #include <ydb/core/grpc_services/auth_processor/dynamic_node_auth_processor.h>
 
 
 namespace NKikimr {

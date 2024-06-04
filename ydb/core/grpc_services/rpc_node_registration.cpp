@@ -23,15 +23,6 @@ using TEvNodeRegistrationRequest = TGrpcRequestOperationCall<Ydb::Discovery::Nod
 class TNodeRegistrationRPC : public TActorBootstrapped<TNodeRegistrationRPC> {
     using TActorBase = TActorBootstrapped<TNodeRegistrationRPC>;
 
-    struct TNodeAuthorizationResult {
-        bool IsAuthorized = false;
-        bool IsCertificateUsed = false;
-
-        operator bool() const {
-            return IsAuthorized;
-        }
-    };
-
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::GRPC_REQ;
@@ -44,12 +35,7 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         auto req = dynamic_cast<TEvNodeRegistrationRequest*>(Request.get());
         Y_ABORT_UNLESS(req, "Unexpected request type for TNodeRegistrationRPC");
-        // const TNodeAuthorizationResult nodeAuthorizationResult = IsNodeAuthorized(req->FindClientCert());
-        // if (!nodeAuthorizationResult.IsAuthorized) {
-        //     SendReplyAndDie(ctx);
-        // }
 
-        Cerr << "+++ Before CheckAccess" << Endl;
         if (!CheckAccess()) {
             Status = Ydb::StatusIds::UNAUTHORIZED;
             Request->RaiseIssue(NYql::TIssue("Cannot authorize node. Access denied"));
@@ -82,7 +68,7 @@ public:
         if (request->has_path()) {
             nodeBrokerRequest->Record.SetPath(request->path());
         }
-        // nodeBrokerRequest->Record.SetAuthorizedByCertificate(nodeAuthorizationResult.IsCertificateUsed);
+        nodeBrokerRequest->Record.SetAuthorizedByCertificate(IsNodeAuthorizedByCertificate);
 
         NTabletPipe::SendData(ctx, NodeBrokerPipe, nodeBrokerRequest.Release());
 
@@ -182,13 +168,13 @@ public:
     }
 
 private:
-    bool CheckAccess() const {
+    bool CheckAccess() {
         const auto& serializedToken = Request->GetSerializedToken();
-        Cerr << "+++&&&&&+++ serializedToken: " << serializedToken << Endl;
         if (!serializedToken.empty() && !AppData()->CertificateAuthAllowedSIDs.empty()) {
             for (const auto& sid : AppData()->CertificateAuthAllowedSIDs) {
                 NACLib::TUserToken token(serializedToken);
                 if (token.IsExist(sid)) {
+                    IsNodeAuthorizedByCertificate = true;
                     return true;
                 }
             }
@@ -271,7 +257,7 @@ private:
     Ydb::Discovery::NodeRegistrationResult Result;
     Ydb::StatusIds_StatusCode Status = Ydb::StatusIds::SUCCESS;
     TActorId NodeBrokerPipe;
-    // const TDynamicNodeAuthorizationParams DynamicNodeAuthorizationParams;
+    bool IsNodeAuthorizedByCertificate = false;
 };
 
 void DoNodeRegistrationRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {

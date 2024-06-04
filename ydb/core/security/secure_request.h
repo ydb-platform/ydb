@@ -38,10 +38,6 @@ private:
         return AppData()->AdministrationAllowedSIDs;
     }
 
-    // static const TVector<TString>& GetCertificateAuthAllowedSIDs() {
-    //     return AppData()->CertificateAuthAllowedSIDs;
-    // }
-
     static const TVector<TString>& GetDefaultUserSIDs() {
         return AppData()->DefaultUserSIDs;
     }
@@ -197,13 +193,6 @@ public:
                 return static_cast<TBootstrap*>(this)->Bootstrap(ctx);
             }
         } else {
-            // TEvTicketParser::TAuthInfo authInfo;
-            // if (AuthInfo.CertAuth.NeedAuthByCertificate) {
-            //     authInfo.Ticket = AuthInfo.CertAuth.ClientCertificate;
-            //     authInfo.IsCertificate = true;
-            // } else {
-            //     authInfo.Ticket = AuthInfo.Token;
-            // }
             ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
                 .Database = Database,
                 .AuthInfo = {.Ticket = AuthInfo.Credentials, .IsCertificate = AuthInfo.IsCertificate},

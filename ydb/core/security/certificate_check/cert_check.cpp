@@ -1,4 +1,5 @@
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/public/lib/ydb_cli/common/common.h>
 #include <util/stream/file.h>
 
 #include <unordered_map>
@@ -8,18 +9,11 @@
 
 namespace NKikimr {
 
-TString TCertificateChecker::ReadFile(const TString& fileName) {
-    TFileInput f(fileName);
-    return f.ReadAll();
-}
-
 TCertificateChecker::TCertificateChecker(const TCertificateAuthValues& certificateAuthValues)
     : DynamicNodeAuthorizationParams(GetDynamicNodeAuthorizationParams(certificateAuthValues.ClientCertificateAuthorization))
-    , ServerCertificate((certificateAuthValues.ServerCertificateFilePath ? ReadFile(certificateAuthValues.ServerCertificateFilePath) : ""))
+    , ServerCertificate((certificateAuthValues.ServerCertificateFilePath ? NYdb::NConsoleClient::ReadFromFile(certificateAuthValues.ServerCertificateFilePath, "Can not open server`s certificate") : ""))
     , Domain(certificateAuthValues.Domain)
-{
-    Cerr << "++++++++: " << ServerCertificate << Endl;
-}
+{ }
 
 TCertificateChecker::TCertificateCheckResult TCertificateChecker::Check(const TString& clientCertificate) const {
     TReadCertificateAsPemResult readCertificateAsPemResult = ReadCertificatesAsPem(clientCertificate);

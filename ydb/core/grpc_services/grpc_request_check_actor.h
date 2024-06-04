@@ -122,7 +122,8 @@ public:
         if (!clientCertificates.empty()) {
             authInfo.Credentials = TString(clientCertificates.front());
             authInfo.IsCertificate = true;
-        } else if (GrpcRequestBaseCtx_->NeedAuthByCertificate()) { // Предыдущие версии ydb при регистрации ноды посылают как сертификаты так и токены. Для таких запросов принимаем только токены.
+        // While nodes send both token and certificate for registration,  check only certificates and ignore tokens
+        } else if (GrpcRequestBaseCtx_->NeedAuthByCertificate()) {
             authInfo.IsCertificate = true;
         } else {
             TMaybe<TString> authToken = GrpcRequestBaseCtx_->GetYdbToken();

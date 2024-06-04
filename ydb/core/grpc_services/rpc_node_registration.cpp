@@ -182,48 +182,10 @@ public:
     }
 
 private:
-    // TNodeAuthorizationResult IsNodeAuthorized(const TVector<TStringBuf>& nodeAuthValues) {
-    //     TNodeAuthorizationResult result {.IsAuthorized = false, .IsCertificateUsed = false};
-    //     auto* appdata = AppData();
-    //     if (appdata && appdata->FeatureFlags.GetEnableDynamicNodeAuthorization() && DynamicNodeAuthorizationParams) {
-    //         if (nodeAuthValues.empty()) {
-    //             Request->RaiseIssue(NYql::TIssue("Cannot authorize node. Node has not provided certificate"));
-    //             Status = Ydb::StatusIds::UNAUTHORIZED;
-    //             return result;
-    //         }
-    //         const auto& pemCert = nodeAuthValues.front();
-    //         TMap<TString, TString> subjectDescription;
-    //         X509CertificateReader::X509Ptr x509cert = X509CertificateReader::ReadCertAsPEM(pemCert);
-    //         for(const auto& term: X509CertificateReader::ReadSubjectTerms(x509cert)) {
-    //             subjectDescription.insert(term);
-    //         }
-
-    //         if (!DynamicNodeAuthorizationParams.IsSubjectDescriptionMatched(subjectDescription)) {
-    //             Status = Ydb::StatusIds::UNAUTHORIZED;
-    //             Request->RaiseIssue(NYql::TIssue("Cannot authorize node by certificate"));
-    //             return result;
-    //         }
-    //         auto request = TEvNodeRegistrationRequest::GetProtoRequest(Request);
-    //         const auto& host = request->host();
-    //         if (!DynamicNodeAuthorizationParams.IsHostMatchAttributeCN(host)) {
-    //             Status = Ydb::StatusIds::UNAUTHORIZED;
-    //             Request->RaiseIssue(NYql::TIssue("Cannot authorize node with host: " + host));
-    //             return result;
-    //         }
-    //         result.IsCertificateUsed = true;
-    //     }
-    //     result.IsAuthorized = true;
-    //     return result;;
-    // }
-
     bool CheckAccess() const {
-        if (AppData()->EnforceUserTokenRequirement) {
-            if (AppData()->CertificateAuthAllowedSIDs.empty()) {
-                Cerr << "+++ CertificateAuthAllowedSIDs is empty" << Endl;
-                return true;
-            }
-            const auto& serializedToken = Request->GetSerializedToken();
-            Cerr << "+++ serializedToken: " << serializedToken << Endl;
+        const auto& serializedToken = Request->GetSerializedToken();
+        Cerr << "+++&&&&&+++ serializedToken: " << serializedToken << Endl;
+        if (!serializedToken.empty() && !AppData()->CertificateAuthAllowedSIDs.empty()) {
             for (const auto& sid : AppData()->CertificateAuthAllowedSIDs) {
                 NACLib::TUserToken token(serializedToken);
                 if (token.IsExist(sid)) {

@@ -352,6 +352,9 @@ public:
 
     bool CheckToken(const TString& serializedToken, const TVector<TString>& allowedSids) const {
         Cerr << "+++ serializedToken: " << serializedToken << Endl;
+        if (allowedSids.empty()) {
+            return true;
+        }
         for (const auto& sid : allowedSids) {
             NACLib::TUserToken token(serializedToken);
             if (token.IsExist(sid)) {
@@ -362,19 +365,13 @@ public:
     }
 
     bool CheckAccessGetNodeConfig() const {
-        if (AppData()->EnforceUserTokenRequirement && AuthInfo.IsCertificate) {
-            if (AppData()->CertificateAuthAllowedSIDs.empty()) {
-                Cerr << "+++ CertificateAuthAllowedSIDs is empty" << Endl;
-                return true;
+        const auto serializedToken = TBase::GetSerializedToken();
+        if (!serializedToken.empty()) {
+            if (AuthInfo.IsCertificate) {
+                return CheckToken(serializedToken, AppData()->CertificateAuthAllowedSIDs);
+            } else {
+                return CheckToken(serializedToken, AppData()->AdministrationAllowedSIDs);
             }
-            const auto& serializedToken = TBase::GetSerializedToken();
-            return CheckToken(serializedToken, AppData()->CertificateAuthAllowedSIDs);
-        } else if (!AuthInfo.IsCertificate) {
-            if (AppData()->AdministrationAllowedSIDs.empty()) {
-                return true;
-            }
-            const auto& serializedToken = TBase::GetSerializedToken();
-            return CheckToken(serializedToken, AppData()->AdministrationAllowedSIDs);
         }
         return true;
     }

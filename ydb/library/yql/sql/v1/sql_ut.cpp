@@ -2675,21 +2675,36 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         )";
 
         auto settings = THashMap<TString, TString>{
-            {"CONNECTION_STRING", "grpc://localhost:2135/?database=/MyDatabase"},
-            {"ENDPOINT", "localhost:2135"},
-            {"DATABASE", "/MyDatabase"},
-            {"TOKEN", "foo"},
-            {"TOKEN_SECRET_NAME", "foo_secret_name"},
-            {"USER", "user"},
-            {"PASSWORD", "bar"},
-            {"PASSWORD_SECRET_NAME", "bar_secret_name"},
+            {"connection_string", "grpc://localhost:2135/?database=/MyDatabase"},
+            {"endpoint", "localhost:2135"},
+            {"database", "/MyDatabase"},
+            {"token", "foo"},
+            {"token_secret_name", "foo_secret_name"},
+            {"user", "user"},
+            {"password", "bar"},
+            {"password_secret_name", "bar_secret_name"},
         };
 
-        for (const auto& [k, v] : settings) {
-            auto req = Sprintf(reqTpl, k.c_str(), v.c_str());
+        for (const auto& setting : settings) {
+            auto& key = setting.first;
+            auto& value = setting.second;
+            auto req = Sprintf(reqTpl, key.c_str(), value.c_str());
             auto res = SqlToYql(req);
-            UNIT_ASSERT(!res.Root);
-            UNIT_ASSERT_NO_DIFF(Err2Str(res), Sprintf("<main>:5:%zu: Error: %s is not supported in ALTER\n", 20 + k.size(), k.c_str()));
+            UNIT_ASSERT(res.Root);
+            
+            TVerifyLineFunc verifyLine = [&key, &value](const TString& word, const TString& line) {
+                if (word == "Write") {
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("MyReplication"));
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("alter"));
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(key));
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(value));
+                }
+            };
+
+            TWordCountHive elementStat = { {TString("Write"), 0}};
+            VerifyProgram(res, elementStat, verifyLine);
+
+            UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
         }
     }
 

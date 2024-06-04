@@ -168,6 +168,10 @@ public:
         Issue = TruncatedIssue(issue);
     }
 
+    void SetConfig(NKikimrReplication::TReplicationConfig&& config) {
+        Config = config;
+    }
+
     void ErrorState(TString issue) {
         SetState(EState::Error, issue);
     }
@@ -254,6 +258,10 @@ const TActorId& TReplication::GetYdbProxy() const {
 
 ui64 TReplication::GetSchemeShardId() const {
     return GetPathId().OwnerId;
+}
+
+void TReplication::SetConfig(NKikimrReplication::TReplicationConfig&& config) {
+    Impl->SetConfig(std::move(config));
 }
 
 const NKikimrReplication::TReplicationConfig& TReplication::GetConfig() const {

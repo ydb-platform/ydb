@@ -2650,7 +2650,8 @@ enum EAggrFuncTypeCallback {
     COUNT_DISTINCT_ESTIMATE,
     LIST,
     UDAF,
-    PG
+    PG,
+    NTH_VALUE
 };
 
 struct TCoreFuncInfo {
@@ -2733,6 +2734,9 @@ TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
             break;
         case PG:
             factory = BuildPGFactoryAggregation(pos, realFunctionName, aggMode);
+            break;
+        case NTH_VALUE:
+            factory = BuildNthFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
             break;
         }
         if (isFactory) {
@@ -3246,8 +3250,10 @@ struct TBuiltinFuncData {
             // Window functions
             {"firstvalue", BuildAggrFuncFactoryCallback("FirstValue", "first_value_traits_factory", {OverWindow})},
             {"lastvalue", BuildAggrFuncFactoryCallback("LastValue", "last_value_traits_factory", {OverWindow})},
+            {"nthvalue", BuildAggrFuncFactoryCallback("NthValue", "nth_value_traits_factory", {OverWindow}, NTH_VALUE)},
             {"firstvalueignorenulls", BuildAggrFuncFactoryCallback("FirstValueIgnoreNulls", "first_value_ignore_nulls_traits_factory", {OverWindow})},
             {"lastvalueignorenulls", BuildAggrFuncFactoryCallback("LastValueIgnoreNulls", "last_value_ignore_nulls_traits_factory", {OverWindow})},
+            {"nthvalueignorenulls", BuildAggrFuncFactoryCallback("NthValueIgnoreNulls", "nth_value_ignore_nulls_traits_factory", {OverWindow}, NTH_VALUE)},
         };
         return aggrFuncs;
     }

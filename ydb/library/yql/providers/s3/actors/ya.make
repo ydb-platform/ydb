@@ -9,16 +9,16 @@ ADDINCL(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
-    raw_read_actor.cpp
     yql_s3_actors_util.cpp
     yql_s3_applicator_actor.cpp
+    yql_s3_raw_read_actor.cpp
     yql_s3_write_actor.cpp
     yql_s3_actors_factory.cpp
 )
 
 PEERDIR(
-    contrib/libs/fmt
     contrib/libs/apache/arrow
+    contrib/libs/fmt
     contrib/libs/poco/Util
     ydb/library/actors/http
     library/cpp/protobuf/util
@@ -49,9 +49,9 @@ PEERDIR(
 IF (CLANG AND NOT WITH_VALGRIND)
 
     SRCS(
-        source_queue.cpp
         yql_arrow_column_converters.cpp
         yql_s3_read_actor.cpp
+        yql_s3_source_queue.cpp
     )
 
     PEERDIR(

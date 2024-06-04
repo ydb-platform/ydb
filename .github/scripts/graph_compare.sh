@@ -45,8 +45,14 @@ cat $workdir/graph_head | jq -r --slurpfile uids $workdir/uids_new 'select( ."ta
 echo Number of modules:
 cat $workdir/modules | wc -l
 
+echo Filter only modules in ydb
+cat $workdir/modules | { grep "^ydb" || true; } > $workdir/modules2
+
+echo Number of modules:
+cat $workdir/modules2 | wc -l
+
 echo Append into ya.make RECURSE to all required modules...
-cat $workdir/modules | (echo 'RECURSE(';cat;echo ')') >> ya.make
+cat $workdir/modules2 | (echo 'RECURSE(';cat;echo ')') >> ya.make
 
 echo "ya.make content:"
 cat ya.make

@@ -32,9 +32,17 @@ private:
     THashMap<TRWAddress, std::vector<TTaskConstructor>> Tasks;
     const NColumnShard::TEngineLogsCounters Counters;
     std::shared_ptr<NActualizer::TController> Controller;
+    TInstant ActualInstant = AppData()->TimeProvider->Now();
 public:
     const std::shared_ptr<NDataLocks::TManager> DataLocksManager;
-    const TInstant Now = AppDataVerified().TimeProvider->Now();
+
+    TInstant GetActualInstant() const {
+        return ActualInstant;
+    }
+
+    void ResetActualInstantForTest() {
+        ActualInstant = TlsActivationContext ? AppData()->TimeProvider->Now() : TInstant::Now();
+    }
 
     const NColumnShard::TEngineLogsCounters GetCounters() const {
         return Counters;

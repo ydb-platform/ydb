@@ -1,8 +1,8 @@
 #include <ydb/library/yql/providers/s3/events/events.h>
 
-#include "raw_read_actor.h"
-#include "source_queue.h"
-#include "yql_s3_actors_util.cpp"
+#include "yql_s3_actors_util.h"
+#include "yql_s3_raw_read_actor.h"
+#include "yql_s3_source_queue.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>

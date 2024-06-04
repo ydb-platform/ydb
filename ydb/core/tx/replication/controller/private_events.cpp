@@ -152,6 +152,17 @@ TString TEvPrivate::TEvAlterDstResult::ToString() const {
     return TStringBuilder() << ToStringHeader() << " {" << ToStringBody() << " }";
 }
 
+TEvPrivate::TEvRemoveWorker::TEvRemoveWorker(ui64 rid, ui64 tid, ui64 wid)
+    : Id(rid, tid, wid)
+{
+}
+
+TString TEvPrivate::TEvRemoveWorker::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {"
+        << " Id: " << Id
+    << " }";
+}
+
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::NController::TEvPrivate::TEvDiscoveryTargetsResult::TAddEntry, stream, value) {

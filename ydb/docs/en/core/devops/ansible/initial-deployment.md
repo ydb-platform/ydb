@@ -18,7 +18,7 @@ For large-scale setups, it is recommended to use at least 9 servers for highly a
 
 {% endnote %}
 
-You can download the repository with example playbooks for installing {{ ydb-short-name }} on the cluster from GitHub – `git clone https://github.com/ydb-platform/ydb-ansible-examples.git`. This repository contains a few installation templates for deploying {{ ydb-short-name }} clusters in subfolders, as well as scripts for generating TLS certificates and requirement files for installing necessary Python packages. In this article, we'll use the `3-nodes-mirror-3-dc` subfolder for the most simple setup. Alternatively, you can similarly use `8-nodes-block-4-2` or `9-nodes-mirror-3-dc` if you have the necessary number of suitable servers.
+Download the GitHub repository with examples for installing {{ ydb-short-name }} cluster – `git clone https://github.com/ydb-platform/ydb-ansible-examples.git`. This repository contains a few installation templates for deploying {{ ydb-short-name }} clusters in subfolders, as well as scripts for generating TLS certificates and requirement files for installing necessary Python packages. In this article, we'll use the `3-nodes-mirror-3-dc` subfolder for the most simple setup. Alternatively, you can similarly use `8-nodes-block-4-2` or `9-nodes-mirror-3-dc` if you have the necessary number of suitable servers.
 
 {% cut "Repository Structure" %}
 

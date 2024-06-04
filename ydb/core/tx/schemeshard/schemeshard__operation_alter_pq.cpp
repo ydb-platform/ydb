@@ -519,6 +519,10 @@ public:
 
         bool splitMergeEnabled = AppData()->FeatureFlags.GetEnableTopicSplitMerge();
         if (splitMergeEnabled) {
+
+            ui32 nextId = topic->NextPartitionId;
+            ui32 nextGroupId = topic->TotalGroupCount;
+
             THashSet<ui32> involvedPartitions;
 
             for (const auto& split : alter.GetSplit()) {
@@ -574,13 +578,12 @@ public:
                 range.FromBound = keyRange ? keyRange->FromBound : Nothing();
                 range.ToBound = splitBoundary;
 
-                alterData->PartitionsToAdd.emplace(topic->NextPartitionId, topic->TotalGroupCount + 1, range, parents);
+                alterData->PartitionsToAdd.emplace(nextId++, ++nextGroupId, range, parents);
 
                 range.FromBound = splitBoundary;
                 range.ToBound = keyRange ? keyRange->ToBound : Nothing();
 
-                alterData->PartitionsToAdd.emplace(topic->NextPartitionId + 1, topic->TotalGroupCount + 2, range,
-                                                   parents);
+                alterData->PartitionsToAdd.emplace(nextId++, ++nextGroupId, range, parents);
             }
             for (const auto& merge : alter.GetMerge()) {
                 alterData->TotalGroupCount += 1;
@@ -650,7 +653,7 @@ public:
                     rangem = range;
                 }
 
-                alterData->PartitionsToAdd.emplace(topic->NextPartitionId, topic->TotalGroupCount + 1, rangem, parents);
+                alterData->PartitionsToAdd.emplace(nextId++, ++nextGroupId, rangem, parents);
             }
         }
 

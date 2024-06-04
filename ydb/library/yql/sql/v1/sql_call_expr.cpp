@@ -1,7 +1,7 @@
 #include "sql_call_expr.h"
 #include "sql_expression.h"
 
-#include <ydb/library/yql/parser/proto_ast/gen/v1/SQLv1Lexer.h>
+#include <ydb/library/yql/parser/proto_ast/gen/v1/SQLv4Lexer.h>
 
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 
@@ -10,7 +10,7 @@ namespace NSQLTranslationV1 {
 TNodePtr BuildSqlCall(TContext& ctx, TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args,
     TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr customUserType, const TDeferredAtom& typeConfig, TNodePtr runConfig);
 
-using namespace NSQLv1Generated;
+using namespace NSQLv4Generated;
 
 static bool ValidateForCounters(const TString& input) {
     for (auto c : input) {

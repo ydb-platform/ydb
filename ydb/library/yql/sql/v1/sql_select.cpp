@@ -7,7 +7,7 @@
 
 namespace NSQLTranslationV1 {
 
-using namespace NSQLv1Generated;
+using namespace NSQLv4Generated;
 
 bool IsColumnsOnly(const TVector<TSortSpecificationPtr>& container) {
     for (const auto& elem: container) {

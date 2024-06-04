@@ -6,7 +6,7 @@
 
 namespace NSQLTranslationV1 {
 
-using namespace NSQLv1Generated;
+using namespace NSQLv4Generated;
 
 namespace {
 
@@ -20,7 +20,7 @@ TString PatternVar(const TRule_row_pattern_variable_name& node, TSqlMatchRecogni
 
 } //namespace
 
-TMatchRecognizeBuilderPtr TSqlMatchRecognizeClause::CreateBuilder(const NSQLv1Generated::TRule_row_pattern_recognition_clause &matchRecognizeClause) {
+TMatchRecognizeBuilderPtr TSqlMatchRecognizeClause::CreateBuilder(const NSQLv4Generated::TRule_row_pattern_recognition_clause &matchRecognizeClause) {
     TPosition pos(matchRecognizeClause.GetToken1().GetColumn(), matchRecognizeClause.GetToken1().GetLine());
     if (!Ctx.FeatureR010) {
         Ctx.Error(pos, TIssuesIds::CORE) << "Unexpected MATCH_RECOGNIZE";

@@ -100,7 +100,7 @@ private:
     void BootWorker(ui32 nodeId, const TWorkerId& id, const NKikimrReplication::TRunWorkerCommand& cmd);
     void StopWorker(ui32 nodeId, const TWorkerId& id);
     void RemoveWorker(const TWorkerId& id, const TActorContext& ctx);
-    void MaybeRemoveWorker(const TWorkerId& id, const TActorContext& ctx);
+    bool MaybeRemoveWorker(const TWorkerId& id, const TActorContext& ctx);
 
     // local transactions
     class TTxInitSchema;

@@ -174,20 +174,19 @@ namespace NKikimr::NStorage {
         vdiskConfig->EnableVDiskCooldownTimeout = Cfg->EnableVDiskCooldownTimeout;
         vdiskConfig->ReplPausedAtStart = Cfg->VDiskReplPausedAtStart;
         vdiskConfig->EnableVPatch = EnableVPatch;
-        vdiskConfig->FeatureFlags = Cfg->FeatureFlags;
 
-        if (Cfg->BlobStorageConfig.HasCostMetricsSettings()) {
-            for (auto type : Cfg->BlobStorageConfig.GetCostMetricsSettings().GetVDiskTypes()) {
-                if (type.HasPDiskType() && deviceType == PDiskTypeToPDiskType(type.GetPDiskType())) {
-                    if (type.HasBurstThresholdNs()) {
-                        vdiskConfig->BurstThresholdNs = type.GetBurstThresholdNs();
-                    }
-                    if (type.HasDiskTimeAvailableScale()) {
-                        vdiskConfig->DiskTimeAvailableScale = type.GetDiskTimeAvailableScale();
-                    }
-                }
-            }
+        vdiskConfig->EnableLocalSyncLogDataCutting = EnableLocalSyncLogDataCutting;
+        if (deviceType == NPDisk::EDeviceType::DEVICE_TYPE_ROT) {
+            vdiskConfig->EnableSyncLogChunkCompression = EnableSyncLogChunkCompressionHDD;
+            vdiskConfig->MaxSyncLogChunksInFlight = MaxSyncLogChunksInFlightHDD;
+        } else {
+            vdiskConfig->EnableSyncLogChunkCompression = EnableSyncLogChunkCompressionSSD;
+            vdiskConfig->MaxSyncLogChunksInFlight = MaxSyncLogChunksInFlightSSD;
         }
+
+        vdiskConfig->CostMetricsParametersByMedia = CostMetricsParametersByMedia;
+
+        vdiskConfig->FeatureFlags = Cfg->FeatureFlags;
 
         // issue initial report to whiteboard before creating actor to avoid races
         Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate(vdiskId, groupInfo->GetStoragePoolName(),

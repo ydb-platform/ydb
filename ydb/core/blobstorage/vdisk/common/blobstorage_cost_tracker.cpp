@@ -42,8 +42,8 @@ public:
 };
 
 TBsCostTracker::TBsCostTracker(const TBlobStorageGroupType& groupType, NPDisk::EDeviceType diskType,
-        const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 burstThresholdNs,
-        float diskTimeAvailableScale)
+        const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
+        const TCostMetricsParameters& costMetricsParameters)
     : GroupType(groupType)
     , CostCounters(counters->GetSubgroup("subsystem", "advancedCost"))
     , UserDiskCost(CostCounters->GetCounter("UserDiskCost", true))
@@ -54,8 +54,10 @@ TBsCostTracker::TBsCostTracker(const TBlobStorageGroupType& groupType, NPDisk::E
     , DiskTimeAvailableCtr(CostCounters->GetCounter("DiskTimeAvailable", false))
     , BucketCapacity(burstThresholdNs * diskTimeAvailableScale / GroupType.BlobSubgroupSize())
     , Bucket(&DiskTimeAvailable, &BucketCapacity, nullptr, nullptr, nullptr, nullptr, true)
-    , DiskTimeAvailableScale(diskTimeAvailableScale)
+    , BurstThresholdNs(costMetricsParameters.BurstThresholdNs)
+    , DiskTimeAvailableScale(costMetricsParameters.DiskTimeAvailableScale)
 {
+    AtomicSet(BucketCapacity, GetDiskTimeAvailableScale() * BurstThresholdNs);
     BurstDetector.Initialize(CostCounters, "BurstDetector");
     switch (GroupType.GetErasure()) {
     case TBlobStorageGroupType::ErasureMirror3dc:

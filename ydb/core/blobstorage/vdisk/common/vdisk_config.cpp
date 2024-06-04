@@ -120,8 +120,6 @@ namespace NKikimr {
         BarrierValidation = true; // switch by default on debug builds
 #endif
 
-        BurstThresholdNs = NPDisk::DevicePerformance.at(baseInfo.DeviceType).BurstThresholdNs;
-        DiskTimeAvailableScale = 1;
     }
 
     void TVDiskConfig::SetupHugeBytes() {

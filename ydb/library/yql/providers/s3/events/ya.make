@@ -23,4 +23,12 @@ PEERDIR(
     ydb/library/yql/udfs/common/clickhouse/client
 )
 
+IF (CLANG AND NOT WITH_VALGRIND)
+
+    CFLAGS (
+        -DARCADIA_BUILD -DUSE_PARQUET
+    )
+
+ENDIF()
+
 END()

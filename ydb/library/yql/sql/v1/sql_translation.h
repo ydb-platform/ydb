@@ -1,12 +1,12 @@
 #pragma once
 #include "context.h"
-#include <ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h>
+#include <ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv4Parser.pb.main.h>
 #include <library/cpp/charset/ci_string.h>
 
 namespace NSQLTranslationV1 {
 
 using namespace NYql;
-using namespace NSQLv1Generated;
+using namespace NSQLv4Generated;
 
 inline TPosition GetPos(const TToken& token) {
     return TPosition(token.GetColumn(), token.GetLine());
@@ -254,7 +254,7 @@ protected:
     bool ValidateAuthMethod(const std::map<TString, TDeferredAtom>& result);
     bool ValidateExternalTable(const TCreateTableParameters& params);
 
-    TNodePtr ReturningList(const ::NSQLv1Generated::TRule_returning_columns_list& columns);
+    TNodePtr ReturningList(const ::NSQLv4Generated::TRule_returning_columns_list& columns);
 private:
     bool SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& node, TTableRef& result);
     static bool IsValidFrameSettings(TContext& ctx, const TFrameSpecification& frameSpec, size_t sortSpecSize);

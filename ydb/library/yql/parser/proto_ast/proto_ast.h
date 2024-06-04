@@ -10,6 +10,8 @@
 #include <util/charset/utf8.h>
 
 namespace NProtoAST {
+    const char* INVALID_TOKEN_NAME = "nothing";
+
     template <typename InputType>
     void InvalidCharacter(IOutputStream& err, const InputType* input) {
         wchar32 rune = 0;
@@ -106,24 +108,24 @@ namespace NProtoAST {
         typedef ANTLR_UINT8 TChar;
 
     public:
-        TLexerTokensCollector(TStringBuf data, const char** tokenNames, const TString& queryName = "query")
-            : TokenNames(tokenNames)
-            , QueryName(queryName)
-            , InputStream((const TChar*)data.data(), antlr3::ENC_8BIT, data.length(), (TChar*)QueryName.begin())
-            , Lexer(&InputStream, static_cast<google::protobuf::Arena*>(nullptr))
+        TLexerTokensCollector(TStringBuf data, /*const char** tokenNames,*/ const TString& queryName = "query")
+            : /*TokenNames(tokenNames)
+            ,*/ QueryName(queryName)
+            , InputStream((const char*)data.data(), data.length())
+            , Lexer(&InputStream/*, static_cast<google::protobuf::Arena*>(nullptr)*/)
         {
         }
 
         void CollectTokens(IErrorCollector& errors, const NSQLTranslation::ILexer::TTokenCallback& onNextToken) {
             try {
-                Lexer.ReportErrors(&errors);
-                auto src = Lexer.get_tokSource();
+                // Lexer.ReportErrors(&errors);
+                // auto src = Lexer.get_tokSource();
                 for (;;) {
                     auto token = src->nextToken();
                     auto type = token->getType();
                     const bool isEOF = type == TLexer::CommonTokenType::TOKEN_EOF;
                     NSQLTranslation::TParsedToken last;
-                    last.Name = isEOF ? "EOF" : TokenNames[type];
+                    last.Name = isEOF ? "EOF" : getTokenName(type);
                     last.Content = token->getText();
                     last.Line = token->get_line();
                     last.LinePos = token->get_charPositionInLine();
@@ -139,7 +141,18 @@ namespace NProtoAST {
         }
 
     private:
-        const char** TokenNames;
+        const char* getTokenName(size_t type) const {
+            auto name = Lexer.getVocabulary().getLiteralName(type);
+            if (name.empty()) {
+			    name = Lexer.getVocabulary().getSymbolicName(type);
+            }
+            if (name.empty()) {
+                return INVALID_TOKEN_NAME;
+            }
+            return name.c_str();
+        }
+
+        // const char** TokenNames;
         TString QueryName;
         typename TLexer::InputStreamType InputStream;
         TLexer Lexer;

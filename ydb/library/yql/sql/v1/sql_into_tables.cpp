@@ -7,9 +7,9 @@ using namespace NYql;
 
 namespace NSQLTranslationV1 {
 
-using NALPDefault::SQLv1LexerTokens;
+using NALPDefault::SQLv4Lexer;
 
-using namespace NSQLv1Generated;
+using namespace NSQLv4Generated;
 
 TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
     static const TMap<TString, ESQLWriteColumnMode> str2Mode = {

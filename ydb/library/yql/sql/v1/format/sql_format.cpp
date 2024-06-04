@@ -6,7 +6,7 @@
 #include <ydb/library/yql/sql/v1/lexer/lexer.h>
 #include <ydb/library/yql/sql/v1/proto_parser/proto_parser.h>
 
-#include <ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h>
+#include <ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv4Parser.pb.main.h>
 
 #include <library/cpp/protobuf/util/simple_reflection.h>
 #include <library/cpp/resource/resource.h>
@@ -22,7 +22,7 @@ namespace NSQLFormat {
 
 namespace {
 
-using namespace NSQLv1Generated;
+using namespace NSQLv4Generated;
 
 using NSQLTranslation::TParsedToken;
 using NSQLTranslation::TParsedTokenList;
@@ -3042,7 +3042,7 @@ bool SqlFormatSimple(const TString& query, TString& formattedQuery, TString& err
 
 THashSet<TString> GetKeywords() {
     TString grammar;
-    Y_ENSURE(NResource::FindExact("SQLv1.g.in", &grammar));
+    Y_ENSURE(NResource::FindExact("SQLv4.g.in", &grammar));
     THashSet<TString> res;
     TVector<TString> lines;
     Split(grammar, "\n", lines);

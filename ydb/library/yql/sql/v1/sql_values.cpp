@@ -7,7 +7,7 @@
 
 namespace NSQLTranslationV1 {
 
-using namespace NSQLv1Generated;
+using namespace NSQLv4Generated;
 
 TSourcePtr TSqlValues::Build(const TRule_values_stmt& node, TPosition& valuesPos, const TVector<TString>& derivedColumns, TPosition derivedColumnsPos) {
     Token(node.GetToken1());

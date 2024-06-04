@@ -48,7 +48,7 @@ public:
 using TResultCodegenerator = std::function<ICodegeneratorInlineWideNode::TGenerateResult(const TCodegenContext&, BasicBlock*&)>;
 #endif
 
-class TSimpleStatefulWideFlowCodegeneratorNodeLLVMBase {
+class TSimpleWideFlowCodegeneratorNodeLLVMBase {
 public:
     struct TMethPtrTable {
         uintptr_t ThisPtr;
@@ -57,7 +57,7 @@ public:
         uintptr_t DoProcessMethPtr;
     };
 
-    TSimpleStatefulWideFlowCodegeneratorNodeLLVMBase(IComputationWideFlowNode* source, ui32 inWidth, ui32 outWidth, TMethPtrTable ptrTable)
+    TSimpleWideFlowCodegeneratorNodeLLVMBase(IComputationWideFlowNode* source, ui32 inWidth, ui32 outWidth, TMethPtrTable ptrTable)
         : SourceFlow(source), InWidth(inWidth), OutWidth(outWidth)
         , PtrTable(ptrTable) {}
 
@@ -71,6 +71,7 @@ public:
     }
 
     ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtrVal, BasicBlock*& genToBlock) const;
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, BasicBlock*& genToBlock) const;
 #endif
 
 protected:
@@ -79,22 +80,22 @@ protected:
     const TMethPtrTable PtrTable;
 };
 
-template<typename TDerived, typename TState, EValueRepresentation StateKind = EValueRepresentation::Embedded>
+template<typename TDerived, EValueRepresentation StateKind = EValueRepresentation::Embedded>
 class TSimpleStatefulWideFlowCodegeneratorNode
-        : public TStatefulWideFlowCodegeneratorNode<TSimpleStatefulWideFlowCodegeneratorNode<TDerived, TState, StateKind>>
-        , public TSimpleStatefulWideFlowCodegeneratorNodeLLVMBase {
+        : public TStatefulWideFlowCodegeneratorNode<TSimpleStatefulWideFlowCodegeneratorNode<TDerived, StateKind>>
+        , public TSimpleWideFlowCodegeneratorNodeLLVMBase {
     using TBase = TStatefulWideFlowCodegeneratorNode<TSimpleStatefulWideFlowCodegeneratorNode>;
-    using TLLVMBase = TSimpleStatefulWideFlowCodegeneratorNodeLLVMBase;
+    using TLLVMBase = TSimpleWideFlowCodegeneratorNodeLLVMBase;
 
 protected:
     TSimpleStatefulWideFlowCodegeneratorNode(TComputationMutables& mutables, IComputationWideFlowNode* source, ui32 inWidth, ui32 outWidth)
-            : TBase(mutables, source, StateKind)
-            , TLLVMBase(source, inWidth, outWidth, {
-                .ThisPtr = reinterpret_cast<uintptr_t>(this),
-                .InitStateMethPtr = GetMethodPtr(&TDerived::InitState),
-                .PrepareInputMethPtr = GetMethodPtr(&TDerived::PrepareInput),
-                .DoProcessMethPtr = GetMethodPtr(&TDerived::DoProcess)
-            }) {}
+        : TBase(mutables, source, StateKind)
+        , TLLVMBase(source, inWidth, outWidth, {
+            .ThisPtr = reinterpret_cast<uintptr_t>(this),
+            .InitStateMethPtr = GetMethodPtr(&TDerived::InitState),
+            .PrepareInputMethPtr = GetMethodPtr(&TDerived::PrepareInput),
+            .DoProcessMethPtr = GetMethodPtr(&TDerived::DoProcess)
+        }) {}
 
 #ifndef MKQL_DISABLE_CODEGEN
     ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtrVal, BasicBlock*& genToBlock) const final {
@@ -117,6 +118,39 @@ public:
             NUdf::TUnboxedValue*const* input = static_cast<const TDerived*>(this)->PrepareInput(state, ctx, output);
             TMaybeFetchResult fetchResult = input ? SourceFlow->FetchValues(ctx, input) : TMaybeFetchResult::None();
             result = static_cast<const TDerived*>(this)->DoProcess(state, ctx, fetchResult, output);
+        }
+        return result.Get();
+    }
+};
+
+template<typename TDerived>
+class TSimpleStatelessWideFlowCodegeneratorNode
+        : public TStatelessWideFlowCodegeneratorNode<TSimpleStatelessWideFlowCodegeneratorNode<TDerived>> 
+        , public TSimpleWideFlowCodegeneratorNodeLLVMBase {
+    using TBase = TStatelessWideFlowCodegeneratorNode<TSimpleStatelessWideFlowCodegeneratorNode<TDerived>>;
+    using TLLVMBase = TSimpleWideFlowCodegeneratorNodeLLVMBase;
+
+protected:
+    TSimpleStatelessWideFlowCodegeneratorNode(IComputationWideFlowNode* source, ui32 inWidth, ui32 outWidth)
+        : TBase (source)
+        , TLLVMBase(source, inWidth, outWidth, {
+            .ThisPtr = reinterpret_cast<uintptr_t>(this),
+            .InitStateMethPtr = 0,
+            .PrepareInputMethPtr = GetMethodPtr(&TDerived::PrepareInput),
+            .DoProcessMethPtr = GetMethodPtr(&TDerived::DoProcess)
+        }) {}
+
+public:
+    EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+         NUdf::TUnboxedValue *const stub = nullptr;
+        if (!output && !OutWidth) {
+            output = &stub;
+        }
+        auto result = TMaybeFetchResult::None();
+        while (result.Empty()) {
+            NUdf::TUnboxedValue*const* input = static_cast<const TDerived*>(this)->PrepareInput(ctx, output);
+            TMaybeFetchResult fetchResult = input ? SourceFlow->FetchValues(ctx, input) : TMaybeFetchResult::None();
+            result = static_cast<const TDerived*>(this)->DoProcess(ctx, fetchResult, output);
         }
         return result.Get();
     }

@@ -5,7 +5,7 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 #ifndef MKQL_DISABLE_CODEGEN
-ICodegeneratorInlineWideNode::TGenerateResult TSimpleStatefulWideFlowCodegeneratorNodeLLVMBase::DoGenGetValues(const NKikimr::NMiniKQL::TCodegenContext &ctx, llvm::Value *statePtrVal, llvm::BasicBlock *&genToBlock) const  {
+ICodegeneratorInlineWideNode::TGenerateResult TSimpleWideFlowCodegeneratorNodeLLVMBase::DoGenGetValues(const NKikimr::NMiniKQL::TCodegenContext &ctx, llvm::Value *statePtrVal, llvm::BasicBlock *&genToBlock) const  {
     // init stuff (mainly in global entry block)
 
     auto& context = ctx.Codegen.GetContext();
@@ -19,12 +19,14 @@ ICodegeneratorInlineWideNode::TGenerateResult TSimpleStatefulWideFlowCodegenerat
     const auto done = BasicBlock::Create(context, "done", ctx.Func);
     const auto entryPos = &ctx.Func->getEntryBlock().back();
 
+    const bool hasState = statePtrVal != nullptr;
+
     const auto thisType = StructType::get(context)->getPointerTo();
     const auto thisRawVal = ConstantInt::get(Type::getInt64Ty(context), PtrTable.ThisPtr);
     const auto thisVal = CastInst::Create(Instruction::IntToPtr, thisRawVal, thisType, "this", entryPos);
     const auto valuePtrType = PointerType::getUnqual(valueType);
     const auto valuePtrsPtrType = PointerType::getUnqual(valuePtrType);
-    const auto statePtrType = statePtrVal->getType();
+    const auto statePtrType = hasState ? statePtrVal->getType() : nullptr;
     const auto ctxType = ctx.Ctx->getType();
     const auto i32Type = Type::getInt32Ty(context);
     const auto valueNullptrVal = ConstantPointerNull::get(valuePtrType);
@@ -44,15 +46,17 @@ ICodegeneratorInlineWideNode::TGenerateResult TSimpleStatefulWideFlowCodegenerat
 
     auto block = genToBlock; // >>> start of main code chunk
 
-    const auto stateVal = new LoadInst(valueType, statePtrVal, "state", block);
-    BranchInst::Create(init, loop, IsInvalid(stateVal, block), block);
+    const auto stateVal = hasState ? new LoadInst(valueType, statePtrVal, "state", block) : nullptr;
+    BranchInst::Create(init, loop, hasState ? IsInvalid(stateVal, block) : ConstantInt::get(Type::getInt1Ty(context), 0), block);
 
     block = init; // state initialization block:
 
-    const auto initFuncType = FunctionType::get(Type::getVoidTy(context), {thisType, statePtrType, ctxType}, false);
-    const auto initFuncRawVal = ConstantInt::get(Type::getInt64Ty(context), PtrTable.InitStateMethPtr);
-    const auto initFuncVal = CastInst::Create(Instruction::IntToPtr, initFuncRawVal, PointerType::getUnqual(initFuncType), "init_func", block);
-    CallInst::Create(initFuncType, initFuncVal, {thisVal, statePtrVal, ctx.Ctx}, "", block);
+    if (hasState) {
+        const auto initFuncType = FunctionType::get(Type::getVoidTy(context), {thisType, statePtrType, ctxType}, false);
+        const auto initFuncRawVal = ConstantInt::get(Type::getInt64Ty(context), PtrTable.InitStateMethPtr);
+        const auto initFuncVal = CastInst::Create(Instruction::IntToPtr, initFuncRawVal, PointerType::getUnqual(initFuncType), "init_func", block);
+        CallInst::Create(initFuncType, initFuncVal, {thisVal, statePtrVal, ctx.Ctx}, "", block);
+    }
     BranchInst::Create(loop, block);
 
     block = loop; // loop head block: (prepare inputs and decide whether to calculate row or not)
@@ -60,10 +64,14 @@ ICodegeneratorInlineWideNode::TGenerateResult TSimpleStatefulWideFlowCodegenerat
     const auto generated = GenFetchProcess(statePtrVal, ctx, std::bind_front(GetNodeValues, SourceFlow), block);
     auto processResVal = generated.first;
     if (processResVal == nullptr) {
-        const auto prepareFuncType = FunctionType::get(valuePtrsPtrType, {thisType, statePtrType, ctxType, valuePtrsPtrType}, false);
+        const auto prepareFuncType = hasState
+            ? FunctionType::get(valuePtrsPtrType, {thisType, statePtrType, ctxType, valuePtrsPtrType}, false)
+            : FunctionType::get(valuePtrsPtrType, {thisType, ctxType, valuePtrsPtrType}, false);
         const auto prepareFuncRawVal = ConstantInt::get(Type::getInt64Ty(context), PtrTable.PrepareInputMethPtr);
         const auto prepareFuncVal = CastInst::Create(Instruction::IntToPtr, prepareFuncRawVal, PointerType::getUnqual(prepareFuncType), "prepare_func", block);
-        const auto inputPtrsVal = CallInst::Create(prepareFuncType, prepareFuncVal, {thisVal, statePtrVal, ctx.Ctx, outputPtrsVal}, "input_ptrs", block);
+        const auto inputPtrsVal = hasState
+            ? CallInst::Create(prepareFuncType, prepareFuncVal, {thisVal, statePtrVal, ctx.Ctx, outputPtrsVal}, "input_ptrs", block)
+            : CallInst::Create(prepareFuncType, prepareFuncVal, {thisVal, ctx.Ctx, outputPtrsVal}, "input_ptrs", block);
         const auto skipFetchCond = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, inputPtrsVal, valuePtrNullptrVal, "skip_fetch", block);
         BranchInst::Create(loopTail, loopFetch, skipFetchCond, block);
 
@@ -109,10 +117,14 @@ ICodegeneratorInlineWideNode::TGenerateResult TSimpleStatefulWideFlowCodegenerat
         maybeFetchResVal->addIncoming(noneVal, loop);
         maybeFetchResVal->addIncoming(fetchResExtVal, fetchSourceBlock);
         maybeFetchResVal->addIncoming(fetchResExtVal, calcSourceBlock);
-        const auto processFuncType = FunctionType::get(maybeResType, {thisType, statePtrType, ctxType, maybeResType, valuePtrsPtrType}, false);
+        const auto processFuncType = hasState 
+            ? FunctionType::get(maybeResType, {thisType, statePtrType, ctxType, maybeResType, valuePtrsPtrType}, false)
+            : FunctionType::get(maybeResType, {thisType, ctxType, maybeResType, valuePtrsPtrType}, false);
         const auto processFuncRawVal = ConstantInt::get(Type::getInt64Ty(context), PtrTable.DoProcessMethPtr);
         const auto processFuncVal = CastInst::Create(Instruction::IntToPtr, processFuncRawVal, PointerType::getUnqual(processFuncType), "process_func", block);
-        processResVal = CallInst::Create(processFuncType, processFuncVal, {thisVal, statePtrVal, ctx.Ctx, maybeFetchResVal, outputPtrsVal}, "process_res", block);
+        processResVal = hasState
+            ? CallInst::Create(processFuncType, processFuncVal, {thisVal, statePtrVal, ctx.Ctx, maybeFetchResVal, outputPtrsVal}, "process_res", block)
+            : CallInst::Create(processFuncType, processFuncVal, {thisVal, ctx.Ctx, maybeFetchResVal, outputPtrsVal}, "process_res", block);
     } else {
         BranchInst::Create(loopFetch, loopFetch);
         BranchInst::Create(loopCalc, loopCalc);
@@ -143,6 +155,11 @@ ICodegeneratorInlineWideNode::TGenerateResult TSimpleStatefulWideFlowCodegenerat
     }
     return {processResTruncVal, std::move(new_getters)};
 }
+
+ICodegeneratorInlineWideNode::TGenerateResult TSimpleWideFlowCodegeneratorNodeLLVMBase::DoGenGetValues(const NKikimr::NMiniKQL::TCodegenContext &ctx, llvm::BasicBlock *&genToBlock) const {
+    return DoGenGetValues(ctx, nullptr, genToBlock);
+}
+
 #endif
 
 }

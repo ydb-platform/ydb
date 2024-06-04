@@ -1316,6 +1316,20 @@ public:
                 return false;
             }
         }
+
+        TMaybe<size_t> groupingColumnsCount;
+        size_t idx = 0;
+        for (const auto& select : Subselects) {
+            size_t count = select->GetGroupingColumnsCount();
+            if (!groupingColumnsCount.Defined()) {
+                groupingColumnsCount = count;
+            } else if (*groupingColumnsCount != count) {
+                ctx.Error(select->GetPos()) << TStringBuilder() << "Mismatch GROUPING() column count in composite select input #"
+                    << idx << ": expected " << *groupingColumnsCount << ", got: " << count << ". Please submit bug report";
+                return false;
+            }
+            ++idx;
+        }
         return true;
     }
 
@@ -1492,6 +1506,10 @@ public:
     void GetInputTables(TTableList& tableList) const override {
         Source->GetInputTables(tableList);
         ISource::GetInputTables(tableList);
+    }
+
+    size_t GetGroupingColumnsCount() const override {
+        return Source->GetGroupingColumnsCount();
     }
 
     bool DoInit(TContext& ctx, ISource* initSrc) override {
@@ -2596,6 +2614,10 @@ public:
         }
         Hints.push_back(hint);
         return true;
+    }
+
+    size_t GetGroupingColumnsCount() const override {
+        return Hints.size();
     }
 
     TNodePtr BuildGroupingColumns(const TString& label) override {

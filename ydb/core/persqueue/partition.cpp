@@ -1072,7 +1072,7 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
             break;
         }
     }
-    if (ret == EProcessResult::Continue) {
+    if (ret == EProcessResult::Continue && tx.Predicate.GetOrElse(true)) {
         TxAffectedSourcesIds.insert(txSourceIds.begin(), txSourceIds.end());
         tx.WriteInfoApplied = true;
         WriteKeysSizeEstimate += tx.WriteInfo->BodyKeys.size();

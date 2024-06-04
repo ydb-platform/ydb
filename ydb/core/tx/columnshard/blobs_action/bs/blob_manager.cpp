@@ -210,8 +210,7 @@ std::deque<TGenStep> TBlobManager::FindNewGCBarriers() {
         result.emplace_back(allocated->GenStep);
         newCollectGenStep = allocated->GenStep;
     }
-    AFL_VERIFY(result.size());
-    if (LastCollectedGenStep < result.front()) {
+    if (result.empty() || LastCollectedGenStep < result.front()) {
         result.emplace_front(LastCollectedGenStep);
     }
     return result;

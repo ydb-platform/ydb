@@ -589,6 +589,7 @@ const TUdfNode* IProxyNode::GetUdfNode() const {
 }
 
 void IProxyNode::DoUpdateState() const {
+    static_assert(static_cast<int>(ENodeState::End) == 9, "Need to support new states here");
     State.Set(ENodeState::CountHint, Inner->GetCountHint());
     State.Set(ENodeState::Const, Inner->IsConstant());
     State.Set(ENodeState::MaybeConst, Inner->MaybeConstant());

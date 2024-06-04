@@ -33,7 +33,7 @@ bool TTieringProcessContext::AddPortion(const TPortionInfo& info, TPortionEvicti
         std::vector<TTaskConstructor> tasks = {buildNewTask()};
         it = Tasks.emplace(features.GetRWAddress(), std::move(tasks)).first;
     }
-    if (it->second.back().GetTxWriteVolume() + info.GetTxVolume() > TGlobalLimits::TxWriteLimitBytes && it->second.back().GetTxWriteVolume()) {
+    if (it->second.back().GetTxWriteVolume() + info.GetTxVolume() > TGlobalLimits::TxWriteLimitBytes / 2 && it->second.back().GetTxWriteVolume()) {
         if (Controller->IsNewTaskAvailable(it->first, it->second.size())) {
             it->second.emplace_back(buildNewTask());
         } else {

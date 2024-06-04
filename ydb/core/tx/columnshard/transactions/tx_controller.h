@@ -237,6 +237,9 @@ public:
         void SetProposeStartInfo(const TTxController::TProposeResult& info) {
             AFL_VERIFY(!ProposeStartInfo);
             ProposeStartInfo = info;
+            if (IsFail()) {
+                Status = EStatus::Failed;
+            }
         }
 
         const TTxInfo& GetTxInfo() const {
@@ -290,6 +293,7 @@ public:
 
         bool StartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) {
             AFL_VERIFY(!ProposeStartInfo);
+            AFL_VERIFY(!IsFail());
             ProposeStartInfo = DoStartProposeOnExecute(owner, txc);
             if (ProposeStartInfo->IsFail()) {
                 SwitchStateVerified(EStatus::Parsed, EStatus::Failed);
@@ -299,11 +303,13 @@ public:
             return !GetProposeStartInfoVerified().IsFail();
         }
         void StartProposeOnComplete(TColumnShard& owner, const TActorContext& ctx) {
+            AFL_VERIFY(!IsFail());
             SwitchStateVerified(EStatus::ProposeStartedOnExecute, EStatus::ProposeStartedOnComplete);
             AFL_VERIFY(IsAsync());
             return DoStartProposeOnComplete(owner, ctx);
         }
         void FinishProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) {
+            AFL_VERIFY(!IsFail());
             SwitchStateVerified(EStatus::ProposeStartedOnComplete, EStatus::ProposeFinishedOnExecute);
             AFL_VERIFY(IsAsync());
             return DoFinishProposeOnExecute(owner, txc);

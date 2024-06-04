@@ -227,10 +227,10 @@ def parse_includes(trace_path: str, base_src_dir: str) -> tuple[list[tuple[int, 
     path_to_time = {}
     current_includes_stack = [(cpp_file, 0)]
     last_time_stamp = 0
-    time_parts = {}  # header/cpp -> (header -> (cnt, total time))
+    time_breakdown = {}  # header/cpp -> (header -> (cnt, total time))
     if cpp_file is None:
         print("Can't determine cpp file for {}".format(trace_path))
-        return path_to_time, time_parts
+        return path_to_time, time_breakdown
 
     for time_stamp, ev, path in include_events:
         if current_includes_stack:
@@ -245,50 +245,50 @@ def parse_includes(trace_path: str, base_src_dir: str) -> tuple[list[tuple[int, 
             assert current_path == path
             current_includes_stack.pop()
             parent_path = current_includes_stack[-1][0]
-            if parent_path not in time_parts:
-                time_parts[parent_path] = {}
+            if parent_path not in time_breakdown:
+                time_breakdown[parent_path] = {}
             
-            if current_path not in time_parts[parent_path]:
-                time_parts[parent_path][current_path] = [0, 0]
+            if current_path not in time_breakdown[parent_path]:
+                time_breakdown[parent_path][current_path] = [0, 0]
             
-            time_parts[parent_path][current_path][0] += 1
-            time_parts[parent_path][current_path][1] += (time_stamp - include_ts) / 1000 / 1000
-
+            time_breakdown[parent_path][current_path][0] += 1
+            time_breakdown[parent_path][current_path][1] += (time_stamp - include_ts) / 1000 / 1000
+    
         last_time_stamp = time_stamp
 
-    return path_to_time, time_parts
+    return path_to_time, time_breakdown
 
 
 def generate_header_bloat(build_output_dir: str, result_dir: str, base_src_dir: str) -> dict:
     time_trace_paths = gather_time_traces(build_output_dir)
 
     path_to_stat = {}  # header path -> (total_duration, count)
-    total_time_parts = {}  # header/cpp path -> (header -> (inclusion count, time spend) )
+    total_time_breakdown = {}  # header/cpp path -> (header -> (inclusion count, time spend) )
     with ProcessPoolExecutor() as executor:
         fn = partial(parse_includes, base_src_dir=base_src_dir)
         res = executor.map(fn, time_trace_paths)
-        for path_to_time, time_parts in res:
+        for path_to_time, time_breakdown in res:
             for path, duration in path_to_time.items():
                 if path not in path_to_stat:
                     path_to_stat[path] = [0, 0]
                 path_to_stat[path][0] += duration
                 path_to_stat[path][1] += 1
 
-            for path in time_parts:
-                if path not in total_time_parts:
-                    total_time_parts[path] = {}
+            for path in time_breakdown:
+                if path not in total_time_breakdown:
+                    total_time_breakdown[path] = {}
 
-                for subpath in time_parts[path]:
-                    if subpath not in total_time_parts[path]:
-                        total_time_parts[path][subpath] = [0, 0]
+                for subpath in time_breakdown[path]:
+                    if subpath not in total_time_breakdown[path]:
+                        total_time_breakdown[path][subpath] = [0, 0]
 
-                    total_time_parts[path][subpath][0] += time_parts[path][subpath][0]
-                    total_time_parts[path][subpath][1] += time_parts[path][subpath][1]
+                    total_time_breakdown[path][subpath][0] += time_breakdown[path][subpath][0]
+                    total_time_breakdown[path][subpath][1] += time_breakdown[path][subpath][1]
                 
-        for path in total_time_parts:
+        for path in total_time_breakdown:
             print("*** {}".format(path))
-            for subpath in total_time_parts[path]:
-                count, total_time_ms = total_time_parts[path][subpath]
+            for subpath in total_time_breakdown[path]:
+                count, total_time_ms = total_time_breakdown[path][subpath]
                 print("   {} -> total {:.2f}s (included {} times)".format(subpath, total_time_ms, count))
             print("")
 
@@ -316,24 +316,24 @@ def generate_header_bloat(build_output_dir: str, result_dir: str, base_src_dir: 
             "mean_compilation_time_s": duration / cnt,
         })
 
-    time_parts = {}
+    time_breakdown = {}
 
-    for path in total_time_parts:
-        time_part = []
-        for subpath in total_time_parts[path]:
-            inclusion_count, total_s = total_time_parts[path][subpath]
-            time_part.append({
+    for path in total_time_breakdown:
+        one_file_breakdown = []
+        for subpath in total_time_breakdown[path]:
+            inclusion_count, total_s = total_time_breakdown[path][subpath]
+            one_file_breakdown.append({
                 "path": subpath,
                 "inclusion_count": inclusion_count,
                 "total_time_s": total_s,
             })
-        time_part.sort(key=lambda val: -val["total_time_s"])
-        time_parts[path] = time_part
+        one_file_breakdown.sort(key=lambda val: -val["total_time_s"])
+        time_breakdown[path] = one_file_breakdown
 
 
     human_readable_output = {
         "headers_compile_duration": headers_compile_duration,
-        "time_parts": time_parts,
+        "time_breakdown": time_breakdown,
     }
 
     with open(os.path.join(result_dir, "output.json"), "w") as f:

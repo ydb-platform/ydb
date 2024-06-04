@@ -297,12 +297,14 @@ def generate_header_bloat(build_output_dir: str, result_dir: str, base_src_dir: 
                     total_time_breakdown[path][subpath][0] += time_breakdown[path][subpath][0]
                     total_time_breakdown[path][subpath][1] += time_breakdown[path][subpath][1]
 
-        for path in total_time_breakdown:
-            print("*** {}".format(path))
-            for subpath in total_time_breakdown[path]:
-                count, total_time_ms = total_time_breakdown[path][subpath]
-                print("   {} -> total {:.2f}s (included {} times)".format(subpath, total_time_ms, count))
-            print("")
+        print_more_debug = False
+        if print_more_debug:
+            for path in total_time_breakdown:
+                print("*** {}".format(path))
+                for subpath in total_time_breakdown[path]:
+                    count, total_time_ms = total_time_breakdown[path][subpath]
+                    print("   {} -> total {:.2f}s (included {} times)".format(subpath, total_time_ms, count))
+                print("")
 
     result = []
 

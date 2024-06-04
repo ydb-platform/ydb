@@ -31,6 +31,29 @@ In {{ ydb-short-name }}, calculations are performed on the `String` data type, w
 
 Vector functions are implemented as user-defined functions (UDF) in the `Knn` module.
 
+### Functions for converting between vector and binary representations
+
+Conversion functions are needed to serialize the vector set into an internal binary representation and vice versa.
+The binary representation of a vector can be persisted in a {{ ydb-short-name }}  table column of the `String` type.
+
+#### Function signatures
+
+[About Tagged type.](../../types/special.md)
+
+```sql
+Knn::ToBinaryStringFloat(List<Float>{Flags:AutoMap})->Tagged<String, "FloatVector">
+Knn::ToBinaryStringUint8(List<Uint8>{Flags:AutoMap})->Tagged<String, "Uint8Vector">
+Knn::ToBinaryStringInt8(List<Int8>{Flags:AutoMap})->Tagged<String, "Int8Vector">
+Knn::ToBinaryStringBit(List<Double>{Flags:AutoMap})->Tagged<String, "BitVector">
+Knn::ToBinaryStringBit(List<Float>{Flags:AutoMap})->Tagged<String, "BitVector">
+Knn::ToBinaryStringBit(List<Uint8>{Flags:AutoMap})->Tagged<String, "BitVector">
+Knn::ToBinaryStringBit(List<Int8>{Flags:AutoMap})->Tagged<String, "BitVector">
+Knn::FloatFromBinaryString(String{Flags:AutoMap})->List<Float>?
+```
+
+* `ToBinaryStringBit` -- coordinates that greater than `0` are mapped to `1`, other coordinates are mapped to `0`.
+* `ToBinaryStringBit`, `ToBinaryStringUint8`, `ToBinaryStringInt8` -- commonly used for quantization.
+
 ### Distance and similarity functions
 
 The distance and similarity functions take two lists of real numbers as input and return the distance/similarity between them.
@@ -64,34 +87,11 @@ In case of different length or format, these functions return `NULL`.
 
 {% note info %}
 
-All distance and similarity functions support overloads when first or second argument
-can be `Tagged<String, "FloatVector">`, `Tagged<String, "Uint8Vector">`, `Tagged<String, "Int8Vector">`, `Tagged<String, "BitVector">`.
+All distance and similarity functions support overloads when first or second arguments are `Tagged<String, "FloatVector">`, `Tagged<String, "Uint8Vector">`, `Tagged<String, "Int8Vector">`, `Tagged<String, "BitVector">`.
 
-If both arguments are `Tagged`, value of tag should be same, overwise will be error for this request.
+If both arguments are `Tagged`, value of tag should be same, overwise there will be an error for this request.
 
 {% endnote %}
-
-
-### Functions for converting between vector and binary representations
-
-Conversion functions are needed to serialize the vector set into an internal binary representation and vice versa.
-The binary representation of a vector can be persisted in a {{ ydb-short-name }}  table column of the `String` type.
-
-#### Function signatures
-
-```sql
-Knn::ToBinaryStringFloat(List<Float>{Flags:AutoMap})->Tagged<String, "FloatVector">
-Knn::ToBinaryStringUint8(List<Uint8>{Flags:AutoMap})->Tagged<String, "Uint8Vector">
-Knn::ToBinaryStringInt8(List<Int8>{Flags:AutoMap})->Tagged<String, "Int8Vector">
-Knn::ToBinaryStringBit(List<Double>{Flags:AutoMap})->Tagged<String, "BitVector">
-Knn::ToBinaryStringBit(List<Float>{Flags:AutoMap})->Tagged<String, "BitVector">
-Knn::ToBinaryStringBit(List<Uint8>{Flags:AutoMap})->Tagged<String, "BitVector">
-Knn::ToBinaryStringBit(List<Int8>{Flags:AutoMap})->Tagged<String, "BitVector">
-Knn::FloatFromBinaryString(String{Flags:AutoMap})->List<Float>?
-```
-
-* `ToBinaryStringBit` -- translate to `1` all coordinates that greater than `0`, other coordinates translated to `0`.
-* `ToBinaryStringBit`, `ToBinaryStringUint8`, `ToBinaryStringInt8` -- commonly used for quantization.
 
 ## Examples
 
@@ -111,14 +111,14 @@ CREATE TABLE Facts (
 ### Adding vectors
 
 ```sql
-$vector = CAST([1, 2, 3, 4] AS List<Float>);
+$vector = [1.f, 2.f, 3.f, 4.f];
 UPSERT INTO Facts (id, user, fact, embedding, embedding_bit) 
 VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryStringFloat($vector), "FloatVector"), Untag(Knn::ToBinaryStringBit($vector), "BitVector"));
 ```
 
 {% note info %}
 
-{{ ydb-short-name }} doesn't support storing `Tagged` types, so user should store them as `String`, to achive this user can use `Untag` function.
+{{ ydb-short-name }} doesn't support storing `Tagged` types, so user should store them as `String` type using `Untag` function.
 
 {% endnote %}
 
@@ -157,8 +157,9 @@ INSERT INTO my_table VALUES(
 ```
 
 ```sql
-$TargetEmbeddingBit = Knn::ToBinaryStringBit([1.2f, 2.3f, 3.4f, 4.5f]);
-$TargetEmbeddingFloat = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
+$Target = [1.2f, 2.3f, 3.4f, 4.5f];
+$TargetEmbeddingBit = Knn::ToBinaryStringBit($Target);
+$TargetEmbeddingFloat = Knn::ToBinaryStringFloat($Target);
 
 $Ids = SELECT id FROM Facts
 ORDER BY Knn::CosineDistance(embedding_bit, $TargetEmbeddingBit)

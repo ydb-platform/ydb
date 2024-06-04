@@ -31,6 +31,28 @@ LIMIT 10;
 
 Функции работы с векторами реализовываются в виде пользовательских функций (UDF) в модуле `Knn`.
 
+### Функции преобразования вектора в бинарное представление
+
+Функции преобразования нужны для сериализации множества вектора во внутреннее бинарное представление и обратно.
+Бинарное представление вектора будет храниться в {{ ydb-short-name }} в типе `String`.
+
+#### Сигнатуры функций
+
+[Про Tagged тип.](../../types/special.md)
+
+```sql
+Knn::ToBinaryStringFloat(List<Float>{Flags:AutoMap})->Tagged<String, "FloatVector">
+Knn::ToBinaryStringUint8(List<Uint8>{Flags:AutoMap})->Tagged<String, "Uint8Vector">
+Knn::ToBinaryStringInt8(List<Int8>{Flags:AutoMap})->Tagged<String, "Int8Vector">
+Knn::ToBinaryStringBit(List<Double>{Flags:AutoMap})->Tagged<String, "BitVector">
+Knn::ToBinaryStringBit(List<Float>{Flags:AutoMap})->Tagged<String, "BitVector">
+Knn::ToBinaryStringBit(List<Uint8>{Flags:AutoMap})->Tagged<String, "BitVector">
+Knn::ToBinaryStringBit(List<Int8>{Flags:AutoMap})->Tagged<String, "BitVector">
+Knn::FloatFromBinaryString(String{Flags:AutoMap})->List<Float>?
+```
+
+* `ToBinaryStringBit` преобразует в `1` все коордианты которые больше `0`, остальные координаты преобразуются в `0`.
+
 ### Функции расстояния и сходства
 
 Функции расстояния и сходства принимают на вход два списка вещественных чисел и возвращает расстояние/сходство между ними.
@@ -41,11 +63,11 @@ LIMIT 10;
 
 {% endnote %}
 
-Фукнции сходства:
+Функции сходства:
 * скалярное произведение `InnerProductSimilarity` (сумма произведений координат)
 * косинусное сходство `CosineSimilarity` (скалярное произведение / произведение длин векторов)
 
-Фукнции расстояния:
+Функции расстояния:
 * косинусное расстояние `CosineDistance` (1 - косинусное сходство)
 * манхэттенское расстояние `ManhattanDistance`, также известно как `L1 distance`  (сумма модулей покоординатной разности)
 * Евклидово расстояние `EuclideanDistance`, также известно как `L2 distance` (корень суммы квадратов покоординатной разности)
@@ -60,7 +82,7 @@ Knn::ManhattanDistance(String{Flags:AutoMap}, String{Flags:AutoMap})->Float?
 Knn::EuclideanDistance(String{Flags:AutoMap}, String{Flags:AutoMap})->Float?
 ```
 
-В случае когда у аргументов разная длинна или разный формат, фукнции возвращают `NULL`.
+В случае когда у аргументов разная длинна или разный формат, функции возвращают `NULL`.
 
 {% note info %}
 
@@ -69,27 +91,6 @@ Knn::EuclideanDistance(String{Flags:AutoMap}, String{Flags:AutoMap})->Float?
 Если оба аргумента `Tagged`, то значение тега должно совпадать, иначе запрос завершится с ошибкой.
 
 {% endnote %}
-
-
-### Функции преобразования вектора в бинарное представление
-
-Функции преобразования нужны для сериализации множества вектора во внутреннее бинарное представление и обратно.
-Бинарное представление вектора будет храниться в {{ ydb-short-name }} в типе `String`.
-
-#### Сигнатуры функций
-
-```sql
-Knn::ToBinaryStringFloat(List<Float>{Flags:AutoMap})->Tagged<String, "FloatVector">
-Knn::ToBinaryStringUint8(List<Uint8>{Flags:AutoMap})->Tagged<String, "Uint8Vector">
-Knn::ToBinaryStringInt8(List<Int8>{Flags:AutoMap})->Tagged<String, "Int8Vector">
-Knn::ToBinaryStringBit(List<Double>{Flags:AutoMap})->Tagged<String, "BitVector">
-Knn::ToBinaryStringBit(List<Float>{Flags:AutoMap})->Tagged<String, "BitVector">
-Knn::ToBinaryStringBit(List<Uint8>{Flags:AutoMap})->Tagged<String, "BitVector">
-Knn::ToBinaryStringBit(List<Int8>{Flags:AutoMap})->Tagged<String, "BitVector">
-Knn::FloatFromBinaryString(String{Flags:AutoMap})->List<Float>?
-```
-
-* `ToBinaryStringBit` преобразует в `1` все коордианты которые больше `0`, остальные координаты преобразуются в `0`.
 
 ## Примеры
 
@@ -109,7 +110,7 @@ CREATE TABLE Facts (
 ### Добавление векторов
 
 ```sql
-$vector = CAST([1, 2, 3, 4] AS List<Float>);
+$vector = [1.f, 2.f, 3.f, 4.f];
 UPSERT INTO Facts (id, user, fact, embedding, embedding_bit) 
 VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryStringFloat($vector), "FloatVector"), Untag(Knn::ToBinaryStringBit($vector), "BitVector"));
 ```
@@ -141,8 +142,9 @@ WHERE Knn::CosineDistance(embedding, $TargetEmbedding) < 0.1;
 ### Пример неточного поиска ближайших векторов: квантизация
 
 ```sql
-$TargetEmbeddingBit = Knn::ToBinaryStringBit([1.2f, 2.3f, 3.4f, 4.5f]);
-$TargetEmbeddingFloat = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
+$Target = [1.2f, 2.3f, 3.4f, 4.5f];
+$TargetEmbeddingBit = Knn::ToBinaryStringBit($Target);
+$TargetEmbeddingFloat = Knn::ToBinaryStringFloat($Target);
 
 $Ids = SELECT id FROM Facts
 ORDER BY Knn::CosineDistance(embedding_bit, $TargetEmbeddingBit)

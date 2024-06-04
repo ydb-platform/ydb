@@ -46,9 +46,10 @@ LIMIT 10;
 
 Функции преобразования нужны для сериализации множества вектора во внутреннее бинарное представление и обратно.
 
-[Про Tagged тип.](../../types/special.md)
+Все функции сериализации возвращают результат в виде [`Tagged`](../../types/special.md) типов.
 
-Бинарное представление вектора можно сохранить в {{ ydb-short-name }} колонку, так как {{ ydb-short-name }} не поддерживает хранение `Tagged` типов, нужно сохранять данные векторов как `String` использую функцию `Untag`.
+Бинарное представление вектора можно сохранить в {{ ydb-short-name }} колонку. 
+В настоящий момент {{ ydb-short-name }} не поддерживает хранение `Tagged` типов, нужно сохранять данные векторов как `String` используя функцию `[Untag](../../builtins/basic#as-tagged)`.
 
 #### Сигнатуры функций
 
@@ -98,13 +99,57 @@ Knn::EuclideanDistance(String{Flags:AutoMap}, String{Flags:AutoMap})->Float?
 
 {% note info %}
 
-Также все функции расстояния и сходства поддерживают такие перегрузки, когда первый или второй аргумент могут быть `Tagged<String, "FloatVector">`, `Tagged<String, "Uint8Vector">`, `Tagged<String, "Int8Vector">`, `Tagged<String, "BitVector">`.
+Также все функции расстояния и сходства поддерживают перегрузки, когда первый или второй аргументы имеют один из типов `Tagged<String, "FloatVector">`, `Tagged<String, "Uint8Vector">`, `Tagged<String, "Int8Vector">`, `Tagged<String, "BitVector">`.
 
 Если оба аргумента `Tagged`, то значение тега должно совпадать, иначе запрос завершится с ошибкой.
 
 {% endnote %}
 
-## Примеры
+## Примеры точного поиска
+
+### Создание таблицы
+
+```sql
+CREATE TABLE Facts (
+    id Uint64,        -- Id of fact
+    user Utf8,        -- User name
+    fact Utf8,        -- Human-readable description of a user fact
+    embedding String, -- Binary representation of embedding vector (result of Knn::ToBinaryStringFloat)
+    PRIMARY KEY (id)
+);
+```
+
+### Добавление векторов
+
+```sql
+$vector = [1.f, 2.f, 3.f, 4.f];
+UPSERT INTO Facts (id, user, fact, embedding) 
+VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryStringFloat($vector), "FloatVector"));
+```
+
+### Точный поиск K ближайших векторов
+
+```sql
+$K = 10;
+$TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
+
+SELECT * FROM Facts
+WHERE user="Williams"
+ORDER BY Knn::CosineDistance(embedding, $TargetEmbedding)
+LIMIT $K;
+```
+
+### Точный поиск векторов, находящихся в радиусе R
+
+```sql
+$R = 0.1f;
+$TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
+
+SELECT * FROM Facts
+WHERE Knn::CosineDistance(embedding, $TargetEmbedding) < $R;
+```
+
+## Примеры приближенного поиска
 
 ### Создание таблицы
 
@@ -125,28 +170,6 @@ CREATE TABLE Facts (
 $vector = [1.f, 2.f, 3.f, 4.f];
 UPSERT INTO Facts (id, user, fact, embedding, embedding_bit) 
 VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryStringFloat($vector), "FloatVector"), Untag(Knn::ToBinaryStringBit($vector), "BitVector"));
-```
-
-### Точный поиск K ближайших векторов
-
-```sql
-$K = 10;
-$TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
-
-SELECT * FROM Facts
-WHERE user="Williams"
-ORDER BY Knn::CosineDistance(embedding, $TargetEmbedding)
-LIMIT $K;
-```
-
-### Точный поиск векторов находящихся в радиусe R
-
-```sql
-$R = 0.1;
-$TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
-
-SELECT * FROM Facts
-WHERE Knn::CosineDistance(embedding, $TargetEmbedding) < $R;
 ```
 
 ### Квантизация
@@ -184,7 +207,7 @@ $FloatList = [-1.2f, 2.3f, 3.4f, -4.7f];
 select ListMap($FloatList, $MapInt8), ListMap($Target, $MapUint8);
 ```
 
-### Приближенный поиск K ближайших векторов: квантизация
+### Приближенный поиск K ближайших векторов
 
 ```sql
 $K = 10;

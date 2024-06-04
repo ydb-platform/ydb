@@ -133,8 +133,9 @@ namespace {
         void TryProcessResults() {
             if (auto [batch, partsLeft] = Reader.TryGetResults(); batch.has_value()) {
                 Stats.PartsRead += batch->size();
-                ui64 epoch = Mngr.StartJob(TlsActivationContext->Now(), batch->size(), partsLeft);
-                SendParts(std::move(*batch), epoch);
+                ui64 epoch = Mngr.GetEpoch();
+                ui32 partsSent = SendParts(std::move(*batch), epoch);
+                Mngr.StartJob(TlsActivationContext->Now(), partsSent, partsLeft);
                 Schedule(Mngr.SendTimeout, new NActors::TEvents::TEvCompleted(epoch));
             }
         }
@@ -157,9 +158,10 @@ namespace {
             TryProcessResults();
         }
 
-        void SendParts(TVector<TPart> batch, ui64 epoch) {
+        ui32 SendParts(TVector<TPart> batch, ui64 epoch) {
             STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB11, VDISKP(Ctx->VCtx, "Sending parts"), (BatchSize, batch.size()));
 
+            ui32 partsSent = 0;
             THashMap<TVDiskID, std::unique_ptr<TEvBlobStorage::TEvVMultiPut>> vDiskToEv;
             for (auto& part: batch) {
                 auto localParts = part.PartsMask;
@@ -191,7 +193,7 @@ namespace {
 
                         ev->AddVPut(key, TRcBuf(data), nullptr, {}, NWilson::TTraceId());
                     }
-
+                    partsSent++;
                 }
             }
 
@@ -210,6 +212,8 @@ namespace {
                     blobsSize
                 );
             }
+
+            return partsSent;
         }
 
         void Handle(TEvBlobStorage::TEvVPutResult::TPtr ev) {
@@ -276,6 +280,7 @@ namespace {
             , Ctx(ctx)
             , GInfo(ctx->GInfo)
             , Reader(32, Ctx->PDiskCtx, std::move(parts), ctx->VCtx->ReplPDiskReadQuoter, GInfo->GetTopology().GType)
+            , Mngr{.ServiceId=SENDER_ID}
         {}
 
         void Bootstrap() {

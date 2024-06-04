@@ -79,9 +79,17 @@ namespace NBalancing {
         Parts.resize(GType.TotalPartCount());
     }
 
+
+    ///////////////////////////// TWaiter /////////////////////////////
+
     void TWaiter::Init() {
         Y_VERIFY(State == EInit || State == ECompleteJob, "Invalid state");
         State = EInit;
+    }
+
+    ui64 TWaiter::GetEpoch() const {
+        Y_VERIFY(State == EInit, "Invalid state");
+        return Epoch;
     }
 
     ui64 TWaiter::StartJob(TInstant now, ui32 count, ui32 partsLeft) {
@@ -111,7 +119,7 @@ namespace NBalancing {
             ToSendPartsCount = 0;
             SentPartsCount = 0;
             ++Epoch;
-            return new NActors::TEvents::TEvCompleted(SENDER_ID, PartsLeft);
+            return new NActors::TEvents::TEvCompleted(ServiceId, PartsLeft);
         }
         return nullptr;
     }

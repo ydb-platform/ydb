@@ -111,6 +111,7 @@ message TEvAlterReplication {
     optional NKikimrProto.TPathID PathId = 1;
     optional TOperationId OperationId = 2;
     optional TReplicationState SwitchState = 3;
+    optional TReplicationConfig Config = 4;
 }
 
 message TEvAlterReplicationResult {

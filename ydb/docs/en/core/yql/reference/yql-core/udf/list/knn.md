@@ -34,11 +34,12 @@ Vector functions are implemented as user-defined functions (UDF) in the `Knn` mo
 ### Functions for converting between vector and binary representations
 
 Conversion functions are needed to serialize the vector set into an internal binary representation and vice versa.
-The binary representation of a vector can be persisted in a {{ ydb-short-name }}  table column of the `String` type.
-
-#### Function signatures
 
 [About Tagged type.](../../types/special.md)
+
+The binary representation of a vector can be persisted in a {{ ydb-short-name }} table column, {{ ydb-short-name }} doesn't support storing `Tagged` types, so user should store them as `String` type using `Untag` function.
+
+#### Function signatures
 
 ```sql
 Knn::ToBinaryStringFloat(List<Float>{Flags:AutoMap})->Tagged<String, "FloatVector">
@@ -116,57 +117,42 @@ UPSERT INTO Facts (id, user, fact, embedding, embedding_bit)
 VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryStringFloat($vector), "FloatVector"), Untag(Knn::ToBinaryStringBit($vector), "BitVector"));
 ```
 
-{% note info %}
-
-{{ ydb-short-name }} doesn't support storing `Tagged` types, so user should store them as `String` type using `Untag` function.
-
-{% endnote %}
-
-### Exact vector search
+### Exact search of K nearest vectors
 
 ```sql
+$K = 10;
 $TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
 
 SELECT * FROM Facts
 WHERE user="Williams"
 ORDER BY Knn::CosineDistance(embedding, $TargetEmbedding)
-LIMIT 10;
+LIMIT $K;
 ```
 
+### Exact search of vectors in radius R
+
 ```sql
+$R = 0.1;
 $TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
 
 SELECT * FROM Facts
-WHERE Knn::CosineDistance(embedding, $TargetEmbedding) < 0.1;
+WHERE Knn::CosineDistance(embedding, $TargetEmbedding) < $R;
 ```
 
-
-### Approximate neareast neighbor vector search: quantization
-
-```sql
-CREATE TABLE Facts (
-    id Uint64 NOT NULL,
-    embedding String,
-    embedding_bit String,
-    PRIMARY KEY (id)
-);
-
-INSERT INTO my_table VALUES(
-    (1, Untag(Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]), "FloatVector"), Untag(Knn::ToBinaryStringBit([1.2f, 2.3f, 3.4f, 4.5f])), "BitVector")
-);
-```
+### Approximate search of K nearest vectors: quantization
 
 ```sql
+$K = 10;
 $Target = [1.2f, 2.3f, 3.4f, 4.5f];
 $TargetEmbeddingBit = Knn::ToBinaryStringBit($Target);
 $TargetEmbeddingFloat = Knn::ToBinaryStringFloat($Target);
 
 $Ids = SELECT id FROM Facts
 ORDER BY Knn::CosineDistance(embedding_bit, $TargetEmbeddingBit)
-LIMIT 100;
+LIMIT $K * 10;
 
 SELECT * FROM Facts
 WHERE id IN $Ids
 ORDER BY Knn::CosineDistance(embedding, $TargetEmbeddingFloat)
-LIMIT 10;
+LIMIT $K;
 ```

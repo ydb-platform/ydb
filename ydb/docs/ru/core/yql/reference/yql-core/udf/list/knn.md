@@ -34,11 +34,12 @@ LIMIT 10;
 ### Функции преобразования вектора в бинарное представление
 
 Функции преобразования нужны для сериализации множества вектора во внутреннее бинарное представление и обратно.
-Бинарное представление вектора будет храниться в {{ ydb-short-name }} в типе `String`.
-
-#### Сигнатуры функций
 
 [Про Tagged тип.](../../types/special.md)
+
+Бинарное представление вектора можно сохранить в {{ ydb-short-name }} колонку, так как {{ ydb-short-name }} не поддерживает хранение `Tagged` типов, нужно сохранять данные векторов как `String` использую функцию `Untag`.
+
+#### Сигнатуры функций
 
 ```sql
 Knn::ToBinaryStringFloat(List<Float>{Flags:AutoMap})->Tagged<String, "FloatVector">
@@ -115,43 +116,42 @@ UPSERT INTO Facts (id, user, fact, embedding, embedding_bit)
 VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryStringFloat($vector), "FloatVector"), Untag(Knn::ToBinaryStringBit($vector), "BitVector"));
 ```
 
-{% note info %}
-
-{{ ydb-short-name }} не поддерживает хранение `Tagged` типов, поэтому нужно сохранять данные векторов как `String` и при вставке использовать функцию `Untag`
-
-{% endnote %}
-
-### Точный поиск ближайших векторов
+### Точный поиск K ближайших векторов
 
 ```sql
+$K = 10;
 $TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
 
 SELECT * FROM Facts
 WHERE user="Williams"
 ORDER BY Knn::CosineDistance(embedding, $TargetEmbedding)
-LIMIT 10;
+LIMIT $K;
 ```
 
+### Точный поиск векторов находящихся в радиусe R
+
 ```sql
+$R = 0.1;
 $TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
 
 SELECT * FROM Facts
-WHERE Knn::CosineDistance(embedding, $TargetEmbedding) < 0.1;
+WHERE Knn::CosineDistance(embedding, $TargetEmbedding) < $R;
 ```
 
-### Пример неточного поиска ближайших векторов: квантизация
+### Приближенный поиск K ближайших векторов: квантизация
 
 ```sql
+$K = 10;
 $Target = [1.2f, 2.3f, 3.4f, 4.5f];
 $TargetEmbeddingBit = Knn::ToBinaryStringBit($Target);
 $TargetEmbeddingFloat = Knn::ToBinaryStringFloat($Target);
 
 $Ids = SELECT id FROM Facts
 ORDER BY Knn::CosineDistance(embedding_bit, $TargetEmbeddingBit)
-LIMIT 100;
+LIMIT $K * 10;
 
 SELECT * FROM Facts
 WHERE id IN $Ids
 ORDER BY Knn::CosineDistance(embedding, $TargetEmbeddingFloat)
-LIMIT 10;
+LIMIT $K;
 ```

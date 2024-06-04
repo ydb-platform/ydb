@@ -15,6 +15,7 @@ The following authentication modes are supported:
 * **Refresh Token**: [OAuth token](https://auth0.com/blog/refresh-tokens-what-are-they-and-when-to-use-them/) of a user's personal account set as a parameter for the client (SDK or CLI), which the client periodically sends to the IAM API in the background to rotate a token (obtain a new one) to pass in requests.
 * **Service Account Key**: Service account attributes and a signature key set as parameters for the client (SDK or CLI), which the client periodically sends to the IAM API in the background to rotate a token (obtain a new one) to pass in requests.
 * **Metadata**: Client (SDK or CLI) periodically accesses a local service to rotate a token (obtain a new one) to pass in requests.
+* **OAuth 2.0 token exchange** - Client (SDK or CLI) exchanges token of another type into access token using OAuth 2.0 token exchange protocol, then uses it to pass in requests. [Detailed information about OAuth 2.0 token exchange protocol](https://www.rfc-editor.org/rfc/rfc8693)
 
 Any owner of a valid token can get access to perform operations; therefore, the principal objective of the security system is to ensure that a token remains private and to protect it from being compromised.
 

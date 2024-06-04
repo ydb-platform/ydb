@@ -671,7 +671,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         {
             auto res = NKikimr::NPQ::MiddleOf(AsString({0x01}), AsString({0x02}));
-            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "01 FF");
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "01 7F");
         }
 
         {
@@ -686,7 +686,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         {
             auto res = NKikimr::NPQ::MiddleOf(AsString({0x01, 0xFF}), AsString({0x02, 0x00}));
-            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "01 FF FF");
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "01 FF 7F");
         }
 
         {
@@ -718,8 +718,12 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "02 00 00 07");
         }
         {
-            auto res = NKikimr::NPQ::MiddleOf(AsString({0xFF, 0xFF}), AsString({0xFF}));
-            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "FF FF 7F");
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0xFF}), AsString({0xFF, 0xFF}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "FF 7F");
+        }
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x99, 0xFF}), AsString({0x9A}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "99 FF 7F");
         }
     }
 }

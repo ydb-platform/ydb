@@ -142,6 +142,8 @@ namespace NKikimr::NStorage {
         TReplQuoter::TPtr ReplNodeRequestQuoter;
         TReplQuoter::TPtr ReplNodeResponseQuoter;
 
+        TCostMetricsParametersByMedia CostMetricsParametersByMedia;
+
     public:
         struct TGroupRecord;
 
@@ -159,6 +161,11 @@ namespace NKikimr::NStorage {
             , EnableSyncLogChunkCompressionSSD(0, 0, 1)
             , MaxSyncLogChunksInFlightHDD(10, 1, 1024)
             , MaxSyncLogChunksInFlightSSD(10, 1, 1024)
+            , CostMetricsParametersByMedia({
+                TCostMetricsParameters{200},
+                TCostMetricsParameters{50},
+                TCostMetricsParameters{32},
+            })
         {
             Y_ABORT_UNLESS(Cfg->BlobStorageConfig.GetServiceSet().AvailabilityDomainsSize() <= 1);
             AvailDomainId = 1;

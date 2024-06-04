@@ -22,4 +22,12 @@ PEERDIR(
     ydb/library/yql/public/issue/protos
 )
 
+IF (CLANG AND NOT WITH_VALGRIND)
+
+    CFLAGS (
+        -DARCADIA_BUILD -DUSE_PARQUET
+    )
+
+ENDIF()
+
 END()

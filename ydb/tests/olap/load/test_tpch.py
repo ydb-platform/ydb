@@ -8,7 +8,7 @@ class TpchSuiteBase(LoadSuiteBase):
     workload_type: WorkloadType = WorkloadType.TPC_H
     iterations: int = 3
 
-    @pytest.mark.parametrize('query_num', [i for i in range(1, 22)])
+    @pytest.mark.parametrize('query_num', [i for i in range(1, 23)])
     def test_tpch(self, query_num: int):
         self.run_workload_test(f'tpch/s{self.size}/', query_num)
 

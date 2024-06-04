@@ -429,7 +429,7 @@ private:
     void Handle(TEvPQ::TEvProcessChangeOwnerRequests::TPtr& ev, const TActorContext& ctx);
     void StartProcessChangeOwnerRequests(const TActorContext& ctx);
 
-    void CommitWriteOperations(const TActorContext& ctx);
+    void CommitWriteOperations(const TTransaction& t);
 
     void HandleOnInit(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorContext& ctx);

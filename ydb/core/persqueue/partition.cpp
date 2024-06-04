@@ -1770,10 +1770,10 @@ void TPartition::ProcessCommitQueue() {
         return this->ExecUserActionOrTransaction(event, request);
     };
     while (!UserActionAndTxPendingCommit.empty()) {
+        // UserActionAndTxPendingCommit.pop_front();
         auto& front = UserActionAndTxPendingCommit.front();
-        auto& event = front.Event;
         auto state = ECommitState::Committed;
-        if (auto* tx = get_if<TSimpleSharedPtr<TTransaction>>(&event)) {
+        if (auto* tx = get_if<TSimpleSharedPtr<TTransaction>>(&front.Event)) {
             state = tx->Get()->State;
         }
         switch (state) {
@@ -1784,8 +1784,9 @@ void TPartition::ProcessCommitQueue() {
             case ECommitState::Committed:
                 break;
         }
-        std::visit(visitor, front.Event);
+        auto event = std::move(front.Event);
         UserActionAndTxPendingCommit.pop_front();
+        std::visit(visitor, event);
     }
     if (UserActionAndTxPendingCommit.empty()) {
         TxAffectedConsumers.clear();
@@ -1934,7 +1935,6 @@ bool TPartition::ExecUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t, 
             break;
     }
     const auto& ctx = ActorContext();
-    Y_ABORT_UNLESS(!UserActionAndTxPendingCommit.empty());
     if (t->ChangeConfig) {
         Y_ABORT_UNLESS(!ChangeConfig);
         Y_ABORT_UNLESS(ChangingConfig);
@@ -2037,15 +2037,14 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvProposePartitionConfig& event)
     return true;
 }
 
-/*
-Keep some commit-apply-hack-code for reference
-void TPartition::CommitWriteOperations(const TActorContext& ctx)
+void TPartition::CommitWriteOperations(const TTransaction& t)
 {
-    if (!WriteInfoResponse) {
+    if (!t.WriteInfo) {
         return;
     }
+    const auto& ctx = ActorContext();
 
-    for (auto i = WriteInfoResponse->BlobsFromHead.rbegin(); i != WriteInfoResponse->BlobsFromHead.rend(); ++i) {
+    for (auto i = t.WriteInfo->BlobsFromHead.rbegin(); i != t.WriteInfo->BlobsFromHead.rend(); ++i) {
         auto& blob = *i;
 
         TWriteMsg msg{Max<ui64>(), Nothing(), TEvPQ::TEvWrite::TMsg{
@@ -2068,16 +2067,13 @@ void TPartition::CommitWriteOperations(const TActorContext& ctx)
         }, std::nullopt};
         TMessage message(std::move(msg), ctx.Now() - TInstant::Zero());
 
-        UserActionAndTransactionEvents.emplace_front(std::move(message));
+        UserActionAndTxPendingCommit.emplace_front(std::move(message));
     }
-
-    WriteInfoResponse = nullptr;
 }
-*/
+
 void TPartition::CommitTransaction(TSimpleSharedPtr<TTransaction>& t)
 {
     const auto& ctx = ActorContext();
-    Y_ABORT_UNLESS(!UserActionAndTxPendingCommit.empty());
     if (t->Tx) {
         Y_ABORT_UNLESS(t->Predicate.Defined() && *t->Predicate);
 
@@ -2088,7 +2084,7 @@ void TPartition::CommitTransaction(TSimpleSharedPtr<TTransaction>& t)
 
             userInfo.Offset = operation.GetEnd();
         }
-
+        CommitWriteOperations(*t);
         ChangePlanStepAndTxId(t->Tx->Step, t->Tx->TxId);
         ScheduleReplyCommitDone(t->Tx->Step, t->Tx->TxId);
     } else if (t->ProposeConfig) {
@@ -2109,7 +2105,6 @@ void TPartition::RollbackTransaction(TSimpleSharedPtr<TTransaction>& t)
 {
     auto stepAndId = GetStepAndTxId(*t->Tx);
 
-    Y_ABORT_UNLESS(!UserActionAndTxPendingCommit.empty());
     auto txIter = TransactionsInflight.find(stepAndId.second);
     Y_ABORT_UNLESS(!txIter.IsEnd());
 
@@ -2298,6 +2293,7 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
     }
 }
 
+
 TString TPartition::GetKeyConfig() const
 {
     return Sprintf("_config_%u", Partition.OriginalPartitionId);
@@ -2327,7 +2323,9 @@ TPartition::EProcessResult TPartition::PreProcessImmediateTx(const NKikimrPQ::TE
     Y_ABORT_UNLESS(tx.HasData());
     THashSet<TString> consumers;
     for (auto& operation : tx.GetData().GetOperations()) {
-        Y_ABORT_UNLESS(operation.HasBegin() && operation.HasEnd() && operation.HasConsumer());
+        if (!operation.HasBegin() || !operation.HasEnd() || !operation.HasConsumer()) {
+            continue; //Write operation - handled separately via WriteInfo
+        }
 
         Y_ABORT_UNLESS(operation.GetBegin() <= (ui64)Max<i64>(), "Unexpected begin offset: %" PRIu64, operation.GetBegin());
         Y_ABORT_UNLESS(operation.GetEnd() <= (ui64)Max<i64>(), "Unexpected end offset: %" PRIu64, operation.GetEnd());
@@ -2375,7 +2373,9 @@ void TPartition::ExecImmediateTx(const TTransaction& t)
         return;
     }
     for (auto& operation : record.GetData().GetOperations()) {
-        Y_ABORT_UNLESS(operation.HasBegin() && operation.HasEnd() && operation.HasConsumer());
+        if (!operation.HasBegin() || !operation.HasEnd() || !operation.HasConsumer()) {
+            continue; //Write operation - handled separately via WriteInfo
+        }
 
         Y_ABORT_UNLESS(operation.GetBegin() <= (ui64)Max<i64>(), "Unexpected begin offset: %" PRIu64, operation.GetBegin());
         Y_ABORT_UNLESS(operation.GetEnd() <= (ui64)Max<i64>(), "Unexpected end offset: %" PRIu64, operation.GetEnd());
@@ -2415,6 +2415,8 @@ void TPartition::ExecImmediateTx(const TTransaction& t)
         }
         userInfo.Offset = operation.GetEnd();
     }
+    CommitWriteOperations(t);
+
     ScheduleReplyPropose(record,
                          NKikimrPQ::TEvProposeTransactionResult::COMPLETE,
                          NKikimrPQ::TError::OK,

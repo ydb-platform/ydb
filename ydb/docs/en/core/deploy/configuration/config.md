@@ -564,20 +564,22 @@ Node Broker is a system tablet that registers dynamic nodes in the {{ ydb-short-
 
 Node broker gives names to dynamic nodes when they register. By default, a node name consists of the hostname and the port on which the node is running.
 
-Node Broker can give *virtual* names for dynamic nodes. A virtual name identify the node within the tenant. If a dynamic node has been shut down, after a timeout, its virtual name can be taken by a new dynamic node serving the same tenant. Without using virtual names, the number of known dynamic node names in a cluster can grow infinitely if new dynamic nodes always get unique hostnames, which is common in cloud environments.
+In a dynamic environment where hostnames often change, such as in Kubernetes, using hostname and port leads to an uncontrollable increase in the number of node names. This is true even for a database with a handful of dynamic nodes. Such behavior may be undesirable for a time series monitoring system as the number of metrics grows uncontrollably. To solve this problem, the system administrator can set up *stable* node names.
 
-To enable virtual node names, you need to add the following to the cluster configuration:
+A stable name identifies a node within the tenant. It consists of a prefix and a node's sequential number within its tenant. If a dynamic node has been shut down, after a timeout, its stable name can be taken by a new dynamic node serving the same tenant.
+
+To enable stable node names, you need to add the following to the cluster configuration:
 
 ```yaml
 feature_flags:
-  enable_virtual_node_names: true
+  enable_stable_node_names: true
 ```
 
-A virtual node name consists of a prefix and a node's sequential number within its tenant. By default, the prefix is `slot-`. To override the prefix, add the following to the cluster configuration:
+By default, the prefix is `slot-`. To override the prefix, add the following to the cluster configuration:
 
 ```yaml
 node_broker_config:
-  virtual_node_name_prefix: <new prefix>
+  stable_node_name_prefix: <new prefix>
 ```
 
 ## Sample cluster configurations {#examples}

@@ -80,11 +80,11 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TPullConsumerCommand
-    : public TTypedCommand<NApi::TPullConsumerOptions>
+class TPullQueueConsumerCommand
+    : public TTypedCommand<NApi::TPullQueueConsumerOptions>
 {
 public:
-    REGISTER_YSON_STRUCT_LITE(TPullConsumerCommand);
+    REGISTER_YSON_STRUCT_LITE(TPullQueueConsumerCommand);
 
     static void Register(TRegistrar registrar);
 

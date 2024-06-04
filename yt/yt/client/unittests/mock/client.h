@@ -74,13 +74,13 @@ public:
         const TPullQueueOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<NQueueClient::IQueueRowsetPtr>, PullConsumer, (
+    MOCK_METHOD(TFuture<NQueueClient::IQueueRowsetPtr>, PullQueueConsumer, (
         const NYPath::TRichYPath& consumerPath,
         const NYPath::TRichYPath& queuePath,
         std::optional<i64> offset,
         int partitionIndex,
         const NQueueClient::TQueueRowBatchReadOptions& rowBatchReadOptions,
-        const TPullConsumerOptions& options),
+        const TPullQueueConsumerOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<void>, RegisterQueueConsumer, (

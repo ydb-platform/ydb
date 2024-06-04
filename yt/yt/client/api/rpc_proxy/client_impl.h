@@ -137,13 +137,13 @@ public:
         const NQueueClient::TQueueRowBatchReadOptions& rowBatchReadOptions,
         const TPullQueueOptions& options = {}) override;
 
-    TFuture<NQueueClient::IQueueRowsetPtr> PullConsumer(
+    TFuture<NQueueClient::IQueueRowsetPtr> PullQueueConsumer(
         const NYPath::TRichYPath& consumerPath,
         const NYPath::TRichYPath& queuePath,
         std::optional<i64> offset,
         int partitionIndex,
         const NQueueClient::TQueueRowBatchReadOptions& rowBatchReadOptions,
-        const TPullConsumerOptions& options = {}) override;
+        const TPullQueueConsumerOptions& options = {}) override;
 
     TFuture<void> RegisterQueueConsumer(
         const NYPath::TRichYPath& queuePath,

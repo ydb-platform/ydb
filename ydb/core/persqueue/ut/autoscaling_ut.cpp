@@ -620,7 +620,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             .EndConfigurePartitioningSettings();
         client.CreateTopic(TEST_TOPIC, createSettings).Wait();
 
-        auto msg = TString("a", 1_MB);
+        auto msg = TString(1_MB, 'a');
 
         auto writeSession = CreateWriteSession(client, "producer-1", 0);
         UNIT_ASSERT(writeSession->Write(Msg(msg, 1)));

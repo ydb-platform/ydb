@@ -6,6 +6,8 @@ A generalization of the NN problem is the [k-NN problem](https://en.wikipedia.or
 
 The k-NN problem solution is divided into two major subclasses of methods: exact and approximate.
 
+### Exact method
+
 The exact method is based on calculating the distance from the query point to every other point in the database. This algorithm, also known as the naive approach, has a complexity of `O(dn)`, where `n` is the number of points in the dataset, and `d` is its dimension.
 
 The advantage of the method is that there is no need for additional data structures, such as specialized vector indexes.
@@ -22,7 +24,7 @@ ORDER BY Knn::CosineDistance(embedding, $TargetEmbedding)
 LIMIT 10;
 ```
 
-Before we start to talk about approximate methods, it's important to remember that you probably needed to measure is it sufficient accuracy/recall or not.
+### Approximate methods
 
 There are a lot of approximate methods. In this document we will talk about scalar quantization.
 
@@ -32,6 +34,12 @@ So it's possible to apply scalar quantization from `Float` to one of these types
 
 Scalar quantization decrease read/write time because we need to read/write less bytes in few times.
 For an example for `Float` -> `Bit` in `32` times.
+
+{% note info %}
+
+It's important to remember that you probably needed to measure is it sufficient accuracy/recall or not.
+
+{% endnote %}
 
 ## Data types
 
@@ -46,9 +54,9 @@ Vector functions are implemented as user-defined functions (UDF) in the `Knn` mo
 
 Conversion functions are needed to serialize the vector set into an internal binary representation and vice versa.
 
-All conversation functions returns [`Tagged`](../../types/special.md) types.
+All conversation functions returns [Tagged](../../types/special.md) types.
 
-The binary representation of a vector can be persisted in a {{ ydb-short-name }} table column, {{ ydb-short-name }} doesn't support storing `Tagged` types, so user should store them as `String` type using `Untag` function.
+The binary representation of a vector can be persisted in a {{ ydb-short-name }} table column, {{ ydb-short-name }} doesn't support storing `Tagged` types, so user should store them as `String` type using [Untag](../../builtins/basic#as-tagged) function.
 
 #### Function signatures
 
@@ -174,9 +182,9 @@ VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryString
 
 ### Quantization
 
-It can be achieved with ML model or via YQL.
+Quantization can be done by ML model, or this can be done in YQL.
 
-Here examples for YQL and how to use it.
+Here examples of quantization in YQL.
 
 #### Float -> Int8
 

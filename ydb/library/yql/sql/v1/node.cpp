@@ -218,6 +218,11 @@ bool INode::Init(TContext& ctx, ISource* src) {
     return true;
 }
 
+bool INode::InitReference(TContext& ctx) {
+    Y_UNUSED(ctx);
+    return true;
+}
+
 bool INode::DoInit(TContext& ctx, ISource* src) {
     Y_UNUSED(ctx);
     Y_UNUSED(src);
@@ -600,6 +605,10 @@ void IProxyNode::DoUpdateState() const {
 
 void IProxyNode::DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const {
     Inner->VisitTree(func, visited);
+}
+
+bool IProxyNode::InitReference(TContext& ctx) {
+    return Inner->InitReference(ctx);
 }
 
 bool IProxyNode::DoInit(TContext& ctx, ISource* src) {
@@ -3279,7 +3288,7 @@ public:
 
     bool DoInit(TContext& ctx, ISource* src) final {
         Y_UNUSED(src);
-        if (!IProxyNode::DoInit(ctx, nullptr)) {
+        if (!IProxyNode::DoInit(ctx, nullptr) || !IProxyNode::InitReference(ctx)) {
             return false;
         }
 
@@ -3312,34 +3321,51 @@ TNodePtr BuildNamedExprReference(TNodePtr parent, const TString& name, TMaybe<si
     return new TNamedExprReferenceNode(parent, name, tupleIndex);
 }
 
-class TInitWithFakeSourceProxyNode: public IProxyNode {
+class TNamedExprNode: public IProxyNode {
 public:
-    TInitWithFakeSourceProxyNode(TNodePtr parent)
+    TNamedExprNode(TNodePtr parent)
         : IProxyNode(parent->GetPos(), parent)
         , FakeSource(BuildFakeSource(parent->GetPos()))
+        , Unused(BuildAtom(parent->GetPos(), "unused", TNodeFlags::Default))
+        , Referenced(false)
     {
     }
 
     bool DoInit(TContext& ctx, ISource* src) final {
+        YQL_ENSURE(!Referenced, "Refrence is initialized before named expr itself");
         Y_UNUSED(src);
+        if (ctx.ValidateUnusedExprs) {
+            return IProxyNode::DoInit(ctx, FakeSource.Get());
+        }
+        // do actual init in InitReference()
+        return true;
+    }
+
+    bool InitReference(TContext& ctx) final {
+        Referenced = true;
         return IProxyNode::DoInit(ctx, FakeSource.Get());
     }
 
     TAstNode* Translate(TContext& ctx) const override {
-        return Inner->Translate(ctx);
+        if (ctx.ValidateUnusedExprs || Referenced) {
+            return Inner->Translate(ctx);
+        }
+        return Unused->Translate(ctx);
     }
 
     TPtr DoClone() const final {
-        return new TInitWithFakeSourceProxyNode(Inner->Clone());
+        return new TNamedExprNode(Inner->Clone());
     }
 
 private:
     const TSourcePtr FakeSource;
+    const TNodePtr Unused;
+    bool Referenced;
 };
 
-TNodePtr BuildInitWithFakeSource(TNodePtr parent) {
+TNodePtr BuildNamedExpr(TNodePtr parent) {
     YQL_ENSURE(parent);
-    return new TInitWithFakeSourceProxyNode(parent);
+    return new TNamedExprNode(parent);
 }
 
 

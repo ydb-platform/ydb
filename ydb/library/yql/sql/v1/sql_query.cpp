@@ -198,10 +198,10 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 }
             } else {
                 const auto ref = Ctx.MakeName("namedexprnode");
-                blocks.push_back(BuildInitWithFakeSource(names.size() > 1 ? BuildTupleResult(nodeExpr, names.size()) : nodeExpr));
+                blocks.push_back(BuildNamedExpr(names.size() > 1 ? BuildTupleResult(nodeExpr, names.size()) : nodeExpr));
                 blocks.back()->SetLabel(ref);
                 for (size_t i = 0; i < names.size(); ++i) {
-                    nodes.push_back(BuildNamedExprReference(nodeExpr, ref, names.size() == 1 ? TMaybe<size_t>() : i));
+                    nodes.push_back(BuildNamedExprReference(blocks.back(), ref, names.size() == 1 ? TMaybe<size_t>() : i));
                 }
             }
 
@@ -2518,6 +2518,12 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disablecompactnamedexprs") {
             Ctx.CompactNamedExprs = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableCompactNamedExprs");
+        } else if (normalizedPragma == "validateunusedexprs") {
+            Ctx.ValidateUnusedExprs = true;
+            Ctx.IncrementMonCounter("sql_pragma", "ValidateUnusedExprs");
+        } else if (normalizedPragma == "disablevalidateunusedexprs") {
+            Ctx.ValidateUnusedExprs = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableValidateUnusedExprs");
         } else {
             Error() << "Unknown pragma: " << pragma;
             Ctx.IncrementMonCounter("sql_errors", "UnknownPragma");

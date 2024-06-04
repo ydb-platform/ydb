@@ -142,6 +142,7 @@ namespace NSQLTranslationV1 {
         void SetCountHint(bool isCount);
         bool GetCountHint() const;
         bool Init(TContext& ctx, ISource* src);
+        virtual bool InitReference(TContext& ctx);
 
         bool IsConstant() const;
         bool MaybeConstant() const;
@@ -338,6 +339,7 @@ namespace NSQLTranslationV1 {
     protected:
         virtual void DoUpdateState() const override;
         virtual void DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const override;
+        virtual bool InitReference(TContext& ctx) override;
         virtual bool DoInit(TContext& ctx, ISource* src) override;
 
     private:
@@ -1315,7 +1317,7 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildDoCall(TPosition pos, const TNodePtr& node);
     TNodePtr BuildTupleResult(TNodePtr tuple, size_t ensureTupleSize);
     TNodePtr BuildNamedExprReference(TNodePtr parent, const TString& name, TMaybe<size_t> tupleIndex);
-    TNodePtr BuildInitWithFakeSource(TNodePtr parent);
+    TNodePtr BuildNamedExpr(TNodePtr parent);
 
     // Implemented in aggregation.cpp
     TAggregationPtr BuildFactoryAggregation(TPosition pos, const TString& name, const TString& func, EAggregateMode aggMode, bool multi = false);

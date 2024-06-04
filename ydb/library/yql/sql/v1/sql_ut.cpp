@@ -6793,4 +6793,28 @@ Y_UNIT_TEST_SUITE(CompactNamedExprs) {
             ExpectFailWithError(req, errs[callable]);
         }
     }
+
+    Y_UNIT_TEST(ValidateUnusedNamedExprs) {
+        TString query = R"(
+            pragma warning("disable", "4527");
+            pragma CompactNamedExprs;
+            pragma ValidateUnusedExprs;
+
+            $foo = count(1);
+            select 1;
+        )";
+        ExpectFailWithError(query, "<main>:6:20: Error: Aggregation is not allowed in this context\n");
+    }
+
+    Y_UNIT_TEST(DisableValidateUnusedNamedExprs) {
+        TString query = R"(
+            pragma warning("disable", "4527");
+            pragma CompactNamedExprs;
+            pragma DisableValidateUnusedExprs;
+
+            $foo = count(1);
+            select 1;
+        )";
+        SqlToYql(query).IsOk();
+    }
 }

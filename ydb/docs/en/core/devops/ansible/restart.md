@@ -40,7 +40,7 @@ To restart a specific host or subset of hosts, use the `--limit` argument:
 
 ```bash
 ansible-playbook ydb_platform.ydb.restart --limit='<hostname>'
-ansible-playbook ydb_platform.ydb.restart --limit='<hostname-1,hosntname-2>'
+ansible-playbook ydb_platform.ydb.restart --limit='<hostname-1,hostname-2>'
 ```
 
 It can be used together with tags, too:

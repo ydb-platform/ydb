@@ -788,6 +788,7 @@ struct TEvBlobStorage {
         EvRequestProxySessionsState,
         EvProxySessionsState,
         EvBunchOfEvents,
+        EvDeadline,
 
         // blobstorage controller interface
         EvControllerRegisterNode                    = 0x10031602,

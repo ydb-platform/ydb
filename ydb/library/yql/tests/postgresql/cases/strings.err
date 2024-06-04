@@ -1,6 +1,6 @@
 Registering pre-existing tables
-	VARCHAR_TBL
 	text_tbl
+	VARCHAR_TBL
 	CHAR_TBL
 	TEXT_TBL
 	varchar_tbl
@@ -1305,7 +1305,7 @@ alter table toasttest alter column f1 set storage external;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	--
 	^
 <sql-statement>
@@ -1394,7 +1394,7 @@ ALTER TABLE toasttest set (toast_tuple_target = 4080);
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	ALTER TABLE toasttest set (toast_tuple_target = 4080);
 	^
 <sql-statement>
@@ -1452,7 +1452,7 @@ alter table toasttest alter column f1 set storage external;
 </sql-statement>
 -stdin-:<main>: Error: Parse Sql
 
-    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 244
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
     	--
 	^
 <sql-statement>

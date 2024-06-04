@@ -1,12 +1,12 @@
 #include "tx_controller.h"
-#include <ydb/core/tx/columnshard/columnshard_impl.h>
 
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
 
 namespace NKikimr::NColumnShard {
 
 TTxController::TTxController(TColumnShard& owner)
-    : Owner(owner)
-{}
+    : Owner(owner) {
+}
 
 bool TTxController::HaveOutdatedTxs() const {
     if (DeadlineQueue.empty()) {
@@ -23,9 +23,8 @@ ui64 TTxController::GetAllowedStep() const {
 }
 
 ui64 TTxController::GetMemoryUsage() const {
-    return  Operators.size() * (sizeof(TTxController::ITransactionOperator) + 24) +
-            DeadlineQueue.size() * sizeof(TPlanQueueItem) +
-            (PlanQueue.size() + RunningQueue.size()) * sizeof(TPlanQueueItem);
+    return Operators.size() * (sizeof(TTxController::ITransactionOperator) + 24) + DeadlineQueue.size() * sizeof(TPlanQueueItem) +
+           (PlanQueue.size() + RunningQueue.size()) * sizeof(TPlanQueueItem);
 }
 
 TTxController::TPlanQueueItem TTxController::GetFrontTx() const {
@@ -41,8 +40,9 @@ bool TTxController::Load(NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
 
     auto rowset = db.Table<Schema::TxInfo>().GreaterOrEqual(0).Select();
-    if (!rowset.IsReady())
+    if (!rowset.IsReady()) {
         return false;
+    }
 
     while (!rowset.EndOfSet()) {
         const ui64 txId = rowset.GetValue<Schema::TxInfo::TxId>();
@@ -78,7 +78,7 @@ bool TTxController::Load(NTabletFlatExecutor::TTransactionContext& txc) {
 
 TTxController::ITransactionOperator::TPtr TTxController::GetTxOperator(const ui64 txId) const {
     auto it = Operators.find(txId);
-    if(it == Operators.end()) {
+    if (it == Operators.end()) {
         return nullptr;
     }
     return it->second;
@@ -238,8 +238,7 @@ size_t TTxController::CleanExpiredTxs(NTabletFlatExecutor::TTransactionContext& 
                 break;
             }
             ui64 txId = it->TxId;
-            LOG_S_DEBUG(TStringBuilder() << "Removing outdated txId " << txId << " max step " << it->Step
-                << " outdated step ");
+            LOG_S_DEBUG(TStringBuilder() << "Removing outdated txId " << txId << " max step " << it->Step << " outdated step ");
             AbortTx(txId, txc);
             ++removedCount;
         }
@@ -285,8 +284,10 @@ void TTxController::OnTabletInit() {
     }
 }
 
-std::shared_ptr<TTxController::ITransactionOperator> TTxController::StartProposeOnExecute(const TTxController::TTxInfo& txInfo, const TString& txBody, NTabletFlatExecutor::TTransactionContext& txc) {
-    NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("method", "TTxController::StartProposeOnExecute")("tx_info", txInfo.DebugString());
+std::shared_ptr<TTxController::ITransactionOperator> TTxController::StartProposeOnExecute(
+    const TTxController::TTxInfo& txInfo, const TString& txBody, NTabletFlatExecutor::TTransactionContext& txc) {
+    NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("method", "TTxController::StartProposeOnExecute")(
+        "tx_info", txInfo.DebugString())("tx_info", txInfo.DebugString());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "start");
     std::shared_ptr<TTxController::ITransactionOperator> txOperator(TTxController::ITransactionOperator::TFactory::Construct(txInfo.TxKind, txInfo));
     AFL_VERIFY(!!txOperator);
@@ -298,12 +299,13 @@ std::shared_ptr<TTxController::ITransactionOperator> TTxController::StartPropose
     auto txInfoPtr = GetTxInfo(txInfo.TxId);
     if (!!txInfoPtr) {
         if (!txOperator->CheckAllowUpdate(*txInfoPtr)) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "incorrect duplication");
-            TTxController::TProposeResult proposeResult(NKikimrTxColumnShard::EResultStatus::ERROR, TStringBuilder() << "Another commit TxId# " << txInfo.TxId << " has already been proposed");
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "incorrect duplication")("actual_tx", txInfoPtr->DebugString());
+            TTxController::TProposeResult proposeResult(
+                NKikimrTxColumnShard::EResultStatus::ERROR, TStringBuilder() << "Another commit TxId# " << txInfo.TxId << " has already been proposed");
             txOperator->SetProposeStartInfo(proposeResult);
             return txOperator;
         } else {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "update duplication data");
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "update duplication data")("deprecated_tx", txInfoPtr->DebugString());
             return UpdateTxSourceInfo(txOperator->GetTxInfo(), txc);
         }
     } else {
@@ -315,7 +317,8 @@ std::shared_ptr<TTxController::ITransactionOperator> TTxController::StartPropose
             }
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "registered");
         } else {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "problem on start")("message", txOperator->GetProposeStartInfoVerified().GetStatusMessage());
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "problem on start")(
+                "message", txOperator->GetProposeStartInfoVerified().GetStatusMessage());
         }
         return txOperator;
     }
@@ -350,7 +353,7 @@ void TTxController::FinishProposeOnComplete(const ui64 txId, const TActorContext
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "cannot found txOperator in propose transaction finish")("tx_id", txId);
         return;
     }
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "start");
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "start")("tx_info", txOperator->GetTxInfo().DebugString());
     TTxController::TProposeResult proposeResult = txOperator->GetProposeStartInfoVerified();
     AFL_VERIFY(!txOperator->IsFail());
     txOperator->FinishProposeOnComplete(Owner, ctx);
@@ -362,9 +365,9 @@ void TTxController::ITransactionOperator::SwitchStateVerified(const EStatus from
     Status = to;
 }
 
-}
+}   // namespace NKikimr::NColumnShard
 
 template <>
 void Out<NKikimrTxColumnShard::ETransactionKind>(IOutputStream& out, TTypeTraits<NKikimrTxColumnShard::ETransactionKind>::TFuncParam txKind) {
-    out << (ui64) txKind;
+    out << (ui64)txKind;
 }

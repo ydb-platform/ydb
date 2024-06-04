@@ -1,0 +1,2 @@
+# Bazel remote config for {{  item.name }}, generated using ansible. Please don't modify by hand.
+{{ (bazel_remote_config_default | ansible.builtin.combine(item.config)) | to_nice_yaml }}

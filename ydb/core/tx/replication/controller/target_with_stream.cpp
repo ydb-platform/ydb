@@ -9,7 +9,9 @@ namespace NKikimr::NReplication::NController {
 
 const TString ReplicationConsumerName = "replicationConsumer";
 
-void TTargetWithStream::Progress(TReplication::TPtr replication, const TActorContext& ctx) {
+void TTargetWithStream::Progress(const TActorContext& ctx) {
+    auto replication = GetReplication();
+
     switch (GetStreamState()) {
     case EStreamState::Creating:
         if (GetStreamName().empty() && !NameAssignmentInProcess) {
@@ -30,7 +32,7 @@ void TTargetWithStream::Progress(TReplication::TPtr replication, const TActorCon
         break;
     }
 
-    TTargetBase::Progress(replication, ctx);
+    TTargetBase::Progress(ctx);
 }
 
 void TTargetWithStream::Shutdown(const TActorContext& ctx) {

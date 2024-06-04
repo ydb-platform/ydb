@@ -12,13 +12,13 @@
 
 #include <util/system/yassert.h>
 
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, LogComponent, stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, LogComponent, stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, LogComponent, stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, LogComponent, stream)
-#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, LogComponent, stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, LogComponent, stream)
-#define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, LogComponent, stream)
+#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, LogComponent, LogPrefix() << stream)
+#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, LogComponent, LogPrefix() << stream)
+#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, LogComponent, LogPrefix() << stream)
+#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, LogComponent, LogPrefix() << stream)
+#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, LogComponent, LogPrefix() << stream)
+#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, LogComponent, LogPrefix() << stream)
+#define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, LogComponent, LogPrefix() << stream)
 
 namespace NKikimr {
 
@@ -147,8 +147,10 @@ void TQueryBase::Bootstrap() {
     }
 
     if (SessionId) {
+        LOG_D("Bootstrap. Database: " << Database << ", SessionId: " << SessionId);
         RunQuery();
     } else {
+        LOG_D("Bootstrap. Database: " << Database);
         RunCreateSession();
     }
 }
@@ -182,7 +184,7 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvDataQueryResult::TPtr& ev) {
     AmountRequestsTime += TInstant::Now() - RequestStartTime;
     RunningQuery = false;
     TxId = ev->Get()->Result.tx_meta().id();
-    LOG_D("TQueryBase. TEvDataQueryResult " << ev->Get()->Status << ", Issues: \"" << ev->Get()->Issues.ToOneLineString() << "\", SessionId: " << SessionId << ", TxId: " << TxId);
+    LOG_D("TEvDataQueryResult " << ev->Get()->Status << ", Issues: \"" << ev->Get()->Issues.ToOneLineString() << "\", SessionId: " << SessionId << ", TxId: " << TxId);
     if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
         ResultSets.clear();
         ResultSets.reserve(ev->Get()->Result.result_sets_size());
@@ -231,9 +233,9 @@ void TQueryBase::Finish(Ydb::StatusIds::StatusCode status, const TString& messag
 
 void TQueryBase::Finish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues, bool rollbackOnError) {
     if (status == Ydb::StatusIds::SUCCESS) {
-        LOG_D("TQueryBase. Finish with SUCCESS, SessionId: " << SessionId << ", TxId: " << TxId);
+        LOG_D("Finish with SUCCESS, SessionId: " << SessionId << ", TxId: " << TxId);
     } else {
-        LOG_W("TQueryBase. Finish with " << status << ", Issues: " << issues.ToOneLineString() << ", SessionId: " << SessionId << ", TxId: " << TxId);
+        LOG_W("Finish with " << status << ", Issues: " << issues.ToOneLineString() << ", SessionId: " << SessionId << ", TxId: " << TxId);
     }
     Finished = true;
     OnFinish(status, std::move(issues));
@@ -329,6 +331,25 @@ void TQueryBase::CommitTransaction() {
 
 void TQueryBase::CallOnQueryResult() {
     OnQueryResult();
+}
+
+void TQueryBase::SetLogInfo(const TString& operationName, const TString& traceId) {
+    OperationName = operationName;
+    TraceId = traceId;
+}
+
+TString TQueryBase::LogPrefix() const {
+    TStringBuilder result = TStringBuilder() << "[TQueryBase] ";
+    if (Y_LIKELY(OperationName)) {
+        result << "[" << OperationName << "] ";
+    }
+    if (Y_LIKELY(TraceId)) {
+        result << "TraceId: " << TraceId << ", ";
+    }
+    if (StateDescription) {
+        result << "State: " << StateDescription << ", ";
+    }
+    return result;
 }
 
 void TQueryBase::ClearTimeInfo() {

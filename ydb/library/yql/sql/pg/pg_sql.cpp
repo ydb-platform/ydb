@@ -2503,7 +2503,7 @@ public:
 
         setItemOptions.push_back(QL(QA("result"), QVL(CreatePgStarResultItem())));
         setItemOptions.push_back(QL(QA("from"), QVL(fromList.data(), fromList.size())));
-        setItemOptions.push_back(QL(QA("join_ops"), QVL(QL())));
+        setItemOptions.push_back(QL(QA("join_ops"), QVL(QL(QL(QA("push"))))));
 
         NYql::TAstNode* lambda = nullptr;
         if (whereFilter) {
@@ -4769,18 +4769,21 @@ public:
         }
 
         auto lst = CAST_NODE(List, value->rexpr);
-        TVector<TAstNode*> listItems;
-        listItems.push_back(A("AsList"));
+
+        TVector<TAstNode*> children;
+        children.reserve(2 + ListLength(lst));
+
+        children.push_back(A("PgIn"));
+        children.push_back(lhs);
         for (int item = 0; item < ListLength(lst); ++item) {
             auto cell = ParseExpr(ListNodeNth(lst, item), settings);
             if (!cell) {
                 return nullptr;
             }
-
-            listItems.push_back(cell);
+            children.push_back(cell);
         }
 
-        auto ret = L(A("PgIn"), lhs, VL(listItems.data(), listItems.size()));
+        auto ret = VL(children.data(), children.size());
         if (op[0] == '<') {
             ret = L(A("PgNot"), ret);
         }

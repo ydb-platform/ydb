@@ -12,16 +12,16 @@
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/dq/runtime/dq_arrow_helpers.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/core/formats/arrow/serializer/abstract.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 #include <ydb/library/yql/providers/generic/proto/source.pb.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/utils.h>
 #include <ydb/library/yql/providers/generic/proto/range.pb.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/public/udf/arrow/util.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/yql_panic.h>
+#include <ydb/core/formats/arrow/serializer/abstract.h>
 
 namespace NYql::NDq {
 
@@ -269,6 +269,7 @@ namespace NYql::NDq {
             for (auto&& k : RequestedKeys) {
                 LookupResult.emplace_back(std::move(k), NUdf::TUnboxedValue{});
             }
+            RequestedKeys.clear();
             auto ev = new IDqAsyncLookupSource::TEvLookupResult(Alloc, std::move(LookupResult));
             TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(ParentId, SelfId(), ev));
             LookupResult = {};

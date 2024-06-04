@@ -253,7 +253,6 @@ private:
             if (swagger.IsNull()) {
                 auto get = path["get"];
                 get["tags"].push_back(tag);
-                get["produces"].push_back("application/json");
                 if (auto summary = handler->GetRequestSummary()) {
                     get["summary"] = summary;
                 }
@@ -263,7 +262,7 @@ private:
                 get["parameters"] = handler->GetRequestParameters();
                 auto responses = get["responses"];
                 auto response200 = responses["200"];
-                response200["schema"] = handler->GetResponseJsonSchema();
+                response200["content"]["application/json"]["schema"] = handler->GetResponseJsonSchema();
             } else {
                 path = swagger;
             }
@@ -292,13 +291,12 @@ private:
     }
 
     static TInstant GetCompileTime() {
-        static TInstant instantTime(timeval{.tv_sec = GetCompileTimeSeconds(), .tv_usec = 0});
+        static TInstant instantTime(TInstant::Seconds(GetCompileTimeSeconds()));
         return instantTime;
     }
 
     bool ReplyWithFile(NMon::TEvHttpInfo::TPtr& ev, const TString& name) {
         if (name == "/api/viewer.yaml") {
-            Cerr << "CompileTime is " << GetCompileTime() << Endl;
             Send(ev->Sender, new NMon::TEvHttpInfoRes(GetHTTPOKYAML(ev->Get(), Dump(GetSwaggerYaml()), GetCompileTime()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
             return true;
         }
@@ -322,6 +320,9 @@ private:
                 type = mimetypeByExt(filename.c_str());
             } else {
                 filename = name;
+                if (filename.StartsWith("/")) {
+                    filename.erase(0, 1);
+                }
                 if (NResource::FindExact(filename, &blob)) {
                     type = mimetypeByExt(filename.c_str());
                 }
@@ -420,12 +421,8 @@ private:
                 return;
             }
         }
-        if (path.StartsWith("counters/hosts")) {
+        if (path.StartsWith("/counters/hosts")) {
             ctx.ExecutorThread.RegisterActor(new TCountersHostsList(this, ev));
-            return;
-        }
-        if (path.StartsWith("healthcheck")) {
-            ctx.ExecutorThread.RegisterActor(new TJsonHealthCheck(this, ev));
             return;
         }
         // TODO: check path validity
@@ -434,17 +431,17 @@ private:
             if (path.StartsWith("/viewer")) {
                 path.erase(0, 7);
             }
-            if (IsMatchesWildcard(path, "monitoring*/static/js/*")
-            || IsMatchesWildcard(path, "monitoring*/static/css/*")
-            || IsMatchesWildcard(path, "monitoring*/static/media/*")
-            || IsMatchesWildcard(path, "monitoring*/static/assets/fonts/*")
-            || IsMatchesWildcard(path, "monitoring*/static/favicon.png")) {
+            if (IsMatchesWildcard(path, "/monitoring*/static/js/*")
+            || IsMatchesWildcard(path, "/monitoring*/static/css/*")
+            || IsMatchesWildcard(path, "/monitoring*/static/media/*")
+            || IsMatchesWildcard(path, "/monitoring*/static/assets/fonts/*")
+            || IsMatchesWildcard(path, "/monitoring*/static/favicon.png")) {
                 auto resPos = path.find("/static/");
                 if (resPos != TString::npos) {
-                    path = "monitoring" + path.substr(resPos);
+                    path = "/monitoring" + path.substr(resPos);
                 }
-            } else if (path.StartsWith("monitoring") && path != "monitoring/index.html") {
-                path = "monitoring/index.html";
+            } else if (path.StartsWith("/monitoring") && path != "/monitoring/index.html") {
+                 path = "/monitoring/index.html";
             }
             if (path.EndsWith('/')) {
                 path += "index.html";

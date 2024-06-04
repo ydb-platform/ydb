@@ -25,6 +25,12 @@ SRCS(
 
 END()
 
+IF (OS_WINDOWS)
+    CFLAGS(
+        -DKIKIMR_DISABLE_WINDOWS
+    )
+ENDIF()
+
 RECURSE_FOR_TESTS(
     ut
 )

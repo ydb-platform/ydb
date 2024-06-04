@@ -248,7 +248,7 @@ std::unordered_map<ui32, TPartitionGraph::Node> BuildGraph(const TCollection& pa
     return result;
 }
 
-TPartitionGraph::Node::Node(ui32 id, ui64 tabletId, const TString from, const TString& to)
+TPartitionGraph::Node::Node(ui32 id, ui64 tabletId, const TString& from, const TString& to)
     : Id(id)
     , TabletId(tabletId)
     , From(from)

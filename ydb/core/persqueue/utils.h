@@ -33,7 +33,7 @@ public:
         Node() = default;
         Node(Node&&) = default;
         Node(ui32 id, ui64 tabletId);
-        Node(ui32 id, ui64 tabletId, const TString from, const TString& to);
+        Node(ui32 id, ui64 tabletId, const TString& from, const TString& to);
 
         ui32 Id;
         ui64 TabletId;

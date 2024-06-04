@@ -33,7 +33,9 @@ private:
             , PartitionGraph(MakePartitionGraph(config))
             , MaxActivePartitions(config.GetPartitionStrategy().GetMaxPartitionCount())
             , MinActivePartitions(config.GetPartitionStrategy().GetMinPartitionCount())
-            , CurPartitions(config.AllPartitionsSize()) {
+            , CurPartitions(std::count_if(config.GetAllPartitions().begin(), config.GetAllPartitions().end(), [](auto& p) {
+                return p.GetStatus() != NKikimrPQ::ETopicPartitionStatus::Inactive;
+            })) {
         }
 
         ui64 PathId;
@@ -45,7 +47,7 @@ private:
     };
 
 public:
-    TPartitionScaleManager(const TString& topicPath, const TString& databasePath, ui64 pathId, int version, const NKikimrPQ::TPQTabletConfig& balancerConfig);
+    TPartitionScaleManager(const TString& topicPath, const TString& databasePath, ui64 pathId, int version, const NKikimrPQ::TPQTabletConfig& config);
 
 public:
     void HandleScaleStatusChange(const ui32 partition, NKikimrPQ::EScaleStatus scaleStatus, const TActorContext& ctx);

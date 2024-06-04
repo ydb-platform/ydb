@@ -11,12 +11,11 @@ TPartitionScaleManager::TPartitionScaleManager(
     const TString& databasePath,
     ui64 pathId,
     int version,
-    const NKikimrPQ::TPQTabletConfig& balancerConfig
+    const NKikimrPQ::TPQTabletConfig& config
 )
     : TopicName(topicName)
     , DatabasePath(databasePath)
-    , BalancerConfig(pathId, version, balancerConfig) {
-
+    , BalancerConfig(pathId, version, config) {
     }
 
 void TPartitionScaleManager::HandleScaleStatusChange(const ui32 partitionId, NKikimrPQ::EScaleStatus scaleStatus, const TActorContext& ctx) {

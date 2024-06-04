@@ -202,6 +202,7 @@ std::vector<TGenStep> TBlobManager::FindNewGCBarriers() {
     if (AllocatedGenSteps.empty()) {
         return { TGenStep(CurrentGen, CurrentStep) };
     }
+    result.emplace_back(LastCollectedGenStep);
     for (auto& allocated : AllocatedGenSteps) {
         AFL_VERIFY(allocated->GenStep > newCollectGenStep);
         if (!allocated->Finished()) {

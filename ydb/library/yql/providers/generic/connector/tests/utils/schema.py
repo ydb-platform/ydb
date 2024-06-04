@@ -22,8 +22,8 @@ class DataSourceType:
     ydb: Ydb.Type = None
 
     def pick(self, kind: EDataSourceKind.ValueType) -> str:
-        target = None
-        match kind:
+        target = None  
+        match kind: 
             case EDataSourceKind.CLICKHOUSE:
                 target = self.ch
             case EDataSourceKind.POSTGRESQL:
@@ -78,7 +78,7 @@ class Column:
 
     @staticmethod
     def __parse_primitive_type(src: str) -> ydb_value.Type.PrimitiveTypeId:
-        match src:
+        match src:  # TODO: JSON?
             case "Bool":
                 return ydb_value.Type.BOOL
             case "Utf8":

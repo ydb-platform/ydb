@@ -125,6 +125,7 @@ private:
     static constexpr ui64 GC_INTERVAL_SECONDS_DEFAULT = 60;
 
 private:
+    class TGCContext;
     const TTabletId SelfTabletId;
     TIntrusivePtr<TTabletStorageInfo> TabletInfo;
     const ui32 CurrentGen;
@@ -145,6 +146,7 @@ private:
 
     // The Gen:Step that has been acknowledged by the Distributed Storage
     TGenStep LastCollectedGenStep = {0, 0};
+    TGenStep GCBarrierPreparation = { 0, 0 };
 
     // The barrier in the current in-flight GC request(s)
     bool FirstGC = true;
@@ -158,6 +160,8 @@ private:
     TInstant PreviousGCTime; // Used for delaying next GC if there are too few blobs to collect
 
     virtual void DoSaveBlobBatch(TBlobBatch&& blobBatch, IBlobManagerDb& db) override;
+    void DrainDeleteTo(const TGenStep& dest, TGCContext& gcContext);
+    void DrainKeepTo(const TGenStep& dest, TGCContext& gcContext);
 public:
     TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, const ui32 gen, const TTabletId selfTabletId);
 
@@ -197,6 +201,9 @@ public:
 
     void OnGCFinishedOnExecute(const TGenStep& genStep, IBlobManagerDb& db);
     void OnGCFinishedOnComplete(const TGenStep& genStep);
+
+    void OnGCStartOnExecute(const TGenStep& genStep, IBlobManagerDb& db);
+    void OnGCStartOnComplete(const TGenStep& genStep);
 
     TBlobManagerCounters GetCountersUpdate() {
         TBlobManagerCounters res = CountersUpdate;

@@ -81,6 +81,8 @@ struct Schema : NIceDb::Schema {
         LastCompletedStep = 13,
         LastCompletedTxId = 14,
         LastNormalizerSequentialId = 15,
+        GCBarrierPreparationGen = 16,
+        GCBarrierPreparationStep = 17
     };
 
     enum class EInsertTableIds : ui8 {

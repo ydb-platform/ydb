@@ -6,16 +6,34 @@ namespace NKikimr::NOlap {
 
 using namespace NKikimr::NColumnShard;
 
+bool TBlobManagerDb::LoadGCBarrierPreparation(TGenStep& genStep) {
+    ui64 gen = 0;
+    ui64 step = 0;
+    NIceDb::TNiceDb db(Database);
+    if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::GCBarrierPreparationGen, gen) ||
+        !Schema::GetSpecialValueOpt(db, Schema::EValueIds::GCBarrierPreparationStep, step))
+    {
+        return false;
+    }
+    genStep = TGenStep(gen, step);
+    return true;
+}
+
+void TBlobManagerDb::SaveGCBarrierPreparation(const TGenStep& genStep) {
+    NIceDb::TNiceDb db(Database);
+    Schema::SaveSpecialValue(db, Schema::EValueIds::GCBarrierPreparationGen, std::get<0>(genStep));
+    Schema::SaveSpecialValue(db, Schema::EValueIds::GCBarrierPreparationStep, std::get<1>(genStep));
+}
+
 bool TBlobManagerDb::LoadLastGcBarrier(TGenStep& lastCollectedGenStep) {
     NIceDb::TNiceDb db(Database);
     ui64 gen = 0;
     ui64 step = 0;
     if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastGcBarrierGen, gen) ||
-        !Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastGcBarrierStep, step))
-    {
+        !Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastGcBarrierStep, step)) {
         return false;
     }
-    lastCollectedGenStep = {gen, step};
+    lastCollectedGenStep = { gen, step };
     return true;
 }
 

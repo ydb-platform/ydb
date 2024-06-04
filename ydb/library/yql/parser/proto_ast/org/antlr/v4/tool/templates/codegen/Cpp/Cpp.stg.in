@@ -246,12 +246,54 @@ bool <lexer.name>::sempred(RuleContext *context, size_t ruleIndex, size_t predic
 
 <sempredFuncs.values; separator="\n">
 
-void <lexer.name>::initialize() {
-#if ANTLR4_USE_THREAD_LOCAL_CACHE
-  <lexer.grammarName; format = "lower">LexerInitialize();
-#else
-  ::antlr4::internal::call_once(<lexer.grammarName; format = "lower">LexerOnceFlag, <lexer.grammarName; format = "lower">LexerInitialize);
-#endif
+// Static vars and initialization.
+std::vector\<dfa::DFA> <lexer.name>::_decisionToDFA;
+atn::PredictionContextCache <lexer.name>::_sharedContextCache;
+
+// We own the ATN which in turn owns the ATN states.
+atn::ATN <lexer.name>::_atn;
+std::vector\<uint16_t> <lexer.name>::_serializedATN;
+
+std::vector\<std::string> <lexer.name>::_ruleNames = {
+  <lexer.ruleNames: {r | "<r>"}; separator = ", ", wrap, anchor>
+};
+
+std::vector\<std::string> <lexer.name>::_channelNames = {
+  "DEFAULT_TOKEN_CHANNEL", "HIDDEN"<if (lexer.channels)>, <lexer.channels: {c | u8"<c>"}; separator = ", ", wrap, anchor><endif>
+};
+
+std::vector\<std::string> <lexer.name>::_modeNames = {
+  <lexer.modes: {m | "<m>"}; separator = ", ", wrap, anchor>
+};
+
+std::vector\<std::string> <lexer.name>::_literalNames = {
+  <lexer.literalNames: {t | <t>}; null = "\"\"", separator = ", ", wrap, anchor>
+};
+
+std::vector\<std::string> <lexer.name>::_symbolicNames = {
+  <lexer.symbolicNames: {t | <t>}; null = "\"\"", separator = ", ", wrap, anchor>
+};
+
+dfa::Vocabulary <lexer.name>::_vocabulary(_literalNames, _symbolicNames);
+
+std::vector\<std::string> <lexer.name>::_tokenNames;
+
+<lexer.name>::Initializer::Initializer() {
+  // This code could be in a static initializer lambda, but VS doesn't allow access to private class members from there.
+	for (size_t i = 0; i \< _symbolicNames.size(); ++i) {
+		std::string name = _vocabulary.getLiteralName(i);
+		if (name.empty()) {
+			name = _vocabulary.getSymbolicName(i);
+		}
+
+		if (name.empty()) {
+			_tokenNames.push_back("\<INVALID>");
+		} else {
+      _tokenNames.push_back(name);
+    }
+	}
+
+  <atn>
 }
 >>
 
@@ -673,33 +715,57 @@ CodeBlockForAlt(currentAltCodeBlock, locals, preamble, ops) ::= <<
 
 LL1AltBlockHeader(choice, preamble, alts, error) ::= "<! Required to exist, but unused. !>"
 LL1AltBlock(choice, preamble, alts, error) ::= <<
-setState(<choice.stateNumber>);
-_errHandler->sync(this);
-<! TODO: untested !><if (choice.label)>LL1AltBlock(choice, preamble, alts, error) <labelref(choice.label)> = _input->LT(1);<endif>
-<preamble; separator="\n">
-switch (_input->LA(1)) {
-  <choice.altLook, alts: {look, alt | <cases(tokens = look)> {
-  <alt>
-  break;
-\}
-}; separator = "\n">
-default:
-  <error>
+{ // LL1AltBlock
+  setState(<choice.stateNumber>);
+  _errHandler->sync(this);
+  <! TODO: untested !><if (choice.label)>LL1AltBlock(choice, preamble, alts, error) <labelref(choice.label)> = _input->LT(1);<endif>
+  <preamble; separator="\n">
+  // LL1AltBlock protobuf stuff
+  auto global_parent = parent;
+  auto parent = global_parent->MutableBlock<elemId>();
+  // protobuf end
+  switch (_input->LA(1)) {
+    <choice.altLook, alts: {look, alt | <cases(ttypes = look)> {
+    <if(rest(alts))><if(alt)>
+    // LL1AltBlock protobuf stuff
+    auto global_parent = parent;
+    auto parent = global_parent->MutableAlt<i>();
+    // protobuf end
+    <endif><endif>
+    <alt>
+    break;
+  \}
+  }; separator = "\n">
+  default:
+    <error>
+  }
 }
 >>
 
 LL1OptionalBlockHeader(choice, alts, error) ::= "<! Required but unused. !>"
 LL1OptionalBlock(choice, alts, error) ::= <<
-setState(<choice.stateNumber>);
-_errHandler->sync(this);
-switch (_input->LA(1)) {
-  <choice.altLook, alts: {look, alt | <cases(tokens = look)> {
-  <alt>
-  break;
-\}
-}; separator="\n">
-default:
-  break;
+{ // LL1OptionalBlock
+  setState(<choice.stateNumber>);
+  _errHandler->sync(this);
+  // LL1OptionalBlock protobuf stuff
+  auto global_parent = parent;
+  auto parent = global_parent->MutableBlock<elemId>();
+  // protobuf end
+  switch (_input->LA(1)) {
+    <choice.altLook, alts: {look, alt | <cases(ttypes = look)> {
+    <if(rest(alts))><if(alt)>
+    // LL1OptionalBlock protobuf stuff
+    auto global_parent = parent;
+    auto parent = global_parent->MutableAlt<i>();
+    // protobuf end
+    <endif><endif>
+    <alt>
+    break;
+  \}
+  }; separator="\n">
+  default:
+    break;
+  \}
 }
 >>
 
@@ -744,34 +810,58 @@ do {
 
 AltBlockHeader(choice, preamble, alts, error) ::= "<! Unused but must be present. !>"
 AltBlock(choice, preamble, alts, error) ::= <<
-setState(<choice.stateNumber>);
-_errHandler->sync(this);
-<! TODO: untested !><if (choice.label)><labelref(choice.label)> = _input->LT(1);<endif>
-<! TODO: untested !><preamble; separator = "\n">
-switch (getInterpreter\<atn::ParserATNSimulator>()->adaptivePredict(_input, <choice.decision>, _ctx)) {
-<alts: {alt | case <i>: {
-  <alt>
-  break;
-\}
-}; separator="\n">
-default:
-  break;
+{ // AltBlock
+  setState(<choice.stateNumber>);
+  _errHandler->sync(this);
+  <! TODO: untested !><if (choice.label)><labelref(choice.label)> = _input->LT(1);<endif>
+  <! TODO: untested !><preamble; separator = "\n">
+  // AltBlock protobuf stuff
+  auto global_parent = parent;
+  auto parent = global_parent->MutableBlock<elemId>();
+  // protobuf end
+  switch (getInterpreter\<atn::ParserATNSimulator>()->adaptivePredict(_input, <choice.decision>, _ctx)) {
+  <alts: {alt | case <i>: {
+    <if(rest(alts))><if(alt)>
+    // AltBlock protobuf stuff
+    auto global_parent = parent;
+    auto parent = global_parent->MutableAlt<i>();
+    // protobuf end
+    <endif><endif>
+    <alt>
+    break;
+  \}
+  }; separator="\n">
+  default:
+    break;
+  }
 }
 >>
 
 OptionalBlockHeader(choice, alts, error) ::= "<! Unused but must be present. !>"
 OptionalBlock(choice, alts, error) ::= <<
-setState(<choice.stateNumber>);
-_errHandler->sync(this);
+{ // OptionalBlock
+  setState(<choice.stateNumber>);
+  _errHandler->sync(this);
 
-switch (getInterpreter\<atn::ParserATNSimulator>()->adaptivePredict(_input, <choice.decision>, _ctx)) {
-<alts: {alt | case <i><if (!choice.ast.greedy)> + 1<endif>: {
-  <alt>
-  break;
-\}
-}; separator = "\n">
-default:
-  break;
+  // OptionalBlock protobuf stuff
+  auto global_parent = parent;
+  auto parent = global_parent->MutableBlock<elemId>();
+  // protobuf end
+  switch (getInterpreter\<atn::ParserATNSimulator>()->adaptivePredict(_input, <choice.decision>, _ctx)) {
+  <alts: {alt | case <i><if (!choice.ast.greedy)> + 1<endif>: {
+    <if(rest(alts))><if(alt)>
+    // OptionalBlock protobuf stuff
+    auto global_parent = parent;
+    auto parent = global_parent->MutableAlt<i>();
+    // protobuf end
+    <endif><endif>
+    <alt>
+    break;
+  \}
+  }; separator = "\n">
+  default:
+    break;
+  }
 }
 >>
 
@@ -851,14 +941,29 @@ cases(tokens) ::= <<
 
 InvokeRuleHeader(r, argExprsChunks) ::= "InvokeRuleHeader"
 InvokeRule(r, argExprsChunks) ::= <<
-setState(<r.stateNumber>);
-<if(r.labels)><r.labels: {l | <labelref(l)> = }><endif><r.escapedName>(<if(r.ast.options.p)><r.ast.options.p><if(argExprsChunks)>,<endif><endif><argExprsChunks>);
+{
+  setState(<r.stateNumber>);
+  auto res = <if(r.labels)><r.labels: {l | <labelref(l)> = }><endif><r.name>(<if(r.ast.options.p)><r.ast.options.p><if(argExprsChunks)>,<endif><endif><argExprsChunks>);
+  Y_ASSERT(dynamic_cast\<@ANTLR_PACKAGE_NAME@::TRule_<r.name>* >(res));
+  Y_ABORT_UNLESS(parent, "Parent is null");
+  parent->unsafe_arena_set_allocated_rule_<r.name><elemId>(static_cast\<@ANTLR_PACKAGE_NAME@::TRule_<r.name>* >(res));
+\}
 >>
 
 MatchTokenHeader(m) ::= "<! Required but unused. !>"
 MatchToken(m) ::= <<
-setState(<m.stateNumber>);
-<if (m.labels)><m.labels: {l | <labelref(l)> = }><endif>match(<parser.name>::<m.escapedName>);
+{
+  setState(<m.stateNumber>);
+  auto token = <if (m.labels)><m.labels: {l | <labelref(l)> = }><endif>match(<parser.name>::<m.name>);
+  if (token) {
+    Y_ABORT_UNLESS(parent, "Parent is null");
+    parent->MutableToken<elemId>()->SetId(token->getType());
+    parent->MutableToken<elemId>()->SetLine(token->getLine());
+    parent->MutableToken<elemId>()->SetColumn(token->getCharPositionInLine());
+    parent->MutableToken<elemId>()->SetElement(<elemId>);
+    parent->MutableToken<elemId>()->SetValue(token->getText().c_str());
+  }
+}
 >>
 
 MatchSetHeader(m, expr, capture) ::= "<! Required but unused. !>"

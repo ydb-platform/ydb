@@ -64,7 +64,7 @@ bool ArrowToYdbType(Ydb::Type& resType, const arrow::DataType& type) {
         resType.set_type_id(Ydb::Type::STRING);
         return true;
     case arrow::Type::DATE32:
-        resType.set_type_id(Ydb::Type::DATE32);
+        resType.set_type_id(Ydb::Type::DATE);
         return true;
     case arrow::Type::DATE64: // TODO: is it true?
         resType.set_type_id(Ydb::Type::DATETIME64);

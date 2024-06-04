@@ -194,10 +194,14 @@ namespace NYql::NDqs {
 
             void OnQueryStatus(TEvQueryStatus::TPtr& ev, const TActorContext& ctx) {
                 Y_UNUSED(ev); Y_UNUSED(ctx);
-                auto response = MakeHolder<TEvQueryStatusResponse>();
-                auto* r = response->Record.MutableResponse();
-                r->SetStatus("Executing");
-                this->Send(ev->Sender, response.Release());
+                if (!ExecuterActorId) {
+                    auto response = MakeHolder<TEvQueryStatusResponse>();
+                    auto* r = response->Record.MutableResponse();
+                    r->SetStatus("Awaiting");
+                    this->Send(ev->Sender, response.Release());
+                } else {
+                    ctx.Send(ev->Forward(ExecuterActorId)); 
+                }
             }
 
             void OnReturnResult(TEvQueryResponse::TPtr& ev, const NActors::TActorContext& ctx) {
@@ -260,6 +264,7 @@ namespace NYql::NDqs {
             const TString Username;
             TPromise<void> Promise;
             const TInstant RequestStartTime = TInstant::Now();
+            TActorId ExecuterActorId;
 
             TDqConfiguration::TPtr Settings = MakeIntrusive<TDqConfiguration>();
 
@@ -388,7 +393,7 @@ namespace NYql::NDqs {
                 YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__;
                 MergeTaskMetas(params);
 
-                auto executerId = RegisterChild(NDq::MakeDqExecuter(MakeWorkerManagerActorID(SelfId().NodeId()), SelfId(), TraceId, Username, Settings, Counters, RequestStartTime, false, ExecutionTimeout));
+                ExecuterActorId = RegisterChild(NDq::MakeDqExecuter(MakeWorkerManagerActorID(SelfId().NodeId()), SelfId(), TraceId, Username, Settings, Counters, RequestStartTime, false, ExecutionTimeout));
 
                 TVector<TString> columns;
                 columns.reserve(Request->GetColumns().size());
@@ -406,7 +411,7 @@ namespace NYql::NDqs {
                 }
                 auto resultId = RegisterChild(NExecutionHelpers::MakeResultAggregator(
                     columns,
-                    executerId,
+                    ExecuterActorId,
                     TraceId,
                     secureParams,
                     Settings,
@@ -414,8 +419,8 @@ namespace NYql::NDqs {
                     Request->GetDiscard(),
                     GraphExecutionEventsActorId).Release());
                 auto controlId = Settings->EnableComputeActor.Get().GetOrElse(false) == false ? resultId
-                    :  RegisterChild(NYql::MakeTaskController(TraceId, executerId, resultId, Settings, NYql::NCommon::TServiceCounters(Counters, nullptr, ""), TDuration::Seconds(5)).Release());
-                Send(executerId, MakeHolder<TEvGraphRequest>(
+                    :  RegisterChild(NYql::MakeTaskController(TraceId, ExecuterActorId, resultId, Settings, NYql::NCommon::TServiceCounters(Counters, nullptr, ""), TDuration::Seconds(5)).Release());
+                Send(ExecuterActorId, MakeHolder<TEvGraphRequest>(
                     *Request,
                     controlId,
                     resultId));

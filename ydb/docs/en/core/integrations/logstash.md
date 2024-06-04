@@ -58,9 +58,9 @@ This plugin allows to store the Logstash events stream in {{ ydb-short-name }} t
 
 The plugin configuration is making by adding `ydb_storage` block in `output` section of Logstash pipeline [config file](https://www.elastic.co/guide/en/logstash/current/configuration.html). The plugin supports standard set of [connection parameters](#configure-ydb-connection) and a few additional options:
 
-* `table_name` - required name of a destination table
-* `uuid_column` - optional name of column which the plugin will use for storing of auto generated identifier
-* `timestamp_column` - optional name of column which the plugin will use for storing the timestamp of event
+* `table_name` — required name of a destination table
+* `uuid_column` — optional name of column which the plugin will use for storing of auto generated identifier
+* `timestamp_column` — optional name of column which the plugin will use for storing the timestamp of event
 
 {% note warning %}
 
@@ -144,9 +144,9 @@ This plugin allows to read events from the {{ ydb-short-name }} [topic](../conce
 
 The plugin configuration is making by adding `ydb_topic` block to the `input` section of Logstash pipeline [config](https://www.elastic.co/guide/en/logstash/current/configuration.html).The plugin supports standard set of [connection parameters](#configure-ydb-connection) and a few additional options:
 
-* `topic_path` - required the full path of the topic for reading;
-* `consumer_name` - required the name of the topic [consumer](../concepts/topic.md#consumer);
-* `schema` - optional mode of the processing of the {{ ydb-short-name }} events. By default the plugin reads and sent the message as binary data, but if you specify `JSON` mode - every message will be parsed as JSON object.
+* `topic_path` — required the full path of the topic for reading;
+* `consumer_name` — required the name of the topic [consumer](../concepts/topic.md#consumer);
+* `schema` — optional mode of the processing of the {{ ydb-short-name }} events. By default the plugin reads and sent the message as binary data, but if you specify `JSON` mode - every message will be parsed as JSON object.
 
 ### Example of usage
 
@@ -212,7 +212,7 @@ This plugin allows to write `Logstash` event to the {{ ydb-short-name }} [topic]
 
 The plugin configuration is making by adding `ydb_topic` block to the `output` section of Logstash pipeline [config](https://www.elastic.co/guide/en/logstash/current/configuration.html).The plugin supports standard set of [connection parameters](#configure-ydb-connection) and a few additional options:
 
-* `topic_path` - required the full path of the topic for writing.
+* `topic_path` — required the full path of the topic for writing.
 
 ### Example of usage
 

@@ -142,6 +142,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         Self->PersistCreateExport(db, exportInfo);
 
         exportInfo->State = TExportInfo::EState::CreateExportDir;
+        exportInfo->StartTime = TAppData::TimeProvider->Now();
         Self->PersistExportState(db, exportInfo);
 
         Self->Exports[id] = exportInfo;
@@ -485,6 +486,10 @@ private:
 
             CancelTransferring(exportInfo, i);
         }
+
+        if (exportInfo->State == EState::Cancelled) {
+            exportInfo->EndTime = TAppData::TimeProvider->Now();
+        }
     }
 
     TMaybe<TString> GetIssues(const TPathId& itemPathId, TTxId backupTxId) {
@@ -579,6 +584,10 @@ private:
 
                     Self->PersistExportItemState(db, exportInfo, itemIdx);
                 }
+            }
+
+            if (exportInfo->State == EState::Cancelled) {
+                exportInfo->EndTime = TAppData::TimeProvider->Now();
             }
 
             Self->PersistExportState(db, exportInfo);
@@ -804,6 +813,7 @@ private:
 
                     exportInfo->Issue = record.GetReason();
                     exportInfo->State = EState::Cancelled;
+                    exportInfo->EndTime = TAppData::TimeProvider->Now();
                 }
 
                 Self->PersistExportState(db, exportInfo);
@@ -948,6 +958,7 @@ private:
             } else {
                 if (AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
                     exportInfo->State = EState::Done;
+                    exportInfo->EndTime = TAppData::TimeProvider->Now();
                 }
             }
 

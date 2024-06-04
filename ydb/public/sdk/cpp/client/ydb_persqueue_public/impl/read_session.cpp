@@ -204,7 +204,7 @@ void TReadSession::CreateClusterSessionsImpl(TDeferredActions& deferred) {
             SessionId,
             clusterName,
             Log,
-            [](TDuration, std::function<void()>){},  // Callback scheduler, used by TDirectReadSession only.
+            Connections,
             subclient->CreateReadSessionConnectionProcessorFactory(),
             EventsQueue,
             context,

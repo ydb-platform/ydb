@@ -231,7 +231,7 @@ TSingleClusterReadSessionImpl<UseMigrationProtocol>::TSingleClusterReadSessionIm
     const TString& sessionId,
     const TString& clusterName,
     const TLog& log,
-    std::function<void(TDuration delay, std::function<void()> callback)> scheduleCallback,
+    std::shared_ptr<IInternalClient> connections,
     std::shared_ptr<IReadSessionConnectionProcessorFactory<UseMigrationProtocol>> connectionFactory,
     std::shared_ptr<TReadSessionEventsQueue<UseMigrationProtocol>> eventsQueue,
     NYdbGrpc::IQueueClientContextPtr clientContext,
@@ -246,7 +246,7 @@ TSingleClusterReadSessionImpl<UseMigrationProtocol>::TSingleClusterReadSessionIm
     , Log(log)
     , NextPartitionStreamId(partitionStreamIdStart)
     , PartitionStreamIdStep(partitionStreamIdStep)
-    , ScheduleCallback(scheduleCallback)
+    , Connections(connections)
     , ConnectionFactory(std::move(connectionFactory))
     , DirectConnectionFactory(std::move(directConnectionFactory))
     , EventsQueue(std::move(eventsQueue))

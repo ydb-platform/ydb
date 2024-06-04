@@ -16,6 +16,8 @@
 add_library(providers-s3-common)
 
 target_compile_options(providers-s3-common PRIVATE
+  -DARCADIA_BUILD
+  -DUSE_PARQUET
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 

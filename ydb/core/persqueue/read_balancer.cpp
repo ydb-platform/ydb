@@ -503,9 +503,9 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
 
     if (SplitMergeEnabled(TabletConfig)) {
         if (!PartitionsScaleManager) {
-            PartitionsScaleManager = std::make_unique<TPartitionScaleManager>(Topic, DatabasePath, record);
+            PartitionsScaleManager = std::make_unique<TPartitionScaleManager>(Topic, DatabasePath, PathId, Version, TabletConfig);
         } else {
-            PartitionsScaleManager->UpdateBalancerConfig(record);
+            PartitionsScaleManager->UpdateBalancerConfig(PathId, Version, TabletConfig);
         }
     }
 
@@ -533,13 +533,10 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
         if (it == PartitionsInfo.end()) {
             Y_ABORT_UNLESS(p.GetPartition() >= prevNextPartitionId && p.GetPartition() < NextPartitionId || NextPartitionId == 0);
 
-            partitionsInfo[p.GetPartition()] = {p.GetTabletId(), {}};
-            if (SplitMergeEnabled(TabletConfig) && p.HasKeyRange()) {
-                partitionsInfo[p.GetPartition()].KeyRange.DeserializeFromProto(p.GetKeyRange());
-            }
+            partitionsInfo[p.GetPartition()] = {p.GetTabletId()};
 
             newPartitionsIds.push_back(p.GetPartition());
-            newPartitions.push_back(TPartInfo{p.GetPartition(), p.GetTabletId(), 0, partitionsInfo[p.GetPartition()].KeyRange});
+            newPartitions.push_back(TPartInfo{p.GetPartition(), p.GetTabletId(), 0, p.GetKeyRange()});
 
             ++NumActiveParts;
 
@@ -701,11 +698,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
         }
 
         if (SplitMergeEnabled(TabletConfig) && PartitionsScaleManager) {
-            TPartitionScaleManager::TPartitionInfo scalePartitionInfo = {
-                .Id = partitionId,
-                .KeyRange = PartitionsInfo[partitionId].KeyRange
-            };
-            PartitionsScaleManager->HandleScaleStatusChange(scalePartitionInfo, partRes.GetScaleStatus(), ctx);
+            PartitionsScaleManager->HandleScaleStatusChange(partitionId, partRes.GetScaleStatus(), ctx);
         }
 
         AggregatedStats.AggrStats(partitionId, partRes.GetPartitionSize(), partRes.GetUsedReserveSize());
@@ -1248,17 +1241,13 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr&
         return;
     }
     auto& record = ev->Get()->Record;
-    auto partitionInfoIt = PartitionsInfo.find(record.GetPartitionId());
-    if (partitionInfoIt == PartitionsInfo.end()) {
+    auto* node = PartitionGraph.GetPartition(record.GetPartitionId());
+    if (!node) {
         return;
     }
 
     if (PartitionsScaleManager) {
-        TPartitionScaleManager::TPartitionInfo scalePartitionInfo = {
-            .Id = record.GetPartitionId(),
-            .KeyRange = partitionInfoIt->second.KeyRange
-        };
-        PartitionsScaleManager->HandleScaleStatusChange(scalePartitionInfo, record.GetScaleStatus(), ctx);
+        PartitionsScaleManager->HandleScaleStatusChange(record.GetPartitionId(), record.GetScaleStatus(), ctx);
     }
 }
 

@@ -21,24 +21,19 @@ namespace NKikimr {
 namespace NPQ {
 
 class TPartitionScaleManager {
-
-public:
-    struct TPartitionInfo {
-        ui32 Id;
-        NSchemeShard::TTopicTabletInfo::TKeyRange KeyRange;
-    };
-
 private:
     struct TBalancerConfig {
         TBalancerConfig(
-            NKikimrPQ::TUpdateBalancerConfig& config
+            ui64 pathId,
+            int version,
+            const NKikimrPQ::TPQTabletConfig& config
         )
-            : PathId(config.GetPathId())
-            , PathVersion(config.GetVersion())
+            : PathId(pathId)
+            , PathVersion(version)
             , PartitionGraph(MakePartitionGraph(config))
-            , MaxActivePartitions(config.GetTabletConfig().GetPartitionStrategy().GetMaxPartitionCount())
-            , MinActivePartitions(config.GetTabletConfig().GetPartitionStrategy().GetMinPartitionCount())
-            , CurPartitions(config.PartitionsSize()) {
+            , MaxActivePartitions(config.GetPartitionStrategy().GetMaxPartitionCount())
+            , MinActivePartitions(config.GetPartitionStrategy().GetMinPartitionCount())
+            , CurPartitions(config.AllPartitionsSize()) {
         }
 
         ui64 PathId;
@@ -50,13 +45,13 @@ private:
     };
 
 public:
-    TPartitionScaleManager(const TString& topicPath, const TString& databasePath, NKikimrPQ::TUpdateBalancerConfig& balancerConfig);
+    TPartitionScaleManager(const TString& topicPath, const TString& databasePath, ui64 pathId, int version, const NKikimrPQ::TPQTabletConfig& balancerConfig);
 
 public:
-    void HandleScaleStatusChange(const TPartitionInfo& partition, NKikimrPQ::EScaleStatus scaleStatus, const TActorContext& ctx);
+    void HandleScaleStatusChange(const ui32 partition, NKikimrPQ::EScaleStatus scaleStatus, const TActorContext& ctx);
     void HandleScaleRequestResult(TPartitionScaleRequest::TEvPartitionScaleRequestDone::TPtr& ev, const TActorContext& ctx);
     void TrySendScaleRequest(const TActorContext& ctx);
-    void UpdateBalancerConfig(NKikimrPQ::TUpdateBalancerConfig& config);
+    void UpdateBalancerConfig(ui64 pathId, int version, const NKikimrPQ::TPQTabletConfig& config);
     void UpdateDatabasePath(const TString& dbPath);
     void Die(const TActorContext& ctx);
 
@@ -79,7 +74,7 @@ private:
     TDuration RequestTimeout = TDuration::MilliSeconds(0);
     TInstant LastResponseTime = TInstant::Zero();
 
-    std::unordered_map<ui64, TPartitionInfo> PartitionsToSplit;
+    std::unordered_set<ui32> PartitionsToSplit;
 
     TBalancerConfig BalancerConfig;
     bool RequestInflight = false;

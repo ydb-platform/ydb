@@ -58,6 +58,10 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
                         Self->Consumers[consumer.GetName()];
                     }
                     Self->PartitionGraph = MakePartitionGraph(Self->TabletConfig);
+
+                    if (SplitMergeEnabled(Self->TabletConfig)) {
+                        Self->PartitionsScaleManager = std::make_unique<TPartitionScaleManager>(Self->Topic, Self->DatabasePath, Self->PathId, Self->Version, Self->TabletConfig);
+                    }
                     Self->UpdateConfigCounters();
                 }
                 Self->Inited = true;
@@ -71,7 +75,7 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
                 ui32 part = partsRowset.GetValue<Schema::Partitions::Partition>();
                 ui64 tabletId = partsRowset.GetValue<Schema::Partitions::TabletId>();
 
-                partitionsInfo[part] = {tabletId, {}};
+                partitionsInfo[part] = {tabletId};
                 Self->AggregatedStats.AggrStats(part, partsRowset.GetValue<Schema::Partitions::DataSize>(),
                                                 partsRowset.GetValue<Schema::Partitions::UsedReserveSize>());
 

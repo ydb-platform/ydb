@@ -173,9 +173,9 @@ private:
                 this->TenantInfo = executer.State;
 
                 if (refreshed) {
-                    CPC_LOG_AS_D(*actorSystem, "LOADED TenantInfo: State CHANGED at " << this->TenantInfo->StateTime);
+                    CPC_LOG_D("LOADED TenantInfo: State CHANGED at " << this->TenantInfo->StateTime);
                 } else {
-                    CPC_LOG_AS_T(*actorSystem, "LOADED TenantInfo: State NOT changed");
+                    CPC_LOG_T("LOADED TenantInfo: State NOT changed");
                 }
 
                 if (refreshed) {

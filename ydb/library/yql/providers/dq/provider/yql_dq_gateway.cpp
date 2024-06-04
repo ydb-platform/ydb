@@ -206,7 +206,7 @@ public:
 
         Service.DoRequest<TRequest, TResponse>(queryPB, callback, stub);
 
-        ScheduleQueryStatusRequest(progressWriter);
+        MaybeScheduleQueryStatusRequest(progressWriter);
 
         return promise.GetFuture().Apply([=](const TFuture<TResult>& result) {
             if (result.HasException()) {
@@ -328,8 +328,9 @@ public:
     }
 
     void OnRequestQueryStatus(const TDqProgressWriter& progressWriter, const TString& status, bool ok) {
+        StatusRequestScheduled.clear();
         if (ok) {
-            ScheduleQueryStatusRequest(progressWriter);
+            MaybeScheduleQueryStatusRequest(progressWriter);
             if (!status.empty()) {
                 progressWriter(status);
             }
@@ -353,8 +354,11 @@ public:
             request, callback, &Yql::DqsProto::DqService::Stub::AsyncQueryStatus, {}, nullptr);
     }
 
-    void ScheduleQueryStatusRequest(const TDqProgressWriter& progressWriter) {
+    void MaybeScheduleQueryStatusRequest(const TDqProgressWriter& progressWriter) {
         auto self = weak_from_this();
+        if (StatusRequestScheduled.test_and_set()) {
+            return;
+        }
         TaskScheduler.Delay(TDuration::MilliSeconds(1000)).Subscribe([self, progressWriter](const TFuture<void>& f) {
             auto this_ = self.lock();
             if (!this_) {
@@ -377,6 +381,7 @@ private:
     std::optional<TDqProgressWriter> ProgressWriter;
     TString Status;
     TFuture<void> OpenSessionFuture;
+    std::atomic_flag StatusRequestScheduled = ATOMIC_FLAG_INIT;
 };
 
 class TDqGatewayImpl: public std::enable_shared_from_this<TDqGatewayImpl> {

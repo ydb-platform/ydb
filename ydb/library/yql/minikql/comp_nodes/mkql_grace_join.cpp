@@ -1,7 +1,6 @@
 #include "mkql_grace_join.h"
 #include "mkql_grace_join_imp.h"
 
-#include <format>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <ydb/library/yql/public/decimal/yql_decimal_serialize.h>
@@ -632,9 +631,9 @@ private:
     }
 
     bool IsSwitchToSpillingModeCondition() const {
-        // return false;
+        return false;
         // TODO: YQL-18033
-        return !HasMemoryForProcessing();
+        // return !HasMemoryForProcessing();
     }
 
     void SwitchMode(EOperatingMode mode, TComputationContext& ctx) {
@@ -805,10 +804,7 @@ private:
     }
 
     bool TryToReduceMemoryAndWait() {
-        std::cerr << std::format("[MISHA][LEFT] Trying to reduce memory {}MB/{}MB\n", TlsAllocState->GetAllocated() / 1024 / 1024, TlsAllocState->GetLimit() / 1024 / 1024);
         bool isWaitingLeftForReduce = LeftPacker->TablePtr->TryToReduceMemoryAndWait();
-        if (isWaitingLeftForReduce) return true;
-        std::cerr << std::format("[MISHA][RIGHT] Trying to reduce memory {}MB/{}MB\n", TlsAllocState->GetAllocated() / 1024 / 1024, TlsAllocState->GetLimit() / 1024 / 1024);
         bool isWaitingRightForReduce = RightPacker->TablePtr->TryToReduceMemoryAndWait();
 
         return isWaitingLeftForReduce || isWaitingRightForReduce;
@@ -891,8 +887,6 @@ EFetchResult ProcessSpilledData(TComputationContext&, NUdf::TUnboxedValue*const*
                     return EFetchResult::One;
                 }
 
-                std::cerr << std::format("[MISHA] Bucket {} joined {}MB/{}MB\n", NextBucketToJoin, TlsAllocState->GetAllocated() / 1024 / 1024, TlsAllocState->GetLimit() / 1024 / 1024);
-
                 LeftPacker->TuplesBatchPacked = 0;
                 LeftPacker->TablePtr->ClearBucket(NextBucketToJoin); // Clear content of returned bucket
                 LeftPacker->TablePtr->ShrinkBucket(NextBucketToJoin);
@@ -904,8 +898,6 @@ EFetchResult ProcessSpilledData(TComputationContext&, NUdf::TUnboxedValue*const*
                 JoinedTablePtr->Clear();
                 JoinedTablePtr->ResetIterator();
                 *PartialJoinCompleted = false;
-
-                std::cerr << std::format("[MISHA] Bucket {} cleared {}MB/{}MB\n", NextBucketToJoin, TlsAllocState->GetAllocated() / 1024 / 1024, TlsAllocState->GetLimit() / 1024 / 1024);
 
                 NextBucketToJoin++;
             } else {

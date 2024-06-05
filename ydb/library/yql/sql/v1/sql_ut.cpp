@@ -1885,7 +1885,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         auto res = SqlToYql(req);
         UNIT_ASSERT(res.Root);
         const auto programm = GetPrettyPrint(res);
-        auto expected = "(Apply (lambda '(\"$foo bar\" \"$x\")";
+        auto expected = "(lambda '(\"$foo bar\" \"$x\")";
         UNIT_ASSERT(programm.find(expected) != TString::npos);
     }
 
@@ -5179,6 +5179,7 @@ Y_UNIT_TEST_SUITE(JsonPassing) {
 
         for (const auto& function : functions) {
             const auto query = Sprintf(R"(
+                pragma CompactNamedExprs;
                 $json = CAST(@@{"key": 1238}@@ as Json);
                 SELECT %s(
                     $json,
@@ -5202,7 +5203,7 @@ Y_UNIT_TEST_SUITE(JsonPassing) {
                 UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos, line.find(R"('('"var2" (Double '"1.234")))"), "Cannot find `var2`");
                 UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos, line.find(R"('('"var3" (SafeCast (Int32 '"1") (DataType 'Int64))))"), "Cannot find `var3`");
                 UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos, line.find(R"('('"var4" (Bool '"true")))"), "Cannot find `var4`");
-                UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos, line.find(R"('('"var5" (SafeCast (String '@@{"key": 1238}@@) (DataType 'Json))))"), "Cannot find `var5`");
+                UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos, line.find(R"('('"var5" namedexprnode0))"), "Cannot find `var5`");
             };
 
             TWordCountHive elementStat({"JsonVariables"});
@@ -6768,5 +6769,74 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
         UNIT_ASSERT_VALUES_EQUAL(0, elementStat["SqlAccess"]);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["SqlProjectItem"]);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Read!"]);
+    }
+}
+
+Y_UNIT_TEST_SUITE(CompactNamedExprs) {
+    Y_UNIT_TEST(SourceCallablesInWrongContext) {
+        TString query = R"(
+            pragma CompactNamedExprs;
+            $foo = %s();
+            select $foo from plato.Input;
+        )";
+
+        THashMap<TString, TString> errs = {
+            {"TableRow", "<main>:3:20: Error: TableRow requires data source\n"},
+            {"JoinTableRow", "<main>:3:20: Error: JoinTableRow requires data source\n"},
+            {"TableRecordIndex", "<main>:3:20: Error: Unable to use function: TableRecord without source\n"},
+            {"TablePath", "<main>:3:20: Error: Unable to use function: TablePath without source\n"},
+            {"SystemMetadata", "<main>:3:20: Error: Unable to use function: SystemMetadata without source\n"},
+        };
+
+        for (TString callable : { "TableRow", "JoinTableRow", "TableRecordIndex", "TablePath", "SystemMetadata"}) {
+            auto req = Sprintf(query.c_str(), callable.c_str());
+            ExpectFailWithError(req, errs[callable]);
+        }
+    }
+
+    Y_UNIT_TEST(ValidateUnusedExprs) {
+        TString query = R"(
+            pragma warning("disable", "4527");
+            pragma CompactNamedExprs;
+            pragma ValidateUnusedExprs;
+
+            $foo = count(1);
+            select 1;
+        )";
+        ExpectFailWithError(query, "<main>:6:20: Error: Aggregation is not allowed in this context\n");
+        query = R"(
+            pragma warning("disable", "4527");
+            pragma CompactNamedExprs;
+            pragma ValidateUnusedExprs;
+
+            define subquery $x() as 
+                select count(1, 2);
+            end define;
+            select 1;
+        )";
+        ExpectFailWithError(query, "<main>:7:24: Error: Aggregation function Count requires exactly 1 argument(s), given: 2\n");
+    }
+
+    Y_UNIT_TEST(DisableValidateUnusedExprs) {
+        TString query = R"(
+            pragma warning("disable", "4527");
+            pragma CompactNamedExprs;
+            pragma DisableValidateUnusedExprs;
+
+            $foo = count(1);
+            select 1;
+        )";
+        SqlToYql(query).IsOk();
+        query = R"(
+            pragma warning("disable", "4527");
+            pragma CompactNamedExprs;
+            pragma DisableValidateUnusedExprs;
+
+            define subquery $x() as 
+                select count(1, 2);
+            end define;
+            select 1;
+        )";
+        SqlToYql(query).IsOk();
     }
 }

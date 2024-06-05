@@ -1,8 +1,8 @@
 ## NTH_VALUE
 
-Access a value from a given row (in the window's `ORDER BY` order) [window frame](../../../syntax/window.md#frame). Arguments - the expression to access and the row number, starting with 1.
+Access a value from a row specified by position in the window's `ORDER BY` order within [window frame](../../../syntax/window.md#frame). Arguments - the expression to access and the row number, starting with 1.
 
-Optionally, `IGNORE NULLS` modifier can be specified before `OVER`, which causes rows with NULL in the value of the first argument to be skipped. The antonym of this modifier is `RESPECT NULLS`, which is the default behavior and may not be specified.
+Optionally, the `IGNORE NULLS` modifier can be specified before `OVER`, which causes rows with `NULL` in the first argument's value to be skipped. The antonym of this modifier is `RESPECT NULLS`, which is the default behavior and may be skipped.
 
 **Signature**
 ```

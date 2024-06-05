@@ -5,13 +5,13 @@ import "ydb/public/api/protos/annotations/sensitive.proto";
 
 import "ydb/core/protos/base.proto";
 import "ydb/core/protos/msgbus_kv.proto";
-import "ydb/core/protos/node_limits.proto";
 import "ydb/core/protos/netclassifier.proto";
-import "ydb/library/services/services.proto";
+import "ydb/core/protos/node_limits.proto";
+import "ydb/core/scheme/protos/pathid.proto";
 import "ydb/core/scheme/protos/type_info.proto";
 
 import "ydb/library/actors/protos/actors.proto";
-
+import "ydb/library/services/services.proto";
 
 package NKikimrPQ;
 option java_package = "ru.yandex.kikimr.proto";
@@ -306,7 +306,14 @@ enum EConsumerScalingSupport {
 }
 
 message TOffloadConfig {
+    message TIncrementalBackup {
+        optional string DstPath = 1;
+        optional NKikimrProto.TPathID DstPathId = 2;
+    }
 
+    oneof Strategy {
+        TIncrementalBackup IncrementalBackup = 1;
+    }
 }
 
 message TPQTabletConfig {

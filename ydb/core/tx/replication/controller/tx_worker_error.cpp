@@ -43,13 +43,16 @@ public:
             << ", tid# " << WorkerId.TargetId()
             << ", error# " << Error);
 
-        replication->SetState(TReplication::EState::Error);
         target->SetDstState(TReplication::EDstState::Error);
         target->SetIssue(Error);
 
+        replication->SetState(TReplication::EState::Error, TStringBuilder() << "Error in target #" << target->GetId()
+            << ": " << target->GetIssue());
+
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::Replications>().Key(WorkerId.ReplicationId()).Update(
-            NIceDb::TUpdate<Schema::Replications::State>(replication->GetState())
+            NIceDb::TUpdate<Schema::Replications::State>(replication->GetState()),
+            NIceDb::TUpdate<Schema::Replications::Issue>(replication->GetIssue())
         );
         db.Table<Schema::Targets>().Key(WorkerId.ReplicationId(), WorkerId.TargetId()).Update(
             NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()),

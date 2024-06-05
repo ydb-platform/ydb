@@ -21,7 +21,7 @@ set_property(TARGET callables_udf.dyn PROPERTY OUTPUT_NAME
 target_compile_options(callables_udf.dyn PRIVATE
   -DBUILD_UDF
   -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=9
+  -DUDF_ABI_VERSION_MINOR=38
   -DUDF_ABI_VERSION_PATCH=0
 )
 
@@ -49,7 +49,7 @@ add_global_library_for(callables_udf.global
 
 target_compile_options(callables_udf.global PRIVATE
   -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=9
+  -DUDF_ABI_VERSION_MINOR=38
   -DUDF_ABI_VERSION_PATCH=0
 )
 

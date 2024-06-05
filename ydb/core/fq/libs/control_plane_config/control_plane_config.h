@@ -19,7 +19,6 @@
 #define CPC_LOG_T(s) \
     LOG_FQ_CONTROL_PLANE_CONFIG_TRACE(s)
 
-
 namespace NFq {
 
 NActors::TActorId ControlPlaneConfigActorId();

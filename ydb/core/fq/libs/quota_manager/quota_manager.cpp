@@ -471,7 +471,7 @@ private:
             }
         );
 
-        Exec(DbPool, executable, TablePathPrefix).Apply([this, executable, actorSystem=NActors::TActivationContext::ActorSystem(), subjectType, subjectId, callback, selfId = SelfId()](const auto& future) {
+        Exec(DbPool, executable, TablePathPrefix).Apply([this, executable, actorSystem=NActors::TActivationContext::ActorSystem(), subjectType, subjectId, callback, selfId=SelfId()](const auto& future) {
             actorSystem->Send(selfId, new TEvents::TEvCallback([this, executable, subjectType, subjectId, callback, future]() {
                 auto issues = GetIssuesFromYdbStatus(executable, future);
                 if (issues) {
@@ -631,7 +631,7 @@ private:
                     if (itQ != cache.UsageMap.end()) {
                         auto& cached = itQ->second;
                         cached.SyncInProgress = false;
-                        if (cached.ChangedAfterSync) { // this call will be processed in a separate event
+                        if (cached.ChangedAfterSync) { // this check will be processed in a separate event
                             LOG_T(cached.Usage.ToString(executer.State.SubjectType, executer.State.SubjectId, executer.State.MetricName) << " RESYNC");
                             this->SyncQuota(executer.State.SubjectType, executer.State.SubjectId, executer.State.MetricName, cached);
                         }
@@ -723,7 +723,7 @@ private:
         auto it = subjectMap.find(subjectId);
         if (it == subjectMap.end()) {
             ReadQuota(subjectType, subjectId,
-                [this, ev=ev, actorSystem=NActors::TActivationContext::ActorSystem()](TReadQuotaExecuter& executer) {
+                [this, ev=ev](TReadQuotaExecuter& executer) {
                     // This block is executed in correct self-context, no locks/syncs required
                     auto& subjectMap = this->QuotaCacheMap[executer.State.SubjectType];
                     auto& cache = subjectMap[executer.State.SubjectId];

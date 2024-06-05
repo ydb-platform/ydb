@@ -203,7 +203,7 @@ bool TSqlCallExpr::Init(const TRule_using_call_expr& node) {
     const auto& block = node.GetBlock1();
     switch (block.Alt_case()) {
         case TRule_using_call_expr::TBlock1::kAlt1: {
-            auto& subblock = block.GetAlt1().GetBlock1();
+            auto& subblock = block.GetAlt1();
             Module = Id(subblock.GetRule_an_id_or_type1(), *this);
             Func = Id(subblock.GetRule_an_id_or_type3(), *this);
             break;

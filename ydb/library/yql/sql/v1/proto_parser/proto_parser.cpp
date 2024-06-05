@@ -18,7 +18,6 @@ using namespace NYql;
 
 namespace NSQLTranslationV1 {
 
-using NALPDefault::SQLv4LexerTokens;
 
 #if defined(_tsan_enabled_)
     TMutex SanitizerSQLTranslationMutex;

@@ -108,7 +108,7 @@ private:
 
     TNodePtr BinOperList(const TString& opName, TVector<TNodePtr>::const_iterator begin, TVector<TNodePtr>::const_iterator end) const;
 
-    TNodePtr RowPatternVarAccess(const TString& alias, const TRule_unary_subexpr_suffix_TBlock1_TAlt3_TBlock1_TBlock2 block);
+    TNodePtr RowPatternVarAccess(const TString& alias, const TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2 block);
 
     struct TCaseBranch {
         TNodePtr Pred;

@@ -350,7 +350,7 @@ def main():
 
         pr = gh.create_from_raw_data(PullRequest, event["pull_request"])
 
-        text = get_comment_text(pr, summary, args.test_history_url)
+        text = get_comment_text(pr, summary, args.test_history_url, args.test_log_url)
 
         if summary.is_empty | summary.is_failed:
             color = 'red'

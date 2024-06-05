@@ -34,6 +34,7 @@ namespace {
         double Multiplier = 2.0;
 
         ui64 MaxWriteAttempts = 32;
+        ui64 MaxResolveAttempts = 5;
     };
 
     const TWriteActorBackoffSettings* BackoffSettings() {
@@ -109,14 +110,20 @@ class TKqpWriteActor : public TActorBootstrapped<TKqpWriteActor>, public NYql::N
     struct TEvPrivate {
         enum EEv {
             EvShardRequestTimeout = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
+            EvResolveRequestPlanned,
         };
 
         struct TEvShardRequestTimeout : public TEventLocal<TEvShardRequestTimeout, EvShardRequestTimeout> {
             ui64 ShardId;
+            ui64 SendAttempts;
 
-            TEvShardRequestTimeout(ui64 shardId)
-                : ShardId(shardId) {
+            TEvShardRequestTimeout(ui64 shardId, ui64 sendAttempts)
+                : ShardId(shardId)
+                , SendAttempts(sendAttempts) {
             }
+        };
+
+        struct TEvResolveRequestPlanned : public TEventLocal<TEvResolveRequestPlanned, EvResolveRequestPlanned> {
         };
     };
 
@@ -229,7 +236,32 @@ private:
         }
     }
 
+    void RetryResolveTable() {
+        if (ResolveAttempts == 0) {
+            ResolveTable();
+        }
+    }
+
+    void PlanResolveTable() {
+        TlsActivationContext->Schedule(
+            CalculateNextAttemptDelay(ResolveAttempts),
+            new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvResolveRequestPlanned{}, 0, 0));   
+    }
+
     void ResolveTable() {
+        SchemeEntry.reset();
+        SchemeRequest.reset();
+
+        if (ResolveAttempts++ >= BackoffSettings()->MaxResolveAttempts) {
+            const auto error = TStringBuilder()
+                << "Too many table resolve attempts for Sink=" << this->SelfId() << ".";
+            CA_LOG_E(error);
+            RuntimeError(
+                error,
+                NYql::NDqProto::StatusIds::SCHEME_ERROR);
+            return;
+        }
+
         CA_LOG_D("Resolve TableId=" << TableId);
         TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
         NSchemeCache::TSchemeCacheNavigate::TEntry entry;
@@ -238,13 +270,16 @@ private:
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
         entry.SyncVersion = false;
         request->ResultSet.emplace_back(entry);
+        
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvInvalidateTable(TableId, {}));
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         if (ev->Get()->Request->ErrorCount > 0) {
-            RuntimeError(TStringBuilder() << "Failed to get table: "
-                << TableId << "'", NYql::NDqProto::StatusIds::SCHEME_ERROR);
+            CA_LOG_E(TStringBuilder() << "Failed to get table: "
+                << TableId << "'");
+            PlanResolveTable();
             return;
         }
         auto& resultSet = ev->Get()->Request->ResultSet;
@@ -301,8 +336,9 @@ private:
         auto* request = ev->Get()->Request.Get();
 
         if (request->ErrorCount > 0) {
-            RuntimeError(TStringBuilder() << "Failed to get table: "
-                << TableId << "'", NYql::NDqProto::StatusIds::SCHEME_ERROR);
+            CA_LOG_E(TStringBuilder() << "Failed to get table: "
+                << TableId << "'");
+            PlanResolveTable();
             return;
         }
 
@@ -336,6 +372,7 @@ private:
             YQL_ENSURE(false);
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED: {
+            ResetShardRetries(ev->Get()->Record.GetOrigin(), ev->Cookie);
             ProcessWriteCompletedShard(ev);
             return;
         }
@@ -356,12 +393,18 @@ private:
                     << SchemeEntry->TableId.PathId.ToString() << "`."
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << ".");
-            //RuntimeError(
-            //    TStringBuilder() << "Got INTERNAL ERROR for table `"
-            //        << SchemeEntry->TableId.PathId.ToString() << "`.",
-            //    NYql::NDqProto::StatusIds::INTERNAL_ERROR,
-            //    getIssues());
-            ResolveTable();
+            
+            // TODO: Add new status for splits in datashard. This is tmp solution.
+            if (getIssues().ToOneLineString().Contains("in a pre/offline state assuming this is due to a finished split (wrong shard state)")) {
+                ResetShardRetries(ev->Get()->Record.GetOrigin(), ev->Cookie);
+                RetryResolveTable();
+            } else {
+                RuntimeError(
+                    TStringBuilder() << "Got INTERNAL ERROR for table `"
+                        << SchemeEntry->TableId.PathId.ToString() << "`.",
+                    NYql::NDqProto::StatusIds::INTERNAL_ERROR,
+                    getIssues());
+            }
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED: {
@@ -370,7 +413,7 @@ private:
                 << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                 << " Sink=" << this->SelfId() << "."
                 << " Ignored this error.");
-            // TODO: more retries
+            // TODO: support waiting
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED: {
@@ -403,7 +446,8 @@ private:
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << ".");
             if (InconsistentTx) {
-                ResolveTable();
+                ResetShardRetries(ev->Get()->Record.GetOrigin(), ev->Cookie);
+                RetryResolveTable();
             } else {
                 RuntimeError(
                     TStringBuilder() << "Got SCHEME CHANGED for table `"
@@ -539,13 +583,13 @@ private:
         if (SchemeEntry->Kind != NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
             TlsActivationContext->Schedule(
                 CalculateNextAttemptDelay(metadata->SendAttempts),
-                new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvShardRequestTimeout(shardId), 0, metadata->Cookie));
+                new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvShardRequestTimeout(shardId, metadata->SendAttempts), 0, metadata->Cookie));
         }
     }
 
-    void RetryShard(const ui64 shardId, const std::optional<ui64> ifCookieEqual) {
+    void RetryShard(const ui64 shardId, const std::optional<ui64> ifCookieEqual, const std::optional<ui64> sendAttempts) {
         const auto metadata = ShardedWriteController->GetMessageMetadata(shardId);
-        if (!metadata || (ifCookieEqual && metadata->Cookie != ifCookieEqual)) {
+        if (!metadata || (ifCookieEqual && metadata->Cookie != ifCookieEqual) || (sendAttempts && metadata->SendAttempts != sendAttempts)) {
             return;
         }
 
@@ -553,14 +597,18 @@ private:
         SendDataToShard(shardId);
     }
 
+    void ResetShardRetries(const ui64 shardId, const ui64 cookie) {
+        ShardedWriteController->ResetRetries(shardId, cookie);
+    }
+
     void Handle(TEvPrivate::TEvShardRequestTimeout::TPtr& ev) {
         CA_LOG_W("Timeout shardID=" << ev->Get()->ShardId);
-        RetryShard(ev->Get()->ShardId, ev->Cookie);
+        RetryShard(ev->Get()->ShardId, ev->Cookie, ev->Get()->SendAttempts);
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         CA_LOG_W("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
-        RetryShard(ev->Get()->TabletId, std::nullopt);
+        RetryShard(ev->Get()->TabletId, std::nullopt, std::nullopt);
     }
 
     void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {
@@ -582,6 +630,7 @@ private:
 
     void Prepare() {
         YQL_ENSURE(SchemeEntry);
+        ResolveAttempts = 0;
 
         if (!ShardedWriteController) {
             TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata;
@@ -646,6 +695,7 @@ private:
 
     std::optional<NSchemeCache::TSchemeCacheNavigate::TEntry> SchemeEntry;
     std::optional<NSchemeCache::TSchemeCacheRequest::TEntry> SchemeRequest;
+    ui64 ResolveAttempts = 0;
 
     THashMap<ui64, TLockInfo> LocksInfo;
     bool Finished = false;

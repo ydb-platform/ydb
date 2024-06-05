@@ -715,6 +715,10 @@ public:
             ++SendAttempts;
         }
 
+        void ResetSendAttempts() {
+            SendAttempts = 0;
+        }
+
     private:
         std::deque<IPayloadSerializer::IBatchPtr> Batches;
         bool Closed = false;
@@ -895,6 +899,14 @@ public:
             return;
         }
         shardInfo.IncSendAttempts();
+    }
+
+    void ResetRetries(ui64 shardId, ui64 cookie) override {
+        auto& shardInfo = ShardsInfo.GetShard(shardId);
+        if (shardInfo.IsEmpty() || shardInfo.GetCookie() != cookie) {
+            return;
+        }
+        shardInfo.ResetSendAttempts();
     }
 
     i64 GetMemory() const override {

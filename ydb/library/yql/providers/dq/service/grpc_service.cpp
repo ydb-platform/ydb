@@ -678,8 +678,6 @@ namespace NYql::NDqs {
                 },
                 TDuration::MilliSeconds(2000));
 
-            TActorId callbackId = ActorSystem.Register(callback.Release());
-
             uint64_t querySeqNo = request->GetQuerySeqNo();
             if (querySeqNo) {
                 auto session = Sessions.GetSession(request->GetSession());
@@ -696,10 +694,12 @@ namespace NYql::NDqs {
                         result->SetStatus("Finished");
                         ctx->Reply(result, Ydb::StatusIds::SUCCESS);
                     } else {
+                        TActorId callbackId = ActorSystem.Register(callback.Release());
                         ActorSystem.Send(new IEventHandle(actorId, callbackId, ev.Release()));
                     }
                 }
             } else {
+                TActorId callbackId = ActorSystem.Register(callback.Release());
                 ActorSystem.Send(new IEventHandle(MakeWorkerManagerActorID(ActorSystem.NodeId), callbackId, ev.Release(), IEventHandle::FlagTrackDelivery));
             }
         });

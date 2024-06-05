@@ -43,12 +43,7 @@ struct TEnvironmentSetup {
         const bool SuppressCompatibilityCheck = false;
         const TFeatureFlags FeatureFlags;
         const NPDisk::EDeviceType DiskType = NPDisk::EDeviceType::DEVICE_TYPE_NVME;
-<<<<<<< HEAD
-        const ui32 BurstThresholdNs = 0;
-=======
         const ui64 BurstThresholdNs = 0;
-        const ui32 MinHugeBlobInBytes = 0;
->>>>>>> 208706d808... Improve cost metrics configuration (#5045)
         const float DiskTimeAvailableScale = 1;
     };
 
@@ -660,19 +655,6 @@ struct TEnvironmentSetup {
         });
     }
 
-<<<<<<< HEAD
-=======
-    void PutBlob(const ui32 groupId, const TLogoBlobID& blobId, const TString& part) {
-        TActorId edge = Runtime->AllocateEdgeActor(Settings.ControllerNodeId);
-        Runtime->WrapInActorContext(edge, [&] {
-            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(blobId, part, TInstant::Max(),
-                NKikimrBlobStorage::TabletLog, TEvBlobStorage::TEvPut::TacticMaxThroughput));
-        });
-        auto res = WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge);
-        Y_ABORT_UNLESS(res->Get()->Status == NKikimrProto::OK);
-    }
-
->>>>>>> 208706d808... Improve cost metrics configuration (#5045)
     void CommenceReplication() {
         for (ui32 groupId : GetGroups()) {
             auto info = GetGroupInfo(groupId);

@@ -169,10 +169,8 @@ void TNodeWarden::Bootstrap() {
     DsProxyPerPoolCounters = new TDsProxyPerPoolCounters(AppData()->Counters);
 
     if (actorSystem && actorSystem->AppData<TAppData>() && actorSystem->AppData<TAppData>()->Icb) {
-<<<<<<< HEAD
         actorSystem->AppData<TAppData>()->Icb->RegisterLocalControl(EnablePutBatching, "BlobStorage_EnablePutBatching");
         actorSystem->AppData<TAppData>()->Icb->RegisterLocalControl(EnableVPatch, "BlobStorage_EnableVPatch");
-=======
         const TIntrusivePtr<NKikimr::TControlBoard>& icb = actorSystem->AppData<TAppData>()->Icb;
 
         icb->RegisterLocalControl(EnablePutBatching, "BlobStorage_EnablePutBatching");
@@ -195,7 +193,6 @@ void TNodeWarden::Bootstrap() {
                 "VDiskControls.DiskTimeAvailableScaleSSD");
         icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_NVME].DiskTimeAvailableScale,
                 "VDiskControls.DiskTimeAvailableScaleNVME");
->>>>>>> 208706d808... Improve cost metrics configuration (#5045)
     }
 
     // start replication broker

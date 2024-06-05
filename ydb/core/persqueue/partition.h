@@ -637,7 +637,6 @@ private:
     THashSet<TString> WriteAffectedSourcesIds;
     THashSet<TString> TxAffectedConsumers;
     THashSet<TString> SetOffsetAffectedConsumers;
-    THashSet<TString> SetOffsetConsumersCurrBatch; //Same as
 
     ui32 MaxBlobSize;
     const ui32 TotalLevels = 4;

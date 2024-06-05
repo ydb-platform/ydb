@@ -38,6 +38,7 @@ static const TDuration WAKE_TIMEOUT = TDuration::Seconds(5);
 static const TDuration UPDATE_AVAIL_SIZE_INTERVAL = TDuration::MilliSeconds(100);
 static const TDuration MIN_UPDATE_COUNTERS_DELAY = TDuration::MilliSeconds(300);
 static const ui32 MAX_USERS = 1000;
+static const ui32 MAX_KEYS = 10000;
 static const ui32 MAX_TXS = 1000;
 static const ui32 MAX_WRITE_CYCLE_SIZE = 16_MB;
 
@@ -625,6 +626,7 @@ void TPartition::Handle(TEvPQ::TEvPipeDisconnected::TPtr& ev, const TActorContex
 void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext& ctx) {
     NKikimrPQ::TStatusResponse::TPartResult result;
     result.SetPartition(Partition.InternalPartitionId);
+    result.SetGeneration(TabletGeneration);
 
     if (DiskIsFull || WaitingForSubDomainQuota(ctx)) {
         result.SetStatus(NKikimrPQ::TStatusResponse::STATUS_DISK_IS_FULL);
@@ -1079,6 +1081,7 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
         tx.WriteInfoApplied = true;
         WriteKeysSizeEstimate += tx.WriteInfo->BodyKeys.size();
         WriteKeysSizeEstimate += tx.WriteInfo->SrcIdInfo.size();
+        WriteKeysSizeEstimate += tx.WriteInfo->BlobsFromHead.size();
         for (const auto& blob : tx.WriteInfo->BlobsFromHead) {
             WriteCycleSizeEstimate += blob.GetBlobSize();
         }
@@ -1712,7 +1715,7 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext&)
 {
     Y_ABORT_UNLESS(!KVWriteInProgress);
 
-    if (WriteCycleSizeEstimate >= MAX_WRITE_CYCLE_SIZE || WriteKeysSizeEstimate >= MAX_USERS) {
+    if (WriteCycleSizeEstimate >= MAX_WRITE_CYCLE_SIZE || WriteKeysSizeEstimate >= MAX_KEYS) {
         BatchingState = ETxBatchingState::Finishing;
         return;
     }
@@ -1791,7 +1794,6 @@ void TPartition::ProcessCommitQueue() {
     if (UserActionAndTxPendingCommit.empty()) {
         TxAffectedConsumers.clear();
         TxAffectedSourcesIds.clear();
-        SetOffsetConsumersCurrBatch.clear();
         Y_ABORT_UNLESS(UserActionAndTxPendingCommit.empty());
         TransactionsInflight.clear();
     }
@@ -2332,7 +2334,7 @@ TPartition::EProcessResult TPartition::PreProcessImmediateTx(const NKikimrPQ::TE
         Y_ABORT_UNLESS(operation.GetEnd() <= (ui64)Max<i64>(), "Unexpected end offset: %" PRIu64, operation.GetEnd());
 
         const TString& user = operation.GetConsumer();
-        if (TxAffectedConsumers.contains(user) || SetOffsetConsumersCurrBatch.contains(user)) {
+        if (TxAffectedConsumers.contains(user)) {
             return EProcessResult::Blocked;
         }
         if (!PendingUsersInfo.contains(user) && AffectedUsers.contains(user)) {
@@ -2351,7 +2353,6 @@ TPartition::EProcessResult TPartition::PreProcessImmediateTx(const NKikimrPQ::TE
         }
         consumers.insert(user);
     }
-    SetOffsetConsumersCurrBatch.insert(consumers.begin(), consumers.end());
     SetOffsetAffectedConsumers.insert(consumers.begin(), consumers.end());
     WriteKeysSizeEstimate += consumers.size();
     return EProcessResult::Continue;

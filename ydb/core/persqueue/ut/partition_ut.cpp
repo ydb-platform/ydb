@@ -2574,7 +2574,7 @@ Y_UNIT_TEST_F(NonConflictingActsBatchOk, TPartitionTxTestHelper) {
     WaitTxPredicateReply(tx2);
     WaitTxPredicateReply(tx3);
 
-    WaitBatchCompletion(5 + 6 + 6); //5 tx or immediate tx + 2 normal writes with 2 messages each;
+    WaitBatchCompletion(5 + 6 + 6); //5 tx or immediate tx + 2 normal writes with 6 messages each;
 
     SendTxCommit(tx3);
     SendTxRollback(tx2);
@@ -2963,8 +2963,7 @@ Y_UNIT_TEST_F(ConflictingCommitsInSeveralBatches, TPartitionTxTestHelper) {
     WaitTxPredicateReply(txTmp);
     SendTxRollback(txTmp);
 
-    WaitBatchCompletion(1 + 1);
-    WaitBatchCompletion(1);
+    WaitBatchCompletion(1 + 2);
     WaitKvRequest();
     SendKvResponse();
     WaitImmediateTxComplete(immTx1, true);

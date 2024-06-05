@@ -339,7 +339,8 @@ private:
             .UserRequestContext = GetUserRequestContext(),
             .FederatedQuerySetup = std::nullopt,
             .OutputChunkMaxSize = Request.OutputChunkMaxSize,
-            .GUCSettings = nullptr
+            .GUCSettings = nullptr,
+            .SchedulerGroup = "olap"
         });
 
         LOG_D("Execute scan tx, PendingComputeTasks: " << TasksGraph.GetTasks().size());

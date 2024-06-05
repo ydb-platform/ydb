@@ -135,7 +135,7 @@ IActor* CreateKqpScanComputeActor(const TActorId& executerId, ui64 txId,
     TDqTask* task, IDqAsyncIoFactory::TPtr asyncIoFactory,
     const NYql::NDq::TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId,
     TIntrusivePtr<NActors::TProtoArenaHolder> arena, TComputeActorSchedulingOptions schedulingOptions) {
-    return new NScanPrivate::TKqpScanComputeActor(schedulingOptions, executerId, txId, task, std::move(asyncIoFactory),
+    return new NScanPrivate::TKqpScanComputeActor(std::move(schedulingOptions), executerId, txId, task, std::move(asyncIoFactory),
         settings, memoryLimits, std::move(traceId), std::move(arena));
 }
 

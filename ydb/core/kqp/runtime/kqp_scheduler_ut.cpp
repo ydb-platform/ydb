@@ -14,8 +14,7 @@ Y_UNIT_TEST_SUITE(TKqpComputeScheduler) {
         TDuration Cuanta;
     };
 
-    TVector<TDuration> RunSimulation(TComputeScheduler& scheduler, TVector<TProcess> processes, TDuration time, size_t executionUnits) {
-        auto start = TMonotonic::Now();
+    TVector<TDuration> RunSimulation(TComputeScheduler& scheduler, TVector<TProcess> processes, TDuration time, size_t executionUnits, TMonotonic start) {
         TMonotonic now = start;
         TMonotonic deadline = now + time;
         scheduler.AdvanceTime(now);
@@ -38,18 +37,18 @@ Y_UNIT_TEST_SUITE(TKqpComputeScheduler) {
         TVector<double> groupnow(processes.size());
 
         for (size_t i = 0; i < processes.size(); ++i) {
-            handles[i] =  scheduler.Enroll(processes[i].Group, processes[i].Weight);
+            handles[i] =  scheduler.Enroll(processes[i].Group, processes[i].Weight, now);
             runQueue.push_back(i);
         }
 
         while (now < deadline) {
             size_t toRun = executionUnits;
             for (size_t i = 0; i < processes.size(); ++i) {
-                groupnow[i] = scheduler.GroupNow(*handles[i], now);
-                //Cerr << " " << scheduler.Now(*handles[i]) << "<" << scheduler.GroupNow(*handles[i]);
-                UNIT_ASSERT(handles[i].VRuntime() <= scheduler.GroupNow(*handles[i], now)   + (processes[i].Cuanta / processes[i].Weight).MicroSeconds());
+                groupnow[i] = handles[i].GroupNow(now);
+                //Cerr << " " << handles[i].VRuntime() << "<" << scheduler.GroupNow(*handles[i], now) << " + " << (processes[i].Cuanta.MicroSeconds() / processes[i].Weight);
+                UNIT_ASSERT_LE(handles[i].VRuntime(), handles[i].GroupNow(now) + (processes[i].Cuanta.MicroSeconds() / processes[i].Weight) + 1e-5);
             }
-            Cerr << Endl;
+            //Cerr << Endl;
 
             for (size_t i = 0; i < processes.size(); ++i) {
                 if (events[i]) {
@@ -58,7 +57,7 @@ Y_UNIT_TEST_SUITE(TKqpComputeScheduler) {
                             events[i].Clear();
                             runQueue.push_back(i);
                         } else {
-                            auto delay = scheduler.CalcDelay(*handles[i], now);
+                            auto delay = handles[i].CalcDelay(now);
                             if (delay) {
                                 events[i] = TEvent{TEvent::EEventType::Wakeup, now + *delay};
                             } else {
@@ -70,7 +69,7 @@ Y_UNIT_TEST_SUITE(TKqpComputeScheduler) {
                         if (events[i]->Type == TEvent::EEventType::Sleep) {
                             toRun -= 1;
                         } else {
-                            //UNIT_ASSERT(scheduler.CalcDelay(*handles[i], now - TDuration::MicroSeconds(1)).GetOrElse(TDuration::Zero()) > TDuration::Zero());
+                            UNIT_ASSERT(handles[i].CalcDelay(now).Defined());
                         }
                     }
                 }
@@ -81,7 +80,7 @@ Y_UNIT_TEST_SUITE(TKqpComputeScheduler) {
                 size_t taskToRun = runQueue[0];
                 events[taskToRun] = TEvent{TEvent::EEventType::Sleep, now + processes[taskToRun].Cuanta};
                 runTimes[taskToRun] += processes[taskToRun].Cuanta;
-                scheduler.TrackTime(*handles[taskToRun], processes[taskToRun].Cuanta);
+                handles[taskToRun].TrackTime(processes[taskToRun].Cuanta, now);
                 runQueue.erase(runQueue.begin());
             }
 
@@ -93,7 +92,7 @@ Y_UNIT_TEST_SUITE(TKqpComputeScheduler) {
                 }
             }
             now = newDeadline;
-            scheduler.AdvanceTime(now);
+            //scheduler.AdvanceTime(now);
         }
 
         return runTimes;
@@ -106,14 +105,16 @@ Y_UNIT_TEST_SUITE(TKqpComputeScheduler) {
 
     Y_UNIT_TEST(SingleCoreSimple) {
         NKikimr::NKqp::TComputeScheduler scheduler;
-        THashMap<TString, double> priorities;
-        priorities["first"] = 1;
-        priorities["second"] = 1;
-        scheduler.SetPriorities(priorities, 1);
+        auto start = TMonotonic::Now();
+
+        TComputeScheduler::TDistributionRule rule{.Share = 0.5};
+        rule.SubRules.push_back({.Share = 1, .Name = "first"});
+        rule.SubRules.push_back({.Share = 1, .Name = "second"});
+        scheduler.SetPriorities(rule, 1, start);
 
         TDuration all = TDuration::Seconds(10);
 
-        auto result = RunSimulation(scheduler, {{"first", 1, TDuration::MilliSeconds(10)}, {"first", 1, TDuration::MilliSeconds(10)}}, all, 1);
+        auto result = RunSimulation(scheduler, {{"first", 1, TDuration::MilliSeconds(10)}, {"first", 1, TDuration::MilliSeconds(10)}}, all, 1, start);
 
         for (auto t : result) {
             AssertEq(t, all/4, TDuration::MilliSeconds(20));
@@ -122,15 +123,16 @@ Y_UNIT_TEST_SUITE(TKqpComputeScheduler) {
 
     Y_UNIT_TEST(SingleCoreThird) {
         NKikimr::NKqp::TComputeScheduler scheduler;
-        THashMap<TString, double> priorities;
-        priorities["first"] = 1;
-        priorities["second"] = 1;
-        scheduler.SetPriorities(priorities, 1);
+        auto start = TMonotonic::Now();
+
+        TComputeScheduler::TDistributionRule rule{.Share = 0.5};
+        rule.SubRules.push_back({.Share = 1, .Name = "first"});
+        rule.SubRules.push_back({.Share = 1, .Name = "second"});
+        scheduler.SetPriorities(rule, 1, start);
 
         TDuration all = TDuration::Seconds(10);
 
-
-        auto result = RunSimulation(scheduler, {{"first", 1, TDuration::MilliSeconds(10)}, {"first", 2, TDuration::MilliSeconds(10)}}, all, 1);
+        auto result = RunSimulation(scheduler, {{"first", 1, TDuration::MilliSeconds(10)}, {"first", 2, TDuration::MilliSeconds(10)}}, all, 1, start);
         all = all/2;
 
         Cerr << result[0].MicroSeconds() << " " << result[1].MicroSeconds() << Endl;
@@ -140,19 +142,48 @@ Y_UNIT_TEST_SUITE(TKqpComputeScheduler) {
 
     Y_UNIT_TEST(SingleCoreForth) {
         NKikimr::NKqp::TComputeScheduler scheduler;
-        THashMap<TString, double> priorities;
-        priorities["first"] = 1;
-        priorities["second"] = 1;
-        scheduler.SetPriorities(priorities, 1);
+        TComputeScheduler::TDistributionRule rule{.Share = 0.5};
+        auto start = TMonotonic::Now();
+        rule.SubRules.push_back({.Share = 1, .Name = "first"});
+        rule.SubRules.push_back({.Share = 1, .Name = "second"});
+
+        scheduler.SetPriorities(rule, 1, start);
 
         TDuration all = TDuration::Seconds(10);
 
-
-        auto result = RunSimulation(scheduler, {{"first", 1, TDuration::MilliSeconds(10)}, {"first", 3, TDuration::MilliSeconds(10)}}, all, 1);
+        auto result = RunSimulation(scheduler, {{"first", 1, TDuration::MilliSeconds(10)}, {"first", 3, TDuration::MilliSeconds(10)}}, all, 1, start);
         all = all/2;
 
         Cerr << result[0].MicroSeconds() << " " << result[1].MicroSeconds() << Endl;
         AssertEq(result[0], all/4, TDuration::MilliSeconds(20));
         AssertEq(result[1], 3*all/4, TDuration::MilliSeconds(20));
+    }
+
+    Y_UNIT_TEST(MultipleClients) {
+        NKikimr::NKqp::TComputeScheduler scheduler;
+        TComputeScheduler::TDistributionRule rule{.Share = 0.5};
+        auto start = TMonotonic::Now();
+        rule.SubRules.push_back({.Share = 1, .Name = "first"});
+        rule.SubRules.push_back({.Share = 1, .Name = "second"});
+        static const size_t executors = 10;
+
+        scheduler.SetPriorities(rule, executors, start);
+        TVector<TProcess> processes;
+        const size_t processesCount = 3000;
+
+        TDuration cuanta = TDuration::MicroSeconds(200);
+
+        for (size_t i = 0; i < processesCount; ++i) {
+            processes.push_back({"first", 1, cuanta});
+        }
+
+        TDuration all = TDuration::Seconds(3);
+
+
+        auto result = RunSimulation(scheduler, processes, all, executors, start);
+
+        for (auto res : result) {
+            AssertEq(res, all/processesCount * executors /2, cuanta);
+        }
     }
 }

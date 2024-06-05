@@ -78,7 +78,10 @@ public:
         }
         if (config.HasComputePoolsConfiguration()) {
             SetPriorities(config.GetComputePoolsConfiguration());
+        } else {
+            SetPriorities(TComputeScheduler::TDistributionRule{.Share = 1, .Name = "olap"});
         }
+        Scheduler.ReportCounters(counters);
     }
 
     void Bootstrap() {
@@ -103,10 +106,12 @@ public:
 
 private:
     STATEFN(WorkState) {
-        Scheduler.AdvanceTime(TlsActivationContext->Monotonic());
+        Y_DEFER {
+            Scheduler.AdvanceTime(TMonotonic::Now());
+        };
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvKqpNode::TEvStartKqpTasksRequest, HandleWork);
-            hFunc(TEvFinishKqpTask, HandleWork); // used only for unit tests
+            hFunc(TEvKqpNode::TEvFinishKqpTask, HandleWork); // used only for unit tests
             hFunc(TEvKqpNode::TEvCancelKqpTasksRequest, HandleWork);
             hFunc(TEvents::TEvWakeup, HandleWork);
             // misc
@@ -115,6 +120,9 @@ private:
             hFunc(TEvents::TEvUndelivered, HandleWork);
             hFunc(TEvents::TEvPoison, HandleWork);
             hFunc(NMon::TEvHttpInfo, HandleWork);
+            // sheduling
+            hFunc(TEvSchedulerDeregister, HandleWork);
+            hFunc(TEvSchedulerRenice, HandleWork);
             default: {
                 Y_ABORT("Unexpected event 0x%x for TKqpResourceManagerService", ev->GetTypeRewrite());
             }
@@ -122,6 +130,20 @@ private:
     }
 
     static constexpr double SecToUsec = 1e6;
+
+    void HandleWork(TEvSchedulerDeregister::TPtr& ev) {
+        if (ev->Get()->SchedulerEntity) {
+            Scheduler.Deregister(*ev->Get()->SchedulerEntity, TMonotonic::Now());
+        }
+    }
+
+    void HandleWork(TEvSchedulerRenice::TPtr& ev) {
+        auto now = TMonotonic::Now();
+        TSchedulerEntityHandle handle = std::move(ev->Get()->SchedulerEntity);
+        Scheduler.Renice(*handle, now, ev->Get()->DesiredWeight);
+        auto reniceConfirm = MakeHolder<TEvSchedulerReniceConfirm>(std::move(handle));
+        this->Send(ev->Sender, reniceConfirm.Release());
+    }
 
     void HandleWork(TEvKqpNode::TEvStartKqpTasksRequest::TPtr& ev) {
         NWilson::TSpan sendTasksSpan(TWilsonKqp::KqpNodeSendTasks, NWilson::TTraceId(ev->TraceId), "KqpNode.SendTasks", NWilson::EFlags::AUTO_END);
@@ -232,6 +254,8 @@ private:
         const TString& serializedGUCSettings = ev->Get()->Record.HasSerializedGUCSettings() ?
             ev->Get()->Record.GetSerializedGUCSettings() : "";
 
+        auto schedulerNow = TMonotonic::Now();
+
         // start compute actors
         const ui32 tasksCount = msg.GetTasks().size();
         for (int i = 0; i < msg.GetTasks().size(); ++i) {
@@ -240,12 +264,20 @@ private:
             YQL_ENSURE(taskCtx.TaskId != 0);
 
             TComputeActorSchedulingOptions schedulingOptions {
+                .Now = schedulerNow,
                 .NodeService = SelfId(),
                 .Scheduler = &Scheduler,
-                .Group = msg.GetRuntimeSettings().GetExecType() == NYql::NDqProto::TComputeRuntimeSettings::SCAN ? "olap" : "",
+                .Group = msg.GetSchedulerGroup(),
                 .Weight = 1,
-                .NoThrottle = false//msg.GetRuntimeSettings().GetExecType() == NYql::NDqProto::TComputeRuntimeSettings::DATA,
+                .NoThrottle = false,
+                .Counters = Counters
             };
+
+            if (msg.GetSchedulerGroup().empty()) {
+                schedulingOptions.NoThrottle = true;
+            } else {
+                schedulingOptions.Handle = Scheduler.Enroll(schedulingOptions.Group, schedulingOptions.Weight, schedulingOptions.Now);
+            }
 
             taskCtx.ComputeActorId = CaFactory()->CreateKqpComputeActor(
                 request.Executer, txId, &dqTask, runtimeSettingsBase,
@@ -274,7 +306,7 @@ private:
     }
 
     // used only for unit tests
-    void HandleWork(TEvFinishKqpTask::TPtr& ev) {
+    void HandleWork(TEvKqpNode::TEvFinishKqpTask::TPtr& ev) {
         auto& msg = *ev->Get();
         auto& bucket = State_->GetStateBucketByTx(msg.TxId);
         auto tasksToAbort = bucket.GetTasksByTxId(msg.TxId);
@@ -293,9 +325,6 @@ private:
                 auto abortEv = std::make_unique<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::ABORTED, finalReason);
                 Send(computeActorId, abortEv.release());
             }
-        }
-        if (msg.SchedulerEntity) {
-            Scheduler.Deregister(*msg.SchedulerEntity);
         }
     }
 
@@ -386,10 +415,31 @@ private:
 
     void SetPriorities(const NKikimrConfig::TTableServiceConfig::TComputePoolConfiguration& conf) {
         std::function<TComputeScheduler::TDistributionRule(const NKikimrConfig::TTableServiceConfig::TComputePoolConfiguration&)> convert
-            = [](const NKikimrConfig::TTableServiceConfig::TComputePoolConfiguration&)
+            = [&](const NKikimrConfig::TTableServiceConfig::TComputePoolConfiguration& conf)
         {
+            if (conf.HasName()) {
+                return TComputeScheduler::TDistributionRule{.Share = conf.GetMaxCpuShare(), .Name = conf.GetName()};
+            } else if (conf.HasSubPoolsConfiguration()) {
+                auto res = TComputeScheduler::TDistributionRule{.Share = conf.GetMaxCpuShare()};
+                for (auto& subConf : conf.GetSubPoolsConfiguration().GetSubPools()) {
+                    res.SubRules.push_back(convert(subConf));
+                }
+                return res;
+            } else {
+                Y_ENSURE(false, "unknown case");
+            }
         };
-        Scheduler.SetPriorities(convert(conf), 1, TlsActivationContext->Monotonic());
+        SetPriorities(convert(conf));
+    }
+
+    void SetPriorities(TComputeScheduler::TDistributionRule rule) {
+        NActors::TExecutorPoolStats poolStats;
+        TVector<NActors::TExecutorThreadStats> threadsStats;
+        TlsActivationContext->ActorSystem()->GetPoolStats(SelfId().PoolID(), poolStats, threadsStats);
+        Y_ENSURE(poolStats.MaxThreadCount > 0);
+        Counters->SchedulerCapacity->Set(poolStats.MaxThreadCount);
+
+        Scheduler.SetPriorities(rule, poolStats.MaxThreadCount, TMonotonic::Now());
     }
 
     void SetIteratorReadsRetrySettings(const NKikimrConfig::TTableServiceConfig::TIteratorReadsRetrySettings& settings) {

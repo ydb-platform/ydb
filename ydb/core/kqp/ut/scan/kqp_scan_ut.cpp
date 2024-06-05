@@ -26,6 +26,20 @@ NKikimrConfig::TAppConfig AppCfg() {
     appCfg.MutableTableServiceConfig()->MutableResourceManager()->SetMaxTotalChannelBuffersSize(100_GB);
     appCfg.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1_MB);
     appCfg.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlHeavyProgramMemoryLimit(1_MB);
+
+    appCfg.MutableTableServiceConfig()->MutableComputePoolsConfiguration()->SetMaxCpuShare(0.1);
+    {
+        auto* pool = appCfg.MutableTableServiceConfig()->MutableComputePoolsConfiguration()->MutableSubPoolsConfiguration()->AddSubPools();
+        pool->SetName("olap");
+        pool->SetMaxCpuShare(0.5);
+    }
+    
+    {
+        auto* pool = appCfg.MutableTableServiceConfig()->MutableComputePoolsConfiguration()->MutableSubPoolsConfiguration()->AddSubPools();
+        pool->SetName("garbage");
+        pool->SetMaxCpuShare(0.5);
+    }
+
     return appCfg;
 }
 

@@ -81,6 +81,7 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , OutputChunkMaxSize(args.OutputChunkMaxSize)
     , GUCSettings(std::move(args.GUCSettings))
     , MayRunTasksLocally(args.MayRunTasksLocally)
+    , SchedulerGroup(std::move(args.SchedulerGroup))
 {
     if (!Database) {
         // a piece of magic for tests
@@ -208,6 +209,8 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     if (GUCSettings) {
         request.SetSerializedGUCSettings(GUCSettings->SerializeToString());
     }
+
+    request.SetSchedulerGroup(SchedulerGroup);
 
     return result;
 }

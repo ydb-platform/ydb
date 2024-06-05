@@ -9,8 +9,9 @@ namespace {
         return TDuration::MicroSeconds(t);
     }
 
-    static constexpr double MinPriority = 1e-8;
+    static constexpr double MinEntitiesWeight = 1e-8;
 
+    static constexpr TDuration AvgBatch = TDuration::MicroSeconds(700);
 }
 
 namespace NKikimr {
@@ -98,22 +99,104 @@ public:
     TSchedulerEntity() {}
     ~TSchedulerEntity() {}
 
-private:
-    friend class TComputeScheduler;
-    friend class TSchedulerEntityHandle;
-
-    struct TGroupRecord {
-        double Weight;
+    struct TGroupMutableStats {
+        double Weight = 0;
         double Now = 0;
         TMonotonic LastNowRecalc;
         bool Disabled = false;
         double EntitiesWeight = 0;
+        double MaxDeviation = 0;
+
+        ssize_t AllowTrackUsec = 0;
+        ssize_t TrackedBefore = 0;
+
+        double GroupNow(TMonotonic now) const {
+            if (EntitiesWeight < MinEntitiesWeight) {
+                return Now;
+            } else {
+                return Now + FromDuration(now - LastNowRecalc) * Weight / EntitiesWeight;
+            }
+        }
+
+        double Limit(TMonotonic now) const {
+            return AllowTrackUsec + FromDuration(now - LastNowRecalc) * Weight + TrackedBefore;
+        }
     };
 
-    TMultithreadPublisher<TGroupRecord>* Group;
+    struct TGroupRecord {
+        TAtomic TrackedMicroSeconds;
+        TAtomic Delayed = 0;
+
+        //TAtomic MaxDelayUsec = TDuration::MilliSeconds(100).MicroSeconds();
+        TMultithreadPublisher<TGroupMutableStats> MutableStats;
+    };
+
+    TGroupRecord* Group;
     double Weight;
     double Vruntime = 0;
     double Vstart;
+
+    double Vcurrent;
+
+    TDuration MaxDelay = TDuration::MilliSeconds(100);
+
+    TDuration BatchTime = AvgBatch;
+
+    void TrackTime(TDuration time, TMonotonic now) {
+        auto group = Group->MutableStats.Current();
+        Vruntime += FromDuration(time) / Weight;
+        Vcurrent = FromDuration(time) / Weight + Max(Vcurrent, group.get()->GroupNow(now) - group.get()->MaxDeviation);
+        BatchTime = (8 * BatchTime + 2 * time) / 10;
+        AtomicAdd(Group->TrackedMicroSeconds, time.MicroSeconds());
+    }
+
+    TMaybe<TDuration> GroupDelay(TMonotonic now) {
+        auto group = Group->MutableStats.Current();
+        auto limit = group.get()->Limit(now);
+        auto tracked = AtomicGet(Group->TrackedMicroSeconds);
+        if (limit > tracked) {
+            return {};
+        } else {
+            return BatchTime * Group->Delayed + ToDuration((tracked - limit) / Weight);
+        }
+    }
+
+    void SetEnabled(TMonotonic /* now */, bool enabled) {
+        if (enabled) {
+            AtomicIncrement(Group->Delayed);
+        } else {
+            AtomicDecrement(Group->Delayed);
+        }
+    }
+
+    TMaybe<TDuration> CalcDelay(TMonotonic now) {
+        auto group = Group->MutableStats.Current();
+        Y_ENSURE(!group.get()->Disabled);
+        auto vtime = group.get()->GroupNow(now);
+        if (Vcurrent <= vtime + group.get()->MaxDeviation) {
+            return Nothing();
+        } else {
+            return Min(MaxDelay, ToDuration((Vcurrent - vtime) * group.get()->EntitiesWeight / group.get()->Weight));
+        }
+    }
+
+    TMaybe<TDuration> Lag(TMonotonic now) {
+        auto group = Group->MutableStats.Current();
+        Y_ENSURE(!group.get()->Disabled);
+        //double lagTime = (group.get()->GroupNow(now) - Vcurrent) * Weight;
+        double lagTime = (group.get()->GroupNow(now) - Vstart - Vruntime) * Weight;
+        if (lagTime <= 0) {
+            return Nothing();
+        } else {
+            return ToDuration(lagTime);
+        }
+    }
+
+    double EstimateWeight(TMonotonic now, TDuration minTime) {
+        double vruntime = Max(Vruntime, FromDuration(minTime) / Weight);
+        double vtime = Group->MutableStats.Current().get()->GroupNow(now) - Vstart;
+        return (Weight * vruntime) / vtime;
+    }
 };
 
 double TSchedulerEntityHandle::VRuntime() {
@@ -121,31 +204,62 @@ double TSchedulerEntityHandle::VRuntime() {
 }
 
 struct TComputeScheduler::TImpl {
+    TVector<::NMonitoring::TDynamicCounters::TCounterPtr> VtimeCounters;
+    TVector<::NMonitoring::TDynamicCounters::TCounterPtr> EntitiesWeightCounters;
+    TVector<::NMonitoring::TDynamicCounters::TCounterPtr> LimitCounters;
+    TVector<::NMonitoring::TDynamicCounters::TCounterPtr> WeightCounters;
+
     THashMap<TString, size_t> PoolId;
-    std::vector<std::unique_ptr<TMultithreadPublisher<TSchedulerEntity::TGroupRecord>>> Records;
+    std::vector<std::unique_ptr<TSchedulerEntity::TGroupRecord>> Records;
 
     struct TRule {
         size_t Parent;
-        double Weight;
+        double Weight = 0;
 
+        double Share;
         TMaybe<size_t> RecordId = {};
         double SubRulesSum = 0;
         bool Empty = true;
     };
-    size_t RootRule;
     std::vector<TRule> Rules;
 
     double SumCores;
 
-    void AssignWeights(TMonotonic now) {
+    TIntrusivePtr<TKqpCounters> Counters;
+    TDuration SmoothPeriod = TDuration::MilliSeconds(40);
+    TDuration MaxOverCommit = TDuration::MilliSeconds(5);
+
+    TDuration MaxDelay = TDuration::MilliSeconds(50);
+
+    void AssignWeights() {
+        ssize_t rootRule = static_cast<ssize_t>(Rules.size()) - 1;
         for (size_t i = 0; i < Rules.size(); ++i) {
+            Rules[i].SubRulesSum = 0;
+            Rules[i].Empty = true;
+        }
+        for (ssize_t i = 0; i < static_cast<ssize_t>(Rules.size()); ++i) {
             if (Rules[i].RecordId) {
-                if (Records[*Rules[i].RecordId]->Next()->EntitiesWeight < MinPriority) { // mincores
-                }
-            } else {
+                Rules[i].Empty = Records[*Rules[i].RecordId]->MutableStats.Next()->EntitiesWeight < MinEntitiesWeight;
+                Rules[i].SubRulesSum = Rules[i].Share;
+            }
+            if (i != rootRule && !Rules[i].Empty) {
+                Rules[Rules[i].Parent].Empty = false;
+                Rules[Rules[i].Parent].SubRulesSum += Rules[i].SubRulesSum;
             }
         }
-    }
+        for (ssize_t i = static_cast<ssize_t>(Rules.size()) - 1; i >= 0; --i) {
+            if (i == static_cast<ssize_t>(Rules.size()) - 1) {
+                Rules[i].Weight = SumCores * Rules[i].Share;
+            } else if (!Rules[i].Empty) {
+                Rules[i].Weight = Rules[Rules[i].Parent].Weight * Rules[i].Share / Rules[Rules[i].Parent].SubRulesSum;
+            } else {
+                Rules[i].Weight = 0;
+            }
+            if (Rules[i].RecordId) {
+                Records[*Rules[i].RecordId]->MutableStats.Next()->Weight = Rules[i].Weight;
+            }
+        }
+     }
 };
 
 TComputeScheduler::TComputeScheduler() {
@@ -171,17 +285,17 @@ void TComputeScheduler::SetPriorities(TDistributionRule rule, double cores, TMon
         auto ptr = Impl->PoolId.FindPtr(k);
         if (!ptr) {
             Impl->PoolId[k] = Impl->Records.size();
-            auto group = std::make_unique<TMultithreadPublisher<TSchedulerEntity::TGroupRecord>>();
-            group->Next()->LastNowRecalc = now;
+            auto group = std::make_unique<TSchedulerEntity::TGroupRecord>();
+            group->MutableStats.Next()->LastNowRecalc = now;
             Impl->Records.push_back(std::move(group));
         }
     }
     for (auto& [k, v] : Impl->PoolId) {
         if (!seenNames.contains(k)) {
-            auto* group = Impl->Records[Impl->PoolId[v]].get();
-            group->Next()->Weight = 0;
-            group->Next()->Disabled = true;
-            group->Publish();
+            auto& group = Impl->Records[Impl->PoolId[k]]->MutableStats;
+            group.Next()->Weight = 0;
+            group.Next()->Disabled = true;
+            group.Publish();
         }
     }
     Impl->SumCores = cores;
@@ -191,14 +305,14 @@ void TComputeScheduler::SetPriorities(TDistributionRule rule, double cores, TMon
         size_t result;
         if (rule.SubRules.empty()) {
             result = rules.size();
-            rules.push_back(TImpl::TRule{.Weight = rule.Share, .RecordId=Impl->PoolId[rule.Name]});
+            rules.push_back(TImpl::TRule{.Share = rule.Share, .RecordId=Impl->PoolId[rule.Name]});
         } else {
             TVector<size_t> toAssign;
             for (auto& subRule : rule.SubRules) {
                 toAssign.push_back(makeRules(subRule));
             }
             size_t result = rules.size();
-            rules.push_back(TImpl::TRule{.Weight = rule.Share});
+            rules.push_back(TImpl::TRule{.Share = rule.Share});
             for (auto i : toAssign) {
                 rules[i].Parent = result;
             }
@@ -206,102 +320,160 @@ void TComputeScheduler::SetPriorities(TDistributionRule rule, double cores, TMon
         }
         return result;
     };
-    Impl->RootRule = makeRules(rule);
+    makeRules(rule);
     Impl->Rules.swap(rules);
 
-    //    if (ptr) {
-    //        v->Next()->Weight = ((*ptr) * cores) / sum;
-    //        v->Next()->Disabled = false;
-    //    } else {
-    //        v->Next()->Weight = 0;
-    //        v->Next()->Disabled = true;
-    //    }
-    //    v->Publish();
-    //}
-
-    Impl->AssignWeights(now);
+    Impl->AssignWeights();
     for (auto& record : Impl->Records) {
-        record->Publish();
+        record->MutableStats.Publish();
     }
-
-    //double sum = 0;
-    //for (auto [_, v] : priorities) {
-    //    sum += v;
-    //}
-    //for (auto& [k, v] : Impl->Groups) {
-    //    auto ptr = priorities.FindPtr(k);
-    //    if (ptr) {
-    //        v->Next()->Weight = ((*ptr) * cores) / sum;
-    //        v->Next()->Disabled = false;
-    //    } else {
-    //        v->Next()->Weight = 0;
-    //        v->Next()->Disabled = true;
-    //    }
-    //    v->Publish();
-    //}
-    //for (auto& [k, v] : priorities) {
-    //    if (!Impl->Groups.contains(k)) {
-    //        auto group = ;
-    //        group->Next()->LastNowRecalc = TMonotonic::Now();
-    //        group->Next()->Weight = (v * cores) / sum;
-    //        group->Publish();
-    //        Impl->Groups[k] = std::move(group);
-    //    }
-    //}
 }
 
 
-double TComputeScheduler::GroupNow(TSchedulerEntity& self, TMonotonic now) {
-    auto group = self.Group->Current();
-    return group.get()->Now + FromDuration(now - group.get()->LastNowRecalc) * group.get()->Weight / group.get()->EntitiesWeight;
-}
+TSchedulerEntityHandle TComputeScheduler::Enroll(TString groupName, double weight, TMonotonic now) {
+    Y_ENSURE(Impl->PoolId.contains(groupName), "unknown scheduler group");
+    auto* groupEntry = Impl->Records[Impl->PoolId.at(groupName)].get();
+    groupEntry->MutableStats.Next()->EntitiesWeight += weight;
+    Impl->AssignWeights();
+    AdvanceTime(now);
 
-
-TSchedulerEntityHandle TComputeScheduler::Enroll(TString groupName, double weight) {
-    Y_ENSURE(Impl->Groups.contains(groupName), "unknown scheduler group");
-    auto* groupEntry = Impl->Groups[groupName].get();
-    auto group = groupEntry->Current();
     auto result = std::make_unique<TSchedulerEntity>();
     result->Group = groupEntry;
     result->Weight = weight;
-    result->Vstart = group.get()->Now;
-    groupEntry->Next()->EntitiesWeight += weight;
+    result->Vstart = result->Vcurrent = groupEntry->MutableStats.Next()->Now;
+    result->MaxDelay = Impl->MaxDelay;
+
     return TSchedulerEntityHandle(result.release());
 }
 
 void TComputeScheduler::AdvanceTime(TMonotonic now) {
-    Impl->AssignWeights();
-    for (auto& v : Impl->Records) {
-        {
-            auto group = v.get()->Current();
-            if (!group.get()->Disabled && group.get()->EntitiesWeight > MinPriority) {
-                v.get()->Next()->Now += FromDuration(now - group.get()->LastNowRecalc) * group.get()->Weight / group.get()->EntitiesWeight;
+    if (Impl->Counters) {
+        if (Impl->VtimeCounters.size() < Impl->Records.size()) {
+            Impl->VtimeCounters.resize(Impl->Records.size());
+            Impl->EntitiesWeightCounters.resize(Impl->Records.size());
+            Impl->LimitCounters.resize(Impl->Records.size());
+            Impl->WeightCounters.resize(Impl->Records.size());
+            for (auto& [k, i] : Impl->PoolId) {
+                Impl->VtimeCounters[i] = Impl->Counters->GetKqpCounters()->GetSubgroup("NodeScheduler/Group", k)->GetCounter("VTime", true);
+                Impl->EntitiesWeightCounters[i] = Impl->Counters->GetKqpCounters()->GetSubgroup("NodeScheduler/Group", k)->GetCounter("Entities", false);
+                Impl->LimitCounters[i] = Impl->Counters->GetKqpCounters()->GetSubgroup("NodeScheduler/Group", k)->GetCounter("Limit", true);
+                Impl->WeightCounters[i] = Impl->Counters->GetKqpCounters()->GetSubgroup("NodeScheduler/Group", k)->GetCounter("Weight", false);
             }
-            v.get()->Next()->LastNowRecalc = now;
         }
-        v->Publish();
+    }
+    for (size_t i = 0; i < Impl->Records.size(); ++i) {
+        auto& v = Impl->Records[i]->MutableStats;
+        {
+            auto group = v.Current();
+            double delta = 0;
+            if (!group.get()->Disabled && group.get()->EntitiesWeight > MinEntitiesWeight) {
+                delta = FromDuration(now - group.get()->LastNowRecalc) * group.get()->Weight / group.get()->EntitiesWeight;
+                v.Next()->Now += delta;
+                v.Next()->MaxDeviation = (FromDuration(Impl->SmoothPeriod) * v.Next()->Weight) / v.Next()->EntitiesWeight;
+            }
+            v.Next()->LastNowRecalc = now;
+            v.Next()->TrackedBefore = AtomicGet(Impl->Records[i]->TrackedMicroSeconds);
+
+            auto limit = group.get()->Limit(now);
+            if (Impl->Counters) {
+                Impl->Counters->SchedulerLimitUs->Set(limit);
+                Impl->Counters->SchedulerTrackedUs->Set(AtomicGet(Impl->Records[i]->TrackedMicroSeconds));
+                Impl->Counters->SchedulerClock->Add(now.MicroSeconds() - group.get()->LastNowRecalc.MicroSeconds());
+            }
+            v.Next()->AllowTrackUsec = limit - v.Next()->TrackedBefore;
+            //v.Next()->AllowTrackUsec = Min<ssize_t>(limit - v.Next()->TrackedBefore, AvgBatch.MicroSeconds() * AtomicGet(Impl->Records[i]->Delayed));
+
+            if (Impl->VtimeCounters.size() > i && Impl->VtimeCounters[i]) {
+                Impl->VtimeCounters[i]->Add(delta);
+                Impl->EntitiesWeightCounters[i]->Set(v.Next()->EntitiesWeight);
+                Impl->LimitCounters[i]->Add(FromDuration(now - group.get()->LastNowRecalc) * group.get()->Weight);
+                Impl->WeightCounters[i]->Set(group.get()->Weight);
+            }
+        }
+        v.Publish();
     }
 }
 
-void TComputeScheduler::Deregister(TSchedulerEntity& self) {
-    auto* group = self.Group->Next();
-    group->Weight -= self.Weight;
+void TComputeScheduler::Renice(TSchedulerEntity& self, TMonotonic now, double newWeight) {
+    auto* group = self.Group->MutableStats.Next();
+    group->EntitiesWeight -= self.Weight;
+    group->EntitiesWeight += newWeight;
+
+    Impl->AssignWeights();
+    AdvanceTime(now);
+
+    self.Vstart = group->Now;
+    self.Vcurrent = Max(self.Vstart, self.Vcurrent);
+    self.Vruntime = self.Vcurrent - self.Vstart;
+    self.Weight  = newWeight;
 }
 
-void TComputeScheduler::TrackTime(TSchedulerEntity& self, TDuration time) {
-    self.Vruntime += FromDuration(time) / self.Weight;
+void TComputeScheduler::Deregister(TSchedulerEntity& self, TMonotonic now) {
+    auto* group = self.Group->MutableStats.Next();
+    group->EntitiesWeight -= self.Weight;
+
+    //double delta = self.Group->MutableStats.Current().get()->GroupNow(now) - self.Vcurrent;
+    //if (group->EntitiesWeight > MinEntitiesWeight && delta <= 0) {
+    //    group->Now += delta * self.Weight / group->EntitiesWeight;
+    //}
+
+    Impl->AssignWeights();
+    AdvanceTime(now);
 }
 
-TMaybe<TDuration> TComputeScheduler::CalcDelay(TSchedulerEntity& self, TMonotonic now) {
-    auto group = self.Group->Current();
-    Y_ENSURE(!group.get()->Disabled);
-    double lagTime = (self.Vruntime - (group.get()->Now - self.Vstart)) * group.get()->EntitiesWeight / group.get()->Weight;
-    double neededTime = lagTime - FromDuration(now - group.get()->LastNowRecalc);
-    if (neededTime <= 0) {
-        return Nothing();
-    } else {
-        return ToDuration(neededTime);
-    }
+void TSchedulerEntityHandle::TrackTime(TDuration time, TMonotonic now) {
+    Ptr->TrackTime(time, now);
+}
+
+TMaybe<TDuration> TSchedulerEntityHandle::CalcDelay(TMonotonic now) {
+    return Ptr->CalcDelay(now);
+}
+
+TMaybe<TDuration> TSchedulerEntityHandle::GroupDelay(TMonotonic now) {
+    return Ptr->GroupDelay(now);
+}
+
+void TSchedulerEntityHandle::SetEnabled(TMonotonic now, bool enabled) {
+    Ptr->SetEnabled(now, enabled);
+}
+
+TMaybe<TDuration> TSchedulerEntityHandle::Lag(TMonotonic now) {
+    return Ptr->Lag(now);
+}
+
+double TSchedulerEntityHandle::GroupNow(TMonotonic now) {
+    return Ptr->Group->MutableStats.Current().get()->GroupNow(now);
+}
+
+void TSchedulerEntityHandle::Clear() {
+    Ptr.reset();
+}
+
+TString TSchedulerEntityHandle::DebugRepr(TMonotonic now) {
+    auto delay = CalcDelay(now);
+    auto group = Ptr->Group->MutableStats.Current();
+    return TStringBuilder()
+        << " my weight " << Ptr->Weight
+        << " my vcurrent " << Ptr->Vcurrent
+        << " my vruntime " << Ptr->Vruntime
+        << " my vstart " << Ptr->Vstart
+        << " group now " << group.get()->GroupNow(now)
+        << " vtime difference " << (group.get()->GroupNow(now) - Ptr->Vstart)
+        << " my delay is " << (delay.Defined() ? (TStringBuilder() << delay->MicroSeconds() << "us") : TString("{}"))
+        << " entities weight " << group.get()->EntitiesWeight
+    ;
+}
+
+double TSchedulerEntityHandle::EstimateWeight(TMonotonic now, TDuration minTime) {
+    return Ptr->EstimateWeight(now, minTime);
+}
+
+void TComputeScheduler::ReportCounters(TIntrusivePtr<TKqpCounters> counters) {
+    Impl->Counters = counters;
+}
+
+void TComputeScheduler::SetMaxDeviation(TDuration period) {
+    Impl->SmoothPeriod = period;
 }
 
 

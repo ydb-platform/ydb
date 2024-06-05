@@ -6,9 +6,9 @@
 
 namespace NKikimr::NOlap::NStorageOptimizer::NSBuckets {
 
-NKikimr::TConclusion<std::shared_ptr<NKikimr::NOlap::NStorageOptimizer::IOptimizerPlanner>> TOptimizerPlannerConstructor::DoBuildPlanner(const TBuildContext& context) const {
-    std::shared_ptr<IOptimizationLogic> logic;
+std::shared_ptr<IOptimizationLogic> TOptimizerPlannerConstructor::BuildLogic() const {
     const TDuration freshnessCheckDuration = NYDBTest::TControllers::GetColumnShardController()->GetOptimizerFreshnessCheckDuration(FreshnessCheckDuration);
+    std::shared_ptr<IOptimizationLogic> logic;
     if (LogicName == "one_head") {
         logic = std::make_shared<TOneHeadLogic>(freshnessCheckDuration);
     } else if (LogicName == "slices") {
@@ -16,7 +16,11 @@ NKikimr::TConclusion<std::shared_ptr<NKikimr::NOlap::NStorageOptimizer::IOptimiz
     } else {
         AFL_VERIFY(false)("ln", LogicName);
     }
-    return std::make_shared<TOptimizerPlanner>(context.GetPathId(), context.GetStorages(), context.GetPKSchema(), logic);
+    return logic;
+}
+
+TConclusion<std::shared_ptr<NOlap::NStorageOptimizer::IOptimizerPlanner>> TOptimizerPlannerConstructor::DoBuildPlanner(const TBuildContext& context) const {
+    return std::make_shared<TOptimizerPlanner>(context.GetPathId(), context.GetStorages(), context.GetPKSchema(), BuildLogic());
 }
 
 bool TOptimizerPlannerConstructor::DoIsEqualTo(const IOptimizerPlannerConstructor& item) const {
@@ -58,6 +62,15 @@ NKikimr::TConclusionStatus TOptimizerPlannerConstructor::DoDeserializeFromJson(c
     }
     LogicName = logicNameFromJson;
     return TConclusionStatus::Success();
+}
+
+bool TOptimizerPlannerConstructor::DoApplyToCurrentObject(IOptimizerPlanner& current) const {
+    auto* itemClass = dynamic_cast<TOptimizerPlanner*>(&current);
+    if (!itemClass) {
+        return false;
+    }
+    itemClass->ResetLogic(BuildLogic());
+    return true;
 }
 
 } // namespace NKikimr::NOlap::NStorageOptimizer::NSBuckets

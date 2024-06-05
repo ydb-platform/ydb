@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/sbuckets/logic/abstract/logic.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NSBuckets {
 
@@ -13,6 +14,9 @@ public:
     }
 private:
     static inline const TFactory::TRegistrator<TOptimizerPlannerConstructor> Registrator = TFactory::TRegistrator<TOptimizerPlannerConstructor>(GetClassNameStatic());
+
+    std::shared_ptr<IOptimizationLogic> BuildLogic() const;
+    virtual bool DoApplyToCurrentObject(IOptimizerPlanner & current) const override;
 
     virtual void DoSerializeToProto(TProto& proto) const override;
     virtual TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) override;

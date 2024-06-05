@@ -68,6 +68,10 @@ public:
         return Buckets.GetBucketPositions();
     }
 
+    void ResetLogic(const std::shared_ptr<IOptimizationLogic>& logic) {
+        Buckets.ResetLogic(logic);
+    }
+
     TOptimizerPlanner(const ui64 pathId, const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const std::shared_ptr<IOptimizationLogic>& logic);
 };
 

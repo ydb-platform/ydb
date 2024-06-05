@@ -182,10 +182,18 @@ private:
     virtual bool DoDeserializeFromProto(const TProto& proto) = 0;
     virtual bool DoIsEqualTo(const IOptimizerPlannerConstructor& item) const = 0;
     virtual TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) = 0;
+    virtual bool DoApplyToCurrentObject(IOptimizerPlanner& current) const = 0;
 
 public:
 
     virtual ~IOptimizerPlannerConstructor() = default;
+
+    bool ApplyToCurrentObject(const std::shared_ptr<IOptimizerPlanner>& current) const {
+        if (!current) {
+            return false;
+        }
+        return DoApplyToCurrentObject(*current);
+    }
 
     TConclusionStatus DeserializeFromJson(const NJson::TJsonValue& jsonInfo) {
         return DoDeserializeFromJson(jsonInfo);

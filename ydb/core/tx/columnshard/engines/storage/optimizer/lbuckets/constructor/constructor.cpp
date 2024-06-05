@@ -7,6 +7,14 @@ NKikimr::TConclusion<std::shared_ptr<NKikimr::NOlap::NStorageOptimizer::IOptimiz
     return std::make_shared<TOptimizerPlanner>(context.GetPathId(), context.GetStorages(), context.GetPKSchema());
 }
 
+bool TOptimizerPlannerConstructor::DoApplyToCurrentObject(IOptimizerPlanner& current) const {
+    auto* itemClass = dynamic_cast<TOptimizerPlanner*>(&current);
+    if (!itemClass) {
+        return false;
+    }
+    return true;
+}
+
 bool TOptimizerPlannerConstructor::DoIsEqualTo(const IOptimizerPlannerConstructor& item) const {
     const auto* itemClass = dynamic_cast<const TOptimizerPlannerConstructor*>(&item);
     AFL_VERIFY(itemClass);

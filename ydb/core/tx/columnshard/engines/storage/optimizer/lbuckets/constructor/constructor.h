@@ -17,6 +17,7 @@ private:
     virtual TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& /*jsonInfo*/) override {
         return TConclusionStatus::Success();
     }
+    virtual bool DoApplyToCurrentObject(IOptimizerPlanner& current) const override;
 
     virtual TConclusion<std::shared_ptr<IOptimizerPlanner>> DoBuildPlanner(const TBuildContext& context) const override;
     virtual bool DoIsEqualTo(const IOptimizerPlannerConstructor& item) const override;

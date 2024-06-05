@@ -106,6 +106,13 @@ public:
         AddBucketToRating(Buckets.begin()->second);
     }
 
+    void ResetLogic(const std::shared_ptr<IOptimizationLogic>& logic) {
+        Logic = logic;
+        for (auto&& i : Buckets) {
+            i.second->ResetLogic(logic);
+        }
+    }
+
     std::vector<TTaskDescription> GetTasksDescription() const {
         std::vector<TTaskDescription> result;
         for (auto&& i : Buckets) {

@@ -105,7 +105,7 @@ class TPortionsBucket: public TBucketInfo, public TMoveOnly {
 private:
     TLeftBucketBorder Start;
     TRightBucketBorder Finish;
-    const std::shared_ptr<IOptimizationLogic> Logic;
+    std::shared_ptr<IOptimizationLogic> Logic;
     TSimplePortionsGroupInfo PortionsInfo;
     THashMap<ui64, TBucketPortionInfo> Portions;
     TInstant NextActualizeInstant = TInstant::Zero();
@@ -129,6 +129,10 @@ public:
     }
     const TRightBucketBorder& GetFinish() const {
         return Finish;
+    }
+
+    void ResetLogic(const std::shared_ptr<IOptimizationLogic>& logic) {
+        Logic = logic;
     }
 
     i64 ResetWeight(const TInstant currentInstant) {

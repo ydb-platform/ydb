@@ -78,7 +78,7 @@ class Column:
 
     @staticmethod
     def __parse_primitive_type(src: str) -> ydb_value.Type.PrimitiveTypeId:
-        match src:  # TODO: JSON?
+        match src:
             case "Bool":
                 return ydb_value.Type.BOOL
             case "Utf8":
@@ -111,6 +111,8 @@ class Column:
                 return ydb_value.Type.DATETIME
             case "Timestamp":
                 return ydb_value.Type.TIMESTAMP
+            case "Json":
+                return ydb_value.Type.JSON
             case _:
                 raise Exception(f'invalid type: {src}')
 
@@ -142,6 +144,8 @@ class Column:
             case ydb_value.Type.BOOL:
                 return value
             case ydb_value.Type.UTF8:
+                return value
+            case ydb_value.Type.JSON:
                 return value
             case ydb_value.Type.STRING:
                 return value

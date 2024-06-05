@@ -92,6 +92,7 @@ namespace NSQLTranslationV1 {
     class TAccessNode;
     class TLambdaNode;
     class TUdfNode;
+    typedef TIntrusivePtr<ISource> TSourcePtr;
 
     struct TScopedState;
     typedef TIntrusivePtr<TScopedState> TScopedStatePtr;
@@ -554,6 +555,18 @@ namespace NSQLTranslationV1 {
     public:
         TWinRowNumber(TPosition pos, const TString& opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args);
     };
+
+    class TWinNTile final: public TWinAggrEmulation {
+        TPtr DoClone() const final {
+            return CallNodeClone<TWinNTile>();
+        }
+        bool DoInit(TContext& ctx, ISource* src) override;
+    public:
+        TWinNTile(TPosition pos, const TString& opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args);
+
+    private:
+        TSourcePtr FakeSource;
+    };    
 
     class TWinLeadLag final: public TWinAggrEmulation {
         TPtr DoClone() const final {

@@ -13005,6 +13005,13 @@
             "uri": "https://{canondata_backend}/1881367/79a71c1478c556da1931a7565c12bdd14cc63567/resource.tar.gz#test_sql2yql.test_pg-select_win_count_all_/sql.yql"
         }
     ],
+    "test_sql2yql.test[pg-select_win_cume_dist]": [
+        {
+            "checksum": "e5e020bb6ad9ad41d1f4e5757ae3793e",
+            "size": 1343,
+            "uri": "https://{canondata_backend}/1889210/9eae9dde3e4ccce7ed58c152526ff01da2d33ccb/resource.tar.gz#test_sql2yql.test_pg-select_win_cume_dist_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[pg-select_win_expr_agg]": [
         {
             "checksum": "96c31e8993d0b08a37cddf4886db96a9",
@@ -13096,11 +13103,25 @@
             "uri": "https://{canondata_backend}/1871182/567779c73d6cc9df23501e596c52b2adf09b5b7b/resource.tar.gz#test_sql2yql.test_pg-select_win_nth_value_/sql.yql"
         }
     ],
+    "test_sql2yql.test[pg-select_win_ntile]": [
+        {
+            "checksum": "b1c2a7b02c6efcc3b6f68d64a35a0803",
+            "size": 1363,
+            "uri": "https://{canondata_backend}/1889210/9eae9dde3e4ccce7ed58c152526ff01da2d33ccb/resource.tar.gz#test_sql2yql.test_pg-select_win_ntile_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[pg-select_win_partition_sort]": [
         {
             "checksum": "bd5985cc249fcf7c6c8a2ac90c4aa62a",
             "size": 1376,
             "uri": "https://{canondata_backend}/1881367/79a71c1478c556da1931a7565c12bdd14cc63567/resource.tar.gz#test_sql2yql.test_pg-select_win_partition_sort_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[pg-select_win_percent_rank]": [
+        {
+            "checksum": "bbf8c3e7692ec2ca27ae31754e123281",
+            "size": 1349,
+            "uri": "https://{canondata_backend}/1889210/9eae9dde3e4ccce7ed58c152526ff01da2d33ccb/resource.tar.gz#test_sql2yql.test_pg-select_win_percent_rank_/sql.yql"
         }
     ],
     "test_sql2yql.test[pg-select_win_rank]": [
@@ -18304,6 +18325,13 @@
             "uri": "https://{canondata_backend}/1600758/deef50cb75de37e031f94336485e9272fdd5a9af/resource.tar.gz#test_sql2yql.test_window-win_func_auto_arg_two_sort_/sql.yql"
         }
     ],
+    "test_sql2yql.test[window-win_func_cume_dist]": [
+        {
+            "checksum": "5d9cae983ad0a0420eb5e819f088656c",
+            "size": 2333,
+            "uri": "https://{canondata_backend}/1924537/1e6c4bd0b6a388eb0c3be13c5222f8b798f7e45c/resource.tar.gz#test_sql2yql.test_window-win_func_cume_dist_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[window-win_func_first_last]": [
         {
             "checksum": "2876d5cba15d8dd9e4249d6a6ed1c562",
@@ -18388,6 +18416,13 @@
             "uri": "https://{canondata_backend}/1937367/f9c5e2ce003fa874f20946cc39a5807e02d6b085/resource.tar.gz#test_sql2yql.test_window-win_func_nth_value_/sql.yql"
         }
     ],
+    "test_sql2yql.test[window-win_func_ntile]": [
+        {
+            "checksum": "7d9e8bb02850d9a7c833114f249cacad",
+            "size": 2337,
+            "uri": "https://{canondata_backend}/1924537/1e6c4bd0b6a388eb0c3be13c5222f8b798f7e45c/resource.tar.gz#test_sql2yql.test_window-win_func_ntile_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[window-win_func_on_cloned_source]": [
         {
             "checksum": "d64b85d66b7adaa9f59d01653861c470",
@@ -18442,6 +18477,13 @@
             "checksum": "f097fc545b37645b26e809c6bf9133d6",
             "size": 2223,
             "uri": "https://{canondata_backend}/1600758/d2be12e3cc8a37157a962bd9b58c2874635d2195/resource.tar.gz#test_sql2yql.test_window-win_func_part_by_expr_new_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[window-win_func_percent_rank]": [
+        {
+            "checksum": "cb092ec46c8034ee21ebdd8388bc6d21",
+            "size": 2658,
+            "uri": "https://{canondata_backend}/1924537/1e6c4bd0b6a388eb0c3be13c5222f8b798f7e45c/resource.tar.gz#test_sql2yql.test_window-win_func_percent_rank_/sql.yql"
         }
     ],
     "test_sql2yql.test[window-win_func_rank_by_all]": [
@@ -34005,6 +34047,13 @@
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_window-win_func_auto_arg_two_sort_/formatted.sql"
         }
     ],
+    "test_sql_format.test[window-win_func_cume_dist]": [
+        {
+            "checksum": "c2da6ca06ae843d6193bbcf4a8068225",
+            "size": 323,
+            "uri": "https://{canondata_backend}/1924537/1e6c4bd0b6a388eb0c3be13c5222f8b798f7e45c/resource.tar.gz#test_sql_format.test_window-win_func_cume_dist_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[window-win_func_first_last]": [
         {
             "checksum": "1dba48dd53fd6e870b89b62edaf34540",
@@ -34089,6 +34138,13 @@
             "uri": "https://{canondata_backend}/1937367/f9c5e2ce003fa874f20946cc39a5807e02d6b085/resource.tar.gz#test_sql_format.test_window-win_func_nth_value_/formatted.sql"
         }
     ],
+    "test_sql_format.test[window-win_func_ntile]": [
+        {
+            "checksum": "05a41b22e12f50577f6663518f92fb2f",
+            "size": 320,
+            "uri": "https://{canondata_backend}/1924537/1e6c4bd0b6a388eb0c3be13c5222f8b798f7e45c/resource.tar.gz#test_sql_format.test_window-win_func_ntile_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[window-win_func_on_cloned_source]": [
         {
             "checksum": "53a5dd557cae808a17be6d127d4b5178",
@@ -34143,6 +34199,13 @@
             "checksum": "4ed0e6a6836f1d8cf45ee05c4a6caa3d",
             "size": 342,
             "uri": "https://{canondata_backend}/1600758/d2be12e3cc8a37157a962bd9b58c2874635d2195/resource.tar.gz#test_sql_format.test_window-win_func_part_by_expr_new_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[window-win_func_percent_rank]": [
+        {
+            "checksum": "4f5c46173d8534a8dd74eaeb902e1a5c",
+            "size": 354,
+            "uri": "https://{canondata_backend}/1924537/1e6c4bd0b6a388eb0c3be13c5222f8b798f7e45c/resource.tar.gz#test_sql_format.test_window-win_func_percent_rank_/formatted.sql"
         }
     ],
     "test_sql_format.test[window-win_func_rank_by_all]": [

@@ -27,6 +27,7 @@ const EPDiskStatus = [
     "ACTIVE",
     "INACTIVE",
     "BROKEN",
+    "UNKNOWN", // deprecated status
     "FAULTY",
     "TO_BE_REMOVED",
 ];

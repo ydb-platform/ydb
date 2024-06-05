@@ -6,8 +6,8 @@ SET(sql_grammar ${antlr_output}/SQLv4.g)
 
 SET(ANTLR_PACKAGE_NAME NSQLv4Generated)
 
-SET(GRAMMAR_STRING_CORE_SINGLE "~(['\\\]) | (BACKSLASH .)")
-SET(GRAMMAR_STRING_CORE_DOUBLE "~([\"\\\]) | (BACKSLASH .)")
+SET(GRAMMAR_STRING_CORE_SINGLE "\"~(['#BACKSLASH#]) | (BACKSLASH .)\"")
+SET(GRAMMAR_STRING_CORE_DOUBLE "\"~([#DOUBLE_QUOTE##BACKSLASH#]) | (BACKSLASH .)\"")
 SET(GRAMMAR_MULTILINE_COMMENT_CORE       "\".\"")
 
 CONFIGURE_FILE(${ARCADIA_ROOT}/ydb/library/yql/parser/proto_ast/org/antlr/v4/tool/templates/codegen/Java/Java.stg.in ${antlr_templates}/Java/Java.stg)

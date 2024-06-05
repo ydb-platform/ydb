@@ -7,8 +7,8 @@ IF (GEN_PROTO)
 
     SET(ANTLR_PACKAGE_NAME NSQLv1Generated)
 
-    SET(GRAMMAR_STRING_CORE_SINGLE "~(['\\\]) | (BACKSLASH .)")
-    SET(GRAMMAR_STRING_CORE_DOUBLE "~([\"\\\]) | (BACKSLASH .)")
+    SET(GRAMMAR_STRING_CORE_SINGLE "\"~(QUOTE_SINGLE_ | BACKSLASH_) | (BACKSLASH .)\"")
+    SET(GRAMMAR_STRING_CORE_DOUBLE "\"~(QUOTE_DOUBLE_ | BACKSLASH_) | (BACKSLASH .)\"")
     SET(GRAMMAR_MULTILINE_COMMENT_CORE       "\".\"")
 
     CONFIGURE_FILE(${ARCADIA_ROOT}/ydb/library/yql/parser/proto_ast/org/antlr/v4/tool/templates/codegen/Java/Java.stg.in ${antlr_templates}/Java/Java.stg)

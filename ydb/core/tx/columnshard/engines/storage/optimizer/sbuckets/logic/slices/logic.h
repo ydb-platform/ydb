@@ -17,6 +17,9 @@ private:
         for (auto&& i : actualPortions) {
             size += i->GetTotalBlobBytes();
         }
+        if (size < 8000000 && actualPortions.size() < 100) {
+            return TCalcWeightResult(0, nextInstant);
+        }
         const ui64 marker = actualPortions.size() * 1000000000;
         if (marker < size || actualPortions.size() <= 1) {
             return TCalcWeightResult(0, nextInstant);

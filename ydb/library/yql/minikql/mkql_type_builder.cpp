@@ -521,11 +521,6 @@ public:
         return *this;
     }
 
-    // template <const char* Name, typename TArg>
-    // NUdf::ICallableTypeBuilder& Arg() {
-    //     return Arg<TArg>().Name(Name);
-    // }
-
     NUdf::ICallableTypeBuilder& Name(const NUdf::TStringRef& name) override {
         Args_.back().Name_ = Env_.InternName(name);
         return *this;

@@ -230,11 +230,11 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
             } else if (*tx.Predicate) {
                 auto txId = tx.GetTxId();
                 auto txPtr = MakeSimpleShared<TTransaction>(std::move(tx));
-                UserActionAndTxPendingCommit.emplace_back(txPtr);
                 BatchingState = ETxBatchingState::Executing;
                 if (txId.Defined()) {
                     TransactionsInflight.insert(std::make_pair(*txId, txPtr));
                 }
+                UserActionAndTxPendingCommit.emplace_back(std::move(txPtr));
             }
         }
     }

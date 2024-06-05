@@ -1296,6 +1296,10 @@ public:
         ResetBatchCompletion();
     }
 
+    ui64 GetTxId() {
+        return NextActId++;
+    }
+
     ui64 AddAndSendNormalWrite(const TString& srcId, ui64 startSeqnNo, ui64 lastSeqNo);
     ui64 MakeAndSendWriteTx(const TSrcIdMap& srcIdsAffected);
     ui64 MakeAndSendImmediateTx(const TSrcIdMap& srcIdsAffected);
@@ -2574,7 +2578,7 @@ Y_UNIT_TEST_F(NonConflictingActsBatchOk, TPartitionTxTestHelper) {
     WaitTxPredicateReply(tx2);
     WaitTxPredicateReply(tx3);
 
-    WaitBatchCompletion(5 + 6 + 6); //5 tx or immediate tx + 2 normal writes with 6 messages each;
+    WaitBatchCompletion(5 + 6 + 6); //5 txs and immediate txs + 2 normal writes with 6 messages each;
 
     SendTxCommit(tx3);
     SendTxRollback(tx2);
@@ -2963,7 +2967,7 @@ Y_UNIT_TEST_F(ConflictingCommitsInSeveralBatches, TPartitionTxTestHelper) {
     WaitTxPredicateReply(txTmp);
     SendTxRollback(txTmp);
 
-    WaitBatchCompletion(1 + 2);
+    WaitBatchCompletion(2 + 1);
     WaitKvRequest();
     SendKvResponse();
     WaitImmediateTxComplete(immTx1, true);
@@ -3061,6 +3065,52 @@ Y_UNIT_TEST_F(ConflictingCommitProccesAfterRollback, TPartitionTxTestHelper) {
     SendKvResponse();
     WaitCommitDone(tx2);
     ExpectNoCommitDone();
+}
+
+Y_UNIT_TEST_F(TestBatchingWithChangeConfig, TPartitionTxTestHelper) {
+   Init();
+   auto txTmp = MakeAndSendWriteTx({});
+   SendChangePartitionConfig({.Version=2,
+                              .Consumers={
+                              {.Consumer="client-1", .Generation=0},
+                              {.Consumer="client-3", .Generation=7}
+                              }});
+    auto immTx = MakeAndSendImmediateTx({});
+    WaitWriteInfoRequest(txTmp, true);
+    SendTxRollback(txTmp);
+    WaitWriteInfoRequest(immTx, true);
+    WaitBatchCompletion(1);
+    ExpectNoBatchCompletion();
+    EmulateKVTablet();
+    WaitBatchCompletion(1);
+    EmulateKVTablet();
+    WaitImmediateTxComplete(immTx, true);
+}
+
+Y_UNIT_TEST_F(TestBatchingWithProposeConfig, TPartitionTxTestHelper) {
+    Init();
+    auto txTmp = MakeAndSendWriteTx({});
+
+    auto event = std::make_unique<TEvPQ::TEvProposePartitionConfig>(1, GetTxId());
+
+    event->TopicConverter = TopicConverter;
+    auto copy = Config;
+    copy.SetVersion(10);
+    event->Config = std::move(copy);
+    auto* newConsumer = event->Config.AddConsumers();
+    newConsumer->SetName("new-consumer");
+    SendEvent(event.release());
+
+    auto immTx = MakeAndSendImmediateTx({});
+    WaitWriteInfoRequest(txTmp, true);
+    SendTxRollback(txTmp);
+    WaitWriteInfoRequest(immTx, true);
+    WaitBatchCompletion(1);
+    ExpectNoBatchCompletion();
+    EmulateKVTablet();
+    WaitBatchCompletion(1);
+    EmulateKVTablet();
+    WaitImmediateTxComplete(immTx, true);
 }
 
 Y_UNIT_TEST_F(GetUsedStorage, TPartitionFixture) {

@@ -742,9 +742,17 @@ private:
     //
     struct TUserActionAndTransactionEvent {
         std::variant<TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>,             // user actions
-//                     TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction>, // immediate transaction
                      TSimpleSharedPtr<TTransaction>,                        // distributed transaction or update config
                      TMessage> Event;
+        TUserActionAndTransactionEvent(TSimpleSharedPtr<TTransaction>&& transaction)
+            : Event(std::move(transaction))
+        {}
+        TUserActionAndTransactionEvent(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>&& userAct)
+            : Event(std::move(userAct))
+        {}
+        TUserActionAndTransactionEvent(TMessage&& message)
+            : Event(std::move(message))
+        {}
     };
 
     std::deque<TUserActionAndTransactionEvent> UserActionAndTransactionEvents;

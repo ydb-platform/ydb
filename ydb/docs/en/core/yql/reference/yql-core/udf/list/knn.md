@@ -26,18 +26,17 @@ LIMIT 10;
 
 ### Approximate methods
 
-There are a lot of approximate methods. In this document we will talk about scalar quantization.
+There are multiple possible approximate methods. In this document, we will focus on scalar quantization.
 
-Scalar quantization is method to compress vectors, when coordinate mapped to space with lower size.
+**Scalar quantization** is a method to compress vectors by mapping coordinates to a smaller space.
 {{ ydb-short-name }} support exact search for `Float`, `Int8`, `Uint8`, `Bit` vectors.
-So it's possible to apply scalar quantization from `Float` to one of these types.
+So, it's possible to apply scalar quantization from `Float` to one of these other types.
 
-Scalar quantization decrease read/write time because we need to read/write less bytes in few times.
-For an example for `Float` -> `Bit` in `32` times.
+Scalar quantization decreases read/write times by reducing vector size in bytes. For example, after quantization from `Float` to `Bit,` each vector becomes 32 times smaller.
 
 {% note info %}
 
-It's important to remember that you probably needed to measure is it sufficient accuracy/recall or not.
+It is recommended to measure if such transformation provides sufficient accuracy/recall.
 
 {% endnote %}
 
@@ -52,11 +51,15 @@ Vector functions are implemented as user-defined functions (UDF) in the `Knn` mo
 
 ### Functions for converting between vector and binary representations
 
-Conversion functions are needed to serialize the vector set into an internal binary representation and vice versa.
+Conversion functions are needed to serialize vectors into an internal binary representation and vice versa.
 
-All conversation functions returns [Tagged](../../types/special.md) types.
+All conversation functions wrap returned data into [Tagged](../../types/special.md) types.
 
-The binary representation of a vector can be persisted in a {{ ydb-short-name }} table column, {{ ydb-short-name }} doesn't support storing `Tagged` types, so user should store them as `String` type using [Untag](../../builtins/basic#as-tagged) function.
+{% note info %}
+
+To persist vector's binary representation in a {{ ydb-short-name }} table column,  use [Untag](../../builtins/basic#as-tagged) function first because {{ ydb-short-name }} doesn't support storing `Tagged` types.
+
+{% endnote %}
 
 #### Function signatures
 
@@ -71,8 +74,11 @@ Knn::ToBinaryStringBit(List<Int8>{Flags:AutoMap})->Tagged<String, "BitVector">
 Knn::FloatFromBinaryString(String{Flags:AutoMap})->List<Float>?
 ```
 
-* `ToBinaryStringBit` -- coordinates that greater than `0` are mapped to `1`, other coordinates are mapped to `0`.
-* `ToBinaryStringBit`, `ToBinaryStringUint8`, `ToBinaryStringInt8` -- commonly used for quantization.
+#### Implementation details
+
+The `ToBinaryStringBit` function maps coordinates that are greater than `0` to `1`. All other coordinates are mapped to `0`.
+
+`ToBinaryStringBit`, `ToBinaryStringUint8`, and `ToBinaryStringInt8` are commonly used for quantization.
 
 ### Distance and similarity functions
 
@@ -85,13 +91,13 @@ Distance functions return small values for close vectors, while similarity funct
 {% endnote %}
 
 Similarity functions:
-* inner product `InnerProductSimilarity`, it's `dot product` for us, also known as `scalar product` (sum of products of coordinates)
-* cosine similarity `CosineSimilarity` (inner product / product of vector lengths)
+* inner product `InnerProductSimilarity`, it's the dot product, also known as the scalar product (sum of products of coordinates)
+* cosine similarity `CosineSimilarity` (inner product divided by product of vector lengths)
 
 Distance functions:
 * cosine distance `CosineDistance` (1 - cosine similarity)
-* mahattan distance `ManhattanDistance`, also known as `L1 distance` (sum of modules of coordinate difference)
-* euclidean distance `EuclideanDistance`, also known as `L2 distance` (square root of sum of squares of coordinate difference)
+* mahattan distance `ManhattanDistance`, also known as `L1 distance` (sum of modules of coordinate differences)
+* euclidean distance `EuclideanDistance`, also known as `L2 distance` (square root of the sum of squares of coordinate differences)
 
 #### Function signatures
 
@@ -103,17 +109,17 @@ Knn::ManhattanDistance(String{Flags:AutoMap}, String{Flags:AutoMap})->Float?
 Knn::EuclideanDistance(String{Flags:AutoMap}, String{Flags:AutoMap})->Float?
 ```
 
-In case of different length or format, these functions return `NULL`.
+In case of mismatched lengths or formats, these functions return `NULL`.
 
 {% note info %}
 
 All distance and similarity functions support overloads when first or second arguments are `Tagged<String, "FloatVector">`, `Tagged<String, "Uint8Vector">`, `Tagged<String, "Int8Vector">`, `Tagged<String, "BitVector">`.
 
-If both arguments are `Tagged`, value of tag should be same, overwise there will be an error for this request.
+If both arguments are `Tagged`, tag values should match, or the query will raise an error.
 
 {% endnote %}
 
-## Examples of exact search
+## Еxact search examples
 
 ### Creating a table
 
@@ -157,7 +163,7 @@ SELECT * FROM Facts
 WHERE Knn::CosineDistance(embedding, $TargetEmbedding) < $R;
 ```
 
-## Examples of approximate search
+## Approximate search examples
 
 ### Creating a table
 
@@ -182,9 +188,9 @@ VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryString
 
 ### Quantization
 
-Quantization can be done by ML model, or this can be done in YQL.
+An ML model can do quantization, or it can be done manually with YQL.
 
-Here examples of quantization in YQL.
+Below are quantization examples in YQL.
 
 #### Float -> Int8
 
@@ -193,7 +199,7 @@ $MapInt8 = ($x) -> {
     $min = -5.0f;
     $max =  5.0f;
     $dist = $max - $min;
-	RETURN Cast(Math::Round(IF($x < $min, -127, IF($x > $max, 127, ($x / $dist) * 255))) As Int8)
+	RETURN CAST(Math::Round(IF($x < $min, -127, IF($x > $max, 127, ($x / $dist) * 255))) As Int8)
 };
 ```
 
@@ -204,7 +210,7 @@ $MapUint8 = ($x) -> {
     $min = -5.0f;
     $max =  5.0f;
     $dist = $max - $min;
-	RETURN Cast(Math::Round(IF($x < $min, 0, IF($x > $max, 255, (($x - $min) / $dist) * 255))) As Uint8)
+	RETURN CAST(Math::Round(IF($x < $min, 0, IF($x > $max, 255, (($x - $min) / $dist) * 255))) As Uint8)
 };
 ```
 

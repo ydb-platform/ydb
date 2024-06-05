@@ -1318,6 +1318,20 @@ public:
                 return false;
             }
         }
+
+        TMaybe<size_t> groupingColumnsCount;
+        size_t idx = 0;
+        for (const auto& select : Subselects) {
+            size_t count = select->GetGroupingColumnsCount();
+            if (!groupingColumnsCount.Defined()) {
+                groupingColumnsCount = count;
+            } else if (*groupingColumnsCount != count) {
+                ctx.Error(select->GetPos()) << TStringBuilder() << "Mismatch GROUPING() column count in composite select input #"
+                    << idx << ": expected " << *groupingColumnsCount << ", got: " << count << ". Please submit bug report";
+                return false;
+            }
+            ++idx;
+        }
         return true;
     }
 
@@ -1454,7 +1468,7 @@ public:
         bool assumeSorted,
         const TVector<TSortSpecificationPtr>& orderBy,
         TNodePtr having,
-        TWinSpecs& winSpecs,
+        const TWinSpecs& winSpecs,
         TLegacyHoppingWindowSpecPtr legacyHoppingWindowSpec,
         const TVector<TNodePtr>& terms,
         bool distinct,
@@ -1494,6 +1508,10 @@ public:
     void GetInputTables(TTableList& tableList) const override {
         Source->GetInputTables(tableList);
         ISource::GetInputTables(tableList);
+    }
+
+    size_t GetGroupingColumnsCount() const override {
+        return Source->GetGroupingColumnsCount();
     }
 
     bool DoInit(TContext& ctx, ISource* initSrc) override {
@@ -1888,13 +1906,9 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        TWinSpecs newSpecs;
-        for (auto cur: WinSpecs) {
-            newSpecs.emplace(cur.first, cur.second->Clone());
-        }
         return new TSelectCore(Pos, Source->CloneSource(), CloneContainer(GroupByExpr),
                 CloneContainer(GroupBy), CompactGroupBy, GroupBySuffix, AssumeSorted, CloneContainer(OrderBy),
-                SafeClone(Having), newSpecs, SafeClone(LegacyHoppingWindowSpec),
+                SafeClone(Having), CloneContainer(WinSpecs), SafeClone(LegacyHoppingWindowSpec),
                 CloneContainer(Terms), Distinct, Without, SelectStream, Settings, TColumnsSets(UniqueSets), TColumnsSets(DistinctSets));
     }
 
@@ -2604,6 +2618,10 @@ public:
         return true;
     }
 
+    size_t GetGroupingColumnsCount() const override {
+        return Hints.size();
+    }
+
     TNodePtr BuildGroupingColumns(const TString& label) override {
         if (Hints.empty()) {
             return nullptr;
@@ -2706,7 +2724,7 @@ TSourcePtr DoBuildSelectCore(
         }
         totalGroups += contentPtr->size();
         TSelectCore* selectCore = new TSelectCore(pos, std::move(proxySource), CloneContainer(groupByExpr),
-            CloneContainer(*contentPtr), compactGroupBy, groupBySuffix, assumeSorted, orderBy, SafeClone(having), winSpecs,
+            CloneContainer(*contentPtr), compactGroupBy, groupBySuffix, assumeSorted, orderBy, SafeClone(having), CloneContainer(winSpecs),
             legacyHoppingWindowSpec, terms, distinct, without, selectStream, settings, TColumnsSets(uniqueSets), TColumnsSets(distinctSets));
         subselects.emplace_back(selectCore);
     }

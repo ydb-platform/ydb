@@ -305,6 +305,10 @@ enum EConsumerScalingSupport {
     FULL_SUPPORT = 3;
 }
 
+message TOffloadConfig {
+
+}
+
 message TPQTabletConfig {
     optional uint64 CacheSize = 1 [default = 104857600]; //100Mb, per tablet
     optional TPartitionConfig PartitionConfig = 2; //mandatory
@@ -410,6 +414,8 @@ message TPQTabletConfig {
     optional TPartitionStrategy PartitionStrategy = 35;
 
     repeated TPartition AllPartitions = 36; // filled by schemeshard
+
+    optional TOffloadConfig OffloadConfig = 38;
 }
 
 message THeartbeat {
@@ -930,6 +936,7 @@ message TPartitionOperation {
     optional uint64 End = 3;
     optional string Consumer = 4;
     optional string Path = 5; // topic path
+    optional uint32 SupportivePartition = 6;
 };
 
 message TDataTransaction {

@@ -56,6 +56,7 @@ namespace NKikimr::NOlap {
         PortionsCleaner,
         TablesCleaner,
         PortionsMetadata,
+        CleanGranuleId
     };
 
     class TNormalizationContext {
@@ -145,12 +146,15 @@ namespace NKikimr::NOlap {
             }
 
             ui32 GetSequentialId() const {
-                return (ui32) GetType();
+                return (ui32)GetType();
             }
 
             TConclusion<std::vector<INormalizerTask::TPtr>> Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
                 if (controller.HasLastAppliedNormalizerId() && controller.GetLastAppliedNormalizerIdUnsafe() >= GetSequentialId()) {
+                    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "normalization_skipped")("last", controller.GetLastAppliedNormalizerIdUnsafe())("seq_id", GetSequentialId())("type", GetType());
                     return std::vector<INormalizerTask::TPtr>();
+                } else {
+                    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "normalization_init")("last", controller.GetLastAppliedNormalizerIdOptional().value_or(9999999))("seq_id", GetSequentialId())("type", GetType());
                 }
                 auto result = DoInit(controller, txc);
                 if (!result.IsSuccess()) {

@@ -248,13 +248,15 @@ namespace NKikimr::NTable::NPage {
         };
 
     public:
+        // Version = 0 didn't have GroupDataSize field
+        static const ui16 FormatVersion = 1;
+
         TBtreeIndexNode(TSharedData raw)
             : Raw(std::move(raw))
         {
             const auto data = NPage::TLabelWrapper().Read(Raw, EPage::BTreeIndex);
 
-            // Version = 0 didn't have GroupDataSize field
-            Y_ABORT_UNLESS(data == ECodec::Plain && data.Version == 1);
+            Y_ABORT_UNLESS(data == ECodec::Plain && data.Version == FormatVersion);
 
             Header = TDeref<const THeader>::At(data.Page.data());
             size_t offset = sizeof(THeader);

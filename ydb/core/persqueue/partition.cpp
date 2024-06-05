@@ -277,7 +277,7 @@ void TPartition::EmplaceResponse(TMessage&& message, const TActorContext& ctx) {
     );
 }
 
-ui64 TPartition::MeteringDataSize(const TActorContext& /*ctx*/) const {
+ui64 TPartition::MeteringDataSize() const {
     if (DataKeysBody.size() <= 1) {
         // tiny optimization - we do not meter very small queues up to 16MB
         return 0;
@@ -286,29 +286,31 @@ ui64 TPartition::MeteringDataSize(const TActorContext& /*ctx*/) const {
     // We assume that DataKyesBody contains an up-to-date set of blobs, their relevance is
     // maintained by the background process. However, the last block may contain several irrelevant
     // messages. Because of them, we throw out the size of the entire blob.
-    ui64 size = Size() - DataKeysBody[0].Size;
-    Y_DEBUG_ABORT_UNLESS(size >= 0, "Metering data size must be positive");
-    return std::max<ui64>(size, 0);
+    auto size = Size();
+    auto lastBlobSize = DataKeysBody[0].Size;
+    Y_DEBUG_ABORT_UNLESS(size >= lastBlobSize, "Metering data size must be positive");
+    return size >= lastBlobSize ? size - lastBlobSize : 0;
 }
 
 ui64 TPartition::ReserveSize() const {
     return TopicPartitionReserveSize(Config);
 }
 
-ui64 TPartition::StorageSize(const TActorContext& ctx) const {
-    return std::max<ui64>(MeteringDataSize(ctx), ReserveSize());
+ui64 TPartition::StorageSize(const TActorContext&) const {
+    return std::max<ui64>(MeteringDataSize(), ReserveSize());
 }
 
-ui64 TPartition::UsedReserveSize(const TActorContext& ctx) const {
-    return std::min<ui64>(MeteringDataSize(ctx), ReserveSize());
+ui64 TPartition::UsedReserveSize(const TActorContext&) const {
+    return std::min<ui64>(MeteringDataSize(), ReserveSize());
 }
 
-ui64 TPartition::GetUsedStorage(const TActorContext& ctx) {
-    const auto now = ctx.Now();
+ui64 TPartition::GetUsedStorage(const TInstant& now) {
     const auto duration = now - LastUsedStorageMeterTimestamp;
     LastUsedStorageMeterTimestamp = now;
 
-    ui64 size = std::max<ui64>(MeteringDataSize(ctx) - ReserveSize(), 0);
+    auto dataSize = MeteringDataSize();
+    auto reservedSize = ReserveSize();
+    ui64 size = dataSize > reservedSize ? dataSize - reservedSize : 0;
     return size * duration.MilliSeconds() / 1000 / 1_MB; // mb*seconds
 }
 
@@ -335,7 +337,7 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
     ctx.Schedule(WAKE_TIMEOUT, new TEvents::TEvWakeup());
     ctx.Send(Tablet, new TEvPQ::TEvPartitionCounters(Partition, TabletCounters));
 
-    ui64 usedStorage = GetUsedStorage(ctx);
+    ui64 usedStorage = GetUsedStorage(ctx.Now());
     if (usedStorage > 0) {
         ctx.Send(Tablet, new TEvPQ::TEvMetering(EMeteringJson::UsedStorageV1, usedStorage));
     }
@@ -775,7 +777,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
 
         result.SetReadBytesQuota(maxQuota);
 
-        result.SetPartitionSize(MeteringDataSize(ctx));
+        result.SetPartitionSize(MeteringDataSize());
         result.SetUsedReserveSize(UsedReserveSize(ctx));
 
         result.SetLastWriteTimestampMs(WriteTimestamp.MilliSeconds());
@@ -3042,6 +3044,8 @@ void TPartition::Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const T
 
 void TPartition::HandleOnInit(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorContext&)
 {
+    Y_ABORT_UNLESS(IsSupportive());
+
     PendingEvents.emplace_back(ev->ReleaseBase().Release());
 }
 

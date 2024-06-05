@@ -418,6 +418,8 @@ public:
                 srcDesc.MutableSettings()->insert({"addPathIndex", "true"});
             }
 
+            srcDesc.SetAsyncDecoding(State_->Configuration->AsyncDecoding.Get().GetOrElse(false));
+
 #if defined(_linux_) || defined(_darwin_)
 
             auto useRuntimeListing = State_->Configuration->UseRuntimeListing.Get().GetOrElse(false);

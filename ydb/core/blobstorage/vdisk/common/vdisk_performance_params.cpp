@@ -17,4 +17,9 @@ extern const std::unordered_map<NPDisk::EDeviceType, TVDiskPerformanceParams> VD
     } },
 };
 
+TCostMetricsParameters::TCostMetricsParameters(ui64 defaultBurstThresholdMs)
+    : BurstThresholdNs(defaultBurstThresholdMs * 1'000'000, 1, 1'000'000'000'000)
+    , DiskTimeAvailableScale(1'000, 1, 1'000'000)
+{}
+
 } // namespace NKikimr

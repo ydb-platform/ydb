@@ -1343,41 +1343,41 @@ void TTabletResolverInitializer::InitializeServices(
 
 }
 
-// TTabletPipePeNodeCachesInitializer
+// TTabletPipePerNodeCachesInitializer
 
-TTabletPipePeNodeCachesInitializer::TTabletPipePeNodeCachesInitializer(const TKikimrRunConfig& runConfig)
+TTabletPipePerNodeCachesInitializer::TTabletPipePerNodeCachesInitializer(const TKikimrRunConfig& runConfig)
     : IKikimrServicesInitializer(runConfig) {
 }
 
-void TTabletPipePeNodeCachesInitializer::InitializeServices(
+void TTabletPipePerNodeCachesInitializer::InitializeServices(
             NActors::TActorSystemSetup* setup,
             const NKikimr::TAppData* appData)
 {
     auto counters = GetServiceCounters(appData->Counters, "tablets");
 
-    TIntrusivePtr<TPipePeNodeCacheConfig> leaderPipeConfig = new TPipePeNodeCacheConfig();
+    TIntrusivePtr<TPipePerNodeCacheConfig> leaderPipeConfig = new TPipePerNodeCacheConfig();
     leaderPipeConfig->PipeRefreshTime = TDuration::Zero();
     leaderPipeConfig->Counters = counters->GetSubgroup("type", "LEADER_PIPE_CACHE");
 
-    TIntrusivePtr<TPipePeNodeCacheConfig> followerPipeConfig = new TPipePeNodeCacheConfig();
+    TIntrusivePtr<TPipePerNodeCacheConfig> followerPipeConfig = new TPipePerNodeCacheConfig();
     followerPipeConfig->PipeRefreshTime = TDuration::Seconds(30);
     followerPipeConfig->PipeConfig.AllowFollower = true;
     followerPipeConfig->Counters = counters->GetSubgroup("type", "FOLLOWER_PIPE_CACHE");
 
-    TIntrusivePtr<TPipePeNodeCacheConfig> persistentPipeConfig = new TPipePeNodeCacheConfig();
+    TIntrusivePtr<TPipePerNodeCacheConfig> persistentPipeConfig = new TPipePerNodeCacheConfig();
     persistentPipeConfig->PipeRefreshTime = TDuration::Zero();
-    persistentPipeConfig->PipeConfig = TPipePeNodeCacheConfig::DefaultPersistentPipeConfig();
+    persistentPipeConfig->PipeConfig = TPipePerNodeCacheConfig::DefaultPersistentPipeConfig();
     persistentPipeConfig->Counters = counters->GetSubgroup("type", "PERSISTENT_PIPE_CACHE");
 
     setup->LocalServices.emplace_back(
-        MakePipePeNodeCacheID(false),
-        TActorSetupCmd(CreatePipePeNodeCache(leaderPipeConfig), TMailboxType::ReadAsFilled, appData->UserPoolId));
+        MakePipePerNodeCacheID(false),
+        TActorSetupCmd(CreatePipePerNodeCache(leaderPipeConfig), TMailboxType::ReadAsFilled, appData->UserPoolId));
     setup->LocalServices.emplace_back(
-        MakePipePeNodeCacheID(true),
-        TActorSetupCmd(CreatePipePeNodeCache(followerPipeConfig), TMailboxType::ReadAsFilled, appData->UserPoolId));
+        MakePipePerNodeCacheID(true),
+        TActorSetupCmd(CreatePipePerNodeCache(followerPipeConfig), TMailboxType::ReadAsFilled, appData->UserPoolId));
     setup->LocalServices.emplace_back(
-        MakePipePeNodeCacheID(EPipePeNodeCache::Persistent),
-        TActorSetupCmd(CreatePipePeNodeCache(persistentPipeConfig), TMailboxType::ReadAsFilled, appData->UserPoolId));
+        MakePipePerNodeCacheID(EPipePerNodeCache::Persistent),
+        TActorSetupCmd(CreatePipePerNodeCache(persistentPipeConfig), TMailboxType::ReadAsFilled, appData->UserPoolId));
 }
 
 // TTabletMonitoringProxyInitializer

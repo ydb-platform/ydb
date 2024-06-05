@@ -563,7 +563,7 @@ void TReadSessionEvent::TCreatePartitionStreamEvent::Confirm(TMaybe<ui64> readOf
     }
 }
 
-TReadSessionEvent::TDestroyPartitionStreamEvent::TDestroyPartitionStreamEvent(TPartitionStream::TPtr partitionStream, bool committedOffset)
+TReadSessionEvent::TDestroyPartitionStreamEvent::TDestroyPartitionStreamEvent(TPartitionStream::TPtr partitionStream, ui64 committedOffset)
     : PartitionStream(std::move(partitionStream))
     , CommittedOffset(committedOffset)
 {

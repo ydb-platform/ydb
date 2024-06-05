@@ -23,6 +23,10 @@ struct TEnvironmentSetup {
     std::set<TActorId> CommencedReplication;
     std::unordered_map<ui32, TString> Cache;
 
+    using TIcbControlKey = std::pair<ui32, TString>;  // { nodeId, name }
+
+    std::unordered_map<TIcbControlKey, TControlWrapper> IcbControls;
+
     struct TSettings {
         const ui32 NodeCount = 9;
         const bool VDiskReplPausedAtStart = false;
@@ -39,7 +43,7 @@ struct TEnvironmentSetup {
         const bool SuppressCompatibilityCheck = false;
         const TFeatureFlags FeatureFlags;
         const NPDisk::EDeviceType DiskType = NPDisk::EDeviceType::DEVICE_TYPE_NVME;
-        const ui32 BurstThresholdNs = 0;
+        const ui64 BurstThresholdNs = 0;
         const ui32 MinHugeBlobInBytes = 0;
         const float DiskTimeAvailableScale = 1;
         const bool UseFakeConfigDispatcher = false;
@@ -374,14 +378,24 @@ struct TEnvironmentSetup {
                 }
                 config->FeatureFlags = Settings.FeatureFlags;
 
-                {
-                    auto* type = config->BlobStorageConfig.MutableCostMetricsSettings()->AddVDiskTypes();
-                    type->SetPDiskType(NKikimrBlobStorage::EPDiskType::ROT);
-                    if (Settings.BurstThresholdNs) {
-                        type->SetBurstThresholdNs(Settings.BurstThresholdNs);
-                    }
-                    type->SetDiskTimeAvailableScale(Settings.DiskTimeAvailableScale);
+                TAppData* appData = Runtime->GetNode(nodeId)->AppData.get();
+
+#define ADD_ICB_CONTROL(controlName, defaultVal, minVal, maxVal, currentValue) {        \
+                    TControlWrapper control(defaultVal, minVal, maxVal);                \
+                    appData->Icb->RegisterSharedControl(control, controlName);          \
+                    control = currentValue;                                             \
+                    IcbControls.insert({{nodeId, controlName}, std::move(control)});    \
                 }
+
+                if (Settings.BurstThresholdNs) {
+                    ADD_ICB_CONTROL("VDiskControls.BurstThresholdNsHDD", 200'000'000, 1, 1'000'000'000'000, Settings.BurstThresholdNs);
+                    ADD_ICB_CONTROL("VDiskControls.BurstThresholdNsSSD", 50'000'000,  1, 1'000'000'000'000, Settings.BurstThresholdNs);
+                    ADD_ICB_CONTROL("VDiskControls.BurstThresholdNsNVME", 32'000'000,  1, 1'000'000'000'000, Settings.BurstThresholdNs);
+                }
+                ADD_ICB_CONTROL("VDiskControls.DiskTimeAvailableScaleHDD", 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
+                ADD_ICB_CONTROL("VDiskControls.DiskTimeAvailableScaleSSD", 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
+                ADD_ICB_CONTROL("VDiskControls.DiskTimeAvailableScaleNVME", 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
+#undef ADD_ICB_CONTROL
 
                 {
                     auto* type = config->BlobStorageConfig.MutableVDiskPerformanceSettings()->AddVDiskTypes();
@@ -699,7 +713,7 @@ struct TEnvironmentSetup {
         });
     }
 
-     void PutBlob(const ui32 groupId, const TLogoBlobID& blobId, const TString& part) {
+    void PutBlob(const ui32 groupId, const TLogoBlobID& blobId, const TString& part) {
         TActorId edge = Runtime->AllocateEdgeActor(Settings.ControllerNodeId);
         Runtime->WrapInActorContext(edge, [&] {
             SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(blobId, part, TInstant::Max(),
@@ -924,4 +938,19 @@ struct TEnvironmentSetup {
         }
         return ctr;
     };
+
+    void SetIcbControl(ui32 nodeId, TString controlName, ui64 value) {
+        if (nodeId == 0) {
+            for (nodeId = 1; nodeId <= Settings.NodeCount; ++nodeId) {
+                auto it = IcbControls.find({nodeId, controlName});
+                Y_ABORT_UNLESS(it != IcbControls.end());
+                it->second = value;
+            }
+        } else {
+            auto it = IcbControls.find({nodeId, controlName});
+            Y_ABORT_UNLESS(it != IcbControls.end());
+            it->second = value;
+        }
+    }
+
 };

@@ -1,5 +1,6 @@
 import "ydb/core/scheme/protos/pathid.proto";
 import "ydb/public/api/protos/annotations/sensitive.proto";
+import "ydb/public/api/protos/ydb_issue_message.proto";
 
 package NKikimrReplication;
 option java_package = "ru.yandex.kikimr.proto";
@@ -34,6 +35,7 @@ message TReplicationConfig {
         message TTarget {
             optional string SrcPath = 1;
             optional string DstPath = 2;
+            optional string SrcStreamName = 3;
         }
 
         repeated TTarget Targets = 1;
@@ -70,10 +72,15 @@ message TReplicationState {
         optional EFailoverMode FailoverMode = 1;
     }
 
+    message TError {
+        repeated Ydb.Issue.IssueMessage Issues = 1;
+    }
+
     oneof State {
         TStandBy StandBy = 1;
         TPaused Paused = 2;
         TDone Done = 3;
+        TError Error = 4;
     }
 }
 
@@ -104,6 +111,7 @@ message TEvAlterReplication {
     optional NKikimrProto.TPathID PathId = 1;
     optional TOperationId OperationId = 2;
     optional TReplicationState SwitchState = 3;
+    optional TReplicationConfig Config = 4;
 }
 
 message TEvAlterReplicationResult {
@@ -133,6 +141,23 @@ message TEvDropReplicationResult {
     optional TOperationId OperationId = 1;
     optional uint64 Origin = 2;
     optional EStatus Status = 3;
+}
+
+message TEvDescribeReplication {
+    optional NKikimrProto.TPathID PathId = 1;
+}
+
+message TEvDescribeReplicationResult {
+    enum EStatus {
+        UNKNOWN = 0;
+        SUCCESS = 1;
+        NOT_FOUND = 2;
+    }
+
+    optional EStatus Status = 1;
+    optional TConnectionParams ConnectionParams = 2;
+    repeated TReplicationConfig.TTargetSpecific.TTarget Targets = 3;
+    optional TReplicationState State = 4;
 }
 
 message TControllerIdentity {
@@ -184,4 +209,15 @@ message TEvRunWorker {
 message TEvStopWorker {
     optional TControllerIdentity Controller = 1;
     optional TWorkerIdentity Worker = 2;
+}
+
+message TEvWorkerStatus {
+    enum EStatus {
+        UNKNOWN = 0;
+        RUNNING = 1;
+        STOPPED = 2;
+    }
+
+    optional TWorkerIdentity Worker = 1;
+    optional EStatus Status = 2;
 }

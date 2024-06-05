@@ -2405,7 +2405,7 @@ void SendViaPipeCache(
     ui32 nodeIndex = sender.NodeId() - runtime.GetNodeId(0);
     runtime.Send(
         new IEventHandle(
-            MakePipePeNodeCacheID(options.Follower),
+            MakePipePerNodeCacheID(options.Follower),
             sender,
             new TEvPipeCache::TEvForward(msg.release(), tabletId, options.Subscribe),
             options.Flags,

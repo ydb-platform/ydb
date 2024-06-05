@@ -239,16 +239,16 @@
     ],
     "test.test[aggregate-group_by_rollup_grouping_hum--Debug]": [
         {
-            "checksum": "4ef768471dd9fccaafde00aa56310ffa",
-            "size": 9853,
-            "uri": "https://{canondata_backend}/1809005/977edd58b353af582025a25127f98ea301dd01a5/resource.tar.gz#test.test_aggregate-group_by_rollup_grouping_hum--Debug_/opt.yql"
+            "checksum": "9da92c19263936a6edf484323a4739bd",
+            "size": 9863,
+            "uri": "https://{canondata_backend}/1924537/ecb5b23ceaf7191462db08eb0bd1c3a6b0a9be3a/resource.tar.gz#test.test_aggregate-group_by_rollup_grouping_hum--Debug_/opt.yql"
         }
     ],
     "test.test[aggregate-group_by_rollup_grouping_hum--Plan]": [
         {
-            "checksum": "0d6d807bd49dea9da866a475f4cbc3a9",
+            "checksum": "71e9dccb832ca9ab92776f9e31ae85eb",
             "size": 12250,
-            "uri": "https://{canondata_backend}/1809005/977edd58b353af582025a25127f98ea301dd01a5/resource.tar.gz#test.test_aggregate-group_by_rollup_grouping_hum--Plan_/plan.txt"
+            "uri": "https://{canondata_backend}/1924537/ecb5b23ceaf7191462db08eb0bd1c3a6b0a9be3a/resource.tar.gz#test.test_aggregate-group_by_rollup_grouping_hum--Plan_/plan.txt"
         }
     ],
     "test.test[aggregate-group_by_rollup_grouping_hum--Results]": [
@@ -2376,6 +2376,27 @@
             "uri": "https://{canondata_backend}/1936997/a95cccf3209d441f2d222d56081bdfc240fc8b83/resource.tar.gz#test.test_pg-select_win_first_last_value-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[pg-select_win_nth_value-default.txt-Debug]": [
+        {
+            "checksum": "7d5e0c1f9e3f887cac62cbe006ceeb9c",
+            "size": 3262,
+            "uri": "https://{canondata_backend}/1936997/f3f25a67c71a5561041dde7f0dd16e704b83315d/resource.tar.gz#test.test_pg-select_win_nth_value-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[pg-select_win_nth_value-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1936997/f3f25a67c71a5561041dde7f0dd16e704b83315d/resource.tar.gz#test.test_pg-select_win_nth_value-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[pg-select_win_nth_value-default.txt-Results]": [
+        {
+            "checksum": "ed240f2c742d9e7b69d7e215f2e33d2c",
+            "size": 2964,
+            "uri": "https://{canondata_backend}/1936997/f3f25a67c71a5561041dde7f0dd16e704b83315d/resource.tar.gz#test.test_pg-select_win_nth_value-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[pg-sublink_where_expr_corr-default.txt-Debug]": [
         {
             "checksum": "a515dd66abe9292cbe5d071fc4bcf229",
@@ -2567,9 +2588,9 @@
     ],
     "test.test[pg-tpch-q12-default.txt-Debug]": [
         {
-            "checksum": "f018e95bc56ae2533248e0af48a8709f",
-            "size": 7637,
-            "uri": "https://{canondata_backend}/1931696/fcf9714b8990097d8077f3bbe4fd7e67b5d266e0/resource.tar.gz#test.test_pg-tpch-q12-default.txt-Debug_/opt.yql"
+            "checksum": "d58ce7667d1937e6efb39dd24a92dce6",
+            "size": 7578,
+            "uri": "https://{canondata_backend}/1931696/c0a5b8550caf91674eb75065ce306188d540111e/resource.tar.gz#test.test_pg-tpch-q12-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg-tpch-q12-default.txt-Plan]": [
@@ -2588,9 +2609,9 @@
     ],
     "test.test[pg-tpch-q16-default.txt-Debug]": [
         {
-            "checksum": "d71d30c95d4b99563aba2deeff3e3971",
-            "size": 13541,
-            "uri": "https://{canondata_backend}/1600758/d2808a3b43ea1caef0311e41afd075015804a367/resource.tar.gz#test.test_pg-tpch-q16-default.txt-Debug_/opt.yql"
+            "checksum": "f4c73df24ea8027327ee388d8f2615f7",
+            "size": 13535,
+            "uri": "https://{canondata_backend}/1931696/c0a5b8550caf91674eb75065ce306188d540111e/resource.tar.gz#test.test_pg-tpch-q16-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg-tpch-q16-default.txt-Plan]": [

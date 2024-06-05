@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
             AFL_VERIFY(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount() == 0)("count", Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount());
             while (Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize() && TMonotonic::Now() - startInstant < TDuration::Seconds(200)) {
                 for (auto&& i : csController->GetShardActualIds()) {
-                    kikimr.GetTestServer().GetRuntime()->Send(MakePipePeNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
+                    kikimr.GetTestServer().GetRuntime()->Send(MakePipePerNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
                         new TEvents::TEvPoisonPill(), i, false));
                 }
                 csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::GC);
@@ -90,7 +90,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
             const auto startInstant = TMonotonic::Now();
             while (TMonotonic::Now() - startInstant < TDuration::Seconds(10)) {
                 for (auto&& i : csController->GetShardActualIds()) {
-                    kikimr.GetTestServer().GetRuntime()->Send(MakePipePeNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
+                    kikimr.GetTestServer().GetRuntime()->Send(MakePipePerNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
                         new TEvents::TEvPoisonPill(), i, false));
                 }
                 Cerr << "Waiting empty... " << Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetWritesCount() << "/" << Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount() << Endl;

@@ -19,5 +19,6 @@ RECURSE(
     persqueue_cluster_discovery
     persqueue_v1
     rate_limiter
+    replication
     ydb
 )

@@ -1087,6 +1087,14 @@ TWindowSpecificationPtr TWindowSpecification::Clone() const {
     return res;
 }
 
+TWinSpecs CloneContainer(const TWinSpecs& specs) {
+    TWinSpecs newSpecs;
+    for (auto cur: specs) {
+        newSpecs.emplace(cur.first, cur.second->Clone());
+    }
+    return newSpecs;
+}
+
 TLegacyHoppingWindowSpecPtr TLegacyHoppingWindowSpec::Clone() const {
     auto res = MakeIntrusive<TLegacyHoppingWindowSpec>();
     res->TimeExtractor = TimeExtractor->Clone();

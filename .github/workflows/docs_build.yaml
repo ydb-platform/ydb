@@ -1,7 +1,7 @@
 name: Build documentation
 
 on:
-  pull_request:
+  pull_request_target:
     paths: 
     - 'ydb/docs/**'
 
@@ -20,6 +20,8 @@ jobs:
             -d '{"state":"pending","description":"Waiting for relevant checks to complete","context":"checks_integrated"}'
       - name: Checkout
         uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
       - name: Build
         uses: diplodoc-platform/docs-build-action@v3
         with:

@@ -39,6 +39,8 @@ public:
     [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> TxApplyControlFromProto(const NKikimrTxBackgroundProto::TSessionControlContainer& controlProto);
     [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> TxApplyControl(const TSessionControlContainer& control);
 
+    bool HasTask(const TTask& task) const;
+
     void Start() {
         AFL_VERIFY(!Finished);
         AFL_VERIFY(!Started);

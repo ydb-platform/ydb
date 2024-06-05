@@ -10,6 +10,7 @@
 #include "args_dechunker.h"
 #include "block_reader.h"
 #include "block_builder.h"
+#include "memory_pool.h"
 
 #include <arrow/array/array_base.h>
 #include <arrow/array/util.h>
@@ -47,7 +48,7 @@ public:
     IArrayBuilder& GetArrayBuilder() {
         Y_ENSURE(!OnlyScalars_);
         if (!ArrayBuilder_) {
-            ArrayBuilder_ = MakeArrayBuilder(*TypeInfoHelper_, OutputType_, *arrow::default_memory_pool(), TypeInfoHelper_->GetMaxBlockLength(OutputType_), &PgBuilder_);
+            ArrayBuilder_ = MakeArrayBuilder(*TypeInfoHelper_, OutputType_, *GetYqlMemoryPool(), TypeInfoHelper_->GetMaxBlockLength(OutputType_), &PgBuilder_);
         }
 
         return *ArrayBuilder_;
@@ -157,7 +158,7 @@ public:
             }
 
             TUdfKernelState kernelState(ArgTypes_, OutputType_, OnlyScalars_, TypeInfoHelper_.Get(), valueBuilder->GetPgBuilder());
-            arrow::compute::ExecContext execContext;
+            arrow::compute::ExecContext execContext(GetYqlMemoryPool());
             arrow::compute::KernelContext kernelContext(&execContext);
             kernelContext.SetState(&kernelState);
 
@@ -566,7 +567,7 @@ struct TUnaryUnsafeFixedSizeFilterKernel {
         auto& outArray = res->array();
         auto* outValues = outArray->GetMutableValues<TOutput>(1);
 
-        TTypedBufferBuilder<uint8_t> nullBuilder(arrow::default_memory_pool());
+        TTypedBufferBuilder<uint8_t> nullBuilder(GetYqlMemoryPool());
         nullBuilder.Reserve(length);
 
         bool isAllNull = inArray->GetNullCount() == length;
@@ -580,11 +581,11 @@ struct TUnaryUnsafeFixedSizeFilterKernel {
             nullBuilder.UnsafeAppend(length, 0);
         }
         auto validMask = nullBuilder.Finish();
-        validMask = MakeDenseBitmap(validMask->data(), length, arrow::default_memory_pool());
+        validMask = MakeDenseBitmap(validMask->data(), length, GetYqlMemoryPool());
         
         auto inMask = inArray->buffers[0];
         if (inMask) {
-            outArray->buffers[0] = AllocateBitmapWithReserve(length, arrow::default_memory_pool());
+            outArray->buffers[0] = AllocateBitmapWithReserve(length, GetYqlMemoryPool());
             arrow::internal::BitmapAnd(validMask->data(), 0, inArray->buffers[0]->data(), inArray->offset, outArray->length, outArray->offset, outArray->buffers[0]->mutable_data());
         } else {
             outArray->buffers[0] = std::move(validMask);

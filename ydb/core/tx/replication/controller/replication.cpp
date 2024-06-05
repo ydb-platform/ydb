@@ -12,6 +12,7 @@
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>
 
 namespace NKikimr::NReplication::NController {
@@ -28,10 +29,10 @@ class TReplication::TImpl {
     }
 
     template <typename... Args>
-    ITarget* CreateTarget(ui64 id, ETargetKind kind, Args&&... args) const {
+    ITarget* CreateTarget(TReplication::TPtr self, ui64 id, ETargetKind kind, Args&&... args) const {
         switch (kind) {
         case ETargetKind::Table:
-            return new TTableTarget(id, std::forward<Args>(args)...);
+            return new TTableTarget(self, id, std::forward<Args>(args)...);
         }
     }
 
@@ -59,9 +60,9 @@ class TReplication::TImpl {
         }
     }
 
-    void ProgressTargets(TReplication::TPtr self, const TActorContext& ctx) {
+    void ProgressTargets(const TActorContext& ctx) {
         for (auto& [_, target] : Targets) {
-            target->Progress(self, ctx);
+            target->Progress(ctx);
         }
     }
 
@@ -75,15 +76,15 @@ public:
     }
 
     template <typename... Args>
-    ui64 AddTarget(ui64 id, ETargetKind kind, Args&&... args) {
-        const auto res = Targets.emplace(id, CreateTarget(id, kind, std::forward<Args>(args)...));
+    ui64 AddTarget(TReplication::TPtr self, ui64 id, ETargetKind kind, Args&&... args) {
+        const auto res = Targets.emplace(id, CreateTarget(self, id, kind, std::forward<Args>(args)...));
         Y_VERIFY_S(res.second, "Duplicate target: " << id);
         return id;
     }
 
     template <typename... Args>
-    ui64 AddTarget(ETargetKind kind, Args&&... args) {
-        return AddTarget(NextTargetId++, kind, std::forward<Args>(args)...);
+    ui64 AddTarget(TReplication::TPtr self, ETargetKind kind, Args&&... args) {
+        return AddTarget(self, NextTargetId++, kind, std::forward<Args>(args)...);
     }
 
     ITarget* FindTarget(ui64 id) {
@@ -97,7 +98,7 @@ public:
         Targets.erase(id);
     }
 
-    void Progress(TReplication::TPtr self, const TActorContext& ctx) {
+    void Progress(const TActorContext& ctx) {
         if (!YdbProxy) {
             THolder<IActor> ydbProxy;
             const auto& params = Config.GetSrcConnectionParams();
@@ -136,14 +137,15 @@ public:
             if (!Targets) {
                 return DiscoverTargets(ctx);
             } else {
-                return ProgressTargets(self, ctx);
+                return ProgressTargets(ctx);
             }
         case EState::Removing:
             if (!Targets) {
                 return (void)ctx.Send(ctx.SelfID, new TEvPrivate::TEvDropReplication(ReplicationId));
             } else {
-                return ProgressTargets(self, ctx);
+                return ProgressTargets(ctx);
             }
+        case EState::Done:
         case EState::Error:
             return;
         }
@@ -166,6 +168,10 @@ public:
         Issue = TruncatedIssue(issue);
     }
 
+    void SetConfig(NKikimrReplication::TReplicationConfig&& config) {
+        Config = config;
+    }
+
     void ErrorState(TString issue) {
         SetState(EState::Error, issue);
     }
@@ -180,6 +186,7 @@ private:
     TString Issue;
     ui64 NextTargetId = 1;
     THashMap<ui64, THolder<ITarget>> Targets;
+    THashSet<ui64> PendingAlterTargets;
     TActorId SecretResolver;
     TActorId YdbProxy;
     TActorId TenantResolver;
@@ -209,11 +216,11 @@ TReplication::TReplication(ui64 id, const TPathId& pathId, const TString& config
 }
 
 ui64 TReplication::AddTarget(ETargetKind kind, const TString& srcPath, const TString& dstPath) {
-    return Impl->AddTarget(kind, srcPath, dstPath);
+    return Impl->AddTarget(this, kind, srcPath, dstPath);
 }
 
 TReplication::ITarget* TReplication::AddTarget(ui64 id, ETargetKind kind, const TString& srcPath, const TString& dstPath) {
-    Impl->AddTarget(id, kind, srcPath, dstPath);
+    Impl->AddTarget(this, id, kind, srcPath, dstPath);
     return Impl->FindTarget(id);
 }
 
@@ -230,7 +237,7 @@ void TReplication::RemoveTarget(ui64 id) {
 }
 
 void TReplication::Progress(const TActorContext& ctx) {
-    Impl->Progress(this, ctx);
+    Impl->Progress(ctx);
 }
 
 void TReplication::Shutdown(const TActorContext& ctx) {
@@ -251,6 +258,10 @@ const TActorId& TReplication::GetYdbProxy() const {
 
 ui64 TReplication::GetSchemeShardId() const {
     return GetPathId().OwnerId;
+}
+
+void TReplication::SetConfig(NKikimrReplication::TReplicationConfig&& config) {
+    Impl->SetConfig(std::move(config));
 }
 
 const NKikimrReplication::TReplicationConfig& TReplication::GetConfig() const {
@@ -306,6 +317,18 @@ void TReplication::SetDropOp(const TActorId& sender, const std::pair<ui64, ui32>
 
 const std::optional<TReplication::TDropOp>& TReplication::GetDropOp() const {
     return DropOp;
+}
+
+void TReplication::AddPendingAlterTarget(ui64 id) {
+    Impl->PendingAlterTargets.insert(id);
+}
+
+void TReplication::RemovePendingAlterTarget(ui64 id) {
+    Impl->PendingAlterTargets.erase(id);
+}
+
+bool TReplication::CheckAlterDone() const {
+    return Impl->State == EState::Ready && Impl->PendingAlterTargets.empty();
 }
 
 }

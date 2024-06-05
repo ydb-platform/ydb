@@ -4888,6 +4888,83 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             "{ items { int32_value: 2 } items { int32_value: 20 } }");
     }
 
+    Y_UNIT_TEST(UncommittedChangesRenameTable) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetDomainPlanResolution(100)
+            .SetEnableDataShardVolatileTransactions(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table1` (key int, value int, PRIMARY KEY (key));
+            )"),
+            "SUCCESS");
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table1` (key, value) VALUES (2, 22);");
+
+        TString sessionId = CreateSessionRPC(runtime);
+        TString txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, R"(
+                UPSERT INTO `/Root/table1` (key, value) VALUES (1, 11), (3, 33);
+                SELECT key, value FROM `/Root/table1` ORDER BY key;
+            )"),
+            "{ items { int32_value: 1 } items { int32_value: 11 } }, "
+            "{ items { int32_value: 2 } items { int32_value: 22 } }, "
+            "{ items { int32_value: 3 } items { int32_value: 33 } }");
+
+        auto shards = GetTableShards(server, sender, "/Root/table1");
+        auto tableId1 = ResolveTableId(server, sender, "/Root/table1");
+
+        // Check shard has open transactions
+        {
+            runtime.SendToPipe(shards.at(0), sender, new TEvDataShard::TEvGetOpenTxs(tableId1.PathId));
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetOpenTxsResult>(sender);
+            UNIT_ASSERT_C(!ev->Get()->OpenTxs.empty(), "at shard " << shards.at(0));
+        }
+
+        WaitTxNotification(server, sender, AsyncMoveTable(server, "/Root/table1", "/Root/table1moved"));
+        auto tableId2 = ResolveTableId(server, sender, "/Root/table1moved");
+
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // Check shard doesn't have open transactions
+        {
+            runtime.SendToPipe(shards.at(0), sender, new TEvDataShard::TEvGetOpenTxs(tableId2.PathId));
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetOpenTxsResult>(sender);
+            UNIT_ASSERT_C(ev->Get()->OpenTxs.empty(), "at shard " << shards.at(0));
+        }
+
+        RebootTablet(runtime, shards.at(0), sender);
+
+        // The original table was removed
+        // We must not be able to commit the transaction
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, sessionId, txId, "SELECT 1"),
+            "ERROR: ABORTED");
+
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // Check shard doesn't have open transactions
+        {
+            runtime.SendToPipe(shards.at(0), sender, new TEvDataShard::TEvGetOpenTxs(tableId2.PathId));
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetOpenTxsResult>(sender);
+            UNIT_ASSERT_C(ev->Get()->OpenTxs.empty(), "at shard " << shards.at(0));
+        }
+    }
+
 }
 
 } // namespace NKikimr

@@ -158,7 +158,7 @@ void SetupServices(TTestActorRuntime &runtime,
         SetupBSNodeWarden(runtime, nodeIndex, nodeWardenConfig);
         SetupNodeWhiteboard(runtime, nodeIndex);
         SetupTabletResolver(runtime, nodeIndex);
-        SetupResourceBroker(runtime, nodeIndex);
+        SetupResourceBroker(runtime, nodeIndex, {});
         SetupSharedPageCache(runtime, nodeIndex, NFake::TCaches{
             .Shared = 1,
         });

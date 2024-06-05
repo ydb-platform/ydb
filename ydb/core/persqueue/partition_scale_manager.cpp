@@ -1,4 +1,6 @@
-#include "ydb/core/persqueue/partition_scale_manager.h"
+#include "partition_scale_manager.h"
+
+#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -7,20 +9,23 @@ namespace NPQ {
 TPartitionScaleManager::TPartitionScaleManager(
     const TString& topicName,
     const TString& databasePath,
-    NKikimrPQ::TUpdateBalancerConfig& balancerConfig
+    ui64 pathId,
+    int version,
+    const NKikimrPQ::TPQTabletConfig& config
 )
     : TopicName(topicName)
     , DatabasePath(databasePath)
-    , BalancerConfig(balancerConfig) {
-
+    , BalancerConfig(pathId, version, config) {
     }
 
-void TPartitionScaleManager::HandleScaleStatusChange(const TPartitionInfo& partition, NKikimrPQ::EScaleStatus scaleStatus, const TActorContext& ctx) {
+void TPartitionScaleManager::HandleScaleStatusChange(const ui32 partitionId, NKikimrPQ::EScaleStatus scaleStatus, const TActorContext& ctx) {
     if (scaleStatus == NKikimrPQ::EScaleStatus::NEED_SPLIT) {
-        PartitionsToSplit.emplace(partition.Id, partition);
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, "TPartitionScaleManager::HandleScaleStatusChange "
+            << "need to split partition " << partitionId);
+        PartitionsToSplit.insert(partitionId);
         TrySendScaleRequest(ctx);
     } else {
-        PartitionsToSplit.erase(partition.Id);
+        PartitionsToSplit.erase(partitionId);
     }
 }
 
@@ -30,12 +35,14 @@ void TPartitionScaleManager::TrySendScaleRequest(const TActorContext& ctx) {
         return;
     }
 
-    auto splitMergePair = BuildScaleRequest();
+    auto splitMergePair = BuildScaleRequest(ctx);
     if (splitMergePair.first.empty() && splitMergePair.second.empty()) {
         return;
     }
 
     RequestInflight = true;
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, "TPartitionScaleManager::HandleScaleStatusChange "
+        << "send split request");
     CurrentScaleRequest = ctx.Register(new TPartitionScaleRequest(
         TopicName,
         DatabasePath,
@@ -51,32 +58,42 @@ void TPartitionScaleManager::TrySendScaleRequest(const TActorContext& ctx) {
 using TPartitionSplit = NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionSplit;
 using TPartitionMerge = NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionMerge;
 
-std::pair<std::vector<TPartitionSplit>, std::vector<TPartitionMerge>> TPartitionScaleManager::BuildScaleRequest() {
+const TString ToHex(const TString& value) {
+    return TStringBuilder() << HexText(TBasicStringBuf(value));
+}
+
+std::pair<std::vector<TPartitionSplit>, std::vector<TPartitionMerge>> TPartitionScaleManager::BuildScaleRequest(const TActorContext& ctx) {
     std::vector<TPartitionSplit> splitsToApply;
     std::vector<TPartitionMerge> mergesToApply;
 
     size_t allowedSplitsCount = BalancerConfig.MaxActivePartitions > BalancerConfig.CurPartitions ? BalancerConfig.MaxActivePartitions - BalancerConfig.CurPartitions : 0;
-    auto itSplit = PartitionsToSplit.begin();
-    while (allowedSplitsCount > 0 && itSplit != PartitionsToSplit.end()) {
-        const auto partitionId = itSplit->first;
-        const auto& partition = itSplit->second;
-
-        if (BalancerConfig.PartitionGraph.GetPartition(partitionId)->Children.empty()) {
-            auto mid = GetRangeMid(partition.KeyRange.FromBound ? *partition.KeyRange.FromBound : "", partition.KeyRange.ToBound ?*partition.KeyRange.ToBound : "");
+    auto partitionId = PartitionsToSplit.begin();
+    while (allowedSplitsCount > 0 && partitionId != PartitionsToSplit.end()) {
+        auto* node = BalancerConfig.PartitionGraph.GetPartition(*partitionId);
+        if (node->Children.empty()) {
+            auto from = node->From;
+            auto to = node->To;
+            auto mid = MiddleOf(from, to);
             if (mid.empty()) {
-                itSplit = PartitionsToSplit.erase(itSplit);
+                partitionId = PartitionsToSplit.erase(partitionId);
+                LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                        "TPartitionScaleManager::BuildScaleRequest wrong partition key range. Can't get mid. Topic# " << TopicName << ", partition# " << *partitionId);
                 continue;
             }
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                    "TPartitionScaleManager::BuildScaleRequest partition split ranges. From# '" << ToHex(from)
+                    << "'. To# '" << ToHex(to) << "'. Mid# '" << ToHex(mid)
+                    << "'. Topic# " << TopicName << ". Partition# " << *partitionId);
 
             TPartitionSplit split;
-            split.set_partition(partition.Id);
+            split.set_partition(*partitionId);
             split.set_splitboundary(mid);
             splitsToApply.push_back(split);
 
-            allowedSplitsCount--;
-            itSplit++;
+            --allowedSplitsCount;
+            ++partitionId;
         } else {
-            itSplit = PartitionsToSplit.erase(itSplit);
+            partitionId = PartitionsToSplit.erase(partitionId);
         }
     }
 
@@ -87,6 +104,8 @@ void TPartitionScaleManager::HandleScaleRequestResult(TPartitionScaleRequest::TE
     RequestInflight = false;
     LastResponseTime = ctx.Now();
     auto result = ev->Get();
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+            "TPartitionScaleManager::HandleScaleRequestResult scale request result: " << result->Status << ". Topic# " << TopicName);
     if (result->Status == TEvTxUserProxy::TResultStatus::ExecComplete) {
         TrySendScaleRequest(ctx);
     } else {
@@ -102,38 +121,12 @@ void TPartitionScaleManager::Die(const TActorContext& ctx) {
     }
 }
 
-void TPartitionScaleManager::UpdateBalancerConfig(NKikimrPQ::TUpdateBalancerConfig& config) {
-    BalancerConfig = TBalancerConfig(config);
+void TPartitionScaleManager::UpdateBalancerConfig(ui64 pathId, int version, const NKikimrPQ::TPQTabletConfig& config) {
+    BalancerConfig = TBalancerConfig(pathId, version, config);
 }
 
 void TPartitionScaleManager::UpdateDatabasePath(const TString& dbPath) {
     DatabasePath = dbPath;
-}
-
-TString TPartitionScaleManager::GetRangeMid(const TString& from, const TString& to) {
-    if (from > to && to.size() != 0) {
-        return "";
-    }
-
-    TStringBuilder result;
-
-    unsigned char fromPadding = 0;
-    unsigned char toPadding = 255;
-
-    size_t maxSize = std::max(from.size(), to.size());
-    for (size_t i = 0; i < maxSize; ++i) {
-        ui16 fromChar = i < from.size() ? static_cast<ui16>(from[i]) : fromPadding;
-        unsigned char toChar = i < to.size() ? static_cast<unsigned char>(to[i]) : toPadding;
-
-        ui16 sum = fromChar + toChar;
-
-        result += static_cast<unsigned char>(sum / 2);
-    }
-
-    if (result == from) {
-        result += static_cast<unsigned char>(127);
-    }
-    return result;
 }
 
 } // namespace NPQ

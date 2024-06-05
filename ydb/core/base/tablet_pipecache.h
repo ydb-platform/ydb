@@ -131,26 +131,26 @@ struct TEvPipeCache {
     };
 };
 
-struct TPipePeNodeCacheConfig : public TAtomicRefCount<TPipePeNodeCacheConfig>{
+struct TPipePerNodeCacheConfig : public TAtomicRefCount<TPipePerNodeCacheConfig>{
     ui64 TabletCacheLimit = 500000;
     TDuration PipeRefreshTime = TDuration::Zero();
     NTabletPipe::TClientConfig PipeConfig = DefaultPipeConfig();
     ::NMonitoring::TDynamicCounterPtr Counters;
 
-    TPipePeNodeCacheConfig() = default;
+    TPipePerNodeCacheConfig() = default;
 
     static NTabletPipe::TClientConfig DefaultPipeConfig();
     static NTabletPipe::TClientConfig DefaultPersistentPipeConfig();
 };
 
-enum class EPipePeNodeCache {
+enum class EPipePerNodeCache {
     Leader,
     Follower,
     Persistent,
 };
 
-IActor* CreatePipePeNodeCache(const TIntrusivePtr<TPipePeNodeCacheConfig> &config);
-TActorId MakePipePeNodeCacheID(EPipePeNodeCache kind);
-TActorId MakePipePeNodeCacheID(bool allowFollower);
+IActor* CreatePipePerNodeCache(const TIntrusivePtr<TPipePerNodeCacheConfig> &config);
+TActorId MakePipePerNodeCacheID(EPipePerNodeCache kind);
+TActorId MakePipePerNodeCacheID(bool allowFollower);
 
 }

@@ -102,12 +102,13 @@ private:
 
 }; // TTableWorkerRegistar
 
-TTableTarget::TTableTarget(ui64 id, const TString& srcPath, const TString& dstPath)
-    : TTargetWithStream(ETargetKind::Table, id, srcPath, dstPath)
+TTableTarget::TTableTarget(TReplication::TPtr replication, ui64 id, const TString& srcPath, const TString& dstPath)
+    : TTargetWithStream(replication, ETargetKind::Table, id, srcPath, dstPath)
 {
 }
 
-IActor* TTableTarget::CreateWorkerRegistar(TReplication::TPtr replication, const TActorContext& ctx) const {
+IActor* TTableTarget::CreateWorkerRegistar(const TActorContext& ctx) const {
+    auto replication = GetReplication();
     return new TTableWorkerRegistar(ctx.SelfID, replication->GetYdbProxy(),
         replication->GetConfig().GetSrcConnectionParams(), replication->GetId(), GetId(),
         CanonizePath(ChildPath(SplitPath(GetSrcPath()), GetStreamName())), GetDstPathId());

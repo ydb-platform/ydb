@@ -194,4 +194,5 @@ enum ETxTypes {
     TXTYPE_ADD_BACKGROUND_SESSION = 31                      [(TxTypeOpts) = {Name: "TxAddBackgroundSession"}];
     TXTYPE_SAVE_BACKGROUND_SESSION_PROGRESS = 32            [(TxTypeOpts) = {Name: "TxSaveBackgroundSessionProgress"}];
     TXTYPE_SAVE_BACKGROUND_SESSION_STATE = 33               [(TxTypeOpts) = {Name: "TxSaveBackgroundSessionState"}];
+    TXTYPE_GC_START = 34                                    [(TxTypeOpts) = {Name: "TxGarbageCollectionStart"}];
 }

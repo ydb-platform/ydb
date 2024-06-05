@@ -27,7 +27,7 @@ std::shared_ptr<IBlobsReadingAction> TOperator::DoStartReadingAction() {
     return std::make_shared<TReadingAction>(GetStorageId(), GetCurrentOperator());
 }
 
-std::shared_ptr<IBlobsGCAction> TOperator::DoStartGCAction(const std::shared_ptr<TRemoveGCCounters>& counters) const {
+std::shared_ptr<IBlobsGCAction> TOperator::DoCreateGCAction(const std::shared_ptr<TRemoveGCCounters>& counters) const {
     std::deque<TUnifiedBlobId> draftBlobIds;
     AFL_VERIFY(!!TabletActorId);
     TBlobsCategories categories(TTabletId(0));
@@ -44,8 +44,13 @@ std::shared_ptr<IBlobsGCAction> TOperator::DoStartGCAction(const std::shared_ptr
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "start_gc_skipped")("reason", "task_empty");
         return nullptr;
     }
-    TActorContext::AsActorContext().Register(new TGarbageCollectionActor(gcTask, TabletActorId, GetSelfTabletId()));
     return gcTask;
+}
+
+void TOperator::DoStartGCAction(const std::shared_ptr<IBlobsGCAction>& action) const {
+    auto gcTask = dynamic_pointer_cast<TGCTask>(action);
+    AFL_VERIFY(!!gcTask);
+    TActorContext::AsActorContext().Register(new TGarbageCollectionActor(gcTask, TabletActorId, GetSelfTabletId()));
 }
 
 void TOperator::InitNewExternalOperator(const NColumnShard::NTiers::TManager* tierManager) {

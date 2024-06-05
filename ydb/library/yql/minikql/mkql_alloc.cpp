@@ -229,6 +229,21 @@ void TPagedArena::Clear() noexcept {
     }
 }
 
+void* MKQLArrowAllocate(ui64 size) {
+    return GetAlignedPage(size);
+}
+
+void* MKQLArrowReallocate(const void* mem, ui64 prevSize, ui64 size) {
+    auto res = GetAlignedPage(size);
+    memcpy(res, mem, Min(prevSize, size));
+    ReleaseAlignedPage(const_cast<void*>(mem), prevSize);
+    return res;
+}
+
+void MKQLArrowFree(const void* mem, ui64 size) {
+    ReleaseAlignedPage(const_cast<void*>(mem), size);
+}
+
 } // NMiniKQL
 
 } // NKikimr

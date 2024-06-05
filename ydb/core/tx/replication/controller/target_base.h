@@ -10,8 +10,15 @@ protected:
     using EDstState = TReplication::EDstState;
     using EStreamState = TReplication::EStreamState;
 
+    inline TReplication::TPtr GetReplication() const {
+        return Replication;
+    }
+
+    void RemoveWorkers(const TActorContext& ctx);
+
 public:
-    explicit TTargetBase(ETargetKind kind, ui64 id, const TString& srcPath, const TString& dstPath);
+    explicit TTargetBase(TReplication::TPtr replication, ETargetKind kind,
+        ui64 id, const TString& srcPath, const TString& dstPath);
 
     ui64 GetId() const override;
     ETargetKind GetKind() const override;
@@ -34,10 +41,15 @@ public:
     const TString& GetIssue() const override;
     void SetIssue(const TString& value) override;
 
-    void Progress(TReplication::TPtr replication, const TActorContext& ctx) override;
+    void AddWorker(ui64 id) override;
+    void RemoveWorker(ui64 id) override;
+    const THashSet<ui64>& GetWorkers() const override;
+
+    void Progress(const TActorContext& ctx) override;
     void Shutdown(const TActorContext& ctx) override;
 
 private:
+    TReplication::TPtr Replication;
     const ui64 Id;
     const ETargetKind Kind;
     const TString SrcPath;
@@ -53,6 +65,8 @@ private:
     TActorId DstAlterer;
     TActorId DstRemover;
     TActorId WorkerRegistar;
+    THashSet<ui64> Workers;
+    bool PendingRemoveWorkers = false;
 
 }; // TTargetBase
 

@@ -349,6 +349,12 @@ public:
                 Derived().ReplyAndDie(NKikimrProto::ERROR);
                 return true;
             }
+
+            case TEvBlobStorage::EvDeadline: {
+                ErrorReason = "Deadline timer hit";
+                Derived().ReplyAndDie(NKikimrProto::DEADLINE);
+                return true;
+            }
         }
 
         return false;

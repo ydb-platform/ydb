@@ -35,26 +35,22 @@ def extract_stderr_details(stderr_file, max_lines=0):
 
 class DaemonError(RuntimeError):
     def __init__(self, message, stdout, stderr, exit_code, max_stderr_lines=0):
-
         super(DaemonError, self).__init__(
             '\n'.join(
                 [
                     "Daemon failed with message: {message}.".format(message=message),
                     "Process exit_code = {exit_code}.".format(exit_code=exit_code),
                     "Stdout file name: \n{}".format(stdout if stdout is not None else "is not present."),
-                    "Stderr file name: \n{}".format(stderr if stderr is not None else "is not present.")
-                ] + extract_stderr_details(stderr, max_stderr_lines)
+                    "Stderr file name: \n{}".format(stderr if stderr is not None else "is not present."),
+                ]
+                + extract_stderr_details(stderr, max_stderr_lines)
             )
         )
 
 
 class SeveralDaemonErrors(RuntimeError):
     def __init__(self, exceptions):
-        super(SeveralDaemonErrors, self).__init__(
-            "\n".join(
-                str(x) for x in exceptions
-            )
-        )
+        super(SeveralDaemonErrors, self).__init__("\n".join(str(x) for x in exceptions))
 
 
 class Daemon(object):
@@ -67,7 +63,7 @@ class Daemon(object):
         stdout_file=yatest_common.work_path('stdout'),
         stderr_file=yatest_common.work_path('stderr'),
         stderr_on_error_lines=0,
-        core_pattern=None
+        core_pattern=None,
     ):
         self.__cwd = cwd
         self.__timeout = timeout
@@ -123,7 +119,7 @@ class Daemon(object):
             stdout=self.__stdout_file,
             stderr=stderr_stream,
             wait=False,
-            core_pattern=self.__core_pattern
+            core_pattern=self.__core_pattern,
         )
         wait_for(self.is_alive, self.__timeout)
 
@@ -225,7 +221,14 @@ class ExternalNodeDaemon(object):
     def __init__(self, host):
         self._host = host
         self._ssh_username = param_constants.ssh_username
-        self._ssh_options = ["-o", "UserKnownHostsFile=/dev/null", "-o", "StrictHostKeyChecking=no", "-o", "LogLevel=ERROR"]
+        self._ssh_options = [
+            "-o",
+            "UserKnownHostsFile=/dev/null",
+            "-o",
+            "StrictHostKeyChecking=no",
+            "-o",
+            "LogLevel=ERROR",
+        ]
         self.logger = logger.getChild(self.__class__.__name__)
 
     @property
@@ -255,8 +258,7 @@ class ExternalNodeDaemon(object):
         self.ssh_command(['sudo', 'rm', '-rf', target_path], raise_on_error=True)
 
         self._run_in_subprocess(
-            ["scp"] + self._ssh_options + [ '-r', file_or_dir, self._path_at_host(transit_path)],
-            raise_on_error=True
+            ["scp"] + self._ssh_options + ['-r', file_or_dir, self._path_at_host(transit_path)], raise_on_error=True
         )
 
         self.ssh_command(["sudo", "mv", transit_path, target_path], raise_on_error=True)
@@ -268,19 +270,19 @@ class ExternalNodeDaemon(object):
     def cleanup_logs(self):
         self.ssh_command("sudo dmesg --clear", raise_on_error=True)
         self.ssh_command(
-            'sudo rm -rf {}/* && sudo service rsyslog restart'.format(self.logs_directory),
-            raise_on_error=True)
+            'sudo rm -rf {}/* && sudo service rsyslog restart'.format(self.logs_directory), raise_on_error=True
+        )
 
     def sky_get_and_move(self, rb_torrent, item_to_move, target_path):
         self.ssh_command(['sky get -d %s %s' % (self._artifacts_path, rb_torrent)], raise_on_error=True)
         self.ssh_command(
-            ['sudo mv %s %s' % (os.path.join(self._artifacts_path, item_to_move), target_path)],
-            raise_on_error=True
+            ['sudo mv %s %s' % (os.path.join(self._artifacts_path, item_to_move), target_path)], raise_on_error=True
         )
 
     def send_signal(self, signal):
         self.ssh_command(
-            "ps aux | grep %d | grep -v daemon | grep -v grep | awk '{ print $2 }' | xargs sudo kill -%d" % (
+            "ps aux | grep %d | grep -v daemon | grep -v grep | awk '{ print $2 }' | xargs sudo kill -%d"
+            % (
                 int(self.ic_port),
                 int(signal),
             )
@@ -288,13 +290,15 @@ class ExternalNodeDaemon(object):
 
     def kill_process_and_daemon(self):
         self.ssh_command(
-            "ps aux | grep daemon | grep %d | grep -v grep | awk '{ print $2 }' | xargs sudo kill -%d" % (
+            "ps aux | grep daemon | grep %d | grep -v grep | awk '{ print $2 }' | xargs sudo kill -%d"
+            % (
                 int(self.ic_port),
                 int(signal.SIGKILL),
             )
         )
         self.ssh_command(
-            "ps aux | grep %d | grep -v grep | awk '{ print $2 }' | xargs sudo kill -%d" % (
+            "ps aux | grep %d | grep -v grep | awk '{ print $2 }' | xargs sudo kill -%d"
+            % (
                 int(self.ic_port),
                 int(signal.SIGKILL),
             )
@@ -314,4 +318,6 @@ class ExternalNodeDaemon(object):
                 self.logger.exception("Ssh command failed with output = " + e.output.decode("utf-8", errors="replace"))
                 raise
             else:
-                self.logger.info("Ssh command failed with output (it was ignored) = " + e.output.decode("utf-8", errors="replace"))
+                self.logger.info(
+                    "Ssh command failed with output (it was ignored) = " + e.output.decode("utf-8", errors="replace")
+                )

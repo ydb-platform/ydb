@@ -41,6 +41,7 @@ target_link_libraries(ydb-core-blobstorage-ut_blobstorage PUBLIC
 )
 
 target_sources(ydb-core-blobstorage-ut_blobstorage PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/acceleration.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/assimilation.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/block_race.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/counting_events.cpp

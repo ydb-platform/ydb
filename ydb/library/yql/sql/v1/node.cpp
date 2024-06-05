@@ -3326,7 +3326,6 @@ public:
     TNamedExprNode(TNodePtr parent)
         : IProxyNode(parent->GetPos(), parent)
         , FakeSource(BuildFakeSource(parent->GetPos()))
-        , Unused(BuildQuotedAtom(parent->GetPos(), "unused", TNodeFlags::Default))
         , Referenced(false)
     {
     }
@@ -3350,7 +3349,8 @@ public:
         if (ctx.ValidateUnusedExprs || Referenced) {
             return Inner->Translate(ctx);
         }
-        return Unused->Translate(ctx);
+        auto unused = BuildQuotedAtom(GetPos(), "unused", TNodeFlags::Default);
+        return unused->Translate(ctx);
     }
 
     TPtr DoClone() const final {
@@ -3359,7 +3359,6 @@ public:
 
 private:
     const TSourcePtr FakeSource;
-    const TNodePtr Unused;
     bool Referenced;
 };
 

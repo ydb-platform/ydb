@@ -2,15 +2,32 @@
 
 #include <ydb/library/yql/parser/lexer_common/lexer.h>
 
+
+#include <contrib/libs/antlr4_cpp_runtime/include/antlr4-runtime.h>
 #include <contrib/libs/antlr3_cpp_runtime/include/antlr3.hpp>
 
 #include <google/protobuf/message.h>
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
 #include <util/charset/utf8.h>
+#include <type_traits>
+
+template<typename T>
+struct IsDerivedFromLexer
+{
+    static constexpr bool value = std::is_base_of<antlr4::Lexer, T>::value;
+};
+
+template<typename T>
+struct IsDerivedFromParser
+{
+    static constexpr bool value = std::is_base_of<antlr4::Parser, T>::value;
+};
+
 
 namespace NProtoAST {
-    const char* INVALID_TOKEN_NAME = "nothing";
+    static const char* INVALID_TOKEN_NAME = "nothing";
+    static const char* ABSENCE = " absence";
 
     template <typename InputType>
     void InvalidCharacter(IOutputStream& err, const InputType* input) {
@@ -23,13 +40,25 @@ namespace NProtoAST {
         }
     }
 
+
     template <typename TokenType>
-    void InvalidToken(IOutputStream& err, const TokenType* token) {
+    inline void InvalidToken(IOutputStream& err, const TokenType* token) {
         if (token) {
             if (token->get_input()) {
                 err << " '" << token->getText() << "'";
             } else {
-                err << " absence";
+                err << ABSENCE;
+            }
+        }
+    }
+
+    template <>
+    inline void InvalidToken<antlr4::Token>(IOutputStream& err, const antlr4::Token* token) {
+        if (token) {
+            if (token->get_input()) {
+                err << " '" << token->getText() << "'";
+            } else {
+                err << ABSENCE;
             }
         }
     }
@@ -66,8 +95,11 @@ namespace NProtoAST {
         TString Name;
     };
 
+    template <typename TParser, typename TLexer,  bool IsAntlr4 = IsDerivedFromLexer<TLexer>::value && IsDerivedFromParser<TParser>::value>
+    class TProtoASTBuilder;
+
     template <typename TParser, typename TLexer>
-    class TProtoASTBuilder {
+    class TProtoASTBuilder<TParser, TLexer, false> {
         typedef ANTLR_UINT8 TChar;
 
     public:
@@ -103,23 +135,101 @@ namespace NProtoAST {
         TParser Parser;
     };
 
+    template <typename TParser, typename TLexer>
+    class TProtoASTBuilder<TParser, TLexer, true> {
+
+    public:
+        TProtoASTBuilder(TStringBuf data, const TString& queryName = "query", google::protobuf::Arena* arena = nullptr)
+            : QueryName(queryName)
+            , InputStream((const TChar*)data.data(), antlr3::ENC_8BIT, data.length(), (TChar*)QueryName.begin())  // Why the hell antlr needs non-const ptr??
+            , Lexer(&InputStream, static_cast<google::protobuf::Arena*>(nullptr))
+            , TokenStream(ANTLR_SIZE_HINT, Lexer.get_tokSource())
+            , Parser(&TokenStream, arena)
+        {
+        }
+
+        google::protobuf::Message* BuildAST(IErrorCollector& errors) {
+            // TODO: find a better way to break on lexer errors
+            try {
+                return Parser.Parse();
+            } catch (const TTooManyErrors&) {
+                return nullptr;
+            } catch (const yexception& e) {
+                errors.Error(0, 0, e.what());
+                return nullptr;
+            }
+        }
+
+    private:
+        TString QueryName;
+
+        typename TLexer::InputStreamType InputStream;
+        TLexer Lexer;
+
+        typename TParser::TokenStreamType TokenStream;
+        TParser Parser;
+    };
+
+    template <typename TLexer, bool IsAntlr4 = IsDerivedFromLexer<TLexer>::value>
+    class TLexerTokensCollector;
+
     template <typename TLexer>
-    class TLexerTokensCollector {
+    class TLexerTokensCollector<TLexer, false> {
         typedef ANTLR_UINT8 TChar;
 
     public:
-        TLexerTokensCollector(TStringBuf data, /*const char** tokenNames,*/ const TString& queryName = "query")
-            : /*TokenNames(tokenNames)
-            ,*/ QueryName(queryName)
-            , InputStream((const char*)data.data(), data.length())
-            , Lexer(&InputStream/*, static_cast<google::protobuf::Arena*>(nullptr)*/)
+        TLexerTokensCollector(TStringBuf data, const char** tokenNames, const TString& queryName = "query")
+            : TokenNames(tokenNames)
+            , QueryName(queryName)
+            , InputStream((const TChar*)data.data(), antlr3::ENC_8BIT, data.length(), (TChar*)QueryName.begin())
+            , Lexer(&InputStream, static_cast<google::protobuf::Arena*>(nullptr))
         {
         }
 
         void CollectTokens(IErrorCollector& errors, const NSQLTranslation::ILexer::TTokenCallback& onNextToken) {
             try {
-                // Lexer.ReportErrors(&errors);
-                // auto src = Lexer.get_tokSource();
+                Lexer.ReportErrors(&errors);
+                auto src = Lexer.get_tokSource();
+                for (;;) {
+                    auto token = src->nextToken();
+                    auto type = token->getType();
+                    const bool isEOF = type == TLexer::CommonTokenType::TOKEN_EOF;
+                    NSQLTranslation::TParsedToken last;
+                    last.Name = isEOF ? "EOF" : TokenNames[type];
+                    last.Content = token->getText();
+                    last.Line = token->get_line();
+                    last.LinePos = token->get_charPositionInLine();
+                    onNextToken(std::move(last));
+                    if (isEOF) {
+                        break;
+                    }
+                }
+            } catch (const TTooManyErrors&) {
+            } catch (const yexception& e) {
+                errors.Error(0, 0, e.what());
+            }
+        }
+
+    private:
+        const char** TokenNames;
+        TString QueryName;
+        typename TLexer::InputStreamType InputStream;
+        TLexer Lexer;
+    };
+
+    template <typename TLexer>
+    class TLexerTokensCollector<TLexer, true> {
+
+    public:
+        TLexerTokensCollector(TStringBuf data, const TString& queryName = "query")
+            : QueryName(queryName)
+            , InputStream((const char*)data.data(), data.length())
+            , Lexer(&InputStream)
+        {
+        }
+
+        void CollectTokens(IErrorCollector& errors, const NSQLTranslation::ILexer::TTokenCallback& onNextToken) {
+            try {
                 for (;;) {
                     auto token = src->nextToken();
                     auto type = token->getType();
@@ -142,19 +252,18 @@ namespace NProtoAST {
 
     private:
         const char* getTokenName(size_t type) const {
-            auto name = Lexer.getVocabulary().getLiteralName(type);
-            if (name.empty()) {
-			    name = Lexer.getVocabulary().getSymbolicName(type);
+            if (type <  Lexer._symbolicNames.size()) {
+                std::string& name = Lexer._symbolicNames[type];
+                if (name.empty()) {
+                    return INVALID_TOKEN_NAME;
+                }
+                return name.c_str();
             }
-            if (name.empty()) {
-                return INVALID_TOKEN_NAME;
-            }
-            return name.c_str();
+            return INVALID_TOKEN_NAME;
         }
 
-        // const char** TokenNames;
         TString QueryName;
-        typename TLexer::InputStreamType InputStream;
+        antlr4::ANTLRInputStream InputStream;
         TLexer Lexer;
     };
 } // namespace NProtoAST

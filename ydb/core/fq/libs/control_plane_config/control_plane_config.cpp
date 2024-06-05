@@ -164,7 +164,7 @@ private:
             },
             "ReadTenants", true
         ).Process(SelfId(),
-            [=, this, actorSystem=NActors::TActivationContext::ActorSystem()](TTenantExecuter& executer) {
+            [=, this, actorSystem=NActors::TActivationContext::ActorSystem(), selfId=SelfId()](TTenantExecuter& executer) {
                 if (executer.State->CommonVTenants.size()) {
                     std::sort(executer.State->CommonVTenants.begin(), executer.State->CommonVTenants.end());
                 }
@@ -204,12 +204,14 @@ private:
                         );
                     }
 
-                    Exec(DbPool, executable, TablePathPrefix).Apply([executable, actorSystem](const auto& future) {
-                        auto issues = GetIssuesFromYdbStatus(executable, future);
-                        if (issues) {
-                            CPC_LOG_AS_E(*actorSystem, "UpdateState in case of LoadTenantsAndMapping finished with error: " << issues->ToOneLineString());
-                            // Nothing to do. We will retry it in the next Wakeup
-                        }
+                    Exec(DbPool, executable, TablePathPrefix).Apply([executable, actorSystem, selfId](const auto& future) {
+                        actorSystem->Send(selfId, new TEvents::TEvCallback([executable, future]() {
+                            auto issues = GetIssuesFromYdbStatus(executable, future);
+                            if (issues) {
+                                CPC_LOG_E("UpdateState in case of LoadTenantsAndMapping finished with error: " << issues->ToOneLineString());
+                                // Nothing to do. We will retry it in the next Wakeup
+                            }
+                        }));
                     });
                 }
 
@@ -217,12 +219,14 @@ private:
             }
         );
 
-        Exec(DbPool, executable, TablePathPrefix).Apply([this, executable, actorSystem=NActors::TActivationContext::ActorSystem()](const auto& future) {
-            auto issues = GetIssuesFromYdbStatus(executable, future);
-            if (issues) {
-                CPC_LOG_AS_E(*actorSystem, "LoadTenantsAndMapping finished with error: " << issues->ToOneLineString());
-                LoadInProgress = false;
-            }
+        Exec(DbPool, executable, TablePathPrefix).Apply([this, executable, actorSystem=NActors::TActivationContext::ActorSystem(), selfId=SelfId()](const auto& future) {
+            actorSystem->Send(selfId, new TEvents::TEvCallback([this, executable, future]() {
+                auto issues = GetIssuesFromYdbStatus(executable, future);
+                if (issues) {
+                    CPC_LOG_E("LoadTenantsAndMapping finished with error: " << issues->ToOneLineString());
+                    LoadInProgress = false;
+                }
+            }));
         });
     }
 

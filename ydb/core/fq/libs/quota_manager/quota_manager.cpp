@@ -344,7 +344,7 @@ private:
                     cached.Usage.Limit.Value = limit;
                     cached.Usage.Limit.UpdatedAt = Now();
                     LOG_T(cached.Usage.ToString(subjectType, subjectId, metricName) << " LIMIT Changed");
-                    SyncQuota(NActors::TActivationContext::ActorSystem(), subjectType, subjectId, metricName, cached);
+                    SyncQuota(subjectType, subjectId, metricName, cached);
                 }
             }
         }
@@ -381,7 +381,7 @@ private:
                 cached.Usage.Limit.Value = ev->Get()->Limit;
                 cached.Usage.Limit.UpdatedAt = Now();
                 LOG_T(cached.Usage.ToString(subjectType, subjectId, metricName) << " LIMIT Change Accepted");
-                SyncQuota(NActors::TActivationContext::ActorSystem(), subjectType, subjectId, metricName, cached);
+                SyncQuota(subjectType, subjectId, metricName, cached);
             }
         }
 
@@ -471,12 +471,14 @@ private:
             }
         );
 
-        Exec(DbPool, executable, TablePathPrefix).Apply([this, executable, actorSystem=NActors::TActivationContext::ActorSystem(), subjectType, subjectId, callback](const auto& future) {
-            auto issues = GetIssuesFromYdbStatus(executable, future);
-            if (issues) {
-                LOG_AS_E(*actorSystem, "ReadQuota finished with error: " << issues->ToOneLineString());
-                this->ReadQuota(subjectType, subjectId, callback); // TODO: endless retry possible
-            }
+        Exec(DbPool, executable, TablePathPrefix).Apply([this, executable, actorSystem=NActors::TActivationContext::ActorSystem(), subjectType, subjectId, callback, selfId = SelfId()](const auto& future) {
+            actorSystem->Send(selfId, new TEvents::TEvCallback([this, executable, subjectType, subjectId, callback, future]() {
+                auto issues = GetIssuesFromYdbStatus(executable, future);
+                if (issues) {
+                    LOG_E("ReadQuota finished with error: " << issues->ToOneLineString());
+                    this->ReadQuota(subjectType, subjectId, callback); // TODO: endless retry possible
+                }
+            }));
         });
     }
 
@@ -536,7 +538,7 @@ private:
         }
     }
 
-    void SyncQuota(const NActors::TActorSystem* actorSystem, const TString& subjectType, const TString& subjectId, const TString& metricName, TQuotaCachedUsage& cached) {
+    void SyncQuota(const TString& subjectType, const TString& subjectId, const TString& metricName, TQuotaCachedUsage& cached) {
 
         if (cached.SyncInProgress) {
             cached.ChangedAfterSync = true;
@@ -614,7 +616,7 @@ private:
             },
             "CheckQuota"
         ).Process(SelfId(),
-            [this, actorSystem](TSyncQuotaExecuter& executer) {
+            [this](TSyncQuotaExecuter& executer) {
                 if (executer.State.Refreshed) {
                     this->UpdateQuota(executer.State.SubjectType, executer.State.SubjectId, executer.State.MetricName, executer.State.Usage);
                 } else {
@@ -631,30 +633,34 @@ private:
                         cached.SyncInProgress = false;
                         if (cached.ChangedAfterSync) { // this call will be processed in a separate event
                             LOG_T(cached.Usage.ToString(executer.State.SubjectType, executer.State.SubjectId, executer.State.MetricName) << " RESYNC");
-                            this->SyncQuota(actorSystem, executer.State.SubjectType, executer.State.SubjectId, executer.State.MetricName, cached);
+                            this->SyncQuota(executer.State.SubjectType, executer.State.SubjectId, executer.State.MetricName, cached);
                         }
                     }
                 }
             }
         );
 
-        Exec(DbPool, executable, TablePathPrefix).Apply([this, executable, subjectId, subjectType, metricName, actorSystem](const auto& future) {
-            auto issues = GetIssuesFromYdbStatus(executable, future);
-            if (issues) {
-                LOG_AS_E(*actorSystem, "SyncQuota finished with error: " << issues->ToOneLineString());
-                auto& subjectMap = this->QuotaCacheMap[subjectType];
-                auto it = subjectMap.find(subjectId);
-                if (it != subjectMap.end()) {
-                    auto& cache = it->second;
-                    auto itQ = cache.UsageMap.find(metricName);
-                    if (itQ != cache.UsageMap.end()) {
-                        auto& cached = itQ->second;
-                        cached.SyncInProgress = false;
-                        LOG_AS_T(*actorSystem, cached.Usage.ToString(metricName, subjectId, metricName) << " RESYNC after error");
-                        this->SyncQuota(actorSystem, subjectType, subjectId, metricName, cached); // TODO: endless retry possible
+        Exec(DbPool, executable, TablePathPrefix).Apply([this, executable, subjectId, subjectType, metricName, actorSystem=NActors::TActivationContext::ActorSystem(), selfId=SelfId()](const auto& future) {
+            actorSystem->Send(selfId, new TEvents::TEvCallback([this, executable, subjectId, subjectType, metricName, future]() {
+                auto issues = GetIssuesFromYdbStatus(executable, future);
+                if (issues) {
+                    LOG_E("SyncQuota finished with error: " << issues->ToOneLineString());
+                    auto& subjectMap = this->QuotaCacheMap[subjectType];
+                    auto it = subjectMap.find(subjectId);
+                    if (it != subjectMap.end()) {
+                        auto& cache = it->second;
+                        auto itQ = cache.UsageMap.find(metricName);
+                        if (itQ != cache.UsageMap.end()) {
+                            auto& cached = itQ->second;
+                            cached.SyncInProgress = false;
+                            LOG_T(cached.Usage.ToString(metricName, subjectId, metricName) << " RESYNC after error");
+                            this->SyncQuota(subjectType, subjectId, metricName, cached); // TODO: endless retry possible
+                        }
                     }
                 }
-            }
+            }));
+
+
         });
     }
 
@@ -698,7 +704,7 @@ private:
             // if metric is not defined - ignore usage update
             itQ->second.Usage.Usage = ev->Get()->Usage;
             LOG_T(itQ->second.Usage.ToString(subjectType, subjectId, metricName) << " REFRESHED");
-            SyncQuota(NActors::TActivationContext::ActorSystem(), subjectType, subjectId, metricName, itQ->second);
+            SyncQuota(subjectType, subjectId, metricName, itQ->second);
         }
 
         if (cache.PendingUsage.size() == 0) {

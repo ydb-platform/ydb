@@ -19,16 +19,6 @@
 #define CPC_LOG_T(s) \
     LOG_FQ_CONTROL_PLANE_CONFIG_TRACE(s)
 
-#define CPC_LOG_AS_D(as, s) \
-    LOG_FQ_CONTROL_PLANE_CONFIG_AS_DEBUG(as, s)
-#define CPC_LOG_AS_I(as, s) \
-    LOG_FQ_CONTROL_PLANE_CONFIG_AS_INFO(as, s)
-#define CPC_LOG_AS_W(as, s) \
-    LOG_FQ_CONTROL_PLANE_CONFIG_AS_WARN(as, s)
-#define CPC_LOG_AS_E(as, s) \
-    LOG_FQ_CONTROL_PLANE_CONFIG_AS_ERROR(as, s)
-#define CPC_LOG_AS_T(as, s) \
-    LOG_FQ_CONTROL_PLANE_CONFIG_AS_TRACE(as, s)
 
 namespace NFq {
 

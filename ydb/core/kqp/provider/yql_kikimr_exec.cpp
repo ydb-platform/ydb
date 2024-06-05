@@ -1416,6 +1416,34 @@ public:
                             for (auto family : families) {
                                 alter_columns->set_family(TString(family.Value()));
                             }
+                        } else if (alterColumnAction == "setColumnConstraints") {
+                            auto constraintsList = alterColumnList.Item(1).Cast<TExprList>();
+
+                            if (constraintsList.Size() > 1) {
+                                ctx.AddError(TIssue(ctx.GetPosition(constraintsList.Pos()), TStringBuilder() 
+                                    << "\". Several column constrains for a single column are not yet supported"));
+                                return SyncError();
+                            }
+
+                            auto constraint = constraintsList.Item(0).Cast<TCoAtomList>();
+
+                            if (constraint.Size() != 1) {
+                                ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() 
+                                    << "setColumnConstraints can get exactly one token \\in {\"null\", \"not_null\"}"));
+                                return SyncError();
+                            }
+
+                            auto value = TString(constraint.Item(0).Cast<TCoAtom>());
+
+                            if (value == "not_null") {
+                                // todo:
+                                // alter_columns->set_not_null();
+                            } else if (value = "null") {
+                                // todo:
+                                // alter_columns->set_null();
+                            }
+
+                            return SyncError();
                         } else {
                             ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
                                     TStringBuilder() << "Unsupported action to alter column"));

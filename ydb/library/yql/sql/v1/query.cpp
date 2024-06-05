@@ -1341,7 +1341,7 @@ public:
                         columnConstraints = L(columnConstraints, Q(Y(Q("null"))));
                     }
 
-                    columnDesc = L(columnDesc, Q(Y(Q("columnConstrains"), Q(columnConstraints))));
+                    columnDesc = L(columnDesc, Q(Y(Q("setColumnConstraints"), Q(columnConstraints))));
                     columns = L(columns, Q(columnDesc));
                 } else if (col.TypeOfChange == TColumnSchema::ETypeOfChange::SetFamaly) {
                     auto columnDesc = Y();

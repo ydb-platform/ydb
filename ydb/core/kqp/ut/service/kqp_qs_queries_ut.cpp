@@ -3104,7 +3104,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
 
         const TString query = R"(
-            CREATE TABLE `/Root/test/alterNotNull` (
+            CREATE TABLE `/Root/test/alterNullInvalid` (
                 id Int32 NOT NULL,
                 value Int32,
                 PRIMARY KEY (id)
@@ -3115,7 +3115,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         {
             auto initValues = client.ExecuteQuery(R"(
-                REPLACE INTO `/Root/test/alterNotNull` (id, value)
+                REPLACE INTO `/Root/test/alterNullInvalid` (id, value)
                 VALUES
                 ( 1, 1 ),
                 ( 2, 10 ),
@@ -3130,7 +3130,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         {
             auto setNotNull = client.ExecuteQuery(R"(
-                ALTER TABLE alterNotNull
+                ALTER TABLE `/Root/test/alterNullInvalid`
                 ALTER COLUMN value SET NOT NULL;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(!setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
@@ -3177,11 +3177,10 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         {
             auto setNotNull = client.ExecuteQuery(R"(
-                ALTER TABLE alterNotNull
+                ALTER TABLE `/Root/test/alterNotNull`
                 ALTER COLUMN value SET NOT NULL;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            // change
-            UNIT_ASSERT_C(!setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
+            UNIT_ASSERT_C(setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
         }
 
         {
@@ -3209,7 +3208,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
 
         const TString query = R"(
-            CREATE TABLE `/Root/test/alterNotNull` (
+            CREATE TABLE `/Root/test/alterNull` (
                 id Int32 NOT NULL,
                 value Int32,
                 PRIMARY KEY (id)
@@ -3220,7 +3219,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         {
             auto initValues = client.ExecuteQuery(R"(
-                REPLACE INTO `/Root/test/alterNotNull` (id, value)
+                REPLACE INTO `/Root/test/alterNull` (id, value)
                 VALUES
                 ( 1, 1 ),
                 ( 2, 10 ),
@@ -3235,7 +3234,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         {
             auto setNull = client.ExecuteQuery(R"(
-                ALTER TABLE alterNotNull
+                ALTER TABLE `/Root/test/alterNull`
                 ALTER COLUMN value SET NULL;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(!setNull.IsSuccess(), setNull.GetIssues().ToString());
@@ -3243,7 +3242,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         {
             auto initNullValues = client.ExecuteQuery(R"(
-                REPLACE INTO `/Root/test/alterNotNull` (id, value)
+                REPLACE INTO `/Root/test/alterNull` (id, value)
                 VALUES
                 ( 1, NULL ),
                 ( 2, NULL ),

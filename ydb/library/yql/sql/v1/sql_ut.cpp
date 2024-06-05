@@ -2534,7 +2534,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             Y_UNUSED(word);
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(
-                R"(let world (Write! world sink (Key '('tablescheme (String '"tableName"))) (Void) '('('mode 'alter) '('actions '('('alterColumns '('('"val" '('columnConstrains '('('not_null)))))))))))"
+                R"(let world (Write! world sink (Key '('tablescheme (String '"tableName"))) (Void) '('('mode 'alter) '('actions '('('alterColumns '('('"val" '('setColumnConstraints '('('not_null)))))))))))"
             ));
         };
 
@@ -2563,7 +2563,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             Y_UNUSED(word);
 
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(
-                R"(let world (Write! world sink (Key '('tablescheme (String '"tableName"))) (Void) '('('mode 'alter) '('actions '('('alterColumns '('('"val" '('columnConstrains '('('null)))))))))))"
+                R"(let world (Write! world sink (Key '('tablescheme (String '"tableName"))) (Void) '('('mode 'alter) '('actions '('('alterColumns '('('"val" '('setColumnConstraints '('('null)))))))))))"
             ));
         };
 

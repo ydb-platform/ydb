@@ -71,9 +71,9 @@ class TestS3Compressions:
         ("big.json.zst", "zstd"),
         ("big.json.xz", "xz")
     ])
-    def test_big_compression(self, kikimr, s3, client, filename, compression, unique_prefix):
+    def test_big_compression(self, kikimr, s3, client, filename, compression):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = "tbc_fruitbucket"
         client.create_storage_connection(storage_connection_name, "fbucket")
 
         sql = '''

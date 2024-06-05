@@ -52,6 +52,7 @@ target_sources(ydb-core-util PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/util/failure_injection.h
   ${PROJECT_SOURCE_DIR}/ydb/core/util/format.h
   ${PROJECT_SOURCE_DIR}/ydb/core/util/fragmented_buffer.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/util/gen_step.h
   ${PROJECT_SOURCE_DIR}/ydb/core/util/hyperlog_counter.h
   ${PROJECT_SOURCE_DIR}/ydb/core/util/interval_set.h
   ${PROJECT_SOURCE_DIR}/ydb/core/util/intrusive_fixed_hash_set.h
@@ -88,6 +89,7 @@ target_sources(ydb-core-util PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/util/fast_tls.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/util/format.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/util/fragmented_buffer.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/util/gen_step.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/util/hazard.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/util/hyperlog_counter.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/util/intrusive_heap.cpp

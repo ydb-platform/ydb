@@ -14,6 +14,7 @@ SRCS(
 GENERATE_ENUM_SERIALIZATION(kqp_common.h)
 
 PEERDIR(
+    contrib/libs/apache/arrow
     ydb/core/base
     ydb/library/accessor
     ydb/library/actors/core

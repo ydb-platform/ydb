@@ -17,6 +17,7 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/apache/arrow
     ydb/library/accessor
     ydb/library/actors/core
     ydb/public/api/protos

@@ -19,4 +19,3 @@ TMap<NKikimrConfig::TAuditConfig::EFormat, TVector<THolder<TLogBackend>>> Create
     NMonitoring::TDynamicCounterPtr counters);
 
 } // NKikimr
-

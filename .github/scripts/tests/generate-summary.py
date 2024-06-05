@@ -294,7 +294,7 @@ def gen_summary(summary_url_prefix, summary_out_folder, paths):
     return summary
 
 
-def get_comment_text(pr: PullRequest, summary: TestSummary, test_history_url: str):
+def get_comment_text(pr: PullRequest, summary: TestSummary, test_history_url: str, test_log_file_url: Optional[str]):
     if summary.is_empty:
         return [
             f"Test run completed, no test results found for commit {pr.head.sha}. "
@@ -313,6 +313,9 @@ def get_comment_text(pr: PullRequest, summary: TestSummary, test_history_url: st
         body.append("")
         body.append(f"[Test history]({test_history_url})")
 
+    if test_log_file_url:
+        body.append(f"[Test log]({test_log_file_url})")
+
     body.extend(summary.render())
 
     return body
@@ -323,6 +326,7 @@ def main():
     parser.add_argument("--summary-out-path", required=True)
     parser.add_argument("--summary-url-prefix", required=True)
     parser.add_argument('--test-history-url', required=False)
+    parser.add_argument('--test-log-url', required=False)
     parser.add_argument('--build-preset', default="default-linux-x86-64-relwithdebinfo", required=False)
     parser.add_argument('--status-report-file', required=False)
     parser.add_argument("args", nargs="+", metavar="TITLE html_out path")
@@ -350,18 +354,19 @@ def main():
 
         if summary.is_empty | summary.is_failed:
             color = 'red'
-            overall_status="failure"
+            overall_status = "failure"
         else:
             color = 'green'
-            overall_status="success"
+            overall_status = "success"
 
         run_number = int(os.environ.get("GITHUB_RUN_NUMBER"))
 
         update_pr_comment_text(pr, args.build_preset, run_number, color, text='\n'.join(text), rewrite=False)
 
         if args.status_report_file:
-            with open(args.status_report_file,'w') as fo:
-                fo.write( overall_status )
+            with open(args.status_report_file, 'w') as fo:
+                fo.write(overall_status)
+
 
 if __name__ == "__main__":
     main()

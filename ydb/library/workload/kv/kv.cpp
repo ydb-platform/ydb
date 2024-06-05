@@ -493,7 +493,6 @@ TVector<TRow> TKvWorkloadGenerator::GenerateRandomRows(bool randomValues) {
 }
 
 void TKvWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
-    opts.SetFreeArgsNum(0);
     switch (commandType) {
     case TWorkloadParams::ECommandType::Init:
         opts.AddLongOption("init-upserts", "count of upserts need to create while table initialization")

@@ -353,6 +353,7 @@ int TWorkloadCommandRun::Run(TConfig& config) {
 
 void TWorkloadCommandRun::Config(TConfig& config) {
     TWorkloadCommand::Config(config);
+    config.Opts->SetFreeArgsNum(0);
     Params.ConfigureOpts(*config.Opts, NYdbWorkload::TWorkloadParams::ECommandType::Run, Type);
 }
 
@@ -365,6 +366,7 @@ TWorkloadCommandBase::TWorkloadCommandBase(const TString& name, NYdbWorkload::TW
 
 void TWorkloadCommandBase::Config(TConfig& config) {
     TYdbCommand::Config(config);
+    config.Opts->SetFreeArgsNum(0);
     Params.ConfigureOpts(*config.Opts, CommandType, Type);
 }
 

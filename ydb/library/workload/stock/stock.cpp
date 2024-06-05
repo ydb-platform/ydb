@@ -304,7 +304,6 @@ TQueryInfoList TStockWorkloadGenerator::GetCustomerHistory() {
 }
 
 void TStockWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
-    opts.SetFreeArgsNum(0);
     switch (commandType) {
     case TWorkloadParams::ECommandType::Init:
         opts.AddLongOption('p', "products", "Product count. Value in 1..500 000.")

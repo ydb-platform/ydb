@@ -3326,7 +3326,7 @@ public:
     TNamedExprNode(TNodePtr parent)
         : IProxyNode(parent->GetPos(), parent)
         , FakeSource(BuildFakeSource(parent->GetPos()))
-        , Unused(BuildAtom(parent->GetPos(), "unused", TNodeFlags::Default))
+        , Unused(BuildQuotedAtom(parent->GetPos(), "unused", TNodeFlags::Default))
         , Referenced(false)
     {
     }

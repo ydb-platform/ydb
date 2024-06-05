@@ -4,7 +4,7 @@
 #include <ydb/public/lib/ydb_cli/common/progress_bar.h>
 #include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
-#include <ydb/library/workload/workload_query_generator.h>
+#include <ydb/library/workload/abstract/workload_query_generator.h>
 #include <library/cpp/histogram/hdr/histogram.h>
 #include <library/cpp/object_factory/object_factory.h>
 #include <util/datetime/base.h>

@@ -1,5 +1,4 @@
-#include "kv_workload.h"
-#include "workload_factory.h"
+#include "kv.h"
 #include <util/generic/serialized_enum.h>
 #include <util/random/random.h>
 #include <util/datetime/base.h>
@@ -16,8 +15,6 @@
 #include <format>
 
 namespace NYdbWorkload {
-
-TWorkloadFactory::TRegistrator<TKvWorkloadParams> KvRegistrar("kv");
 
 using TRow = TKvWorkloadGenerator::TRow;
 

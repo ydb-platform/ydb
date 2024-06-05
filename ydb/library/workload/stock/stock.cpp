@@ -1,5 +1,4 @@
-#include "stock_workload.h"
-#include "workload_factory.h"
+#include "stock.h"
 
 #include <util/datetime/base.h>
 #include <util/generic/serialized_enum.h>
@@ -21,8 +20,6 @@ uint64_t getOrderId() {
 }
 
 namespace NYdbWorkload {
-
-TWorkloadFactory::TRegistrator<TStockWorkloadParams> StockRegistrar("stock");
 
 TStockWorkloadGenerator::TStockWorkloadGenerator(const TStockWorkloadParams* params)
     : TBase(params)

@@ -7,9 +7,9 @@
 #include "query_workload.h"
 #include "ydb_benchmark.h"
 
-#include "ydb/library/yverify_stream/yverify_stream.h"
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
-#include <ydb/library/workload/workload_factory.h>
+#include <ydb/library/workload/abstract/workload_factory.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>

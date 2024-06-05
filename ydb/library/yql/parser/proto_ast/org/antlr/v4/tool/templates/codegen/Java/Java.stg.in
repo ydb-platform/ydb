@@ -94,7 +94,28 @@ RuleSempredFunction(r, actions) ::= <<
 RuleFunction(currentRule,args,code,locals,ruleCtx,altLabelCtxs,namedActions,finallyAction,postamble,exceptions) ::= <<
 // rule $ANTLR start "<currentRule.name>"
 message TRule_<currentRule.name> {
+    <if(rest(code))>
     <code:{e | <element(e, i)>}; separator="\n">
+    <else>
+    <if(first(code).alts)>
+    <if(rest(first(code).alts))>
+    // some alt block
+    <first(code).alts:{a | <altDecl(a,i)>}; separator="\n">
+    oneof Alt {
+        <first(code).alts:{a | TAlt<i> Alt_<currentRule.name><i> = <i>; }; separator="\n">
+    }
+    <else>
+    // some star block
+    <code:{e | <element(e, i)>}; separator="\n">
+    <endif>
+    <else>
+    <if(first(code).ops)>
+    <code:{e | <element(e, i)>}; separator="\n">
+    <else>
+    // shit happened
+    <endif>
+    <endif>
+    <endif>
 }
 // $ANTLR end "<currentRule.name>"
 >>
@@ -102,15 +123,30 @@ message TRule_<currentRule.name> {
 LeftRecursiveRuleFunction(currentRule,args,code,locals,ruleCtx,altLabelCtxs,
 	namedActions,finallyAction,postamble) ::=
 <<
-LeftRecursiveRuleFunction {
-    <currentRule>
-    <args> 
-    <code>
-    <ruleCtx>
-    <namedActions>
-    <finallyAction>
-    <postamble>
-    <exceptions>
+// rule $ANTLR start "<currentRule.name>"
+message TRule_<currentRule.name> {
+    <if(rest(code))>
+    <code:{e | <element(e, i)>}; separator="\n">
+    <else>
+    <if(first(code).alts)>
+    <if(rest(first(code).alts))>
+    // some alt block
+    <first(code).alts:{a | <altDecl(a,i)>}; separator="\n">
+    oneof Alt {
+        <first(code).alts:{a | TAlt<i> Alt_<currentRule.name><i> = <i>; }; separator="\n">
+    }
+    <else>
+    // some star block
+    <code:{e | <element(e, i)>}; separator="\n">
+    <endif>
+    <else>
+    <if(first(code).ops)>
+    <code:{e | <element(e, i)>}; separator="\n">
+    <else>
+    // shit happened
+    <endif>
+    <endif>
+    <endif>
 }
 >>
 

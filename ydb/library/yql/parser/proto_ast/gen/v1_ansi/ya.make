@@ -28,7 +28,11 @@ ENDIF()
 
 NO_COMPILER_WARNINGS()
 
-INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/ya.make.incl)
+ADDINCL(
+    GLOBAL contrib/libs/antlr4_cpp_runtime/include
+)
+
+INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/parser/proto_ast/org/antlr/v4/tool/templates/codegen/ya.make.incl)
 
 RUN_ANTLR4(
     ${sql_grammar}

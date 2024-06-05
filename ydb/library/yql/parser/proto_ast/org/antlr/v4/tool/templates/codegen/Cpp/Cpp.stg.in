@@ -91,12 +91,19 @@ public:
   bool sempred(antlr4::RuleContext *_localctx, size_t ruleIndex, size_t predicateIndex) override;
   <endif>
 
-  // By default the static state used to implement the lexer is lazily initialized during the first
-  // call to the constructor. You can call this function if you wish to initialize the static state
-  // ahead of time.
-  static void initialize();
-
+  static std::vector\<std::string> _symbolicNames;
 private:
+  static std::vector\<antlr4::dfa::DFA> _decisionToDFA;
+  static antlr4::atn::PredictionContextCache _sharedContextCache;
+  static std::vector\<std::string> _ruleNames;
+  static std::vector\<std::string> _tokenNames;
+  static std::vector\<std::string> _channelNames;
+  static std::vector\<std::string> _modeNames;
+
+  static std::vector\<std::string> _literalNames;
+  static antlr4::dfa::Vocabulary _vocabulary;
+  <atn>
+
   <namedActions.declarations>
 
   // Individual action functions triggered by action() above.
@@ -554,7 +561,19 @@ RuleFunction(currentRule, args, code, locals, ruleCtx, altLabelCtxs, namedAction
 <! TODO: untested !><if (currentRule.hasLookaheadBlock)>
     size_t alt;
     <endif>
-    <code>
+    <if(rest(code))>
+    <code:{e | <element(e, i)>}; separator="\n">
+    <else>
+    <if(first(code).alts)>
+    <if(rest(first(code).alts))>
+    <code; separator="\n">
+    <else>
+    <code:{e | <element(e, i)>}; separator="\n">
+    <endif>
+    <else>
+    <code; separator="\n">
+    <endif>
+    <endif>
 <! TODO: untested !>   <postamble; separator = "\n">
     <namedActions.after>
   }
@@ -609,7 +628,19 @@ LeftRecursiveRuleFunction(currentRule, args, code, locals, ruleCtx, altLabelCtxs
   });
   try {
     <if (currentRule.hasLookaheadBlock)>size_t alt;<endif>
-    <code>
+    <if(rest(code))>
+    <code:{e | <element(e, i)>}; separator="\n">
+    <else>
+    <if(first(code).alts)>
+    <if(rest(first(code).alts))>
+    <code; separator="\n">
+    <else>
+    <code:{e | <element(e, i)>}; separator="\n">
+    <endif>
+    <else>
+    <code; separator="\n">
+    <endif>
+    <endif>
 <! TODO: untested !><postamble; separator = "\n">
     <namedActions.after>
   }
@@ -720,16 +751,18 @@ LL1AltBlock(choice, preamble, alts, error) ::= <<
   _errHandler->sync(this);
   <! TODO: untested !><if (choice.label)>LL1AltBlock(choice, preamble, alts, error) <labelref(choice.label)> = _input->LT(1);<endif>
   <preamble; separator="\n">
+  <if(elemId)>
   // LL1AltBlock protobuf stuff
   auto global_parent = parent;
   auto parent = global_parent->MutableBlock<elemId>();
   // protobuf end
+  <endif>
   switch (_input->LA(1)) {
     <choice.altLook, alts: {look, alt | <cases(ttypes = look)> {
     <if(rest(alts))><if(alt)>
     // LL1AltBlock protobuf stuff
     auto global_parent = parent;
-    auto parent = global_parent->MutableAlt<i>();
+    auto parent = global_parent->MutableAlt<if(!elemId)>_<currentRule.name><endif><i>();
     // protobuf end
     <endif><endif>
     <alt>
@@ -815,16 +848,18 @@ AltBlock(choice, preamble, alts, error) ::= <<
   _errHandler->sync(this);
   <! TODO: untested !><if (choice.label)><labelref(choice.label)> = _input->LT(1);<endif>
   <! TODO: untested !><preamble; separator = "\n">
+  <if(elemId)>
   // AltBlock protobuf stuff
   auto global_parent = parent;
   auto parent = global_parent->MutableBlock<elemId>();
   // protobuf end
+  <endif>
   switch (getInterpreter\<atn::ParserATNSimulator>()->adaptivePredict(_input, <choice.decision>, _ctx)) {
   <alts: {alt | case <i>: {
     <if(rest(alts))><if(alt)>
     // AltBlock protobuf stuff
     auto global_parent = parent;
-    auto parent = global_parent->MutableAlt<i>();
+    auto parent = global_parent->MutableAlt<if(!elemId)>_<currentRule.name><endif><i>();
     // protobuf end
     <endif><endif>
     <alt>

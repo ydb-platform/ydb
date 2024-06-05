@@ -352,6 +352,8 @@ def generate_header_bloat(build_output_dir: str, result_dir: str, base_src_dir: 
         "time_breakdown": time_breakdown,
     }
 
+    os.makedirs(result_dir, exist_ok=True)
+    
     with open(os.path.join(result_dir, "output.json"), "w") as f:
         json.dump(human_readable_output, f, indent=4)
 

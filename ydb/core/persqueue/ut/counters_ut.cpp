@@ -185,7 +185,7 @@ Y_UNIT_TEST(PartitionFirstClass) {
         dbGroup->OutputHtml(countersStr);
         TString referenceCounters = NResource::Find(TStringBuf("counters_pqproxy_firstclass.html"));
 
-        UNIT_ASSERT_EQUAL(countersStr.Str() + "\n", referenceCounters);
+        UNIT_ASSERT_VALUES_EQUAL(countersStr.Str() + "\n", referenceCounters);
     }
 
     {
@@ -427,7 +427,8 @@ Y_UNIT_TEST(PartitionFirstClass) {
                                 ->GetSubgroup("database", "/Root")
                                 ->GetSubgroup("cloud_id", "cloud_id")
                                 ->GetSubgroup("folder_id", "folder_id")
-                                ->GetSubgroup("database_id", "database_id")->GetSubgroup("topic", "topic");
+                                ->GetSubgroup("database_id", "database_id")
+                                ->GetSubgroup("topic", "topic");
             group->GetNamedCounter("name", "topic.partition.uptime_milliseconds_min", false)->Set(30000);
             group->GetNamedCounter("name", "topic.partition.write.lag_milliseconds_max", false)->Set(600);
             group->GetNamedCounter("name", "topic.partition.uptime_milliseconds_min", false)->Set(30000);

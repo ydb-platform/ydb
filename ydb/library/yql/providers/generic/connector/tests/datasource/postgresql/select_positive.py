@@ -138,7 +138,7 @@ class Factory:
                     ydb_type=makeOptionalYdbTypeFromTypeID(Type.UTF8),
                     data_source_type=DataSourceType(pg=postgresql.Text()),
                 ),
-                Column(  # TODO: maybe refactor in fq-connector-go col_23_timestamp, col_24_date
+                Column(  # TODO: maybe refactor: in fq-connector-go col_23_timestamp, col_24_date
                     name='col_23_date',
                     ydb_type=makeOptionalYdbTypeFromTypeID(Type.DATE),
                     data_source_type=DataSourceType(pg=postgresql.Date()),
@@ -224,7 +224,7 @@ class Factory:
                     'buki',
                     'buki ',
                     'buki ',
-                    'buki',
+                    'buki', 
                     datetime.date(1988, 11, 20),
                     datetime.datetime(1988, 11, 20, 12, 00, 00),
                     '{ "TODO" : "unicode" }',
@@ -472,22 +472,22 @@ class Factory:
             ),
         ]
 
-    def _json(self) -> TestCase:
-        schema = Schema(
-            columns=ColumnList(
-                Column(
-                    name='col_json',
-                    ydb_type=Type.JSON,
-                    data_source_type=DataSourceType(pg=postgresql.Json()),
-                ),
-            ),
-        )
+    # def _json(self) -> TestCase:
+    #     schema = Schema(
+    #         columns=ColumnList(
+    #             Column(
+    #                 name='col_json',
+    #                 ydb_type=Type.JSON,
+    #                 data_source_type=DataSourceType(pg=postgresql.Json()),
+    #             ),
+    #         ),
+    #     )
 
-        data_in = [
-            ['{ "friends": [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}'],
-            ['{ "TODO" : "unicode" }'],
-            [None],
-        ]
+    #     data_in = [
+    #         ['{ "friends": [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}'],
+    #         ['{ "TODO" : "unicode" }'],
+    #         [None],
+    #     ]
 
         data_out_1 = [
             ['{"age":35,"name":"James Holden"}'],
@@ -495,9 +495,9 @@ class Factory:
             [None],
         ]
 
-        data_source_kind = EDataSourceKind.POSTGRESQL
+    #     data_source_kind = EDataSourceKind.POSTGRESQL
 
-        test_case_name = 'json'
+    #     test_case_name = 'json'
 
         return [
             TestCase(
@@ -521,6 +521,6 @@ class Factory:
                 self._constant(),
                 self._count(),
                 self._pushdown(),
-                self._json(),
+                # self._json(), TODO need json2 udf module in kqprun
             )
         )

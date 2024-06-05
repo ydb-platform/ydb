@@ -8,6 +8,7 @@
 class TProtoToYaml {
 public:
     static YAML::Node ProtoToYamlSchema(const ::google::protobuf::Descriptor* descriptor);
+    static void FillEnum(YAML::Node property, const ::google::protobuf::EnumDescriptor* enumDescriptor);
 
     template <typename ProtoType>
     static YAML::Node ProtoToYamlSchema() {

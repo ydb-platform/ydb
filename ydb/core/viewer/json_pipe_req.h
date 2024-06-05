@@ -174,6 +174,21 @@ protected:
         SendRequestToPipe(pipeClient, request.Release());
     }
 
+    void RequestBSControllerVDiskEvict(ui32 groupId, ui32 groupGeneration, ui32 failRealmIdx, ui32 failDomainIdx, ui32 vdiskIdx, bool force = false) {
+        TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+        THolder<TEvBlobStorage::TEvControllerConfigRequest> request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto* evictVDisk = request->Record.MutableRequest()->AddCommand()->MutableReassignGroupDisk();
+        evictVDisk->SetGroupId(groupId);
+        evictVDisk->SetGroupGeneration(groupGeneration);
+        evictVDisk->SetFailRealmIdx(failRealmIdx);
+        evictVDisk->SetFailDomainIdx(failDomainIdx);
+        evictVDisk->SetVDiskIdx(vdiskIdx);
+        if (force) {
+            request->Record.MutableRequest()->SetIgnoreDegradedGroupsChecks(true);
+        }
+        SendRequestToPipe(pipeClient, request.Release());
+    }
+
     void RequestSchemeCacheNavigate(const TString& path) {
         THolder<NSchemeCache::TSchemeCacheNavigate> request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
         NSchemeCache::TSchemeCacheNavigate::TEntry entry;

@@ -57,7 +57,7 @@ LIMIT 10;
 Все функции сериализации возвращают результат в виде [Tagged](../../types/special.md) типов, содержащего внутри `String`. 
 
 Бинарное представление вектора можно сохранить в {{ ydb-short-name }} колонку. 
-В настоящий момент {{ ydb-short-name }} не поддерживает хранение `Tagged` типов и поэтому перед сохранением бинарного представления векторов нужно извлечь `String` с помощью функцию [Untag](../../builtins/basic#as-tagged).
+В настоящий момент {{ ydb-short-name }} не поддерживает хранение `Tagged` типов и поэтому перед сохранением бинарного представления векторов нужно извлечь `String` с помощью функции [Untag](../../builtins/basic#as-tagged).
 
 #### Сигнатуры функций
 
@@ -103,7 +103,7 @@ Knn::ManhattanDistance(String{Flags:AutoMap}, String{Flags:AutoMap})->Float?
 Knn::EuclideanDistance(String{Flags:AutoMap}, String{Flags:AutoMap})->Float?
 ```
 
-В случае разной длины или формата агрументов, функции возвращают `NULL`.
+В случае разной длины или разного формата агрументов, функции возвращают `NULL`.
 
 {% note info %}
 
@@ -182,7 +182,7 @@ VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryString
 
 ### Скалярное квантование
 
-Если ML модель возвращает целочисленные вектора `List<Int8>` / `List<Uint8>`, то их можно напрямую подавать на фукнцию `ToBinaryStringInt8` / `ToBinaryStringUint8`.
+Если ML модель возвращает целочисленные вектора `List<Int8>` / `List<Uint8>`, то их можно напрямую подавать в фукнции `ToBinaryStringInt8` / `ToBinaryStringUint8`.
 Если ML модель возвращает вещественные вектора, то к ним можно применять скалярное квантование средствами YQL.
 
 #### Пример квантования Float -> Int8

@@ -367,13 +367,15 @@ static Ydb::Type* AddColumn(Ydb::Table::ColumnMeta* newColumn, const TColumn& co
         pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
         pg->set_typlen(0);
         pg->set_typmod(0);
+        if (column.GetNotNull()) {
+            newColumn->set_not_null(column.GetNotNull());
+        }
     } else {
         NYql::NProto::TypeIds protoType;
         if (!NYql::NProto::TypeIds_Parse(column.GetType(), &protoType)) {
             throw NYql::TErrorException(NKikimrIssues::TIssuesIds::DEFAULT_ERROR)
                 << "Got invalid type: " << column.GetType() << " for column: " << column.GetName();
         }
-
         if (column.GetNotNull()) {
             columnType = newColumn->mutable_type();
         } else {
@@ -389,7 +391,6 @@ static Ydb::Type* AddColumn(Ydb::Table::ColumnMeta* newColumn, const TColumn& co
             NMiniKQL::ExportPrimitiveTypeToProto(protoType, *columnType);
         }
     }
-    newColumn->set_not_null(column.GetNotNull());
     return columnType;
 }
 
@@ -407,13 +408,15 @@ Ydb::Type* AddColumn<NKikimrSchemeOp::TColumnDescription>(Ydb::Table::ColumnMeta
         pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
         pg->set_typlen(0);
         pg->set_typmod(0);
+        if (column.GetNotNull()) {
+            newColumn->set_not_null(column.GetNotNull());
+        }
     } else {
         NYql::NProto::TypeIds protoType;
         if (!NYql::NProto::TypeIds_Parse(column.GetType(), &protoType)) {
             throw NYql::TErrorException(NKikimrIssues::TIssuesIds::DEFAULT_ERROR)
                 << "Got invalid type: " << column.GetType() << " for column: " << column.GetName();
         }
-
         if (column.GetNotNull()) {
             columnType = newColumn->mutable_type();
         } else {
@@ -429,7 +432,6 @@ Ydb::Type* AddColumn<NKikimrSchemeOp::TColumnDescription>(Ydb::Table::ColumnMeta
             NMiniKQL::ExportPrimitiveTypeToProto(protoType, *columnType);
         }
     }
-    newColumn->set_not_null(column.GetNotNull());
     switch (column.GetDefaultValueCase()) {
         case NKikimrSchemeOp::TColumnDescription::kDefaultFromLiteral: {
             auto fromLiteral = newColumn->mutable_from_literal();

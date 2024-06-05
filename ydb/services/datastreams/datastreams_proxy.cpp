@@ -121,7 +121,6 @@ namespace NKikimr::NDataStreams::V1 {
                 topicRequest.mutable_retention_period()->set_seconds(
                     TDuration::Hours(DEFAULT_STREAM_DAY_RETENTION).Seconds());
         }
-        topicRequest.mutable_supported_codecs()->add_codecs(Ydb::Topic::CODEC_RAW);
         topicRequest.set_partition_write_speed_bytes_per_second(
             PartitionWriteSpeedInBytesPerSec(GetProtoRequest()->write_quota_kb_per_sec()));
         topicRequest.set_partition_write_burst_bytes(

@@ -175,7 +175,7 @@ Y_UNIT_TEST_SUITE(DiscoveryConverterTest) {
         );
         UNIT_ASSERT_VALUES_EQUAL(converter->GetFullModernName(), "account/account");
         UNIT_ASSERT_VALUES_EQUAL(converter->GetSecondaryPath("account"), "/account/account/account");
-        
+
         converter = converterFactory.MakeDiscoveryConverter(
                 "account/", {}, "dc1", "account"
         );
@@ -431,10 +431,11 @@ Y_UNIT_TEST_SUITE(TopicNameConverterForCPTest) {
         );
         UNIT_ASSERT(!converter->IsValid());
 
+        // this is valid, corresponding check relaxed
         converter = TTopicNameConverter::ForFederation(
                 "", "", "topic-mirrored-from-sas", "/LbCommunal/account", "/LbCommunal/account", true, "sas", "account"
         );
-        UNIT_ASSERT(!converter->IsValid());
+        UNIT_ASSERT(converter->IsValid());
 
         converter = TTopicNameConverter::ForFederation(
                 "", "", "topic-mirrored-from-", "/LbCommunal/account", "/LbCommunal/account", true, "sas", "account"

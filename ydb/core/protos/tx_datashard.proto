@@ -811,8 +811,13 @@ message TEvPeriodicTableStats {
 }
 
 message TObjectStorageListingFilter {
+    enum EMatchType {
+        EQUAL = 0;
+        NOT_EQUAL = 1;
+    }
     optional bytes Values = 1;
     repeated uint32 Columns = 2;
+    repeated EMatchType MatchTypes = 3; 
 }
 
 message TEvObjectStorageListingRequest {

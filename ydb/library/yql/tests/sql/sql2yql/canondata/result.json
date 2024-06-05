@@ -3695,6 +3695,13 @@
             "uri": "https://{canondata_backend}/1936947/659b615f15086142a8960946dabd06b519d43335/resource.tar.gz#test_sql2yql.test_column_order-insert_/sql.yql"
         }
     ],
+    "test_sql2yql.test[column_order-insert_reorder_without_columnorder]": [
+        {
+            "checksum": "d3105827a0ca8e095bcecc797540f34e",
+            "size": 1553,
+            "uri": "https://{canondata_backend}/1923547/0aba22156762a55d9c7578c76fffd5395d319f8b/resource.tar.gz#test_sql2yql.test_column_order-insert_reorder_without_columnorder_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[column_order-insert_tmp]": [
         {
             "checksum": "f7020067b63cf9ba560ad9e409933221",
@@ -21165,6 +21172,13 @@
             "checksum": "d3d9912afa60d329bb37f97bce70dff2",
             "size": 586,
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_column_order-insert_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[column_order-insert_reorder_without_columnorder]": [
+        {
+            "checksum": "e0526a3060fc6b9c9a2d0c295066f135",
+            "size": 223,
+            "uri": "https://{canondata_backend}/1923547/0aba22156762a55d9c7578c76fffd5395d319f8b/resource.tar.gz#test_sql_format.test_column_order-insert_reorder_without_columnorder_/formatted.sql"
         }
     ],
     "test_sql_format.test[column_order-insert_tmp]": [

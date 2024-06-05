@@ -11,7 +11,7 @@ The k-NN problem solution is divided into two major subclasses of methods: exact
 The exact method is based on calculating the distance from the query point to every other point in the database. This algorithm, also known as the naive approach, has a complexity of `O(dn)`, where `n` is the number of points in the dataset, and `d` is its dimension.
 
 The advantage of the method is that there is no need for additional data structures, such as specialized vector indexes.
-The disadvantage is the need for a complete data search. But this disadvantage is insignificant in cases where data has been pre-filtered, for example, by user ID.
+The disadvantage is the need for a full data scan. But this disadvantage is insignificant in cases where data has been pre-filtered, for example, by user ID.
 
 Example:
 
@@ -42,8 +42,8 @@ It is recommended to measure if such transformation provides sufficient accuracy
 
 ## Data types
 
-In mathematics, a vector of real numbers is used to store points.
-In {{ ydb-short-name }}, calculations are performed on the `String` data type, which is a binary serialized representation of `List<Float>`.
+In mathematics, a vector of real or integer numbers is used to store points.
+In {{ ydb-short-name }}, vectors are stored in the `String` data type, which is a binary serialized representation of a vector.
 
 ## Functions
 
@@ -53,13 +53,9 @@ Vector functions are implemented as user-defined functions (UDF) in the `Knn` mo
 
 Conversion functions are needed to serialize vectors into an internal binary representation and vice versa.
 
-All conversation functions wrap returned data into [Tagged](../../types/special.md) types.
+All serialization functions wrap returned `String` data into [Tagged](../../types/special.md) types.
 
-{% note info %}
-
-To persist vector's binary representation in a {{ ydb-short-name }} table column,  use [Untag](../../builtins/basic#as-tagged) function first because {{ ydb-short-name }} doesn't support storing `Tagged` types.
-
-{% endnote %}
+The binary representation of the vector can be stored in the {{ ydb-short-name }} table column. Currently {{ ydb-short-name }} does not support storing `Tagged`, so before storing binary representation vectors you must call [Untag](../../builtins/basic#as-tagged).
 
 #### Function signatures
 
@@ -78,8 +74,6 @@ Knn::FloatFromBinaryString(String{Flags:AutoMap})->List<Float>?
 
 The `ToBinaryStringBit` function maps coordinates that are greater than `0` to `1`. All other coordinates are mapped to `0`.
 
-`ToBinaryStringBit`, `ToBinaryStringUint8`, and `ToBinaryStringInt8` are commonly used for quantization.
-
 ### Distance and similarity functions
 
 The distance and similarity functions take two lists of real numbers as input and return the distance/similarity between them.
@@ -92,7 +86,7 @@ Distance functions return small values for close vectors, while similarity funct
 
 Similarity functions:
 * inner product `InnerProductSimilarity`, it's the dot product, also known as the scalar product (sum of products of coordinates)
-* cosine similarity `CosineSimilarity` (inner product divided by product of vector lengths)
+* cosine similarity `CosineSimilarity` (dot product divided by product of vector lengths)
 
 Distance functions:
 * cosine distance `CosineDistance` (1 - cosine similarity)
@@ -116,6 +110,12 @@ In case of mismatched lengths or formats, these functions return `NULL`.
 All distance and similarity functions support overloads when first or second arguments are `Tagged<String, "FloatVector">`, `Tagged<String, "Uint8Vector">`, `Tagged<String, "Int8Vector">`, `Tagged<String, "BitVector">`.
 
 If both arguments are `Tagged`, tag values should match, or the query will raise an error.
+
+Example:
+
+```
+Error: Failed to find UDF function: Knn.CosineDistance, reason: Error: Module: Knn, function: CosineDistance, error: Arguments should have same tags, but 'FloatVector' is not equal to 'Uint8Vector'
+```
 
 {% endnote %}
 
@@ -186,11 +186,11 @@ UPSERT INTO Facts (id, user, fact, embedding, embedding_bit)
 VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryStringFloat($vector), "FloatVector"), Untag(Knn::ToBinaryStringBit($vector), "BitVector"));
 ```
 
-### Quantization
+### Scalar quantization
 
 An ML model can do quantization, or it can be done manually with YQL.
 
-Below are quantization examples in YQL.
+Below are quantization example in YQL.
 
 #### Float -> Int8
 
@@ -198,30 +198,20 @@ Below are quantization examples in YQL.
 $MapInt8 = ($x) -> {
     $min = -5.0f;
     $max =  5.0f;
-    $dist = $max - $min;
-	RETURN CAST(Math::Round(IF($x < $min, -127, IF($x > $max, 127, ($x / $dist) * 255))) As Int8)
+    $range = $max - $min;
+	RETURN CAST(Math::Round(IF($x < $min, -127, IF($x > $max, 127, ($x / $range) * 255))) As Int8)
 };
-```
 
-#### Float -> Uint8
-
-```sql
-$MapUint8 = ($x) -> {
-    $min = -5.0f;
-    $max =  5.0f;
-    $dist = $max - $min;
-	RETURN CAST(Math::Round(IF($x < $min, 0, IF($x > $max, 255, (($x - $min) / $dist) * 255))) As Uint8)
-};
-```
-
-#### Usage
-
-```sql
 $FloatList = [-1.2f, 2.3f, 3.4f, -4.7f];
-select ListMap($FloatList, $MapInt8), ListMap($Target, $MapUint8);
+SELECT ListMap($FloatList, $MapInt8);
 ```
 
-### Approximate search of K nearest vectors
+### Approximate search of K nearest vectors: bit quantization
+
+Approximate search algorithm:
+* an approximate search is performed using bit quantization;
+* an approximate list of vectors is obtained;
+* we search this list without using quantization.
 
 ```sql
 $K = 10;

@@ -311,6 +311,14 @@ public:
     virtual ICallableTypeBuilder& Arg(const ITypeBuilder& typeBuilder) = 0;
 
     virtual ICallableTypeBuilder& OptionalArgs(ui32 optionalArgs) = 0;
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 36)
+    // sets name for the last added argument
+    virtual ICallableTypeBuilder& Name(const TStringRef& name) = 0;
+
+    // sets flags for the last added argument, see ICallablePayload::TArgumentFlags
+    virtual ICallableTypeBuilder& Flags(ui64 flags) = 0;
+#endif
 };
 
 UDF_ASSERT_TYPE_SIZE(ICallableTypeBuilder, 8);

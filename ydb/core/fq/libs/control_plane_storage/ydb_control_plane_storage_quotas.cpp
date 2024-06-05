@@ -95,7 +95,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvQuotaService::TQuotaUsageRequest::T
         }
     );
 
-    Exec(DbPool, executable, TablePathPrefix).Apply([=, this, actorSystem=NActors::TActivationContext::ActorSystem(), selfId=SelfId(), sender=ev.Get()->Sender](const auto& future) {
+    Exec(DbPool, executable, TablePathPrefix).Apply([=, this, actorSystem=NActors::TActivationContext::ActorSystem(), selfId=SelfId()](const auto& future) {
         actorSystem->Send(selfId, new TEvents::TEvCallback([this, executable, future]() {
             auto issues = GetIssuesFromYdbStatus(executable, future);
             if (issues) {

@@ -705,9 +705,10 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
             const ui64 numRows = 1000;
             const ui64 txCount = 20;
-            const ui32 tsIncrement = 1;
-            const ui32 blobTsRange = numRows * tsIncrement;
-            ui32 blobStartTs = 0;
+            const ui64 tsIncrement = 1;
+            const auto blobTsRange = numRows * tsIncrement;
+            const auto gap = TDuration::Hours(1); //much longer than blobTsRange*txCount
+            auto blobStartTs = (TInstant::Now() -  gap).MicroSeconds();
             for (ui64 txId = 1; txId <= txCount; ++txId) {
                 TString testBlob = MakeTestBlob(blobStartTs, blobStartTs + blobTsRange, tsIncrement);
                 auto blobRange = MakeBlobRange(++step, testBlob.size());
@@ -723,8 +724,10 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
                 bool ok = Insert(engine, db, TSnapshot(planStep, txId), std::move(dataToIndex), blobs, step);
                 UNIT_ASSERT(ok);
                 blobStartTs += blobTsRange;
-                if (txId == txCount / 2) { //make a gap
-                    blobStartTs += blobTsRange * txCount;
+                if (txId == txCount / 2) { 
+                    //Make a gap. 
+                    //NB After this gap, some rows may be in the future at the point of setting TTL 
+                    blobStartTs += gap.MicroSeconds();
                 }
             }
 
@@ -759,7 +762,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             std::shared_ptr<arrow::DataType> ttlColType = arrow::timestamp(arrow::TimeUnit::MICRO);
             THashMap<ui64, NOlap::TTiering> pathTtls;
             NOlap::TTiering tiering;
-            AFL_VERIFY(tiering.Add(NOlap::TTierInfo::MakeTtl(TDuration::MicroSeconds(TInstant::Now().MicroSeconds() - txCount / 2 * blobTsRange), "timestamp")));
+            AFL_VERIFY(tiering.Add(NOlap::TTierInfo::MakeTtl(gap, "timestamp")));
             pathTtls.emplace(pathId, std::move(tiering));
             Ttl(engine, db, pathTtls, txCount / 2 );
 

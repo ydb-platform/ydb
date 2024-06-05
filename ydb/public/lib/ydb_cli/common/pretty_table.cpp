@@ -233,7 +233,7 @@ TVector<size_t> TPrettyTable::CalcWidths() const {
     // adjust
     auto terminalWidth = GetTerminalWidth();
     size_t lineLength = terminalWidth ? *terminalWidth : Max<size_t>();
-    const size_t maxWidth = Max(Config.Width, lineLength) - ((Columns * 3) + 1);
+    const size_t maxWidth = Min(Config.Width ? Config.Width : lineLength, lineLength) - ((Columns * 3) + 1);
     size_t totalWidth = Accumulate(widths, (size_t)0);
     while (totalWidth > maxWidth) {
         auto it = MaxElement(widths.begin(), widths.end());

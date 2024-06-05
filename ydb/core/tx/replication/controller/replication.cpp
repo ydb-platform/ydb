@@ -99,7 +99,7 @@ public:
     }
 
     void Progress(const TActorContext& ctx) {
-        if (!YdbProxy) {
+        if (!YdbProxy && !(State == EState::Removing && !Targets)) {
             THolder<IActor> ydbProxy;
             const auto& params = Config.GetSrcConnectionParams();
 
@@ -117,9 +117,7 @@ public:
                 ydbProxy.Reset(CreateYdbProxy(params.GetEndpoint(), params.GetDatabase(), params.GetOAuthToken().GetToken()));
                 break;
             default:
-                if (!(State == EState::Removing && !Targets)) {
-                    ErrorState(TStringBuilder() << "Unexpected credentials: " << params.GetCredentialsCase());
-                }
+                ErrorState(TStringBuilder() << "Unexpected credentials: " << params.GetCredentialsCase());
                 break;
             }
 

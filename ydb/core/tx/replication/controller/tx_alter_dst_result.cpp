@@ -58,11 +58,13 @@ public:
                 replication->SetState(TReplication::EState::Done);
             }
         } else {
-            replication->SetState(TReplication::EState::Error);
             target->SetDstState(TReplication::EDstState::Error);
             target->SetIssue(TStringBuilder() << "Alter dst error"
                 << ": " << NKikimrScheme::EStatus_Name(Ev->Get()->Status)
                 << ", " << Ev->Get()->Error);
+
+            replication->SetState(TReplication::EState::Error, TStringBuilder() << "Error in target #" << target->GetId()
+                << ": " << target->GetIssue());
 
             CLOG_E(ctx, "Alter dst error"
                 << ": rid# " << rid
@@ -73,7 +75,8 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::Replications>().Key(rid).Update(
-            NIceDb::TUpdate<Schema::Replications::State>(replication->GetState())
+            NIceDb::TUpdate<Schema::Replications::State>(replication->GetState()),
+            NIceDb::TUpdate<Schema::Replications::Issue>(replication->GetIssue())
         );
         db.Table<Schema::Targets>().Key(rid, tid).Update(
             NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()),

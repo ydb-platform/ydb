@@ -159,6 +159,7 @@ private:
     }
 
     static void ConvertItem(const NKikimrReplication::TReplicationConfig::TTargetSpecific::TTarget& from, Ydb::Replication::DescribeReplicationResult::Item& to) {
+        to.set_id(from.GetId());
         to.set_source_path(from.GetSrcPath());
         to.set_destination_path(from.GetDstPath());
         if (from.HasSrcStreamName()) {

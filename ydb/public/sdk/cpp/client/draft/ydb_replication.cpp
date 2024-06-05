@@ -90,6 +90,7 @@ TReplicationDescription::TReplicationDescription(const Ydb::Replication::Describ
     Items_.reserve(desc.items_size());
     for (const auto& item : desc.items()) {
         Items_.push_back(TItem{
+            .Id = item.id(),
             .SrcPath = item.source_path(),
             .DstPath = item.destination_path(),
             .SrcChangefeedName = item.has_source_changefeed_name()

@@ -76,6 +76,7 @@ private:
 class TReplicationDescription {
 public:
     struct TItem {
+        ui64 Id;
         TString SrcPath;
         TString DstPath;
         std::optional<TString> SrcChangefeedName;

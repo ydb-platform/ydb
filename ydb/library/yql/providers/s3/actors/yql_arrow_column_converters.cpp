@@ -183,7 +183,7 @@ std::shared_ptr<arrow::Array> ArrowTypeAsYqlTimestamp(const std::shared_ptr<arro
 }
 
 template <bool isOptional, typename TArrowType>
-std::shared_ptr<arrow::Array> ArrowTypeAsYqlString(const std::shared_ptr<arrow::DataType>& targetType, const std::shared_ptr<arrow::Array>& value, ui64 multiplier) {
+std::shared_ptr<arrow::Array> ArrowTypeAsYqlString(const std::shared_ptr<arrow::DataType>& targetType, const std::shared_ptr<arrow::Array>& value, ui64 multiplier, const TString& format = {}) {
     ::NYql::NUdf::TStringArrayBuilder<arrow::BinaryType, isOptional> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), targetType, *arrow::system_memory_pool(), value->length());
     ::NYql::NUdf::TFixedSizeBlockReader<TArrowType, isOptional> reader;
     for (i64 i = 0; i < value->length(); ++i) {
@@ -207,7 +207,7 @@ std::shared_ptr<arrow::Array> ArrowTypeAsYqlString(const std::shared_ptr<arrow::
         }
 
         const ui64 v = baseValue * multiplier;
-        TString result = TInstant::FromValue(v).ToString();
+        TString result = format ? TInstant::FromValue(v).FormatGmTime(format.c_str()) : TInstant::FromValue(v).ToString();
         builder.Add(NUdf::TBlockItem(NUdf::TStringRef(result.c_str(), result.Size())));
     }
     return builder.Build(true).make_array();
@@ -417,16 +417,16 @@ TColumnConverter ArrowTimestampAsYqlString(const std::shared_ptr<arrow::DataType
 TColumnConverter ArrowDate64AsYqlString(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional, arrow::DateUnit dateUnit) {
     return [targetType, isOptional, multiplier=GetMultiplierForDatetime(dateUnit)](const std::shared_ptr<arrow::Array>& value) {
         return isOptional
-                ? ArrowTypeAsYqlString<true, i64>(targetType, value, multiplier)
-                : ArrowTypeAsYqlString<false, i64>(targetType, value, multiplier);
+                ? ArrowTypeAsYqlString<true, i64>(targetType, value, multiplier, "%Y-%m-%d")
+                : ArrowTypeAsYqlString<false, i64>(targetType, value, multiplier, "%Y-%m-%d");
     };
 }
 
 TColumnConverter ArrowDate32AsYqlString(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional, arrow::DateUnit dateUnit) {
     return [targetType, isOptional, multiplier=GetMultiplierForTimestamp(dateUnit)](const std::shared_ptr<arrow::Array>& value) {
         return isOptional
-                ? ArrowTypeAsYqlString<true, i32>(targetType, value, multiplier)
-                : ArrowTypeAsYqlString<false, i32>(targetType, value, multiplier);
+                ? ArrowTypeAsYqlString<true, i32>(targetType, value, multiplier, "%Y-%m-%d")
+                : ArrowTypeAsYqlString<false, i32>(targetType, value, multiplier, "%Y-%m-%d");
     };
 }
 

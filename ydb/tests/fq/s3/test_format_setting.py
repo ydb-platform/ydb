@@ -1856,7 +1856,7 @@ Pear;15;33'''
 
         # date64 -> String
 
-        # 2024-04-02T00:00:00.000000Z
+        # 2024-04-02
         data = [['apple'], [1712016000000]]
 
         # Define the schema for the data
@@ -1881,7 +1881,7 @@ Pear;15;33'''
                 ));
             SELECT Ensure(
                 0,
-                `fruit` = "apple" and `ts` = "2024-04-02T00:00:00.000000Z",
+                `fruit` = "apple" and `ts` = "2024-04-02",
                 "invalid row: " || Unwrap(`fruit`) || " " || Unwrap(CAST(`ts` as String))
             ) AS value FROM $result;
             '''
@@ -1893,7 +1893,7 @@ Pear;15;33'''
 
         # date32 -> String
 
-        # 2024-04-02T00:00:00.000000Z
+        # 2024-04-02
         data = [['apple'], [19815]]
 
         # Define the schema for the data
@@ -2017,7 +2017,7 @@ Pear;15;33'''
 
         # date64 -> Utf8
 
-        # 2024-04-02T00:00:00.000000Z
+        # 2024-04-02
         data = [['apple'], [1712016000000]]
 
         # Define the schema for the data
@@ -2042,7 +2042,7 @@ Pear;15;33'''
                 ));
             SELECT Ensure(
                 0,
-                `fruit` = "apple" and `ts` = "2024-04-02T00:00:00.000000Z",
+                `fruit` = "apple" and `ts` = "2024-04-02",
                 "invalid row: " || Unwrap(`fruit`) || " " || Unwrap(CAST(`ts` as String))
             ) AS value FROM $result;
             '''
@@ -2054,7 +2054,7 @@ Pear;15;33'''
 
         # date32 -> Utf8
 
-        # 2024-04-02T00:00:00.000000Z
+        # 2024-04-02
         data = [['apple'], [19815]]
 
         # Define the schema for the data

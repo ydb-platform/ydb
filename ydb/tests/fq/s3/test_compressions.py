@@ -63,6 +63,33 @@ class TestS3Compressions:
         self.validate_result(result_set)
 
     @yq_all
+    def test_zstd_unknown_frame_descriptor(self, kikimr, s3, client, unique_prefix):
+        self.create_bucket_and_upload_file("unknown_frame_descriptor.json.zst", s3, kikimr)
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = '''
+            SELECT count(*)
+            FROM `{}`.`unknown_frame_descriptor.json.zst`
+            WITH (format=json_each_row, compression="zstd", SCHEMA (
+                a String NOT NULL
+            ));
+            '''.format(storage_connection_name)
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+
+        logging.debug(str(result_set))
+        assert len(result_set.columns) == 1
+        assert result_set.columns[0].name == "column0"
+        assert result_set.columns[0].type.type_id == ydb.Type.UINT64
+        assert len(result_set.rows) == 1
+        assert result_set.rows[0].items[0].uint64_value == 5458
+
+    @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_invalid_compression(self, kikimr, s3, client):
         resource = boto3.resource(

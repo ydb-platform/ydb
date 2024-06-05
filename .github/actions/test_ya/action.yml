@@ -219,6 +219,8 @@ runs:
           --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR" || (
             RC=$?
             if [ $RC -ne 0 ]; then
+              echo "10 [Test run log]($YA_TEST_LOG_URL)" >> $SUMMARY_LINKS
+
               echo "ya test returned $RC, check existence $JUNIT_REPORT_XML"
               if [ -s "$JUNIT_REPORT_XML" ]; then
                 echo "$JUNIT_REPORT_XML exists"

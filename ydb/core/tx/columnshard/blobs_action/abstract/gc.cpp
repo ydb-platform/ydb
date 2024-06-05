@@ -36,7 +36,7 @@ void IBlobsGCAction::OnExecuteTxAfterCleaning(NColumnShard::TColumnShard& self, 
 
 void IBlobsGCAction::OnCompleteTxBeforeCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& taskAction) {
     if (!AbortedFlag) {
-        if (!DoOnCompleteTxAfterCleaning(self, taskAction)) {
+        if (!DoOnCompleteTxBeforeCleaning(self, taskAction)) {
             return;
         }
     }
@@ -44,7 +44,7 @@ void IBlobsGCAction::OnCompleteTxBeforeCleaning(NColumnShard::TColumnShard& self
 
 void IBlobsGCAction::OnExecuteTxBeforeCleaning(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs) {
     if (!AbortedFlag) {
-        return DoOnExecuteTxAfterCleaning(self, dbBlobs);
+        return DoOnExecuteTxBeforeCleaning(self, dbBlobs);
     }
 }
 

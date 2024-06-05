@@ -13,7 +13,7 @@ using ETargetKind = TReplication::ETargetKind;
 using EDstState = TReplication::EDstState;
 using EStreamState = TReplication::EStreamState;
 
-TTargetBase::TTargetBase(TReplication::TPtr replication, ETargetKind kind,
+TTargetBase::TTargetBase(TReplication* replication, ETargetKind kind,
         ui64 id, const TString& srcPath, const TString& dstPath)
     : Replication(replication)
     , Id(id)

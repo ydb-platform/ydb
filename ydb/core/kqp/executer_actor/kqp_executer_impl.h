@@ -166,7 +166,7 @@ public:
     TString BuildMemoryLimitExceptionMessage() const {
         if (Request.TxAlloc) {
             return TStringBuilder() << "Memory limit exception at " << CurrentStateFuncName()
-                << ", current limit is " << Request.TxAlloc->Alloc.GetLimit() << " bytes.";
+                << ", current limit is " << Request.TxAlloc->Alloc->GetLimit() << " bytes.";
         }
         return TStringBuilder() << "Memory limit exception at " << CurrentStateFuncName();
     }
@@ -575,7 +575,7 @@ protected:
     void InvalidateNode(ui64 node) {
         for (auto tablet : ShardsOnNode[node]) {
             auto ev = MakeHolder<TEvPipeCache::TEvForcePipeReconnect>(tablet);
-            this->Send(MakePipePeNodeCacheID(false), ev.Release());
+            this->Send(MakePipePerNodeCacheID(false), ev.Release());
         }
     }
 

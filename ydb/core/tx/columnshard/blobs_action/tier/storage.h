@@ -30,7 +30,8 @@ protected:
     virtual std::shared_ptr<IBlobsDeclareRemovingAction> DoStartDeclareRemovingAction(const std::shared_ptr<NBlobOperations::TRemoveDeclareCounters>& counters) override;
     virtual std::shared_ptr<IBlobsWritingAction> DoStartWritingAction() override;
     virtual std::shared_ptr<IBlobsReadingAction> DoStartReadingAction() override;
-    virtual std::shared_ptr<IBlobsGCAction> DoStartGCAction(const std::shared_ptr<TRemoveGCCounters>& counters) const override;
+    virtual std::shared_ptr<IBlobsGCAction> DoCreateGCAction(const std::shared_ptr<TRemoveGCCounters>& counters) const override;
+    virtual void DoStartGCAction(const std::shared_ptr<IBlobsGCAction>& action) const override;
     virtual bool DoLoad(IBlobManagerDb& dbBlobs) override;
     virtual void DoOnTieringModified(const std::shared_ptr<NColumnShard::ITiersManager>& tiers) override;
 

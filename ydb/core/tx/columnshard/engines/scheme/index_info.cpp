@@ -105,7 +105,7 @@ TString TIndexInfo::GetColumnName(ui32 id, bool required) const {
             return {};
         }
 
-        Y_ABORT_UNLESS(ci != Columns.end());
+        AFL_VERIFY(ci != Columns.end())("id", id);
         return ci->second.Name;
     }
 }

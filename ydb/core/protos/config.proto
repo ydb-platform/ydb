@@ -289,16 +289,6 @@ message TBlobStorageConfig {
 
     optional TAutoconfigSettings AutoconfigSettings = 6;
 
-    message TCostMetricsConfig {
-        optional NKikimrBlobStorage.EPDiskType PDiskType = 1;
-        optional uint64 BurstThresholdNs = 2;
-        optional float DiskTimeAvailableScale = 3;
-    }
-
-    message TCostMetricsSettings {
-        repeated TCostMetricsConfig VDiskTypes = 1;
-    };
-
     message TVDiskPerformanceConfig {
         optional NKikimrBlobStorage.EPDiskType PDiskType = 1;
         optional uint32 MinHugeBlobSizeInBytes = 4;
@@ -308,7 +298,7 @@ message TBlobStorageConfig {
         repeated TVDiskPerformanceConfig VDiskTypes = 1;
     };
 
-    optional TCostMetricsSettings CostMetricsSettings = 7;
+    reserved 7;  // TCostMetricsSettings, moved to ICB
     optional TVDiskPerformanceSettings VDiskPerformanceSettings = 8;
  }
 
@@ -1262,6 +1252,37 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1024,
             DefaultValue: 10 }];
+
+        optional uint64 BurstThresholdNsHDD = 6 [(ControlOptions) = {
+            Description: "Minumum operation queue size that is considered a burst, setting for HDD",
+            MinValue: 1,
+            MaxValue: 1000000000000,
+            DefaultValue: 200000000 }];
+        optional uint64 BurstThresholdNsSSD = 7 [(ControlOptions) = {
+            Description: "Minumum operation queue size that is considered a burst, setting for SSD",
+            MinValue: 1,
+            MaxValue: 1000000000000,
+            DefaultValue: 50000000 }];
+        optional uint64 BurstThresholdNsNVME = 8 [(ControlOptions) = {
+            Description: "Minumum operation queue size that is considered a burst, setting for NVME",
+            MinValue: 1,
+            MaxValue: 1000000000000,
+            DefaultValue: 32000000 }];
+        optional uint64 DiskTimeAvailableScaleHDD = 9 [(ControlOptions) = {
+            Description: "Scale coefficient DiskTimeAvailableScale metric, this parameter will be converted to float and divided by 1'000, setting for HDD",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 1000 }];
+        optional uint64 DiskTimeAvailableScaleSSD = 10 [(ControlOptions) = {
+            Description: "Scale coefficient for DiskTimeAvailableScale metric, this parameter will be converted to float and divided by 1'000, setting for SSD",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 1000 }];
+        optional uint64 DiskTimeAvailableScaleNVME = 11 [(ControlOptions) = {
+            Description: "Scale coefficient DiskTimeAvailableScale metric, this parameter will be converted to float and divided by 1'000, setting for NVME",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 1000 }];
     }
 
     message TTabletControls {

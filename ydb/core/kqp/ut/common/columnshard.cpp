@@ -125,7 +125,7 @@ namespace NKqp {
             }
         }
         for (auto shard : shards) {
-            Kikimr.GetTestServer().GetRuntime()->Send(MakePipePeNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
+            Kikimr.GetTestServer().GetRuntime()->Send(MakePipePerNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
                     new TEvents::TEvPoisonPill(), shard, false));
         }
     }

@@ -29,10 +29,6 @@ public:
     {
     }
 
-    bool HasRunningAsyncIoOperation() const {
-        return ReadOperation.has_value() && !ReadOperation->HasValue() || WriteOperation.has_value() && !WriteOperation->HasValue();
-    }
-
     ///Returns current stete of the adapter
     EState GetState() const {
         return State;

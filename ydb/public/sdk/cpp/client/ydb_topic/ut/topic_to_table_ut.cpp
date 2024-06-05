@@ -6,6 +6,8 @@
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/key.h>
 
+#include <ydb/core/tx/long_tx_service/public/events.h>
+
 #include <library/cpp/logger/stream.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -79,6 +81,11 @@ protected:
                                    const TDuration& duration);
     void WaitForAcks(const TString& topicPath,
                      const TString& messageGroupId);
+    void WaitForSessionClose(const TString& topicPath,
+                             const TString& messageGroupId,
+                             NYdb::EStatus status);
+    void CloseTopicWriteSession(const TString& topicPath,
+                                const TString& messageGroupId);
 
     enum EEndOfTransaction {
         Commit,
@@ -92,6 +99,10 @@ protected:
     };
 
     void TestTheCompletionOfATransaction(const TTransactionCompletionTestDescription& d);
+    void RestartLongTxService();
+
+    void DeleteSupportivePartition(const TString& topicName,
+                                   ui32 partition);
 
 protected:
     const TDriver& GetDriver() const;
@@ -107,6 +118,15 @@ private:
                           ui32 partition);
     THashSet<TString> GetTabletKeys(const TActorId& actorId,
                                     ui64 tabletId);
+    ui64 GetTransactionWriteId(const TActorId& actorId,
+                               ui64 tabletId);
+    void SendLongTxLockStatus(const TActorId& actorId,
+                              ui64 tabletId,
+                              ui64 writeId,
+                              NKikimrLongTxService::TEvLockStatus::EStatus status);
+    void WaitForTheTabletToDeleteTheWriteInfo(const TActorId& actorId,
+                                              ui64 tabletId,
+                                              ui64 writeId);
 
     void CheckTabletKeys(const TString& topicName);
 
@@ -526,6 +546,20 @@ void TFixture::TTopicWriteSessionContext::Write(const TString& message, NTable::
     ContinuationToken = Nothing();
 }
 
+void TFixture::CloseTopicWriteSession(const TString& topicPath,
+                                      const TString& messageGroupId)
+{
+    std::pair<TString, TString> key(topicPath, messageGroupId);
+    auto i = TopicWriteSessions.find(key);
+
+    UNIT_ASSERT(i != TopicWriteSessions.end());
+
+    TTopicWriteSessionContext& context = i->second;
+
+    context.Session->Close();
+    TopicWriteSessions.erase(key);
+}
+
 void TFixture::WriteToTopic(const TString& topicPath,
                             const TString& messageGroupId,
                             const TString& message,
@@ -597,6 +631,40 @@ void TFixture::WaitForAcks(const TString& topicPath, const TString& messageGroup
     }
 
     UNIT_ASSERT(context.AckCount == context.WriteCount);
+}
+
+void TFixture::WaitForSessionClose(const TString& topicPath,
+                                   const TString& messageGroupId,
+                                   NYdb::EStatus status)
+{
+    std::pair<TString, TString> key(topicPath, messageGroupId);
+    auto i = TopicWriteSessions.find(key);
+    UNIT_ASSERT(i != TopicWriteSessions.end());
+
+    auto& context = i->second;
+
+    UNIT_ASSERT(context.AckCount <= context.WriteCount);
+
+    for(bool stop = false; !stop; ) {
+        context.Session->WaitEvent().Wait();
+        for (auto& event : context.Session->GetEvents()) {
+            if (auto* e = std::get_if<NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&event)) {
+                context.ContinuationToken = std::move(e->ContinuationToken);
+            } else if (auto* e = std::get_if<NTopic::TWriteSessionEvent::TAcksEvent>(&event)) {
+                for (auto& ack : e->Acks) {
+                    if (ack.State == NTopic::TWriteSessionEvent::TWriteAck::EES_WRITTEN) {
+                        ++context.AckCount;
+                    }
+                }
+            } else if (auto* e = std::get_if<NTopic::TSessionClosedEvent>(&event)) {
+                UNIT_ASSERT_VALUES_EQUAL(e->GetStatus(), status);
+                UNIT_ASSERT_GT(e->GetIssues().Size(), 0);
+                stop = true;
+            }
+        }
+    }
+
+    UNIT_ASSERT(context.AckCount <= context.WriteCount);
 }
 
 ui64 TFixture::GetTopicTabletId(const TActorId& actorId, const TString& topicPath, ui32 partition)
@@ -676,6 +744,19 @@ THashSet<TString> TFixture::GetTabletKeys(const TActorId& actorId, ui64 tabletId
     }
 
     return keys;
+}
+
+void TFixture::RestartLongTxService()
+{
+    auto& runtime = Setup->GetRuntime();
+    TActorId edge = runtime.AllocateEdgeActor();
+
+    for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+        runtime.Send(NKikimr::NLongTxService::MakeLongTxServiceID(runtime.GetNodeId(node)), edge,
+                     new TEvents::TEvPoison(),
+                     0,
+                     true);
+    }
 }
 
 Y_UNIT_TEST_F(WriteToTopic_Demo_1, TFixture)
@@ -1075,6 +1156,103 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_10, TFixture)
     }
 }
 
+ui64 TFixture::GetTransactionWriteId(const TActorId& actorId,
+                                     ui64 tabletId)
+{
+    using TEvKeyValue = NKikimr::TEvKeyValue;
+
+    auto request = std::make_unique<TEvKeyValue::TEvRequest>();
+    request->Record.SetCookie(12345);
+    request->Record.AddCmdRead()->SetKey("_txinfo");
+
+    auto& runtime = Setup->GetRuntime();
+
+    runtime.SendToPipe(tabletId, actorId, request.release());
+    auto response = runtime.GrabEdgeEvent<TEvKeyValue::TEvResponse>();
+
+    UNIT_ASSERT(response->Record.HasCookie());
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetCookie(), 12345);
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.ReadResultSize(), 1);
+
+    auto& read = response->Record.GetReadResult(0);
+
+    NKikimrPQ::TTabletTxInfo info;
+    UNIT_ASSERT(info.ParseFromString(read.GetValue()));
+
+    UNIT_ASSERT_VALUES_EQUAL(info.TxWritesSize(), 1);
+
+    auto& writeInfo = info.GetTxWrites(0);
+    UNIT_ASSERT(writeInfo.HasWriteId());
+
+    return writeInfo.GetWriteId();
+}
+
+void TFixture::SendLongTxLockStatus(const TActorId& actorId,
+                                    ui64 tabletId,
+                                    ui64 writeId,
+                                    NKikimrLongTxService::TEvLockStatus::EStatus status)
+{
+    auto event = std::make_unique<NKikimr::NLongTxService::TEvLongTxService::TEvLockStatus>(writeId, 0, status);
+    auto& runtime = Setup->GetRuntime();
+    runtime.SendToPipe(tabletId, actorId, event.release());
+}
+
+void TFixture::WaitForTheTabletToDeleteTheWriteInfo(const TActorId& actorId,
+                                                    ui64 tabletId,
+                                                    ui64 writeId)
+{
+    while (true) {
+        using TEvKeyValue = NKikimr::TEvKeyValue;
+
+        auto request = std::make_unique<TEvKeyValue::TEvRequest>();
+        request->Record.SetCookie(12345);
+        request->Record.AddCmdRead()->SetKey("_txinfo");
+
+        auto& runtime = Setup->GetRuntime();
+
+        runtime.SendToPipe(tabletId, actorId, request.release());
+        auto response = runtime.GrabEdgeEvent<TEvKeyValue::TEvResponse>();
+
+        UNIT_ASSERT(response->Record.HasCookie());
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetCookie(), 12345);
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.ReadResultSize(), 1);
+
+        auto& read = response->Record.GetReadResult(0);
+
+        NKikimrPQ::TTabletTxInfo info;
+        UNIT_ASSERT(info.ParseFromString(read.GetValue()));
+
+        bool found = false;
+
+        for (size_t i = 0; i < info.TxWritesSize(); ++i) {
+            auto& writeInfo = info.GetTxWrites(i);
+            UNIT_ASSERT(writeInfo.HasWriteId());
+            if (writeInfo.GetWriteId() == writeId) {
+                found = true;
+                break;
+            }
+        }
+
+        if (!found) {
+            break;
+        }
+
+        Sleep(TDuration::MilliSeconds(100));
+    }
+}
+
+void TFixture::DeleteSupportivePartition(const TString& topicName, ui32 partition)
+{
+    auto& runtime = Setup->GetRuntime();
+    TActorId edge = runtime.AllocateEdgeActor();
+    ui64 tabletId = GetTopicTabletId(edge, "/Root/" + topicName, partition);
+    ui64 writeId = GetTransactionWriteId(edge, tabletId);
+
+    SendLongTxLockStatus(edge, tabletId, writeId, NKikimrLongTxService::TEvLockStatus::STATUS_NOT_FOUND);
+
+    WaitForTheTabletToDeleteTheWriteInfo(edge, tabletId, writeId);
+}
+
 void TFixture::CheckTabletKeys(const TString& topicName)
 {
     auto& runtime = Setup->GetRuntime();
@@ -1139,6 +1317,75 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_11, TFixture)
         TestTheCompletionOfATransaction({.Topics={"topic_A"}, .EndOfTransaction = endOfTransaction});
         TestTheCompletionOfATransaction({.Topics={"topic_A", "topic_B"}, .EndOfTransaction = endOfTransaction});
     }
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_12, TFixture)
+{
+    CreateTopic("topic_A");
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", &tx);
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+
+    DeleteSupportivePartition("topic_A", 0);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #2", &tx);
+    WaitForSessionClose("topic_A", TEST_MESSAGE_GROUP_ID, NYdb::EStatus::PRECONDITION_FAILED);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_13, TFixture)
+{
+    CreateTopic("topic_A");
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message", &tx);
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+
+    DeleteSupportivePartition("topic_A", 0);
+
+    CommitTx(tx, EStatus::ABORTED);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_14, TFixture)
+{
+    CreateTopic("topic_A");
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", &tx);
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+
+    DeleteSupportivePartition("topic_A", 0);
+
+    CloseTopicWriteSession("topic_A", TEST_MESSAGE_GROUP_ID);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #2", &tx);
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+
+    CommitTx(tx, EStatus::ABORTED);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_15, TFixture)
+{
+    CreateTopic("topic_A");
+
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, "message #1", &tx);
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_1);
+    CloseTopicWriteSession("topic_A", TEST_MESSAGE_GROUP_ID_1);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, "message #2", &tx);
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_2);
+    CloseTopicWriteSession("topic_A", TEST_MESSAGE_GROUP_ID_2);
+
+    CommitTx(tx, EStatus::SUCCESS);
 }
 
 }

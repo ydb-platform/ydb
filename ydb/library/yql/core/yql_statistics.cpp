@@ -20,6 +20,9 @@ static TString ConvertToStatisticsTypeString(EStatisticsType type) {
 std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) {
     os << "Type: " << ConvertToStatisticsTypeString(s.Type) << ", Nrows: " << s.Nrows
         << ", Ncols: " << s.Ncols << ", ByteSize: " << s.ByteSize << ", Cost: " << s.Cost;
+    for (const auto& c : s.KeyColumns) {
+        os << ", " << c;
+    }
     return os;
 }
 

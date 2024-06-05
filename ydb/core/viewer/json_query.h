@@ -177,6 +177,7 @@ public:
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
             request.mutable_txcontrol()->mutable_begin_tx()->mutable_serializable_read_write();
+            request.mutable_txcontrol()->set_commit_tx(true);
             request.SetKeepSession(false);
         } else if (Action == "explain-query") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
@@ -190,6 +191,7 @@ public:
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
             request.mutable_txcontrol()->mutable_begin_tx()->mutable_serializable_read_write();
+            request.mutable_txcontrol()->set_commit_tx(true);
             request.SetKeepSession(false);
         } else if (Action == "explain" || Action == "explain-ast" || Action == "explain-data") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
@@ -387,12 +389,11 @@ private:
 
     void Handle(NKikimrKqp::TEvQueryResponse& record) {
         if (Event) {
-            TStringBuilder out;
             NJson::TJsonValue jsonResponse;
             if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
-                MakeOkReply(out, jsonResponse, record);
+                MakeOkReply(jsonResponse, record);
             } else {
-                MakeErrorReply(out, jsonResponse, record);
+                MakeErrorReply(jsonResponse, record);
             }
 
             if (Schema == ESchemaType::Classic && Stats.empty() && (Action.empty() || Action == "execute")) {
@@ -404,9 +405,8 @@ private:
             config.ValidateUtf8 = false;
             config.WriteNanAsString = true;
             NJson::WriteJson(&stream, &jsonResponse, config);
-            out << stream.Str();
 
-            ReplyAndPassAway(out);
+            ReplyAndPassAway(stream.Str());
         } else {
             TEvViewer::TEvViewerResponse* response = new TEvViewer::TEvViewerResponse();
             response->Record.MutableQueryResponse()->CopyFrom(record);
@@ -449,7 +449,8 @@ private:
 
     void HandleTimeout() {
         if (Event) {
-            ReplyAndPassAway(Viewer->GetHTTPGATEWAYTIMEOUT(Event->Get()));
+            Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPGATEWAYTIMEOUT(Event->Get()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+            PassAway();
         } else {
             auto* response = new TEvViewer::TEvViewerResponse();
             response->Record.MutableQueryResponse()->SetYdbStatus(Ydb::StatusIds::TIMEOUT);
@@ -463,13 +464,12 @@ private:
     }
 
     void ReplyAndPassAway(TString data) {
-        Send(Event->Sender, new NMon::TEvHttpInfoRes(std::move(data), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), std::move(data)), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         PassAway();
     }
 
 private:
-    void MakeErrorReply(TStringBuilder& out, NJson::TJsonValue& jsonResponse, NKikimrKqp::TEvQueryResponse& record) {
-        out << Viewer->GetHTTPBADREQUEST(Event->Get(), "application/json");
+    void MakeErrorReply(NJson::TJsonValue& jsonResponse, NKikimrKqp::TEvQueryResponse& record) {
         NJson::TJsonValue& jsonIssues = jsonResponse["issues"];
 
         // find first deepest error
@@ -490,7 +490,7 @@ private:
         }
     }
 
-    void MakeOkReply(TStringBuilder& out, NJson::TJsonValue& jsonResponse, NKikimrKqp::TEvQueryResponse& record) {
+    void MakeOkReply(NJson::TJsonValue& jsonResponse, NKikimrKqp::TEvQueryResponse& record) {
         const auto& response = record.GetResponse();
 
         if (response.ResultsSize() > 0 || response.YdbResultsSize() > 0) {
@@ -509,12 +509,11 @@ private:
                 Ydb::Issue::IssueMessage* issue = record.MutableResponse()->AddQueryIssues();
                 issue->set_message(Sprintf("Convert error: %s", ex.what()));
                 issue->set_severity(NYql::TSeverityIds::S_ERROR);
-                MakeErrorReply(out, jsonResponse, record);
+                MakeErrorReply(jsonResponse, record);
                 return;
             }
         }
 
-        out << Viewer->GetHTTPOKJSON(Event->Get());
         if (ResultSets.size() > 0) {
             if (Schema == ESchemaType::Classic) {
                 NJson::TJsonValue& jsonResults = jsonResponse["result"];
@@ -624,31 +623,73 @@ private:
 
 template <>
 struct TJsonRequestParameters<TJsonQuery> {
-    static TString GetParameters() {
-        return R"___([{"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
-                      {"name":"query","in":"query","description":"query text","required":true,"type":"string"},
-                      {"name":"direct","in":"query","description":"force processing query on current node","required":false,"type":"boolean"},
-                      {"name":"syntax","in":"query","description":"query syntax (yql_v1, pg)","required":false,"type":"string"},
-                      {"name":"database","in":"query","description":"database name","required":false,"type":"string"},
-                      {"name":"schema","in":"query","description":"result format schema (classic, modern, ydb, multi)","required":false,"type":"string"},
-                      {"name":"stats","in":"query","description":"return stats (profile, full)","required":false,"type":"string"},
-                      {"name":"action","in":"query","description":"execute method (execute-scan, execute-script, execute-query, execute-data,explain-ast, explain-scan, explain-script, explain-query, explain-data)","required":false,"type":"string"},
-                      {"name":"base64","in":"query","description":"return strings using base64 encoding","required":false,"type":"string"},
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___";
+    static YAML::Node GetParameters() {
+        return YAML::Load(R"___(
+              - name: ui64
+                in: query
+                description: return ui64 as number
+                type: boolean
+                required: false
+              - name: query
+                in: query
+                description: query text
+                type: string
+                required: true
+              - name: direct
+                in: query
+                description: force processing query on current node
+                type: boolean
+                required: false
+              - name: syntax
+                in: query
+                description: query syntax (yql_v1, pg)
+                type: string
+                required: false
+              - name: database
+                in: query
+                description: database name
+                type: string
+                required: false
+              - name: schema
+                in: query
+                description: result format schema (classic, modern, ydb, multi)
+                type: string
+                required: false
+              - name: stats
+                in: query
+                description: return stats (profile, full)
+                type: string
+                required: false
+              - name: action
+                in: query
+                description: execute method (execute-scan, execute-script, execute-query, execute-data,explain-ast, explain-scan, explain-script, explain-query, explain-data)
+                type: string
+                required: false
+              - name: base64
+                in: query
+                description: return strings using base64 encoding
+                type: string
+                required: false
+              - name: timeout
+                in: query
+                description: timeout in ms
+                type: integer
+                required: false
+                )___");
     }
 };
 
 template <>
 struct TJsonRequestSummary<TJsonQuery> {
     static TString GetSummary() {
-        return "\"Execute query\"";
+        return "Execute query";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonQuery> {
     static TString GetDescription() {
-        return "\"Executes database query\"";
+        return "Executes database query";
     }
 };
 

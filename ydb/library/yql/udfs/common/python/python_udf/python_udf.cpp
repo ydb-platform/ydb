@@ -76,9 +76,10 @@ os.environ['OPENBLAS_NUM_THREADS'] = '1'
 import sys
 import threading
 if sys.version_info >= (3, 0):
-    from io import StringIO
+    from io import StringIO, TextIOWrapper as SysStderrType
 else:
     from cStringIO import StringIO
+    SysStderrType = file
 
 class StderrLocal(threading.local):
 
@@ -108,7 +109,8 @@ class StderrProxy(object):
 
         return getattr(target, attr)
 
-sys.stderr = StderrProxy(sys.stderr)
+if isinstance(sys.stderr, SysStderrType):
+    sys.stderr = StderrProxy(sys.stderr)
 )");
         Y_ABORT_UNLESS(rc >= 0, "Can't setup module");
 

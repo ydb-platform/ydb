@@ -12,7 +12,7 @@
 
 Более подробная информация об общей архитектуре YDB объясняется в разделе [документации о кластерах YDB](../../cluster/index.md).
 
-### Иерархия
+### Иерархия {#ydb-hierarchy}
 
 ![Иерархия](https://storage.yandexcloud.net/ydb-www-prod-site-assets/howitworks/organization.png)
 

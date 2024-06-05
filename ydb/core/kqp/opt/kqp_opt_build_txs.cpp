@@ -576,7 +576,11 @@ public:
             .Add(CreateKqpBuildPhyStagesTransformer(/* allowDependantConsumers */ false, typesCtx, config->BlockChannelsMode), "BuildPhysicalStages")
             .Add(CreateKqpBuildWideBlockChannelsTransformer(typesCtx, config->BlockChannelsMode), "BuildWideBlockChannels")
             .Add(*BuildTxTransformer, "BuildPhysicalTx")
-            .Add(CreateKqpTxPeepholeTransformer(TypeAnnTransformer.Get(), typesCtx, config, /* withFinalStageRules */ false, {"KqpPeephole-RewriteCrossJoin"}), "Peephole")
+            .Add(CreateKqpTxPeepholeTransformer(
+                TypeAnnTransformer.Get(), typesCtx, config,
+                /* withFinalStageRules */ config->BlockChannelsMode == NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_FORCE,
+                {"KqpPeephole-RewriteCrossJoin"}),
+                "Peephole")
             .Build(false);
 
         ScanTxTransformer = TTransformationPipeline(&typesCtx)

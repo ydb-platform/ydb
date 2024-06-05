@@ -1251,6 +1251,11 @@ TCheckFunc ServerlessComputeResourcesMode(NKikimrSubDomains::EServerlessComputeR
     };
 }
 
+void HasOffloadConfigBase(const NKikimrScheme::TEvDescribeSchemeResult& record, TInverseTag inverse) {
+    UNIT_ASSERT(inverse.Value xor record.GetPathDescription().GetPersQueueGroup()
+        .GetPQTabletConfig().HasOffloadConfig());
+}
+
 #undef DESCRIBE_ASSERT_EQUAL
 #undef DESCRIBE_ASSERT_GE
 #undef DESCRIBE_ASSERT

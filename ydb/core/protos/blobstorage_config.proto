@@ -771,4 +771,7 @@ message TConfigResponse {
     bool Success = 2;
     string ErrorDescription = 3;
     uint64 ConfigTxSeqNo = 4;
+    repeated uint32 GroupsGetDegraded = 5;
+    repeated uint32 GroupsGetDisintegrated = 6;
+    repeated uint32 GroupsGetDisintegratedByExpectedStatus = 7;
 }

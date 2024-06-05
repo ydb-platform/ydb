@@ -491,34 +491,50 @@ public:
 
 template <>
 struct TJsonRequestSchema<TJsonCluster> {
-    static TString GetSchema() {
-        TStringStream stream;
-        TProtoToJson::ProtoToJsonSchema<NKikimrViewer::TClusterInfo>(stream);
-        return stream.Str();
+    static YAML::Node GetSchema() {
+        return TProtoToYaml::ProtoToYamlSchema<NKikimrViewer::TClusterInfo>();
     }
 };
 
 template <>
 struct TJsonRequestParameters<TJsonCluster> {
-    static TString GetParameters() {
-        return R"___([{"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
-                      {"name":"tablets","in":"query","description":"return system tablets state","required":false,"type":"boolean"},
-                      {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___";
+    static YAML::Node GetParameters() {
+        return YAML::Load(R"___(
+            - name: enums
+              in: query
+              description: convert enums to strings
+              required: false
+              type: boolean
+            - name: tablets
+              in: query
+              description: return system tablets state
+              required: false
+              type: boolean
+            - name: ui64
+              in: query
+              description: return ui64 as number
+              required: false
+              type: boolean
+            - name: timeout
+              in: query
+              description: timeout in ms
+              required: false
+              type: integer
+            )___");
     }
 };
 
 template <>
 struct TJsonRequestSummary<TJsonCluster> {
     static TString GetSummary() {
-        return "\"Cluster information\"";
+        return "Cluster information";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonCluster> {
     static TString GetDescription() {
-        return "\"Returns information about cluster\"";
+        return "Returns information about cluster";
     }
 };
 

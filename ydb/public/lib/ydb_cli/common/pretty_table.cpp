@@ -36,6 +36,11 @@ size_t TPrettyTable::TRow::ColumnWidth(size_t columnIndex) const {
                 while (i < column.size() && column[i] != COLOR_END) {
                     ++i;
                 }
+
+                if (i < column.size() && column[i] == COLOR_END) {
+                    ++i;
+                }
+
                 continue;
             }
 
@@ -115,6 +120,11 @@ private:
                 while (i < column.size() && column[i] != COLOR_END) {
                     Output_ << column[i++];
                 }
+
+                if (i < column.size() && column[i] == COLOR_END) {
+                    Output_ << column[i++];
+                }
+            
                 continue;
             }
 

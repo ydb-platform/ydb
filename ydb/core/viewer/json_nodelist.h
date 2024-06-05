@@ -74,7 +74,7 @@ public:
                 }
             }
         }
-        ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get()) + NJson::WriteJson(json, false), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), NJson::WriteJson(json, false)), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         Die(ctx);
     }
 
@@ -85,22 +85,37 @@ public:
 
 template <>
 struct TJsonRequestSchema<TJsonNodeList> {
-    static TString GetSchema() {
-        return R"___({"type":"array","title":"TEvNodeListResponse","items":{"type":"object","title":"TNodeInfo","properties":{"Id":{"type":"integer"},"Host":{"type":"string"},"Address":{"type":"string"},"Port":{"type":"integer"}},"required":["Id","Address","Port"]}})___";
+    static YAML::Node GetSchema() {
+        return YAML::Load(R"___(
+            type: array
+            title: TEvNodeListResponse
+            items:
+                type: object
+                title: TNodeInfo
+                properties:
+                    Id:
+                        type: integer
+                    Host:
+                        type: string
+                    Address:
+                        type: string
+                    Port:
+                        type: integer
+            )___");
     }
 };
 
 template <>
 struct TJsonRequestSummary<TJsonNodeList> {
     static TString GetSummary() {
-        return "\"Nodes list\"";
+        return "Nodes list";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonNodeList> {
     static TString GetDescription() {
-        return "\"Returns list of nodes\"";
+        return "Returns list of nodes";
     }
 };
 

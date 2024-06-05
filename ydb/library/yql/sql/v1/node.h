@@ -669,6 +669,8 @@ namespace NSQLTranslationV1 {
     typedef TIntrusivePtr<TWindowSpecification> TWindowSpecificationPtr;
     typedef TMap<TString, TWindowSpecificationPtr> TWinSpecs;
 
+    TWinSpecs CloneContainer(const TWinSpecs& specs);
+
     void WarnIfAliasFromSelectIsUsedInGroupBy(TContext& ctx, const TVector<TNodePtr>& selectTerms, const TVector<TNodePtr>& groupByTerms,
         const TVector<TNodePtr>& groupByExprTerms);
     bool ValidateAllNodesForAggregation(TContext& ctx, const TVector<TNodePtr>& nodes);
@@ -1218,6 +1220,7 @@ namespace NSQLTranslationV1 {
     TAggregationPtr BuildCountAggregation(TPosition pos, const TString& name, const TString& func, EAggregateMode aggMode);
     TAggregationPtr BuildUserDefinedFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
     TAggregationPtr BuildPGFactoryAggregation(TPosition pos, const TString& name, EAggregateMode aggMode);
+    TAggregationPtr BuildNthFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
 
 
     // Implemented in builtin.cpp

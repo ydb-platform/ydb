@@ -51,7 +51,9 @@ public:
             case arrow::Type::DURATION:
                 return CompareView<arrow::DurationArray, notNull>(lhs, lpos, rhs, rpos);
             case arrow::Type::DECIMAL256:
+                return CompareView<arrow::Decimal256Array, notNull>(lhs, lpos, rhs, rpos);
             case arrow::Type::DECIMAL:
+                return CompareView<arrow::Decimal128Array, notNull>(lhs, lpos, rhs, rpos);
             case arrow::Type::DENSE_UNION:
             case arrow::Type::DICTIONARY:
             case arrow::Type::EXTENSION:

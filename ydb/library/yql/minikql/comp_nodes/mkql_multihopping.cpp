@@ -101,7 +101,7 @@ public:
 
         NUdf::TUnboxedValue Save() const override {
             MKQL_ENSURE(Ready.empty(), "Inconsistent state to save, not all elements are fetched");
-            TOutputSerializer out(EMkqlStateType::SIMPLE_BLOB, StateVersion);
+            TOutputSerializer out(EMkqlStateType::SIMPLE_BLOB, StateVersion, Ctx);
 
             out.Write<ui32>(StatesMap.size());
             for (const auto& [key, state] : StatesMap) {
@@ -126,7 +126,16 @@ public:
 
         void Load(const NUdf::TStringRef& state) override {
             TInputSerializer in(state, EMkqlStateType::SIMPLE_BLOB);
+            LoadStateImpl(in);
+        }
 
+        bool Load2(const NUdf::TUnboxedValue& state) override {
+            TInputSerializer in(state, EMkqlStateType::SIMPLE_BLOB);
+            LoadStateImpl(in);
+            return true;
+        }
+
+        void LoadStateImpl(TInputSerializer& in) {
             const auto loadStateVersion = in.GetStateVersion();
             if (loadStateVersion != StateVersion) {
                 THROW yexception() << "Invalid state version " << loadStateVersion;
@@ -155,6 +164,10 @@ public:
             }
 
             in(Finished);
+        }
+
+        bool HasListItems() const override {
+            return false;
         }
 
         TInstant GetWatermark() {
@@ -500,11 +513,15 @@ public:
         if (valueRef.IsInvalid()) {
             // Create new.
             valueRef = CreateStream(compCtx);
-        } else if (valueRef.HasValue() && !valueRef.IsBoxed()) {
-            // Load from saved state.
-            NUdf::TUnboxedValue stream = CreateStream(compCtx);
-            stream.Load(valueRef.AsStringRef());
-            valueRef = stream;
+        } else if (valueRef.HasValue()) {
+            MKQL_ENSURE(valueRef.IsBoxed(), "Expected boxed value");
+            bool isStateToLoad = valueRef.HasListItems();
+            if (isStateToLoad) {
+                // Load from saved state.
+                NUdf::TUnboxedValue stream = CreateStream(compCtx);
+                stream.Load2(valueRef);
+                valueRef = stream;
+            }
         }
 
         return valueRef;

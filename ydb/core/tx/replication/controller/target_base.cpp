@@ -1,6 +1,7 @@
 #include "dst_alterer.h"
 #include "dst_creator.h"
 #include "dst_remover.h"
+#include "private_events.h"
 #include "target_base.h"
 #include "util.h"
 
@@ -12,8 +13,10 @@ using ETargetKind = TReplication::ETargetKind;
 using EDstState = TReplication::EDstState;
 using EStreamState = TReplication::EStreamState;
 
-TTargetBase::TTargetBase(ETargetKind kind, ui64 id, const TString& srcPath, const TString& dstPath)
-    : Id(id)
+TTargetBase::TTargetBase(TReplication::TPtr replication, ETargetKind kind,
+        ui64 id, const TString& srcPath, const TString& dstPath)
+    : Replication(replication)
+    , Id(id)
     , Kind(kind)
     , SrcPath(srcPath)
     , DstPath(dstPath)
@@ -42,6 +45,14 @@ EDstState TTargetBase::GetDstState() const {
 
 void TTargetBase::SetDstState(const EDstState value) {
     DstState = value;
+    switch (DstState) {
+    case EDstState::Alter:
+        return Replication->AddPendingAlterTarget(Id);
+    case EDstState::Done:
+        return Replication->RemovePendingAlterTarget(Id);
+    default:
+        break;
+    }
 }
 
 const TPathId& TTargetBase::GetDstPathId() const {
@@ -77,30 +88,53 @@ void TTargetBase::SetIssue(const TString& value) {
     TruncatedIssue(Issue);
 }
 
-void TTargetBase::Progress(TReplication::TPtr replication, const TActorContext& ctx) {
+void TTargetBase::AddWorker(ui64 id) {
+    Workers.insert(id);
+}
+
+void TTargetBase::RemoveWorker(ui64 id) {
+    Workers.erase(id);
+}
+
+const THashSet<ui64>& TTargetBase::GetWorkers() const {
+    return Workers;
+}
+
+void TTargetBase::RemoveWorkers(const TActorContext& ctx) {
+    if (!PendingRemoveWorkers) {
+        PendingRemoveWorkers = true;
+        for (const auto& id : Workers) {
+            ctx.Send(ctx.SelfID, new TEvPrivate::TEvRemoveWorker(Replication->GetId(), Id, id));
+        }
+    }
+}
+
+void TTargetBase::Progress(const TActorContext& ctx) {
     switch (DstState) {
     case EDstState::Creating:
         if (!DstCreator) {
-            DstCreator = ctx.Register(CreateDstCreator(replication, Id, ctx));
+            DstCreator = ctx.Register(CreateDstCreator(Replication, Id, ctx));
         }
         break;
-    case EDstState::Syncing:
-        break; // TODO
     case EDstState::Ready:
         if (!WorkerRegistar) {
-            WorkerRegistar = ctx.Register(CreateWorkerRegistar(replication, ctx));
+            WorkerRegistar = ctx.Register(CreateWorkerRegistar(ctx));
         }
         break;
     case EDstState::Alter:
-        if (!DstAlterer) {
-            DstAlterer = ctx.Register(CreateDstAlterer(replication, Id, ctx));
+        if (Workers) {
+            RemoveWorkers(ctx);
+        } else if (!DstAlterer) {
+            DstAlterer = ctx.Register(CreateDstAlterer(Replication, Id, ctx));
         }
         break;
     case EDstState::Done:
         break;
     case EDstState::Removing:
-        if (!DstRemover) {
-            DstRemover = ctx.Register(CreateDstRemover(replication, Id, ctx));
+        if (Workers) {
+            RemoveWorkers(ctx);
+        } else if (!DstRemover) {
+            DstRemover = ctx.Register(CreateDstRemover(Replication, Id, ctx));
         }
         break;
     case EDstState::Error:

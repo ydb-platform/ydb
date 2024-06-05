@@ -64,4 +64,54 @@ Y_UNIT_TEST_SUITE(TContinuousBackupTests) {
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/continuousBackupImpl"), {NLs::PathNotExist});
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/continuousBackupImpl/streamImpl"), {NLs::PathNotExist});
     }
+
+    Y_UNIT_TEST(TakeIncrementalBackup) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateContinuousBackup(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            ContinuousBackupDescription {
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/continuousBackupImpl"), {
+            NLs::PathExist,
+            NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeUpdate),
+            NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatProto),
+            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
+            NLs::StreamVirtualTimestamps(false),
+        });
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/continuousBackupImpl/streamImpl"), {
+            NLs::PathExist,
+            NLs::HasNotOffloadConfig,
+        });
+
+        TestAlterContinuousBackup(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            TakeIncrementalBackup {}
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/continuousBackupImpl/streamImpl"), {
+            NLs::PathExist,
+            NLs::HasOffloadConfig,
+        });
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/incBackupImpl"), {
+            NLs::PathExist,
+            NLs::IsTable,
+            NLs::CheckColumns("incBackupImpl", {"key", "value", "__incrBackupImpl_deleted"}, {}, {"key"}),
+        });
+    }
 } // TCdcStreamWithInitialScanTests

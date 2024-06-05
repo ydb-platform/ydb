@@ -593,6 +593,81 @@ namespace {
                 return false;
             }
         }
+        return true;
+    }
+
+    bool ParseAsyncReplicationSettings(
+        TReplicationSettings& dstSettings, const TCoNameValueTupleList& srcSettings, TExprContext& ctx, TPositionHandle pos
+    ) {
+        for (auto setting : srcSettings) {
+            auto name = setting.Name().Value();
+            if (name == "connection_string") {
+                dstSettings.ConnectionString = setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+            } else if (name == "endpoint") {
+                dstSettings.Endpoint = setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+            } else if (name == "database") {
+                dstSettings.Database = setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+            } else if (name == "token") {
+                dstSettings.EnsureOAuthToken().Token =
+                    setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+            } else if (name == "token_secret_name") {
+                dstSettings.EnsureOAuthToken().TokenSecretName =
+                    setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+            } else if (name == "user") {
+                dstSettings.EnsureStaticCredentials().UserName =
+                    setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+            } else if (name == "password") {
+                dstSettings.EnsureStaticCredentials().Password =
+                    setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+            } else if (name == "password_secret_name") {
+                dstSettings.EnsureStaticCredentials().PasswordSecretName =
+                    setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+            } else if (name == "state") {
+                auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                if (to_lower(value) == "done") {
+                    dstSettings.EnsureStateDone();
+                } else {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << "Unknown replication state: " << value));
+                    return false;
+                }
+            } else if (name == "failover_mode") {
+                auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                if (to_lower(value) == "consistent") {
+                    dstSettings.EnsureStateDone(TReplicationSettings::EFailoverMode::Consistent);
+                } else if (to_lower(value) == "force") {
+                    dstSettings.EnsureStateDone(TReplicationSettings::EFailoverMode::Force);
+                } else {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << "Unknown failover mode: " << value));
+                    return false;
+                }
+            }
+        }
+
+        if (dstSettings.ConnectionString && (dstSettings.Endpoint || dstSettings.Database)) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos),
+                TStringBuilder() << "Connection string and Endpoint/Database are mutually exclusive"));
+            return false;
+        }
+
+        if (dstSettings.OAuthToken && dstSettings.StaticCredentials) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos),
+                TStringBuilder() << "Token and User/Password are mutually exclusive"));
+            return false;
+        }
+
+        if (const auto& x = dstSettings.OAuthToken; x && x->Token && x->TokenSecretName) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos),
+                TStringBuilder() << "TOKEN and TOKEN_SECRET_NAME are mutually exclusive"));
+            return false;
+        }
+
+        if (const auto& x = dstSettings.StaticCredentials; x && x->Password && x->PasswordSecretName) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos),
+                TStringBuilder() << "PASSWORD and PASSWORD_SECRET_NAME are mutually exclusive"));
+            return false;
+        }
 
         return true;
     }
@@ -668,7 +743,7 @@ private:
             return peepHoleStatus;
         }
 
-        auto guard = Guard(SessionCtx->Query().QueryData->GetAllocState()->Alloc);
+        auto guard = Guard(*SessionCtx->Query().QueryData->GetAllocState()->Alloc);
 
         auto input = Build<TDqPhyStage>(ctx, pos)
             .Inputs()
@@ -1933,35 +2008,7 @@ public:
                 );
             }
 
-            for (auto setting : createReplication.ReplicationSettings()) {
-                auto name = setting.Name().Value();
-                if (name == "connection_string") {
-                    settings.Settings.ConnectionString = setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
-                } else if (name == "endpoint") {
-                    settings.Settings.Endpoint = setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
-                } else if (name == "database") {
-                    settings.Settings.Database = setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
-                } else if (name == "token") {
-                    settings.Settings.EnsureOAuthToken().Token =
-                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
-                } else if (name == "token_secret_name") {
-                    settings.Settings.EnsureOAuthToken().TokenSecretName =
-                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
-                } else if (name == "user") {
-                    settings.Settings.EnsureStaticCredentials().UserName =
-                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
-                } else if (name == "password") {
-                    settings.Settings.EnsureStaticCredentials().Password =
-                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
-                } else if (name == "password_secret_name") {
-                    settings.Settings.EnsureStaticCredentials().PasswordSecretName =
-                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
-                }
-            }
-
-            if (settings.Settings.ConnectionString && (settings.Settings.Endpoint || settings.Settings.Database)) {
-                ctx.AddError(TIssue(ctx.GetPosition(createReplication.Pos()),
-                    TStringBuilder() << "Connection string and Endpoint/Database are mutually exclusive"));
+            if (!ParseAsyncReplicationSettings(settings.Settings, createReplication.ReplicationSettings(), ctx, createReplication.Pos())) {
                 return SyncError();
             }
 
@@ -1971,27 +2018,15 @@ public:
                 return SyncError();
             }
 
-            if (settings.Settings.OAuthToken && settings.Settings.StaticCredentials) {
-                ctx.AddError(TIssue(ctx.GetPosition(createReplication.Pos()),
-                    TStringBuilder() << "Token and User/Password are mutually exclusive"));
-                return SyncError();
-            }
-
             if (!settings.Settings.OAuthToken && !settings.Settings.StaticCredentials) {
                 ctx.AddError(TIssue(ctx.GetPosition(createReplication.Pos()),
                     TStringBuilder() << "Neither Token nor User/Password are provided"));
                 return SyncError();
             }
 
-            if (const auto& x = settings.Settings.OAuthToken; x && x->Token && x->TokenSecretName) {
+            if (const auto& x = settings.Settings.StaticCredentials; x && (!x->UserName && x->Password || !x->UserName && x->PasswordSecretName)) {
                 ctx.AddError(TIssue(ctx.GetPosition(createReplication.Pos()),
-                    TStringBuilder() << "TOKEN and TOKEN_SECRET_NAME are mutually exclusive"));
-                return SyncError();
-            }
-
-            if (const auto& x = settings.Settings.StaticCredentials; x && x->Password && x->PasswordSecretName) {
-                ctx.AddError(TIssue(ctx.GetPosition(createReplication.Pos()),
-                    TStringBuilder() << "PASSWORD and PASSWORD_SECRET_NAME are mutually exclusive"));
+                    TStringBuilder() << "USER for PASSWORD or PASSWORD_SECRET_NAME are not provided"));
                 return SyncError();
             }
 
@@ -2017,29 +2052,8 @@ public:
             TAlterReplicationSettings settings;
             settings.Name = TString(alterReplication.Replication());
 
-            for (auto setting : alterReplication.ReplicationSettings()) {
-                auto name = setting.Name().Value();
-                if (name == "state") {
-                    auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
-                    if (to_lower(value) == "done") {
-                        settings.Settings.EnsureStateDone();
-                    } else {
-                        ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                            TStringBuilder() << "Unknown replication state: " << value));
-                        return SyncError();
-                    }
-                } else if (name == "failover_mode") {
-                    auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
-                    if (to_lower(value) == "consistent") {
-                        settings.Settings.EnsureStateDone(TReplicationSettings::EFailoverMode::Consistent);
-                    } else if (to_lower(value) == "force") {
-                        settings.Settings.EnsureStateDone(TReplicationSettings::EFailoverMode::Force);
-                    } else {
-                        ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                            TStringBuilder() << "Unknown failover mode: " << value));
-                        return SyncError();
-                    }
-                }
+            if (!ParseAsyncReplicationSettings(settings.Settings, alterReplication.ReplicationSettings(), ctx, alterReplication.Pos())) {
+                return SyncError();
             }
 
             auto cluster = TString(alterReplication.DataSink().Cluster());

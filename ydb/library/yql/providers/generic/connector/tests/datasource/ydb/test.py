@@ -13,6 +13,9 @@ from ydb.library.yql.providers.generic.connector.tests.utils.run.runners import 
 import ydb.library.yql.providers.generic.connector.tests.utils.scenario.ydb as scenario
 import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_positive_common as select_positive_common
 
+# import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_missing_database as select_missing_database
+# import ydb.library.yql.providers.generic.connector.tests.common_test_cases.select_missing_table as select_missing_table
+
 from conftest import docker_compose_dir
 from collection import Collection
 
@@ -35,7 +38,8 @@ class OneTimeWaiter:
         # This should be enough for tables to initialize
         start = datetime.now()
 
-        timeout = 600
+        timeout = 60
+        # timeout = 600
         while (datetime.now() - start).total_seconds() < timeout:
             self.actual_tables = set(self.docker_compose_helper.list_ydb_tables())
 
@@ -58,6 +62,12 @@ one_time_waiter = OneTimeWaiter(
         "column_selection_col2_COL1_NATIVE",
         "column_selection_col2_NATIVE",
         "column_selection_col3_NATIVE",
+        "primitive_types_NATIVE",
+        "optional_types_NATIVE",
+        "constant_NATIVE",
+        "count_NATIVE",
+        "pushdown_NATIVE",
+        "unsupported_types_NATIVE",
     ]
 )
 
@@ -82,3 +92,22 @@ def test_select_positive(
         test_case=test_case,
         test_name=request.node.name,
     )
+
+
+# FIXME: YQ-3315
+# @pytest.mark.parametrize("runner_type", runner_types)
+# @pytest.mark.parametrize(
+#     "test_case", tc_collection.get('select_missing_table'), ids=tc_collection.ids('select_missing_table')
+# )
+# def test_select_missing_table(
+#     request: pytest.FixtureRequest,
+#     runner_type: str,
+#     test_case: select_missing_table.TestCase,
+# ):
+#     runner = configure_runner(runner_type=runner_type, settings=settings)
+#     scenario.select_missing_table(
+#         test_name=request.node.name,
+#         settings=settings,
+#         runner=runner,
+#         test_case=test_case,
+#     )

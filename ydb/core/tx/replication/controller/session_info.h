@@ -22,6 +22,7 @@ public:
     void AttachWorker(const TWorkerId& id);
     void DetachWorker(const TWorkerId& id);
     const THashSet<TWorkerId>& GetWorkers() const;
+    bool HasWorker(const TWorkerId& id) const;
 
 private:
     bool Ready;
@@ -30,8 +31,7 @@ private:
 
 class TWorkerInfo {
 public:
-    TWorkerInfo() = default;
-    explicit TWorkerInfo(NKikimrReplication::TRunWorkerCommand* cmd);
+    explicit TWorkerInfo(NKikimrReplication::TRunWorkerCommand* cmd = nullptr);
 
     void SetCommand(NKikimrReplication::TRunWorkerCommand* cmd);
     bool HasCommand() const;

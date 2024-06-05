@@ -143,9 +143,9 @@ public:
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
-class TTabletPipePeNodeCachesInitializer : public IKikimrServicesInitializer {
+class TTabletPipePerNodeCachesInitializer : public IKikimrServicesInitializer {
 public:
-    TTabletPipePeNodeCachesInitializer(const TKikimrRunConfig& runConfig);
+    TTabletPipePerNodeCachesInitializer(const TKikimrRunConfig& runConfig);
 
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };

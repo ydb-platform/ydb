@@ -355,4 +355,14 @@ struct TEvDescribeSecretsResponse : public NActors::TEventLocal<TEvDescribeSecre
     TDescription Description;
 };
 
+struct TEvScriptExecutionsTablesCreationFinished : public NActors::TEventLocal<TEvScriptExecutionsTablesCreationFinished, TKqpScriptExecutionEvents::EvScriptExecutionsTableCreationFinished> {
+    TEvScriptExecutionsTablesCreationFinished(bool success, NYql::TIssues issues)
+        : Success(success)
+        , Issues(std::move(issues))
+    {}
+
+    const bool Success;
+    const NYql::TIssues Issues;
+};
+
 } // namespace NKikimr::NKqp

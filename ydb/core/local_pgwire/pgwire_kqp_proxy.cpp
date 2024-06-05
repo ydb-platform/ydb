@@ -464,7 +464,7 @@ public:
     }
 
     void Bootstrap() {
-        ResponseFormat_ = Portal_.BindData.ParametersFormat;
+        ResponseFormat_ = Portal_.BindData.ResultsFormat;
         auto event = ConvertQueryToRequest(Portal_.QueryData.Query);
         if (event) {
             for (unsigned int paramNum = 0; paramNum < Portal_.BindData.ParametersValue.size(); ++paramNum) {

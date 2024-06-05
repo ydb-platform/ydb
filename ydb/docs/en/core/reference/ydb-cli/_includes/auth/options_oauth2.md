@@ -1,4 +1,4 @@
 - `--sa-key-file <filepath>`: Enables the **Service Account Key** authentication mode, where the key and other parameters are taken from the JSON file specified in this option
-- `--oauth2-key-file <filepath>` : Enables the **OAuth 2.0 token exchange** authentication mode, where the key and other parameters are taken from the [json file](../../reference/ydb-sdk/ath.md#oauth2-key-file-format) specified in this option
+- `--oauth2-key-file <filepath>` : Enables the **OAuth 2.0 token exchange** authentication mode, where the key and other parameters are taken from the [json file](../../reference/ydb-sdk/auth.md#oauth2-key-file-format) specified in this option
     - For setting token endpoint option `--iam-endpoint` option is used (via {{ ydb-short-name }} CLI option, profile or environment variable) in `SCHEMA://HOST:PORT/PATH` format
     - [Detailed information about OAuth 2.0 token exchange protocol](https://www.rfc-editor.org/rfc/rfc8693)

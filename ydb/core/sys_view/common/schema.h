@@ -4,6 +4,8 @@
 
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tx/locks/sys_tables.h>
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
 
 namespace NKikimr {
 namespace NSysView {
@@ -42,6 +44,8 @@ constexpr TStringBuf TablePrimaryIndexOptimizerStatsName = "primary_index_optimi
 
 constexpr TStringBuf TopPartitions1MinuteName = "top_partitions_one_minute";
 constexpr TStringBuf TopPartitions1HourName = "top_partitions_one_hour";
+
+constexpr TStringBuf PgTablesName = "pg_tables";
 
 struct Schema : NIceDb::Schema {
     struct PartitionStats : Table<1> {
@@ -586,6 +590,22 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
+
+    struct PgColumn {
+        NIceDb::TColumnId _ColumnId;
+        NScheme::TTypeInfo _ColumnTypeInfo;
+        TString _ColumnName;
+        PgColumn(NIceDb::TColumnId columnId, TStringBuf columnTypeName, TStringBuf columnName) 
+            : _ColumnId(columnId), _ColumnTypeInfo(NScheme::TTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeName(columnTypeName))), _ColumnName(columnName) {} 
+        
+        TString GetColumnName() const {
+            return _ColumnName;
+        }
+    };
+
+    struct PgTables {
+        static TVector<PgColumn> Columns;
+    };
 };
 
 bool MaybeSystemViewPath(const TVector<TString>& path);

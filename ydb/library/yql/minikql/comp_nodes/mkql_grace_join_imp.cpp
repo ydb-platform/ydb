@@ -1128,6 +1128,18 @@ void TTable::ClearBucket(ui64 bucket) {
     tbs.StringValuesTotalSize = 0;
 }
 
+void TTable::ShrinkBucket(ui64 bucket) {
+    TTableBucket & tb = TableBuckets[bucket];
+    tb.KeyIntVals.shrink_to_fit();
+    tb.DataIntVals.shrink_to_fit();
+    tb.StringsOffsets.shrink_to_fit();
+    tb.StringsValues.shrink_to_fit();
+    tb.InterfaceValues.shrink_to_fit();
+    tb.InterfaceOffsets.shrink_to_fit();
+    tb.JoinIds.shrink_to_fit();
+    tb.RightIds.shrink_to_fit();
+}
+
 void TTable::InitializeBucketSpillers(ISpiller::TPtr spiller) {
     for (size_t i = 0; i < NumberOfBuckets; ++i) {
         TableBucketsSpillers.emplace_back(spiller, 5_MB);

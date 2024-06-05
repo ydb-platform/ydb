@@ -73,6 +73,10 @@ public:
                 0, NMon::IEvHttpInfoRes::EContentType::Custom));
             return PassAway();
         }
+        if (Force && !Viewer->CheckAccessAdministration(Event->Get())) {
+            TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPFORBIDDEN(Event->Get()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+            return PassAway();
+        }
 
         if (!NodeId) {
             NodeId = TlsActivationContext->ActorSystem()->NodeId;
@@ -136,23 +140,6 @@ public:
         TBase::PassAway();
     }
 
-    void TryToTranslateFromBSC2Human(TString& bscError, bool& forceRetryPossible) {
-        if (IsMatchesWildcard(bscError, "GroupId# * ExpectedStatus# *")) {
-            TStringBuf groupId = TStringBuf(bscError).After(' ').Before(' ');
-            TStringBuf expectedStatus = TStringBuf(bscError).After('#').After('#').After(' ');
-            if (expectedStatus == "DEGRADED") {
-                bscError = TStringBuilder() << "Calling this operation will cause at least group " << groupId << " to go into a degraded state";
-                forceRetryPossible = true;
-                return;
-            }
-            if (expectedStatus == "DISINTEGRATED") {
-                bscError = TStringBuilder() << "Calling this operation will cause at least group " << groupId << " to go into a dead state";
-                return;
-            }
-        }
-        forceRetryPossible = false;
-    }
-
     void ReplyAndPassAway() {
         NJson::TJsonValue json;
         if (Response != nullptr) {
@@ -160,11 +147,11 @@ public:
                 json["result"] = true;
             } else {
                 json["result"] = false;
-                TString error = Response->Record.GetResponse().GetErrorDescription();
+                TString error;
                 bool forceRetryPossible = false;
-                TryToTranslateFromBSC2Human(error, forceRetryPossible);
+                Viewer->TranslateFromBSC2Human(Response->Record.GetResponse(), error, forceRetryPossible);
                 json["error"] = error;
-                if (forceRetryPossible) {
+                if (forceRetryPossible && Viewer->CheckAccessAdministration(Event->Get())) {
                     json["forceRetryPossible"] = true;
                 }
             }

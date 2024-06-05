@@ -603,38 +603,6 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
         }
     }
 
-    Y_UNIT_TEST(Single_Small_2_Levels)
-    {
-        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
-            auto subset = TMake(Mass3, PageConf(Mass3.Model->Scheme->Families.size(), mode)).Mixed(0, 1, TMixerOne{ });   
-            Check(*subset, mode, 1000);
-        }
-    }
-
-    Y_UNIT_TEST(Single_Small_1_Level)
-    {
-        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
-            auto conf = PageConf(Mass3.Model->Scheme->Families.size(), mode);
-            for (auto& group : conf.Groups) {
-                group.BTreeIndexNodeKeysMin = group.BTreeIndexNodeKeysMax = Max<ui32>();
-            }
-            auto subset = TMake(Mass3, conf).Mixed(0, 1, TMixerOne{ });   
-            Check(*subset, mode, 1000);
-        }
-    }
-
-    Y_UNIT_TEST(Single_Small_0_Levels)
-    {
-        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
-            auto conf = PageConf(Mass3.Model->Scheme->Families.size(), mode);
-            for (auto& group : conf.Groups) {
-                group.PageSize = group.PageRows = Max<ui32>();
-            }
-            auto subset = TMake(Mass3, conf).Mixed(0, 1, TMixerOne{ });   
-            Check(*subset, mode, 1000, false);
-        }
-    }
-
     Y_UNIT_TEST(Single_Slices)
     {
         for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
@@ -669,75 +637,11 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
         }
     }
 
-    Y_UNIT_TEST(Three_Mixed_Small_2_Levels)
-    {
-        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
-            auto subset = TMake(Mass3, PageConf(Mass3.Model->Scheme->Families.size(), mode)).Mixed(0, 3, TMixerRnd(3));   
-            Check(*subset, mode, 1000, false);
-        }
-    }
-
-    Y_UNIT_TEST(Three_Mixed_Small_1_Level)
-    {
-        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
-            auto conf = PageConf(Mass3.Model->Scheme->Families.size(), mode);
-            for (auto& group : conf.Groups) {
-                group.BTreeIndexNodeKeysMin = group.BTreeIndexNodeKeysMax = Max<ui32>();
-            }
-            auto subset = TMake(Mass3, conf).Mixed(0, 3, TMixerRnd(3));
-            Check(*subset, mode, 1000, false);
-        }
-    }
-
-    Y_UNIT_TEST(Three_Mixed_Small_0_Levels)
-    {
-        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
-            auto conf = PageConf(Mass3.Model->Scheme->Families.size(), mode);
-            for (auto& group : conf.Groups) {
-                group.PageSize = group.PageRows = Max<ui32>();
-            }
-            auto subset = TMake(Mass3, conf).Mixed(0, 3, TMixerRnd(3));
-            Check(*subset, mode, 1000, false);
-        }
-    }
-
     Y_UNIT_TEST(Ten_Serial)
     {
         for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
             auto subset = TMake(Mass2, PageConf(Mass2.Model->Scheme->Families.size(), mode)).Mixed(0, 10, TMixerSeq(10, Mass2.Saved.Size()));
             Check(*subset, mode);
-        }
-    }
-
-    Y_UNIT_TEST(Three_Serial_Small_2_Levels)
-    {
-        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
-            auto subset = TMake(Mass3, PageConf(Mass3.Model->Scheme->Families.size(), mode)).Mixed(0, 3, TMixerSeq(3, Mass3.Saved.Size()));   
-            Check(*subset, mode, 1000, false);
-        }
-    }
-
-    Y_UNIT_TEST(Three_Serial_Small_1_Level)
-    {
-        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
-            auto conf = PageConf(Mass3.Model->Scheme->Families.size(), mode);
-            for (auto& group : conf.Groups) {
-                group.BTreeIndexNodeKeysMin = group.BTreeIndexNodeKeysMax = Max<ui32>();
-            }
-            auto subset = TMake(Mass3, conf).Mixed(0, 3, TMixerSeq(3, Mass3.Saved.Size()));
-            Check(*subset, mode, 1000, false);
-        }
-    }
-
-    Y_UNIT_TEST(Three_Serial_Small_0_Levels)
-    {
-        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
-            auto conf = PageConf(Mass3.Model->Scheme->Families.size(), mode);
-            for (auto& group : conf.Groups) {
-                group.PageSize = group.PageRows = Max<ui32>();
-            }
-            auto subset = TMake(Mass3, conf).Mixed(0, 3, TMixerSeq(3, Mass3.Saved.Size()));
-            Check(*subset, mode, 1000, false);
         }
     }
 
@@ -991,6 +895,102 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
             TMixer mixer(10, Mass2.Saved.Size());
             auto subset = TMake(Mass2, PageConf(Mass2.Model->Scheme->Families.size(), mode)).Mixed(0, 10, mixer);
             Check(*subset, mode);
+        }
+    }
+
+    Y_UNIT_TEST(Single_Small_2_Levels)
+    {
+        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
+            auto subset = TMake(Mass3, PageConf(Mass3.Model->Scheme->Families.size(), mode)).Mixed(0, 1, TMixerOne{ });   
+            Check(*subset, mode, 1000);
+        }
+    }
+
+    Y_UNIT_TEST(Single_Small_1_Level)
+    {
+        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
+            auto conf = PageConf(Mass3.Model->Scheme->Families.size(), mode);
+            for (auto& group : conf.Groups) {
+                group.BTreeIndexNodeKeysMin = group.BTreeIndexNodeKeysMax = Max<ui32>();
+            }
+            auto subset = TMake(Mass3, conf).Mixed(0, 1, TMixerOne{ });   
+            Check(*subset, mode, 1000);
+        }
+    }
+
+    Y_UNIT_TEST(Single_Small_0_Levels)
+    {
+        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
+            auto conf = PageConf(Mass3.Model->Scheme->Families.size(), mode);
+            for (auto& group : conf.Groups) {
+                group.PageSize = group.PageRows = Max<ui32>();
+            }
+            auto subset = TMake(Mass3, conf).Mixed(0, 1, TMixerOne{ });   
+            Check(*subset, mode, 1000, false);
+        }
+    }
+
+    Y_UNIT_TEST(Three_Mixed_Small_2_Levels)
+    {
+        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
+            auto subset = TMake(Mass3, PageConf(Mass3.Model->Scheme->Families.size(), mode)).Mixed(0, 3, TMixerRnd(3));   
+            Check(*subset, mode, 1000, false);
+        }
+    }
+
+    Y_UNIT_TEST(Three_Mixed_Small_1_Level)
+    {
+        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
+            auto conf = PageConf(Mass3.Model->Scheme->Families.size(), mode);
+            for (auto& group : conf.Groups) {
+                group.BTreeIndexNodeKeysMin = group.BTreeIndexNodeKeysMax = Max<ui32>();
+            }
+            auto subset = TMake(Mass3, conf).Mixed(0, 3, TMixerRnd(3));
+            Check(*subset, mode, 1000, false);
+        }
+    }
+
+    Y_UNIT_TEST(Three_Mixed_Small_0_Levels)
+    {
+        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
+            auto conf = PageConf(Mass3.Model->Scheme->Families.size(), mode);
+            for (auto& group : conf.Groups) {
+                group.PageSize = group.PageRows = Max<ui32>();
+            }
+            auto subset = TMake(Mass3, conf).Mixed(0, 3, TMixerRnd(3));
+            Check(*subset, mode, 1000, false);
+        }
+    }
+
+    Y_UNIT_TEST(Three_Serial_Small_2_Levels)
+    {
+        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
+            auto subset = TMake(Mass3, PageConf(Mass3.Model->Scheme->Families.size(), mode)).Mixed(0, 3, TMixerSeq(3, Mass3.Saved.Size()));   
+            Check(*subset, mode, 1000, false);
+        }
+    }
+
+    Y_UNIT_TEST(Three_Serial_Small_1_Level)
+    {
+        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
+            auto conf = PageConf(Mass3.Model->Scheme->Families.size(), mode);
+            for (auto& group : conf.Groups) {
+                group.BTreeIndexNodeKeysMin = group.BTreeIndexNodeKeysMax = Max<ui32>();
+            }
+            auto subset = TMake(Mass3, conf).Mixed(0, 3, TMixerSeq(3, Mass3.Saved.Size()));
+            Check(*subset, mode, 1000, false);
+        }
+    }
+
+    Y_UNIT_TEST(Three_Serial_Small_0_Levels)
+    {
+        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
+            auto conf = PageConf(Mass3.Model->Scheme->Families.size(), mode);
+            for (auto& group : conf.Groups) {
+                group.PageSize = group.PageRows = Max<ui32>();
+            }
+            auto subset = TMake(Mass3, conf).Mixed(0, 3, TMixerSeq(3, Mass3.Saved.Size()));
+            Check(*subset, mode, 1000, false);
         }
     }
 }

@@ -691,7 +691,6 @@ namespace NYql::NDqs {
                     auto actorId = session->FindActorId(querySeqNo);
                     if (!actorId) {
                         auto* result = google::protobuf::Arena::CreateMessage<Yql::DqsProto::QueryStatusResponse>(ctx->GetArena());
-                        result->SetStatus("Finished");
                         ctx->Reply(result, Ydb::StatusIds::SUCCESS);
                     } else {
                         TActorId callbackId = ActorSystem.Register(callback.Release());

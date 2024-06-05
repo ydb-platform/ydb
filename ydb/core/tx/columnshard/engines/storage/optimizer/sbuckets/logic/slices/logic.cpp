@@ -4,7 +4,8 @@
 
 namespace NKikimr::NOlap::NStorageOptimizer::NSBuckets {
 
-std::vector<std::shared_ptr<NKikimr::NOlap::TPortionInfo>> TTimeSliceLogic::GetPortionsForMerge(const TInstant now, const ui64 memLimit, const TBucketInfo& bucket, std::vector<NArrow::TReplaceKey>* stopPoints, TInstant* stopInstant) const {
+std::vector<std::shared_ptr<NKikimr::NOlap::TPortionInfo>> TTimeSliceLogic::GetPortionsForMerge(const TInstant now, const ui64 memLimit, 
+    const TBucketInfo& bucket, std::vector<NArrow::TReplaceKey>* stopPoints, TInstant* stopInstant) const {
     std::vector<std::shared_ptr<TPortionInfo>> result;
     {
         ui64 memUsage = 0;
@@ -14,7 +15,7 @@ std::vector<std::shared_ptr<NKikimr::NOlap::TPortionInfo>> TTimeSliceLogic::GetP
         }
         std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges::IMemoryPredictor> predictor = NCompaction::TGeneralCompactColumnEngineChanges::BuildMemoryPredictor();
         for (auto&& [maxInstant, portions] : bucket.GetSnapshotPortions()) {
-            if (now - maxInstant < GetCommonFreshnessCheckDuration()) {
+            if (now - maxInstant < FreshnessCheckDuration) {
                 if (stopInstant) {
                     *stopInstant = maxInstant;
                 }

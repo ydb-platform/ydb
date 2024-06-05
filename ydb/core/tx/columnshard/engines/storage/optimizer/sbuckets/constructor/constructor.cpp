@@ -2,15 +2,17 @@
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/sbuckets/optimizer/optimizer.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/sbuckets/logic/one_head/logic.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/sbuckets/logic/slices/logic.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NSBuckets {
 
 NKikimr::TConclusion<std::shared_ptr<NKikimr::NOlap::NStorageOptimizer::IOptimizerPlanner>> TOptimizerPlannerConstructor::DoBuildPlanner(const TBuildContext& context) const {
     std::shared_ptr<IOptimizationLogic> logic;
+    const TDuration freshnessCheckDuration = NYDBTest::TControllers::GetColumnShardController()->GetOptimizerFreshnessCheckDuration(FreshnessCheckDuration);
     if (LogicName == "one_head") {
-        logic = std::make_shared<TOneHeadLogic>();
+        logic = std::make_shared<TOneHeadLogic>(freshnessCheckDuration);
     } else if (LogicName == "slices") {
-        logic = std::make_shared<TTimeSliceLogic>();
+        logic = std::make_shared<TTimeSliceLogic>(freshnessCheckDuration);
     } else {
         AFL_VERIFY(false)("ln", LogicName);
     }
@@ -20,11 +22,12 @@ NKikimr::TConclusion<std::shared_ptr<NKikimr::NOlap::NStorageOptimizer::IOptimiz
 bool TOptimizerPlannerConstructor::DoIsEqualTo(const IOptimizerPlannerConstructor& item) const {
     const auto* itemClass = dynamic_cast<const TOptimizerPlannerConstructor*>(&item);
     AFL_VERIFY(itemClass);
-    return LogicName == itemClass->LogicName;
+    return LogicName == itemClass->LogicName && FreshnessCheckDuration == itemClass->FreshnessCheckDuration;
 }
 
 void TOptimizerPlannerConstructor::DoSerializeToProto(TProto& proto) const {
     proto.MutableSBuckets()->SetLogicName(LogicName);
+    proto.MutableSBuckets()->SetFreshnessCheckDurationSeconds(FreshnessCheckDuration.Seconds());
 }
 
 bool TOptimizerPlannerConstructor::DoDeserializeFromProto(const TProto& proto) {
@@ -33,6 +36,9 @@ bool TOptimizerPlannerConstructor::DoDeserializeFromProto(const TProto& proto) {
         return false;
     }
     LogicName = proto.GetSBuckets().GetLogicName();
+    if (proto.GetSBuckets().HasFreshnessCheckDurationSeconds()) {
+        FreshnessCheckDuration = TDuration::Seconds(proto.GetSBuckets().GetFreshnessCheckDurationSeconds());
+    }
     if (LogicName == "") {
         LogicName = "one_head";
     } else if (LogicName != "one_head" && LogicName != "slices") {

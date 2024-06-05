@@ -6,6 +6,7 @@ namespace NKikimr::NOlap::NStorageOptimizer::NSBuckets {
 class TOptimizerPlannerConstructor: public IOptimizerPlannerConstructor {
 private:
     YDB_READONLY_DEF(TString, LogicName);
+    YDB_READONLY(TDuration, FreshnessCheckDuration, TDuration::Seconds(300));
 public:
     static TString GetClassNameStatic() {
         return "s-buckets";

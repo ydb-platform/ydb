@@ -250,7 +250,7 @@ public:
     }
 
     void ActualizeOptimizer(const TInstant currentInstant, const TDuration recalcLag) const {
-        if (currentInstant - OptimizerPlanner->GetActualizationInstant() >= recalcLag) {
+        if (OptimizerPlanner->GetActualizationInstant() + recalcLag < currentInstant) {
             OptimizerPlanner->Actualize(currentInstant);
         }
     }

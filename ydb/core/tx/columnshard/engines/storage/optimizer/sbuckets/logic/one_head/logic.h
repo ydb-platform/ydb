@@ -5,6 +5,8 @@ namespace NKikimr::NOlap::NStorageOptimizer::NSBuckets {
 
 class TOneHeadLogic: public IOptimizationLogic {
 private:
+    const TDuration FreshnessCheckDuration = TDuration::Seconds(300);
+
     std::vector<std::shared_ptr<TPortionInfo>> GetPortionsForMerge(const TInstant now, const ui64 memLimit, const TBucketInfo& bucket,
         std::vector<NArrow::TReplaceKey>* stopPoints, TInstant* stopInstant) const;
 
@@ -28,7 +30,12 @@ private:
         std::vector<std::shared_ptr<TPortionInfo>> portions = GetPortionsForMerge(now, memLimit, bucket, &stopPoints, nullptr);
         return TCompactionTaskResult(std::move(portions), std::move(stopPoints));
     }
+public:
+    TOneHeadLogic(const TDuration freshnessCheckDuration)
+        : FreshnessCheckDuration(freshnessCheckDuration)
+    {
 
+    }
 };
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NSBuckets

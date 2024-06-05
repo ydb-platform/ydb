@@ -22,10 +22,10 @@ std::vector<std::shared_ptr<NKikimr::NOlap::TPortionInfo>> TOneHeadLogic::GetPor
                         splitKeys.emplace_back(pk);
                     }
                     AFL_VERIFY(currentCompactedPortions.emplace(p->GetPortionId(), p.GetPortionInfo()).second);
-                } else if (now - p->RecordSnapshotMax().GetPlanInstant() < GetCommonFreshnessCheckDuration()) {
+                } else if (now - p->RecordSnapshotMax().GetPlanInstant() < FreshnessCheckDuration) {
                     finished = true;
                     if (stopInstant) {
-                        *stopInstant = p->RecordSnapshotMax().GetPlanInstant() + GetCommonFreshnessCheckDuration();
+                        *stopInstant = p->RecordSnapshotMax().GetPlanInstant() + FreshnessCheckDuration;
                     }
                     splitKeys.emplace_back(pk);
                     break;

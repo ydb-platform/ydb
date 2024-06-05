@@ -1,4 +1,4 @@
-#include "aws_signature.h"
+#include "yql_aws_signature.h"
 
 #include <ydb/library/actors/http/http.h>
 
@@ -51,7 +51,7 @@ TAwsSignature::TAwsSignature(const TString& method, const TString& url, const TS
     Uri = path;
     Cgi = cgi;
 
-    PrepateCgiParameters();
+    PrepareCgiParameters();
 }
 
 TString TAwsSignature::GetAuthorization() const {
@@ -156,7 +156,7 @@ TString TAwsSignature::UriEncode(const TStringBuf input, bool encodeSlash) {
     return result.Str();
 }
 
-void TAwsSignature::PrepateCgiParameters() {
+void TAwsSignature::PrepareCgiParameters() {
     TCgiParameters cgi(Cgi);
     TMap<TString, TVector<TString>> sortedCgi;
 

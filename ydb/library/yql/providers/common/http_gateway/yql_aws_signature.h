@@ -34,7 +34,7 @@ private:
 
     static TString UriEncode(const TStringBuf input, bool encodeSlash = false);
 
-    void PrepateCgiParameters();
+    void PrepareCgiParameters();
 
 private:
     TString Host;

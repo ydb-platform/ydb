@@ -1,6 +1,6 @@
-#include "aws_signature.h"
-#include "yql_http_gateway.h"
+#include "yql_aws_signature.h"
 #include "yql_dns_gateway.h"
+#include "yql_http_gateway.h"
 
 #include <util/generic/size_literals.h>
 #include <util/generic/yexception.h>

@@ -49,14 +49,16 @@ TString TEvWorker::TEvData::ToString() const {
     << " }";
 }
 
-TEvWorker::TEvGone::TEvGone(EStatus status)
+TEvWorker::TEvGone::TEvGone(EStatus status, const TString& errorDescription)
     : Status(status)
+    , ErrorDescription(errorDescription)
 {
 }
 
 TString TEvWorker::TEvGone::ToString() const {
     return TStringBuilder() << ToStringHeader() << " {"
         << " Status: " << Status
+        << " ErrorDescription: " << ErrorDescription
     << " }";
 }
 
@@ -172,34 +174,37 @@ class TWorker: public TActorBootstrapped<TWorker> {
         if (ev->Sender == Reader) {
             LOG_I("Reader has gone"
                 << ": sender# " << ev->Sender);
-            MaybeRecreateActor(ev->Get()->Status, Reader);
+            MaybeRecreateActor(ev, Reader);
         } else if (ev->Sender == Writer) {
             LOG_I("Writer has gone"
                 << ": sender# " << ev->Sender);
-            MaybeRecreateActor(ev->Get()->Status, Writer);
+            MaybeRecreateActor(ev, Writer);
         } else {
             LOG_W("Unknown actor has gone"
                 << ": sender# " << ev->Sender);
         }
     }
 
-    void MaybeRecreateActor(TEvWorker::TEvGone::EStatus status, TActorInfo& info) {
-        switch (status) {
+    void MaybeRecreateActor(TEvWorker::TEvGone::TPtr& ev, TActorInfo& info) {
+        switch (ev->Get()->Status) {
         case TEvWorker::TEvGone::UNAVAILABLE:
             if (info.GetCreateAttempt() < MaxAttempts) {
                 return info.Register(this);
             }
             [[fallthrough]];
         default:
-            return Leave(status);
+            return Leave(ev);
         }
     }
 
-    void Leave(TEvWorker::TEvGone::EStatus status) {
+    void Leave(TEvWorker::TEvGone::TPtr& ev) {
         LOG_I("Leave"
-            << ": status# " << status);
+            << ": status# " << ev->Get()->Status
+            << ", error# " << ev->Get()->ErrorDescription);
 
-        Send(Parent, new TEvWorker::TEvGone(status));
+        ev->Sender = SelfId();
+        Send(ev->Forward(Parent));
+
         PassAway();
     }
 

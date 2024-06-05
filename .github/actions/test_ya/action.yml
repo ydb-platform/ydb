@@ -44,7 +44,6 @@ runs:
       shell: bash
       run: |
         export TMP_DIR=$(pwd)/tmp
-        
         export LOG_DIR=$TMP_DIR/logs
         
         echo "TMP_DIR=$TMP_DIR" >> $GITHUB_ENV

@@ -60,6 +60,7 @@ struct TAppData::TImpl {
     NKikimrConfig::TBackgroundCleaningConfig BackgroundCleaningConfig;
     NKikimrConfig::TGraphConfig GraphConfig;
     NKikimrSharedCache::TSharedCacheConfig SharedCacheConfig;
+    NKikimrConfig::TMetadataCacheConfig MetadataCacheConfig;
 };
 
 TAppData::TAppData(
@@ -111,6 +112,7 @@ TAppData::TAppData(
     , BackgroundCleaningConfig(Impl->BackgroundCleaningConfig)
     , GraphConfig(Impl->GraphConfig)
     , SharedCacheConfig(Impl->SharedCacheConfig)
+    , MetadataCacheConfig(Impl->MetadataCacheConfig)
     , KikimrShouldContinue(kikimrShouldContinue)
 {}
 

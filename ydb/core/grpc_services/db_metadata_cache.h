@@ -34,7 +34,7 @@ public:
     using TBoardInfoEntries = TMap<TActorId, TEvStateStorage::TBoardInfoEntry>;
 
 private:
-    static constexpr TDuration TIMEOUT = TDuration::Seconds(15);
+    TDuration RefreshPeriod;
     const TString Path;
     const TString BoardPath;
     ui32 ActiveNode;
@@ -70,7 +70,7 @@ private:
 
     void RefreshCache() {
         SendRequest();
-        Schedule(TIMEOUT, new TEvRefreshCache());
+        Schedule(RefreshPeriod, new TEvRefreshCache());
     }
 
     void UpdateActiveNode() {
@@ -129,7 +129,7 @@ private:
     void Handle(NHealthCheck::TEvSelfCheckRequestProto::TPtr& ev) {
         LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::DB_METADATA_CACHE, "Got request");
         TInstant now = TActivationContext::Now();
-        if (Result && now - LastResultUpdate <= 2 * TIMEOUT) {
+        if (Result && now - LastResultUpdate <= 2 * RefreshPeriod) {
             LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::DB_METADATA_CACHE, "Replying now");
             Reply(ev->Sender);
         } else {
@@ -169,6 +169,7 @@ public:
 
     void Bootstrap() {
         LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::DB_METADATA_CACHE, "Starting db metadata cache actor");
+        RefreshPeriod = TDuration::MilliSeconds(AppData()->MetadataCacheConfig.GetRefreshPeriodMs());
         TInstant now = TActivationContext::Now();
         NKikimrMetadataCache::TDatabaseMetadataCacheInfo info;
         info.SetStartTimestamp(now.MicroSeconds());

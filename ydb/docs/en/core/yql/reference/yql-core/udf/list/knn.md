@@ -36,7 +36,7 @@ Scalar quantization decreases read/write times by reducing vector size in bytes.
 
 {% note info %}
 
-It is recommended to measure if such transformation provides sufficient accuracy/recall.
+It is recommended to measure if such quantization provides sufficient accuracy/recall.
 
 {% endnote %}
 
@@ -90,7 +90,7 @@ Similarity functions:
 
 Distance functions:
 * cosine distance `CosineDistance` (1 - cosine similarity)
-* mahattan distance `ManhattanDistance`, also known as `L1 distance` (sum of modules of coordinate differences)
+* manhattan distance `ManhattanDistance`, also known as `L1 distance` (sum of modules of coordinate differences)
 * euclidean distance `EuclideanDistance`, also known as `L2 distance` (square root of the sum of squares of coordinate differences)
 
 #### Function signatures
@@ -190,7 +190,7 @@ VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryString
 
 An ML model can do quantization, or it can be done manually with YQL.
 
-Below are quantization example in YQL.
+Below there is a quantization example in YQL.
 
 #### Float -> Int8
 

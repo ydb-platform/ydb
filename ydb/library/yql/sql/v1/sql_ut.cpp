@@ -6794,7 +6794,7 @@ Y_UNIT_TEST_SUITE(CompactNamedExprs) {
         }
     }
 
-    Y_UNIT_TEST(ValidateUnusedNamedExprs) {
+    Y_UNIT_TEST(ValidateUnusedExprs) {
         TString query = R"(
             pragma warning("disable", "4527");
             pragma CompactNamedExprs;
@@ -6804,15 +6804,37 @@ Y_UNIT_TEST_SUITE(CompactNamedExprs) {
             select 1;
         )";
         ExpectFailWithError(query, "<main>:6:20: Error: Aggregation is not allowed in this context\n");
+        query = R"(
+            pragma warning("disable", "4527");
+            pragma CompactNamedExprs;
+            pragma ValidateUnusedExprs;
+
+            define subquery $x() as 
+                select count(1, 2);
+            end define;
+            select 1;
+        )";
+        ExpectFailWithError(query, "<main>:7:24: Error: Aggregation function Count requires exactly 1 argument(s), given: 2\n");
     }
 
-    Y_UNIT_TEST(DisableValidateUnusedNamedExprs) {
+    Y_UNIT_TEST(DisableValidateUnusedExprs) {
         TString query = R"(
             pragma warning("disable", "4527");
             pragma CompactNamedExprs;
             pragma DisableValidateUnusedExprs;
 
             $foo = count(1);
+            select 1;
+        )";
+        SqlToYql(query).IsOk();
+        query = R"(
+            pragma warning("disable", "4527");
+            pragma CompactNamedExprs;
+            pragma DisableValidateUnusedExprs;
+
+            define subquery $x() as 
+                select count(1, 2);
+            end define;
             select 1;
         )";
         SqlToYql(query).IsOk();

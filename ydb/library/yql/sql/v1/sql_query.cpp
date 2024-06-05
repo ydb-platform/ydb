@@ -501,9 +501,9 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             if (Ctx.CompactNamedExprs) {
                 const auto ref = Ctx.MakeName("named" + kind + "node");
-                blocks.push_back(lambda);
+                blocks.push_back(BuildNamedExpr(lambda));
                 blocks.back()->SetLabel(ref);
-                lambda = BuildNamedExprReference(lambda, ref, {});
+                lambda = BuildNamedExprReference(blocks.back(), ref, {});
             }
 
             PushNamedNode(nameAndPos.Pos, nameAndPos.Name, lambda);

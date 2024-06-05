@@ -78,6 +78,7 @@ target_sources(tx-replication-controller PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_init.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_init_schema.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_resolve_secret_result.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_worker_error.cpp
 )
 
 generate_enum_serilization(tx-replication-controller

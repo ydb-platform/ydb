@@ -27,6 +27,13 @@
             "uri": "https://{canondata_backend}/1936947/659b615f15086142a8960946dabd06b519d43335/resource.tar.gz#test_sql2yql.test_action-action_eval_cluster_use_/sql.yql"
         }
     ],
+    "test_sql2yql.test[action-action_eval_cluster_use_compact_named_exprs]": [
+        {
+            "checksum": "35a3048bab0205c637649c7aae6a5268",
+            "size": 2836,
+            "uri": "https://{canondata_backend}/937458/377e39eb6941e00a686233afcdf53a4d2fa21bc2/resource.tar.gz#test_sql2yql.test_action-action_eval_cluster_use_compact_named_exprs_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[action-action_nested_query]": [
         {
             "checksum": "be11fad7523cd4cac5b1e0c82b7a02e4",
@@ -2993,6 +3000,27 @@
             "checksum": "b45d0e502898e2e619b51c159562ea96",
             "size": 1533,
             "uri": "https://{canondata_backend}/1784117/d56ae82ad9d30397a41490647be1bd2124718f98/resource.tar.gz#test_sql2yql.test_binding-bind_select_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[binding-compact_named_exprs]": [
+        {
+            "checksum": "a773b156672b11373a9608855255ca6a",
+            "size": 1785,
+            "uri": "https://{canondata_backend}/1809005/b7945fe82426e7557a5cb23e4f8d7e62a7121d64/resource.tar.gz#test_sql2yql.test_binding-compact_named_exprs_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[binding-compact_named_subq_actions]": [
+        {
+            "checksum": "07d95d138d6a8f8408d9b97f3853a3fb",
+            "size": 6320,
+            "uri": "https://{canondata_backend}/1946324/346199389197bc9c043ccc12a40510ba4660b1a6/resource.tar.gz#test_sql2yql.test_binding-compact_named_subq_actions_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[binding-compact_named_with_subq_contexts]": [
+        {
+            "checksum": "3a3110b72747676fc712610ea376bc63",
+            "size": 5774,
+            "uri": "https://{canondata_backend}/1942415/4d74b807c83c1e482d93f5dffd276eccf97421f9/resource.tar.gz#test_sql2yql.test_binding-compact_named_with_subq_contexts_/sql.yql"
         }
     ],
     "test_sql2yql.test[binding-drop_binding]": [
@@ -18696,6 +18724,13 @@
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_action-action_eval_cluster_use_/formatted.sql"
         }
     ],
+    "test_sql_format.test[action-action_eval_cluster_use_compact_named_exprs]": [
+        {
+            "checksum": "7196432be485664f5805d070e041f121",
+            "size": 417,
+            "uri": "https://{canondata_backend}/937458/377e39eb6941e00a686233afcdf53a4d2fa21bc2/resource.tar.gz#test_sql_format.test_action-action_eval_cluster_use_compact_named_exprs_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[action-action_nested_query]": [
         {
             "checksum": "d4b969fa47e3959966e06f9dd80bcdfc",
@@ -21662,6 +21697,27 @@
             "checksum": "ff5c3df6ad35bb633df7c587b5d186b4",
             "size": 129,
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_binding-bind_select_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[binding-compact_named_exprs]": [
+        {
+            "checksum": "35ad55137c3afe0b7dfb083f9366aaec",
+            "size": 162,
+            "uri": "https://{canondata_backend}/1809005/b7945fe82426e7557a5cb23e4f8d7e62a7121d64/resource.tar.gz#test_sql_format.test_binding-compact_named_exprs_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[binding-compact_named_subq_actions]": [
+        {
+            "checksum": "5253022e37bb40f5af0cea746efa0ca4",
+            "size": 702,
+            "uri": "https://{canondata_backend}/1946324/346199389197bc9c043ccc12a40510ba4660b1a6/resource.tar.gz#test_sql_format.test_binding-compact_named_subq_actions_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[binding-compact_named_with_subq_contexts]": [
+        {
+            "checksum": "28a94c7e37e622e7ce393d756783cfec",
+            "size": 397,
+            "uri": "https://{canondata_backend}/1942415/4d74b807c83c1e482d93f5dffd276eccf97421f9/resource.tar.gz#test_sql_format.test_binding-compact_named_with_subq_contexts_/formatted.sql"
         }
     ],
     "test_sql_format.test[binding-drop_binding]": [

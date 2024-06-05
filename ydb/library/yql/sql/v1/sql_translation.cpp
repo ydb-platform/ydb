@@ -3935,7 +3935,7 @@ TWindowSpecificationPtr TSqlTranslation::WindowSpecification(const TRule_window_
         auto removed = std::remove_if(winSpecPtr->Partitions.begin(), winSpecPtr->Partitions.end(),
             [](const TNodePtr& partitionNode) {
                 return !partitionNode->GetLabel() && !partitionNode->GetColumnName() &&
-                       dynamic_cast<TTupleNode*>(partitionNode.Get()) != nullptr &&
+                       partitionNode->GetTupleNode() != nullptr &&
                        partitionNode->GetTupleSize() == 0;
         });
         winSpecPtr->Partitions.erase(removed, winSpecPtr->Partitions.end());
@@ -4129,7 +4129,7 @@ bool TSqlTranslation::DefineActionOrSubqueryBody(TSqlQuery& query, TBlocks& bloc
     return true;
 }
 
-bool TSqlTranslation::DefineActionOrSubqueryStatement(const TRule_define_action_or_subquery_stmt& stmt) {
+bool TSqlTranslation::DefineActionOrSubqueryStatement(const TRule_define_action_or_subquery_stmt& stmt, TSymbolNameWithPos& nameAndPos, TNodePtr& lambda) {
     auto kind = Ctx.Token(stmt.GetToken2());
     const bool isSubquery = to_lower(kind) == "subquery";
     if (!isSubquery && Mode == NSQLTranslation::ESqlMode::SUBQUERY) {
@@ -4212,7 +4212,7 @@ bool TSqlTranslation::DefineActionOrSubqueryStatement(const TRule_define_action_
         params->Add(BuildAtom(arg.Pos, arg.Name));
     }
 
-    auto lambda = BuildLambda(Ctx.Pos(), params, blockNode);
+    lambda = BuildLambda(Ctx.Pos(), params, blockNode);
     if (optionalArgumentsCount > 0) {
         lambda = new TCallNodeImpl(Ctx.Pos(), "WithOptionalArgs", {
             lambda,
@@ -4220,7 +4220,8 @@ bool TSqlTranslation::DefineActionOrSubqueryStatement(const TRule_define_action_
             });
     }
 
-    PushNamedNode(actionNamePos, actionName, lambda);
+    nameAndPos.Name = actionName;
+    nameAndPos.Pos = actionNamePos;
     return true;
 }
 

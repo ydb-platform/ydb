@@ -108,6 +108,11 @@ public:
         Retries = FromStringWithDefault<ui32>(params.Get("retries"), 0);
         RetryPeriod = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("retry_period"), RetryPeriod.MilliSeconds()));
 
+        if (Force && !Viewer->CheckAccessAdministration(Event->Get())) {
+            TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPFORBIDDEN(Event->Get()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+            return PassAway();
+        }
+
         SendRequest();
 
         TBase::Become(&TThis::StateWork, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
@@ -161,31 +166,6 @@ public:
         TBase::PassAway();
     }
 
-    void TryToTranslateFromBSC2Human(const NKikimrBlobStorage::TConfigResponse& response, TString& bscError, bool& forceRetryPossible) {
-        if (response.GroupsGetDisintegratedByExpectedStatusSize()) {
-            bscError = TStringBuilder() << "Calling this operation will cause at least groups [" << JoinStrings(response.GetGroupsGetDisintegratedByExpectedStatus().begin(), response.GetGroupsGetDisintegratedByExpectedStatus().end(), ", ") << "] to go into a dead state";
-        } else if (response.GroupsGetDisintegratedSize()) {
-            bscError = TStringBuilder() << "Calling this operation will cause at least groups [" << JoinStrings(response.GetGroupsGetDisintegrated().begin(), response.GetGroupsGetDisintegrated().end(), ", ") << "] to go into a dead state";
-        } else if (response.GroupsGetDegradedSize()) {
-            bscError = TStringBuilder() << "Calling this operation will cause at least groups [" << JoinStrings(response.GetGroupsGetDegraded().begin(), response.GetGroupsGetDegraded().end(), ", ") << "] to go into a degraded state";
-            forceRetryPossible = true;
-        } else if (response.StatusSize()) {
-            const auto& lastStatus = response.GetStatus(response.StatusSize() - 1);
-            TVector<ui32> groups;
-            for (auto& failParam: lastStatus.GetFailParam()) {
-                if (failParam.HasGroupId()) {
-                    groups.emplace_back(failParam.GetGroupId());
-                }
-            }
-            if (lastStatus.GetFailReason() == NKikimrBlobStorage::TConfigResponse::TStatus::kMayGetDegraded) {
-                bscError = TStringBuilder() << "Calling this operation will cause at least groups [" << JoinVectorIntoString(groups, ", ") << "] to go into a degraded state";
-                forceRetryPossible = true;
-            } else if (lastStatus.GetFailReason() == NKikimrBlobStorage::TConfigResponse::TStatus::kMayLoseData) {
-                bscError = TStringBuilder() << "Calling this operation may result in data loss for at least groups [" << JoinVectorIntoString(groups, ", ") << "]";
-            }
-        }
-    }
-
     void ReplyAndPassAway() {
         NJson::TJsonValue json;
         if (Response != nullptr) {
@@ -193,11 +173,11 @@ public:
                 json["result"] = true;
             } else {
                 json["result"] = false;
-                TString error = Response->Record.GetResponse().GetErrorDescription();
+                TString error;
                 bool forceRetryPossible = false;
-                TryToTranslateFromBSC2Human(Response->Record.GetResponse(), error, forceRetryPossible);
+                Viewer->TranslateFromBSC2Human(Response->Record.GetResponse(), error, forceRetryPossible);
                 json["error"] = error;
-                if (forceRetryPossible) {
+                if (forceRetryPossible && Viewer->CheckAccessAdministration(Event->Get())) {
                     json["forceRetryPossible"] = true;
                 }
             }

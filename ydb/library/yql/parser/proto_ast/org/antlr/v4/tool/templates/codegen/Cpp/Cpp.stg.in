@@ -822,7 +822,25 @@ while (<loopExpr>) {
   <alts; separator="\n">
   setState(<choice.loopBackStateNumber>);
   _errHandler->sync(this);
+<<<<<<< HEAD
   <iteration>
+=======
+  <preamble; separator="\n">
+  // LL1StarBlockSingleAlt protobuf stuff
+  auto global_parent = parent;
+  // protobuf end
+  while (<loopExpr>) {
+    // LL1StarBlockSingleAlt protobuf stuff
+    auto parent = global_parent->AddBlock<elemId>();
+    // protobuf end
+    <alts; separator="\n">
+    // LL1StarBlockSingleAlt protobuf stuff
+    // protobuf end
+    setState(<choice.loopBackStateNumber>);
+    _errHandler->sync(this);
+    <iteration>
+  }
+>>>>>>> dd62252e05 (ascii fix)
 }
 >>
 
@@ -835,8 +853,27 @@ do {
   <alts; separator="\n">
   setState(<choice.stateNumber>); <! loopback/exit decision !>
   _errHandler->sync(this);
+<<<<<<< HEAD
   <iteration>
 } while (<loopExpr>);
+=======
+  <preamble; separator="\n">
+  // LL1PlusBlockSingleAlt protobuf stuff
+  auto global_parent = parent;
+  // protobuf end
+  do {
+    // LL1StarBlockSingleAlt protobuf stuff
+    auto parent = global_parent->AddBlock<elemId>();
+    // protobuf end
+    <alts; separator="\n">
+    // LL1StarBlockSingleAlt protobuf stuff
+    // protobuf end
+    setState(<choice.stateNumber>); <! loopback/exit decision !>
+    _errHandler->sync(this);
+    <iteration>
+  } while (<loopExpr>);
+\}
+>>>>>>> dd62252e05 (ascii fix)
 >>
 
 // LL(*) stuff
@@ -933,8 +970,37 @@ do {
   }
   setState(<choice.loopBackStateNumber>); <! loopback/exit decision !>
   _errHandler->sync(this);
+<<<<<<< HEAD
   alt = getInterpreter\<atn::ParserATNSimulator>()->adaptivePredict(_input, <choice.decision>, _ctx);
 } while (alt != <choice.exitAlt> && alt != atn::ATN::INVALID_ALT_NUMBER);
+=======
+  alt = 1<if(!choice.ast.greedy)> + 1<endif>;
+  // PlusBlock protobuf stuff
+  auto global_parent = parent;
+  // protobuf end
+  do {
+    switch (alt) {
+      <alts: {alt | case <i><if (!choice.ast.greedy)> + 1<endif>: {
+        <if(rest(alts))>
+        // OptionalBlock protobuf stuff
+        auto parent = global_parent->AddBlock<elemId>()->MutableAlt<i>();
+        // protobuf end
+        <else>
+        auto parent = global_parent->AddBlock<elemId>();
+        <endif>
+        <alt>
+        break;
+      \}
+  }; separator="\n">
+    default:
+      <error>
+    }
+    setState(<choice.loopBackStateNumber>); <! loopback/exit decision !>
+    _errHandler->sync(this);
+    alt = getInterpreter\<atn::ParserATNSimulator>()->adaptivePredict(_input, <choice.decision>, _ctx);
+  } while (alt != <choice.exitAlt> && alt != atn::ATN::INVALID_ALT_NUMBER);
+}
+>>>>>>> dd62252e05 (ascii fix)
 >>
 
 Sync(s) ::= "Sync(s) sync(<s.expecting.name>);"

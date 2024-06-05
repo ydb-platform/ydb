@@ -141,9 +141,9 @@ namespace NProtoAST {
     public:
         TProtoASTBuilder(TStringBuf data, const TString& queryName = "query", google::protobuf::Arena* arena = nullptr)
             : QueryName(queryName)
-            , InputStream((const TChar*)data.data(), antlr3::ENC_8BIT, data.length(), (TChar*)QueryName.begin())  // Why the hell antlr needs non-const ptr??
-            , Lexer(&InputStream, static_cast<google::protobuf::Arena*>(nullptr))
-            , TokenStream(ANTLR_SIZE_HINT, Lexer.get_tokSource())
+            , InputStream(std::string(data))  // Why the hell antlr needs non-const ptr??
+            , Lexer(&InputStream)
+            , TokenStream(&Lexer)
             , Parser(&TokenStream, arena)
         {
         }
@@ -223,7 +223,7 @@ namespace NProtoAST {
     public:
         TLexerTokensCollector(TStringBuf data, const TString& queryName = "query")
             : QueryName(queryName)
-            , InputStream((const char*)data.data(), data.length())
+            , InputStream(std::string(data))
             , Lexer(&InputStream)
         {
         }

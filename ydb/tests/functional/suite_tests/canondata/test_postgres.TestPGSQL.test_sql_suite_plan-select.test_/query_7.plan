@@ -52,6 +52,7 @@
                                                     "unique1 (null, 20)",
                                                     "unique2 (-\u221e, +\u221e)"
                                                 ],
+                                                "Scan": "Parallel",
                                                 "Table": "postgres_select.test_plan/onek"
                                             }
                                         ],

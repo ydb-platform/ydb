@@ -14,8 +14,8 @@ SET(PROTOBUF_SUFFIX_PATH .pb.main.h)
 
 SET(LEXER_PARSER_NAMESPACE NALPDefault)
 
-SET(GRAMMAR_STRING_CORE_SINGLE "~(['\\\]) | (BACKSLASH .)")
-SET(GRAMMAR_STRING_CORE_DOUBLE "~([\"\\\]) | (BACKSLASH .)")
+SET(GRAMMAR_STRING_CORE_SINGLE "\"~(['#BACKSLASH#]) | (BACKSLASH .)\"")
+SET(GRAMMAR_STRING_CORE_DOUBLE "\"~([#DOUBLE_QUOTE##BACKSLASH#]) | (BACKSLASH .)\"")
 SET(GRAMMAR_MULTILINE_COMMENT_CORE       "\".\"")
 
 CONFIGURE_FILE(${ARCADIA_ROOT}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/Cpp/Cpp.stg.in ${antlr_templates}/Cpp/Cpp.stg)

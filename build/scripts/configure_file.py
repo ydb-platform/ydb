@@ -55,6 +55,8 @@ if __name__ == "__main__":
     for x in sys.argv[3:]:
         try:
             key, value = str(x).split('=', 1)
+            value = value.replace("#BACKSLASH#", "\\\\")
+            value = value.replace("#DOUBLE_QUOTE#", '"')
         except Exception:
             continue
         varDict[key] = value

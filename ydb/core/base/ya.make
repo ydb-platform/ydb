@@ -32,8 +32,6 @@ SRCS(
     memobserver.h
     nameservice.h
     path.cpp
-    pool_stats_collector.cpp
-    pool_stats_collector.h
     resource_profile.h
     row_version.cpp
     row_version.h
@@ -96,7 +94,6 @@ PEERDIR(
     ydb/library/pretty_types_print/protobuf
     ydb/library/ydb_issue
     ydb/public/api/protos/out
-    ydb/library/yql/minikql
     library/cpp/deprecated/atomic
 )
 

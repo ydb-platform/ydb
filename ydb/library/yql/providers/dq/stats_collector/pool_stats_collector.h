@@ -7,7 +7,7 @@ namespace NActors {
     struct TActorSystemSetup;
 }
 
-// copy from kikimr/core/base/pool_stats_collector.h
+// copy from ydb/library/pool_stats_collector/pool_stats_collector.h
 
 namespace NYql {
 

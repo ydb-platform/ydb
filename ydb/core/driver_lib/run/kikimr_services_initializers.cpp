@@ -16,7 +16,6 @@
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/location.h>
-#include <ydb/core/base/pool_stats_collector.h>
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -168,6 +167,8 @@
 
 #include <ydb/library/folder_service/folder_service.h>
 #include <ydb/library/folder_service/proto/config.pb.h>
+
+#include <ydb/library/pool_stats_collector/pool_stats_collector.h>
 
 #include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/comp_factory.h>

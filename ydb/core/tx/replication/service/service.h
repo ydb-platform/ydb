@@ -50,6 +50,18 @@ struct TEvService {
         explicit TEvWorkerStatus(const TWorkerId& id, NKikimrReplication::TEvWorkerStatus::EStatus status) {
             id.Serialize(*Record.MutableWorker());
             Record.SetStatus(status);
+            Record.SetReason(NKikimrReplication::TEvWorkerStatus::REASON_ACK);
+        }
+
+        explicit TEvWorkerStatus(const TWorkerId& id,
+                NKikimrReplication::TEvWorkerStatus::EStatus status,
+                NKikimrReplication::TEvWorkerStatus::EReason reason,
+                const TString& errorDescription
+        ) {
+            id.Serialize(*Record.MutableWorker());
+            Record.SetStatus(status);
+            Record.SetReason(reason);
+            Record.SetErrorDescription(errorDescription);
         }
     };
 };

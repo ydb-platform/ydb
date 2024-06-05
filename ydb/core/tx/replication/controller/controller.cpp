@@ -338,19 +338,23 @@ void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorCont
     const auto id = TWorkerId::Parse(record.GetWorker());
 
     switch (record.GetStatus()) {
-    case NKikimrReplication::TEvWorkerStatus::RUNNING:
+    case NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING:
         if (!session.HasWorker(id)) {
             StopQueue.emplace(id, nodeId);
         }
         break;
-    case NKikimrReplication::TEvWorkerStatus::STOPPED:
+    case NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED:
         if (!MaybeRemoveWorker(id, ctx)) {
-            session.DetachWorker(id);
-            if (IsValidWorker(id)) {
-                auto* worker = GetOrCreateWorker(id);
-                worker->ClearSession();
-                if (worker->HasCommand()) {
-                    BootQueue.insert(id);
+            if (record.GetReason() == NKikimrReplication::TEvWorkerStatus::REASON_ERROR) {
+                RunTxWorkerError(id, record.GetErrorDescription(), ctx);
+            } else {
+                session.DetachWorker(id);
+                if (IsValidWorker(id)) {
+                    auto* worker = GetOrCreateWorker(id);
+                    worker->ClearSession();
+                    if (worker->HasCommand()) {
+                        BootQueue.insert(id);
+                    }
                 }
             }
         }
@@ -577,7 +581,7 @@ void TController::Handle(TEvPrivate::TEvRemoveWorker::TPtr& ev, const TActorCont
 
 void TController::RemoveWorker(const TWorkerId& id, const TActorContext& ctx) {
     LOG_D("Remove worker"
-        << ", workerId# " << id);
+        << ": workerId# " << id);
 
     Y_ABORT_UNLESS(RemoveQueue.contains(id));
 

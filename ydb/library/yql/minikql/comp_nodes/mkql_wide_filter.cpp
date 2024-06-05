@@ -100,6 +100,34 @@ public:
         return fetchRes;
     }
 
+#ifndef MKQL_DISABLE_CODEGEN
+    typename TBaseComputation::TGenerateResult GenFetchProcess(Value*, const TCodegenContext& ctx, const TResultCodegenerator& fetchGenerator, BasicBlock*& block) const override {
+        auto &context = ctx.Codegen.GetContext();
+        auto pass = BasicBlock::Create(context, "pass", ctx.Func);
+        auto check = BasicBlock::Create(context, "check", ctx.Func);
+        auto decr = BasicBlock::Create(context, "decr", ctx.Func);
+        auto maybeResultVal = PHINode::Create(TMaybeFetchResult::LLVMType(context), 4, "maybe_res", pass);
+        
+        auto [fetchResVal, fetchGetters] = fetchGenerator(ctx, block);
+        auto passCond = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, ConstantInt::get(fetchResVal->getType(), static_cast<i32>(EFetchResult::One)), fetchResVal, "not_one", block);
+        maybeResultVal->addIncoming(TMaybeFetchResult::LLVMFromFetchResult(fetchResVal, "fetch_res_ext", block), block);
+        BranchInst::Create(pass, check, passCond, block);
+
+        block = check;
+        auto predicateCond = GenGetPredicate<false>(ctx, fetchGetters, block);
+        maybeResultVal->addIncoming(TMaybeFetchResult::None().LLVMConst(context), block);
+        BranchInst::Create(decr, pass, predicateCond, block);
+
+        block = decr;
+        maybeResultVal->addIncoming(TMaybeFetchResult(EFetchResult::One).LLVMConst(context), block);
+        BranchInst::Create(pass, block);
+
+        block = pass;
+
+        return {maybeResultVal, std::move(fetchGetters)};
+    }
+#endif
+
 private:
     void RegisterDependencies() const final {
         if (const auto flow = FlowDependsOn(Flow)) {

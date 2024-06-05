@@ -2347,6 +2347,7 @@ class Cuda(object):
         self.have_cuda = Setting('HAVE_CUDA', auto=self.auto_have_cuda, convert=to_bool)
 
         self.cuda_root = Setting('CUDA_ROOT')
+        self.cuda_target_root = Setting('CUDA_TARGET_ROOT')
         self.cuda_version = Setting('CUDA_VERSION', auto=self.auto_cuda_version, convert=self.convert_major_version, rewrite=True)
         self.cuda_architectures = Setting('CUDA_ARCHITECTURES', auto=self.auto_cuda_architectures, rewrite=True)
         self.use_arcadia_cuda = Setting('USE_ARCADIA_CUDA', auto=self.auto_use_arcadia_cuda, convert=to_bool)
@@ -2373,6 +2374,9 @@ class Cuda(object):
             "--expt-relaxed-constexpr",
             # Allow to use newer compilers than CUDA Toolkit officially supports
             "--allow-unsupported-compiler",
+            # Set paths explicitly
+            "--dont-use-profile",
+            "--libdevice-directory=$CUDA_ROOT/nvvm/libdevice",
         ]
 
         if not self.have_cuda.value:
@@ -2383,6 +2387,13 @@ class Cuda(object):
 
         if self.use_arcadia_cuda.value:
             self.cuda_root.value = '$CUDA_RESOURCE_GLOBAL'
+
+            host, target = self.build.host_target
+
+            if host == target:
+                self.cuda_target_root.value = '$CUDA_RESOURCE_GLOBAL'
+            else:
+                self.cuda_target_root.value = '$CUDA_TARGET_RESOURCE_GLOBAL'
 
             if self.build.target.is_linux_x86_64 and self.build.tc.is_clang:
                 # TODO(somov): Эта настройка должна приезжать сюда автоматически из другого места
@@ -2404,6 +2415,7 @@ class Cuda(object):
         self.setup_vc_root()
 
         self.cuda_root.emit()
+        self.cuda_target_root.emit()
         self.cuda_version.emit()
         self.cuda_architectures.emit()
         self.use_arcadia_cuda.emit()
@@ -2419,13 +2431,14 @@ class Cuda(object):
         emit('NVCC_OLD', '${quo:NVCC_OLD_UNQUOTED}')
         emit('NVCC_FLAGS', self.nvcc_flags, '$CUDA_NVCC_FLAGS')
         emit('NVCC_OBJ_EXT', '.o' if not self.build.target.is_windows else '.obj')
+        emit('NVCC_ENV', format_env({'PATH': '$CUDA_ROOT/nvvm/bin:$CUDA_ROOT/bin'}))
 
     def print_macros(self):
         mtime = ' '
         if self.build.host_target[1].is_linux:
             mtime = ' --mtime ${tool:"tools/mtime0"} '
         if not self.cuda_use_clang.value:
-            cmd = '$YMAKE_PYTHON ${input:"build/scripts/compile_cuda.py"}' + mtime + '$NVCC_OLD $NVCC_STD $NVCC_FLAGS -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} --cflags $C_FLAGS_PLATFORM $CXXFLAGS $NVCC_STD $NVCC_CFLAGS $SRCFLAGS ${input;hide:"build/platform/cuda/cuda_runtime_include.h"} $CUDA_HOST_COMPILER_ENV ${kv;hide:"p CC"} ${kv;hide:"pc light-green"}'  # noqa E501
+            cmd = '$YMAKE_PYTHON ${input:"build/scripts/compile_cuda.py"}' + mtime + '$NVCC_OLD $NVCC_STD $NVCC_FLAGS -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} --cflags $C_FLAGS_PLATFORM $CXXFLAGS $NVCC_STD $NVCC_CFLAGS $SRCFLAGS ${input;hide:"build/platform/cuda/cuda_runtime_include.h"} $NVCC_ENV $CUDA_HOST_COMPILER_ENV ${kv;hide:"p CC"} ${kv;hide:"pc light-green"}'  # noqa E501
         else:
             cmd = '$CXX_COMPILER_OLD --cuda-path=$CUDA_ROOT $C_FLAGS_PLATFORM -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} $CXXFLAGS $SRCFLAGS $TOOLCHAIN_ENV ${kv;hide:"p CU"} ${kv;hide:"pc green"}'  # noqa E501
 

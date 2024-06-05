@@ -48,6 +48,7 @@ SRCS(
     json_topicinfo.h
     json_pqconsumerinfo.h
     json_vdisk_req.h
+    json_vdisk_evict.h
     json_vdiskinfo.h
     json_vdiskstat.h
     json_wb_req.h

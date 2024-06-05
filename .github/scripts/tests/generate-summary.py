@@ -253,7 +253,7 @@ def render_testlist_html(rows, fn):
         fp.write(content)
 
 
-def write_summary(summary: TestSummary):
+def write_summary(summary: TestSummary, test_log_url: str):
     summary_fn = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary_fn:
         fp = open(summary_fn, "at")
@@ -261,7 +261,7 @@ def write_summary(summary: TestSummary):
         fp = sys.stdout
 
     if summary.is_empty:
-        fp.write(":red_circle: Test run completed, no test results found. Please check build logs.")
+        fp.write(f":red_circle: Test run completed, no test results found. Please check [test logs]({test_log_url}).")
     else:
         for line in summary.render(add_footnote=True):
             fp.write(f"{line}\n")
@@ -294,7 +294,7 @@ def gen_summary(summary_url_prefix, summary_out_folder, paths):
     return summary
 
 
-def get_comment_text(pr: PullRequest, summary: TestSummary, test_history_url: str, test_log_file_url: Optional[str]):
+def get_comment_text(pr: PullRequest, summary: TestSummary, test_history_url: str, test_log_file_url: str):
     if summary.is_empty:
         return [
             f"Test run completed, no test results found for commit {pr.head.sha}. "
@@ -314,7 +314,7 @@ def get_comment_text(pr: PullRequest, summary: TestSummary, test_history_url: st
         body.append(f"[Test history]({test_history_url})")
 
     if test_log_file_url:
-        body.append(f"[Test log]({test_log_file_url})")
+        body.append(f"[Tests log]({test_log_file_url})")
 
     body.extend(summary.render())
 
@@ -340,7 +340,7 @@ def main():
     title_path = list(zip(paths, paths, paths))
 
     summary = gen_summary(args.summary_url_prefix, args.summary_out_path, title_path)
-    write_summary(summary)
+    write_summary(summary, args.test_log_url)
 
     if os.environ.get("GITHUB_EVENT_NAME") in ("pull_request", "pull_request_target"):
         gh = Github(auth=GithubAuth.Token(os.environ["GITHUB_TOKEN"]))

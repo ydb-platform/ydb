@@ -2,13 +2,7 @@
 
 Updates the data in the table.{% if feature_mapreduce %}  The table is searched by name in the database specified by the [USE](../use.md) operator.{% endif %} After the `SET` keyword, enter the columns where you want to update values and the new values themselves. The list of rows is defined by the `WHERE` clause. If `WHERE` is omitted, the updates are applied to all the rows of the table.
 
-`UPDATE` can't change the value of `PRIMARY_KEY`.
-
-{% note info %}
-
-The table state changes can't be tracked within a single transaction. If the table has already been changed, use [`UPDATE ON`](#update-on) to update the data within the same transaction.
-
-{% endnote %}
+`UPDATE` can't change the value of the primary key columns.
 
 **Example**
 
@@ -20,7 +14,7 @@ WHERE Key1 > 1;
 
 ## UPDATE ON {#update-on}
 
-Used to update the data within a same transaction, if the table has already been changed.
+Used to update the data based on the results of a subquery. The set of columns returned by the subquery must be a subset of the columns of the table being updated, and all columns of the table's primary key must be present in the returned columns. The data types of the columns returned by the subquery must match the data types of the corresponding columns in the table.
 
 **Example**
 

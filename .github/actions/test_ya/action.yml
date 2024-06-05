@@ -208,7 +208,7 @@ runs:
 
         ./ya test ${{ inputs.build_target }} "${params[@]}" \
           --stat --log-file "$LOG_DIR/ya_log2.txt" --evlog-file "$LOG_DIR/ya_evlog2.jsonl" -DCONSISTENT_DEBUG \
-          --no-dir-outputs \
+          --no-dir-outputs --test-failure-code 0 \
           --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR" || (
             RC=$?
             if [ $RC -ne 0 ]; then

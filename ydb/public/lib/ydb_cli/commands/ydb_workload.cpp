@@ -334,8 +334,6 @@ TWorkloadCommandInit::TWorkloadCommandInit(NYdbWorkload::TWorkloadParams& params
 
 void TWorkloadCommandInit::Config(TConfig& config) {
     TWorkloadCommandBase::Config(config);
-    config.Opts->AddLongOption('t', "upload-threads", "Number of threads to generate and upload tables content.")
-        .Optional().DefaultValue(UpsertThreadsCount).StoreResult(&UpsertThreadsCount);
     config.Opts->AddLongOption("clear", "Clear tables before init").NoArgument()
         .Optional().StoreResult(&Clear, true);
 }

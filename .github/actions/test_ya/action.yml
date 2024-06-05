@@ -60,8 +60,8 @@ runs:
         echo "GITHUB_TOKEN=${{ github.token }}" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
         
-        echo YA_TEST_LOG_FILENAME=$LOG_DIR/ya_test.log" >> $GITHUB_ENV
-        echo YA_TEST_LOG_URL=$S3_URL_PREFIX/test_logs/ya_test.log" >> $GITHUB_ENV
+        echo "YA_TEST_LOG_FILENAME=$LOG_DIR/ya_test.log" >> $GITHUB_ENV
+        echo "YA_TEST_LOG_URL=$S3_URL_PREFIX/test_logs/ya_test.log" >> $GITHUB_ENV
         echo "S3_LOG_BUCKET_PATH=$S3_BUCKET_PATH/test_logs" >> $GITHUB_ENV
         
     

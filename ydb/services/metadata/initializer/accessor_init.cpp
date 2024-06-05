@@ -11,6 +11,15 @@
 namespace NKikimr::NMetadata::NInitializer {
 
 void TDSAccessorInitialized::DoNextModifier(const bool doPop) {
+    if (InitializationSnapshotOwner->HasInitializationSnapshot() && !doPop) {
+        while (Modifiers.size() && !doPop) {
+            if (InitializationSnapshotOwner->HasModification(ComponentId, Modifiers.front()->GetModificationId())) {
+                Modifiers.pop_front();
+            } else {
+                break;
+            }
+        }
+    }
     if (doPop) {
         Modifiers.pop_front();
     }
@@ -27,11 +36,11 @@ void TDSAccessorInitialized::DoNextModifier(const bool doPop) {
 TDSAccessorInitialized::TDSAccessorInitialized(const NRequest::TConfig& config,
     const TString& componentId,
     IInitializationBehaviour::TPtr initializationBehaviour,
-    IInitializerOutput::TPtr controller, std::shared_ptr<TSnapshot> initializationSnapshot)
+    IInitializerOutput::TPtr controller, const std::shared_ptr<NProvider::TInitializationSnapshotOwner>& snapshotOwner)
     : Config(config)
     , InitializationBehaviour(initializationBehaviour)
     , ExternalController(controller)
-    , InitializationSnapshot(initializationSnapshot)
+    , InitializationSnapshotOwner(snapshotOwner)
     , ComponentId(componentId)
 {
 }
@@ -40,7 +49,7 @@ void TDSAccessorInitialized::OnModificationFinished(const TString& modificationI
     ALS_INFO(NKikimrServices::METADATA_INITIALIZER) << "modifiers count: " << Modifiers.size();
     Y_ABORT_UNLESS(Modifiers.size());
     Y_ABORT_UNLESS(Modifiers.front()->GetModificationId() == modificationId);
-    if (NProvider::TServiceOperator::IsEnabled() && InitializationSnapshot) {
+    if (NProvider::TServiceOperator::IsEnabled() && InitializationSnapshotOwner->HasInitializationSnapshot()) {
         TDBInitialization dbInit(ComponentId, Modifiers.front()->GetModificationId());
         NModifications::IOperationsManager::TExternalModificationContext extContext;
         extContext.SetUserToken(NACLib::TSystemUsers::Metadata());
@@ -58,9 +67,6 @@ void TDSAccessorInitialized::OnModificationFinished(const TString& modificationI
 void TDSAccessorInitialized::OnPreparationFinished(const TVector<ITableModifier::TPtr>& modifiers) {
     for (auto&& i : modifiers) {
         TDBInitializationKey key(ComponentId, i->GetModificationId());
-        if (InitializationSnapshot && InitializationSnapshot->GetObjects().contains(key)) {
-            continue;
-        }
         Modifiers.emplace_back(i);
     }
     DoNextModifier(false);
@@ -93,10 +99,11 @@ void TDSAccessorInitialized::OnAlteringFinished() {
 
 void TDSAccessorInitialized::Execute(const NRequest::TConfig& config, const TString& componentId,
     IInitializationBehaviour::TPtr initializationBehaviour, IInitializerOutput::TPtr controller,
-    std::shared_ptr<TSnapshot> initializationSnapshot)
+    const std::shared_ptr<NProvider::TInitializationSnapshotOwner>& snapshotOwner)
 {
+    AFL_VERIFY(snapshotOwner);
     std::shared_ptr<TDSAccessorInitialized> initializer(new TDSAccessorInitialized(config,
-        componentId, initializationBehaviour, controller, initializationSnapshot));
+        componentId, initializationBehaviour, controller, snapshotOwner));
     initializer->SelfPtr = initializer;
 
     initializationBehaviour->Prepare(initializer);

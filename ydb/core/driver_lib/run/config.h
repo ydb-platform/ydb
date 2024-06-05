@@ -125,6 +125,7 @@ union TBasicKikimrServicesMask {
 
     TBasicKikimrServicesMask() {
         EnableAll();
+        EnableDatabaseMetadataCache = false;
     }
 };
 

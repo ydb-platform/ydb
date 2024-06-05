@@ -6,7 +6,7 @@ namespace NDataShard {
 
 using namespace NTabletFlatExecutor;
 
-class TDataShard::TTxS3Listing : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxObjectStorageListing : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
     TEvDataShard::TEvObjectStorageListingRequest::TPtr Ev;
     TAutoPtr<TEvDataShard::TEvObjectStorageListingResponse> Result;
@@ -19,7 +19,7 @@ private:
     ui32 RestartCount;
 
 public:
-    TTxS3Listing(TDataShard* ds, TEvDataShard::TEvObjectStorageListingRequest::TPtr ev)
+    TTxObjectStorageListing(TDataShard* ds, TEvDataShard::TEvObjectStorageListingRequest::TPtr ev)
         : TBase(ds)
         , Ev(ev)
         , RestartCount(0)
@@ -175,6 +175,7 @@ public:
         bool hasFilter = Ev->Get()->Record.has_filter();
         TSerializedCellVec filterColumnValues;
         TVector<ui32> filterColumnIds;
+        TVector<NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType> matchTypes;
 
         if (hasFilter) {
             const auto& filter = Ev->Get()->Record.filter();
@@ -182,6 +183,14 @@ public:
             filterColumnValues.Parse(filter.values());
             for (const auto& colId : filter.columns()) {
                 filterColumnIds.push_back(colId);
+            }
+            
+            for (const auto& matchType : filter.matchtypes()) {
+                if (!NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType_IsValid(matchType)) {
+                    SetError(NKikimrTxDataShard::TError::BAD_ARGUMENT, Sprintf("Unknown match type %" PRIu32, matchType));
+                    return true;
+                }
+                matchTypes.push_back(static_cast<NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType>(matchType));
             }
         }
 
@@ -239,15 +248,41 @@ public:
 
                 if (Result->Record.GetContentsRows().empty() ||
                     *Result->Record.GetContentsRows().rbegin() != newContentsRow) {
+
                     if (hasFilter) {
                         bool matches = true;
 
                         for (size_t i = 0; i < filterColumnIds.size(); i++) {
                             auto &columnId = filterColumnIds[i];
-                            int cmp = CompareTypedCells(value.Cells()[columnId], filterColumnValues.GetCells()[i], value.Types[columnId]);
 
-                            if (cmp != 0) {
-                                matches = false;
+                            Y_VERIFY(columnId < value.Cells().size());
+
+                            NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType matchType;
+
+                            if (matchTypes.size() == filterColumnIds.size()) {
+                                matchType = matchTypes[i];
+                            } else {
+                                matchType = NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType_EQUAL;
+                            }
+
+                            switch (matchType) {
+                                case NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType_EQUAL:
+                                    if (CompareTypedCells(value.Cells()[columnId], filterColumnValues.GetCells()[i], value.Types[columnId]) != 0) {
+                                        matches = false;
+                                    }
+                                    break;
+                                case NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType_NOT_EQUAL: {
+                                    int cmp = CompareTypedCells(value.Cells()[columnId], filterColumnValues.GetCells()[i], value.Types[columnId]);
+
+                                    if (cmp == 0) {
+                                        matches = false;
+                                    }
+
+                                    break;
+                                }
+                            }
+
+                            if (!matches) {
                                 break;
                             }
                         }
@@ -269,8 +304,35 @@ public:
 
                     for (size_t i = 0; i < filterColumnIds.size(); i++) {
                         auto &columnId = filterColumnIds[i];
-                        if (value.Cells()[columnId].AsBuf() != filterColumnValues.GetCells()[i].AsBuf()) {
-                            matches = false;
+
+                        Y_VERIFY(columnId < value.Cells().size());
+
+                        NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType matchType;
+                        
+                        if (matchTypes.size() == filterColumnIds.size()) {
+                            matchType = matchTypes[i];
+                        } else {
+                            matchType = NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType_EQUAL;
+                        }
+
+                        switch (matchType) {
+                            case NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType_EQUAL:
+                                if (CompareTypedCells(value.Cells()[columnId], filterColumnValues.GetCells()[i], value.Types[columnId]) != 0) {
+                                    matches = false;
+                                }
+                                break;
+                            case NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType_NOT_EQUAL: {
+                                int cmp = CompareTypedCells(value.Cells()[columnId], filterColumnValues.GetCells()[i], value.Types[columnId]);
+
+                                if (cmp == 0) {
+                                    matches = false;
+                                }
+
+                                break;
+                            }
+                        }
+
+                        if (!matches) {
                             break;
                         }
                     }
@@ -364,7 +426,7 @@ private:
 };
 
 void TDataShard::Handle(TEvDataShard::TEvObjectStorageListingRequest::TPtr& ev, const TActorContext& ctx) {
-    Executor()->Execute(new TTxS3Listing(this, ev), ctx);
+    Executor()->Execute(new TTxObjectStorageListing(this, ev), ctx);
 }
 
 } // namespace NDataShard

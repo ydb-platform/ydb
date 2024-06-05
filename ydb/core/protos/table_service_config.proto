@@ -256,7 +256,7 @@ message TTableServiceConfig {
         CTV_OOB_PICKLE_1_0 = 1;
     }
 
-    optional EChannelTransportVersion ChannelTransportVersion = 46 [default = CTV_OOB_PICKLE_1_0];
+    optional EChannelTransportVersion ChannelTransportVersion = 46 [default = CTV_UV_PICKLE_1_0];
 
     enum EIndexAutoChooseMode {
         DISABLED = 0;

@@ -87,7 +87,7 @@ TString TPartition::LogPrefix() const {
 
 bool TPartition::CanWrite() const {
     if (PartitionConfig == nullptr) {
-        // Old format without AllPartitions configuration field. 
+        // Old format without AllPartitions configuration field.
         // It is not split/merge partition.
         return true;
     }
@@ -273,7 +273,7 @@ ui64 TPartition::ImportantClientsMinOffset() const {
         minOffset = Min<ui64>(minOffset, curOffset);
     }
 
-    return minOffset;    
+    return minOffset;
 }
 
 void TPartition::HandleWakeup(const TActorContext& ctx) {
@@ -552,7 +552,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
         PartitionCountersLabeled->GetCounters()[METRIC_INIT_TIME] = InitDuration.MilliSeconds();
         PartitionCountersLabeled->GetCounters()[METRIC_LIFE_TIME] = CreationTime.MilliSeconds();
         PartitionCountersLabeled->GetCounters()[METRIC_PARTITIONS] = 1;
-        PartitionCountersLabeled->GetCounters()[METRIC_PARTITIONS_TOTAL] = Config.PartitionIdsSize();
+        PartitionCountersLabeled->GetCounters()[METRIC_PARTITIONS_TOTAL] = std::max(Config.PartitionIdsSize(), Config.PartitionsSize());
         ctx.Send(Tablet, new TEvPQ::TEvPartitionLabeledCounters(Partition, *PartitionCountersLabeled));
     }
     UpdateUserInfoEndOffset(ctx.Now());
@@ -969,7 +969,7 @@ void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& c
 
     auto it = ReadInfo.find(cookie);
     Y_ABORT_UNLESS(it != ReadInfo.end());
-    
+
     TReadInfo info = std::move(it->second);
     ReadInfo.erase(it);
 
@@ -980,7 +980,7 @@ void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& c
         info.Destination, GetSizeLag(info.Offset), Tablet, Config.GetMeteringMode()
     ));
     const auto& resp = dynamic_cast<TEvPQ::TEvProxyResponse*>(answer.Event.Get())->Response;
-    
+
     if (HasError(*ev->Get())) {
         if (info.IsSubscription) {
             TabletCounters.Cumulative()[COUNTER_PQ_READ_SUBSCRIPTION_ERROR].Increment(1);

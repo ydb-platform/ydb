@@ -19,7 +19,7 @@ namespace NKqp {
 namespace {
 
 constexpr ui64 MaxBatchBytes = 8_MB;
-constexpr ui64 MaxUnshardedBatchBytes = 8_MB;
+constexpr ui64 MaxUnshardedBatchBytes = 4_MB;
 
 TVector<TSysTables::TTableColumnInfo> BuildColumns(const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns) {
     TVector<TSysTables::TTableColumnInfo> result;
@@ -489,11 +489,12 @@ public:
         TVector<TCell> cells(Columns.size());
         data.ForEachRow([&](const auto& row) {
             for (size_t index = 0; index < Columns.size(); ++index) {
+                // TODO: move to SerializedVector
                 cells[WriteIndex[index]] = MakeCell(
                     Columns[index].PType,
                     row.GetElement(index),
                     TypeEnv,
-                    /* copy */ false);
+                    /* copy */ true);
             }
             AddRow(cells, GetKeyRange());
 

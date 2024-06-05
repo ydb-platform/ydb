@@ -180,8 +180,7 @@ namespace {
         if (!isOlap) {
             insertSettings.push_back(
                 exprCtx.NewList(pos, {
-                        exprCtx.NewAtom(pos, "AllowInconsistentWrites"),
-                        exprCtx.NewList(pos, {}),
+                    exprCtx.NewAtom(pos, "AllowInconsistentWrites"),
                 }));
         }
 

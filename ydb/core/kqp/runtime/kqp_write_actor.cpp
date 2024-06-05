@@ -25,10 +25,10 @@
 namespace {
     constexpr i64 kInFlightMemoryLimitPerActor = 64_MB;
     constexpr i64 kMemoryLimitPerMessage = 48_MB;
-    constexpr i64 kMaxBatchesPerMessage = 8;
+    constexpr i64 kMaxBatchesPerMessage = 1;
 
     struct TWriteActorBackoffSettings {
-        TDuration StartRetryDelay = TDuration::MilliSeconds(200);
+        TDuration StartRetryDelay = TDuration::MilliSeconds(100);
         TDuration MaxRetryDelay = TDuration::Seconds(30);
         double UnsertaintyRatio = 0.5;
         double Multiplier = 2.0;
@@ -92,7 +92,8 @@ class TKqpWriteActor : public TActorBootstrapped<TKqpWriteActor>, public NYql::N
 
         void CheckMemory() {
             const auto freeSpace = Writer.GetFreeSpace();
-            if (freeSpace > LastFreeMemory) {
+            if (freeSpace > LastFreeMemory && freeSpace >= Writer.MemoryLimit / 2) {
+                YQL_ENSURE(freeSpace > 0);
                 Writer.ResumeExecution();
             }
             LastFreeMemory = freeSpace;
@@ -143,7 +144,7 @@ public:
             Settings.GetInconsistentTx())
     {
         YQL_ENSURE(std::holds_alternative<ui64>(TxId));
-        //YQL_ENSURE(!InconsistentTx && !ImmediateTx);
+        YQL_ENSURE(!ImmediateTx);
         EgressStats.Level = args.StatsLevel;
     }
 
@@ -195,7 +196,7 @@ private:
         Finished = finished;
         EgressStats.Resume();
 
-        CA_LOG_D("New data: size=" << size << ", finished=" << finished << "." << "freespace=" << ShardedWriteController->GetMemory());
+        CA_LOG_D("New data: size=" << size << ", finished=" << finished << ".");
 
         YQL_ENSURE(ShardedWriteController);
         try {
@@ -208,8 +209,6 @@ private:
                 CurrentExceptionMessage(),
                 NYql::NDqProto::StatusIds::INTERNAL_ERROR);
         }
-        CA_LOG_D("ADDED New data: freespace=" << ShardedWriteController->GetMemory());
-
         ProcessBatches();
     }
 

@@ -346,7 +346,7 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
             .Name("row")
             .Done();
 
-        if (table.Metadata->Kind == EKikimrTableKind::Olap) {
+        if (table.Metadata->Kind == EKikimrTableKind::Olap || settings.AllowInconsistentWrites) {
             // OLAP is expected to write into all shards (hash partitioning),
             // so we use serveral sinks for this without union all.
             // (TODO: shuffle by shard instead of DqCnMap)

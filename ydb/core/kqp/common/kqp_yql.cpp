@@ -283,7 +283,7 @@ TKqpUpsertRowsSettings TKqpUpsertRowsSettings::Parse(const TCoNameValueTupleList
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
             settings.IsUpdate = true; 
         } else if (name == TKqpUpsertRowsSettings::AllowInconsistentWritesSettingName) {
-            YQL_ENSURE(tuple.Ref().ChildrenSize() == 2); // TODO: 1
+            YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
             settings.AllowInconsistentWrites = true;
         } else {
             YQL_ENSURE(false, "Unknown KqpUpsertRows setting name '" << name << "'");

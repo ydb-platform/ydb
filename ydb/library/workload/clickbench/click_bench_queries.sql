@@ -42,7 +42,7 @@ SELECT UserID, SearchPhrase, COUNT(*) as cnt FROM {table} GROUP BY UserID, Searc
 SELECT UserID, SearchPhrase, COUNT(*) FROM {table} GROUP BY UserID, SearchPhrase LIMIT 10;
 -- q18
 SELECT UserID, m, SearchPhrase, COUNT(*) as cnt
-FROM {table} GROUP BY UserID, DateTime::GetMinute(EventTime) AS m, SearchPhrase ORDER BY cnt DESC LIMIT 10;
+FROM {table} GROUP BY UserID, DateTime::GetMinute(Cast(EventTime as Timestamp)) AS m, SearchPhrase ORDER BY cnt DESC LIMIT 10;
 -- q19
 SELECT UserID FROM {table} WHERE UserID = 435090932899640449;
 -- q20
@@ -160,6 +160,6 @@ GROUP BY WindowClientWidth, WindowClientHeight ORDER BY PageViews DESC LIMIT 10;
 SELECT Minute, COUNT(*) AS PageViews
 FROM {table}
 WHERE
-    CounterID = 62 AND EventDate >= Date('2013-07-14') AND EventDate <= Date('2013-07-15') AND IsRefresh == 0
+    CounterID = 62 AND CAST(EventDate AS Date) >= Date('2013-07-14') AND CAST(EventDate AS Date) <= Date('2013-07-15') AND IsRefresh == 0
     AND DontCountHits = 0
-GROUP BY DateTime::ToSeconds(EventTime)/60 As Minute ORDER BY Minute LIMIT 10;
+GROUP BY DateTime::ToSeconds(CAST(EventTime AS Timestamp))/60 As Minute ORDER BY Minute LIMIT 10;

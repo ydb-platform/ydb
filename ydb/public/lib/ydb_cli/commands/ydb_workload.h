@@ -113,13 +113,7 @@ public:
 private:
     NTable::TSession GetSession();
     int DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& config) override;
-    TStatus SendDataPortion(NYdbWorkload::IBulkDataGenerator::TDataPortionPtr portion) const;
-    bool ProcessDataGenerator(std::shared_ptr<NYdbWorkload::IBulkDataGenerator> dataGen, const TAtomic& stop) noexcept;
-
-    ui32 UpsertThreadsCount = 128;
     bool Clear = false;
-    THolder<TProgressBar> Bar;
-    TAdaptiveLock Lock;
 };
 
 class TWorkloadCommandClean final: public TWorkloadCommandBase {

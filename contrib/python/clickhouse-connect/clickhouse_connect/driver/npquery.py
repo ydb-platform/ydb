@@ -101,7 +101,7 @@ class NumpyResult(Closable):
         chains = [chain(b) for b in zip(*bg)]
         new_df_series = []
         for c in chains:
-            new_df_series.append(pd.concat([pd.Series(piece, copy=False) for piece in c],
+            new_df_series.append(pd.concat([pd.Series(piece, copy=False) for piece in c if len(piece) > 0],
                                            copy=False, ignore_index=True))
         self._df_result = pd.DataFrame(dict(zip(self.column_names, new_df_series)))
         self.close()

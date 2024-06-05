@@ -1,3 +1,3 @@
-- Otherwise, if the value of the `YDB_OAUTH2_KEY_FILE` environment variable is set, the **OAuth 2.0 token exchange** authentication mode is used and the parameters for token exchange is taken from the [json-file](reference/ydb-sdk/ath.md#oauth2-key-file-format) whose name is specified in this variable.
+- Otherwise, if the value of the `YDB_OAUTH2_KEY_FILE` environment variable is set, the **OAuth 2.0 token exchange** authentication mode is used and the parameters for token exchange is taken from the [json-file](../../reference/ydb-sdk/ath.md#oauth2-key-file-format) whose name is specified in this variable.
     - For setting token endpoint option `--iam-endpoint` option is used (via {{ ydb-short-name }} CLI option, profile or environment variable) in `SCHEMA://HOST:PORT/PATH` format
     - [Detailed information about OAuth 2.0 token exchange protocol](https://www.rfc-editor.org/rfc/rfc8693)

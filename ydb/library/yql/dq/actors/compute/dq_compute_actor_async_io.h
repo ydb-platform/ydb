@@ -202,6 +202,20 @@ struct IDqComputeActorAsyncOutput {
 };
 
 struct IDqAsyncLookupSource {
+    struct TEvLookupRequest: NActors::TEventLocal<TEvLookupRequest, TDqComputeEvents::EvLookupRequest> {
+        TEvLookupRequest(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, NKikimr::NMiniKQL::TUnboxedValueVector&& keys)
+            : Alloc(alloc)
+            , Keys(std::move(keys))
+        {
+        }
+        ~TEvLookupRequest() {
+            auto guard = Guard(*Alloc);
+            Keys = NKikimr::NMiniKQL::TUnboxedValueVector{};
+        }
+
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+        NKikimr::NMiniKQL::TUnboxedValueVector Keys;
+    };
     struct TEvLookupResult: NActors::TEventLocal<TEvLookupResult, TDqComputeEvents::EvLookupResult> {
         TEvLookupResult(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, NKikimr::NMiniKQL::TKeyPayloadPairVector&& data)
             : Alloc(alloc)

@@ -836,7 +836,11 @@ void TColumnShard::SetupGC() {
         return;
     }
     for (auto&& i : StoragesManager->GetStorages()) {
-        i.second->StartGC();
+        auto gcTask = i.second->CreateGC();
+        if (!gcTask) {
+            continue;
+        }
+        Execute(new TTxGarbageCollectionStart(this, gcTask, i.second), NActors::TActivationContext::AsActorContext());
     }
 }
 

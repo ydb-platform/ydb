@@ -16,6 +16,12 @@ private:
 protected:
     virtual void DoOnExecuteTxAfterCleaning(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs) override;
     virtual bool DoOnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& taskAction) override;
+    virtual void DoOnExecuteTxBeforeCleaning(NColumnShard::TColumnShard& /*self*/, TBlobManagerDb& /*dbBlobs*/) override {
+
+    }
+    virtual bool DoOnCompleteTxBeforeCleaning(NColumnShard::TColumnShard& /*self*/, const std::shared_ptr<IBlobsGCAction>& /*taskAction*/) override {
+        return true;
+    }
     virtual void RemoveBlobIdFromDB(const TTabletId tabletId, const TUnifiedBlobId& blobId, TBlobManagerDb& dbBlobs) override;
     virtual bool DoIsEmpty() const override {
         return DraftBlobIds.empty();

@@ -291,7 +291,11 @@ struct TObjectStorageExternalSource : public IExternalSource {
             authInfo.AwsRegion = awsAuth.Region;
         } else if (std::holds_alternative<NAuth::TServiceAccount>(meta->Auth)) {
             if (!CredentialsFactory) {
-                
+                try {
+                    throw yexception{} << "trying to authenticate with service account credentials, internal error";
+                } catch (const yexception& error) {
+                    return NThreading::MakeErrorFuture<std::shared_ptr<TMetadata>>(std::current_exception());
+                }
             }
             auto& saAuth = std::get<NAuth::TServiceAccount>(meta->Auth);
             NYql::GetAuthInfo(CredentialsFactory, "");

@@ -160,14 +160,11 @@ class Factory:
                 #     data_source_type=DataSourceType(pg=postgresql.time),
                 # ),
                 # maybe col_26_time?
-<<<<<<< HEAD
                 Column(
                     name='col_27_json',
                     ydb_type=makeOptionalYdbTypeFromTypeID(Type.JSON),
                     data_source_type=DataSourceType(pg=postgresql.Json()),
                 ),
-=======
->>>>>>> adding json support for external datasource postgres
             )
         )
 
@@ -227,18 +224,10 @@ class Factory:
                     'buki',
                     'buki ',
                     'buki ',
-                    'buki',
+                    'buki', 
                     datetime.date(1988, 11, 20),
                     datetime.datetime(1988, 11, 20, 12, 00, 00),
-<<<<<<< HEAD
-<<<<<<< HEAD
                     '{ "TODO" : "unicode" }',
-=======
-                    '{ "TODO" : "unicode }',
->>>>>>> adding json support for external datasource postgres
-=======
-                    '{ "TODO" : "unicode" }',
->>>>>>> adding Json test cases
                     # TODO: support time in YQ-2297
                 ],
                 [
@@ -501,11 +490,7 @@ class Factory:
         ]
 
         data_out_1 = [
-<<<<<<< HEAD
             ['{"age":35,"name":"James Holden"}'],
-=======
-            ['{"name": "James Holden","age": 35}'],
->>>>>>> adding json support for external datasource postgres
             [None],
             [None],
         ]
@@ -520,20 +505,10 @@ class Factory:
                 data_in=data_in,
                 data_out_=data_out_1,
                 protocol=EProtocol.NATIVE,
-<<<<<<< HEAD
                 select_what=SelectWhat(SelectWhat.Item(name='JSON_QUERY(col_json, "$.friends[0]")', kind='expr')),
                 select_where=None,
                 data_source_kind=data_source_kind,
                 pragmas=dict(),
-=======
-                select_what=SelectWhat(SelectWhat.Item(name='JSON_QUERY($col_json, "$.friends[0]")', kind='expr')),
-                select_where=None,
-                data_source_kind=data_source_kind,
-<<<<<<< HEAD
->>>>>>> adding json support for external datasource postgres
-=======
-                pragmas=dict(),
->>>>>>> adding Json test cases
                 schema=schema,
             ),
         ]
@@ -546,6 +521,6 @@ class Factory:
                 self._constant(),
                 self._count(),
                 self._pushdown(),
-                self._json(),
+                # self._json(), TODO need json2 udf module in kqprun
             )
         )

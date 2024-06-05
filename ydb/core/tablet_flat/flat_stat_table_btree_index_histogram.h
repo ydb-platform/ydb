@@ -157,9 +157,9 @@ private:
     template <typename TGetSize>
     bool BuildHistogramRecursive(THistogram& histogram, TVector<TPartNodes>& parts, ui64 beginSize, ui64 endSize, ui32 depth) {
         const static ui32 MaxDepth = 100;
-        bool ready = true;
 
         if (SafeDiff(endSize, beginSize) <= Resolution || depth > MaxDepth) {
+            Y_DEBUG_ABORT_UNLESS(depth <= MaxDepth, "Shouldn't normally happen");
             return true;
         }
 
@@ -172,24 +172,19 @@ private:
 
         // FIXME: load the biggest node if its size more than a half
         if (biggestPart->GetCount() == 1 && biggestPart->GetNodes().Front()->Level > 0) {
-            if (!TryLoadNode<TGetSize>(biggestPart->GetPart(), *biggestPart->PopFront(), [&biggestPart](TNodeState& child) {
+            const auto addNode = [&biggestPart](TNodeState& child) {
                 biggestPart->PushBack(&child);
-            })) {
+            };
+            if (!TryLoadNode<TGetSize>(biggestPart->GetPart(), *biggestPart->PopFront(), addNode)) {
                 return false;
             }
         }
-        TCellsIterable splitKey = FindMedianPartKey(*biggestPart);
+        TCellsIterable splitKey = biggestPart->GetCount() > 1
+            ? FindMedianPartKey(*biggestPart)
+            : FindMedianTableKey(parts);
 
-        if (Y_UNLIKELY(!splitKey)) {
-            // Note: a rare scenario when we can't split biggest SST
-            // this means that we have a lot of parts which total size exceed resolution
-            // may also happen with small tables
-
-            splitKey = FindMedianTableKey(parts);
-
-            if (!splitKey) {
-                return true;
-            }
+        if (!splitKey) {
+            return true;
         }
 
         ui64 leftSize = 0, middleSize = 0, rightSize = 0;
@@ -211,11 +206,10 @@ private:
                 }
             }
 
+            Y_DEBUG_ABORT_UNLESS(middleNodes.GetCount() <= 1);
             leftSize += leftNodes.GetSize();
             middleSize += middleNodes.GetSize();
             rightSize += rightNodes.GetSize();
-            
-            Y_DEBUG_ABORT_UNLESS(middleNodes.GetCount() <= 1);
         }
         
         if (middleSize > Resolution / 2) {
@@ -236,12 +230,12 @@ private:
                 bool hasChanges = false;
                 for (auto index : xrange(count)) {
                     Y_UNUSED(index);
-                    auto& parent = *middleNodes.PopFront();
-                    if (!parent.Level) { // can't be splitted, return as-is
-                        middleNodes.PushBack(&parent);
+                    auto& node = *middleNodes.PopFront();
+                    if (!node.Level) { // can't be splitted, return as-is
+                        middleNodes.PushBack(&node);
                         continue;
                     }
-                    if (!TryLoadNode<TGetSize>(middleNodes.GetPart(), parent, [&](TNodeState& node) {
+                    const auto addNode = [&](TNodeState& node) {
                         if (node.EndKey && CompareKeys(node.EndKey, splitKey) <= 0) {
                             leftNodes.PushBack(&node);
                         } else if (node.BeginKey && CompareKeys(node.BeginKey, splitKey) >= 0) {
@@ -249,28 +243,36 @@ private:
                         } else {
                             middleNodes.PushBack(&node);
                         }
-                    })) {
+                    };
+                    if (!TryLoadNode<TGetSize>(middleNodes.GetPart(), node, addNode)) {
                         return false;
                     }
                     hasChanges = true;
                 }
 
-                while (!rightNodesBuffer.Empty()) { // should be reversed
+                while (!rightNodesBuffer.Empty()) { // reverse right part new nodes
                     rightNodes.PushFront(rightNodesBuffer.PopBack());
                 }
 
+                Y_DEBUG_ABORT_UNLESS(middleNodes.GetCount() <= 1);
                 leftSize += leftNodes.GetSize();
                 middleSize += middleNodes.GetSize();
                 rightSize += rightNodes.GetSize();
 
-                if (hasChanges) { // return updated nodes to heap 
-                    Y_DEBUG_ABORT_UNLESS(middleNodes.GetCount() <= 1);
+                if (hasChanges) { // return updated nodes to the heap 
                     std::push_heap(middleParts.begin(), middleParts.end());
                 } else { // can't be splitted, ignore
                     middleParts.pop_back();
                 }
             }
         }
+
+        if (middleSize == 0 && (leftSize == 0 || rightSize == 0)) {
+            // no progress, don't continue
+            return true;
+        }
+
+        bool ready = true;
 
         ready &= BuildHistogramRecursive<TGetSize>(histogram, leftParts, beginSize, beginSize + leftSize, depth + 1);
         
@@ -285,21 +287,24 @@ private:
     }
 
     TCellsIterable FindMedianPartKey(const TPartNodes& part) {
-        Y_ABORT_UNLESS(part.GetCount());
-        
+        Y_ABORT_UNLESS(part.GetCount() > 1, "It's impossible to split part with only one node");
+
         TCellsIterable splitKey = EmptyKey;
         ui64 splitSize = 0, currentSize = 0;
         const ui64 middleSize = part.GetSize() / 2;
         
         for (const auto& node : part.GetNodes()) {
-            // Note: avoid picking the first key to make histogram keys unique
-            if (!splitKey && splitSize || AbsDifference(currentSize, middleSize) < AbsDifference(splitSize, middleSize)) {
-                splitKey = node.BeginKey;
-                splitSize = currentSize;
+            if (currentSize) { // can't split with the first key, skip it
+                if (!splitSize || AbsDifference(currentSize, middleSize) < AbsDifference(splitSize, middleSize)) {
+                    splitKey = node.BeginKey;
+                    splitSize = currentSize;
+                }
             }
 
             currentSize += node.GetSize();
         }
+
+        Y_ABORT_UNLESS(splitKey);
 
         return splitKey;
     }
@@ -314,13 +319,15 @@ private:
             }
         }
 
-        // Note: avoid picking the first key to make histogram keys unique
         auto median = keys.begin() + (keys.size() + 1) / 2;
 
         if (median == keys.end()) {
             return EmptyKey;
         }
 
+        // Note: may work badly in case when all begin keys are the same
+        // however such cases are rare and don't worth optimizing with sort+unique complex code
+        // also this method is only called when we couldn't split the biggest part
         std::nth_element(keys.begin(), median, keys.end(), [this](const TCellsIterable& left, const TCellsIterable& right) {
             return CompareKeys(left, right) < 0;
         });

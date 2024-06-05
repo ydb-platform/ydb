@@ -24,6 +24,7 @@ target_link_libraries(core-sys_view-common PUBLIC
   ydb-core-protos
   ydb-core-tablet_flat
   cpp-deprecated-atomic
+  parser-pg_wrapper-interface
 )
 
 target_sources(core-sys_view-common PRIVATE

@@ -81,18 +81,18 @@ NYql::TIssues RemoveDatabaseFromIssues(const NYql::TIssues& issues, const TStrin
 
 template<typename TExecutable>
 TMaybe<NYql::TIssues> GetIssuesFromYdbStatus(const TExecutable& executable, const NYdb::TAsyncStatus& future) {
-    bool success = true;
-    NYql::TIssues issues;
     try {
         auto status = future.GetValue();
+        if (status.IsSuccess()) {
+            return {};
+        }
+        NYql::TIssues issues;
         issues.AddIssues(executable->Issues);
         issues.AddIssues(executable->InternalIssues);
-        success = status.IsSuccess();
+        return issues;
     } catch (...) {
-        success = false;
-        issues.AddIssue(CurrentExceptionMessage());
+        return NYql::TIssues{NYql::TIssue{CurrentExceptionMessage()}};
     }
-    return success ? TMaybe<NYql::TIssues>{} : issues;
 }
 
 }  // namespace NFq

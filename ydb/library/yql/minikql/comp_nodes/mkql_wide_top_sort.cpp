@@ -380,6 +380,9 @@ public:
         , TupleMultiType(tupleMultiType)
         , Ctx(ctx)
     {
+        if (Ctx.SpillerFactory) {
+            Spiller = Ctx.SpillerFactory->CreateSpiller();
+        }
         if constexpr (!HasCount) {
             ResetFields();
             return;
@@ -538,9 +541,8 @@ private:
                 break;
             case EOperatingMode::Spilling:
             {
-                auto spiller = Ctx.SpillerFactory->CreateSpiller();
                 const size_t PACK_SIZE = 5_MB;
-                SpilledStates.emplace_back(std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, TupleMultiType, PACK_SIZE));
+                SpilledStates.emplace_back(std::make_unique<TWideUnboxedValuesSpillerAdapter>(Spiller, TupleMultiType, PACK_SIZE));
                 break;
             }
             case EOperatingMode::ProcessSpilled:
@@ -644,6 +646,7 @@ private:
     std::vector<TSpilledUnboxedValuesIterator> SpilledUnboxedValuesIterators;
     NUdf::TUnboxedValuePod* Tongue = nullptr;
     NUdf::TUnboxedValuePod* Throat = nullptr;
+    ISpiller::TPtr Spiller = nullptr;
     bool IsHeapBuilt = false;
 };
 

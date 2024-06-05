@@ -705,9 +705,12 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
             const ui64 numRows = 1000;
             const ui64 txCount = 20;
-            const ui32 tsIncrement = 1;
+            const ui64 tsIncrement = 1;
+            const auto blobTsRange = numRows * tsIncrement;
+            const auto gap = TDuration::Hours(1); //much longer than blobTsRange*txCount
+            auto blobStartTs = (TInstant::Now() -  gap).MicroSeconds();
             for (ui64 txId = 1; txId <= txCount; ++txId) {
-                TString testBlob = MakeTestBlob((txId - 1) * numRows * tsIncrement, txId * numRows * tsIncrement, tsIncrement);
+                TString testBlob = MakeTestBlob(blobStartTs, blobStartTs + blobTsRange, tsIncrement);
                 auto blobRange = MakeBlobRange(++step, testBlob.size());
                 NBlobOperations::NRead::TCompositeReadBlobs blobs;
                 TString str1 = testBlob;
@@ -720,6 +723,12 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
                 bool ok = Insert(engine, db, TSnapshot(planStep, txId), std::move(dataToIndex), blobs, step);
                 UNIT_ASSERT(ok);
+                blobStartTs += blobTsRange;
+                if (txId == txCount / 2) { 
+                    //Make a gap. 
+                    //NB After this gap, some rows may be in the future at the point of setting TTL 
+                    blobStartTs += gap.MicroSeconds();
+                }
             }
 
             // compact
@@ -753,10 +762,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             std::shared_ptr<arrow::DataType> ttlColType = arrow::timestamp(arrow::TimeUnit::MICRO);
             THashMap<ui64, NOlap::TTiering> pathTtls;
             NOlap::TTiering tiering;
-            AFL_VERIFY(tiering.Add(NOlap::TTierInfo::MakeTtl(TDuration::MicroSeconds(TInstant::Now().MicroSeconds() - txCount / 2 * numRows * tsIncrement), "timestamp")));
+            AFL_VERIFY(tiering.Add(NOlap::TTierInfo::MakeTtl(gap, "timestamp")));
             pathTtls.emplace(pathId, std::move(tiering));
-            //if this check flaps consider to slightly increase tsIncrement value above
-            //it it fails regularly it' a problem to investigate
             Ttl(engine, db, pathTtls, txCount / 2 );
 
             // read + load + read

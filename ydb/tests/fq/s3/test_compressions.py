@@ -63,18 +63,26 @@ class TestS3Compressions:
         self.validate_result(result_set)
 
     @yq_all
-    def test_zstd_unknown_frame_descriptor(self, kikimr, s3, client, unique_prefix):
-        self.create_bucket_and_upload_file("unknown_frame_descriptor.json.zst", s3, kikimr)
+    @pytest.mark.parametrize("filename, compression", [
+        ("big.json.gz", "gzip"),
+        ("big.json.lz4", "lz4"),
+        ("big.json.br", "brotli"),
+        ("big.json.bz2", "bzip2"),
+        ("big.json.zst", "zstd"),
+        ("big.json.xz", "xz")
+    ])
+    def test_big_compression(self, kikimr, s3, client, filename, compression, unique_prefix):
+        self.create_bucket_and_upload_file(filename, s3, kikimr)
         storage_connection_name = unique_prefix + "fruitbucket"
         client.create_storage_connection(storage_connection_name, "fbucket")
 
         sql = '''
             SELECT count(*)
-            FROM `{}`.`unknown_frame_descriptor.json.zst`
-            WITH (format=json_each_row, compression="zstd", SCHEMA (
+            FROM `{}`.`{}`
+            WITH (format=json_each_row, compression="{}", SCHEMA (
                 a String NOT NULL
             ));
-            '''.format(storage_connection_name)
+            '''.format(storage_connection_name, filename, compression)
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)

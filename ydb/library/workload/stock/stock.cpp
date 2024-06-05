@@ -336,6 +336,7 @@ void TStockWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComman
         }
         break;
     case TWorkloadParams::ECommandType::Clean:
+    case TWorkloadParams::ECommandType::Root:
         break;
     }
 }

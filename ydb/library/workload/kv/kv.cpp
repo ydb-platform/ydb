@@ -571,6 +571,7 @@ void TKvWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandTy
         }
         break;
     case TWorkloadParams::ECommandType::Clean:
+    case TWorkloadParams::ECommandType::Root:
         break;
     }
 }

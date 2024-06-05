@@ -134,7 +134,8 @@ public:
     enum class ECommandType {
         Init /* "init" */,
         Run /* "run" */,
-        Clean  /* "clean" */
+        Clean  /* "clean" */,
+        Root  /* "root" */
     };
     virtual ~TWorkloadParams() = default;
     virtual void ConfigureOpts(NLastGetopt::TOpts& /*opts*/, const ECommandType /*commandType*/, int /*workloadType*/) {

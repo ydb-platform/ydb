@@ -4,6 +4,7 @@
 #include <ydb/library/actors/core/mon.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/viewer/json/json.h>
+#include <ydb/core/viewer/yaml/yaml.h>
 #include <ydb/core/util/wildcard.h>
 #include <library/cpp/json/json_writer.h>
 #include "viewer.h"
@@ -14,7 +15,7 @@ namespace NViewer {
 
 using namespace NActors;
 
-class TJsonPDiskRestart : public TViewerPipeClient<TJsonPDiskRestart> {
+class TPDiskInfo : public TViewerPipeClient<TPDiskInfo> {
     enum EEv {
         EvRetryNodeRequest = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvEnd
@@ -28,7 +29,7 @@ class TJsonPDiskRestart : public TViewerPipeClient<TJsonPDiskRestart> {
     };
 
 protected:
-    using TThis = TJsonPDiskRestart;
+    using TThis = TPDiskInfo;
     using TBase = TViewerPipeClient<TThis>;
     IViewer* Viewer;
     NMon::TEvHttpInfo::TPtr Event;
@@ -37,18 +38,18 @@ protected:
     ui32 Retries = 0;
     TDuration RetryPeriod = TDuration::MilliSeconds(500);
 
-    std::unique_ptr<TEvBlobStorage::TEvControllerConfigResponse> Response;
+    std::unique_ptr<NSysView::TEvSysView::TEvGetPDisksResponse> BSCResponse;
+    std::unique_ptr<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateResponse> WhiteboardResponse;
 
     ui32 NodeId = 0;
     ui32 PDiskId = 0;
-    bool Force = false;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TJsonPDiskRestart(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+    TPDiskInfo(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : Viewer(viewer)
         , Event(ev)
     {}
@@ -57,7 +58,6 @@ public:
         const auto& params(Event->Get()->Request.GetParams());
         NodeId = FromStringWithDefault<ui32>(params.Get("node_id"), 0);
         PDiskId = FromStringWithDefault<ui32>(params.Get("pdisk_id"), Max<ui32>());
-        Force = FromStringWithDefault<bool>(params.Get("force"), false);
 
         if (PDiskId == Max<ui32>()) {
             TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(
@@ -65,9 +65,9 @@ public:
                 0, NMon::IEvHttpInfoRes::EContentType::Custom));
             return PassAway();
         }
-        if (Event->Get()->Request.GetMethod() != HTTP_METHOD_POST) {
+        if (Event->Get()->Request.GetMethod() != HTTP_METHOD_GET) {
             TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(
-                Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Only POST method is allowed"),
+                Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Only GET method is allowed"),
                 0, NMon::IEvHttpInfoRes::EContentType::Custom));
             return PassAway();
         }
@@ -78,25 +78,33 @@ public:
         TBase::InitConfig(params);
 
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
-        Retries = FromStringWithDefault<ui32>(params.Get("retries"), 0);
+        Retries = FromStringWithDefault<ui32>(params.Get("retries"), 3);
         RetryPeriod = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("retry_period"), RetryPeriod.MilliSeconds()));
 
-        SendRequest();
+        SendWhiteboardRequest();
+        SendBSCRequest();
 
         TBase::Become(&TThis::StateWork, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
     }
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
+            hFunc(NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateResponse, Handle);
+            hFunc(NSysView::TEvSysView::TEvGetPDisksResponse, Handle);
             cFunc(TEvRetryNodeRequest::EventType, HandleRetry);
             cFunc(TEvents::TEvUndelivered::EventType, Undelivered);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
 
-    void SendRequest() {
-        RequestBSControllerPDiskRestart(NodeId, PDiskId, Force);
+    void SendWhiteboardRequest() {
+        TActorId whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(NodeId);
+        auto request = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateRequest>();
+        TBase::SendRequest(whiteboardServiceId, request.release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, NodeId);
+    }
+
+    void SendBSCRequest() {
+        RequestBSControllerPDiskInfo(NodeId, PDiskId);
     }
 
     bool RetryRequest() {
@@ -115,75 +123,56 @@ public:
         }
     }
 
-    void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& ev) {
-        Response.reset(ev->Release().Release());
-        ReplyAndPassAway();
+    void Handle(NSysView::TEvSysView::TEvGetPDisksResponse::TPtr& ev) {
+        BSCResponse.reset(ev->Release().Release());
+        TBase::RequestDone();
+    }
+
+    void Handle(NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateResponse::TPtr& ev) {
+        WhiteboardResponse.reset(ev->Release().Release());
+        TBase::RequestDone();
     }
 
     void HandleRetry() {
-        SendRequest();
+        SendWhiteboardRequest();
     }
 
     void HandleTimeout() {
         Send(Event->Sender, new NMon::TEvHttpInfoRes(
-            Viewer->GetHTTPGATEWAYTIMEOUT(Event->Get(), "text/plain", "Timeout receiving response from BSC"),
+            Viewer->GetHTTPGATEWAYTIMEOUT(Event->Get(), "text/plain", "Timeout receiving response"),
             0, NMon::IEvHttpInfoRes::EContentType::Custom));
     }
 
     void PassAway() override {
+        TBase::Send(TActivationContext::InterconnectProxy(NodeId), new TEvents::TEvUnsubscribe());
         TBase::PassAway();
     }
 
-    void TryToTranslateFromBSC2Human(TString& bscError, bool& forceRetryPossible) {
-        if (IsMatchesWildcard(bscError, "GroupId# * ExpectedStatus# *")) {
-            TStringBuf groupId = TStringBuf(bscError).After(' ').Before(' ');
-            TStringBuf expectedStatus = TStringBuf(bscError).After('#').After('#').After(' ');
-            if (expectedStatus == "DEGRADED") {
-                bscError = TStringBuilder() << "Calling this operation will cause at least group " << groupId << " to go into a degraded state";
-                forceRetryPossible = true;
-                return;
-            }
-            if (expectedStatus == "DISINTEGRATED") {
-                bscError = TStringBuilder() << "Calling this operation will cause at least group " << groupId << " to go into a dead state";
-                return;
-            }
-        }
-        forceRetryPossible = false;
-    }
-
     void ReplyAndPassAway() {
-        NJson::TJsonValue json;
-        if (Response != nullptr) {
-            if (Response->Record.GetResponse().GetSuccess()) {
-                json["result"] = true;
-            } else {
-                json["result"] = false;
-                TString error = Response->Record.GetResponse().GetErrorDescription();
-                bool forceRetryPossible = false;
-                TryToTranslateFromBSC2Human(error, forceRetryPossible);
-                json["error"] = error;
-                if (forceRetryPossible) {
-                    json["forceRetryPossible"] = true;
-                }
-            }
-            json["debugMessage"] = Response->Record.ShortDebugString();
-        } else {
-            json["result"] = false;
-            json["error"] = "No response was received from BSC";
+        NKikimrViewer::TPDiskInfo proto;
+        TStringStream json;
+        if (WhiteboardResponse != nullptr && WhiteboardResponse->Record.PDiskStateInfoSize() > 0) {
+            proto.MutableWhiteboard()->CopyFrom(WhiteboardResponse->Record.GetPDiskStateInfo(0));
         }
-        TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), NJson::WriteJson(json)), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        if (BSCResponse != nullptr && BSCResponse->Record.EntriesSize() > 0) {
+            proto.MutableBSC()->CopyFrom(BSCResponse->Record.GetEntries(0).GetInfo());
+        }
+        TProtoToJson::ProtoToJson(json, proto, {
+            .EnumAsNumbers = false,
+        });
+        TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), json.Str()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         PassAway();
     }
 };
 
 template <>
-YAML::Node TJsonRequestSwagger<TJsonPDiskRestart>::GetSwagger() {
-    return YAML::Load(R"___(
-        post:
+YAML::Node TJsonRequestSwagger<TPDiskInfo>::GetSwagger() {
+    YAML::Node node = YAML::Load(R"___(
+        get:
           tags:
           - pdisk
-          summary: Restart PDisk
-          description: Restart PDisk on the specified node
+          summary: Gets PDisk info
+          description: Gets PDisk information from Whiteboard and BSC
           parameters:
           - name: node_id
             in: query
@@ -199,28 +188,12 @@ YAML::Node TJsonRequestSwagger<TJsonPDiskRestart>::GetSwagger() {
             description: timeout in ms
             required: false
             type: integer
-          - name: force
-            in: query
-            description: attempt forced operation, ignore warnings
-            required: false
-            type: boolean
           responses:
             200:
               description: OK
               content:
                 application/json:
-                  schema:
-                    type: object
-                    properties:
-                      result:
-                        type: boolean
-                        description: was operation successful or not
-                      error:
-                        type: string
-                        description: details about failed operation
-                      forceRetryPossible:
-                        type: boolean
-                        description: if true, operation can be retried with force flag
+                  schema: {}
             400:
               description: Bad Request
             403:
@@ -228,6 +201,13 @@ YAML::Node TJsonRequestSwagger<TJsonPDiskRestart>::GetSwagger() {
             504:
               description: Gateway Timeout
         )___");
+
+    node["get"]["responses"]["200"]["content"]["application/json"]["schema"] = TProtoToYaml::ProtoToYamlSchema<NKikimrViewer::TPDiskInfo>();
+    YAML::Node properties(node["get"]["responses"]["200"]["content"]["application/json"]["schema"]["properties"]["BSC"]["properties"]);
+    TProtoToYaml::FillEnum(properties["StatusV2"], NProtoBuf::GetEnumDescriptor<NKikimrBlobStorage::EDriveStatus>());
+    TProtoToYaml::FillEnum(properties["DecommitStatus"], NProtoBuf::GetEnumDescriptor<NKikimrBlobStorage::EDecommitStatus>());
+    TProtoToYaml::FillEnum(properties["Type"], NProtoBuf::GetEnumDescriptor<NKikimrBlobStorage::EPDiskType>());
+    return node;
 }
 
 }

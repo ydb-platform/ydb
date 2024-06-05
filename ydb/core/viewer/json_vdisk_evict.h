@@ -32,7 +32,6 @@ protected:
     using TBase = TViewerPipeClient<TThis>;
     IViewer* Viewer;
     NMon::TEvHttpInfo::TPtr Event;
-    TJsonSettings JsonSettings;
     ui32 Timeout = 0;
     ui32 ActualRetries = 0;
     ui32 Retries = 0;
@@ -153,7 +152,7 @@ public:
 
     void HandleTimeout() {
         Send(Event->Sender, new NMon::TEvHttpInfoRes(
-            Viewer->GetHTTPGATEWAYTIMEOUT(Event->Get(), "text/plain", "Timeout receiving response from NodeWarden"),
+            Viewer->GetHTTPGATEWAYTIMEOUT(Event->Get(), "text/plain", "Timeout receiving response from BSC"),
             0, NMon::IEvHttpInfoRes::EContentType::Custom));
     }
 

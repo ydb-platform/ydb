@@ -1343,6 +1343,7 @@ message TImmediateControlsConfig {
     optional TSchemeShardControls SchemeShardControls = 4;
     optional TTCMallocControls TCMallocControls = 5;
     optional TTracingControls TracingControls = 6;
+    optional TVDiskControls VDiskControls = 7;
 };
 
 message TMeteringConfig {

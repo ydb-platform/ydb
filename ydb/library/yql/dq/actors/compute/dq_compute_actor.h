@@ -4,7 +4,7 @@
 #include <ydb/library/yql/dq/actors/dq_events_ids.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
-#include <ydb/library/yql/dq/proto/dq_checkpoint.pb.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 #include <ydb/library/yql/dq/runtime/dq_async_stats.h>
 #include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
@@ -89,9 +89,10 @@ struct TEvDqCompute {
 
         TEvInjectCheckpoint() = default;
 
-        TEvInjectCheckpoint(ui64 id, ui64 generation) {
+        TEvInjectCheckpoint(ui64 id, ui64 generation, NDqProto::ECheckpointType type) {
             Record.MutableCheckpoint()->SetId(id);
             Record.MutableCheckpoint()->SetGeneration(generation);
+            Record.MutableCheckpoint()->SetType(type);
             Record.SetGeneration(generation);
         }
     };
@@ -106,7 +107,7 @@ struct TEvDqCompute {
         const TString GraphId;
         const ui64 TaskId;
         const NDqProto::TCheckpoint Checkpoint;
-        NDqProto::TComputeActorState State;
+        TComputeActorState State;
     };
 
     struct TEvSaveTaskStateResult : public NActors::TEventPB<TEvSaveTaskStateResult,
@@ -197,7 +198,7 @@ struct TEvDqCompute {
             , Generation(generation) {}
 
         const NDqProto::TCheckpoint Checkpoint;
-        std::vector<NDqProto::TComputeActorState> States;
+        std::vector<TComputeActorState> States;
         const TIssues Issues;
         const ui64 Generation;
     };

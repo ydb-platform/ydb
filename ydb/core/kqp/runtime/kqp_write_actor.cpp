@@ -280,7 +280,7 @@ private:
     }
 
     void CommitState(const NYql::NDqProto::TCheckpoint&) final {};
-    void LoadState(const NYql::NDqProto::TSinkState&) final {};
+    void LoadState(const NYql::NDq::TSinkState&) final {};
 
     ui64 GetOutputIndex() const final {
         return OutputIndex;

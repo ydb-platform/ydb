@@ -6,7 +6,7 @@
 #include <ydb/library/yql/dq/actors/compute/dq_source_watermark_tracker.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
-#include <ydb/library/yql/dq/proto/dq_checkpoint.pb.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 
 #include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
 #include <ydb/library/yql/minikql/mkql_alloc.h>
@@ -137,7 +137,7 @@ public:
     static constexpr char ActorName[] = "DQ_PQ_READ_ACTOR";
 
 public:
-    void SaveState(const NDqProto::TCheckpoint& checkpoint, NDqProto::TSourceState& state) override {
+    void SaveState(const NDqProto::TCheckpoint& checkpoint, TSourceState& state) override {
         NPq::NProto::TDqPqTopicSourceState stateProto;
 
         NPq::NProto::TDqPqTopicSourceState::TTopicDescription* topic = stateProto.AddTopics();
@@ -161,22 +161,19 @@ public:
         TString stateBlob;
         YQL_ENSURE(stateProto.SerializeToString(&stateBlob));
 
-        auto* data = state.AddData()->MutableStateData();
-        data->SetVersion(StateVersion);
-        data->SetBlob(stateBlob);
+        state.Data.emplace_back(stateBlob, StateVersion);
 
         DeferredCommits.emplace(checkpoint.GetId(), std::move(CurrentDeferredCommit));
         CurrentDeferredCommit = NYdb::NTopic::TDeferredCommit();
     }
 
-    void LoadState(const NDqProto::TSourceState& state) override {
+    void LoadState(const TSourceState& state) override {
         TInstant minStartingMessageTs = state.DataSize() ? TInstant::Max() : StartingMessageTimestamp;
         ui64 ingressBytes = 0;
-        for (const auto& stateData : state.GetData()) {
-            const auto& data = stateData.GetStateData();
-            if (data.GetVersion() == StateVersion) { // Current version
+        for (const auto& data : state.Data) {
+            if (data.Version == StateVersion) { // Current version
                 NPq::NProto::TDqPqTopicSourceState stateProto;
-                YQL_ENSURE(stateProto.ParseFromString(data.GetBlob()), "Serialized state is corrupted");
+                YQL_ENSURE(stateProto.ParseFromString(data.Blob), "Serialized state is corrupted");
                 YQL_ENSURE(stateProto.TopicsSize() == 1, "One topic per source is expected");
                 PartitionToOffset.reserve(PartitionToOffset.size() + stateProto.PartitionsSize());
                 for (const NPq::NProto::TDqPqTopicSourceState::TPartitionReadState& partitionProto : stateProto.GetPartitions()) {
@@ -190,7 +187,7 @@ public:
                 minStartingMessageTs = Min(minStartingMessageTs, TInstant::MilliSeconds(stateProto.GetStartingMessageTimestampMs()));
                 ingressBytes += stateProto.GetIngressBytes();
             } else {
-                ythrow yexception() << "Invalid state version " << data.GetVersion();
+                ythrow yexception() << "Invalid state version " << data.Version;
             }
         }
         for (const auto& [key, value] : PartitionToOffset) {

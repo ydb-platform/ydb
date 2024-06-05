@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import os
 import pytest
+
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 
@@ -29,6 +31,7 @@ def stop_yds_query(client, query_id):
 
 class TestPqReadWrite(TestYdsBase):
     @yq_v1
+    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
     @pytest.mark.parametrize(
         "with_checkpoints",
         [True, False],
@@ -36,7 +39,7 @@ class TestPqReadWrite(TestYdsBase):
     )
     def test_pq_read_write(self, kikimr, client, with_checkpoints):
         client.create_yds_connection(name=YDS_CONNECTION, database_id="FakeDatabaseId")
-        self.init_topics("pq_test_pq_read_write")
+        self.init_topics(Rf"pq_test_pq_read_write_{with_checkpoints}")
         sql = Rf'''
             PRAGMA dq.MaxTasksPerStage="2";
             PRAGMA dq.DisableCheckpoints="{not with_checkpoints}";
@@ -113,9 +116,10 @@ class TestPqReadWrite(TestYdsBase):
         [True, False],
         ids=["with_checkpoints", "without_checkpoints"]
     )
+    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
     def test_pq_read_schema_metadata(self, kikimr, client, with_checkpoints):
         client.create_yds_connection(name=YDS_CONNECTION, database_id="FakeDatabaseId")
-        self.init_topics("pq_test_pq_read_schema_metadata")
+        self.init_topics(Rf"pq_read_schema_meta_{with_checkpoints}")
         sql = Rf'''
                 PRAGMA dq.MaxTasksPerStage="2";
                 PRAGMA dq.DisableCheckpoints="{not with_checkpoints}";

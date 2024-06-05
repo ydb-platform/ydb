@@ -312,7 +312,7 @@ public:
 
     virtual ICallableTypeBuilder& OptionalArgs(ui32 optionalArgs) = 0;
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 36)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 38)
     // sets name for the last added argument
     virtual ICallableTypeBuilder& Name(const TStringRef& name) = 0;
 

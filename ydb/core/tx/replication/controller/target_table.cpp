@@ -102,7 +102,7 @@ private:
 
 }; // TTableWorkerRegistar
 
-TTableTarget::TTableTarget(TReplication::TPtr replication, ui64 id, const TString& srcPath, const TString& dstPath)
+TTableTarget::TTableTarget(TReplication* replication, ui64 id, const TString& srcPath, const TString& dstPath)
     : TTargetWithStream(replication, ETargetKind::Table, id, srcPath, dstPath)
 {
 }

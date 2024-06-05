@@ -1,0 +1,18 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package NFq.NConfig;
+option java_package = "ru.yandex.kikimr.proto";
+
+import "ydb/core/fq/libs/config/protos/storage.proto";
+
+////////////////////////////////////////////////////////////
+
+message TRowDispatcherCoordinatorConfig {
+    bool Enabled = 1;
+    TYdbStorageConfig Storage = 2;
+}
+message TRowDispatcherConfig {
+    bool Enabled = 1;
+    TRowDispatcherCoordinatorConfig Coordinator = 2;
+}

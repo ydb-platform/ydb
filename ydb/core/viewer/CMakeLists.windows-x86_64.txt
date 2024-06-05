@@ -51,6 +51,7 @@ target_link_libraries(ydb-core-viewer PUBLIC
   ydb-core-node_whiteboard
   ydb-core-protos
   ydb-core-scheme
+  core-sys_view-common
   core-tx-schemeshard
   core-tx-tx_proxy
   ydb-core-util
@@ -113,6 +114,7 @@ target_sources(ydb-core-viewer PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/json_wb_req.h
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/json_whoami.h
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/log.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/pdisk_info.h
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/query_autocomplete_helper.h
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/viewer_request.h
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/viewer.h
@@ -161,6 +163,7 @@ target_link_libraries(ydb-core-viewer.global PUBLIC
   ydb-core-node_whiteboard
   ydb-core-protos
   ydb-core-scheme
+  core-sys_view-common
   core-tx-schemeshard
   core-tx-tx_proxy
   ydb-core-util

@@ -74,7 +74,7 @@ void TKafkaSaslAuthActor::Handle(NKikimr::TEvTicketParser::TEvAuthorizeTicketRes
 void TKafkaSaslAuthActor::Handle(TEvPrivate::TEvTokenReady::TPtr& ev, const NActors::TActorContext& /*ctx*/) {
     Send(NKikimr::MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
         .Database = ev->Get()->Database,
-        .AuthInfo = {.Ticket = "Login " + ev->Get()->LoginResult.token()},
+        .Ticket = "Login " + ev->Get()->LoginResult.token(),
         .PeerName = TStringBuilder() << Address,
     }));
 }
@@ -177,7 +177,7 @@ void TKafkaSaslAuthActor::SendApiKeyRequest() {
 
     Send(NKikimr::MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
         .Database = DatabasePath,
-        .AuthInfo = {.Ticket = "ApiKey " + ClientAuthData.Password},
+        .Ticket = "ApiKey " + ClientAuthData.Password,
         .PeerName = TStringBuilder() << Address,
         .Entries = entries
     }));

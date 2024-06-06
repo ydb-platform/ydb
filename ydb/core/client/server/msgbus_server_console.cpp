@@ -32,12 +32,10 @@ public:
     {
         const auto& clientCertificates = msg.FindClientCert();
         if (!clientCertificates.empty()) {
-            AuthInfo.Credentials = TString(clientCertificates.front());
-            AuthInfo.IsCertificate = true;
+            TBase::SetSecurityToken(TString(clientCertificates.front()));
         } else {
-            AuthInfo.Credentials = request.GetSecurityToken();
+            TBase::SetSecurityToken(request.GetSecurityToken());
         }
-        TBase::SetAuthInfo(std::move(AuthInfo));
         // Don`t require admin access for GetNodeConfigRequest
         if (!Request.HasGetNodeConfigRequest()) {
             TBase::SetRequireAdminAccess(true);
@@ -366,11 +364,11 @@ public:
     bool CheckAccessGetNodeConfig() const {
         const auto serializedToken = TBase::GetSerializedToken();
         if (!serializedToken.empty()) {
-            if (AuthInfo.IsCertificate) {
+            // if (AuthInfo.IsCertificate) {
                 return CheckToken(serializedToken, AppData()->CertificateAuthAllowedSIDs);
-            } else {
-                return CheckToken(serializedToken, AppData()->AdministrationAllowedSIDs);
-            }
+            // } else {
+            //     return CheckToken(serializedToken, AppData()->AdministrationAllowedSIDs);
+            // }
         }
         return true;
     }
@@ -379,7 +377,7 @@ private:
     NKikimrClient::TConsoleRequest Request;
     NKikimrClient::TConsoleResponse Response;
     TActorId ConsolePipe;
-    typename TBase::TAuthInfo AuthInfo;
+    // typename TBase::TAuthInfo AuthInfo;
 };
 
 } // namespace

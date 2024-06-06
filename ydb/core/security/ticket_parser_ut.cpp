@@ -621,7 +621,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TTestActorRuntime* runtime = server.GetRuntime();
 
         TString clientCertificateContent(clientCert.Certificate);
-        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({.AuthInfo = {.Ticket = clientCertificateContent, .IsCertificate = true}})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({.Ticket = clientCertificateContent})), 0);
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -662,7 +662,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TTestActorRuntime* runtime = server.GetRuntime();
 
         TString clientCertificateContent(clientCert.Certificate);
-        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({.AuthInfo = {.Ticket = clientCertificateContent, .IsCertificate = true}})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({.Ticket = clientCertificateContent})), 0);
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -706,7 +706,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TTestActorRuntime* runtime = server.GetRuntime();
 
         TString clientCertificateContent(clientCert.Certificate);
-        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({.AuthInfo = {.Ticket = clientCertificateContent, .IsCertificate = true}})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({.Ticket = clientCertificateContent})), 0);
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -757,7 +757,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TTestActorRuntime* runtime = server.GetRuntime();
 
         TString clientCertificateContent(clientCert.Certificate);
-        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({.AuthInfo = {.Ticket = clientCertificateContent, .IsCertificate = true}})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({.Ticket = clientCertificateContent})), 0);
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -807,7 +807,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TTestActorRuntime* runtime = server.GetRuntime();
 
         TString clientCertificateContent(clientCert.Certificate);
-        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({.AuthInfo = {.Ticket = clientCertificateContent, .IsCertificate = true}})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({.Ticket = clientCertificateContent})), 0);
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -850,7 +850,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TTestActorRuntime* runtime = server.GetRuntime();
 
         TString clientCertificateContent(clientCert.Certificate);
-        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({.AuthInfo = {.Ticket = clientCertificateContent, .IsCertificate = true}})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({.Ticket = clientCertificateContent})), 0);
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -896,7 +896,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TTestActorRuntime* runtime = server.GetRuntime();
 
         TString clientCertificateContent(clientCert.Certificate);
-        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({.AuthInfo = {.Ticket = clientCertificateContent, .IsCertificate = true}})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({.Ticket = clientCertificateContent})), 0);
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -942,7 +942,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TTestActorRuntime* runtime = server.GetRuntime();
 
         TString clientCertificateContent(clientCert.Certificate);
-        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({.AuthInfo = {.Ticket = clientCertificateContent, .IsCertificate = true}})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({.Ticket = clientCertificateContent})), 0);
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -1349,7 +1349,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT_C(result->Error.empty(), result->Error);
         UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.AuthorizeCount.load(), 0);
         UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.AuthenticateCount.load(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(result->AuthInfo.Ticket, userToken);
+        UNIT_ASSERT_VALUES_EQUAL(result->Ticket, userToken);
         UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), userToken + "@as");
     }
 

@@ -117,21 +117,18 @@ public:
         , FacilityProvider_(facilityProvider)
         , Span_(TWilsonGrpc::RequestCheckActor, GrpcRequestBaseCtx_->GetWilsonTraceId(), "RequestCheckActor")
     {
-        typename TBase::TAuthInfo authInfo;
         const auto& clientCertificates = GrpcRequestBaseCtx_->FindClientCertPropertyValues();
         if (!clientCertificates.empty()) {
-            authInfo.Credentials = TString(clientCertificates.front());
-            authInfo.IsCertificate = true;
+            TBase::SetSecurityToken(TString(clientCertificates.front()));
         // While nodes send both token and certificate for registration,  check only certificates and ignore tokens
         } else if (GrpcRequestBaseCtx_->NeedAuthByCertificate()) {
-            authInfo.IsCertificate = true;
+            TBase::SetSecurityToken("");
         } else {
             TMaybe<TString> authToken = GrpcRequestBaseCtx_->GetYdbToken();
             if (authToken) {
-                authInfo.Credentials = authToken.GetRef();
+                TBase::SetSecurityToken(authToken.GetRef());
             }
         }
-        TBase::SetAuthInfo(std::move(authInfo));
         Initialize(schemeData);
     }
 
@@ -500,7 +497,7 @@ private:
             return {false, std::nullopt};
         }
 
-        if (!TBase::GetAuthInfo().IsExists()) {
+        if (!TBase::GetSecurityToken()) {
             if (!TBase::IsTokenRequired()) {
                 LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
                             "Skip check permission connect db, token is not required, there is no token provided"

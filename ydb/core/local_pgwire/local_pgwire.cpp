@@ -64,7 +64,7 @@ public:
     }
 
     void Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev) {
-        auto token = ev->Get()->AuthInfo.Ticket;
+        auto token = ev->Get()->Ticket;
         auto itTokenState = TokenState.find(token);
         if (itTokenState == TokenState.end()) {
             BLOG_W("Couldn't find token in reply from TicketParser");
@@ -96,7 +96,7 @@ public:
         if (needSend) {
             Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
                 .Database = ev->Get()->Database,
-                .AuthInfo = {.Ticket = token},
+                .Ticket = token,
                 .PeerName = ev->Get()->PeerName,
             }));
         }

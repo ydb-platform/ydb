@@ -327,7 +327,7 @@ private:
             key << sign.AccessKeyId << "-" << sign.Signature << ":" << sign.StringToSign << ":"
                 << sign.Service << ":" << sign.Region << ":" << sign.SignedAt.NanoSeconds();
         } else {
-            key << request->AuthInfo.Ticket;
+            key << request->Ticket;
         }
         key << ':';
         if (request->Database) {
@@ -795,12 +795,7 @@ private:
     void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
         TStringBuf ticket;
         TStringBuf ticketType;
-        if (ev->Get()->AuthInfo.IsCertificate) {
-            ticket = ev->Get()->AuthInfo.Ticket;
-            ticketType = TDerived::TTokenRecord::CertificateAuthType;
-        } else {
-            CrackTicket(ev->Get()->AuthInfo.Ticket, ticket, ticketType);
-        }
+        CrackTicket(ev->Get()->Ticket, ticket, ticketType);
 
         TString key = GetKey(ev->Get());
         TActorId sender = ev->Sender;
@@ -813,15 +808,15 @@ private:
             error.Message = "Access key signature is not supported";
             error.Retryable = false;
             BLOG_ERROR("Ticket " << MaskTicket(signature.AccessKeyId) << ": " << error);
-            Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->AuthInfo, error), 0, cookie);
+            Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, error), 0, cookie);
             return;
         }
         if (ticket.empty() && !signature.AccessKeyId) {
             TEvTicketParser::TError error;
-            error.Message = (ev->Get()->AuthInfo.IsCertificate ? "Certificate is empty" : "Ticket is empty");
+            error.Message = "Ticket is empty";
             error.Retryable = false;
             BLOG_ERROR("Ticket " << MaskTicket(ticket) << ": " << error);
-            Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->AuthInfo, error), 0, cookie);
+            Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, error), 0, cookie);
             return;
         }
         auto& userTokens = GetDerived()->GetUserTokens();
@@ -833,11 +828,11 @@ private:
             if (record.IsTokenReady()) {
                 // token already have built
                 record.AccessTime = now;
-                Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->AuthInfo, record.GetToken()), 0, cookie);
+                Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, record.GetToken()), 0, cookie);
             } else if (record.Error) {
                 // token stores information about previous error
                 record.AccessTime = now;
-                Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->AuthInfo, record.Error), 0, cookie);
+                Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, record.Error), 0, cookie);
             } else {
                 // token building in progress
                 record.AuthorizeRequests.emplace_back(ev.Release());
@@ -868,12 +863,12 @@ private:
         InitTokenRecord(key, record);
         if (record.Error) {
             BLOG_ERROR("Ticket " << record.GetMaskedTicket() << ": " << record.Error);
-            Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->AuthInfo, record.Error), 0, cookie);
+            Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, record.Error), 0, cookie);
             return;
         }
         if (record.IsTokenReady()) {
             // offline check ready
-            Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->AuthInfo, record.GetToken()), 0, cookie);
+            Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, record.GetToken()), 0, cookie);
             return;
         }
         record.AuthorizeRequests.emplace_back(ev.Release());
@@ -1714,15 +1709,11 @@ protected:
     void Respond(TTokenRecordBase& record) {
         if (record.IsTokenReady()) {
             for (const auto& request : record.AuthorizeRequests) {
-                Send(request->Sender, new TEvTicketParser::TEvAuthorizeTicketResult({.Ticket = record.Ticket,
-                                                                                                .IsCertificate = (record.TokenType == TDerived::ETokenType::Certificate)},
-                                                                                                record.GetToken()), 0, request->Cookie);
+                Send(request->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(record.Ticket, record.GetToken()), 0, request->Cookie);
             }
         } else {
             for (const auto& request : record.AuthorizeRequests) {
-                Send(request->Sender, new TEvTicketParser::TEvAuthorizeTicketResult({.Ticket = record.Ticket,
-                                                                                                .IsCertificate = (record.TokenType == TDerived::ETokenType::Certificate)},
-                                                                                                record.Error), 0, request->Cookie);
+                Send(request->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(record.Ticket, record.Error), 0, request->Cookie);
             }
         }
         record.AuthorizeRequests.clear();

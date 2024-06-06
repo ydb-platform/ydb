@@ -421,7 +421,7 @@ void TWriteSessionActor::InitCheckACL(const TActorContext& ctx) {
     auto entries = NKikimr::NGRpcProxy::V1::GetTicketParserEntries(DatabaseId, FolderId);
     ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
             .Database = Database,
-            .AuthInfo = {.Ticket = ticket},
+            .Ticket = ticket,
             .PeerName = PeerName,
             .Entries = entries
         }));
@@ -429,7 +429,7 @@ void TWriteSessionActor::InitCheckACL(const TActorContext& ctx) {
 
 void TWriteSessionActor::Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const TActorContext& ctx) {
     Y_ABORT_UNLESS(ACLCheckInProgress);
-    TString ticket = ev->Get()->AuthInfo.Ticket;
+    TString ticket = ev->Get()->Ticket;
     TString maskedTicket = ticket.size() > 5 ? (ticket.substr(0, 5) + "***" + ticket.substr(ticket.size() - 5)) : "***";
     LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "CheckACL ticket " << maskedTicket << " got result from TICKET_PARSER response: error: "
                             << ev->Get()->Error << " user: "

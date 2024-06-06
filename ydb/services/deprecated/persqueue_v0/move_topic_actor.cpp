@@ -382,7 +382,7 @@ void TMoveTopicActor::SendAclRequest(const TActorContext& ctx) {
 }
 
 void TMoveTopicActor::HandleAclResponse(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const TActorContext& ctx) {
-    TString ticket = ev->Get()->AuthInfo.Ticket;
+    TString ticket = ev->Get()->Ticket;
     TString maskedTicket = ticket.size() > 5 ? (ticket.substr(0, 5) + "***" + ticket.substr(ticket.size() - 5)) : "***";
     LOG_INFO_S(ctx, NKikimrServices::PQ_MOVE_TOPIC, "CheckACL ticket " << maskedTicket << " got result from TICKET_PARSER response: error: "
                                                                         << ev->Get()->Error << " user: "

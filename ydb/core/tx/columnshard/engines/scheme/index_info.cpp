@@ -3,7 +3,6 @@
 
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
-#include <ydb/core/tx/columnshard/engines/storage/optimizer/lbuckets/constructor/constructor.h>
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
@@ -26,7 +25,7 @@ TIndexInfo::TIndexInfo(const TString& name)
     : NTable::TScheme::TTableSchema()
     , Name(name)
 {
-    CompactionPlannerConstructor = std::make_shared<NStorageOptimizer::NLBuckets::TOptimizerPlannerConstructor>();
+    CompactionPlannerConstructor = NStorageOptimizer::IOptimizerPlannerConstructor::BuildDefault();
 }
 
 bool TIndexInfo::CheckCompatible(const TIndexInfo& other) const {

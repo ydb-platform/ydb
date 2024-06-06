@@ -23,12 +23,15 @@ public:
     struct TNodeState : public TIntrusiveListItem<TNodeState> {
         TPageId PageId;
         ui32 Level;
+        TRowId BeginRowId, EndRowId;
         TCellsIterable BeginKey, EndKey;
         ui64 BeginSize, EndSize;
 
-        TNodeState(TPageId pageId, ui32 level, TCellsIterable beginKey, TCellsIterable endKey, TRowId beginSize, TRowId endSize)
+        TNodeState(TPageId pageId, ui32 level, TRowId beginRowId, TRowId endRowId, TCellsIterable beginKey, TCellsIterable endKey, TRowId beginSize, TRowId endSize)
             : PageId(pageId)
             , Level(level)
+            , BeginRowId(beginRowId)
+            , EndRowId(endRowId)
             , BeginKey(beginKey)
             , EndKey(endKey)
             , BeginSize(beginSize)
@@ -134,18 +137,28 @@ public:
     template <typename TGetSize>
     bool Build(THistogram& histogram, ui64 resolution, ui64 totalSize) {
         Resolution = resolution;
+        TotalSize = totalSize;
+        bool ready = true;
 
+        ui64 endSize = 0;
         TVector<TPartNodes> parts;
 
         for (auto index : xrange(Subset.Flatten.size())) {
             auto& part = Subset.Flatten[index];
             auto& meta = part->IndexPages.GetBTree({});
             parts.emplace_back(part.Part.Get(), index);
-            LoadedStateNodes.emplace_back(meta.PageId, meta.LevelCount, EmptyKey, EmptyKey, 0, TGetSize::Get(meta));
-            parts.back().PushBack(&LoadedStateNodes.back());
+            LoadedStateNodes.emplace_back(meta.PageId, meta.LevelCount, 0, meta.RowCount, EmptyKey, EmptyKey, 0, TGetSize::Get(meta));
+            ready &= SlicePart<TGetSize>(parts.back(), *part.Slices, LoadedStateNodes.back());
+            endSize += parts.back().GetSize();
         }
 
-        auto ready = BuildHistogramRecursive<TGetSize>(histogram, parts, 0, totalSize, 0);
+        if (!ready) {
+            return false;
+        }
+
+        if (endSize) {
+            ready &= BuildHistogramRecursive<TGetSize>(histogram, parts, 0, endSize, 0);
+        }
 
         LoadedBTreeNodes.clear();
         LoadedStateNodes.clear();
@@ -155,8 +168,56 @@ public:
 
 private:
     template <typename TGetSize>
+    bool SlicePart(TPartNodes& part, const TSlices& slices, TNodeState& node) {
+        auto it = slices.LookupBackward(slices.end(), node.EndRowId - 1);
+        
+        if (it == slices.end() || node.EndRowId <= it->BeginRowId() || it->EndRowId() <= node.BeginRowId) {
+            // skip the node
+            return true;
+        }
+
+        if (it->BeginRowId() <= node.BeginRowId && node.EndRowId <= it->EndRowId()) {
+            // take the node
+            part.PushBack(&node);
+            return true;
+        }
+
+        // split the node
+
+        if (node.Level == 0) {
+            // can't split, decide by node.EndRowId - 1
+            if (it->BeginRowId() < node.EndRowId && node.EndRowId <= it->EndRowId()) {
+                part.PushBack(&node);
+            }
+            return true;
+        }
+
+        bool ready = true;
+
+        const auto addNode = [&](TNodeState& child) {
+            ready &= SlicePart<TGetSize>(part, slices, child);
+        };
+        if (!TryLoadNode<TGetSize>(part.GetPart(), node, addNode)) {
+            return false;
+        }
+
+        return ready;
+    }
+
+    template <typename TGetSize>
     bool BuildHistogramRecursive(THistogram& histogram, TVector<TPartNodes>& parts, ui64 beginSize, ui64 endSize, ui32 depth) {
         const static ui32 MaxDepth = 100;
+
+#ifndef NDEBUG
+        {
+            Y_DEBUG_ABORT_UNLESS(beginSize < endSize);
+            ui64 size = 0;
+            for (const auto& part : parts) {
+                size += part.GetSize();
+            }
+            Y_DEBUG_ABORT_UNLESS(size == endSize - beginSize);
+        }
+#endif
 
         if (SafeDiff(endSize, beginSize) <= Resolution || depth > MaxDepth) {
             Y_DEBUG_ABORT_UNLESS(depth <= MaxDepth, "Shouldn't normally happen");
@@ -170,7 +231,6 @@ private:
         }
         Y_ABORT_UNLESS(biggestPart->GetCount());
 
-        // FIXME: load the biggest node if its size more than a half
         if (biggestPart->GetCount() == 1 && biggestPart->GetNodes().Front()->Level > 0) {
             const auto addNode = [&biggestPart](TNodeState& child) {
                 biggestPart->PushBack(&child);
@@ -276,9 +336,10 @@ private:
 
         ready &= BuildHistogramRecursive<TGetSize>(histogram, leftParts, beginSize, beginSize + leftSize, depth + 1);
         
-        ui64 splitValue = beginSize + leftSize + middleSize / 2;
-        if (beginSize < splitValue && splitValue < endSize) {
-            AddBucket(histogram, splitKey, splitValue);
+        ui64 splitSize = beginSize + leftSize + middleSize / 2;
+        // Note: due to different calculation approaches splitSize may exceed TotalSize, ignore them
+        if (beginSize < splitSize && splitSize < Min(endSize, TotalSize)) {
+            AddBucket(histogram, splitKey, splitSize);
         }
 
         ready &= BuildHistogramRecursive<TGetSize>(histogram, rightParts, SafeDiff(endSize, rightSize), endSize, depth + 1);
@@ -335,7 +396,7 @@ private:
         return *median;
     }
 
-    void AddBucket(THistogram& histogram, TCellsIterable key, ui64 value) {
+    void AddBucket(THistogram& histogram, TCellsIterable key, ui64 size) {
         TVector<TCell> splitKeyCells;
 
         // Add columns that are present in the part
@@ -352,7 +413,7 @@ private:
 
         TString serializedSplitKey = TSerializedCellVec::Serialize(splitKeyCells);
 
-        histogram.push_back({serializedSplitKey, value});
+        histogram.push_back({serializedSplitKey, size});
     }
 
     template <typename TGetSize>
@@ -368,16 +429,14 @@ private:
         auto &bTreeNode = LoadedBTreeNodes.back();
         auto& groupInfo = part->Scheme->GetLayout({});
 
-        ui64 currentBeginSize = parent.BeginSize;
         for (auto pos : xrange(bTreeNode.GetChildrenCount())) {
             auto& child = bTreeNode.GetChild(pos);
 
             LoadedStateNodes.emplace_back(child.PageId, parent.Level - 1,
+                pos ? bTreeNode.GetChild(pos - 1).RowCount : parent.BeginRowId, child.RowCount,
                 pos ? bTreeNode.GetKeyCellsIterable(pos - 1, groupInfo.ColsKeyData) : parent.BeginKey,
                 pos < bTreeNode.GetKeysCount() ? bTreeNode.GetKeyCellsIterable(pos, groupInfo.ColsKeyData) : parent.EndKey,
-                currentBeginSize, TGetSize::Get(child));
-
-            currentBeginSize = LoadedStateNodes.back().EndSize;
+                pos ? TGetSize::Get(bTreeNode.GetChild(pos - 1)) : parent.BeginSize, TGetSize::Get(child));
 
             addNode(LoadedStateNodes.back());
         }
@@ -429,7 +488,7 @@ private:
     const TSubset& Subset;
     const TKeyCellDefaults& KeyDefaults;
     IPages* const Env;
-    ui64 Resolution;
+    ui64 Resolution, TotalSize;
     TDeque<TBtreeIndexNode> LoadedBTreeNodes; // keep nodes to use TCellsIterable key refs
     TDeque<TNodeState> LoadedStateNodes; // keep nodes to use TIntrusiveList
 };

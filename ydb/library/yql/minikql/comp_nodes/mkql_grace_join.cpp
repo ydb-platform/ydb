@@ -1,7 +1,6 @@
 #include "mkql_grace_join.h"
 #include "mkql_grace_join_imp.h"
 
-#include <format>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <ydb/library/yql/public/decimal/yql_decimal_serialize.h>
@@ -638,7 +637,6 @@ private:
     }
 
     void SwitchMode(EOperatingMode mode, TComputationContext& ctx) {
-        std::cerr << std::format("[MISHA] switching mode {}->{}\n", (int)Mode, (int)mode );
         switch(mode) {
             case EOperatingMode::InMemory: {
                 MKQL_ENSURE(false, "Internal logic error");

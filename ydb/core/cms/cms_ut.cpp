@@ -459,6 +459,59 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                               "vdisk-3-1-0-1-0", "vdisk-3-1-0-5-0"));
     }
 
+    Y_UNIT_TEST(RequestDecomissionDevices)
+    {
+        TCmsTestEnv env(8);
+
+        env.CheckPermissionRequest("user", false, false, false, true, TStatus::NO_SUCH_DEVICE,
+                                   MakeAction(TAction::DECOMISSION_DISK, "::1", 60000000, "/dev/bad/device/path"));
+
+        auto rec1 = env.CheckPermissionRequest
+            ("user", false, false, false, true, TStatus::ALLOW,
+             MakeAction(TAction::DECOMISSION_DISK, 1, 60000000, env.PDiskName(0)));
+        UNIT_ASSERT_VALUES_EQUAL(rec1.PermissionsSize(), 1);
+        auto id1 = rec1.GetPermissions(0).GetId();
+
+        // Disallow conflicting PDisk.
+        env.CheckPermissionRequest("user", false, false, false, true, TStatus::DISALLOW_TEMP,
+                                   MakeAction(TAction::DECOMISSION_DISK, 1, 60000000, env.PDiskName(1)));
+
+        // Disallow locked PDisk.
+        env.CheckPermissionRequest("user", false, false, false, true, TStatus::DISALLOW_TEMP,
+                                   MakeAction(TAction::DECOMISSION_DISK, 1, 60000000, env.PDiskName(0)));
+
+        // Disallow VDisk on locked PDisk.
+        env.CheckPermissionRequest("user", false, false, false, true, TStatus::DISALLOW_TEMP,
+                                   MakeAction(TAction::REPLACE_DEVICES, 1, 60000000, "vdisk-1-1-0-0-0"));
+
+        // Disallow conflicting VDisk.
+        env.CheckPermissionRequest("user", false, false, false, true, TStatus::DISALLOW_TEMP,
+                                   MakeAction(TAction::REPLACE_DEVICES, 1, 60000000, "vdisk-1-1-0-1-0"));
+
+        // Unlock PDisk.
+        env.CheckDonePermission("user", id1);
+
+        // Lock VDisks.
+        auto rec2 = env.CheckPermissionRequest
+            ("user", false, false, false, true, TStatus::ALLOW,
+             MakeAction(TAction::REPLACE_DEVICES, 1, 60000000,
+                        "vdisk-0-1-0-0-0", "vdisk-1-1-0-1-0", "vdisk-2-1-0-2-0"));
+        UNIT_ASSERT_VALUES_EQUAL(rec2.PermissionsSize(), 1);
+        id1 = rec2.GetPermissions(0).GetId();
+
+        // Disallow conflicting PDisk.
+        env.CheckPermissionRequest("user", false, false, false, true, TStatus::DISALLOW_TEMP,
+                                   MakeAction(TAction::DECOMISSION_DISK, 1, 60000000, env.PDiskName(0)));
+
+        // Unlock VDisks.
+        env.CheckDonePermission("user", false, TStatus::OK, id1);
+
+        // Impossible action.
+        env.CheckPermissionRequest("user", false, false, false, true, TStatus::DISALLOW,
+                                   MakeAction(TAction::DECOMISSION_DISK, 1, 60000000,
+                                              env.PDiskName(0), env.PDiskName(1)));
+    }
+
     Y_UNIT_TEST(RequestReplaceManyDevicesOnOneNode)
     {
         TCmsTestEnv env(16, 3);

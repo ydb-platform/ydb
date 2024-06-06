@@ -84,6 +84,7 @@ private:
         HFunc(TEvDqFailure, OnFailure);
         HFunc(TEvGraphFinished, OnGraphFinished);
         HFunc(TEvQueryResponse, OnQueryResponse);
+        HFunc(NYql::NDqs::TEvQueryStatus, OnQueryStatus);
         // execution timeout
         cFunc(TEvents::TEvBootstrap::EventType, [this]() {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
@@ -253,6 +254,19 @@ private:
                 Timeout -= StartTime - RequestStartTime;
             }
         }
+    }
+
+    void OnQueryStatus(NYql::NDqs::TEvQueryStatus::TPtr& ev, const TActorContext& ctx) {
+        Y_UNUSED(ctx);
+        auto response = MakeHolder<NYql::NDqs::TEvQueryStatusResponse>();
+        auto* r = response->Record.MutableResponse();
+        // TODO: Add metrics here
+        if (ExecutionStart) {
+            r->SetStatus("Executing");
+        } else {
+            r->SetStatus("Uploading artifacts");
+        }
+        Send(ev->Sender, response.Release());
     }
 
     void Finish(NYql::NDqProto::StatusIds::StatusCode statusCode)

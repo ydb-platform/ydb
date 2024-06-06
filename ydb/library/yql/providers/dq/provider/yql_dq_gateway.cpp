@@ -206,7 +206,7 @@ public:
 
         Service.DoRequest<TRequest, TResponse>(queryPB, callback, stub);
 
-        ScheduleQueryStatusRequest(progressWriter);
+        ScheduleQueryStatusRequest(progressWriter, queryPB.GetQuerySeqNo());
 
         return promise.GetFuture().Apply([=](const TFuture<TResult>& result) {
             if (result.HasException()) {
@@ -281,6 +281,7 @@ public:
         }
 
         queryPB.SetDiscard(discard);
+        queryPB.SetQuerySeqNo(QuerySeqNo++);
 
         int retry = settings->MaxRetries.Get().GetOrElse(5);
 
@@ -327,42 +328,43 @@ public:
         return promise.GetFuture();
     }
 
-    void OnRequestQueryStatus(const TDqProgressWriter& progressWriter, const TString& status, bool ok) {
+    void OnRequestQueryStatus(const TDqProgressWriter& progressWriter, const TString& status, bool ok, uint64_t querySeqNo) {
         if (ok) {
-            ScheduleQueryStatusRequest(progressWriter);
+            ScheduleQueryStatusRequest(progressWriter, querySeqNo);
             if (!status.empty()) {
                 progressWriter(status);
             }
         }
     }
 
-    void RequestQueryStatus(const TDqProgressWriter& progressWriter) {
+    void RequestQueryStatus(const TDqProgressWriter& progressWriter, uint64_t querySeqNo) {
         Yql::DqsProto::QueryStatusRequest request;
         request.SetSession(SessionId);
+        request.SetQuerySeqNo(querySeqNo);
         auto self = weak_from_this();
-        auto callback = [self, progressWriter](NYdbGrpc::TGrpcStatus&& status, Yql::DqsProto::QueryStatusResponse&& resp) {
+        auto callback = [self, progressWriter, querySeqNo](NYdbGrpc::TGrpcStatus&& status, Yql::DqsProto::QueryStatusResponse&& resp) {
             auto this_ = self.lock();
             if (!this_) {
                 return;
             }
 
-            this_->OnRequestQueryStatus(progressWriter, resp.GetStatus(), status.Ok());
+            this_->OnRequestQueryStatus(progressWriter, resp.GetStatus(), status.Ok(), querySeqNo);
         };
 
         Service.DoRequest<Yql::DqsProto::QueryStatusRequest, Yql::DqsProto::QueryStatusResponse>(
             request, callback, &Yql::DqsProto::DqService::Stub::AsyncQueryStatus, {}, nullptr);
     }
 
-    void ScheduleQueryStatusRequest(const TDqProgressWriter& progressWriter) {
+    void ScheduleQueryStatusRequest(const TDqProgressWriter& progressWriter, uint64_t querySeqNo) {
         auto self = weak_from_this();
-        TaskScheduler.Delay(TDuration::MilliSeconds(1000)).Subscribe([self, progressWriter](const TFuture<void>& f) {
+        TaskScheduler.Delay(TDuration::MilliSeconds(1000)).Subscribe([self, progressWriter, querySeqNo](const TFuture<void>& f) {
             auto this_ = self.lock();
             if (!this_) {
                 return;
             }
 
             if (!f.HasException()) {
-                this_->RequestQueryStatus(progressWriter);
+                this_->RequestQueryStatus(progressWriter, querySeqNo);
             }
         });
     }
@@ -377,6 +379,7 @@ private:
     std::optional<TDqProgressWriter> ProgressWriter;
     TString Status;
     TFuture<void> OpenSessionFuture;
+    std::atomic<ui64> QuerySeqNo = 1;
 };
 
 class TDqGatewayImpl: public std::enable_shared_from_this<TDqGatewayImpl> {

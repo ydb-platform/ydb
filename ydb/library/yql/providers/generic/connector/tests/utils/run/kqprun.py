@@ -16,8 +16,6 @@ from ydb.library.yql.providers.generic.connector.tests.utils.settings import Set
 from ydb.library.yql.providers.generic.connector.tests.utils.run.parent import Runner
 from ydb.library.yql.providers.generic.connector.tests.utils.run.result import Result
 
-# import yql_utils
-
 LOGGER = make_logger(__name__)
 
 
@@ -168,12 +166,14 @@ class KqpRunner(Runner):
         kqprun_path: Path,
         settings: Settings,
         udf_dir: Path,
+        udf_dir: Path,
     ):
         self.scheme_renderer = SchemeRenderer()
         self.app_conf_renderer = AppConfigRenderer()
         self.kqprun_path = kqprun_path
         self.settings = settings
 
+        self.udf_dir = udf_dir
         self.udf_dir = udf_dir
 
     def run(self, test_name: str, script: str, generic_settings: GenericSettings) -> Result:
@@ -192,14 +192,11 @@ class KqpRunner(Runner):
         scheme_path = artifacts.make_path(test_name=test_name, artifact_name='scheme.txt')
         self.scheme_renderer.render(scheme_path, settings=self.settings, generic_settings=generic_settings)
 
-        # Set udfs dir for cmd
-        udfs_dir = self.udfs_dir
-
         # Run kqprun
         result_path = artifacts.make_path(test_name=test_name, artifact_name='result.json')
 
         # For debug add option --trace-opt to args
-        cmd = f'{self.kqprun_path} -s {scheme_path} -p {script_path} --app-config={app_conf_path} --result-file={result_path} --result-format=full-json --udfs-dir={udf_dir} '
+        cmd = f'{self.kqprun_path} -s {scheme_path} -p {script_path} --app-config={app_conf_path} --result-file={result_path} --result-format=full-json --udfs-dir={self.udf_dir} '
 
         output = None
         data_out = None

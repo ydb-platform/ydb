@@ -235,7 +235,7 @@ class Factory:
                     'buki',
                     'buki ',
                     'buki ',
-                    'buki', 
+                    'buki',
                     datetime.date(1988, 11, 20),
                     datetime.datetime(1988, 11, 20, 12, 00, 00),
 <<<<<<< HEAD
@@ -492,6 +492,9 @@ class Factory:
         ]
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> Connector: PostgreSQL: Json tests
     def _json(self) -> TestCase:
         schema = Schema(
             columns=ColumnList(
@@ -511,10 +514,14 @@ class Factory:
 
         data_out_1 = [
 <<<<<<< HEAD
+<<<<<<< HEAD
             ['{"age":35,"name":"James Holden"}'],
 =======
             ['{"name": "James Holden","age": 35}'],
 >>>>>>> adding json support for external datasource postgres
+=======
+            ['{"age":35,"name":"James Holden"}'],
+>>>>>>> Connector: PostgreSQL: Json tests
             [None],
             [None],
         ]
@@ -530,10 +537,14 @@ class Factory:
                 data_out_=data_out_1,
                 protocol=EProtocol.NATIVE,
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> Connector: PostgreSQL: Json tests
                 select_what=SelectWhat(SelectWhat.Item(name='JSON_QUERY(col_json, "$.friends[0]")', kind='expr')),
                 select_where=None,
                 data_source_kind=data_source_kind,
                 pragmas=dict(),
+<<<<<<< HEAD
 =======
                 select_what=SelectWhat(SelectWhat.Item(name='JSON_QUERY($col_json, "$.friends[0]")', kind='expr')),
                 select_where=None,
@@ -588,6 +599,11 @@ class Factory:
     #         ),
     #     ]
 >>>>>>> postgresql connector json tests
+=======
+                schema=schema,
+            ),
+        ]
+>>>>>>> Connector: PostgreSQL: Json tests
 
     def make_test_cases(self) -> Sequence[TestCase]:
         return list(
@@ -597,6 +613,6 @@ class Factory:
                 self._constant(),
                 self._count(),
                 self._pushdown(),
-                # self._json(), TODO need json2 udf module in kqprun
+                self._json(),
             )
         )

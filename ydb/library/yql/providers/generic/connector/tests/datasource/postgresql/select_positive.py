@@ -138,15 +138,7 @@ class Factory:
                     ydb_type=makeOptionalYdbTypeFromTypeID(Type.UTF8),
                     data_source_type=DataSourceType(pg=postgresql.Text()),
                 ),
-<<<<<<< HEAD
-<<<<<<< HEAD
                 Column(  # TODO: maybe refactor: in fq-connector-go col_23_timestamp, col_24_date
-=======
-                Column(  # TODO: maybe refactor in fq-connector-go col_23_timestamp, col_24_date
->>>>>>> adding json support for external datasource postgres
-=======
-                Column(  # TODO: maybe refactor: in fq-connector-go col_23_timestamp, col_24_date
->>>>>>> postgresql connector json tests
                     name='col_23_date',
                     ydb_type=makeOptionalYdbTypeFromTypeID(Type.DATE),
                     data_source_type=DataSourceType(pg=postgresql.Date()),
@@ -156,11 +148,6 @@ class Factory:
                     ydb_type=makeOptionalYdbTypeFromTypeID(Type.TIMESTAMP),
                     data_source_type=DataSourceType(pg=postgresql.TimestampWithoutTimeZone()),
                 ),
-                Column(
-                    name='col_25_json',
-                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.JSON),
-                    data_source_type=DataSourceType(pg=postgresql.Json()),
-                ),
                 # TODO: YQ-2297
                 # Column(
                 #     name='col_25_time',
@@ -168,14 +155,11 @@ class Factory:
                 #     data_source_type=DataSourceType(pg=postgresql.time),
                 # ),
                 # maybe col_26_time?
-<<<<<<< HEAD
                 Column(
                     name='col_27_json',
                     ydb_type=makeOptionalYdbTypeFromTypeID(Type.JSON),
                     data_source_type=DataSourceType(pg=postgresql.Json()),
                 ),
-=======
->>>>>>> adding json support for external datasource postgres
             )
         )
 
@@ -238,15 +222,7 @@ class Factory:
                     'buki', 
                     datetime.date(1988, 11, 20),
                     datetime.datetime(1988, 11, 20, 12, 00, 00),
-<<<<<<< HEAD
-<<<<<<< HEAD
                     '{ "TODO" : "unicode" }',
-=======
-                    '{ "TODO" : "unicode }',
->>>>>>> adding json support for external datasource postgres
-=======
-                    '{ "TODO" : "unicode" }',
->>>>>>> adding Json test cases
                     # TODO: support time in YQ-2297
                 ],
                 [
@@ -491,13 +467,6 @@ class Factory:
             ),
         ]
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> Connector: PostgreSQL: Json tests
-=======
->>>>>>> Resolve merge conflict
     def _json(self) -> TestCase:
         schema = Schema(
             columns=ColumnList(
@@ -516,15 +485,7 @@ class Factory:
         ]
 
         data_out_1 = [
-<<<<<<< HEAD
-<<<<<<< HEAD
             ['{"age":35,"name":"James Holden"}'],
-=======
-            ['{"name": "James Holden","age": 35}'],
->>>>>>> adding json support for external datasource postgres
-=======
-            ['{"age":35,"name":"James Holden"}'],
->>>>>>> Connector: PostgreSQL: Json tests
             [None],
             [None],
         ]
@@ -539,119 +500,13 @@ class Factory:
                 data_in=data_in,
                 data_out_=data_out_1,
                 protocol=EProtocol.NATIVE,
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> Connector: PostgreSQL: Json tests
                 select_what=SelectWhat(SelectWhat.Item(name='JSON_QUERY(col_json, "$.friends[0]")', kind='expr')),
                 select_where=None,
                 data_source_kind=data_source_kind,
                 pragmas=dict(),
-<<<<<<< HEAD
-=======
-                select_what=SelectWhat(SelectWhat.Item(name='JSON_QUERY($col_json, "$.friends[0]")', kind='expr')),
-                select_where=None,
-                data_source_kind=data_source_kind,
-<<<<<<< HEAD
->>>>>>> adding json support for external datasource postgres
-=======
-                pragmas=dict(),
->>>>>>> adding Json test cases
                 schema=schema,
             ),
         ]
-=======
-    # def _json(self) -> TestCase:
-    #     schema = Schema(
-    #         columns=ColumnList(
-    #             Column(
-    #                 name='col_json',
-    #                 ydb_type=Type.JSON,
-    #                 data_source_type=DataSourceType(pg=postgresql.Json()),
-    #             ),
-    #         ),
-    #     )
-
-    #     data_in = [
-    #         ['{ "friends": [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}'],
-    #         ['{ "TODO" : "unicode" }'],
-    #         [None],
-    #     ]
-
-    #     data_out_1 = [
-    #         ['{"name" : "James Holden", "age" : 35}'],
-    #         [None],
-    #         [None],
-    #     ]
-
-    #     data_source_kind = EDataSourceKind.POSTGRESQL
-
-    #     test_case_name = 'json'
-
-    #     return [
-    #         TestCase(
-    #             name_=test_case_name,
-    #             data_in=data_in,
-    #             data_out_=data_out_1,
-    #             protocol=EProtocol.NATIVE,
-    #             select_what=SelectWhat(SelectWhat.Item(name='JSON_QUERY(col_json, "$.friends[0]")', kind='expr')),
-    #             select_where=None,
-    #             data_source_kind=data_source_kind,
-    #             pragmas=dict(),
-    #             schema=schema,
-    #         ),
-    #     ]
->>>>>>> postgresql connector json tests
-=======
-                schema=schema,
-            ),
-        ]
-<<<<<<< HEAD
->>>>>>> Connector: PostgreSQL: Json tests
-=======
-=======
-    # def _json(self) -> TestCase:
-    #     schema = Schema(
-    #         columns=ColumnList(
-    #             Column(
-    #                 name='col_json',
-    #                 ydb_type=Type.JSON,
-    #                 data_source_type=DataSourceType(pg=postgresql.Json()),
-    #             ),
-    #         ),
-    #     )
-
-    #     data_in = [
-    #         ['{ "friends": [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}'],
-    #         ['{ "TODO" : "unicode" }'],
-    #         [None],
-    #     ]
-
-    #     data_out_1 = [
-    #         ['{"name" : "James Holden", "age" : 35}'],
-    #         [None],
-    #         [None],
-    #     ]
-
-    #     data_source_kind = EDataSourceKind.POSTGRESQL
-
-    #     test_case_name = 'json'
-
-    #     return [
-    #         TestCase(
-    #             name_=test_case_name,
-    #             data_in=data_in,
-    #             data_out_=data_out_1,
-    #             protocol=EProtocol.NATIVE,
-    #             select_what=SelectWhat(SelectWhat.Item(name='JSON_QUERY(col_json, "$.friends[0]")', kind='expr')),
-    #             select_where=None,
-    #             data_source_kind=data_source_kind,
-    #             pragmas=dict(),
-    #             schema=schema,
-    #         ),
-    #     ]
->>>>>>> 71cae95586... postgresql connector json tests
->>>>>>> Resolve merge conflict
 
     def make_test_cases(self) -> Sequence[TestCase]:
         return list(

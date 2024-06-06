@@ -63,6 +63,41 @@ class TestS3Compressions:
         self.validate_result(result_set)
 
     @yq_all
+    @pytest.mark.parametrize("filename, compression", [
+        ("big.json.gz", "gzip"),
+        ("big.json.lz4", "lz4"),
+        ("big.json.br", "brotli"),
+        ("big.json.bz2", "bzip2"),
+        ("big.json.zst", "zstd"),
+        ("big.json.xz", "xz")
+    ])
+    def test_big_compression(self, kikimr, s3, client, filename, compression):
+        self.create_bucket_and_upload_file(filename, s3, kikimr)
+        storage_connection_name = "tbc_fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = '''
+            SELECT count(*)
+            FROM `{}`.`{}`
+            WITH (format=json_each_row, compression="{}", SCHEMA (
+                a String NOT NULL
+            ));
+            '''.format(storage_connection_name, filename, compression)
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+
+        logging.debug(str(result_set))
+        assert len(result_set.columns) == 1
+        assert result_set.columns[0].name == "column0"
+        assert result_set.columns[0].type.type_id == ydb.Type.UINT64
+        assert len(result_set.rows) == 1
+        assert result_set.rows[0].items[0].uint64_value == 5458
+
+    @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_invalid_compression(self, kikimr, s3, client):
         resource = boto3.resource(

@@ -58,14 +58,14 @@ using TJsonSysInfo = TJsonWhiteboardRequest<TEvWhiteboard::TEvSystemStateRequest
 template <>
 struct TJsonRequestSummary<TJsonSysInfo> {
     static TString GetSummary() {
-        return "\"System information\"";
+        return "System information";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonSysInfo> {
     static TString GetDescription() {
-        return "\"Returns system information\"";
+        return "Returns system information";
     }
 };
 

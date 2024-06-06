@@ -83,7 +83,7 @@ public:
                 auto guard = TGuard(*KqpAlloc);
                 KqpTypeEnv.Reset();
             }
-            KqpAlloc.Reset();
+            KqpAlloc.reset();
         }
         KqpExecCtx = {};
 
@@ -128,7 +128,7 @@ private:
     NYql::NDq::TLogFunc KqpLogFunc;
     THolder<NUdf::IApplyContext> KqpApplyCtx;
     THolder<NMiniKQL::TKqpDatashardComputeContext> ComputeCtx;
-    THolder<NMiniKQL::TScopedAlloc> KqpAlloc;
+    std::shared_ptr<NMiniKQL::TScopedAlloc> KqpAlloc;
     THolder<NMiniKQL::TTypeEnvironment> KqpTypeEnv;
     NYql::NDq::TDqTaskRunnerContext KqpExecCtx;
     TIntrusivePtr<NKqp::TKqpTasksRunner> KqpTasksRunner;

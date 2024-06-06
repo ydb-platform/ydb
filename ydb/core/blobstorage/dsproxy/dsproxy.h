@@ -61,6 +61,16 @@ constexpr bool WithMovingPatchRequestToStaticNode = true;
 // Common types
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+struct TDiskDelayPrediction {
+    ui64 PredictedNs;
+    ui32 DiskIdx;
+
+    bool operator<(const TDiskDelayPrediction& other) const {
+        return PredictedNs > other.PredictedNs;
+    }
+};
+
+using TDiskDelayPredictions = TStackVec<TDiskDelayPrediction, TypicalDisksInSubring>;
 
 struct TEvDeathNote : public TEventLocal<TEvDeathNote, TEvBlobStorage::EvDeathNote> {
     TStackVec<std::pair<TDiskResponsivenessTracker::TDiskId, TDuration>, 16> Responsiveness;
@@ -347,6 +357,12 @@ public:
             case TEvents::TSystem::Poison: {
                 ErrorReason = "Request got Poison";
                 Derived().ReplyAndDie(NKikimrProto::ERROR);
+                return true;
+            }
+
+            case TEvBlobStorage::EvDeadline: {
+                ErrorReason = "Deadline timer hit";
+                Derived().ReplyAndDie(NKikimrProto::DEADLINE);
                 return true;
             }
         }

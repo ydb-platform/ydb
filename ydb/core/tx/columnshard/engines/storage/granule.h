@@ -150,6 +150,7 @@ private:
     std::shared_ptr<TGranulesStat> Stats;
     std::shared_ptr<NStorageOptimizer::IOptimizerPlanner> OptimizerPlanner;
     std::shared_ptr<NActualizer::TGranuleActualizationIndex> ActualizationIndex;
+    mutable TInstant LastActualizations = TInstant::Zero();
     std::map<NArrow::TReplaceKey, THashMap<ui64, std::shared_ptr<TPortionInfo>>> PortionsByPK;
 
     void OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> portionBefore);
@@ -160,6 +161,10 @@ public:
     void RefreshTiering(const std::optional<TTiering>& tiering) {
         NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
         ActualizationIndex->RefreshTiering(tiering, context);
+    }
+
+    std::vector<NStorageOptimizer::TTaskDescription> GetOptimizerTasksDescription() const {
+        return OptimizerPlanner->GetTasksDescription();
     }
 
     void RefreshScheme() {
@@ -193,10 +198,7 @@ public:
         LastCompactionInstant = TMonotonic::Now();
     }
 
-    void BuildActualizationTasks(NActualizer::TTieringProcessContext& context) const {
-        NActualizer::TExternalTasksContext extTasks(Portions);
-        ActualizationIndex->ExtractActualizationTasks(context, extTasks);
-    }
+    void BuildActualizationTasks(NActualizer::TTieringProcessContext& context, const TDuration actualizationLag) const;
 
     std::shared_ptr<TColumnEngineChanges> GetOptimizationTask(std::shared_ptr<TGranuleMeta> self, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
         return OptimizerPlanner->GetOptimizationTask(self, locksManager);
@@ -244,13 +246,11 @@ public:
         return OptimizerPlanner->IsLocked(dataLocksManager);
     }
 
-    void ActualizeOptimizer(const TInstant currentInstant) const {
-        if (currentInstant - OptimizerPlanner->GetActualizationInstant() >= NYDBTest::TControllers::GetColumnShardController()->GetCompactionActualizationLag(TDuration::Seconds(1))) {
+    void ActualizeOptimizer(const TInstant currentInstant, const TDuration recalcLag) const {
+        if (currentInstant - OptimizerPlanner->GetActualizationInstant() >= recalcLag) {
             OptimizerPlanner->Actualize(currentInstant);
         }
     }
-
-    bool InCompaction() const;
 
     bool IsErasable() const {
         return Activity.empty() && Portions.empty();

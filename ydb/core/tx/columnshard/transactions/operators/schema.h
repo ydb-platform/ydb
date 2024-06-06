@@ -7,7 +7,7 @@
 
 namespace NKikimr::NColumnShard {
 
-    class TSchemaTransactionOperator : public IProposeTxOperator {
+    class TSchemaTransactionOperator: public IProposeTxOperator {
     private:
         using TBase = IProposeTxOperator;
 
@@ -37,18 +37,14 @@ namespace NKikimr::NColumnShard {
                     AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "cannot parse incoming tx message");
                     return false;
                 }
-                TxAddSharding = owner.TablesManager.CreateAddShardingInfoTx(owner, SchemaTxBody.GetGranuleShardingInfo().GetPathId(),
-                    SchemaTxBody.GetGranuleShardingInfo().GetVersionId(), infoContainer);
+                TxAddSharding = owner.TablesManager.CreateAddShardingInfoTx(
+                    owner, SchemaTxBody.GetGranuleShardingInfo().GetPathId(), SchemaTxBody.GetGranuleShardingInfo().GetVersionId(), infoContainer);
             }
             return true;
         }
 
     public:
         using TBase::TBase;
-
-            bool TxWithDeadline() const override {
-                return false;
-            }
 
         virtual bool ExecuteOnProgress(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override {
             if (!!TxAddSharding) {
@@ -100,6 +96,9 @@ namespace NKikimr::NColumnShard {
                 return TConclusionStatus::Fail("Preset name must be empty or 'default', but '" + preset.GetName() + "' got");
             }
             return ValidateTableSchema(preset.GetSchema());
+        }
+        virtual TString DoDebugString() const override {
+            return "SCHEME:" + SchemaTxBody.DebugString();
         }
 
     private:

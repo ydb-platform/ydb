@@ -476,7 +476,7 @@ public:
         , ReturnType_(nullptr)
         , OptionalArgs_(0)
     {
-        ArgsTypes_.reserve(argsCount);
+        Args_.reserve(argsCount);
     }
 
     NUdf::ICallableTypeBuilder& Returns(
@@ -503,13 +503,13 @@ public:
 
     NUdf::ICallableTypeBuilder& Arg(NUdf::TDataTypeId typeId) override {
         auto type = NMiniKQL::TDataType::Create(typeId, Env_);
-        ArgsTypes_.push_back(type);
+        Args_.emplace_back().Type_ = type;
         return *this;
     }
 
     NUdf::ICallableTypeBuilder& Arg(const NUdf::TType* type) override {
         auto mkqlType = const_cast<NMiniKQL::TType*>(static_cast<const NMiniKQL::TType*>(type));
-        ArgsTypes_.push_back(mkqlType);
+        Args_.emplace_back().Type_ = mkqlType;
         return *this;
     }
 
@@ -517,7 +517,17 @@ public:
             const NUdf::ITypeBuilder& typeBuilder) override
     {
         auto type = static_cast<NMiniKQL::TType*>(typeBuilder.Build());
-        ArgsTypes_.push_back(type);
+        Args_.emplace_back().Type_ = type;
+        return *this;
+    }
+
+    NUdf::ICallableTypeBuilder& Name(const NUdf::TStringRef& name) override {
+        Args_.back().Name_ = Env_.InternName(name);
+        return *this;
+    }
+
+    NUdf::ICallableTypeBuilder& Flags(ui64 flags) override {
+        Args_.back().Flags_ = flags;
         return *this;
     }
 
@@ -529,20 +539,26 @@ public:
     NUdf::TType* Build() const override {
         Y_ABORT_UNLESS(ReturnType_, "callable returns type is not configured");
 
-        NMiniKQL::TNode* payload = nullptr;
+        NMiniKQL::TCallableTypeBuilder builder(Env_, UdfName, ReturnType_);
+        for (const auto& arg : Args_) {
+            builder.Add(arg.Type_);
+            if (!arg.Name_.Str().empty()) {
+                builder.SetArgumentName(arg.Name_.Str());
+            }
 
-        auto callableType = NMiniKQL::TCallableType::Create(
-                    UdfName, ReturnType_,
-                    ArgsTypes_.size(), const_cast<NMiniKQL::TType**>(ArgsTypes_.data()),
-                    payload, Env_);
-        callableType->SetOptionalArgumentsCount(OptionalArgs_);
-        return callableType;
+            if (arg.Flags_ != 0) {
+                builder.SetArgumentFlags(arg.Flags_);
+            }
+        }
+        builder.SetOptionalArgs(OptionalArgs_);
+
+        return builder.Build();
     }
 
 private:
     const NMiniKQL::TTypeEnvironment& Env_;
     NMiniKQL::TType* ReturnType_;
-    TVector<NMiniKQL::TType*> ArgsTypes_;
+    TVector<NMiniKQL::TArgInfo> Args_;
     ui32 OptionalArgs_;
 };
 

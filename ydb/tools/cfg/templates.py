@@ -188,7 +188,7 @@ def local_vars(
     mbus_port=2134,
     kikimr_home='/Berkanavt/kikimr',
     kikimr_binaries_base_path='/Berkanavt/kikimr',
-    pq_enable=False,
+    pq_enable=True,
     sqs_port=8771,
     sqs_enable=False,
     enable_cores=False,
@@ -377,6 +377,7 @@ def kikimr_cfg_for_static_node_new_style(
     cert_params=None,
     new_style_kikimr_cfg=True,
     mbus_enabled=False,
+    pq_enable=True,
 ):
     return "\n".join(
         [
@@ -385,6 +386,7 @@ def kikimr_cfg_for_static_node_new_style(
                 ic_port=ic_port,
                 mon_address=mon_address,
                 mon_port=mon_port,
+                grpc_port=grpc_port,
                 kikimr_home=kikimr_home,
                 enable_cores=enable_cores,
                 cert_params=cert_params,
@@ -392,6 +394,7 @@ def kikimr_cfg_for_static_node_new_style(
                 kikimr_binaries_base_path=None,
                 new_style_kikimr_cfg=new_style_kikimr_cfg,
                 mbus_enabled=mbus_enabled,
+                pq_enable=pq_enable,
             ),
             NEW_STYLE_CONFIG,
         ]
@@ -404,7 +407,7 @@ def kikimr_cfg_for_static_node(
     ic_port=19001,
     mon_port=8765,
     kikimr_home='/Berkanavt/kikimr',
-    pq_enable=False,
+    pq_enable=True,
     enable_cores=False,
     default_log_level=3,
     kikimr_binaries_base_path='/Berkanavt/kikimr',

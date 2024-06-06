@@ -347,14 +347,13 @@ void TStorageProxy::Handle(NYql::NDq::TEvDqCompute::TEvSaveTaskState::TPtr& ev) 
                 taskId = event->TaskId,
                 cookie = ev->Cookie,
                 sender = ev->Sender,
-                stateSize = stateSize,
-                actorSystem = TActivationContext::ActorSystem()](const NThreading::TFuture<NYql::TIssues>& futureResult) {
+                actorSystem = TActivationContext::ActorSystem()](const NThreading::TFuture<IStateStorage::TSaveStateResult>& futureResult) {
             LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*actorSystem, "[" << graphId << "] [" << checkpointId << "] TEvSaveTaskState Apply: task: " << taskId)
-            const auto& issues = futureResult.GetValue();
+            const auto& issues = futureResult.GetValue().second;
             auto response = std::make_unique<NYql::NDq::TEvDqCompute::TEvSaveTaskStateResult>();
             response->Record.MutableCheckpoint()->SetGeneration(checkpointId.CoordinatorGeneration);
             response->Record.MutableCheckpoint()->SetId(checkpointId.SeqNo);
-            response->Record.SetStateSizeBytes(stateSize);
+            response->Record.SetStateSizeBytes(futureResult.GetValue().first);
             response->Record.SetTaskId(taskId);
 
             if (issues) {

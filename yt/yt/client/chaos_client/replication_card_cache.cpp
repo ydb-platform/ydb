@@ -16,6 +16,11 @@ TReplicationCardCacheKey::operator size_t() const
         FetchOptions);
 }
 
+bool TReplicationCardCacheKey::operator == (const TReplicationCardCacheKey& other) const
+{
+    return CardId == other.CardId && FetchOptions == other.FetchOptions;
+}
+
 void FormatValue(TStringBuilderBase* builder, const TReplicationCardCacheKey& key, TStringBuf /*spec*/)
 {
     builder->AppendFormat("{CardId: %v, FetchOptions: %v}",

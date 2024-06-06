@@ -3,6 +3,8 @@
 #include <ydb/public/sdk/cpp/client/ydb_topic/ut/ut_utils/topic_sdk_test_setup.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
+#include <ydb/core/persqueue/partition_scale_manager.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_env.h>
 
@@ -497,6 +499,232 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         status = client.CommitOffset(TEST_TOPIC, 0, TEST_CONSUMER, 0).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(NYdb::EStatus::BAD_REQUEST, status.GetStatus(), "The consumer cannot commit an offset for inactive, read-to-the-end partitions.");
+    }
+
+    Y_UNIT_TEST(ControlPlane_CreateAlterDescribe) {
+        auto autoscalingTestTopic = "autoscalit-topic";
+        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicClient client = setup.MakeClient();
+
+        auto minParts = 5;
+        auto maxParts = 10;
+        auto scaleUpPercent = 80;
+        auto scaleDownPercent = 20;
+        auto threshold = 500;
+        auto strategy = EAutoscalingStrategy::ScaleUp;
+
+        TCreateTopicSettings createSettings;
+        createSettings
+            .BeginConfigurePartitioningSettings()
+            .MinActivePartitions(minParts)
+            .MaxActivePartitions(maxParts)
+                .BeginConfigureAutoscalingSettings()
+                .ScaleUpThresholdPercent(scaleUpPercent)
+                .ScaleDownThresholdPercent(scaleDownPercent)
+                .ThresholdTime(TDuration::Seconds(threshold))
+                .Strategy(strategy)
+                .EndConfigureAutoscalingSettings()
+            .EndConfigurePartitioningSettings();
+        client.CreateTopic(autoscalingTestTopic, createSettings).Wait();
+
+        TDescribeTopicSettings descSettings;
+
+        auto describe = client.DescribeTopic(autoscalingTestTopic, descSettings).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), NYdb::EStatus::SUCCESS, describe.GetIssues().ToString());
+
+
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitioningSettings().GetMinActivePartitions(), minParts);
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitioningSettings().GetMaxActivePartitions(), maxParts);
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetStrategy(), strategy);
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetScaleDownThresholdPercent(), scaleDownPercent);
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetScaleUpThresholdPercent(), scaleUpPercent);
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetThresholdTime().Seconds(), threshold);
+
+        auto alterMinParts = 10;
+        auto alterMaxParts = 20;
+        auto alterScaleUpPercent = 90;
+        auto alterScaleDownPercent = 10;
+        auto alterThreshold = 700;
+        auto alterStrategy = EAutoscalingStrategy::ScaleUpAndDown;
+
+        TAlterTopicSettings alterSettings;
+        alterSettings
+            .BeginAlterPartitioningSettings()
+            .MinActivePartitions(alterMinParts)
+            .MaxActivePartitions(alterMaxParts)
+                .BeginAlterAutoscalingSettings()
+                .ScaleDownThresholdPercent(alterScaleDownPercent)
+                .ScaleUpThresholdPercent(alterScaleUpPercent)
+                .ThresholdTime(TDuration::Seconds(alterThreshold))
+                .Strategy(alterStrategy)
+                .EndAlterAutoscalingSettings()
+            .EndAlterTopicPartitioningSettings();
+
+        client.AlterTopic(autoscalingTestTopic, alterSettings).Wait();
+
+        auto describeAfterAlter = client.DescribeTopic(autoscalingTestTopic).GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetMinActivePartitions(), alterMinParts);
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetMaxActivePartitions(), alterMaxParts);
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetStrategy(), alterStrategy);
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetScaleDownThresholdPercent(), alterScaleDownPercent);
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetScaleUpThresholdPercent(), alterScaleUpPercent);
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetAutoscalingSettings().GetThresholdTime().Seconds(), alterThreshold);
+    }
+
+    Y_UNIT_TEST(ControlPlane_AutoscalingWithStorageSizeRetention) {
+        auto autoscalingTestTopic = "autoscalit-topic";
+        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicClient client = setup.MakeClient();
+
+        TCreateTopicSettings createSettings;
+        createSettings
+            .RetentionStorageMb(1024)
+            .BeginConfigurePartitioningSettings()
+                .BeginConfigureAutoscalingSettings()
+                .Strategy(EAutoscalingStrategy::ScaleUp)
+                .EndConfigureAutoscalingSettings()
+            .EndConfigurePartitioningSettings();
+        auto result = client.CreateTopic(autoscalingTestTopic, createSettings).GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::BAD_REQUEST);
+
+        createSettings.RetentionStorageMb(0);
+        result = client.CreateTopic(autoscalingTestTopic, createSettings).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+
+        TAlterTopicSettings alterSettings;
+        alterSettings
+            .SetRetentionStorageMb(1024);
+
+        result = client.AlterTopic(autoscalingTestTopic, alterSettings).GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::BAD_REQUEST);
+    }
+
+    Y_UNIT_TEST(PartitionSplit_AutosplitByLoad) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicClient client = setup.MakeClient();
+
+        TCreateTopicSettings createSettings;
+        createSettings
+            .BeginConfigurePartitioningSettings()
+            .MinActivePartitions(1)
+            .MaxActivePartitions(100)
+                .BeginConfigureAutoscalingSettings()
+                .ScaleUpThresholdPercent(2)
+                .ScaleDownThresholdPercent(1)
+                .ThresholdTime(TDuration::Seconds(1))
+                .Strategy(EAutoscalingStrategy::ScaleUp)
+                .EndConfigureAutoscalingSettings()
+            .EndConfigurePartitioningSettings();
+        client.CreateTopic(TEST_TOPIC, createSettings).Wait();
+
+        auto msg = TString(1_MB, 'a');
+
+        auto writeSession = CreateWriteSession(client, "producer-1", 0);
+        UNIT_ASSERT(writeSession->Write(Msg(msg, 1)));
+        UNIT_ASSERT(writeSession->Write(Msg(msg, 2)));
+        Sleep(TDuration::Seconds(10));
+        auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+        UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
+
+        auto writeSession2 = CreateWriteSession(client, "producer-1", 1);
+        UNIT_ASSERT(writeSession2->Write(Msg(msg, 3)));
+        Sleep(TDuration::Seconds(10));
+        auto describe2 = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+        UNIT_ASSERT_EQUAL(describe2.GetTopicDescription().GetPartitions().size(), 5);
+    }
+
+    Y_UNIT_TEST(MidOfRange) {
+        auto AsString = [](std::vector<ui16> vs) {
+            TStringBuilder a;
+            for (auto v : vs) {
+                a << static_cast<unsigned char>(v);
+            }
+            return a;
+        };
+
+        auto ToHex = [](const TString& value) {
+            return TStringBuilder() << HexText(TBasicStringBuf(value));
+        };
+
+        {
+            auto res = NKikimr::NPQ::MiddleOf("", "");
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "7F");
+        }
+
+        {
+            auto res = NKikimr::NPQ::MiddleOf("", AsString({0x7F}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "3F");
+        }
+
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x7F}), "");
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "BF");
+        }
+
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x7F}), AsString({0xBF}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "9F");
+        }
+
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x01}), AsString({0x02}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "01 7F");
+        }
+
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x01, 0x7F}), AsString({0x02}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "01 BF");
+        }
+
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x02}), AsString({0x03, 0x7F}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "02 3F");
+        }
+
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x01, 0xFF}), AsString({0x02, 0x00}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "01 FF 7F");
+        }
+
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x03, 0xFF}), AsString({0x04, 0x20}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "04 0F");
+        }
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x03, 0x40}), AsString({0x04, 0x40}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "03 C0");
+        }
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x03, 0x20}), AsString({0x04, 0x10}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "03 98");
+        }
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x04, 0xFF, 0xFF}), AsString({0x05, 0x20}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "05 0F FF");
+        }
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x03, 0x40, 0x7F}), AsString({0x04, 0x40}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "03 C0 BF");
+        }
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x03, 0x40, 0x30}), AsString({0x04, 0x40, 0x20}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "03 C0 A8");
+        }
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x01, 0xFF, 0xFF, 0xFF}), AsString({0x02, 0x00, 0x00, 0x10}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "02 00 00 07");
+        }
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0xFF}), AsString({0xFF, 0xFF}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "FF 7F");
+        }
+        {
+            auto res = NKikimr::NPQ::MiddleOf(AsString({0x99, 0xFF}), AsString({0x9A}));
+            UNIT_ASSERT_VALUES_EQUAL(ToHex(res), "99 FF 7F");
+        }
     }
 }
 

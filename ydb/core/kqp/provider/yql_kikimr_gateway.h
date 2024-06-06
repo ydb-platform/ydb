@@ -15,6 +15,7 @@
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/metadata/manager/abstract.h>
 
+#include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -881,6 +882,18 @@ public:
             return *this;
         }
 
+        TLoadTableMetadataSettings& WithExternalSourceFactory(NKikimr::NExternalSource::IExternalSourceFactory::TPtr factory) {
+            ExternalSourceFactory = std::move(factory);
+            return *this;
+        }
+
+        TLoadTableMetadataSettings& WithReadAttributes(THashMap<TString, TString> options) {
+            ReadAttributes = std::move(options);
+            return *this;
+        }
+
+        NKikimr::NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory;
+        THashMap<TString, TString> ReadAttributes;
         bool RequestStats_ = false;
         bool WithPrivateTables_ = false;
         bool WithExternalDatasources_ = false;

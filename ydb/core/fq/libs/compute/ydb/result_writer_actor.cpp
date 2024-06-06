@@ -96,6 +96,13 @@ public:
 
     void Handle(const TEvYdbCompute::TEvFetchScriptResultResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
+        if (response.Status == NYdb::EStatus::BAD_REQUEST && FetchRowsLimit == 0) {
+            LOG_W("ResultSetId: " << ResultSetId << " Got bad request: " << ev->Get()->Issues.ToOneLineString() << ", try to fallback to old behaviour");
+            FetchRowsLimit = 1000;
+            SendFetchScriptResultRequest();
+            return;
+        }
+
         if (response.Status != NYdb::EStatus::SUCCESS) {
             LOG_E("ResultSetId: " << ResultSetId << " Can't fetch script result: " << ev->Get()->Issues.ToOneLineString());
             Send(Parent, new TEvYdbCompute::TEvResultSetWriterResponse(ResultSetId, ev->Get()->Issues, NYdb::EStatus::INTERNAL_ERROR));
@@ -190,7 +197,7 @@ public:
 
     void SendFetchScriptResultRequest() {
         LastProcessedToken = FetchToken;
-        Register(new TRetryActor<TEvYdbCompute::TEvFetchScriptResultRequest, TEvYdbCompute::TEvFetchScriptResultResponse, NKikimr::NOperationId::TOperationId, int64_t, TString>(Counters.GetCounters(ERequestType::RT_FETCH_SCRIPT_RESULT), SelfId(), Connector, OperationId, ResultSetId, FetchToken));
+        Register(new TRetryActor<TEvYdbCompute::TEvFetchScriptResultRequest, TEvYdbCompute::TEvFetchScriptResultResponse, NKikimr::NOperationId::TOperationId, int64_t, TString, uint64_t>(Counters.GetCounters(ERequestType::RT_FETCH_SCRIPT_RESULT), SelfId(), Connector, OperationId, ResultSetId, FetchToken, FetchRowsLimit));
     }
 
     void SendReplyAndPassAway() {
@@ -222,6 +229,7 @@ private:
     bool Truncated = false;
     TString FetchToken;
     TString LastProcessedToken;
+    ui64 FetchRowsLimit = 0;
     const size_t ProtoMessageLimit = 10_MB;
     const size_t MaxRowsCountPerChunk = 100'000;
     const size_t BaseProtoByteSize = CreateProtoRequestWithoutResultSet(0).ByteSizeLong();

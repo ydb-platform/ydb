@@ -105,6 +105,7 @@
                                                                                     "q1 (-\u221e, +\u221e)",
                                                                                     "q2 (-\u221e, +\u221e)"
                                                                                 ],
+                                                                                "Scan": "Parallel",
                                                                                 "Table": "postgres_jointest/join0.test_plan/int8_tbl"
                                                                             }
                                                                         ],
@@ -138,6 +139,7 @@
                                                                     "q1 (-\u221e, +\u221e)",
                                                                     "q2 (-\u221e, +\u221e)"
                                                                 ],
+                                                                "Scan": "Parallel",
                                                                 "Table": "postgres_jointest/join0.test_plan/int8_tbl"
                                                             }
                                                         ],

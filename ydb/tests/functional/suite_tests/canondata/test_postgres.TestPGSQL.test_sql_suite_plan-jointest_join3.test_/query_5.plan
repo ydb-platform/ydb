@@ -284,6 +284,7 @@
                                                 "ReadRangesKeys": [
                                                     "k"
                                                 ],
+                                                "Scan": "Parallel",
                                                 "Table": "postgres_jointest/join3.test_plan/parent"
                                             }
                                         ],

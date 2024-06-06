@@ -482,47 +482,118 @@ public:
 
 template <>
 struct TJsonRequestSchema<TJsonStorage> {
-    static TString GetSchema() {
-        TStringStream stream;
-        TProtoToJson::ProtoToJsonSchema<NKikimrViewer::TStorageInfo>(stream);
-        return stream.Str();
+    static YAML::Node GetSchema() {
+        return TProtoToYaml::ProtoToYamlSchema<NKikimrViewer::TStorageInfo>();
     }
 };
 
 template <>
 struct TJsonRequestParameters<TJsonStorage> {
-    static TString GetParameters() {
-        return R"___([{"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
-                      {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
-                      {"name":"tenant","in":"query","description":"tenant name","required":false,"type":"string"},
-                      {"name":"pool","in":"query","description":"storage pool name","required":false,"type":"string"},
-                      {"name":"node_id","in":"query","description":"node id","required":false,"type":"integer"},
-                      {"name":"pdisk_id","in":"query","description":"pdisk id","required":false,"type":"integer"},
-                      {"name":"group_id","in":"query","description":"group id","required":false,"type":"integer"},
-                      {"name":"need_groups","in":"query","description":"return groups information","required":false,"type":"boolean","default":true},
-                      {"name":"need_disks","in":"query","description":"return disks information","required":false,"type":"boolean","default":true},
-                      {"name":"with","in":"query","description":"filter groups by missing or space","required":false,"type":"string"},
-                      {"name":"version","in":"query","description":"query version (v1, v2)","required":false,"type":"string"},
-                      {"name":"usage_pace","in":"query","description":"bucket size as a percentage","required":false,"type":"integer","default":5},
-                      {"name":"usage_buckets","in":"query","description":"filter groups by usage buckets","required":false,"type":"integer"},
-                      {"name":"sort","in":"query","description":"sort by (PoolName,Kind,MediaType,Erasure,Degraded,Usage,GroupId,Used,Limit,Read,Write)","required":false,"type":"string"},
-                      {"name":"offset","in":"query","description":"skip N nodes","required":false,"type":"integer"},
-                      {"name":"limit","in":"query","description":"limit to N nodes","required":false,"type":"integer"},
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___";
+    static YAML::Node GetParameters() {
+        return YAML::Load(R"___(
+              - name: enums
+                in: query
+                description: convert enums to strings
+                required: false
+                type: boolean
+              - name: ui64
+                in: query
+                description: return ui64 as number
+                required: false
+                type: boolean
+              - name: tenant
+                in: query
+                description: tenant name
+                required: false
+                type: string
+              - name: pool
+                in: query
+                description: storage pool name
+                required: false
+                type: string
+              - name: node_id
+                in: query
+                description: node id
+                required: false
+                type: integer
+              - name: pdisk_id
+                in: query
+                description: pdisk id
+                required: false
+                type: integer
+              - name: group_id
+                in: query
+                description: group id
+                required: false
+                type: integer
+              - name: need_groups
+                in: query
+                description: return groups information
+                required: false
+                type: boolean
+                default: true
+              - name: need_disks
+                in: query
+                description: return disks information
+                required: false
+                type: boolean
+                default: true
+              - name: with
+                in: query
+                description: filter groups by missing or space
+                required: false
+                type: string
+              - name: version
+                in: query
+                description: query version (v1, v2)
+                required: false
+                type: string
+              - name: usage_pace
+                in: query
+                description: bucket size as a percentage
+                required: false
+                type: integer
+                default: 5
+              - name: usage_buckets
+                in: query
+                description: filter groups by usage buckets
+                required: false
+                type: integer
+              - name: sort
+                in: query
+                description: sort by (PoolName,Kind,MediaType,Erasure,Degraded,Usage,GroupId,Used,Limit,Read,Write)
+                required: false
+                type: string
+              - name: offset
+                in: query
+                description: skip N nodes
+                required: false
+                type: integer
+              - name: limit
+                in: query
+                description: limit to N nodes
+                required: false
+                type: integer
+              - name: timeout
+                in: query
+                description: timeout in ms
+                required: false
+                type: integer
+            )___");
     }
 };
 
 template <>
 struct TJsonRequestSummary<TJsonStorage> {
     static TString GetSummary() {
-        return "\"Storage information\"";
+        return "Storage information";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonStorage> {
     static TString GetDescription() {
-        return "\"Returns information about storage\"";
+        return "Returns information about storage";
     }
 };
 

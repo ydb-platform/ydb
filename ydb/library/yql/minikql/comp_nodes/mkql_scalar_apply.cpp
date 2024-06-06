@@ -1,5 +1,7 @@
 #include "mkql_scalar_apply.h"
 
+#include <ydb/library/yql/public/udf/arrow/memory_pool.h>
+
 #include <ydb/library/yql/minikql/computation/mkql_block_reader.h>
 #include <ydb/library/yql/minikql/computation/mkql_block_builder.h>
 #include <ydb/library/yql/minikql/computation/mkql_block_impl.h>
@@ -47,12 +49,11 @@ public:
             , ValueBuilder(HolderFactory, NUdf::EValidatePolicy::Exception)
             , PgBuilder(NYql::CreatePgBuilder())
             , Accessors(argsTypes, returnType, *PgBuilder)
-            , ArrowMemoryPool(MakeArrowMemoryPool(Alloc.Ref()))
             , RandomProvider(CreateDefaultRandomProvider())
             , TimeProvider(CreateDefaultTimeProvider())
             , Ctx(HolderFactory, &ValueBuilder, TComputationOptsFull(
                 nullptr, Alloc.Ref(), *RandomProvider, *TimeProvider, NUdf::EValidatePolicy::Exception, nullptr),
-                originalContext.Mutables, *ArrowMemoryPool)
+                originalContext.Mutables, *NYql::NUdf::GetYqlMemoryPool())
         {
             Alloc.Release();
         }
@@ -68,7 +69,6 @@ public:
         TDefaultValueBuilder ValueBuilder;
         std::unique_ptr<NUdf::IPgBuilder> PgBuilder;
         TAccessors Accessors;
-        std::unique_ptr<arrow::MemoryPool> ArrowMemoryPool;
         TIntrusivePtr<IRandomProvider> RandomProvider;
         TIntrusivePtr<ITimeProvider> TimeProvider;
         TComputationContext Ctx;
@@ -89,7 +89,7 @@ public:
                     providers.emplace_back(MakeDatumProvider(v));
                 }
 
-                *res = parent->CalculateImpl(providers, state.Accessors, *ctx->memory_pool(), state.Ctx);
+                *res = parent->CalculateImpl(providers, state.Accessors, *NYql::NUdf::GetYqlMemoryPool(), state.Ctx);
                 return arrow::Status::OK();
             })
         {

@@ -52,6 +52,7 @@ private:
         void Init(NMonitoring::TDynamicCounterPtr group) {
             Group = group;
 
+            CurrentActivationTimeByActivity.resize(GetActivityTypeCount());
             ElapsedMicrosecByActivityBuckets.resize(GetActivityTypeCount());
             ReceivedEventsByActivityBuckets.resize(GetActivityTypeCount());
             ActorsAliveByActivityBuckets.resize(GetActivityTypeCount());
@@ -77,6 +78,7 @@ private:
                     }
                 }
 
+                *CurrentActivationTimeByActivity[i] = 0;
                 *ElapsedMicrosecByActivityBuckets[i] = ::NHPTimer::GetSeconds(ticks)*1000000;
                 *ReceivedEventsByActivityBuckets[i] = events;
                 *ActorsAliveByActivityBuckets[i] = actors;
@@ -87,6 +89,29 @@ private:
                     *UsageByActivityBuckets[i][j] = stats.UsageByActivity[i][j];
                 }
             }
+
+            auto setActivationTime = [&](TActivationTime activation) {
+                if (!ActorsAliveByActivityBuckets[activation.LastActivity]) {
+                    InitCountersForActivity(activation.LastActivity);
+                }
+                *CurrentActivationTimeByActivity[activation.LastActivity] = activation.TimeUs;
+            };
+            if (stats.CurrentActivationTime.TimeUs) {
+                setActivationTime(stats.CurrentActivationTime);
+            }
+            std::vector<TActivationTime> activationTimes = stats.AggregatedCurrentActivationTime;
+            Sort(activationTimes.begin(), activationTimes.end(), [](auto &left, auto &right) {
+                return left.LastActivity < right.LastActivity ||
+                    left.LastActivity == right.LastActivity && left.TimeUs > right.TimeUs;
+            });
+            ui32 prevActivity = Max<ui32>();
+            for (auto &activationTime : activationTimes) {
+                if (activationTime.LastActivity == prevActivity) {
+                    continue;
+                }
+                setActivationTime(activationTime);
+                prevActivity = activationTime.LastActivity;
+            }
         }
 
     private:
@@ -95,6 +120,8 @@ private:
 
             auto bucketName = TString(GetActivityTypeName(activityType));
 
+            CurrentActivationTimeByActivity[activityType] =
+                Group->GetSubgroup("sensor", "CurrentActivationTimeUsByActivity")->GetNamedCounter("activity", bucketName, false);
             ElapsedMicrosecByActivityBuckets[activityType] =
                 Group->GetSubgroup("sensor", "ElapsedMicrosecByActivity")->GetNamedCounter("activity", bucketName, true);
             ReceivedEventsByActivityBuckets[activityType] =
@@ -114,6 +141,7 @@ private:
     private:
         NMonitoring::TDynamicCounterPtr Group;
 
+        TVector<NMonitoring::TDynamicCounters::TCounterPtr> CurrentActivationTimeByActivity;
         TVector<NMonitoring::TDynamicCounters::TCounterPtr> ElapsedMicrosecByActivityBuckets;
         TVector<NMonitoring::TDynamicCounters::TCounterPtr> ReceivedEventsByActivityBuckets;
         TVector<NMonitoring::TDynamicCounters::TCounterPtr> ActorsAliveByActivityBuckets;
@@ -414,7 +442,7 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            CFunc(TEvents::TSystem::Wakeup, Wakeup);
+            HFunc(TEvents::TEvWakeup, Wakeup);
         }
     }
 
@@ -423,20 +451,25 @@ private:
         Y_UNUSED(ctx);
     }
 
-    void Wakeup(const TActorContext &ctx) {
-        for (size_t poolId = 0; poolId < PoolCounters.size(); ++poolId) {
+    void Wakeup(TEvents::TEvWakeup::TPtr &ev, const TActorContext &ctx) {
+        auto *event = ev->Get();
+        if (event->Tag == 0) {
+            StartOfCollecting = ctx.Now();
+        }
+        if (event->Tag < PoolCounters.size()) {
+            ui16 poolId = event->Tag;
             TVector<TExecutorThreadStats> stats;
             TVector<TExecutorThreadStats> sharedStats;
             TExecutorPoolStats poolStats;
             ctx.ExecutorThread.ActorSystem->GetPoolStats(poolId, poolStats, stats, sharedStats);
             SetAggregatedCounters(PoolCounters[poolId], poolStats, stats, sharedStats);
+            ctx.Schedule(TDuration::MilliSeconds(1), new TEvents::TEvWakeup(poolId + 1));
+            return;
         }
         THarmonizerStats harmonizerStats = ctx.ExecutorThread.ActorSystem->GetHarmonizerStats();
         ActorSystemCounters.Set(harmonizerStats);
-
         OnWakeup(ctx);
-
-        ctx.Schedule(TDuration::Seconds(IntervalSec), new TEvents::TEvWakeup());
+        ctx.Schedule(TDuration::Seconds(IntervalSec) - (ctx.Now() - StartOfCollecting), new TEvents::TEvWakeup(0));
     }
 
     void SetAggregatedCounters(TExecutorPoolCounters& poolCounters, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& stats, TVector<TExecutorThreadStats>& sharedStats) {
@@ -455,6 +488,7 @@ private:
 
 protected:
     const ui32 IntervalSec;
+    TInstant StartOfCollecting;
     NMonitoring::TDynamicCounterPtr Counters;
 
     TVector<TExecutorPoolCounters> PoolCounters;

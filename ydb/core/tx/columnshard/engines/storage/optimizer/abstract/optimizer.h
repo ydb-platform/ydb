@@ -51,6 +51,26 @@ public:
 
 };
 
+class TTaskDescription {
+private:
+    YDB_READONLY(ui64, TaskId, 0);
+    YDB_ACCESSOR_DEF(TString, Start);
+    YDB_ACCESSOR_DEF(TString, Finish);
+    YDB_ACCESSOR_DEF(TString, Details);
+    YDB_ACCESSOR_DEF(ui64, WeightCategory);
+    YDB_ACCESSOR_DEF(i64, Weight);
+public:
+    TTaskDescription(const ui64 taskId)
+        : TaskId(taskId)
+    {
+
+    }
+
+    bool operator<(const TTaskDescription& item) const {
+        return TaskId < item.TaskId;
+    }
+};
+
 class IOptimizerPlanner {
 private:
     const ui64 PathId;
@@ -67,6 +87,7 @@ protected:
         return NJson::JSON_NULL;
     }
     virtual bool DoIsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const = 0;
+    virtual std::vector<TTaskDescription> DoGetTasksDescription() const = 0;
 
 public:
     using TFactory = NObjectFactory::TObjectFactory<IOptimizerPlanner, TString>;
@@ -74,6 +95,10 @@ public:
         : PathId(pathId)
     {
 
+    }
+
+    std::vector<TTaskDescription> GetTasksDescription() const {
+        return DoGetTasksDescription();
     }
 
     class TModificationGuard: TNonCopyable {

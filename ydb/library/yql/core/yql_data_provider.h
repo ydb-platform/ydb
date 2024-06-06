@@ -50,10 +50,12 @@ public:
     // returns visibility of node
     virtual bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) = 0;
     virtual void GetResultDependencies(const TExprNode::TPtr& node, TExprNode::TListType& children, bool compact) = 0;
-    virtual void GetInputs(const TExprNode& node, TVector<TPinInfo>& inputs) = 0;
-    virtual void GetOutputs(const TExprNode& node, TVector<TPinInfo>& outputs) = 0;
+    // returns full number of inputs
+    virtual ui32 GetInputs(const TExprNode& node, TVector<TPinInfo>& inputs, bool withLimits) = 0;
+    // returns full number of outputs
+    virtual ui32 GetOutputs(const TExprNode& node, TVector<TPinInfo>& outputs, bool withLimits) = 0;
     virtual TString GetProviderPath(const TExprNode& node) = 0;
-    virtual void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer) = 0;
+    virtual void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer, bool withLimits) = 0;
     virtual void WritePullDetails(const TExprNode& node, NYson::TYsonWriter& writer) = 0;
     virtual void WritePinDetails(const TExprNode& node, NYson::TYsonWriter& writer) = 0;
     virtual TString GetOperationDisplayName(const TExprNode& node) = 0;

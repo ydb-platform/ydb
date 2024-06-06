@@ -1335,7 +1335,8 @@ public:
                 for (const auto& family : col.Families) {
                     familiesDesc = L(familiesDesc, BuildQuotedAtom(family.Pos, family.Name));
                 }
-                columnDesc = L(columnDesc, Q(familiesDesc));
+
+                columnDesc = L(columnDesc, Q(Y(Q("setFamily"), Q(familiesDesc))));
                 columns = L(columns, Q(columnDesc));
             }
             actions = L(actions, Q(Y(Q("alterColumns"), Q(columns))));
@@ -2694,17 +2695,19 @@ public:
                 Add(Y("let", x.second, Y("Udf", BuildQuotedAtom(Pos, x.first))));
             }
 
-            for (auto& nodes: Scoped->NamedNodes) {
-                if (src || ctx.Exports.contains(nodes.first)) {
-                    auto& item = nodes.second.front();
-                    if (!item->Node->Init(ctx, src)) {
-                        hasError = true;
-                        continue;
-                    }
+            if (!ctx.CompactNamedExprs) {
+                for (auto& nodes: Scoped->NamedNodes) {
+                    if (src || ctx.Exports.contains(nodes.first)) {
+                        auto& item = nodes.second.front();
+                        if (!item->Node->Init(ctx, src)) {
+                            hasError = true;
+                            continue;
+                        }
 
-                    // Some constants may be used directly by YQL code and need to be translated without reference from SQL AST
-                    if (item->Node->IsConstant() || ctx.Exports.contains(nodes.first)) {
-                        Add(Y("let", BuildAtom(item->Node->GetPos(), nodes.first), item->Node));
+                        // Some constants may be used directly by YQL code and need to be translated without reference from SQL AST
+                        if (item->Node->IsConstant() || ctx.Exports.contains(nodes.first)) {
+                            Add(Y("let", BuildAtom(item->Node->GetPos(), nodes.first), item->Node));
+                        }
                     }
                 }
             }
@@ -2858,6 +2861,15 @@ public:
             Nodes.insert(Nodes.begin(), std::make_move_iterator(imports.begin()), std::make_move_iterator(imports.end()));
 
             for (const auto& symbol: ctx.Exports) {
+                if (ctx.CompactNamedExprs) {
+                    auto node = Scoped->LookupNode(symbol);
+                    YQL_ENSURE(node);
+                    if (!node->Init(ctx, src)) {
+                        hasError = true;
+                        continue;
+                    }
+                    Add(Y("let", BuildAtom(node->GetPos(), symbol), node));
+                }
                 Add(Y("export", symbol));
             }
         }

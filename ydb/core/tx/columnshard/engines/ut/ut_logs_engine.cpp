@@ -263,9 +263,9 @@ TBlobRange MakeBlobRange(ui32 step, ui32 blobSize) {
     return TBlobRange(MakeUnifiedBlobId(step, blobSize), 0, blobSize);
 }
 
-TString MakeTestBlob(i64 start = 0, i64 end = 100) {
+TString MakeTestBlob(i64 start = 0, i64 end = 100, ui32 step = 1) {
     TBuilder<arrow::TimestampType> builder;
-    for (i64 ts = start; ts < end; ++ts) {
+    for (i64 ts = start; ts < end; ts += step) {
         TString str = ToString(ts);
         TString sortedStr = Sprintf("%05ld", (long)ts);
         builder.AddRow({ts, sortedStr, str, str, str});
@@ -689,6 +689,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
     Y_UNIT_TEST(IndexTtl) {
         TTestDbWrapper db;
         TIndexInfo tableInfo = NColumnShard::BuildTableInfo(testColumns, testKey);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        csDefaultControllerGuard->SetTasksActualizationLag(TDuration::Zero());
 
         ui64 pathId = 1;
         ui32 step = 1000;
@@ -701,10 +703,14 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             engine.RegisterTable(pathId);
             engine.Load(db);
 
-            ui64 numRows = 1000;
-            ui64 rowPos = 0;
-            for (ui64 txId = 1; txId <= 20; ++txId, rowPos += numRows) {
-                TString testBlob = MakeTestBlob(rowPos, rowPos + numRows);
+            const ui64 numRows = 1000;
+            const ui64 txCount = 20;
+            const ui64 tsIncrement = 1;
+            const auto blobTsRange = numRows * tsIncrement;
+            const auto gap = TDuration::Hours(1); //much longer than blobTsRange*txCount
+            auto blobStartTs = (TInstant::Now() -  gap).MicroSeconds();
+            for (ui64 txId = 1; txId <= txCount; ++txId) {
+                TString testBlob = MakeTestBlob(blobStartTs, blobStartTs + blobTsRange, tsIncrement);
                 auto blobRange = MakeBlobRange(++step, testBlob.size());
                 NBlobOperations::NRead::TCompositeReadBlobs blobs;
                 TString str1 = testBlob;
@@ -717,6 +723,12 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
                 bool ok = Insert(engine, db, TSnapshot(planStep, txId), std::move(dataToIndex), blobs, step);
                 UNIT_ASSERT(ok);
+                blobStartTs += blobTsRange;
+                if (txId == txCount / 2) { 
+                    //Make a gap. 
+                    //NB After this gap, some rows may be in the future at the point of setting TTL 
+                    blobStartTs += gap.MicroSeconds();
+                }
             }
 
             // compact
@@ -750,9 +762,9 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             std::shared_ptr<arrow::DataType> ttlColType = arrow::timestamp(arrow::TimeUnit::MICRO);
             THashMap<ui64, NOlap::TTiering> pathTtls;
             NOlap::TTiering tiering;
-            AFL_VERIFY(tiering.Add(NOlap::TTierInfo::MakeTtl(TDuration::MicroSeconds(TInstant::Now().MicroSeconds() - 10000), "timestamp")));
+            AFL_VERIFY(tiering.Add(NOlap::TTierInfo::MakeTtl(gap, "timestamp")));
             pathTtls.emplace(pathId, std::move(tiering));
-            Ttl(engine, db, pathTtls, 10);
+            Ttl(engine, db, pathTtls, txCount / 2 );
 
             // read + load + read
 

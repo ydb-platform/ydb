@@ -10,6 +10,6 @@ struct IExternalSourceFactory : public TThrRefBase {
     virtual IExternalSource::TPtr GetOrCreate(const TString& type) const = 0;
 };
 
-IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TString>& hostnamePatterns, size_t pathsLimit = 50000);
+IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TString>& hostnamePatterns, NActors::TActorSystem* actorSystem = nullptr, size_t pathsLimit = 50000);
 
 }

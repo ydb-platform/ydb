@@ -88,7 +88,7 @@ public:
     }
 
     void SendNodeRequestToWhiteboard(TNodeId nodeId) {
-        TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId );
+        TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
         THolder<TRequestEventType> request = CloneRequest();
         BLOG_TRACE("Sent WhiteboardRequest to " << nodeId << " Request: " << request->Record.ShortDebugString());
         TBase::SendRequest(whiteboardServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);

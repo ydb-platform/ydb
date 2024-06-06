@@ -464,6 +464,9 @@ public:
             if (Tenant->IsExternalBackupController) {
                 subdomain.SetExternalBackupController(true);
             }
+            if (Tenant->IsGraphShardEnabled) {
+                subdomain.SetGraphShard(true);
+            }
         }
 
         if (SharedTenant) {
@@ -491,6 +494,9 @@ public:
             }
             if (Tenant->IsExternalBackupController) {
                 subdomain.SetExternalBackupController(true);
+            }
+            if (Tenant->IsGraphShardEnabled) {
+                subdomain.SetGraphShard(true);
             }
         }
         if (tablets) {

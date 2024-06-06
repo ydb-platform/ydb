@@ -1,8 +1,8 @@
-# YDB SDK
+# {{ ydb-short-name }} SDK reference
 
 {% include [index_intro_overlay.md](index_intro_overlay.md) %}
 
-OpenSource SDKs in the following programming languages are available to work with YDB:
+OpenSource SDKs in the following programming languages are available to work with {{ ydb-short-name }}:
 
 {% if oss %}
 - C++ [https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp)
@@ -19,7 +19,7 @@ The SDK documentation contains the following sections:
 
 - [Installation](../install.md)
 - [Authentication](../auth.md)
-- [Code recipes](../recipes/index.md)
+- [Code recipes](../../../recipes/ydb-sdk/index.md)
 - [Comparison of SDK features](../feature-parity.md)
 
 See also:

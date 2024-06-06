@@ -985,3 +985,12 @@ struct THash<NYT::NTableClient::TUnversionedRow>
         return NYT::NTableClient::TDefaultUnversionedRowHash()(row);
     }
 };
+
+template <class T>
+    requires std::derived_from<std::remove_cvref_t<T>, NYT::NTableClient::TUnversionedRow>
+struct NYT::TFormatArg<T>
+    : public NYT::TFormatArgBase
+{
+    static constexpr auto FlagSpecifiers
+        = TFormatArgBase::ExtendFlags</*Hot*/ true, 1, std::array{'k'}>();
+};

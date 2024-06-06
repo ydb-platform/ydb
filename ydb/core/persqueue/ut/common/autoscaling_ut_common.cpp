@@ -105,9 +105,9 @@ TTopicSdkTestSetup CreateSetup() {
     return setup;
 }
 
-std::shared_ptr<ISimpleBlockingWriteSession> CreateWriteSession(TTopicClient& client, const TString& producer, std::optional<ui32> partition) {
+std::shared_ptr<ISimpleBlockingWriteSession> CreateWriteSession(TTopicClient& client, const TString& producer, std::optional<ui32> partition, TString topic) {
     auto writeSettings = TWriteSessionSettings()
-                    .Path(TEST_TOPIC)
+                    .Path(topic)
                     .ProducerId(producer);
     if (partition) {
         writeSettings.PartitionId(*partition);

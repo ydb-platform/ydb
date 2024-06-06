@@ -12,6 +12,7 @@ ELSE()
 ENDIF()
 
 SRCS(
+    acceleration.cpp
     assimilation.cpp
     block_race.cpp
     counting_events.cpp

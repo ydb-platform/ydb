@@ -19,6 +19,8 @@ class IBlobManagerDb {
 public:
     virtual ~IBlobManagerDb() = default;
 
+    [[nodiscard]] virtual bool LoadGCBarrierPreparation(TGenStep& genStep) = 0;
+    virtual void SaveGCBarrierPreparation(const TGenStep& genStep) = 0;
     [[nodiscard]] virtual bool LoadLastGcBarrier(TGenStep& lastCollectedGenStep) = 0;
     virtual void SaveLastGcBarrier(const TGenStep& lastCollectedGenStep) = 0;
 
@@ -53,6 +55,9 @@ public:
 
     [[nodiscard]] bool LoadLastGcBarrier(TGenStep& lastCollectedGenStep) override;
     void SaveLastGcBarrier(const TGenStep& lastCollectedGenStep) override;
+
+    [[nodiscard]] bool LoadGCBarrierPreparation(TGenStep& genStep) override;
+    void SaveGCBarrierPreparation(const TGenStep& genStep) override;
 
     [[nodiscard]] bool LoadLists(std::vector<TUnifiedBlobId>& blobsToKeep, TTabletsByBlob& blobsToDelete,
         const IBlobGroupSelector* dsGroupSelector, const TTabletId selfTabletId) override;

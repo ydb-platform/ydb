@@ -36,6 +36,7 @@ namespace NKikimr::NPQ {
 #define ERROR(message) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, LOG_PREFIX << message);
 
 static const ui64 WRITE_BLOCK_SIZE = 4_KB;
+static const ui32 INVALID_PARTITION_ID = Max<ui32>();
 
 TString TEvPartitionWriter::TEvInitResult::TSuccess::ToString() const {
     auto out = TStringBuilder() << "Success {"
@@ -288,17 +289,28 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
         ev->Record.MutableRequest()->MutableTxControl()->set_tx_id(Opts.TxId);
 
-        auto* topics = ev->Record.MutableRequest()->MutableTopicOperations()->AddTopics();
+        auto* operations = ev->Record.MutableRequest()->MutableTopicOperations();
+        auto* topics = operations->AddTopics();
         topics->set_path(Opts.TopicPath);
         auto* partitions = topics->add_partitions();
         partitions->set_partition_id(PartitionId);
+
+        if (HasSupportivePartitionId()) {
+            operations->SetSupportivePartition(SupportivePartitionId);
+        }
 
         return ev;
     }
 
     void SetWriteId(NKikimrClient::TPersQueuePartitionRequest& request) {
-        if (WriteId != INVALID_WRITE_ID) {
+        if (HasWriteId()) {
             request.SetWriteId(WriteId);
+        }
+    }
+
+    void SetNeedSupportivePartition(NKikimrClient::TPersQueuePartitionRequest& request, bool value) {
+        if (HasWriteId()) {
+            request.SetNeedSupportivePartition(value);
         }
     }
 
@@ -313,6 +325,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         cmd.SetForce(true);
 
         SetWriteId(request);
+        SetNeedSupportivePartition(request, true);
 
         NTabletPipe::SendData(SelfId(), PipeClient, ev.Release());
         Become(&TThis::StateGetOwnership);
@@ -322,6 +335,8 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPersQueue::TEvResponse, HandleOwnership);
             hFunc(TEvPartitionWriter::TEvWriteRequest, HoldPending);
+            HFunc(NKqp::TEvKqp::TEvQueryResponse, HandlePartitionIdSaved);
+            SFunc(TEvents::TEvWakeup, SavePartitionId);
         default:
             return StateBase(ev);
         }
@@ -344,7 +359,39 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
             return InitResult("Partition is inactive", std::move(record));
         }
 
-        OwnerCookie = response.GetCmdGetOwnershipResult().GetOwnerCookie();
+        auto& reply = response.GetCmdGetOwnershipResult();
+        OwnerCookie = reply.GetOwnerCookie();
+        if (reply.HasSupportivePartition()) {
+            SupportivePartitionId = reply.GetSupportivePartition();
+        }
+
+        if (HasWriteId()) {
+            SavePartitionId(ActorContext());
+        } else {
+            GetMaxSeqNo();
+        }
+    }
+
+    void SavePartitionId(const TActorContext& ctx) {
+        Y_ABORT_UNLESS(HasWriteId());
+        Y_ABORT_UNLESS(HasSupportivePartitionId());
+
+        auto ev = MakeWriteIdRequest();
+        ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
+    }
+
+    void HandlePartitionIdSaved(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext&) {
+        auto& record = ev->Get()->Record.GetRef();
+        switch (record.GetYdbStatus()) {
+        case Ydb::StatusIds::SUCCESS:
+            break;
+        case Ydb::StatusIds::SESSION_BUSY:
+        case Ydb::StatusIds::PRECONDITION_FAILED: // see TKqpSessionActor::ReplyBusy
+            return Retry(record.GetYdbStatus());
+        default:
+            return InitResult("Invalid KQP session", record);
+        }
+
         GetMaxSeqNo();
     }
 
@@ -489,7 +536,11 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
             return false;
         }
 
-        Pending.emplace(cookie, std::move(ev->Get()->Record));
+        auto& request = *record.MutablePartitionRequest();
+        SetWriteId(request);
+
+        Pending.emplace(cookie, std::move(record));
+
         return true;
     }
 
@@ -829,6 +880,13 @@ public:
     }
 
 private:
+    bool HasWriteId() const {
+        return WriteId != INVALID_WRITE_ID;
+    }
+
+    bool HasSupportivePartitionId() const {
+        return SupportivePartitionId != INVALID_PARTITION_ID;
+    }
 
     const TActorId Client;
     const ui64 TabletId;
@@ -865,6 +923,7 @@ private:
     EErrorCode ErrorCode = EErrorCode::InternalError;
 
     ui64 WriteId = INVALID_WRITE_ID;
+    ui32 SupportivePartitionId = INVALID_PARTITION_ID;
 
     using IRetryPolicy = IRetryPolicy<Ydb::StatusIds::StatusCode>;
     using IRetryState = IRetryPolicy::IRetryState;

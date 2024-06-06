@@ -11,6 +11,46 @@
 
 #include <algorithm>
 
+namespace {
+// Transpose 8x8 bit-matrix packed in ui64 integer
+ui64 transposeBitmatrix(ui64 x) {
+        // a b A B aa bb AA BB
+        // c d C D cc dd CC DD
+        // ->
+        // a c A C aa cc AA CC
+        // b d B D bb dd BB DD
+        // a b A B aa bb AA BB // c d C D cc dd CC DD
+        // a c A C aa cc AA CC // b d B D bb dd BB DD
+        x =
+        ((x & 0b10101010'01010101'10101010'01010101'10101010'01010101'10101010'01010101ull)) |
+        ((x & 0b01010101'00000000'01010101'00000000'01010101'00000000'01010101'00000000ull) >> 7) |
+        ((x & 0b00000000'10101010'00000000'10101010'00000000'10101010'00000000'10101010ull) << 7);
+        // a1 a2 b1 b2 A1 A2 B1 B2
+        // a3 a4 b3 b4 A3 A4 B3 B4
+        // c1 c2 d1 d2 C1 C2 D1 D2
+        // c3 c4 d3 d4 C3 C4 D3 D4
+        // ->
+        // a1 a2 c1 c2 A1 A2 C1 C2
+        // a3 a4 c3 c4 A3 A4 C3 C4
+        // b1 b2 d1 d2 B1 B2 D1 D2
+        // b3 b4 d3 d4 B3 B4 D3 D4
+        //
+        //
+        // a1 a2 b1 b2 A1 A2 B1 B2 // a3 a4 b3 b4 A3 A4 B3 B4 // c1 c2 d1 d2 C1 C2 D1 D2 // c3 c4 d3 d4 C3 C4 D3 D4
+        // ->
+        // a1 a2 c1 c2 A1 A2 C1 C2 // a3 a4 c3 c4 A3 A4 C3 C4 // b1 b2 d1 d2 B1 B2 D1 D2 // b3 b4 d3 d4 B3 B4 D3 D4
+        x =
+        ((x & 0b1100110011001100'0011001100110011'1100110011001100'0011001100110011ull)) |
+        ((x & 0b0011001100110011'0000000000000000'0011001100110011'0000000000000000ull) >> 14) |
+        ((x & 0b0000000000000000'1100110011001100'0000000000000000'1100110011001100ull) << 14);
+        x =
+        ((x & 0b11110000111100001111000011110000'00001111000011110000111100001111ull)) |
+        ((x & 0b00001111000011110000111100001111'00000000000000000000000000000000ull) >> 28) |
+        ((x & 0b00000000000000000000000000000000'11110000111100001111000011110000ull) << 28);
+        return x;
+}
+}
+
 namespace NKikimr {
 namespace NMiniKQL {
 namespace NPackedTuple {
@@ -149,10 +189,21 @@ namespace NPackedTuple {
 
         std::vector<ui64> bitmaskMatrix(BitmaskSize);
 
+        if (auto off = (start % 8)) {
+            auto bitmaskIdx = start / 8;
+
+            for (ui32 j = Columns.size(); j--; )
+                bitmaskMatrix[j / 8] |= ui64(isValidBitmask[Columns[j].OriginalIndex][bitmaskIdx]) << ((j % 8)*8);
+
+            for (auto &m: bitmaskMatrix) {
+                m = transposeBitmatrix(m);
+                m >>= off * 8;
+            }
+        }
+
         for (; count--; ++start, res += TotalRowSize) {
             ui32 hash = 0;
             auto bitmaskIdx = start / 8;
-            auto bitmaskShift = start % 8;
 
             bool anyOverflow = false;
 
@@ -168,12 +219,17 @@ namespace NPackedTuple {
                 }
             }
 
-            std::memset(res + BitmaskOffset, 0, BitmaskSize);
+            if ((start % 8) == 0) {
+                std::fill(bitmaskMatrix.begin(), bitmaskMatrix.end(), 0);
+                for (ui32 j = Columns.size(); j--; )
+                    bitmaskMatrix[j / 8] |= ui64(isValidBitmask[Columns[j].OriginalIndex][bitmaskIdx]) << ((j % 8)*8);
+                for (auto &m: bitmaskMatrix)
+                    m = transposeBitmatrix(m);
+            }
 
-            for (ui32 i = 0; i < Columns.size(); ++i) {
-                auto& col = Columns[i];
-
-                res[BitmaskOffset + (i / 8)] |= ((isValidBitmask[col.OriginalIndex][bitmaskIdx] >> bitmaskShift) & 1u) << (i % 8);
+            for (ui32 j = 0; j < BitmaskSize; ++j) {
+                res[BitmaskOffset + j] = ui8(bitmaskMatrix[j]);
+                bitmaskMatrix[j] >>= 8;
             }
 
             for (auto &col: FixedNPOTColumns_) {
@@ -219,7 +275,7 @@ namespace NPackedTuple {
                     }
 
                     if (anyOverflow && col.Role == EColumnRole::Key) {
-                        hash = CalculateCRC32<TTraits, sizeof(ui32)>((ui8 *)&size, hash);
+                        hash = TSimdI8::CRC32u32(hash, size);
                         hash = CalculateCRC32<TTraits>(data, size, hash);
                     }
             }
@@ -233,6 +289,12 @@ namespace NPackedTuple {
             WriteUnaligned<ui32>(res, hash);
         }
     }
+    template
+    __attribute__((target("avx2")))
+    void TTupleLayoutFallback<NSimd::TSimdAVX2Traits>::Pack( const ui8** columns, const ui8** isValidBitmask, ui8 * res, std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start, ui32 count) const;
+    template
+    __attribute__((target("sse4.2")))
+    void TTupleLayoutFallback<NSimd::TSimdSSE42Traits>::Pack( const ui8** columns, const ui8** isValidBitmask, ui8 * res, std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start, ui32 count) const;
 }
 }
 }

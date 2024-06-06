@@ -4,11 +4,6 @@ RECURSE_FOR_TESTS(
 
 LIBRARY()
 
-OWNER(
-    molotkov-and
-    g:kikimr
-)
-
 SRCS(
     mvp.cpp
     oidc_client.cpp

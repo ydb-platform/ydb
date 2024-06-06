@@ -92,6 +92,49 @@ TEST(TestCancelableRunWithBoundedConcurrency, TestCancelation)
     EXPECT_EQ(canceledCount, 4);
 }
 
+TEST(TestAllSucceededBoundedConcurrency, TestAllSucceededFail)
+{
+    using TCounter = std::atomic<int>;
+
+    auto threadPool = CreateThreadPool(4, "ThreadPool");
+
+    auto x = std::make_shared<TCounter>(0);
+    auto startingSleepCount = std::make_shared<TCounter>(0);
+    auto finishedSleepCount = std::make_shared<TCounter>(0);
+
+    std::vector<TCallback<TFuture<void>()>> callbacks;
+    for (int i = 0; i < 9; ++i) {
+        callbacks.emplace_back(BIND([x, startingSleepCount, finishedSleepCount]() mutable {
+            int cur_x = (*x)++;
+            if (cur_x < 5) {
+                return;
+            } else if (cur_x == 5) {
+                //Make sure other callbacks have a chance to start first
+                Sleep(TDuration::MilliSeconds(5));
+                THROW_ERROR_EXCEPTION("My Error");
+            }
+
+            (*startingSleepCount)++;
+            Sleep(TDuration::MilliSeconds(50));
+            (*finishedSleepCount)++;
+        })
+        .AsyncVia(threadPool->GetInvoker()));
+    }
+
+    auto future = RunWithAllSucceededBoundedConcurrency<void>(
+        std::move(callbacks),
+        /*concurrencyLimit*/ 5);
+
+    auto result = WaitFor(future);
+    EXPECT_EQ(result.IsOK(), false);
+    EXPECT_EQ(result.GetCode(), NYT::EErrorCode::Generic);
+    EXPECT_EQ(result.GetMessage(), "My Error");
+
+    EXPECT_EQ(x->load(), 9);
+    EXPECT_EQ(startingSleepCount->load(), 3);
+    EXPECT_EQ(finishedSleepCount->load(), 0);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace

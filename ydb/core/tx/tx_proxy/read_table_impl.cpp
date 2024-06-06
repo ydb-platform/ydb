@@ -1447,6 +1447,9 @@ private:
             case EReadTableFormat::YdbResultSet:
                 tx.SetApiVersion(NKikimrTxUserProxy::TReadTableTransaction::YDB_V1);
                 break;
+            case EReadTableFormat::YdbResultSetWithNotNullSupport:
+                tx.SetApiVersion(NKikimrTxUserProxy::TReadTableTransaction::YDB_V2);
+                break;
         }
 
         for (auto &col : Columns) {
@@ -1458,6 +1461,7 @@ private:
             if (columnType.TypeInfo) {
                 *c.MutableTypeInfo() = *columnType.TypeInfo;
             }
+            c.SetNotNull(col.IsNotNullColumn);
         }
 
         auto& txRange = *tx.MutableRange();
@@ -1739,15 +1743,19 @@ private:
     void SendEmptyResponseData(const TActorContext& ctx) {
         TString data;
         ui32 apiVersion = 0;
+        bool allowNotNull = false;
 
         switch (Settings.DataFormat) {
             case EReadTableFormat::OldResultSet:
                 // we don't support empty result sets
                 return;
 
+            case EReadTableFormat::YdbResultSetWithNotNullSupport:
+                allowNotNull = true;
             case EReadTableFormat::YdbResultSet: {
                 Ydb::ResultSet res;
                 for (auto& col : Columns) {
+                    bool notNullResp = allowNotNull && col.IsNotNullColumn;
                     auto* meta = res.add_columns();
                     meta->set_name(col.Name);
 
@@ -1757,16 +1765,15 @@ private:
                         pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
                         pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
                     } else {
+                        auto xType = notNullResp ? meta->mutable_type() : meta->mutable_type()->mutable_optional_type()->mutable_item();
                         auto id = static_cast<NYql::NProto::TypeIds>(col.PType.GetTypeId());
                         if (id == NYql::NProto::Decimal) {
-                            auto decimalType = meta->mutable_type()->mutable_optional_type()->mutable_item()
-                                ->mutable_decimal_type();
+                            auto decimalType = xType->mutable_decimal_type();
                             //TODO: Pass decimal params here
                             decimalType->set_precision(22);
                             decimalType->set_scale(9);
                         } else {
-                            meta->mutable_type()->mutable_optional_type()->mutable_item()
-                                ->set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(id));
+                            xType->set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(id));
                         }
                     }
                 }

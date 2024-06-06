@@ -741,7 +741,7 @@ public:
     }
 
     TRawPartitionStreamEventQueue<UseMigrationProtocol> ExtractQueue() noexcept {
-        return std::move(EventsQueue);
+        return std::exchange(EventsQueue, TRawPartitionStreamEventQueue(CbContext));
     }
 
     static void GetDataEventImpl(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,

@@ -28,7 +28,8 @@ public:
     }
 
     STFUNC(StateWork) {
-        NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("action_id", GCTask->GetActionGuid());
+        NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)
+            ("action_id", GCTask->GetActionGuid())("tablet_id", GCTask->GetTabletId());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle);
             default:

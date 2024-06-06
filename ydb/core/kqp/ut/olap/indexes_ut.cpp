@@ -136,6 +136,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             filler(1100000, 300100000, 10000);
 
         }
+        const ui64 initCount = csController->GetActualizationRefreshSchemeCount().Val();
+        AFL_VERIFY(initCount == 3)("started_value", initCount);
 
         for (ui32 i = 0; i < 10; ++i) {
             auto alterQuery = TStringBuilder() <<
@@ -144,11 +146,11 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
-        const ui64 startCount = csController->GetActualizationRefreshSchemeCount().Val();
-        AFL_VERIFY(startCount == 30);
+        const ui64 updatesCount = csController->GetActualizationRefreshSchemeCount().Val();
+        AFL_VERIFY(updatesCount == 30 + initCount)("after_modification", updatesCount);
 
         for (auto&& i : csController->GetShardActualIds()) {
-            kikimr.GetTestServer().GetRuntime()->Send(MakePipePeNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
+            kikimr.GetTestServer().GetRuntime()->Send(MakePipePerNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
                 new TEvents::TEvPoisonPill(), i, false));
         }
 
@@ -165,8 +167,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             CompareYson(result, R"([[20000u;]])");
         }
 
-        AFL_VERIFY(startCount + 3 /*tables count*/ * 3 /*2 * normalizers + main_load*/ == 
-            (ui64)csController->GetActualizationRefreshSchemeCount().Val())("start", startCount)("count", csController->GetActualizationRefreshSchemeCount().Val());
+        AFL_VERIFY(updatesCount + 3 /*tablets count*/ * 1 /*normalizers*/ ==
+            (ui64)csController->GetActualizationRefreshSchemeCount().Val())("updates", updatesCount)("count", csController->GetActualizationRefreshSchemeCount().Val());
     }
 
     Y_UNIT_TEST(Indexes) {
@@ -308,7 +310,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             CompareYson(result, R"([[1u;]])");
         }
 
-        AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() < 0.20 * csController->GetIndexesSkippingOnSelect().Val());
+        AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() < 0.20 * csController->GetIndexesSkippingOnSelect().Val())
+            ("approved", csController->GetIndexesApprovedOnSelect().Val())("skipped", csController->GetIndexesSkippingOnSelect().Val());
 
     }
 

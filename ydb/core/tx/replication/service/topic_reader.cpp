@@ -69,15 +69,17 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
         switch (ev->Get()->Result.GetStatus()) {
         case NYdb::EStatus::SCHEME_ERROR:
-            return Leave(TEvWorker::TEvGone::SCHEME_ERROR);
+            return Leave(TEvWorker::TEvGone::SCHEME_ERROR, ev->Get()->Result.GetIssues().ToOneLineString());
         default:
             return Leave(TEvWorker::TEvGone::UNAVAILABLE);
         }
     }
 
-    void Leave(TEvWorker::TEvGone::EStatus status) {
+    template <typename... Args>
+    void Leave(Args&&... args) {
         LOG_I("Leave");
-        Send(Worker, new TEvWorker::TEvGone(status));
+
+        Send(Worker, new TEvWorker::TEvGone(std::forward<Args>(args)...));
         PassAway();
     }
 

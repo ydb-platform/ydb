@@ -11,6 +11,7 @@ SRCS(
     cypress.cpp
     errors.cpp
     format.cpp
+    helpers.cpp
     job_counters.cpp
     job_statistics.cpp
     io.cpp

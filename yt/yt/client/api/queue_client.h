@@ -73,6 +73,21 @@ struct TListQueueConsumerRegistrationsResult
     std::optional<std::vector<int>> Partitions;
 };
 
+struct TCreateQueueProducerSessionOptions
+    : public TTimeoutOptions
+{ };
+
+struct TCreateQueueProducerSessionResult
+{
+    ui64 SequenceNumber;
+    ui64 Epoch;
+    std::optional<NYson::TYsonString> UserMeta;
+};
+
+struct TRemoveQueueProducerSessionOptions
+    : public TTimeoutOptions
+{ };
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct IQueueClientBase
@@ -125,6 +140,19 @@ struct IQueueClient
         const std::optional<NYPath::TRichYPath>& queuePath,
         const std::optional<NYPath::TRichYPath>& consumerPath,
         const TListQueueConsumerRegistrationsOptions& options = {}) = 0;
+
+    virtual TFuture<TCreateQueueProducerSessionResult> CreateQueueProducerSession(
+        const NYPath::TRichYPath& producerPath,
+        const NYPath::TRichYPath& queuePath,
+        const TString& sessionId,
+        const std::optional<NYson::TYsonString>& userMeta,
+        const TCreateQueueProducerSessionOptions& options = {}) = 0;
+
+    virtual TFuture<void> RemoveQueueProducerSession(
+        const NYPath::TRichYPath& producerPath,
+        const NYPath::TRichYPath& queuePath,
+        const TString& sessionId,
+        const TRemoveQueueProducerSessionOptions& options = {}) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

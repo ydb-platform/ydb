@@ -16,6 +16,7 @@
 #include <ydb/core/protos/blob_depot.pb.h>
 #include <ydb/core/protos/counters_blob_depot.pb.h>
 #include <ydb/core/util/format.h>
+#include <ydb/core/util/gen_step.h>
 #include <ydb/core/util/stlog.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>

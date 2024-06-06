@@ -91,7 +91,7 @@ private:
 
 }; // TStreamRemover
 
-IActor* CreateStreamRemover(TReplication::TPtr replication, ui64 targetId, const TActorContext& ctx) {
+IActor* CreateStreamRemover(TReplication* replication, ui64 targetId, const TActorContext& ctx) {
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
     return CreateStreamRemover(ctx.SelfID, replication->GetYdbProxy(),

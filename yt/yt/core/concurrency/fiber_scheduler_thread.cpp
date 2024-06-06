@@ -25,6 +25,16 @@
 
 #include <thread>
 
+#if defined(_linux_) && !defined(NDEBUG)
+    #define YT_ENABLE_TLS_ADDRESS_TRACKING
+#endif
+
+#ifdef YT_ENABLE_TLS_ADDRESS_TRACKING
+    #include <unistd.h>
+    #include <sys/types.h>
+    #include <sys/syscall.h>
+#endif
+
 namespace NYT::NConcurrency {
 
 // NB(arkady-e1ppa): Please run core tests with this macro undefined
@@ -302,7 +312,6 @@ void SwitchFromFiber(TFiber* targetFiber, TAfterSwitch afterSwitch)
     auto* targetContext = targetFiber->GetMachineContext();
 
     auto currentFiber = SwapCurrentFiber(targetFiber);
-    YT_VERIFY(currentFiber->GetState() != EFiberState::Waiting);
     auto* currentContext = currentFiber->GetMachineContext();
 
     SetAfterSwitch(afterSwitch);
@@ -310,6 +319,41 @@ void SwitchFromFiber(TFiber* targetFiber, TAfterSwitch afterSwitch)
 
     YT_VERIFY(TryGetCurrentFiber() == currentFiber);
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TFiberIdGenerator
+{
+public:
+    static TFiberIdGenerator* Get()
+    {
+        return LeakySingleton<TFiberIdGenerator>();
+    }
+
+    TFiberId Generate()
+    {
+        const TFiberId Factor = std::numeric_limits<TFiberId>::max() - 173864;
+        YT_ASSERT(Factor % 2 == 1); // Factor must be coprime with 2^n.
+
+        while (true) {
+            auto seed = Seed_++;
+            auto id = seed * Factor;
+            if (id != InvalidFiberId) {
+                return id;
+            }
+        }
+    }
+
+private:
+    std::atomic<TFiberId> Seed_;
+
+    DECLARE_LEAKY_SINGLETON_FRIEND()
+
+    TFiberIdGenerator()
+    {
+        Seed_.store(static_cast<TFiberId>(::time(nullptr)));
+    }
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -676,6 +720,63 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+//! This class wraps reads of TLS saving the reader thread id.
+//! Rereads of the TLS compare the thread id and crash if
+//! TLS was cached when it shouldn't have been.
+template <class T>
+class TTlsAddressStorage
+{
+public:
+    TTlsAddressStorage() = default;
+
+    template <CInvocable<T*()> TTlsReader>
+    Y_FORCE_INLINE explicit TTlsAddressStorage(TTlsReader reader)
+    {
+#ifdef YT_ENABLE_TLS_ADDRESS_TRACKING
+        Tid_ = GetTid();
+#endif
+
+        Address_ = reader();
+    }
+
+    Y_FORCE_INLINE T& operator*()
+    {
+        return *Address_;
+    }
+
+    template <CInvocable<T*()> TTlsReader>
+    Y_FORCE_INLINE void ReReadAddress(TTlsReader reader)
+    {
+        auto* address = reader();
+
+#ifdef YT_ENABLE_TLS_ADDRESS_TRACKING
+        auto newTid = GetTid();
+        if (newTid != Tid_) {
+            YT_VERIFY(address != Address_);
+        }
+        Tid_ = newTid;
+#endif
+
+        Address_ = address;
+    }
+
+private:
+#ifdef YT_ENABLE_TLS_ADDRESS_TRACKING
+    pid_t Tid_;
+#endif
+
+    T* Address_;
+
+#ifdef YT_ENABLE_TLS_ADDRESS_TRACKING
+    Y_FORCE_INLINE static pid_t GetTid()
+    {
+        return ::syscall(__NR_gettid);
+    }
+#endif
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 //! All context thread local variables which must be preserved for each fiber are listed here.
 class TBaseSwitchHandler
 {
@@ -714,21 +815,34 @@ public:
     // On start fiber running.
     explicit TFiberSwitchHandler(TFiber* fiber)
         : Fiber_(fiber)
+        , FiberId_(TFiberIdGenerator::Get()->Generate())
     {
-        SavedThis_ = std::exchange(CurrentFiberSwitchHandler(), this);
+        AddressStorage_ = TTlsAddressStorage<TFiberSwitchHandler*>([] {
+            return std::addressof(CurrentFiberSwitchHandler());
+        });
 
-        YT_VERIFY(SwapCurrentFiberId(fiber->GetFiberId()) == InvalidFiberId);
-        YT_VERIFY(!SwapCurrentFls(fiber->GetFls()));
+        SavedThis_ = std::exchange(*AddressStorage_, this);
+
+        Fiber_->OnCallbackExecutionStarted(FiberId_, &Fls_);
+
+        YT_VERIFY(SwapCurrentFiberId(FiberId_) == InvalidFiberId);
+        YT_VERIFY(!SwapCurrentFls(&Fls_));
     }
 
     // On finish fiber running.
     ~TFiberSwitchHandler()
     {
-        YT_VERIFY(CurrentFiberSwitchHandler() == this);
+        AddressStorage_.ReReadAddress([] {
+            return std::addressof(CurrentFiberSwitchHandler());
+        });
+
+        YT_VERIFY(*AddressStorage_ == this);
         YT_VERIFY(UserHandlers_.empty());
 
-        YT_VERIFY(SwapCurrentFiberId(InvalidFiberId) == Fiber_->GetFiberId());
-        YT_VERIFY(SwapCurrentFls(nullptr) == Fiber_->GetFls());
+        Fiber_->OnCallbackExecutionFinished();
+
+        YT_VERIFY(SwapCurrentFiberId(InvalidFiberId) == FiberId_);
+        YT_VERIFY(SwapCurrentFls(nullptr) == &Fls_);
 
         // Support case when current fiber has been resumed, but finished without WaitFor.
         // There is preserved context of resumer fiber saved in switchHandler. Restore it.
@@ -769,7 +883,10 @@ public:
 private:
     friend TContextSwitchGuard;
 
-    const TFiber* const Fiber_;
+    TFiber* const Fiber_;
+    const TFiberId FiberId_;
+    TFls Fls_;
+    TTlsAddressStorage<TFiberSwitchHandler*> AddressStorage_;
 
     TFiberSwitchHandler* SavedThis_;
 
@@ -791,7 +908,7 @@ private:
 
         TBaseSwitchHandler::OnSwitch();
 
-        std::swap(SavedThis_, CurrentFiberSwitchHandler());
+        std::swap(SavedThis_, *AddressStorage_);
     }
 
     // On finish fiber running.
@@ -811,6 +928,9 @@ private:
     // On start fiber running.
     void OnIn()
     {
+        AddressStorage_.ReReadAddress([] {
+            return std::addressof(CurrentFiberSwitchHandler());
+        });
         OnSwitch();
 
         for (auto it = UserHandlers_.rbegin(); it != UserHandlers_.rend(); ++it) {
@@ -834,7 +954,6 @@ TFiberSwitchHandler* GetFiberSwitchHandler()
 // See devtools/gdb/yt_fibers_printer.py.
 Y_NO_INLINE void RunInFiberContext(TFiber* fiber, TClosure callback)
 {
-    fiber->Recreate();
     TFiberSwitchHandler switchHandler(fiber);
     TNullPropagatingStorageGuard nullPropagatingStorageGuard;
     callback();
@@ -910,6 +1029,8 @@ void TFiberSchedulerThread::ThreadMain()
 {
     // Hold this strongly.
     auto this_ = MakeStrong(this);
+
+    EnsureSafeShutdown();
 
     try {
         YT_LOG_DEBUG("Thread started (Name: %v)",

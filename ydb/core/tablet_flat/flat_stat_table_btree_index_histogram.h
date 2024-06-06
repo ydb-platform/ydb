@@ -135,11 +135,11 @@ public:
     }
 
     template <typename TGetSize>
-    bool Build(THistogram& histogram, ui64 resolution, ui64 totalSize) {
+    bool Build(THistogram& histogram, ui64 resolution, ui64 statTotalSize) {
         Resolution = resolution;
-        TotalSize = totalSize;
+        StatTotalSize = statTotalSize;
+        
         bool ready = true;
-
         ui64 endSize = 0;
         TVector<TPartNodes> parts;
 
@@ -337,8 +337,8 @@ private:
         ready &= BuildHistogramRecursive<TGetSize>(histogram, leftParts, beginSize, beginSize + leftSize, depth + 1);
         
         ui64 splitSize = beginSize + leftSize + middleSize / 2;
-        // Note: due to different calculation approaches splitSize may exceed TotalSize, ignore them
-        if (beginSize < splitSize && splitSize < Min(endSize, TotalSize)) {
+        // Note: due to different calculation approaches splitSize may exceed StatTotalSize, ignore them
+        if (beginSize < splitSize && splitSize < Min(endSize, StatTotalSize)) {
             AddBucket(histogram, splitKey, splitSize);
         }
 
@@ -488,7 +488,7 @@ private:
     const TSubset& Subset;
     const TKeyCellDefaults& KeyDefaults;
     IPages* const Env;
-    ui64 Resolution, TotalSize;
+    ui64 Resolution, StatTotalSize;
     TDeque<TBtreeIndexNode> LoadedBTreeNodes; // keep nodes to use TCellsIterable key refs
     TDeque<TNodeState> LoadedStateNodes; // keep nodes to use TIntrusiveList
 };

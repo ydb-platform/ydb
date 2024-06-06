@@ -14,7 +14,7 @@ WHERE Key1 > 1;
 
 ## UPDATE ON {#update-on}
 
-Used to update the data based on the results of a subquery. The set of columns returned by the subquery must be a subset of the columns of the table being updated, and all columns of the table's primary key must be present in the returned columns. The data types of the columns returned by the subquery must match the data types of the corresponding columns in the table.
+Updates the data based on the results of a subquery. The set of columns returned by the subquery must be a subset of the table's columns being updated, and all columns of the table's primary key must be present in the returned columns. The data types of the columns returned by the subquery must match the data types of the corresponding columns in the table.
 
 **Example**
 

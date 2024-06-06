@@ -159,6 +159,8 @@ public:
         if (Monitoring) {
             Monitoring->RegisterActorPage(Monitoring->RegisterIndexPage("fq_diag", "Federated Query diagnostics"),
                 "fetcher", "Pending Fetcher", false, TActivationContext::ActorSystem(), SelfId());
+            Monitoring->RegisterActorPage(Monitoring->RegisterIndexPage("fq_diag", "Federated Query diagnostics"),
+                "local_worker_manager", "Local Worker Manager", false, TActivationContext::ActorSystem(), NYql::NDqs::MakeWorkerManagerActorID(SelfId().NodeId()));
         }
 
         Become(&TPendingFetcher::StateFunc);

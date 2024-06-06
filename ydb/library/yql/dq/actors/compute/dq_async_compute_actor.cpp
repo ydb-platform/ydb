@@ -181,10 +181,178 @@ private:
             hFunc(TEvDqCompute::TEvInjectCheckpoint, OnInjectCheckpoint);
             hFunc(TEvDqCompute::TEvRestoreFromCheckpoint, OnRestoreFromCheckpoint);
             hFunc(NKikimr::TEvQuota::TEvClearance, OnCpuQuotaGiven);
+            hFunc(NActors::NMon::TEvHttpInfo, OnMonitoringPage)
             default:
                 TBase::BaseStateFuncBody(ev);
         };
     };
+
+    void OnMonitoringPage(NActors::NMon::TEvHttpInfo::TPtr& ev) {
+        TStringStream html;
+        html << "<h3>Common</h3>";
+        html << "Cookie: " << Cookie << "<br />";
+        html << "MkqlMemoryLimit: " << MkqlMemoryLimit << "<br />";
+        html << "SentStatsRequest: " << SentStatsRequest << "<br />";
+
+        html << "<h3>State</h3>";
+        html << "<pre>" << ComputeActorState.DebugString() << "</pre>";
+
+        html << "<h3>Watermarks</h3>";
+        for (const auto& [time, id]: WatermarkTakeInputChannelDataRequests) {
+            html << "WatermarkTakeInputChannelDataRequests: " << time.ToString() << " " << id << "<br />";
+        }
+
+        html << "<h3>CPU Quota</h3>";
+        html << "QuoterServiceActorId: " << QuoterServiceActorId.ToString() << "<br />";
+        if (ContinueRunEvent) {
+            html << "ContinueRunEvent.AskFreeSpace: " << ContinueRunEvent->AskFreeSpace << "<br />";
+            html << "ContinueRunEvent.AskFreeSpace: " << ContinueRunEvent->CheckpointOnly << "<br />";
+            html << "ContinueRunEvent.AskFreeSpace: " << ContinueRunEvent->CheckpointRequest.Defined() << "<br />";
+            html << "ContinueRunEvent.AskFreeSpace: " << ContinueRunEvent->WatermarkRequest.Defined() << "<br />";
+            html << "ContinueRunEvent.AskFreeSpace: " << ContinueRunEvent->CheckpointOnly << "<br />";
+            html << "ContinueRunEvent.AskFreeSpace: " << ContinueRunEvent->MemLimit << "<br />";
+            for (const auto& sinkId: ContinueRunEvent->SinkIds) {
+                html << "ContinueRunEvent.SinkIds: " << sinkId << "<br />";
+            }
+
+            for (const auto& inputTransformId: ContinueRunEvent->InputTransformIds) {
+                html << "ContinueRunEvent.InputTransformIds: " << inputTransformId << "<br />";
+            }
+        }
+
+        html << "ContinueRunStartWaitTime: " << ContinueRunStartWaitTime.ToString() << "<br />";
+        html << "ContinueRunInflight: " << ContinueRunInflight << "<br />";
+        html << "CpuTimeSpent: " << CpuTimeSpent.ToString() << "<br />";
+        html << "CpuTimeQuotaAsked: " << CpuTimeQuotaAsked.ToString() << "<br />";
+        html << "UseCpuQuota: " << UseCpuQuota() << "<br />";
+
+        html << "<h3>Checkpoints</h3>";
+        html << "ReadyToCheckpoint: " << ReadyToCheckpoint() << "<br />";
+        html << "CheckpointRequestedFromTaskRunner: " << CheckpointRequestedFromTaskRunner << "<br />";
+
+        html << "<h3>InputChannels</h3>";
+        for (const auto& [id, info]: InputChannelsMap) {
+            html << "<h4>Input Channel Id: " << id << "</h4>";
+            html << "LogPrefix: " << info.LogPrefix << "<br />";
+            html << "ChannelId: " << info.ChannelId << "<br />";
+            html << "SrcStageId: " << info.SrcStageId << "<br />";
+            html << "HasPeer: " << info.HasPeer << "<br />";
+            html << "PendingWatermarks: " << !info.PendingWatermarks.empty() << " " << (info.PendingWatermarks.empty() ? TString{} : info.PendingWatermarks.back().ToString()) << "<br />";
+            html << "WatermarksMode: " << NDqProto::EWatermarksMode_Name(info.WatermarksMode) << "<br />";
+            html << "PendingCheckpoint: " << info.PendingCheckpoint.has_value() << " " << (info.PendingCheckpoint ? TStringBuilder{} << info.PendingCheckpoint->GetId() << " " << info.PendingCheckpoint->GetGeneration() : TString{}) << "<br />";
+            html << "CheckpointingMode: " << NDqProto::ECheckpointingMode_Name(info.CheckpointingMode) << "<br />";
+            html << "FreeSpace: " << info.FreeSpace << "<br />";
+            html << "IsPaused: " << info.IsPaused() << "<br />";
+            if (info.Channel) {
+                html << "DqInputChannel.ChannelId: " << info.Channel->GetChannelId() << "<br />";
+                html << "DqInputChannel.FreeSpace: " << info.Channel->GetFreeSpace() << "<br />";
+                html << "DqInputChannel.StoredBytes: " << info.Channel->GetStoredBytes() << "<br />";
+                html << "DqInputChannel.Empty: " << info.Channel->Empty() << "<br />";
+                html << "DqInputChannel.InputType: " << (info.Channel->GetInputType() ? info.Channel->GetInputType()->GetKindAsStr() : TString{"unknown"})  << "<br />";
+                html << "DqInputChannel.InputWidth: " << (info.Channel->GetInputWidth() ? ToString(*info.Channel->GetInputWidth()) : TString{"unknown"})  << "<br />";
+                html << "DqInputChannel.IsFinished: " << info.Channel->IsFinished() << "<br />";
+
+                const auto& pushStats = info.Channel->GetPushStats();
+                html << "DqInputChannel.PushStats.ChannelId: " << pushStats.ChannelId << "<br />";
+                html << "DqInputChannel.PushStats.SrcStageId: " << pushStats.SrcStageId << "<br />";
+                html << "DqInputChannel.PushStats.RowsInMemory: " << pushStats.RowsInMemory << "<br />";
+                html << "DqInputChannel.PushStats.MaxMemoryUsage: " << pushStats.MaxMemoryUsage << "<br />";
+                html << "DqInputChannel.PushStats.DeserializationTime: " << pushStats.DeserializationTime.ToString() << "<br />";
+                html << "DqInputChannel.PushStats.Level: " << static_cast<int>(pushStats.Level) << "<br />";
+                html << "DqInputChannel.PushStats.MinWaitDuration: " << pushStats.MinWaitDuration.ToString() << "<br />";
+                html << "DqInputChannel.PushStats.CurrentPauseTs: " << (pushStats.CurrentPauseTs ? pushStats.CurrentPauseTs->ToString() : TString{}) << "<br />";
+                html << "DqInputChannel.PushStats.MergeWaitPeriod: " << pushStats.MergeWaitPeriod << "<br />";
+                html << "DqInputChannel.PushStats.Bytes: " << pushStats.Bytes << "<br />";
+                html << "DqInputChannel.PushStats.Rows: " << pushStats.Rows << "<br />";
+                html << "DqInputChannel.PushStats.Chunks: " << pushStats.Chunks << "<br />";
+                html << "DqInputChannel.PushStats.Splits: " << pushStats.Splits << "<br />";
+                html << "DqInputChannel.PushStats.FirstMessageTs: " << pushStats.FirstMessageTs.ToString() << "<br />";
+                html << "DqInputChannel.PushStats.PauseMessageTs: " << pushStats.PauseMessageTs.ToString() << "<br />";
+                html << "DqInputChannel.PushStats.ResumeMessageTs: " << pushStats.ResumeMessageTs.ToString() << "<br />";
+                html << "DqInputChannel.PushStats.LastMessageTs: " << pushStats.LastMessageTs.ToString() << "<br />";
+                html << "DqInputChannel.PushStats.WaitTime: " << pushStats.WaitTime.ToString() << "<br />";
+
+                const auto& popStats = info.Channel->GetPopStats();
+                html << "DqInputChannel.PopStats.Bytes: " << popStats.Bytes << "<br />";
+                html << "DqInputChannel.PopStats.Rows: " << popStats.Rows << "<br />";
+                html << "DqInputChannel.PopStats.Chunks: " << popStats.Chunks << "<br />";
+                html << "DqInputChannel.PopStats.Splits: " << popStats.Splits << "<br />";
+                html << "DqInputChannel.PopStats.FirstMessageTs: " << popStats.FirstMessageTs.ToString() << "<br />";
+                html << "DqInputChannel.PopStats.PauseMessageTs: " << popStats.PauseMessageTs.ToString() << "<br />";
+                html << "DqInputChannel.PopStats.ResumeMessageTs: " << popStats.ResumeMessageTs.ToString() << "<br />";
+                html << "DqInputChannel.PopStats.LastMessageTs: " << popStats.LastMessageTs.ToString() << "<br />";
+                html << "DqInputChannel.PopStats.WaitTime: " << popStats.WaitTime.ToString() << "<br />";
+            }
+        }
+
+        html << "<h3>OutputChannels</h3>";
+        for (const auto& [id, info]: OutputChannelsMap) {
+            html << "<h4>Input Channel Id: " << id << "</h4>";
+            html << "ChannelId: " << info.ChannelId << "<br />";
+            html << "DstStageId: " << info.DstStageId << "<br />";
+            html << "HasPeer: " << info.HasPeer << "<br />";
+            html << "Finished: " << info.Finished << "<br />";
+            html << "EarlyFinish: " << info.EarlyFinish << "<br />";
+            html << "PopStarted: " << info.PopStarted << "<br />";
+            html << "IsTransformOutput: " << info.IsTransformOutput << "<br />";
+            html << "EWatermarksMode: " << NDqProto::EWatermarksMode_Name(info.WatermarksMode) << "<br />";
+
+            if (info.AsyncData) {
+                html << "AsyncData.DataSize: " << info.AsyncData->Data.size() << "<br />";
+                html << "AsyncData.Changed: " << info.AsyncData->Changed << "<br />";
+                html << "AsyncData.Checkpoint: " << info.AsyncData->Checkpoint << "<br />";
+                html << "AsyncData.Finished: " << info.AsyncData->Finished << "<br />";
+                html << "AsyncData.Watermark: " << info.AsyncData->Watermark << "<br />";
+            }
+
+            if (info.Channel) {
+                html << "DqOutputChannel.ChannelId: " << info.Channel->GetChannelId() << "<br />";
+                html << "DqOutputChannel.ValuesCount: " << info.Channel->GetValuesCount() << "<br />";
+                html << "DqOutputChannel.IsFull: " << info.Channel->IsFull() << "<br />";
+                html << "DqOutputChannel.HasData: " << info.Channel->HasData() << "<br />";
+                html << "DqOutputChannel.IsFinished: " << info.Channel->IsFinished() << "<br />";
+                html << "DqInputChannel.OutputType: " << (info.Channel->GetOutputType() ? info.Channel->GetOutputType()->GetKindAsStr() : TString{"unknown"})  << "<br />";
+
+                const auto& pushStats = info.Channel->GetPushStats();
+                html << "DqOutputChannel.PushStats.MaxRowsInMemory: " << pushStats.MaxRowsInMemory << "<br />";
+                html << "DqOutputChannel.PushStats.MaxMemoryUsage: " << pushStats.MaxMemoryUsage << "<br />";
+                html << "DqOutputChannel.PushStats.Level: " << static_cast<int>(pushStats.Level) << "<br />";
+                html << "DqOutputChannel.PushStats.MinWaitDuration: " << pushStats.MinWaitDuration.ToString() << "<br />";
+                html << "DqOutputChannel.PushStats.CurrentPauseTs: " << (pushStats.CurrentPauseTs ? pushStats.CurrentPauseTs->ToString() : TString{}) << "<br />";
+                html << "DqOutputChannel.PushStats.MergeWaitPeriod: " << pushStats.MergeWaitPeriod << "<br />";
+                html << "DqOutputChannel.PushStats.Bytes: " << pushStats.Bytes << "<br />";
+                html << "DqOutputChannel.PushStats.Rows: " << pushStats.Rows << "<br />";
+                html << "DqOutputChannel.PushStats.Chunks: " << pushStats.Chunks << "<br />";
+                html << "DqOutputChannel.PushStats.Splits: " << pushStats.Splits << "<br />";
+                html << "DqOutputChannel.PushStats.FirstMessageTs: " << pushStats.FirstMessageTs.ToString() << "<br />";
+                html << "DqOutputChannel.PushStats.PauseMessageTs: " << pushStats.PauseMessageTs.ToString() << "<br />";
+                html << "DqOutputChannel.PushStats.ResumeMessageTs: " << pushStats.ResumeMessageTs.ToString() << "<br />";
+                html << "DqOutputChannel.PushStats.LastMessageTs: " << pushStats.LastMessageTs.ToString() << "<br />";
+                html << "DqOutputChannel.PushStats.WaitTime: " << pushStats.WaitTime.ToString() << "<br />";
+
+                const auto& popStats = info.Channel->GetPopStats();
+                html << "DqOutputChannel.PopStats.ChannelId: " << popStats.ChannelId << "<br />";
+                html << "DqOutputChannel.PopStats.DstStageId: " << popStats.DstStageId << "<br />";
+                html << "DqOutputChannel.PopStats.MaxMemoryUsage: " << popStats.MaxMemoryUsage << "<br />";
+                html << "DqOutputChannel.PopStats.MaxRowsInMemory: " << popStats.MaxRowsInMemory << "<br />";
+                html << "DqOutputChannel.PopStats.SerializationTime: " << popStats.SerializationTime.ToString() << "<br />";
+                html << "DqOutputChannel.PopStats.SpilledBytes: " << popStats.SpilledBytes << "<br />";
+                html << "DqOutputChannel.PopStats.SpilledRows: " << popStats.SpilledRows << "<br />";
+                html << "DqOutputChannel.PopStats.SpilledBlobs: " << popStats.SpilledBlobs << "<br />";
+                html << "DqOutputChannel.PopStats.Bytes: " << popStats.Bytes << "<br />";
+                html << "DqOutputChannel.PopStats.Rows: " << popStats.Rows << "<br />";
+                html << "DqOutputChannel.PopStats.Chunks: " << popStats.Chunks << "<br />";
+                html << "DqOutputChannel.PopStats.Splits: " << popStats.Splits << "<br />";
+                html << "DqOutputChannel.PopStats.FirstMessageTs: " << popStats.FirstMessageTs.ToString() << "<br />";
+                html << "DqOutputChannel.PopStats.PauseMessageTs: " << popStats.PauseMessageTs.ToString() << "<br />";
+                html << "DqOutputChannel.PopStats.ResumeMessageTs: " << popStats.ResumeMessageTs.ToString() << "<br />";
+                html << "DqOutputChannel.PopStats.LastMessageTs: " << popStats.LastMessageTs.ToString() << "<br />";
+                html << "DqOutputChannel.PopStats.WaitTime: " << popStats.WaitTime.ToString() << "<br />";
+            }
+        }
+
+        Send(ev->Sender, new NActors::NMon::TEvHttpInfoRes(html.Str()));
+    }
 
     void OnStateRequest(TEvDqCompute::TEvStateRequest::TPtr& ev) {
         CA_LOG_T("Got TEvStateRequest from actor " << ev->Sender << " PingCookie: " << ev->Cookie);
@@ -230,18 +398,18 @@ private:
             CA_LOG_T("update task runner stats");
             TaskRunnerStats = std::move(ev->Get()->Stats);
         }
-        auto record = NDqProto::TEvComputeActorState();
-        record.SetState(NDqProto::COMPUTE_STATE_EXECUTING);
-        record.SetStatusCode(NYql::NDqProto::StatusIds::SUCCESS);
-        record.SetTaskId(Task.GetId());
+        ComputeActorState = NDqProto::TEvComputeActorState();
+        ComputeActorState.SetState(NDqProto::COMPUTE_STATE_EXECUTING);
+        ComputeActorState.SetStatusCode(NYql::NDqProto::StatusIds::SUCCESS);
+        ComputeActorState.SetTaskId(Task.GetId());
         NYql::TIssues issues;
         FillIssues(issues);
 
-        IssuesToMessage(issues, record.MutableIssues());
-        FillStats(record.MutableStats(), /* last */ false);
+        IssuesToMessage(issues, ComputeActorState.MutableIssues());
+        FillStats(ComputeActorState.MutableStats(), /* last */ false);
         for (const auto& [actorId, cookie] : WaitingForStateResponse) {
             auto state = MakeHolder<TEvDqCompute::TEvState>();
-            state->Record = record;
+            state->Record = ComputeActorState;
             Send(actorId, std::move(state), NActors::IEventHandle::FlagTrackDelivery, cookie);
         }
         WaitingForStateResponse.clear();
@@ -976,6 +1144,7 @@ private:
     NMonitoring::THistogramPtr CpuTimeGetQuotaLatency;
     NMonitoring::THistogramPtr CpuTimeQuotaWaitDelay;
     NMonitoring::TDynamicCounters::TCounterPtr CpuTime;
+    NDqProto::TEvComputeActorState ComputeActorState;
 };
 
 

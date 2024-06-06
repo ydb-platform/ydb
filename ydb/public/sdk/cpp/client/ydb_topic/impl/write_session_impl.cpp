@@ -672,6 +672,9 @@ void TWriteSessionImpl::OnConnect(
             ConnectDelayContext = nullptr;
 
             if (st.Ok()) {
+                if (Processor) {
+                    Processor->Cancel();
+                }
                 Processor = std::move(processor);
                 InitImpl();
                 // Still should call ReadFromProcessor();

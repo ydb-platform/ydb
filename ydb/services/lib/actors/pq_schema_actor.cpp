@@ -1090,9 +1090,11 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         if (request.has_partitioning_settings()) {
             const auto& settings = request.partitioning_settings();
-            if (settings.min_active_partitions() > 0) {
-                minParts = settings.min_active_partitions();
+            if (settings.min_active_partitions() < 0) {
+                error = TStringBuilder() << "Partitions count must be positive, provided " << settings.min_active_partitions();
+                return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
             }
+            minParts = std::max<ui32>(1, settings.min_active_partitions());
             if (AppData(ctx)->FeatureFlags.GetEnableTopicSplitMerge() && request.has_partitioning_settings()) {
                 auto pqTabletConfigPartStrategy = pqTabletConfig->MutablePartitionStrategy();
                 auto autoscaleSettings = settings.autoscaling_settings();

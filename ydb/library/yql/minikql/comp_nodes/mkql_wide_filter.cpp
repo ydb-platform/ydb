@@ -101,7 +101,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    typename TBaseComputation::TGenerateResult GenFetchProcess(Value*, const TCodegenContext& ctx, const TResultCodegenerator& fetchGenerator, BasicBlock*& block) const override {
+    typename TBaseComputation::TGenerateResult GenFetchProcess(const TCodegenContext& ctx, const TResultCodegenerator& fetchGenerator, BasicBlock*& block) const override {
         auto &context = ctx.Codegen.GetContext();
         auto pass = BasicBlock::Create(context, "pass", ctx.Func);
         auto check = BasicBlock::Create(context, "check", ctx.Func);

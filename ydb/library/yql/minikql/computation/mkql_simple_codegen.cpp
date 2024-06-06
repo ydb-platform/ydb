@@ -5,7 +5,7 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 #ifndef MKQL_DISABLE_CODEGEN
-ICodegeneratorInlineWideNode::TGenerateResult TSimpleWideFlowCodegeneratorNodeLLVMBase::DoGenGetValues(const NKikimr::NMiniKQL::TCodegenContext &ctx, llvm::Value *statePtrVal, llvm::BasicBlock *&genToBlock) const  {
+ICodegeneratorInlineWideNode::TGenerateResult TSimpleWideFlowCodegeneratorNodeLLVMBase::DoGenGetValuesBase(const NKikimr::NMiniKQL::TCodegenContext &ctx, llvm::Value *statePtrVal, llvm::BasicBlock *&genToBlock) const  {
     // init stuff (mainly in global entry block)
 
     auto& context = ctx.Codegen.GetContext();
@@ -61,7 +61,7 @@ ICodegeneratorInlineWideNode::TGenerateResult TSimpleWideFlowCodegeneratorNodeLL
 
     block = loop; // loop head block: (prepare inputs and decide whether to calculate row or not)
 
-    const auto generated = GenFetchProcess(statePtrVal, ctx, std::bind_front(GetNodeValues, SourceFlow), block);
+    const auto generated = DispatchGenFetchProcess(statePtrVal, ctx, std::bind_front(GetNodeValues, SourceFlow), block);
     auto processResVal = generated.first;
     if (processResVal == nullptr) {
         const auto prepareFuncType = hasState
@@ -154,10 +154,6 @@ ICodegeneratorInlineWideNode::TGenerateResult TSimpleWideFlowCodegeneratorNodeLL
         });
     }
     return {processResTruncVal, std::move(new_getters)};
-}
-
-ICodegeneratorInlineWideNode::TGenerateResult TSimpleWideFlowCodegeneratorNodeLLVMBase::DoGenGetValues(const NKikimr::NMiniKQL::TCodegenContext &ctx, llvm::BasicBlock *&genToBlock) const {
-    return DoGenGetValues(ctx, nullptr, genToBlock);
 }
 
 #endif

@@ -173,6 +173,7 @@ public:
     virtual TString GetHTTPBADREQUEST(const NMon::TEvHttpInfo* request, TString contentType = {}, TString response = {}) = 0;
     virtual TString GetHTTPFORBIDDEN(const NMon::TEvHttpInfo* request) = 0;
     virtual TString GetHTTPNOTFOUND(const NMon::TEvHttpInfo* request) = 0;
+    virtual TString GetHTTPINTERNALERROR(const NMon::TEvHttpInfo* request, TString contentType = {}, TString response = {}) = 0;
     virtual bool CheckAccessAdministration(const NMon::TEvHttpInfo* request) = 0;
     virtual void TranslateFromBSC2Human(const NKikimrBlobStorage::TConfigResponse& response, TString& bscError, bool& forceRetryPossible) = 0;
 };

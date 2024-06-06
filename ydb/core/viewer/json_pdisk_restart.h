@@ -132,6 +132,7 @@ public:
         Send(Event->Sender, new NMon::TEvHttpInfoRes(
             Viewer->GetHTTPGATEWAYTIMEOUT(Event->Get(), "text/plain", "Timeout receiving response from BSC"),
             0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        PassAway();
     }
 
     void PassAway() override {
@@ -154,11 +155,14 @@ public:
                 }
             }
             json["debugMessage"] = Response->Record.ShortDebugString();
+            TBase::Send(Event->Sender,
+                new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), NJson::WriteJson(json)),
+                0, NMon::IEvHttpInfoRes::EContentType::Custom));
         } else {
-            json["result"] = false;
-            json["error"] = "No response was received from BSC";
+            TBase::Send(Event->Sender,
+                new NMon::TEvHttpInfoRes(Viewer->GetHTTPINTERNALERROR(Event->Get(), "text/plain", "No response was received from BSC"),
+                0, NMon::IEvHttpInfoRes::EContentType::Custom));
         }
-        TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), NJson::WriteJson(json)), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         PassAway();
     }
 };

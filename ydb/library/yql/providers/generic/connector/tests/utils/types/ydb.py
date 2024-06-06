@@ -83,6 +83,7 @@ class Timestamp(PrimitiveType):
 class Interval(PrimitiveType):
     pass
 
+
 class Json(PrimitiveType):
     pass
 

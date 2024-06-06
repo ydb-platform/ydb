@@ -38,21 +38,9 @@ class OneTimeWaiter:
         # This should be enough for tables to initialize
         start = datetime.now()
 
-<<<<<<< HEAD
-<<<<<<< HEAD
         timeout = 60
         # timeout = 120
         # timeout = 600
-=======
-        # timeout = 60
-        # timeout = 120
-        timeout = 600
->>>>>>> ydb json tests
-=======
-        timeout = 60
-        # timeout = 120
-        # timeout = 600
->>>>>>> adding table wait timeout
         while (datetime.now() - start).total_seconds() < timeout:
             self.actual_tables = set(self.docker_compose_helper.list_ydb_tables())
 

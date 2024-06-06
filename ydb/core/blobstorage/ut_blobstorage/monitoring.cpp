@@ -459,11 +459,12 @@ Y_UNIT_TEST_SUITE(BurstDetection) {
 void TestDiskTimeAvailableScaling() {
     TBlobStorageGroupInfo::TTopology topology(TBlobStorageGroupType::ErasureNone, 1, 1, 1, true);
     std::unique_ptr<TEnvironmentSetup> env;
+    NKikimrBlobStorage::TBaseConfig baseConfig;
     ui32 groupSize;
     TBlobStorageGroupType groupType;
     ui32 groupId;
     std::vector<ui32> pdiskLayout;
-    SetupEnv(topology, env, groupSize, groupType, groupId, pdiskLayout, 0, 1);
+    SetupEnv(topology, env, baseConfig, groupSize, groupType, groupId, pdiskLayout, 0, 1);
 
     i64 test1 = env->AggregateVDiskCounters(env->StoragePoolName, groupSize, groupSize, groupId, pdiskLayout,
             "advancedCost", "DiskTimeAvailable");

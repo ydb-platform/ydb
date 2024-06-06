@@ -7,8 +7,6 @@ import subprocess
 import yaml
 from typing import Dict, Any, Sequence
 
-import time
-
 import yatest.common
 
 from ydb.library.yql.providers.generic.connector.tests.utils.log import make_logger

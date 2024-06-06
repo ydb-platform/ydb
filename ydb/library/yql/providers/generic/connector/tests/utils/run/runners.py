@@ -19,13 +19,21 @@ def configure_runner(runner_type: str, settings: Settings) -> Runner:
             return DqRunner(
                 dqrun_path=yat.build_path("ydb/library/yql/tools/dqrun/dqrun"),
                 settings=settings,
+<<<<<<< HEAD
                 udf_dir=yat.build_path("ydb/library/yql/udfs/common/json2"),
+=======
+                udfs_dir=yat.build_path("ydb/library/yql/udfs/common/json2"),
+>>>>>>> style fixes
             )
         case "kqprun":
             return KqpRunner(
                 kqprun_path=yat.build_path("ydb/tests/tools/kqprun/kqprun"),
                 settings=settings,
+<<<<<<< HEAD
                 udf_dir=yat.build_path("ydb/library/yql/udfs/common/json2"),
+=======
+                udfs_dir=yat.build_path("ydb/library/yql/udfs/common/json2"),
+>>>>>>> style fixes
             )
         case _:
             raise ValueError(runner_type)

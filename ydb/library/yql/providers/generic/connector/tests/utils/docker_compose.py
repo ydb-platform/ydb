@@ -7,6 +7,8 @@ import subprocess
 import yaml
 from typing import Dict, Any, Sequence
 
+import time
+
 import yatest.common
 
 from ydb.library.yql.providers.generic.connector.tests.utils.log import make_logger
@@ -126,12 +128,7 @@ class DockerComposeHelper:
         LOGGER.debug("calling command: " + " ".join(cmd))
 
         # let tables initialize
-        # let tables initialize
         # TODO maybe try except where timeout (quick check: to get it set sleep to zero and review error log for ../datasource/ydb -F *optional*)
-<<<<<<< HEAD
-=======
-        # time.sleep(15)
->>>>>>> adding table wait timeout
 
         # This should be enough for database to initialize
         #   makes CalledProcessError if database did not initialize it`s first tables before check

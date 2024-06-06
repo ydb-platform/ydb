@@ -127,7 +127,9 @@ class DockerComposeHelper:
 
         LOGGER.debug("calling command: " + " ".join(cmd))
 
-        # time.sleep(1000)
+        # let tables initialize 
+        # TODO maybe try except where timeout (quick check: to get it set sleep to zero and review error log for ../datasource/ydb -F *optional*)
+        time.sleep(15)
 
         # let tables initialize
         # let tables initialize

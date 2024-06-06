@@ -203,13 +203,13 @@ class DqRunner(Runner):
         self,
         dqrun_path: Path,
         settings: Settings,
-        udfs_dir: Path,
+        udf_dir: Path,
     ):
         self.gateways_conf_renderer = GatewaysConfRenderer()
         self.dqrun_path = dqrun_path
         self.settings = settings
 
-        self.udfs_dir = udfs_dir
+        self.udf_dir = udf_dir
 
     def run(self, test_name: str, script: str, generic_settings: GenericSettings) -> Result:
         LOGGER.debug(script)
@@ -226,14 +226,11 @@ class DqRunner(Runner):
         with open(fs_conf_path, "w") as f:
             pass
 
-        # Set udfs dir for cmd
-        udfs_dir = self.udfs_dir
-
         # Run dqrun
         result_path = artifacts.make_path(test_name, 'result.yson')
 
         # For debug add option --trace-opt to args
-        cmd = f'{self.dqrun_path} -s -p {script_path} --fs-cfg={fs_conf_path} --gateways-cfg={gateways_conf_path} --result-file={result_path}  --udfs-dir={udfs_dir}  --format="binary" -v 7'
+        cmd = f'{self.dqrun_path} -s -p {script_path} --fs-cfg={fs_conf_path} --gateways-cfg={gateways_conf_path} --result-file={result_path}  --udfs-dir={self.udf_dir}  --format="binary" -v 7'
 
         output = None
         data_out = None

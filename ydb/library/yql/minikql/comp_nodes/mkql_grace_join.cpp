@@ -690,6 +690,10 @@ private:
             }
         }
 
+        if (resultLeft == EFetchResult::Yield || resultRight == EFetchResult::Yield) {
+            return true;
+        }
+
         if (resultLeft == EFetchResult::Finish ) {
             *HaveMoreLeftRows = false;
         }
@@ -699,11 +703,6 @@ private:
             *HaveMoreRightRows = false;
         }
 
-        if ((resultLeft == EFetchResult::Yield && (!*HaveMoreRightRows || resultRight == EFetchResult::Yield)) ||
-            (resultRight == EFetchResult::Yield && !*HaveMoreLeftRows))
-        {
-            return true;
-        }
         return false;
     }
 

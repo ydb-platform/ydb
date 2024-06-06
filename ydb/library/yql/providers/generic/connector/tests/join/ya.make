@@ -68,7 +68,6 @@ PEERDIR(
 )
 
 DEPENDS(
-    ydb/library/yql/udfs/common/json2
     ydb/library/yql/tools/dqrun
     ydb/library/yql/udfs/common/json2
     ydb/tests/tools/kqprun

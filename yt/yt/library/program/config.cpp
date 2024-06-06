@@ -1,5 +1,7 @@
 #include "config.h"
 
+#include <yt/yt/core/concurrency/fiber_scheduler_thread.h>
+
 namespace NYT {
 
 using namespace NYTree;
@@ -117,6 +119,8 @@ void TSingletonsDynamicConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("spin_lock_slow_path_logging_threshold", &TThis::SpinWaitSlowPathLoggingThreshold)
         .Optional();
+    registrar.Parameter("max_idle_fibers", &TThis::MaxIdleFibers)
+        .Default(NConcurrency::DefaultMaxIdleFibers);
     registrar.Parameter("yt_alloc", &TThis::YTAlloc)
         .Optional();
     registrar.Parameter("tcp_dispatcher", &TThis::TcpDispatcher)

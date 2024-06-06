@@ -37,8 +37,9 @@ using namespace NAuth;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const NLogging::TLogger Logger{"Jaeger"};
-static const NProfiling::TProfiler Profiler{"/tracing"};
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Jaeger");
+YT_DEFINE_GLOBAL(const NProfiling::TProfiler, Profiler, "/tracing");
+
 static const TString ServiceTicketMetadataName = "x-ya-service-ticket";
 static const TString TracingServiceAlias = "tracing";
 
@@ -229,10 +230,10 @@ TBatchInfo::TBatchInfo()
 { }
 
 TBatchInfo::TBatchInfo(const TString& endpoint)
-    : TracesDequeued_(Profiler.WithTag("endpoint", endpoint).Counter("/traces_dequeued"))
-    , TracesDropped_(Profiler.WithTag("endpoint", endpoint).Counter("/traces_dropped"))
-    , MemoryUsage_(Profiler.WithTag("endpoint", endpoint).Gauge("/memory_usage"))
-    , TraceQueueSize_(Profiler.WithTag("endpoint", endpoint).Gauge("/queue_size"))
+    : TracesDequeued_(Profiler().WithTag("endpoint", endpoint).Counter("/traces_dequeued"))
+    , TracesDropped_(Profiler().WithTag("endpoint", endpoint).Counter("/traces_dropped"))
+    , MemoryUsage_(Profiler().WithTag("endpoint", endpoint).Gauge("/memory_usage"))
+    , TraceQueueSize_(Profiler().WithTag("endpoint", endpoint).Gauge("/queue_size"))
 { }
 
 void TBatchInfo::PopFront()
@@ -312,10 +313,10 @@ TJaegerChannelManager::TJaegerChannelManager(
     , Endpoint_(endpoint)
     , ReopenTime_(TInstant::Now() + config->ReconnectPeriod + RandomDuration(config->ReconnectPeriod))
     , RpcTimeout_(config->RpcTimeout)
-    , PushedBytes_(Profiler.WithTag("endpoint", endpoint).Counter("/pushed_bytes"))
-    , PushErrors_(Profiler.WithTag("endpoint", endpoint).Counter("/push_errors"))
-    , PayloadSize_(Profiler.WithTag("endpoint", endpoint).Summary("/payload_size"))
-    , PushDuration_(Profiler.WithTag("endpoint", endpoint).Timer("/push_duration"))
+    , PushedBytes_(Profiler().WithTag("endpoint", endpoint).Counter("/pushed_bytes"))
+    , PushErrors_(Profiler().WithTag("endpoint", endpoint).Counter("/push_errors"))
+    , PayloadSize_(Profiler().WithTag("endpoint", endpoint).Summary("/payload_size"))
+    , PushDuration_(Profiler().WithTag("endpoint", endpoint).Timer("/push_duration"))
 {
     auto channelEndpointConfig = CloneYsonStruct(config->CollectorChannelConfig);
     channelEndpointConfig->Address = endpoint;
@@ -388,7 +389,7 @@ TJaegerTracer::TJaegerTracer(
     , Config_(config)
     , TvmService_(config->TvmService ? CreateTvmService(config->TvmService) : nullptr)
 {
-    Profiler.AddFuncGauge("/enabled", MakeStrong(this), [this] {
+    Profiler().AddFuncGauge("/enabled", MakeStrong(this), [this] {
         return Config_.Acquire()->IsEnabled();
     });
 

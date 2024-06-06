@@ -632,6 +632,7 @@ def ktlint(unit, *args):
         # TODO remove FILES, see DEVTOOLS-7052
         'FILES': serialized_test_files,
         'TEST-FILES': serialized_test_files,
+        'MODULE_LANG': consts.ModuleLang.KOTLIN,
     }
     test_record.update(extra_test_dart_data)
 
@@ -698,6 +699,7 @@ def java_style(unit, *args):
         'TEST-FILES': serialized_test_files,
         'JDK_LATEST_VERSION': unit.get('JDK_LATEST_VERSION'),
         'JDK_RESOURCE': 'JDK' + (unit.get('JDK_VERSION') or unit.get('JDK_REAL_VERSION') or '_DEFAULT'),
+        'MODULE_LANG': consts.ModuleLang.JAVA,
     }
 
     data = dump_test(unit, test_record)
@@ -744,6 +746,7 @@ def gofmt(unit, *args):
         # TODO remove FILES, see DEVTOOLS-7052
         'FILES': serialized_test_files,
         'TEST-FILES': serialized_test_files,
+        'MODULE_LANG': consts.ModuleLang.GO,
     }
 
     data = dump_test(unit, test_record)
@@ -785,6 +788,7 @@ def govet(unit, *args):
         # TODO remove FILES, see DEVTOOLS-7052
         'FILES': serialized_test_files,
         'TEST-FILES': serialized_test_files,
+        'MODULE_LANG': consts.ModuleLang.GO,
     }
 
     data = dump_test(unit, test_record)
@@ -855,6 +859,7 @@ def onadd_check_py_imports(unit, *args):
         # TODO remove FILES, see DEVTOOLS-7052
         'FILES': test_files,
         'TEST-FILES': test_files,
+        'MODULE_LANG': consts.ModuleLang.PY,
     }
     if unit.get('NO_CHECK_IMPORTS_FOR_VALUE') != "None":
         test_record["NO-CHECK"] = serialize_list(get_values_list(unit, 'NO_CHECK_IMPORTS_FOR_VALUE') or ["*"])
@@ -934,6 +939,7 @@ def onadd_pytest_bin(unit, *args):
         'BUILD-FOLDER-PATH': _common.strip_roots(unit_path),
         'BLOB': unit.get('TEST_BLOB_DATA'),
         'CANONIZE_SUB_PATH': unit.get('CANONIZE_SUB_PATH'),
+        'MODULE_LANG': consts.ModuleLang.PY,
     }
     if binary_path:
         test_record['BINARY-PATH'] = _common.strip_roots(binary_path)
@@ -1047,6 +1053,7 @@ def onjava_test(unit, *args):
         'JDK_RESOURCE': 'JDK' + (unit.get('JDK_VERSION') or unit.get('JDK_REAL_VERSION') or '_DEFAULT'),
         'JDK_FOR_TESTS': 'JDK' + (unit.get('JDK_VERSION') or unit.get('JDK_REAL_VERSION') or '_DEFAULT') + '_FOR_TESTS',
         'YT-SPEC': serialize_list(yt_spec_values),
+        'MODULE_LANG': consts.ModuleLang.JAVA,
     }
     test_classpath_origins = unit.get('TEST_CLASSPATH_VALUE')
     if test_classpath_origins:
@@ -1088,6 +1095,7 @@ def onjava_test_deps(unit, *args):
         'IGNORE_CLASSPATH_CLASH': ' '.join(get_values_list(unit, 'JAVA_IGNORE_CLASSPATH_CLASH_VALUE')),
         # JTEST/JTEST_FOR only
         'MODULE_TYPE': unit.get('MODULE_TYPE'),
+        'MODULE_LANG': consts.ModuleLang.JAVA,
     }
     if mode == 'strict':
         test_record['STRICT_CLASSPATH_CLASH'] = 'yes'
@@ -1464,6 +1472,7 @@ def clang_tidy(unit, *args, from_other_type=False):
         'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE'),
         'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE'),
         'TEST_PARTITION': unit.get("TEST_PARTITION"),
+        'MODULE_LANG': consts.ModuleLang.CPP,
     }
 
     data = dump_test(unit, test_record)
@@ -1536,6 +1545,7 @@ def unittest_py(unit, *args):
         'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE'),
         'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE'),
         'TEST_PARTITION': unit.get("TEST_PARTITION"),
+        'MODULE_LANG': consts.ModuleLang.CPP,
     }
 
     data = dump_test(unit, test_record)
@@ -1608,6 +1618,7 @@ def gunittest(unit, *args):
         'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE'),
         'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE'),
         'TEST_PARTITION': unit.get("TEST_PARTITION"),
+        'MODULE_LANG': consts.ModuleLang.CPP,
     }
 
     data = dump_test(unit, test_record)
@@ -1680,6 +1691,7 @@ def g_benchmark(unit, *args):
         'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE'),
         'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE'),
         'TEST_PARTITION': unit.get("TEST_PARTITION"),
+        'MODULE_LANG': consts.ModuleLang.CPP,
     }
 
     benchmark_opts = get_unit_list_variable(unit, 'BENCHMARK_OPTS_VALUE')
@@ -1760,6 +1772,7 @@ def go_test(unit, *args):
         'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE'),
         'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE'),
         'TEST_PARTITION': unit.get("TEST_PARTITION"),
+        'MODULE_LANG': consts.ModuleLang.GO,
     }
 
     data = dump_test(unit, test_record)
@@ -1992,6 +2005,7 @@ def y_benchmark(unit, *args):
         'TEST_IOS_RUNTIME_TYPE': unit.get('TEST_IOS_RUNTIME_TYPE_VALUE'),
         'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE'),
         'TEST_PARTITION': unit.get("TEST_PARTITION"),
+        'MODULE_LANG': consts.ModuleLang.CPP,
     }
 
     benchmark_opts = get_unit_list_variable(unit, 'BENCHMARK_OPTS_VALUE')
@@ -2138,6 +2152,7 @@ def go_bench(unit, *args):
         'ANDROID_APK_TEST_ACTIVITY': unit.get('ANDROID_APK_TEST_ACTIVITY_VALUE'),
         'TEST_PARTITION': unit.get("TEST_PARTITION"),
         'GO_BENCH_TIMEOUT': unit.get('GO_BENCH_TIMEOUT'),
+        'MODULE_LANG': consts.ModuleLang.GO,
     }
 
     if "ya:run_go_benchmark" not in test_record["TAG"]:

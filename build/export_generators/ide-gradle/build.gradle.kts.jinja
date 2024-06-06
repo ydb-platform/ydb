@@ -3,7 +3,15 @@
 {%- set with_kotlin = target.with_kotlin -%}
 {%- set kotlin_version = target.kotlin_version -%}
 {%- set hasJunit5Test = extra_targets|selectattr('junit5_test') -%}
+{%- set errorprone_plugin_version = "4.0.0" -%}
 plugins {
+{# error prone plugin configuration #}
+{%- for library in target.consumer if library.classpath -%}
+{%-     if library.prebuilt and library.jar and (library.type != "contrib" or build_contribs) and "contrib/java/com/google/errorprone/error_prone_annotations/" in library.jar -%}
+    id("net.ltgt.errorprone") version "{{ errorprone_plugin_version }}"
+{%-     endif -%}
+{%- endfor -%}
+{# lombok configuration #}
 {%- if "lombok.launch.AnnotationProcessorHider$AnnotationProcessor" in target.annotation_processors %}
     id("io.freefair.lombok") version "8.6"
 {%- endif -%}
@@ -165,6 +173,16 @@ sourceSets {
 
 dependencies {
 {%- for library in target.consumer if library.classpath -%}
+{# error prone plugin configuration #}
+{%-     if library.prebuilt and library.jar and (library.type != "contrib" or build_contribs) and "contrib/java/com/google/errorprone/error_prone_annotations" in library.jar -%}
+{%          set errorprone_version = library.jar -%}
+{%          set errorprone_parts = errorprone_version|replace("contrib/java/com/google/errorprone/error_prone_annotations/") -%}
+{%          set errorprone_parts = split(errorprone_parts, '/') -%}
+
+    errorprone("com.google.errorprone:error_prone_core:{{ errorprone_parts[0] }}")
+
+{%-     endif -%}
+
 {%-     if library.prebuilt and library.jar and (library.type != "contrib" or build_contribs) %}
     implementation(files("$project_root/{{ library.jar }}"))
 {%-     else -%}

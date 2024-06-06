@@ -254,9 +254,13 @@ public:
         , MutationId_(mutationId)
         , Retry_(retry)
         , SyncInput_(Input_)
-        , AsyncInput_(CreateAsyncAdapter(
-            &SyncInput_,
-            Context_->GetClient()->GetConnection()->GetInvoker()))
+        , AsyncInput_(
+            CreateZeroCopyAdapter(
+                CreateAsyncAdapter(
+                    &SyncInput_,
+                    Context_->GetClient()->GetConnection()->GetInvoker()
+                )
+            ))
         , SyncOutput_(Output_)
         , AsyncOutput_(CreateAsyncAdapter(
             &SyncOutput_,
@@ -337,7 +341,7 @@ private:
 
     TString Input_;
     TStringInput SyncInput_;
-    IAsyncInputStreamPtr AsyncInput_;
+    IAsyncZeroCopyInputStreamPtr AsyncInput_;
 
     TString Output_;
     TStringOutput SyncOutput_;

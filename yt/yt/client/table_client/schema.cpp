@@ -924,19 +924,16 @@ TTableSchemaPtr TTableSchema::FromKeyColumns(const TKeyColumns& keyColumns)
 
 TTableSchemaPtr TTableSchema::FromSortColumns(const TSortColumns& sortColumns)
 {
-    TTableSchema schema;
     std::vector<TColumnSchema> columns;
     for (const auto& sortColumn : sortColumns) {
         columns.push_back(
             TColumnSchema(sortColumn.Name, ESimpleLogicalValueType::Any)
                 .SetSortOrder(sortColumn.SortOrder));
     }
-    schema.ColumnInfo_ = std::make_shared<const TColumnInfo>(
-        std::move(columns),
-        std::vector<TDeletedColumn>{});
-    schema.KeyColumnCount_ = sortColumns.size();
-    ValidateTableSchema(schema);
-    return New<TTableSchema>(std::move(schema));
+
+    auto schema = New<TTableSchema>(std::move(columns), /*strict*/ false);
+    ValidateTableSchema(*schema);
+    return schema;
 }
 
 TTableSchemaPtr TTableSchema::ToQuery() const

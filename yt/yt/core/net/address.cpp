@@ -803,6 +803,8 @@ void Serialize(const TIP6Address& value, IYsonConsumer* consumer)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+
 int GetMaskSize(const TIP6Address& mask)
 {
     int size = 0;
@@ -812,6 +814,8 @@ int GetMaskSize(const TIP6Address& mask)
     }
     return size;
 }
+
+} // namespace
 
 TIP6Network::TIP6Network(const TIP6Address& network, const TIP6Address& mask)
     : Network_(network)
@@ -827,7 +831,7 @@ TIP6Network::TIP6Network(const TIP6Address& network, const TIP6Address& mask)
             seenOne = true;
         } else {
             if (seenOne) {
-                THROW_ERROR_EXCEPTION("Invalid network mask %Qv", ToString(mask));
+                THROW_ERROR_EXCEPTION("Invalid network mask %Qv", mask);
             }
         }
     }
@@ -913,8 +917,7 @@ bool TIP6Network::FromString(TStringBuf str, TIP6Network* network)
 
 void FormatValue(TStringBuilderBase* builder, const TIP6Network& network, TStringBuf /*spec*/)
 {
-    auto projectId = network.GetProjectId();
-    if (projectId) {
+    if (auto projectId = network.GetProjectId()) {
         // The network has been created from string in
         // project id notation. Save it just the way it came.
 

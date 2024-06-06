@@ -5,7 +5,7 @@ namespace NYql {
 
 struct TAwsSignature {
 public:
-    TAwsSignature(const TString& method, const TString& url, const TString& contentType, const TString& payload, const TString& awsSigV4, const TString& userPwd);
+    TAwsSignature(const TString& method, const TString& url, const TString& contentType, const TString& payload, const TString& awsSigV4, const TString& userPwd, const TInstant& currentTime = TInstant::Now());
 
     TString GetAuthorization() const;
 
@@ -48,7 +48,7 @@ private:
     TString Url;
     TString ContentType;
     TString Payload;
-    TInstant CurrentTime = TInstant::Now();
+    TInstant CurrentTime;
 };
 
 }

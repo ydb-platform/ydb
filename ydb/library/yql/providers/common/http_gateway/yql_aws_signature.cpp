@@ -18,11 +18,12 @@
 
 namespace NYql {
 
-TAwsSignature::TAwsSignature(const TString& method, const TString& url, const TString& contentType, const TString& payload, const TString& awsSigV4, const TString& userPwd)
+TAwsSignature::TAwsSignature(const TString& method, const TString& url, const TString& contentType, const TString& payload, const TString& awsSigV4, const TString& userPwd, const TInstant& currentTime)
     : Method(method)
     , Url(url)
     , ContentType(contentType)
     , Payload(payload)
+    , CurrentTime(currentTime)
 {
     const TVector<TString> secrets = StringSplitter(userPwd).Split(':');
     if (secrets.size() == 2) {

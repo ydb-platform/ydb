@@ -47,10 +47,23 @@ Y_UNIT_TEST_SUITE(TAwsSignature) {
         UNIT_ASSERT_VALUES_EQUAL(signature2.GetXAmzContentSha256(), "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126");
         UNIT_ASSERT_VALUES_EQUAL(signature3.GetXAmzContentSha256(), "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126");
         UNIT_ASSERT_VALUES_EQUAL(signature4.GetXAmzContentSha256(), "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126");
+        UNIT_ASSERT_VALUES_EQUAL(signature1.GetAmzDate(), "19700101T000000Z");
+        UNIT_ASSERT_VALUES_EQUAL(signature2.GetAmzDate(), "19700101T000000Z");
+        UNIT_ASSERT_VALUES_EQUAL(signature3.GetAmzDate(), "19700101T000000Z");
+        UNIT_ASSERT_VALUES_EQUAL(signature4.GetAmzDate(), "19700101T000000Z");
         UNIT_ASSERT_VALUES_EQUAL(signature1.GetAuthorization(), "AWS4-HMAC-SHA256 Credential=/19700101///aws4_request, SignedHeaders=content-type;host;x-amz-content-sha256;x-amz-date, Signature=fba1374eb117fe9d00fc04bb1b709a3ea6f152232ac1f7dc49117a505f7e9f3f");
         UNIT_ASSERT_VALUES_EQUAL(signature2.GetAuthorization(), "AWS4-HMAC-SHA256 Credential=/19700101///aws4_request, SignedHeaders=content-type;host;x-amz-content-sha256;x-amz-date, Signature=39b47595c16b5d7b8256fd00e3d17e2157c5050c293306c995ae6980f11c689f");
         UNIT_ASSERT_VALUES_EQUAL(signature3.GetAuthorization(), "AWS4-HMAC-SHA256 Credential=/19700101///aws4_request, SignedHeaders=content-type;host;x-amz-content-sha256;x-amz-date, Signature=fba1374eb117fe9d00fc04bb1b709a3ea6f152232ac1f7dc49117a505f7e9f3f");
         UNIT_ASSERT_VALUES_EQUAL(signature4.GetAuthorization(), "AWS4-HMAC-SHA256 Credential=/19700101///aws4_request, SignedHeaders=content-type;host;x-amz-content-sha256;x-amz-date, Signature=a495d0ada1156d7278a56fb754a728d3b9470725208ad422bc299d6d6f793a8b");
+    }
+
+    Y_UNIT_TEST(SignWithCanonization) {
+        auto time = TInstant::FromValue(30);
+        NYql::TAwsSignature signature1("GET", "http://os.com/path?a=3&b=7", "application/json", {}, "key", "pwd", time);
+        NYql::TAwsSignature signature2("GET", "http://os.com/path?b=7&a=3", "application/json", {}, "key", "pwd", time);
+        UNIT_ASSERT_VALUES_EQUAL(signature1.GetContentType(), signature2.GetContentType());
+        UNIT_ASSERT_VALUES_EQUAL(signature1.GetAmzDate(), signature2.GetAmzDate());
+        UNIT_ASSERT_VALUES_EQUAL(signature1.GetAuthorization(), signature2.GetAuthorization());
     }
 } // Y_UNIT_TEST_SUITE(TAwsSignature)
 } // namespace NYql

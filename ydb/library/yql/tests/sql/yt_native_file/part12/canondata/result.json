@@ -3387,6 +3387,27 @@
             "uri": "https://{canondata_backend}/1936997/a95cccf3209d441f2d222d56081bdfc240fc8b83/resource.tar.gz#test.test_window-win_func_aggr_4func_sort--Results_/results.txt"
         }
     ],
+    "test.test[window-win_func_percent_rank-default.txt-Debug]": [
+        {
+            "checksum": "31d3e8335c44ef9e8705832ae3db498f",
+            "size": 1191,
+            "uri": "https://{canondata_backend}/1942525/07685b90122fc858d517af116d938fa435d86833/resource.tar.gz#test.test_window-win_func_percent_rank-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[window-win_func_percent_rank-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1942525/07685b90122fc858d517af116d938fa435d86833/resource.tar.gz#test.test_window-win_func_percent_rank-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[window-win_func_percent_rank-default.txt-Results]": [
+        {
+            "checksum": "498a4405ea43c12551009c6672c00356",
+            "size": 2401,
+            "uri": "https://{canondata_backend}/1942525/07685b90122fc858d517af116d938fa435d86833/resource.tar.gz#test.test_window-win_func_percent_rank-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[window-win_func_spec_with_part--Debug]": [
         {
             "checksum": "fc05d4b33d06c75d8224a9b82af0368c",

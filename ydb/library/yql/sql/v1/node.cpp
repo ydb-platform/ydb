@@ -1042,6 +1042,23 @@ TWinRowNumber::TWinRowNumber(TPosition pos, const TString& opName, i32 minArgs, 
     : TWinAggrEmulation(pos, opName, minArgs, maxArgs, args)
 {}
 
+TWinNTile::TWinNTile(TPosition pos, const TString& opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args)
+    : TWinAggrEmulation(pos, opName, minArgs, maxArgs, args)
+{
+    FakeSource = BuildFakeSource(pos);
+}
+
+bool TWinNTile::DoInit(TContext& ctx, ISource* src) {
+    if (Args.size() >= 1 && !Args[0]->Init(ctx, FakeSource.Get())) {
+        return false;
+    }
+
+    if (!TWinAggrEmulation::DoInit(ctx, src)) {
+        return false;
+    }
+    return true;
+}
+
 TWinLeadLag::TWinLeadLag(TPosition pos, const TString& opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args)
     : TWinAggrEmulation(pos, opName, minArgs, maxArgs, args)
 {}

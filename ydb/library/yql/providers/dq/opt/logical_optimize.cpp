@@ -185,7 +185,7 @@ protected:
 
     TMaybeNode<TExprBase> ExpandWindowFunctions(TExprBase node, TExprContext& ctx) {
         if (node.Cast<TCoInputBase>().Input().Maybe<TDqConnection>()) {
-            return DqExpandWindowFunctions(node, ctx, true);
+            return DqExpandWindowFunctions(node, ctx, TypesCtx, true);
         }
         return node;
     }

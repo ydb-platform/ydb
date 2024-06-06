@@ -3093,6 +3093,20 @@
             "uri": "https://{canondata_backend}/1931696/8382830b676a61af36d1344910d51cd1bf39f3ef/resource.tar.gz#test.test_window-win_func_aggr_with_qualified_all--Plan_/plan.txt"
         }
     ],
+    "test.test[window-win_func_percent_rank-default.txt-Debug]": [
+        {
+            "checksum": "61da880978e75d9d3500e8adbcb9bdc9",
+            "size": 1261,
+            "uri": "https://{canondata_backend}/1942415/0be95092588fe1a5379e1336687f83ad5f8d20f7/resource.tar.gz#test.test_window-win_func_percent_rank-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[window-win_func_percent_rank-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1942415/0be95092588fe1a5379e1336687f83ad5f8d20f7/resource.tar.gz#test.test_window-win_func_percent_rank-default.txt-Plan_/plan.txt"
+        }
+    ],
     "test.test[window-win_func_with_struct_access-default.txt-Debug]": [
         {
             "checksum": "5fd0123a68e009dbb4abfb0b0e6203a3",

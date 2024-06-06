@@ -83,6 +83,8 @@ class Column:
                 return ydb_value.Type.BOOL
             case "Utf8":
                 return ydb_value.Type.UTF8
+            case "Json":
+                return ydb_value.Type.JSON
             case "String":
                 return ydb_value.Type.STRING
             case "Int8":
@@ -111,8 +113,6 @@ class Column:
                 return ydb_value.Type.DATETIME
             case "Timestamp":
                 return ydb_value.Type.TIMESTAMP
-            case "Json":
-                return ydb_value.Type.JSON
             case _:
                 raise Exception(f'invalid type: {src}')
 
@@ -146,6 +146,8 @@ class Column:
             case ydb_value.Type.UTF8:
                 return value
             case ydb_value.Type.JSON:
+                return value
+            case ydb_value.Type.JSON_DOCUMENT:
                 return value
             case ydb_value.Type.STRING:
                 return value

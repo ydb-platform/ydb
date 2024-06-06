@@ -144,7 +144,7 @@ class Factory:
                     datetime.date(1988, 11, 20),
                     datetime.datetime(1988, 11, 20, 12, 55, 28),
                     datetime.datetime(1988, 11, 20, 12, 55, 28, 111000),
-                    '{ "friends": [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}',
+                    '{ "friends" : [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}',
                 ],
                 [
                     2,
@@ -298,7 +298,7 @@ class Factory:
                     datetime.date(1988, 11, 20),
                     datetime.datetime(1988, 11, 20, 12, 55, 28),
                     datetime.datetime(1988, 11, 20, 12, 55, 28, 111000),
-                    '@@{ "friends": [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}@@',
+                    '{ "friends" : [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}',
                 ],
                 [
                     2,
@@ -318,7 +318,7 @@ class Factory:
                     datetime.date(2024, 5, 27),
                     datetime.datetime(2024, 5, 27, 18, 43, 32),
                     datetime.datetime(2024, 5, 27, 18, 43, 32, 123456),
-                    '@@{ "TODO" : "unicode" }@@',
+                    '{ "TODO" : "unicode" }',
                 ],
                 [
                     3,

@@ -53,6 +53,9 @@ void TCommandSql::Config(TConfig& config) {
             "  - Using this option will probably reduce performance due to artifitial delays between polling requests.\n"
             "Note: query results will be stored on server and thus consume storage resources.")
         .StoreTrue(&AsyncWait);
+    config.Opts->AddLongOption("results-ttl", "Amount of time to store query results on server. "
+            "By default it is 86400s (24 hours).").RequiredArgument("SECONDS")
+        .StoreResult(&OperationIdToFetch);
     config.Opts->AddLongOption("explain", "Execute explain request for the query. Shows query plan. "
             "The query is not actually executed, thus does not affect the database.")
         .StoreTrue(&ExplainMode);
@@ -60,7 +63,7 @@ void TCommandSql::Config(TConfig& config) {
             "Query results are ignored.\n"
             "Important note: The query is actually executed, so any changes will be applied in the database.")
         .StoreTrue(&ExplainAnalyzeMode);
-    config.Opts->AddLongOption("stats", "Statistics collection mode [none, basic, full, profile]")
+    config.Opts->AddLongOption("stats", "Execution statistics collection mode [none, basic, full, profile]")
         .RequiredArgument("[String]").StoreResult(&CollectStatsMode);
     config.Opts->AddLongOption("syntax", "Query syntax [yql, pg]")
         .RequiredArgument("[String]").DefaultValue("yql").StoreResult(&Syntax)
@@ -114,22 +117,12 @@ void TCommandSql::Parse(TConfig& config) {
             << "and \"Explain-analyze mode\" (\"--explain-analyze\") were provided.";
     }
     if (ExplainAnalyzeMode && !CollectStatsMode.Empty()) {
-        auto optStatsMode = NQuery::ParseStatsMode(CollectStatsMode);
-        if (optStatsMode.has_value()) {
-            auto statsMode = optStatsMode.value();
-            switch (statsMode) {
-                case NQuery::EStatsMode::None:
-                case NQuery::EStatsMode::Basic:
-                throw TMisuseException() << "Statistics collection mode \"" << CollectStatsMode
-                    << "\" is too low for explain-analyze mode to show any statistics. Use at least \"full\" mode.";
-                default:
-                break;
-            }
-        }
-        if (ExplainAnalyzeMode && (CollectStatsMode == "none" || CollectStatsMode == "basic")) {
-            throw TMisuseException() << "\"" << CollectStatsMode
-                << "\" stats collection mode is too low for Explain-analyze mode to  show any info";
-        }
+        throw TMisuseException() << "Statistics collection mode option \"--stats\" has no effect in explain-analyze mode. "
+            "Relevant for execution mode only.";
+    }
+    if (ExplainMode && !CollectStatsMode.Empty()) {
+        throw TMisuseException() << "Statistics collection mode option \"--stats\" has no effect in explain mode"
+            "Relevant for execution mode only.";
     }
     if (QueryFile) {
         Query = ReadFromFile(QueryFile, "query");
@@ -334,8 +327,9 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
     }
 
     if (plan) {
-        if (!ExplainMode && !ExplainAnalyzeMode) {
-            Cout << Endl << "Query plan:" << Endl;
+        if (!ExplainMode && !ExplainAnalyzeMode
+                && (OutputFormat == EOutputFormat::Default || OutputFormat == EOutputFormat::Pretty)) {
+            Cout << Endl << "Execution plan:" << Endl;
         }
         // TODO: get rid of pretty-table format, refactor TQueryPrinter to reflect that
         EOutputFormat format = (OutputFormat == EOutputFormat::Default || OutputFormat == EOutputFormat::Pretty)
@@ -374,6 +368,7 @@ int TCommandSql::FetchResults(TDriver& driver, NQuery::TQueryClient& client) {
     bool firstGetOperation = true;
     NOperation::TOperationClient operationClient(driver);
     TWaitingBar waitingBar("Waiting for qeury execution to finish... ");
+    int fakeCounter = 0;
     while (!IsInterrupted()) {
         NQuery::TScriptExecutionOperation execScriptOperation = operationClient
             .Get<NQuery::TScriptExecutionOperation>(operationId)
@@ -382,7 +377,7 @@ int TCommandSql::FetchResults(TDriver& driver, NQuery::TQueryClient& client) {
             ThrowOnError(execScriptOperation.Status());
             firstGetOperation = false;
         }
-        if (!execScriptOperation.Status().IsSuccess() || !execScriptOperation.Ready()) {
+        if (!execScriptOperation.Status().IsSuccess() || !execScriptOperation.Ready() || ++fakeCounter <= 5) {
             waitingBar.Render();
             Sleep(TDuration::Seconds(1));
             continue;
@@ -430,6 +425,7 @@ int TCommandSql::WaitForResultAndPrintResponse(TDriver& driver, NQuery::TQueryCl
     bool firstGetOperation = true;
     NOperation::TOperationClient operationClient(driver);
     TWaitingBar waitingBar("Waiting for qeury execution to finish... ");
+    int fakeCounter = 0;
     while (!IsInterrupted()) {
         NQuery::TScriptExecutionOperation execScriptOperation = firstGetOperation
             ? result
@@ -440,7 +436,7 @@ int TCommandSql::WaitForResultAndPrintResponse(TDriver& driver, NQuery::TQueryCl
             ThrowOnError(execScriptOperation.Status());
             firstGetOperation = false;
         }
-        if (!execScriptOperation.Status().IsSuccess() || !execScriptOperation.Ready()) {
+        if (!execScriptOperation.Status().IsSuccess() || !execScriptOperation.Ready() || ++fakeCounter <= 5) {
             waitingBar.Render();
             Sleep(TDuration::Seconds(1));
             continue;

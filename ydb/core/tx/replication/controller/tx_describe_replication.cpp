@@ -43,6 +43,7 @@ public:
             }
 
             auto& item = *Result->Record.AddTargets();
+            item.SetId(target->GetId());
             item.SetSrcPath(target->GetSrcPath());
             item.SetDstPath(target->GetDstPath());
             if (target->GetStreamName()) {

@@ -8,6 +8,7 @@
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
 
 #include <ydb/library/yql/public/udf/arrow/args_dechunker.h>
+#include <ydb/library/yql/public/udf/arrow/memory_pool.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
 
 #include <ydb/library/yql/utils/yql_panic.h>
@@ -537,7 +538,7 @@ private:
             if (blockType->GetShape() == NMiniKQL::TBlockType::EShape::Many) {
                 auto itemType = blockType->GetItemType();
                 YQL_ENSURE(!itemType->IsPg(), "pg types are not supported yet");
-                Builders_.emplace_back(MakeArrayBuilder(helper, itemType, *arrow::default_memory_pool(), maxBlockLen, nullptr));
+                Builders_.emplace_back(MakeArrayBuilder(helper, itemType, *NYql::NUdf::GetYqlMemoryPool(), maxBlockLen, nullptr));
             } else {
                 Builders_.emplace_back();
             }

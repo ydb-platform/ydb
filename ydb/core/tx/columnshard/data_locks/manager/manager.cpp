@@ -47,4 +47,11 @@ void TManager::TGuard::Release(TManager& manager) {
     Released = true;
 }
 
+void TManager::TGuard::AbortLock() {
+    if (!Released) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("message", "aborted data locks manager");
+    }
+    Released = true;
+}
+
 }

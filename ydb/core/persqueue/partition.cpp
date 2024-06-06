@@ -38,6 +38,7 @@ static const TDuration WAKE_TIMEOUT = TDuration::Seconds(5);
 static const TDuration UPDATE_AVAIL_SIZE_INTERVAL = TDuration::MilliSeconds(100);
 static const TDuration MIN_UPDATE_COUNTERS_DELAY = TDuration::MilliSeconds(300);
 static const ui32 MAX_USERS = 1000;
+static const ui32 MAX_KEYS = 10000;
 static const ui32 MAX_TXS = 1000;
 static const ui32 MAX_WRITE_CYCLE_SIZE = 16_MB;
 
@@ -65,44 +66,6 @@ struct TMirrorerInfo {
     TActorId Actor;
     TTabletCountersBase Baseline;
 };
-
-template <class T>
-T& TPartition::GetUserActionAndTransactionEventsFront()
-{
-    Y_ABORT_UNLESS(!UserActionAndTransactionEvents.empty());
-    auto* ptr = get_if<T>(&UserActionAndTransactionEvents.front());
-    Y_ABORT_UNLESS(ptr);
-    return *ptr;
-}
-
-template <class T>
-T& TPartition::GetCurrentEvent()
-{
-    return *GetUserActionAndTransactionEventsFront<TSimpleSharedPtr<T>>();
-}
-
-TTransaction& TPartition::GetCurrentTransaction()
-{
-    return GetUserActionAndTransactionEventsFront<TTransaction>();
-}
-
-template <class T>
-void TPartition::EnsureUserActionAndTransactionEventsFrontIs() const
-{
-    Y_ABORT_UNLESS(!UserActionAndTransactionEvents.empty());
-    auto* ptr = get_if<T>(&UserActionAndTransactionEvents.front());
-    Y_ABORT_UNLESS(ptr);
-}
-
-TEvPersQueue::TEvProposeTransaction* TPartition::TryGetCurrentImmediateTransaction()
-{
-    Y_ABORT_UNLESS(!UserActionAndTransactionEvents.empty());
-    auto* ptr = get_if<TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction>>(&UserActionAndTransactionEvents.front());
-    if (!ptr) {
-        return nullptr;
-    }
-    return ptr->Get();
-}
 
 const TString& TPartition::TopicName() const {
     return TopicConverter->GetClientsideName();
@@ -262,9 +225,18 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
 
     if (!distrTxs.empty()) {
         for (auto& tx : distrTxs) {
-            UserActionAndTransactionEvents.emplace_back(TTransaction(std::move(tx)));
+            if (!tx.Predicate.Defined()) {
+                UserActionAndTransactionEvents.emplace_back(MakeSimpleShared<TTransaction>(std::move(tx)));
+            } else if (*tx.Predicate) {
+                auto txId = tx.GetTxId();
+                auto txPtr = MakeSimpleShared<TTransaction>(std::move(tx));
+                BatchingState = ETxBatchingState::Executing;
+                if (txId.Defined()) {
+                    TransactionsInflight.insert(std::make_pair(*txId, txPtr));
+                }
+                UserActionAndTxPendingCommit.emplace_back(std::move(txPtr));
+            }
         }
-        TxInProgress = GetCurrentTransaction().Predicate.Defined();
     }
 }
 
@@ -277,7 +249,7 @@ void TPartition::EmplaceResponse(TMessage&& message, const TActorContext& ctx) {
     );
 }
 
-ui64 TPartition::MeteringDataSize(const TActorContext& /*ctx*/) const {
+ui64 TPartition::MeteringDataSize() const {
     if (DataKeysBody.size() <= 1) {
         // tiny optimization - we do not meter very small queues up to 16MB
         return 0;
@@ -296,20 +268,19 @@ ui64 TPartition::ReserveSize() const {
     return TopicPartitionReserveSize(Config);
 }
 
-ui64 TPartition::StorageSize(const TActorContext& ctx) const {
-    return std::max<ui64>(MeteringDataSize(ctx), ReserveSize());
+ui64 TPartition::StorageSize(const TActorContext&) const {
+    return std::max<ui64>(MeteringDataSize(), ReserveSize());
 }
 
-ui64 TPartition::UsedReserveSize(const TActorContext& ctx) const {
-    return std::min<ui64>(MeteringDataSize(ctx), ReserveSize());
+ui64 TPartition::UsedReserveSize(const TActorContext&) const {
+    return std::min<ui64>(MeteringDataSize(), ReserveSize());
 }
 
-ui64 TPartition::GetUsedStorage(const TActorContext& ctx) {
-    const auto now = ctx.Now();
+ui64 TPartition::GetUsedStorage(const TInstant& now) {
     const auto duration = now - LastUsedStorageMeterTimestamp;
     LastUsedStorageMeterTimestamp = now;
 
-    auto dataSize = MeteringDataSize(ctx);
+    auto dataSize = MeteringDataSize();
     auto reservedSize = ReserveSize();
     ui64 size = dataSize > reservedSize ? dataSize - reservedSize : 0;
     return size * duration.MilliSeconds() / 1000 / 1_MB; // mb*seconds
@@ -338,7 +309,7 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
     ctx.Schedule(WAKE_TIMEOUT, new TEvents::TEvWakeup());
     ctx.Send(Tablet, new TEvPQ::TEvPartitionCounters(Partition, TabletCounters));
 
-    ui64 usedStorage = GetUsedStorage(ctx);
+    ui64 usedStorage = GetUsedStorage(ctx.Now());
     if (usedStorage > 0) {
         ctx.Send(Tablet, new TEvPQ::TEvMetering(EMeteringJson::UsedStorageV1, usedStorage));
     }
@@ -656,7 +627,6 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
     NKikimrPQ::TStatusResponse::TPartResult result;
     result.SetPartition(Partition.InternalPartitionId);
     result.SetGeneration(TabletGeneration);
-    result.SetCookie(++PQRBCookie);
 
     if (DiskIsFull || WaitingForSubDomainQuota(ctx)) {
         result.SetStatus(NKikimrPQ::TStatusResponse::STATUS_DISK_IS_FULL);
@@ -778,7 +748,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
 
         result.SetReadBytesQuota(maxQuota);
 
-        result.SetPartitionSize(MeteringDataSize(ctx));
+        result.SetPartitionSize(MeteringDataSize());
         result.SetUsedReserveSize(UsedReserveSize(ctx));
 
         result.SetLastWriteTimestampMs(WriteTimestamp.MilliSeconds());
@@ -813,9 +783,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
             }
         }
     }
-
     result.SetScaleStatus(SplitMergeEnabled(TabletConfig) ? ScaleStatus :NKikimrPQ::EScaleStatus::NORMAL);
-
     ctx.Send(ev->Get()->Sender, new TEvPQ::TEvPartitionStatusResponse(result, Partition));
 }
 
@@ -938,9 +906,7 @@ void TPartition::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TAc
                      "the allowed number of transactions has been exceeded");
         return;
     }
-
     AddImmediateTx(ev->Release());
-
     ProcessTxsAndUserActs(ctx);
 }
 
@@ -980,114 +946,46 @@ void TPartition::Handle(TEvPQ::TEvTxCalcPredicate::TPtr& ev, const TActorContext
 
 void TPartition::Handle(TEvPQ::TEvTxCommit::TPtr& ev, const TActorContext& ctx)
 {
-    EndTransaction(*ev->Get(), ctx);
+    if (PlanStep.Defined() && TxId.Defined()) {
+        if (GetStepAndTxId(*ev->Get()) < GetStepAndTxId(*PlanStep, *TxId)) {
+            ctx.Send(Tablet, MakeCommitDone(ev->Get()->Step, ev->Get()->TxId).Release());
+            return;
+        }
+    }
 
-    TxInProgress = false;
+    auto txIter = TransactionsInflight.begin();
+    if (ChangeConfig) {
+        Y_ABORT_UNLESS(TransactionsInflight.size() == 1);
+    } else {
+        Y_ABORT_UNLESS(!TransactionsInflight.empty());
+        txIter = TransactionsInflight.find(ev->Get()->TxId);
+        Y_ABORT_UNLESS(!txIter.IsEnd());
+    }
+    Y_ABORT_UNLESS(txIter->second->State == ECommitState::Pending);
 
-    ContinueProcessTxsAndUserActs(ctx);
+    txIter->second->State = ECommitState::Committed;
+    ProcessTxsAndUserActs(ctx);
 }
 
 void TPartition::Handle(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext& ctx)
 {
-    EndTransaction(*ev->Get(), ctx);
-
-    TxInProgress = false;
-
-    ContinueProcessTxsAndUserActs(ctx);
-}
-
-void TPartition::Handle(TEvPQ::TEvGetWriteInfoResponse::TPtr& ev, const TActorContext& ctx)
-{
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
-                "TEvGetWriteInfoResponse Cookie: " << ev->Get()->Cookie);
-
-    Y_ABORT_UNLESS(TxInProgress);
-
-    bool predicate = true;
-    for (auto& [k, v] : ev->Get()->SrcIdInfo) {
-        auto s = SourceManager.Get(k);
-        if (s.State == TSourceIdInfo::EState::Unknown) {
-            continue;
-        }
-
-        if (v.MinSeqNo < s.SeqNo) {
-            predicate = false;
-            break;
+    auto* event = ev->Get();
+    if (PlanStep.Defined() && TxId.Defined()) {
+        if (GetStepAndTxId(*event) < GetStepAndTxId(*PlanStep, *TxId)) {
+            return;
         }
     }
 
-    WriteInfoResponse = ev->Release();
-
-    if (auto* t = TryGetCurrentImmediateTransaction()) {
-        if (!WriteInfoResponse->BodyKeys.empty()) {
-            predicate = false;
-        }
-
-        auto tx = std::move(t->Record);
-
-        // This is a transaction for a write operation. Write operations will be added to the head of the queue
-        UserActionAndTransactionEvents.pop_front();
-        --ImmediateTxCount;
-
-        ProcessImmediateTx(tx, predicate, ctx);
-        ScheduleTransactionCompleted(tx);
-        TxInProgress = false;
-        ContinueProcessTxsAndUserActs(ctx);
-
-        return;
-    }
-
-    auto& t = GetCurrentTransaction();
-    Y_ABORT_UNLESS(t.Tx);
-
-    if (WriteInfoResponse->BodyKeys.empty()) {
-        t.Predicate = predicate && BeginTransaction(*t.Tx, ctx);
+    auto txIter = TransactionsInflight.begin();
+    if (ChangeConfig) {
+        Y_ABORT_UNLESS(TransactionsInflight.size() == 1);
     } else {
-        t.Predicate = false;
+        txIter = TransactionsInflight.find(ev->Get()->TxId);
+        Y_ABORT_UNLESS(!txIter.IsEnd());
     }
-
-    ctx.Send(Tablet,
-             MakeHolder<TEvPQ::TEvTxCalcPredicateResult>(t.Tx->Step,
-                                                         t.Tx->TxId,
-                                                         Partition,
-                                                         *t.Predicate).Release());
-}
-
-void TPartition::Handle(TEvPQ::TEvGetWriteInfoError::TPtr& ev, const TActorContext& ctx)
-{
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
-                "TEvGetWriteInfoError Cookie: " << ev->Get()->Cookie);
-
-    Y_ABORT_UNLESS(TxInProgress);
-
-    WriteInfoResponse = nullptr;
-
-    if (auto* t = TryGetCurrentImmediateTransaction()) {
-        ScheduleReplyPropose(t->Record,
-                             NKikimrPQ::TEvProposeTransactionResult::ABORTED,
-                             NKikimrPQ::TError::BAD_REQUEST,
-                             ev->Get()->Message);
-        ScheduleTransactionCompleted(t->Record);
-
-        UserActionAndTransactionEvents.pop_front();
-        --ImmediateTxCount;
-
-        TxInProgress = false;
-        ContinueProcessTxsAndUserActs(ctx);
-
-        return;
-    }
-
-    auto& t = GetCurrentTransaction();
-    Y_ABORT_UNLESS(t.Tx);
-
-    t.Predicate = false;
-
-    ctx.Send(Tablet,
-             MakeHolder<TEvPQ::TEvTxCalcPredicateResult>(t.Tx->Step,
-                                                         t.Tx->TxId,
-                                                         Partition,
-                                                         *t.Predicate).Release());
+    Y_ABORT_UNLESS(txIter->second->State == ECommitState::Pending);
+    txIter->second->State = ECommitState::Aborted;
+    ProcessTxsAndUserActs(ctx);
 }
 
 void TPartition::Handle(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorContext& ctx) {
@@ -1109,17 +1007,115 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorCon
     response->BlobsFromHead = std::move(GetReadRequestFromHead(0, 0, std::numeric_limits<ui32>::max(),
                                                                std::numeric_limits<ui32>::max(), 0, &rcount, &rsize,
                                                                &insideHeadOffset, 0));
-
-
     response->BytesWrittenGrpc = BytesWrittenGrpc.Value();
     response->BytesWrittenUncompressed = BytesWrittenUncompressed.Value();
     response->BytesWrittenTotal = BytesWrittenTotal.Value();
-
     response->MessagesWrittenTotal = MsgsWrittenTotal.Value();
     response->MessagesWrittenGrpc = MsgsWrittenGrpc.Value();
     response->MessagesSizes = std::move(MessageSize.GetValues());
 
     ctx.Send(ev->Sender, response);
+}
+
+void TPartition::WriteInfoResponseHandler(
+        const TActorId& sender,
+        std::variant<TAutoPtr<TEvPQ::TEvGetWriteInfoResponse>, TAutoPtr<TEvPQ::TEvGetWriteInfoError>>&& ev,
+        const TActorContext& ctx
+) {
+    auto txIter = WriteInfosToTx.find(sender);
+    Y_ABORT_UNLESS(!txIter.IsEnd());
+
+    auto& tx = (*txIter->second);
+    if (auto msg = std::get<0>(ev)) {
+        tx.WriteInfo.Reset(msg.Release());
+    } else {
+        auto err = std::get<1>(ev);
+        tx.Predicate = false;
+        tx.WriteInfoApplied = true;
+        tx.Message = err->Message;
+    }
+    auto ret = txIter->second;
+    WriteInfosToTx.erase(txIter);
+    ProcessTxsAndUserActs(ctx);
+}
+
+TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) {
+    bool isImmediate = (tx.ProposeTransaction != nullptr);
+    Y_ABORT_UNLESS(tx.WriteInfo);
+    Y_ABORT_UNLESS(!tx.WriteInfoApplied);
+    if (!tx.Predicate.GetOrElse(true)) {
+        return EProcessResult::Continue;
+    }
+    auto& srcIdInfo = tx.WriteInfo->SrcIdInfo;
+
+    EProcessResult ret = EProcessResult::Continue;
+    const auto& knownSourceIds = SourceIdStorage.GetInMemorySourceIds();
+    THashSet<TString> txSourceIds;
+    for (auto& s : srcIdInfo) {
+        if (TxAffectedSourcesIds.contains(s.first)) {
+            ret = EProcessResult::Blocked;
+            break;
+        }
+        if (isImmediate) {
+            WriteAffectedSourcesIds.insert(s.first);
+        } else {
+            if (WriteAffectedSourcesIds.contains(s.first)) {
+                ret = EProcessResult::Blocked;
+                break;
+            }
+            txSourceIds.insert(s.first);
+        }
+
+        auto existing = knownSourceIds.find(s.first);
+        if (existing.IsEnd())
+            continue;
+        if (s.second.MinSeqNo <= existing->second.SeqNo) {
+            tx.Predicate = false;
+            tx.Message = TStringBuilder() << "MinSeqNo violation failure on " << s.first;
+            tx.WriteInfoApplied = true;
+            break;
+        }
+    }
+    if (ret == EProcessResult::Continue && tx.Predicate.GetOrElse(true)) {
+        TxAffectedSourcesIds.insert(txSourceIds.begin(), txSourceIds.end());
+        tx.WriteInfoApplied = true;
+        WriteKeysSizeEstimate += tx.WriteInfo->BodyKeys.size();
+        WriteKeysSizeEstimate += tx.WriteInfo->SrcIdInfo.size();
+        WriteKeysSizeEstimate += tx.WriteInfo->BlobsFromHead.size();
+        for (const auto& blob : tx.WriteInfo->BlobsFromHead) {
+            WriteCycleSizeEstimate += blob.GetBlobSize();
+        }
+    }
+
+    return ret;
+}
+
+void TPartition::Handle(TEvPQ::TEvGetWriteInfoResponse::TPtr& ev, const TActorContext& ctx) {
+    WriteInfoResponseHandler(ev->Sender, ev->Release(), ctx);
+}
+
+
+void TPartition::Handle(TEvPQ::TEvGetWriteInfoError::TPtr& ev, const TActorContext& ctx) {
+    WriteInfoResponseHandler(ev->Sender, ev->Release(), ctx);
+}
+
+void TPartition::ReplyToProposeOrPredicate(TSimpleSharedPtr<TTransaction>& tx, bool isPredicate) {
+
+    if (isPredicate) {
+        auto insRes = TransactionsInflight.insert(std::make_pair(tx->Tx->TxId, tx));
+        Y_ABORT_UNLESS(insRes.second);
+        Send(Tablet, MakeHolder<TEvPQ::TEvTxCalcPredicateResult>(tx->Tx->Step,
+                                                                tx->Tx->TxId,
+                                                                Partition,
+                                                                *tx->Predicate).Release());
+    } else {
+        auto insRes = TransactionsInflight.insert(std::make_pair(tx->ProposeConfig->TxId, tx));
+        Y_ABORT_UNLESS(insRes.second);
+        Send(Tablet,
+                MakeHolder<TEvPQ::TEvProposePartitionConfigResult>(tx->ProposeConfig->Step,
+                                                                    tx->ProposeConfig->TxId,
+                                                                    Partition).Release());
+    }
 }
 
 void TPartition::Handle(TEvPQ::TEvGetMaxSeqNoRequest::TPtr& ev, const TActorContext& ctx) {
@@ -1583,7 +1579,6 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
     if (response.GetStatusResultSize()) {
         DiskIsFull = !diskIsOk;
     }
-
     const auto writeDuration = ctx.Now() - WriteStartTime;
     const auto minWriteLatency = TDuration::MilliSeconds(AppData(ctx)->PQConfig.GetMinWriteLatencyMs());
 
@@ -1594,30 +1589,44 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
     }
 }
 
+
 void TPartition::PushBackDistrTx(TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> event)
 {
-    UserActionAndTransactionEvents.emplace_back(TTransaction(std::move(event)));
+    UserActionAndTransactionEvents.emplace_back(MakeSimpleShared<TTransaction>(std::move(event)));
+    RequestWriteInfoIfRequired();
 }
+
+void TPartition::RequestWriteInfoIfRequired()
+{
+    auto tx = std::get<1>(UserActionAndTransactionEvents.back().Event);
+    auto supportId = tx->SupportivePartitionActor;
+    if (supportId) {
+        Send(supportId, new TEvPQ::TEvGetWriteInfoRequest());
+        WriteInfosToTx.insert(std::make_pair(supportId, tx));
+    }
+}
+
 
 void TPartition::PushBackDistrTx(TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> event)
 {
-    UserActionAndTransactionEvents.emplace_back(TTransaction(std::move(event), true));
+    UserActionAndTransactionEvents.emplace_back(MakeSimpleShared<TTransaction>(std::move(event), true));
 }
 
 void TPartition::PushFrontDistrTx(TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> event)
 {
-    UserActionAndTransactionEvents.emplace_front(TTransaction(std::move(event), false));
+    UserActionAndTransactionEvents.emplace_front(MakeSimpleShared<TTransaction>(std::move(event), false));
 }
 
 void TPartition::PushBackDistrTx(TSimpleSharedPtr<TEvPQ::TEvProposePartitionConfig> event)
 {
-    UserActionAndTransactionEvents.emplace_back(TTransaction(std::move(event)));
+    UserActionAndTransactionEvents.emplace_back(MakeSimpleShared<TTransaction>(std::move(event)));
 }
 
 void TPartition::AddImmediateTx(TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction> tx)
 {
-    UserActionAndTransactionEvents.emplace_back(std::move(tx));
+    UserActionAndTransactionEvents.emplace_back(MakeSimpleShared<TTransaction>(std::move(tx)));
     ++ImmediateTxCount;
+    RequestWriteInfoIfRequired();
 }
 
 void TPartition::AddUserAct(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo> act)
@@ -1627,10 +1636,9 @@ void TPartition::AddUserAct(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo> act)
     ++UserActCount[clientId];
 }
 
-void TPartition::RemoveUserAct()
+void TPartition::RemoveUserAct(const TString& consumerId)
 {
-    TString clientId = GetCurrentEvent<TEvPQ::TEvSetClientInfo>().ClientId;
-    auto p = UserActCount.find(clientId);
+    auto p = UserActCount.find(consumerId);
     Y_ABORT_UNLESS(p != UserActCount.end());
 
     Y_ABORT_UNLESS(p->second > 0);
@@ -1650,126 +1658,204 @@ size_t TPartition::GetUserActCount(const TString& consumer) const
 
 void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
 {
-    if (KVWriteInProgress || TxInProgress) {
+    if (KVWriteInProgress) {
         return;
     }
-
-    Y_ABORT_UNLESS(PendingUsersInfo.empty());
-    Y_ABORT_UNLESS(Replies.empty());
-    Y_ABORT_UNLESS(AffectedUsers.empty());
-
-    ContinueProcessTxsAndUserActs(ctx);
-}
-
-void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
-{
-    Y_ABORT_UNLESS(!KVWriteInProgress);
-    Y_ABORT_UNLESS(!TxInProgress);
-
-    THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
-
     if (DeletePartitionState == DELETION_INITED) {
+        if (!PersistRequest) {
+            PersistRequest = MakeHolder<TEvKeyValue::TEvRequest>();
+        }
         ScheduleNegativeReplies();
         ScheduleDeletePartitionDone();
 
-        AddCmdDeleteRangeForAllKeys(*request);
+        AddCmdDeleteRangeForAllKeys(*PersistRequest);
 
-        ctx.Send(Tablet, request.Release());
-
+        ctx.Send(Tablet, PersistRequest.Release());
+        PersistRequest = nullptr;
         DeletePartitionState = DELETION_IN_PROCESS;
         KVWriteInProgress = true;
 
         return;
     }
-
-    HaveWriteMsg = false;
-
-    if (UserActionAndTransactionEvents.empty()) {
-        const auto now = ctx.Now();
-
-        if (ManageWriteTimestampEstimate) {
-            WriteTimestampEstimate = now;
+    while (true) {
+        if (BatchingState == ETxBatchingState::PreProcessing) {
+            ContinueProcessTxsAndUserActs(ctx);
+        }
+        if (BatchingState == ETxBatchingState::PreProcessing) {
+            return; // Still preprocessing - waiting for something;
         }
 
-        bool haveChanges = CleanUp(request.Get(), ctx);
-        if (DiskIsFull) {
-            AddCheckDiskRequest(request.Get(), NumChannels);
-            haveChanges = true;
+        // Preprocessing complete;
+        if (CurrentBatchSize > 0) {
+            Send(SelfId(), new TEvPQ::TEvTxBatchComplete(CurrentBatchSize));
         }
+        CurrentBatchSize = 0;
 
-        ProcessReserveRequests(ctx);
-
-        if (haveChanges || TxIdHasChanged || !AffectedUsers.empty() || ChangeConfig) {
-            AddCmdWriteTxMeta(request->Record);
-            AddCmdWriteUserInfos(request->Record);
-            AddCmdWriteConfig(request->Record);
-
-            WriteCycleStartTime = now;
-            WriteStartTime = now;
-            TopicQuotaWaitTimeForCurrentBlob = TDuration::Zero();
-            PartitionQuotaWaitTimeForCurrentBlob = TDuration::Zero();
-            WritesTotal.Inc();
-            AddMetaKey(request.Get());
-            ctx.Send(Tablet, request.Release());
-            KVWriteInProgress = true;
-            HaveWriteMsg = true;
+        if (UserActionAndTxPendingCommit.empty()) {
+            // Processing stopped and nothing to commit - finalize
+            BatchingState = ETxBatchingState::Finishing;
         } else {
-            AnswerCurrentWrites(ctx);
-            AnswerCurrentReplies(ctx);
+            // Process commit queue
+            ProcessCommitQueue();
         }
+        if (!UserActionAndTxPendingCommit.empty()) {
+            // Still pending for come commits
+            return;
+        }
+        // Commit queue processing complete. Now can either swith to persist or continue preprocessing;
+        if (BatchingState == ETxBatchingState::Finishing) { // Persist required;
+            RunPersist();
+            return;
+        }
+        BatchingState = ETxBatchingState::PreProcessing;
+    }
+}
 
+void TPartition::ContinueProcessTxsAndUserActs(const TActorContext&)
+{
+    Y_ABORT_UNLESS(!KVWriteInProgress);
+
+    if (WriteCycleSizeEstimate >= MAX_WRITE_CYCLE_SIZE || WriteKeysSizeEstimate >= MAX_KEYS) {
+        BatchingState = ETxBatchingState::Finishing;
+        return;
+    }
+    auto visitor = [this](auto& event) {
+        return this->PreProcessUserActionOrTransaction(event);
+    };
+    while (BatchingState == ETxBatchingState::PreProcessing && !UserActionAndTransactionEvents.empty()) {
+        if (ChangingConfig) {
+            BatchingState = ETxBatchingState::Finishing;
+            break;
+        }
+        auto& front = UserActionAndTransactionEvents.front();
+        switch (std::visit(visitor, front.Event)) {
+        case EProcessResult::Continue:
+            MoveUserActOrTxToCommitState();
+            FirstEvent = false;
+            break;
+        case EProcessResult::ContinueDrop:
+            UserActionAndTransactionEvents.pop_front();
+            break;
+        case EProcessResult::Break:
+            MoveUserActOrTxToCommitState();
+            BatchingState = ETxBatchingState::Finishing;
+            FirstEvent = false;
+            break;
+        case EProcessResult::Blocked:
+            BatchingState = ETxBatchingState::Executing;
+            return;
+        case EProcessResult::NotReady:
+            return;
+        }
+        CurrentBatchSize += 1;
+    }
+    if (UserActionAndTransactionEvents.empty()) {
+        BatchingState = ETxBatchingState::Executing;
         return;
     }
 
-    auto visitor = [this, &ctx, &request](auto& event) {
-        using T = std::decay_t<decltype(event)>;
-        if constexpr (TIsSimpleSharedPtr<T>::value) {
-            return this->ProcessUserActionOrTransaction(*event, request.Get(), ctx);
-        } else {
-            return this->ProcessUserActionOrTransaction(event, request.Get(), ctx);
-        }
+}
+
+void TPartition::MoveUserActOrTxToCommitState() {
+    auto& front = UserActionAndTransactionEvents.front();
+    UserActionAndTxPendingCommit.push_back(std::move(front));
+    UserActionAndTransactionEvents.pop_front();
+}
+
+void TPartition::ProcessCommitQueue() {
+    CurrentBatchSize = 0;
+
+    Y_ABORT_UNLESS(!KVWriteInProgress);
+    if (!PersistRequest) {
+        PersistRequest = MakeHolder<TEvKeyValue::TEvRequest>();
+    }
+    auto visitor = [this, request=PersistRequest.Get()](auto& event) {
+        return this->ExecUserActionOrTransaction(event, request);
     };
-
-    FirstEvent = true;
-    for (bool stop = false; !stop && !UserActionAndTransactionEvents.empty(); ) {
-        auto& front = UserActionAndTransactionEvents.front();
-
-        switch (std::visit(visitor, front)) {
-        case EProcessResult::Continue:
-        case EProcessResult::Reply:
-            UserActionAndTransactionEvents.pop_front();
-            FirstEvent = false;
-            break;
-        case EProcessResult::Break:
-            stop = true;
-            break;
-        case EProcessResult::Abort:
-            return;
+    while (!UserActionAndTxPendingCommit.empty()) {
+        // UserActionAndTxPendingCommit.pop_front();
+        auto& front = UserActionAndTxPendingCommit.front();
+        auto state = ECommitState::Committed;
+        if (auto* tx = get_if<TSimpleSharedPtr<TTransaction>>(&front.Event)) {
+            state = tx->Get()->State;
         }
+        switch (state) {
+            case ECommitState::Pending:
+                return;
+            case ECommitState::Aborted:
+                break;
+            case ECommitState::Committed:
+                break;
+        }
+        auto event = std::move(front.Event);
+        UserActionAndTxPendingCommit.pop_front();
+        std::visit(visitor, event);
+    }
+    if (UserActionAndTxPendingCommit.empty()) {
+        TxAffectedConsumers.clear();
+        TxAffectedSourcesIds.clear();
+        Y_ABORT_UNLESS(UserActionAndTxPendingCommit.empty());
+        TransactionsInflight.clear();
+    }
+}
+
+void TPartition::RunPersist() {
+    TransactionsInflight.clear();
+
+    Y_ABORT_UNLESS(UserActionAndTxPendingCommit.empty());
+    const auto& ctx = ActorContext();
+    const auto now = ctx.Now();
+    if (!PersistRequest) {
+        PersistRequest = MakeHolder<TEvKeyValue::TEvRequest>();
     }
 
-    if (HaveWriteMsg) {
-        if (!DiskIsFull) {
-            EndAppendHeadWithNewWrites(request.Get(), ctx);
-            EndProcessWrites(request.Get(), ctx);
-        }
-        EndHandleRequests(request.Get(), ctx);
+    if (ManageWriteTimestampEstimate) {
+        WriteTimestampEstimate = now;
     }
+
+    bool haveChanges = CleanUp(PersistRequest.Get(), ctx);
+    if (DiskIsFull) {
+        AddCheckDiskRequest(PersistRequest.Get(), NumChannels);
+        haveChanges = true;
+    }
+
+    ProcessReserveRequests(ctx);
 
     WriteStartTime = TActivationContext::Now();
 
-    AddCmdWriteTxMeta(request->Record);
-    AddCmdWriteUserInfos(request->Record);
-    AddCmdWriteConfig(request->Record);
+    if (HaveWriteMsg) {
+        if (!DiskIsFull) {
+            EndAppendHeadWithNewWrites(PersistRequest.Get(), ctx);
+            EndProcessWrites(PersistRequest.Get(), ctx);
+        }
+        EndHandleRequests(PersistRequest.Get(), ctx);
+        //haveChanges = true;
+    }
+    if (haveChanges || TxIdHasChanged || !AffectedUsers.empty() || ChangeConfig) {
+        WriteCycleStartTime = now;
+        WriteStartTime = now;
+        TopicQuotaWaitTimeForCurrentBlob = TDuration::Zero();
+        PartitionQuotaWaitTimeForCurrentBlob = TDuration::Zero();
+        WritesTotal.Inc();
+        AddMetaKey(PersistRequest.Get());
+        HaveWriteMsg = true;
 
-    if (request->Record.CmdDeleteRangeSize() || request->Record.CmdWriteSize() || request->Record.CmdRenameSize()) {
-        ctx.Send(HaveWriteMsg ? BlobCache : Tablet, request.Release());
+        AddCmdWriteTxMeta(PersistRequest->Record);
+        AddCmdWriteUserInfos(PersistRequest->Record);
+        AddCmdWriteConfig(PersistRequest->Record);
+    }
+    if (PersistRequest->Record.CmdDeleteRangeSize() || PersistRequest->Record.CmdWriteSize() || PersistRequest->Record.CmdRenameSize()) {
+        ctx.Send(HaveWriteMsg ? BlobCache : Tablet, PersistRequest.Release());
         KVWriteInProgress = true;
     } else {
+        OnProcessTxsAndUserActsWriteComplete(ActorContext());
         AnswerCurrentWrites(ctx);
         AnswerCurrentReplies(ctx);
+	    HaveWriteMsg = false;
     }
+    PersistRequest = nullptr;
 }
+
 
 void TPartition::AnswerCurrentReplies(const TActorContext& ctx)
 {
@@ -1779,90 +1865,114 @@ void TPartition::AnswerCurrentReplies(const TActorContext& ctx)
     Replies.clear();
 }
 
-void TPartition::RemoveDistrTx()
+TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t)
 {
-    EnsureUserActionAndTransactionEventsFrontIs<TTransaction>();
-
-    UserActionAndTransactionEvents.pop_front();
-    PendingPartitionConfig = nullptr;
-}
-
-TPartition::EProcessResult TPartition::ProcessUserActionOrTransaction(TTransaction& t,
-                                                                      TEvKeyValue::TEvRequest* request,
-                                                                      const TActorContext& ctx)
-{
-    Y_UNUSED(request);
-
-    Y_ABORT_UNLESS(!TxInProgress);
-
     auto result = EProcessResult::Continue;
-
-    if (t.Tx) {
-        if (!FirstEvent) {
-            return EProcessResult::Break;
-        }
-
-        if (t.Tx->SupportivePartitionActor != TActorId()) {
-            ctx.Send(t.Tx->SupportivePartitionActor,
-                     MakeHolder<TEvPQ::TEvGetWriteInfoRequest>(0).Release());
-        } else {
-            t.Predicate = BeginTransaction(*t.Tx, ctx);
-
-            ctx.Send(Tablet,
-                     MakeHolder<TEvPQ::TEvTxCalcPredicateResult>(t.Tx->Step,
-                                                                 t.Tx->TxId,
-                                                                 Partition,
-                                                                 *t.Predicate).Release());
-        }
-
-        TxInProgress = true;
-
-        result = EProcessResult::Abort;
-    } else if (t.ProposeConfig) {
-        if (!FirstEvent) {
-            return EProcessResult::Break;
-        }
-
-        t.Predicate = BeginTransaction(*t.ProposeConfig);
-
-        PendingPartitionConfig = GetPartitionConfig(t.ProposeConfig->Config);
-        //Y_VERIFY_DEBUG_S(PendingPartitionConfig, "Partition " << Partition << " config not found");
-
-        ctx.Send(Tablet,
-                 MakeHolder<TEvPQ::TEvProposePartitionConfigResult>(t.ProposeConfig->Step,
-                                                                    t.ProposeConfig->TxId,
-                                                                    Partition).Release());
-
-        TxInProgress = true;
-
-        result = EProcessResult::Abort;
-    } else {
-        Y_ABORT_UNLESS(!ChangeConfig);
-
-        ChangeConfig = t.ChangeConfig;
-        SendChangeConfigReply = t.SendReply;
-        BeginChangePartitionConfig(ChangeConfig->Config, ctx);
-
-        result = EProcessResult::Continue;
+    if (t->SupportivePartitionActor && !t->WriteInfo) { // Pending for write info
+        return EProcessResult::NotReady;
     }
+    if (t->WriteInfo && !t->WriteInfoApplied) { //Recieved write info but not applied
+        result = ApplyWriteInfoResponse(*t);
+        if (!t->WriteInfoApplied) { // Tried to apply write info but couldn't - TX must be blocked.
+            Y_ABORT_UNLESS(result != EProcessResult::Continue);
+            return result;
+        }
+    }
+    if (t->ProposeTransaction) { // Immediate TX
+        if (!t->Predicate.GetOrElse(true)) {
+            t->State = ECommitState::Aborted;
+            return EProcessResult::Continue;
+        }
+        t->Predicate.ConstructInPlace(true);
+        return PreProcessImmediateTx(t->ProposeTransaction->Record);
 
+    } else if (t->Tx) { // Distributed TX
+        if (t->Predicate.Defined()) { // Predicate defined - either failed previously or Tx created with predicate defined.
+            ReplyToProposeOrPredicate(t, true);
+            return EProcessResult::Continue;
+        }
+        result = BeginTransaction(*t->Tx, t->Predicate);
+        if (t->Predicate.Defined()) {
+            ReplyToProposeOrPredicate(t, true);
+        }
+        return result;
+    } else if (t->ProposeConfig) {
+        if (!FirstEvent) {
+            return EProcessResult::Blocked;
+        }
+        t->Predicate = BeginTransaction(*t->ProposeConfig);
+        ChangingConfig = true;
+        PendingPartitionConfig = GetPartitionConfig(t->ProposeConfig->Config);
+        //Y_VERIFY_DEBUG_S(PendingPartitionConfig, "Partition " << Partition << " config not found");
+        ReplyToProposeOrPredicate(t, false);
+        return EProcessResult::Break;
+    } else {
+        Y_ABORT_UNLESS(t->ChangeConfig);
+
+        Y_ABORT_UNLESS(!ChangeConfig && !ChangingConfig);
+        if (!FirstEvent)
+            return EProcessResult::Blocked;
+        ChangingConfig = true;
+        // Should remove this and add some id to TEvChangeConfig if we want to batch change of configs
+        t->State = ECommitState::Committed;
+        return EProcessResult::Break;
+    }
+    Y_ABORT();
     return result;
 }
 
-bool TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx,
-                                  const TActorContext& ctx)
+bool TPartition::ExecUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t, TEvKeyValue::TEvRequest*)
 {
-    Y_UNUSED(ctx);
-    bool predicate = true;
+    if (t->ProposeTransaction) {
+        ExecImmediateTx(*t);
+        return true;
+    }
+    switch(t->State) {
+        case ECommitState::Pending:
+            return false;
+        case ECommitState::Aborted:
+            RollbackTransaction(t);
+            return true;
+        case ECommitState::Committed:
+            break;
+    }
+    const auto& ctx = ActorContext();
+    if (t->ChangeConfig) {
+        Y_ABORT_UNLESS(!ChangeConfig);
+        Y_ABORT_UNLESS(ChangingConfig);
+        ChangeConfig = t->ChangeConfig;
+        SendChangeConfigReply = t->SendReply;
+        BeginChangePartitionConfig(ChangeConfig->Config, ctx);
+    } else if (t->ProposeConfig) {
+        Y_ABORT_UNLESS(ChangingConfig);
+        ChangeConfig = MakeSimpleShared<TEvPQ::TEvChangePartitionConfig>(TopicConverter,
+                                                                         t->ProposeConfig->Config);
+        PendingPartitionConfig = GetPartitionConfig(ChangeConfig->Config);
+        SendChangeConfigReply = false;
+    }
+    CommitTransaction(t);
+    return true;
+}
 
+TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx, TMaybe<bool>& predicate)
+{
+    const auto& ctx = ActorContext();
+    THashSet<TString> consumers;
+    bool ok = true;
     for (auto& operation : tx.Operations) {
         const TString& consumer = operation.GetConsumer();
+        if (TxAffectedConsumers.contains(consumer)) {
+            return EProcessResult::Blocked;
+        }
+        if (SetOffsetAffectedConsumers.contains(consumer)) {
+            return EProcessResult::Blocked;
+        }
 
         if (AffectedUsers.contains(consumer) && !GetPendingUserIfExists(consumer)) {
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
                         "Partition " << Partition <<
                         " Consumer '" << consumer << "' has been removed");
-            predicate = false;
+            ok = false;
             break;
         }
 
@@ -1870,7 +1980,7 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx,
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
                         "Partition " << Partition <<
                         " Unknown consumer '" << consumer << "'");
-            predicate = false;
+            ok = false;
             break;
         }
 
@@ -1884,7 +1994,7 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx,
                         " Bad request (invalid range) " <<
                         " Begin " << operation.GetBegin() <<
                         " End " << operation.GetEnd());
-            predicate = false;
+            ok = false;
         } else if (userInfo.Offset != (i64)operation.GetBegin()) {
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
                         "Partition " << Partition <<
@@ -1892,7 +2002,7 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx,
                         " Bad request (gap) " <<
                         " Offset " << userInfo.Offset <<
                         " Begin " << operation.GetBegin());
-            predicate = false;
+            ok = false;
         } else if (operation.GetEnd() > EndOffset) {
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
                         "Partition " << Partition <<
@@ -1900,18 +2010,22 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx,
                         " Bad request (behind the last offset) " <<
                         " EndOffset " << EndOffset <<
                         " End " << operation.GetEnd());
-            predicate = false;
+            ok = false;
         }
 
-        if (!predicate) {
+        if (!ok) {
             if (!isAffectedConsumer) {
                 AffectedUsers.erase(consumer);
             }
             break;
         }
+        consumers.insert(consumer);
     }
-
-    return predicate;
+    if (ok) {
+        TxAffectedConsumers.insert(consumers.begin(), consumers.end());
+    }
+    predicate = ok;
+    return EProcessResult::Continue;
 }
 
 bool TPartition::BeginTransaction(const TEvPQ::TEvProposePartitionConfig& event)
@@ -1925,60 +2039,14 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvProposePartitionConfig& event)
     return true;
 }
 
-void TPartition::EndTransaction(const TEvPQ::TEvTxCommit& event,
-                                const TActorContext& ctx)
+void TPartition::CommitWriteOperations(const TTransaction& t)
 {
-    if (PlanStep.Defined() && TxId.Defined()) {
-        if (GetStepAndTxId(event) < GetStepAndTxId(*PlanStep, *TxId)) {
-            ctx.Send(Tablet, MakeCommitDone(event.Step, event.TxId).Release());
-            return;
-        }
-    }
-
-    Y_ABORT_UNLESS(TxInProgress);
-
-    TTransaction& t = GetCurrentTransaction();
-
-    if (t.Tx) {
-        Y_ABORT_UNLESS(GetStepAndTxId(event) == GetStepAndTxId(*t.Tx));
-        Y_ABORT_UNLESS(t.Predicate.Defined() && *t.Predicate);
-
-        for (auto& operation : t.Tx->Operations) {
-            TUserInfoBase& userInfo = GetOrCreatePendingUser(operation.GetConsumer());
-
-            Y_ABORT_UNLESS(userInfo.Offset == (i64)operation.GetBegin());
-
-            userInfo.Offset = operation.GetEnd();
-        }
-
-        ChangePlanStepAndTxId(t.Tx->Step, t.Tx->TxId);
-
-        ScheduleReplyCommitDone(t.Tx->Step, t.Tx->TxId);
-    } else if (t.ProposeConfig) {
-        Y_ABORT_UNLESS(GetStepAndTxId(event) == GetStepAndTxId(*t.ProposeConfig));
-        Y_ABORT_UNLESS(t.Predicate.Defined() && *t.Predicate);
-
-        BeginChangePartitionConfig(t.ProposeConfig->Config, ctx);
-
-        ChangePlanStepAndTxId(t.ProposeConfig->Step, t.ProposeConfig->TxId);
-
-        ScheduleReplyCommitDone(t.ProposeConfig->Step, t.ProposeConfig->TxId);
-    } else {
-        Y_ABORT_UNLESS(t.ChangeConfig);
-    }
-
-    RemoveDistrTx();
-
-    CommitWriteOperations(ctx);
-}
-
-void TPartition::CommitWriteOperations(const TActorContext& ctx)
-{
-    if (!WriteInfoResponse) {
+    if (!t.WriteInfo) {
         return;
     }
+    const auto& ctx = ActorContext();
 
-    for (auto i = WriteInfoResponse->BlobsFromHead.rbegin(); i != WriteInfoResponse->BlobsFromHead.rend(); ++i) {
+    for (auto i = t.WriteInfo->BlobsFromHead.rbegin(); i != t.WriteInfo->BlobsFromHead.rend(); ++i) {
         auto& blob = *i;
 
         TWriteMsg msg{Max<ui64>(), Nothing(), TEvPQ::TEvWrite::TMsg{
@@ -2001,49 +2069,65 @@ void TPartition::CommitWriteOperations(const TActorContext& ctx)
         }, std::nullopt};
         TMessage message(std::move(msg), ctx.Now() - TInstant::Zero());
 
-        UserActionAndTransactionEvents.emplace_front(std::move(message));
+        UserActionAndTxPendingCommit.emplace_front(std::move(message));
     }
-
-    WriteInfoResponse = nullptr;
 }
 
-void TPartition::EndTransaction(const TEvPQ::TEvTxRollback& event,
-                                const TActorContext& ctx)
+void TPartition::CommitTransaction(TSimpleSharedPtr<TTransaction>& t)
 {
-    Y_UNUSED(ctx);
+    const auto& ctx = ActorContext();
+    if (t->Tx) {
+        Y_ABORT_UNLESS(t->Predicate.Defined() && *t->Predicate);
 
-    if (PlanStep.Defined() && TxId.Defined()) {
-        if (GetStepAndTxId(event) <= GetStepAndTxId(*PlanStep, *TxId)) {
-            return;
+        for (auto& operation : t->Tx->Operations) {
+            TUserInfoBase& userInfo = GetOrCreatePendingUser(operation.GetConsumer());
+
+            Y_ABORT_UNLESS(userInfo.Offset == (i64)operation.GetBegin());
+
+            userInfo.Offset = operation.GetEnd();
         }
-    }
+        CommitWriteOperations(*t);
+        ChangePlanStepAndTxId(t->Tx->Step, t->Tx->TxId);
+        ScheduleReplyCommitDone(t->Tx->Step, t->Tx->TxId);
+    } else if (t->ProposeConfig) {
+        Y_ABORT_UNLESS(t->Predicate.Defined() && *t->Predicate);
 
-    Y_ABORT_UNLESS(TxInProgress);
+        BeginChangePartitionConfig(t->ProposeConfig->Config, ctx);
+        ExecChangePartitionConfig();
+        ChangePlanStepAndTxId(t->ProposeConfig->Step, t->ProposeConfig->TxId);
 
-    TTransaction& t = GetCurrentTransaction();
-
-    if (t.Tx) {
-        Y_ABORT_UNLESS(GetStepAndTxId(event) == GetStepAndTxId(*t.Tx));
-        Y_ABORT_UNLESS(t.Predicate.Defined());
-
-        ChangePlanStepAndTxId(t.Tx->Step, t.Tx->TxId);
-    } else if (t.ProposeConfig) {
-        Y_ABORT_UNLESS(GetStepAndTxId(event) == GetStepAndTxId(*t.ProposeConfig));
-        Y_ABORT_UNLESS(t.Predicate.Defined());
-
-        ChangePlanStepAndTxId(t.ProposeConfig->Step, t.ProposeConfig->TxId);
+        ScheduleReplyCommitDone(t->ProposeConfig->Step, t->ProposeConfig->TxId);
     } else {
-        Y_ABORT_UNLESS(t.ChangeConfig);
+        Y_ABORT_UNLESS(t->ChangeConfig);
+        ExecChangePartitionConfig();
     }
+}
 
-    RemoveDistrTx();
+void TPartition::RollbackTransaction(TSimpleSharedPtr<TTransaction>& t)
+{
+    auto stepAndId = GetStepAndTxId(*t->Tx);
+
+    auto txIter = TransactionsInflight.find(stepAndId.second);
+    Y_ABORT_UNLESS(!txIter.IsEnd());
+
+    if (t->Tx) {
+        Y_ABORT_UNLESS(t->Predicate.Defined());
+        ChangePlanStepAndTxId(t->Tx->Step, t->Tx->TxId);
+    } else if (t->ProposeConfig) {
+        Y_ABORT_UNLESS(t->Predicate.Defined());
+        ChangingConfig = false;
+        ChangePlanStepAndTxId(t->ProposeConfig->Step, t->ProposeConfig->TxId);
+    } else {
+        Y_ABORT_UNLESS(t->ChangeConfig);
+        ChangeConfig = nullptr;
+        ChangingConfig = false;
+    }
 }
 
 void TPartition::BeginChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& config,
                                             const TActorContext& ctx)
 {
     TSet<TString> hasReadRule;
-
     for (auto& [consumer, info] : UsersInfoStorage->GetAll()) {
         hasReadRule.insert(consumer);
     }
@@ -2067,24 +2151,44 @@ void TPartition::BeginChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& co
 
         ui64 rrGen = consumer.GetGeneration();
         if (userInfo.ReadRuleGeneration != rrGen) {
-            TEvPQ::TEvSetClientInfo act(0, consumer.GetName(), 0, "", 0, 0, 0, TActorId{},
+            auto act = MakeHolder<TEvPQ::TEvSetClientInfo>(0, consumer.GetName(), 0, "", 0, 0, 0, TActorId{},
                                         TEvPQ::TEvSetClientInfo::ESCI_INIT_READ_RULE, rrGen);
 
-            ProcessUserAct(act, ctx);
+            auto res = PreProcessUserAct(*act, ctx);
+            ChangeConfigActs.emplace_back(std::move(act));
+
+            Y_ABORT_UNLESS(res == EProcessResult::Continue);
         }
         hasReadRule.erase(consumer.GetName());
     }
 
     for (auto& consumer : hasReadRule) {
         GetOrCreatePendingUser(consumer);
-        TEvPQ::TEvSetClientInfo act(0, consumer, 0, "", 0, 0, 0, TActorId{},
+        auto act = MakeHolder<TEvPQ::TEvSetClientInfo>(0, consumer, 0, "", 0, 0, 0, TActorId{},
                                     TEvPQ::TEvSetClientInfo::ESCI_DROP_READ_RULE, 0);
 
-        ProcessUserAct(act, ctx);
+        auto res = PreProcessUserAct(*act, ctx);
+        Y_ABORT_UNLESS(res == EProcessResult::Continue);
+        ChangeConfigActs.emplace_back(std::move(act));
+    }
+}
+
+void TPartition::ExecChangePartitionConfig() {
+    for (auto& act : ChangeConfigActs) {
+        auto& userInfo = GetOrCreatePendingUser(act->ClientId);
+        EmulatePostProcessUserAct(*act, userInfo, ActorContext());
     }
 }
 
 void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) {
+    FirstEvent = true;
+    TxAffectedConsumers.clear();
+    TxAffectedSourcesIds.clear();
+    WriteAffectedSourcesIds.clear();
+    SetOffsetAffectedConsumers.clear();
+    BatchingState = ETxBatchingState::PreProcessing;
+    WriteCycleSizeEstimate = 0;
+    WriteKeysSizeEstimate = 0;
 
     if (ChangeConfig) {
         EndChangePartitionConfig(std::move(ChangeConfig->Config),
@@ -2136,6 +2240,7 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
         }
     }
 
+    ChangeConfigActs.clear();
     AnswerCurrentReplies(ctx);
 
     PendingUsersInfo.clear();
@@ -2148,6 +2253,8 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
         ChangeConfig = nullptr;
         PendingPartitionConfig = nullptr;
     }
+    ChangingConfig = false;
+    BatchingState = ETxBatchingState::PreProcessing;
 }
 
 void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
@@ -2189,6 +2296,7 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
     }
 }
 
+
 TString TPartition::GetKeyConfig() const
 {
     return Sprintf("_config_%u", Partition.OriginalPartitionId);
@@ -2209,85 +2317,83 @@ void TPartition::ResendPendingEvents(const TActorContext& ctx)
     }
 }
 
-TPartition::EProcessResult TPartition::ProcessUserActionOrTransaction(const TEvPersQueue::TEvProposeTransaction& event,
-                                                                      TEvKeyValue::TEvRequest* request,
-                                                                      const TActorContext& ctx)
+TPartition::EProcessResult TPartition::PreProcessImmediateTx(const NKikimrPQ::TEvProposeTransaction& tx)
 {
-    Y_UNUSED(request);
-
-    Y_ABORT_UNLESS(event.Record.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData);
-    Y_ABORT_UNLESS(event.Record.HasData());
-
     if (AffectedUsers.size() >= MAX_USERS) {
-        return EProcessResult::Break;
+        return EProcessResult::Blocked;
     }
-
-    EProcessResult result = EProcessResult::Continue;
-
-    if (event.Record.GetData().HasWriteId()) {
-        if (!FirstEvent) {
-            result = EProcessResult::Break;
-        } else {
-            Y_ABORT_UNLESS(event.Record.HasSupportivePartitionActor());
-
-            ctx.Send(ActorIdFromProto(event.Record.GetSupportivePartitionActor()),
-                     MakeHolder<TEvPQ::TEvGetWriteInfoRequest>(0).Release());
-
-            TxInProgress = true;
-
-            result = EProcessResult::Abort;
-        }
-    } else {
-        // This is a transaction for a read operation
-        ProcessImmediateTx(event.Record, true, ctx);
-        --ImmediateTxCount;
-
-        result = EProcessResult::Continue;
-    }
-
-    return result;
-}
-
-void TPartition::ProcessImmediateTx(const NKikimrPQ::TEvProposeTransaction& tx,
-                                    bool predicate,
-                                    const TActorContext& ctx)
-{
-
     Y_ABORT_UNLESS(tx.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData);
     Y_ABORT_UNLESS(tx.HasData());
-
-    if (!predicate) {
-        ScheduleReplyPropose(tx,
-                             NKikimrPQ::TEvProposeTransactionResult::ABORTED,
-                             NKikimrPQ::TError::INTERNAL,
-                             "not an empty list of keys");
-        return;
-    }
-
+    THashSet<TString> consumers;
     for (auto& operation : tx.GetData().GetOperations()) {
-        if (!operation.HasBegin()) {
-            continue;
+        if (!operation.HasBegin() || !operation.HasEnd() || !operation.HasConsumer()) {
+            continue; //Write operation - handled separately via WriteInfo
         }
-
-        Y_ABORT_UNLESS(operation.HasEnd() && operation.HasConsumer());
 
         Y_ABORT_UNLESS(operation.GetBegin() <= (ui64)Max<i64>(), "Unexpected begin offset: %" PRIu64, operation.GetBegin());
         Y_ABORT_UNLESS(operation.GetEnd() <= (ui64)Max<i64>(), "Unexpected end offset: %" PRIu64, operation.GetEnd());
 
         const TString& user = operation.GetConsumer();
-
+        if (TxAffectedConsumers.contains(user)) {
+            return EProcessResult::Blocked;
+        }
         if (!PendingUsersInfo.contains(user) && AffectedUsers.contains(user)) {
             ScheduleReplyPropose(tx,
                                  NKikimrPQ::TEvProposeTransactionResult::ABORTED,
                                  NKikimrPQ::TError::BAD_REQUEST,
                                  "the consumer has been deleted");
-            return;
+            return EProcessResult::ContinueDrop;
+        }
+        if (operation.GetBegin() > operation.GetEnd()) {
+            ScheduleReplyPropose(tx,
+                                 NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST,
+                                 NKikimrPQ::TError::BAD_REQUEST,
+                                 "incorrect offset range (begin > end)");
+            return EProcessResult::ContinueDrop;
+        }
+        consumers.insert(user);
+    }
+    SetOffsetAffectedConsumers.insert(consumers.begin(), consumers.end());
+    WriteKeysSizeEstimate += consumers.size();
+    return EProcessResult::Continue;
+}
+
+void TPartition::ExecImmediateTx(const TTransaction& t)
+{
+    --ImmediateTxCount;
+    auto& record = t.ProposeTransaction->Record;
+    Y_ABORT_UNLESS(record.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData);
+    Y_ABORT_UNLESS(record.HasData());
+
+
+    //ToDo - check, this probably wouldn't work any longer.
+    if (!t.Predicate.GetRef()) {
+        ScheduleReplyPropose(record,
+                             NKikimrPQ::TEvProposeTransactionResult::ABORTED,
+                             NKikimrPQ::TError::BAD_REQUEST,
+                             t.Message);
+        return;
+    }
+    for (auto& operation : record.GetData().GetOperations()) {
+        if (!operation.HasBegin() || !operation.HasEnd() || !operation.HasConsumer()) {
+            continue; //Write operation - handled separately via WriteInfo
         }
 
+        Y_ABORT_UNLESS(operation.GetBegin() <= (ui64)Max<i64>(), "Unexpected begin offset: %" PRIu64, operation.GetBegin());
+        Y_ABORT_UNLESS(operation.GetEnd() <= (ui64)Max<i64>(), "Unexpected end offset: %" PRIu64, operation.GetEnd());
+
+        const TString& user = operation.GetConsumer();
+        if (!PendingUsersInfo.contains(user) && AffectedUsers.contains(user)) {
+            ScheduleReplyPropose(record,
+                                 NKikimrPQ::TEvProposeTransactionResult::ABORTED,
+                                 NKikimrPQ::TError::BAD_REQUEST,
+                                 "the consumer has been deleted");
+            return;
+        }
         TUserInfoBase& userInfo = GetOrCreatePendingUser(user);
 
         if (operation.GetBegin() > operation.GetEnd()) {
-            ScheduleReplyPropose(tx,
+            ScheduleReplyPropose(record,
                                  NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST,
                                  NKikimrPQ::TError::BAD_REQUEST,
                                  "incorrect offset range (begin > end)");
@@ -2295,7 +2401,7 @@ void TPartition::ProcessImmediateTx(const NKikimrPQ::TEvProposeTransaction& tx,
         }
 
         if (userInfo.Offset != (i64)operation.GetBegin()) {
-            ScheduleReplyPropose(tx,
+            ScheduleReplyPropose(record,
                                  NKikimrPQ::TEvProposeTransactionResult::ABORTED,
                                  NKikimrPQ::TError::BAD_REQUEST,
                                  "incorrect offset range (gap)");
@@ -2303,86 +2409,111 @@ void TPartition::ProcessImmediateTx(const NKikimrPQ::TEvProposeTransaction& tx,
         }
 
         if (operation.GetEnd() > EndOffset) {
-            ScheduleReplyPropose(tx,
+            ScheduleReplyPropose(record,
                                  NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST,
                                  NKikimrPQ::TError::BAD_REQUEST,
                                  "incorrect offset range (commit to the future)");
             return;
         }
-
         userInfo.Offset = operation.GetEnd();
     }
+    CommitWriteOperations(t);
 
-    ScheduleReplyPropose(tx,
+    ScheduleReplyPropose(record,
                          NKikimrPQ::TEvProposeTransactionResult::COMPLETE,
                          NKikimrPQ::TError::OK,
                          "");
 
-    CommitWriteOperations(ctx);
+    ScheduleTransactionCompleted(record);
+    return;
 }
 
-TPartition::EProcessResult TPartition::ProcessUserActionOrTransaction(TEvPQ::TEvSetClientInfo& act,
-                                                                      TEvKeyValue::TEvRequest* request,
-                                                                      const TActorContext& ctx)
+TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>& act)
 {
-    Y_UNUSED(request);
-
     if (AffectedUsers.size() >= MAX_USERS) {
-        return EProcessResult::Break;
+        return EProcessResult::Blocked;
+    }
+    return PreProcessUserAct(*act, ActorContext());
+}
+
+bool TPartition::ExecUserActionOrTransaction(
+        TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>& event, TEvKeyValue::TEvRequest*
+) {
+    CommitUserAct(*event);
+    return true;
+}
+
+TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TMessage& msg)
+{
+    if (WriteCycleSize >= MAX_WRITE_CYCLE_SIZE) {
+        return EProcessResult::Blocked;
     }
 
-    ProcessUserAct(act, ctx);
-    RemoveUserAct();
-
-    return EProcessResult::Continue;
+    auto result = EProcessResult::Continue;
+    if (msg.IsWrite()) {
+        result = PreProcessRequest(msg.GetWrite());
+    } else if (msg.IsRegisterMessageGroup()) {
+        result = PreProcessRequest(msg.GetRegisterMessageGroup());
+    } else if (msg.IsDeregisterMessageGroup()) {
+        result = PreProcessRequest(msg.GetDeregisterMessageGroup());
+    } else if (msg.IsSplitMessageGroup()) {
+        result = PreProcessRequest(msg.GetSplitMessageGroup());
+    } else {
+        Y_ABORT_UNLESS(msg.IsOwnership());
+    }
+    return result;
 }
 
-TPartition::EProcessResult TPartition::ProcessUserActionOrTransaction(TMessage& msg,
-                                                                      TEvKeyValue::TEvRequest* request,
-                                                                      const TActorContext& ctx)
+bool TPartition::ExecUserActionOrTransaction(TMessage& msg, TEvKeyValue::TEvRequest* request)
 {
+    const auto& ctx = ActorContext();
     if (!HaveWriteMsg) {
         BeginHandleRequests(request, ctx);
         if (!DiskIsFull) {
             BeginProcessWrites(ctx);
             BeginAppendHeadWithNewWrites(ctx);
         }
-
         HaveWriteMsg = true;
     }
 
-    if (WriteCycleSize >= MAX_WRITE_CYCLE_SIZE) {
-        return EProcessResult::Break;
-    }
-
-    auto result = EProcessResult::Continue;
+    bool doReply = true;
     if (msg.IsWrite()) {
-        result = ProcessRequest(msg.GetWrite(), *Parameters, request, ctx);
+        doReply = ExecRequest(msg.GetWrite(), *Parameters, request);
     } else if (msg.IsRegisterMessageGroup()) {
-        result = ProcessRequest(msg.GetRegisterMessageGroup(), *Parameters);
+        ExecRequest(msg.GetRegisterMessageGroup(), *Parameters);
     } else if (msg.IsDeregisterMessageGroup()) {
-        result = ProcessRequest(msg.GetDeregisterMessageGroup(), *Parameters);
+        ExecRequest(msg.GetDeregisterMessageGroup(), *Parameters);
     } else if (msg.IsSplitMessageGroup()) {
-        result = ProcessRequest(msg.GetSplitMessageGroup(), *Parameters);
+        ExecRequest(msg.GetSplitMessageGroup(), *Parameters);
     } else {
         Y_ABORT_UNLESS(msg.IsOwnership());
     }
-
-    if ((result == EProcessResult::Reply) || msg.IsOwnership()) {
+    if (doReply) {
         EmplaceResponse(std::move(msg), ctx);
     }
-
-    return result;
+    return true;
 }
 
-void TPartition::ProcessUserAct(TEvPQ::TEvSetClientInfo& act,
-                                const TActorContext& ctx)
-{
+TPartition::EProcessResult TPartition::PreProcessUserAct(
+        TEvPQ::TEvSetClientInfo& act, const TActorContext&
+) {
     Y_ABORT_UNLESS(!KVWriteInProgress);
 
     const TString& user = act.ClientId;
-    const bool strictCommitOffset = (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && act.Strict);
+    if (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET) {
+        if (TxAffectedConsumers.contains(user)) {
+            return EProcessResult::Blocked;
+        }
+    }
+    WriteKeysSizeEstimate += 1;
+    SetOffsetAffectedConsumers.insert(user);
+    return EProcessResult::Continue;
+}
 
+void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
+    const bool strictCommitOffset = (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && act.Strict);
+    const TString& user = act.ClientId;
+    const auto& ctx = ActorContext();
     if (!PendingUsersInfo.contains(user) && AffectedUsers.contains(user)) {
         switch (act.Type) {
         case TEvPQ::TEvSetClientInfo::ESCI_INIT_READ_RULE:
@@ -2396,8 +2527,7 @@ void TPartition::ProcessUserAct(TEvPQ::TEvSetClientInfo& act,
             return;
         }
     }
-
-    TUserInfoBase& userInfo = GetOrCreatePendingUser(user);
+    auto& userInfo = GetOrCreatePendingUser(user);
 
     if (act.Type == TEvPQ::TEvSetClientInfo::ESCI_DROP_READ_RULE) {
         LOG_DEBUG_S(
@@ -2509,7 +2639,8 @@ void TPartition::ProcessUserAct(TEvPQ::TEvSetClientInfo& act,
         return;
     }
 
-    EmulatePostProcessUserAct(act, userInfo, ctx);
+    RemoveUserAct(act.ClientId);
+    return EmulatePostProcessUserAct(act, userInfo, ActorContext());
 }
 
 void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
@@ -2746,6 +2877,7 @@ void TPartition::AddCmdWriteUserInfos(NKikimrClient::TKeyValueRequest& request)
 
         if (TUserInfoBase* userInfo = GetPendingUserIfExists(user)) {
             auto *ui = UsersInfoStorage->GetIfExists(user);
+
             AddCmdWrite(request,
                         ikey, ikeyDeprecated,
                         userInfo->Offset, userInfo->Generation, userInfo->Step,
@@ -2802,7 +2934,6 @@ TUserInfoBase& TPartition::GetOrCreatePendingUser(const TString& user,
     } else {
         userInfo = &i->second;
     }
-
     AffectedUsers.insert(user);
 
     return *userInfo;
@@ -2945,7 +3076,6 @@ void TPartition::Handle(TEvPQ::TEvApproveWriteQuota::TPtr& ev, const TActorConte
     // Metrics
     TopicQuotaWaitTimeForCurrentBlob = ev->Get()->AccountQuotaWaitTime;
     PartitionQuotaWaitTimeForCurrentBlob = ev->Get()->PartitionQuotaWaitTime;
-
     if (TopicWriteQuotaWaitCounter) {
         TopicWriteQuotaWaitCounter->IncFor(TopicQuotaWaitTimeForCurrentBlob.MilliSeconds());
     }
@@ -3062,20 +3192,24 @@ void TPartition::Handle(TEvPQ::TEvDeletePartition::TPtr&, const TActorContext& c
 
 void TPartition::ScheduleNegativeReplies()
 {
-    for (auto& event : UserActionAndTransactionEvents) {
-        auto visitor = [this](auto& event) {
-            using T = std::decay_t<decltype(event)>;
-            if constexpr (TIsSimpleSharedPtr<T>::value) {
-                return this->ScheduleNegativeReply(*event);
+    auto processQueue = [&](std::deque<TUserActionAndTransactionEvent>& queue) {
+        for (auto& event : queue) {
+            if (auto* setInfo = std::get_if<0>(&event.Event)) {
+                ScheduleNegativeReply(*setInfo->Get());
+            } else if (auto* tx = std::get_if<1>(&event.Event)) {
+                if (tx->Get()->ProposeTransaction) {
+                    ScheduleNegativeReply(*tx->Get()->ProposeTransaction);
+                } else {
+                    ScheduleNegativeReply(*tx->Get());
+                }
             } else {
-                return this->ScheduleNegativeReply(event);
+                ScheduleNegativeReply(*(std::get_if<2>(&event.Event)));
             }
-        };
-
-        std::visit(visitor, event);
-    }
-
-    UserActionAndTransactionEvents.clear();
+        }
+        queue.clear();
+    };
+    processQueue(UserActionAndTransactionEvents);
+    processQueue(UserActionAndTxPendingCommit);
 }
 
 void TPartition::AddCmdDeleteRangeForAllKeys(TEvKeyValue::TEvRequest& request)

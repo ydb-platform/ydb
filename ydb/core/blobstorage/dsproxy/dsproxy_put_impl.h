@@ -186,7 +186,7 @@ public:
     void PrepareOneReply(NKikimrProto::EReplyStatus status, size_t blobIdx, TLogContext &logCtx,
             TString errorReason, TPutResultVec &outPutResults);
 
-    ui64 GetTimeToAccelerateNs(TLogContext &logCtx);
+    ui64 GetTimeToAccelerateNs(TLogContext &logCtx, ui32 nthWorst);
 
     TString DumpFullState() const;
 
@@ -206,7 +206,6 @@ public:
 
     TDeque<TPutEvent> GeneratePutRequests() {
         TDeque<TPutEvent> events;
-
         // Group put requests together by VDiskID.
         std::unordered_multimap<ui32, TDiskPutRequest*> puts;
         for (auto& put : Blackboard.GroupDiskRequests.PutsPending) {

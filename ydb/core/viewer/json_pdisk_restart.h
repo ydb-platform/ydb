@@ -4,6 +4,7 @@
 #include <ydb/library/actors/core/mon.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/viewer/json/json.h>
+#include <ydb/core/util/wildcard.h>
 #include <library/cpp/json/json_writer.h>
 #include "viewer.h"
 #include "json_pipe_req.h"
@@ -31,19 +32,16 @@ protected:
     using TBase = TViewerPipeClient<TThis>;
     IViewer* Viewer;
     NMon::TEvHttpInfo::TPtr Event;
-    TJsonSettings JsonSettings;
-    bool AllEnums = false;
     ui32 Timeout = 0;
     ui32 ActualRetries = 0;
     ui32 Retries = 0;
     TDuration RetryPeriod = TDuration::MilliSeconds(500);
 
-    std::unique_ptr<TEvBlobStorage::TEvAskWardenRestartPDiskResult> Response;
+    std::unique_ptr<TEvBlobStorage::TEvControllerConfigResponse> Response;
 
     ui32 NodeId = 0;
     ui32 PDiskId = 0;
-
-    TActorId SessionId;
+    bool Force = false;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -59,6 +57,7 @@ public:
         const auto& params(Event->Get()->Request.GetParams());
         NodeId = FromStringWithDefault<ui32>(params.Get("node_id"), 0);
         PDiskId = FromStringWithDefault<ui32>(params.Get("pdisk_id"), Max<ui32>());
+        Force = FromStringWithDefault<bool>(params.Get("force"), false);
 
         if (PDiskId == Max<ui32>()) {
             TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(
@@ -70,6 +69,10 @@ public:
             TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(
                 Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Only POST method is allowed"),
                 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+            return PassAway();
+        }
+        if (Force && !Viewer->CheckAccessAdministration(Event->Get())) {
+            TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPFORBIDDEN(Event->Get()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
             return PassAway();
         }
 
@@ -89,21 +92,15 @@ public:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvBlobStorage::TEvAskWardenRestartPDiskResult, Handle);
+            hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
             cFunc(TEvRetryNodeRequest::EventType, HandleRetry);
             cFunc(TEvents::TEvUndelivered::EventType, Undelivered);
-            hFunc(TEvInterconnect::TEvNodeConnected, Connected);
-            hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
 
     void SendRequest() {
-        auto request = MakeHolder<TEvBlobStorage::TEvAskWardenRestartPDisk>(PDiskId);
-        TBase::SendRequest(MakeBlobStorageNodeWardenID(NodeId),
-                           request.Release(),
-                           IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
-                           NodeId);
+        RequestBSControllerPDiskRestart(NodeId, PDiskId, Force);
     }
 
     bool RetryRequest() {
@@ -122,18 +119,7 @@ public:
         }
     }
 
-    void Connected(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
-        SessionId = ev->Sender;
-    }
-
-    void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr&) {
-        SessionId = {};
-        if (!RetryRequest()) {
-            TBase::RequestDone();
-        }
-    }
-
-    void Handle(TEvBlobStorage::TEvAskWardenRestartPDiskResult::TPtr& ev) {
+    void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& ev) {
         Response.reset(ev->Release().Release());
         ReplyAndPassAway();
     }
@@ -144,27 +130,33 @@ public:
 
     void HandleTimeout() {
         Send(Event->Sender, new NMon::TEvHttpInfoRes(
-            Viewer->GetHTTPGATEWAYTIMEOUT(Event->Get(), "text/plain", "Timeout receiving response from NodeWarden"),
+            Viewer->GetHTTPGATEWAYTIMEOUT(Event->Get(), "text/plain", "Timeout receiving response from BSC"),
             0, NMon::IEvHttpInfoRes::EContentType::Custom));
     }
 
     void PassAway() override {
-        if (SessionId) {
-            TBase::Send(SessionId, new TEvents::TEvUnsubscribe());
-        }
         TBase::PassAway();
     }
 
     void ReplyAndPassAway() {
         NJson::TJsonValue json;
         if (Response != nullptr) {
-            json["result"] = Response->RestartAllowed;
-            if (Response->Details) {
-                json["error"] = Response->Details;
+            if (Response->Record.GetResponse().GetSuccess()) {
+                json["result"] = true;
+            } else {
+                json["result"] = false;
+                TString error;
+                bool forceRetryPossible = false;
+                Viewer->TranslateFromBSC2Human(Response->Record.GetResponse(), error, forceRetryPossible);
+                json["error"] = error;
+                if (forceRetryPossible && Viewer->CheckAccessAdministration(Event->Get())) {
+                    json["forceRetryPossible"] = true;
+                }
             }
+            json["debugMessage"] = Response->Record.ShortDebugString();
         } else {
             json["result"] = false;
-            json["error"] = "No response was received from the NodeWarden";
+            json["error"] = "No response was received from BSC";
         }
         TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), NJson::WriteJson(json)), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         PassAway();
@@ -177,8 +169,6 @@ YAML::Node TJsonRequestSwagger<TJsonPDiskRestart>::GetSwagger() {
         post:
           tags:
           - pdisk
-          produces:
-          - application/json
           summary: Restart PDisk
           description: Restart PDisk on the specified node
           parameters:
@@ -196,29 +186,28 @@ YAML::Node TJsonRequestSwagger<TJsonPDiskRestart>::GetSwagger() {
             description: timeout in ms
             required: false
             type: integer
-          - name: retries
+          - name: force
             in: query
-            description: number of retries
+            description: attempt forced operation, ignore warnings
             required: false
-            type: integer
-          - name: retry_period
-            in: query
-            description: retry period in ms
-            required: false
-            type: integer
-            default: 500
+            type: boolean
           responses:
             200:
               description: OK
-              schema:
-                type: object
-                properties:
-                  result:
-                    type: boolean
-                    description: was operation successful or not
-                  error:
-                    type: string
-                    description: details about failed operation
+              content:
+                application/json:
+                  schema:
+                    type: object
+                    properties:
+                      result:
+                        type: boolean
+                        description: was operation successful or not
+                      error:
+                        type: string
+                        description: details about failed operation
+                      forceRetryPossible:
+                        type: boolean
+                        description: if true, operation can be retried with force flag
             400:
               description: Bad Request
             403:

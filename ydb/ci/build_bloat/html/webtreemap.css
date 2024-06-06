@@ -1,42 +1,31 @@
-/* Based on https://github.com/martine/webtreemap */
-
 .webtreemap-node {
   /* Required attributes. */
   position: absolute;
   overflow: hidden;   /* To hide overlong captions. */
   background: white;  /* Nodes must be opaque for zIndex layering. */
-  border: solid 1px black;  /* Calculations assume 1px border. */
+  border: solid 1px #555;  /* Calculations assume 1px border. */
 
   /* Optional: CSS animation. */
-  -webkit-transition: top    0.3s,
-                      left   0.3s,
-                      width  0.3s,
-                      height 0.3s;
+  transition: top    0.3s,
+              left   0.3s,
+              width  0.3s,
+              height 0.3s;
 }
 
 /* Optional: highlight nodes on mouseover. */
 .webtreemap-node:hover {
-  background: #eee;
+  background: #FFFFFF;
 }
 
-/* Optional: Different background colors depending on symbol. */
-.webtreemap-symbol-h {
+/* Optional: Different background colors depending on type. */
+.webtreemap-type-h {
   background: #66C2A5;
 }
-.webtreemap-symbol-cpp {
+.webtreemap-type-cpp {
   background: #FC8D62;
 }
-.webtreemap-symbol-dir {
+.webtreemap-type-dir {
   background: #8DA0CB;
-}
-.webtreemap-symbol-dir.webtreemap-aggregate {
-  background: #CBD5E8;
-}
-.webtreemap-symbol-cpp.webtreemap-aggregate {
-  background: #FDCDAC;
-}
-.webtreemap-symbol-h.webtreemap-aggregate {
-  background: #E6F5C9;
 }
 
 #legend > * {
@@ -44,6 +33,7 @@
 }
 
 /* Optional: Different borders depending on level. */
+/*
 .webtreemap-level0 {
   border: solid 1px #444;
 }
@@ -59,6 +49,7 @@
 .webtreemap-level4 {
   border: solid 1px #ccc;
 }
+*/
 
 /* Optional: styling on node captions. */
 .webtreemap-caption {

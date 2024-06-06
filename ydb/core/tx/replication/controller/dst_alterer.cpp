@@ -177,7 +177,7 @@ private:
 
 }; // TDstAlterer
 
-IActor* CreateDstAlterer(TReplication::TPtr replication, ui64 targetId, const TActorContext& ctx) {
+IActor* CreateDstAlterer(TReplication* replication, ui64 targetId, const TActorContext& ctx) {
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
     return CreateDstAlterer(ctx.SelfID, replication->GetSchemeShardId(),

@@ -1,5 +1,4 @@
 #include "vdisk_config.h"
-#include "vdisk_performance_params.h"
 #include <ydb/core/base/interconnect_channels.h>
 #include <google/protobuf/text_format.h>
 
@@ -124,8 +123,6 @@ namespace NKikimr {
         BarrierValidation = true; // switch by default on debug builds
 #endif
 
-        BurstThresholdNs = NPDisk::DevicePerformance.at(baseInfo.DeviceType).BurstThresholdNs;
-        DiskTimeAvailableScale = 1;
     }
 
     void TVDiskConfig::SetupHugeBytes() {

@@ -169,11 +169,11 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db) {
     }
 
     {
-        TMemoryProfileGuard g("TTxInit/LoadColumns");
         auto guard = GranulesStorage->GetStats()->StartPackModification();
         if (!LoadColumns(db)) {
             return false;
         }
+        TMemoryProfileGuard g("TTxInit/LoadCounters");
         if (!LoadCounters(db)) {
             return false;
         }
@@ -196,6 +196,7 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db) {
 bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
     TPortionConstructors constructors;
     {
+        TMemoryProfileGuard g("TTxInit/LoadColumns/Portions");
         if (!db.LoadPortions([&](TPortionInfoConstructor&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
             const TIndexInfo& indexInfo = portion.GetSchema(VersionedIndex)->GetIndexInfo();
             AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo));
@@ -206,6 +207,7 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
     }
 
     {
+        TMemoryProfileGuard g("TTxInit/LoadColumns/Records");
         TPortionInfo::TSchemaCursor schema(VersionedIndex);
         if (!db.LoadColumns([&](TPortionInfoConstructor&& portion, const TColumnChunkLoadContext& loadContext) {
             auto currentSchema = schema.GetSchema(portion);
@@ -216,6 +218,7 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
         }
     }
     {
+        TMemoryProfileGuard g("TTxInit/LoadColumns/Indexes");
         if (!db.LoadIndexes([&](const ui64 pathId, const ui64 portionId, const TIndexChunkLoadContext& loadContext) {
             auto* constructor = constructors.GetConstructorVerified(pathId, portionId);
             constructor->LoadIndex(loadContext);
@@ -223,14 +226,20 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
             return false;
         };
     }
-    for (auto&& [granuleId, pathConstructors] : constructors) {
-        auto g = GetGranulePtrVerified(granuleId);
-        for (auto&& [portionId, constructor] : pathConstructors) {
-            g->UpsertPortionOnLoad(constructor.Build(false));
+    {
+        TMemoryProfileGuard g("TTxInit/LoadColumns/Constructors");
+        for (auto&& [granuleId, pathConstructors] : constructors) {
+            auto g = GetGranulePtrVerified(granuleId);
+            for (auto&& [portionId, constructor] : pathConstructors) {
+                g->UpsertPortionOnLoad(constructor.Build(false));
+            }
         }
     }
-    for (auto&& i : GranulesStorage->GetTables()) {
-        i.second->OnAfterPortionsLoad();
+    {
+        TMemoryProfileGuard g("TTxInit/LoadColumns/After");
+        for (auto&& i : GranulesStorage->GetTables()) {
+            i.second->OnAfterPortionsLoad();
+        }
     }
     return true;
 }
@@ -404,6 +413,7 @@ std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::Star
 
     TSaverContext saverContext(StoragesManager);
     NActualizer::TTieringProcessContext context(memoryUsageLimit, saverContext, dataLocksManager, SignalCounters, ActualizationController);
+    const TDuration actualizationLag = NYDBTest::TControllers::GetColumnShardController()->GetActualizationTasksLag(TDuration::Seconds(1));
     for (auto&& i : pathEviction) {
         auto g = GetGranuleOptional(i.first);
         if (g) {
@@ -411,7 +421,8 @@ std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::Star
                 g->StartActualizationIndex();
             }
             g->RefreshTiering(i.second);
-            g->BuildActualizationTasks(context);
+            context.ResetActualInstantForTest();
+            g->BuildActualizationTasks(context, actualizationLag);
         }
     }
 
@@ -421,7 +432,7 @@ std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::Star
             if (pathEviction.contains(i.first)) {
                 continue;
             }
-            i.second->BuildActualizationTasks(context);
+            i.second->BuildActualizationTasks(context, actualizationLag);
         }
     } else {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "StartTtl")("skip", "not_ready_tiers");

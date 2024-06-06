@@ -143,6 +143,7 @@ public:
         OverloadState,
         SyncState,
         Uptime,
+        QuotaUsage,
     };
 
     enum ETimeoutTag {
@@ -241,6 +242,7 @@ public:
         ui64 StorageQuota = 0;
         ui64 StorageUsage = 0;
         TMaybeServerlessComputeResourcesMode ServerlessComputeResourcesMode;
+        TString Path;
     };
 
     struct TGroupState {
@@ -1060,6 +1062,7 @@ public:
         if (ev->Get()->GetRecord().status() == NKikimrScheme::StatusSuccess) {
             TString path = ev->Get()->GetRecord().path();
             TDatabaseState& state(DatabaseState[path]);
+            state.Path = path;
             for (const auto& storagePool : ev->Get()->GetRecord().pathdescription().domaindescription().storagepools()) {
                 TString storagePoolName = storagePool.name();
                 state.StoragePoolNames.emplace(storagePoolName);
@@ -1447,7 +1450,7 @@ public:
         }
     }
 
-    void FillComputeNodeStatus(TDatabaseState& databaseState,TNodeId nodeId, Ydb::Monitoring::ComputeNodeStatus& computeNodeStatus, TSelfCheckContext context) {
+    void FillComputeNodeStatus(TDatabaseState& databaseState, TNodeId nodeId, Ydb::Monitoring::ComputeNodeStatus& computeNodeStatus, TSelfCheckContext context) {
         FillNodeInfo(nodeId, context.Location.mutable_compute()->mutable_node());
 
         TSelfCheckContext rrContext(&context, "NODE_UPTIME");
@@ -1494,6 +1497,39 @@ public:
         computeNodeStatus.set_overall(context.GetOverallStatus());
     }
 
+    void FillComputeDatabaseStatus(TDatabaseState& databaseState, Ydb::Monitoring::ComputeStatus& computeStatus, TSelfCheckContext context) {
+        auto itDescribe = DescribeByPath.find(databaseState.Path);
+        if (itDescribe != DescribeByPath.end()) {
+            const auto& domain(itDescribe->second->GetRecord().GetPathDescription().GetDomainDescription());
+            if (domain.GetPathsLimit() > 0) {
+                float usage = (float)domain.GetPathsInside() / domain.GetPathsLimit();
+                computeStatus.set_paths_quota_usage(usage);
+                if (static_cast<i64>(domain.GetPathsLimit()) - static_cast<i64>(domain.GetPathsInside()) <= 1) {
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Paths quota exhausted", ETags::QuotaUsage);
+                } else if (usage >= 0.99) {
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Paths quota usage is over than 99%", ETags::QuotaUsage);
+                } else if (usage >= 0.90) {
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Paths quota usage is over than 90%", ETags::QuotaUsage);
+                } else {
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
+                }
+            }
+            if (domain.GetShardsLimit() > 0) {
+                float usage = (float)domain.GetShardsInside() / domain.GetShardsLimit();
+                computeStatus.set_shards_quota_usage(usage);
+                if (static_cast<i64>(domain.GetShardsLimit()) - static_cast<i64>(domain.GetShardsInside()) <= 1) {
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Shards quota exhausted", ETags::QuotaUsage);
+                } else if (usage >= 0.99) {
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Shards quota usage is over than 99%", ETags::QuotaUsage);
+                } else if (usage >= 0.90) {
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Shards quota usage is over than 90%", ETags::QuotaUsage);
+                } else {
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
+                }
+            }
+        }
+    }
+
     void FillCompute(TDatabaseState& databaseState, Ydb::Monitoring::ComputeStatus& computeStatus, TSelfCheckContext context) {
         TVector<TNodeId>* computeNodeIds = &databaseState.ComputeNodeIds;
         if (databaseState.ResourcePathId
@@ -1520,8 +1556,10 @@ public:
                 auto& computeNode = *computeStatus.add_nodes();
                 FillComputeNodeStatus(databaseState, nodeId, computeNode, {&context, "COMPUTE_NODE"});
             }
+            FillComputeDatabaseStatus(databaseState, computeStatus, {&context, "COMPUTE_QUOTA"});
             context.ReportWithMaxChildStatus("Some nodes are restarting too often", ETags::ComputeState, {ETags::Uptime});
             context.ReportWithMaxChildStatus("Compute is overloaded", ETags::ComputeState, {ETags::OverloadState});
+            context.ReportWithMaxChildStatus("Compute quota usage", ETags::ComputeState, {ETags::QuotaUsage});
             Ydb::Monitoring::StatusFlag::Status tabletsStatus = Ydb::Monitoring::StatusFlag::GREEN;
             computeNodeIds->push_back(0); // for tablets without node
             for (TNodeId nodeId : *computeNodeIds) {

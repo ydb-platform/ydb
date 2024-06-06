@@ -173,9 +173,12 @@ private: //IDqAsyncLookupSource
 
 private: //events
     STRICT_STFUNC(StateFunc,
+        hFunc(IDqAsyncLookupSource::TEvLookupRequest, Handle);
         hFunc(NActors::TEvents::TEvPoison, Handle);
     )
-
+    void Handle(IDqAsyncLookupSource::TEvLookupRequest::TPtr ev) {
+        AsyncLookup(ev->Get()->Keys);
+    }
     void Handle(NActors::TEvents::TEvPoison::TPtr) {
         PassAway();
     }

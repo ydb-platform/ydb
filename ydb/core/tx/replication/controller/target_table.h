@@ -6,7 +6,7 @@ namespace NKikimr::NReplication::NController {
 
 class TTableTarget: public TTargetWithStream {
 public:
-    explicit TTableTarget(TReplication::TPtr replication,
+    explicit TTableTarget(TReplication* replication,
         ui64 id, const TString& srcPath, const TString& dstPath);
 
 protected:

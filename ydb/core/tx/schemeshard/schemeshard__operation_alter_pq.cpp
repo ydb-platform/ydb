@@ -184,6 +184,13 @@ public:
             const TString databasePath = TPath::Init(context.SS->RootPathId(), context.SS).PathString();
             alterConfig.SetYdbDatabasePath(databasePath);
 
+
+            if (alterConfig.HasOffloadConfig()) {
+                // TODO: check validity
+                auto* pathId = alterConfig.MutableOffloadConfig()->MutableIncrementalBackup()->MutableDstPathId();
+                PathIdFromPathId(TPath::Resolve(alterConfig.GetOffloadConfig().GetIncrementalBackup().GetDstPath(), context.SS).Base()->PathId, pathId);
+            }
+
             alterConfig.MutablePartitionKeySchema()->Swap(tabletConfig->MutablePartitionKeySchema());
             Y_PROTOBUF_SUPPRESS_NODISCARD alterConfig.SerializeToString(&params->TabletConfig);
             alterConfig.Swap(tabletConfig);
@@ -519,6 +526,14 @@ public:
 
         bool splitMergeEnabled = AppData()->FeatureFlags.GetEnableTopicSplitMerge();
         if (splitMergeEnabled) {
+
+            auto Hex = [](const auto& value) {
+                return HexText(TBasicStringBuf(value));
+            };
+
+            ui32 nextId = topic->NextPartitionId;
+            ui32 nextGroupId = topic->TotalGroupCount;
+
             THashSet<ui32> involvedPartitions;
 
             for (const auto& split : alter.GetSplit()) {
@@ -554,15 +569,16 @@ public:
                 if (keyRange) {
                     if (keyRange->FromBound && splitBoundary <= *keyRange->FromBound) {
                         errStr = TStringBuilder()
-                                 << "Split boundary less or equals FromBound of partition: " << splitBoundary
-                                 << " <= " << *keyRange->FromBound;
+                                 << "Split boundary less or equals FromBound of partition: '" << Hex(splitBoundary)
+                                 << "' <= '" << Hex(*keyRange->FromBound) << "'";
                         result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                         return result;
                     }
                     if (keyRange->ToBound && splitBoundary >= *keyRange->ToBound) {
                         errStr = TStringBuilder()
-                                 << "Split boundary greate or equals ToBound of partition: " << splitBoundary
-                                 << " >= " << *keyRange->ToBound;
+                                 << "Split boundary greate or equals ToBound of partition: '" << Hex(splitBoundary)
+                                 << "' >= '" << Hex(*keyRange->ToBound)
+                                 << "' (FromBound is '" << Hex(keyRange->FromBound ? *keyRange->FromBound : TString{}) << "')";
                         result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                         return result;
                     }
@@ -574,13 +590,12 @@ public:
                 range.FromBound = keyRange ? keyRange->FromBound : Nothing();
                 range.ToBound = splitBoundary;
 
-                alterData->PartitionsToAdd.emplace(topic->NextPartitionId, topic->TotalGroupCount + 1, range, parents);
+                alterData->PartitionsToAdd.emplace(nextId++, ++nextGroupId, range, parents);
 
                 range.FromBound = splitBoundary;
                 range.ToBound = keyRange ? keyRange->ToBound : Nothing();
 
-                alterData->PartitionsToAdd.emplace(topic->NextPartitionId + 1, topic->TotalGroupCount + 2, range,
-                                                   parents);
+                alterData->PartitionsToAdd.emplace(nextId++, ++nextGroupId, range, parents);
             }
             for (const auto& merge : alter.GetMerge()) {
                 alterData->TotalGroupCount += 1;
@@ -650,7 +665,7 @@ public:
                     rangem = range;
                 }
 
-                alterData->PartitionsToAdd.emplace(topic->NextPartitionId, topic->TotalGroupCount + 1, rangem, parents);
+                alterData->PartitionsToAdd.emplace(nextId++, ++nextGroupId, rangem, parents);
             }
         }
 

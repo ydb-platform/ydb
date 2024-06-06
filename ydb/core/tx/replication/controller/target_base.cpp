@@ -1,6 +1,7 @@
 #include "dst_alterer.h"
 #include "dst_creator.h"
 #include "dst_remover.h"
+#include "private_events.h"
 #include "target_base.h"
 #include "util.h"
 
@@ -12,7 +13,7 @@ using ETargetKind = TReplication::ETargetKind;
 using EDstState = TReplication::EDstState;
 using EStreamState = TReplication::EStreamState;
 
-TTargetBase::TTargetBase(TReplication::TPtr replication, ETargetKind kind,
+TTargetBase::TTargetBase(TReplication* replication, ETargetKind kind,
         ui64 id, const TString& srcPath, const TString& dstPath)
     : Replication(replication)
     , Id(id)
@@ -87,6 +88,27 @@ void TTargetBase::SetIssue(const TString& value) {
     TruncatedIssue(Issue);
 }
 
+void TTargetBase::AddWorker(ui64 id) {
+    Workers.insert(id);
+}
+
+void TTargetBase::RemoveWorker(ui64 id) {
+    Workers.erase(id);
+}
+
+const THashSet<ui64>& TTargetBase::GetWorkers() const {
+    return Workers;
+}
+
+void TTargetBase::RemoveWorkers(const TActorContext& ctx) {
+    if (!PendingRemoveWorkers) {
+        PendingRemoveWorkers = true;
+        for (const auto& id : Workers) {
+            ctx.Send(ctx.SelfID, new TEvPrivate::TEvRemoveWorker(Replication->GetId(), Id, id));
+        }
+    }
+}
+
 void TTargetBase::Progress(const TActorContext& ctx) {
     switch (DstState) {
     case EDstState::Creating:
@@ -100,14 +122,18 @@ void TTargetBase::Progress(const TActorContext& ctx) {
         }
         break;
     case EDstState::Alter:
-        if (!DstAlterer) {
+        if (Workers) {
+            RemoveWorkers(ctx);
+        } else if (!DstAlterer) {
             DstAlterer = ctx.Register(CreateDstAlterer(Replication, Id, ctx));
         }
         break;
     case EDstState::Done:
         break;
     case EDstState::Removing:
-        if (!DstRemover) {
+        if (Workers) {
+            RemoveWorkers(ctx);
+        } else if (!DstRemover) {
             DstRemover = ctx.Register(CreateDstRemover(Replication, Id, ctx));
         }
         break;

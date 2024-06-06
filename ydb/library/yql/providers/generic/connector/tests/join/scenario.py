@@ -1,5 +1,5 @@
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
-from ydb.library.yql.providers.generic.connector.tests.utils.comparator import data_outs_equal
+from ydb.library.yql.providers.generic.connector.tests.utils.comparator import assert_data_outs_equal
 from ydb.library.yql.providers.generic.connector.tests.utils.log import make_logger
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
 from ydb.library.yql.providers.generic.connector.tests.utils.run.parent import Runner
@@ -53,7 +53,7 @@ def join(
 
     assert result.returncode == 0, result.stderr
 
-    assert data_outs_equal(test_case.data_out, result.data_out_with_types), (
+    assert_data_outs_equal(test_case.data_out, result.data_out_with_types), (
         test_case.data_out,
         result.data_out_with_types,
     )

@@ -394,38 +394,14 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
 }
 
 const TTypeAnnotationNode* FromPgImpl(TPositionHandle pos, const TTypeAnnotationNode* type, TExprContext& ctx) {
-    auto name = type->Cast<TPgExprType>()->GetName();
-    const TDataExprType* dataType;
-    if (name == "bool") {
-        dataType = ctx.MakeType<TDataExprType>(EDataSlot::Bool);
-    } else if (name == "int2") {
-        dataType = ctx.MakeType<TDataExprType>(EDataSlot::Int16);
-    } else if (name == "int4") {
-        dataType = ctx.MakeType<TDataExprType>(EDataSlot::Int32);
-    } else if (name == "int8") {
-        dataType = ctx.MakeType<TDataExprType>(EDataSlot::Int64);
-    } else if (name == "float4") {
-        dataType = ctx.MakeType<TDataExprType>(EDataSlot::Float);
-    } else if (name == "float8") {
-        dataType = ctx.MakeType<TDataExprType>(EDataSlot::Double);
-    } else if (name == "text" || name == "varchar" || name == "cstring") {
-        dataType = ctx.MakeType<TDataExprType>(EDataSlot::Utf8);
-    } else if (name == "bytea") {
-        dataType = ctx.MakeType<TDataExprType>(EDataSlot::String);
-    } else if (name == "unknown") {
-        return ctx.MakeType<TNullExprType>();
-    } else if (name == "date") {
-        dataType = ctx.MakeType<TDataExprType>(EDataSlot::Date32);
-    } else if (name == "timestamp") {
-        dataType = ctx.MakeType<TDataExprType>(EDataSlot::Timestamp64);
-    } else if (name == "uuid") {
-        dataType = ctx.MakeType<TDataExprType>(EDataSlot::Uuid);
-    } else {
+    auto res = ConvertFromPgType(type->Cast<TPgExprType>()->GetId());
+    if (!res) {
         ctx.AddError(TIssue(ctx.GetPosition(pos),
-            TStringBuilder() << "Unsupported type: " << name));
+            TStringBuilder() << "Unsupported type: " << *type));
         return nullptr;
     }
 
+    auto dataType = ctx.MakeType<TDataExprType>(*res);
     return ctx.MakeType<TOptionalExprType>(dataType);
 }
 
@@ -464,81 +440,8 @@ const TTypeAnnotationNode* ToPgImpl(TPositionHandle pos, const TTypeAnnotationNo
         return nullptr;
     }
 
-    TString pgType;
-    switch (dataType->GetSlot()) {
-    case NUdf::EDataSlot::Bool:
-        pgType = "bool";
-        break;
-    case NUdf::EDataSlot::Int16:
-    case NUdf::EDataSlot::Int8:
-    case NUdf::EDataSlot::Uint8:
-        pgType = "int2";
-        break;
-    case NUdf::EDataSlot::Int32:
-    case NUdf::EDataSlot::Uint16:
-        pgType = "int4";
-        break;
-    case NUdf::EDataSlot::Int64:
-    case NUdf::EDataSlot::Uint32:
-        pgType = "int8";
-        break;
-    case NUdf::EDataSlot::Uint64:
-    case NUdf::EDataSlot::Decimal:
-    case NUdf::EDataSlot::DyNumber:
-        pgType = "numeric";
-        break;
-    case NUdf::EDataSlot::Float:
-        pgType = "float4";
-        break;
-    case NUdf::EDataSlot::Double:
-        pgType = "float8";
-        break;
-    case NUdf::EDataSlot::String:
-    case NUdf::EDataSlot::Yson:
-        pgType = "bytea";
-        break;
-    case NUdf::EDataSlot::Utf8:
-    case NUdf::EDataSlot::TzDate:
-    case NUdf::EDataSlot::TzDatetime:
-    case NUdf::EDataSlot::TzTimestamp:
-        pgType = "text";
-        break;
-    case NUdf::EDataSlot::Date:
-    case NUdf::EDataSlot::Date32:
-        pgType = "date";
-        break;
-    case NUdf::EDataSlot::Datetime:
-    case NUdf::EDataSlot::Datetime64:
-    case NUdf::EDataSlot::Timestamp:
-    case NUdf::EDataSlot::Timestamp64:
-        pgType = "timestamp";
-        break;
-    case NUdf::EDataSlot::Interval:
-    case NUdf::EDataSlot::Interval64:
-        pgType = "interval";
-        break;
-    case NUdf::EDataSlot::Json:
-        pgType = "json";
-        break;
-    case NUdf::EDataSlot::JsonDocument:
-        pgType = "jsonb";
-        break;
-    case NUdf::EDataSlot::Uuid:
-        pgType = "uuid";
-        break;
-    default:
-        ctx.AddError(TIssue(ctx.GetPosition(pos),
-            TStringBuilder() << "Unsupported type: " << dataType->GetName()));
-        return nullptr;
-    }
-
-    try {
-        auto result = ctx.MakeType<TPgExprType>(NPg::LookupType(pgType).TypeId);
-        return result;
-    } catch (const yexception& e) {
-        ctx.AddError(TIssue(ctx.GetPosition(pos), e.what()));
-        return nullptr;
-    }
+    auto pgTypeId = ConvertToPgType(dataType->GetSlot());
+    return ctx.MakeType<TPgExprType>(pgTypeId);
 }
 
 IGraphTransformer::TStatus ToPgWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
@@ -851,6 +754,32 @@ IGraphTransformer::TStatus PgWindowCallWrapper(const TExprNode::TPtr& input, TEx
         } else {
             input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(arg));
         }
+    } else if (name == "nth_value") {
+        if (input->ChildrenSize() != 5) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                TStringBuilder() << "Expected two arguments in function" << name));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (input->Child(4)->GetTypeAnn() && input->Child(4)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg) {
+            auto name = input->Child(4)->GetTypeAnn()->Cast<TPgExprType>()->GetName();
+            if (name != "int4") {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(4)->Pos()), TStringBuilder() <<
+                    "Expected int4 type, but got: " << name));
+                return IGraphTransformer::TStatus::Error;
+            }
+        } else {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(4)->Pos()), TStringBuilder() <<
+                "Expected pg type, but got: " << input->Child(4)->GetTypeAnn()->GetKind()));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto arg = input->Child(3)->GetTypeAnn();
+        if (arg->IsOptionalOrNull()) {
+            input->SetTypeAnn(arg);
+        } else {
+            input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(arg));
+        }
     } else if (name == "row_number" || name == "rank" || name == "dense_rank") {
         if (input->ChildrenSize() != 3) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
@@ -859,6 +788,35 @@ IGraphTransformer::TStatus PgWindowCallWrapper(const TExprNode::TPtr& input, TEx
         }
 
         input->SetTypeAnn(ctx.Expr.MakeType<TPgExprType>(NPg::LookupType("int8").TypeId));
+    } else if (name == "cume_dist" || name == "percent_rank") {
+        if (input->ChildrenSize() != 3) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                TStringBuilder() << "Expected no arguments in function " << name));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(ctx.Expr.MakeType<TPgExprType>(NPg::LookupType("float8").TypeId));
+    } else if (name == "ntile") {
+        if (input->ChildrenSize() != 4) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                TStringBuilder() << "Expected exactly one argument in function " << name));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (input->Child(3)->GetTypeAnn() && input->Child(3)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg) {
+            auto name = input->Child(3)->GetTypeAnn()->Cast<TPgExprType>()->GetName();
+            if (name != "int4") {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(3)->Pos()), TStringBuilder() <<
+                    "Expected int4 type, but got: " << name));
+                return IGraphTransformer::TStatus::Error;
+            }
+        } else {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(3)->Pos()), TStringBuilder() <<
+                "Expected pg type, but got: " << input->Child(3)->GetTypeAnn()->GetKind()));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(ctx.Expr.MakeType<TPgExprType>(NPg::LookupType("int4").TypeId));
     } else {
         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
             TStringBuilder() << "Unsupported function: " << name));

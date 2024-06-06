@@ -104,6 +104,10 @@ public:
         return def;
     }
 
+    virtual TDuration GetActualizationTasksLag(const TDuration d) const {
+        return d;
+    }
+
     virtual ui64 GetReduceMemoryIntervalLimit(const ui64 def) const {
         return def;
     }

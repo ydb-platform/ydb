@@ -254,21 +254,22 @@ Y_UNIT_TEST_SUITE(BurstDetection) {
 }
 
 void TestDiskTimeAvailableScaling() {
-    auto measure = [](float scale) {
-        TBlobStorageGroupInfo::TTopology topology(TBlobStorageGroupType::ErasureNone, 1, 1, 1, true);
-        std::unique_ptr<TEnvironmentSetup> env;
-        ui32 groupSize;
-        TBlobStorageGroupType groupType;
-        ui32 groupId;
-        std::vector<ui32> pdiskLayout;
-        SetupEnv(topology, env, groupSize, groupType, groupId, pdiskLayout, 0, scale);
+    TBlobStorageGroupInfo::TTopology topology(TBlobStorageGroupType::ErasureNone, 1, 1, 1, true);
+    std::unique_ptr<TEnvironmentSetup> env;
+    ui32 groupSize;
+    TBlobStorageGroupType groupType;
+    ui32 groupId;
+    std::vector<ui32> pdiskLayout;
+    SetupEnv(topology, env, groupSize, groupType, groupId, pdiskLayout, 0, 1);
 
-        return env->AggregateVDiskCounters(env->StoragePoolName, groupSize, groupSize, groupId, pdiskLayout,
-                "advancedCost", "DiskTimeAvailable");
-    };
+    i64 test1 = env->AggregateVDiskCounters(env->StoragePoolName, groupSize, groupSize, groupId, pdiskLayout,
+            "advancedCost", "DiskTimeAvailable");
 
-    i64 test1 = measure(1);
-    i64 test2 = measure(2);
+    env->SetIcbControl(0, "VDiskControls.DiskTimeAvailableScaleNVME", 2'000);
+    env->Sim(TDuration::Minutes(5));
+
+    i64 test2 = env->AggregateVDiskCounters(env->StoragePoolName, groupSize, groupSize, groupId, pdiskLayout,
+            "advancedCost", "DiskTimeAvailable");
 
     i64 delta = test1 * 2 - test2;
 

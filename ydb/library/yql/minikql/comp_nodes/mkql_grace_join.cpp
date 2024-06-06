@@ -766,6 +766,12 @@ private:
 
             bool isYield = FetchAndPackData(ctx);
             if (ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
+                const auto used = TlsAllocState->GetUsed();
+                const auto limit = TlsAllocState->GetLimit();
+
+                YQL_LOG(INFO) << "yellow zone reached " << (used*100/limit) << "%=" << used << "/" << limit;
+                YQL_LOG(INFO) << "switching Memory mode to Spilling";
+
                 SwitchMode(EOperatingMode::Spilling, ctx);
                 return EFetchResult::Yield;
             }
@@ -852,6 +858,7 @@ void DoCalculateWithSpilling(TComputationContext& ctx) {
         }
         if (!IsReadyForSpilledDataProcessing()) return;
 
+        YQL_LOG(INFO) << "switching to ProcessSpilled";
         SwitchMode(EOperatingMode::ProcessSpilled, ctx);
         return;
     }
@@ -880,17 +887,18 @@ EFetchResult ProcessSpilledData(TComputationContext&, NUdf::TUnboxedValue*const*
 
         if (LeftPacker->TablePtr->IsBucketInMemory(NextBucketToJoin) && RightPacker->TablePtr->IsBucketInMemory(NextBucketToJoin)) {
             if (*PartialJoinCompleted) {
-                while (JoinedTablePtr->NextJoinedData(LeftPacker->JoinTupleData, RightPacker->JoinTupleData)) {
+                while (JoinedTablePtr->NextJoinedData(LeftPacker->JoinTupleData, RightPacker->JoinTupleData, NextBucketToJoin + 1)) {
                     UnpackJoinedData(output);
-
                     return EFetchResult::One;
                 }
 
                 LeftPacker->TuplesBatchPacked = 0;
                 LeftPacker->TablePtr->ClearBucket(NextBucketToJoin); // Clear content of returned bucket
+                LeftPacker->TablePtr->ShrinkBucket(NextBucketToJoin);
 
                 RightPacker->TuplesBatchPacked = 0;
                 RightPacker->TablePtr->ClearBucket(NextBucketToJoin); // Clear content of returned bucket
+                RightPacker->TablePtr->ShrinkBucket(NextBucketToJoin);
 
                 JoinedTablePtr->Clear();
                 JoinedTablePtr->ResetIterator();

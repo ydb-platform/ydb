@@ -213,7 +213,7 @@ class KqpRunner(Runner):
         else:
             # Parse output
             with open(result_path, 'r') as f:
-                result = json.loads(f.read().encode('ascii'), strict=False)
+                result = json.loads(f.read().encode('utf-8'), strict=False)
 
             # Kqprun's data output is missing type information (everything is a string),
             # so we have to recover schema and transform the results to make them comparable with the inputs

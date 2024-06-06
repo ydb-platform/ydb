@@ -32,6 +32,10 @@ public:
 };
 
 struct TFullTxInfo: public TBasicTxInfo {
+private:
+    using TBase = TBasicTxInfo;
+
+public:
     ui64 MaxStep = Max<ui64>();
     ui64 MinStep = 0;
     ui64 PlanStep = 0;
@@ -40,6 +44,15 @@ struct TFullTxInfo: public TBasicTxInfo {
     std::optional<TMessageSeqNo> SeqNo;
 public:
     bool operator==(const TFullTxInfo& item) const = default;
+
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << TBase::DebugString() << ";min=" << MinStep << ";max=" << MaxStep << ";plan=" << PlanStep << ";src=" << Source << ";cookie=" << Cookie;
+        if (SeqNo) {
+            sb << *SeqNo << ";";
+        }
+        return sb;
+    }
 
     TString SerializeSeqNoAsString() const {
         if (!SeqNo) {
@@ -224,6 +237,9 @@ public:
         void SetProposeStartInfo(const TTxController::TProposeResult& info) {
             AFL_VERIFY(!ProposeStartInfo);
             ProposeStartInfo = info;
+            if (IsFail()) {
+                Status = EStatus::Failed;
+            }
         }
 
         const TTxInfo& GetTxInfo() const {
@@ -277,6 +293,7 @@ public:
 
         bool StartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) {
             AFL_VERIFY(!ProposeStartInfo);
+            AFL_VERIFY(!IsFail());
             ProposeStartInfo = DoStartProposeOnExecute(owner, txc);
             if (ProposeStartInfo->IsFail()) {
                 SwitchStateVerified(EStatus::Parsed, EStatus::Failed);
@@ -286,11 +303,13 @@ public:
             return !GetProposeStartInfoVerified().IsFail();
         }
         void StartProposeOnComplete(TColumnShard& owner, const TActorContext& ctx) {
+            AFL_VERIFY(!IsFail());
             SwitchStateVerified(EStatus::ProposeStartedOnExecute, EStatus::ProposeStartedOnComplete);
             AFL_VERIFY(IsAsync());
             return DoStartProposeOnComplete(owner, ctx);
         }
         void FinishProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) {
+            AFL_VERIFY(!IsFail());
             SwitchStateVerified(EStatus::ProposeStartedOnComplete, EStatus::ProposeFinishedOnExecute);
             AFL_VERIFY(IsAsync());
             return DoFinishProposeOnExecute(owner, txc);

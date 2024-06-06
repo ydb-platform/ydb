@@ -268,7 +268,11 @@ class TTableDescription::TImpl {
 
         // columns
         for (const auto& col : proto.columns()) {
-            Columns_.emplace_back(col.name(), col.type(), col.family(), col.not_null());
+            std::optional<bool> not_null;
+            if (col.has_not_null()) {
+                not_null = col.not_null();
+            }
+            Columns_.emplace_back(col.name(), col.type(), col.family(), not_null);
         }
 
         // indexes

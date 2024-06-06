@@ -198,6 +198,92 @@ public:
     TString GetHTTPFORBIDDEN(const NMon::TEvHttpInfo* request) override;
     TString GetHTTPNOTFOUND(const NMon::TEvHttpInfo* request) override;
 
+    bool CheckAccessAdministration(const NMon::TEvHttpInfo* request) override {
+        if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()) {
+            if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenCheckRequirement() || request->UserToken.empty()) {
+                return true;
+            }
+        }
+        if (request->UserToken.empty()) {
+            return false;
+        }
+        auto token = std::make_unique<NACLib::TUserToken>(request->UserToken);
+        for (const auto& allowedSID : KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetAdministrationAllowedSIDs()) {
+            if (token->IsExist(allowedSID)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    static bool IsStaticGroup(ui32 groupId) {
+        return groupId & 0x80000000 == 0;
+    }
+
+    TString GetGroupList(const auto& groups) {
+        std::vector<ui32> groupIds;
+        for (auto group : groups) {
+            groupIds.push_back(group);
+        }
+        std::sort(groupIds.begin(), groupIds.end());
+        TStringBuilder result;
+        if (groups.empty()) {
+            return result << "something";
+        }
+        result << "at least " << groups.size();
+        if (groups.size() > 1) {
+            result << " groups (";
+        } else {
+            result << " group (";
+        }
+        auto was_groups = 0;
+        auto max_groups = 3;
+        for (auto group : groupIds) {
+            if (was_groups > 0) {
+                result << ", ";
+            }
+            if (was_groups >= max_groups) {
+                result << "...";
+            }
+            if (IsStaticGroup(group)) {
+                result << "static ";
+            }
+            result << group;
+            ++was_groups;
+        }
+        result << ")";
+        return result;
+    }
+
+    void TranslateFromBSC2Human(const NKikimrBlobStorage::TConfigResponse& response, TString& bscError, bool& forceRetryPossible) override {
+        forceRetryPossible = false;
+        if (response.GroupsGetDisintegratedByExpectedStatusSize()) {
+            bscError = TStringBuilder() << "Calling this operation could cause " << GetGroupList(response.GetGroupsGetDisintegratedByExpectedStatus()) << " to go into a dead state";
+        } else if (response.GroupsGetDisintegratedSize()) {
+            bscError = TStringBuilder() << "Calling this operation will cause " << GetGroupList(response.GetGroupsGetDisintegrated()) << " to go into a dead state";
+        } else if (response.GroupsGetDegradedSize()) {
+            bscError = TStringBuilder() << "Calling this operation will cause " << GetGroupList(response.GetGroupsGetDegraded()) << " to go into a degraded state";
+            forceRetryPossible = true;
+        } else if (response.StatusSize()) {
+            const auto& lastStatus = response.GetStatus(response.StatusSize() - 1);
+            TVector<ui32> groups;
+            for (auto& failParam: lastStatus.GetFailParam()) {
+                if (failParam.HasGroupId()) {
+                    groups.emplace_back(failParam.GetGroupId());
+                }
+            }
+            if (lastStatus.GetFailReason() == NKikimrBlobStorage::TConfigResponse::TStatus::kMayGetDegraded) {
+                bscError = TStringBuilder() << "Calling this operation will cause " << GetGroupList(groups) << " to go into a degraded state";
+                forceRetryPossible = true;
+            } else if (lastStatus.GetFailReason() == NKikimrBlobStorage::TConfigResponse::TStatus::kMayLoseData) {
+                bscError = TStringBuilder() << "Calling this operation may result in data loss for " << GetGroupList(groups);
+            }
+        }
+        if (bscError.empty()) {
+            bscError = response.GetErrorDescription();
+        }
+    }
+
     void RegisterVirtualHandler(
             NKikimrViewer::EObjectType parentObjectType,
             TVirtualHandlerType handler) override {
@@ -253,7 +339,6 @@ private:
             if (swagger.IsNull()) {
                 auto get = path["get"];
                 get["tags"].push_back(tag);
-                get["produces"].push_back("application/json");
                 if (auto summary = handler->GetRequestSummary()) {
                     get["summary"] = summary;
                 }
@@ -263,7 +348,7 @@ private:
                 get["parameters"] = handler->GetRequestParameters();
                 auto responses = get["responses"];
                 auto response200 = responses["200"];
-                response200["schema"] = handler->GetResponseJsonSchema();
+                response200["content"]["application/json"]["schema"] = handler->GetResponseJsonSchema();
             } else {
                 path = swagger;
             }
@@ -292,7 +377,7 @@ private:
     }
 
     static TInstant GetCompileTime() {
-        static TInstant instantTime(timeval{.tv_sec = GetCompileTimeSeconds(), .tv_usec = 0});
+        static TInstant instantTime(TInstant::Seconds(GetCompileTimeSeconds()));
         return instantTime;
     }
 

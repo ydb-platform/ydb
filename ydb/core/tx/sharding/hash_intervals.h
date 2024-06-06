@@ -62,13 +62,7 @@ private:
     std::vector<TConsistencyShardingTablet> SpecialSharding;
     std::vector<TConsistencyShardingTablet*> ActiveWriteSpecialSharding;
     std::vector<TConsistencyShardingTablet*> ActiveReadSpecialSharding;
-    ui64 GetUnifiedDistributionBorder(const ui32 idx, const ui64 shardsCount) const {
-        AFL_VERIFY(idx <= shardsCount);
-        if (idx == shardsCount) {
-            return Max<ui64>();
-        }
-        return Max<ui64>() * (1.0 * idx / shardsCount);
-    }
+    ui64 GetUnifiedDistributionBorder(const ui32 idx, const ui64 shardsCount) const;
 
     TConclusionStatus CheckIntervalsFilling() const {
         {

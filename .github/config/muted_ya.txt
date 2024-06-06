@@ -21,12 +21,15 @@ ydb/core/kqp/ut/scheme KqpOlap.OlapRead_GenericQuerys
 ydb/core/kqp/ut/scheme KqpOlap.OlapRead_StreamGenericQuery
 ydb/core/kqp/ut/scheme KqpOlap.OlapRead_UsesGenericQueryOnJoinWithDataShardTable
 ydb/core/kqp/ut/scheme KqpQueryService.TableSink_ReplaceFromSelectLargeOlap
+ydb/core/kqp/ut/scheme KqpScheme.AlterAsyncReplication
 ydb/core/kqp/ut/scheme KqpScheme.QueryWithAlter
+ydb/core/kqp/ut/scheme [15/50]*
 ydb/core/kqp/ut/scheme [44/50]*
 ydb/core/kqp/ut/service KqpQueryService.ExecuteQueryPgTableSelect
 ydb/core/kqp/ut/service KqpQueryService.QueryOnClosedSession
 ydb/core/kqp/ut/service KqpService.CloseSessionsWithLoad
 ydb/core/kqp/ut/service [38/50]*
+ydb/core/persqueue/ut TPartitionTests.TestBatchingWithProposeConfig
 ydb/core/persqueue/ut TPQTest.*DirectRead*
 ydb/core/persqueue/ut TopicAutoscaling.PartitionSplit_ManySession_NewSDK
 ydb/core/tx/coordinator/ut Coordinator.RestoreTenantConfiguration
@@ -42,7 +45,6 @@ ydb/library/actors/http/ut HttpProxy.TooLongHeader
 ydb/library/actors/http/ut sole*
 ydb/library/yql/providers/generic/connector/tests/datasource/ydb* *
 ydb/public/lib/ydb_cli/topic/ut TTopicReaderTests.TestRun_ReadOneMessage
-ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/with_offset_ranges_mode_ut RetryPolicy.RetryWithBatching
 ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/with_offset_ranges_mode_ut RetryPolicy.TWriteSession_TestBrokenPolicy
 ydb/public/sdk/cpp/client/ydb_topic/ut BasicUsage.ConflictingWrites
 ydb/public/sdk/cpp/client/ydb_topic/ut BasicUsage.WriteRead

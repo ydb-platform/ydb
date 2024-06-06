@@ -8217,9 +8217,6 @@ struct TPeepHoleRules {
         {"FoldMap", &CleckClosureOnUpperLambdaOverList<2U>},
         {"Fold1Map", &CleckClosureOnUpperLambdaOverList<1U, 2U>},
         {"Chain1Map", &CleckClosureOnUpperLambdaOverList<1U, 2U>},
-        {"CalcOverWindow", &ExpandCalcOverWindow},
-        {"CalcOverSessionWindow", &ExpandCalcOverWindow},
-        {"CalcOverWindowGroup", &ExpandCalcOverWindow},
         {"PartitionsByKeys", &ExpandPartitionsByKeys},
         {"DictItems", &MapForOptionalContainer},
         {"DictKeys", &MapForOptionalContainer},
@@ -8283,7 +8280,10 @@ struct TPeepHoleRules {
         {"AggregateFinalize", &ExpandAggregatePeephole},
         {"CostsOf", &ExpandCostsOf},
         {"JsonQuery", &ExpandJsonQuery},
-        {"MatchRecognize", &ExpandMatchRecognize}
+        {"MatchRecognize", &ExpandMatchRecognize},
+        {"CalcOverWindow", &ExpandCalcOverWindow},
+        {"CalcOverSessionWindow", &ExpandCalcOverWindow},
+        {"CalcOverWindowGroup", &ExpandCalcOverWindow},
     };
 
     const TPeepHoleOptimizerMap SimplifyStageRules = {

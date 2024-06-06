@@ -29,7 +29,7 @@ class TReplication::TImpl {
     }
 
     template <typename... Args>
-    ITarget* CreateTarget(TReplication::TPtr self, ui64 id, ETargetKind kind, Args&&... args) const {
+    ITarget* CreateTarget(TReplication* self, ui64 id, ETargetKind kind, Args&&... args) const {
         switch (kind) {
         case ETargetKind::Table:
             return new TTableTarget(self, id, std::forward<Args>(args)...);
@@ -76,14 +76,14 @@ public:
     }
 
     template <typename... Args>
-    ui64 AddTarget(TReplication::TPtr self, ui64 id, ETargetKind kind, Args&&... args) {
+    ui64 AddTarget(TReplication* self, ui64 id, ETargetKind kind, Args&&... args) {
         const auto res = Targets.emplace(id, CreateTarget(self, id, kind, std::forward<Args>(args)...));
         Y_VERIFY_S(res.second, "Duplicate target: " << id);
         return id;
     }
 
     template <typename... Args>
-    ui64 AddTarget(TReplication::TPtr self, ETargetKind kind, Args&&... args) {
+    ui64 AddTarget(TReplication* self, ETargetKind kind, Args&&... args) {
         return AddTarget(self, NextTargetId++, kind, std::forward<Args>(args)...);
     }
 
@@ -99,7 +99,7 @@ public:
     }
 
     void Progress(const TActorContext& ctx) {
-        if (!YdbProxy) {
+        if (!YdbProxy && !(State == EState::Removing && !Targets)) {
             THolder<IActor> ydbProxy;
             const auto& params = Config.GetSrcConnectionParams();
 
@@ -117,9 +117,7 @@ public:
                 ydbProxy.Reset(CreateYdbProxy(params.GetEndpoint(), params.GetDatabase(), params.GetOAuthToken().GetToken()));
                 break;
             default:
-                if (!(State == EState::Removing && !Targets)) {
-                    ErrorState(TStringBuilder() << "Unexpected credentials: " << params.GetCredentialsCase());
-                }
+                ErrorState(TStringBuilder() << "Unexpected credentials: " << params.GetCredentialsCase());
                 break;
             }
 
@@ -166,6 +164,10 @@ public:
     void SetState(EState state, TString issue = {}) {
         State = state;
         Issue = TruncatedIssue(issue);
+    }
+
+    void SetConfig(NKikimrReplication::TReplicationConfig&& config) {
+        Config = config;
     }
 
     void ErrorState(TString issue) {
@@ -254,6 +256,10 @@ const TActorId& TReplication::GetYdbProxy() const {
 
 ui64 TReplication::GetSchemeShardId() const {
     return GetPathId().OwnerId;
+}
+
+void TReplication::SetConfig(NKikimrReplication::TReplicationConfig&& config) {
+    Impl->SetConfig(std::move(config));
 }
 
 const NKikimrReplication::TReplicationConfig& TReplication::GetConfig() const {

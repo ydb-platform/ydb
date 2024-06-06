@@ -126,24 +126,22 @@ public:
         }
 
         // Find the slowest disk
-        i32 worstSubgroupIdx = -1;
-        ui64 worstPredictedNs = 0;
-        ui64 nextToWorstPredictedNs = 0;
+        TDiskDelayPredictions worstDisks;
         state.GetWorstPredictedDelaysNs(info, *blackboard.GroupQueues,
-                HandleClassToQueueId(blackboard.PutHandleClass),
-                &worstPredictedNs, &nextToWorstPredictedNs, &worstSubgroupIdx);
+                HandleClassToQueueId(blackboard.PutHandleClass), 1,
+                &worstDisks);
 
         // Check if the slowest disk exceptionally slow, or just not very fast
-        i32 slowDiskSubgroupIdx = -1;
-        if (nextToWorstPredictedNs > 0 && worstPredictedNs > nextToWorstPredictedNs * 2) {
-            slowDiskSubgroupIdx = worstSubgroupIdx;
+        TStackVec<ui32, 2> slowDiskSubgroupIdxs;
+        if (worstDisks[1].PredictedNs > 0 && worstDisks[0].PredictedNs > worstDisks[1].PredictedNs * 2) {
+            slowDiskSubgroupIdxs.push_back(worstDisks[0].DiskIdx);
         }
 
         bool isDone = false;
-        if (slowDiskSubgroupIdx >= 0) {
+        if (!slowDiskSubgroupIdxs.empty()) {
             // If there is an exceptionally slow disk, try not touching it, mark isDone
             TBlobStorageGroupType::TPartLayout layout;
-            PreparePartLayout(state, info, &layout, slowDiskSubgroupIdx);
+            PreparePartLayout(state, info, &layout, slowDiskSubgroupIdxs);
 
             TBlobStorageGroupType::TPartPlacement partPlacement;
             bool isCorrectable = info.Type.CorrectLayout(layout, partPlacement);
@@ -157,7 +155,7 @@ public:
         if (!isDone) {
             // Fill in the part layout
             TBlobStorageGroupType::TPartLayout layout;
-            PreparePartLayout(state, info, &layout, InvalidVDiskIdx);
+            PreparePartLayout(state, info, &layout, {});
             TBlobStorageGroupType::TPartPlacement partPlacement;
             bool isCorrectable = info.Type.CorrectLayout(layout, partPlacement);
             Y_ABORT_UNLESS(isCorrectable);

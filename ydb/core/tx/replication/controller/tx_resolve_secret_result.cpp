@@ -29,13 +29,6 @@ public:
             return true;
         }
 
-        if (Replication->GetState() != TReplication::EState::Ready) {
-            CLOG_W(ctx, "Replication state mismatch"
-                << ": rid# " << rid
-                << ", state# " << Replication->GetState());
-            return true;
-        }
-
         if (Ev->Get()->IsSuccess()) {
             CLOG_N(ctx, "Secret resolved"
                 << ": rid# " << rid);

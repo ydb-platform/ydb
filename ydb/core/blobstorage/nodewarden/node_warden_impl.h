@@ -139,11 +139,6 @@ namespace NKikimr::NStorage {
             : Cfg(cfg)
             , EnablePutBatching(Cfg->FeatureFlags.GetEnablePutBatchingForBlobStorage(), false, true)
             , EnableVPatch(Cfg->FeatureFlags.GetEnableVPatch(), false, true)
-            , EnableLocalSyncLogDataCutting(0, 0, 1)
-            , EnableSyncLogChunkCompressionHDD(1, 0, 1)
-            , EnableSyncLogChunkCompressionSSD(0, 0, 1)
-            , MaxSyncLogChunksInFlightHDD(10, 1, 1024)
-            , MaxSyncLogChunksInFlightSSD(10, 1, 1024)
             , CostMetricsParametersByMedia({
                 TCostMetricsParameters{200},
                 TCostMetricsParameters{50},

@@ -764,10 +764,6 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
 
         if (settings.has_partitions_count()) {
-            if (settings.partitions_count() <= 0) {
-                error = TStringBuilder() << "Partitions count must be positive, provided " << settings.partitions_count();
-                return Ydb::StatusIds::BAD_REQUEST;
-            }
             minParts = settings.partitions_count();
         } else if (settings.has_autoscaling_settings()) {
             const auto& autoScalteSettings = settings.autoscaling_settings();
@@ -797,6 +793,10 @@ namespace NKikimr::NGRpcProxy::V1 {
                     return code->YdbCode;
                 }
             }
+        }
+        if (minParts <= 0) {
+            error = TStringBuilder() << "Partitions count must be positive, provided " << settings.partitions_count();
+            return Ydb::StatusIds::BAD_REQUEST;
         }
         pqDescr->SetTotalGroupCount(minParts);
         pqTabletConfig->SetRequireAuthWrite(true);

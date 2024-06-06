@@ -1335,6 +1335,8 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000000,
             DefaultValue: 1000 }];
+    }
+
     message TTabletControls {
         optional uint64 MaxCommitRedoMB = 1 [(ControlOptions) = {
             Description: "Maximum redo size per commit in megabytes",

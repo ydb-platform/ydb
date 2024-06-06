@@ -22,30 +22,85 @@ class TPgTablesScan : public NKikimr::NSysView::TScanActorBase<TPgTablesScan> {
 private:
     TCell MakePgCell(const Schema::PgColumn& column, const TString& value, TVector<TString>& cellData) {
         NYql::NUdf::TStringRef ref;
-        auto typeDesc = column._ColumnTypeInfo.GetTypeDesc();
-        auto convert = NPg::PgNativeBinaryFromNativeText(value, NPg::PgTypeIdFromTypeDesc(typeDesc));
+        auto convert = NPg::PgNativeBinaryFromNativeText(value, NPg::PgTypeIdFromTypeDesc(column._ColumnTypeInfo.GetTypeDesc()));
         if (convert.Error) {
             ConvertError_ = *convert.Error;
             return TCell();
         }
         cellData.emplace_back(convert.Str);
         ref = NYql::NUdf::TStringRef(cellData.back());
-    
+        Y_ENSURE(ref.Size() > 0);
         return TCell(ref.Data(), ref.Size());
     }
 
     TVector<TCell> MakePgTablesRow(const TString& tableName, const TString& tableOwner, TVector<TString>& cellData) {
-        const auto &Columns =  Schema::PgTables::Columns;
-        return {
-            MakePgCell(Columns[0], "true", cellData), //hasindexes
-            MakePgCell(Columns[1], "false", cellData), //hasrules
-            MakePgCell(Columns[2], "false", cellData), //hastriggers
-            MakePgCell(Columns[3], "false", cellData), //rowsecurity
-            MakePgCell(Columns[4], "public", cellData), //schemaname
-            MakePgCell(Columns[5], tableName, cellData), //tablename
-            MakePgCell(Columns[6], tableOwner, cellData), //tableowner
-            TCell() //tablespace
-        };
+        TVector<TCell> res;
+        res.reserve(Columns.size());
+        for (const auto& column : Columns) {
+            TCell cell;
+            switch (column.Tag) {
+                case 1: {
+                    cell = MakePgCell(Schema::PgTables::Columns[0], "public", cellData);
+                    break;
+                }
+                case 2: {
+                    cell = MakePgCell(Schema::PgTables::Columns[1], tableName, cellData);
+                    break;
+                }
+                case 3: {
+                    cell = MakePgCell(Schema::PgTables::Columns[2], tableOwner, cellData);
+                    break;
+                }
+                case 4: {
+                    cell = TCell();
+                    break;
+                }
+                case 5: {
+                    cell = MakePgCell(Schema::PgTables::Columns[4], "true", cellData);
+                    break;
+                }
+                case 6: {
+                    cell = MakePgCell(Schema::PgTables::Columns[5], "false", cellData);
+                    break;
+                }
+                case 7: {
+                    cell = MakePgCell(Schema::PgTables::Columns[6], "false", cellData);
+                    break;
+                }
+                case 8: {
+                    cell = MakePgCell(Schema::PgTables::Columns[7], "false", cellData);
+                    break;
+                }
+
+            }
+            res.emplace_back(std::move(cell));
+        }
+        return res;
+    }
+
+    TVector<TCell> MakePgTablesStaticRow(const NYql::NPg::TTableInfo& tableInfo, TVector<TString>& cellData) {
+        TVector<TCell> res;
+        res.reserve(Columns.size());
+        for (const auto& column : Columns) {
+            TCell cell;
+            switch (column.Tag) {
+                case 1: {
+                    cell = MakePgCell(Schema::PgTables::Columns[0], tableInfo.Schema, cellData);
+                    break;
+                }
+                case 2: {
+                    cell = MakePgCell(Schema::PgTables::Columns[1], tableInfo.Name, cellData);
+                    break;
+                }
+                default: {
+                    cell = TCell();
+                    break;
+                }
+
+            }
+            res.emplace_back(std::move(cell));
+        }
+        return res;
     }
 public:
     using TBase = NKikimr::NSysView::TScanActorBase<TPgTablesScan>;
@@ -69,6 +124,19 @@ public:
         auto PipeCache = MakePipePerNodeCacheID(true);
         Send(PipeCache, new TEvPipeCache::TEvForward(request.Release(), SchemeShardId, true), IEventHandle::FlagTrackDelivery);
         Become(&TPgTablesScan::StateWork);
+    }
+
+    void ExpandBatchWithStaticTables(const THolder<NKqp::TEvKqpCompute::TEvScanData>& batch) {
+        for (const auto& tableDesc : NYql::NPg::GetStaticTables()) {
+            TVector<TString> cellData;
+            TVector<TCell> cells = MakePgTablesStaticRow(tableDesc, cellData);
+            if (!ConvertError_.Empty()) {
+                ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, ConvertError_);
+                return;
+            }
+            TArrayRef<const TCell> ref(cells);
+            batch->Rows.emplace_back(TOwnedCellVec::Make(ref));
+        }
     }
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
@@ -102,6 +170,7 @@ public:
     
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
 
+        ExpandBatchWithStaticTables(batch);
 
         for (size_t i = 0; i < record.GetPathDescription().ChildrenSize(); ++i) {
             TVector<TString> cellData;

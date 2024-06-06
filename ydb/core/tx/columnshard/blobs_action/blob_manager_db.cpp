@@ -21,8 +21,8 @@ bool TBlobManagerDb::LoadGCBarrierPreparation(TGenStep& genStep) {
 
 void TBlobManagerDb::SaveGCBarrierPreparation(const TGenStep& genStep) {
     NIceDb::TNiceDb db(Database);
-    Schema::SaveSpecialValue(db, Schema::EValueIds::GCBarrierPreparationGen, std::get<0>(genStep));
-    Schema::SaveSpecialValue(db, Schema::EValueIds::GCBarrierPreparationStep, std::get<1>(genStep));
+    Schema::SaveSpecialValue(db, Schema::EValueIds::GCBarrierPreparationGen, genStep.Generation());
+    Schema::SaveSpecialValue(db, Schema::EValueIds::GCBarrierPreparationStep, genStep.Step());
 }
 
 bool TBlobManagerDb::LoadLastGcBarrier(TGenStep& lastCollectedGenStep) {
@@ -33,14 +33,14 @@ bool TBlobManagerDb::LoadLastGcBarrier(TGenStep& lastCollectedGenStep) {
         !Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastGcBarrierStep, step)) {
         return false;
     }
-    lastCollectedGenStep = { gen, step };
+    lastCollectedGenStep = TGenStep(gen, step);
     return true;
 }
 
 void TBlobManagerDb::SaveLastGcBarrier(const TGenStep& lastCollectedGenStep) {
     NIceDb::TNiceDb db(Database);
-    Schema::SaveSpecialValue(db, Schema::EValueIds::LastGcBarrierGen, std::get<0>(lastCollectedGenStep));
-    Schema::SaveSpecialValue(db, Schema::EValueIds::LastGcBarrierStep, std::get<1>(lastCollectedGenStep));
+    Schema::SaveSpecialValue(db, Schema::EValueIds::LastGcBarrierGen, lastCollectedGenStep.Generation());
+    Schema::SaveSpecialValue(db, Schema::EValueIds::LastGcBarrierStep, lastCollectedGenStep.Step());
 }
 
 bool TBlobManagerDb::LoadLists(std::vector<TUnifiedBlobId>& blobsToKeep, TTabletsByBlob& blobsToDelete,

@@ -54,7 +54,7 @@ IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(600)
+    TIMEOUT(120)
     SIZE(MEDIUM)
 ENDIF()
 

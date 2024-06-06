@@ -246,6 +246,9 @@ federated_query_config:
     enabled: true
     coordinator:
       enabled: true
+      node_path: "row_dispatcher"
+      storage:
+        endpoint: ""
   resource_manager:
     enabled: true
   private_proxy:

@@ -2691,11 +2691,24 @@ TExprNode::TPtr BuildWindows(TPositionHandle pos, const TExprNode::TPtr& list, c
             if (isAgg) {
                 value = BuildAggregationTraits(pos, true, "", p, listTypeNode, &aggId, ctx, optCtx);
             } else {
-                if (name == "row_number" || name == "cume_dist") {
+                if (name == "row_number") {
                     value = ctx.Builder(pos)
-                        .Callable(name == "row_number" ? "RowNumber" : "CumeDist")
+                        .Callable("RowNumber")
                             .Callable(0, "TypeOf")
                                 .Add(0, list)
+                            .Seal()
+                        .Seal()
+                        .Build();
+                } else if (name == "cume_dist") {
+                    value = ctx.Builder(pos)
+                        .Callable("CumeDist")
+                            .Callable(0, "TypeOf")
+                                .Add(0, list)
+                            .Seal()
+                            .List(1)
+                                .List(0)
+                                    .Atom(0, "ansi")
+                                .Seal()
                             .Seal()
                         .Seal()
                         .Build();

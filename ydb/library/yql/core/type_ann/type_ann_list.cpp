@@ -6305,7 +6305,45 @@ namespace {
         if (auto status = EnsureTypeRewrite(input->HeadRef(), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
             return status;
         }
-        input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(input->IsCallable("CumeDist") ? EDataSlot::Double : EDataSlot::Uint64));
+        input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus WinCumeDistWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        if (auto status = EnsureTypeRewrite(input->HeadRef(), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        auto options = input->Child(1);
+        if (!EnsureTuple(*options, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        for (const auto& option : options->Children()) {
+            if (!EnsureTupleSize(*option, 1, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (!EnsureAtom(option->Head(), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            const auto optionName = option->Head().Content();
+            static const THashSet<TStringBuf> supportedOptions =
+                {"ansi"};
+            if (!supportedOptions.contains(optionName)) {
+                ctx.Expr.AddError(
+                    TIssue(ctx.Expr.GetPosition(option->Pos()),
+                        TStringBuilder() << "Unknown " << input->Content() << "option '" << optionName));
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+
+        input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Double));
         return IGraphTransformer::TStatus::Ok;
     }
 

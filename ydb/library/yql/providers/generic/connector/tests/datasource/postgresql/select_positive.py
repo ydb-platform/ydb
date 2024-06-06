@@ -225,7 +225,7 @@ class Factory:
                     'buki',
                     'buki ',
                     'buki ',
-                    'buki',
+                    'buki', 
                     datetime.date(1988, 11, 20),
                     datetime.datetime(1988, 11, 20, 12, 00, 00),
                     '{ "TODO" : "unicode" }',
@@ -473,6 +473,7 @@ class Factory:
             ),
         ]
 
+<<<<<<< HEAD
     def _json(self) -> TestCase:
         schema = Schema(
             columns=ColumnList(
@@ -513,6 +514,48 @@ class Factory:
                 schema=schema,
             ),
         ]
+=======
+    # def _json(self) -> TestCase:
+    #     schema = Schema(
+    #         columns=ColumnList(
+    #             Column(
+    #                 name='col_json',
+    #                 ydb_type=Type.JSON,
+    #                 data_source_type=DataSourceType(pg=postgresql.Json()),
+    #             ),
+    #         ),
+    #     )
+
+    #     data_in = [
+    #         ['{ "friends": [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}'],
+    #         ['{ "TODO" : "unicode" }'],
+    #         [None],
+    #     ]
+
+    #     data_out_1 = [
+    #         ['{"name" : "James Holden", "age" : 35}'],
+    #         [None],
+    #         [None],
+    #     ]
+
+    #     data_source_kind = EDataSourceKind.POSTGRESQL
+
+    #     test_case_name = 'json'
+
+    #     return [
+    #         TestCase(
+    #             name_=test_case_name,
+    #             data_in=data_in,
+    #             data_out_=data_out_1,
+    #             protocol=EProtocol.NATIVE,
+    #             select_what=SelectWhat(SelectWhat.Item(name='JSON_QUERY(col_json, "$.friends[0]")', kind='expr')),
+    #             select_where=None,
+    #             data_source_kind=data_source_kind,
+    #             pragmas=dict(),
+    #             schema=schema,
+    #         ),
+    #     ]
+>>>>>>> 71cae95586... postgresql connector json tests
 
     def make_test_cases(self) -> Sequence[TestCase]:
         return list(
@@ -522,6 +565,6 @@ class Factory:
                 self._constant(),
                 self._count(),
                 self._pushdown(),
-                self._json(),
+                # self._json(), TODO need json2 udf module in kqprun
             )
         )

@@ -547,8 +547,13 @@ RuleFunctionHeader(currentRule, args, code, locals, ruleCtx, altLabelCtxs, named
 RuleFunction(currentRule, args, code, locals, ruleCtx, altLabelCtxs, namedActions, finallyAction, postamble, exceptions) ::= <<
 <ruleCtx>
 <! TODO: untested !><altLabelCtxs: {l | <altLabelCtxs.(l)>}; separator = "\n">
-<parser.name>::<currentRule.ctxType>* <parser.name>::<currentRule.escapedName>(<args; separator=",">) {
-  <currentRule.ctxType> *_localctx = _tracker.createInstance\<<currentRule.ctxType>\>(_ctx, getState()<currentRule.args:{a | , <a.escapedName>}>);
+<parser.name>::RuleReturnType <parser.name>::<currentRule.name>(<args; separator=",">) {
+  <currentRule.ctxType> *_localctx = _tracker.createInstance\<<currentRule.ctxType>\>(_ctx, getState()<currentRule.args:{a | , <a.name>}>);
+  // proto stuff
+  @ANTLR_PACKAGE_NAME@::TRule_<currentRule.name>* retval = google::protobuf::Arena::CreateMessage\<@ANTLR_PACKAGE_NAME@::TRule_<currentRule.name>\>(Arena);
+  auto parent = retval;
+  std::string invoked_stmt;
+  // proto end
   enterRule(_localctx, <currentRule.startState>, <parser.name>::Rule<currentRule.name; format = "cap">);
   <namedActions.init>
   <locals; separator = "\n">
@@ -634,7 +639,12 @@ LeftRecursiveRuleFunction(currentRule, args, code, locals, ruleCtx, altLabelCtxs
 <parser.name>::<currentRule.ctxType>* <parser.name>::<currentRule.escapedName>(int precedence<currentRule.args:{a | , <a>}>) {
   ParserRuleContext *parentContext = _ctx;
   size_t parentState = getState();
-  <parser.name>::<currentRule.ctxType> *_localctx = _tracker.createInstance\<<currentRule.ctxType>\>(_ctx, parentState<currentRule.args: {a | , <a.escapedName>}>);
+  // proto stuff
+  @ANTLR_PACKAGE_NAME@::TRule_<currentRule.name>* retval = google::protobuf::Arena::CreateMessage\<@ANTLR_PACKAGE_NAME@::TRule_<currentRule.name>\>(Arena);
+  auto parent = retval;
+  std::string invoked_stmt;
+  // proto end
+  <parser.name>::<currentRule.ctxType> *_localctx = _tracker.createInstance\<<currentRule.ctxType>\>(_ctx, parentState<currentRule.args: {a | , <a.name>}>);
   <parser.name>::<currentRule.ctxType> *previousContext = _localctx;
   (void)previousContext; // Silence compiler, in case the context is not used by generated code.
   size_t startState = <currentRule.startState>;
@@ -803,9 +813,15 @@ LL1AltBlock(choice, preamble, alts, error) ::= <<
     // LL1AltBlock protobuf stuff
     auto global_parent = parent;
     auto parent = global_parent-><if(elemId)>MutableBlock<elemId>()-><endif><if(rest(alts))>MutableAlt<if(!elemId)>_<currentRule.name><endif><i>()<endif>;
+    <if(elemId)><if(!rest(alts))>
+    global_parent->MutableBlock<elemId>()->SetDescr("<currentRule.name>");
+    <endif><endif>
     // protobuf end
     <endif>
     <alt>
+    <if(!elemId)><if(rest(alts))>
+    global_parent->MutableAlt_<currentRule.name><i>()->SetDescr(invoked_stmt.c_str());
+    <endif><endif>
     <if(elemId)>
     // LL1AltBlock protobuf stuff
     if (!parent) {
@@ -833,6 +849,9 @@ LL1OptionalBlock(choice, alts, error) ::= <<
     // LL1OptionalBlock protobuf stuff
     auto global_parent = parent;
     auto parent = global_parent->MutableBlock<elemId>()<if(rest(alts))>->MutableAlt<i>()<endif>;
+    <if(!rest(alts))>
+    global_parent->MutableBlock<elemId>()->SetDescr("<currentRule.name>");
+    <endif>
     // protobuf end
     <endif>
     <alt>
@@ -859,6 +878,11 @@ _errHandler->sync(this);
 
 <preamble; separator = "\n">
 if (<expr>) {
+  // LL1OptionalBlockSingleAlt protobuf stuff
+  auto global_parent = parent;
+  auto parent = global_parent->MutableBlock<elemId>();
+  global_parent->MutableBlock<elemId>()->SetDescr("<currentRule.name>");
+  // protobuf end
   <alts; separator = "\n">
   // LL1OptionalBlockSingleAlt protobuf stuff
   if (!parent) {
@@ -947,9 +971,15 @@ AltBlock(choice, preamble, alts, error) ::= <<
     // AltBlock protobuf stuff
     auto global_parent = parent;
     auto parent = global_parent-><if(elemId)>MutableBlock<elemId>()-><endif><if(rest(alts))>MutableAlt<if(!elemId)>_<currentRule.name><endif><i>()<endif>;
+    <if(elemId)><if(!rest(alts))>
+    global_parent->MutableBlock<elemId>()->SetDescr("<currentRule.name>");
+    <endif><endif>
     // protobuf end
     <endif>
     <alt>
+    <if(!elemId)><if(rest(alts))>
+    global_parent->MutableAlt_<currentRule.name><i>()->SetDescr(invoked_stmt.c_str());
+    <endif><endif>
     <if(elemId)>
     // AltBlock protobuf stuff
     if (!parent) {
@@ -977,6 +1007,9 @@ OptionalBlock(choice, alts, error) ::= <<
     // OptionalBlock protobuf stuff
     auto global_parent = parent;
     auto parent = global_parent->MutableBlock<elemId>()<if(rest(alts))>->MutableAlt<i>()<endif>;
+    <if(!rest(alts))>
+    global_parent->MutableBlock<elemId>()->SetDescr("<currentRule.name>");
+    <endif>
     // protobuf end
     <endif>
     <alt>
@@ -1105,6 +1138,7 @@ InvokeRuleHeader(r, argExprsChunks) ::= "InvokeRuleHeader"
 InvokeRule(r, argExprsChunks) ::= <<
 {
   setState(<r.stateNumber>);
+  invoked_stmt = "<r.name>";
   auto res = <if(r.labels)><r.labels: {l | <labelref(l)> = }><endif><r.name>(<if(r.ast.options.p)><r.ast.options.p><if(argExprsChunks)>,<endif><endif><argExprsChunks>);
   if (res) {
     Y_ASSERT(dynamic_cast\<@ANTLR_PACKAGE_NAME@::TRule_<r.name>* >(res));

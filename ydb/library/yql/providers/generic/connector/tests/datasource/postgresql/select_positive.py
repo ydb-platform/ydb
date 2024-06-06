@@ -224,7 +224,7 @@ class Factory:
                     'buki',
                     'buki ',
                     'buki ',
-                    'buki', 
+                    'buki',
                     datetime.date(1988, 11, 20),
                     datetime.datetime(1988, 11, 20, 12, 00, 00),
                     '{ "TODO" : "unicode" }',
@@ -521,6 +521,6 @@ class Factory:
                 self._constant(),
                 self._count(),
                 self._pushdown(),
-                # self._json(), TODO need json2 udf module in kqprun
+                self._json(),
             )
         )

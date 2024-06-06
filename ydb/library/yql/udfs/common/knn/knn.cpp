@@ -289,7 +289,7 @@ public:
         if (!Base::ValidTag(arg0Tag, {TagStoredVector, TagFloatVector, TagInt8Vector, TagUint8Vector, TagBitVector}) ||
             !Base::ValidTag(arg1Tag, {TagStoredVector, TagFloatVector, TagInt8Vector, TagUint8Vector, TagBitVector})) {
             TStringBuilder sb;
-            sb << "Both arguments expected to be results from 'ToBinaryString[Float|Int8|Uint8]' but recevied types '";
+            sb << "Both arguments are expected to be results from 'ToBinaryString[Float|Int8|Uint8]' but got '";
             TTypePrinter(*typeInfoHelper, argsTuple.GetElementType(0)).Out(sb.Out);
             sb << "' and '";
             TTypePrinter(*typeInfoHelper, argsTuple.GetElementType(1)).Out(sb.Out);

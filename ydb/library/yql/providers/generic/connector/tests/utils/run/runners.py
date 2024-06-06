@@ -16,6 +16,7 @@ runner_types: Final = ("dqrun", "kqprun")
 def configure_runner(runner_type: str, settings: Settings) -> Runner:
     match runner_type:
         case "dqrun":
+<<<<<<< HEAD
             return DqRunner(
                 dqrun_path=yat.build_path("ydb/library/yql/tools/dqrun/dqrun"),
                 settings=settings,
@@ -27,5 +28,10 @@ def configure_runner(runner_type: str, settings: Settings) -> Runner:
                 settings=settings,
                 udf_dir=yat.build_path("ydb/library/yql/udfs/common/json2"),
             )
+=======
+            return DqRunner(dqrun_path=yat.build_path("ydb/library/yql/tools/dqrun/dqrun"), settings=settings, udfs_dir=yat.build_path("ydb/library/yql/udfs/common/json2"))
+        case "kqprun":
+            return KqpRunner(kqprun_path=yat.build_path("ydb/tests/tools/kqprun/kqprun"), settings=settings, udfs_dir=yat.build_path("ydb/library/yql/udfs/common/json2"))
+>>>>>>> Connector: PostgreSQL: Json tests
         case _:
             raise ValueError(runner_type)

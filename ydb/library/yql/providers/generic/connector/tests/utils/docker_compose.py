@@ -6,6 +6,8 @@ import subprocess
 import yaml
 from typing import Dict, Any, Sequence
 
+import time
+
 import yatest.common
 
 from ydb.library.yql.providers.generic.connector.tests.utils.log import make_logger
@@ -123,6 +125,8 @@ class DockerComposeHelper:
         ]
 
         LOGGER.debug("calling command: " + " ".join(cmd))
+
+        # time.sleep(1000)
 
         try:
             out = subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode('utf8')

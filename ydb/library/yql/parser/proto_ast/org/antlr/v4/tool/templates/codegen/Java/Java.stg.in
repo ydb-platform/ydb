@@ -246,6 +246,8 @@ message TBlock<elemId> {
     }
 <else>
     <alts>
+
+    string Descr = 1000;
 <endif>
 }
 >>
@@ -253,6 +255,7 @@ message TBlock<elemId> {
 altDecl(alt,altNum) ::= <<
 message TAlt<altNum> {
     <alt>
+    string Descr = 1000;
 }
 >>
 

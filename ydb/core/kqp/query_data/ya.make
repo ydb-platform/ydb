@@ -13,6 +13,7 @@ PEERDIR(
     ydb/core/kqp/common/simple
     ydb/library/yql/dq/expr_nodes
     ydb/library/yql/dq/proto
+    ydb/library/yql/minikql
     ydb/core/kqp/expr_nodes
 )
 

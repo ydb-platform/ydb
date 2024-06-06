@@ -1,5 +1,4 @@
 #pragma once
-#include "defs.h"
 
 #include <util/stream/null.h>
 #include <util/system/valgrind.h>
@@ -25,8 +24,6 @@ constexpr bool IsLowVerbose = true;
 #endif
 constexpr bool IsVerbose = false;
 constexpr bool IsMonitoringEnabled = false;
-constexpr bool IsRealBlockDevice = false;
-static const char *RealBlockDevicePath = "/dev/sda5";
 
 #ifndef NDEBUG
 #   define IS_SLOW_MACHINE 1

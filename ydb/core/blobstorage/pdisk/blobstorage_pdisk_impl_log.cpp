@@ -3,6 +3,7 @@
 #include "blobstorage_pdisk_completion_impl.h"
 #include "blobstorage_pdisk_logreader.h"
 #include "blobstorage_pdisk_syslogreader.h"
+#include "blobstorage_pdisk_writer.h"
 
 #include <util/random/entropy.h>
 #include <util/random/mersenne64.h>

@@ -7,6 +7,7 @@ SRCS(
 
 PEERDIR(
     ydb/services/bg_tasks/abstract
+    contrib/libs/apache/arrow
 )
 
 END()

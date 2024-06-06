@@ -1,11 +1,8 @@
 #pragma once
+
 #include "blobstorage_pdisk_defs.h"
 
 #include <ydb/library/pdisk_io/sector_map.h>
-
-namespace NActors {
-    struct TActorSetupCmd;
-}
 
 namespace NKikimr {
 

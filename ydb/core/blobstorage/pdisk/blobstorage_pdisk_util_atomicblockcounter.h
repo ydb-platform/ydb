@@ -1,5 +1,6 @@
 #pragma once
-#include "defs.h"
+
+#include <library/cpp/deprecated/atomic/atomic.h>
 
 namespace NKikimr {
 namespace NPDisk {

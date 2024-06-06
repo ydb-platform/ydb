@@ -78,6 +78,7 @@ PEERDIR(
     ydb/library/actors/interconnect
     ydb/library/actors/protos
     ydb/library/actors/wilson
+    library/cpp/deprecated/atomic
     library/cpp/deprecated/enum_codegen
     library/cpp/logger
     library/cpp/lwtrace
@@ -95,9 +96,8 @@ PEERDIR(
     ydb/library/pdisk_io
     ydb/library/pretty_types_print/protobuf
     ydb/library/ydb_issue
-    ydb/public/api/protos/out
     ydb/library/yql/minikql
-    library/cpp/deprecated/atomic
+    ydb/public/api/protos/out
 )
 
 IF (NOT OS_WINDOWS)

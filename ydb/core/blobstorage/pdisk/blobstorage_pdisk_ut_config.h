@@ -1,5 +1,4 @@
 #pragma once
-#include "defs.h"
 
 #include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
 

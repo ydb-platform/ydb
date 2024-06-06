@@ -1,8 +1,5 @@
 #pragma once
 
-#include "defs.h"
-
-
 #include "blobstorage_pdisk.h"
 #include "blobstorage_pdisk_gate.h"
 #include "blobstorage_pdisk_mon.h"

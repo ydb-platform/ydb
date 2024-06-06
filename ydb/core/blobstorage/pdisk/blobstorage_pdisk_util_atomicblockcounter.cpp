@@ -1,5 +1,7 @@
 #include "blobstorage_pdisk_util_atomicblockcounter.h"
 
+#include <ydb/library/yverify_stream/yverify_stream.h>
+
 namespace NKikimr {
 namespace NPDisk {
 

@@ -1,5 +1,6 @@
 #pragma once
-#include "defs.h"
+
+#include <util/generic/vector.h>
 
 namespace NKikimr {
 namespace NPDisk {

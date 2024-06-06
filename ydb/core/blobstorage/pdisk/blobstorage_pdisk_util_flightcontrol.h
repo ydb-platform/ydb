@@ -1,6 +1,4 @@
 #pragma once
-#include "defs.h"
-#include "blobstorage_pdisk_mon.h"
 
 #include <library/cpp/deprecated/atomic/atomic.h>
 

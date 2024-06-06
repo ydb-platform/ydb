@@ -379,7 +379,7 @@ private:
     std::optional<TDqProgressWriter> ProgressWriter;
     TString Status;
     TFuture<void> OpenSessionFuture;
-    std::atomic_int QuerySeqNo = 1;
+    std::atomic<ui64> QuerySeqNo = 1;
 };
 
 class TDqGatewayImpl: public std::enable_shared_from_this<TDqGatewayImpl> {

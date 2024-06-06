@@ -456,11 +456,15 @@ void <parser.grammarName; format = "lower">ParserInitialize() {
 
 }
 
-<parser.name>::<parser.name>(TokenStream *input) : <parser.name>(input, antlr4::atn::ParserATNSimulatorOptions()) {}
-
-<parser.name>::<parser.name>(TokenStream *input, const antlr4::atn::ParserATNSimulatorOptions &options) : <superClass>(input) {
-  <parser.name>::initialize();
-  _interpreter = new atn::ParserATNSimulator(this, *<parser.grammarName; format = "lower">ParserStaticData->atn, <parser.grammarName; format = "lower">ParserStaticData->decisionToDFA, <parser.grammarName; format = "lower">ParserStaticData->sharedContextCache, options);
+<parser.name>::RuleReturnType <parser.name>::Parse() {
+  RuleReturnType root(<parser.name>::<first(parser.funcs).name>());
+  if (root) {
+    auto ast = google::protobuf::Arena::CreateMessage\<@ANTLR_PACKAGE_NAME@::T<parser.name>AST>(Arena);
+    Y_ASSERT(dynamic_cast\<@ANTLR_PACKAGE_NAME@::TRule_<first(parser.funcs).name>* >(root));
+    ast->unsafe_arena_set_allocated_rule_<first(parser.funcs).name>(static_cast\<@ANTLR_PACKAGE_NAME@::TRule_<first(parser.funcs).name>* >(root));
+    return ast;
+  }
+  return nullptr;
 }
 
 <parser.name>::~<parser.name>() {
@@ -571,7 +575,7 @@ RuleFunction(currentRule, args, code, locals, ruleCtx, altLabelCtxs, namedAction
     <code:{e | <element(e, i)>}; separator="\n">
     <endif>
     <else>
-    <code; separator="\n">
+    <code:{e | <element(e, i)>}; separator="\n">
     <endif>
     <endif>
 <! TODO: untested !>   <postamble; separator = "\n">
@@ -585,6 +589,27 @@ RuleFunction(currentRule, args, code, locals, ruleCtx, altLabelCtxs, namedAction
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
   }
+  <endif>
+  <if(rest(code))>
+  if (!parent) {
+    retval = nullptr;
+  }
+  <else>
+  <if(first(code).alts)>
+  <if(rest(first(code).alts))>
+  if (!parent || !retval->Alt_case()) {
+    retval = nullptr;
+  }
+  <else>
+  if (!parent) {
+    retval = nullptr;
+  }
+  <endif>
+  <else>
+  if (!parent) {
+    retval = nullptr;
+  }
+  <endif>
   <endif>
 
   return _localctx;
@@ -649,7 +674,28 @@ LeftRecursiveRuleFunction(currentRule, args, code, locals, ruleCtx, altLabelCtxs
     _localctx->exception = std::current_exception();
     _errHandler->recover(this, _localctx->exception);
   }
-  return _localctx;
+  <if(rest(code))>
+  if (!parent) {
+    retval = nullptr;
+  }
+  <else>
+  <if(first(code).alts)>
+  <if(rest(first(code).alts))>
+  if (!parent || !retval->Alt_case()) {
+    retval = nullptr;
+  }
+  <else>
+  if (!parent) {
+    retval = nullptr;
+  }
+  <endif>
+  <else>
+  if (!parent) {
+    retval = nullptr;
+  }
+  <endif>
+  <endif>
+  return retval;
 }
 >>
 
@@ -751,21 +797,22 @@ LL1AltBlock(choice, preamble, alts, error) ::= <<
   _errHandler->sync(this);
   <! TODO: untested !><if (choice.label)>LL1AltBlock(choice, preamble, alts, error) <labelref(choice.label)> = _input->LT(1);<endif>
   <preamble; separator="\n">
-  <if(elemId)>
-  // LL1AltBlock protobuf stuff
-  auto global_parent = parent;
-  auto parent = global_parent->MutableBlock<elemId>();
-  // protobuf end
-  <endif>
   switch (_input->LA(1)) {
     <choice.altLook, alts: {look, alt | <cases(ttypes = look)> {
-    <if(rest(alts))><if(alt)>
+    <if(alt)>
     // LL1AltBlock protobuf stuff
     auto global_parent = parent;
-    auto parent = global_parent->MutableAlt<if(!elemId)>_<currentRule.name><endif><i>();
+    auto parent = global_parent-><if(elemId)>MutableBlock<elemId>()-><endif><if(rest(alts))>MutableAlt<if(!elemId)>_<currentRule.name><endif><i>()<endif>;
     // protobuf end
-    <endif><endif>
+    <endif>
     <alt>
+    <if(elemId)>
+    // LL1AltBlock protobuf stuff
+    if (!parent) {
+      global_parent->ClearBlock<elemId>();
+    \}
+    // protobuf end
+    <endif>
     break;
   \}
   }; separator = "\n">
@@ -780,19 +827,22 @@ LL1OptionalBlock(choice, alts, error) ::= <<
 { // LL1OptionalBlock
   setState(<choice.stateNumber>);
   _errHandler->sync(this);
-  // LL1OptionalBlock protobuf stuff
-  auto global_parent = parent;
-  auto parent = global_parent->MutableBlock<elemId>();
-  // protobuf end
   switch (_input->LA(1)) {
     <choice.altLook, alts: {look, alt | <cases(ttypes = look)> {
-    <if(rest(alts))><if(alt)>
+    <if(alt)>
     // LL1OptionalBlock protobuf stuff
     auto global_parent = parent;
-    auto parent = global_parent->MutableAlt<i>();
+    auto parent = global_parent->MutableBlock<elemId>()<if(rest(alts))>->MutableAlt<i>()<endif>;
     // protobuf end
-    <endif><endif>
+    <endif>
     <alt>
+    <if(alt)>
+    // LL1OptionalBlock protobuf stuff
+    if (!parent) {
+      global_parent->ClearBlock<elemId>();
+    \}
+    // protobuf end
+    <endif>
     break;
   \}
   }; separator="\n">
@@ -810,6 +860,11 @@ _errHandler->sync(this);
 <preamble; separator = "\n">
 if (<expr>) {
   <alts; separator = "\n">
+  // LL1OptionalBlockSingleAlt protobuf stuff
+  if (!parent) {
+    global_parent->ClearBlock<elemId>();
+  \}
+  // protobuf end
 }
 >>
 
@@ -822,9 +877,6 @@ while (<loopExpr>) {
   <alts; separator="\n">
   setState(<choice.loopBackStateNumber>);
   _errHandler->sync(this);
-<<<<<<< HEAD
-  <iteration>
-=======
   <preamble; separator="\n">
   // LL1StarBlockSingleAlt protobuf stuff
   auto global_parent = parent;
@@ -835,12 +887,14 @@ while (<loopExpr>) {
     // protobuf end
     <alts; separator="\n">
     // LL1StarBlockSingleAlt protobuf stuff
+    if (!parent) {
+      global_parent->MutableBlock<elemId>()->RemoveLast();
+    \}
     // protobuf end
     setState(<choice.loopBackStateNumber>);
     _errHandler->sync(this);
     <iteration>
   }
->>>>>>> dd62252e05 (ascii fix)
 }
 >>
 
@@ -853,10 +907,6 @@ do {
   <alts; separator="\n">
   setState(<choice.stateNumber>); <! loopback/exit decision !>
   _errHandler->sync(this);
-<<<<<<< HEAD
-  <iteration>
-} while (<loopExpr>);
-=======
   <preamble; separator="\n">
   // LL1PlusBlockSingleAlt protobuf stuff
   auto global_parent = parent;
@@ -867,13 +917,19 @@ do {
     // protobuf end
     <alts; separator="\n">
     // LL1StarBlockSingleAlt protobuf stuff
+    if (!parent) {
+      global_parent->MutableBlock<elemId>()->RemoveLast();
+    \}
     // protobuf end
     setState(<choice.stateNumber>); <! loopback/exit decision !>
     _errHandler->sync(this);
     <iteration>
   } while (<loopExpr>);
+  Y_ABORT_UNLESS(global_parent, "parentBlock is null");
+  if (!global_parent->Block<elemId>Size()) {
+    parent = nullptr;
+  \}
 \}
->>>>>>> dd62252e05 (ascii fix)
 >>
 
 // LL(*) stuff
@@ -885,21 +941,22 @@ AltBlock(choice, preamble, alts, error) ::= <<
   _errHandler->sync(this);
   <! TODO: untested !><if (choice.label)><labelref(choice.label)> = _input->LT(1);<endif>
   <! TODO: untested !><preamble; separator = "\n">
-  <if(elemId)>
-  // AltBlock protobuf stuff
-  auto global_parent = parent;
-  auto parent = global_parent->MutableBlock<elemId>();
-  // protobuf end
-  <endif>
   switch (getInterpreter\<atn::ParserATNSimulator>()->adaptivePredict(_input, <choice.decision>, _ctx)) {
   <alts: {alt | case <i>: {
-    <if(rest(alts))><if(alt)>
+    <if(alt)>
     // AltBlock protobuf stuff
     auto global_parent = parent;
-    auto parent = global_parent->MutableAlt<if(!elemId)>_<currentRule.name><endif><i>();
+    auto parent = global_parent-><if(elemId)>MutableBlock<elemId>()-><endif><if(rest(alts))>MutableAlt<if(!elemId)>_<currentRule.name><endif><i>()<endif>;
     // protobuf end
-    <endif><endif>
+    <endif>
     <alt>
+    <if(elemId)>
+    // AltBlock protobuf stuff
+    if (!parent) {
+      global_parent->ClearBlock<elemId>();
+    \}
+    // protobuf end
+    <endif>
     break;
   \}
   }; separator="\n">
@@ -914,20 +971,22 @@ OptionalBlock(choice, alts, error) ::= <<
 { // OptionalBlock
   setState(<choice.stateNumber>);
   _errHandler->sync(this);
-
-  // OptionalBlock protobuf stuff
-  auto global_parent = parent;
-  auto parent = global_parent->MutableBlock<elemId>();
-  // protobuf end
   switch (getInterpreter\<atn::ParserATNSimulator>()->adaptivePredict(_input, <choice.decision>, _ctx)) {
   <alts: {alt | case <i><if (!choice.ast.greedy)> + 1<endif>: {
-    <if(rest(alts))><if(alt)>
+    <if(alt)>
     // OptionalBlock protobuf stuff
     auto global_parent = parent;
-    auto parent = global_parent->MutableAlt<i>();
+    auto parent = global_parent->MutableBlock<elemId>()<if(rest(alts))>->MutableAlt<i>()<endif>;
     // protobuf end
-    <endif><endif>
+    <endif>
     <alt>
+    <if(alt)>
+    // LL1OptionalBlock protobuf stuff
+    if (!parent) {
+      global_parent->ClearBlock<elemId>();
+    \}
+    // protobuf end
+    <endif>
     break;
   \}
   }; separator = "\n">
@@ -970,10 +1029,6 @@ do {
   }
   setState(<choice.loopBackStateNumber>); <! loopback/exit decision !>
   _errHandler->sync(this);
-<<<<<<< HEAD
-  alt = getInterpreter\<atn::ParserATNSimulator>()->adaptivePredict(_input, <choice.decision>, _ctx);
-} while (alt != <choice.exitAlt> && alt != atn::ATN::INVALID_ALT_NUMBER);
-=======
   alt = 1<if(!choice.ast.greedy)> + 1<endif>;
   // PlusBlock protobuf stuff
   auto global_parent = parent;
@@ -989,6 +1044,9 @@ do {
         auto parent = global_parent->AddBlock<elemId>();
         <endif>
         <alt>
+        if (!parent) {
+          global_parent->MutableBlock<elemId>()->RemoveLast();
+        \}
         break;
       \}
   }; separator="\n">
@@ -999,8 +1057,11 @@ do {
     _errHandler->sync(this);
     alt = getInterpreter\<atn::ParserATNSimulator>()->adaptivePredict(_input, <choice.decision>, _ctx);
   } while (alt != <choice.exitAlt> && alt != atn::ATN::INVALID_ALT_NUMBER);
+  Y_ABORT_UNLESS(global_parent, "parentBlock is null");
+  if (!global_parent->Block<elemId>Size()) {
+    parent = nullptr;
+  \}
 }
->>>>>>> dd62252e05 (ascii fix)
 >>
 
 Sync(s) ::= "Sync(s) sync(<s.expecting.name>);"
@@ -1045,9 +1106,11 @@ InvokeRule(r, argExprsChunks) ::= <<
 {
   setState(<r.stateNumber>);
   auto res = <if(r.labels)><r.labels: {l | <labelref(l)> = }><endif><r.name>(<if(r.ast.options.p)><r.ast.options.p><if(argExprsChunks)>,<endif><endif><argExprsChunks>);
-  Y_ASSERT(dynamic_cast\<@ANTLR_PACKAGE_NAME@::TRule_<r.name>* >(res));
-  Y_ABORT_UNLESS(parent, "Parent is null");
-  parent->unsafe_arena_set_allocated_rule_<r.name><elemId>(static_cast\<@ANTLR_PACKAGE_NAME@::TRule_<r.name>* >(res));
+  if (res) {
+    Y_ASSERT(dynamic_cast\<@ANTLR_PACKAGE_NAME@::TRule_<r.name>* >(res));
+    Y_ABORT_UNLESS(parent, "Parent is null");
+    parent->unsafe_arena_set_allocated_rule_<r.name><elemId>(static_cast\<@ANTLR_PACKAGE_NAME@::TRule_<r.name>* >(res));
+  \}
 \}
 >>
 
@@ -1056,7 +1119,7 @@ MatchToken(m) ::= <<
 {
   setState(<m.stateNumber>);
   auto token = <if (m.labels)><m.labels: {l | <labelref(l)> = }><endif>match(<parser.name>::<m.name>);
-  if (token) {
+  if (token && token->getType() > 0) {
     Y_ABORT_UNLESS(parent, "Parent is null");
     parent->MutableToken<elemId>()->SetId(token->getType());
     parent->MutableToken<elemId>()->SetLine(token->getLine());
@@ -1081,6 +1144,15 @@ if (<if (invert)><m.varName> == 0 || <m.varName> == Token::EOF || <else>!<endif>
   <if (m.labels)><m.labels: {l | <labelref(l)> = }><endif>_errHandler->recoverInline(this);
 }
 else {
+  auto token = _input->LT(1);
+  if (token && token->getType() > 0) {
+    Y_ABORT_UNLESS(parent, "Parent is null");
+    parent->MutableToken<elemId>()->SetId(token->getType());
+    parent->MutableToken<elemId>()->SetLine(token->getLine());
+    parent->MutableToken<elemId>()->SetColumn(token->getCharPositionInLine());
+    parent->MutableToken<elemId>()->SetElement(<elemId>);
+    parent->MutableToken<elemId>()->SetValue(token->getText().c_str());
+  }
   _errHandler->reportMatch(this);
   consume();
 }

@@ -1437,23 +1437,33 @@ integer: DIGITS | INTEGER_VALUE;
 // Lexer
 //
 
-EQUALS:        '=';
 EQUALS2:       '==';
+EQUALS:        '=';
+
 NOT_EQUALS:    '!=';
+
 NOT_EQUALS2:   '<>';
-LESS:          '<';
 LESS_OR_EQ:    '<=';
-GREATER:       '>';
-GREATER_OR_EQ: '>=';
 SHIFT_LEFT:    '<<';
-ROT_LEFT:      '|<<';
-AMPERSAND:     '&';
-PIPE:          '|';
-DOUBLE_PIPE:   '||';
 STRUCT_OPEN:   '<|';
+LESS:          '<';
+
+GREATER_OR_EQ: '>=';
+GREATER:       '>';
+
+ROT_LEFT:      '|<<';
 STRUCT_CLOSE:  '|>';
-PLUS:          '+';
+DOUBLE_PIPE:   '||';
+PIPE:          '|';
+
+ARROW:         '->';
 MINUS:         '-';
+
+NAMESPACE:     '::';
+COLON:         ':';
+
+AMPERSAND:     '&';
+PLUS:          '+';
 TILDA:         '~';
 ASTERISK:      '*';
 SLASH:         '/';
@@ -1465,48 +1475,13 @@ COMMA:         ',';
 LPAREN:        '(';
 RPAREN:        ')';
 QUESTION:      '?';
-COLON:         ':';
-AT:            '@';
-DOUBLE_AT:     '@@';
+
 DOLLAR:        '$';
-QUOTE_DOUBLE:  '"'; // This comment for fix syntax highlighting "
-QUOTE_SINGLE:  '\'';
-BACKTICK:      '`';
 LBRACE_CURLY:  '{';
 RBRACE_CURLY:  '}';
 CARET:         '^';
-NAMESPACE:     '::';
-ARROW:         '->';
 RBRACE_SQUARE: ']';
 LBRACE_SQUARE: '['; // pair ]
-
-// http://www.antlr.org/wiki/pages/viewpage.action?pageId=1782
-fragment A:('a'|'A');
-fragment B:('b'|'B');
-fragment C:('c'|'C');
-fragment D:('d'|'D');
-fragment E:('e'|'E');
-fragment F:('f'|'F');
-fragment G:('g'|'G');
-fragment H:('h'|'H');
-fragment I:('i'|'I');
-fragment J:('j'|'J');
-fragment K:('k'|'K');
-fragment L:('l'|'L');
-fragment M:('m'|'M');
-fragment N:('n'|'N');
-fragment O:('o'|'O');
-fragment P:('p'|'P');
-fragment Q:('q'|'Q');
-fragment R:('r'|'R');
-fragment S:('s'|'S');
-fragment T:('t'|'T');
-fragment U:('u'|'U');
-fragment V:('v'|'V');
-fragment W:('w'|'W');
-fragment X:('x'|'X');
-fragment Y:('y'|'Y');
-fragment Z:('z'|'Z');
 
 ABORT: A B O R T;
 ACTION: A C T I O N;
@@ -1660,17 +1635,17 @@ MODIFY: M O D I F Y;
 NANOSECONDS: N A N O S E C O N D S;
 NATURAL: N A T U R A L;
 NEXT: N E X T;
-NO: N O;
-NOT: N O T;
 NOTNULL: N O T N U L L;
-NULL: N U L L;
+NOT: N O T;
+NO: N O;
 NULLS: N U L L S;
+TNULL: N U L L;
 OBJECT: O B J E C T;
 OF: O F;
 OFFSET: O F F S E T;
 OMIT: O M I T;
-ON: O N;
 ONE: O N E;
+ON: O N;
 ONLY: O N L Y;
 OPTION: O P T I O N;
 OPTIONAL: O P T I O N A L;
@@ -1785,40 +1760,26 @@ WRAPPER: W R A P P E R;
 //WRITE: W R I T E;
 XOR: X O R;
 
-// YQL Default Lexer:
-// GRAMMAR_STRING_CORE_SINGLE = ~(QUOTE_SINGLE | BACKSLASH) | (BACKSLASH .)
-// GRAMMAR_STRING_CORE_DOUBLE = ~(QUOTE_DOUBLE | BACKSLASH) | (BACKSLASH .)
-
-// ANSI Lexer:
-// GRAMMAR_STRING_CORE_SINGLE = ~QUOTE_SINGLE | (QUOTE_SINGLE QUOTE_SINGLE)
-// GRAMMAR_STRING_CORE_DOUBLE = ~QUOTE_DOUBLE | (QUOTE_DOUBLE QUOTE_DOUBLE)
-
-fragment STRING_CORE_SINGLE: @GRAMMAR_STRING_CORE_SINGLE@;
-fragment STRING_CORE_DOUBLE: @GRAMMAR_STRING_CORE_DOUBLE@;
-
-fragment STRING_SINGLE: (QUOTE_SINGLE STRING_CORE_SINGLE* QUOTE_SINGLE);
-fragment STRING_DOUBLE: (QUOTE_DOUBLE STRING_CORE_DOUBLE* QUOTE_DOUBLE);
-fragment STRING_MULTILINE: (DOUBLE_AT .*? DOUBLE_AT)+ AT?;
-
 STRING_VALUE: ((STRING_SINGLE | STRING_DOUBLE | STRING_MULTILINE) (S | U | Y | J | P (T | B | V)?)?);
+
+STRING_SINGLE: (QUOTE_SINGLE STRING_CORE_SINGLE* QUOTE_SINGLE);
+QUOTE_SINGLE:  '\'';
+
+STRING_DOUBLE: (QUOTE_DOUBLE STRING_CORE_DOUBLE* QUOTE_DOUBLE);
+QUOTE_DOUBLE:  '"';
+
+STRING_MULTILINE: (DOUBLE_AT .*? DOUBLE_AT)+ AT?;
+DOUBLE_AT:     '@@';
+AT:            '@';
 
 ID_PLAIN: ('a'..'z' | 'A'..'Z' | '_') ('a'..'z' | 'A'..'Z' | '_' | DIGIT)*;
 
-fragment ID_QUOTED_CORE: '``' | '\\`' | ~'`';
 ID_QUOTED: BACKTICK ID_QUOTED_CORE* BACKTICK;
-
-fragment DIGIT: '0'..'9';
-fragment HEXDIGIT: '0'..'9' | 'a'..'f' | 'A'..'F';
-fragment HEXDIGITS: '0' X HEXDIGIT+;
-fragment OCTDIGITS: '0' O ('0'..'8')+;
-fragment BINDIGITS: '0' B ('0' | '1')+;
-fragment DECDIGITS: DIGIT+;
-DIGITS: DECDIGITS | HEXDIGITS | OCTDIGITS | BINDIGITS;
+BACKTICK: '`';
 
 // not all combinations of P/U with L/S/T/I/B/N are actually valid - this is resolved in sql.cpp
 INTEGER_VALUE: DIGITS ((P | U)? (L | S | T | I | B | N)?);
-
-fragment FLOAT_EXP : E (PLUS | MINUS)? DECDIGITS ;
+FLOAT_EXP : E (PLUS | MINUS)? DECDIGITS ;
 REAL:
     (
         DECDIGITS DOT DIGIT* FLOAT_EXP?
@@ -1827,6 +1788,15 @@ REAL:
     ) (F | P (F ('4'|'8') | N)?)?
     ;
 
+
+HEXDIGIT: '0'..'9' | 'a'..'f' | 'A'..'F';
+DIGIT: '0'..'9';
+HEXDIGITS: '0' X HEXDIGIT+;
+OCTDIGITS: '0' O ('0'..'8')+;
+BINDIGITS: '0' B ('0' | '1')+;
+DECDIGITS: DIGIT+;
+DIGITS: DECDIGITS | HEXDIGITS | OCTDIGITS | BINDIGITS;
+
 BLOB: X QUOTE_SINGLE HEXDIGIT+ QUOTE_SINGLE;
 
 // YQL Default Lexer:
@@ -1834,7 +1804,48 @@ BLOB: X QUOTE_SINGLE HEXDIGIT+ QUOTE_SINGLE;
 // ANSI Lexer:
 // GRAMMAR_MULTILINE_COMMENT_CORE = MULTILINE_COMMENT | .
 
-fragment MULTILINE_COMMENT: '/*' ( @GRAMMAR_MULTILINE_COMMENT_CORE@ )*? '*/';
-fragment LINE_COMMENT: '--' ~('\n'|'\r')* ('\r' '\n'? | '\n' | EOF);
+// http://www.antlr.org/wiki/pages/viewpage.action?pageId=1782
+A:('a'|'A');
+B:('b'|'B');
+C:('c'|'C');
+D:('d'|'D');
+E:('e'|'E');
+F:('f'|'F');
+G:('g'|'G');
+H:('h'|'H');
+I:('i'|'I');
+J:('j'|'J');
+K:('k'|'K');
+L:('l'|'L');
+M:('m'|'M');
+N:('n'|'N');
+O:('o'|'O');
+P:('p'|'P');
+Q:('q'|'Q');
+R:('r'|'R');
+S:('s'|'S');
+T:('t'|'T');
+U:('u'|'U');
+V:('v'|'V');
+W:('w'|'W');
+X:('x'|'X');
+Y:('y'|'Y');
+Z:('z'|'Z');
+
 WS: (' '|'\r'|'\t'|'\u000C'|'\n') -> channel(HIDDEN);
 COMMENT: (MULTILINE_COMMENT|LINE_COMMENT) -> channel(HIDDEN);
+
+MULTILINE_COMMENT: '/*' ( @GRAMMAR_MULTILINE_COMMENT_CORE@ )*? '*/';
+LINE_COMMENT: '--' ~('\n'|'\r')* ('\r' '\n'? | '\n' | EOF);
+
+// YQL Default Lexer:
+// GRAMMAR_STRING_CORE_SINGLE = ~(QUOTE_SINGLE | BACKSLASH) | (BACKSLASH .)
+// GRAMMAR_STRING_CORE_DOUBLE = ~(QUOTE_DOUBLE | BACKSLASH) | (BACKSLASH .)
+
+// ANSI Lexer:
+// GRAMMAR_STRING_CORE_SINGLE = ~QUOTE_SINGLE | (QUOTE_SINGLE QUOTE_SINGLE)
+// GRAMMAR_STRING_CORE_DOUBLE = ~QUOTE_DOUBLE | (QUOTE_DOUBLE QUOTE_DOUBLE)
+
+STRING_CORE_SINGLE: @GRAMMAR_STRING_CORE_SINGLE@;
+STRING_CORE_DOUBLE: @GRAMMAR_STRING_CORE_DOUBLE@;
+ID_QUOTED_CORE: '``' | '\\`' | ~'`';

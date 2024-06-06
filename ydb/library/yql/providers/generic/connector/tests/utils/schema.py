@@ -22,8 +22,8 @@ class DataSourceType:
     ydb: Ydb.Type = None
 
     def pick(self, kind: EDataSourceKind.ValueType) -> str:
-        target = None  
-        match kind: 
+        target = None
+        match kind:
             case EDataSourceKind.CLICKHOUSE:
                 target = self.ch
             case EDataSourceKind.POSTGRESQL:

@@ -55,6 +55,7 @@ SRCS(
     json_whoami.h
     log.h
     pdisk_info.h
+    pdisk_status.h
     query_autocomplete_helper.h
     viewer_request.cpp
     viewer_request.h

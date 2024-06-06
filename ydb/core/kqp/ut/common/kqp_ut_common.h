@@ -112,6 +112,7 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     TKikimrSettings& SetStorage(const NFake::TStorage& storage) { Storage = storage; return *this; };
     TKikimrSettings& SetFederatedQuerySetupFactory(NKqp::IKqpFederatedQuerySetupFactory::TPtr value) { FederatedQuerySetupFactory = value; return *this; };
     TKikimrSettings& SetUseRealThreads(bool value) { UseRealThreads = value; return *this; };
+    TKikimrSettings& SetS3ActorsFactory(std::shared_ptr<NYql::NDq::IS3ActorsFactory> value) { S3ActorsFactory = std::move(value); return *this; };
 };
 
 class TKikimrRunner {

@@ -52,9 +52,9 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         settings
             .SetFeatureFlags(featureFlags)
             .SetFederatedQuerySetupFactory(federatedQuerySetupFactory)
-            .SetKqpSettings({});
-        
-        settings.S3ActorsFactory = s3ActorsFactory;
+            .SetKqpSettings({})
+            .SetS3ActorsFactory(std::move(s3ActorsFactory));
+
         settings = settings.SetAppConfig(appConfig.value());
 
         return std::make_shared<TKikimrRunner>(settings);

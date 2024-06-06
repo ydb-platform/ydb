@@ -39,7 +39,7 @@ private:
         return LogPrefix.GetRef();
     }
 
-    THolder<TEvPersQueue::TEvRequest> CreateGetOffsetRequest() {
+    THolder<TEvPersQueue::TEvRequest> CreateGetOffsetRequest() const {
         THolder<TEvPersQueue::TEvRequest> request(new TEvPersQueue::TEvRequest);
 
         auto& req = *request->Record.MutablePartitionRequest();
@@ -77,7 +77,7 @@ private:
         Become(&TLocalPartitionReader::StateWork);
     }
 
-    THolder<TEvPersQueue::TEvRequest> CreateReadRequest() {
+    THolder<TEvPersQueue::TEvRequest> CreateReadRequest() const {
         THolder<TEvPersQueue::TEvRequest> request(new TEvPersQueue::TEvRequest);
 
         auto& req = *request->Record.MutablePartitionRequest();
@@ -101,7 +101,7 @@ private:
         Send(PQTablet, CreateReadRequest().Release());
     }
 
-    NKikimrPQClient::TDataChunk GetDeserializedData(const TString& string) {
+    static NKikimrPQClient::TDataChunk GetDeserializedData(const TString& string) {
         NKikimrPQClient::TDataChunk proto;
         bool res = proto.ParseFromString(string);
         Y_ABORT_UNLESS(res, "Got invalid data from PQTablet");
@@ -147,6 +147,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWorker::TEvHandshake, HandleInit);
             hFunc(TEvPersQueue::TEvResponse, HandleInit);
+            sFunc(TEvents::TEvPoison, PassAway);
         default:
             Y_VERIFY_S(false, "Unhandled event type: " << ev->GetTypeRewrite()
                         << " event: " << ev->ToString());

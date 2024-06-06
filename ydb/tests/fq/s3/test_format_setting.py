@@ -1665,7 +1665,9 @@ Pear;15;33'''
         assert rows[0].items[1].bytes_value == b"2024-04-02T00:00:00Z"
 
     @yq_all
-    def test_parquet_converters_to_string(self, kikimr, s3, client, unique_prefix):
+    def test_parquet_converters_to_string(self, kikimr, s3, client):
+        unique_prefix = str(uuid.uuid4())
+
         # timestamp[ms] -> String
         # 2024-04-02T12:01:00.000000Z
         data = [['apple'], [1712059260000]]
@@ -1821,7 +1823,9 @@ Pear;15;33'''
         assert rows[0].items[1].bytes_value == b"2024-04-02"
 
     @yq_all
-    def test_parquet_converters_to_utf8(self, kikimr, s3, client, unique_prefix):
+    def test_parquet_converters_to_utf8(self, kikimr, s3, client):
+        unique_prefix = str(uuid.uuid4())
+
         # timestamp[ms] -> Utf8
         # 2024-04-02T12:01:00.000000Z
         data = [['apple'], [1712059260000]]

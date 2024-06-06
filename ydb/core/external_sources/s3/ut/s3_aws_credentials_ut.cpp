@@ -46,9 +46,6 @@ TString GetExternalPort(const TString& service, const TString& port) {
 Y_UNIT_TEST_SUITE(S3AwsCredentials) {
     Y_UNIT_TEST(ExecuteScriptWithEqSymbol) {
         const TString externalDataSourceName = "/Root/external_data_source";
-
-        Cerr << "HERE: " << GetExternalPort("minio", "9000") << Endl;
-
         auto kikimr = MakeKikimrRunner(true);
         auto tc = kikimr->GetTableClient();
         auto session = tc.CreateSession().GetValueSync().GetSession();

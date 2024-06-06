@@ -16,8 +16,6 @@ from ydb.library.yql.providers.generic.connector.tests.utils.settings import Set
 from ydb.library.yql.providers.generic.connector.tests.utils.run.parent import Runner
 from ydb.library.yql.providers.generic.connector.tests.utils.run.result import Result
 
-# import yql_utils
-
 LOGGER = make_logger(__name__)
 
 
@@ -191,9 +189,6 @@ class KqpRunner(Runner):
         # Create scheme
         scheme_path = artifacts.make_path(test_name=test_name, artifact_name='scheme.txt')
         self.scheme_renderer.render(scheme_path, settings=self.settings, generic_settings=generic_settings)
-
-        # Set udfs dir for cmd
-        udfs_dir = self.udfs_dir
 
         # Run kqprun
         result_path = artifacts.make_path(test_name=test_name, artifact_name='result.json')

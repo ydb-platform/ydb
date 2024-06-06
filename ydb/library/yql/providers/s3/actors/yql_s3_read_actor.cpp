@@ -902,7 +902,7 @@ public:
         if (!ErrorText.empty()) {
             TString errorCode;
             TString message;
-            if (ParseS3ErrorResponse(ErrorText, errorCode, message)) {
+            if (!ParseS3ErrorResponse(ErrorText, errorCode, message)) {
                 message = ErrorText;
             }
             Issues.AddIssues(BuildIssues(HttpResponseCode, errorCode, message));

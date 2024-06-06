@@ -1695,7 +1695,16 @@ Y_UNIT_TEST_SUITE(KqpPg) {
     }
 
     Y_UNIT_TEST(CopyTableSerialColumns) {
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false).SetEnableNotNullDataColumns(true));
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        TKikimrRunner kikimr(
+            TKikimrSettings()
+                .SetAppConfig(appConfig)
+                .SetKqpSettings({setting})
+                .SetWithSampleTables(false)
+                .SetEnableNotNullDataColumns(true)
+        );
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
         {

@@ -186,7 +186,8 @@ public:
 
     bool IsOK() const;
 
-    void ThrowOnError() const;
+    template <class... TArgs>
+    void ThrowOnError(TArgs&&... args) const;
 
     template <CInvocable<bool(const TError&)> TFilter>
     std::optional<TError> FindMatching(const TFilter& filter) const;

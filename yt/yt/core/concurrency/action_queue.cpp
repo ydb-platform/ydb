@@ -54,16 +54,14 @@ public:
 
     void Shutdown(bool graceful)
     {
-        if (Stopped_.exchange(true)) {
+        // Proper synchronization done via Queue_->Shutdown().
+        if (Stopped_.exchange(true, std::memory_order::relaxed)) {
             return;
         }
 
-        Queue_->Shutdown();
-
-        ShutdownInvoker_->Invoke(BIND_NO_PROPAGATE([graceful, thread = Thread_, queue = Queue_] {
-            thread->Stop(graceful);
-            queue->DrainConsumer();
-        }));
+        Queue_->Shutdown(graceful);
+        Thread_->Stop(graceful);
+        Queue_->OnConsumerFinished();
     }
 
     const IInvokerPtr& GetInvoker()
@@ -79,20 +77,14 @@ private:
     const TMpscSingleQueueSchedulerThreadPtr Thread_;
 
     const TShutdownCookie ShutdownCookie_;
-    const IInvokerPtr ShutdownInvoker_ = GetShutdownInvoker();
 
-    std::atomic<bool> Started_ = false;
     std::atomic<bool> Stopped_ = false;
 
 
     void EnsureStarted()
     {
-        if (Started_.load(std::memory_order::relaxed)) {
-            return;
-        }
-        if (Started_.exchange(true)) {
-            return;
-        }
+        // Thread::Start already has
+        // its own short-circ mechanism.
         Thread_->Start();
     }
 };

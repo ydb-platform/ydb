@@ -10,7 +10,7 @@
 
 import math
 from collections import defaultdict
-from typing import TYPE_CHECKING, Callable, Dict, Optional
+from typing import TYPE_CHECKING, Callable, Dict, Optional, Union
 
 import attr
 
@@ -268,10 +268,12 @@ class Shrinker:
     def __init__(
         self,
         engine: "ConjectureRunner",
-        initial: ConjectureData,
-        predicate: Optional[Callable[..., bool]],
+        initial: Union[ConjectureData, ConjectureResult],
+        predicate: Optional[Callable[[ConjectureData], bool]],
         *,
-        allow_transition: bool,
+        allow_transition: Optional[
+            Callable[[Union[ConjectureData, ConjectureResult], ConjectureData], bool]
+        ],
         explain: bool,
         in_target_phase: bool = False,
     ):
@@ -381,9 +383,31 @@ class Shrinker:
         test function."""
         return self.engine.call_count
 
+    def check_calls(self):
+        if self.calls - self.calls_at_last_shrink >= self.max_stall:
+            raise StopShrinking
+
+    def cached_test_function_ir(self, tree):
+        result = self.engine.cached_test_function_ir(tree)
+        self.incorporate_test_data(result)
+        self.check_calls()
+        return result
+
     def consider_new_tree(self, tree):
-        data = self.engine.ir_tree_to_data(tree)
-        return self.consider_new_buffer(data.buffer)
+        tree = tree[: len(self.nodes)]
+
+        def startswith(t1, t2):
+            return t1[: len(t2)] == t2
+
+        if startswith(tree, self.nodes):
+            return True
+
+        if startswith(self.nodes, tree):
+            return False
+
+        previous = self.shrink_target
+        self.cached_test_function_ir(tree)
+        return previous is not self.shrink_target
 
     def consider_new_buffer(self, buffer):
         """Returns True if after running this buffer the result would be
@@ -430,12 +454,10 @@ class Shrinker:
         that the result is either an Overrun object (if the buffer is
         too short to be a valid test case) or a ConjectureData object
         with status >= INVALID that would result from running this buffer."""
-
         buffer = bytes(buffer)
         result = self.engine.cached_test_function(buffer, extend=self.__extend)
         self.incorporate_test_data(result)
-        if self.calls - self.calls_at_last_shrink >= self.max_stall:
-            raise StopShrinking
+        self.check_calls()
         return result
 
     def debug(self, msg):
@@ -1632,7 +1654,7 @@ class ShrinkPass:
         return True
 
     @property
-    def name(self):
+    def name(self) -> str:
         return self.run_with_chooser.__name__
 
 

@@ -20,7 +20,7 @@ please check out [https://uriparser.github.io/](https://uriparser.github.io/).
 # Example use from an existing CMake project
 
 ```cmake
-cmake_minimum_required(VERSION 3.3)
+cmake_minimum_required(VERSION 3.5.0)
 
 project(hello VERSION 1.0.0)
 
@@ -49,9 +49,6 @@ target_link_libraries(hello PUBLIC uriparser::uriparser)
 ## Available CMake options (and defaults)
 ```console
 # rm -f CMakeCache.txt ; cmake -LH . | grep -B1 ':.*=' | sed 's,--,,'
-// Build shared libraries (rather than static ones)
-BUILD_SHARED_LIBS:BOOL=ON
-
 // Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel ...
 CMAKE_BUILD_TYPE:STRING=
 
@@ -81,6 +78,9 @@ URIPARSER_ENABLE_INSTALL:BOOL=ON
 
 // Use of specific runtime library (/MT /MTd /MD /MDd) with MSVC
 URIPARSER_MSVC_RUNTIME:STRING=
+
+// Build shared libraries (rather than static ones)
+URIPARSER_SHARED_LIBS:BOOL=ON
 
 // Treat all compiler warnings as errors
 URIPARSER_WARNINGS_AS_ERRORS:BOOL=OFF

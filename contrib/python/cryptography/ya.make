@@ -16,3 +16,7 @@ RECURSE(
     py2
     py3
 )
+
+IF (OS_LINUX AND MUSL)
+    RECURSE(next)
+ENDIF()

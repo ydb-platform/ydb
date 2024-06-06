@@ -1,0 +1,19 @@
+{%- if (current_target.target_macroses is defined) and (current_target.target_macroses|length) -%}
+{%-     set ONE_CALL_MACROSES = [ 'target_cuda_flags', 'target_cuda_cflags', 'target_proto_outs', 'target_proto_addincls', 'use_export_script', 'target_cython_options', 'target_cython_include_directories', 'set_python_type_for_cython' ] -%}
+{#-     Apply one call macroses (apply only first found macros) -#}
+{%-     for ONE_CALL_MACRO in ONE_CALL_MACROSES -%}
+{%-         set macroses = current_target.target_macroses|selectattr('macro', 'eq', ONE_CALL_MACRO) -%}
+{%-         if macroses|length -%}
+{%-             set target_macros = macroses|first -%}
+{%-             if target_macros.args|length %}
+{{ target_macros.macro }}({{ name }}
+{%-                 for arg in target_macros.args %}
+  {{ arg }}
+{%-                 endfor %}
+)
+{%              endif -%}
+{%-         endif -%}
+{%-     endfor -%}
+{#-     Apply macroses called any times (concat all args and make one call) -#}
+{{ Macroses(name, current_target.target_macroses, 'macro', 'args', ONE_CALL_MACROSES) }}
+{%- endif -%}

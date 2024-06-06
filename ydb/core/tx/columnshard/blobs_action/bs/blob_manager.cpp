@@ -161,8 +161,8 @@ bool TBlobManager::LoadState(IBlobManagerDb& db, const TTabletId selfTabletId) {
     THashSet<TGenStep> genStepsWithBlobsToKeep;
     for (const auto& unifiedBlobId : blobsToKeep) {
         TLogoBlobID blobId = unifiedBlobId.GetLogoBlobId();
-        TGenStep genStep{ blobId.Generation(), blobId.Step() };
-        Y_ABORT_UNLESS(genStep > LastCollectedGenStep);
+        TGenStep genStep(blobId);
+        Y_ABORT_UNLESS(LastCollectedGenStep < genStep);
 
         BlobsToKeep.insert(blobId);
         BlobsManagerCounters.OnKeepMarker(blobId.BlobSize());

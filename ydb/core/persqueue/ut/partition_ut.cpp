@@ -2704,10 +2704,6 @@ class TBatchingConditionsTest {
     TPartitionTxTestHelper* TxHelper;
     ui64 SeqNo = 1;
     ui64 TxTmp;
-    TVector<TString> SourceIds = {"src1", "src2", "src3", "src4"};
-    TVector<TString> Clients = {"client1", "client2", "client3", "client4"};
-    TVector<TString> Sessions = {"session1", "session2", "session3", "session4"};
-    TVector<TString> Owners;
 
 public:
     TString SrcId = "src1";
@@ -3068,49 +3064,64 @@ Y_UNIT_TEST_F(ConflictingCommitProccesAfterRollback, TPartitionTxTestHelper) {
 }
 
 Y_UNIT_TEST_F(TestBatchingWithChangeConfig, TPartitionTxTestHelper) {
-   Init();
-   auto txTmp = MakeAndSendWriteTx({});
-   SendChangePartitionConfig({.Version=2,
-                              .Consumers={
-                              {.Consumer="client-1", .Generation=0},
-                              {.Consumer="client-3", .Generation=7}
-                              }});
-    auto immTx = MakeAndSendImmediateTx({});
+    Init({.ConsumersCount = 2});
+    auto txTmp = MakeAndSendWriteTx({});
+    auto immTx1 = MakeAndSendImmediateTxOffsetCommit(1, 0, 5);
+    SendChangePartitionConfig({.Version=2,
+                                .Consumers={
+                                {.Consumer="client-0", .Offset=5, .Generation=0},
+                                {.Consumer="client-1", .Generation=7}
+                                }});
+    auto immTx2 = MakeAndSendImmediateTxOffsetCommit(1, 5, 10);
     WaitWriteInfoRequest(txTmp, true);
     SendTxRollback(txTmp);
-    WaitWriteInfoRequest(immTx, true);
-    WaitBatchCompletion(1);
+    WaitBatchCompletion(2);
     ExpectNoBatchCompletion();
     EmulateKVTablet();
+    WaitImmediateTxComplete(immTx1, true);
     WaitBatchCompletion(1);
     EmulateKVTablet();
-    WaitImmediateTxComplete(immTx, true);
+    auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvPartitionConfigChanged>();
+    WaitBatchCompletion(1); // immTx2
+    EmulateKVTablet();
+    WaitImmediateTxComplete(immTx2, true);
 }
 
 Y_UNIT_TEST_F(TestBatchingWithProposeConfig, TPartitionTxTestHelper) {
-    Init();
+    Init({.ConsumersCount = 2});
     auto txTmp = MakeAndSendWriteTx({});
+    auto immTx1 = MakeAndSendImmediateTxOffsetCommit(1, 0, 5);
 
-    auto event = std::make_unique<TEvPQ::TEvProposePartitionConfig>(1, GetTxId());
+    auto proposeTxId = GetTxId();
+    auto event = std::make_unique<TEvPQ::TEvProposePartitionConfig>(1, proposeTxId);
 
     event->TopicConverter = TopicConverter;
     auto copy = Config;
     copy.SetVersion(10);
-    event->Config = std::move(copy);
-    auto* newConsumer = event->Config.AddConsumers();
-    newConsumer->SetName("new-consumer");
-    SendEvent(event.release());
+    auto* newConsumer = copy.AddConsumers();
 
-    auto immTx = MakeAndSendImmediateTx({});
+    newConsumer->SetName("client-0");
+    newConsumer->SetGeneration(0);
+
+    event->Config = std::move(copy);
+    SendEvent(event.release());
+    auto immTx2 = MakeAndSendImmediateTxOffsetCommit(1, 5, 10);
+
     WaitWriteInfoRequest(txTmp, true);
     SendTxRollback(txTmp);
-    WaitWriteInfoRequest(immTx, true);
-    WaitBatchCompletion(1);
+    WaitBatchCompletion(2);
     ExpectNoBatchCompletion();
     EmulateKVTablet();
+    WaitImmediateTxComplete(immTx1, true);
+
+    SendCommitTx(1, proposeTxId);
+    //ToDo - wait propose result;
     WaitBatchCompletion(1);
     EmulateKVTablet();
-    WaitImmediateTxComplete(immTx, true);
+    WaitCommitTxDone({.TxId=proposeTxId});
+    WaitBatchCompletion(1);
+    EmulateKVTablet();
+    WaitImmediateTxComplete(immTx2, true);
 }
 
 Y_UNIT_TEST_F(GetUsedStorage, TPartitionFixture) {

@@ -2,7 +2,7 @@
 
 #include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
-#include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory.h>
+#include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 
 
 namespace NKikimr::NKqp {

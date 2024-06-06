@@ -38,7 +38,7 @@
 #include <ydb/library/yql/providers/dq/local_gateway/yql_dq_gateway_local.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
-#include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory.h>
+#include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 #include <ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
@@ -239,7 +239,7 @@ NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(const NYdb::TDriver& driver, I
     RegisterClickHouseReadActorFactory(*factory, nullptr, httpGateway);
     RegisterDqPqWriteActorFactory(*factory, driver, nullptr);
 
-    auto s3ActorsFactory = std::make_shared<NYql::NDq::TS3ActorsFactory>();
+    auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
     auto retryPolicy = GetHTTPDefaultRetryPolicy();
     s3ActorsFactory->RegisterS3WriteActorFactory(*factory, nullptr, httpGateway, retryPolicy);
     s3ActorsFactory->RegisterS3ReadActorFactory(*factory, nullptr, httpGateway, retryPolicy);

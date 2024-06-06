@@ -3,7 +3,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/public/sdk/cpp/client/ydb_query/query.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
-#include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory.h>
+#include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 
 namespace NKikimr::NKqp::NFederatedQueryTest {
     using namespace NKikimr::NKqp;

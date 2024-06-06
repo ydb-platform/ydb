@@ -14,7 +14,7 @@
 #include <ydb/library/yql/providers/dq/worker_manager/interface/counters.h>
 #include <ydb/library/yql/providers/pq/cm_client/client.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_gateway.h>
-#include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory.h>
+#include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 
 #include <ydb/public/lib/fq/scope.h>
 

@@ -16,7 +16,7 @@
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/library/yql/providers/common/metrics/service_counters.h>
 #include <ydb/library/yql/providers/pq/cm_client/client.h>
-#include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory.h>
+#include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 
 #include <ydb/public/lib/fq/scope.h>
 

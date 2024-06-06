@@ -12,7 +12,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
-#include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory.h>
+#include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 
 #ifndef NDEBUG
 const bool DETAILED_LOG = true;
@@ -186,7 +186,7 @@ public:
         WaitForBootstrap();
 
         auto FederatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({NYql::IHTTPGateway::Make(), nullptr, nullptr, nullptr, {}, {}, {}, nullptr, nullptr});
-        auto asyncIoFactory = CreateKqpAsyncIoFactory(KqpCounters, FederatedQuerySetup, std::make_shared<NYql::NDq::TDefaultS3ActorsFactory>());
+        auto asyncIoFactory = CreateKqpAsyncIoFactory(KqpCounters, FederatedQuerySetup, NYql::NDq::CreateDefaultS3ActorsFactory());
         auto kqpNode = CreateKqpNodeService(config, KqpCounters, CompFactory.Get(), asyncIoFactory);
         KqpNodeActorId = Runtime->Register(kqpNode);
         Runtime->EnableScheduleForActor(KqpNodeActorId, true);

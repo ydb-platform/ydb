@@ -32,7 +32,6 @@
 #include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h>
 #include <ydb/library/yql/providers/solomon/gateway/yql_solomon_gateway.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
-#include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
 #include <ydb/library/yql/sql/settings/translation_settings.h>
 #include <ydb/library/yql/minikql/mkql_alloc.h>

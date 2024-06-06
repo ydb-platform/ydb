@@ -624,6 +624,7 @@ public:
         : ResourceBrokerId(resourceBrokerId ? resourceBrokerId : MakeResourceBrokerID())
         , KqpProxySharedResources(std::move(kqpProxySharedResources))
         , PublishResourcesByExchanger(config.GetEnablePublishResourcesByExchanger())
+        , ServedWorkload(config.GetServedWorkload())
     {
         ResourceManager = std::make_shared<TKqpResourceManager>(config, counters);
     }
@@ -1032,6 +1033,7 @@ private:
         NKikimrKqp::TKqpNodeResources payload;
         payload.SetNodeId(SelfId().NodeId());
         payload.SetTimestamp(now.Seconds());
+        payload.SetServedWorkload(ServedWorkload);
         if (KqpProxySharedResources) {
             if (SelfDataCenterId) {
                 auto* proxyNodeResources = payload.MutableKqpProxyNodeResources();
@@ -1112,6 +1114,7 @@ private:
 
     bool PublishResourcesByExchanger;
     std::optional<TString> SelfDataCenterId;
+    NKikimrKqp::EWorkloadType ServedWorkload;
 };
 
 } // namespace NRm

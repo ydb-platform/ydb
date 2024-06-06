@@ -95,13 +95,15 @@ TResourceBrokerConfig MakeResourceBrokerTestConfig() {
 }
 
 NKikimrConfig::TTableServiceConfig::TResourceManager MakeKqpResourceManagerConfig(
-        bool EnablePublishResourcesByExchanger = false) {
+        bool EnablePublishResourcesByExchanger = false,
+        NKikimrKqp::EWorkloadType servedWorkload = NKikimrKqp::WORKLOAD_TYPE_UNDEFINED) {
     NKikimrConfig::TTableServiceConfig::TResourceManager config;
 
     config.SetComputeActorsCount(100);
     config.SetPublishStatisticsIntervalSec(0);
     config.SetQueryMemoryLimit(1000);
     config.SetEnablePublishResourcesByExchanger(EnablePublishResourcesByExchanger);
+    config.SetServedWorkload(servedWorkload);
 
     auto* infoExchangerRetrySettings = config.MutableInfoExchangerSettings();
     auto* exchangerSettings = infoExchangerRetrySettings->MutableExchangerSettings();
@@ -213,12 +215,14 @@ public:
     }
 
     struct TCheckedResources {
-        ui64 ScanQueryMemory;
-        ui32 ExecutionUnits;
+        ui64 ScanQueryMemory = 0;
+        ui32 ExecutionUnits = 0;
+        NKikimrKqp::EWorkloadType ServedWorkload = NKikimrKqp::WORKLOAD_TYPE_UNDEFINED;
 
         bool operator==(const TCheckedResources& other) const {
             return ScanQueryMemory == other.ScanQueryMemory &&
-                ExecutionUnits == other.ExecutionUnits;
+                ExecutionUnits == other.ExecutionUnits &&
+                ServedWorkload == other.ServedWorkload;
         }
     };
 
@@ -248,7 +252,7 @@ public:
             TVector<TCheckedResources> currentData;
             std::transform(snapshot.cbegin(), snapshot.cend(), std::back_inserter(currentData),
                    [](const NKikimrKqp::TKqpNodeResources& cur) {
-                        return TCheckedResources{cur.GetMemory()[0].GetAvailable(), cur.GetExecutionUnits()};
+                        return TCheckedResources{cur.GetMemory()[0].GetAvailable(), cur.GetExecutionUnits(), cur.GetServedWorkload()};
             });
 
             if (verificationData[nodeIndToCheck] == currentData[nodeIndToCheck]) {
@@ -276,6 +280,8 @@ public:
         UNIT_TEST(NodesMembershipByStateStorage);
         UNIT_TEST(NodesMembershipByExchanger);
         UNIT_TEST(DisonnectNodes);
+        UNIT_TEST(AnalyticalNodesByStateStorage);
+        UNIT_TEST(AnalyticalNodesByExchanger);
     UNIT_TEST_SUITE_END();
 
     void SingleTask();
@@ -294,6 +300,9 @@ public:
     void NodesMembershipByStateStorage();
     void NodesMembershipByExchanger();
     void DisonnectNodes();
+    void AnalyticalNodes(bool byExchanger);
+    void AnalyticalNodesByStateStorage();
+    void AnalyticalNodesByExchanger();
 
 private:
     THolder<TTestBasicRuntime> Runtime;
@@ -628,6 +637,30 @@ void KqpRm::DisonnectNodes() {
     Runtime->DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
 
     CheckSnapshot(0, {{1000, 100}}, rm_first);
+}
+
+void KqpRm::AnalyticalNodes(bool byExchanger) {
+    StartRms({
+        MakeKqpResourceManagerConfig(byExchanger, NKikimrKqp::WORKLOAD_TYPE_ANALYTICAL),
+        MakeKqpResourceManagerConfig(byExchanger)
+    });
+    NKikimr::TActorSystemStub stub;
+
+    auto rm_first = GetKqpResourceManager(ResourceManagers[0].NodeId());
+    auto rm_second = GetKqpResourceManager(ResourceManagers[1].NodeId());
+
+    Runtime->DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
+
+    CheckSnapshot(0, {{1000, 100, NKikimrKqp::WORKLOAD_TYPE_ANALYTICAL}, {1000, 100}}, rm_first);
+    CheckSnapshot(1, {{1000, 100, NKikimrKqp::WORKLOAD_TYPE_ANALYTICAL}, {1000, 100}}, rm_second);
+}
+
+void KqpRm::AnalyticalNodesByStateStorage() {
+    AnalyticalNodes(false);
+}
+
+void KqpRm::AnalyticalNodesByExchanger() {
+    AnalyticalNodes(true);
 }
 
 } // namespace NKqp

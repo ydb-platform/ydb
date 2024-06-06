@@ -113,8 +113,6 @@ class Column:
                 return ydb_value.Type.DATETIME
             case "Timestamp":
                 return ydb_value.Type.TIMESTAMP
-            case "Json":
-                return ydb_value.Type.JSON
             case _:
                 raise Exception(f'invalid type: {src}')
 

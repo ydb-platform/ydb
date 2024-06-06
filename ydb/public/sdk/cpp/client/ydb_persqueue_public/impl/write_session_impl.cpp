@@ -456,6 +456,10 @@ void TWriteSessionImpl::DoConnect(const TDuration& delay, const TString& endpoin
         Y_ASSERT(connectContext);
         Y_ASSERT(connectTimeoutContext);
 
+        if (Processor) {
+            Processor->Cancel();
+        }
+
         reqSettings = TRpcRequestSettings::Make(Settings);
 
         connectCallback = [cbContext = SelfContext,

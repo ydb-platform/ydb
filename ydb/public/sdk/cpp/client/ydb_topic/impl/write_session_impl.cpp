@@ -603,6 +603,10 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
         }
         Cancel(prevConnectTimeoutContext);
 
+        if (Processor) {
+            Processor->Cancel();
+        }
+
         reqSettings = TRpcRequestSettings::Make(Settings, PreferredPartitionLocation.Endpoint);
 
         connectCallback = [cbContext = SelfContext,

@@ -38,8 +38,8 @@ public:
         : TabletInfo(tabletInfo)
         , GenStepRef(genStep)
         , Counters(counters)
-        , Gen(std::get<0>(GenStepRef->GenStep))
-        , Step(std::get<1>(GenStepRef->GenStep))
+        , Gen(GenStepRef->GenStep.Generation())
+        , Step(GenStepRef->GenStep.Step())
         , Channel(channel)
         , InFlightCount(0)
         , TotalSizeBytes(0) {
@@ -161,8 +161,8 @@ bool TBlobManager::LoadState(IBlobManagerDb& db, const TTabletId selfTabletId) {
     THashSet<TGenStep> genStepsWithBlobsToKeep;
     for (const auto& unifiedBlobId : blobsToKeep) {
         TLogoBlobID blobId = unifiedBlobId.GetLogoBlobId();
-        TGenStep genStep{ blobId.Generation(), blobId.Step() };
-        Y_ABORT_UNLESS(genStep > LastCollectedGenStep);
+        TGenStep genStep(blobId);
+        Y_ABORT_UNLESS(LastCollectedGenStep < genStep);
 
         BlobsToKeep.insert(blobId);
         BlobsManagerCounters.OnKeepMarker(blobId.BlobSize());
@@ -279,8 +279,7 @@ void TBlobManager::DrainDeleteTo(const TGenStep& dest, TGCContext& gcContext) {
 }
 
 void TBlobManager::DrainKeepTo(const TGenStep& dest, TGCContext& gcContext) {
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BS)("event", "PreparePerGroupGCRequests")
-        ("gen", std::get<0>(dest))("step", std::get<1>(dest))("blobs_to_keep_count", BlobsToKeep.size());
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BS)("event", "PreparePerGroupGCRequests")("gen_step", dest)("blobs_to_keep_count", BlobsToKeep.size());
     auto keepBlobIt = BlobsToKeep.begin();
     for (; keepBlobIt != BlobsToKeep.end(); ++keepBlobIt) {
         TGenStep genStep{ keepBlobIt->Generation(), keepBlobIt->Step() };
@@ -332,7 +331,7 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
     AFL_VERIFY(newCollectGenSteps.front() == LastCollectedGenStep);
 
     if (GCBarrierPreparation != LastCollectedGenStep) {
-        if (!std::get<0>(GCBarrierPreparation)) {
+        if (!GCBarrierPreparation.Generation()) {
             for (auto&& newCollectGenStep : newCollectGenSteps) {
                 DrainKeepTo(newCollectGenStep, gcContext);
                 CollectGenStepInFlight = std::max(CollectGenStepInFlight.value_or(newCollectGenStep), newCollectGenStep);
@@ -342,7 +341,7 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
             }
             DrainDeleteTo(*CollectGenStepInFlight, gcContext);
         } else {
-            AFL_VERIFY(std::get<0>(GCBarrierPreparation) != CurrentGen);
+            AFL_VERIFY(GCBarrierPreparation.Generation() != CurrentGen);
             AFL_VERIFY(LastCollectedGenStep <= GCBarrierPreparation);
             CollectGenStepInFlight = GCBarrierPreparation;
             DrainKeepTo(*CollectGenStepInFlight, gcContext);

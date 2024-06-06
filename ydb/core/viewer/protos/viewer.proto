@@ -434,6 +434,7 @@ message TNodesInfo {
     repeated TNodeInfo Nodes = 2;
     optional uint64 TotalNodes = 3;
     optional uint64 FoundNodes = 4;
+    optional uint64 MaximumDisksPerNode = 5;
 }
 
 enum ENodeType {

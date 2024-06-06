@@ -197,6 +197,7 @@ public:
     TString GetHTTPBADREQUEST(const NMon::TEvHttpInfo* request, TString type, TString response) override;
     TString GetHTTPFORBIDDEN(const NMon::TEvHttpInfo* request) override;
     TString GetHTTPNOTFOUND(const NMon::TEvHttpInfo* request) override;
+    TString GetHTTPINTERNALERROR(const NMon::TEvHttpInfo* request, TString contentType = {}, TString response = {}) override;
 
     bool CheckAccessAdministration(const NMon::TEvHttpInfo* request) override {
         if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()) {
@@ -662,6 +663,22 @@ TString TViewer::GetHTTPOK(const NMon::TEvHttpInfo* request, TString contentType
             res << "Last-Modified: " << lastModified.ToRfc822String() << "\r\n";
             res << "Cache-Control: max-age=604800\r\n"; // one week
         }
+    }
+    res << "\r\n";
+    if (response) {
+        res << response;
+    }
+    return res;
+}
+
+TString TViewer::GetHTTPINTERNALERROR(const NMon::TEvHttpInfo* request, TString contentType, TString response) {
+    TStringBuilder res;
+    res << "HTTP/1.1 500 Internal Server Error\r\n"
+        << "X-Worker-Name: " << CurrentWorkerName << "\r\n";
+    res << GetCORS(request);
+    if (response) {
+        res << "Content-Type: " << contentType << "\r\n";
+        res << "Content-Length: " << response.size() << "\r\n";
     }
     res << "\r\n";
     if (response) {

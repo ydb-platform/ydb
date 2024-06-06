@@ -5,6 +5,7 @@
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
+#include <ydb/core/util/gen_step.h>
 
 namespace NKikimr::NTable {
 class TDatabase;
@@ -13,7 +14,7 @@ class TDatabase;
 namespace NKikimr::NOlap {
 
 // Garbage Collection generation and step
-using TGenStep = std::tuple<ui32, ui32>;
+using TGenStep = ::NKikimr::TGenStep;
 
 class IBlobManagerDb {
 public:

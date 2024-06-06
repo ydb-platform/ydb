@@ -5,13 +5,15 @@
 
 #include "json_pdisk_restart.h"
 #include "pdisk_info.h"
+#include "pdisk_status.h"
 
 
 namespace NKikimr::NViewer {
 
 void InitPDiskJsonHandlers(TJsonHandlers& jsonHandlers) {
-    jsonHandlers.AddHandler("/pdisk/restart", new TJsonHandler<TJsonPDiskRestart>);
     jsonHandlers.AddHandler("/pdisk/info", new TJsonHandler<TPDiskInfo>);
+    jsonHandlers.AddHandler("/pdisk/restart", new TJsonHandler<TJsonPDiskRestart>);
+    jsonHandlers.AddHandler("/pdisk/status", new TJsonHandler<TPDiskStatus>);
 }
 
 }

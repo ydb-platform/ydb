@@ -148,6 +148,7 @@ private:
     const NColumnShard::TGranuleDataCounters Counters;
     NColumnShard::TEngineLogsCounters::TPortionsInfoGuard PortionInfoGuard;
     std::shared_ptr<TGranulesStat> Stats;
+    std::shared_ptr<IStoragesManager> StoragesManager;
     std::shared_ptr<NStorageOptimizer::IOptimizerPlanner> OptimizerPlanner;
     std::shared_ptr<NActualizer::TGranuleActualizationIndex> ActualizationIndex;
     mutable TInstant LastActualizations = TInstant::Zero();
@@ -166,6 +167,8 @@ public:
     std::vector<NStorageOptimizer::TTaskDescription> GetOptimizerTasksDescription() const {
         return OptimizerPlanner->GetTasksDescription();
     }
+
+    void ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& constructor, std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema);
 
     void RefreshScheme() {
         NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
@@ -247,7 +250,7 @@ public:
     }
 
     void ActualizeOptimizer(const TInstant currentInstant, const TDuration recalcLag) const {
-        if (currentInstant - OptimizerPlanner->GetActualizationInstant() >= recalcLag) {
+        if (OptimizerPlanner->GetActualizationInstant() + recalcLag < currentInstant) {
             OptimizerPlanner->Actualize(currentInstant);
         }
     }

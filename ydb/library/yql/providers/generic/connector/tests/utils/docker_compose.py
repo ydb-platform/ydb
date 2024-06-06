@@ -127,7 +127,7 @@ class DockerComposeHelper:
 
         LOGGER.debug("calling command: " + " ".join(cmd))
 
-        # let tables initialize 
+        # let tables initialize
         # TODO maybe try except where timeout (quick check: to get it set sleep to zero and review error log for ../datasource/ydb -F *optional*)
 
         # This should be enough for database to initialize
@@ -143,12 +143,12 @@ class DockerComposeHelper:
                 passed = True
             except subprocess.CalledProcessError as e:
                 err = RuntimeError(f"docker-compose error: {e.output} (code {e.returncode})")
-        
+
         if not passed:
             if err is not None:
                 raise err
             else:
-                raise RuntimeError(f"docker-compose error: timed out to check cmd output")
+                raise RuntimeError("docker-compose error: timed out to check cmd output")
 
         data = json.loads(out)
 

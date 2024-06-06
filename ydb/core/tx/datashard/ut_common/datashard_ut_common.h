@@ -524,6 +524,9 @@ ui64 AsyncCreateCopyTable(Tests::TServer::TPtr server,
 NKikimrTxDataShard::TEvCompactTableResult CompactTable(
     TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId, bool compactBorrowed = false);
 
+NKikimrTxDataShard::TEvCompactBorrowedResult CompactBorrowed(
+    TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId);
+
 using TTableInfoMap = THashMap<TString, NKikimrTxDataShard::TEvGetInfoResponse::TUserTable>;
 
 std::pair<TTableInfoMap, ui64> GetTables(Tests::TServer::TPtr server,
@@ -683,6 +686,8 @@ TString ReadShardedTable(
 
 void WaitTxNotification(Tests::TServer::TPtr server, TActorId sender, ui64 txId);
 void WaitTxNotification(Tests::TServer::TPtr server, ui64 txId);
+
+NKikimrTxDataShard::TEvPeriodicTableStats WaitTableStats(TTestActorRuntime& runtime, ui64 tabletId, ui64 minPartCount = 0, ui64 minRows = 0);
 
 void SimulateSleep(Tests::TServer::TPtr server, TDuration duration);
 void SimulateSleep(TTestActorRuntime& runtime, TDuration duration);

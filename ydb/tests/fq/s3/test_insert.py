@@ -483,7 +483,7 @@ class TestS3(object):
             assert result.query.meta.status in [fq.QueryMeta.STARTING,
                                                 fq.QueryMeta.RUNNING], "Query is not RUNNING anymore"
             issues = result.query.transient_issue
-            if "500 Internal Server Error" in str(issues):
+            if "HTTP error code: 500" in str(issues):
                 break
             assert time.time() - start_at < 20, "Timeout waiting for transient issue in " + str(issues)
             time.sleep(0.5)

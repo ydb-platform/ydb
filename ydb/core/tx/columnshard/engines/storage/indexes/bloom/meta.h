@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/meta.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
 namespace NKikimr::NOlap::NIndexes {
 
 class TBloomIndexMeta: public TIndexByColumns {

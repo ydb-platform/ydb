@@ -1,11 +1,11 @@
 #pragma once
-#include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
-#include <ydb/core/formats/arrow/replace_key.h>
-#include <ydb/library/accessor/accessor.h>
-#include <ydb/core/tx/columnshard/splitter/settings.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
 
-namespace NKikimr::NOlap::NStorageOptimizer::NBuckets {
+namespace NKikimr::NOlap {
+class TPortionInfo;
+}
+
+namespace NKikimr::NOlap::NStorageOptimizer::NLBuckets {
 
 class TPortionCategoryCounterAgents: public NColumnShard::TCommonCountersOwner {
 private:
@@ -36,17 +36,9 @@ public:
         Bytes = agents.Bytes->GetClient();
     }
 
-    void AddPortion(const std::shared_ptr<TPortionInfo>& p) {
-        RecordsCount->Add(p->NumRows());
-        Count->Add(1);
-        Bytes->Add(p->GetTotalBlobBytes());
-    }
+    void AddPortion(const std::shared_ptr<TPortionInfo>& p);
 
-    void RemovePortion(const std::shared_ptr<TPortionInfo>& p) {
-        RecordsCount->Remove(p->NumRows());
-        Count->Remove(1);
-        Bytes->Remove(p->GetTotalBlobBytes());
-    }
+    void RemovePortion(const std::shared_ptr<TPortionInfo>& p);
 };
 
 class TGlobalCounters: public NColumnShard::TCommonCountersOwner {

@@ -226,9 +226,6 @@ class DqRunner(Runner):
         with open(fs_conf_path, "w") as f:
             pass
 
-        # Set udfs dir for cmd
-        udfs_dir = self.udfs_dir
-
         # Run dqrun
         result_path = artifacts.make_path(test_name, 'result.yson')
 

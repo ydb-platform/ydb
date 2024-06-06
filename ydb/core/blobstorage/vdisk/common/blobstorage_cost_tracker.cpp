@@ -52,7 +52,6 @@ TBsCostTracker::TBsCostTracker(const TBlobStorageGroupType& groupType, NPDisk::E
     , DefragDiskCost(CostCounters->GetCounter("DefragDiskCost", true))
     , InternalDiskCost(CostCounters->GetCounter("InternalDiskCost", true))
     , DiskTimeAvailableCtr(CostCounters->GetCounter("DiskTimeAvailable", false))
-    , BucketCapacity(burstThresholdNs * diskTimeAvailableScale / GroupType.BlobSubgroupSize())
     , Bucket(&DiskTimeAvailable, &BucketCapacity, nullptr, nullptr, nullptr, nullptr, true)
     , BurstThresholdNs(costMetricsParameters.BurstThresholdNs)
     , DiskTimeAvailableScale(costMetricsParameters.DiskTimeAvailableScale)

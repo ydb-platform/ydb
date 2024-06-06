@@ -165,30 +165,14 @@ class KqpRunner(Runner):
         self,
         kqprun_path: Path,
         settings: Settings,
-<<<<<<< HEAD
-<<<<<<< HEAD
         udf_dir: Path,
-=======
-        udfs_dir: Path,
->>>>>>> Connector: PostgreSQL: Json tests
-=======
-        udf_dir: Path,
->>>>>>> review fixes
     ):
         self.scheme_renderer = SchemeRenderer()
         self.app_conf_renderer = AppConfigRenderer()
         self.kqprun_path = kqprun_path
         self.settings = settings
 
-<<<<<<< HEAD
-<<<<<<< HEAD
         self.udf_dir = udf_dir
-=======
-        self.udfs_dir = udfs_dir
->>>>>>> Connector: PostgreSQL: Json tests
-=======
-        self.udf_dir = udf_dir
->>>>>>> review fixes
 
     def run(self, test_name: str, script: str, generic_settings: GenericSettings) -> Result:
         LOGGER.debug(script)
@@ -210,15 +194,7 @@ class KqpRunner(Runner):
         result_path = artifacts.make_path(test_name=test_name, artifact_name='result.json')
 
         # For debug add option --trace-opt to args
-<<<<<<< HEAD
-<<<<<<< HEAD
         cmd = f'{self.kqprun_path} -s {scheme_path} -p {script_path} --app-config={app_conf_path} --result-file={result_path} --result-format=full-json --udfs-dir={self.udf_dir} '
-=======
-        cmd = f'{self.kqprun_path} -s {scheme_path} -p {script_path} --app-config={app_conf_path} --result-file={result_path} --result-format=full-json --udfs-dir={udfs_dir} '
->>>>>>> Connector: PostgreSQL: Json tests
-=======
-        cmd = f'{self.kqprun_path} -s {scheme_path} -p {script_path} --app-config={app_conf_path} --result-file={result_path} --result-format=full-json --udfs-dir={self.udf_dir} '
->>>>>>> review fixes
 
         output = None
         data_out = None

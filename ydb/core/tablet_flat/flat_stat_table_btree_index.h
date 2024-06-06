@@ -202,7 +202,7 @@ inline bool BuildStatsBTreeIndex(const TSubset& subset, TStats& stats, ui64 rowC
 
     ready &= BuildStatsHistogramsBTreeIndex(subset, stats, rowCountResolution, dataSizeResolution, env);
 
-    return true;
+    return ready;
 }
 
 }

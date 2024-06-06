@@ -571,7 +571,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
         ui64 dataSizeResolution = totalBytes / buckets;
 
         TTouchEnv env;
-        env.Faulty = false; // TODO: check faulty
+        // env.Faulty = false; // uncomment for debug
         TStats stats;
         auto buildStats = [&]() {
             if (mode == BTreeIndex) {
@@ -581,7 +581,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
             }
         };
 
-        const ui32 attempts = 10;
+        const ui32 attempts = 25;
         for (ui32 attempt : xrange(attempts)) {
             if (buildStats()) {
                 break;

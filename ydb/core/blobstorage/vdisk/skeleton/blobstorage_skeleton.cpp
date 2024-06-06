@@ -2201,13 +2201,21 @@ namespace NKikimr {
                                     TABLED() {str << "VDiskIncarnationGuid";}
                                     TABLED() {str << Db->GetVDiskIncarnationGuid(true);}
                                 }
-                                TABLER() {
-                                    TABLED() {str << "BurstThresholdNs";}
-                                    TABLED() {str << Config->BurstThresholdNs;}
-                                }
-                                TABLER() {
-                                    TABLED() {str << "DiskTimeAvailableScale";}
-                                    TABLED() {str << Config->DiskTimeAvailableScale;}
+
+                                if (PDiskCtx && PDiskCtx->Dsk) {
+                                    NPDisk::EDeviceType trueMedia = PDiskCtx->Dsk->TrueMediaType;
+                                    TABLER() {
+                                        TABLED() {str << "TrueMediaType";}
+                                        TABLED() {str << NPDisk::DeviceTypeStr(trueMedia, true); }
+                                    }
+                                    TABLER() {
+                                        TABLED() {str << "BurstThresholdNs";}
+                                        TABLED() {str << (i64)Config->CostMetricsParametersByMedia[trueMedia].BurstThresholdNs;}
+                                    }
+                                    TABLER() {
+                                        TABLED() {str << "DiskTimeAvailableScale";}
+                                        TABLED() {str << 0.001 * Config->CostMetricsParametersByMedia[trueMedia].DiskTimeAvailableScale;}
+                                    }
                                 }
                             }
                         }

@@ -529,4 +529,16 @@ void TVersionedRowDigestConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TSchemalessBufferedDynamicTableWriterConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("max_batch_size", &TThis::MaxBatchSize)
+        .Default(1000);
+    registrar.Parameter("flush_period", &TThis::FlushPeriod)
+        .Default(TDuration::Seconds(5));
+    registrar.Parameter("retry_backoff", &TThis::RetryBackoff)
+        .Default();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NTableClient

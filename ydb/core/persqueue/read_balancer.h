@@ -177,7 +177,6 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 public:
     struct TPartitionInfo {
         ui64 TabletId;
-        NSchemeShard::TTopicTabletInfo::TKeyRange KeyRange;
     };
 
 private:

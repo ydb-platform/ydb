@@ -333,18 +333,31 @@ void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorCont
         return;
     }
 
-    const auto& session = Sessions[nodeId];
+    auto& session = Sessions[nodeId];
     const auto& record = ev->Get()->Record;
     const auto id = TWorkerId::Parse(record.GetWorker());
 
     switch (record.GetStatus()) {
-    case NKikimrReplication::TEvWorkerStatus::RUNNING:
+    case NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING:
         if (!session.HasWorker(id)) {
             StopQueue.emplace(id, nodeId);
         }
         break;
-    case NKikimrReplication::TEvWorkerStatus::STOPPED:
-        MaybeRemoveWorker(id, ctx);
+    case NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED:
+        if (!MaybeRemoveWorker(id, ctx)) {
+            if (record.GetReason() == NKikimrReplication::TEvWorkerStatus::REASON_ERROR) {
+                RunTxWorkerError(id, record.GetErrorDescription(), ctx);
+            } else {
+                session.DetachWorker(id);
+                if (IsValidWorker(id)) {
+                    auto* worker = GetOrCreateWorker(id);
+                    worker->ClearSession();
+                    if (worker->HasCommand()) {
+                        BootQueue.insert(id);
+                    }
+                }
+            }
+        }
         break;
     default:
         CLOG_W(ctx, "Unknown worker status"
@@ -568,7 +581,7 @@ void TController::Handle(TEvPrivate::TEvRemoveWorker::TPtr& ev, const TActorCont
 
 void TController::RemoveWorker(const TWorkerId& id, const TActorContext& ctx) {
     LOG_D("Remove worker"
-        << ", workerId# " << id);
+        << ": workerId# " << id);
 
     Y_ABORT_UNLESS(RemoveQueue.contains(id));
 
@@ -589,10 +602,13 @@ void TController::RemoveWorker(const TWorkerId& id, const TActorContext& ctx) {
     target->Progress(ctx);
 }
 
-void TController::MaybeRemoveWorker(const TWorkerId& id, const TActorContext& ctx) {
-    if (RemoveQueue.contains(id)) {
-        RemoveWorker(id, ctx);
+bool TController::MaybeRemoveWorker(const TWorkerId& id, const TActorContext& ctx) {
+    if (!RemoveQueue.contains(id)) {
+        return false;
     }
+
+    RemoveWorker(id, ctx);
+    return true;
 }
 
 void TController::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx) {

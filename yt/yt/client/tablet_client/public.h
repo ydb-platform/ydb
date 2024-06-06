@@ -224,8 +224,11 @@ DEFINE_ENUM(ESecondaryIndexKind,
 );
 
 DEFINE_ENUM(ERowMergerType,
-    (Legacy)
+    ((Legacy)               (0))
+    ((Watermark)            (1))
 );
+
+struct TWatermarkRuntimeData;
 
 ////////////////////////////////////////////////////////////////////////////////
 

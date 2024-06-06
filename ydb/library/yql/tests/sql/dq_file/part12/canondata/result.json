@@ -2477,6 +2477,28 @@
         }
     ],
     "test.test[pg-select_win_first_last_value-default.txt-Results]": [],
+    "test.test[pg-select_win_nth_value-default.txt-Analyze]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1936997/4d6442f2c45d3e77a2ced29c096325d3ced197d8/resource.tar.gz#test.test_pg-select_win_nth_value-default.txt-Analyze_/plan.txt"
+        }
+    ],
+    "test.test[pg-select_win_nth_value-default.txt-Debug]": [
+        {
+            "checksum": "2ac16dc0b9b9019d2429a9a1c173af7d",
+            "size": 3323,
+            "uri": "https://{canondata_backend}/1936997/4d6442f2c45d3e77a2ced29c096325d3ced197d8/resource.tar.gz#test.test_pg-select_win_nth_value-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[pg-select_win_nth_value-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1936997/4d6442f2c45d3e77a2ced29c096325d3ced197d8/resource.tar.gz#test.test_pg-select_win_nth_value-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[pg-select_win_nth_value-default.txt-Results]": [],
     "test.test[pg-sublink_where_expr_corr-default.txt-Analyze]": [
         {
             "checksum": "a3b64a2cf9903b3868a2dd88a18fc46e",
@@ -3508,6 +3530,28 @@
         }
     ],
     "test.test[window-win_func_aggr_4func_sort--Results]": [],
+    "test.test[window-win_func_percent_rank-default.txt-Analyze]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1031349/12c4584507630678ad646e234c8e75078785de4d/resource.tar.gz#test.test_window-win_func_percent_rank-default.txt-Analyze_/plan.txt"
+        }
+    ],
+    "test.test[window-win_func_percent_rank-default.txt-Debug]": [
+        {
+            "checksum": "8874e85f86b8b253bd547e9a8916b512",
+            "size": 1262,
+            "uri": "https://{canondata_backend}/1031349/12c4584507630678ad646e234c8e75078785de4d/resource.tar.gz#test.test_window-win_func_percent_rank-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[window-win_func_percent_rank-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1031349/12c4584507630678ad646e234c8e75078785de4d/resource.tar.gz#test.test_window-win_func_percent_rank-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[window-win_func_percent_rank-default.txt-Results]": [],
     "test.test[window-win_func_spec_with_part--Analyze]": [
         {
             "checksum": "41d4c0b859c1d8a3ec761f7a22064044",

@@ -102,6 +102,21 @@ public:
         const TListQueueConsumerRegistrationsOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<TCreateQueueProducerSessionResult>, CreateQueueProducerSession, (
+        const NYPath::TRichYPath& producerPath,
+        const NYPath::TRichYPath& queuePath,
+        const TString& sessionId,
+        const std::optional<NYson::TYsonString>& userMeta,
+        const TCreateQueueProducerSessionOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<void>, RemoveQueueProducerSession, (
+        const NYPath::TRichYPath& producerPath,
+        const NYPath::TRichYPath& queuePath,
+        const TString& sessionId,
+        const TRemoveQueueProducerSessionOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<NYson::TYsonString>, ExplainQuery, (
         const TString& query,
         const TExplainQueryOptions& options),

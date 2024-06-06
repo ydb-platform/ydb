@@ -34,7 +34,7 @@ protected:
     void AddGetRequest(TLogContext &logCtx, TGroupDiskRequests &groupDiskRequests, TLogoBlobID &fullId, ui32 partIdx,
             TBlobState::TDisk &disk, TIntervalSet<i32> &intervalSet, const char *logMarker);
     void PreparePartLayout(const TBlobState &state, const TBlobStorageGroupInfo &info,
-            TBlobStorageGroupType::TPartLayout *layout, ui32 slowDiskIdx);
+            TBlobStorageGroupType::TPartLayout *layout,  const TStackVec<ui32, 2>& slowDiskIdxs);
     bool IsPutNeeded(const TBlobState &state, const TBlobStorageGroupType::TPartPlacement &partPlacement);
     void PreparePutsForPartPlacement(TLogContext &logCtx, TBlobState &state,
             const TBlobStorageGroupInfo &info, TGroupDiskRequests &groupDiskRequests,
@@ -52,7 +52,7 @@ protected:
             TBlobStorageGroupType::TPartPlacement &outPartPlacement);
     // Sets IsSlow for the slow disk, resets for other disks.
     // Returns -1 if there is no slow disk, or subgroupIdx of the slow disk.
-    i32 MarkSlowSubgroupDisk(TBlobState &state, const TBlobStorageGroupInfo &info, TBlackboard &blackboard, bool isPut);
+    ui32 MakeSlowSubgroupDiskMask(TBlobState &state, const TBlobStorageGroupInfo &info, TBlackboard &blackboard, bool isPut);
 };
 
 

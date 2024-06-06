@@ -42,6 +42,10 @@ public:
     TBlobBatch& operator = (TBlobBatch&& other);
     ~TBlobBatch();
 
+    bool operator!() const {
+        return !BatchInfo;
+    }
+
     // Write new blob as a part of this batch
     void SendWriteBlobRequest(const TString& blobData, const TUnifiedBlobId& blobId, TInstant deadline, const TActorContext& ctx);
 
@@ -66,7 +70,8 @@ class IBlobManagerDb;
 // All garbage collection related logic is hidden inside the implementation.
 class IBlobManager {
 protected:
-    virtual void DoSaveBlobBatch(TBlobBatch&& blobBatch, IBlobManagerDb& db) = 0;
+    virtual void DoSaveBlobBatchOnExecute(const TBlobBatch& blobBatch, IBlobManagerDb& db) = 0;
+    virtual void DoSaveBlobBatchOnComplete(TBlobBatch&& blobBatch) = 0;
 public:
     static constexpr ui32 BLOB_CHANNEL = 2;
     virtual ~IBlobManager() = default;
@@ -79,11 +84,17 @@ public:
     // This method is called in the same transaction in which the user saves references to blobs
     // in some LocalDB table. It tells the BlobManager that the blobs are becoming permanently saved.
     // NOTE: At this point all blob writes must be already acknowledged.
-    void SaveBlobBatch(TBlobBatch&& blobBatch, IBlobManagerDb& db) {
+    void SaveBlobBatchOnExecute(const TBlobBatch& blobBatch, IBlobManagerDb& db) {
         if (blobBatch.GetBlobCount() == 0) {
             return;
         }
-        return DoSaveBlobBatch(std::move(blobBatch), db);
+        return DoSaveBlobBatchOnExecute(blobBatch, db);
+    }
+    void SaveBlobBatchOnComplete(TBlobBatch&& blobBatch) {
+        if (blobBatch.GetBlobCount() == 0) {
+            return;
+        }
+        return DoSaveBlobBatchOnComplete(std::move(blobBatch));
     }
 
     virtual void DeleteBlobOnExecute(const TTabletId tabletId, const TUnifiedBlobId& blobId, IBlobManagerDb& db) = 0;
@@ -125,6 +136,7 @@ private:
     static constexpr ui64 GC_INTERVAL_SECONDS_DEFAULT = 60;
 
 private:
+    class TGCContext;
     const TTabletId SelfTabletId;
     TIntrusivePtr<TTabletStorageInfo> TabletInfo;
     const ui32 CurrentGen;
@@ -145,6 +157,7 @@ private:
 
     // The Gen:Step that has been acknowledged by the Distributed Storage
     TGenStep LastCollectedGenStep = {0, 0};
+    TGenStep GCBarrierPreparation = { 0, 0 };
 
     // The barrier in the current in-flight GC request(s)
     bool FirstGC = true;
@@ -157,7 +170,10 @@ private:
 
     TInstant PreviousGCTime; // Used for delaying next GC if there are too few blobs to collect
 
-    virtual void DoSaveBlobBatch(TBlobBatch&& blobBatch, IBlobManagerDb& db) override;
+    virtual void DoSaveBlobBatchOnExecute(const TBlobBatch& blobBatch, IBlobManagerDb& db) override;
+    virtual void DoSaveBlobBatchOnComplete(TBlobBatch&& blobBatch) override;
+    void DrainDeleteTo(const TGenStep& dest, TGCContext& gcContext);
+    void DrainKeepTo(const TGenStep& dest, TGCContext& gcContext);
 public:
     TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, const ui32 gen, const TTabletId selfTabletId);
 
@@ -198,6 +214,9 @@ public:
     void OnGCFinishedOnExecute(const TGenStep& genStep, IBlobManagerDb& db);
     void OnGCFinishedOnComplete(const TGenStep& genStep);
 
+    void OnGCStartOnExecute(const TGenStep& genStep, IBlobManagerDb& db);
+    void OnGCStartOnComplete(const TGenStep& genStep);
+
     TBlobManagerCounters GetCountersUpdate() {
         TBlobManagerCounters res = CountersUpdate;
         CountersUpdate = TBlobManagerCounters();
@@ -209,7 +228,7 @@ public:
     virtual void DeleteBlobOnExecute(const TTabletId tabletId, const TUnifiedBlobId& blobId, IBlobManagerDb& db) override;
     virtual void DeleteBlobOnComplete(const TTabletId tabletId, const TUnifiedBlobId& blobId) override;
 private:
-    std::vector<TGenStep> FindNewGCBarriers();
+    std::deque<TGenStep> FindNewGCBarriers();
     void PopGCBarriers(const TGenStep gs);
     void PopGCBarriers(const ui32 count);
 

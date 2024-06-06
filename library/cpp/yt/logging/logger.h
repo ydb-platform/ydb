@@ -22,6 +22,10 @@
 
 #include <atomic>
 
+#if !defined(NDEBUG) && !defined(YT_DISABLE_FORMAT_STATIC_ANALYSIS)
+    #include "static_analysis.h"
+#endif
+
 namespace NYT::NLogging {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -56,7 +60,7 @@ struct TLoggingAnchor
 
     struct TCounter
     {
-        std::atomic<i64> Current = 0;
+        i64 Current = 0;
         i64 Previous = 0;
     };
 
@@ -100,6 +104,8 @@ struct TLogEvent
 
     TStringBuf SourceFile;
     int SourceLine = -1;
+
+    TLoggingAnchor* Anchor = nullptr;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -294,6 +300,12 @@ void LogStructuredEvent(
 #define YT_LOG_EVENT(logger, level, ...) \
     YT_LOG_EVENT_WITH_ANCHOR(logger, level, nullptr, __VA_ARGS__)
 
+#if !defined(NDEBUG) && !defined(YT_DISABLE_FORMAT_STATIC_ANALYSIS)
+    #define YT_LOG_CHECK_FORMAT(...) STATIC_ANALYSIS_CHECK_LOG_FORMAT(__VA_ARGS__)
+#else
+    #define YT_LOG_CHECK_FORMAT(...)
+#endif
+
 #define YT_LOG_EVENT_WITH_ANCHOR(logger, level, anchor, ...) \
     do { \
         const auto& logger__ = (logger)(); \
@@ -317,6 +329,7 @@ void LogStructuredEvent(
         } \
         \
         auto loggingContext__ = ::NYT::NLogging::GetLoggingContext(); \
+        YT_LOG_CHECK_FORMAT(__VA_ARGS__); \
         auto message__ = ::NYT::NLogging::NDetail::BuildLogMessage(loggingContext__, logger__, __VA_ARGS__); \
         \
         if (!anchorUpToDate__) { \
@@ -328,21 +341,12 @@ void LogStructuredEvent(
             break; \
         } \
         \
-        static thread_local i64 localByteCounter__; \
-        static thread_local ui8 localMessageCounter__; \
-        \
-        localByteCounter__ += message__.MessageRef.Size(); \
-        if (Y_UNLIKELY(++localMessageCounter__ == 0)) { \
-            anchor__->MessageCounter.Current += 256; \
-            anchor__->ByteCounter.Current += localByteCounter__; \
-            localByteCounter__ = 0; \
-        } \
-        \
         ::NYT::NLogging::NDetail::LogEventImpl( \
             loggingContext__, \
             logger__, \
             level__, \
             location__, \
+            anchor__, \
             std::move(message__.MessageRef)); \
     } while (false)
 

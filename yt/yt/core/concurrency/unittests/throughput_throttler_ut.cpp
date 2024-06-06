@@ -18,7 +18,7 @@ using namespace testing;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const TLogger Logger("Test");
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Test");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -51,6 +51,44 @@ TEST(TReconfigurableThroughputThrottlerTest, TestLimit)
     auto duration = timer.GetElapsedTime().MilliSeconds();
     EXPECT_GE(duration, 1000u);
     EXPECT_LE(duration, 3000u);
+}
+
+TEST(TReconfigurableThroughputThrottlerTest, TestNoOverflow)
+{
+    auto throttler = CreateReconfigurableThroughputThrottler(
+        TThroughputThrottlerConfig::Create(100_TB));
+
+    auto* testableThrottler = static_cast<ITestableReconfigurableThroughputThrottler*>(throttler.Get());
+
+    NProfiling::TWallTimer timer;
+    testableThrottler->Throttle(1).Get().ThrowOnError();
+    testableThrottler->SetLastUpdated(TInstant::Now() - TDuration::Days(1));
+
+    std::vector<TFuture<void>> futures;
+    for (int i = 0; i < 2; ++i) {
+        futures.push_back(testableThrottler->Throttle(1));
+        testableThrottler->SetLimit(5_TB);
+    }
+
+    WaitFor(AllSucceeded(futures)
+        .WithTimeout(TDuration::Seconds(5)))
+        .ThrowOnError();
+}
+
+TEST(TReconfigurableThroughputThrottlerTest, TestFractionalPeriod)
+{
+    auto config = NYT::New<NYT::NConcurrency::TThroughputThrottlerConfig>();
+        config->Limit = 15;
+        config->Period = TDuration::Seconds(1) / 15;
+
+    auto throttler = CreateReconfigurableThroughputThrottler(config);
+
+    for (int i = 0; i < 10; ++i) {
+        WaitFor(throttler->Throttle(1)
+            .WithTimeout(TDuration::Seconds(5)))
+            .ThrowOnError();
+    }
+
 }
 
 TEST(TReconfigurableThroughputThrottlerTest, TestScheduleUpdate)
@@ -324,7 +362,7 @@ public:
         Config_->MaxPrefetchAmount = 1 << 30;
         Config_->Window = TDuration::MilliSeconds(100);
 
-        Throttler_ = CreatePrefetchingThrottler(Config_, Underlying_, Logger);
+        Throttler_ = CreatePrefetchingThrottler(Config_, Underlying_, Logger());
     }
 
 protected:
@@ -459,7 +497,7 @@ public:
         Config_->MaxPrefetchAmount = 1 << 30;
         Config_->Window = TDuration::Seconds(1);
 
-        Throttler_ = CreatePrefetchingThrottler(Config_, Underlying_, Logger);
+        Throttler_ = CreatePrefetchingThrottler(Config_, Underlying_, Logger());
     }
 
 protected:

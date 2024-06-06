@@ -59,7 +59,7 @@ def main():
     if not os.path.exists(YDBD_PATH):
         # can be possible due to incremental builds and ydbd itself is not affected by changes
         print("{} not exists, skipping".format(YDBD_PATH))
-        return 1
+        return 0
 
     with ydb.Driver(
         endpoint="grpcs://ydb.serverless.yandexcloud.net:2135",

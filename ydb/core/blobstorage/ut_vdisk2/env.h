@@ -174,6 +174,7 @@ namespace NKikimr {
                 NPDisk::DEVICE_TYPE_SSD, VSlotId, NKikimrBlobStorage::TVDiskKind::Default, 1,
                 "static");
             VDiskConfig = AllVDiskKinds->MakeVDiskConfig(baseInfo);
+            VDiskConfig->UseCostTracker = false;
 
             // create and register actor
             std::unique_ptr<IActor> vdisk(NKikimr::CreateVDisk(VDiskConfig, Info, Counters->GetSubgroup("subsystem", "vdisk")));

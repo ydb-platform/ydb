@@ -277,7 +277,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
 
     IsTableJoined = true;
 
-    if (joinKind == EJoinKind::Cross) return;
+    MKQL_ENSURE(joinKind != EJoinKind::Cross, "Cross Join is not allowed in Grace Join");
 
     if ( JoinKind == EJoinKind::Right || JoinKind == EJoinKind::RightOnly || JoinKind == EJoinKind::RightSemi ) {
         std::swap(JoinTable1, JoinTable2);
@@ -768,31 +768,6 @@ inline bool HasRightIdMatch(ui64 currId, ui64 & rightIdIter, const std::vector<u
 
 
 bool TTable::NextJoinedData( TupleData & td1, TupleData & td2, ui64 bucketLimit) {
-
-    if (JoinKind == EJoinKind::Cross) {
-
-        if (HasMoreTuples(JoinTable1->TableBucketsStats, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex, bucketLimit))
-        {
-            JoinTable1->GetTupleData(JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex, td1);
-
-            if (HasMoreTuples(JoinTable2->TableBucketsStats, JoinTable2->CurrIterBucket, JoinTable2->CurrIterIndex, bucketLimit))
-            {
-                JoinTable2->GetTupleData(JoinTable2->CurrIterBucket, JoinTable2->CurrIterIndex, td2);
-                JoinTable2->CurrIterIndex++;
-                return true;
-            }
-            else
-            {
-                JoinTable2->CurrIterBucket = 0;
-                JoinTable2->CurrIterIndex = 0;
-                JoinTable1->CurrIterIndex++;
-                return NextJoinedData(td1, td2, bucketLimit);
-            }
-        }
-        else
-            return false;
-    }
-
     if ( JoinKind == EJoinKind::Inner ) {
         while(HasMoreTuples(JoinTable1->TableBucketsStats, JoinTable1->CurrIterBucket, JoinTable1->CurrIterIndex, bucketLimit)) {
             ui32 tupleId2;
@@ -1126,6 +1101,18 @@ void TTable::ClearBucket(ui64 bucket) {
     tbs.TuplesNum = 0;
     tbs.KeyIntValsTotalSize = 0;
     tbs.StringValuesTotalSize = 0;
+}
+
+void TTable::ShrinkBucket(ui64 bucket) {
+    TTableBucket & tb = TableBuckets[bucket];
+    tb.KeyIntVals.shrink_to_fit();
+    tb.DataIntVals.shrink_to_fit();
+    tb.StringsOffsets.shrink_to_fit();
+    tb.StringsValues.shrink_to_fit();
+    tb.InterfaceValues.shrink_to_fit();
+    tb.InterfaceOffsets.shrink_to_fit();
+    tb.JoinIds.shrink_to_fit();
+    tb.RightIds.shrink_to_fit();
 }
 
 void TTable::InitializeBucketSpillers(ISpiller::TPtr spiller) {

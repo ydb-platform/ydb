@@ -10,6 +10,7 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/sys_view/common/events.h>
 #include "viewer.h"
 
 namespace NKikimr {
@@ -172,6 +173,33 @@ protected:
             request->Record.MutableRequest()->SetIgnoreDegradedGroupsChecks(true);
         }
         SendRequestToPipe(pipeClient, request.Release());
+    }
+
+    void RequestBSControllerVDiskEvict(ui32 groupId, ui32 groupGeneration, ui32 failRealmIdx, ui32 failDomainIdx, ui32 vdiskIdx, bool force = false) {
+        TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+        THolder<TEvBlobStorage::TEvControllerConfigRequest> request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto* evictVDisk = request->Record.MutableRequest()->AddCommand()->MutableReassignGroupDisk();
+        evictVDisk->SetGroupId(groupId);
+        evictVDisk->SetGroupGeneration(groupGeneration);
+        evictVDisk->SetFailRealmIdx(failRealmIdx);
+        evictVDisk->SetFailDomainIdx(failDomainIdx);
+        evictVDisk->SetVDiskIdx(vdiskIdx);
+        if (force) {
+            request->Record.MutableRequest()->SetIgnoreDegradedGroupsChecks(true);
+        }
+        SendRequestToPipe(pipeClient, request.Release());
+    }
+
+    void RequestBSControllerPDiskInfo(ui32 nodeId, ui32 pdiskId) {
+        TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+        auto request = std::make_unique<NSysView::TEvSysView::TEvGetPDisksRequest>();
+        request->Record.SetInclusiveFrom(true);
+        request->Record.SetInclusiveTo(true);
+        request->Record.MutableFrom()->SetNodeId(nodeId);
+        request->Record.MutableFrom()->SetPDiskId(pdiskId);
+        request->Record.MutableTo()->SetNodeId(nodeId);
+        request->Record.MutableTo()->SetPDiskId(pdiskId);
+        SendRequestToPipe(pipeClient, request.release());
     }
 
     void RequestSchemeCacheNavigate(const TString& path) {

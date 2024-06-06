@@ -200,6 +200,18 @@ namespace NKikimr::NStorage {
 
                 DIV_CLASS("panel panel-info") {
                     DIV_CLASS("panel-heading") {
+                        out << "Static <-> dynamic node interaction";
+                    }
+                    DIV_CLASS("panel-body") {
+                        out << "IsSelfStatic: " << (IsSelfStatic ? "true" : "false") << "<br/>";
+                        out << "ConnectedToStaticNode: " << ConnectedToStaticNode << "<br/>";
+                        out << "StaticNodeSessionId: " << StaticNodeSessionId << "<br/>";
+                        out << "ConnectedDynamicNodes: " << FormatList(ConnectedDynamicNodes) << "<br/>";
+                    }
+                }
+
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
                         out << "Incoming bindings";
                     }
                     DIV_CLASS("panel-body") {

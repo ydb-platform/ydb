@@ -1,3 +1,4 @@
+#include <util/system/unaligned_mem.h>
 #include <ydb/library/yql/utils/simd/simd.h>
 
 namespace NKikimr {
@@ -79,27 +80,28 @@ UnpackTupleFallbackRowImpl(const ui8 *const src_rows, ui8 *const dst_cols[],
 }
 
 template <class ByteType>
-static void
+Y_FORCE_INLINE static void
 PackTupleFallbackTypedColImpl(const ui8 *const src_col, ui8 *const dst_rows,
                               const size_t size, const size_t tuple_size,
                               const size_t start = 0) {
     static constexpr size_t BYTES = sizeof(ByteType);
     for (size_t row = 0; row != size; ++row) {
-        *reinterpret_cast<ByteType *>(dst_rows + row * tuple_size) =
-            *reinterpret_cast<const ByteType *>(src_col +
-                                                (start + row) * BYTES);
+        WriteUnaligned<ByteType>(
+            dst_rows + row * tuple_size,
+            ReadUnaligned<ByteType>(src_col + (start + row) * BYTES));
     }
 }
 
 template <class ByteType>
-static void
+Y_FORCE_INLINE static void
 UnpackTupleFallbackTypedColImpl(const ui8 *const src_rows, ui8 *const dst_col,
                                 const size_t size, const size_t tuple_size,
                                 const size_t start = 0) {
     static constexpr size_t BYTES = sizeof(ByteType);
     for (size_t row = 0; row != size; ++row) {
-        *reinterpret_cast<ByteType *>(dst_col + (start + row) * BYTES) =
-            *reinterpret_cast<const ByteType *>(src_rows + row * tuple_size);
+        WriteUnaligned<ByteType>(
+            dst_col + (start + row) * BYTES,
+            ReadUnaligned<ByteType>(src_rows + row * tuple_size));
     }
 }
 
@@ -197,34 +199,31 @@ UnpackTupleFallbackColImpl(const ui8 *const src_rows, ui8 *const dst_cols[],
 
 #define CASE(bits)                                                             \
     case bits:                                                                 \
-        BLOCK_LOOP(*reinterpret_cast<ui##bits *>(dst_rows + row * tuple_size + \
-                                                 offsets[col]) =               \
-                       *reinterpret_cast<const ui##bits *>(                    \
-                           src_cols[col] + (start + row) * (bits / 8));)       \
+        PackTupleFallbackTypedColImpl<ui##bits>(                               \
+            src_cols[col],                                                     \
+            dst_rows + block * block_rows * tuple_size + offsets[col],         \
+            block_rows, tuple_size, start + block * block_rows);               \
         break
 
                 MULTY_8x4(CASE);
-
-#undef CASE
-#undef MULTY_8x4
 
             default:
                 BLOCK_LOOP(
                     memcpy(dst_rows + row * tuple_size + offsets[col],
                            src_cols[col] + (start + row) * col_sizes[col],
                            col_sizes[col]);)
+
+#undef CASE
+#undef MULTY_8x4
+#undef BLOCK_LOOP
             }
         }
     }
 
-    for (ui8 col = 0; col != cols; ++col) {
-        const auto col_p =
-            src_cols[col] + block_size * block_rows * col_sizes[col];
-        PackTupleFallbackColImpl(
-            &col_p, dst_rows + block_size * block_rows * tuple_size, 1,
-            size - block_size * block_rows, &col_sizes[col], &offsets[col],
-            tuple_size, start);
-    }
+    PackTupleFallbackColImpl(
+        src_cols, dst_rows + block_size * block_rows * tuple_size, cols,
+        size - block_size * block_rows, col_sizes, offsets, tuple_size,
+        start + block_size * block_rows);
 }
 
 [[maybe_unused]] static void UnpackTupleFallbackBlockImpl(
@@ -251,34 +250,31 @@ UnpackTupleFallbackColImpl(const ui8 *const src_rows, ui8 *const dst_cols[],
 
 #define CASE(bits)                                                             \
     case bits:                                                                 \
-        BLOCK_LOOP(*reinterpret_cast<ui##bits *>(dst_cols[col] +               \
-                                                 (start + row) * (bits / 8)) = \
-                       *reinterpret_cast<const ui##bits *>(                    \
-                           src_rows + row * tuple_size + offsets[col]);)       \
+        UnpackTupleFallbackTypedColImpl<ui##bits>(                             \
+            src_rows + block * block_rows * tuple_size + offsets[col],         \
+            dst_cols[col], block_rows, tuple_size,                             \
+            start + block * block_rows);                                       \
         break
 
                 MULTY_8x4(CASE);
-
-#undef CASE
-#undef MULTY_8x4
 
             default:
                 BLOCK_LOOP(
                     memcpy(dst_cols[col] + (start + row) * col_sizes[col],
                            src_rows + row * tuple_size + offsets[col],
                            col_sizes[col]);)
+
+#undef CASE
+#undef MULTY_8x4
+#undef BLOCK_LOOP
             }
         }
     }
 
-    for (ui8 col = 0; col != cols; ++col) {
-        const auto col_p =
-            dst_cols[col] + block_size * block_rows * col_sizes[col];
-        UnpackTupleFallbackColImpl(
-            src_rows + block_size * block_rows * tuple_size, &col_p, 1,
-            size - block_size * block_rows, &col_sizes[col], &offsets[col],
-            tuple_size, start);
-    }
+    UnpackTupleFallbackColImpl(src_rows + block_size * block_rows * tuple_size,
+                               dst_cols, cols, size - block_size * block_rows,
+                               col_sizes, offsets, tuple_size,
+                               start + block_size * block_rows);
 }
 
 template <class TTraits> struct SIMDPack {

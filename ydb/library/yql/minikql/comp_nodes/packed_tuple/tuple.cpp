@@ -21,7 +21,11 @@ namespace NPackedTuple {
 namespace {
 
 // Transpose 8x8 bit-matrix packed in ui64 integer
-ui64 transposeBitmatrix(ui64 x) {
+Y_FORCE_INLINE ui64 transposeBitmatrix(ui64 x) {
+    if (x == 0xFFFFFFFFFFFFFFFFLL) {
+        return x;
+    }
+
     // a b A B aa bb AA BB
     // c d C D cc dd CC DD
     // ->
@@ -77,16 +81,8 @@ void transposeBitmatrix(ui8 dst[], const ui8 *src[], const size_t row_size) {
     for (size_t ind = 0; ind != 8; ++ind) {
         x |= ui64(*src[ind]) << (ind * 8);
     }
-
-    if (x != 0xFFFFFFFFFFFFFFFFLL) {
-        /// blocked matrix transposition
-        x = x & 0xAA55AA55AA55AA55LL | (x & 0x00AA00AA00AA00AALL) << 7 |
-            (x >> 7) & 0x00AA00AA00AA00AALL;
-        x = x & 0xCCCC3333CCCC3333LL | (x & 0x0000CCCC0000CCCCLL) << 14 |
-            (x >> 14) & 0x0000CCCC0000CCCCLL;
-        x = x & 0xF0F0F0F00F0F0F0FLL | (x & 0x00000000F0F0F0F0LL) << 28 |
-            (x >> 28) & 0x00000000F0F0F0F0LL;
-    }
+    
+    x = transposeBitmatrix(x);
 
     for (size_t ind = 0; ind != 8; ++ind) {
         dst[ind * row_size] = x;
@@ -100,17 +96,9 @@ void transposeBitmatrix(ui8 *dst[], const ui8 src[], const size_t row_size) {
         x |= ui64(src[ind * row_size]) << (ind * 8);
     }
 
-    if (x != 0xFFFFFFFFFFFFFFFFLL) {
-        /// blocked matrix transposition
-        x = x & 0xAA55AA55AA55AA55LL | (x & 0x00AA00AA00AA00AALL) << 7 |
-            (x >> 7) & 0x00AA00AA00AA00AALL;
-        x = x & 0xCCCC3333CCCC3333LL | (x & 0x0000CCCC0000CCCCLL) << 14 |
-            (x >> 14) & 0x0000CCCC0000CCCCLL;
-        x = x & 0xF0F0F0F00F0F0F0FLL | (x & 0x00000000F0F0F0F0LL) << 28 |
-            (x >> 28) & 0x00000000F0F0F0F0LL;
-    }
+    x = transposeBitmatrix(x);
 
-    for (size_t ind = 7; ind != -1ul; --ind) {
+    for (size_t ind = 0; ind != 8; ++ind) {
         *dst[ind] = x;
         x >>= 8;
     }
@@ -246,17 +234,7 @@ TTupleLayoutFallback<TTraits>::TTupleLayoutFallback(
     std::vector<const TColumnDesc *> block_fallback;
     std::queue<const TColumnDesc *> next_cols;
 
-    size_t fixed_cols_left =
-        std::accumulate(KeyColumns.begin(), KeyColumns.end(), 0,
-                        [](size_t prev, const auto &col) {
-                            return prev +
-                                   (col.SizeType == EColumnSizeType::Fixed);
-                        }) +
-        std::accumulate(PayloadColumns.begin(), PayloadColumns.end(), 0,
-                        [](size_t prev, const auto &col) {
-                            return prev +
-                                   (col.SizeType == EColumnSizeType::Fixed);
-                        });
+    size_t fixed_cols_left = KeyColumnsFixedNum;
 
     size_t prev_tuple_size;
     size_t curr_tuple_size = 0;

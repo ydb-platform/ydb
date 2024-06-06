@@ -7,8 +7,6 @@ import subprocess
 import yaml
 from typing import Dict, Any, Sequence
 
-import time
-
 import yatest.common
 
 from ydb.library.yql.providers.generic.connector.tests.utils.log import make_logger
@@ -144,12 +142,20 @@ class DockerComposeHelper:
                 passed = True
             except subprocess.CalledProcessError as e:
                 err = RuntimeError(f"docker-compose error: {e.output} (code {e.returncode})")
+<<<<<<< HEAD
 
+=======
+        
+>>>>>>> adding table wait timeout
         if not passed:
             if err is not None:
                 raise err
             else:
+<<<<<<< HEAD
                 raise RuntimeError("docker-compose error: timed out to check cmd output")
+=======
+                raise RuntimeError(f"docker-compose error: timed out to check cmd output")
+>>>>>>> adding table wait timeout
 
         data = json.loads(out)
 

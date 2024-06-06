@@ -103,7 +103,7 @@ void TExecutorGCLogic::SnapToLog(NKikimrExecutorFlat::TLogSnapshot &snap, ui32 s
             x->SetSetToGeneration(chIt.second.CommitedGcBarrier.Generation);
             x->SetSetToStep(chIt.second.CommitedGcBarrier.Step);
 
-            if (!chIt.second.CutHistory) {
+            if (!chIt.second.CutHistory && chIt.second.GcWaitFor == 0) {
                 ChannelsToCutHistory.push_back(chIt.first);
             }
         }
@@ -166,18 +166,25 @@ void TExecutorGCLogic::FollowersSyncComplete(bool isBoot) {
 }
 
 void TExecutorGCLogic::Confirm(const TActorContext &ctx, TActorId launcher) {
+    Cerr << (TStringBuilder() << "CutHistory " << TabletStorageInfo->TabletID << "\n");
     for (auto channel : ChannelsToCutHistory) {
-        for (const auto& historyEntry : HistoryCutter.GetHistoryToCut(channel)) {
+        Cerr << (TStringBuilder() << "CutHistory " << TabletStorageInfo->TabletID <<  " " << channel << "\n");
+        auto historyToCut = HistoryCutter.GetHistoryToCut(channel);
+        for (const auto* historyEntry : historyToCut) {
+            Cerr << (TStringBuilder() << "CutHistory " << TabletStorageInfo->TabletID <<  " " << channel << " " << historyEntry->FromGeneration << "\n");
             TAutoPtr<TEvTablet::TEvCutTabletHistory> ev(new TEvTablet::TEvCutTabletHistory);
             auto &record = ev->Record;
             record.SetTabletID(TabletStorageInfo->TabletID);
             record.SetChannel(channel);
-            record.SetFromGeneration(historyEntry.FromGeneration);
-            record.SetGroupID(historyEntry.GroupID);
+            record.SetFromGeneration(historyEntry->FromGeneration);
+            record.SetGroupID(historyEntry->GroupID);
             ctx.Send(launcher, ev.Release());
+            Cerr << "Sent\n";
         }
         ChannelInfo[channel].CutHistory = true;
+        Cerr << "out of\n";
     }
+    Cerr << "here\n";
     ChannelsToCutHistory.clear();
 }
 

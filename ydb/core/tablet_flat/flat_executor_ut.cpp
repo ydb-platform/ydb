@@ -3879,12 +3879,21 @@ Y_UNIT_TEST_SUITE(TFlatTableCold) {
 
         for (ui32 attempt = 1; attempt <= 3; ++attempt) {
             // Restart tablet, so cold tables are loaded at boot time
+            // Also start it "reassigned" to test there is no history cutting (owner would fail)
+            struct TTestStarter : NFake::TStarter {
+                NFake::TStorageInfo* MakeTabletInfo(ui64 tablet) noexcept override {
+                    auto *info = TStarter::MakeTabletInfo(tablet);
+                    info->Channels[1].History.emplace_back(3, 1);
+                    return info;
+                }
+            };
+            TTestStarter starter;
             Cerr << "...restarting tablet, iteration " << attempt << Endl;
             env.SendSync(new TEvents::TEvPoison, false, true);
             env.WaitForGone();
             env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
                 return new TTestFlatTablet(env.Edge, tablet, info);
-            });
+            }, 0, &starter);
             env.WaitForWakeUp();
 
             Cerr << "...checking table only has cold parts" << Endl;
@@ -6569,6 +6578,26 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorReboot) {
 }
 
 Y_UNIT_TEST_SUITE(TCutTabletHistory) {
+    struct TTxChangeRoom : public ITransaction {
+        bool Execute(TTransactionContext &txc, const TActorContext &) override
+        {
+            ui32 room = NTable::TScheme::DefaultRoom + 1;
+            ui32 family = NTable::TColumn::LeaderFamily + 3;
+            txc.DB.Alter()
+                .SetRoom(TRowsModel::TableId, room, 2, 2, 2)
+                .AddFamily(TRowsModel::TableId, family, room)
+                .AddColumnToFamily(TRowsModel::TableId, TRowsModel::ColumnValueId, family)
+                .SetFamilyBlobs(TRowsModel::TableId, family, 128, -1);
+
+            return true;
+        }
+
+        void Complete(const TActorContext &ctx) override
+        {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+    };
+
     Y_UNIT_TEST(TestCutTabletHistory) {
         struct TTestStarter : NFake::TStarter {
             NFake::TStorageInfo* MakeTabletInfo(ui64 tablet) noexcept override {
@@ -6589,6 +6618,7 @@ Y_UNIT_TEST_SUITE(TCutTabletHistory) {
                 UNIT_ASSERT_LE(event->Record.GetFromGeneration(), 1);
                 UNIT_ASSERT_LE(event->Record.GetGroupID(), 1);
                 wasCutHistory = true;
+                Cerr << "!! TEST SHOULD BE FINISHED\n";
                 return TTestActorRuntime::EEventAction::DROP;
             }
             return TTestActorRuntime::EEventAction::PROCESS;
@@ -6616,6 +6646,125 @@ Y_UNIT_TEST_SUITE(TCutTabletHistory) {
             env.Env.DispatchEvents({});
         }
 
+    }
+
+    Y_UNIT_TEST(TestDoNotCutBeforeGc) {
+        struct TTestStarter : NFake::TStarter {
+            NFake::TStorageInfo* MakeTabletInfo(ui64 tablet) noexcept override {
+                auto *info = TStarter::MakeTabletInfo(tablet);
+                info->Channels[1].History.emplace_back(1, 0);
+                info->Channels[1].History.emplace_back(2, 1);
+                info->Channels[2].History.emplace_back(1, 0);
+                info->Channels[2].History.emplace_back(2, 2);
+                return info;
+            }
+        };
+
+        TMyEnvBase env;
+        TRowsModel data;
+        bool wasCutHistory = false;
+        env.Env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvTablet::EvCutTabletHistory: {
+                    auto* event = ev->Get<TEvTablet::TEvCutTabletHistory>();
+                    UNIT_ASSERT_VALUES_EQUAL(event->Record.GetChannel(), 2);
+                    UNIT_ASSERT_LE(event->Record.GetFromGeneration(), 1);
+                    wasCutHistory = true;
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                case TEvBlobStorage::EvCollectGarbage: {
+                    auto* event = ev->Get<TEvBlobStorage::TEvCollectGarbage>();
+                    if (event->Channel == 2) {
+                        return TTestActorRuntime::EEventAction::PROCESS;
+                    } else {
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                }
+                default:
+                    return TTestActorRuntime::EEventAction::PROCESS;
+            }
+        });
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+
+        env.WaitForWakeUp();
+
+        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy();
+
+        env.SendSync(data.MakeScheme(std::move(policy)));
+        env.SendSync(new NFake::TEvExecute{ new TTxChangeRoom() });
+        env.SendSync(data.MakeRows(1000));
+
+        env.SendSync(new TEvents::TEvPoison, false, true);
+
+        TTestStarter starter;
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        }, 0, &starter);
+
+        while (!wasCutHistory) {
+            env.Env.DispatchEvents({});
+        }
+    }
+
+    Y_UNIT_TEST(TestSeeOuterBlobs) {
+        struct TTestStarter : NFake::TStarter {
+            NFake::TStorageInfo* MakeTabletInfo(ui64 tablet) noexcept override {
+                auto *info = TStarter::MakeTabletInfo(tablet);
+                info->Channels[1].History.emplace_back(3, 1);
+                info->Channels[2].History.emplace_back(1, 0);
+                info->Channels[2].History.emplace_back(2, 2);
+                return info;
+            }
+        };
+
+        TMyEnvBase env;
+        TRowsModel data;
+        bool wasCutHistory = false;
+        env.Env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvTablet::EvCutTabletHistory: {
+                    auto* event = ev->Get<TEvTablet::TEvCutTabletHistory>();
+                    UNIT_ASSERT_VALUES_EQUAL(event->Record.GetChannel(), 2);
+                    UNIT_ASSERT_LE(event->Record.GetFromGeneration(), 1);
+                    wasCutHistory = true;
+                    Cerr << "!! TEST SHOULD BE FINISHED\n";
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                default:
+                    return TTestActorRuntime::EEventAction::PROCESS;
+            }
+        });
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+
+        env.WaitForWakeUp();
+
+        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy();
+
+        env.SendSync(data.MakeScheme(std::move(policy)));
+        env.SendSync(new NFake::TEvExecute{ new TTxChangeRoom() });
+        env.SendSync(data.MakeRows(1000, 255));
+        env.SendSync(data.MakeRows(255));
+
+        env.SendSync(new TEvents::TEvPoison, false, true);
+
+        TTestStarter starter;
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        }, 0, &starter);
+
+        while (!wasCutHistory) {
+            //env.SendSync(data.MakeRows(1000, 255));
+            env.Env.DispatchEvents({});
+        }
+
+        //env.WaitFor<TEvTablet::TEvCommitResult>();
+        //env.WaitFor<TEvBlobStorage::TEvCollectGarbageResult>();
     }
 }
 

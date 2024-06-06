@@ -487,6 +487,8 @@ void TExecutor::Active(const TActorContext &ctx) {
     MakeLogSnapshot();
 
     if (loadedState->ShouldSnapshotScheme) {
+        if (auto logl = Logger->Log(ELnLev::Crit))
+            logl << NFmt::Do(*this) << " Rewriting scheme ";
         TTxStamp stamp = Stamp();
         auto alter = Database->GetScheme().GetSnapshot();
         alter->SetRewrite(true);
@@ -2513,6 +2515,10 @@ void TExecutor::MakeLogSnapshot() {
     if (!LogicSnap->MayFlush(true) || PendingPartSwitches)
         return;
 
+    if (auto logl = Logger->Log(ELnLev::Crit)) {
+        logl
+            << NFmt::Do(*this) << " MakeLogSnapshot ";
+    }
     NeedFollowerSnapshot = false;
     THPTimer makeLogSnapTimer;
 
@@ -2898,7 +2904,7 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
 
     const auto cookie = static_cast<ECommit>(ev->Cookie);
 
-    if (auto logl = Logger->Log(ELnLev::Debug)) {
+    if (auto logl = Logger->Log(ELnLev::Crit)) {
         logl
             << NFmt::Do(*this) << " commited cookie " << int(cookie)
             << " for step " << step;

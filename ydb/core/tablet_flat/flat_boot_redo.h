@@ -55,6 +55,10 @@ namespace NBoot {
 
             Queue.at(load->Cookie - Skip).Body = load->Plain();
 
+            if (auto logl = Env->Logger()->Log(ELnLev::Crit)) {
+                logl
+                    << NFmt::Do(*Back) << "redo log applying " << load->Blobs();
+            }
             Flush();
         }
 
@@ -88,7 +92,7 @@ namespace NBoot {
 
             const auto affects = Back->DatabaseImpl->GrabAffects();
 
-            if (auto logl = Env->Logger()->Log(ELnLev::Debug)) {
+            if (auto logl = Env->Logger()->Log(ELnLev::Crit)) {
                 logl
                     << NFmt::Do(*Back) << " redo log " << NFmt::TStamp(stamp)
                     << " serial " << begin_ << " -> [" << Back->DatabaseImpl->First_

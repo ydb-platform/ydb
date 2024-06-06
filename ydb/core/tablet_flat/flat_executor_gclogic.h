@@ -37,7 +37,7 @@ struct TGCLogEntry {
 
 class THistoryCutter {
 public:
-    explicit THistoryCutter(const TIntrusiveConstPtr<TTabletStorageInfo> info) 
+    explicit THistoryCutter(const TIntrusiveConstPtr<TTabletStorageInfo> info)
         : Info(info)
         , ChannelStats(info->Channels.size())
     {}
@@ -50,22 +50,34 @@ public:
         }
         ui32 channel = blob.Channel();
         Y_ABORT_UNLESS(channel < ChannelStats.size());
-        ui32& earliestGen = ChannelStats[channel].EarliestGeneration;
-        earliestGen = std::min(earliestGen, blob.Generation());
+        ChannelStats[channel].SeenGenerations.insert(blob.Generation());
+        TStringBuilder str;
+        str << "SeenBlob " << channel << " " << blob << "\n";
+        Cerr << str;
     }
 
-    TArrayRef<const TTabletChannelInfo::THistoryEntry> GetHistoryToCut(ui32 channel) const {
+    std::vector<const TTabletChannelInfo::THistoryEntry*> GetHistoryToCut(ui32 channel) const {
+        std::vector<const TTabletChannelInfo::THistoryEntry*> result;
         if (!ChannelStats[channel].Certain) {
-            return {};
+            return result;
         }
         const auto& history = Info->Channels[channel].History;
-        ui32 cutoffGen = ChannelStats[channel].EarliestGeneration;
-        auto cutoffIt = std::upper_bound(history.begin(), history.end(), cutoffGen, TTabletChannelInfo::THistoryEntry::TCmp());
-        if (cutoffIt == history.begin()) {
-            return {};
+        if (history.size() < 2) {
+            return result;
         }
-        --cutoffIt;
-        return {history.data(), &(*cutoffIt)};
+        auto historyIt = history.begin();
+        auto historyNext = std::next(historyIt);
+        const auto& seen = ChannelStats[channel].SeenGenerations;
+        auto seenIt = seen.begin();
+        for (; historyNext != history.end(); ++historyIt, ++historyNext) {
+            while (seenIt != seen.end() && *seenIt < historyIt->FromGeneration) {
+                ++seenIt;
+            }
+            if (seenIt == seen.end() || *seenIt >= historyNext->FromGeneration) {
+                result.push_back(&*historyIt);
+            }
+        }
+        return result;
     }
 
     void BecomeUncertain(ui32 channel) {
@@ -73,7 +85,7 @@ public:
     }
 private:
     struct TChannelStat {
-        ui32 EarliestGeneration = Max<ui32>();
+        std::set<ui32> SeenGenerations;
         bool Certain = true;
     };
 

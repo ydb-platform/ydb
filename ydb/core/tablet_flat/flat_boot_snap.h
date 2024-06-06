@@ -147,6 +147,9 @@ namespace NBoot {
                 blobs.emplace_back(LogoBlobIDFromLogoBlobID(one));
                 const auto& blob = blobs.back();
                 const auto* channel = Logic->Info->ChannelInfo(blob.Channel());
+                TStringBuilder str;
+                str << "SchemeBlob " << blob << "\n";
+                Cerr << str;
                 if (channel && blob.Generation() < channel->LatestEntry()->FromGeneration) {
                     Logic->Result().ShouldSnapshotScheme = true;
                 }

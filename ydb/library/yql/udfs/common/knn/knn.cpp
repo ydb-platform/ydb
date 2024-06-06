@@ -166,7 +166,7 @@ public:
         }
         if (type == EType::None) {
             TStringBuilder sb;
-            sb << "'List<Double|Float|Uint8|Int8>' is expected but received type: '";
+            sb << "'List<Double|Float|Uint8|Int8>' is expected but got '";
             TTypePrinter(*typeInfoHelper, argsTuple.GetElementType(0)).Out(sb.Out);
             sb << "'";
             builder.SetError(std::move(sb));
@@ -235,7 +235,7 @@ public:
         auto argTag = GetArg(*typeInfoHelper, argType, builder);
         if (!ValidTag(argTag, {TagStoredVector, TagFloatVector, TagInt8Vector, TagUint8Vector})) {
             TStringBuilder sb;
-            sb << "A result from 'ToBinaryString[Float|Int8|Uint8]' is expected as an argument but received type: '";
+            sb << "A result from 'ToBinaryString[Float|Int8|Uint8]' is expected as an argument but got '";
             TTypePrinter(*typeInfoHelper, argsTuple.GetElementType(0)).Out(sb.Out);
             sb << "'";
             builder.SetError(std::move(sb));

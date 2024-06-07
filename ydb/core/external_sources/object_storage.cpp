@@ -354,7 +354,6 @@ struct TObjectStorageExternalSource : public IExternalSource {
                 result.Metadata = meta;
                 metaPromise.SetValue(std::move(result));
             };
-            Cout << "inferring from " << pathFut.GetValue() << Endl;
             actorSystem->Register(new NKqp::TActorRequestHandler<NObjectStorage::TEvInferFileSchema, NObjectStorage::TEvInferredFileSchema, TMetadataResult>(
                 arrowInferencinatorId,
                 new NObjectStorage::TEvInferFileSchema(TString{pathFut.GetValue()}),

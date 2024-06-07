@@ -5,6 +5,7 @@ import re
 import datetime
 import json
 import argparse
+import signal
 
 try:
     from time import clock_gettime_ns, CLOCK_MONOTONIC
@@ -20,18 +21,30 @@ except Exception:
 RE_DIGITS = re.compile(r'([0-9]+)')
 
 
-def run(argv, out, err):
+def run(argv, out, err, timeout=30*60, hard_timeout=5):
 
-    start_time = time_ns()
-    pid = os.posix_spawn(argv[0], argv, {}, file_actions=(
-        (os.POSIX_SPAWN_OPEN, 1, out, os.O_WRONLY | os.O_CREAT, 0o666),
-        (os.POSIX_SPAWN_OPEN, 2, err, os.O_WRONLY | os.O_CREAT, 0o666),
-        ))
-    (pid, status, rusage) = os.wait4(pid, 0)
-    elapsed = time_ns()
-    elapsed -= start_time
-    exitcode = os.waitstatus_to_exitcode(status)
-    return exitcode, rusage, elapsed
+    oldmask = signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGCHLD})
+    try:
+        start_time = time_ns()
+        pid = os.posix_spawn(argv[0], argv, {}, setsigmask=oldmask, file_actions=(
+            (os.POSIX_SPAWN_OPEN, 1, out, os.O_WRONLY | os.O_CREAT, 0o666),
+            (os.POSIX_SPAWN_OPEN, 2, err, os.O_WRONLY | os.O_CREAT, 0o666),
+            ))
+        assert pid > 0
+        if timeout is not None:
+            siginfo = signal.sigtimedwait({signal.SIGCHLD}, timeout)
+            if siginfo is None:
+                os.kill(pid, signal.SIGTERM)
+                siginfo = signal.sigtimedwait({signal.SIGCHLD}, hard_timeout)
+                if siginfo is None:
+                    os.kill(pid, signal.SIGKILL)
+        (pid, status, rusage) = os.wait4(pid, 0)
+        elapsed = time_ns()
+        elapsed -= start_time
+        exitcode = os.waitstatus_to_exitcode(status)
+        return exitcode, rusage, elapsed
+    finally:
+        signal.pthread_sigmask(signal.SIG_SETMASK, oldmask)
 
 
 def main():
@@ -40,6 +53,7 @@ def main():
     parser.add_argument('--query-dir', type=str, default='q/scalar')
     parser.add_argument('--bindings', type=str, default='bindings.json')
     parser.add_argument('--result-dir', type=str, default="result-{:%Y%m%dT%H%M%S}".format(datetime.datetime.now()))
+    parser.add_argument('--timeout', type=int, default=30*60)
     args, argv = parser.parse_known_intermixed_args()
     qdir = args.query_dir
     bindings = args.bindings
@@ -72,7 +86,8 @@ def main():
                     '-p', q
                 ],
                 name + '-stdout.txt',
-                name + '-stderr.txt')
+                name + '-stderr.txt',
+                timeout=args.timeout)
             print(rusage.ru_utime, end='\t', file=outf)
             print(rusage.ru_stime, end='\t', file=outf)
             print(rusage.ru_maxrss, end='\t', file=outf)

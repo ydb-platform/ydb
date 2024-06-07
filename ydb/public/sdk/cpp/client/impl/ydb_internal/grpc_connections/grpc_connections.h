@@ -55,7 +55,7 @@ public:
         TDuration timeout,
         std::function<void(bool)> callback,
         IQueueClientContextPtr token = nullptr
-    );
+    ) override;
     // The idea is: sometimes we need to work with multiple databases simultaneously
     // This method returns DbDriverState (or just db state) for given database credentials pair
     // this state is used to keep data related to particular database.

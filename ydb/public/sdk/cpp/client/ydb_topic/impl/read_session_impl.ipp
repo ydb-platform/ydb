@@ -2934,14 +2934,14 @@ void TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>::OnUserRetrievedE
 
 template<bool UseMigrationProtocol>
 void TDeferredActions<UseMigrationProtocol>::DeferReadFromProcessor(
-    const IDirectReadConnection::TPtr& connection,
+    const IDirectReadProcessor::TPtr& processor,
     TDirectReadServerMessage* dst,
-    IDirectReadConnection::TReadCallback callback
+    IDirectReadProcessor::TReadCallback callback
 ) {
-    Y_ASSERT(!DirectConnection);
+    Y_ASSERT(!DirectReadProcessor);
     Y_ASSERT(!DirectReadDst);
     Y_ASSERT(!DirectReadCallback);
-    DirectConnection = connection;
+    DirectReadProcessor = processor;
     DirectReadDst = dst;
     DirectReadCallback = std::move(callback);
 }
@@ -3047,7 +3047,7 @@ void TDeferredActions<UseMigrationProtocol>::Read() {
 template<bool UseMigrationProtocol>
 void TDeferredActions<UseMigrationProtocol>::DirectRead() {
     if (DirectReadDst) {
-        Y_ASSERT(DirectConnection);
+        Y_ASSERT(DirectReadProcessor);
         Y_ASSERT(DirectReadCallback);
         DirectConnection->Read(DirectReadDst, std::move(DirectReadCallback));
     }

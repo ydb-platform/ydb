@@ -133,6 +133,7 @@ PEERDIR(
     ydb/library/folder_service
     ydb/library/folder_service/proto
     ydb/library/pdisk_io
+    ydb/library/pool_stats_collector
     ydb/library/security
     ydb/library/yql/minikql/comp_nodes/llvm14
     ydb/library/yql/providers/yt/codec/codegen

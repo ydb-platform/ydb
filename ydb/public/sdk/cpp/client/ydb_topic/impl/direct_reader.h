@@ -37,9 +37,9 @@ using TDirectReadId = i64;
 
 using TDirectReadServerMessage = Ydb::Topic::StreamDirectReadMessage_FromServer;
 using TDirectReadClientMessage = Ydb::Topic::StreamDirectReadMessage_FromClient;
-using IDirectReadConnectionFactory = ISessionConnectionProcessorFactory<TDirectReadClientMessage, TDirectReadServerMessage>;
-using IDirectReadConnectionFactoryPtr = std::shared_ptr<IDirectReadConnectionFactory>;
-using IDirectReadConnection = IDirectReadConnectionFactory::IProcessor;
+using IDirectReadProcessorFactory = ISessionConnectionProcessorFactory<TDirectReadClientMessage, TDirectReadServerMessage>;
+using IDirectReadProcessorFactoryPtr = std::shared_ptr<IDirectReadProcessorFactory>;
+using IDirectReadProcessor = IDirectReadProcessorFactory::IProcessor;
 
 class TDirectReadSession;
 
@@ -110,7 +110,7 @@ public:
         const NYdb::NTopic::TReadSessionSettings settings,
         TDirectReadSessionManagerContextPtr managerContextPtr,
         NYdbGrpc::IQueueClientContextPtr clientContext,
-        IDirectReadConnectionFactoryPtr connectionFactory,
+        IDirectReadProcessorFactoryPtr processorFactory,
         TLog log
     );
 
@@ -143,7 +143,7 @@ private:
 
     void OnConnect(
         TPlainStatus&& st,
-        IDirectReadConnection::TPtr&& processor,
+        IDirectReadProcessor::TPtr&& processor,
         const NYdbGrpc::IQueueClientContextPtr& connectContext
     );
 
@@ -185,8 +185,8 @@ private:
     const NYdb::NTopic::TReadSessionSettings ReadSessionSettings;
     TDirectReadSessionManagerContextPtr ManagerContextPtr;
     TServerSessionId ServerSessionId;
-    IDirectReadConnection::TPtr Connection;
-    IDirectReadConnectionFactoryPtr ConnectionFactory;
+    IDirectReadProcessor::TPtr Processor;
+    IDirectReadProcessorFactoryPtr ProcessorFactory;
     std::shared_ptr<TDirectReadServerMessage> ServerMessage;
 
     THashMap<TPartitionSessionId, TDirectReadPartitionSession> PartitionSessions;
@@ -221,7 +221,7 @@ public:
         const NYdb::NTopic::TReadSessionSettings,
         TSingleClusterReadSessionContextPtr,
         NYdbGrpc::IQueueClientContextPtr,
-        IDirectReadConnectionFactoryPtr,
+        IDirectReadProcessorFactoryPtr,
         TLog
     );
 
@@ -249,7 +249,7 @@ private:
     const TServerSessionId ServerSessionId;
     TSingleClusterReadSessionContextPtr SingleClusterReadSessionContextPtr;
     const NYdbGrpc::IQueueClientContextPtr ClientContext;
-    const IDirectReadConnectionFactoryPtr ConnectionFactory;
+    const IDirectReadProcessorFactoryPtr ProcessorFactory;
     TNodeSessionsMap NodeSessions;
     TMap<TPartitionSessionId, TPartitionLocation> Locations;
     TLog Log;

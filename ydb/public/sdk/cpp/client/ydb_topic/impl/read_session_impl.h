@@ -1086,7 +1086,6 @@ public:
     using IProcessor = IProcessorFactory::IProcessor;
 
     friend class TPartitionStreamImpl<UseMigrationProtocol>;
-    friend class TDirectReadSession;
     friend class TDirectReadSessionControlCallbacks;
 
     TSingleClusterReadSessionImpl(

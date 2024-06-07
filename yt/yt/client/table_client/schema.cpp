@@ -1376,11 +1376,6 @@ void FormatValue(TStringBuilderBase* builder, const TTableSchema& schema, TStrin
     builder->AppendChar(']');
 }
 
-TString ToString(const TTableSchema& schema)
-{
-    return ToStringViaBuilder(schema);
-}
-
 void FormatValue(TStringBuilderBase* builder, const TTableSchemaPtr& schema, TStringBuf spec)
 {
     if (schema) {
@@ -1388,11 +1383,6 @@ void FormatValue(TStringBuilderBase* builder, const TTableSchemaPtr& schema, TSt
     } else {
         builder->AppendString(TStringBuf("<null>"));
     }
-}
-
-TString ToString(const TTableSchemaPtr& schema)
-{
-    return ToStringViaBuilder(schema);
 }
 
 TString SerializeToWireProto(const TTableSchemaPtr& schema)

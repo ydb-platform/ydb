@@ -55,7 +55,7 @@ namespace NDetail {
 template <size_t Length, class... TArgs>
 TString FormatErrorMessage(const char (&format)[Length], TArgs&&... args)
 {
-    return Format(format, std::forward<TArgs>(args)...);
+    return Format(TRuntimeFormat{format}, std::forward<TArgs>(args)...);
 }
 
 template <size_t Length>

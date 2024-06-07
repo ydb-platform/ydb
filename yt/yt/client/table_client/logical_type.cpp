@@ -286,6 +286,12 @@ TString ToString(const TLogicalType& logicalType)
     YT_ABORT();
 }
 
+void FormatValue(TStringBuilderBase* builder, const TLogicalType& logicalType, TStringBuf spec)
+{
+    // TODO(arkady-e1ppa): Optimize and express ToString using this.
+    FormatValue(builder, ToString(logicalType), spec);
+}
+
 void PrintTo(ELogicalMetatype metatype, std::ostream* os)
 {
     *os << ToString(metatype);

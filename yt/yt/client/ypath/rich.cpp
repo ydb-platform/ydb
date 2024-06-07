@@ -695,6 +695,11 @@ TString ToString(const TRichYPath& path)
     return ConvertToString(path, EYsonFormat::Text);
 }
 
+void FormatValue(TStringBuilderBase* builder, const TRichYPath& path, TStringBuf spec)
+{
+    FormatValue(builder, ToString(path), spec);
+}
+
 std::vector<TRichYPath> Normalize(const std::vector<TRichYPath>& paths)
 {
     std::vector<TRichYPath> result;

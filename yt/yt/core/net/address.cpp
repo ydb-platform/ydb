@@ -388,6 +388,12 @@ void FromProto(TNetworkAddress* address, const TString& protoAddress)
     address->Length_ = protoAddress.size();
 }
 
+void FormatValue(TStringBuilderBase* builder, const TNetworkAddress& address, TStringBuf spec)
+{
+    // TODO(arkady-e1ppa): Optimize.
+    FormatValue(builder, ToString(address), spec);
+}
+
 TString ToString(const TNetworkAddress& address, const TNetworkAddressFormatOptions& options)
 {
     const auto& sockAddr = address.GetSockAddr();

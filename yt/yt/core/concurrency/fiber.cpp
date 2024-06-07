@@ -233,7 +233,6 @@ private:
             auto* regNode = static_cast<TIntrusiveListItem<NDetail::TFiberBase, NDetail::TFiberRegisterTag>*>(fiber);
             auto* delNode = static_cast<TIntrusiveListItem<NDetail::TFiberBase, NDetail::TFiberUnregisterTag>*>(fiber);
 
-            Cerr << Format("Fiber node at %v", iter) << '\n';
             Cerr << Format("Fiber address after cast is %v", fiber) << '\n';
             Cerr << Format("Fiber registration queue status: Next: %v, Prev: %v", regNode->Next(), regNode->Prev()) << '\n';
             // NB: Reading deletion queue is data race. Don't do this under tsan.

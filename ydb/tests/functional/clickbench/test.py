@@ -106,7 +106,7 @@ def save_canonical_data(data, fname):
 @pytest.mark.parametrize("executer", ["scan", "generic"])
 def test_run_benchmark(store, executer):
     path = "clickbench/benchmark/{}/hits".format(store)
-    ret = run_cli(["workload", "clickbench", "init", "--store", store, "--path", path])
+    ret = run_cli(["workload", "clickbench", "--path", path, "init", "--store", store])
     assert_that(ret.exit_code, is_(0))
 
     ret = run_cli(
@@ -120,14 +120,14 @@ def test_run_benchmark(store, executer):
 
     # just validating that benchmark can be executed successfully on this data.
     out_fpath = os.path.join(yatest.common.output_path(), 'click_bench.{}.results'.format(store))
-    ret = run_cli(["workload", "clickbench", "run", "--output", out_fpath, "--table", path, "--executer", executer])
+    ret = run_cli(["workload", "clickbench", "--path", path, "run", "--output", out_fpath, "--executer", executer])
     assert_that(ret.exit_code, is_(0))
 
 
 @pytest.mark.parametrize("store", ["row", "column"])
 def test_run_determentistic(store):
     path = "clickbench/determentistic/{}/hits".format(store)
-    ret = run_cli(["workload", "clickbench", "init", "--store", store, "--path", path])
+    ret = run_cli(["workload", "clickbench", "--path", path, "init", "--store", store])
     assert_that(ret.exit_code, is_(0))
     ret = run_cli(
         [
@@ -158,7 +158,7 @@ def test_run_determentistic(store):
 @pytest.mark.parametrize("store", ["row", "column"])
 def test_plans(store):
     ret = run_cli(
-        ["workload", "clickbench", "init", "--store", store, "--path", "clickbench/plans/{}/hits".format(store)]
+        ["workload", "clickbench", "--path", "clickbench/plans/{}/hits".format(store), "init", "--store", store]
     )
     assert_that(ret.exit_code, is_(0))
 

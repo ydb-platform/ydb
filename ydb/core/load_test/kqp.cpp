@@ -5,9 +5,9 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
 
-#include <ydb/library/workload/workload_factory.h>
-#include <ydb/library/workload/stock_workload.h>
-#include <ydb/library/workload/kv_workload.h>
+#include <ydb/library/workload/abstract/workload_factory.h>
+#include <ydb/library/workload/stock/stock.h>
+#include <ydb/library/workload/kv/kv.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 

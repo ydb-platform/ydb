@@ -1,5 +1,4 @@
-#include "kv_workload.h"
-#include "workload_factory.h"
+#include "kv.h"
 #include <util/generic/serialized_enum.h>
 #include <util/random/random.h>
 #include <util/datetime/base.h>
@@ -16,8 +15,6 @@
 #include <format>
 
 namespace NYdbWorkload {
-
-TWorkloadFactory::TRegistrator<TKvWorkloadParams> KvRegistrar("kv");
 
 using TRow = TKvWorkloadGenerator::TRow;
 
@@ -496,7 +493,6 @@ TVector<TRow> TKvWorkloadGenerator::GenerateRandomRows(bool randomValues) {
 }
 
 void TKvWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
-    opts.SetFreeArgsNum(0);
     switch (commandType) {
     case TWorkloadParams::ECommandType::Init:
         opts.AddLongOption("init-upserts", "count of upserts need to create while table initialization")
@@ -574,6 +570,7 @@ void TKvWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandTy
         }
         break;
     case TWorkloadParams::ECommandType::Clean:
+    case TWorkloadParams::ECommandType::Root:
         break;
     }
 }

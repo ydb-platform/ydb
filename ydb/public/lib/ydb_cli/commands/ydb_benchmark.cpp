@@ -5,8 +5,8 @@
 #include <util/string/printf.h>
 
 namespace NYdb::NConsoleClient {
-    TWorkloadCommandBenchmark::TWorkloadCommandBenchmark(const TString& key, const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload)
-        : TWorkloadCommandBase(workload.CommandName, key, NYdbWorkload::TWorkloadParams::ECommandType::Run, workload.Description, workload.Type)
+    TWorkloadCommandBenchmark::TWorkloadCommandBenchmark(NYdbWorkload::TWorkloadParams& params, const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload)
+        : TWorkloadCommandBase(workload.CommandName, params, NYdbWorkload::TWorkloadParams::ECommandType::Run, workload.Description, workload.Type)
     {
         
     }

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "workload_query_generator.h"
+#include <ydb/library/workload/abstract/workload_query_generator.h>
 
 #include <cctype>
 

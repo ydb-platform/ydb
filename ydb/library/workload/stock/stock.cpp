@@ -1,5 +1,4 @@
-#include "stock_workload.h"
-#include "workload_factory.h"
+#include "stock.h"
 
 #include <util/datetime/base.h>
 #include <util/generic/serialized_enum.h>
@@ -21,8 +20,6 @@ uint64_t getOrderId() {
 }
 
 namespace NYdbWorkload {
-
-TWorkloadFactory::TRegistrator<TStockWorkloadParams> StockRegistrar("stock");
 
 TStockWorkloadGenerator::TStockWorkloadGenerator(const TStockWorkloadParams* params)
     : TBase(params)
@@ -307,7 +304,6 @@ TQueryInfoList TStockWorkloadGenerator::GetCustomerHistory() {
 }
 
 void TStockWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
-    opts.SetFreeArgsNum(0);
     switch (commandType) {
     case TWorkloadParams::ECommandType::Init:
         opts.AddLongOption('p', "products", "Product count. Value in 1..500 000.")
@@ -339,6 +335,7 @@ void TStockWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComman
         }
         break;
     case TWorkloadParams::ECommandType::Clean:
+    case TWorkloadParams::ECommandType::Root:
         break;
     }
 }

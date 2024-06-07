@@ -705,6 +705,10 @@ bool TDirectReadSession::Reconnect(const TPlainStatus& status) {
             }
         }
 
+        if (Connection) {
+            Connection->Cancel();
+        }
+
         Connection = nullptr;
         // TODO(qyryq) WaitingReadResponse = false;
         ServerMessage = std::make_shared<TDirectReadServerMessage>();

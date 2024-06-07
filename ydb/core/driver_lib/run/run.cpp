@@ -227,7 +227,8 @@ public:
                 appData->AllAuthenticatedUsers = allUsersGroup;
             }
         }
-        TVector<TString> registerDynamicNodeAllowedSIDs {TString(DEFAULT_REGISTER_NODE_CERT_USER) + "@" + Config.GetAuthConfig().GetCertificateAuthenticationDomain()};
+        TVector<TString> registerDynamicNodeAllowedSIDs {BUILTIN_ACL_ROOT, // Remove when switch on certificate auth only
+                                                         TString(DEFAULT_REGISTER_NODE_CERT_USER) + "@" + Config.GetAuthConfig().GetCertificateAuthenticationDomain()};
         if (securityConfig.RegisterDynamicNodeAllowedSIDsSize() > 0) {
             const auto& allowedSids = securityConfig.GetRegisterDynamicNodeAllowedSIDs();
             registerDynamicNodeAllowedSIDs.insert(registerDynamicNodeAllowedSIDs.end(), allowedSids.cbegin(), allowedSids.cend());

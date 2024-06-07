@@ -121,6 +121,7 @@ public:
         if (authToken) {
             TBase::SetSecurityToken(authToken.GetRef());
         } else {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY, "Ydb token was not provided. Try to auth by certificate");
             const auto& clientCertificates = GrpcRequestBaseCtx_->FindClientCertPropertyValues();
             if (!clientCertificates.empty()) {
                 TBase::SetSecurityToken(TString(clientCertificates.front()));

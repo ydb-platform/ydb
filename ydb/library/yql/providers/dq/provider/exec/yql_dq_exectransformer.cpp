@@ -234,6 +234,7 @@ struct TUploadCache {
 struct TPublicIds {
     THashMap<ui32, ui32> AllPublicIds;
     THashMap<ui64, ui32> Stage2publicId;
+    THashMap<ui32, ui64> PublicId2Stage;
     size_t GraphsCount = 0;
 
     using TPtr = std::shared_ptr<TPublicIds>;
@@ -1230,6 +1231,7 @@ private:
                     if (const auto publicId = State->TypeCtx->TranslateOperationId(node->UniqueId())) {
                         if (const auto settings = NDq::TDqStageSettings::Parse(stage); settings.LogicalId) {
                             publicIds->Stage2publicId[settings.LogicalId] = *publicId;
+                            publicIds->PublicId2Stage[*publicId] = settings.LogicalId;
                         }
                         publicIds->AllPublicIds.emplace(*publicId, 0U);
                     }
@@ -1619,7 +1621,7 @@ private:
     }
 
     IDqGateway::TDqProgressWriter MakeDqProgressWriter(const TPublicIds::TPtr& publicIds) const {
-        IDqGateway::TDqProgressWriter dqProgressWriter = [progressWriter = State->ProgressWriter, publicIds, current = std::make_shared<TString>()](const TString& stage) {
+        IDqGateway::TDqProgressWriter dqProgressWriter = [progressWriter = State->ProgressWriter, publicIds, current = std::make_shared<TString>()](const TString& stage, const auto& stats) {
             if (*current != stage) {
                 for (const auto& publicId : publicIds->AllPublicIds) {
                     auto p = TOperationProgress(TString(DqProviderName), publicId.first, TOperationProgress::EState::InProgress, stage);

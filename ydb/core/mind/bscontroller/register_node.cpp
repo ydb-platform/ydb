@@ -418,7 +418,7 @@ void TBlobStorageController::ReadPDisk(const TPDiskId& pdiskId, const TPDiskInfo
                 (PDiskId, pdiskId.PDiskId));
         }
     }
-    pDisk->SetExpectedSerial(pdisk.ExpectedSerial);
+    //pDisk->SetExpectedSerial(pdisk.ExpectedSerial);
     pDisk->SetManagementStage(SerialManagementStage);
     pDisk->SetSpaceColorBorder(PDiskSpaceColorBorder);
     pDisk->SetEntityStatus(entityStatus);

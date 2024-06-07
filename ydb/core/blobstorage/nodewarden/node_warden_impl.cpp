@@ -89,6 +89,9 @@ void TNodeWarden::RemoveDrivesWithBadSerialsAndReport(TVector<NPDisk::TDriveData
 }
 
 TVector<NPDisk::TDriveData> TNodeWarden::ListLocalDrives() {
+    return {};
+
+#if 0
     TStringStream details;
     TVector<NPDisk::TDriveData> drives = ListDevicesWithPartlabel(details);
 
@@ -114,6 +117,7 @@ TVector<NPDisk::TDriveData> TNodeWarden::ListLocalDrives() {
     RemoveDrivesWithBadSerialsAndReport(drives, details);
 
     return drives;
+#endif
 }
 
 void TNodeWarden::StartInvalidGroupProxy() {

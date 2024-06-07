@@ -1306,7 +1306,11 @@ private:
     TLog Log;
     ui64 NextPartitionStreamId;
     ui64 PartitionStreamIdStep;
+
+    // Currently needed for scheduling callbacks in direct read sessions
+    // to retry sending StartDirectReadPartitionSession requests after temporary errors.
     std::shared_ptr<IInternalClient> Connections;
+
     std::shared_ptr<IReadSessionConnectionProcessorFactory<UseMigrationProtocol>> ConnectionFactory;
     IDirectReadProcessorFactoryPtr DirectReadProcessorFactory;
     std::shared_ptr<TReadSessionEventsQueue<UseMigrationProtocol>> EventsQueue;

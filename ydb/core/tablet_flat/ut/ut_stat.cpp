@@ -993,6 +993,23 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
             Check(*subset, mode, 1000, false);
         }
     }
+
+    Y_UNIT_TEST(Mixed_Groups_History)
+    {
+        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
+            auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), mode)).Mixed(0, 4, TMixerRnd(4), 0.3);
+            Check(*subset, mode);
+        }
+    }
+
+    Y_UNIT_TEST(Serial_Groups_History)
+    {
+        for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
+            TMixerSeq mixer(4, Mass1.Saved.Size());
+            auto subset = TMake(Mass1, PageConf(Mass1.Model->Scheme->Families.size(), mode)).Mixed(0, 4, mixer, 0.3);
+            Check(*subset, mode);
+        }
+    }
 }
 
 }

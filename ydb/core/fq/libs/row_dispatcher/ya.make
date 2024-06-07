@@ -4,6 +4,7 @@ SRCS(
     row_dispatcher.cpp
     row_dispatcher_service.cpp
     coordinator.cpp
+    leader_detector.cpp
 )
 
 PEERDIR(

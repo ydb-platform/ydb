@@ -14,7 +14,7 @@ namespace NFq {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::unique_ptr<NActors::IActor> NewRDCoordinator(
+std::unique_ptr<NActors::IActor> NewLeaderDetector(
     NActors::TActorId rowDispatcherId,
     const NConfig::TRowDispatcherCoordinatorConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,

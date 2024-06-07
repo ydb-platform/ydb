@@ -1,0 +1,11 @@
+package NFq.NRowDispatcherProto;
+option cc_enable_arenas = true;
+
+import "google/protobuf/any.proto";
+
+
+
+
+message TEvStartSession {
+    optional uint32 TransportMeta = 1;
+}

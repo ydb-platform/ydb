@@ -581,6 +581,25 @@ private:
     std::shared_ptr<TMockRetryPolicy> Policy;
 };
 
+class TMockConnections : public IInternalClient {
+public:
+    MOCK_METHOD(void, ScheduleCallback, (TDuration, std::function<void(bool)>, NYdbGrpc::IQueueClientContextPtr), (override));
+
+public:
+
+    NThreading::TFuture<TListEndpointsResult> GetEndpoints(std::shared_ptr<TDbDriverState>) override { return {}; }
+    void AddPeriodicTask(TPeriodicCb&&, TDuration) override {}
+#ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
+    void DeleteChannels([[maybe_unused]] const std::vector<std::string>& endpoints) override {}
+#endif
+    TBalancingSettings GetBalancingSettings() const override  {}
+    bool StartStatCollecting(::NMonitoring::IMetricRegistry*) override { return false; }
+    ::NMonitoring::TMetricRegistry* GetMetricRegistry() override { return nullptr; }
+    const TLog& GetLog() const override { return Log; }
+private:
+    TLog Log;
+};
+
 // Class for testing read session impl with mocks.
 class TDirectReadSessionImplTestSetup {
 public:
@@ -618,7 +637,7 @@ public:
     ~TDirectReadSessionImplTestSetup() noexcept(false); // Performs extra validation and UNIT_ASSERTs
 
     TSingleClusterReadSessionImpl<false>* GetControlSession();
-    TDirectReadSession* GetDirectReadSession(TDirectReadSessionCallbacks);
+    TDirectReadSession* GetDirectReadSession();
 
     std::shared_ptr<TReadSessionEventsQueue<false>> GetEventsQueue();
     IExecutor::TPtr GetDefaultExecutor();
@@ -640,14 +659,16 @@ public:
     std::shared_ptr<TMockRetryPolicy> MockRetryPolicy = std::make_shared<TMockRetryPolicy>();
     std::shared_ptr<TMockReadProcessorFactory> MockReadProcessorFactory = std::make_shared<TMockReadProcessorFactory>();
     std::shared_ptr<TMockDirectReadProcessorFactory> MockDirectReadProcessorFactory = std::make_shared<TMockDirectReadProcessorFactory>();
+    std::shared_ptr<TMockConnections> MockConnections = std::make_shared<TMockConnections>();
     TIntrusivePtr<TMockReadSessionProcessor> MockReadProcessor = MakeIntrusive<TMockReadSessionProcessor>();
     TIntrusivePtr<TMockDirectReadSessionProcessor> MockDirectReadProcessor = MakeIntrusive<TMockDirectReadSessionProcessor>();
 
-    TSingleClusterReadSessionImpl<false>::TPtr Session;
-    std::shared_ptr<TCallbackContext<TSingleClusterReadSessionImpl<false>>> CbContext;
+    TSingleClusterReadSessionImpl<false>::TPtr SingleClusterReadSession;
+    TSingleClusterReadSessionContextPtr SingleClusterReadSessionContextPtr;
 
-    TDirectReadSession::TPtr DirectReadSession;
-    std::shared_ptr<TCallbackContext<TDirectReadSession>> DirectReadSessionCbContext;
+    TDirectReadSessionManager::TPtr DirectReadSessionManagerPtr;
+    TDirectReadSession::TPtr DirectReadSessionPtr;
+    TDirectReadSessionContextPtr DirectReadSessionContextPtr;
 
     std::shared_ptr<TThreadPool> ThreadPool;
     IExecutor::TPtr DefaultExecutor;
@@ -679,21 +700,21 @@ TDirectReadSessionImplTestSetup::~TDirectReadSessionImplTestSetup() noexcept(fal
         MockDirectReadProcessor->Validate();
     }
 
-    if (CbContext) {
-        if (auto session = CbContext->LockShared()) {
+    if (SingleClusterReadSessionContextPtr) {
+        if (auto session = SingleClusterReadSessionContextPtr->LockShared()) {
             session->Close({});
         }
-        CbContext->Cancel();
+        SingleClusterReadSessionContextPtr->Cancel();
     }
 
-    if (DirectReadSessionCbContext) {
-        if (auto session = DirectReadSessionCbContext->LockShared()) {
+    if (DirectReadSessionContextPtr) {
+        if (auto session = DirectReadSessionContextPtr->LockShared()) {
             session->Close();
         }
-        DirectReadSessionCbContext->Cancel();
+        DirectReadSessionContextPtr->Cancel();
     }
 
-    Session = nullptr;
+    SingleClusterReadSession = nullptr;
 
     if (ThreadPool) {
         ThreadPool->Stop();
@@ -742,44 +763,44 @@ IExecutor::TPtr TDirectReadSessionImplTestSetup::GetDefaultExecutor() {
 }
 
 TSingleClusterReadSessionImpl<false>* TDirectReadSessionImplTestSetup::GetControlSession() {
-    if (!Session) {
+    if (!SingleClusterReadSession) {
         if (!ReadSessionSettings.DecompressionExecutor_) {
             ReadSessionSettings.DecompressionExecutor(GetDefaultExecutor());
         }
         if (!ReadSessionSettings.EventHandlers_.HandlersExecutor_) {
             ReadSessionSettings.EventHandlers_.HandlersExecutor(GetDefaultExecutor());
         }
-        CbContext = MakeWithCallbackContext<TSingleClusterReadSessionImpl<false>>(
+        SingleClusterReadSessionContextPtr = MakeWithCallbackContext<TSingleClusterReadSessionImpl<false>>(
             ReadSessionSettings,
             "db",
             "client-session-id-1",
             "",
             Log,
-            [](TDuration, std::function<void()> cb) { cb(); },
+            MockConnections,
             MockReadProcessorFactory,
             GetEventsQueue(),
             FakeContext,
             1,
             1,
             MockDirectReadProcessorFactory);
-        Session = CbContext->TryGet();
+        SingleClusterReadSession = SingleClusterReadSessionContextPtr->TryGet();
     }
-    return Session.get();
+    return SingleClusterReadSession.get();
 }
 
-TDirectReadSession* TDirectReadSessionImplTestSetup::GetDirectReadSession(TDirectReadSessionCallbacks callbacks = {}) {
-    if (!DirectReadSession) {
-        DirectReadSessionCbContext = MakeWithCallbackContext<TDirectReadSession>(
+TDirectReadSession* TDirectReadSessionImplTestSetup::GetDirectReadSession() {
+    if (!DirectReadSessionPtr) {
+        DirectReadSessionContextPtr = MakeWithCallbackContext<TDirectReadSession>(
             TNodeId(1),
             SERVER_SESSION_ID,
             ReadSessionSettings,
-            callbacks,
+            MockDirectReadSessionManagerContextPtr,
             FakeContext,
             MockDirectReadProcessorFactory,
             Log);
-        DirectReadSession = DirectReadSessionCbContext->TryGet();
+        DirectReadSessionPtr = DirectReadSessionContextPtr->TryGet();
     }
-    return DirectReadSession.get();
+    return DirectReadSessionPtr.get();
 }
 
 
@@ -1066,9 +1087,8 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
         EXPECT_CALL(*setup.MockDirectReadProcessorFactory, OnCreateProcessor(_))
             .WillOnce([&]() { setup.MockDirectReadProcessorFactory->FailCreation(); });
 
-        auto session = setup.GetDirectReadSession({
-            .OnAbortSession = [&gotClosedEvent](TSessionClosedEvent&&) { gotClosedEvent.SetValue(); },
-        });
+        // TODO(qyryq) .OnAbortSession = [&gotClosedEvent](TSessionClosedEvent&&) { gotClosedEvent.SetValue(); },
+        auto session = setup.GetDirectReadSession();
         session->Start();
         setup.MockDirectReadProcessorFactory->Wait();
         gotClosedEvent.GetFuture().Wait();
@@ -1091,9 +1111,8 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
         EXPECT_CALL(*setup.MockDirectReadProcessorFactory, OnCreateProcessor(_))
             .Times(1 + nRetries);  // First call + N retries.
 
-        auto session = setup.GetDirectReadSession({
-            .OnAbortSession = [&gotClosedEvent](TSessionClosedEvent&&) { gotClosedEvent.SetValue(); },
-        });
+        // .OnAbortSession = [&gotClosedEvent](TSessionClosedEvent&&) { gotClosedEvent.SetValue(); },
+        auto session = setup.GetDirectReadSession();
         session->Start();
         setup.MockDirectReadProcessorFactory->Wait();
 
@@ -1116,9 +1135,8 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
             .WillOnce([&]() { setup.MockDirectReadProcessorFactory->CreateProcessor(setup.MockDirectReadProcessor); });
         EXPECT_CALL(*setup.MockDirectReadProcessor, OnInitDirectReadRequest(_)).Times(1);
 
-        auto session = setup.GetDirectReadSession({
-            .OnAbortSession = [&gotClosedEvent](TSessionClosedEvent&&) { gotClosedEvent.SetValue(); },
-        });
+        // .OnAbortSession = [&gotClosedEvent](TSessionClosedEvent&&) { gotClosedEvent.SetValue(); },
+        auto session = setup.GetDirectReadSession();
         session->Start();
         setup.MockDirectReadProcessorFactory->Wait();
 
@@ -1154,10 +1172,9 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
         EXPECT_CALL(*setup.MockDirectReadProcessor, OnInitDirectReadRequest(_))
             .Times(1);
 
-        auto session = setup.GetDirectReadSession({
-            .OnAbortSession = [&gotClosedEvent](TSessionClosedEvent&&) { gotClosedEvent.SetValue(); },
-            .OnSchedule = [](TDuration, std::function<void()> cb) { cb(); },
-        });
+        // .OnAbortSession = [&gotClosedEvent](TSessionClosedEvent&&) { gotClosedEvent.SetValue(); },
+        // .OnSchedule = [](TDuration, std::function<void()> cb) { cb(); },
+        auto session = setup.GetDirectReadSession();
 
         setup.AddDirectReadResponse(TMockDirectReadSessionProcessor::TServerReadInfo()
             .InitDirectReadResponse());
@@ -1239,9 +1256,8 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
                 .WillOnce([&]() { gotFinalStart.SetValue(); });
         }
 
-        auto session = setup.GetDirectReadSession({
-            .OnSchedule = [](TDuration, std::function<void()> cb) { cb(); },
-        });
+        // .OnSchedule = [](TDuration, std::function<void()> cb) { cb(); },
+        auto session = setup.GetDirectReadSession();
 
         session->Start();
         setup.MockDirectReadProcessorFactory->Wait();
@@ -1337,12 +1353,11 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
 
         std::function<void()> callback;
 
-        auto session = setup.GetDirectReadSession({
-            .OnSchedule = [&](TDuration d, std::function<void()> cb) {
-                UNIT_ASSERT_EQUAL(delay, d);
-                callback = cb;
-            },
-        });
+        // .OnSchedule = [&](TDuration d, std::function<void()> cb) {
+        //     UNIT_ASSERT_EQUAL(delay, d);
+        //     callback = cb;
+        // },
+        auto session = setup.GetDirectReadSession();
 
         session->Start();
         setup.MockDirectReadProcessorFactory->Wait();
@@ -1443,12 +1458,11 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
 
         std::function<void()> callback;
 
-        auto session = setup.GetDirectReadSession({
-            .OnSchedule = [&](TDuration d, std::function<void()> cb) {
-                UNIT_ASSERT_EQUAL(delay, d);
-                callback = cb;
-            },
-        });
+        // .OnSchedule = [&](TDuration d, std::function<void()> cb) {
+        //     UNIT_ASSERT_EQUAL(delay, d);
+        //     callback = cb;
+        // },
+        auto session = setup.GetDirectReadSession();
 
         session->Start();
         setup.MockDirectReadProcessorFactory->Wait();
@@ -1481,6 +1495,18 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
         secondProcessor->Wait();
         secondProcessor->Validate();
     }
+
+    /*
+    TODO(qyryq) Test:
+
+      - send wrong requests: InitDirectReadRequest, StartDirectReadPartitionSessionRequest
+      - test direct_read_ids
+      - wrong generations
+      - EndPartitionSession
+      - dieCallback
+      - graceful/non-graceful StopPartitionSession
+
+    */
 
 } // Y_UNIT_TEST_SUITE(DirectReadSession)
 

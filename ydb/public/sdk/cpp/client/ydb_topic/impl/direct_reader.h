@@ -26,8 +26,7 @@ class TDeferredActions;
 template <bool UseMigrationProtocol>
 class TSingleClusterReadSessionImpl;
 
-template <bool UseMigrationProtocol>
-using TSingleClusterReadSessionPtr = std::shared_ptr<TCallbackContext<TSingleClusterReadSessionImpl<UseMigrationProtocol>>>;
+using TSingleClusterReadSessionContextPtr = std::shared_ptr<TCallbackContext<TSingleClusterReadSessionImpl<false>>>;
 
 using TNodeId = i32;
 using TGeneration = i64;
@@ -41,8 +40,14 @@ using TDirectReadClientMessage = Ydb::Topic::StreamDirectReadMessage_FromClient;
 using IDirectReadConnectionFactory = ISessionConnectionProcessorFactory<TDirectReadClientMessage, TDirectReadServerMessage>;
 using IDirectReadConnectionFactoryPtr = std::shared_ptr<IDirectReadConnectionFactory>;
 using IDirectReadConnection = IDirectReadConnectionFactory::IProcessor;
+
 class TDirectReadSession;
-using TDirectReadSessionCbContextPtr = std::shared_ptr<TCallbackContext<TDirectReadSession>>;
+
+using TDirectReadSessionContextPtr = std::shared_ptr<TCallbackContext<TDirectReadSession>>;
+
+class IDirectReadSessionManager;
+
+using TDirectReadSessionManagerContextPtr = std::shared_ptr<TCallbackContext<IDirectReadSessionManager>>;
 
 struct TDirectReadSessionCallbacks {
     using TOnDirectReadDone = std::function<void(Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&& response, TDeferredActions<false>& deferred)>;
@@ -80,7 +85,12 @@ struct TDirectReadPartitionSession {
     TPartitionLocation Location;
     EState State = EState::IDLE;
     IRetryPolicy::IRetryState::TPtr RetryState = {};
-    TDirectReadId LastDirectReadId = 0;
+    TDirectReadId PrevDirectReadId = 0;
+
+    // If the control session sends StopPartitionSessionRequest(graceful=true, last_direct_read_id),
+    // we need to remember the Id, read up to it, and then kill the partition session (and probably the direct session altogether).
+    TMaybe<TDirectReadId> LastDirectReadId = Nothing();
+    TMaybe<i64> CommittedOffset = Nothing();
 
     // TODO(qyryq) min read id, partition id, done read id?
 
@@ -98,8 +108,7 @@ public:
         TNodeId node,
         TString serverSessionId,
         const NYdb::NTopic::TReadSessionSettings settings,
-        // TSingleClusterReadSessionPtr<false> singleClusterReadSession,
-        TDirectReadSessionCallbacks callbacks,
+        TDirectReadSessionManagerContextPtr managerContextPtr,
         NYdbGrpc::IQueueClientContextPtr clientContext,
         IDirectReadConnectionFactoryPtr connectionFactory,
         TLog log
@@ -109,6 +118,7 @@ public:
     void Close();
     void AddPartitionSession(TDirectReadPartitionSession&&);
     void UpdatePartitionSessionGeneration(TPartitionSessionId, TPartitionLocation);
+    void SetLastDirectReadId(TPartitionSessionId, i64 committedOffset, TDirectReadId);
     void DeletePartitionSession(TPartitionSessionId);
     bool Empty() const;
 
@@ -145,7 +155,9 @@ private:
     void SendStartDirectReadPartitionSessionImpl(TDirectReadPartitionSession&, TPlainStatus&&, TDeferredActions<false>&, bool delayedCall = false);
     void SendStartDirectReadPartitionSessionImpl(TPartitionSessionId, TPlainStatus&&, TDeferredActions<false>&, bool delayedCall = false);
 
-    void AbortImpl(TSessionClosedEvent&& closeEvent);
+    void DeletePartitionSessionImpl(TPartitionSessionId);
+
+    void AbortImpl(TPlainStatus&&);
 
     TStringBuilder GetLogPrefix() const;
 
@@ -161,8 +173,6 @@ private:
         CLOSED
     };
 
-    friend void Out<NYdb::NTopic::TDirectReadSession::EState>(IOutputStream& o, NYdb::NTopic::TDirectReadSession::EState state);
-
 private:
     TAdaptiveLock Lock;
 
@@ -173,8 +183,7 @@ private:
     size_t ConnectionGeneration = 0;
 
     const NYdb::NTopic::TReadSessionSettings ReadSessionSettings;
-    // TSingleClusterReadSessionPtr<false> SingleClusterReadSession;
-    TDirectReadSessionCallbacks Callbacks;
+    TDirectReadSessionManagerContextPtr ManagerContextPtr;
     TServerSessionId ServerSessionId;
     IDirectReadConnection::TPtr Connection;
     IDirectReadConnectionFactoryPtr ConnectionFactory;
@@ -190,40 +199,57 @@ private:
     TLog Log;
 };
 
-
-class TDirectReadSessionManager {
+class IDirectReadSessionManager {
 public:
+
+    virtual void StartPartitionSession(TDirectReadPartitionSession&&) = 0;
+    virtual void UpdatePartitionSession(TPartitionSessionId, TPartitionLocation) = 0;
+    virtual void StopPartitionSession(TPartitionSessionId) = 0;
+    virtual void StopPartitionSessionGracefully(TPartitionSessionId, i64 committedOffset, TDirectReadId lastDirectReadId) = 0;
+    virtual void Close() = 0;
+};
+
+class TDirectReadSessionManager : public IDirectReadSessionManager,
+                                  public TEnableSelfContext<IDirectReadSessionManager> {
+    friend TDirectReadSession;
+public:
+    using TSelf = TDirectReadSessionManager;
+    using TPtr = std::shared_ptr<TSelf>;
+
     TDirectReadSessionManager(
-        TServerSessionId serverSessionId,
+        TServerSessionId,
         const NYdb::NTopic::TReadSessionSettings,
-        // TSingleClusterReadSessionPtr<false> singleClusterReadSession,
-        TDirectReadSessionCallbacks callbacks,
-        NYdbGrpc::IQueueClientContextPtr clientContext,
-        IDirectReadConnectionFactoryPtr connectionFactory,
-        TLog log
+        TSingleClusterReadSessionContextPtr,
+        NYdbGrpc::IQueueClientContextPtr,
+        IDirectReadConnectionFactoryPtr,
+        TLog
     );
 
-    void StartPartitionSession(TDirectReadPartitionSession&&);
-    void UpdatePartitionSession(TPartitionSessionId, TPartitionLocation);
-    void StopPartitionSession(TPartitionSessionId);
-    void Close();
+    void StartPartitionSession(TDirectReadPartitionSession&&) override;
+    void UpdatePartitionSession(TPartitionSessionId, TPartitionLocation) override;
+    void StopPartitionSession(TPartitionSessionId) override;
+    void StopPartitionSessionGracefully(TPartitionSessionId, i64 committedOffset, TDirectReadId lastDirectReadId) override;
+    void Close() override;
 
 private:
 
-    using TNodeSessionsMap = TMap<TNodeId, TDirectReadSessionCbContextPtr>;
+    using TNodeSessionsMap = TMap<TNodeId, TDirectReadSessionContextPtr>;
 
-    TDirectReadSessionCbContextPtr CreateDirectReadSession(TNodeId);
-    void DeletePartitionSession(TPartitionSessionId id, TNodeSessionsMap::iterator it);
-    void DeleteNodeSessionIfEmpty(TNodeId);
+    TDirectReadSessionContextPtr CreateDirectReadSession(TNodeId);
+    void StartPartitionSessionImpl(TDirectReadPartitionSession&&);
+    void DeletePartitionSessionImpl(TPartitionSessionId id, TNodeSessionsMap::iterator it);
+    void DeleteNodeSessionIfEmptyImpl(TNodeId);
 
     TStringBuilder GetLogPrefix() const;
 
 private:
+    TAdaptiveLock Lock;
+
     const NYdb::NTopic::TReadSessionSettings ReadSessionSettings;
-    TServerSessionId ServerSessionId;
-    TDirectReadSessionCallbacks Callbacks;
-    NYdbGrpc::IQueueClientContextPtr ClientContext;
-    IDirectReadConnectionFactoryPtr ConnectionFactory;
+    const TServerSessionId ServerSessionId;
+    TSingleClusterReadSessionContextPtr SingleClusterReadSessionContextPtr;
+    const NYdbGrpc::IQueueClientContextPtr ClientContext;
+    const IDirectReadConnectionFactoryPtr ConnectionFactory;
     TNodeSessionsMap NodeSessions;
     TMap<TPartitionSessionId, TPartitionLocation> Locations;
     TLog Log;

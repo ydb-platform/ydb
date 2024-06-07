@@ -25,6 +25,11 @@ class IInternalClient {
 public:
     virtual NThreading::TFuture<TListEndpointsResult> GetEndpoints(std::shared_ptr<TDbDriverState> dbState) = 0;
     virtual void AddPeriodicTask(TPeriodicCb&& cb, TDuration period) = 0;
+    virtual void ScheduleCallback(
+        TDuration timeout,
+        std::function<void(bool)> callback,
+        NYdbGrpc::IQueueClientContextPtr token
+    ) = 0;
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
     virtual void DeleteChannels(const std::vector<std::string>& endpoints) = 0;
 #endif

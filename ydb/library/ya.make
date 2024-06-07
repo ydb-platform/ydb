@@ -21,6 +21,7 @@ RECURSE(
     ncloud
     pdisk_io
     persqueue
+    pool_stats_collector
     pretty_types_print
     protobuf_printer
     query_actor

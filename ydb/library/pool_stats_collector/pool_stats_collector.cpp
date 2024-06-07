@@ -1,6 +1,6 @@
 #include "pool_stats_collector.h"
 
-#include "counters.h"
+#include <ydb/core/base/counters.h>
 
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 

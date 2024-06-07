@@ -308,13 +308,17 @@ def get_comment_text(pr: PullRequest, summary: TestSummary, test_history_url: st
     body = [
         result
     ]
+    links = []
 
     if test_history_url:
-        body.append("")
-        body.append(f"[Test history]({test_history_url})")
+        links.append(f"[Test history]({test_history_url})")
 
     if test_log_file_url:
-        body.append(f"[Tests log]({test_log_file_url})")
+        links.append(f"[Tests log]({test_log_file_url})")
+
+    if links:
+        body.append("")
+        body.append(" | ".join(links))
 
     body.extend(summary.render())
 

@@ -169,7 +169,7 @@ void TAwsSignature::PrepareCgiParameters() {
         ::Sort(pair.second.begin(), pair.second.end());
     }
 
-    if (sortedCgi.size()) {
+    if (!sortedCgi.empty()) {
         TStringStream canonicalCgi;
 
         auto printSingleParam = [&canonicalCgi](const TString& key, const TVector<TString>& values) {

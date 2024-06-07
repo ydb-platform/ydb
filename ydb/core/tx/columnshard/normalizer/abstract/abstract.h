@@ -55,7 +55,9 @@ enum class ENormalizerSequentialId: ui32 {
     PortionsCleaner,
     TablesCleaner,
     PortionsMetadata,
-    CleanGranuleId
+    CleanGranuleId,
+
+    MAX
 };
 
 class TNormalizationContext {
@@ -190,14 +192,8 @@ public:
         }
 
         TConclusion<std::vector<INormalizerTask::TPtr>> Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
-            if (controller.HasLastAppliedNormalizerId() && GetSequentialId() && *GetSequentialId() <= controller.GetLastAppliedNormalizerIdUnsafe()) {
-                AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "normalization_skipped")("last", controller.GetLastAppliedNormalizerIdUnsafe())
-                    ("seq_id", GetSequentialId())("type", GetEnumSequentialId());
-                return std::vector<INormalizerTask::TPtr>();
-            } else {
-                AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "normalization_init")("last", controller.GetLastAppliedNormalizerIdOptional())
-                    ("seq_id", GetSequentialId())("type", GetEnumSequentialId());
-            }
+            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "normalization_init")("last", controller.GetLastSavedNormalizerId())
+                ("seq_id", GetSequentialId())("type", GetEnumSequentialId());
             auto result = DoInit(controller, txc);
             if (!result.IsSuccess()) {
                 return result;
@@ -220,7 +216,7 @@ private:
     std::deque<INormalizerComponent::TPtr> Normalizers;
     std::deque<TNormalizerCounters> Counters;
     THashSet<TString> FinishedRepairs;
-    YDB_READONLY_OPT(ui32, LastAppliedNormalizerId);
+    YDB_READONLY_DEF(std::optional<ui32>, LastSavedNormalizerId);
 private:
     INormalizerComponent::TPtr RegisterNormalizer(INormalizerComponent::TPtr normalizer);
 
@@ -238,11 +234,6 @@ public:
     void UpdateControllerState(NIceDb::TNiceDb& db) const;
     void AddRepairInfo(NIceDb::TNiceDb& db, const TString& info) const;
     bool InitControllerState(NIceDb::TNiceDb& db);
-
-    ui32 GetLastNormalizerSequentialId() {
-        AFL_VERIFY(!Normalizers.empty());
-        return Normalizers.back()->GetSequentialIdVerified();
-    }
 
     std::shared_ptr<IStoragesManager> GetStoragesManager() const {
         AFL_VERIFY(!!StoragesManager);

@@ -56,6 +56,8 @@ void TNormalizationController::UpdateControllerState(NIceDb::TNiceDb& db) const 
 }
 
 void TNormalizationController::InitNormalizers(const TInitContext& ctx) {
+    Counters.clear();
+    Normalizers.clear();
     if (HasAppData()) {
         for (auto&& i : AppDataVerified().ColumnShardConfig.GetRepairs()) {
             AFL_VERIFY(i.GetDescription())("error", "repair normalization have to has unique description");
@@ -67,9 +69,21 @@ void TNormalizationController::InitNormalizers(const TInitContext& ctx) {
             }
         }
     }
+
+    // We want to rerun all normalizers in case of binary rollback
+    if (LastSavedNormalizerId && (ui32)ENormalizerSequentialId::MAX <= *LastSavedNormalizerId) {
+        LastSavedNormalizerId = {};
+    }
+
     auto normalizers = GetEnumAllValues<ENormalizerSequentialId>();
     auto lastRegisteredNormalizer = ENormalizerSequentialId::Granules;
     for (auto nType : normalizers) {
+        if (LastSavedNormalizerId && (ui32)nType <= *LastSavedNormalizerId) {
+            continue;
+        }
+        if (nType == ENormalizerSequentialId::MAX) {
+            continue;
+        }
         auto normalizer = RegisterNormalizer(std::shared_ptr<INormalizerComponent>(INormalizerComponent::TFactory::Construct(::ToString(nType), ctx)));
         AFL_VERIFY(normalizer->GetEnumSequentialIdVerified() == nType);
         AFL_VERIFY(lastRegisteredNormalizer <= nType)("current", ToString(nType))("last", ToString(lastRegisteredNormalizer));
@@ -99,15 +113,9 @@ bool TNormalizationController::InitControllerState(NIceDb::TNiceDb& db) {
 
     ui64 lastNormalizerId;
     if (NColumnShard::Schema::GetSpecialValue(db, NColumnShard::Schema::EValueIds::LastNormalizerSequentialId, lastNormalizerId)) {
-        // We want to rerun all normalizers in case of binary rollback
-        if (lastNormalizerId <= GetLastNormalizerSequentialId()) {
-            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("last_normalizer_id", lastNormalizerId)("event", "restored");
-            LastAppliedNormalizerId = lastNormalizerId;
-        } else {
-            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("last_normalizer_id", LastAppliedNormalizerId)("event", "not_restored");
-        }
+        LastSavedNormalizerId = lastNormalizerId;
     } else {
-        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("last_normalizer_id", LastAppliedNormalizerId)("event", "have not info");
+        LastSavedNormalizerId = {};
     }
     return true;
 }

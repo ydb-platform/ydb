@@ -382,6 +382,10 @@ bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
             return false;
         }
     }
+    {
+        NOlap::TNormalizationController::TInitContext initCtx(Self->Info());
+        Self->NormalizerController.InitNormalizers(initCtx);
+    }
 
     if (isFirstRun) {
         txc.DB.Alter().SetExecutorAllowLogBatching(gAllowLogBatchingDefaultValue);

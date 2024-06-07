@@ -1,6 +1,19 @@
 # INSERT INTO
+
+{% include [OLAP_not_allow](../../../../_includes/not_allow_for_olap.md) %}
+
+{% note info %}
+
+Для загрузки данных в колоночные таблицы используются: 
+* [YDB CLI](../../../../reference/ydb-cli/export-import/import-file.md)
+* [Пакетная вставка данных](../../../../recipes/ydb-sdk/bulk-upsert.md)
+* [Yandex Data Transfer](https://yandex.cloud/ru/docs/ydb/tutorials/mmy-ydb-migration)
+* [FluentBit](../../../../integrations/fluent-bit.md)
+
+{% endnote %}
+
 {% if select_command != "SELECT STREAM" %}
-Добавляет строки в таблицу. {% if feature_bulk_tables %} Если целевая таблица уже существует и не является сортированной, операция `INSERT INTO` дописывает строки в конец таблицы. В случае сортированной таблицы, YQL пытается сохранить сортированность путем запуска сортированного слияния. {% endif %}{% if feature_map_tables %} При попытке вставить в таблицу строку с уже существующим значением первичного ключа операция завершится ошибкой с кодом `PRECONDITION_FAILED` и текстом `Operation aborted due to constraint violation: insert_pk`.{% endif %}
+Добавляет строки в строковую таблицу. {% if feature_bulk_tables %} Если целевая таблица уже существует и не является сортированной, операция `INSERT INTO` дописывает строки в конец таблицы. В случае сортированной таблицы, YQL пытается сохранить сортированность путем запуска сортированного слияния. {% endif %}{% if feature_map_tables %} При попытке вставить в таблицу строку с уже существующим значением первичного ключа операция завершится ошибкой с кодом `PRECONDITION_FAILED` и текстом `Operation aborted due to constraint violation: insert_pk`.{% endif %}
 
 {% if feature_mapreduce %}Таблица по имени ищется в базе данных, заданной оператором [USE](../use.md).{% endif %}
 

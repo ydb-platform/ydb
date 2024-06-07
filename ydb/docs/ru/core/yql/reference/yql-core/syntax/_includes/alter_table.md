@@ -167,6 +167,8 @@ ALTER TABLE `table1` RENAME TO `/backup/table1`;
 
 ## Создание и изменение групп колонок {#column-family}
 
+{% include [OLAP_not_allow](../../../../_includes/not_allow_for_olap.md) %}
+
 ### Создание группы колонок
 ```ADD FAMILY``` — создаёт новую группу колонок в строковой или колоночной таблице. Приведенный ниже код создаст в таблице ```series_with_families``` группу колонок ```family_small```.
 
@@ -178,8 +180,6 @@ ALTER TABLE series_with_families ADD FAMILY family_small (
 ```
 
 ### Изменение групп колонок
-
-{% include [OLAP_not_allow](../../../../_includes/not_allow_for_olap.md) %}
 
 При помощи команды ```ALTER COLUMN``` можно изменить группу колонок для указанной колонки. Приведенный ниже код для колонки ```release_date``` в таблице ```series_with_families``` сменит группу колонок на ```family_small```.
 

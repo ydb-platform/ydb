@@ -290,9 +290,9 @@
     "test.test[aggr_factory-multi_struct_nulls-default.txt-Results]": [],
     "test.test[aggregate-group_by_gs_flatten_columns-default.txt-Analyze]": [
         {
-            "checksum": "5622076e98cae82fe277d9cbcc3da49f",
-            "size": 6978,
-            "uri": "https://{canondata_backend}/1936997/93899b3de50fae3f9677baacc98094a7a629590a/resource.tar.gz#test.test_aggregate-group_by_gs_flatten_columns-default.txt-Analyze_/plan.txt"
+            "checksum": "3427f19a0976cbfd69351d55da5feeed",
+            "size": 6949,
+            "uri": "https://{canondata_backend}/1784826/ca2b5c92f6c48a734cb3bc782f744c31b81d1837/resource.tar.gz#test.test_aggregate-group_by_gs_flatten_columns-default.txt-Analyze_/plan.txt"
         }
     ],
     "test.test[aggregate-group_by_gs_flatten_columns-default.txt-Debug]": [

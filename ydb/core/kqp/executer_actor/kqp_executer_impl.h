@@ -1018,7 +1018,7 @@ protected:
     }
 
     TVector<TVector<TShardRangesWithShardId>> DistributeShardsToTasks(TVector<TShardRangesWithShardId> shardsRanges, const size_t tasksCount, const TVector<NScheme::TTypeInfo>& keyTypes) {
-        {
+        if (IsDebugLogEnabled()) {
             TStringBuilder sb;
             sb << "Distrubiting shards to tasks: [";
             for(size_t i = 0; i < shardsRanges.size(); i++) {

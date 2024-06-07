@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/retry/retry_async.h>
+#include <ydb/public/sdk/cpp/client/ydb_retry/retry.h>
 
 namespace Ydb {
     class VirtualTimestamp;
@@ -11,6 +11,12 @@ namespace Ydb {
 }
 
 namespace NYdb {
+
+namespace NRetry::Async {
+template <typename TClient, typename TStatusType>
+class TRetryContext;
+} // namespace NRetry::Async
+
 namespace NScheme {
 
 ////////////////////////////////////////////////////////////////////////////////

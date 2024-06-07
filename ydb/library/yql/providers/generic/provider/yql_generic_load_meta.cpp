@@ -318,6 +318,9 @@ namespace NYql {
             TString schema;
             const auto it = clusterConfig.GetDataSourceOptions().find("schema");
             if (it != clusterConfig.GetDataSourceOptions().end()) {
+                schema = it->second;
+            }
+            if (!schema) {
                 schema = "public";
             }
 

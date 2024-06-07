@@ -1,6 +1,6 @@
 # ALTER TABLE
 
-При помощи команды ```ALTER TABLE``` можно изменить состав колонок и дополнительные параметры таблицы. В одной команде можно указать несколько действий. В общем случае команда ```ALTER TABLE``` выглядит так:
+При помощи команды ```ALTER TABLE``` можно изменить состав колонок и дополнительные параметры строковых и колоночных таблиц. В одной команде можно указать несколько действий. В общем случае команда ```ALTER TABLE``` выглядит так:
 
 ```sql
 ALTER TABLE table_name action1, action2, ..., actionN;
@@ -10,25 +10,29 @@ ALTER TABLE table_name action1, action2, ..., actionN;
 
 ## Изменение состава колонок {#columns}
 
-{{ backend_name }} поддерживает возможность добавлять столбцы в таблицу, а также удалять неключевые колонки из таблицы.
+{{ backend_name }} поддерживает возможность добавлять столбцы в строковые и колоночные таблицы, а также удалять неключевые колонки из таблиц.
 
-```ADD COLUMN``` — добавляет столбец с указанными именем и типом. Приведенный ниже код добавит к таблице ```episodes``` столбец ```is_deleted``` с типом данных ```Bool```.
+```ADD COLUMN``` — добавляет столбец с указанными именем и типом. Приведенный ниже код добавит к таблице ```episodes``` столбец ```views``` с типом данных ```Uint16```.
 
 ```sql
-ALTER TABLE episodes ADD COLUMN is_deleted Bool;
+ALTER TABLE episodes ADD COLUMN views Uint16;
 ```
 
-```DROP COLUMN``` — удаляет столбец с указанным именем. Приведенный ниже код удалит столбец ```is_deleted``` из таблицы ```episodes```.
+```DROP COLUMN``` — удаляет столбец с указанным именем. Приведенный ниже код удалит столбец ```views``` из таблицы ```episodes```.
 
 ```sql
-ALTER TABLE episodes DROP column is_deleted;
+ALTER TABLE episodes DROP column views;
 ```
 
 {% if feature_secondary_index %}
 
-## Добавление или удаление вторичного индекса {#secondary-index}
+## Добавление, удаление и переименование вторичного индекса {#secondary-index}
 
-```ADD INDEX``` — добавляет индекс с указанным именем и типом для заданного набора колонок. Приведенный ниже код добавит глобальный индекс с именем ```title_index``` для колонки ```title```.
+{% include [OLAP_not_allow](../../../../_includes/not_allow_for_olap.md) %}
+
+### Добавление индекса
+
+```ADD INDEX``` — добавляет индекс с указанным именем и типом для заданного набора колонок в строковых таблицах. Приведенный ниже код добавит глобальный индекс с именем ```title_index``` для колонки ```title```.
 
 ```sql
 ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);
@@ -36,7 +40,7 @@ ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);
 
 Могут быть указаны все параметры индекса, описанные в команде [`CREATE TABLE`](../create_table#secondary_index)
 
-Удаление индекса:
+### Удаление индекса
 
 ```DROP INDEX``` — удаляет индекс с указанным именем. Приведенный ниже код удалит индекс с именем ```title_index```.
 
@@ -44,13 +48,11 @@ ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);
 ALTER TABLE `series` DROP INDEX `title_index`;
 ```
 
-Также добавить или удалить вторичный индекс можно с помощью команды [table index](https://ydb.tech/ru/docs/reference/ydb-cli/commands/secondary_index) {{ ydb-short-name }} CLI.
+Также добавить или удалить вторичный индекс у строковой таблицы можно с помощью команды [table index](https://ydb.tech/ru/docs/reference/ydb-cli/commands/secondary_index) {{ ydb-short-name }} CLI.
 
-## Переименование вторичного индекса {#rename-secondary-index}
+### Переименование вторичного индекса {#rename-secondary-index}
 
-`RENAME INDEX` — переименовывает индекс с указанным именем.
-
-Если индекс с новым именем существует, будет возвращена ошибка.
+`RENAME INDEX` — переименовывает индекс с указанным именем. Если индекс с новым именем существует, будет возвращена ошибка.
 
 {% if backend_name == YDB %}
 
@@ -69,6 +71,8 @@ ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;
 {% if feature_changefeed %}
 
 ## Добавление или удаление потока изменений {#changefeed}
+
+{% include [OLAP_not_allow](../../../../_includes/not_allow_for_olap.md) %}
 
 `ADD CHANGEFEED <name> WITH (option = value[, ...])` — добавляет [поток изменений (changefeed)](../../../../concepts/cdc) с указанным именем и параметрами.
 
@@ -145,6 +149,8 @@ ALTER TABLE `series` DROP CHANGEFEED `updates_feed`;
 
 ## Переименование таблицы {#rename}
 
+{% include [OLAP_not_allow](../../../../_includes/not_allow_for_olap.md) %}
+
 ```sql
 ALTER TABLE old_table_name RENAME TO new_table_name;
 ```
@@ -159,9 +165,10 @@ ALTER TABLE old_table_name RENAME TO new_table_name;
 ALTER TABLE `table1` RENAME TO `/backup/table1`;
 ```
 
-## Изменение групп колонок {#column-family}
+## Создание и изменение групп колонок {#column-family}
 
-```ADD FAMILY``` — создаёт новую группу колонок в таблице. Приведенный ниже код создаст в таблице ```series_with_families``` группу колонок ```family_small```.
+### Создание группы колонок
+```ADD FAMILY``` — создаёт новую группу колонок в строковой или колоночной таблице. Приведенный ниже код создаст в таблице ```series_with_families``` группу колонок ```family_small```.
 
 ```sql
 ALTER TABLE series_with_families ADD FAMILY family_small (
@@ -169,6 +176,10 @@ ALTER TABLE series_with_families ADD FAMILY family_small (
     COMPRESSION = "off"
 );
 ```
+
+### Изменение групп колонок
+
+{% include [OLAP_not_allow](../../../../_includes/not_allow_for_olap.md) %}
 
 При помощи команды ```ALTER COLUMN``` можно изменить группу колонок для указанной колонки. Приведенный ниже код для колонки ```release_date``` в таблице ```series_with_families``` сменит группу колонок на ```family_small```.
 
@@ -202,9 +213,9 @@ ALTER TABLE series_with_families ALTER FAMILY default SET DATA "hdd";
 Могут быть указаны все параметры группы колонок, описанные в команде [`CREATE TABLE`](create_table#column-family)
 
 
-## Изменение дополнительных параметров таблицы {#additional-alter}
+## Изменение дополнительных параметров таблиц {#additional-alter}
 
-Большинство параметров таблицы в YDB, приведенных на странице [описания таблицы]({{ concept_table }}), можно изменить командой ```ALTER```.
+Большинство параметров строчных и колоночных таблиц в {{ ydb-short-name }}, приведенных на странице [описания таблицы]({{ concept_table }}), можно изменить командой ```ALTER```.
 
 В общем случае команда для изменения любого параметра таблицы выглядит следующим образом:
 
@@ -214,7 +225,7 @@ ALTER TABLE table_name SET (key = value);
 
 ```key``` — имя параметра, ```value``` — его новое значение.
 
-Например, такая команда выключит автоматическое партиционирование таблицы:
+Например, такая команда выключит автоматическое партиционирование для колоночной или строковой таблицы:
 
 ```sql
 ALTER TABLE series SET (AUTO_PARTITIONING_BY_SIZE = DISABLED);
@@ -222,9 +233,7 @@ ALTER TABLE series SET (AUTO_PARTITIONING_BY_SIZE = DISABLED);
 
 ## Сброс дополнительных параметров таблицы {#additional-reset}
 
-Некоторые параметры таблицы в YDB, приведенные на странице [описания таблицы]({{ concept_table }}), можно сбросить командой ```ALTER```.
-
-Команда для сброса параметра таблицы выглядит следующим образом:
+Некоторые параметры таблиц в {{ ydb-short-name }}, приведенные на странице [описания таблицы]({{ concept_table }}), можно сбросить командой ```ALTER```. Команда для сброса параметра таблиц выглядит следующим образом:
 
 ```sql
 ALTER TABLE table_name RESET (key);
@@ -232,7 +241,7 @@ ALTER TABLE table_name RESET (key);
 
 ```key``` — имя параметра.
 
-Например, такая команда сбросит (удалит) настройки TTL для таблицы:
+Например, такая команда сбросит (удалит) настройки TTL для строковых или колоночных таблиц:
 
 ```sql
 ALTER TABLE series RESET (TTL);

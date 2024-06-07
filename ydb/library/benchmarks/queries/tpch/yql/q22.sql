@@ -8,7 +8,7 @@ $customers = (
 select
     c_acctbal,
     c_custkey,
-    Substring(c_phone, 0u, 2u) as cntrycode
+    Substring(CAST(c_phone AS STRING), 0u, 2u) as cntrycode
 from
     {{customer}}
 );

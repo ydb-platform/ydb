@@ -313,17 +313,15 @@ namespace NYql {
             *dsi->mutable_credentials()->mutable_token()->mutable_type() = "IAM";
         }
 
-        TString SetSchema(const TGenericClusterConfig& clusterConfig) {
+        template <typename T>
+        void SetSchema(T& request, const TGenericClusterConfig& clusterConfig) {
             TString schema;
             const auto it = clusterConfig.GetDataSourceOptions().find("schema");
             if (it != clusterConfig.GetDataSourceOptions().end()) {
-                schema = it->second;
-            }
-            if (!schema) {
                 schema = "public";
             }
 
-            return schema;
+            request.set_schema(schema);
         }
 
         void FillDataSourceOptions(NConnector::NApi::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig) {
@@ -336,14 +334,14 @@ namespace NYql {
                 case NYql::NConnector::NApi::MYSQL:
                     break;
                 case NYql::NConnector::NApi::GREENPLUM: {
-                    auto schema = SetSchema(clusterConfig);
-                    request.mutable_data_source_instance()->mutable_gp_options()->set_schema(schema);
+                    auto* options = request.mutable_data_source_instance()->mutable_gp_options();
+                    SetSchema(*options, clusterConfig);
                 } break;
                 case NYql::NConnector::NApi::MS_SQL_SERVER:
                     break;
                 case NYql::NConnector::NApi::POSTGRESQL: {
-                    auto schema = SetSchema(clusterConfig);
-                    request.mutable_data_source_instance()->mutable_pg_options()->set_schema(schema);
+                    auto* options = request.mutable_data_source_instance()->mutable_pg_options();
+                    SetSchema(*options, clusterConfig);
                 } break;
 
                 default:

@@ -99,8 +99,8 @@ public:
         }
         RowCost += TUpsertCost::OneRowCost(sz);
 
-        TConstArrayRef<TCell> keyCells(&cells[0], KeySize);
-        TConstArrayRef<TCell> valueCells(&cells[KeySize], cells.size() - KeySize);
+        TConstArrayRef<TCell> keyCells = cells.first(KeySize);
+        TConstArrayRef<TCell> valueCells = cells.subspan(KeySize);
 
         TSerializedCellVec serializedKey(keyCells);
         Rows.emplace_back(std::move(serializedKey), TSerializedCellVec::Serialize(valueCells));

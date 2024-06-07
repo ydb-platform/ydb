@@ -8,6 +8,7 @@ import "ydb/core/protos/blobstorage_pdisk_config.proto";
 import "ydb/core/protos/blobstorage_config.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
 import "ydb/core/protos/blobstorage_disk_color.proto";
+import "ydb/core/protos/node_whiteboard.proto";
 
 package NKikimrBlobStorage;
 option java_package = "ru.yandex.kikimr.proto";
@@ -1341,6 +1342,7 @@ message TGroupMetrics {
 message TEvControllerGroupMetricsExchange {
     repeated TGroupMetrics GroupMetrics = 1;
     repeated fixed32 GroupsToQuery = 2; // filled in by entities asking BSC to report some metrics in return
+    optional NKikimrWhiteboard.TBSGroupStateInfo WhiteboardUpdate = 3;
 }
 
 message TEvNodeWardenQueryGroupInfo {

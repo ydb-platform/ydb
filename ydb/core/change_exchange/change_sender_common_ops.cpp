@@ -28,7 +28,7 @@ void TBaseChangeSender::RegisterSender(ui64 partitionId) {
     auto& sender = Senders.at(partitionId);
 
     Y_ABORT_UNLESS(!sender.ActorId);
-    sender.ActorId = ActorOps->RegisterWithSameMailbox(CreateSender(partitionId));
+    sender.ActorId = ActorOps->RegisterWithSameMailbox(SenderFactory->CreateSender(partitionId));
 }
 
 void TBaseChangeSender::CreateMissingSenders(const TVector<ui64>& partitionIds) {
@@ -444,14 +444,20 @@ void TBaseChangeSender::RemoveRecords() {
     }
 }
 
-TBaseChangeSender::TBaseChangeSender(IActorOps* actorOps, IChangeSenderResolver* resolver, const TPathId& pathId)
-    : ActorOps(actorOps)
-    , Resolver(resolver)
-    , PathId(pathId)
-    , MemLimit(192_KB)
-    , MemUsage(0)
-{
-}
+TBaseChangeSender::TBaseChangeSender(
+    IActorOps* const actorOps,
+    IChangeSenderResolver* const resolver,
+    ISenderFactory* const senderFactory,
+    const TActorId changeServer,
+    const TPathId& pathId)
+        : ActorOps(actorOps)
+        , Resolver(resolver)
+        , SenderFactory(senderFactory)
+        , ChangeServer(changeServer)
+        , PathId(pathId)
+        , MemLimit(192_KB)
+        , MemUsage(0)
+{}
 
 void TBaseChangeSender::RenderHtmlPage(ui64 tabletId, NMon::TEvRemoteHttpInfo::TPtr& ev,
         const TActorContext& ctx)

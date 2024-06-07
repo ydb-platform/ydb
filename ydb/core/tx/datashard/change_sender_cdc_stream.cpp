@@ -296,6 +296,7 @@ class TCdcChangeSenderMain
     : public TActorBootstrapped<TCdcChangeSenderMain>
     , public NChangeExchange::TBaseChangeSender
     , public NChangeExchange::IChangeSenderResolver
+    , public NChangeExchange::ISenderFactory
     , private NSchemeCache::TSchemeCacheHelpers
 {
     struct TPQPartitionInfo {
@@ -651,10 +652,6 @@ class TCdcChangeSenderMain
         return StateBase(ev);
     }
 
-    TActorId GetChangeServer() const override {
-        return DataShard.ActorId;
-    }
-
     void Resolve() override {
         ResolveCdcStream();
     }
@@ -704,7 +701,7 @@ class TCdcChangeSenderMain
         }
     }
 
-    IActor* CreateSender(ui64 partitionId) override {
+    IActor* CreateSender(ui64 partitionId) const override {
         Y_ABORT_UNLESS(PartitionToShard.contains(partitionId));
         const auto shardId = PartitionToShard.at(partitionId);
         return new TCdcChangeSenderPartition(SelfId(), DataShard, partitionId, shardId, Stream);
@@ -764,7 +761,7 @@ public:
 
     explicit TCdcChangeSenderMain(const TDataShardId& dataShard, const TPathId& streamPathId)
         : TActorBootstrapped()
-        , TBaseChangeSender(this, this, streamPathId)
+        , TBaseChangeSender(this, this, this, dataShard.ActorId, streamPathId)
         , DataShard(dataShard)
         , TopicVersion(0)
     {

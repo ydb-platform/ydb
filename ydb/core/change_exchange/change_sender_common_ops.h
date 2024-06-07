@@ -56,24 +56,6 @@ struct TEvChangeExchangePrivate {
 
 }; // TEvChangeExchangePrivate
 
-class IChangeSender {
-public:
-    virtual ~IChangeSender() = default;
-
-    virtual TActorId GetChangeServer() const = 0;
-
-    virtual void CreateSenders(const TVector<ui64>& partitionIds, bool partitioningChanged = true) = 0;
-    virtual void KillSenders() = 0;
-    virtual IActor* CreateSender(ui64 partitionId) = 0;
-    virtual void RemoveRecords() = 0;
-
-    virtual void EnqueueRecords(TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>&& records) = 0;
-    virtual void ProcessRecords(TVector<IChangeRecord::TPtr>&& records) = 0;
-    virtual void ForgetRecords(TVector<ui64>&& records) = 0;
-    virtual void OnReady(ui64 partitionId) = 0;
-    virtual void OnGone(ui64 partitionId) = 0;
-};
-
 class IChangeSenderResolver {
 public:
     virtual ~IChangeSenderResolver() = default;
@@ -84,7 +66,13 @@ public:
     virtual ui64 GetPartitionId(IChangeRecord::TPtr record) const = 0;
 };
 
-class TBaseChangeSender: public IChangeSender {
+class ISenderFactory {
+public:
+    virtual ~ISenderFactory() = default;
+    virtual IActor* CreateSender(ui64 partitionId) const = 0;
+};
+
+class TBaseChangeSender {
     using TIncompleteRecord = TEvChangeExchange::TEvRequestRecords::TRecordInfo;
 
     struct TEnqueuedRecord: TIncompleteRecord {
@@ -119,6 +107,7 @@ class TBaseChangeSender: public IChangeSender {
         THashSet<ui64> CompletedPartitions;
     };
 
+private:
     void LazyCreateSender(THashMap<ui64, TSender>& senders, ui64 partitionId);
     void RegisterSender(ui64 partitionId);
     void CreateMissingSenders(const TVector<ui64>& partitionIds);
@@ -154,25 +143,32 @@ protected:
         ActorOps->Send(GetChangeServer(), new TEvChangeExchange::TEvRemoveRecords(std::move(records)));
     }
 
-    void CreateSenders(const TVector<ui64>& partitionIds, bool partitioningChanged = true) override;
-    void KillSenders() override;
-    void RemoveRecords() override;
+    TActorId GetChangeServer() const { return ChangeServer; };
+    void CreateSenders(const TVector<ui64>& partitionIds, bool partitioningChanged = true);
+    void KillSenders();
+    void RemoveRecords();
 
-    void EnqueueRecords(TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>&& records) override;
-    void ProcessRecords(TVector<IChangeRecord::TPtr>&& records) override;
-    void ForgetRecords(TVector<ui64>&& records) override;
-    void OnReady(ui64 partitionId) override;
-    void OnGone(ui64 partitionId) override;
+    void EnqueueRecords(TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>&& records);
+    void ProcessRecords(TVector<IChangeRecord::TPtr>&& records);
+    void ForgetRecords(TVector<ui64>&& records);
+    void OnReady(ui64 partitionId);
+    void OnGone(ui64 partitionId);
 
-    explicit TBaseChangeSender(IActorOps* actorOps, IChangeSenderResolver* resolver, const TPathId& pathId);
+    explicit TBaseChangeSender(
+        IActorOps* const actorOps,
+        IChangeSenderResolver* const resolver,
+        ISenderFactory* const senderFactory,
+        const TActorId changeServer,
+        const TPathId& pathId);
 
     void RenderHtmlPage(ui64 tabletId, NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
 
 private:
     IActorOps* const ActorOps;
     IChangeSenderResolver* const Resolver;
-
+    ISenderFactory* const SenderFactory;
 protected:
+    TActorId ChangeServer;
     const TPathId PathId;
 
 private:

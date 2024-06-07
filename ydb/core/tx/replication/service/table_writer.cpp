@@ -196,6 +196,7 @@ class TLocalTableWriter
     : public TActor<TLocalTableWriter>
     , public NChangeExchange::TBaseChangeSender
     , public NChangeExchange::IChangeSenderResolver
+    , public NChangeExchange::ISenderFactory
     , private NSchemeCache::TSchemeCacheHelpers
 {
     TStringBuf GetLogPrefix() const {
@@ -265,8 +266,8 @@ class TLocalTableWriter
         return result;
     }
 
-    TActorId GetChangeServer() const override {
-        return SelfId();
+    void Registered(TActorSystem*, const TActorId&) override {
+        ChangeServer = SelfId();
     }
 
     void Resolve() override {
@@ -402,7 +403,7 @@ class TLocalTableWriter
         Resolving = false;
     }
 
-    IActor* CreateSender(ui64 partitionId) override {
+    IActor* CreateSender(ui64 partitionId) const override {
         return new TTablePartitionWriter(SelfId(), partitionId, TTableId(PathId, Schema->Version));
     }
 
@@ -517,7 +518,7 @@ public:
 
     explicit TLocalTableWriter(const TPathId& tablePathId)
         : TActor(&TThis::StateWork)
-        , TBaseChangeSender(this, this, tablePathId)
+        , TBaseChangeSender(this, this, this, TActorId(), tablePathId)
         , MemoryPool(256)
     {
     }

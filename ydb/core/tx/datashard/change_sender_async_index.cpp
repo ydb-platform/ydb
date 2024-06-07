@@ -332,6 +332,7 @@ class TAsyncIndexChangeSenderMain
     : public TActorBootstrapped<TAsyncIndexChangeSenderMain>
     , public NChangeExchange::TBaseChangeSender
     , public NChangeExchange::IChangeSenderResolver
+    , public NChangeExchange::ISenderFactory
     , private NSchemeCache::TSchemeCacheHelpers
 {
     TStringBuf GetLogPrefix() const {
@@ -704,10 +705,6 @@ class TAsyncIndexChangeSenderMain
         return StateBase(ev);
     }
 
-    TActorId GetChangeServer() const override {
-        return DataShard.ActorId;
-    }
-
     void Resolve() override {
         ResolveIndex();
     }
@@ -740,7 +737,7 @@ class TAsyncIndexChangeSenderMain
         return it->ShardId; // partition = shard
     }
 
-    IActor* CreateSender(ui64 partitionId) override {
+    IActor* CreateSender(ui64 partitionId) const override {
         return new TAsyncIndexChangeSenderShard(SelfId(), DataShard, partitionId, IndexTablePathId, TagMap);
     }
 
@@ -798,7 +795,7 @@ public:
 
     explicit TAsyncIndexChangeSenderMain(const TDataShardId& dataShard, const TTableId& userTableId, const TPathId& indexPathId)
         : TActorBootstrapped()
-        , TBaseChangeSender(this, this, indexPathId)
+        , TBaseChangeSender(this, this, this, dataShard.ActorId, indexPathId)
         , DataShard(dataShard)
         , UserTableId(userTableId)
         , IndexTableVersion(0)

@@ -75,6 +75,10 @@ TDirectReadSessionManager::TDirectReadSessionManager(
     , Log(log)
     {}
 
+TDirectReadSessionManager::~TDirectReadSessionManager() {
+    Close();
+}
+
 TStringBuilder TDirectReadSessionManager::GetLogPrefix() const {
     return TStringBuilder() << "TDirectReadSessionManager ServerSessionId=" << ServerSessionId << " ";
 }
@@ -85,7 +89,6 @@ TDirectReadSessionContextPtr TDirectReadSessionManager::CreateDirectReadSession(
         ServerSessionId,
         ReadSessionSettings,
         SingleClusterReadSessionContextPtr,
-        this->SelfContext,
         ClientContext->CreateContext(),
         ProcessorFactory,
         Log);

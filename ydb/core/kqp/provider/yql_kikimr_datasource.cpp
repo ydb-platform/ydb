@@ -2,6 +2,7 @@
 #include "rewrite_io_utils.h"
 #include "yql_kikimr_provider_impl.h"
 
+#include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
 #include <ydb/library/yql/providers/common/config/yql_configuration_transformer.h>
 
@@ -200,8 +201,10 @@ public:
             }
 
             const THashMap<TString, TString>* readAttrs = nullptr;
-            if (!table.Metadata && table.GetTableType() == ETableType::ExternalTable) {
-                readAttributes = GatherReadAttributes(*input, ctx);
+            if (!table.Metadata && clusterName != NKqp::DefaultKikimrPublicClusterName) {
+                if (!readAttributes) {
+                    readAttributes = GatherReadAttributes(*input, ctx);
+                }
                 readAttrs = readAttributes->FindPtr(std::make_pair(clusterName, tableName));
             }
 

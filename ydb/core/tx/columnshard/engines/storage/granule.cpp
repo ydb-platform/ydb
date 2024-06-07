@@ -163,12 +163,12 @@ std::shared_ptr<TPortionInfo> TGranuleMeta::UpsertPortionOnLoad(TPortionInfo&& p
 }
 
 void TGranuleMeta::BuildActualizationTasks(NActualizer::TTieringProcessContext& context, const TDuration actualizationLag) const {
-    if (context.GetActualInstant() - LastActualizations < actualizationLag) {
+    if (context.GetActualInstant() < NextActualizations) {
         return;
     }
     NActualizer::TExternalTasksContext extTasks(Portions);
     ActualizationIndex->ExtractActualizationTasks(context, extTasks);
-    LastActualizations = context.GetActualInstant();
+    NextActualizations = context.GetActualInstant() + actualizationLag;
 }
 
 void TGranuleMeta::ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& constructor, std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema) {

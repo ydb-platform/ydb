@@ -378,16 +378,16 @@
     ],
     "test.test[aggregate-group_by_gs_join_aliases-default.txt-Debug]": [
         {
-            "checksum": "518cc94fed466753398e4a197ea7358e",
-            "size": 9301,
-            "uri": "https://{canondata_backend}/1937027/16b7289b1b8f5fdff728155d836fa2b238949b2d/resource.tar.gz#test.test_aggregate-group_by_gs_join_aliases-default.txt-Debug_/opt.yql"
+            "checksum": "1389caddedba1226d2cd8ad9d3fe98a0",
+            "size": 8615,
+            "uri": "https://{canondata_backend}/1847551/f28f63ec4dd6767606b90b69927b23cab38a7b41/resource.tar.gz#test.test_aggregate-group_by_gs_join_aliases-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[aggregate-group_by_gs_join_aliases-default.txt-Plan]": [
         {
-            "checksum": "9a1c3edad9819a0a5db9455b501d8ddc",
-            "size": 12158,
-            "uri": "https://{canondata_backend}/1937429/bc6c4453c1968361ffcaf05069260f5bb28fb44a/resource.tar.gz#test.test_aggregate-group_by_gs_join_aliases-default.txt-Plan_/plan.txt"
+            "checksum": "47a6157a3f703f8676bbbb60ed459da6",
+            "size": 12681,
+            "uri": "https://{canondata_backend}/1847551/f28f63ec4dd6767606b90b69927b23cab38a7b41/resource.tar.gz#test.test_aggregate-group_by_gs_join_aliases-default.txt-Plan_/plan.txt"
         }
     ],
     "test.test[aggregate-group_by_gs_join_aliases-default.txt-Results]": [
@@ -462,16 +462,16 @@
     ],
     "test.test[aggregate-rollup_with_dict--Debug]": [
         {
-            "checksum": "fd812013f55db8af289c6d5b52c7e49c",
-            "size": 4753,
-            "uri": "https://{canondata_backend}/1937027/16b7289b1b8f5fdff728155d836fa2b238949b2d/resource.tar.gz#test.test_aggregate-rollup_with_dict--Debug_/opt.yql"
+            "checksum": "963e6980166522d3d8197b4782d93b76",
+            "size": 4756,
+            "uri": "https://{canondata_backend}/1847551/f28f63ec4dd6767606b90b69927b23cab38a7b41/resource.tar.gz#test.test_aggregate-rollup_with_dict--Debug_/opt.yql"
         }
     ],
     "test.test[aggregate-rollup_with_dict--Plan]": [
         {
-            "checksum": "feb5ccc71d2d6f4f2a0508e989365086",
-            "size": 8243,
-            "uri": "https://{canondata_backend}/1937027/16b7289b1b8f5fdff728155d836fa2b238949b2d/resource.tar.gz#test.test_aggregate-rollup_with_dict--Plan_/plan.txt"
+            "checksum": "2088e4517d68425cb3c14aa8d492842d",
+            "size": 8201,
+            "uri": "https://{canondata_backend}/1847551/f28f63ec4dd6767606b90b69927b23cab38a7b41/resource.tar.gz#test.test_aggregate-rollup_with_dict--Plan_/plan.txt"
         }
     ],
     "test.test[aggregate-rollup_with_dict--Results]": [
@@ -1585,9 +1585,9 @@
     ],
     "test.test[optimizers-yql-17413-topsort--Debug]": [
         {
-            "checksum": "dbd02544a3cebd8a5526cebfd8b76b1c",
-            "size": 6135,
-            "uri": "https://{canondata_backend}/1925821/966d30e2d89883a10ca60d1a9265b5612e9c3c87/resource.tar.gz#test.test_optimizers-yql-17413-topsort--Debug_/opt.yql"
+            "checksum": "6aef50c75b53a2bcd37a8a4f09f1ce5c",
+            "size": 6011,
+            "uri": "https://{canondata_backend}/1847551/f28f63ec4dd6767606b90b69927b23cab38a7b41/resource.tar.gz#test.test_optimizers-yql-17413-topsort--Debug_/opt.yql"
         }
     ],
     "test.test[optimizers-yql-17413-topsort--Plan]": [
@@ -2896,9 +2896,9 @@
     ],
     "test.test[window-win_func_over_group_by_compl--Debug]": [
         {
-            "checksum": "5be5c6a8b9d59e8191117eba40666c7b",
-            "size": 10407,
-            "uri": "https://{canondata_backend}/1809005/3e49db5707e4bdeb046d566ca12933bc1e63c00d/resource.tar.gz#test.test_window-win_func_over_group_by_compl--Debug_/opt.yql"
+            "checksum": "9d9a55bdeebc98729f68429df66c4ecc",
+            "size": 10583,
+            "uri": "https://{canondata_backend}/1847551/f28f63ec4dd6767606b90b69927b23cab38a7b41/resource.tar.gz#test.test_window-win_func_over_group_by_compl--Debug_/opt.yql"
         }
     ],
     "test.test[window-win_func_over_group_by_compl--Plan]": [

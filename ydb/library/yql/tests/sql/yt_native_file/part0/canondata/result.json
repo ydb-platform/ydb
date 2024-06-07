@@ -345,16 +345,16 @@
     ],
     "test.test[aggregate-group_by_ru_join_qualified-default.txt-Debug]": [
         {
-            "checksum": "2f14245ec79cc47f9627e6db4a2712ae",
-            "size": 10117,
-            "uri": "https://{canondata_backend}/1937150/405a288927b41cb521a886c3ea36bf5749dfa5c2/resource.tar.gz#test.test_aggregate-group_by_ru_join_qualified-default.txt-Debug_/opt.yql"
+            "checksum": "1d565e41faa2672a289393c32278a127",
+            "size": 9467,
+            "uri": "https://{canondata_backend}/1937027/423fc21a447df25372cb080b89d394d1a55ba513/resource.tar.gz#test.test_aggregate-group_by_ru_join_qualified-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[aggregate-group_by_ru_join_qualified-default.txt-Plan]": [
         {
-            "checksum": "050deba971a4f5805f550dfb3ecc4e56",
-            "size": 13194,
-            "uri": "https://{canondata_backend}/1784826/37492dce1b5f3d5641ad23b53689b1db045db82f/resource.tar.gz#test.test_aggregate-group_by_ru_join_qualified-default.txt-Plan_/plan.txt"
+            "checksum": "cdfc259b00f1e41cf6f9bc22b178eb94",
+            "size": 13719,
+            "uri": "https://{canondata_backend}/1937027/423fc21a447df25372cb080b89d394d1a55ba513/resource.tar.gz#test.test_aggregate-group_by_ru_join_qualified-default.txt-Plan_/plan.txt"
         }
     ],
     "test.test[aggregate-group_by_ru_join_qualified-default.txt-Results]": [
@@ -2688,9 +2688,9 @@
     ],
     "test.test[simple_columns-simple_columns_join_coalesce_without_2-default.txt-Debug]": [
         {
-            "checksum": "4217a12d4d62f9cae582435c63b64289",
-            "size": 873,
-            "uri": "https://{canondata_backend}/1936997/f7e730981c1adb5511ebdbc3485797ec5e38e855/resource.tar.gz#test.test_simple_columns-simple_columns_join_coalesce_without_2-default.txt-Debug_/opt.yql"
+            "checksum": "7f83c9af502e850f327359c051f92564",
+            "size": 954,
+            "uri": "https://{canondata_backend}/1937027/423fc21a447df25372cb080b89d394d1a55ba513/resource.tar.gz#test.test_simple_columns-simple_columns_join_coalesce_without_2-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[simple_columns-simple_columns_join_coalesce_without_2-default.txt-Plan]": [

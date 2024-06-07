@@ -399,9 +399,9 @@
     ],
     "test.test[aggregate-group_by_rollup_aggr_expr--Debug]": [
         {
-            "checksum": "b7c5fdaa5f082179153d0b94911f61c7",
-            "size": 7150,
-            "uri": "https://{canondata_backend}/1889210/97759537b96117d0b783b60421791e318b61fc40/resource.tar.gz#test.test_aggregate-group_by_rollup_aggr_expr--Debug_/opt.yql_patched"
+            "checksum": "66366d52a0c559024f7ca2bf1b1924f0",
+            "size": 7262,
+            "uri": "https://{canondata_backend}/1871102/a3f4b73c2abee8d4bf99b0344946712ef43a9193/resource.tar.gz#test.test_aggregate-group_by_rollup_aggr_expr--Debug_/opt.yql_patched"
         }
     ],
     "test.test[aggregate-group_by_rollup_aggr_expr--Plan]": [
@@ -604,9 +604,9 @@
     ],
     "test.test[blocks-pg_to_strings--Debug]": [
         {
-            "checksum": "173a79347cebb416f04ad47f56a4ef40",
-            "size": 2933,
-            "uri": "https://{canondata_backend}/1925821/76f31386bb8c24a8c6deb4852e43a6b3c032e597/resource.tar.gz#test.test_blocks-pg_to_strings--Debug_/opt.yql_patched"
+            "checksum": "3b3d55e59e15c29cddd06ca9656fe299",
+            "size": 2931,
+            "uri": "https://{canondata_backend}/1871102/a3f4b73c2abee8d4bf99b0344946712ef43a9193/resource.tar.gz#test.test_blocks-pg_to_strings--Debug_/opt.yql_patched"
         }
     ],
     "test.test[blocks-pg_to_strings--Plan]": [
@@ -1751,9 +1751,9 @@
     ],
     "test.test[optimizers-length_over_merge--Debug]": [
         {
-            "checksum": "91466e7eee661caa2599771c1bb6a770",
-            "size": 3090,
-            "uri": "https://{canondata_backend}/1925821/76f31386bb8c24a8c6deb4852e43a6b3c032e597/resource.tar.gz#test.test_optimizers-length_over_merge--Debug_/opt.yql_patched"
+            "checksum": "61f1a0b279a64876139c836931eabd3c",
+            "size": 2711,
+            "uri": "https://{canondata_backend}/1871102/a3f4b73c2abee8d4bf99b0344946712ef43a9193/resource.tar.gz#test.test_optimizers-length_over_merge--Debug_/opt.yql_patched"
         }
     ],
     "test.test[optimizers-length_over_merge--Plan]": [

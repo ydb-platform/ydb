@@ -81,14 +81,19 @@ void TReadSession::CreateClusterSessionsImpl(TDeferredActions<false>& deferred) 
         Settings,
         DbDriverState->Database,
         SessionId,
+
+        // clusterName parameter is used by ydb_persqueue_public only:
         "",
+
         Log,
         Connections,
         Client->CreateReadSessionConnectionProcessorFactory(),
         EventsQueue,
         context,
-        1,
-        1,
+
+        // partitionStreamIdStart, partitionStreamIdStep parameters are used by ydb_persqueue_public only:
+        1, 1,
+
         Client->CreateDirectReadSessionConnectionProcessorFactory()
     );
 

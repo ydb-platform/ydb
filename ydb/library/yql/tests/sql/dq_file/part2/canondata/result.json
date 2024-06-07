@@ -2840,9 +2840,9 @@
     ],
     "test.test[window-win_func_cume_dist-default.txt-Debug]": [
         {
-            "checksum": "8b2974aadc3e89715fbb478097ffff78",
-            "size": 1018,
-            "uri": "https://{canondata_backend}/1597364/81324d44a583c1e929d9afce72a977f6bafb04dd/resource.tar.gz#test.test_window-win_func_cume_dist-default.txt-Debug_/opt.yql_patched"
+            "checksum": "b4528cac39b1139eb7429d33ecf897c4",
+            "size": 1022,
+            "uri": "https://{canondata_backend}/1942173/cdd1c55686f268ec709b7b06494ceedf8dba76de/resource.tar.gz#test.test_window-win_func_cume_dist-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[window-win_func_cume_dist-default.txt-Plan]": [

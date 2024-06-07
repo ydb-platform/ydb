@@ -3123,7 +3123,7 @@ struct TBuiltinFuncData {
             {"lead", BuildNamedArgcBuiltinFactoryCallback<TWinLeadLag>("Lead", 1, 2)},
             {"lag", BuildNamedArgcBuiltinFactoryCallback<TWinLeadLag>("Lag", 1, 2)},
             {"percentrank", BuildNamedArgcBuiltinFactoryCallback<TWinRank>("PercentRank", 0, 1)},
-            {"cumedist", BuildNamedArgcBuiltinFactoryCallback<TWinRowNumber>("CumeDist", 0, 0)},
+            {"cumedist", BuildNamedArgcBuiltinFactoryCallback<TWinCumeDist>("CumeDist", 0, 0)},
             {"ntile", BuildNamedArgcBuiltinFactoryCallback<TWinNTile>("NTile", 1, 1)},
 
             // Session window

@@ -306,10 +306,10 @@ private:
 };
 
 #ifndef MKQL_DISABLE_CODEGEN
-template <bool Sort>
-class TLLVMFieldsStructureState: public TLLVMFieldsStructure<TComputationValue<TState<Sort>>> {
+template <class TState>
+class TLLVMFieldsStructureState: public TLLVMFieldsStructure<TComputationValue<TState>> {
 private:
-    using TBase = TLLVMFieldsStructure<TComputationValue<TState<Sort>>>;
+    using TBase = TLLVMFieldsStructure<TComputationValue<TState>>;
     llvm::IntegerType* ValueType;
     llvm::PointerType* PtrValueType;
     llvm::IntegerType* StatusType;
@@ -320,8 +320,6 @@ public:
         std::vector<llvm::Type*> result = TBase::GetFields();
         result.emplace_back(StatusType); //status
         result.emplace_back(PtrValueType); //tongue
-        result.emplace_back(PtrValueType); //throat
-        result.emplace_back(Type::getInt64Ty(Context)); //count
         return result;
     }
 
@@ -413,7 +411,7 @@ public:
         const auto statusType = Type::getInt32Ty(context);
         const auto indexType = Type::getInt32Ty(ctx.Codegen.GetContext());
 
-        TLLVMFieldsStructureState<Sort> stateFields(context);
+        TLLVMFieldsStructureState<TState<Sort>> stateFields(context);
         const auto stateType = StructType::get(context, stateFields.GetFieldsArray());
 
         const auto statePtrType = PointerType::getUnqual(stateType);
@@ -865,40 +863,6 @@ private:
     bool IsHeapBuilt = false;
 };
 
-#ifndef MKQL_DISABLE_CODEGEN
-class TLLVMFieldsStructureSpillState: public TLLVMFieldsStructure<TComputationValue<TSpillingSupportState>> {
-private:
-    using TBase = TLLVMFieldsStructure<TComputationValue<TSpillingSupportState>>;
-    llvm::IntegerType* ValueType;
-    llvm::PointerType* PtrValueType;
-    llvm::IntegerType* StatusType;
-protected:
-    using TBase::Context;
-public:
-    std::vector<llvm::Type*> GetFieldsArray() {
-        std::vector<llvm::Type*> result = TBase::GetFields();
-        result.emplace_back(StatusType); //status
-        result.emplace_back(PtrValueType); //storage
-        return result;
-    }
-
-    llvm::Constant* GetStatus() {
-        return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 0);
-    }
-
-    llvm::Constant* GetStorage() {
-        return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 1);
-    }
-
-    TLLVMFieldsStructureSpillState(llvm::LLVMContext& context)
-        : TBase(context)
-        , ValueType(Type::getInt128Ty(Context))
-        , PtrValueType(PointerType::getUnqual(ValueType))
-        , StatusType(Type::getInt32Ty(Context)) {
-    }
-};
-#endif
-
 class TWideSortWrapper: public TStatefulWideFlowCodegeneratorNode<TWideSortWrapper>
 #ifndef MKQL_DISABLE_CODEGEN
     , public ICodegeneratorRootNode
@@ -975,7 +939,7 @@ public:
         const auto statusType = Type::getInt32Ty(context);
         const auto indexType = Type::getInt32Ty(ctx.Codegen.GetContext());
 
-        TLLVMFieldsStructureSpillState stateFields(context);
+        TLLVMFieldsStructureState<TSpillingSupportState> stateFields(context);
         const auto stateType = StructType::get(context, stateFields.GetFieldsArray());
 
         const auto statePtrType = PointerType::getUnqual(stateType);
@@ -1065,12 +1029,12 @@ public:
 
             block = good;
 
-            const auto storagePtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetStorage() }, "storage_ptr", block);
-            const auto storage = new LoadInst(ptrValueType, storagePtr, "storage", block);
+            const auto tonguePtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetTongue() }, "tongue_ptr", block);
+            const auto tongue = new LoadInst(ptrValueType, tonguePtr, "tongue", block);
 
             std::vector<Value*> placeholders(Representations.size());
             for (auto i = 0U; i < placeholders.size(); ++i) {
-                placeholders[i] = GetElementPtrInst::CreateInBounds(valueType, storage, {ConstantInt::get(indexType, i)}, (TString("placeholder_") += ToString(i)).c_str(), block);
+                placeholders[i] = GetElementPtrInst::CreateInBounds(valueType, tongue, {ConstantInt::get(indexType, i)}, (TString("placeholder_") += ToString(i)).c_str(), block);
             }
 
             for (auto i = 0U; i < Representations.size(); ++i) {

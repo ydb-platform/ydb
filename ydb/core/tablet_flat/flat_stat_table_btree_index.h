@@ -52,6 +52,7 @@ ui64 GetPrevHistoricDataSize(const TPart* part, TGroupId groupId, TRowId rowId, 
     auto& meta = part->IndexPages.GetBTree(groupId);
 
     if (rowId == 0) {
+        historicRowId = 0;
         return 0;
     }
     if (rowId >= part->IndexPages.GetBTree({}).RowCount) {

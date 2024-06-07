@@ -96,7 +96,7 @@ namespace {
         TStats stats;
         TTouchEnv env;
 
-        const ui32 attempts = 10;
+        const ui32 attempts = 25;
         for (ui32 attempt : xrange(attempts)) {
             if (NTable::BuildStatsBTreeIndex(subset, stats, rowCountResolution, dataSizeResolution, &env)) {
                 break;

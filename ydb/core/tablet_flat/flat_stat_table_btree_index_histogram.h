@@ -186,7 +186,7 @@ private:
 
         if (node.Level == 0) {
             // can't split, decide by node.EndRowId - 1
-            if (it->BeginRowId() < node.EndRowId && node.EndRowId <= it->EndRowId()) {
+            if (it->Has(node.EndRowId - 1)) {
                 part.PushBack(&node);
             }
             return true;
@@ -334,7 +334,9 @@ private:
 
         bool ready = true;
 
-        ready &= BuildHistogramRecursive<TGetSize>(histogram, leftParts, beginSize, beginSize + leftSize, depth + 1);
+        if (leftSize) {
+            ready &= BuildHistogramRecursive<TGetSize>(histogram, leftParts, beginSize, beginSize + leftSize, depth + 1);
+        }
         
         ui64 splitSize = beginSize + leftSize + middleSize / 2;
         // Note: due to different calculation approaches splitSize may exceed StatTotalSize, ignore them
@@ -342,7 +344,9 @@ private:
             AddBucket(histogram, splitKey, splitSize);
         }
 
-        ready &= BuildHistogramRecursive<TGetSize>(histogram, rightParts, SafeDiff(endSize, rightSize), endSize, depth + 1);
+        if (rightSize) {
+            ready &= BuildHistogramRecursive<TGetSize>(histogram, rightParts, SafeDiff(endSize, rightSize), endSize, depth + 1);
+        }
 
         return ready;
     }

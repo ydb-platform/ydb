@@ -1,9 +1,11 @@
 #pragma once
 
-#include "mpmc_ring_queue.h"
+#include "defs.h"
+
+#include <ydb/library/actors/queues/mpmc_ring_queue.h>
 
 
-namespace NActors::NTests {
+namespace NActors::NQueueBench {
 
     struct IQueue {
         virtual ~IQueue() = default;
@@ -63,5 +65,6 @@ namespace NActors::NTests {
             return Queue->TryPop(State);
         }
     };
+
 
 }

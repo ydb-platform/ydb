@@ -281,16 +281,16 @@
     ],
     "test.test[aggregate-group_by_cube_grouping--Debug]": [
         {
-            "checksum": "cea0d6d5cb8911807b454c830d51032c",
-            "size": 11214,
-            "uri": "https://{canondata_backend}/1689644/165c4e4c98ea173a3cb63ec2b954c166a8209d84/resource.tar.gz#test.test_aggregate-group_by_cube_grouping--Debug_/opt.yql_patched"
+            "checksum": "2af97603ecbeb4c0e4aa6c85de640b60",
+            "size": 12278,
+            "uri": "https://{canondata_backend}/1777230/af30d016cca75b9d11b6ed54e7d270e255deb404/resource.tar.gz#test.test_aggregate-group_by_cube_grouping--Debug_/opt.yql_patched"
         }
     ],
     "test.test[aggregate-group_by_cube_grouping--Plan]": [
         {
-            "checksum": "d7a29187167830a0917f36edc0289cca",
-            "size": 13670,
-            "uri": "https://{canondata_backend}/1773845/d2141055cd31d948959dc44b2043b73e0eedb61e/resource.tar.gz#test.test_aggregate-group_by_cube_grouping--Plan_/plan.txt"
+            "checksum": "dfe8ddb1a7da07b99d4a206fd2e5c5bc",
+            "size": 13741,
+            "uri": "https://{canondata_backend}/1777230/af30d016cca75b9d11b6ed54e7d270e255deb404/resource.tar.gz#test.test_aggregate-group_by_cube_grouping--Plan_/plan.txt"
         }
     ],
     "test.test[aggregate-group_by_cube_grouping--Results]": [],
@@ -1073,9 +1073,9 @@
     ],
     "test.test[flatten_by-flatten_expr_struct-default.txt-Debug]": [
         {
-            "checksum": "c3c67ca9ed5dc0189b3d340de4471a32",
-            "size": 1734,
-            "uri": "https://{canondata_backend}/1923547/ddf9bfe2e7c7e3d1c3694dcf4147e353597b5e64/resource.tar.gz#test.test_flatten_by-flatten_expr_struct-default.txt-Debug_/opt.yql_patched"
+            "checksum": "9497509cf16dd61207021552faddd204",
+            "size": 1831,
+            "uri": "https://{canondata_backend}/1777230/af30d016cca75b9d11b6ed54e7d270e255deb404/resource.tar.gz#test.test_flatten_by-flatten_expr_struct-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[flatten_by-flatten_expr_struct-default.txt-Plan]": [
@@ -1882,16 +1882,16 @@
     ],
     "test.test[optimizers-field_subset_for_multiusage--Debug]": [
         {
-            "checksum": "4f851cb02ddb2ffc0ca48f111dbab31f",
-            "size": 6712,
-            "uri": "https://{canondata_backend}/1903885/dc53b4edac607ebf3b277ca9598c7c26218fd737/resource.tar.gz#test.test_optimizers-field_subset_for_multiusage--Debug_/opt.yql_patched"
+            "checksum": "5e3f5601ebf144223658c4bf431467a0",
+            "size": 5977,
+            "uri": "https://{canondata_backend}/1777230/af30d016cca75b9d11b6ed54e7d270e255deb404/resource.tar.gz#test.test_optimizers-field_subset_for_multiusage--Debug_/opt.yql_patched"
         }
     ],
     "test.test[optimizers-field_subset_for_multiusage--Plan]": [
         {
-            "checksum": "51a8ba088ff2fff905f60f8461017fce",
-            "size": 12167,
-            "uri": "https://{canondata_backend}/1773845/d2141055cd31d948959dc44b2043b73e0eedb61e/resource.tar.gz#test.test_optimizers-field_subset_for_multiusage--Plan_/plan.txt"
+            "checksum": "1b04a659a0e3393cf535afc62df4535f",
+            "size": 11854,
+            "uri": "https://{canondata_backend}/1777230/af30d016cca75b9d11b6ed54e7d270e255deb404/resource.tar.gz#test.test_optimizers-field_subset_for_multiusage--Plan_/plan.txt"
         }
     ],
     "test.test[optimizers-field_subset_for_multiusage--Results]": [
@@ -2900,9 +2900,9 @@
     ],
     "test.test[window-mixed/aggregations--Debug]": [
         {
-            "checksum": "a26fc44be7dd0190d44d51b087b431bb",
-            "size": 5283,
-            "uri": "https://{canondata_backend}/1777230/07925bc76f621b8c24d146f499334eda41f5710e/resource.tar.gz#test.test_window-mixed_aggregations--Debug_/opt.yql_patched"
+            "checksum": "2584efe9f60df5bde9820efbeeba90f7",
+            "size": 5350,
+            "uri": "https://{canondata_backend}/1777230/af30d016cca75b9d11b6ed54e7d270e255deb404/resource.tar.gz#test.test_window-mixed_aggregations--Debug_/opt.yql_patched"
         }
     ],
     "test.test[window-mixed/aggregations--Plan]": [

@@ -303,16 +303,16 @@
     ],
     "test.test[aggregate-group_by_mul_gs_ru--Debug]": [
         {
-            "checksum": "eca618680b8f3736d278bca83a433a62",
-            "size": 6273,
-            "uri": "https://{canondata_backend}/1937001/e2395e23fd4b098a700827420232526a8bbb83b2/resource.tar.gz#test.test_aggregate-group_by_mul_gs_ru--Debug_/opt.yql_patched"
+            "checksum": "0638146b59bc226b8388bd56d7b4313f",
+            "size": 6072,
+            "uri": "https://{canondata_backend}/1923547/320f607d9e9c19a93a835d3183938f1fba6dd52c/resource.tar.gz#test.test_aggregate-group_by_mul_gs_ru--Debug_/opt.yql_patched"
         }
     ],
     "test.test[aggregate-group_by_mul_gs_ru--Plan]": [
         {
-            "checksum": "40c04a936854a48430f33fac30ab1d8a",
-            "size": 7850,
-            "uri": "https://{canondata_backend}/1600758/32cfdeb8c6377a2e7e62c6c4adbb95f25af7669b/resource.tar.gz#test.test_aggregate-group_by_mul_gs_ru--Plan_/plan.txt"
+            "checksum": "e78b8c0f6855d3df92663efab505204b",
+            "size": 7921,
+            "uri": "https://{canondata_backend}/1923547/320f607d9e9c19a93a835d3183938f1fba6dd52c/resource.tar.gz#test.test_aggregate-group_by_mul_gs_ru--Plan_/plan.txt"
         }
     ],
     "test.test[aggregate-group_by_mul_gs_ru--Results]": [],
@@ -530,9 +530,9 @@
     ],
     "test.test[column_order-select_plain_nosimple-default.txt-Debug]": [
         {
-            "checksum": "dc11b68594287b9498702b467774cf2f",
+            "checksum": "6251c1c778a50da9b004c97dce332b78",
             "size": 3939,
-            "uri": "https://{canondata_backend}/1031349/6c70521322fc43f752ef6b89f8667fefd006af8b/resource.tar.gz#test.test_column_order-select_plain_nosimple-default.txt-Debug_/opt.yql_patched"
+            "uri": "https://{canondata_backend}/1923547/320f607d9e9c19a93a835d3183938f1fba6dd52c/resource.tar.gz#test.test_column_order-select_plain_nosimple-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[column_order-select_plain_nosimple-default.txt-Plan]": [
@@ -987,9 +987,9 @@
     ],
     "test.test[hor_join-out_hor_join-default.txt-Debug]": [
         {
-            "checksum": "8bf8685581bc3f484d21f3c980850afd",
-            "size": 4496,
-            "uri": "https://{canondata_backend}/1600758/32cfdeb8c6377a2e7e62c6c4adbb95f25af7669b/resource.tar.gz#test.test_hor_join-out_hor_join-default.txt-Debug_/opt.yql_patched"
+            "checksum": "02bf3ab1624e7afabe529827b0112f5c",
+            "size": 4669,
+            "uri": "https://{canondata_backend}/1923547/320f607d9e9c19a93a835d3183938f1fba6dd52c/resource.tar.gz#test.test_hor_join-out_hor_join-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[hor_join-out_hor_join-default.txt-Plan]": [
@@ -1864,9 +1864,9 @@
     ],
     "test.test[pg-select_agg_gs_rollup-default.txt-Debug]": [
         {
-            "checksum": "2b2cbab97e7f3ca3f50e9ec949e89cc4",
-            "size": 1129,
-            "uri": "https://{canondata_backend}/1600758/32cfdeb8c6377a2e7e62c6c4adbb95f25af7669b/resource.tar.gz#test.test_pg-select_agg_gs_rollup-default.txt-Debug_/opt.yql_patched"
+            "checksum": "4e890852d5e654d71472abbac4a10c5f",
+            "size": 1166,
+            "uri": "https://{canondata_backend}/1923547/320f607d9e9c19a93a835d3183938f1fba6dd52c/resource.tar.gz#test.test_pg-select_agg_gs_rollup-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-select_agg_gs_rollup-default.txt-Plan]": [
@@ -2694,9 +2694,9 @@
     ],
     "test.test[window-win_func_over_group_by_list_names--Debug]": [
         {
-            "checksum": "116c8f0b0f2c4badf18f2b13257bd318",
-            "size": 7946,
-            "uri": "https://{canondata_backend}/1817427/7191f51686eac4d9e9410ce1ece49c2825ef4156/resource.tar.gz#test.test_window-win_func_over_group_by_list_names--Debug_/opt.yql_patched"
+            "checksum": "93272f345d0939b83721190ea5597f30",
+            "size": 8213,
+            "uri": "https://{canondata_backend}/1923547/320f607d9e9c19a93a835d3183938f1fba6dd52c/resource.tar.gz#test.test_window-win_func_over_group_by_list_names--Debug_/opt.yql_patched"
         }
     ],
     "test.test[window-win_func_over_group_by_list_names--Plan]": [

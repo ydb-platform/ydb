@@ -1181,6 +1181,8 @@ private:
 
     // Direct Read
     void OnDirectReadDone(Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&&, TDeferredActions<false>&);
+    void ScheduleCallback(TDuration timeout, std::function<void(bool)> callback);
+    bool StopPartitionSession(TPartitionSessionId);
 
     // Assumes that we're under lock.
     template<typename TMessage>
@@ -1328,7 +1330,7 @@ private:
     bool WaitingReadResponse = false;
     std::shared_ptr<TServerMessage<UseMigrationProtocol>> ServerMessage; // Server message to write server response to.
     THashMap<ui64, TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>>> PartitionStreams; // assignId -> Partition stream.
-    std::shared_ptr<TDirectReadSessionManager> DirectReadSessionManager; // Only for ydb_topic
+    TDirectReadSessionManagerContextPtr DirectReadSessionManagerContextPtr; // Only for ydb_topic
     TPartitionCookieMapping CookieMapping;  // Only for ydb_persqueue?
     std::deque<TDecompressionQueueItem> DecompressionQueue;
     bool DataReadingSuspended = false;

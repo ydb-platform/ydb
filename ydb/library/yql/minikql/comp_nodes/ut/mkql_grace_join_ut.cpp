@@ -1330,22 +1330,21 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
             const auto iterator = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue tuple;
 
-
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "B");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "X");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "B");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Y");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "C");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "X");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "C");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Y");
             UNIT_ASSERT(iterator.Next(tuple));
             UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "A");
             UNIT_ASSERT(!tuple.GetElement(1));
+            UNIT_ASSERT(iterator.Next(tuple));
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "B");
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "X");
+            UNIT_ASSERT(iterator.Next(tuple));
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "B");
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Y");
+            UNIT_ASSERT(iterator.Next(tuple));
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "C");
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "X");
+            UNIT_ASSERT(iterator.Next(tuple));
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "C");
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Y");
             UNIT_ASSERT(!iterator.Next(tuple));
             UNIT_ASSERT(!iterator.Next(tuple));
         }
@@ -1859,22 +1858,21 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
             const auto iterator = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue tuple;
 
-
+            UNIT_ASSERT(iterator.Next(tuple));
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "B");
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "X");
+            UNIT_ASSERT(iterator.Next(tuple));
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "C");
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "X");
+            UNIT_ASSERT(iterator.Next(tuple));
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "B");
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Y");
+            UNIT_ASSERT(iterator.Next(tuple));
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "C");
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Y");
             UNIT_ASSERT(iterator.Next(tuple));
             UNIT_ASSERT(!tuple.GetElement(0));
             UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Z");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "B");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "X");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "C");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "X");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "B");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Y");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "C");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Y");
             UNIT_ASSERT(!iterator.Next(tuple));
             UNIT_ASSERT(!iterator.Next(tuple));
         }
@@ -2001,11 +1999,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
             NUdf::TUnboxedValue tuple;
 
             UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "Z");
-            UNIT_ASSERT_VALUES_EQUAL(tuple.GetElement(1).Get<ui32>(), 3);
-            UNIT_ASSERT(iterator.Next(tuple));
             UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "C");
             UNIT_ASSERT(!tuple.GetElement(1));
+            UNIT_ASSERT(iterator.Next(tuple));
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "Z");
+            UNIT_ASSERT_VALUES_EQUAL(tuple.GetElement(1).Get<ui32>(), 3);
             UNIT_ASSERT(!iterator.Next(tuple));
             UNIT_ASSERT(!iterator.Next(tuple));
         }
@@ -2061,24 +2059,24 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
 
             const auto graph = setup.BuildGraph(pgmReturn);
             const auto iterator = graph->GetValue().GetListIterator();
+
             NUdf::TUnboxedValue tuple;
 
-
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "B");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "X");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "B");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Y");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "C");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "X");
-            UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "C");
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Y");
             UNIT_ASSERT(iterator.Next(tuple));
             UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "A");
             UNIT_ASSERT(!tuple.GetElement(1));
+            UNIT_ASSERT(iterator.Next(tuple));
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "B");
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "X");
+            UNIT_ASSERT(iterator.Next(tuple));
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "B");
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Y");
+            UNIT_ASSERT(iterator.Next(tuple));
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "C");
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "X");
+            UNIT_ASSERT(iterator.Next(tuple));
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "C");
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Y");
             UNIT_ASSERT(iterator.Next(tuple));
             UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Z");
             UNIT_ASSERT(!tuple.GetElement(0));
@@ -2140,12 +2138,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
             const auto iterator = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue tuple;
 
-
             UNIT_ASSERT(iterator.Next(tuple));
             UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "A");
             UNIT_ASSERT(!tuple.GetElement(1));
             UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Z");
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "X");
             UNIT_ASSERT(!tuple.GetElement(0));
             UNIT_ASSERT(!iterator.Next(tuple));
             UNIT_ASSERT(!iterator.Next(tuple));

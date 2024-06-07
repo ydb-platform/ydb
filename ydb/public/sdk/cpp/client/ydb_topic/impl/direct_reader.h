@@ -42,12 +42,7 @@ using IDirectReadProcessorFactoryPtr = std::shared_ptr<IDirectReadProcessorFacto
 using IDirectReadProcessor = IDirectReadProcessorFactory::IProcessor;
 
 class TDirectReadSession;
-
 using TDirectReadSessionContextPtr = std::shared_ptr<TCallbackContext<TDirectReadSession>>;
-
-class IDirectReadSessionManager;
-
-using TDirectReadSessionManagerContextPtr = std::shared_ptr<TCallbackContext<IDirectReadSessionManager>>;
 
 struct TDirectReadSessionCallbacks {
     using TOnDirectReadDone = std::function<void(Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&& response, TDeferredActions<false>& deferred)>;
@@ -199,18 +194,7 @@ private:
     TLog Log;
 };
 
-class IDirectReadSessionManager {
-public:
-
-    virtual void StartPartitionSession(TDirectReadPartitionSession&&) = 0;
-    virtual void UpdatePartitionSession(TPartitionSessionId, TPartitionLocation) = 0;
-    virtual void StopPartitionSession(TPartitionSessionId) = 0;
-    virtual void StopPartitionSessionGracefully(TPartitionSessionId, i64 committedOffset, TDirectReadId lastDirectReadId) = 0;
-    virtual void Close() = 0;
-};
-
-class TDirectReadSessionManager : public IDirectReadSessionManager,
-                                  public TEnableSelfContext<IDirectReadSessionManager> {
+class TDirectReadSessionManager {
     friend TDirectReadSession;
 public:
     using TSelf = TDirectReadSessionManager;
@@ -225,11 +209,13 @@ public:
         TLog
     );
 
-    void StartPartitionSession(TDirectReadPartitionSession&&) override;
-    void UpdatePartitionSession(TPartitionSessionId, TPartitionLocation) override;
-    void StopPartitionSession(TPartitionSessionId) override;
-    void StopPartitionSessionGracefully(TPartitionSessionId, i64 committedOffset, TDirectReadId lastDirectReadId) override;
-    void Close() override;
+    ~TDirectReadSessionManager();
+
+    void StartPartitionSession(TDirectReadPartitionSession&&);
+    void UpdatePartitionSession(TPartitionSessionId, TPartitionLocation);
+    void StopPartitionSession(TPartitionSessionId);
+    void StopPartitionSessionGracefully(TPartitionSessionId, i64 committedOffset, TDirectReadId lastDirectReadId);
+    void Close();
 
 private:
 

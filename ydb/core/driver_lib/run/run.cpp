@@ -227,6 +227,12 @@ public:
                 appData->AllAuthenticatedUsers = allUsersGroup;
             }
         }
+        TVector<TString> registerDynamicNodeAllowedSIDs {TString(DEFAULT_REGISTER_NODE_CERT_USER) + "@" + Config.GetAuthConfig().GetCertificateAuthenticationDomain()};
+        if (securityConfig.RegisterDynamicNodeAllowedSIDsSize() > 0) {
+            const auto& allowedSids = securityConfig.GetRegisterDynamicNodeAllowedSIDs();
+            registerDynamicNodeAllowedSIDs.insert(registerDynamicNodeAllowedSIDs.end(), allowedSids.cbegin(), allowedSids.cend());
+        }
+        appData->RegisterDynamicNodeAllowedSIDs = std::move(registerDynamicNodeAllowedSIDs);
 
         appData->FeatureFlags = Config.GetFeatureFlags();
         appData->AllowHugeKeyValueDeletes = Config.GetFeatureFlags().GetAllowHugeKeyValueDeletes();
@@ -234,14 +240,6 @@ public:
 
         appData->CompactionConfig = Config.GetCompactionConfig();
         appData->BackgroundCleaningConfig = Config.GetBackgroundCleaningConfig();
-
-        TVector<TString> certificateAuthAllowedSIDs {TString(DEFAULT_REGISTER_NODE_CERT_USER) + "@" + Config.GetAuthConfig().GetCertificateAuthenticationDomain()};
-        const auto& clientCertificateAuthorization(Config.GetClientCertificateAuthorization());
-        const auto& certSidName = clientCertificateAuthorization.GetDynamicNodeAuthorization().GetSidName();
-        if (!certSidName.empty()) {
-            certificateAuthAllowedSIDs.push_back(certSidName);
-        }
-        appData->CertificateAuthAllowedSIDs = std::move(certificateAuthAllowedSIDs);
     }
 };
 

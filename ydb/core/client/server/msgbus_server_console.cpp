@@ -30,12 +30,21 @@ public:
         : TBase(msg)
         , Request(request)
     {
-        const auto& clientCertificates = msg.FindClientCert();
-        if (!clientCertificates.empty()) {
-            TBase::SetSecurityToken(TString(clientCertificates.front()));
+        const auto& token = request.GetSecurityToken();
+        if (!token.empty()) {
+            TBase::SetSecurityToken(token);
         } else {
-            TBase::SetSecurityToken(request.GetSecurityToken());
+            const auto& clientCertificates = msg.FindClientCert();
+            if (!clientCertificates.empty()) {
+                TBase::SetSecurityToken(TString(clientCertificates.front()));
+            }
         }
+        // const auto& clientCertificates = msg.FindClientCert();
+        // if (!clientCertificates.empty()) {
+        //     TBase::SetSecurityToken(TString(clientCertificates.front()));
+        // } else {
+        //     TBase::SetSecurityToken(request.GetSecurityToken());
+        // }
         // Don`t require admin access for GetNodeConfigRequest
         if (!Request.HasGetNodeConfigRequest()) {
             TBase::SetRequireAdminAccess(true);
@@ -364,11 +373,9 @@ public:
     bool CheckAccessGetNodeConfig() const {
         const auto serializedToken = TBase::GetSerializedToken();
         if (!serializedToken.empty()) {
-            // if (AuthInfo.IsCertificate) {
-                return CheckToken(serializedToken, AppData()->CertificateAuthAllowedSIDs);
-            // } else {
-            //     return CheckToken(serializedToken, AppData()->AdministrationAllowedSIDs);
-            // }
+            if (!CheckToken(serializedToken, AppData()->RegisterDynamicNodeAllowedSIDs)) {
+                return CheckToken(serializedToken, AppData()->AdministrationAllowedSIDs);
+            }
         }
         return true;
     }

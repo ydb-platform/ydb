@@ -238,6 +238,7 @@ message TDomainsConfig {
         repeated string DefaultUserSIDs = 4;
         optional string AllAuthenticatedUsers = 5;
         repeated string ViewerAllowedSIDs = 6;
+        repeated string RegisterDynamicNodeAllowedSIDs = 8;
 
         message TUser {
             optional string Name = 1;

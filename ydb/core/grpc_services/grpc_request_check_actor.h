@@ -117,18 +117,24 @@ public:
         , FacilityProvider_(facilityProvider)
         , Span_(TWilsonGrpc::RequestCheckActor, GrpcRequestBaseCtx_->GetWilsonTraceId(), "RequestCheckActor")
     {
-        const auto& clientCertificates = GrpcRequestBaseCtx_->FindClientCertPropertyValues();
-        if (!clientCertificates.empty()) {
-            TBase::SetSecurityToken(TString(clientCertificates.front()));
-        // While nodes send both token and certificate for registration,  check only certificates and ignore tokens
-        } else if (GrpcRequestBaseCtx_->NeedAuthByCertificate()) {
-            TBase::SetSecurityToken("");
+        TMaybe<TString> authToken = GrpcRequestBaseCtx_->GetYdbToken();
+        if (authToken) {
+            TBase::SetSecurityToken(authToken.GetRef());
         } else {
-            TMaybe<TString> authToken = GrpcRequestBaseCtx_->GetYdbToken();
-            if (authToken) {
-                TBase::SetSecurityToken(authToken.GetRef());
+            const auto& clientCertificates = GrpcRequestBaseCtx_->FindClientCertPropertyValues();
+            if (!clientCertificates.empty()) {
+                TBase::SetSecurityToken(TString(clientCertificates.front()));
             }
         }
+
+        // const auto& clientCertificates = GrpcRequestBaseCtx_->FindClientCertPropertyValues();
+        // if (!clientCertificates.empty()) {
+        //     TBase::SetSecurityToken(TString(clientCertificates.front()));
+        // // While nodes send both token and certificate for registration,  check only certificates and ignore tokens
+        // } else if (GrpcRequestBaseCtx_->NeedAuthByCertificate()) {
+        //     TBase::SetSecurityToken("");
+        // } else {
+        // }
         Initialize(schemeData);
     }
 

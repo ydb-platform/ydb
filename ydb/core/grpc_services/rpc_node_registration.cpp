@@ -170,8 +170,8 @@ public:
 private:
     bool CheckAccess() {
         const auto& serializedToken = Request->GetSerializedToken();
-        if (!serializedToken.empty() && !AppData()->CertificateAuthAllowedSIDs.empty()) {
-            for (const auto& sid : AppData()->CertificateAuthAllowedSIDs) {
+        if (!serializedToken.empty() && !AppData()->RegisterDynamicNodeAllowedSIDs.empty()) {
+            for (const auto& sid : AppData()->RegisterDynamicNodeAllowedSIDs) {
                 NACLib::TUserToken token(serializedToken);
                 if (token.IsExist(sid)) {
                     IsNodeAuthorizedByCertificate = true;

@@ -76,6 +76,8 @@ private:
             config.MutableFeatureFlags()->SetEnableDynamicNodeAuthorization(true);
         }
 
+        securityConfig.MutableRegisterDynamicNodeAllowedSIDs()->Add(BUILTIN_ACL_ROOT);
+
         if (serverInitialization.SetNodeAuthValues) {
             auto& dynNodeDefinition = *config.MutableClientCertificateAuthorization()->MutableDynamicNodeAuthorization();
             if (serverInitialization.EnableWrongIdentity) {
@@ -138,7 +140,7 @@ void CheckGood(const NDiscovery::TNodeRegistrationResult& result) {
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
 }
 
-void CheckAccessDeniedWithoutUserToken(const NDiscovery::TNodeRegistrationResult& result, const TString& expectedError) {
+void CheckAccessDenied(const NDiscovery::TNodeRegistrationResult& result, const TString& expectedError) {
     UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
     UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
     UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), expectedError);
@@ -165,7 +167,7 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientWithCorrectCerts) {
 
         CheckGood(RegisterNode(config));
         CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
-        CheckGood(RegisterNode(config.SetAuthToken("wrong_token")));
+        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), "Could not find correct token validator");
     }
     {
         TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
@@ -209,7 +211,7 @@ Y_UNIT_TEST(ServerWithIssuerVerification_ClientWithSameIssuer) {
 
         CheckGood(RegisterNode(config));
         CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
-        CheckGood(RegisterNode(config.SetAuthToken("wrong_token")));
+        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), "Could not find correct token validator");
     }
     {
         TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
@@ -251,10 +253,9 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesEmptyClientCerts) {
             .UseClientCertificate(noCert.Certificate.c_str(),noCert.PrivateKey.c_str())
             .SetEndpoint(location);
 
-        const TString expectedError = "Access denied without user token";
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config), expectedError);
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+        CheckAccessDenied(RegisterNode(config), "Access denied without user token");
+        CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
+        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), "Could not find correct token validator");
     }
     {
         TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
@@ -295,10 +296,9 @@ Y_UNIT_TEST(ServerWithoutCertVerification_ClientProvidesCorrectCerts) {
             .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
             .SetEndpoint(location);
 
-        const TString expectedError = "Access denied without user token";
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config), expectedError);
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+        CheckAccessDenied(RegisterNode(config), "Access denied without user token");
+        CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
+        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), "Could not find correct token validator");
     }
     {
         TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
@@ -337,10 +337,9 @@ Y_UNIT_TEST(ServerWithoutCertVerification_ClientProvidesEmptyClientCerts) {
             .UseClientCertificate(noCert.Certificate.c_str(),noCert.PrivateKey.c_str())
             .SetEndpoint(location);
 
-        const TString expectedError = "Access denied without user token";
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config), expectedError);
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+        CheckAccessDenied(RegisterNode(config), "Access denied without user token");
+        CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
+        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), "Could not find correct token validator");
     }
     {
         TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
@@ -382,10 +381,9 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvideIncorrectCerts) {
             .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
             .SetEndpoint(location);
 
-        const TString expectedError = "Cannot create token from certificate. Client certificate failed verification";
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config), expectedError);
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+        CheckAccessDenied(RegisterNode(config), "Cannot create token from certificate. Client certificate failed verification");
+        CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
+        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), "Could not find correct token validator");
     }
     {
         TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
@@ -426,9 +424,9 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientDoesNotProvideAnyCerts) {
         config.SetEndpoint(location);
 
         const TString expectedError = "failed to connect to all addresses";
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config), expectedError);
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+        CheckAccessDenied(RegisterNode(config), expectedError);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
     }
     {
         TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
@@ -445,9 +443,9 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientDoesNotProvideAnyCerts) {
         config.SetEndpoint(location);
 
         const TString expectedError = "failed to connect to all addresses";
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config), expectedError);
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+        CheckAccessDenied(RegisterNode(config), expectedError);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
     }
 }
 
@@ -471,9 +469,9 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesServerCerts) {
             .SetEndpoint(location);
 
         const TString expectedError = "failed to connect to all addresses";
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config), expectedError);
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+        CheckAccessDenied(RegisterNode(config), expectedError);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
     }
     {
         TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
@@ -492,9 +490,9 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesServerCerts) {
             .SetEndpoint(location);
 
         const TString expectedError = "failed to connect to all addresses";
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config), expectedError);
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+        CheckAccessDenied(RegisterNode(config), expectedError);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
     }
 }
 
@@ -523,9 +521,9 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesCorruptedCert) {
             .SetEndpoint(location);
 
         const TString expectedError = "empty address list";
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config), expectedError);
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+        CheckAccessDenied(RegisterNode(config), expectedError);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
     }
     {
         TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
@@ -544,9 +542,9 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesCorruptedCert) {
             .SetEndpoint(location);
 
         const TString expectedError = "empty address list";
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config), expectedError);
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+        CheckAccessDenied(RegisterNode(config), expectedError);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
     }
 }
 
@@ -575,9 +573,9 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesCorruptedPrivatekey) {
             .SetEndpoint(location);
 
         const TString expectedError = "empty address list";
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config), expectedError);
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+        CheckAccessDenied(RegisterNode(config), expectedError);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
     }
     {
         TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
@@ -596,9 +594,9 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesCorruptedPrivatekey) {
             .SetEndpoint(location);
 
         const TString expectedError = "empty address list";
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config), expectedError);
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+        CheckAccessDenied(RegisterNode(config), expectedError);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
     }
 }
 
@@ -625,9 +623,9 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesExpiredCert) {
             .SetEndpoint(location);
 
         const TString expectedError = "failed to connect to all addresses";
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config), expectedError);
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+        CheckAccessDenied(RegisterNode(config), expectedError);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
     }
     {
         TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
@@ -649,9 +647,9 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesExpiredCert) {
             .SetEndpoint(location);
 
         const TString expectedError = "failed to connect to all addresses";
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config), expectedError);
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+        CheckAccessDenied(RegisterNode(config), expectedError);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
     }
 }
 
@@ -675,10 +673,9 @@ Y_UNIT_TEST(ServerWithOutCertVerification_ClientProvidesExpiredCert) {
             .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
             .SetEndpoint(location);
 
-        const TString expectedError = "Access denied without user token";
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config), expectedError);
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+        CheckAccessDenied(RegisterNode(config), "Access denied without user token");
+        CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
+        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), "Could not find correct token validator");
     }
     {
         TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
@@ -720,10 +717,9 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientDoesNotProvideClientCerts) {
         config.UseSecureConnection(caCert.Certificate.c_str())
             .SetEndpoint(location);
 
-        const TString expectedError = "Access denied without user token";
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config), expectedError);
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+        CheckAccessDenied(RegisterNode(config), "Access denied without user token");
+        CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
+        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), "Could not find correct token validator");
     }
     {
         TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
@@ -761,10 +757,9 @@ Y_UNIT_TEST(ServerWithoutCertVerification_ClientDoesNotProvideClientCerts) {
         config.UseSecureConnection(caCert.Certificate.c_str())
             .SetEndpoint(location);
 
-        const TString expectedError = "Access denied without user token";
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config), expectedError);
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedError);
-        CheckAccessDeniedWithoutUserToken(RegisterNode(config.SetAuthToken("wrong_token")), expectedError);
+        CheckAccessDenied(RegisterNode(config), "Access denied without user token");
+        CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
+        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), "Could not find correct token validator");
     }
     {
         TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({

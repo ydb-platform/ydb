@@ -224,7 +224,7 @@ struct TAppData {
     TVector<TString> AdministrationAllowedSIDs; // users/groups which allowed to perform administrative tasks
     TVector<TString> DefaultUserSIDs;
     TString AllAuthenticatedUsers = "all-users@well-known";
-    TVector<TString> CertificateAuthAllowedSIDs;
+    TVector<TString> RegisterDynamicNodeAllowedSIDs;
     TString TenantName;
     TString NodeName;
 

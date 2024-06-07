@@ -110,7 +110,7 @@ class Factory:
                     data_source_type=DataSourceType(ydb=types_ydb.Timestamp().to_non_nullable()),
                 ),
                 Column(
-                    name='col_16_json',
+                    name='col_17_json',
                     ydb_type=makeYdbTypeFromTypeID(Type.JSON),
                     data_source_type=DataSourceType(ydb=types_ydb.Json().to_non_nullable()),
                 ),
@@ -264,7 +264,7 @@ class Factory:
                     data_source_type=DataSourceType(ydb=types_ydb.Timestamp()),
                 ),
                 Column(
-                    name='col_16_json',
+                    name='col_17_json',
                     ydb_type=makeOptionalYdbTypeFromTypeID(Type.JSON),
                     data_source_type=DataSourceType(ydb=types_ydb.Json()),
                 ),
@@ -500,53 +500,53 @@ class Factory:
 
         return [tc]
 
-    # def _json(self) -> Sequence[TestCase]:
-    #     schema = Schema(
-    #         columns=ColumnList(
-    #             Column(
-    #                 name='col_json',
-    #                 ydb_type=makeYdbTypeFromTypeID(Type.JSON),
-    #                 data_source_type=DataSourceType(ydb=types_ydb.Json().to_non_nullable()),
-    #             ),
-    #             Column(
-    #                 name='col_json',
-    #                 ydb_type=makeYdbTypeFromTypeID(Type.JSON),
-    #                 data_source_type=DataSourceType(ydb=types_ydb.Json()),
-    #             ),
-    #         ),
-    #     )
+    def _json(self) -> Sequence[TestCase]:
+        schema = Schema(
+            columns=ColumnList(
+                Column(
+                    name='col_json',
+                    ydb_type=makeYdbTypeFromTypeID(Type.JSON),
+                    data_source_type=DataSourceType(ydb=types_ydb.Json().to_non_nullable()),
+                ),
+                Column(
+                    name='col_json',
+                    ydb_type=makeYdbTypeFromTypeID(Type.JSON),
+                    data_source_type=DataSourceType(ydb=types_ydb.Json()),
+                ),
+            ),
+        )
 
-    #     test_case_name = 'json'
+        test_case_name = 'json'
 
-    #     data_in = [
-    #         ['{ "friends": [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}', '{ "friends": [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}'],
-    #         ['{ "TODO" : "unicode" }', '{ "TODO" : "unicode" }'],
-    #         [None, None],
-    #     ]
+        data_in = [
+            ['{ "friends": [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}', '{ "friends": [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}'],
+            ['{ "TODO" : "unicode" }', '{ "TODO" : "unicode" }'],
+            [None, None],
+        ]
 
-    #     data_out_1 = [
-    #         ['{"age":35,"name":"James Holden"}', '{"age":35,"name":"James Holden"}'],
-    #         [None, None],
-    #         [None, None],
-    #     ]
+        data_out_1 = [
+            ['{"age":35,"name":"James Holden"}', '{"age":35,"name":"James Holden"}'],
+            [None, None],
+            [None, None],
+        ]
 
-    #     data_source_kind = EDataSourceKind.POSTGRESQL
+        data_source_kind = EDataSourceKind.POSTGRESQL
 
-    #     test_case_name = 'json'
+        test_case_name = 'json'
 
-    #     return [
-    #         TestCase(
-    #             name_=test_case_name,
-    #             data_in=data_in,
-    #             data_out_=data_out_1,
-    #             protocol=EProtocol.NATIVE,
-    #             select_what=SelectWhat(SelectWhat.Item(name='JSON_QUERY(col_json, "$.friends[0]")', kind='expr')),
-    #             select_where=None,
-    #             data_source_kind=data_source_kind,
-    #             pragmas=dict(),
-    #             schema=schema,
-    #         ),
-    #     ]
+        return [
+            TestCase(
+                name_=test_case_name,
+                data_in=data_in,
+                data_out_=data_out_1,
+                protocol=EProtocol.NATIVE,
+                select_what=SelectWhat(SelectWhat.Item(name='JSON_QUERY(col_json, "$.friends[0]")', kind='expr')),
+                select_where=None,
+                data_source_kind=data_source_kind,
+                pragmas=dict(),
+                schema=schema,
+            ),
+        ]
 
     def make_test_cases(self) -> Sequence[TestCase]:
         return list(
@@ -558,6 +558,6 @@ class Factory:
                 # self._count(),
                 self._pushdown(),
                 self._unsupported_types(),
-                # self._json(),
+                self._json(),
             )
         )

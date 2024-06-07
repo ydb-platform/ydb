@@ -44,14 +44,28 @@ using IDirectReadProcessor = IDirectReadProcessorFactory::IProcessor;
 class TDirectReadSession;
 using TDirectReadSessionContextPtr = std::shared_ptr<TCallbackContext<TDirectReadSession>>;
 
-struct TDirectReadSessionCallbacks {
-    using TOnDirectReadDone = std::function<void(Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&& response, TDeferredActions<false>& deferred)>;
-    using TOnAbortSession = std::function<void(TSessionClosedEvent&& closeEvent)>;
-    using TOnSchedule = std::function<void(TDuration delay, std::function<void()> callback)>;
+struct IDirectReadSessionControlCallbacks {
+    using TPtr = std::shared_ptr<IDirectReadSessionControlCallbacks>;
 
-    TOnDirectReadDone OnDirectReadDone;
-    TOnAbortSession OnAbortSession;
-    TOnSchedule OnSchedule;
+    virtual ~IDirectReadSessionControlCallbacks() {}
+    virtual void OnDirectReadDone(Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&&, TDeferredActions<false>&) {}
+    virtual void AbortSession(TSessionClosedEvent&&) {}
+    virtual void ScheduleCallback(TDuration, std::function<void()>) {}
+    virtual void ScheduleCallback(TDuration, std::function<void()>, TDeferredActions<false>&) {}
+};
+
+class TDirectReadSessionControlCallbacks : public IDirectReadSessionControlCallbacks {
+public:
+
+    TDirectReadSessionControlCallbacks(TSingleClusterReadSessionContextPtr contextPtr);
+    void OnDirectReadDone(Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&& response, TDeferredActions<false>&) override;
+    void AbortSession(TSessionClosedEvent&& closeEvent) override;
+    void ScheduleCallback(TDuration delay, std::function<void()> callback) override;
+    void ScheduleCallback(TDuration delay, std::function<void()> callback, TDeferredActions<false>&) override;
+
+private:
+
+    TSingleClusterReadSessionContextPtr SingleClusterReadSessionContextPtr;
 };
 
 struct TDirectReadPartitionSession {
@@ -100,13 +114,13 @@ public:
     using TPtr = std::shared_ptr<TSelf>;
 
     TDirectReadSession(
-        TNodeId node,
-        TString serverSessionId,
-        const NYdb::NTopic::TReadSessionSettings settings,
-        TDirectReadSessionManagerContextPtr managerContextPtr,
-        NYdbGrpc::IQueueClientContextPtr clientContext,
-        IDirectReadProcessorFactoryPtr processorFactory,
-        TLog log
+        TNodeId,
+        TServerSessionId,
+        const NYdb::NTopic::TReadSessionSettings,
+        IDirectReadSessionControlCallbacks::TPtr,
+        NYdbGrpc::IQueueClientContextPtr,
+        const IDirectReadProcessorFactoryPtr,
+        TLog
     );
 
     void Start();
@@ -180,18 +194,17 @@ private:
     size_t ConnectionGeneration = 0;
 
     const NYdb::NTopic::TReadSessionSettings ReadSessionSettings;
-    TDirectReadSessionManagerContextPtr ManagerContextPtr;
-    TServerSessionId ServerSessionId;
-    IDirectReadProcessor::TPtr Processor;
-    IDirectReadProcessorFactoryPtr ProcessorFactory;
-    std::shared_ptr<TDirectReadServerMessage> ServerMessage;
+    const TServerSessionId ServerSessionId;
+    const IDirectReadProcessorFactoryPtr ProcessorFactory;
+    const TNodeId NodeId;
 
+    IDirectReadSessionControlCallbacks::TPtr ControlCallbacks;
+    IDirectReadProcessor::TPtr Processor;
+    std::shared_ptr<TDirectReadServerMessage> ServerMessage;
     THashMap<TPartitionSessionId, TDirectReadPartitionSession> PartitionSessions;
     IRetryPolicy::IRetryState::TPtr RetryState = {};
     size_t ConnectionAttemptsDone = 0;
-
     EState State;
-    TNodeId NodeId;
 
     TLog Log;
 };
@@ -205,7 +218,7 @@ public:
     TDirectReadSessionManager(
         TServerSessionId,
         const NYdb::NTopic::TReadSessionSettings,
-        TSingleClusterReadSessionContextPtr,
+        IDirectReadSessionControlCallbacks::TPtr,
         NYdbGrpc::IQueueClientContextPtr,
         IDirectReadProcessorFactoryPtr,
         TLog
@@ -235,9 +248,10 @@ private:
 
     const NYdb::NTopic::TReadSessionSettings ReadSessionSettings;
     const TServerSessionId ServerSessionId;
-    TSingleClusterReadSessionContextPtr SingleClusterReadSessionContextPtr;
     const NYdbGrpc::IQueueClientContextPtr ClientContext;
     const IDirectReadProcessorFactoryPtr ProcessorFactory;
+
+    IDirectReadSessionControlCallbacks::TPtr ControlCallbacks;
     TNodeSessionsMap NodeSessions;
     TMap<TPartitionSessionId, TPartitionLocation> Locations;
     TLog Log;

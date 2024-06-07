@@ -145,7 +145,7 @@ public:
     // TODO(qyryq) Extract a separate TDeferredDirectReadActions class?
     void DeferReadFromProcessor(const typename IDirectReadProcessor::TPtr& processor, TDirectReadServerMessage* dst, typename IDirectReadProcessor::TReadCallback callback);
     // TODO(qyryq) Come up with better names: DeferStartCallback, DirectReadStartCallback, DirectReadStart
-    void DeferStartCallback(std::function<void()> callback);
+    void DeferScheduleCallback(TDuration delay, std::function<void(bool)> callback, TSingleClusterReadSessionContextPtr);
 
     void DeferReadFromProcessor(const typename IProcessor<UseMigrationProtocol>::TPtr& processor, TServerMessage<UseMigrationProtocol>* dst, typename IProcessor<UseMigrationProtocol>::TReadCallback callback);
     void DeferStartExecutorTask(const typename IAExecutor<UseMigrationProtocol>::TPtr& executor, typename IAExecutor<UseMigrationProtocol>::TFunction task);
@@ -163,7 +163,7 @@ private:
 
     void Read();
     void DirectRead();
-    void DirectReadStart();
+    void DirectReadScheduleCallback();
     void StartExecutorTasks();
     void AbortSession();
     void Reconnect();
@@ -177,10 +177,24 @@ private:
     typename IProcessor<UseMigrationProtocol>::TReadCallback ReadCallback;
 
     // Direct read.
-    IDirectReadProcessor::TPtr DirectReadProcessor;
-    TDirectReadServerMessage* DirectReadDst = nullptr;
-    IDirectReadProcessor::TReadCallback DirectReadCallback;
-    std::function<void()> DirectReadStartCallback;
+    struct TDirectReadDeferredActions {
+        struct TRead {
+            IDirectReadProcessor::TPtr Processor;
+            TDirectReadServerMessage* ServerMessage = nullptr;
+            IDirectReadProcessor::TReadCallback ReadCallback;
+        };
+
+        TMaybe<TRead> Read;
+
+        struct TScheduledCallback {
+            std::function<void(bool)> Callback;
+            TDuration Delay;
+            TSingleClusterReadSessionContextPtr ContextPtr;
+        };
+
+        TMaybe<TScheduledCallback> ScheduledCallback;
+    } DirectReadActions;
+
 
     // Executor tasks.
     std::vector<std::pair<typename IAExecutor<UseMigrationProtocol>::TPtr, typename IAExecutor<UseMigrationProtocol>::TFunction>> ExecutorsTasks;
@@ -1073,6 +1087,7 @@ public:
 
     friend class TPartitionStreamImpl<UseMigrationProtocol>;
     friend class TDirectReadSession;
+    friend class TDirectReadSessionControlCallbacks;
 
     TSingleClusterReadSessionImpl(
         const TAReadSessionSettings<UseMigrationProtocol>& settings,
@@ -1136,6 +1151,8 @@ public:
     void DumpStatisticsToLog(TLogElement& log);
     void UpdateMemoryUsageStatistics();
 
+    void ScheduleCallback(TDuration timeout, std::function<void(bool)> callback);
+
     TStringBuilder GetLogPrefix() const;
 
     const TLog& GetLog() const {
@@ -1183,7 +1200,6 @@ private:
 
     // Direct Read
     void OnDirectReadDone(Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&&, TDeferredActions<false>&);
-    void ScheduleCallback(TDuration timeout, std::function<void(bool)> callback);
     bool StopPartitionSession(TPartitionSessionId);
 
     // Assumes that we're under lock.

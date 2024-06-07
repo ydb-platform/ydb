@@ -1392,10 +1392,10 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
 
     if (Settings.DirectRead_) {
         Y_ABORT_UNLESS(!DirectReadSessionManager.Defined());
-        DirectReadSessionManager = TDirectReadSessionManager(
+        DirectReadSessionManager.ConstructInPlace(
             ServerSessionId,
             Settings,
-            this->SelfContext,
+            std::make_shared<TDirectReadSessionControlCallbacks>(this->SelfContext),
             ClientContext->CreateContext(),
             DirectReadProcessorFactory,
             Log
@@ -2925,17 +2925,22 @@ void TDeferredActions<UseMigrationProtocol>::DeferReadFromProcessor(
     TDirectReadServerMessage* dst,
     IDirectReadProcessor::TReadCallback callback
 ) {
-    Y_ASSERT(!DirectReadProcessor);
-    Y_ASSERT(!DirectReadDst);
-    Y_ASSERT(!DirectReadCallback);
-    DirectReadProcessor = processor;
-    DirectReadDst = dst;
-    DirectReadCallback = std::move(callback);
+    Y_ASSERT(!DirectReadActions.Read.Defined());
+    DirectReadActions.Read = {
+        .Processor = processor,
+        .ServerMessage = dst,
+        .ReadCallback = std::move(callback),
+    };
 }
 
 template<bool UseMigrationProtocol>
-void TDeferredActions<UseMigrationProtocol>::DeferStartCallback(std::function<void()> callback) {
-    DirectReadStartCallback = callback;
+void TDeferredActions<UseMigrationProtocol>::DeferScheduleCallback(TDuration delay, std::function<void(bool)> callback, TSingleClusterReadSessionContextPtr contextPtr) {
+    Y_ASSERT(!DirectReadActions.ScheduledCallback);
+    DirectReadActions.ScheduledCallback = {
+        .Callback = std::move(callback),
+        .Delay = delay,
+        .ContextPtr = contextPtr,
+    };
 }
 
 template<bool UseMigrationProtocol>
@@ -3005,7 +3010,7 @@ template<bool UseMigrationProtocol>
 void TDeferredActions<UseMigrationProtocol>::DoActions() {
     Read();
     DirectRead();
-    DirectReadStart();
+    DirectReadScheduleCallback();
     StartExecutorTasks();
     AbortSession();
     Reconnect();
@@ -3033,17 +3038,23 @@ void TDeferredActions<UseMigrationProtocol>::Read() {
 
 template<bool UseMigrationProtocol>
 void TDeferredActions<UseMigrationProtocol>::DirectRead() {
-    if (DirectReadDst) {
-        Y_ASSERT(DirectReadProcessor);
-        Y_ASSERT(DirectReadCallback);
-        DirectConnection->Read(DirectReadDst, std::move(DirectReadCallback));
+    auto& read = DirectReadActions.Read;
+    if (read.Defined()) {
+        Y_ASSERT(read->Processor);
+        Y_ASSERT(read->ReadCallback);
+        read->Processor->Read(read->ServerMessage, std::move(read->ReadCallback));
     }
 }
 
 template<bool UseMigrationProtocol>
-void TDeferredActions<UseMigrationProtocol>::DirectReadStart() {
-    if (DirectReadStartCallback) {
-        DirectReadStartCallback();
+void TDeferredActions<UseMigrationProtocol>::DirectReadScheduleCallback() {
+    auto& scheduled = DirectReadActions.ScheduledCallback;
+    if (scheduled.Defined()) {
+        Y_ASSERT(scheduled->Callback);
+        Y_ASSERT(scheduled->ContextPtr);
+        if (auto s = scheduled->ContextPtr->LockShared()) {
+            s->ScheduleCallback(scheduled->Delay, scheduled->Callback);
+        }
     }
 }
 

@@ -168,6 +168,8 @@ private:
         CLOSED
     };
 
+    friend void Out<NYdb::NTopic::TDirectReadSession::EState>(IOutputStream& o, NYdb::NTopic::TDirectReadSession::EState state);
+
 private:
     TAdaptiveLock Lock;
 

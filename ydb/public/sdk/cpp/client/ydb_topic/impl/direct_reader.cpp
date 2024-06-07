@@ -57,21 +57,68 @@ TDirectReadClientMessage TDirectReadPartitionSession::MakeStartRequest() const {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TDirectReadSessionControlCallbacks
+
+TDirectReadSessionControlCallbacks::TDirectReadSessionControlCallbacks(TSingleClusterReadSessionContextPtr contextPtr)
+    : SingleClusterReadSessionContextPtr(contextPtr)
+    {}
+
+void TDirectReadSessionControlCallbacks::OnDirectReadDone(
+    Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&& response,
+    TDeferredActions<false>& deferred
+) {
+    if (auto s = SingleClusterReadSessionContextPtr->LockShared()) {
+        s->OnDirectReadDone(std::move(response), deferred);
+    }
+}
+
+void TDirectReadSessionControlCallbacks::AbortSession(TSessionClosedEvent&& closeEvent) {
+    if (auto s = SingleClusterReadSessionContextPtr->LockShared()) {
+        s->AbortSession(std::move(closeEvent));
+    }
+}
+
+void TDirectReadSessionControlCallbacks::ScheduleCallback(TDuration delay, std::function<void()> callback) {
+    if (auto s = SingleClusterReadSessionContextPtr->LockShared()) {
+        s->ScheduleCallback(
+            delay,
+            [callback = std::move(callback)](bool ok) {
+                if (ok) {
+                    callback();
+                }
+            }
+        );
+    }
+}
+
+void TDirectReadSessionControlCallbacks::ScheduleCallback(TDuration delay, std::function<void()> callback, TDeferredActions<false>& deferred) {
+    deferred.DeferScheduleCallback(
+        delay,
+        [callback = std::move(callback)](bool ok) {
+            if (ok) {
+                callback();
+            }
+        },
+        SingleClusterReadSessionContextPtr
+    );
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TDirectReadSessionManager
 
 TDirectReadSessionManager::TDirectReadSessionManager(
     TServerSessionId serverSessionId,
     const NYdb::NTopic::TReadSessionSettings settings,
-    TSingleClusterReadSessionContextPtr singleClusterReadSession,
+    IDirectReadSessionControlCallbacks::TPtr controlCallbacks,
     NYdbGrpc::IQueueClientContextPtr clientContext,
     IDirectReadProcessorFactoryPtr processorFactory,
     TLog log
 )
     : ReadSessionSettings(settings)
     , ServerSessionId(serverSessionId)
-    , SingleClusterReadSessionContextPtr(singleClusterReadSession)
     , ClientContext(clientContext)
     , ProcessorFactory(processorFactory)
+    , ControlCallbacks(controlCallbacks)
     , Log(log)
     {}
 
@@ -88,7 +135,7 @@ TDirectReadSessionContextPtr TDirectReadSessionManager::CreateDirectReadSession(
         nodeId,
         ServerSessionId,
         ReadSessionSettings,
-        SingleClusterReadSessionContextPtr,
+        ControlCallbacks,
         ClientContext->CreateContext(),
         ProcessorFactory,
         Log);
@@ -210,20 +257,18 @@ TDirectReadSession::TDirectReadSession(
     TNodeId nodeId,
     TString serverSessionId,
     const NYdb::NTopic::TReadSessionSettings settings,
-    TSingleClusterReadSessionContextPtr singleClusterReadSessionContextPtr,
-    TDirectReadSessionManagerContextPtr managerContextPtr,
+    IDirectReadSessionControlCallbacks::TPtr controlCallbacks,
     NYdbGrpc::IQueueClientContextPtr clientContext,
     IDirectReadProcessorFactoryPtr processorFactory,
     TLog log
 )
     : ClientContext(clientContext)
     , ReadSessionSettings(settings)
-    , SingleClusterReadSessionContextPtr(singleClusterReadSessionContextPtr)
-    , ManagerContextPtr(managerContextPtr)
     , ServerSessionId(serverSessionId)
     , ProcessorFactory(processorFactory)
-    , State(EState::CREATED)
     , NodeId(nodeId)
+    , ControlCallbacks(controlCallbacks)
+    , State(EState::CREATED)
     , Log(log)
     {
     }
@@ -308,9 +353,7 @@ void TDirectReadSession::AbortImpl(TPlainStatus&& status) {
     LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Abort");
     if (State < EState::CLOSING) {
         State = EState::CLOSED;
-        if (auto s = SingleClusterReadSessionContextPtr->LockShared()) {
-            s->AbortSession(std::move(status));
-        }
+        ControlCallbacks->AbortSession(std::move(status));
     }
 }
 
@@ -390,7 +433,9 @@ void TDirectReadSession::SendStartDirectReadPartitionSessionImpl(TPartitionSessi
     SendStartDirectReadPartitionSessionImpl(it->second, std::move(status), deferred, delayedCall);
 }
 
-void TDirectReadSession::SendStartDirectReadPartitionSessionImpl(TDirectReadPartitionSession& partitionSession, TPlainStatus&& status, TDeferredActions<false>& deferred, bool delayedCall) {
+void TDirectReadSession::SendStartDirectReadPartitionSessionImpl(
+    TDirectReadPartitionSession& partitionSession, TPlainStatus&& status, TDeferredActions<false>& deferred, bool delayedCall
+) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     if (State < EState::WORKING && partitionSession.State == TDirectReadPartitionSession::EState::DELAYED && delayedCall) {
@@ -436,23 +481,17 @@ void TDirectReadSession::SendStartDirectReadPartitionSessionImpl(TDirectReadPart
     partitionSession.State = TDirectReadPartitionSession::EState::DELAYED;
     LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "SendStartDirectReadPartitionSessionImpl retry in " << delay);
 
-    deferred.DeferStartCallback(
-        [this, delay = *delay, id = partitionSession.PartitionSessionId]() {
-            if (auto singleClusterReadSession = SingleClusterReadSessionContextPtr->LockShared()) {
-                singleClusterReadSession->ScheduleCallback(
-                    delay,
-                    [this, id](bool ok) {
-                        if (!ok) return;
-                        if (auto directReadSession = this->SelfContext->LockShared()) {
-                            TDeferredActions<false> deferred;
-                            with_lock (directReadSession->Lock) {
-                                directReadSession->SendStartDirectReadPartitionSessionImpl(id, TPlainStatus(), deferred, /* delayedCall = */ true);
-                            }
-                        }
-                    }
-                );
+    ControlCallbacks->ScheduleCallback(
+        *delay,
+        [context = this->SelfContext, id = partitionSession.PartitionSessionId]() {
+            if (auto s = context->LockShared()) {
+                TDeferredActions<false> deferred;
+                with_lock (s->Lock) {
+                    s->SendStartDirectReadPartitionSessionImpl(id, TPlainStatus(), deferred, /* delayedCall = */ true);
+                }
             }
-        }
+        },
+        deferred
     );
 }
 
@@ -519,9 +558,7 @@ void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::Dir
     auto& partitionSession = it->second;
     partitionSession.PrevDirectReadId = response.direct_read_id();
 
-    if (auto s = SingleClusterReadSessionContextPtr->LockShared()) {
-        s->OnDirectReadDone(std::move(response), deferred);
-    }
+    ControlCallbacks->OnDirectReadDone(std::move(response), deferred);
 
     // TODO(qyryq) Ситуация: получаем DirectReadResponse, после этого приходит в контрольной сессии
     // StopPartitionSession с тем же идентификатором direct_read_id.
@@ -533,17 +570,10 @@ void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::Dir
         // We have read all available data, time to stop the partition session.
         DeletePartitionSessionImpl(partitionSession.PartitionSessionId);
 
-        if (auto s = SingleClusterReadSessionContextPtr->LockShared()) {
-            bool pushedEvent = s->StopPartitionSession(partitionSession.PartitionSessionId);
-            if (!pushedEvent) {
-                // TODO(qyryq) How do we handle it?
-            }
-        }
+        // ControlCallbacks.StopPartitionSession(partitionSession.PartitionSessionId);
 
         if (Empty()) {
-            if (auto s = ManagerContextPtr->LockShared()) {
-                s->DeleteNodeSessionIfEmptyImpl(NodeId);
-            }
+            // ControlCallbacks.DeleteNodeSessionIfEmpty(NodeId);
         }
     }
 }

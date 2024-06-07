@@ -5,7 +5,7 @@
 
 #include "json_tabletinfo.h"
 #include "json_sysinfo.h"
-#include "json_query.h"
+#include "json_query_old.h"
 #include "json_render.h"
 #include "json_autocomplete.h"
 
@@ -75,7 +75,7 @@ IActor* CreateViewerRequestHandler(TEvViewer::TEvViewerRequest::TPtr& request) {
         case NKikimrViewer::TEvViewerRequest::kSystemRequest:
             return new TViewerWhiteboardRequest<TEvWhiteboard::TEvSystemStateRequest, TEvWhiteboard::TEvSystemStateResponse>(request);
         case NKikimrViewer::TEvViewerRequest::kQueryRequest:
-            return new TJsonQuery(request);
+            return new TJsonQueryOld(request);
         case NKikimrViewer::TEvViewerRequest::kRenderRequest:
             return new TJsonRender(request);
         case NKikimrViewer::TEvViewerRequest::kAutocompleteRequest:

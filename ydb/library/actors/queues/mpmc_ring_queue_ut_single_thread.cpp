@@ -1,7 +1,7 @@
 #define MPMC_RING_QUEUE_COLLECT_STATISTICS
 
 #include "mpmc_ring_queue.h"
-#include "mpmc_ring_queue_ut_base.h"
+#include "bench/queue.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -11,7 +11,7 @@
 
 
 using namespace NActors;
-using namespace NActors::NTests;
+using namespace NActors::NQueueBench;
 
 namespace { // Tests
 

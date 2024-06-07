@@ -143,7 +143,7 @@ public:
     }
 
     // TODO(qyryq) Extract a separate TDeferredDirectReadActions class?
-    void DeferReadFromProcessor(const typename IDirectReadConnection::TPtr& processor, TDirectReadServerMessage* dst, typename IDirectReadConnection::TReadCallback callback);
+    void DeferReadFromProcessor(const typename IDirectReadProcessor::TPtr& processor, TDirectReadServerMessage* dst, typename IDirectReadProcessor::TReadCallback callback);
     // TODO(qyryq) Come up with better names: DeferStartCallback, DirectReadStartCallback, DirectReadStart
     void DeferStartCallback(std::function<void()> callback);
 
@@ -177,9 +177,9 @@ private:
     typename IProcessor<UseMigrationProtocol>::TReadCallback ReadCallback;
 
     // Direct read.
-    IDirectReadConnection::TPtr DirectConnection;
+    IDirectReadProcessor::TPtr DirectReadProcessor;
     TDirectReadServerMessage* DirectReadDst = nullptr;
-    IDirectReadConnection::TReadCallback DirectReadCallback;
+    IDirectReadProcessor::TReadCallback DirectReadCallback;
     std::function<void()> DirectReadStartCallback;
 
     // Executor tasks.
@@ -1084,7 +1084,7 @@ public:
         NYdbGrpc::IQueueClientContextPtr clientContext,
         ui64 partitionStreamIdStart,
         ui64 partitionStreamIdStep,
-        IDirectReadConnectionFactoryPtr directConnectionFactory = {}
+        IDirectReadProcessorFactoryPtr directReadProcessorFactory = {}
     );
 
     ~TSingleClusterReadSessionImpl();
@@ -1308,7 +1308,7 @@ private:
     ui64 PartitionStreamIdStep;
     std::shared_ptr<IInternalClient> Connections;
     std::shared_ptr<IReadSessionConnectionProcessorFactory<UseMigrationProtocol>> ConnectionFactory;
-    IDirectReadConnectionFactoryPtr DirectConnectionFactory;
+    IDirectReadProcessorFactoryPtr DirectReadProcessorFactory;
     std::shared_ptr<TReadSessionEventsQueue<UseMigrationProtocol>> EventsQueue;
     NYdbGrpc::IQueueClientContextPtr ClientContext; // Common client context.
     NYdbGrpc::IQueueClientContextPtr ConnectContext;

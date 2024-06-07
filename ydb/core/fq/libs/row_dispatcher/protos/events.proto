@@ -9,3 +9,7 @@ import "google/protobuf/any.proto";
 message TEvStartSession {
     optional uint32 TransportMeta = 1;
 }
+
+message TEvCoordinatorInfo {
+    optional uint32 TransportMeta = 1;
+}

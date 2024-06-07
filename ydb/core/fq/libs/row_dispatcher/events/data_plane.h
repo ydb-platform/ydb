@@ -17,6 +17,7 @@ struct TEvRowDispatcher {
         EvCreateResourceResponse,
         EvDeleteResource,
         EvStartSession,
+        EvCoordinatorInfo,
         EvEnd,
     };
 
@@ -31,14 +32,12 @@ struct TEvRowDispatcher {
 
     struct TEvStartSession : public NActors::TEventPB<TEvStartSession,
         NFq::NRowDispatcherProto::TEvStartSession, EEv::EvStartSession> {
-
         TEvStartSession() = default;
+    };
 
-        // TEvStartSession(ui64 id, ui64 generation, ui64 taskId) {
-        //     Record.MutableCheckpoint()->SetId(id);
-        //     Record.MutableCheckpoint()->SetGeneration(generation);
-        //     Record.SetTaskId(taskId);
-        // }
+    struct TEvCoordinatorInfo : public NActors::TEventPB<TEvCoordinatorInfo,
+        NFq::NRowDispatcherProto::TEvCoordinatorInfo, EEv::EvCoordinatorInfo> {
+        TEvCoordinatorInfo() = default;
     };
 
 };

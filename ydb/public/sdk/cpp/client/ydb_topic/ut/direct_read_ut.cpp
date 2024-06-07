@@ -581,18 +581,21 @@ private:
     std::shared_ptr<TMockRetryPolicy> Policy;
 };
 
-class TMockConnections : public IInternalClient {
+class TMockConnections : public IQueueClientContextProvider, public IInternalClient {
 public:
+
     MOCK_METHOD(void, ScheduleCallback, (TDuration, std::function<void(bool)>, NYdbGrpc::IQueueClientContextPtr), (override));
 
 public:
+
+    IQueueClientContextPtr CreateContext() override { return {}; }
 
     NThreading::TFuture<TListEndpointsResult> GetEndpoints(std::shared_ptr<TDbDriverState>) override { return {}; }
     void AddPeriodicTask(TPeriodicCb&&, TDuration) override {}
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
     void DeleteChannels([[maybe_unused]] const std::vector<std::string>& endpoints) override {}
 #endif
-    TBalancingSettings GetBalancingSettings() const override  {}
+    TBalancingSettings GetBalancingSettings() const override  { return {}; }
     bool StartStatCollecting(::NMonitoring::IMetricRegistry*) override { return false; }
     ::NMonitoring::TMetricRegistry* GetMetricRegistry() override { return nullptr; }
     const TLog& GetLog() const override { return Log; }
@@ -637,7 +640,7 @@ public:
     ~TDirectReadSessionImplTestSetup() noexcept(false); // Performs extra validation and UNIT_ASSERTs
 
     TSingleClusterReadSessionImpl<false>* GetControlSession();
-    TDirectReadSession* GetDirectReadSession();
+    TDirectReadSession* GetDirectReadSession(IDirectReadSessionControlCallbacks::TPtr);
 
     std::shared_ptr<TReadSessionEventsQueue<false>> GetEventsQueue();
     IExecutor::TPtr GetDefaultExecutor();
@@ -788,13 +791,13 @@ TSingleClusterReadSessionImpl<false>* TDirectReadSessionImplTestSetup::GetContro
     return SingleClusterReadSession.get();
 }
 
-TDirectReadSession* TDirectReadSessionImplTestSetup::GetDirectReadSession() {
+TDirectReadSession* TDirectReadSessionImplTestSetup::GetDirectReadSession(IDirectReadSessionControlCallbacks::TPtr controlCallbacks) {
     if (!DirectReadSessionPtr) {
         DirectReadSessionContextPtr = MakeWithCallbackContext<TDirectReadSession>(
             TNodeId(1),
             SERVER_SESSION_ID,
             ReadSessionSettings,
-            MockDirectReadSessionManagerContextPtr,
+            controlCallbacks,
             FakeContext,
             MockDirectReadProcessorFactory,
             Log);
@@ -1044,7 +1047,8 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
 
         TPartitionSessionId partitionSessionId = 1;
 
-        auto session = setup.GetDirectReadSession();
+        class TControlCallbacks : public IDirectReadSessionControlCallbacks {};
+        auto session = setup.GetDirectReadSession(std::make_shared<TControlCallbacks>());
 
         ::testing::InSequence sequence;
 
@@ -1087,8 +1091,15 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
         EXPECT_CALL(*setup.MockDirectReadProcessorFactory, OnCreateProcessor(_))
             .WillOnce([&]() { setup.MockDirectReadProcessorFactory->FailCreation(); });
 
-        // TODO(qyryq) .OnAbortSession = [&gotClosedEvent](TSessionClosedEvent&&) { gotClosedEvent.SetValue(); },
-        auto session = setup.GetDirectReadSession();
+        class TControlCallbacks : public IDirectReadSessionControlCallbacks {
+        public:
+            TControlCallbacks(NThreading::TPromise<void>& gotClosedEvent) : GotClosedEvent(gotClosedEvent) {}
+            void AbortSession(TSessionClosedEvent&&) { GotClosedEvent.SetValue(); }
+            NThreading::TPromise<void>& GotClosedEvent;
+        };
+
+        auto session = setup.GetDirectReadSession(std::make_shared<TControlCallbacks>(gotClosedEvent));
+
         session->Start();
         setup.MockDirectReadProcessorFactory->Wait();
         gotClosedEvent.GetFuture().Wait();
@@ -1112,7 +1123,15 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
             .Times(1 + nRetries);  // First call + N retries.
 
         // .OnAbortSession = [&gotClosedEvent](TSessionClosedEvent&&) { gotClosedEvent.SetValue(); },
-        auto session = setup.GetDirectReadSession();
+
+        class TControlCallbacks : public IDirectReadSessionControlCallbacks {
+        public:
+            TControlCallbacks(NThreading::TPromise<void>& gotClosedEvent) : GotClosedEvent(gotClosedEvent) {}
+            void AbortSession(TSessionClosedEvent&&) { GotClosedEvent.SetValue(); }
+            NThreading::TPromise<void>& GotClosedEvent;
+        };
+
+        auto session = setup.GetDirectReadSession(std::make_shared<TControlCallbacks>(gotClosedEvent));
         session->Start();
         setup.MockDirectReadProcessorFactory->Wait();
 
@@ -1136,7 +1155,15 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
         EXPECT_CALL(*setup.MockDirectReadProcessor, OnInitDirectReadRequest(_)).Times(1);
 
         // .OnAbortSession = [&gotClosedEvent](TSessionClosedEvent&&) { gotClosedEvent.SetValue(); },
-        auto session = setup.GetDirectReadSession();
+
+        class TControlCallbacks : public IDirectReadSessionControlCallbacks {
+        public:
+            TControlCallbacks(NThreading::TPromise<void>& gotClosedEvent) : GotClosedEvent(gotClosedEvent) {}
+            void AbortSession(TSessionClosedEvent&&) { GotClosedEvent.SetValue(); }
+            NThreading::TPromise<void>& GotClosedEvent;
+        };
+
+        auto session = setup.GetDirectReadSession(std::make_shared<TControlCallbacks>(gotClosedEvent));
         session->Start();
         setup.MockDirectReadProcessorFactory->Wait();
 
@@ -1172,9 +1199,15 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
         EXPECT_CALL(*setup.MockDirectReadProcessor, OnInitDirectReadRequest(_))
             .Times(1);
 
-        // .OnAbortSession = [&gotClosedEvent](TSessionClosedEvent&&) { gotClosedEvent.SetValue(); },
-        // .OnSchedule = [](TDuration, std::function<void()> cb) { cb(); },
-        auto session = setup.GetDirectReadSession();
+        class TControlCallbacks : public IDirectReadSessionControlCallbacks {
+        public:
+            TControlCallbacks(NThreading::TPromise<void>& gotClosedEvent) : GotClosedEvent(gotClosedEvent) {}
+            void AbortSession(TSessionClosedEvent&&) { GotClosedEvent.SetValue(); }
+            void ScheduleCallback(TDuration, std::function<void()> cb) { cb(); }
+            NThreading::TPromise<void>& GotClosedEvent;
+        };
+
+        auto session = setup.GetDirectReadSession(std::make_shared<TControlCallbacks>(gotClosedEvent));
 
         setup.AddDirectReadResponse(TMockDirectReadSessionProcessor::TServerReadInfo()
             .InitDirectReadResponse());
@@ -1256,8 +1289,12 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
                 .WillOnce([&]() { gotFinalStart.SetValue(); });
         }
 
-        // .OnSchedule = [](TDuration, std::function<void()> cb) { cb(); },
-        auto session = setup.GetDirectReadSession();
+        class TControlCallbacks : public IDirectReadSessionControlCallbacks {
+        public:
+            void ScheduleCallback(TDuration, std::function<void()> cb) { cb(); }
+        };
+
+        auto session = setup.GetDirectReadSession(std::make_shared<TControlCallbacks>());
 
         session->Start();
         setup.MockDirectReadProcessorFactory->Wait();
@@ -1353,11 +1390,12 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
 
         std::function<void()> callback;
 
-        // .OnSchedule = [&](TDuration d, std::function<void()> cb) {
-        //     UNIT_ASSERT_EQUAL(delay, d);
-        //     callback = cb;
-        // },
-        auto session = setup.GetDirectReadSession();
+        class TControlCallbacks : public IDirectReadSessionControlCallbacks {
+        public:
+            void ScheduleCallback(TDuration, std::function<void()> cb) { cb(); }
+        };
+
+        auto session = setup.GetDirectReadSession(std::make_shared<TControlCallbacks>());
 
         session->Start();
         setup.MockDirectReadProcessorFactory->Wait();
@@ -1458,11 +1496,17 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
 
         std::function<void()> callback;
 
-        // .OnSchedule = [&](TDuration d, std::function<void()> cb) {
-        //     UNIT_ASSERT_EQUAL(delay, d);
-        //     callback = cb;
-        // },
-        auto session = setup.GetDirectReadSession();
+        class TControlCallbacks : public IDirectReadSessionControlCallbacks {
+        public:
+            TControlCallbacks(TDuration delay) : Delay(delay) {}
+            void ScheduleCallback(TDuration d, std::function<void()> cb) {
+                UNIT_ASSERT_EQUAL(Delay, d);
+                cb();
+            }
+            TDuration Delay;
+        };
+
+        auto session = setup.GetDirectReadSession(std::make_shared<TControlCallbacks>(delay));
 
         session->Start();
         setup.MockDirectReadProcessorFactory->Wait();

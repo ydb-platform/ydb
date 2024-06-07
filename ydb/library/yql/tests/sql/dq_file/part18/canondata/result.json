@@ -993,9 +993,9 @@
     ],
     "test.test[insert-append_sorted-to_sorted_desc-Debug]": [
         {
-            "checksum": "a39631d64fb01e3061f6d26f02f36160",
+            "checksum": "0276136a844d85e4cd4e30122a8293b3",
             "size": 10559,
-            "uri": "https://{canondata_backend}/1777230/00c02c2221ad7773f9cfecb5ec1bd067dbaacbc5/resource.tar.gz#test.test_insert-append_sorted-to_sorted_desc-Debug_/opt.yql_patched"
+            "uri": "https://{canondata_backend}/1880306/86e38f56dd10d4e4b0cb388faab19323771a312e/resource.tar.gz#test.test_insert-append_sorted-to_sorted_desc-Debug_/opt.yql_patched"
         }
     ],
     "test.test[insert-append_sorted-to_sorted_desc-Plan]": [

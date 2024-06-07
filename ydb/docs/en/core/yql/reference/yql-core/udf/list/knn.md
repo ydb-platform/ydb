@@ -26,7 +26,9 @@ LIMIT 10;
 
 ### Approximate methods
 
-There are multiple possible approximate methods. In this document, we will focus on scalar quantization.
+Approximate methods do not perform a complete search of the source data. Due to this, they work significantly faster, although they may result in some loss of quality.
+
+This document provides an [example of approximate search](#approximate-search-examples) using scalar quantization. This example does not require the creation of a secondary vector index.
 
 **Scalar quantization** is a method to compress vectors by mapping coordinates to a smaller space.
 {{ ydb-short-name }} support exact search for `Float`, `Int8`, `Uint8`, `Bit` vectors.
@@ -164,6 +166,10 @@ WHERE Knn::CosineDistance(embedding, $TargetEmbedding) < $R;
 ```
 
 ## Approximate search examples
+
+This example differs from the [exact search example](#еxact-search-examples) by using bit quantization.
+
+This allows to first do a approximate preliminary search by the `embedding_bit` column, and then refine the results by the original vector column `embegging`.
 
 ### Creating a table
 

@@ -792,10 +792,31 @@ private:
         }
     }
 
+    bool IsTicketCertificate(const TString& ticket) const {
+        static const TStringBuf CertificateBeginMark = "-----BEGIN";
+        static const TStringBuf CertificateEndMark = "-----END";
+        size_t eolPos = ticket.find('\n');
+        if (eolPos == TString::npos) {
+            return false;
+        }
+        if (TString firstLine = ticket.substr(0, eolPos); !firstLine.Contains(CertificateBeginMark)) {
+            return false;
+        }
+        if (ticket.rfind(CertificateEndMark) == TString::npos) {
+            return false;
+        }
+        return true;
+    }
+
     void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
         TStringBuf ticket;
         TStringBuf ticketType;
-        CrackTicket(ev->Get()->Ticket, ticket, ticketType);
+        if (IsTicketCertificate(ev->Get()->Ticket)) {
+            ticket = ev->Get()->Ticket;
+            ticketType = TDerived::TTokenRecord::CertificateAuthType;
+        } else {
+            CrackTicket(ev->Get()->Ticket, ticket, ticketType);
+        }
 
         TString key = GetKey(ev->Get());
         TActorId sender = ev->Sender;

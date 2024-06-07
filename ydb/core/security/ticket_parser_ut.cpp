@@ -620,8 +620,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         client.InitRootScheme();
         TTestActorRuntime* runtime = server.GetRuntime();
 
-        TString clientCertificateContent(clientCert.Certificate);
-        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({.Ticket = clientCertificateContent})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket(TString(clientCert.Certificate))), 0);
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -661,8 +660,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         client.InitRootScheme();
         TTestActorRuntime* runtime = server.GetRuntime();
 
-        TString clientCertificateContent(clientCert.Certificate);
-        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({.Ticket = clientCertificateContent})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket(TString(clientCert.Certificate))), 0);
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -678,7 +676,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         ui16 grpcPort = tp.GetPort(2135);
         auto settings = TServerSettings(kikimrPort);
         settings.SetDomainName("Root");
-        // settings.SetEnableDynamicNodeAuthorization(true);
         auto& dynNodeDefinition = *settings.AppConfig->MutableClientCertificateAuthorization()->MutableDynamicNodeAuthorization();
         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("C", {"RU"});
         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
@@ -705,8 +702,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         client.InitRootScheme();
         TTestActorRuntime* runtime = server.GetRuntime();
 
-        TString clientCertificateContent(clientCert.Certificate);
-        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({.Ticket = clientCertificateContent})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket(TString(clientCert.Certificate))), 0);
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -725,7 +721,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         ui16 grpcPort = tp.GetPort(2135);
         auto settings = TServerSettings(kikimrPort);
         settings.SetDomainName("Root");
-        // settings.SetEnableDynamicNodeAuthorization(true);
         auto& dynNodeDefinition = *settings.AppConfig->MutableClientCertificateAuthorization()->MutableDynamicNodeAuthorization();
         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("C", {"RU"});
         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
@@ -756,8 +751,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         client.InitRootScheme();
         TTestActorRuntime* runtime = server.GetRuntime();
 
-        TString clientCertificateContent(clientCert.Certificate);
-        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({.Ticket = clientCertificateContent})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket(TString(clientCert.Certificate))), 0);
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -776,7 +770,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         ui16 grpcPort = tp.GetPort(2135);
         auto settings = TServerSettings(kikimrPort);
         settings.SetDomainName("Root");
-        // settings.SetEnableDynamicNodeAuthorization(true);
         auto& dynNodeDefinition = *settings.AppConfig->MutableClientCertificateAuthorization()->MutableDynamicNodeAuthorization();
         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("C", {"RU"});
         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
@@ -806,8 +799,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         client.InitRootScheme();
         TTestActorRuntime* runtime = server.GetRuntime();
 
-        TString clientCertificateContent(clientCert.Certificate);
-        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({.Ticket = clientCertificateContent})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket(TString(clientCert.Certificate))), 0);
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -823,7 +815,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         ui16 grpcPort = tp.GetPort(2135);
         auto settings = TServerSettings(kikimrPort);
         settings.SetDomainName("Root");
-        // settings.SetEnableDynamicNodeAuthorization(true);
         auto& dynNodeDefinition = *settings.AppConfig->MutableClientCertificateAuthorization()->MutableDynamicNodeAuthorization();
         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("C", {"RU"});
         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
@@ -849,8 +840,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         client.InitRootScheme();
         TTestActorRuntime* runtime = server.GetRuntime();
 
-        TString clientCertificateContent(clientCert.Certificate);
-        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({.Ticket = clientCertificateContent})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket(TString(clientCert.Certificate))), 0);
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -869,7 +859,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         ui16 grpcPort = tp.GetPort(2135);
         auto settings = TServerSettings(kikimrPort);
         settings.SetDomainName("Root");
-        // settings.SetEnableDynamicNodeAuthorization(true);
         auto& dynNodeDefinition = *settings.AppConfig->MutableClientCertificateAuthorization()->MutableDynamicNodeAuthorization();
         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("C", {"RU"});
         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
@@ -895,8 +884,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         client.InitRootScheme();
         TTestActorRuntime* runtime = server.GetRuntime();
 
-        TString clientCertificateContent(clientCert.Certificate);
-        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({.Ticket = clientCertificateContent})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket(TString(clientCert.Certificate))), 0);
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -912,7 +900,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         ui16 grpcPort = tp.GetPort(2135);
         auto settings = TServerSettings(kikimrPort);
         settings.SetDomainName("Root");
-        // settings.SetEnableDynamicNodeAuthorization(true);
         auto& dynNodeDefinition = *settings.AppConfig->MutableClientCertificateAuthorization()->MutableDynamicNodeAuthorization();
         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("C", {"RU"});
         *dynNodeDefinition.AddSubjectTerms() = MakeSubjectTerm("ST", {"MSK"});
@@ -941,8 +928,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         client.InitRootScheme();
         TTestActorRuntime* runtime = server.GetRuntime();
 
-        TString clientCertificateContent(clientCert.Certificate);
-        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({.Ticket = clientCertificateContent})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket(TString(clientCert.Certificate))), 0);
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);

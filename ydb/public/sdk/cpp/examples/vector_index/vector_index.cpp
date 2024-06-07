@@ -35,6 +35,7 @@ ECommand Parse(std::string_view command) {
     }
     return ECommand::None;
 }
+
 static void ThrowOnError(NYdb::TStatus status) {
     if (!status.IsSuccess()) {
         throw TVectorException{status} << status;
@@ -42,12 +43,14 @@ static void ThrowOnError(NYdb::TStatus status) {
 }
 
 static void PrintTop(TResultSetParser&& parser) {
-    // TODO print user defined columns
     while (parser.TryNextRow()) {
-        Cout << parser.ColumnParser(0).GetUint64() << "\t"
-             << *parser.ColumnParser(1).GetOptionalFloat() << "\t"
-             << *parser.ColumnParser(2).GetOptionalUtf8() << "\t"
-             << *parser.ColumnParser(3).GetOptionalUtf8() << "\n";
+        Y_ASSERT(parser.ColumnsCount() >= 2);
+        Cout << parser.ColumnParser(0).GetUint64() << "    \t"
+             << *parser.ColumnParser(1).GetOptionalFloat() << "    \t";
+        for (size_t i = 2; i < parser.ColumnsCount(); ++i) {
+            Cout << *parser.ColumnParser(2).GetOptionalUtf8() << "    \t";
+        }
+        Cout << "\n";
     }
     Cout << Endl;
 }
@@ -90,6 +93,10 @@ static void UpdateFlatBit(TTableClient& client, const TOptions& options) {
         paramsBuilder.AddParam("$begin").Uint64(i).Build();
         paramsBuilder.AddParam("$rows").Uint64(Rows).Build();
         ThrowOnError(client.RetryOperationSync([&](TSession session) {
+            // auto fit = session.ReadTable("");
+            // [[maybe_unused]] auto it = fit.ExtractValueSync();
+            // it.ReadNext()
+
             return session.ExecuteDataQuery(query,
                                             TTxControl::BeginTx(TTxSettings::SerializableRW())
                                                 .CommitTx(),

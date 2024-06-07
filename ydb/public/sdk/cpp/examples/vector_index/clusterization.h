@@ -18,14 +18,15 @@
 // when go each 2^7
 
 using TId = uint64_t;
+using TRawEmbedding = std::string_view;
 using TEmbedding = std::span<const float>;
 
 class TDatasetIterator {
 public:
     virtual ui64 Rows() const = 0;
-    virtual void RandomK(ui64 k, std::function<void(TEmbedding)>) = 0;
-    virtual void Iterate(std::function<void(TEmbedding)>) = 0;
-    virtual void Iterate(std::function<void(TId, TEmbedding)>) = 0;
+    virtual void RandomK(ui64 k, std::function<void(TRawEmbedding)>) = 0;
+    virtual void Iterate(std::function<void(TRawEmbedding)>) = 0;
+    virtual void Iterate(std::function<void(TId, TRawEmbedding)>) = 0;
 };
 
 class TClusterizer {
@@ -35,7 +36,6 @@ public:
     TClusterizer(TDatasetIterator& it, TDistance distance);
 
     struct TOptions {
-        ui32 size = 0;
         ui32 maxIterations = 10;
         ui32 minClusterSize = 1;
         ui32 maxClusterSize = 1 << 13;

@@ -1,6 +1,9 @@
 #include "clusterization.h"
 #include "util/system/yassert.h"
 
+#define USE_CURRENT_UDF_ABI_VERSION
+#include "ydb/library/yql/udfs/common/knn/knn-distance.h"
+
 static constexpr ui64 kStep = 1 << 7;
 
 TClusterizer::TClusters TClusterizer::Run(const TOptions& options) {
@@ -26,14 +29,15 @@ void TClusterizer::Init(ui64 k) {
     Clusters.Ids.clear();
     Clusters.Ids.resize(k);
     Clusters.Coords.reserve(k);
-    It.RandomK(k, [&](TEmbedding embedding) {
+    It.RandomK(k, [&](TRawEmbedding embedding) {
         Clusters.Coords.emplace_back(embedding);
     });
     Y_ASSERT(Clusters.Coords.size() == k)
 }
 
 bool TClusterizer::Step(float neededDiff) {
-    It.Iterate([&](TEmbedding embedding) {
+    It.Iterate([&](TRawEmbedding rawEmbedding) {
+        std::span embedding = TKnnVectorSerializer<float>::GetArray(rawEmbedding);
         float minDistance = std::numeric_limits<float>::max();
         size_t minPos = 0;
         Y_ASSERT(!Clusters.Coords.empty());
@@ -75,7 +79,9 @@ void TClusterizer::Finalize() {
     for (size_t pos = 0; auto& cluster : NewClusters) {
         Clusters.Ids[pos++].reserve(cluster.Count);
     }
-    It.Iterate([&](TId id, TEmbedding embedding) {
+    It.Iterate([&](TId id, TRawEmbedding rawEmbedding) {
+        std::span embedding = TKnnVectorSerializer<float>::GetArray(rawEmbedding);
+
         float minDistance = std::numeric_limits<float>::max();
         size_t minPos = 0;
         Y_ASSERT(!Clusters.Coords.empty());

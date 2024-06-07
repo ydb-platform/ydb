@@ -1,4 +1,5 @@
 #include "vector_index.h"
+#include "clusterization.h"
 #include "library/cpp/messagebus/www/concat_strings.h"
 #include <format>
 
@@ -14,7 +15,8 @@ using namespace NLastGetopt;
 using namespace NYdb;
 using namespace NTable;
 
-static std::string_view kFlatIndex = "flat";
+static std::string_view FlatIndex = "flat";
+static std::string_view KMeansIndex = "kmeans";
 
 namespace NQuantizer {
     static std::string_view None = "none";
@@ -55,7 +57,7 @@ static void PrintTop(TResultSetParser&& parser) {
     Cout << Endl;
 }
 
-static TString FlatBit(const TOptions& options) {
+static TString IndexName(const TOptions& options) {
     return TString::Join(options.Table, "_", options.IndexType, "_", options.IndexQuantizer);
 }
 
@@ -67,7 +69,21 @@ static void CreateFlatBit(TTableClient& client, const TOptions& options) {
                         .SetPrimaryKeyColumn(options.PrimaryKey)
                         .Build();
 
-        return session.CreateTable(TString::Join(options.Database, "/", FlatBit(options)), std::move(desc)).ExtractValueSync();
+        return session.CreateTable(TString::Join(options.Database, "/", IndexName(options)), std::move(desc)).ExtractValueSync();
+    }));
+}
+
+static void CreateKMeansNone(TTableClient& client, const TOptions& options) {
+    ThrowOnError(client.RetryOperationSync([&](TSession session) {
+        auto desc = TTableBuilder()
+                        .AddNonNullableColumn("level", EPrimitiveType::Uint8)
+                        .AddNonNullableColumn("id", EPrimitiveType::Uint32)
+                        .AddNullableColumn(options.Embedding + "s", EPrimitiveType::String)
+                        .AddNullableColumn(options.PrimaryKey + "s", EPrimitiveType::String)
+                        .SetPrimaryKeyColumns({"level", "id"})
+                        .Build();
+
+        return session.CreateTable(TString::Join(options.Database, "/", IndexName(options)), std::move(desc)).ExtractValueSync();
     }));
 }
 
@@ -84,7 +100,7 @@ static void UpdateFlatBit(TTableClient& client, const TOptions& options) {
         WHERE $begin <= {2} AND {2} < $begin + $rows
     )",
                                 options.Table,
-                                FlatBit(options),
+                                IndexName(options),
                                 options.PrimaryKey,
                                 options.Embedding);
     Cerr << query << Endl;
@@ -93,17 +109,67 @@ static void UpdateFlatBit(TTableClient& client, const TOptions& options) {
         paramsBuilder.AddParam("$begin").Uint64(i).Build();
         paramsBuilder.AddParam("$rows").Uint64(Rows).Build();
         ThrowOnError(client.RetryOperationSync([&](TSession session) {
-            // auto fit = session.ReadTable("");
-            // [[maybe_unused]] auto it = fit.ExtractValueSync();
-            // it.ReadNext()
-
             return session.ExecuteDataQuery(query,
                                             TTxControl::BeginTx(TTxSettings::SerializableRW())
                                                 .CommitTx(),
                                             paramsBuilder.Build())
-                .GetValueSync();
+                .ExtractValueSync();
         }));
     }
+}
+
+class TTableIterator final: public TDatasetIterator {
+public:
+    TTableIterator(const TOptions& options, TSession& session)
+        : Options{options}
+        , Session{session}
+    {
+    }
+
+    ui64 Rows() const final {
+        return 0;
+    }
+
+    void RandomK(ui64 k, std::function<void(TRawEmbedding)>) final {
+    }
+
+    void Iterate(std::function<void(TRawEmbedding)> cb) final {
+        Iterate([&](TId, TRawEmbedding embedding) {
+            cb(embedding);
+        });
+    }
+
+    void Iterate(std::function<void(TId, TRawEmbedding)> cb) final {
+        auto fit = Session.ReadTable(IndexName(Options));
+        auto it = fit.ExtractValueSync();
+        bool stop = true;
+        do {
+            auto part = it.ReadNext().ExtractValueSync().ExtractPart();
+            TResultSetParser batch(part);
+            Y_ASSERT(batch.ColumnsCount() >= 2);
+            stop = true;
+            while (batch.TryNextRow()) {
+                cb(batch.ColumnParser(0).GetUint64(), *batch.ColumnParser(0).GetOptionalString());
+                stop = false;
+            }
+        } while (!stop);
+    }
+
+private:
+    const TOptions& Options;
+    TSession& Session;
+};
+
+static void UpdateKMeansNone(TTableClient& client, const TOptions& options) {
+    ThrowOnError(client.RetryOperationSync([&](TSession session) {
+        TTableIterator it{options, session};
+        TClusterizer clusterizer{it, [](TEmbedding, TEmbedding) {
+                                     return 0.f;
+                                 }};
+        auto clusters = clusterizer.Run({});
+        // clusters.Coords;
+        // clusters.Ids;
+    }));
 }
 
 static void TopKFlatBit(TTableClient& client, const TOptions& options) {
@@ -125,7 +191,7 @@ static void TopKFlatBit(TTableClient& client, const TOptions& options) {
     )",
                                 options.Distance,
                                 options.PrimaryKey,
-                                FlatBit(options),
+                                IndexName(options),
                                 options.Table,
                                 options.Embedding,
                                 options.Data,
@@ -153,9 +219,12 @@ static void TopKFlatBit(TTableClient& client, const TOptions& options) {
     }));
 }
 
+static void TopKKMeansNone(TTableClient& client, const TOptions& options) {
+}
+
 int CreateIndex(NYdb::TDriver& driver, const TOptions& options) {
-    if (options.IndexType == kFlatIndex) {
-        TTableClient client(driver);
+    TTableClient client(driver);
+    if (options.IndexType == FlatIndex) {
         if (options.IndexQuantizer == NQuantizer::None) {
             return 0;
         }
@@ -163,13 +232,18 @@ int CreateIndex(NYdb::TDriver& driver, const TOptions& options) {
             CreateFlatBit(client, options);
             return 0;
         }
+    } else if (options.IndexType == KMeansIndex) {
+        if (options.IndexQuantizer == NQuantizer::None) {
+            CreateKMeansNone(client, options);
+            return 0;
+        }
     }
     return 1;
 }
 
 int UpdateIndex(NYdb::TDriver& driver, const TOptions& options) {
-    if (options.IndexType == kFlatIndex) {
-        TTableClient client(driver);
+    TTableClient client(driver);
+    if (options.IndexType == FlatIndex) {
         if (options.IndexQuantizer == NQuantizer::None) {
             return 0;
         }
@@ -177,18 +251,28 @@ int UpdateIndex(NYdb::TDriver& driver, const TOptions& options) {
             UpdateFlatBit(client, options);
             return 0;
         }
+    } else if (options.IndexType == KMeansIndex) {
+        if (options.IndexQuantizer == NQuantizer::None) {
+            UpdateKMeansNone(client, options);
+            return 0;
+        }
     }
     return 1;
 }
 
 int TopK(NYdb::TDriver& driver, const TOptions& options) {
-    if (options.IndexType == kFlatIndex) {
-        TTableClient client(driver);
+    TTableClient client(driver);
+    if (options.IndexType == FlatIndex) {
         if (options.IndexQuantizer == NQuantizer::None) {
             return 0;
         }
         if (options.IndexQuantizer == NQuantizer::Bit) {
             TopKFlatBit(client, options);
+            return 0;
+        }
+    } else if (options.IndexType == KMeansIndex) {
+        if (options.IndexQuantizer == NQuantizer::None) {
+            TopKKMeansNone(client, options);
             return 0;
         }
     }

@@ -9,6 +9,8 @@
 #include <ydb/core/blobstorage/vdisk/repl/blobstorage_replbroker.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 
+#include <ydb/core/protos/pqconfig.pb.h>
+
 using namespace NActors;
 using namespace NKikimr;
 

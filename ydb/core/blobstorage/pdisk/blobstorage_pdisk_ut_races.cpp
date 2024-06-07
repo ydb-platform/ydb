@@ -10,6 +10,8 @@
 #include <util/system/hp_timer.h>
 #include <util/random/random.h>
 
+#include <ydb/core/protos/pqconfig.pb.h>
+
 namespace NKikimr {
 
 Y_UNIT_TEST_SUITE(TPDiskRaces) {

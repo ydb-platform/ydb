@@ -5,6 +5,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/thread/factory.h>
 
+#include <ydb/core/protos/pqconfig.pb.h>
+
 namespace NKikimr {
     using namespace NActors;
 

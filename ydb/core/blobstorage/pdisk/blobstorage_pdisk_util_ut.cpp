@@ -21,6 +21,8 @@
 #include <util/system/tempfile.h>
 #include <cstring>
 
+#include <ydb/core/protos/pqconfig.pb.h>
+
 namespace NKikimr { namespace NPDisk {
 
 Y_UNIT_TEST_SUITE(TPDiskUtil) {

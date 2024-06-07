@@ -1,5 +1,7 @@
 #include "node_warden_mock.h"
 
+#include <ydb/core/protos/pqconfig.pb.h>
+
 void TNodeWardenMockActor::Connect() {
     Y_ABORT_UNLESS(!PipeId);
     PipeId = Register(NTabletPipe::CreateClient(SelfId(), Setup->TabletId, {}));

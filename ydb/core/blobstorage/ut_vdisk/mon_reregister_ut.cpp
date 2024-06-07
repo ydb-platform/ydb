@@ -17,6 +17,8 @@
 #include <ydb/core/blobstorage/ut_vdisk/lib/http_client.h>
 #include <util/stream/null.h>
 
+#include <ydb/core/protos/pqconfig.pb.h>
+
 #define STR Cnull
 
 using namespace NKikimr;

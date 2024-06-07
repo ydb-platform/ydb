@@ -11,6 +11,7 @@
 #include <ydb/library/actors/core/executor_pool_io.h>
 #include <ydb/library/actors/interconnect/interconnect_impl.h>
 
+#include <ydb/core/protos/pqconfig.pb.h>
 
 /**** ACHTUNG: Do not make here any new dependecies on kikimr ****/
 

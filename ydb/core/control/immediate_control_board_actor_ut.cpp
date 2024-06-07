@@ -20,6 +20,7 @@
 #include <util/generic/string.h>
 #include <util/generic/yexception.h>
 
+#include <ydb/core/protos/pqconfig.pb.h>
 
 namespace NKikimr {
 

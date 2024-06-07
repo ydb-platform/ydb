@@ -16,10 +16,14 @@ struct TTopicClientSettings : public TCommonClientSettingsBase<TTopicClientSetti
     FLUENT_SETTING_DEFAULT(IExecutor::TPtr, DefaultHandlersExecutor, CreateThreadPoolExecutor(1));
 };
 
+using TRetryOperationSettings = NYdb::NRetry::TRetryOperationSettings;
+
 // Topic client.
 class TTopicClient {
+    friend class NRetry::Async::TRetryContext<TTopicClient, TAsyncStatus>;
 public:
     class TImpl;
+    using TOperationWithoutSessionFunc = std::function<TAsyncStatus(TTopicClient& tableClient)>;
 
     TTopicClient(const TDriver& driver, const TTopicClientSettings& settings = TTopicClientSettings());
 
@@ -51,6 +55,9 @@ public:
     // Commit offset
     TAsyncStatus CommitOffset(const TString& path, ui64 partitionId, const TString& consumerName, ui64 offset,
         const TCommitOffsetSettings& settings = {});
+
+    TAsyncStatus RetryOperation(TOperationWithoutSessionFunc&& operation,
+        const TRetryOperationSettings& settings = TRetryOperationSettings());
 
 private:
     std::shared_ptr<TImpl> Impl_;

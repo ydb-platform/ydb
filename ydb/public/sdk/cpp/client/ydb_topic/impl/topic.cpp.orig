@@ -496,12 +496,4 @@ TAsyncStatus TTopicClient::CommitOffset(const TString& path, ui64 partitionId, c
     return Impl_->CommitOffset(path, partitionId, consumerName, offset, settings);
 }
 
-TAsyncStatus TTopicClient::RetryOperation(TOperationWithoutSessionFunc&& operation,
-        const TRetryOperationSettings& settings)
-{
-    using TRetryContextAsync = NYdb::NRetry::Async::TRetryWithoutSession<TTopicClient, TOperationWithoutSessionFunc>; 
-    auto context = MakeIntrusive<TRetryContextAsync>(*this, std::move(operation), settings);
-    return context->Execute();
-}
-
 }  // namespace NYdb::NTopic

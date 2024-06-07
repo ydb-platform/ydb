@@ -247,6 +247,13 @@ public:
             TRpcRequestSettings::Make(settings));
     }
 
+    void CollectRetryStatAsync(EStatus status) {
+        Y_UNUSED(status);
+    }
+
+    void CollectRetryStatSync(EStatus status) {
+        Y_UNUSED(status);
+    }
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -317,6 +324,12 @@ TAsyncStatus TSchemeClient::ModifyPermissions(const TString& path,
     const TModifyPermissionsSettings& data)
 {
     return Impl_->ModifyPermissions(path, data);
+}
+
+TAsyncStatus TSchemeClient::RetryOperation(TOperationWithoutSessionFunc&& operation, const TRetryOperationSettings& settings) {
+    using TRetryContextAsync = NRetry::Async::TRetryWithoutSession<TSchemeClient, TOperationWithoutSessionFunc>;
+    auto context = MakeIntrusive<TRetryContextAsync>(*this, std::move(operation), settings);
+    return context->Execute();
 }
 
 } // namespace NScheme

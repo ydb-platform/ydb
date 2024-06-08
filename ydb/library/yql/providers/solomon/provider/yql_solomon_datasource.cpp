@@ -113,8 +113,10 @@ public:
         return false;
     }
 
-    void GetInputs(const TExprNode& node, TVector<TPinInfo>&) override {
+    ui32 GetInputs(const TExprNode& node, TVector<TPinInfo>&, bool withLimits) override {
         Y_UNUSED(node);
+        Y_UNUSED(withLimits);
+        return 0;
     }
 
     IDqIntegration* GetDqIntegration() override {

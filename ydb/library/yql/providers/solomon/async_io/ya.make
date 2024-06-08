@@ -10,7 +10,6 @@ PEERDIR(
     library/cpp/json/easy_parse
     library/cpp/monlib/encode/json
     ydb/library/yql/dq/actors/compute
-    ydb/library/yql/minikql/computation/llvm14
     ydb/library/yql/providers/common/token_accessor/client
     ydb/library/yql/providers/solomon/proto
     ydb/library/yql/public/types

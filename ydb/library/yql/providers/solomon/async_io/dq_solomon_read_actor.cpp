@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
-#include <ydb/library/yql/dq/proto/dq_checkpoint.pb.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 
 #include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
 #include <ydb/library/yql/minikql/mkql_alloc.h>
@@ -281,8 +281,8 @@ public:
         return 0;
     }
 
-    void SaveState(const NDqProto::TCheckpoint&, NDqProto::TSourceState&) final {}
-    void LoadState(const NDqProto::TSourceState&) override { }
+    void SaveState(const NDqProto::TCheckpoint&, TSourceState&) final {}
+    void LoadState(const TSourceState&) override { }
     void CommitState(const NDqProto::TCheckpoint&) override { }
 
     ui64 GetInputIndex() const override {
@@ -304,7 +304,7 @@ private:
     }
 
 private:
-    NDqProto::TSourceState BuildState() { return {}; }
+    TSourceState BuildState() { return {}; }
 
     void NotifyComputeActorWithData() {
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));

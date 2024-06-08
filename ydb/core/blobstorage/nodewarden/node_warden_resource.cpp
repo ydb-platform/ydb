@@ -217,7 +217,7 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
     // terminate unused replicas
     for (const auto& replicaId : localActorIds) {
         STLOG(PRI_INFO, BS_NODE, NW43, "terminating useless state storage replica", (ReplicaId, replicaId));
-        const TActorId actorId = as->RegisterLocalService(actorId, TActorId());
+        const TActorId actorId = as->RegisterLocalService(replicaId, TActorId());
         TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
     }
 

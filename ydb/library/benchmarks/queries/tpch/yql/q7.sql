@@ -14,8 +14,7 @@ $l = select
 from 
     {{lineitem}} as l
 where 
-    cast(cast(l.l_shipdate as Timestamp) as Date) 
-    between Date('1995-01-01') and Date('1996-12-31');
+    l.l_shipdate between Date('1995-01-01') and Date('1996-12-31');
 
 $j1 = select 
     n_name as supp_nation,

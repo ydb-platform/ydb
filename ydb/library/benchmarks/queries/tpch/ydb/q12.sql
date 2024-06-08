@@ -12,7 +12,7 @@ $join = (
     from
         `{path}orders` as o
         join `{path}lineitem` as l
-        on o.o_orderkey == l.l_orderkey
+        on o.o_orderkey = l.l_orderkey
 );
 
 $border = Date("1994-01-01");

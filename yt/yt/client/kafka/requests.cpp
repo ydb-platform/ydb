@@ -455,6 +455,44 @@ void TRspHeartbeat::Serialize(IKafkaProtocolWriter* writer, int /*apiVersion*/) 
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TReqOffsetCommitTopicPartition::Deserialize(IKafkaProtocolReader* reader, int /*apiVersion*/)
+{
+    PartitionIndex = reader->ReadInt32();
+    CommittedOffset = reader->ReadInt64();
+    CommittedMetadata = reader->ReadNullableString();
+}
+
+void TReqOffsetCommitTopic::Deserialize(IKafkaProtocolReader* reader, int apiVersion)
+{
+    Name = reader->ReadString();
+    NKafka::Deserialize(Partitions, reader, /*isCompact*/ apiVersion >= 8, apiVersion);
+}
+
+void TReqOffsetCommit::Deserialize(IKafkaProtocolReader* reader, int apiVersion)
+{
+    GroupId = reader->ReadString();
+    NKafka::Deserialize(Topics, reader, /*isCompact*/ apiVersion >= 8, apiVersion);
+}
+
+void TRspOffsetCommitTopicPartition::Serialize(IKafkaProtocolWriter* writer, int /*apiVersion*/) const
+{
+    writer->WriteInt32(PartitionIndex);
+    writer->WriteErrorCode(ErrorCode);
+}
+
+void TRspOffsetCommitTopic::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
+{
+    writer->WriteString(Name);
+    NKafka::Serialize(Partitions, writer, /*isCompact*/ apiVersion >= 8, apiVersion);
+}
+
+void TRspOffsetCommit::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
+{
+    NKafka::Serialize(Topics, writer, /*isCompact*/ apiVersion >= 8, apiVersion);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TReqOffsetFetchTopic::Deserialize(IKafkaProtocolReader* reader, int /*apiVersion*/)
 {
     Name = reader->ReadString();

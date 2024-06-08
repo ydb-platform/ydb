@@ -14,10 +14,10 @@ DEFINE_ENUM(ERequestType,
     ((None)               (-1))
     ((Produce)            (0))
     ((Fetch)              (1))
-    ((ListOffsets)        (2)) // Unimplemented.
+    ((ListOffsets)        (2))
     ((Metadata)           (3))
     ((UpdateMetadata)     (6)) // Unimplemented.
-    ((OffsetCommit)       (8)) // Unimplemented.
+    ((OffsetCommit)       (8))
     ((OffsetFetch)        (9))
     ((FindCoordinator)    (10))
     ((JoinGroup)          (11)) // Unimplemented.
@@ -25,7 +25,7 @@ DEFINE_ENUM(ERequestType,
     ((SyncGroup)          (14)) // Unimplemented.
     ((DescribeGroups)     (15)) // Unimplemented.
     ((SaslHandshake)      (17))
-    ((ApiVersions)        (18)) // Unimplemented.
+    ((ApiVersions)        (18))
     ((SaslAuthenticate)   (36)) // Unimplemented.
 );
 
@@ -405,6 +405,60 @@ struct TRspHeartbeat
 {
     EErrorCode ErrorCode = EErrorCode::None;
 
+    void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TReqOffsetCommitTopicPartition
+{
+    i32 PartitionIndex = 0;
+    i64 CommittedOffset = 0;
+    std::optional<TString> CommittedMetadata;
+
+    void Deserialize(IKafkaProtocolReader* reader, int apiVersion);
+};
+
+struct TReqOffsetCommitTopic
+{
+    TString Name;
+    std::vector<TReqOffsetCommitTopicPartition> Partitions;
+
+    void Deserialize(IKafkaProtocolReader* reader, int apiVersion);
+};
+
+struct TReqOffsetCommit
+{
+    TString GroupId;
+    std::vector<TReqOffsetCommitTopic> Topics;
+
+    void Deserialize(IKafkaProtocolReader* reader, int apiVersion);
+
+    static ERequestType GetRequestType()
+    {
+        return ERequestType::OffsetCommit;
+    }
+};
+
+struct TRspOffsetCommitTopicPartition
+{
+    i32 PartitionIndex = 0;
+    EErrorCode ErrorCode = EErrorCode::None;
+
+    void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
+};
+
+struct TRspOffsetCommitTopic
+{
+    TString Name;
+    std::vector<TRspOffsetCommitTopicPartition> Partitions;
+
+    void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
+};
+
+struct TRspOffsetCommit
+{
+    std::vector<TRspOffsetCommitTopic> Topics;
     void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
 };
 

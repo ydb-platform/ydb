@@ -151,7 +151,7 @@ private:
     std::shared_ptr<IStoragesManager> StoragesManager;
     std::shared_ptr<NStorageOptimizer::IOptimizerPlanner> OptimizerPlanner;
     std::shared_ptr<NActualizer::TGranuleActualizationIndex> ActualizationIndex;
-    mutable TInstant LastActualizations = TInstant::Zero();
+    mutable TInstant NextActualizations = TInstant::Zero();
     std::map<NArrow::TReplaceKey, THashMap<ui64, std::shared_ptr<TPortionInfo>>> PortionsByPK;
 
     void OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> portionBefore);

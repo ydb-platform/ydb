@@ -119,6 +119,26 @@ public:
         }
     };
 
+    class TNormalizerFullId {
+    private:
+        YDB_READONLY_DEF(TString, ClassName);
+        YDB_READONLY_DEF(TString, Description);
+    public:
+        bool operator<(const TNormalizerFullId& item) const {
+            if (ClassName == item.ClassName) {
+                return Description < item.Description;
+            }
+            return ClassName < item.ClassName;
+        }
+
+        TNormalizerFullId(const TString& className, const TString& description)
+            : ClassName(className)
+            , Description(description)
+        {
+
+        }
+    };
+
     class INormalizerComponent {
     private:
         YDB_ACCESSOR(bool, IsRepair, false);
@@ -136,6 +156,10 @@ public:
         using TFactory = NObjectFactory::TParametrizedObjectFactory<INormalizerComponent, TString, TInitContext>;
 
         virtual ~INormalizerComponent() {}
+
+        TNormalizerFullId GetNormalizerFullId() const {
+            return TNormalizerFullId(GetClassName(), UniqueDescription);
+        }
 
         bool HasActiveTasks() const {
             return AtomicGet(ActiveTasksCount) > 0;
@@ -191,16 +215,7 @@ public:
             }
         }
 
-        TConclusion<std::vector<INormalizerTask::TPtr>> Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
-            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "normalization_init")("last", controller.GetLastSavedNormalizerId())
-                ("seq_id", GetSequentialId())("type", GetEnumSequentialId());
-            auto result = DoInit(controller, txc);
-            if (!result.IsSuccess()) {
-                return result;
-            }
-            AtomicSet(ActiveTasksCount, result.GetResult().size());
-            return result;
-        }
+        TConclusion<std::vector<INormalizerTask::TPtr>> Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc);
 
     private:
         virtual TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) = 0;
@@ -215,7 +230,8 @@ private:
 
     std::deque<INormalizerComponent::TPtr> Normalizers;
     std::deque<TNormalizerCounters> Counters;
-    THashSet<TString> FinishedRepairs;
+    std::set<TNormalizerFullId> FinishedNormalizers;
+    std::map<TNormalizerFullId, TString> StartedNormalizers;
     YDB_READONLY_DEF(std::optional<ui32>, LastSavedNormalizerId);
 private:
     INormalizerComponent::TPtr RegisterNormalizer(INormalizerComponent::TPtr normalizer);
@@ -231,8 +247,8 @@ public:
     }
 
     void InitNormalizers(const TInitContext& ctx);
-    void UpdateControllerState(NIceDb::TNiceDb& db) const;
-    void AddRepairInfo(NIceDb::TNiceDb& db, const TString& info) const;
+    void OnNormalizerFinished(NIceDb::TNiceDb& db) const;
+    void AddNormalizerEvent(NIceDb::TNiceDb& db, const TString& eventType, const TString& eventDescription) const;
     bool InitControllerState(NIceDb::TNiceDb& db);
 
     std::shared_ptr<IStoragesManager> GetStoragesManager() const {

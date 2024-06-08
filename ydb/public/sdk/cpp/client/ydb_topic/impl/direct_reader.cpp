@@ -103,6 +103,26 @@ void TDirectReadSessionControlCallbacks::ScheduleCallback(TDuration delay, std::
     );
 }
 
+void TDirectReadSessionControlCallbacks::StopPartitionSession(TPartitionSessionId partitionSessionId) {
+    if (auto s = SingleClusterReadSessionContextPtr->LockShared()) {
+        with_lock (s->Lock) {
+            if (s->DirectReadSessionManager) {
+                s->DirectReadSessionManager->StopPartitionSession(partitionSessionId);
+            }
+        }
+    }
+}
+
+void TDirectReadSessionControlCallbacks::DeleteNodeSessionIfEmpty(TNodeId nodeId) {
+    if (auto s = SingleClusterReadSessionContextPtr->LockShared()) {
+        with_lock (s->Lock) {
+            if (s->DirectReadSessionManager) {
+                s->DirectReadSessionManager->DeleteNodeSessionIfEmpty(nodeId);
+            }
+        }
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TDirectReadSessionManager
 
@@ -167,7 +187,7 @@ void TDirectReadSessionManager::StartPartitionSessionImpl(TDirectReadPartitionSe
     }
 }
 
-void TDirectReadSessionManager::DeleteNodeSessionIfEmptyImpl(TNodeId nodeId) {
+void TDirectReadSessionManager::DeleteNodeSessionIfEmpty(TNodeId nodeId) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "DeleteNodeSessionIfEmpty " << nodeId);
@@ -299,22 +319,6 @@ bool TDirectReadSession::Empty() const {
     }
 }
 
-/* XXXXX
-    TDirectReadSessionCallbacks {
-        .OnDirectReadDone = [context = this->SelfContext](Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&& response, TDeferredActions<false>& deferred) {
-            if (auto s = context->LockShared()) {
-                s->OnDirectReadDone(std::move(response), deferred);
-            }
-        },
-        .OnAbortSession = [context = this->SelfContext](TSessionClosedEvent&& closeEvent) {
-            if (auto s = context->LockShared()) {
-                s->AbortSession(std::move(closeEvent));
-            }
-        },
-        .OnSchedule = ScheduleCallback,
-    },
-*/
-
 void TDirectReadSession::AddPartitionSession(TDirectReadPartitionSession&& session) {
     TDeferredActions<false> deferred;
     with_lock (Lock) {
@@ -438,34 +442,47 @@ void TDirectReadSession::SendStartDirectReadPartitionSessionImpl(
 ) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
-    if (State < EState::WORKING && partitionSession.State == TDirectReadPartitionSession::EState::DELAYED && delayedCall) {
-        // It's time to send a delayed Start-request, but there is no working connection at the moment.
-        // Reset the partition session state, so the request is sent as soon as the connection is reestablished.
-        partitionSession.State = TDirectReadPartitionSession::EState::IDLE;
-        partitionSession.RetryState = nullptr;
+    // For delayed calls the status should be a default-constructed TPlainStatus().
+    Y_ABORT_UNLESS(!delayedCall || delayedCall && status.Ok());
+
+    bool isImmediateCall = partitionSession.State == TDirectReadPartitionSession::EState::IDLE && !delayedCall;
+    bool isDelayedCall = partitionSession.State == TDirectReadPartitionSession::EState::DELAYED && delayedCall;
+
+    // We should either send a non-delayed request or a delayed one.
+    // We must not send a delayed request when the session is IDLE,
+    //           or a non-delayed request when the session is DELAYED.
+    Y_ABORT_UNLESS(isImmediateCall || isDelayedCall);
+
+    if (State < EState::WORKING) {
+        if (isDelayedCall) {
+            // It's time to send a delayed Start-request, but there is no working connection at the moment.
+            // Reset the partition session state, so the request is sent as soon as the connection is reestablished.
+            partitionSession.State = TDirectReadPartitionSession::EState::IDLE;
+            partitionSession.RetryState = nullptr;
+            return;
+        }
+
+        if (isImmediateCall) {
+            // The request will be sent from OnReadDoneImpl(InitDirectReadResponse).
+            return;
+        }
+    }
+
+    if (State >= EState::CLOSING) {
+        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "SendStartDirectReadPartitionSessionImpl bail out 1, State=" << State);
         return;
     }
 
-    // Send the StartDirectReadPartitionSession request only if we're already connected.
-    // In other cases adding the session to PartitionSessions is enough,
-    // the request will be sent from OnReadDoneImpl(InitDirectReadResponse).
-    bool sendOrSchedule = State == EState::WORKING && (
-            partitionSession.State == TDirectReadPartitionSession::EState::IDLE && !delayedCall ||
-            partitionSession.State == TDirectReadPartitionSession::EState::DELAYED && delayedCall);
-
-    if (!sendOrSchedule) {
-        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "SendStartDirectReadPartitionSessionImpl bail out, State=" << State
-                                                 << " partitionSession.State=" << partitionSession.State
-                                                 << " delayedCall=" << delayedCall);
-        return;
-    }
+    Y_ABORT_UNLESS(State == EState::WORKING);
 
     if (status.Ok()) {
-        partitionSession.State = TDirectReadPartitionSession::EState::STARTING;
         LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "SendStartDirectReadPartitionSessionImpl send request");
+        partitionSession.State = TDirectReadPartitionSession::EState::STARTING;
         WriteToProcessorImpl(partitionSession.MakeStartRequest());
         return;
     }
+
+    // Can't send the request right away, schedule it:
 
     if (!partitionSession.RetryState) {
         partitionSession.RetryState = ReadSessionSettings.RetryPolicy_->CreateRetryState();
@@ -570,10 +587,10 @@ void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::Dir
         // We have read all available data, time to stop the partition session.
         DeletePartitionSessionImpl(partitionSession.PartitionSessionId);
 
-        // ControlCallbacks.StopPartitionSession(partitionSession.PartitionSessionId);
+        ControlCallbacks->StopPartitionSession(partitionSession.PartitionSessionId);
 
         if (Empty()) {
-            // ControlCallbacks.DeleteNodeSessionIfEmpty(NodeId);
+            ControlCallbacks->DeleteNodeSessionIfEmpty(NodeId);
         }
     }
 }

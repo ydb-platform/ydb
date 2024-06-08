@@ -1094,7 +1094,7 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
         class TControlCallbacks : public IDirectReadSessionControlCallbacks {
         public:
             TControlCallbacks(NThreading::TPromise<void>& gotClosedEvent) : GotClosedEvent(gotClosedEvent) {}
-            void AbortSession(TSessionClosedEvent&&) { GotClosedEvent.SetValue(); }
+            void AbortSession(TSessionClosedEvent&&) override { GotClosedEvent.SetValue(); }
             NThreading::TPromise<void>& GotClosedEvent;
         };
 
@@ -1127,7 +1127,7 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
         class TControlCallbacks : public IDirectReadSessionControlCallbacks {
         public:
             TControlCallbacks(NThreading::TPromise<void>& gotClosedEvent) : GotClosedEvent(gotClosedEvent) {}
-            void AbortSession(TSessionClosedEvent&&) { GotClosedEvent.SetValue(); }
+            void AbortSession(TSessionClosedEvent&&) override { GotClosedEvent.SetValue(); }
             NThreading::TPromise<void>& GotClosedEvent;
         };
 
@@ -1159,7 +1159,7 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
         class TControlCallbacks : public IDirectReadSessionControlCallbacks {
         public:
             TControlCallbacks(NThreading::TPromise<void>& gotClosedEvent) : GotClosedEvent(gotClosedEvent) {}
-            void AbortSession(TSessionClosedEvent&&) { GotClosedEvent.SetValue(); }
+            void AbortSession(TSessionClosedEvent&&) override { GotClosedEvent.SetValue(); }
             NThreading::TPromise<void>& GotClosedEvent;
         };
 
@@ -1202,8 +1202,10 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
         class TControlCallbacks : public IDirectReadSessionControlCallbacks {
         public:
             TControlCallbacks(NThreading::TPromise<void>& gotClosedEvent) : GotClosedEvent(gotClosedEvent) {}
-            void AbortSession(TSessionClosedEvent&&) { GotClosedEvent.SetValue(); }
-            void ScheduleCallback(TDuration, std::function<void()> cb) { cb(); }
+            void AbortSession(TSessionClosedEvent&&) override { GotClosedEvent.SetValue(); }
+            void ScheduleCallback(TDuration, std::function<void()> cb, TDeferredActions<false>& deferred) override {
+                deferred.DeferCallback(cb);
+            }
             NThreading::TPromise<void>& GotClosedEvent;
         };
 
@@ -1291,7 +1293,9 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
 
         class TControlCallbacks : public IDirectReadSessionControlCallbacks {
         public:
-            void ScheduleCallback(TDuration, std::function<void()> cb) { cb(); }
+            void ScheduleCallback(TDuration, std::function<void()> cb, TDeferredActions<false>& deferred) override {
+                deferred.DeferCallback(cb);
+            }
         };
 
         auto session = setup.GetDirectReadSession(std::make_shared<TControlCallbacks>());
@@ -1392,10 +1396,14 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
 
         class TControlCallbacks : public IDirectReadSessionControlCallbacks {
         public:
-            void ScheduleCallback(TDuration, std::function<void()> cb) { cb(); }
+            TControlCallbacks(std::function<void()>& callback) : Callback(callback) {}
+            void ScheduleCallback(TDuration, std::function<void()> cb, TDeferredActions<false>&) override {
+                Callback = cb;
+            }
+            std::function<void()>& Callback;
         };
 
-        auto session = setup.GetDirectReadSession(std::make_shared<TControlCallbacks>());
+        auto session = setup.GetDirectReadSession(std::make_shared<TControlCallbacks>(callback));
 
         session->Start();
         setup.MockDirectReadProcessorFactory->Wait();
@@ -1498,15 +1506,16 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
 
         class TControlCallbacks : public IDirectReadSessionControlCallbacks {
         public:
-            TControlCallbacks(TDuration delay) : Delay(delay) {}
-            void ScheduleCallback(TDuration d, std::function<void()> cb) {
+            TControlCallbacks(TDuration delay, std::function<void()>& callback) : Delay(delay), Callback(callback) {}
+            void ScheduleCallback(TDuration d, std::function<void()> cb, TDeferredActions<false>&) override {
                 UNIT_ASSERT_EQUAL(Delay, d);
-                cb();
+                Callback = cb;
             }
             TDuration Delay;
+            std::function<void()>& Callback;
         };
 
-        auto session = setup.GetDirectReadSession(std::make_shared<TControlCallbacks>(delay));
+        auto session = setup.GetDirectReadSession(std::make_shared<TControlCallbacks>(delay, callback));
 
         session->Start();
         setup.MockDirectReadProcessorFactory->Wait();

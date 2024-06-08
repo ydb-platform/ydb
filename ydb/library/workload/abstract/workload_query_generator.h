@@ -10,6 +10,8 @@
 #include <vector>
 #include <string>
 
+#define WORKLOAD_QUERY_GENERATOR_INTERFACE_VERSION 3
+
 namespace NYdbWorkload {
 
 struct TQueryInfo {

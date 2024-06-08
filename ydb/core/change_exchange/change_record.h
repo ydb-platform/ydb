@@ -4,7 +4,24 @@
 #include <util/generic/string.h>
 #include <util/stream/output.h>
 
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/scheme_types/scheme_type_info.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
+
 namespace NKikimr::NChangeExchange {
+
+class IChangeSenderResolver {
+public:
+    virtual ~IChangeSenderResolver() = default;
+
+    virtual void Resolve() = 0;
+    virtual bool IsResolving() const = 0;
+    virtual bool IsResolved() const = 0;
+
+    virtual const TVector<TKeyDesc::TPartitionInfo>& GetPartitions() const = 0;
+    virtual const TVector<NScheme::TTypeInfo>& GetSchema() const = 0;
+    virtual NKikimrSchemeOp::ECdcStreamFormat GetStreamFormat() const = 0;
+};
 
 class IChangeRecord: public TThrRefBase {
 public:
@@ -34,11 +51,7 @@ public:
     virtual TString ToString() const = 0;
     virtual void Out(IOutputStream& out) const = 0;
 
-    template <typename T>
-    T* Get() {
-        return dynamic_cast<T*>(this);
-    }
-
+    virtual ui64 ResolvePartitionId(IChangeSenderResolver* const resolver) const = 0;
 }; // IChangeRecord
 
 template <typename T, typename TDerived> class TChangeRecordBuilder;
@@ -77,13 +90,11 @@ protected:
 public:
     TChangeRecordBuilder()
         : Record(MakeIntrusive<T>())
-    {
-    }
+    {}
 
-    explicit TChangeRecordBuilder(IChangeRecord::TPtr record)
+    explicit TChangeRecordBuilder(TIntrusivePtr<T> record)
         : Record(std::move(record))
-    {
-    }
+    {}
 
     TSelf& WithOrder(ui64 order) {
         GetRecord()->Order = order;
@@ -105,12 +116,12 @@ public:
         return static_cast<TSelf&>(*this);
     }
 
-    IChangeRecord::TPtr Build() {
+    TIntrusivePtr<T> Build() {
         return Record;
     }
 
 protected:
-    IChangeRecord::TPtr Record;
+    TIntrusivePtr<T> Record;
 
 }; // TChangeRecordBuilder
 

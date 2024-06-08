@@ -77,9 +77,12 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
         tableId.SetSchemaVersion(TableId.SchemaVersion);
 
         TString source;
-        for (auto recordPtr : ev->Get()->Records) {
+
+        auto& records = std::get<TVector<NReplication::NService::TChangeRecord::TPtr>>(ev->Get()->Records);
+
+        for (auto recordPtr : records) {
             MemoryPool.Clear();
-            const auto& record = *recordPtr->Get<TChangeRecord>();
+            const auto& record = *recordPtr;
             record.Serialize(*event->Record.AddChanges(), MemoryPool);
 
             if (!source) {
@@ -407,30 +410,9 @@ class TLocalTableWriter
         return new TTablePartitionWriter(SelfId(), partitionId, TTableId(PathId, Schema->Version));
     }
 
-    ui64 GetPartitionId(NChangeExchange::IChangeRecord::TPtr record) const override {
-        Y_ABORT_UNLESS(KeyDesc);
-        Y_ABORT_UNLESS(KeyDesc->GetPartitions());
-
-        MemoryPool.Clear();
-        const auto range = TTableRange(record->Get<TChangeRecord>()->GetKey(MemoryPool));
-        Y_ABORT_UNLESS(range.Point);
-
-        TVector<TKeyDesc::TPartitionInfo>::const_iterator it = LowerBound(
-            KeyDesc->GetPartitions().begin(), KeyDesc->GetPartitions().end(), true,
-            [&](const TKeyDesc::TPartitionInfo& partition, bool) {
-                const int compares = CompareBorders<true, false>(
-                    partition.Range->EndKeyPrefix.GetCells(), range.From,
-                    partition.Range->IsInclusive || partition.Range->IsPoint,
-                    range.InclusiveFrom || range.Point, KeyDesc->KeyColumnTypes
-                );
-
-                return (compares < 0);
-            }
-        );
-
-        Y_ABORT_UNLESS(it != KeyDesc->GetPartitions().end());
-        return it->ShardId;
-    }
+    const TVector<TKeyDesc::TPartitionInfo>& GetPartitions() const override { return KeyDesc->GetPartitions(); };
+    const TVector<NScheme::TTypeInfo>& GetSchema() const override { return KeyDesc->KeyColumnTypes; }
+    NKikimrSchemeOp::ECdcStreamFormat GetStreamFormat() const override { return NKikimrSchemeOp::ECdcStreamFormatJson; }
 
     void Handle(TEvWorker::TEvData::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
@@ -456,7 +438,7 @@ class TLocalTableWriter
     void Handle(NChangeExchange::TEvChangeExchange::TEvRequestRecords::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
 
-        TVector<NChangeExchange::IChangeRecord::TPtr> records(::Reserve(ev->Get()->Records.size()));
+        TVector<NReplication::NService::TChangeRecord::TPtr> records(::Reserve(ev->Get()->Records.size()));
 
         for (const auto& record : ev->Get()->Records) {
             auto it = PendingRecords.find(record.Order);
@@ -548,7 +530,7 @@ private:
     TLightweightSchema::TCPtr Schema;
     bool Resolving = false;
 
-    TMap<ui64, NChangeExchange::IChangeRecord::TPtr> PendingRecords;
+    TMap<ui64, NReplication::NService::TChangeRecord::TPtr> PendingRecords;
 
 }; // TLocalTableWriter
 

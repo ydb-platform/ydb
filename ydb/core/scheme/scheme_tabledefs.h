@@ -712,6 +712,21 @@ public:
         , Status(EStatus::Unknown)
         , Partitioning(std::make_shared<TVector<TKeyDesc::TPartitionInfo>>())
     {}
+
+    // FIXME
+    static THolder<TKeyDesc> CreateMiniKeyDesc(const TVector<NScheme::TTypeInfo> &keyColumnTypes) {
+        return MakeHolder<TKeyDesc>(keyColumnTypes);
+    }
+private:
+    friend THolder<TKeyDesc> MakeHolder<TKeyDesc>(const TVector<NScheme::TTypeInfo> &keyColumnTypes);
+
+    TKeyDesc(const TVector<NScheme::TTypeInfo> &keyColumnTypes)
+        : RowOperation(ERowOperation::Unknown)
+        , KeyColumnTypes(keyColumnTypes.begin(), keyColumnTypes.end())
+        , Reverse(false)
+        , Status(EStatus::Unknown)
+        , Partitioning(std::make_shared<TVector<TKeyDesc::TPartitionInfo>>())
+    {}
 };
 
 struct TSystemColumnInfo {

@@ -2,6 +2,9 @@
 
 #include "change_record.h"
 
+#include <ydb/core/tx/replication/service/json_change_record.h>
+#include <ydb/core/tx/datashard/change_record.h>
+
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
 #include <ydb/core/scheme/scheme_pathid.h>
@@ -9,6 +12,8 @@
 #include <util/generic/vector.h>
 
 namespace NKikimr::NChangeExchange {
+
+using TChangeRecordVector = std::variant<TVector<NDataShard::TChangeRecord::TPtr>, TVector<NReplication::NService::TChangeRecord::TPtr>>;
 
 struct TEvChangeExchange {
     enum EEv {
@@ -73,10 +78,10 @@ struct TEvChangeExchange {
     };
 
     struct TEvRecords: public TEventLocal<TEvRecords, EvRecords> {
-        TVector<IChangeRecord::TPtr> Records;
+        TChangeRecordVector Records;
 
-        explicit TEvRecords(const TVector<IChangeRecord::TPtr>& records);
-        explicit TEvRecords(TVector<IChangeRecord::TPtr>&& records);
+        explicit TEvRecords(const TChangeRecordVector& records);
+        explicit TEvRecords(TChangeRecordVector&& records);
         TString ToString() const override;
     };
 

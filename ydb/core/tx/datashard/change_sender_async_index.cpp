@@ -128,8 +128,10 @@ class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeS
         records->Record.SetOrigin(DataShard.TabletId);
         records->Record.SetGeneration(DataShard.Generation);
 
-        for (auto recordPtr : ev->Get()->Records) {
-            const auto& record = *recordPtr->Get<TChangeRecord>();
+        auto evRecords = std::get<TVector<TChangeRecord::TPtr>>(ev->Get()->Records);
+
+        for (auto& recordPtr : evRecords) {
+            const auto& record = *recordPtr;
 
             if (record.GetOrder() <= LastRecordOrder) {
                 continue;
@@ -713,29 +715,9 @@ class TAsyncIndexChangeSenderMain
         return KeyDesc && KeyDesc->GetPartitions();
     }
 
-    ui64 GetPartitionId(NChangeExchange::IChangeRecord::TPtr record) const override {
-        Y_ABORT_UNLESS(KeyDesc);
-        Y_ABORT_UNLESS(KeyDesc->GetPartitions());
-
-        const auto range = TTableRange(record->Get<TChangeRecord>()->GetKey());
-        Y_ABORT_UNLESS(range.Point);
-
-        TVector<TKeyDesc::TPartitionInfo>::const_iterator it = LowerBound(
-            KeyDesc->GetPartitions().begin(), KeyDesc->GetPartitions().end(), true,
-            [&](const TKeyDesc::TPartitionInfo& partition, bool) {
-                const int compares = CompareBorders<true, false>(
-                    partition.Range->EndKeyPrefix.GetCells(), range.From,
-                    partition.Range->IsInclusive || partition.Range->IsPoint,
-                    range.InclusiveFrom || range.Point, KeyDesc->KeyColumnTypes
-                );
-
-                return (compares < 0);
-            }
-        );
-
-        Y_ABORT_UNLESS(it != KeyDesc->GetPartitions().end());
-        return it->ShardId; // partition = shard
-    }
+    const TVector<TKeyDesc::TPartitionInfo>& GetPartitions() const override { return KeyDesc->GetPartitions(); }
+    const TVector<NScheme::TTypeInfo>& GetSchema() const override { return KeyDesc->KeyColumnTypes; }
+    NKikimrSchemeOp::ECdcStreamFormat GetStreamFormat() const override { return NKikimrSchemeOp::ECdcStreamFormatProto; }
 
     IActor* CreateSender(ui64 partitionId) const override {
         return new TAsyncIndexChangeSenderShard(SelfId(), DataShard, partitionId, IndexTablePathId, TagMap);

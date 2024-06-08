@@ -5,6 +5,7 @@
 #include <ydb/core/change_exchange/change_record.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/services/lib/sharding/sharding.h>
 
 #include <util/generic/maybe.h>
 
@@ -20,6 +21,8 @@ class TChangeRecord: public NChangeExchange::TChangeRecordBase {
     friend class TChangeRecordBuilder;
 
 public:
+    using TPtr = TIntrusivePtr<TChangeRecord>;
+
     ui64 GetGroup() const override { return Group; }
     ui64 GetStep() const override { return Step; }
     ui64 GetTxId() const override { return TxId; }
@@ -41,6 +44,49 @@ public:
     bool IsBroadcast() const override;
 
     void Out(IOutputStream& out) const override;
+
+    ui64 ResolvePartitionId(NChangeExchange::IChangeSenderResolver* const resolver) const override {
+        const auto& partitions = resolver->GetPartitions();
+        Y_ABORT_UNLESS(partitions);
+        const auto& schema = resolver->GetSchema();
+        const auto streamFormat = resolver->GetStreamFormat();
+
+        switch (streamFormat) {
+            case NKikimrSchemeOp::ECdcStreamFormatProto: {
+                const auto range = TTableRange(GetKey());
+                Y_ABORT_UNLESS(range.Point);
+
+                const auto it = LowerBound(
+                    partitions.cbegin(), partitions.cend(), true,
+                    [&](const auto& partition, bool) {
+                        const int compares = CompareBorders<true, false>(
+                            partition.Range->EndKeyPrefix.GetCells(), range.From,
+                            partition.Range->IsInclusive || partition.Range->IsPoint,
+                            range.InclusiveFrom || range.Point, schema
+                        );
+
+                        return (compares < 0);
+                    }
+                );
+
+                Y_ABORT_UNLESS(it != partitions.cend());
+                return it->ShardId;
+            }
+
+            case NKikimrSchemeOp::ECdcStreamFormatJson:
+            case NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson:
+            case NKikimrSchemeOp::ECdcStreamFormatDebeziumJson: {
+                using namespace NKikimr::NDataStreams::V1;
+                const auto hashKey = HexBytesToDecimal(GetPartitionKey() /* MD5 */);
+                return ShardFromDecimal(hashKey, partitions.size());
+            }
+
+            default: {
+                Y_FAIL_S("Unknown format"
+                    << ": format# " << static_cast<int>(streamFormat));
+            }
+        }
+    }
 
 private:
     ui64 Group = 0;

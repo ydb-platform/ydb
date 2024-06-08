@@ -2,6 +2,9 @@
 
 #include "change_exchange.h"
 
+#include <ydb/core/tx/replication/service/json_change_record.h>
+#include <ydb/core/tx/datashard/change_record.h>
+
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/mon.h>
 
@@ -10,7 +13,13 @@
 #include <util/generic/set.h>
 #include <util/string/builder.h>
 
+#include <variant>
+
 namespace NKikimr::NChangeExchange {
+
+using TChangeRecordPtr = std::variant<NDataShard::TChangeRecord::TPtr, NReplication::NService::TChangeRecord::TPtr>;
+using TChangeRecordVector = std::variant<TVector<NDataShard::TChangeRecord::TPtr>, TVector<NReplication::NService::TChangeRecord::TPtr>>;
+using TChangeRecordMap = std::variant<TMap<ui64, NDataShard::TChangeRecord::TPtr>, TMap<ui64, NReplication::NService::TChangeRecord::TPtr>>;
 
 struct TEvChangeExchangePrivate {
     enum EEv {
@@ -56,16 +65,6 @@ struct TEvChangeExchangePrivate {
 
 }; // TEvChangeExchangePrivate
 
-class IChangeSenderResolver {
-public:
-    virtual ~IChangeSenderResolver() = default;
-
-    virtual void Resolve() = 0;
-    virtual bool IsResolving() const = 0;
-    virtual bool IsResolved() const = 0;
-    virtual ui64 GetPartitionId(IChangeRecord::TPtr record) const = 0;
-};
-
 class ISenderFactory {
 public:
     virtual ~ISenderFactory() = default;
@@ -96,7 +95,7 @@ class TBaseChangeSender {
         TActorId ActorId;
         bool Ready = false;
         TVector<TIncompleteRecord> Pending;
-        TVector<IChangeRecord::TPtr> Prepared;
+        TChangeRecordVector Prepared;
         TVector<ui64> Broadcasting;
     };
 
@@ -149,7 +148,7 @@ protected:
     void RemoveRecords();
 
     void EnqueueRecords(TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>&& records);
-    void ProcessRecords(TVector<IChangeRecord::TPtr>&& records);
+    void ProcessRecords(TChangeRecordVector&& records);
     void ForgetRecords(TVector<ui64>&& records);
     void OnReady(ui64 partitionId);
     void OnGone(ui64 partitionId);
@@ -178,7 +177,7 @@ private:
     THashMap<ui64, TSender> Senders; // ui64 is partition id
     TSet<TEnqueuedRecord> Enqueued;
     TSet<TIncompleteRecord> PendingBody;
-    TMap<ui64, IChangeRecord::TPtr> PendingSent; // ui64 is order
+    TChangeRecordMap PendingSent; // ui64 is order
     THashMap<ui64, TBroadcast> Broadcasting; // ui64 is order
 
     TVector<ui64> GonePartitions;

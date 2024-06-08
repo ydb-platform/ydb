@@ -51,7 +51,7 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
 
     struct TLoadResult {
         NTable::EReady Ready;
-        IChangeRecord::TPtr Record;
+        TIntrusivePtr<NKikimr::NDataShard::TChangeRecord> Record;
 
         TLoadResult() = default;
         TLoadResult(NTable::EReady ready)
@@ -59,7 +59,7 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
         {
         }
 
-        explicit TLoadResult(NTable::EReady ready, IChangeRecord::TPtr record)
+        explicit TLoadResult(NTable::EReady ready, TIntrusivePtr<NKikimr::NDataShard::TChangeRecord> record)
             : Ready(ready)
             , Record(record)
         {
@@ -274,7 +274,7 @@ private:
     static constexpr size_t MemLimit = 512_KB;
     size_t MemUsage = 0;
 
-    THashMap<TActorId, TVector<IChangeRecord::TPtr>> RecordsToSend;
+    THashMap<TActorId, TVector<TChangeRecord::TPtr>> RecordsToSend;
     THashMap<TActorId, TVector<ui64>> RecordsToForget;
 
 }; // TTxRequestChangeRecords

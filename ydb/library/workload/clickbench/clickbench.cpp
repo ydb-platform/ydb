@@ -153,10 +153,7 @@ void TClickbenchWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EC
             .DefaultValue("")
             .StoreResult(&ExternalQueries);
         break;
-    case TWorkloadParams::ECommandType::Clean:
-    case TWorkloadParams::ECommandType::Root:
-        break;
-    case TWorkloadParams::ECommandType::Init:
+    default:
         break;
     }
 }

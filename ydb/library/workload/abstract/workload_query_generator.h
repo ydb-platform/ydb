@@ -7,10 +7,8 @@
 #include <ydb/library/accessor/accessor.h>
 #include <library/cpp/getopt/last_getopt.h>
 
-#include <list>
+#include <vector>
 #include <string>
-
-#define WORKLOAD_QUERY_GENERATOR_INTERFACE_VERSION 2
 
 namespace NYdbWorkload {
 
@@ -40,7 +38,7 @@ struct TQueryInfo {
     std::optional<std::function<void(NYdb::NQuery::TExecuteQueryResult)>> GenericQueryResultCallback;
 };
 
-using TQueryInfoList = std::list<TQueryInfo>;
+using TQueryInfoList = std::vector<TQueryInfo>;
 
 class IBulkDataGenerator {
 public:
@@ -90,7 +88,25 @@ public:
     YDB_READONLY(ui64, Size, 0);
 };
 
-using TBulkDataGeneratorList = std::list<std::shared_ptr<IBulkDataGenerator>>;
+using TBulkDataGeneratorList = std::vector<std::shared_ptr<IBulkDataGenerator>>;
+
+class TWorkloadDataInitializer {
+public:
+    using TPtr = std::shared_ptr<TWorkloadDataInitializer>;
+    using TList = std::vector<TPtr>;
+
+    TWorkloadDataInitializer(const TString& name, const TString& description)
+        : Name(name)
+        , Description(description)
+    {}
+
+    virtual ~TWorkloadDataInitializer() = default;
+
+    virtual void ConfigureOpts(NLastGetopt::TOpts& opts) = 0;
+    virtual TBulkDataGeneratorList GetBulkInitialData() = 0;
+    YDB_READONLY_DEF(TString, Name);
+    YDB_READONLY_DEF(TString, Description);
+};
 
 class IWorkloadQueryGenerator {
 public:
@@ -114,9 +130,6 @@ public:
     virtual ~IWorkloadQueryGenerator() = default;
     virtual std::string GetDDLQueries() const = 0;
     virtual TQueryInfoList GetInitialData() = 0;
-    virtual TBulkDataGeneratorList GetBulkInitialData() const {
-        return {};
-    }
     virtual TVector<std::string> GetCleanPaths() const = 0;
     virtual TQueryInfoList GetWorkload(int type) = 0;
     virtual TVector<TWorkloadType> GetSupportedWorkloadTypes() const = 0;
@@ -135,15 +148,20 @@ public:
         Init /* "init" */,
         Run /* "run" */,
         Clean  /* "clean" */,
-        Root  /* "root" */
+        Root  /* "root" */,
+        Import /* "import"*/
     };
     virtual ~TWorkloadParams() = default;
     virtual void ConfigureOpts(NLastGetopt::TOpts& /*opts*/, const ECommandType /*commandType*/, int /*workloadType*/) {
     };
     virtual THolder<IWorkloadQueryGenerator> CreateGenerator() const = 0;
+    virtual TWorkloadDataInitializer::TList CreateDataInitializers() const {
+        return {};
+    }
     virtual TString GetWorkloadName() const = 0;
 
 public:
+    ui64 BulkSize = 10000;
     std::string DbPath;
 };
 

@@ -52,6 +52,9 @@ struct IDirectReadSessionControlCallbacks {
     virtual void AbortSession(TSessionClosedEvent&&) {}
     virtual void ScheduleCallback(TDuration, std::function<void()>) {}
     virtual void ScheduleCallback(TDuration, std::function<void()>, TDeferredActions<false>&) {}
+
+    virtual void StopPartitionSession(TPartitionSessionId) {}
+    virtual void DeleteNodeSessionIfEmpty(TNodeId) {}
 };
 
 class TDirectReadSessionControlCallbacks : public IDirectReadSessionControlCallbacks {
@@ -62,6 +65,9 @@ public:
     void AbortSession(TSessionClosedEvent&& closeEvent) override;
     void ScheduleCallback(TDuration delay, std::function<void()> callback) override;
     void ScheduleCallback(TDuration delay, std::function<void()> callback, TDeferredActions<false>&) override;
+
+    void StopPartitionSession(TPartitionSessionId) override;
+    void DeleteNodeSessionIfEmpty(TNodeId) override;
 
 private:
 
@@ -230,6 +236,7 @@ public:
     void UpdatePartitionSession(TPartitionSessionId, TPartitionLocation);
     void StopPartitionSession(TPartitionSessionId);
     void StopPartitionSessionGracefully(TPartitionSessionId, i64 committedOffset, TDirectReadId lastDirectReadId);
+    void DeleteNodeSessionIfEmpty(TNodeId);
     void Close();
 
 private:
@@ -239,7 +246,6 @@ private:
     TDirectReadSessionContextPtr CreateDirectReadSession(TNodeId);
     void StartPartitionSessionImpl(TDirectReadPartitionSession&&);
     void DeletePartitionSessionImpl(TPartitionSessionId id, TNodeSessionsMap::iterator it);
-    void DeleteNodeSessionIfEmptyImpl(TNodeId);
 
     TStringBuilder GetLogPrefix() const;
 

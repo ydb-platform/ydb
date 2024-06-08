@@ -7,8 +7,9 @@
 #include <ydb/library/accessor/accessor.h>
 #include <library/cpp/getopt/last_getopt.h>
 
-#include <vector>
+#include <list>
 #include <string>
+#include <vector>
 
 #define WORKLOAD_QUERY_GENERATOR_INTERFACE_VERSION 3
 
@@ -40,7 +41,7 @@ struct TQueryInfo {
     std::optional<std::function<void(NYdb::NQuery::TExecuteQueryResult)>> GenericQueryResultCallback;
 };
 
-using TQueryInfoList = std::vector<TQueryInfo>;
+using TQueryInfoList = std::list<TQueryInfo>;
 
 class IBulkDataGenerator {
 public:

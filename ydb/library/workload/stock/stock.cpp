@@ -74,7 +74,7 @@ std::string TStockWorkloadGenerator::GetDDLQueries() const {
 }
 
 TQueryInfoList TStockWorkloadGenerator::GetInitialData() {
-    std::vector<TQueryInfo> res;
+    TQueryInfoList res;
     res.push_back(FillStockData());
     for (size_t i = 0; i < Params.OrderCount; ++i) {
         auto queryInfos = InsertRandomOrder();

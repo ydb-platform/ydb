@@ -1558,6 +1558,7 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
       - EndPartitionSession
       - dieCallback
       - graceful/non-graceful StopPartitionSession
+      - tablet relocation to another/same node
 
     */
 

@@ -1,5 +1,7 @@
 ## VIEW (INDEX) {#secondary_index}
 
+{% include [OLAP_not_allow](../../../../../_includes/not_allow_for_olap.md) %}
+
 Чтобы сделать запрос `SELECT` по вторичному индексу, используйте конструкцию:
 
 ``` yql

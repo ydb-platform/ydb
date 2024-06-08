@@ -1047,7 +1047,7 @@ void TPartitionFixture::ShadowPartitionCountersTest(bool isFirstClass) {
     TAutoPtr<IEventHandle> handle;
     std::function<bool(const TEvPQ::TEvProxyResponse&)> truth = [&](const TEvPQ::TEvProxyResponse& e) { return cookie == e.Cookie; };
 
-    TString data{"d", 500};
+    TString data{500, 'd'};
     //auto fullData = data;
     ui64 currTotalSize = 0, currUncSize = 0;
     ui64 accWaitTime = 0, partWaitTime = 0;

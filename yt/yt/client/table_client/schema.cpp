@@ -1749,13 +1749,13 @@ void ValidateDynamicTableConstraints(const TTableSchema& schema)
 
     for (const auto& column : schema.Columns()) {
         try {
-            auto logical_type = column.LogicalType();
+            auto logicalType = column.LogicalType();
             if (column.SortOrder() && !column.IsOfV1Type() &&
-                logical_type->GetMetatype() != ELogicalMetatype::List &&
-                logical_type->GetMetatype() != ELogicalMetatype::Tuple)
+                logicalType->GetMetatype() != ELogicalMetatype::List &&
+                logicalType->GetMetatype() != ELogicalMetatype::Tuple)
             {
                 THROW_ERROR_EXCEPTION("Dynamic table cannot have key column of type %Qv",
-                    *logical_type);
+                    *logicalType);
             }
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION("Error validating column %v in dynamic table schema",

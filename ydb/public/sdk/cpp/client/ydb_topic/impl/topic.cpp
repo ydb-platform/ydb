@@ -3,6 +3,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/topic_impl.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/common.h>
 
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/retry/retry_async.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/scheme_helpers/helpers.h>
 
 #include <util/random/random.h>

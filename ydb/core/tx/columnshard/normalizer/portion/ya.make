@@ -5,6 +5,7 @@ SRCS(
     GLOBAL portion.cpp
     GLOBAL chunks.cpp
     GLOBAL clean.cpp
+    GLOBAL broken_blobs.cpp
 )
 
 PEERDIR(

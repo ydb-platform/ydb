@@ -55,7 +55,8 @@ struct Schema : NIceDb::Schema {
         ExportSessionsId,
         PortionsTableId,
         BackgroundSessionsTableId,
-        ShardingInfoTabletId
+        ShardingInfoTableId,
+        RepairsTableId
     };
 
     enum class ETierTables: ui32 {
@@ -476,7 +477,7 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<ClassName, Identifier, StatusChannel, LogicDescription, Progress, State>;
     };
 
-    struct ShardingInfo : Table<ShardingInfoTabletId> {
+    struct ShardingInfo : Table<ShardingInfoTableId> {
         struct PathId : Column<1, NScheme::NTypeIds::Uint64> {};
         struct VersionId : Column<2, NScheme::NTypeIds::Uint64> {};
         struct Snapshot : Column<3, NScheme::NTypeIds::String> {};
@@ -484,6 +485,16 @@ struct Schema : NIceDb::Schema {
 
         using TKey = TableKey<PathId, VersionId>;
         using TColumns = TableColumns<PathId, VersionId, Snapshot, Logic>;
+    };
+
+    struct Repairs: Table<RepairsTableId> {
+        struct Identifier: Column<1, NScheme::NTypeIds::Utf8> {};
+        struct UniqueDescription: Column<2, NScheme::NTypeIds::Utf8> {};
+        struct Instant: Column<3, NScheme::NTypeIds::Uint64> {};
+        struct Event: Column<4, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<Identifier>;
+        using TColumns = TableColumns<Identifier, UniqueDescription, Instant, Event>;
     };
 
     using TTables = SchemaTables<
@@ -517,7 +528,8 @@ struct Schema : NIceDb::Schema {
         OperationTxIds,
         IndexPortions,
         BackgroundSessions,
-        ShardingInfo
+        ShardingInfo,
+        Repairs
         >;
 
     //
@@ -570,6 +582,15 @@ struct Schema : NIceDb::Schema {
             return true;
         }
         return false;
+    }
+
+    static void AddRepairEvent(NIceDb::TNiceDb& db, const TString& id, const TInstant instant, const TString& description, const TString& eventInfo) {
+        db.Table<Repairs>().Key(id)
+            .Update(
+                NIceDb::TUpdate<Repairs::UniqueDescription>(description),
+                NIceDb::TUpdate<Repairs::Instant>(instant.Seconds()),
+                NIceDb::TUpdate<Repairs::Event>(eventInfo))
+            ;
     }
 
     static void SaveSpecialValue(NIceDb::TNiceDb& db, EValueIds key, const TString& value) {

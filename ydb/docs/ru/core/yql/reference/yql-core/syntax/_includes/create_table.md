@@ -54,7 +54,7 @@
 {% endif %}
 
 {% if feature_not_null == true %}
-Без дополнительных модификаторов колонка приобретает [опциональный тип](../../types/optional.md) тип, и допускает запись `NULL` в качестве значений. Для получения неопционального типа необходимо использовать `NOT NULL`.
+Без дополнительных модификаторов колонка приобретает [опциональный тип](../../types/optional.md), и допускает запись `NULL` в качестве значений. Для получения неопционального типа необходимо использовать `NOT NULL`.
 {% else %}
 {% if feature_not_null_for_pk %}
 По умолчанию все колонки [опциональные](../../types/optional.md) и могут иметь значение NULL. Ограничение `NOT NULL` можно указать только для колонок, входящих в первичный ключ.
@@ -145,8 +145,6 @@ WITH (
 
 Например, такой код создаст таблицу с включенным автоматическим партиционированием по размеру партиции и предпочитаемым размером каждой партиции 512 мегабайт:
 
-<small>Листинг 4</small>
-
 ```sql
 CREATE TABLE my_table (
     id Uint64,
@@ -156,6 +154,19 @@ CREATE TABLE my_table (
 WITH (
     AUTO_PARTITIONING_BY_SIZE = ENABLED,
     AUTO_PARTITIONING_PARTITION_SIZE_MB = 512
+);
+```
+
+Также в блоке `WITH` можно задать TTL (Time to Live) — время жизни строки. [TTL](../../../../concepts/ttl.md) автоматически удаляет из строковой таблицы строки, когда проходит указанное количество секунд от времени, записанного в TTL-колонку. TTL можно задать при создании таблицы, а можно добавить позже через `ALTER TABLE`. Код ниже создаст строчную таблицу таблицу с TTL:
+```sql
+CREATE TABLE my_table (
+    id Uint64,
+    title Utf8,
+    expire_at Timestamp,
+    PRIMARY KEY (id)
+)
+WITH (
+    TTL = Interval("PT0S") ON expire_at
 );
 ```
 
@@ -208,7 +219,7 @@ CREATE TABLE series_with_families (
 
 {% endnote %}
 
-Вызов `CREATE TABLE` создает [колоночную таблицу](../../../../concepts/datamodel/table.md#column-tables) с указанной схемой данных и ключевыми колонками (`PRIMARY KEY`).
+Вызов `CREATE TABLE` создает [колоночную таблицу](../../../../concepts/datamodel/table.md#column-tables) с указанной схемой данных и ключевыми колонками (`PRIMARY KEY`). Создание временных колоночных таблиц не поддерживается.
 
 ```sql
 CREATE TABLE table_name (
@@ -230,9 +241,7 @@ WITH (
 
 ### Колонки {#olap-columns}
 
-Поддерживаемые типы данных в колоночных таблицах и ограничение на использование типов в первичных ключах или колонках данных описаны в разделе [колоночные таблицы](../../../../concepts/datamodel/table.md#column-tables).
-
-Обязательно указание `PRIMARY KEY` и `PARTITION BY` с непустым списком колонок.
+Поддерживаемые типы данных в колоночных таблицах и ограничение на использование типов в первичных ключах или колонках данных описаны в разделе [колоночные таблицы](../../../../concepts/datamodel/table.md#column-tables). При создании колоночных таблиц обязательно указывается `PRIMARY KEY` с непустым списком колонок, с условием `NOT NULL`. 
 
 Без дополнительных модификаторов колонка приобретает [опциональный](../../types/optional.md) тип и допускает запись `NULL` в качестве значений. Для получения неопционального типа необходимо использовать `NOT NULL`.
 
@@ -247,7 +256,7 @@ CREATE TABLE my_table (
 )
 PARTITION BY HASH(b)
 WITH (
-STORE = COLUMN
+    STORE = COLUMN
 )
 ```
 
@@ -258,6 +267,7 @@ STORE = COLUMN
 ```sql
 CREATE TABLE table_name (...)
 WITH (
+    STORE = COLUMN,
     key1 = value1,
     key2 = value2,
     ...
@@ -280,7 +290,22 @@ CREATE TABLE my_table (
 )
 PARTITION BY HASH(id)
 WITH (
+    STORE = COLUMN,
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
+);
+```
+*  `TTL` — автоматическое фоновое удаление устаревших данных. Код ниже создаст колоночную таблицу с TTL:
+```sql
+CREATE TABLE my_table (
+    id Uint64,
+    title Utf8,
+    expire_at Timestamp,
+    PRIMARY KEY (id)
+)
+PARTITION BY HASH(id)
+WITH (
+    STORE = COLUMN,
+    TTL = Interval("PT0S") ON expire_at
 );
 ```
 

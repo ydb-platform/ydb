@@ -20,6 +20,7 @@ PEERDIR(
     ydb/library/actors/protos
     ydb/library/yql/dq/expr_nodes
     ydb/library/yql/dq/integration
+    ydb/library/yql/dq/opt
     ydb/library/yql/providers/common/config
     ydb/library/yql/providers/common/proto
     ydb/library/yql/providers/common/provider
@@ -28,7 +29,7 @@ PEERDIR(
     ydb/library/yql/providers/result/expr_nodes
     ydb/library/yql/providers/solomon/expr_nodes
     ydb/library/yql/providers/solomon/proto
-    ydb/library/yql/dq/opt
+    ydb/library/yql/providers/solomon/scheme
 )
 
 YQL_LAST_ABI_VERSION()

@@ -19,6 +19,20 @@ using namespace NNodes;
 
 namespace {
 
+bool ExtractSettingValue(const TExprNode& value, TStringBuf settingName, TExprContext& ctx, TStringBuf& settingValue) {
+    if (value.IsAtom()) {
+        settingValue = value.Content();
+        return true;
+    }
+
+    if (!value.IsCallable({ "String", "Utf8" })) {
+        ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), TStringBuilder() << settingName << " must be literal value"));
+        return false;
+    }
+    settingValue = value.Head().Content();
+    return true;
+}
+
 NSo::NProto::ESolomonClusterType MapClusterType(TSolomonClusterConfig::ESolomonClusterType clusterType) {
     switch (clusterType) {
         case TSolomonClusterConfig::SCT_SOLOMON:
@@ -104,9 +118,84 @@ public:
             const auto token = "cluster:default_" + clusterName;
             YQL_CLOG(INFO, ProviderS3) << "Wrap " << read->Content() << " with token: " << token;
 
-            auto settings = soReadObject.Object().Settings();
+            auto& settings = soReadObject.Object().Settings().Ref();
+            TString from;
+            TString to;
+            TString program;
+            bool downsamplingDisabled = false;
+            TString downsamplingAggregation;
+            TString downsamplingFill;
+            ui32 downsamplingGridSec = 15;
 
-            auto emptyNode = Build<TCoVoid>(ctx, read->Pos()).Done().Ptr();
+            for (auto i = 0U; i < settings.ChildrenSize(); ++i) {
+                if (settings.Child(i)->Head().IsAtom("from"sv)) {
+                    TStringBuf value;
+                    if (!ExtractSettingValue(settings.Child(i)->Tail(), "from"sv, ctx, value)) {
+                        return {};
+                    }
+
+                    from = value;
+                    continue;
+                }
+                if (settings.Child(i)->Head().IsAtom("to"sv)) {
+                    TStringBuf value;
+                    if (!ExtractSettingValue(settings.Child(i)->Tail(), "to"sv, ctx, value)) {
+                        return {};
+                    }
+
+                    to = value;
+                    continue;
+                }
+                if (settings.Child(i)->Head().IsAtom("program"sv)) {
+                    TStringBuf value;
+                    if (!ExtractSettingValue(settings.Child(i)->Tail(), "program"sv, ctx, value)) {
+                        return {};
+                    }
+
+                    program = value;
+                    continue;
+                }
+                if (settings.Child(i)->Head().IsAtom("downsampling.disabled"sv)) {
+                    TStringBuf value;
+                    if (!ExtractSettingValue(settings.Child(i)->Tail(), "downsampling.disabled"sv, ctx, value)) {
+                        return {};
+                    }
+                    downsamplingDisabled = FromString<bool>(value);
+                    continue;
+                }
+                if (settings.Child(i)->Head().IsAtom("downsampling.gridaggregation"sv)) {
+                    TStringBuf value;
+                    if (!ExtractSettingValue(settings.Child(i)->Tail(), "downsampling.grid_aggregation"sv, ctx, value)) {
+                        return {};
+                    }
+                    // todo: validate value
+                    downsamplingAggregation = value;
+                    continue;
+                }
+                if (settings.Child(i)->Head().IsAtom("downsampling.fill"sv)) {
+                    TStringBuf value;
+                    if (!ExtractSettingValue(settings.Child(i)->Tail(), "downsampling.fill"sv, ctx, value)) {
+                        return {};
+                    }
+                    // todo: validate value
+                    downsamplingFill = value;
+                    continue;
+                }
+                if (settings.Child(i)->Head().IsAtom("downsampling.gridinterval"sv)) {
+                    TStringBuf value;
+                    if (!ExtractSettingValue(settings.Child(i)->Tail(), "downsampling.grid_interval"sv, ctx, value)) {
+                        return {};
+                    }
+                    ui32 intValue = 0;
+                    if (!TryFromString(value, intValue)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(settings.Child(i)->Head().Pos()), TStringBuilder() << "downsampling.grid_interval must be positive number, but has " << value));
+                        return {};
+                    }
+                    downsamplingGridSec = intValue;
+                    continue;
+                }
+            }
+
             const auto rowType = soReadObject.Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back()->Cast<TListExprType>()->GetItemType();
             return Build<TDqSourceWrap>(ctx, read->Pos())
                 .Input<TSoSourceSettings>()
@@ -115,11 +204,17 @@ public:
                         .Build()
                     .SystemColumns(soReadObject.SystemColumns())
                     .LabelNames(soReadObject.LabelNames())
-                    .Settings(settings)
+                    .From<TCoAtom>().Build(from)
+                    .To<TCoAtom>().Build(to)
+                    .Program<TCoAtom>().Build(program)
+                    .DownsamplingDisabled<TCoBool>().Literal().Build(downsamplingDisabled ? "true" : "false").Build()
+                    .DownsamplingAggregation<TCoAtom>().Build(downsamplingAggregation)
+                    .DownsamplingFill<TCoAtom>().Build(downsamplingFill)
+                    .DownsamplingGridSec<TCoAtom>().Build(ToString(downsamplingGridSec))
                     .Build()
                 .DataSource(soReadObject.DataSource().Cast<TCoDataSource>())
                 .RowType(ExpandType(soReadObject.Pos(), *rowType, ctx))
-                .Settings(settings)
+                .Settings(&settings)
                 .Done().Ptr();
         }
         return read;

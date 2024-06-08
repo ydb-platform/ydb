@@ -1,5 +1,7 @@
 #include "dq_solomon_read_actor.h"
 
+#include <ydb/library/yql/providers/solomon/scheme/yql_solomon_scheme.h>
+
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
@@ -62,8 +64,6 @@ enum ESystemColumn{
     SC_TYPE,
     SC_TS
 };
-
-constexpr size_t INVALID_POSITION = -1;
 
 struct TDqSolomonReadParams {
     NSo::NProto::TDqSolomonSource Source;
@@ -145,38 +145,6 @@ public:
     }
 
     void FillSystemColumnPositionindex() {
-        SystemColumnPositionIndex = std::vector<size_t>(ReadParams.Source.GetSystemColumns().size(), INVALID_POSITION);
-
-        size_t i = 0;
-        for (const auto &c : ReadParams.Source.GetSystemColumns()) {
-            if (c == "kind"sv) {
-                SystemColumnPositionIndex[SC_KIND] = i++;
-                continue;
-            }
-
-            if (c == "type"sv) {
-                SystemColumnPositionIndex[SC_TYPE] = i++;
-                continue;
-            }
-
-            if (c == "labels"sv) {
-                SystemColumnPositionIndex[SC_LABELS] = i++;
-                continue;
-            }
-
-            if (c == "value"sv) {
-                SystemColumnPositionIndex[SC_VALUE] = i++;
-                continue;
-            }
-
-            if (c == "ts"sv) {
-                SystemColumnPositionIndex[SC_TS] = i++;
-                continue;
-            }
-
-            throw yexception() << "Unknown system column " << c;
-        }
-
         std::vector<TString> names(ReadParams.Source.GetSystemColumns().begin(), ReadParams.Source.GetSystemColumns().end());
         names.insert(names.end(), ReadParams.Source.GetLabelNames().begin(), ReadParams.Source.GetLabelNames().end());
         std::sort(names.begin(), names.end());
@@ -221,47 +189,27 @@ public:
                 for (size_t i = 0; i < timestamps.size(); ++i){
                     NUdf::TUnboxedValue* items = nullptr;
                     auto value = HolderFactory.CreateDirectArrayHolder(ReadParams.Source.GetSystemColumns().size() + ReadParams.Source.GetLabelNames().size(), items);
-                    // if (SystemColumnPositionIndex[SC_KIND] != INVALID_POSITION) {
-                    //     items[SystemColumnPositionIndex[SC_KIND]] = NUdf::TUnboxedValuePod(NKikimr::NMiniKQL::MakeString(kind.GetString()));
-                    // }
-
-                    // if (SystemColumnPositionIndex[SC_LABELS] != INVALID_POSITION) {
-                    //     items[SystemColumnPositionIndex[SC_LABELS]] = dictValue;
-                    // }
-
-                    // if (SystemColumnPositionIndex[SC_VALUE] != INVALID_POSITION) {
-                    //     items[SystemColumnPositionIndex[SC_VALUE]] = NUdf::TUnboxedValuePod(values[i].GetDouble());
-                    // }
-
-                    // if (SystemColumnPositionIndex[SC_TYPE] != INVALID_POSITION) {
-                    //     items[SystemColumnPositionIndex[SC_TYPE]] = NUdf::TUnboxedValuePod(NKikimr::NMiniKQL::MakeString(type.GetString()));;
-                    // }
-
-                    // if (SystemColumnPositionIndex[SC_TS] != INVALID_POSITION) {
-                    //     items[SystemColumnPositionIndex[SC_TS]] = NUdf::TUnboxedValuePod((ui64)timestamps[i].GetUInteger() / 1000);
-                    // }
-
-                    if (auto it = Index.find("kind"); it != Index.end()) {
+                    if (auto it = Index.find(SOLOMON_SCHEME_KIND); it != Index.end()) {
                         items[it->second] = NUdf::TUnboxedValuePod(NKikimr::NMiniKQL::MakeString(kind.GetString()));
                     }
 
-                    if (auto it = Index.find("labels"); it != Index.end()) {
+                    if (auto it = Index.find(SOLOMON_SCHEME_LABELS); it != Index.end()) {
                         items[it->second] = dictValue;
                     }
 
-                    if (auto it = Index.find("value"); it != Index.end()) {
+                    if (auto it = Index.find(SOLOMON_SCHEME_VALUE); it != Index.end()) {
                         items[it->second] = NUdf::TUnboxedValuePod(values[i].GetDouble());
                     }
 
-                    if (auto it = Index.find("type"); it != Index.end()) {
+                    if (auto it = Index.find(SOLOMON_SCHEME_TYPE); it != Index.end()) {
                         items[it->second] = NUdf::TUnboxedValuePod(NKikimr::NMiniKQL::MakeString(type.GetString()));
                     }
 
-                    if (auto it = Index.find("ts"); it != Index.end()) {
+                    if (auto it = Index.find(SOLOMON_SCHEME_TS); it != Index.end()) {
+                        // convert ms to sec
                         items[it->second] = NUdf::TUnboxedValuePod((ui64)timestamps[i].GetUInteger() / 1000);
                     }
 
-                    //size_t labelIndex = 0;
                     for (const auto& c : ReadParams.Source.GetLabelNames()) {
                         // empty optional by default
                         auto& v = items[Index[c]];

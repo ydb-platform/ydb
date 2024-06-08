@@ -777,7 +777,7 @@ public:
 
     explicit TAsyncIndexChangeSenderMain(const TDataShardId& dataShard, const TTableId& userTableId, const TPathId& indexPathId)
         : TActorBootstrapped()
-        , TBaseChangeSender(this, this, this, dataShard.ActorId, indexPathId)
+        , TBaseChangeSender(this, this, this, dataShard.ActorId, indexPathId, std::type_identity<TChangeRecord::TPtr>{})
         , DataShard(dataShard)
         , UserTableId(userTableId)
         , IndexTableVersion(0)

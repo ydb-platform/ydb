@@ -12,7 +12,11 @@
 namespace NKikimr::NChangeExchange {
 
 void TBaseChangeSender::LazyCreateSender(THashMap<ui64, TSender>& senders, ui64 partitionId) {
-    auto res = senders.emplace(partitionId, TSender{});
+    auto res = std::visit(
+        [&](auto type){
+            return senders.emplace(partitionId, type);
+        },
+        Type);
     Y_ABORT_UNLESS(res.second);
 
     for (const auto& [order, broadcast] : Broadcasting) {
@@ -197,6 +201,8 @@ void TBaseChangeSender::SendRecords() {
                     }
 
                     auto& sender = Senders.at(partitionId);
+                    bool check = std::holds_alternative<TVector<T>>(sender.Prepared);
+                    Y_ABORT_UNLESS(check);
                     auto& prepared = std::get<TVector<T>>(sender.Prepared);
                     prepared.push_back(std::move(it->second));
                     if (!sender.ActorId) {
@@ -211,6 +217,8 @@ void TBaseChangeSender::SendRecords() {
                     EraseNodesIf(broadcast.PendingPartitions, [&](ui64 partitionId) {
                         if (Senders.contains(partitionId)) {
                             auto& sender = Senders.at(partitionId);
+                            bool check = std::holds_alternative<TVector<T>>(sender.Prepared);
+                            Y_ABORT_UNLESS(check);
                             auto& prepared = std::get<TVector<T>>(sender.Prepared);
                             prepared.push_back(std::move(it->second));
                             if (!sender.ActorId) {
@@ -482,21 +490,6 @@ void TBaseChangeSender::RemoveRecords() {
         RemoveRecords(TVector<ui64>(remove.begin(), remove.end()));
     }
 }
-
-TBaseChangeSender::TBaseChangeSender(
-    IActorOps* const actorOps,
-    IChangeSenderResolver* const resolver,
-    ISenderFactory* const senderFactory,
-    const TActorId changeServer,
-    const TPathId& pathId)
-        : ActorOps(actorOps)
-        , Resolver(resolver)
-        , SenderFactory(senderFactory)
-        , ChangeServer(changeServer)
-        , PathId(pathId)
-        , MemLimit(192_KB)
-        , MemUsage(0)
-{}
 
 void TBaseChangeSender::RenderHtmlPage(ui64 tabletId, NMon::TEvRemoteHttpInfo::TPtr& ev,
         const TActorContext& ctx)

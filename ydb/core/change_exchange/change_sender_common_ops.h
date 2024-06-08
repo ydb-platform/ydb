@@ -17,6 +17,7 @@
 
 namespace NKikimr::NChangeExchange {
 
+using TChangeRecordType = std::variant<std::type_identity<NDataShard::TChangeRecord::TPtr>, std::type_identity<NReplication::NService::TChangeRecord::TPtr>>;
 using TChangeRecordPtr = std::variant<NDataShard::TChangeRecord::TPtr, NReplication::NService::TChangeRecord::TPtr>;
 using TChangeRecordVector = std::variant<TVector<NDataShard::TChangeRecord::TPtr>, TVector<NReplication::NService::TChangeRecord::TPtr>>;
 using TChangeRecordMap = std::variant<TMap<ui64, NDataShard::TChangeRecord::TPtr>, TMap<ui64, NReplication::NService::TChangeRecord::TPtr>>;
@@ -97,6 +98,11 @@ class TBaseChangeSender {
         TVector<TIncompleteRecord> Pending;
         TChangeRecordVector Prepared;
         TVector<ui64> Broadcasting;
+
+        template <class T>
+        explicit TSender(std::type_identity<T>)
+            : Prepared(TVector<T>{})
+        {}
     };
 
     struct TBroadcast {
@@ -153,12 +159,24 @@ protected:
     void OnReady(ui64 partitionId);
     void OnGone(ui64 partitionId);
 
+    template <class T>
     explicit TBaseChangeSender(
         IActorOps* const actorOps,
         IChangeSenderResolver* const resolver,
         ISenderFactory* const senderFactory,
         const TActorId changeServer,
-        const TPathId& pathId);
+        const TPathId& pathId,
+        std::type_identity<T> type)
+            : ActorOps(actorOps)
+            , Resolver(resolver)
+            , SenderFactory(senderFactory)
+            , ChangeServer(changeServer)
+            , PathId(pathId)
+            , MemLimit(192_KB)
+            , MemUsage(0)
+            , PendingSent(TMap<ui64, T>{})
+            , Type(type)
+    {}
 
     void RenderHtmlPage(ui64 tabletId, NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
 
@@ -181,7 +199,7 @@ private:
     THashMap<ui64, TBroadcast> Broadcasting; // ui64 is order
 
     TVector<ui64> GonePartitions;
-
+    TChangeRecordType Type;
 }; // TBaseChangeSender
 
 }

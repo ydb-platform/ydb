@@ -729,7 +729,7 @@ public:
 
     explicit TCdcChangeSenderMain(const TDataShardId& dataShard, const TPathId& streamPathId)
         : TActorBootstrapped()
-        , TBaseChangeSender(this, this, this, dataShard.ActorId, streamPathId)
+        , TBaseChangeSender(this, this, this, dataShard.ActorId, streamPathId, std::type_identity<TChangeRecord::TPtr>{})
         , DataShard(dataShard)
         , TopicVersion(0)
     {

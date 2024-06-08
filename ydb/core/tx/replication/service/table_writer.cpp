@@ -500,7 +500,7 @@ public:
 
     explicit TLocalTableWriter(const TPathId& tablePathId)
         : TActor(&TThis::StateWork)
-        , TBaseChangeSender(this, this, this, TActorId(), tablePathId)
+        , TBaseChangeSender(this, this, this, TActorId(), tablePathId, std::type_identity<NReplication::NService::TChangeRecord::TPtr>{})
         , MemoryPool(256)
     {
     }

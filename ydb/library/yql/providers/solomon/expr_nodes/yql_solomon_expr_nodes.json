@@ -51,7 +51,13 @@
                 {"Index": 0, "Name": "Token", "Type": "TCoSecureParam"},
                 {"Index": 1, "Name": "SystemColumns", "Type": "TCoAtomList"},
                 {"Index": 2, "Name": "LabelNames", "Type": "TCoAtomList"},
-                {"Index": 3, "Name": "Settings", "Type": "TExprBase"}
+                {"Index": 3, "Name": "From", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "To", "Type": "TCoAtom"},
+                {"Index": 5, "Name": "Program", "Type": "TCoAtom"},
+                {"Index": 6, "Name": "DownsamplingDisabled", "Type": "TCoBool"},
+                {"Index": 7, "Name": "DownsamplingAggregation", "Type": "TCoAtom"},
+                {"Index": 8, "Name": "DownsamplingFill", "Type": "TCoAtom"},
+                {"Index": 9, "Name": "DownsamplingGridSec", "Type": "TCoAtom"}
             ]
         },
         {

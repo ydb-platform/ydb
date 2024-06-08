@@ -185,6 +185,7 @@ void TDirectReadSessionManager::StartPartitionSessionImpl(TDirectReadPartitionSe
         s->Start();
         s->AddPartitionSession(std::move(partitionSession));
     }
+    Locations.emplace(partitionSession.PartitionSessionId, partitionSession.Location);
 }
 
 void TDirectReadSessionManager::DeleteNodeSessionIfEmpty(TNodeId nodeId) {
@@ -214,16 +215,17 @@ void TDirectReadSessionManager::DeleteNodeSessionIfEmpty(TNodeId nodeId) {
     }
 }
 
-void TDirectReadSessionManager::DeletePartitionSessionImpl(TPartitionSessionId id, TNodeSessionsMap::iterator it) {
+void TDirectReadSessionManager::DeletePartitionSessionImpl(TPartitionSessionId partitionSessionId, TNodeSessionsMap::iterator it) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
-    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "DeletePartitionSession " << id);
+    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "DeletePartitionSession " << partitionSessionId);
 
     if (auto session = it->second->LockShared()) {
-        session->DeletePartitionSession(id);
+        session->DeletePartitionSession(partitionSessionId);
         if (session->Empty()) {
             session->Close();
             NodeSessions.erase(it);
+            Locations.erase(partitionSessionId);
         }
     }
 }

@@ -131,7 +131,7 @@ bool TBaseChangeSender::RequestRecords() {
 void TBaseChangeSender::ProcessRecords(TChangeRecordVector&& records) {
     std::visit(
         [&](auto&& records){
-            using T = std::decay_t<decltype(records)>::value_type;
+            using T = typename std::decay_t<decltype(records)>::value_type;
             bool check = std::holds_alternative<TMap<ui64, T>>(PendingSent);
             Y_ABORT_UNLESS(check);
             auto& pendingSent = std::get<TMap<ui64, T>>(PendingSent);
@@ -168,7 +168,7 @@ void TBaseChangeSender::SendRecords() {
 
     std::visit(
         [&](auto& pendingSent){
-            using T = std::decay_t<decltype(pendingSent)>::mapped_type;
+            using T = typename std::decay_t<decltype(pendingSent)>::mapped_type;
 
             if (!pendingSent) {
                 return;

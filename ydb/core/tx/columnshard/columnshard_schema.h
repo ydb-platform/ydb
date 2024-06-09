@@ -56,7 +56,9 @@ struct Schema : NIceDb::Schema {
         PortionsTableId,
         BackgroundSessionsTableId,
         ShardingInfoTableId,
-        RepairsTableId
+        RepairsTableId,
+        NormalizersTableId,
+        NormalizerEventsTableId
     };
 
     enum class ETierTables: ui32 {
@@ -487,14 +489,26 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<PathId, VersionId, Snapshot, Logic>;
     };
 
-    struct Repairs: Table<RepairsTableId> {
-        struct Identifier: Column<1, NScheme::NTypeIds::Utf8> {};
-        struct UniqueDescription: Column<2, NScheme::NTypeIds::Utf8> {};
-        struct Instant: Column<3, NScheme::NTypeIds::Uint64> {};
-        struct Event: Column<4, NScheme::NTypeIds::Utf8> {};
+    struct Normalizers: Table<NormalizersTableId> {
+        struct ClassName: Column<1, NScheme::NTypeIds::Utf8> {};
+        struct Description: Column<2, NScheme::NTypeIds::Utf8> {};
+        struct Identifier: Column<3, NScheme::NTypeIds::Utf8> {};
+        struct Start: Column<4, NScheme::NTypeIds::Uint64> {};
+        struct Finish: Column<5, NScheme::NTypeIds::Uint64> {};
 
-        using TKey = TableKey<Identifier>;
-        using TColumns = TableColumns<Identifier, UniqueDescription, Instant, Event>;
+        using TKey = TableKey<ClassName, Description, Identifier>;
+        using TColumns = TableColumns<ClassName, Description, Identifier, Start, Finish>;
+    };
+
+    struct NormalizerEvents: Table<NormalizerEventsTableId> {
+        struct NormalizerId: Column<1, NScheme::NTypeIds::Utf8> {};
+        struct EventId: Column<2, NScheme::NTypeIds::Utf8> {};
+        struct Instant: Column<3, NScheme::NTypeIds::Uint64> {};
+        struct EventType: Column<4, NScheme::NTypeIds::Utf8> {};
+        struct Description: Column<5, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<NormalizerId, EventId>;
+        using TColumns = TableColumns<NormalizerId, EventId, Instant, EventType, Description>;
     };
 
     using TTables = SchemaTables<
@@ -529,7 +543,8 @@ struct Schema : NIceDb::Schema {
         IndexPortions,
         BackgroundSessions,
         ShardingInfo,
-        Repairs
+        Normalizers,
+        NormalizerEvents
         >;
 
     //
@@ -572,6 +587,22 @@ struct Schema : NIceDb::Schema {
         return false;
     }
 
+    template <typename T>
+    static bool GetSpecialValueOpt(NIceDb::TNiceDb& db, EValueIds key, std::optional<T>& value) {
+        using TSource = std::conditional_t<std::is_integral_v<T> || std::is_enum_v<T>, Value::Digit, Value::Bytes>;
+
+        auto rowset = db.Table<Value>().Key((ui32)key).Select<TSource>();
+        if (rowset.IsReady()) {
+            if (rowset.IsValid()) {
+                value = T{ rowset.template GetValue<TSource>() };
+            } else {
+                value = {};
+            }
+            return true;
+        }
+        return false;
+    }
+
     template<class TMessage>
     static bool GetSpecialProtoValue(NIceDb::TNiceDb& db, EValueIds key, std::optional<TMessage>& value) {
         auto rowset = db.Table<Value>().Key(ui32(key)).Select<Value::Bytes>();
@@ -584,13 +615,31 @@ struct Schema : NIceDb::Schema {
         return false;
     }
 
-    static void AddRepairEvent(NIceDb::TNiceDb& db, const TString& id, const TInstant instant, const TString& description, const TString& eventInfo) {
-        db.Table<Repairs>().Key(id)
+    static void AddNormalizerEvent(NIceDb::TNiceDb& db, const TString& normalizerId, const TString& eventType, const TString& description) {
+        db.Table<NormalizerEvents>().Key(normalizerId, TGUID::CreateTimebased().AsUuidString())
             .Update(
-                NIceDb::TUpdate<Repairs::UniqueDescription>(description),
-                NIceDb::TUpdate<Repairs::Instant>(instant.Seconds()),
-                NIceDb::TUpdate<Repairs::Event>(eventInfo))
-            ;
+                NIceDb::TUpdate<NormalizerEvents::Instant>(TInstant::Now().MicroSeconds()),
+                NIceDb::TUpdate<NormalizerEvents::EventType>(eventType),
+                NIceDb::TUpdate<NormalizerEvents::Description>(description)
+            );
+    }
+
+    static void StartNormalizer(NIceDb::TNiceDb& db, const TString& className, const TString& description, const TString& normalizerId) {
+        db.Table<Normalizers>().Key(className, description, normalizerId)
+            .Update(
+                NIceDb::TUpdate<Normalizers::Start>(TInstant::Now().MicroSeconds())
+            );
+    }
+
+    static void RemoveNormalizer(NIceDb::TNiceDb& db, const TString& className, const TString& description, const TString& normalizerId) {
+        db.Table<Normalizers>().Key(className, description, normalizerId).Delete();
+    }
+
+    static void FinishNormalizer(NIceDb::TNiceDb& db, const TString& className, const TString& description, const TString& normalizerId) {
+        db.Table<Normalizers>().Key(className, description, normalizerId)
+            .Update(
+                NIceDb::TUpdate<Normalizers::Start>(TInstant::Now().MicroSeconds())
+            );
     }
 
     static void SaveSpecialValue(NIceDb::TNiceDb& db, EValueIds key, const TString& value) {

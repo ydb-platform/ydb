@@ -41,7 +41,7 @@ public:
             sb << "];";
             sb << "records_count:" << recordsCount;
             NIceDb::TNiceDb db(txc.DB);
-            normController.AddRepairInfo(db, sb);
+            normController.AddNormalizerEvent(db, "REMOVE_PORTIONS", sb);
         }
         return true;
     }

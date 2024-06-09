@@ -281,7 +281,7 @@ bool TTxUpdateSchema::Execute(TTransactionContext& txc, const TActorContext&) {
                 break;
             }
             NIceDb::TNiceDb db(txc.DB);
-            Self->NormalizerController.UpdateControllerState(db);
+            Self->NormalizerController.OnNormalizerFinished(db);
             Self->NormalizerController.SwitchNormalizer();
         } else {
             Self->NormalizerController.GetCounters().OnNormalizerFails();
@@ -335,7 +335,7 @@ bool TTxApplyNormalizer::Execute(TTransactionContext& txc, const TActorContext&)
 
     if (Self->NormalizerController.GetNormalizer()->GetActiveTasksCount() == 1) {
         NIceDb::TNiceDb db(txc.DB);
-        Self->NormalizerController.UpdateControllerState(db);
+        Self->NormalizerController.OnNormalizerFinished(db);
     }
     return true;
 }

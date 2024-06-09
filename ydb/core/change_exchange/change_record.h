@@ -130,3 +130,7 @@ protected:
 Y_DECLARE_OUT_SPEC(inline, NKikimr::NChangeExchange::IChangeRecord::TPtr, out, value) {
     return value->Out(out);
 }
+
+Y_DECLARE_OUT_SPEC(inline, NKikimr::NChangeExchange::IChangeRecord*, out, value) {
+    return value->Out(out);
+}

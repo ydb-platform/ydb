@@ -632,7 +632,16 @@ class TCdcChangeSenderMain
                 // TODO: compare cells
             }
 
-            partitioning.emplace_back(cur.PartitionId); // FIXME: sus
+            auto& part = partitioning.emplace_back(cur.PartitionId); // FIXME: sus
+
+            if (cur.KeyRange.ToBound) {
+                part.Range = NKikimr::TKeyDesc::TPartitionRangeInfo{
+                    .EndKeyPrefix = *cur.KeyRange.ToBound,
+                };
+            } else {
+                part.Range = NKikimr::TKeyDesc::TPartitionRangeInfo{};
+            }
+
             prev = &cur;
         }
 

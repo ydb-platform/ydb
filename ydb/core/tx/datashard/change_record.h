@@ -59,6 +59,7 @@ public:
                 const auto it = LowerBound(
                     partitions.cbegin(), partitions.cend(), true,
                     [&](const auto& partition, bool) {
+                        Y_ABORT_UNLESS(partition.Range);
                         const int compares = CompareBorders<true, false>(
                             partition.Range->EndKeyPrefix.GetCells(), range.From,
                             partition.Range->IsInclusive || partition.Range->IsPoint,

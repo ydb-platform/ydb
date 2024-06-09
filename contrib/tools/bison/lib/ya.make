@@ -71,7 +71,6 @@ SRCS(
     lbitset.c
     localcharset.c
     mbswidth.c
-    nl_langinfo.c
     pipe-safer.c
     pipe2-safer.c
     printf-args.c
@@ -114,7 +113,6 @@ ENDIF()
 IF (OS_WINDOWS)
     SRCS(
         fcntl.c
-        frexp.c
         getopt.c
         getopt1.c
         msvc-inval.c

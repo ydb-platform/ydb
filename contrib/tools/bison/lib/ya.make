@@ -123,7 +123,6 @@ IF (OS_WINDOWS)
         raise.c
         sigaction.c
         sigprocmask.c
-        snprintf.c
         strndup.c
         waitpid.c
         wcwidth.c

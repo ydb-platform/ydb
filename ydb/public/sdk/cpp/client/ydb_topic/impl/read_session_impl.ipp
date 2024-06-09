@@ -1781,6 +1781,9 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::AbortImpl() {
         }
 
         if constexpr (!UseMigrationProtocol) {
+            if (DirectReadSessionManager) {
+                DirectReadSessionManager->Close();
+            }
             DirectReadSessionManager.Clear();
         }
     }

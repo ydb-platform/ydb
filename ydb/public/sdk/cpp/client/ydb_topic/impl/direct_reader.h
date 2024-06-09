@@ -74,26 +74,15 @@ private:
     TSingleClusterReadSessionContextPtr SingleClusterReadSessionContextPtr;
 };
 
-struct TDirectReadPartitionSession {
+class TDirectReadPartitionSession {
+public:
     enum class EState {
-        IDLE,
-        DELAYED,  // Got an error, SendStartDirectReadPartitionSessionImpl will be called later
+        IDLE,     // The partition session has just been created. RetryState is empty.
+        DELAYED,  // Got an error, SendStartRequestImpl will be called later
         STARTING, // Sent StartDirectReadPartitionSessionRequest, waiting for response
         WORKING   // Got StartDirectReadPartitionSessionResponse
 
-        /*
-        +---------------------+
-        |                     |
-        |  +-------+          |
-        v  v       |          |
-        IDLE--->DELAYED--->STARTING--->WORKING
-        ^ |                   ^           |
-        | |                   |           |
-        | +-------------------+           |
-        |                                 |
-        +---------------------------------+
-                   on errors
-        */
+        // See all possible transitions in TDirectReadPartitionSession::TransitionTo.
     };
 
     TPartitionSessionId PartitionSessionId;
@@ -111,6 +100,7 @@ struct TDirectReadPartitionSession {
     // TODO(qyryq) min read id, partition id, done read id?
 
     TDirectReadClientMessage MakeStartRequest() const;
+    bool TransitionTo(EState);
 };
 
 // One TDirectReadSession instance comprises multiple TDirectReadPartitionSessions.
@@ -168,8 +158,9 @@ private:
     );
 
     // delayedCall may be true only if the method is called from a scheduled callback.
-    void SendStartDirectReadPartitionSessionImpl(TDirectReadPartitionSession&, TPlainStatus&&, TDeferredActions<false>&, bool delayedCall = false);
-    void SendStartDirectReadPartitionSessionImpl(TPartitionSessionId, TPlainStatus&&, TDeferredActions<false>&, bool delayedCall = false);
+    void SendStartRequestImpl(TPartitionSessionId, bool delayedCall = false);
+    void SendStartRequestImpl(TDirectReadPartitionSession&, bool delayedCall = false);
+    void DelayStartRequestImpl(TDirectReadPartitionSession&, TPlainStatus&&, TDeferredActions<false>&);
 
     void DeletePartitionSessionImpl(TPartitionSessionId);
 
@@ -184,7 +175,9 @@ private:
         CONNECTING,
         CONNECTED,
         INITIALIZING,
+
         WORKING,
+
         CLOSING,
         CLOSED
     };

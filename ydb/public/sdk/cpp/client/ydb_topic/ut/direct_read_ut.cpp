@@ -1264,10 +1264,6 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
         {
             ::testing::InSequence sequence;
 
-            // Create TDirectReadSession::RetryState
-            EXPECT_CALL(*setup.MockRetryPolicy, CreateRetryState())
-                .Times(1);
-
             EXPECT_CALL(*setup.MockDirectReadProcessorFactory, OnCreateProcessor(_))
                 .WillOnce([&]() { setup.MockDirectReadProcessorFactory->CreateProcessor(setup.MockDirectReadProcessor); });
 
@@ -1358,10 +1354,6 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
 
         {
             ::testing::InSequence sequence;
-
-            // Create TDirectReadSession::RetryState
-            EXPECT_CALL(*setup.MockRetryPolicy, CreateRetryState())
-                .Times(1);
 
             EXPECT_CALL(*setup.MockDirectReadProcessorFactory, OnCreateProcessor(1))
                 .WillOnce([&]() { setup.MockDirectReadProcessorFactory->CreateProcessor(setup.MockDirectReadProcessor); });
@@ -1471,10 +1463,6 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
         {
             ::testing::InSequence sequence;
 
-            // Create TDirectReadSession::RetryState
-            EXPECT_CALL(*setup.MockRetryPolicy, CreateRetryState())
-                .Times(1);
-
             EXPECT_CALL(*setup.MockDirectReadProcessorFactory, OnCreateProcessor(1))
                 .WillOnce([&]() { setup.MockDirectReadProcessorFactory->CreateProcessor(setup.MockDirectReadProcessor); });
 
@@ -1558,7 +1546,7 @@ Y_UNIT_TEST_SUITE(DirectReadSession) {
       - wrong generations
       - EndPartitionSession
       - dieCallback
-      - graceful/non-graceful StopPartitionSession
+      - graceful/non-graceful StopPartitionSession (sdk should respond in either way)
       - tablet relocation to another/same node
 
     */

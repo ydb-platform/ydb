@@ -40,7 +40,7 @@ void Out<NYdb::NTopic::TDirectReadPartitionSession>(IOutputStream& o, NYdb::NTop
     o << "{ PartitionSessionId: \"" << session.PartitionSessionId << "\"";
     o << ", Location: " << session.Location << "";
     o << ", State: " << session.State << "";
-    o << ", PrevDirectReadId: " << session.PrevDirectReadId << "";
+    o << ", NextDirectReadId: " << session.NextDirectReadId << "";
     o << ", LastDirectReadId: " << session.LastDirectReadId << "";
     o << " }";
 }
@@ -51,7 +51,7 @@ TDirectReadClientMessage TDirectReadPartitionSession::MakeStartRequest() const {
     TDirectReadClientMessage req;
     auto& start = *req.mutable_start_direct_read_partition_session_request();
     start.set_partition_session_id(PartitionSessionId);
-    start.set_last_direct_read_id(PrevDirectReadId);
+    start.set_last_direct_read_id(NextDirectReadId - 1);
     start.set_generation(Location.GetGeneration());
     return req;
 }
@@ -575,7 +575,17 @@ void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::Dir
     auto it = PartitionSessions.find(response.partition_session_id());
     Y_ABORT_UNLESS(it != PartitionSessions.end());
     auto& partitionSession = it->second;
-    partitionSession.PrevDirectReadId = response.direct_read_id();
+
+    auto directReadId = response.direct_read_id();
+
+    // Ignore a response, if we've already read it.
+    if (directReadId < partitionSession.NextDirectReadId) {
+        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Got stale DirectReadResponse with direct_read_id=" << directReadId
+                                                 << ", but we are waiting for direct_read_id=" << partitionSession.NextDirectReadId);
+        return;
+    }
+
+    partitionSession.NextDirectReadId = directReadId + 1;
 
     ControlCallbacks->OnDirectReadDone(std::move(response), deferred);
 
@@ -583,7 +593,7 @@ void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::Dir
     // StopPartitionSession с тем же идентификатором direct_read_id.
     // Следующий код в этом случае уже не выполнится. Кто должен отправить клиенту TStopPartitionSessionEvent?
 
-    if (partitionSession.LastDirectReadId.Defined() && partitionSession.PrevDirectReadId + 1 == partitionSession.LastDirectReadId) {
+    if (partitionSession.LastDirectReadId.Defined() && partitionSession.NextDirectReadId == partitionSession.LastDirectReadId) {
         // We've already got a graceful StopPartitionSessionRequest through the control session,
         // that told us the LastDirectReadId, we should read up to.
         // We have read all available data, time to stop the partition session.

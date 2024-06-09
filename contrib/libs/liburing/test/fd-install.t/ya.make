@@ -26,8 +26,8 @@ CFLAGS(
 SRCDIR(contrib/libs/liburing/test)
 
 SRCS(
+    fd-install.c
     helpers.c
-    pollfree.c
 )
 
 END()

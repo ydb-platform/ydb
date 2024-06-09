@@ -26,8 +26,8 @@ CFLAGS(
 SRCDIR(contrib/libs/liburing/test)
 
 SRCS(
+    buf-ring-put.c
     helpers.c
-    sqpoll-cancel-hang.c
 )
 
 END()

@@ -339,31 +339,6 @@ class TCdcChangeSenderMain
 
     }; // TPQPartitionInfo
 
-    struct TKeyDesc {
-        struct TPartitionInfo {
-            ui32 PartitionId;
-            ui64 ShardId;
-            TSerializedCellVec EndKeyPrefix;
-            // just a hint
-            static constexpr bool IsInclusive = false;
-            static constexpr bool IsPoint = false;
-
-            explicit TPartitionInfo(const TPQPartitionInfo& info)
-                : PartitionId(info.PartitionId)
-                , ShardId(info.ShardId)
-            {
-                if (info.KeyRange.ToBound) {
-                    EndKeyPrefix = *info.KeyRange.ToBound;
-                }
-            }
-
-        }; // TPartitionInfo
-
-        TVector<NScheme::TTypeInfo> Schema;
-        TVector<TPartitionInfo> Partitions;
-
-    }; // TKeyDesc
-
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
             LogPrefix = TStringBuilder()
@@ -632,7 +607,7 @@ class TCdcChangeSenderMain
                 // TODO: compare cells
             }
 
-            auto& part = partitioning.emplace_back(cur.PartitionId); // FIXME: sus
+            auto& part = partitioning.emplace_back(cur.PartitionId); // TODO: double-check that it is right partitioning
 
             if (cur.KeyRange.ToBound) {
                 part.Range = NKikimr::TKeyDesc::TPartitionRangeInfo{

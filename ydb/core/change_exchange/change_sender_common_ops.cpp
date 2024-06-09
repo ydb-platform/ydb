@@ -317,6 +317,14 @@ void TBaseChangeSender::OnGone(ui64 partitionId) {
     Resolver->Resolve();
 }
 
+TChangeRecordVector CreateChangeRecordVector(const TChangeRecordVector& sample) {
+    return std::visit(
+        [&](const auto& type){
+            return TChangeRecordVector{std::decay_t<decltype(type)>{}};
+        },
+        sample);
+}
+
 void TBaseChangeSender::SendPreparedRecords(ui64 partitionId) {
     Y_ABORT_UNLESS(Senders.contains(partitionId));
     auto& sender = Senders.at(partitionId);
@@ -339,7 +347,7 @@ void TBaseChangeSender::SendPreparedRecords(ui64 partitionId) {
         sender.Prepared);
 
     Y_ABORT_UNLESS(sender.ActorId);
-    ActorOps->Send(sender.ActorId, new TEvChangeExchange::TEvRecords(std::exchange(sender.Prepared, {})));
+    ActorOps->Send(sender.ActorId, new TEvChangeExchange::TEvRecords(std::exchange(sender.Prepared, CreateChangeRecordVector(sender.Prepared))));
 }
 
 void TBaseChangeSender::ReEnqueueRecords(const TSender& sender) {

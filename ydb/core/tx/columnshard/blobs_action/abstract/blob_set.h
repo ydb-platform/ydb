@@ -261,6 +261,8 @@ public:
         }
         return true;
     }
+
+    TString DebugString() const;
 };
 
 class TBlobsByTablet {
@@ -334,6 +336,14 @@ public:
             }
         }
         std::swap(result, resultLocal);
+    }
+
+    bool Contains(const TTabletId tabletId, const TUnifiedBlobId& blobId) const {
+        auto it = Data.find(tabletId);
+        if (it == Data.end()) {
+            return false;
+        }
+        return it->second.contains(blobId);
     }
 
     const THashSet<TUnifiedBlobId>* Find(const TTabletId tabletId) const {
@@ -421,6 +431,10 @@ private:
 public:
     bool IsEmpty() const {
         return Sharing.IsEmpty() && Direct.IsEmpty() && Borrowed.IsEmpty();
+    }
+
+    bool HasSharingOnly() const {
+        return !Sharing.IsEmpty() && Direct.IsEmpty() && Borrowed.IsEmpty();
     }
 
     class TIterator {

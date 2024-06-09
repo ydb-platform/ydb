@@ -11,6 +11,7 @@ private:
     mutable TRWMutex RWMutex;
     bool Initialized = false;
     bool Finished = false;
+    TAtomicCounter GCStopped = 0;
 protected:
     virtual std::shared_ptr<IBlobsStorageOperator> DoBuildOperator(const TString& storageId) = 0;
     THashMap<TString, std::shared_ptr<IBlobsStorageOperator>> Constructed;
@@ -38,10 +39,17 @@ public:
     }
 
     bool LoadIdempotency(NTable::TDatabase& database);
-
     bool HasBlobsToDelete() const;
-
     void Stop();
+
+    bool IsGCInProgress() const {
+        for (auto&& s : GetStorages()) {
+            if (s.second->IsGCInProgress()) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     std::shared_ptr<IBlobsStorageOperator> GetDefaultOperator() const {
         return GetOperatorVerified(DefaultStorageId);
@@ -51,7 +59,7 @@ public:
         return GetDefaultOperator();
     }
 
-    const THashMap<TString, std::shared_ptr<IBlobsStorageOperator>>& GetStorages() {
+    const THashMap<TString, std::shared_ptr<IBlobsStorageOperator>>& GetStorages() const {
         AFL_VERIFY(Initialized);
         return Constructed;
     }

@@ -177,6 +177,10 @@ private:
 public:
     TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, const ui32 gen, const TTabletId selfTabletId);
 
+    bool HasToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) const {
+        return BlobsToDelete.Contains(tabletId, blobId) || BlobsToDeleteDelayed.Contains(tabletId, blobId);
+    }
+
     TTabletsByBlob GetBlobsToDeleteAll() const {
         auto result = BlobsToDelete;
         result.Add(BlobsToDeleteDelayed);

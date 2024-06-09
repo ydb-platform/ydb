@@ -31,7 +31,7 @@ private:
     THashMap<ui64, TString> PathPortionHashes;
     bool IsStartedFlag = false;
     YDB_ACCESSOR(bool, StaticSaved, false);
-    void BuildSelection(const std::shared_ptr<TSharedBlobsManager>& sharedBlobsManager, const TVersionedIndex& index);
+    void BuildSelection(const std::shared_ptr<IStoragesManager>& storagesManager, const TVersionedIndex& index);
 public:
     bool IsAckDataReceived() const {
         return AckReceivedForPackIdx == PackIdx;
@@ -88,7 +88,7 @@ public:
         return Links;
     }
 
-    bool Next(const std::shared_ptr<TSharedBlobsManager>& sharedBlobsManager, const TVersionedIndex& index);
+    bool Next(const std::shared_ptr<IStoragesManager>& storagesManager, const TVersionedIndex& index);
 
     bool IsValid() {
         return Selected.size();
@@ -96,7 +96,7 @@ public:
 
     TSourceCursor(const TTabletId selfTabletId, const std::set<ui64>& pathIds, const TTransferContext transferContext);
 
-    bool Start(const std::shared_ptr<TSharedBlobsManager>& sharedBlobsManager, const THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>>& portions, const TVersionedIndex& index);
+    bool Start(const std::shared_ptr<IStoragesManager>& storagesManager, const THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>>& portions, const TVersionedIndex& index);
 
     NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic SerializeDynamicToProto() const;
     NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic SerializeStaticToProto() const;

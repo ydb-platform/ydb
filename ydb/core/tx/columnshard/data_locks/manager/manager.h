@@ -41,8 +41,8 @@ public:
     [[nodiscard]] std::shared_ptr<TGuard> RegisterLock(Args&&... args) {
         return RegisterLock(std::make_shared<TLock>(args...));
     }
-    std::optional<TString> IsLocked(const TPortionInfo& portion) const;
-    std::optional<TString> IsLocked(const TGranuleMeta& granule) const;
+    std::optional<TString> IsLocked(const TPortionInfo& portion, const THashSet<TString>& excludedLocks = {}) const;
+    std::optional<TString> IsLocked(const TGranuleMeta& granule, const THashSet<TString>& excludedLocks = {}) const;
 
 };
 

@@ -31,6 +31,10 @@ public:
     TOperator(const TString& storageId, const NActors::TActorId& tabletActorId,
         const TIntrusivePtr<TTabletStorageInfo>& tabletInfo, const ui64 generation, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobs);
 
+    virtual bool HasToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) const override {
+        return Manager->HasToDelete(blobId, tabletId);
+    }
+
     virtual TTabletsByBlob GetBlobsToDelete() const override {
         return Manager->GetBlobsToDeleteAll();
     }

@@ -25,7 +25,7 @@ NKikimr::TConclusionStatus TDestinationSession::DataReceived(THashMap<ui64, NEve
 }
 
 ui32 TDestinationSession::GetSourcesInProgressCount() const {
-    AFL_VERIFY(IsStarted() || IsStarting());
+    AFL_VERIFY(IsInProgress());
     AFL_VERIFY(Cursors.size());
     ui32 result = 0;
     for (auto&& [_, cursor] : Cursors) {
@@ -37,7 +37,7 @@ ui32 TDestinationSession::GetSourcesInProgressCount() const {
 }
 
 void TDestinationSession::SendCurrentCursorAck(const NColumnShard::TColumnShard& shard, const std::optional<TTabletId> tabletId) {
-    AFL_VERIFY(IsStarted() || IsStarting());
+    AFL_VERIFY(IsInProgress() || IsPrepared());
     bool found = false;
     for (auto&& [_, cursor] : Cursors) {
         if (tabletId && *tabletId != cursor.GetTabletId()) {

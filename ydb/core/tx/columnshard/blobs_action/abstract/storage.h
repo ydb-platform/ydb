@@ -73,11 +73,16 @@ public:
 
     void Stop();
 
+    bool IsGCInProgress() {
+        return !!CurrentGCAction && CurrentGCAction->IsInProgress();
+    }
+
     const NSplitter::TSplitSettings& GetBlobSplitSettings() const {
         return DoGetBlobSplitSettings();
     }
 
     virtual TTabletsByBlob GetBlobsToDelete() const = 0;
+    virtual bool HasToDelete(const TUnifiedBlobId& blobId, const TTabletId initiatorTabletId) const = 0;
     virtual std::shared_ptr<IBlobInUseTracker> GetBlobsTracker() const = 0;
 
     virtual ~IBlobsStorageOperator() = default;

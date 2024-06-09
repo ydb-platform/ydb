@@ -49,6 +49,11 @@ public:
     virtual std::shared_ptr<IBlobInUseTracker> GetBlobsTracker() const override {
         return GCInfo;
     }
+
+    virtual bool HasToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) const override {
+        return GCInfo->HasToDelete(blobId, tabletId);
+    }
+
 };
 
 }

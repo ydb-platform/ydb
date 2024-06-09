@@ -54,6 +54,8 @@ def main():
     parser.add_argument('--bindings', type=str, default='bindings.json')
     parser.add_argument('--result-dir', type=str, default="result-{:%Y%m%dT%H%M%S}".format(datetime.datetime.now()))
     parser.add_argument('--timeout', type=int, default=30*60)
+    parser.add_argument('--perf', action='store_true')
+    parser.add_argument('--arc-path', type=str, default='{}/arcadia'.format(os.environ['HOME']))
     args, argv = parser.parse_known_intermixed_args()
     qdir = args.query_dir
     bindings = args.bindings
@@ -124,6 +126,25 @@ def main():
                 }
             }), file=outj)
             outj.flush()
+            if args.perf:
+                exitcode, rusage, elapsed = run(
+                    ['{}/ya'.format(args.arc_path), 'tool', 'perf', 'record', '-F250', '-g', '--call-graph', 'dwarf', '--'] +
+                    argv + [
+                        '--result-file', '/dev/null',
+                        '--bindings-file', bindings,
+                        '--plan-file', '/dev/null',
+                        '--err-file', '/dev/null',
+                        '--expr-file', '/dev/null',
+                        '-p', q
+                    ],
+                    name + '-stdout-perf.txt',
+                    name + '-stderr-perf.txt',
+                    timeout=args.timeout)
+                os.system('''
+                {0}/ya tool perf script --header |
+                {0}/contrib/tools/flame-graph/stackcollapse-perf.pl |
+                {0}/contrib/tools/flame-graph/flamegraph.pl > {1}
+                '''.format(args.arc_path, name + '.svg'))
 
 
 if __name__ == "__main__":

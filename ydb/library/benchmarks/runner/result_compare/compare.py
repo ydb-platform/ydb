@@ -6,6 +6,7 @@ import math
 import argparse
 import re
 import sys
+import os
 from pathlib import Path
 
 import cyson as yson
@@ -119,6 +120,8 @@ code { white-space: pre; }
                             spilling[spilling_type] = spilling.get(spilling_type, 0) + 1
             outname = dirname + '/' + q + '-result.yson'
             print('<td class="{}">'.format(cls))
+            if os.access(dirname + '/' + q + '.svg', os.F_OK):
+                print('<a href="{}">'.format(html.escape(dirname + '/' + q + '.svg')))
             if exitcode < 0:
                 print('<span class="signal {}" title="{}">SIG</span>'.format(cls, html.escape(signal.strsignal(-exitcode), quote=True)))
             elif exitcode > 0:

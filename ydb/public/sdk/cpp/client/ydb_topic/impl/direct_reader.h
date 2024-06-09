@@ -100,10 +100,11 @@ struct TDirectReadPartitionSession {
     TPartitionLocation Location;
     EState State = EState::IDLE;
     IRetryPolicy::IRetryState::TPtr RetryState = {};
-    TDirectReadId PrevDirectReadId = 0;
+
+    TDirectReadId NextDirectReadId = 1;
 
     // If the control session sends StopPartitionSessionRequest(graceful=true, last_direct_read_id),
-    // we need to remember the Id, read up to it, and then kill the partition session (and probably the direct session altogether).
+    // we need to remember the Id, read up to it, and then kill the partition session (and its direct session if it becomes empty).
     TMaybe<TDirectReadId> LastDirectReadId = Nothing();
     TMaybe<i64> CommittedOffset = Nothing();
 

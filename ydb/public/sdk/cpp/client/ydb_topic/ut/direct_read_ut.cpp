@@ -400,6 +400,7 @@ struct TMockDirectReadSessionProcessor : public TMockProcessorFactory<TDirectRea
         // Data helpers.
         TServerReadInfo& PartitionData(const TPartitionSessionId partitionSessionId) {
             Response.mutable_direct_read_response()->set_partition_session_id(partitionSessionId);
+            Response.mutable_direct_read_response()->set_direct_read_id(1);
             auto* data = Response.mutable_direct_read_response()->mutable_partition_data();
             data->set_partition_session_id(partitionSessionId);
             return *this;

@@ -1447,7 +1447,7 @@ TEST_W(TCompressionTest, Roundtrip)
             auto compressingStream = CreateCompressingAdapter(asyncCompressedStream, encoding, GetCurrentInvoker());
             size_t offset = 0;
             while (offset < payload.size()) {
-                size_t len = std::min((size_t)10, payload.size() - offset);//RandomNumber<size_t>(std::min(payload.size() - offset, static_cast<size_t>(100))) + 1;
+                size_t len = RandomNumber<size_t>(std::min(payload.size() - offset, static_cast<size_t>(100))) + 1;
                 WaitFor(compressingStream->Write(TSharedRef(payload.data() + offset, len, nullptr)))
                     .ThrowOnError();
                 offset += len;

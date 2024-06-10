@@ -46,7 +46,7 @@ The configuration file needs to be created manually.
 
 ### Configuration file reference
 
-Here is an example of configuration file with all possible options that can be specified and example values (you will most likely not need all of these options at the same time):
+Here is an example of a configuration file with all possible options that can be specified and example values (most likely, they will not all be needed at the same time):
 
 ```
 # a special key `current-profile` can be specified to 

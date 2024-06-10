@@ -370,7 +370,6 @@ void TDirectReadSession::Start()  {
         if (State != EState::CREATED) {
             return;
         }
-        State = EState::CONNECTING;
     }
     Reconnect(TPlainStatus());
 }

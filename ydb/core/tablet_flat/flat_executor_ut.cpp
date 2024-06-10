@@ -1,8 +1,6 @@
 #include "flat_dbase_sz_env.h"
 #include "flat_executor_ut_common.h"
 
-#include <ydb/core/protos/pqconfig.pb.h>
-
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 

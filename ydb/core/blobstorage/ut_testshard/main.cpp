@@ -1,7 +1,5 @@
 #include "env.h"
 
-#include <ydb/core/protos/pqconfig.pb.h>
-
 TEnvironmentSetup *TEnvironmentSetup::Env = nullptr;
 
 const ui64 NKikimr::NPDisk::YdbDefaultPDiskSequence = 0x7e5700007e570000;

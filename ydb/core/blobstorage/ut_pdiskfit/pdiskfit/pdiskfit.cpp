@@ -3,8 +3,6 @@
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/string_utils/parse_size/parse_size.h>
 
-#include <ydb/core/protos/pqconfig.pb.h>
-
 using namespace NLastGetopt;
 
 int main(int argc, char *argv[]) {

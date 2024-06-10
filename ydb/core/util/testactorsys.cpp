@@ -12,7 +12,6 @@
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/base/channel_profiles.h>
 #include <ydb/core/base/domain.h>
-#include <ydb/core/protos/pqconfig.pb.h>
 
 #include <util/generic/singleton.h>
 

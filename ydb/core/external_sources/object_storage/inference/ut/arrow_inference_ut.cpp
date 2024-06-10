@@ -8,8 +8,6 @@
 #include <arrow/table.h>
 #include <arrow/csv/api.h>
 
-#include <ydb/core/protos/pqconfig.pb.h>
-
 namespace {
 
 using namespace NKikimr::NExternalSource::NObjectStorage;

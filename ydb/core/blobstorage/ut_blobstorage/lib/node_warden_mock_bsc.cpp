@@ -2,8 +2,6 @@
 #include "node_warden_mock_state.h"
 #include "node_warden_mock_vdisk.h"
 
-#include <ydb/core/protos/pqconfig.pb.h>
-
 void TNodeWardenMockActor::SendRegisterNode() {
     Y_ABORT_UNLESS(PipeId);
 

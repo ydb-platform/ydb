@@ -1,6 +1,42 @@
 #include "schema.h"
+#include <ydb/core/tx/columnshard/subscriber/abstract/subscriber/subscriber.h>
+#include <ydb/core/tx/columnshard/subscriber/events/tables_erased/event.h>
+#include <ydb/core/tx/columnshard/transactions/transactions/tx_finish_async.h>
 
 namespace NKikimr::NColumnShard {
+
+class TWaitEraseTablesTxSubscriber: public NSubscriber::ISubscriber {
+private:
+    THashSet<ui64> WaitTables;
+    const ui64 TxId;
+public:
+    virtual std::set<NSubscriber::EEventType> GetEventTypes() const override {
+        return { NSubscriber::EEventType::TablesErased };
+    }
+
+    virtual bool DoOnEvent(const std::shared_ptr<NSubscriber::ISubscriptionEvent>& ev, TColumnShard& shard) override {
+        AFL_VERIFY(ev->GetType() == NSubscriber::EEventType::TablesErased);
+        auto* evErased = static_cast<const NSubscriber::TEventTablesErased*>(ev.get());
+        bool result = false;
+        for (auto&& i : evErased->GetPathIds()) {
+            result |= WaitTables.erase(i);
+        }
+        if (WaitTables.empty()) {
+            shard.Execute(new TTxFinishAsyncTransaction(shard, TxId));
+        }
+        return result;
+    }
+
+    virtual bool IsFinished() const override {
+        return WaitTables.empty();
+    }
+
+    TWaitEraseTablesTxSubscriber(const THashSet<ui64>& waitTables, const ui64 txId)
+        : WaitTables(waitTables)
+        , TxId(txId) {
+
+    }
+};
 
 NKikimr::NColumnShard::TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) {
     switch (SchemaTxBody.TxBody_case()) {
@@ -17,6 +53,13 @@ NKikimr::NColumnShard::TTxController::TProposeResult TSchemaTransactionOperator:
         auto validationStatus = ValidateTables(SchemaTxBody.GetEnsureTables().GetTables());
         if (validationStatus.IsFail()) {
             return  TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Invalid schema: " + validationStatus.GetErrorMessage());
+        }
+        WaitPathIdsToErase.clear();
+        for (auto&& i : SchemaTxBody.GetEnsureTables().GetTables()) {
+            AFL_VERIFY(!owner.TablesManager.HasTable(i.GetPathId()));
+            if (owner.TablesManager.HasTable(i.GetPathId(), true)) {
+                WaitPathIdsToErase.emplace(i.GetPathId());
+            }
         }
     }
     break;
@@ -124,6 +167,39 @@ NKikimr::TConclusionStatus TSchemaTransactionOperator::ValidateTables(::google::
             }
         }
     } return TConclusionStatus::Success();
+}
+
+void TSchemaTransactionOperator::DoOnStart(TColumnShard& owner) {
+    AFL_VERIFY(WaitPathIdsToErase.empty());
+    switch (SchemaTxBody.TxBody_case()) {
+        case NKikimrTxColumnShard::TSchemaTxBody::kInitShard:
+            break;
+        case NKikimrTxColumnShard::TSchemaTxBody::kEnsureTables:
+        {
+            for (auto&& i : SchemaTxBody.GetEnsureTables().GetTables()) {
+                AFL_VERIFY(owner.TablesManager.HasTable(i.GetPathId()));
+                if (owner.TablesManager.HasTable(i.GetPathId(), true)) {
+                    WaitPathIdsToErase.emplace(i.GetPathId());
+                }
+            }
+        }
+        break;
+        case NKikimrTxColumnShard::TSchemaTxBody::kAlterTable:
+        case NKikimrTxColumnShard::TSchemaTxBody::kAlterStore:
+        case NKikimrTxColumnShard::TSchemaTxBody::kDropTable:
+        case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
+            break;
+    }
+    if (WaitPathIdsToErase.empty()) {
+        owner.Execute(new TTxFinishAsyncTransaction(owner, GetTxId()));
+    } else {
+        owner.Subscribers->RegisterSubscriber(std::make_shared<TWaitEraseTablesTxSubscriber>(WaitPathIdsToErase, GetTxId()));
+    }
+}
+
+void TSchemaTransactionOperator::DoStartProposeOnComplete(TColumnShard& owner, const TActorContext& /*ctx*/) {
+    AFL_VERIFY(WaitPathIdsToErase.size())("error", "not implemented for non-async operator by default")("method", "DoStartProposeOnComplete");
+    owner.Subscribers->RegisterSubscriber(std::make_shared<TWaitEraseTablesTxSubscriber>(WaitPathIdsToErase, GetTxId()));
 }
 
 }

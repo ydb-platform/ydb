@@ -90,10 +90,6 @@ protected:
 public:
     bool TryTakePortionBlobs(const TVersionedIndex& vIndex, const TPortionInfo& portion);
 
-    void SetBarrierSnapshot(const TSnapshot& value) {
-        TransferContext.SetSnapshotBarrier(value);
-    }
-
     TSourceCursorForDestination& GetCursorVerified(const TTabletId& tabletId) {
         auto it = Cursors.find(tabletId);
         AFL_VERIFY(it != Cursors.end());

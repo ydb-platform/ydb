@@ -285,6 +285,7 @@ void TDirectReadSessionManager::DeleteNodeSessionIfEmpty(TNodeId nodeId) {
 
     if (erase) {
         LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "DeleteNodeSessionIfEmpty deleted node " << nodeId);
+        it->second->Cancel();
         NodeSessions.erase(it);
     } else {
         LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "DeleteNodeSessionIfEmpty did not delete node " << nodeId << " as it is not empty");

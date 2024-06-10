@@ -634,10 +634,16 @@ private:
     TPartitionGraph PartitionGraph;
     TPartitionSourceManager SourceManager;
 
+    struct TSourceIdPostPersistInfo {
+        ui64 SeqNo = 0;
+        ui64 Offset = 0;
+    };
+
     THashSet<TString> TxAffectedSourcesIds;
     THashSet<TString> WriteAffectedSourcesIds;
     THashSet<TString> TxAffectedConsumers;
     THashSet<TString> SetOffsetAffectedConsumers;
+    THashMap<TString, TSourceIdPostPersistInfo> TxSourceIdForPostPersist;
 
     ui32 MaxBlobSize;
     const ui32 TotalLevels = 4;

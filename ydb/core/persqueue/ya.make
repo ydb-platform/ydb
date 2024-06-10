@@ -70,6 +70,7 @@ PEERDIR(
     ydb/library/protobuf_printer
     ydb/public/lib/base
     ydb/public/sdk/cpp/client/ydb_persqueue_public
+    ydb/library/dbgtrace
 )
 
 END()

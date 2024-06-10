@@ -21,6 +21,7 @@
 #include <util/folder/path.h>
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace {
 
@@ -43,6 +44,7 @@ static const ui32 MAX_USERS = 1000;
 static const ui32 MAX_KEYS = 10000;
 static const ui32 MAX_TXS = 1000;
 static const ui32 MAX_WRITE_CYCLE_SIZE = 16_MB;
+static const ui32 BATCH_UNPACK_SIZE_BORDER = 500_KB;
 
 auto GetStepAndTxId(ui64 step, ui64 txId)
 {
@@ -1024,11 +1026,13 @@ void TPartition::WriteInfoResponseHandler(
         std::variant<TAutoPtr<TEvPQ::TEvGetWriteInfoResponse>, TAutoPtr<TEvPQ::TEvGetWriteInfoError>>&& ev,
         const TActorContext& ctx
 ) {
+    DBGTRACE("TPartition::WriteInfoResponseHandler");
     auto txIter = WriteInfosToTx.find(sender);
     Y_ABORT_UNLESS(!txIter.IsEnd());
 
     auto& tx = (*txIter->second);
     if (auto msg = std::get<0>(ev)) {
+        DBGTRACE_LOG("reset tx.WriteInfo");
         tx.WriteInfo.Reset(msg.Release());
     } else {
         auto err = std::get<1>(ev);
@@ -1042,10 +1046,12 @@ void TPartition::WriteInfoResponseHandler(
 }
 
 TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) {
+    DBGTRACE("TPartition::ApplyWriteInfoResponse");
     bool isImmediate = (tx.ProposeTransaction != nullptr);
     Y_ABORT_UNLESS(tx.WriteInfo);
     Y_ABORT_UNLESS(!tx.WriteInfoApplied);
     if (!tx.Predicate.GetOrElse(true)) {
+        DBGTRACE_LOG("predicate is false");
         return EProcessResult::Continue;
     }
     auto& srcIdInfo = tx.WriteInfo->SrcIdInfo;
@@ -1054,10 +1060,13 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
     const auto& knownSourceIds = SourceIdStorage.GetInMemorySourceIds();
     THashSet<TString> txSourceIds;
     for (auto& s : srcIdInfo) {
+        DBGTRACE_LOG("s.first=" << s.first);
+        DBGTRACE_LOG("s.second.MinSeqNo=" << s.second.MinSeqNo);
         if (TxAffectedSourcesIds.contains(s.first)) {
             ret = EProcessResult::Blocked;
             break;
         }
+        DBGTRACE_LOG("isImmediate=" << isImmediate);
         if (isImmediate) {
             WriteAffectedSourcesIds.insert(s.first);
         } else {
@@ -1071,6 +1080,7 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
         auto existing = knownSourceIds.find(s.first);
         if (existing.IsEnd())
             continue;
+        DBGTRACE_LOG("existing->second.SeqNo=" << existing->second.SeqNo);
         if (s.second.MinSeqNo <= existing->second.SeqNo) {
             tx.Predicate = false;
             tx.Message = TStringBuilder() << "MinSeqNo violation failure on " << s.first;
@@ -1078,6 +1088,7 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
             break;
         }
     }
+    DBGTRACE_LOG("WriteKeysSizeEstimate=" << WriteKeysSizeEstimate);
     if (ret == EProcessResult::Continue && tx.Predicate.GetOrElse(true)) {
         TxAffectedSourcesIds.insert(txSourceIds.begin(), txSourceIds.end());
         tx.WriteInfoApplied = true;
@@ -1088,6 +1099,7 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
             WriteCycleSizeEstimate += blob.GetBlobSize();
         }
     }
+    DBGTRACE_LOG("WriteKeysSizeEstimate=" << WriteKeysSizeEstimate);
 
     return ret;
 }
@@ -1522,6 +1534,7 @@ void TPartition::Handle(NReadQuoterEvents::TEvQuotaUpdated::TPtr& ev, const TAct
 }
 
 void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
+    DBGTRACE("TPartition::Handle(TEvKeyValue::TEvResponse)");
     auto& response = ev->Get()->Record;
 
     //check correctness of response
@@ -1589,6 +1602,7 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
     if (writeDuration > minWriteLatency) {
         OnHandleWriteResponse(ctx);
     } else {
+        DBGTRACE_LOG("schedule TEvPQ::TEvHandleWriteResponse");
         ctx.Schedule(minWriteLatency - writeDuration, new TEvPQ::TEvHandleWriteResponse(response.GetCookie()));
     }
 }
@@ -1662,10 +1676,13 @@ size_t TPartition::GetUserActCount(const TString& consumer) const
 
 void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
 {
+    DBGTRACE("TPartition::ProcessTxsAndUserActs");
+    DBGTRACE_LOG("KVWriteInProgress=" << KVWriteInProgress);
     if (KVWriteInProgress) {
         return;
     }
     if (DeletePartitionState == DELETION_INITED) {
+        DBGTRACE_LOG("deletion");
         if (!PersistRequest) {
             PersistRequest = MakeHolder<TEvKeyValue::TEvRequest>();
         }
@@ -1683,11 +1700,14 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
     }
     while (true) {
         if (BatchingState == ETxBatchingState::PreProcessing) {
+            DBGTRACE_LOG("preprocessing");
             ContinueProcessTxsAndUserActs(ctx);
         }
         if (BatchingState == ETxBatchingState::PreProcessing) {
+            DBGTRACE_LOG("preprocessing");
             return; // Still preprocessing - waiting for something;
         }
+        DBGTRACE_LOG("preprocessing completed");
 
         // Preprocessing complete;
         if (CurrentBatchSize > 0) {
@@ -1698,16 +1718,19 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
         if (UserActionAndTxPendingCommit.empty()) {
             // Processing stopped and nothing to commit - finalize
             BatchingState = ETxBatchingState::Finishing;
+            DBGTRACE_LOG("finishing");
         } else {
             // Process commit queue
             ProcessCommitQueue();
         }
+        DBGTRACE_LOG("UserActionAndTxPendingCommit.size=" << UserActionAndTxPendingCommit.size());
         if (!UserActionAndTxPendingCommit.empty()) {
             // Still pending for come commits
             return;
         }
         // Commit queue processing complete. Now can either swith to persist or continue preprocessing;
         if (BatchingState == ETxBatchingState::Finishing) { // Persist required;
+            DBGTRACE_LOG("finishing");
             RunPersist();
             return;
         }
@@ -1717,6 +1740,7 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
 
 void TPartition::ContinueProcessTxsAndUserActs(const TActorContext&)
 {
+    DBGTRACE("TPartition::ContinueProcessTxsAndUserActs");
     Y_ABORT_UNLESS(!KVWriteInProgress);
 
     if (WriteCycleSizeEstimate >= MAX_WRITE_CYCLE_SIZE || WriteKeysSizeEstimate >= MAX_KEYS) {
@@ -1767,6 +1791,7 @@ void TPartition::MoveUserActOrTxToCommitState() {
 }
 
 void TPartition::ProcessCommitQueue() {
+    DBGTRACE("TPartition::ProcessCommitQueue");
     CurrentBatchSize = 0;
 
     Y_ABORT_UNLESS(!KVWriteInProgress);
@@ -1804,6 +1829,7 @@ void TPartition::ProcessCommitQueue() {
 }
 
 void TPartition::RunPersist() {
+    DBGTRACE("TPartition::RunPersist");
     TransactionsInflight.clear();
 
     Y_ABORT_UNLESS(UserActionAndTxPendingCommit.empty());
@@ -1885,7 +1911,7 @@ void TPartition::RunPersist() {
         OnProcessTxsAndUserActsWriteComplete(ActorContext());
         AnswerCurrentWrites(ctx);
         AnswerCurrentReplies(ctx);
-	    HaveWriteMsg = false;
+        HaveWriteMsg = false;
     }
     PersistRequest = nullptr;
 }
@@ -1901,26 +1927,34 @@ void TPartition::AnswerCurrentReplies(const TActorContext& ctx)
 
 TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t)
 {
+    DBGTRACE("TPartition::PreProcessUserActionOrTransaction(TTransaction)");
     auto result = EProcessResult::Continue;
     if (t->SupportivePartitionActor && !t->WriteInfo) { // Pending for write info
+        DBGTRACE_LOG("not ready");
         return EProcessResult::NotReady;
     }
     if (t->WriteInfo && !t->WriteInfoApplied) { //Recieved write info but not applied
+        DBGTRACE_LOG("not applied");
         result = ApplyWriteInfoResponse(*t);
         if (!t->WriteInfoApplied) { // Tried to apply write info but couldn't - TX must be blocked.
+            DBGTRACE_LOG("not applied");
             Y_ABORT_UNLESS(result != EProcessResult::Continue);
             return result;
         }
     }
     if (t->ProposeTransaction) { // Immediate TX
+        DBGTRACE_LOG("immediate tx");
         if (!t->Predicate.GetOrElse(true)) {
+            DBGTRACE_LOG("predicate is false");
             t->State = ECommitState::Aborted;
             return EProcessResult::Continue;
         }
+        DBGTRACE_LOG("predicate is true");
         t->Predicate.ConstructInPlace(true);
         return PreProcessImmediateTx(t->ProposeTransaction->Record);
 
     } else if (t->Tx) { // Distributed TX
+        DBGTRACE_LOG("distributed tx");
         if (t->Predicate.Defined()) { // Predicate defined - either failed previously or Tx created with predicate defined.
             ReplyToProposeOrPredicate(t, true);
             return EProcessResult::Continue;
@@ -2075,38 +2109,166 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvProposePartitionConfig& event)
 
 void TPartition::CommitWriteOperations(TTransaction& t)
 {
+    DBGTRACE("TPartition::CommitWriteOperations");
+    Y_ABORT_UNLESS(PersistRequest);
+    Y_ABORT_UNLESS(!PartitionedBlob.IsInited());
+
     if (!t.WriteInfo) {
         return;
     }
     const auto& ctx = ActorContext();
 
-    for (auto i = t.WriteInfo->BlobsFromHead.rbegin(); i != t.WriteInfo->BlobsFromHead.rend(); ++i) {
+    if (!HaveWriteMsg) {
+        BeginHandleRequests(PersistRequest.Get(), ctx);
+        if (!DiskIsFull) {
+            BeginProcessWrites(ctx);
+            BeginAppendHeadWithNewWrites(ctx);
+        }
+        HaveWriteMsg = true;
+    }
+
+    auto& sourceIdBatch = Parameters->SourceIdBatch;
+    ui64 curOffset = EndOffset;
+
+    DBGTRACE_LOG("BlobsFromHead.size=" << t.WriteInfo->BlobsFromHead.size());
+
+    for (auto i = t.WriteInfo->BlobsFromHead.begin(); i != t.WriteInfo->BlobsFromHead.end(); ++i) {
         auto& blob = *i;
 
-        TWriteMsg msg{Max<ui64>(), Nothing(), TEvPQ::TEvWrite::TMsg{
-            .SourceId = blob.SourceId,
-                .SeqNo = blob.SeqNo,
-                .PartNo = (ui16)(blob.PartData ? blob.PartData->PartNo : 0),
-                .TotalParts = (ui16)(blob.PartData ? blob.PartData->TotalParts : 1),
-                .TotalSize = (ui32)(blob.PartData ? blob.PartData->TotalSize : blob.UncompressedSize),
-                .CreateTimestamp = blob.CreateTimestamp.MilliSeconds(),
-                .ReceiveTimestamp = blob.CreateTimestamp.MilliSeconds(),
-                .DisableDeduplication = false,
-                .WriteTimestamp = blob.WriteTimestamp.MilliSeconds(),
-                .Data = blob.Data,
-                .UncompressedSize = blob.UncompressedSize,
-                .PartitionKey = blob.PartitionKey,
-                .ExplicitHashKey = blob.ExplicitHashKey,
-                .External = false,
-                .IgnoreQuotaDeadline = true,
-                .HeartbeatVersion = std::nullopt,
-        }, std::nullopt};
-        msg.Internal = true;
-        TMessage message(std::move(msg), ctx.Now() - TInstant::Zero());
+        auto sourceId = sourceIdBatch.GetSource(blob.SourceId);
+        ui16 totalParts = blob.PartData.Defined() ? blob.PartData->TotalParts : 1;
+        ui32 totalSize = blob.GetBlobSize();
+        bool headCleared = true;
+        bool needCompactHead = true;
 
-        UserActionAndTxPendingCommit.emplace_front(std::move(message));
+        PartitionedBlob = TPartitionedBlob(Partition, curOffset, blob.SourceId, blob.SeqNo,
+                                           totalParts, totalSize, Head, NewHead,
+                                           headCleared, needCompactHead, MaxBlobSize);
+
+        auto newWrite = PartitionedBlob.Add(std::move(blob));
+        DBGTRACE_LOG("newWrite.has_value=" << newWrite.has_value());
+        if (newWrite && !newWrite->second.empty()) {
+            DBGTRACE_LOG("write key=" << TString(newWrite->first.Data(), newWrite->first.Size()));
+            auto write = PersistRequest->Record.AddCmdWrite();
+            write->SetKey(newWrite->first.Data(), newWrite->first.Size());
+            write->SetValue(newWrite->second);
+            Y_ABORT_UNLESS(!newWrite->first.IsHead());
+            auto channel = GetChannel(NextChannel(newWrite->first.IsHead(), newWrite->second.Size()));
+            write->SetStorageChannel(channel);
+            write->SetTactic(AppData(ctx)->PQConfig.GetTactic());
+
+            TKey resKey = newWrite->first;
+            resKey.SetType(TKeyPrefix::TypeData);
+            write->SetKeyToCache(resKey.Data(), resKey.Size());
+            DBGTRACE_LOG("cache key=" << TString(resKey.Data(), resKey.Size()));
+            WriteCycleSize += newWrite->second.size();
+
+            LOG_DEBUG_S(
+                    ctx, NKikimrServices::PERSQUEUE,
+                    "Topic '" << TopicName() <<
+                        "' partition " << Partition <<
+                        " part blob sourceId '" << EscapeC(blob.SourceId) <<
+                        "' seqNo " << blob.SeqNo <<
+                        //" partNo " << p.Msg.PartNo <<
+                        " result is " << TStringBuf(newWrite->first.Data(), newWrite->first.Size()) <<
+                        " size " << newWrite->second.size()
+            );
+        }
+
+        bool lastBlobPart = blob.IsLastPart();
+        Y_ABORT_UNLESS(lastBlobPart);
+
+        if (lastBlobPart) {
+            Y_ABORT_UNLESS(PartitionedBlob.IsComplete());
+            ui32 curWrites = 0;
+            for (ui32 i = 0; i < PersistRequest->Record.CmdWriteSize(); ++i) { //change keys for yet to be writed KV pairs
+                TKey key(PersistRequest->Record.GetCmdWrite(i).GetKey());
+                if (key.GetType() == TKeyPrefix::TypeTmpData) {
+                    key.SetType(TKeyPrefix::TypeData);
+                    PersistRequest->Record.MutableCmdWrite(i)->SetKey(TString(key.Data(), key.Size()));
+                    ++curWrites;
+                }
+            }
+            auto formedBlobs = PartitionedBlob.GetFormedBlobs();
+            DBGTRACE_LOG("curWrites=" << curWrites << ", formedBlobs.size=" << formedBlobs.size());
+            Y_ABORT_UNLESS(curWrites <= formedBlobs.size());
+            for (ui32 i = 0; i < formedBlobs.size(); ++i) {
+                const auto& x = formedBlobs[i];
+                if (i + curWrites < formedBlobs.size()) { //this KV pair is already writed, rename needed
+                    auto rename = PersistRequest->Record.AddCmdRename();
+                    TKey key = x.first;
+                    DBGTRACE_LOG("need rename key " << TString(key.Data(), key.Size()));
+                    rename->SetOldKey(TString(key.Data(), key.Size()));
+                    key.SetType(TKeyPrefix::TypeData);
+                    rename->SetNewKey(TString(key.Data(), key.Size()));
+                }
+                if (!DataKeysBody.empty() && CompactedKeys.empty()) {
+                    Y_ABORT_UNLESS(DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount() <= x.first.GetOffset(),
+                        "LAST KEY %s, HeadOffset %lu, NEWKEY %s", DataKeysBody.back().Key.ToString().c_str(), Head.Offset, x.first.ToString().c_str());
+                }
+                LOG_DEBUG_S(
+                        ctx, NKikimrServices::PERSQUEUE,
+                        "writing blob: topic '" << TopicName() << "' partition " << Partition
+                            << " " << x.first.ToString() << " size " << x.second << " WTime " << ctx.Now().MilliSeconds()
+                );
+
+                CompactedKeys.push_back(x);
+                CompactedKeys.back().first.SetType(TKeyPrefix::TypeData);
+            }
+            if (PartitionedBlob.HasFormedBlobs()) { //Head and newHead are cleared
+                Parameters->HeadCleared = true;
+                NewHead.Clear();
+                NewHead.Offset = PartitionedBlob.GetOffset();
+                NewHead.PartNo = PartitionedBlob.GetHeadPartNo();
+                NewHead.PackedSize = 0;
+            }
+            ui32 countOfLastParts = 0;
+            for (auto& x : PartitionedBlob.GetClientBlobs()) {
+                if (NewHead.Batches.empty() || NewHead.Batches.back().Packed) {
+                    NewHead.Batches.emplace_back(curOffset, x.GetPartNo(), TVector<TClientBlob>());
+                    NewHead.PackedSize += GetMaxHeaderSize(); //upper bound for packed size
+                }
+                if (x.IsLastPart()) {
+                    ++countOfLastParts;
+                }
+                Y_ABORT_UNLESS(!NewHead.Batches.back().Packed);
+                NewHead.Batches.back().AddBlob(x);
+                NewHead.PackedSize += x.GetBlobSize();
+                if (NewHead.Batches.back().GetUnpackedSize() >= BATCH_UNPACK_SIZE_BORDER) {
+                    NewHead.Batches.back().Pack();
+                    NewHead.PackedSize += NewHead.Batches.back().GetPackedSize(); //add real packed size for this blob
+
+                    NewHead.PackedSize -= GetMaxHeaderSize(); //instead of upper bound
+                    NewHead.PackedSize -= NewHead.Batches.back().GetUnpackedSize();
+                }
+            }
+
+            Y_ABORT_UNLESS(countOfLastParts == 1);
+
+            LOG_DEBUG_S(
+                    ctx, NKikimrServices::PERSQUEUE,
+                    "Topic '" << TopicName() << "' partition " << Partition
+                        << " part blob complete sourceId '" << EscapeC(blob.SourceId) << "' seqNo " << blob.SeqNo
+                        //<< " partNo " << p.Msg.PartNo
+                        << " FormedBlobsCount " << PartitionedBlob.GetFormedBlobs().size()
+                        << " NewHead: " << NewHead
+            );
+
+            DBGTRACE_LOG("update SourceId: SeqNo=" << blob.SeqNo << ", Offset=" << curOffset);
+            sourceId.Update(blob.SeqNo, curOffset, CurrentTimestamp);
+
+            auto& info = TxSourceIdForPostPersist[blob.SourceId];
+            info.SeqNo = blob.SeqNo;
+            info.Offset = curOffset;
+
+            ++curOffset;
+            PartitionedBlob = TPartitionedBlob(Partition, 0, "", 0, 0, 0, Head, NewHead, true, false, MaxBlobSize);
+        }
     }
+
     WriteInfosApplied.emplace_back(std::move(t.WriteInfo));
+
+    DBGTRACE_LOG("CompactedKeys.size=" << CompactedKeys.size() << ", Head.PackedSize=" << Head.PackedSize);
 }
 
 void TPartition::CommitTransaction(TSimpleSharedPtr<TTransaction>& t)
@@ -2362,6 +2524,7 @@ void TPartition::ResendPendingEvents(const TActorContext& ctx)
 
 TPartition::EProcessResult TPartition::PreProcessImmediateTx(const NKikimrPQ::TEvProposeTransaction& tx)
 {
+    DBGTRACE("TPartition::PreProcessImmediateTx");
     if (AffectedUsers.size() >= MAX_USERS) {
         return EProcessResult::Blocked;
     }

@@ -1650,7 +1650,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 
     sil->AddServiceInitializer(new TStatServiceInitializer(runConfig));
 
-    if (serviceMask.EnableDatabaseMetadataCache && runConfig.AppConfig.GetFeatureFlags().GetEnableDbMetadataCache()) {
+    if (serviceMask.EnableDatabaseMetadataCache) {
         sil->AddServiceInitializer(new TDatabaseMetadataCacheInitializer(runConfig));
     }
 

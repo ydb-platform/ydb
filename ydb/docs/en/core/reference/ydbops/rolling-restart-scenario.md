@@ -36,7 +36,7 @@ The command will restart all the nodes in the cluster: all storage nodes first, 
 ydbops restart 
 ```
 
-### Restarting only storage\tenant nodes
+### Restarting only storage or tenant nodes
 
 It is possible to restart storage nodes only:
 

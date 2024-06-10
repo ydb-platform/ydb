@@ -6,7 +6,7 @@ The article is being updated. Expect new content to appear and minor fixes to ex
 
 {% endnote %}
 
-`ydbops` can be used to perform the rolling restart operation: restarting all (or a subset) of {{ ydb-short-name }} cluster nodes while maintaining cluster availability.
+`ydbops` can be used to perform the rolling restart operation: restarting all or some of {{ ydb-short-name }} cluster nodes while maintaining cluster availability. Why this is not trivial and requires a special utility is explained in [{#T}](../../devops/manual/maintenance-without-downtime)
 
 The subcommand responsible for this operation is `ydbops restart`.
 

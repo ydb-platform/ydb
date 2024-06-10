@@ -275,9 +275,9 @@ void AddClustersFromConnections(
             FillGenericClusterConfig(
                 common,
                 *gatewaysConfig.MutableGeneric()->AddClusterMapping(),
-                conn.content().setting().postgresql_cluster(),
+                conn.content().setting().greenplum_cluster(),
                 connectionName,
-                NYql::NConnector::NApi::EDataSourceKind::POSTGRESQL,
+                NYql::NConnector::NApi::EDataSourceKind::GREENPLUM,
                 authToken,
                 accountIdSignatures);
             clusters.emplace(connectionName, GenericProviderName);

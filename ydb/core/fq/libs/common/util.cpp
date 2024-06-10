@@ -161,7 +161,7 @@ TMaybe<TString> GetLogin(const FederatedQuery::ConnectionSetting& setting) {
         case FederatedQuery::ConnectionSetting::kPostgresqlCluster:
             return setting.postgresql_cluster().login();
         case FederatedQuery::ConnectionSetting::kGreenplumCluster:
-            return setting.postgresql_cluster().login();
+            return setting.greenplum_cluster().login();
     }
 }
 
@@ -203,7 +203,7 @@ EYdbComputeAuth GetYdbComputeAuthMethod(const FederatedQuery::ConnectionSetting&
         case FederatedQuery::ConnectionSetting::kPostgresqlCluster:
             return GetBasicAuthMethod(setting.postgresql_cluster().auth());
         case FederatedQuery::ConnectionSetting::kGreenplumCluster:
-            return GetBasicAuthMethod(setting.postgresql_cluster().auth());
+            return GetBasicAuthMethod(setting.greenplum_cluster().auth());
     }
 }
 

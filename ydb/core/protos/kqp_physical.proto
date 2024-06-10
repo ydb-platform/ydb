@@ -438,6 +438,9 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme CreateTableStore = 29;
         NKikimrSchemeOp.TModifyScheme DropTableStore = 30;
         NKikimrSchemeOp.TModifyScheme AlterTableStore = 31;
+        NKikimrSchemeOp.TModifyScheme CreateReplication = 34;
+        NKikimrSchemeOp.TModifyScheme AlterReplication = 35;
+        NKikimrSchemeOp.TModifyScheme DropReplication = 36;
     }
 }
 

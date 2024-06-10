@@ -6,9 +6,25 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/string/printf.h>
+
 namespace NKikimr::NReplication {
 
-Y_UNIT_TEST_SUITE(YdbProxyTests) {
+Y_UNIT_TEST_SUITE(YdbProxy) {
+    template <bool UseDatabase = true>
+    class TEnv: public NTestHelpers::TEnv<UseDatabase> {
+        using TBase = NTestHelpers::TEnv<UseDatabase>;
+
+    public:
+        using TBase::TBase;
+        using TBase::Send;
+
+        template <typename TEvResponse>
+        auto Send(IEventBase* ev) {
+            return TBase::template Send<TEvResponse>(this->GetYdbProxy(), ev);
+        }
+    };
+
     Y_UNIT_TEST(MakeDirectory) {
         TEnv env;
         // ok
@@ -129,7 +145,18 @@ Y_UNIT_TEST_SUITE(YdbProxyTests) {
     }
 
     Y_UNIT_TEST(StaticCreds) {
-        TEnv env("user1", "password1");
+        TEnv<true> env("user1", "password1");
+        // make dir
+        {
+            auto ev = env.Send<TEvYdbProxy::TEvMakeDirectoryResponse>(
+                new TEvYdbProxy::TEvMakeDirectoryRequest("/Root/dir", {}));
+            UNIT_ASSERT(ev);
+            UNIT_ASSERT(ev->Get()->Result.IsSuccess());
+        }
+    }
+
+    Y_UNIT_TEST(OAuthToken) {
+        TEnv<true> env("user@builtin");
         // make dir
         {
             auto ev = env.Send<TEvYdbProxy::TEvMakeDirectoryResponse>(
@@ -569,7 +596,7 @@ Y_UNIT_TEST_SUITE(YdbProxyTests) {
 
     template <typename Env>
     TActorId CreateTopicReader(Env& env, const TString& topicPath) {
-        auto settings = NYdb::NTopic::TReadSessionSettings()
+        auto settings = TEvYdbProxy::TTopicReaderSettings()
             .ConsumerName("consumer")
             .AppendTopics(NYdb::NTopic::TTopicReadSettings(topicPath));
 
@@ -583,24 +610,24 @@ Y_UNIT_TEST_SUITE(YdbProxyTests) {
 
     template <typename Env>
     TEvYdbProxy::TReadTopicResult ReadTopicData(Env& env, TActorId& reader, const TString& topicPath) {
-        env.SendAsync(reader, new TEvYdbProxy::TEvReadTopicRequest());
+        do {
+            env.SendAsync(reader, new TEvYdbProxy::TEvReadTopicRequest());
 
-        while (true) {
-            TAutoPtr<IEventHandle> handle;
-            auto result = env.GetRuntime().template GrabEdgeEventsRethrow<TEvYdbProxy::TEvReadTopicResponse, TEvents::TEvGone>(handle);
-            if (handle->Recipient != env.GetSender()) {
-                continue;
-            }
+            try {
+                TAutoPtr<IEventHandle> ev;
+                env.GetRuntime().template GrabEdgeEventsRethrow<TEvYdbProxy::TEvReadTopicResponse, TEvYdbProxy::TEvTopicReaderGone>(ev);
+                UNIT_ASSERT_VALUES_EQUAL(ev->Sender, reader);
 
-            if (auto* ev = std::get<TEvYdbProxy::TEvReadTopicResponse*>(result)) {
-                return ev->Result;
-            } else if (std::get<TEvents::TEvGone*>(result)) {
+                switch (ev->GetTypeRewrite()) {
+                case TEvYdbProxy::EvReadTopicResponse:
+                    return ev->Get<TEvYdbProxy::TEvReadTopicResponse>()->Result;
+                case TEvYdbProxy::EvTopicReaderGone:
+                    ythrow yexception();
+                }
+            } catch (yexception&) {
                 reader = CreateTopicReader(env, topicPath);
-                env.SendAsync(reader, new TEvYdbProxy::TEvReadTopicRequest());
-            } else {
-                UNIT_ASSERT("Unexpected event");
             }
-        }
+        } while (true);
     }
 
     Y_UNIT_TEST(ReadTopic) {
@@ -621,53 +648,64 @@ Y_UNIT_TEST_SUITE(YdbProxyTests) {
 
         TActorId reader = CreateTopicReader(env, "/Root/topic");
 
-        UNIT_ASSERT(WriteTopic(env, "/Root/topic", "message-1"));
+        UNIT_ASSERT(NTestHelpers::WriteTopic(env, "/Root/topic", "message-0"));
         {
             auto data = ReadTopicData(env, reader, "/Root/topic");
             UNIT_ASSERT_VALUES_EQUAL(data.Messages.size(), 1);
 
             const auto& msg = data.Messages.at(0);
             UNIT_ASSERT_VALUES_EQUAL(msg.GetOffset(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(msg.GetData(), "message-1");
-
-            auto ev = env.Send<TEvYdbProxy::TEvCommitOffsetResponse>(
-                new TEvYdbProxy::TEvCommitOffsetRequest("/Root/topic", 0, "consumer", msg.GetOffset() + 1, {}));
-            UNIT_ASSERT(ev);
-            UNIT_ASSERT(ev->Get()->Result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(msg.GetData(), "message-0");
         }
 
         // wait next event
         env.SendAsync(reader, new TEvYdbProxy::TEvReadTopicRequest());
 
-        TActorId newReader = CreateTopicReader(env, "/Root/topic");
-        // wait next event
-        env.SendAsync(newReader, new TEvYdbProxy::TEvReadTopicRequest());
+        TActorId newReader;
+        do {
+            newReader = CreateTopicReader(env, "/Root/topic");
+            // wait next event
+            env.SendAsync(newReader, new TEvYdbProxy::TEvReadTopicRequest());
 
-        // wait event from previous session
-        try {
-            auto ev = env.GetRuntime().GrabEdgeEventRethrow<TEvents::TEvGone>(env.GetSender());
-            if (ev->Sender != reader) {
-                ythrow yexception();
+            // wait event from previous session
+            try {
+                auto ev = env.GetRuntime().GrabEdgeEventRethrow<TEvYdbProxy::TEvTopicReaderGone>(env.GetSender());
+                if (ev->Sender == reader) {
+                    break;
+                } else if (ev->Sender == newReader) {
+                    continue;
+                } else {
+                    UNIT_ASSERT("Unexpected reader has gone");
+                }
+            } catch (yexception&) {
+                // bad luck, previous session was not closed, close it manually
+                env.SendAsync(reader, new TEvents::TEvPoison());
+                break;
             }
-        } catch (yexception&) {
-            // bad luck, previous session was not closed, close it manually
-            env.SendAsync(reader, new TEvents::TEvPoison());
-        }
+        } while (true);
 
-        UNIT_ASSERT(WriteTopic(env, "/Root/topic", "message-2"));
+        UNIT_ASSERT(NTestHelpers::WriteTopic(env, "/Root/topic", "message-1"));
         {
             auto data = ReadTopicData(env, newReader, "/Root/topic");
-            UNIT_ASSERT_VALUES_EQUAL(data.Messages.size(), 1);
+            UNIT_ASSERT(data.Messages.size() >= 1);
 
-            const auto& msg = data.Messages.at(0);
-            UNIT_ASSERT_VALUES_EQUAL(msg.GetOffset(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(msg.GetData(), "message-2");
-
-            auto ev = env.Send<TEvYdbProxy::TEvCommitOffsetResponse>(
-                new TEvYdbProxy::TEvCommitOffsetRequest("/Root/topic", 0, "consumer", msg.GetOffset() + 1, {}));
-            UNIT_ASSERT(ev);
-            UNIT_ASSERT(ev->Get()->Result.IsSuccess());
+            for (int i = data.Messages.size() - 1; i >= 0; --i) {
+                const auto offset = i + int(data.Messages.size() == 1);
+                const auto& msg = data.Messages.at(i);
+                UNIT_ASSERT_VALUES_EQUAL(msg.GetOffset(), offset);
+                UNIT_ASSERT_VALUES_EQUAL(msg.GetData(), Sprintf("message-%i", offset));
+            }
         }
+    }
+
+    Y_UNIT_TEST(ReadNonExistentTopic) {
+        TEnv env;
+
+        auto reader = CreateTopicReader(env, "/Root/topic");
+        auto ev = env.Send<TEvYdbProxy::TEvTopicReaderGone>(reader, new TEvYdbProxy::TEvReadTopicRequest());
+
+        UNIT_ASSERT(ev);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Result.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
     }
 
 } // YdbProxyTests

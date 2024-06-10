@@ -2,6 +2,7 @@
 #include <ydb/core/kqp/ut/common/columnshard.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/public/sdk/cpp/client/draft/ydb_replication.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
@@ -5124,6 +5125,454 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto resultSuccess = session.ExecuteSchemeQuery("DROP EXTERNAL DATA SOURCE test").GetValueSync();
         UNIT_ASSERT_C(resultSuccess.GetStatus() == EStatus::SCHEME_ERROR, TStringBuilder{} << resultSuccess.GetStatus() << " " << resultSuccess.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(CreateAsyncReplication) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        // connection string & endpoint/database are mutually exclusive
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    CONNECTION_STRING = "grpc://localhost:2135/?database=/Root"
+                    ENDPOINT = "localhost:2135",
+                    DATABASE = "/Root"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        }
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    DATABASE = "/Root"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        }
+
+        // token & user/password are mutually exclusive
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    TOKEN = "foo",
+                    USER = "user",
+                    PASSWORD = "bar"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        }
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    CONNECTION_STRING = "grpc://localhost:2135/?database=/Root"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        }
+
+        // token & token_secret_name are mutually exclusive
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    TOKEN = "foo",
+                    TOKEN_SECRET_NAME = "bar"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        }
+
+        // password & password_secret_name are mutually exclusive
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    USER = "user",
+                    PASSWORD = "bar"
+                    PASSWORD_SECRET_NAME = "baz"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        }
+
+        // unsupported setting (STATE) in CREATE
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
+                    TOKEN = "root@builtin",
+                    STATE = "DONE"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/table` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // ok
+        {
+            auto query = Sprintf(R"(
+                --!syntax_v1
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    ENDPOINT = "%s",
+                    DATABASE = "/Root",
+                    TOKEN = "root@builtin"
+                );
+            )", kikimr.GetEndpoint().c_str());
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(CreateAsyncReplicationWithSecret) {
+        TKikimrRunner kikimr("root@builtin");
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/table` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // ok
+        {
+            auto query = Sprintf(R"(
+                --!syntax_v1
+                CREATE OBJECT mysecret (TYPE SECRET) WITH (value = "root@builtin");
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    ENDPOINT = "%s",
+                    DATABASE = "/Root",
+                    TOKEN_SECRET_NAME = "mysecret"
+                );
+            )", kikimr.GetEndpoint().c_str());
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        while (true) {
+            auto describe = session.DescribeTable("/Root/replica").GetValueSync();
+            if (describe.GetStatus() == EStatus::SUCCESS) {
+                break;
+            }
+
+            Sleep(TDuration::Seconds(1));
+        }
+    }
+
+    Y_UNIT_TEST(AlterAsyncReplication) {
+        using namespace NReplication;
+
+        TKikimrRunner kikimr;
+        auto repl = TReplicationClient(kikimr.GetDriver(), TCommonClientSettings().Database("/Root"));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        // path does not exist
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER ASYNC REPLICATION `/Root/replication`
+                SET (
+                    STATE = "DONE"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/table` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = Sprintf(R"(
+                --!syntax_v1
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    ENDPOINT = "%s",
+                    DATABASE = "/Root",
+                    TOKEN = "root@builtin"
+                );
+            )", kikimr.GetEndpoint().c_str());
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // unsupported setting (TOKEN) in ALTER
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER ASYNC REPLICATION `/Root/replication`
+                SET (
+                    TOKEN = "foo"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        }
+
+        // invalid state
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER ASYNC REPLICATION `/Root/replication`
+                SET (
+                    STATE = "foo"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        }
+
+        // invalid failover mode
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER ASYNC REPLICATION `/Root/replication`
+                SET (
+                    FAILOVER_MODE = "foo"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        }
+
+        // ok
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER ASYNC REPLICATION `/Root/replication`
+                SET (
+                    STATE = "DONE",
+                    FAILOVER_MODE = "FORCE"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        while (true) {
+            const auto result = repl.DescribeReplication("/Root/replication").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            const auto& desc = result.GetReplicationDescription();
+            switch (desc.GetState()) {
+            case TReplicationDescription::EState::Done:
+                return;
+            default:
+                continue;
+            }
+
+            Sleep(TDuration::Seconds(1));
+        }
+    }
+
+    Y_UNIT_TEST(DropAsyncReplication) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        // path does not exist
+        {
+            auto query = R"(
+                --!syntax_v1
+                DROP ASYNC REPLICATION `/Root/replication`
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/table` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = Sprintf(R"(
+                --!syntax_v1
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    ENDPOINT = "%s",
+                    DATABASE = "/Root",
+                    TOKEN = "root@builtin"
+                );
+            )", kikimr.GetEndpoint().c_str());
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        while (true) {
+            auto describe = session.DescribeTable("/Root/replica").GetValueSync();
+            if (describe.GetStatus() == EStatus::SUCCESS) {
+                break;
+            }
+
+            Sleep(TDuration::Seconds(1));
+        }
+
+        // ok
+        {
+            auto query = R"(
+                --!syntax_v1
+                DROP ASYNC REPLICATION `/Root/replication`
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto describe = session.DescribeTable("/Root/replica").GetValueSync();
+            UNIT_ASSERT_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(DropAsyncReplicationCascade) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/table` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = Sprintf(R"(
+                --!syntax_v1
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    ENDPOINT = "%s",
+                    DATABASE = "/Root",
+                    TOKEN = "root@builtin"
+                );
+            )", kikimr.GetEndpoint().c_str());
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        while (true) {
+            auto describe = session.DescribeTable("/Root/replica").GetValueSync();
+            if (describe.GetStatus() == EStatus::SUCCESS) {
+                break;
+            }
+
+            Sleep(TDuration::Seconds(1));
+        }
+
+        // ok
+        {
+            auto query = R"(
+                --!syntax_v1
+                DROP ASYNC REPLICATION `/Root/replication` CASCADE
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto describe = session.DescribeTable("/Root/replica").GetValueSync();
+            UNIT_ASSERT_EQUAL_C(describe.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+        }
     }
 }
 

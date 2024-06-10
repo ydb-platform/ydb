@@ -8,6 +8,7 @@
 
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 
+#include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 
 namespace NKikimr::NReplication::NController {
@@ -38,6 +39,15 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 << ": path# " << path.first);
 
             auto entry = result.GetEntry();
+            switch (entry.Type) {
+            case NYdb::NScheme::ESchemeEntryType::SubDomain:
+            case NYdb::NScheme::ESchemeEntryType::Directory:
+                Pending.erase(it);
+                return ListDirectory(path);
+            default:
+                break;
+            }
+
             entry.Name = path.first; // replace by full path
 
             if (const auto kind = TryTargetKindFromEntryType(entry.Type)) {
@@ -56,17 +66,23 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             }
         } else {
             LOG_E("Describe failed"
-                << ": path# " << path.first);
+                << ": path# " << path.first
+                << ", status# " << result.GetStatus()
+                << ", issues# " << result.GetIssues().ToOneLineString());
 
             if (IsRetryableError(result)) {
-                return Retry(*it);
+                return RetryDescribe(*it);
             } else {
                 Failed.emplace_back(path.first, result);
             }
         }
 
         Pending.erase(it);
-        if (Pending) {
+        MaybeReply();
+    }
+
+    void MaybeReply() {
+        if (Pending || Listings) {
             return;
         }
 
@@ -79,20 +95,108 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
         PassAway();
     }
 
-    void Retry(ui32 idx) {
-        if (ToRetry.empty()) {
-            Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup);
+    void ListDirectory(const std::pair<TString, TString>& path) {
+        auto res = Listings.emplace(NextListingId++, path);
+        Y_ABORT_UNLESS(res.second);
+        ListDirectory(res.first->first);
+    }
+
+    void ListDirectory(ui64 listingId) {
+        auto it = Listings.find(listingId);
+        Y_ABORT_UNLESS(it != Listings.end());
+        Send(YdbProxy, new TEvYdbProxy::TEvListDirectoryRequest(it->second.first, {}), 0, it->first);
+    }
+
+    static bool IsSystemObject(const NYdb::NScheme::TSchemeEntry& entry) {
+        if (entry.Type != NYdb::NScheme::ESchemeEntryType::Directory) {
+            return false;
         }
 
-        ToRetry.insert(idx);
+        return entry.Name.StartsWith("~")
+            || entry.Name.StartsWith(".sys")
+            || entry.Name.StartsWith(".metadata");
+    }
+
+    void Handle(TEvYdbProxy::TEvListDirectoryResponse::TPtr& ev) {
+        LOG_T("Handle " << ev->Get()->ToString());
+
+        auto it = Listings.find(ev->Cookie);
+        if (it == Listings.end()) {
+            LOG_W("Unknown listing response"
+                << ": cookie# " << ev->Cookie);
+            return;
+        }
+
+        const auto& path = it->second;
+        const auto& result = ev->Get()->Result;
+        if (result.IsSuccess()) {
+            LOG_D("Listing succeeded"
+                << ": path# " << path.first);
+
+            for (const auto& child : result.GetChildren()) {
+                switch (child.Type) {
+                case NYdb::NScheme::ESchemeEntryType::SubDomain:
+                case NYdb::NScheme::ESchemeEntryType::Directory:
+                    if (!IsSystemObject(child)) {
+                        ListDirectory(std::make_pair(
+                            path.first  + '/' + child.Name,
+                            path.second + '/' + child.Name));
+                    }
+                    break;
+                default:
+                    if (TryTargetKindFromEntryType(child.Type)) {
+                        Paths.emplace_back(
+                            path.first  + '/' + child.Name,
+                            path.second + '/' + child.Name);
+                        DescribePath(Paths.size() - 1);
+                    }
+                    break;
+                }
+            }
+        } else {
+            LOG_E("Listing failed"
+                << ": path# " << path.first
+                << ", status# " << result.GetStatus()
+                << ", issues# " << result.GetIssues().ToOneLineString());
+
+            if (IsRetryableError(result)) {
+                return RetryListing(it->first);
+            } else {
+                Failed.emplace_back(path.first, result);
+            }
+        }
+
+        Listings.erase(it);
+        MaybeReply();
+    }
+
+    void ScheduleRetry() {
+        if (DescribeRetries.empty() && ListingRetries.empty()) {
+            Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup);
+        }
+    }
+
+    void RetryDescribe(ui32 idx) {
+        ScheduleRetry();
+        DescribeRetries.insert(idx);
+    }
+
+    void RetryListing(ui64 id) {
+        ScheduleRetry();
+        ListingRetries.insert(id);
     }
 
     void Retry() {
-        for (const ui32 idx : ToRetry) {
+        for (const ui32 idx : DescribeRetries) {
             DescribePath(idx);
         }
 
-        ToRetry.clear();
+        for (const ui64 id : ListingRetries) {
+            ListDirectory(id);
+        }
+
+        DescribeRetries.clear();
+        ListingRetries.clear();
     }
 
 public:
@@ -120,6 +224,7 @@ public:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvDescribePathResponse, Handle);
+            hFunc(TEvYdbProxy::TEvListDirectoryResponse, Handle);
             sFunc(TEvents::TEvWakeup, Retry);
             sFunc(TEvents::TEvPoison, PassAway);
         }
@@ -129,11 +234,15 @@ private:
     const TActorId Parent;
     const ui64 ReplicationId;
     const TActorId YdbProxy;
-    const TVector<std::pair<TString, TString>> Paths;
+    TVector<std::pair<TString, TString>> Paths;
     const TActorLogPrefix LogPrefix;
 
+    ui64 NextListingId = 1;
+    THashMap<ui64, std::pair<TString, TString>> Listings;
+
     THashSet<ui32> Pending;
-    THashSet<ui32> ToRetry;
+    THashSet<ui32> DescribeRetries;
+    THashSet<ui64> ListingRetries;
     TVector<TEvPrivate::TEvDiscoveryTargetsResult::TAddEntry> ToAdd;
     TVector<TEvPrivate::TEvDiscoveryTargetsResult::TFailedEntry> Failed;
 

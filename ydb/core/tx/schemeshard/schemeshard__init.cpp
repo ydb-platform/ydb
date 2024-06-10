@@ -1791,6 +1791,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 if (const auto replicationConfig = std::get<9>(rec)) {
                     bool parseOk = ParseFromStringNoSizeLimit(tableInfo->MutableReplicationConfig(), replicationConfig);
                     Y_ABORT_UNLESS(parseOk);
+
+                    if (tableInfo->IsAsyncReplica()) {
+                        Self->PathsById.at(pathId)->SetAsyncReplica();
+                    }
                 }
 
                 tableInfo->IsBackup = std::get<8>(rec);
@@ -3560,7 +3564,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         txState->TxType != TTxState::TxDropSequence &&
                         txState->TxType != TTxState::TxCreateReplication &&
                         txState->TxType != TTxState::TxAlterReplication &&
-                        txState->TxType != TTxState::TxDropReplication)
+                        txState->TxType != TTxState::TxDropReplication &&
+                        txState->TxType != TTxState::TxDropReplicationCascade)
                     {
                         Y_VERIFY_S(txState->TxType == TTxState::TxCopyTable, "Only CopyTable Tx can have participating shards from a different table"
                                        << ", txId: " << operationId.GetTxId()

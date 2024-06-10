@@ -10,8 +10,18 @@ protected:
     using EDstState = TReplication::EDstState;
     using EStreamState = TReplication::EStreamState;
 
+    inline TReplication* GetReplication() const {
+        return Replication;
+    }
+
+    void RemoveWorkers(const TActorContext& ctx);
+
 public:
-    explicit TTargetBase(ETargetKind kind, ui64 rid, ui64 tid, const TString& srcPath, const TString& dstPath);
+    explicit TTargetBase(TReplication* replication, ETargetKind kind,
+        ui64 id, const TString& srcPath, const TString& dstPath);
+
+    ui64 GetId() const override;
+    ETargetKind GetKind() const override;
 
     const TString& GetSrcPath() const override;
     const TString& GetDstPath() const override;
@@ -31,18 +41,17 @@ public:
     const TString& GetIssue() const override;
     void SetIssue(const TString& value) override;
 
-    void Progress(ui64 schemeShardId, const TActorId& proxy, const TActorContext& ctx) override;
+    void AddWorker(ui64 id) override;
+    void RemoveWorker(ui64 id) override;
+    const THashSet<ui64>& GetWorkers() const override;
+
+    void Progress(const TActorContext& ctx) override;
     void Shutdown(const TActorContext& ctx) override;
 
-protected:
-    ui64 GetReplicationId() const;
-    ui64 GetTargetId() const;
-    ETargetKind GetTargetKind() const;
-
 private:
+    TReplication* const Replication;
+    const ui64 Id;
     const ETargetKind Kind;
-    const ui64 ReplicationId;
-    const ui64 TargetId;
     const TString SrcPath;
     const TString DstPath;
 
@@ -53,7 +62,11 @@ private:
     TString Issue;
 
     TActorId DstCreator;
+    TActorId DstAlterer;
     TActorId DstRemover;
+    TActorId WorkerRegistar;
+    THashSet<ui64> Workers;
+    bool PendingRemoveWorkers = false;
 
 }; // TTargetBase
 

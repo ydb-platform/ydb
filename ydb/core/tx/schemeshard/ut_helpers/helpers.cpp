@@ -853,8 +853,11 @@ namespace NSchemeShardUT_Private {
 
     // replication
     GENERIC_HELPERS(CreateReplication, NKikimrSchemeOp::EOperationType::ESchemeOpCreateReplication, &NKikimrSchemeOp::TModifyScheme::MutableReplication)
+    GENERIC_HELPERS(AlterReplication, NKikimrSchemeOp::EOperationType::ESchemeOpAlterReplication, &NKikimrSchemeOp::TModifyScheme::MutableAlterReplication)
     GENERIC_HELPERS(DropReplication, NKikimrSchemeOp::EOperationType::ESchemeOpDropReplication, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
     DROP_BY_PATH_ID_HELPERS(DropReplication, NKikimrSchemeOp::EOperationType::ESchemeOpDropReplication)
+    GENERIC_HELPERS(DropReplicationCascade, NKikimrSchemeOp::EOperationType::ESchemeOpDropReplicationCascade, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
+    DROP_BY_PATH_ID_HELPERS(DropReplicationCascade, NKikimrSchemeOp::EOperationType::ESchemeOpDropReplicationCascade)
 
     // pq
     GENERIC_HELPERS(CreatePQGroup, NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup, &NKikimrSchemeOp::TModifyScheme::MutableCreatePersQueueGroup)
@@ -2188,6 +2191,14 @@ namespace NSchemeShardUT_Private {
         } else {
             ForwardToTablet(runtime, targetTabletId, sender, ev, nodeIndex);
         }
+    }
+
+    TEvTx* InternalTransaction(TEvTx* tx) {
+        for (auto& x : *tx->Record.MutableTransaction()) {
+            x.SetInternal(true);
+        }
+
+        return tx;
     }
 
     TTestActorRuntimeBase::TEventObserver SetSuppressObserver(TTestActorRuntime &runtime, TVector<THolder<IEventHandle> > &suppressed, ui32 type) {

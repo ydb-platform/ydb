@@ -106,6 +106,7 @@
 #include <ydb/services/persqueue_v1/persqueue.h>
 #include <ydb/services/persqueue_v1/topic.h>
 #include <ydb/services/rate_limiter/grpc_service.h>
+#include <ydb/services/replication/grpc_service.h>
 #include <ydb/services/ydb/ydb_clickhouse_internal.h>
 #include <ydb/services/ydb/ydb_dummy.h>
 #include <ydb/services/ydb/ydb_export.h>
@@ -583,6 +584,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["query_service"] = &hasQueryService;
         TServiceCfg hasKeyValue = services.empty();
         names["keyvalue"] = &hasKeyValue;
+        TServiceCfg hasReplication = services.empty();
+        names["replication"] = &hasReplication;
 
         std::unordered_set<TString> enabled;
         for (const auto& name : services) {
@@ -847,6 +850,11 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         if (hasKeyValue) {
             server.AddService(new NGRpcService::TKeyValueGRpcService(ActorSystem.Get(), Counters,
                 grpcRequestProxies[0]));
+        }
+
+        if (hasReplication) {
+            server.AddService(new NGRpcService::TGRpcReplicationService(ActorSystem.Get(), Counters,
+                grpcRequestProxies[0], hasReplication.IsRlAllowed()));
         }
 
         if (ModuleFactories) {
@@ -1705,10 +1713,6 @@ void TKikimrRunner::KikimrStop(bool graceful) {
         SqsHttp->Shutdown();
     }
 
-    if (YdbDriver) {
-        YdbDriver->Stop(true);
-    }
-
     if (Monitoring) {
         Monitoring->Stop();
     }
@@ -1748,6 +1752,10 @@ void TKikimrRunner::KikimrStop(bool graceful) {
         if (ModuleFactories->DataShardExportFactory) {
             ModuleFactories->DataShardExportFactory->Shutdown();
         }
+    }
+
+    if (YdbDriver) {
+        YdbDriver->Stop(true);
     }
 }
 

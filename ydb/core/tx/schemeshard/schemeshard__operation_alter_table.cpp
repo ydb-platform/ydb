@@ -71,7 +71,11 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         return nullptr;
     }
 
-    if (!hasSchemaChanges && !copyAlter.HasPartitionConfig() && !copyAlter.HasTTLSettings()) {
+    if (!hasSchemaChanges
+        && !copyAlter.HasPartitionConfig()
+        && !copyAlter.HasTTLSettings()
+        && !copyAlter.HasReplicationConfig())
+    {
         errStr = Sprintf("No changes specified");
         status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;
@@ -497,8 +501,11 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .IsTable()
-                .NotAsyncReplicaTable()
                 .NotUnderOperation();
+
+            if (!Transaction.GetInternal()) {
+                checks.NotAsyncReplicaTable();
+            }
 
             if (!context.IsAllowedPrivateTables) {
                 checks.IsCommonSensePath(); //forbid alter impl index tables outside consistent operation

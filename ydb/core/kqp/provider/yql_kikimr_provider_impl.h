@@ -43,6 +43,10 @@ private:
     virtual TStatus HandleAlterTopic(NNodes::TKiAlterTopic node, TExprContext& ctx) = 0;
     virtual TStatus HandleDropTopic(NNodes::TKiDropTopic node, TExprContext& ctx) = 0;
 
+    virtual TStatus HandleCreateReplication(NNodes::TKiCreateReplication node, TExprContext& ctx) = 0;
+    virtual TStatus HandleAlterReplication(NNodes::TKiAlterReplication node, TExprContext& ctx) = 0;
+    virtual TStatus HandleDropReplication(NNodes::TKiDropReplication node, TExprContext& ctx) = 0;
+
     virtual TStatus HandleCreateUser(NNodes::TKiCreateUser node, TExprContext& ctx) = 0;
     virtual TStatus HandleAlterUser(NNodes::TKiAlterUser node, TExprContext& ctx) = 0;
     virtual TStatus HandleDropUser(NNodes::TKiDropUser node, TExprContext& ctx) = 0;
@@ -78,7 +82,8 @@ public:
         Object,
         Topic,
         Permission,
-        PGObject
+        PGObject,
+        Replication,
     };
 
     struct TViewDescription {
@@ -104,6 +109,12 @@ public:
     TString GetTopicPath() const {
         Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
         Y_DEBUG_ABORT_UNLESS(KeyType == Type::Topic);
+        return Target;
+    }
+
+    TString GetReplicationPath() const {
+        Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
+        Y_DEBUG_ABORT_UNLESS(KeyType == Type::Replication);
         return Target;
     }
 

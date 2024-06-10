@@ -317,6 +317,11 @@ public:
             return result;
         }
 
+        if (desc.HasState()) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "Cannot create replication with explicit state");
+            return result;
+        }
+
         path.MaterializeLeaf(owner);
         path->CreateTxId = OperationId.GetTxId();
         path->LastTxId = OperationId.GetTxId();
@@ -328,6 +333,7 @@ public:
         parentPath->IncAliveChildren();
         parentPath.DomainInfo()->IncPathsInside();
 
+        desc.MutableState()->MutableStandBy();
         auto replication = TReplicationInfo::Create(std::move(desc));
         context.SS->Replications[path->PathId] = replication;
         context.SS->TabletCounters->Simple()[COUNTER_REPLICATION_COUNT].Add(1);

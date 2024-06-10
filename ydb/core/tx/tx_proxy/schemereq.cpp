@@ -147,6 +147,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropColumnTable:
         case NKikimrSchemeOp::ESchemeOpDropSequence:
         case NKikimrSchemeOp::ESchemeOpDropReplication:
+        case NKikimrSchemeOp::ESchemeOpDropReplicationCascade:
         case NKikimrSchemeOp::ESchemeOpDropBlobDepot:
         case NKikimrSchemeOp::ESchemeOpDropExternalTable:
         case NKikimrSchemeOp::ESchemeOpDropExternalDataSource:
@@ -617,6 +618,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropColumnTable:
         case NKikimrSchemeOp::ESchemeOpDropSequence:
         case NKikimrSchemeOp::ESchemeOpDropReplication:
+        case NKikimrSchemeOp::ESchemeOpDropReplicationCascade:
         case NKikimrSchemeOp::ESchemeOpDropBlobDepot:
         case NKikimrSchemeOp::ESchemeOpDropExternalTable:
         case NKikimrSchemeOp::ESchemeOpDropExternalDataSource:

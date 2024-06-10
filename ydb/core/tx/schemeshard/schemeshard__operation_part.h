@@ -52,6 +52,7 @@
     action(NSequenceShard::TEvSequenceShard::TEvRedirectSequenceResult, NSchemeShard::TXTYPE_SEQUENCESHARD_REDIRECT_SEQUENCE_RESULT) \
 \
     action(NReplication::TEvController::TEvCreateReplicationResult, NSchemeShard::TXTYPE_CREATE_REPLICATION_RESULT) \
+    action(NReplication::TEvController::TEvAlterReplicationResult,  NSchemeShard::TXTYPE_ALTER_REPLICATION_RESULT)  \
     action(NReplication::TEvController::TEvDropReplicationResult,   NSchemeShard::TXTYPE_DROP_REPLICATION_RESULT)   \
 \
     action(TEvSubDomain::TEvConfigureStatus,     NSchemeShard::TXTYPE_SUBDOMAIN_CONFIGURE_RESULT)        \
@@ -586,8 +587,10 @@ ISubOperation::TPtr CreateDropSequence(TOperationId id, TTxState::ETxState state
 
 ISubOperation::TPtr CreateNewReplication(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateNewReplication(TOperationId id, TTxState::ETxState state);
-ISubOperation::TPtr CreateDropReplication(TOperationId id, const TTxTransaction& tx);
-ISubOperation::TPtr CreateDropReplication(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateAlterReplication(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateAlterReplication(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateDropReplication(TOperationId id, const TTxTransaction& tx, bool cascade);
+ISubOperation::TPtr CreateDropReplication(TOperationId id, TTxState::ETxState state, bool cascade);
 
 ISubOperation::TPtr CreateNewBlobDepot(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateNewBlobDepot(TOperationId id, TTxState::ETxState state);

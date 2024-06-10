@@ -1048,6 +1048,22 @@ TCheckFunc IsBackupTable(bool value) {
     };
 }
 
+TCheckFunc ReplicationMode(NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode mode) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        const auto& table = record.GetPathDescription().GetTable();
+        UNIT_ASSERT(table.HasReplicationConfig());
+        UNIT_ASSERT_EQUAL(table.GetReplicationConfig().GetMode(), mode);
+    };
+}
+
+TCheckFunc ReplicationState(NKikimrReplication::TReplicationState::StateCase state) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        const auto& replication = record.GetPathDescription().GetReplicationDescription();
+        UNIT_ASSERT(replication.HasState());
+        UNIT_ASSERT_EQUAL(replication.GetState().GetStateCase(), state);
+    };
+}
+
 TCheckFunc HasColumnTableSchemaPreset(const TString& presetName) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         const auto& table = record.GetPathDescription().GetColumnTableDescription();

@@ -54,7 +54,7 @@ struct TVirtualTimestamp {
     TVirtualTimestamp(const ::Ydb::VirtualTimestamp& proto);
 
     TString ToString() const;
-    void Out(IOutputStream& o) const;
+    void Out(IOutputStream& out) const;
 
     bool operator<(const TVirtualTimestamp& rhs) const;
     bool operator<=(const TVirtualTimestamp& rhs) const;
@@ -75,6 +75,8 @@ struct TSchemeEntry {
 
     TSchemeEntry() = default;
     TSchemeEntry(const ::Ydb::Scheme::Entry& proto);
+
+    void Out(IOutputStream& out) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -163,6 +165,8 @@ public:
     TDescribePathResult(TStatus&& status, const TSchemeEntry& entry);
     const TSchemeEntry& GetEntry() const;
 
+    void Out(IOutputStream& out) const;
+
 private:
     TSchemeEntry Entry_;
 };
@@ -171,6 +175,8 @@ class TListDirectoryResult : public TDescribePathResult {
 public:
     TListDirectoryResult(TStatus&& status, const TSchemeEntry& self, TVector<TSchemeEntry>&& children);
     const TVector<TSchemeEntry>& GetChildren() const;
+
+    void Out(IOutputStream& out) const;
 
 private:
     TVector<TSchemeEntry> Children_;

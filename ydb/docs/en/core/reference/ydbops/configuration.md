@@ -70,7 +70,7 @@ my-profile:
   kubeconfig: /path/to/kube/config
   k8s-namespace: your-default-k8s-namespace
 ```
-## Environment variables
+## Environment variables {#environment-variables}
 
 There is also an option to specify several environment variables instead of passing command line arguments.
 

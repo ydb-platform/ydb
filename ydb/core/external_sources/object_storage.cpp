@@ -324,7 +324,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
                     return entry.Path;
                 }
             }
-            throw yexception() << "no non-empty objects found";
+            throw yexception() << "couldn't find any files for type inference, please check that the right path is provided";
         });
 
         auto s3FetcherId = ActorSystem->Register(NObjectStorage::CreateS3FetcherActor(

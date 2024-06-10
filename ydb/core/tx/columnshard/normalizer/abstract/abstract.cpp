@@ -2,6 +2,7 @@
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 
+#include <ydb/core/protos/config.pb.h>
 
 namespace NKikimr::NOlap {
 

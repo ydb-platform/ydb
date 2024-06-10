@@ -453,18 +453,24 @@ public:
         auto pos = options.Pos();
         try {
             TSession* session = GetSession(options);
+            
             TSet<TString> uniqueTables;
-            if (options.Prefix().empty() && options.Suffix().empty()) {
-                for (auto& x : Services_->GetTablesMapping()) {
-                    TVector<TString> parts;
-                    Split(x.first, ".", parts);
-                    if (parts.size() > 2 && parts[0] == YtProviderName) {
-                        if (!parts[2].StartsWith(TStringBuf("Input"))) {
-                            continue;
-                        }
-                        uniqueTables.insert(parts[2]);
-                    }
+            for (const auto& [tableName, _] : Services_->GetTablesMapping()) {
+                TVector<TString> parts;
+                Split(tableName, ".", parts);
+                if (parts.size() != 3) {
+                    continue;
                 }
+                if (parts[0] != YtProviderName || parts[1] != options.Cluster()) {
+                    continue;
+                }
+                if (!options.Prefix().Empty() && !parts[2].StartsWith(options.Prefix() + '/')) {
+                    continue;
+                }
+                if (!options.Suffix().Empty() && !parts[2].EndsWith('/' + options.Suffix())) {
+                    continue;
+                }
+                uniqueTables.insert(parts[2]);
             }
 
             TTableRangeResult res;
@@ -484,8 +490,16 @@ public:
                     TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *Services_->GetFunctionRegistry());
 
                     TVector<TRuntimeNode> strings;
-                    for (auto& x: uniqueTables) {
-                        strings.push_back(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(x));
+                    for (auto& tableName: uniqueTables) {
+                        size_t beg = 0, end = 0;
+                        if (!options.Prefix().Empty()) {
+                            beg = options.Prefix().Size() + 1;
+                        }
+                        if (!options.Suffix().Empty()) {
+                            end = tableName.Size() - (1 + options.Suffix().Size());
+                        }
+                        auto strippedTableName = tableName.substr(beg, end - beg);
+                        strings.push_back(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(strippedTableName));
                     }
 
                     auto inputNode = pgmBuilder.AsList(strings);
@@ -504,7 +518,14 @@ public:
                     const auto& value = compGraph->GetValue();
                     const auto it = value.GetListIterator();
                     for (NUdf::TUnboxedValue current; it.Next(current);) {
-                        res.Tables.push_back(TCanonizedPath{TString(current.AsStringRef()), Nothing(), {}, Nothing()});
+                        TString tableName = TString(current.AsStringRef());
+                        if (!options.Prefix().Empty()) {
+                            tableName = options.Prefix() + '/' + tableName;
+                        }
+                        if (!options.Suffix().Empty()) {
+                            tableName = tableName + '/' + options.Suffix();
+                        }
+                        res.Tables.push_back(TCanonizedPath{tableName, Nothing(), {}, Nothing()});
                     }
                 }
                 else {

@@ -106,6 +106,10 @@ namespace NKikimr::NTable::NPage {
                 return RowCount - ErasedRowCount;
             }
 
+            ui64 GetTotalDataSize() const noexcept {
+                return DataSize + GroupDataSize;
+            }
+
             TString ToString() const noexcept {
                 TStringBuilder result;
                 result << "PageId: " << PageId << " RowCount: " << RowCount << " DataSize: " << DataSize;
@@ -241,9 +245,14 @@ namespace NKikimr::NTable::NPage {
                 return Iter().CompareTo(key, keyDefaults);
             }
 
+            explicit operator bool() const noexcept
+            {
+                return Count() > 0;
+            }
+
         private:
-            const TIsNullBitmap* const IsNullBitmap;
-            const TColumns Columns;
+            const TIsNullBitmap* IsNullBitmap;
+            TColumns Columns;
             const char* Ptr;
         };
 
@@ -395,8 +404,8 @@ namespace NKikimr::NTable::NPage {
             Y_ABORT_UNLESS(key);
             Y_UNUSED(seek);
 
-            return (!beginKey.Count() || beginKey.CompareTo(key, keyDefaults) <= 0)
-                && (!endKey.Count() || endKey.CompareTo(key, keyDefaults) > 0);
+            return (!beginKey || beginKey.CompareTo(key, keyDefaults) <= 0)
+                && (!endKey || endKey.CompareTo(key, keyDefaults) > 0);
         }
 
         /**
@@ -426,8 +435,8 @@ namespace NKikimr::NTable::NPage {
 
             // ESeek::Upper can skip a page with given key
             const bool endKeyExclusive = seek != ESeek::Upper;
-            return (!beginKey.Count() || beginKey.CompareTo(key, keyDefaults) <= 0)
-                && (!endKey.Count() || endKey.CompareTo(key, keyDefaults) >= endKeyExclusive);
+            return (!beginKey || beginKey.CompareTo(key, keyDefaults) <= 0)
+                && (!endKey || endKey.CompareTo(key, keyDefaults) >= endKeyExclusive);
         }
 
         /**

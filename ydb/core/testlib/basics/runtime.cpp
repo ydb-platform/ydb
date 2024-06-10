@@ -7,8 +7,6 @@
 #include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
 #include <util/generic/xrange.h>
 
-#include <ydb/core/protos/pqconfig.pb.h>
-
 namespace NActors {
 
     TTestBasicRuntime::~TTestBasicRuntime()

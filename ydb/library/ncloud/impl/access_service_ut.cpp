@@ -10,8 +10,6 @@
 
 #include <util/string/builder.h>
 
-#include <ydb/core/protos/pqconfig.pb.h>
-
 using namespace NKikimr;
 
 struct TTestSetup : public NUnitTest::TBaseFixture {

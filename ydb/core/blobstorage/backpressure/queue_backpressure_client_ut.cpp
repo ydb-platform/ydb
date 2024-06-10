@@ -13,8 +13,6 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <util/folder/tempdir.h>
 
-#include <ydb/core/protos/pqconfig.pb.h>
-
 using namespace NKikimr;
 using namespace NActors;
 

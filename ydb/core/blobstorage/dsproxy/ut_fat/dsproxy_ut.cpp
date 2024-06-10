@@ -55,8 +55,6 @@
 #include <util/system/event.h>
 #include <util/system/sanitizers.h>
 
-#include <ydb/core/protos/pqconfig.pb.h>
-
 #define RT_EXECUTOR_POOL 0
 
 

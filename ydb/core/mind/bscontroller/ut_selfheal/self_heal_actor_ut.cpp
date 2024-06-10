@@ -4,8 +4,6 @@
 #include <ydb/core/mind/bscontroller/impl.h>
 #include <ydb/core/mind/bscontroller/layout_helpers.h>
 
-#include <ydb/core/protos/pqconfig.pb.h>
-
 using namespace NActors;
 using namespace NKikimr;
 using namespace NKikimr::NBsController;

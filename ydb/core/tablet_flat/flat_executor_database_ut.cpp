@@ -9,8 +9,6 @@
 #include <util/system/sanitizers.h>
 #include <util/system/valgrind.h>
 
-#include <ydb/core/protos/pqconfig.pb.h>
-
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 

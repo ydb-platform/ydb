@@ -20,6 +20,8 @@ int main(int argc, const char* argv[]) {
     NActors::TActorSystem actorSystem(actorySystemSetup);
     actorSystem.Start();
 
+    actorSystem.Register(CreateSelfPingActor(TDuration::Seconds(1)).Release());
+    
     NActors::TActorId writeActor = actorSystem.Register(CreateWriteActor().Release());
     actorSystem.Register(CreateReadActor(std::cin, writeActor).Release());
 

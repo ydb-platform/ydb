@@ -11,8 +11,8 @@ public:
 private:
     struct TUploadParams {
         TUploadParams();
-        ui32 Threads = 32;
-        ui32 MaxInFly = 128;
+        ui32 Threads;
+        ui32 MaxInFlight = 128;
     };
     class TUploadCommand;
 
@@ -35,8 +35,8 @@ private:
     NYdbWorkload::TWorkloadDataInitializer::TPtr Initializer;
     THolder<TProgressBar> Bar;
     TAdaptiveLock Lock;
-    NThreading::TAsyncSemaphore::TPtr InFlySemaphore;
-    TAtomic HasErrors;
+    NThreading::TAsyncSemaphore::TPtr InFlightSemaphore;
+    TAtomic ErrorsCount;
 };
 
 }

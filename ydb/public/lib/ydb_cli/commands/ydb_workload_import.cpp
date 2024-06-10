@@ -22,8 +22,8 @@ void TWorkloadCommandImport::Config(TConfig& config) {
         .Optional().DefaultValue(UploadParams.Threads).StoreResult(&UploadParams.Threads);
     config.Opts->AddLongOption("bulk-size", "Data portion size in rows for upload.")
         .DefaultValue(WorkloadParams.BulkSize).StoreResult(&WorkloadParams.BulkSize);
-    config.Opts->AddLongOption("max-in-fly", "Maximum number if data portions that can be simultaneously in process.")
-        .DefaultValue(UploadParams.MaxInFly).StoreResult(&UploadParams.MaxInFly);
+    config.Opts->AddLongOption("max-in-flight", "Maximum number if data portions that can be simultaneously in process.")
+        .DefaultValue(UploadParams.MaxInFlight).StoreResult(&UploadParams.MaxInFlight);
 }
 
 TWorkloadCommandImport::TUploadParams::TUploadParams()
@@ -43,8 +43,8 @@ TWorkloadCommandImport::TUploadCommand::TUploadCommand(NYdbWorkload::TWorkloadPa
 
 int TWorkloadCommandImport::TUploadCommand::DoRun(NYdbWorkload::IWorkloadQueryGenerator& /*workloadGen*/, TConfig& /*config*/) {
     auto dataGeneratorList = Initializer->GetBulkInitialData();
-    AtomicSet(HasErrors, 0);
-    InFlySemaphore = NThreading::TAsyncSemaphore::Make(UploadParams.MaxInFly);
+    AtomicSet(ErrorsCount, 0);
+    InFlightSemaphore = NThreading::TAsyncSemaphore::Make(UploadParams.MaxInFlight);
     for (auto dataGen : dataGeneratorList) {
         TThreadPoolParams params;
         params.SetCatching(false);
@@ -60,13 +60,13 @@ int TWorkloadCommandImport::TUploadCommand::DoRun(NYdbWorkload::IWorkloadQueryGe
             }, pool));
         }
         NThreading::WaitAll(sendings).Wait();
-        const bool wasErrors = AtomicGet(HasErrors);
-        Cout << "Fill table " << dataGen->GetName() << "..."  << (wasErrors ? "Breaked" : "OK" ) << " " << Bar->GetCurProgress() << " / " << Bar->GetCapacity() << " (" << (Now() - start) << ")" << Endl;
-        if (wasErrors) {
+        const bool wereErrors = AtomicGet(ErrorsCount);
+        Cout << "Fill table " << dataGen->GetName() << (wereErrors ? "Failed" : "OK" ) << " " << Bar->GetCurProgress() << " / " << Bar->GetCapacity() << " (" << (Now() - start) << ")" << Endl;
+        if (wereErrors) {
             break;
         }
     }
-    return AtomicGet(HasErrors) ? EXIT_FAILURE : EXIT_SUCCESS;
+    return AtomicGet(ErrorsCount) ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 
 TAsyncStatus TWorkloadCommandImport::TUploadCommand::SendDataPortion(NYdbWorkload::IBulkDataGenerator::TDataPortionPtr portion) const {
@@ -98,10 +98,10 @@ TAsyncStatus TWorkloadCommandImport::TUploadCommand::SendDataPortion(NYdbWorkloa
 
 void TWorkloadCommandImport::TUploadCommand::ProcessDataGenerator(std::shared_ptr<NYdbWorkload::IBulkDataGenerator> dataGen) noexcept try {
     TDeque<NThreading::TFuture<void>> sendings;
-    for (auto portions = dataGen->GenerateDataPortion(); !portions.empty() && !AtomicGet(HasErrors); portions = dataGen->GenerateDataPortion()) {
+    for (auto portions = dataGen->GenerateDataPortion(); !portions.empty() && !AtomicGet(ErrorsCount); portions = dataGen->GenerateDataPortion()) {
         for (const auto& data: portions) {
             sendings.emplace_back(
-                InFlySemaphore->AcquireAsync().Apply([this, data](const auto& sem) {
+                InFlightSemaphore->AcquireAsync().Apply([this, data](const auto& sem) {
                     auto ar = MakeAtomicShared<NThreading::TAsyncSemaphore::TAutoRelease>(sem.GetValueSync()->MakeAutoRelease());
                     return SendDataPortion(data).Apply(
                         [ar, data, this](const TAsyncStatus& result) {
@@ -109,14 +109,14 @@ void TWorkloadCommandImport::TUploadCommand::ProcessDataGenerator(std::shared_pt
                             auto guard = Guard(Lock);
                             if (!res.IsSuccess()) {
                                 Cerr << "Bulk upset to " << data->Table << " failed, " << res.GetStatus() << ", " << res.GetIssues().ToString() << Endl;
-                                AtomicSet(HasErrors, 1);
+                                AtomicIncrement(ErrorsCount);
                             }
                             Bar->AddProgress(data->Size);
                         });
                     }
                 )
             );
-            while(sendings.size() > UploadParams.MaxInFly) {
+            while(sendings.size() > UploadParams.MaxInFlight) {
                 sendings.pop_front();
             }
         }
@@ -126,6 +126,6 @@ void TWorkloadCommandImport::TUploadCommand::ProcessDataGenerator(std::shared_pt
     auto g = Guard(Lock);
     Cerr << "Fill table " << dataGen->GetName() << " failed: " << CurrentExceptionMessage() << ", backtrace: ";
     PrintBackTrace();
-    AtomicSet(HasErrors, 1);
+    AtomicSet(ErrorsCount, 1);
 }
 }

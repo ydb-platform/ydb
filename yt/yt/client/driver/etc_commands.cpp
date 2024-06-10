@@ -258,9 +258,7 @@ public:
             CreateZeroCopyAdapter(
                 CreateAsyncAdapter(
                     &SyncInput_,
-                    Context_->GetClient()->GetConnection()->GetInvoker()
-                )
-            ))
+                    Context_->GetClient()->GetConnection()->GetInvoker())))
         , SyncOutput_(Output_)
         , AsyncOutput_(CreateAsyncAdapter(
             &SyncOutput_,

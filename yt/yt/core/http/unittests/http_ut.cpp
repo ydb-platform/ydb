@@ -447,8 +447,7 @@ TEST(THttpOutputTest, LargeResponse)
         "\r\n"
         "0\r\n"
         "\r\n",
-        Size
-    ));
+        Size));
 
     if (TStringBuf(fake->LargeRef.Begin(), fake->LargeRef.Size()) != body) {
         ADD_FAILURE() << "Wrong large chunk";

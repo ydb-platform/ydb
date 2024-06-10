@@ -540,8 +540,7 @@ TFuture<ITransactionPtr> TTransaction::StartTransaction(
             } else {
                 return {New<TTransaction>(Client_, ClientIndex_, result.Value())};
             }
-        }
-    ));
+        }));
 }
 
 DEFINE_REFCOUNTED_TYPE(TTransaction)

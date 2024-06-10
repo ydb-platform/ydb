@@ -244,8 +244,8 @@ std::vector<NChunkClient::TLegacyReadRange> TRichYPath::GetRanges() const
         return std::vector<TLegacyReadRange>({
             TLegacyReadRange(
                 optionalLowerLimit.value_or(TLegacyReadLimit()),
-                optionalUpperLimit.value_or(TLegacyReadLimit())
-            )});
+                optionalUpperLimit.value_or(TLegacyReadLimit())),
+            });
     } else {
         return optionalRanges.value_or(std::vector<TLegacyReadRange>({TLegacyReadRange()}));
     }

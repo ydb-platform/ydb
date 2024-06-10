@@ -40,9 +40,9 @@ ydbops restart \
 
 ### Profile management commands
 
-Currently `ydbops` does not support creation, modification and activation of profiles through CLI [the way that {{ ydb-short-name }} CLI does it](../ydb-cli/profile/index.md#commands).
+Currently, `ydbops` does not support the creation, modification, and activation of profiles via the CLI commands [the way that {{ ydb-short-name }} CLI does](../ydb-cli/profile/index.md#commands).
 
-Please create a configuration file manually. 
+The configuration file needs to be created manually.
 
 ### Configuration file reference
 

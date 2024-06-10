@@ -449,7 +449,7 @@ namespace NFq {
             Test(
                 NYql::EDatabaseType::Greenplum,
                 NYql::NConnector::NApi::EProtocol::NATIVE,
-                "https://mdb.api.cloud.yandex.net:443/managed-greenplum/v1/clusters/c9qfrvbs21vo0a56s5hm/hosts",
+                "https://mdb.api.cloud.yandex.net:443/managed-greenplum/v1/clusters/etn021us5r9rhld1vgbh/master-hosts",
                 "200",
                 R"({
             "hosts": [
@@ -472,39 +472,39 @@ namespace NFq {
                 NYql::TDatabaseResolverResponse::TDatabaseDescription{
                     TString{""},
                     TString{"rc1d-51jc89m9q72vcdkn.db.yandex.net"},
-                    5432,
+                    6432,
                     TString(""),
                     true},
                 {});
         }
 
-        Y_UNIT_TEST(Greenplum_AccessDenied) {
+        Y_UNIT_TEST(Greenplum_PermissionDenied) {
             NYql::TIssues issues{
                 NYql::TIssue(
                     TStringBuilder{} << MakeErrorPrefix(
                                             "mdb.api.cloud.yandex.net:443",
-                                            "/managed-greenplum/v1/clusters/c9qfrvbs21vo0a56s5hm/hosts",
-                                            "c9qfrvbs21vo0a56s5hm",
+                                            "/managed-greenplum/v1/clusters/etn021us5r9rhld1vgbh/master-hosts",
+                                            "etn021us5r9rhld1vgbh",
                                             NYql::EDatabaseType::Greenplum)
-                                     << NoPermissionStr << " Please check that your service account has the necessary permissions.")};
+                                     << NoPermissionStr)};
 
             Test(
                 NYql::EDatabaseType::Greenplum,
                 NYql::NConnector::NApi::EProtocol::NATIVE,
-                "https://mdb.api.cloud.yandex.net:443/managed-greenplum/v1/clusters/c9qfrvbs21vo0a56s5hm/hosts",
-                "401",
+                "https://mdb.api.cloud.yandex.net:443/managed-greenplum/v1/clusters/etn021us5r9rhld1vgbh/master-hosts",
+                "403",
                 R"(
-            {
-                "code": 16,
-                "message": "Access denied: you do not have sufficient permissions",
-                "details": [
-                    {
-                        "@type": "type.googleapis.com/google.rpc.RequestInfo",
-                        "requestId": "a943c092-d596-4e0e-ae7b-1f67f9d8164e"
-                    }
-                ]
-            }
-        )",
+                {
+                    "code": 7,
+                    "message": "Permission denied",
+                    "details": [
+                        {
+                            "@type": "type.googleapis.com/google.rpc.RequestInfo",
+                            "requestId": "a943c092-d596-4e0e-ae7b-1f67f9d8164e"
+                        }
+                    ]
+                }
+            )",
                 NYql::TDatabaseResolverResponse::TDatabaseDescription{},
                 issues);
         }

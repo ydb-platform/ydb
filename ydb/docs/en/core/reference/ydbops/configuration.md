@@ -32,7 +32,7 @@ Calling the same `ydbops restart` command with profile options enabled makes the
 ```bash
 ydbops restart \
  --config-file ./config.yaml \
- --tenant --tenant-list=my-tenant
+ --tenant --tenant-list=<tenant-name>
 ```
 
 For the invocation above, the following `config.yaml` is assumed to be present:
@@ -77,7 +77,7 @@ my-profile:
 
   # if working with YDB clusters in Kubernetes, kubeconfig path can be specified:
   kubeconfig: /path/to/kube/config
-  k8s-namespace: your-default-k8s-namespace
+  k8s-namespace: <k8s-namespace>
 ```
 
 ## Environment variables {#environment-variables}

@@ -1,0 +1,100 @@
+# Настройка ydbops
+
+{% include [warning.md](_includes/warning.md) %}
+
+`ydbops` можно запустить, указав все необходимые аргументы командной строки при вызове команды. 
+Однако, есть две функции, которые позволяют избежать повторения часто используемых аргументов:
+
+
+- [Файл конфигурации](#config-file)
+- [Переменные окружения](#environment-variables)
+
+## Файл конфигурации {#config-file}
+
+Файл конфигурации для `ydbops` — это файл в формате YAML, содержащий несколько профилей. Профили для `ydbops` работают так же, как и профили в [{{ ydb-short-name }} CLI](../ydb-cli/profile/index.md) (но профили {{ ydb-short-name }} CLI не взаимозаменяемы с профилями ydbops, так как могут быть опции, которые имеют смысл для ydbops и не имеют смысла для {{ ydb-short-name }} CLI и наоборот).
+
+Некоторые параметры командной строки могут быть записаны в файл конфигурации вместо того, чтобы указывать их каждый раз напрямую при вызове `ydbops`.
+
+### Пример
+
+Вызов команды `ydbops restart` без профиля:
+
+```bash
+ydbops restart \
+ -e grpc://<hostname>:2135 \
+ --kubeconfig ~/.kube/config \
+ --k8s-namespace <k8s-namespace> \
+ --user admin \
+ --password-file ~/<password-file> \
+ --tenant --tenant-list=<tenant-name>
+```
+
+Вызов той же команды `ydbops restart` с включенными параметрами профиля делает команду намного короче:
+
+```bash
+ydbops restart \
+ --config-file ./config.yaml \
+ --tenant --tenant-list=<tenant-name>
+```
+
+Для указанного выше вызова предполагается наличие следующего `config.yaml`:
+
+```yaml
+current-profile: my-profile
+my-profile:
+  endpoint: grpc://<hostname>:2135
+  user: admin
+  password-file: ~/<password-file>
+  k8s-namespace: <k8s-namespace>
+  kubeconfig: ~/.kube/config
+```
+
+### Команды управления профилями
+
+В настоящее время `ydbops` не поддерживает создание, изменение и активацию профилей через команды CLI [так, как это делает {{ ydb-short-name }} CLI](../ydb-cli/profile/index.md#commands).
+
+Файл конфигурации необходимо создавать вручную.
+
+### Максимально полный файл конфигурации
+
+Пример файла конфигурации со всеми возможными параметрами и примерами значений (скорее всего, не все опции будут нужны одновременно):
+
+```yaml
+# специальный ключ `current-profile` может быть указан для 
+# использования в качестве активного профиля по умолчанию при вызове CLI
+current-profile: my-profile
+
+my-profile:
+  endpoint: grpc://your.ydb.cluster.fqdn:2135
+
+  # расположение файла CA при использовании grpcs в endpoint
+  ca-file: /path/to/custom/ca/file
+
+  # имя пользователя и файл пароля, если используется аутентификация при помощи логина и пароля:
+  user: your-ydb-user-name
+  password-file: /path/to/password-file
+
+  # если используется аутентификация при помощи access token
+  token-file: /path/to/ydb/token
+
+  # если идет работа с YDB кластерами под Kubernetes, можно указать путь к kubeconfig:
+  kubeconfig: /path/to/kube/config
+  k8s-namespace: <k8s-namespace>
+```
+
+## Переменные окружения {#environment-variables}
+
+Кроме того, есть возможность указать несколько переменных окружения вместо передачи аргументов командной строки или использования [файлов конфигурации](#config-files).
+
+
+Для справки о приоритете при определении опции в нескольких местах, вызовите `ydbops --help`.
+
+- `YDB_TOKEN` может быть передан вместо флага `--token-file` или параметра профиля `token-file`.
+- `YDB_PASSWORD` может быть передан вместо флага `--password-file` или параметра профиля `password-file`.
+- `YDB_USER` может быть передан вместо флага `--user` или параметра профиля `user`.
+ 
+## Смотри также
+
+- [{#T}](index.md)
+- [{#T}](install.md)
+- [{#T}](rolling-restart-scenario.md)

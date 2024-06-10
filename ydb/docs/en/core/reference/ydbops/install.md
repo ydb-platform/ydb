@@ -2,7 +2,7 @@
 
 {% include [warning.md](_includes/warning.md) %}
 
-Currently, only building from source is available as an installation option. The pre-compiled binaries will be available later.
+Currently, only building from source is available as an installation option. The pre-compiled executables will be available later.
 
 ### Building from source
 
@@ -17,7 +17,7 @@ Currently, only building from source is available as an installation option. The
     ```bash
     go build
     ```
-    The binary `ydbops` will be available in the repository root folder.
+    The `ydbops` executable will be available in the repository root folder.
 
 ### Download the binary from releases page
 

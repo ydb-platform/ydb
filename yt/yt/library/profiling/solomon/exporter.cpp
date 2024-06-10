@@ -952,8 +952,8 @@ TErrorOr<TReadWindow> TSolomonExporter::SelectReadWindow(
         int index = Registry_->IndexOf(iteration / gridFactor);
         if (time >= now - period && time < now) {
             if (readWindow.empty() ||
-                readWindow.back().first.size() >= static_cast<size_t>(gridSubsample)
-            ) {
+                readWindow.back().first.size() >= static_cast<size_t>(gridSubsample))
+            {
                 readWindow.emplace_back(std::vector<int>{index}, time);
             } else {
                 readWindow.back().first.push_back(index);

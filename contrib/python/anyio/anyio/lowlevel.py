@@ -114,12 +114,10 @@ class RunVar(Generic[T]):
             return run_vars
 
     @overload
-    def get(self, default: D) -> T | D:
-        ...
+    def get(self, default: D) -> T | D: ...
 
     @overload
-    def get(self) -> T:
-        ...
+    def get(self) -> T: ...
 
     def get(
         self, default: D | Literal[_NoValueSet.NO_VALUE_SET] = NO_VALUE_SET

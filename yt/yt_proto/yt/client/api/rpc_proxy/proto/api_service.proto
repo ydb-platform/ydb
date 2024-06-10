@@ -682,7 +682,7 @@ message TRspPullQueue
     optional int64 start_offset = 2;
 }
 
-message TReqPullConsumer
+message TReqPullQueueConsumer
 {
     optional string consumer_path = 1;
     optional string queue_path = 2;
@@ -693,7 +693,7 @@ message TReqPullConsumer
     optional EReplicaConsistency replica_consistency = 6;
 }
 
-message TRspPullConsumer
+message TRspPullQueueConsumer
 {
     optional TRowsetDescriptor rowset_descriptor = 1;
     optional int64 start_offset = 2;
@@ -2895,6 +2895,19 @@ message TRspGetPipelineStatus
 {
     // TODO(babenko): provide native proto enum
     required int32 state = 1; // EPipelineState
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqGetFlowView
+{
+    required string pipeline_path = 1;
+    optional string view_path = 2;
+}
+
+message TRspGetFlowView
+{
+    required bytes flow_view_part = 1; // YSON
 }
 
 ////////////////////////////////////////////////////////////////////////////////

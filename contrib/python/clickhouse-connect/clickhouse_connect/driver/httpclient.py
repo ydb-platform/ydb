@@ -22,7 +22,7 @@ from clickhouse_connect.driver.compression import available_compression
 from clickhouse_connect.driver.exceptions import DatabaseError, OperationalError, ProgrammingError
 from clickhouse_connect.driver.external import ExternalData
 from clickhouse_connect.driver.httputil import ResponseSource, get_pool_manager, get_response_data, \
-    default_pool_manager, get_proxy_manager, all_managers, check_env_proxy, check_conn_reset
+    default_pool_manager, get_proxy_manager, all_managers, check_env_proxy, check_conn_expiration
 from clickhouse_connect.driver.insert import InsertContext
 from clickhouse_connect.driver.summary import QuerySummary
 from clickhouse_connect.driver.query import QueryResult, QueryContext, quote_identifier, bind_query
@@ -68,7 +68,8 @@ class HttpClient(Client):
                  http_proxy: Optional[str] = None,
                  https_proxy: Optional[str] = None,
                  server_host_name: Optional[str] = None,
-                 apply_server_timezone: Optional[Union[str, bool]] = None):
+                 apply_server_timezone: Optional[Union[str, bool]] = None,
+                 show_clickhouse_errors: Optional[bool] = None):
         """
         Create an HTTP ClickHouse Connect client
         See clickhouse_connect.get_client for parameters
@@ -114,7 +115,7 @@ class HttpClient(Client):
         self._read_format = self._write_format = 'Native'
         self._transform = NativeTransform()
 
-        # There is use cases when client need to disable timeouts.
+        # There are use cases when the client needs to disable timeouts.
         if connect_timeout is not None:
             connect_timeout = coerce_int(connect_timeout)
         if send_receive_timeout is not None:
@@ -147,7 +148,8 @@ class HttpClient(Client):
                          query_limit=query_limit,
                          query_retries=query_retries,
                          server_host_name=server_host_name,
-                         apply_server_timezone=apply_server_timezone)
+                         apply_server_timezone=apply_server_timezone,
+                         show_clickhouse_errors=show_clickhouse_errors)
         self.params = self._validate_settings(ch_settings)
         comp_setting = self._setting_status('enable_http_compression')
         self._send_comp_setting = not comp_setting.is_set and comp_setting.is_writable
@@ -165,8 +167,7 @@ class HttpClient(Client):
             self.params[key] = str_value
 
     def get_client_setting(self, key) -> Optional[str]:
-        values = self.params.get(key)
-        return values[0] if values else None
+        return self.params.get(key)
 
     def _prep_query(self, context: QueryContext):
         final_query = super()._prep_query(context)
@@ -357,8 +358,11 @@ class HttpClient(Client):
             response.close()
 
         if err_content:
-            err_msg = common.format_error(err_content.decode(errors='backslashreplace'))
-            err_str = f':{err_str}\n {err_msg}'
+            if self.show_clickhouse_errors:
+                err_msg = common.format_error(err_content.decode(errors='backslashreplace'))
+                err_str = f':{err_str}\n {err_msg}'
+            else:
+                err_str = 'The ClickHouse server returned an error.'
         raise OperationalError(err_str) if retried else DatabaseError(err_str) from None
 
     def _raw_request(self,
@@ -399,7 +403,7 @@ class HttpClient(Client):
             kwargs['fields'] = fields
         else:
             kwargs['body'] = data
-        check_conn_reset(self.http)
+        check_conn_expiration(self.http)
         query_session = final_params.get('session_id')
         while True:
             attempts += 1

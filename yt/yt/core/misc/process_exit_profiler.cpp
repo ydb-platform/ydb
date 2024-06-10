@@ -57,7 +57,7 @@ NProfiling::TCounter TProcessExitProfiler::MakeExitCodeCounter(int exitCode)
 {
     return Profiler_
         .WithTag("non_zero_exit_code", ToString(exitCode))
-        .Counter("count");
+        .Counter("/count");
 }
 
 NProfiling::TCounter& TProcessExitProfiler::GetOrCreateSignalExitCounter(int signal)
@@ -74,7 +74,7 @@ NProfiling::TCounter TProcessExitProfiler::MakeSignalExitCounter(int signal)
 {
     return Profiler_
         .WithTag("terminated_by_signal", SignalName(signal))
-        .Counter("count");
+        .Counter("/count");
 }
 
 TString TProcessExitProfiler::SignalName(int signal)

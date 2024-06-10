@@ -48,10 +48,7 @@
 - source_filter: "^contrib/tools/bison/"
   includes:
     - error.h:       contrib/tools/bison/lib/error.h
-    - fcntl.h:       contrib/tools/bison/lib/platform/posix/fcntl.h
-    - getopt.h:      contrib/tools/bison/lib/platform/posix/getopt.h
     - obstack.h:     contrib/tools/bison/lib/obstack.h
-    - regex.h:       contrib/tools/bison/lib/regex.h
     - system.h
     # ucrt headers are included by bison/lib in a very specific way
     - ../ucrt/fcntl.h

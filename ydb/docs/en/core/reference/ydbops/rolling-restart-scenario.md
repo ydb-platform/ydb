@@ -58,7 +58,7 @@ ydbops restart --tenant-list=/domain/database_name_1,/domain/database_name_2
 
 ### Restarting only specific nodes
 
-It is possible to restart only specific nodes by supplying FQDNs with a `--hosts` option:
+It is possible to restart nodes only on specific hosts by supplying FQDNs with the `--hosts` option:
 
 ```
 ydbops restart --hosts=node1.some.zone,node2.some.zone

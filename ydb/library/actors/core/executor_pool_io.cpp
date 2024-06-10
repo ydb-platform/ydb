@@ -30,31 +30,27 @@ namespace NActors {
         i16 workerId = wctx.WorkerId;
         Y_DEBUG_ABORT_UNLESS(workerId < PoolThreads);
 
-        NHPTimer::STime elapsed = 0;
-        NHPTimer::STime parked = 0;
-        NHPTimer::STime hpstart = GetCycleCountFast();
-        NHPTimer::STime hpnow;
-
         const TAtomic x = AtomicDecrement(Semaphore);
         if (x < 0) {
             TExecutorThreadCtx& threadCtx = Threads[workerId];
             ThreadQueue.Push(workerId + 1, revolvingCounter);
-            hpnow = GetCycleCountFast();
-            elapsed += hpnow - hpstart;
+
+            NHPTimer::STime hpnow = GetCycleCountFast();
+            NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
+            TlsThreadContext->ElapsingActorActivity.store(Max<ui64>(), std::memory_order_release);
+            wctx.AddElapsedCycles(ActorSystemIndex, hpnow - hpprev);
+
             if (threadCtx.WaitingPad.Park())
                 return 0;
-            hpstart = GetCycleCountFast();
-            parked += hpstart - hpnow;
+
+            hpnow = GetCycleCountFast();
+            hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
+            TlsThreadContext->ElapsingActorActivity.store(ActorSystemIndex, std::memory_order_release);
+            wctx.AddParkedCycles(hpnow - hpprev);
         }
 
         while (!StopFlag.load(std::memory_order_acquire)) {
             if (const ui32 activation = Activations.Pop(++revolvingCounter)) {
-                hpnow = GetCycleCountFast();
-                elapsed += hpnow - hpstart;
-                wctx.AddElapsedCycles(ActorSystemIndex, elapsed);
-                if (parked > 0) {
-                    wctx.AddParkedCycles(parked);
-                }
                 return activation;
             }
             SpinLockPause();

@@ -141,6 +141,7 @@ public:
                         EDirection direction = EDirection::Forward,
                         TRowVersion snapshot = TRowVersion::Max());
 
+    TSizeEnv CreateSizeEnv();
     void CalculateReadSize(TSizeEnv& env, ui32 table, TRawVals minKey, TRawVals maxKey,
                         TTagsRef tags, ui64 readFlags, ui64 itemsLimit, ui64 bytesLimit,
                         EDirection direction = EDirection::Forward,
@@ -256,7 +257,6 @@ public:
     void RollUpRemoveRowVersions(ui32 table, const TRowVersion& lower, const TRowVersion& upper);
 
     size_t GetCommitRedoBytes() const;
-    bool ValidateCommit(TString&);
 
     TCompactionStats GetCompactionStats(ui32 table) const;
 

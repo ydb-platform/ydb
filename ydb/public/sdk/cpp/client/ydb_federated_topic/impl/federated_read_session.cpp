@@ -17,7 +17,7 @@ NTopic::TTopicClientSettings FromFederated(const TFederatedTopicClientSettings& 
 template <typename TEvent, typename TFederatedEvent>
 typename std::function<void(TEvent&)> WrapFederatedHandler(std::function<void(TFederatedEvent&)> outerHandler, std::shared_ptr<TDbInfo> db, std::shared_ptr<TEventFederator> federator) {
     if (outerHandler) {
-        return [outerHandler, db = std::move(db), &federator](TEvent& ev) {
+        return [outerHandler, db = std::move(db), federator = std::move(federator)](TEvent& ev) {
             auto fev = federator->LocateFederate(ev, std::move(db));
             return outerHandler(fev);
         };

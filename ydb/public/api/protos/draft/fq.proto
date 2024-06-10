@@ -501,6 +501,7 @@ message ConnectionSetting {
         OBJECT_STORAGE = 4;
         MONITORING = 5;
         POSTGRESQL_CLUSTER = 6;
+        GREENPLUM_CLUSTER = 7;
     }
 
     oneof connection {
@@ -510,6 +511,7 @@ message ConnectionSetting {
         ObjectStorageConnection object_storage = 4;
         Monitoring monitoring = 5;
         PostgreSQLCluster postgresql_cluster = 6;
+        GreenplumCluster = greenplum_cluster = 7;
     }
 }
 

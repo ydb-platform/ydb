@@ -30,8 +30,6 @@ public:
     const TString& GetName() const;
     TFieldTag GetTag() const;
     bool IsDeprecated() const;
-    int GetMinVersion() const;
-    int GetMaxVersion() const;
 
     const TFieldSchemaPtr& GetSchema() const;
 

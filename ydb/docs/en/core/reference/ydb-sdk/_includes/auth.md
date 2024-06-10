@@ -127,10 +127,10 @@ In the table below, `creds_json` means a JSON with parameters for exchanging the
 |`aud`|string|`aud` JWT standard claim (audience)|optional|
 |`jti`|string|`jti` JWT standard claim (JWT id)|optional|
 |`ttl`|string|JWT token TTL|`1h`|
-|**Description of fields of creds_json (FIXED)**|||||
-|type|string|Token source type. Set `FIXED`||
-|token|string|Token value||
-|token-type|string|Token type value. It will become subject_token_type/actor_token_type parameter in [token exchange request](https://www.rfc-editor.org/rfc/rfc8693)||
+|**Description of fields of `creds_json` (FIXED)**|||||
+|`type`|string|Token source type. Set `FIXED`||
+|`token`|string|Token value||
+|`token-type`|string|Token type value. It will become `subject_token_type/actor_token_type` parameter in [token exchange request](https://www.rfc-editor.org/rfc/rfc8693).||
 
 ## Peculiarities of {{ ydb-short-name }} Python SDK v2 (deprecated version)
 

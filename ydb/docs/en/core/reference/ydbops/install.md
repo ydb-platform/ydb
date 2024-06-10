@@ -6,7 +6,7 @@ The article is being updated. Expect new content to appear and minor fixes to ex
 
 {% endnote %}
 
-Currently only building from source is available as an installation option. The compiled binaries will be available soon.
+Currently, only building from source is available as an installation option. The pre-compiled binaries will be available later.
 
 ### Building from source
 

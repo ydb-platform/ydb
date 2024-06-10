@@ -181,13 +181,9 @@ void TDirectReadSessionControlCallbacks::ScheduleCallback(TDuration delay, std::
     );
 }
 
-void TDirectReadSessionControlCallbacks::StopPartitionSession(TPartitionSessionId partitionSessionId) {
+void TDirectReadSessionControlCallbacks::StopPartitionSession(TPartitionSessionId partitionSessionId, bool graceful) {
     if (auto s = SingleClusterReadSessionContextPtr->LockShared()) {
-        with_lock (s->Lock) {
-            if (s->DirectReadSessionManager) {
-                s->DirectReadSessionManager->StopPartitionSession(partitionSessionId);
-            }
-        }
+        s->StopPartitionSession(partitionSessionId, graceful);
     }
 }
 
@@ -329,7 +325,7 @@ void TDirectReadSessionManager::StopPartitionSession(TPartitionSessionId partiti
     DeletePartitionSession(partitionSessionId, sessionIt);
 }
 
-void TDirectReadSessionManager::StopPartitionSessionGracefully(TPartitionSessionId partitionSessionId, i64 committedOffset, TDirectReadId lastDirectReadId) {
+void TDirectReadSessionManager::StopPartitionSessionGracefully(TPartitionSessionId partitionSessionId, TDirectReadId lastDirectReadId) {
     auto locIt = Locations.find(partitionSessionId);
     Y_ABORT_UNLESS(locIt != Locations.end());
 
@@ -337,7 +333,7 @@ void TDirectReadSessionManager::StopPartitionSessionGracefully(TPartitionSession
     Y_ABORT_UNLESS(sessionIt != NodeSessions.end());
 
     if (auto session = sessionIt->second->LockShared()) {
-        session->SetLastDirectReadId(partitionSessionId, committedOffset, lastDirectReadId);
+        session->SetLastDirectReadId(partitionSessionId, lastDirectReadId);
     }
 }
 
@@ -412,12 +408,16 @@ void TDirectReadSession::AddPartitionSession(TDirectReadPartitionSession&& sessi
     }
 }
 
-void TDirectReadSession::SetLastDirectReadId(TPartitionSessionId partitionSessionId, i64 committedOffset, TDirectReadId lastDirectReadId) {
+void TDirectReadSession::SetLastDirectReadId(TPartitionSessionId partitionSessionId, TDirectReadId lastDirectReadId) {
     with_lock (Lock) {
         auto it = PartitionSessions.find(partitionSessionId);
         Y_ABORT_UNLESS(it != PartitionSessions.end());
-        it->second.LastDirectReadId = lastDirectReadId;
-        it->second.CommittedOffset = committedOffset;
+
+        if (it->second.LastDirectReadId < lastDirectReadId) {
+            it->second.LastDirectReadId = lastDirectReadId;
+        } else {
+            ControlCallbacks->StopPartitionSession(partitionSessionId, /* graceful= */ true);
+        }
     }
 }
 
@@ -592,10 +592,10 @@ void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::Ini
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     Y_ABORT_UNLESS(State == EState::INITIALIZING);
+    State = EState::WORKING;
 
     LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Got InitDirectReadResponse " << response.ShortDebugString());
 
-    State = EState::WORKING;
     RetryState = nullptr;
 
     // Successful init. Send StartDirectReadPartitionSession requests.
@@ -666,17 +666,16 @@ void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::Dir
 
     ControlCallbacks->OnDirectReadDone(std::move(response), deferred);
 
-    // TODO(qyryq) Ситуация: получаем DirectReadResponse, после этого приходит в контрольной сессии
-    // StopPartitionSession с тем же идентификатором direct_read_id.
-    // Следующий код в этом случае уже не выполнится. Кто должен отправить клиенту TStopPartitionSessionEvent?
+    // If here we get a DirectReadResponse(direct_read_id) and after that the control session receives
+    // a StopPartitionSession command with the same direct_read_id, we need to stop it from the control session.
 
     if (partitionSession.LastDirectReadId.Defined() && partitionSession.NextDirectReadId == partitionSession.LastDirectReadId) {
         // We've already got a graceful StopPartitionSessionRequest through the control session,
         // that told us the LastDirectReadId, we should read up to.
         // We have read all available data, time to stop the partition session.
-        DeletePartitionSessionImpl(partitionSession.PartitionSessionId);
+        DeletePartitionSessionImpl(partitionSessionId);
 
-        ControlCallbacks->StopPartitionSession(partitionSession.PartitionSessionId);
+        ControlCallbacks->StopPartitionSession(partitionSessionId, /* graceful= */ true);
 
         if (Empty()) {
             ControlCallbacks->DeleteNodeSessionIfEmpty(NodeId);
@@ -732,10 +731,9 @@ void TDirectReadSession::InitImpl(TDeferredActions<false>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     Y_ABORT_UNLESS(State == EState::CONNECTED);
+    State = EState::INITIALIZING;
 
     LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Successfully connected. Initializing session");
-
-    State = EState::INITIALIZING;
 
     TDirectReadClientMessage req;
     auto& init = *req.mutable_init_direct_read_request();
@@ -824,15 +822,13 @@ bool TDirectReadSession::Reconnect(const TPlainStatus& status) {
     NYdbGrpc::IQueueClientContextPtr connectDelayContext = nullptr;
 
     with_lock (Lock) {
-        connectContext = ClientContext->CreateContext();
-        connectTimeoutContext = ClientContext->CreateContext();
-        if (!connectContext || !connectTimeoutContext) {
+        if (State >= EState::CLOSING) {
             return false;
         }
 
-        if (State == EState::CLOSING) {
-            ::NYdb::NTopic::Cancel(connectContext);
-            ::NYdb::NTopic::Cancel(connectTimeoutContext);
+        connectContext = ClientContext->CreateContext();
+        connectTimeoutContext = ClientContext->CreateContext();
+        if (!connectContext || !connectTimeoutContext) {
             return false;
         }
 

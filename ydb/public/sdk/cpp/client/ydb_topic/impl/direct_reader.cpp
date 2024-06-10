@@ -256,6 +256,8 @@ void TDirectReadSessionManager::StartPartitionSession(TDirectReadPartitionSessio
 }
 
 void TDirectReadSessionManager::StartPartitionSessionImpl(TDirectReadPartitionSession&& partitionSession) {
+    Y_ABORT_UNLESS(Lock.IsLocked());
+
     auto nodeId = partitionSession.Location.GetNodeId();
     LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "StartPartitionSession " << partitionSession);
     TDirectReadSessionContextPtr& session = NodeSessions[nodeId];
@@ -431,6 +433,8 @@ void TDirectReadSession::DeletePartitionSession(TPartitionSessionId partitionSes
 }
 
 void TDirectReadSession::DeletePartitionSessionImpl(TPartitionSessionId partitionSessionId) {
+    Y_ABORT_UNLESS(Lock.IsLocked());
+
     PartitionSessions.erase(partitionSessionId);
 }
 
@@ -510,6 +514,7 @@ void TDirectReadSession::OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t c
 
 void TDirectReadSession::SendStartRequestImpl(TPartitionSessionId id, bool delayedCall) {
     Y_ABORT_UNLESS(Lock.IsLocked());
+
     auto it = PartitionSessions.find(id);
 
     if (it == PartitionSessions.end()) {
@@ -606,6 +611,7 @@ void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::Ini
 
 void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::StartDirectReadPartitionSessionResponse&& response, TDeferredActions<false>&) {
     Y_ABORT_UNLESS(Lock.IsLocked());
+
     LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Got StartDirectReadPartitionSessionResponse " << response.ShortDebugString());
 
     auto partitionSessionId = response.partition_session_id();
@@ -625,6 +631,7 @@ void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::Sta
 
 void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::StopDirectReadPartitionSession&& response, TDeferredActions<false>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
+
     LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Got StopDirectReadPartitionSession " << response.ShortDebugString());
 
     auto partitionSessionId = response.partition_session_id();
@@ -640,6 +647,7 @@ void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::Sto
 
 void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&& response, TDeferredActions<false>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
+
     LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Got DirectReadResponse " << response.ShortDebugString());
 
     auto it = PartitionSessions.find(response.partition_session_id());

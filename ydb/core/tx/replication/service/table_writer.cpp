@@ -78,7 +78,7 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
 
         TString source;
 
-        auto& records = std::get<TVector<NReplication::NService::TChangeRecord::TPtr>>(ev->Get()->Records);
+        auto& records = std::get<std::shared_ptr<TChangeRecordContainer<NReplication::NService::TChangeRecord>>>(ev->Get()->Records)->Records;
 
         for (auto recordPtr : records) {
             MemoryPool.Clear();
@@ -197,7 +197,7 @@ private:
 
 class TLocalTableWriter
     : public TActor<TLocalTableWriter>
-    , public NChangeExchange::TBaseChangeSender
+    , public NChangeExchange::TBaseChangeSender<TChangeRecord>
     , public NChangeExchange::IChangeSenderResolver
     , public NChangeExchange::ISenderFactory
     , private NSchemeCache::TSchemeCacheHelpers
@@ -500,7 +500,7 @@ public:
 
     explicit TLocalTableWriter(const TPathId& tablePathId)
         : TActor(&TThis::StateWork)
-        , TBaseChangeSender(this, this, this, TActorId(), tablePathId, std::type_identity<NReplication::NService::TChangeRecord::TPtr>{})
+        , TBaseChangeSender(this, this, this, TActorId(), tablePathId)
         , MemoryPool(256)
     {
     }

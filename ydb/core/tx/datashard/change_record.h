@@ -3,6 +3,7 @@
 #include "datashard_user_table.h"
 
 #include <ydb/core/change_exchange/change_record.h>
+#include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/services/lib/sharding/sharding.h>
@@ -163,6 +164,15 @@ public:
     }
 
 }; // TChangeRecordBuilder
+
+}
+
+namespace NKikimr {
+
+template <>
+struct TChangeRecordContainer<NDataShard::TChangeRecord> {
+    TVector<NDataShard::TChangeRecord::TPtr> Records;
+};
 
 }
 

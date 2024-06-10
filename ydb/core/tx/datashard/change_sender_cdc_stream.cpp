@@ -95,7 +95,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
         LOG_D("Handle " << ev->Get()->ToString());
         NKikimrClient::TPersQueueRequest request;
 
-        auto& records = std::get<TVector<TChangeRecord::TPtr>>(ev->Get()->Records);
+        auto& records = std::get<std::shared_ptr<TChangeRecordContainer<NKikimr::NDataShard::TChangeRecord>>>(ev->Get()->Records)->Records;
         for (auto recordPtr : records) {
             const auto& record = *recordPtr;
 
@@ -295,7 +295,7 @@ private:
 
 class TCdcChangeSenderMain
     : public TActorBootstrapped<TCdcChangeSenderMain>
-    , public NChangeExchange::TBaseChangeSender
+    , public NChangeExchange::TBaseChangeSender<TChangeRecord>
     , public NChangeExchange::IChangeSenderResolver
     , public NChangeExchange::ISenderFactory
     , private NSchemeCache::TSchemeCacheHelpers
@@ -666,7 +666,8 @@ class TCdcChangeSenderMain
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
-        ProcessRecords(std::move(ev->Get()->Records));
+        auto& records = std::get<std::shared_ptr<TChangeRecordContainer<NKikimr::NDataShard::TChangeRecord>>>(ev->Get()->Records)->Records;
+        ProcessRecords(std::move(records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvForgetRecords::TPtr& ev) {
@@ -713,7 +714,7 @@ public:
 
     explicit TCdcChangeSenderMain(const TDataShardId& dataShard, const TPathId& streamPathId)
         : TActorBootstrapped()
-        , TBaseChangeSender(this, this, this, dataShard.ActorId, streamPathId, std::type_identity<TChangeRecord::TPtr>{})
+        , TBaseChangeSender(this, this, this, dataShard.ActorId, streamPathId)
         , DataShard(dataShard)
         , TopicVersion(0)
     {

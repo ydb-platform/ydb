@@ -2,18 +2,34 @@
 
 #include "change_record.h"
 
-#include <ydb/core/tx/replication/service/json_change_record.h>
-#include <ydb/core/tx/datashard/change_record.h>
-
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 
 #include <util/generic/vector.h>
 
+namespace NKikimr {
+
+namespace NDataShard {
+
+class TChangeRecord;
+
+}
+
+namespace NReplication::NService {
+
+class TChangeRecord;
+
+}
+
+template <class T>
+struct TChangeRecordContainer {};
+
+}
+
 namespace NKikimr::NChangeExchange {
 
-using TChangeRecordVector = std::variant<TVector<NDataShard::TChangeRecord::TPtr>, TVector<NReplication::NService::TChangeRecord::TPtr>>;
+using TChangeRecordVector = std::variant<std::shared_ptr<TChangeRecordContainer<NDataShard::TChangeRecord>>, std::shared_ptr<TChangeRecordContainer<NReplication::NService::TChangeRecord>>>;
 
 struct TEvChangeExchange {
     enum EEv {

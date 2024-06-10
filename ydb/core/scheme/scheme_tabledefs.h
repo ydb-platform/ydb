@@ -713,13 +713,10 @@ public:
         , Partitioning(std::make_shared<TVector<TKeyDesc::TPartitionInfo>>())
     {}
 
-    // FIXME
     static THolder<TKeyDesc> CreateMiniKeyDesc(const TVector<NScheme::TTypeInfo> &keyColumnTypes) {
-        return MakeHolder<TKeyDesc>(keyColumnTypes);
+        return THolder<TKeyDesc>(new TKeyDesc(keyColumnTypes));
     }
 private:
-    friend THolder<TKeyDesc> MakeHolder<TKeyDesc>(const TVector<NScheme::TTypeInfo> &keyColumnTypes);
-
     TKeyDesc(const TVector<NScheme::TTypeInfo> &keyColumnTypes)
         : RowOperation(ERowOperation::Unknown)
         , KeyColumnTypes(keyColumnTypes.begin(), keyColumnTypes.end())

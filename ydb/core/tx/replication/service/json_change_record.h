@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/change_exchange/change_record.h>
+#include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme_types/scheme_type_info.h>
@@ -108,6 +109,15 @@ public:
     }
 
 }; // TChangeRecordBuilder
+
+}
+
+namespace NKikimr {
+
+template <>
+struct TChangeRecordContainer<NReplication::NService::TChangeRecord> {
+    TVector<NReplication::NService::TChangeRecord::TPtr> Records;
+};
 
 }
 

@@ -99,41 +99,42 @@ TEvChangeExchange::TEvRecords::TEvRecords(TChangeRecordVector&& records)
 {
 }
 
-template <class T>
-TString JoinRecords(const T& records) {
-    TString out;
+// template <class T>
+// TString JoinRecords(const T& records) {
+//     TString out;
 
-    auto beg = records.begin();
-    auto end = records.end();
-    TString delim = ",";
+//     auto beg = records.begin();
+//     auto end = records.end();
+//     TString delim = ",";
 
-    if (beg != end) {
-        size_t total = records.size();
-        for (auto pos = beg; ++pos != end;) {
-            total += 1 /* + ::NPrivate::GetLength(*pos) */; // TODO estimate length of record
-        }
-        if (total > 0) {
-            out.reserve(total);
-        }
+//     if (beg != end) {
+//         size_t total = records.size();
+//         for (auto pos = beg; ++pos != end;) {
+//             total += 1 /* + ::NPrivate::GetLength(*pos) */; // TODO estimate length of record
+//         }
+//         if (total > 0) {
+//             out.reserve(total);
+//         }
 
-        AppendToString(out, (IChangeRecord*)beg->Get());
-        for (auto pos = beg; ++pos != end;) {
-            AppendToString(out, delim);
-            AppendToString(out, (IChangeRecord*)pos->Get());
-        }
-    }
+//         AppendToString(out, (IChangeRecord*)beg->Get());
+//         for (auto pos = beg; ++pos != end;) {
+//             AppendToString(out, delim);
+//             AppendToString(out, (IChangeRecord*)pos->Get());
+//         }
+//     }
 
-    return out;
-}
+//     return out;
+// }
 
 TString TEvChangeExchange::TEvRecords::ToString() const {
-    return std::visit(
-        [&](auto& records){
-            return TStringBuilder() << ToStringHeader() << " {"
-                << " Records [" << JoinRecords(records) << "]"
-            << " }";
-        },
-        Records);
+    return {};
+    // return std::visit(
+    //     [&](auto& records){
+    //         return TStringBuilder() << ToStringHeader() << " {"
+    //             << " Records [" << JoinRecords(records) << "]"
+    //         << " }";
+    //     },
+    //     Records);
 }
 
 /// TEvForgetRecords

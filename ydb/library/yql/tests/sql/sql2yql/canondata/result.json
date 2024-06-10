@@ -13007,9 +13007,9 @@
     ],
     "test_sql2yql.test[pg-select_win_cume_dist]": [
         {
-            "checksum": "e5e020bb6ad9ad41d1f4e5757ae3793e",
-            "size": 1343,
-            "uri": "https://{canondata_backend}/1889210/9eae9dde3e4ccce7ed58c152526ff01da2d33ccb/resource.tar.gz#test_sql2yql.test_pg-select_win_cume_dist_/sql.yql"
+            "checksum": "8dc40ca9a5f1350c623f3939adc8c36c",
+            "size": 946,
+            "uri": "https://{canondata_backend}/1889210/3b80794dcf61416ec7f21fc15203e31fda3473f3/resource.tar.gz#test_sql2yql.test_pg-select_win_cume_dist_/sql.yql"
         }
     ],
     "test_sql2yql.test[pg-select_win_expr_agg]": [
@@ -18327,9 +18327,16 @@
     ],
     "test_sql2yql.test[window-win_func_cume_dist]": [
         {
-            "checksum": "5d9cae983ad0a0420eb5e819f088656c",
-            "size": 2333,
-            "uri": "https://{canondata_backend}/1924537/1e6c4bd0b6a388eb0c3be13c5222f8b798f7e45c/resource.tar.gz#test_sql2yql.test_window-win_func_cume_dist_/sql.yql"
+            "checksum": "0deb2e3218f3e63a34e1cdfd0401546c",
+            "size": 2337,
+            "uri": "https://{canondata_backend}/1889210/3b80794dcf61416ec7f21fc15203e31fda3473f3/resource.tar.gz#test_sql2yql.test_window-win_func_cume_dist_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[window-win_func_cume_dist_ansi]": [
+        {
+            "checksum": "126bf5ff29c5734f2c4e8c317fc73fd4",
+            "size": 1429,
+            "uri": "https://{canondata_backend}/1889210/3b80794dcf61416ec7f21fc15203e31fda3473f3/resource.tar.gz#test_sql2yql.test_window-win_func_cume_dist_ansi_/sql.yql"
         }
     ],
     "test_sql2yql.test[window-win_func_first_last]": [
@@ -34052,6 +34059,13 @@
             "checksum": "c2da6ca06ae843d6193bbcf4a8068225",
             "size": 323,
             "uri": "https://{canondata_backend}/1924537/1e6c4bd0b6a388eb0c3be13c5222f8b798f7e45c/resource.tar.gz#test_sql_format.test_window-win_func_cume_dist_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[window-win_func_cume_dist_ansi]": [
+        {
+            "checksum": "f668aefed6ec54eff0cf412291169a2c",
+            "size": 257,
+            "uri": "https://{canondata_backend}/1889210/3b80794dcf61416ec7f21fc15203e31fda3473f3/resource.tar.gz#test_sql_format.test_window-win_func_cume_dist_ansi_/formatted.sql"
         }
     ],
     "test_sql_format.test[window-win_func_first_last]": [

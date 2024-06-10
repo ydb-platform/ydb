@@ -1042,6 +1042,31 @@ TWinRowNumber::TWinRowNumber(TPosition pos, const TString& opName, i32 minArgs, 
     : TWinAggrEmulation(pos, opName, minArgs, maxArgs, args)
 {}
 
+TWinCumeDist::TWinCumeDist(TPosition pos, const TString& opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args)
+    : TWinAggrEmulation(pos, opName, minArgs, maxArgs, args)
+{}
+
+bool TWinCumeDist::DoInit(TContext& ctx, ISource* src) {
+    if (!ValidateArguments(ctx)) {
+        return false;
+    }
+
+    YQL_ENSURE(Args.size() == 0);
+    TVector<TNodePtr> optionsElements;
+    if (ctx.AnsiCurrentRow) {
+        optionsElements.push_back(BuildTuple(Pos, { BuildQuotedAtom(Pos, "ansi", NYql::TNodeFlags::Default) }));
+    }
+    Args.push_back(BuildTuple(Pos, optionsElements));
+
+    MinArgs = MaxArgs = 1;
+    if (!TWinAggrEmulation::DoInit(ctx, src)) {
+        return false;
+    }
+
+    YQL_ENSURE(Args.size() == 1);
+    return true;
+}
+
 TWinNTile::TWinNTile(TPosition pos, const TString& opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args)
     : TWinAggrEmulation(pos, opName, minArgs, maxArgs, args)
 {

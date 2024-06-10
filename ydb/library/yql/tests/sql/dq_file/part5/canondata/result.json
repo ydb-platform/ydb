@@ -332,23 +332,23 @@
     ],
     "test.test[aggregate-group_by_mul_ru_ru--Analyze]": [
         {
-            "checksum": "a6622faf5d09bf900803a4b5098e5a05",
-            "size": 14650,
-            "uri": "https://{canondata_backend}/1784826/ae144ae65f45caf0cf861d9528ef4fc3e1c5e830/resource.tar.gz#test.test_aggregate-group_by_mul_ru_ru--Analyze_/plan.txt"
+            "checksum": "bb0e311793a99c2eba2a715166302cc4",
+            "size": 14721,
+            "uri": "https://{canondata_backend}/1784826/23b1299e7f12d5cf020984a5f7c964801c31ebc5/resource.tar.gz#test.test_aggregate-group_by_mul_ru_ru--Analyze_/plan.txt"
         }
     ],
     "test.test[aggregate-group_by_mul_ru_ru--Debug]": [
         {
-            "checksum": "3f15a027c432e91bae1960d1265ec61a",
-            "size": 13065,
-            "uri": "https://{canondata_backend}/1689644/dacabb0d41dd6d653a8cdc97ed09eed267f6e739/resource.tar.gz#test.test_aggregate-group_by_mul_ru_ru--Debug_/opt.yql_patched"
+            "checksum": "9cba3bd36f11cf360a6ccd255109a281",
+            "size": 13190,
+            "uri": "https://{canondata_backend}/1777230/4b5479e2ebed213e8e8d9a64aa0b5a72bb3ea4dd/resource.tar.gz#test.test_aggregate-group_by_mul_ru_ru--Debug_/opt.yql_patched"
         }
     ],
     "test.test[aggregate-group_by_mul_ru_ru--Plan]": [
         {
-            "checksum": "a6622faf5d09bf900803a4b5098e5a05",
-            "size": 14650,
-            "uri": "https://{canondata_backend}/1775319/f824086f9aede9fe69b74b082af09c546782c449/resource.tar.gz#test.test_aggregate-group_by_mul_ru_ru--Plan_/plan.txt"
+            "checksum": "bb0e311793a99c2eba2a715166302cc4",
+            "size": 14721,
+            "uri": "https://{canondata_backend}/1777230/4b5479e2ebed213e8e8d9a64aa0b5a72bb3ea4dd/resource.tar.gz#test.test_aggregate-group_by_mul_ru_ru--Plan_/plan.txt"
         }
     ],
     "test.test[aggregate-group_by_mul_ru_ru--Results]": [],
@@ -449,9 +449,9 @@
     ],
     "test.test[aggregate-percentile_interval-default.txt-Debug]": [
         {
-            "checksum": "50397a8a877eec9b55f6cc1c02602339",
-            "size": 8640,
-            "uri": "https://{canondata_backend}/1775319/581989ddfd844cd7fb811fb9f47c5b23d36a9346/resource.tar.gz#test.test_aggregate-percentile_interval-default.txt-Debug_/opt.yql_patched"
+            "checksum": "bc93766ea34d999e44c84680430a9216",
+            "size": 8786,
+            "uri": "https://{canondata_backend}/1777230/4b5479e2ebed213e8e8d9a64aa0b5a72bb3ea4dd/resource.tar.gz#test.test_aggregate-percentile_interval-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[aggregate-percentile_interval-default.txt-Plan]": [
@@ -749,9 +749,9 @@
     ],
     "test.test[column_order-select_plain-default.txt-Debug]": [
         {
-            "checksum": "450e37f6867fdddf16d09bd25af7aec3",
+            "checksum": "258869f3437db1a01d7dd4cdb79e0edd",
             "size": 4240,
-            "uri": "https://{canondata_backend}/1775319/581989ddfd844cd7fb811fb9f47c5b23d36a9346/resource.tar.gz#test.test_column_order-select_plain-default.txt-Debug_/opt.yql_patched"
+            "uri": "https://{canondata_backend}/1777230/4b5479e2ebed213e8e8d9a64aa0b5a72bb3ea4dd/resource.tar.gz#test.test_column_order-select_plain-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[column_order-select_plain-default.txt-Plan]": [
@@ -1145,9 +1145,9 @@
     ],
     "test.test[flatten_by-flatten_corr_name_column-default.txt-Debug]": [
         {
-            "checksum": "b7d6d1f0c0881cebe5b5b2cfabd55227",
-            "size": 1616,
-            "uri": "https://{canondata_backend}/1942415/b35d2514a5150e9f12a175bf916b9aef176e9b54/resource.tar.gz#test.test_flatten_by-flatten_corr_name_column-default.txt-Debug_/opt.yql_patched"
+            "checksum": "7fe0264fcfd357dec36f9884eb6281aa",
+            "size": 1649,
+            "uri": "https://{canondata_backend}/1777230/4b5479e2ebed213e8e8d9a64aa0b5a72bb3ea4dd/resource.tar.gz#test.test_flatten_by-flatten_corr_name_column-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[flatten_by-flatten_corr_name_column-default.txt-Plan]": [

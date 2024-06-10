@@ -19,9 +19,6 @@ namespace NKqpNode {
 // Task information.
 struct TTaskContext {
     ui64 TaskId = 0;
-    ui64 Memory = 0;
-    ui32 Channels = 0;
-    ui64 ChannelSize = 0;
     TActorId ComputeActorId;
 };
 
@@ -42,14 +39,6 @@ struct TTasksRequest {
         , Executer(executer)
         , StartTime(startTime)
     {
-    }
-
-    ui64 CalculateTotalMemory() const {
-        ui64 result = 0;
-        for(auto [id, task]: InFlyTasks) {
-            result += task.Memory;
-        }
-        return result;
     }
 
     TTaskExpirationInfo GetExpritationInfo() const {
@@ -176,8 +165,6 @@ public:
                 str << "        In-fly tasks:" << Endl;
                 for (auto& [taskId, task] : request->InFlyTasks) {
                     str << "          Task: " << taskId << Endl;
-                    str << "            Memory: " << task.Memory << Endl;
-                    str << "            Channels: " << task.Channels << Endl;
                     str << "            Compute actor: " << task.ComputeActorId << Endl;
                 }
             }

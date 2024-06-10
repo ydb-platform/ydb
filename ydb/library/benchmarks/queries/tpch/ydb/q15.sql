@@ -6,8 +6,7 @@ $border = Date("1997-03-01");
 $revenue0 = (
     select
         l_suppkey as supplier_no,
-        sum(l_extendedprice * (1 - l_discount)) as total_revenue,
-        cast(sum(l_extendedprice * (1 - l_discount)) as Uint64) as total_revenue_approx
+        Math::Round(sum(l_extendedprice * (1 - l_discount)), -8) as total_revenue
     from
         `{path}lineitem`
     where
@@ -18,7 +17,7 @@ $revenue0 = (
 );
 $max_revenue = (
 select
-    max(total_revenue_approx) as max_revenue
+    max(total_revenue) as max_revenue
 from
     $revenue0
 );
@@ -28,8 +27,7 @@ select
     s.s_name as s_name,
     s.s_address as s_address,
     s.s_phone as s_phone,
-    r.total_revenue as total_revenue,
-    r.total_revenue_approx as total_revenue_approx
+    r.total_revenue as total_revenue
 from
     `{path}supplier` as s
 join
@@ -49,7 +47,7 @@ from
 join
     $max_revenue as m
 on
-    j.total_revenue_approx = m.max_revenue
+    j.total_revenue = m.max_revenue
 order by
     s_suppkey;
 

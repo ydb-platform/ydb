@@ -1504,6 +1504,12 @@ message TColumnShardConfig {
     optional TIndexMetadataMemoryLimit IndexMetadataMemoryLimit = 12;
     optional bool CleanupEnabled = 13 [default = true];
     optional uint32 RemovedPortionLivetimeSeconds = 14 [default = 600];
+
+    message TRepairInfo {
+        optional string ClassName = 1;
+        optional string Description = 2;
+    }
+    repeated TRepairInfo Repairs = 15;
 }
 
 message TSchemeShardConfig {

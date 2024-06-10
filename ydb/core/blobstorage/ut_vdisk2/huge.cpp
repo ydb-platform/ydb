@@ -1,5 +1,7 @@
 #include "env.h"
 
+#include <ydb/core/protos/pqconfig.pb.h>
+
 using namespace NKikimr;
 
 Y_UNIT_TEST_SUITE(VDiskTest) {

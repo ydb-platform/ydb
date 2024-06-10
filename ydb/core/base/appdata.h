@@ -1,5 +1,11 @@
 #pragma once
 
+#ifdef GOOGLE_PROTOBUF_INCLUDED_ydb_2fcore_2fprotos_2fpqconfig_2eproto
+#   define __PQCONFIG_WAS_INCLUDED__ 1
+#else
+#   define __PQCONFIG_WAS_INCLUDED__ 0
+#endif
+
 #include "defs.h"
 #include "appdata_fwd.h"
 #include "channel_profiles.h"
@@ -20,7 +26,6 @@
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/key.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
-#include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/netclassifier.pb.h>
 #include <ydb/core/protos/stream.pb.h>
 #include <ydb/core/protos/shared_cache.pb.h>
@@ -40,3 +45,9 @@
 
 namespace NKikimr {
 } // NKikimr
+
+#if defined(GOOGLE_PROTOBUF_INCLUDED_ydb_2fcore_2fprotos_2fpqconfig_2eproto) && !__PQCONFIG_WAS_INCLUDED__
+#   error NEVER EVER INCLUDE pqconfig.pb.h FROM appdata.h
+#endif
+
+#undef __PQCONFIG_WAS_INCLUDED__

@@ -1,77 +1,77 @@
-# Using {{ ydb-short-name }} plugins in a Logstash
+# Integrating Logstash and {{ ydb-short-name }}
 
-This section presents the description of plugins which may be used for connect {{ ydb-short-name }} and Logstash - a free and open server-side data processing pipeline.
+This section describes the integration options between {{ ydb-short-name }} and Logstash, a server-side data collection and processing pipeline.
 
 ## Introduction
 
-[Logstash](https://www.elastic.co/logstash) dynamically ingests, transforms, and ships your data regardless of format or complexity. A Logstash pipeline can contains different types of plugins - input, output и filter. The {{ ydb-short-name }} Logstash plugins repository are hosted on [GitHub](https://github.com/ydb-platform/ydb-logstash-plugins) and contains the following plugins:
+[Logstash](https://www.elastic.co/logstash) dynamically ingests, transforms, and ships data regardless of format or complexity. A Logstash pipeline can contain different types of plugins: input, output, and filter. The {{ ydb-short-name }} Logstash plugins repository is hosted on [GitHub](https://github.com/ydb-platform/ydb-logstash-plugins) and contains the following plugins:
 
-* Storage Plugin for storing Logstash events in [row-oriented](../concepts/datamodel/table.md#row-orineted_table) or [column-oriented](../concepts/datamodel/table.md#olap-data-types) tables {{ ydb-short-name }};
-* Input Topic Plugin for reading Logstash events from {{ ydb-short-name }} [topic](../concepts/topic.md);
-* Output Topic Plugin for sending Logstash events tp {{ ydb-short-name }} [topic](../concepts/topic.md).
+* **Storage Plugin** for persisting Logstash events in [row-oriented](../concepts/datamodel/table.md#row-orineted_table) or [column-oriented](../concepts/datamodel/table.md#olap-data-types) {{ ydb-short-name }} tables;
+* **Input Topic Plugin** for reading Logstash events from {{ ydb-short-name }} [topics](../concepts/topic.md);
+* **Output Topic Plugin** for sending Logstash events to {{ ydb-short-name }} [topics](../concepts/topic.md).
 
- You can [build](https://github.com/ydb-platform/ydb-logstash-plugins/blob/main/BUILD.md) plugins yourself from sources or download pre-builded [artifacts](https://github.com/ydb-platform/ydb-logstash-plugins/releases) for two last version of Logstash.
+ These plugins can be [built](https://github.com/ydb-platform/ydb-logstash-plugins/blob/main/BUILD.md) from the source code or downloaded as pre-built [artifacts](https://github.com/ydb-platform/ydb-logstash-plugins/releases) for the two latest versions of Logstash.
 
 {% note info %}
 
-Further code snippets use a placeholder `<path-to-logstash>`, which must be replaced by the path to installed Logstash.
+Further code snippets use the placeholder `<path-to-logstash>`, which must be replaced by a path to a directory with installed Logstash.
 
 {% endnote %}
 
-Any Logstash plugin may be installed by execution of command
+Execute the following command to install any Logstash plugin:
 ```bash
 <path-to-logstash>/bin/logstash-plugin install </path/to/logstash-plugin.gem>
 ```
 
-Check that the plugin is installed
+Check that the plugin has been installed
 ```bash
 <path-to-logstash>/bin/logstash-plugin list
 ```
-The command will return a list of all installed plugins and this list must contain the name of installed plugin.
+The command will return a list of all installed plugins, which contain the plugin's name.
 
 ## Configure {{ ydb-short-name }} connection
 
-All plugins use the same set of parameters for configure connection to {{ ydb-short-name }}. This set contains only one required parameter `connection_string`, others parameters are optional and allow to configure [an authentication mode](../concepts/auth.md). If config doesn't contain any of them will be used anonymous mode.
+All plugins use the same set of parameters to configure the connection to {{ ydb-short-name }}. This set contains only one required parameter, `connection_string`. Other parameters are optional and allow configuring [an authentication mode](../concepts/auth.md). An anonymous mode will be used if the configuration doesn't contain any of these parameters.
 
 ```ruby
 # This example demonstrates configuration for ydb_storage plugin.
 # The plugins ydb_topics_output and ydb_topics_input configure the same way.
 ydb_storage {
-    # Database connection string contains schema, hostname, port and database path
+    # Database connection string contains a schema, hostname, port, and database path
     connection_string => "grpc://localhost:2136/local"
-    # Authentication token (for using Access Token mode)
+    # Authentication token (for using the "Access Token" mode)
     token_auth => "<token_value>"
-    # Authentication token file path (for using Access Token mode)
+    # Authentication token file path (for using the "Access Token" mode)
     token_file => "</path/to/token/file>"
-    # Service account key file path (for using Service Account Key mode)
+    # Service account key file path (for using the "Service Account Key" mode)
     sa_key_file => "</path/to/key.json>"
-    # Flag to use metadata authentication service (for using Metadata mode)
+    # Flag to use metadata authentication service (for using the "Metadata" mode)
     use_metadata => true
 }
 ```
 
 ## {{ ydb-short-name }} Storage Plugin
 
-This plugin allows to store the Logstash events stream in {{ ydb-short-name }} tables for further analysis. This is especially useful with [column tables](../concepts/datamodel/table.md#column-tables) optimized for handling Online Analytical Processing (OLAP) requests. Every [field](https://www.elastic.co/guide/en/logstash/current/event-dependent-configuration.html) of Logstash event will be stored in a column with a corresponding name. Those fields that do not match any column will be ignored.
+This plugin allows storing the Logstash events stream in {{ ydb-short-name }} tables for further analysis. This is especially useful with [column-oriented tables](../concepts/datamodel/table.md#column-tables) optimized for handling Online Analytical Processing (OLAP) requests. Every [field](https://www.elastic.co/guide/en/logstash/current/event-dependent-configuration.html) of a Logstash event will be stored in a column with a corresponding name. Fields that do not match any column will be ignored.
 
 ### Configuration
 
-The plugin configuration is making by adding `ydb_storage` block in `output` section of Logstash pipeline [config file](https://www.elastic.co/guide/en/logstash/current/configuration.html). The plugin supports standard set of [connection parameters](#configure-ydb-connection) and a few additional options:
+The plugin configuration is done by adding a `ydb_storage` block in the `output` section of the Logstash pipeline [config file](https://www.elastic.co/guide/en/logstash/current/configuration.html). The plugin supports the standard set of [connection parameters](#configure-ydb-connection) and a few additional options:
 
-* `table_name` — required name of a destination table
-* `uuid_column` — optional name of column which the plugin will use for storing of auto generated identifier
-* `timestamp_column` — optional name of column which the plugin will use for storing the timestamp of event
+* `table_name` — the required name of the destination table.
+* `uuid_column` — the optional name of the column that the plugin will use for storing an auto-generated identifier.
+* `timestamp_column` — the optional name of the column that the plugin will use for storing the events' timestamp.
 
 {% note warning %}
 
-The Storage plugin doesn't check if the logstash event has correct and unique values for the table primary keys. It uses [bulk upsert method](../dev/batch-upload.md) for storing in {{ ydb-short-name }} and if various events have the same primary keys they will rewrite each other. It is recommended to use those events field that will be present in every event and uniquely identity it. If there is no such set of fields you can add a special column for the primary key and fill it with a random value using parameter `uuid_column`
+The Storage plugin doesn't check if the Logstash event has correct and unique values for the table's primary key. It uses the [bulk upsert method](../dev/batch-upload.md) for storing data in {{ ydb-short-name }}, and if multiple events have the same primary keys, they will overwrite each other. The primary key is recommended to contain those event fields that will be present in every event and can uniquely identify each event. If no such set of fields exists, add an extra column to the primary key and fill it with a random value using the `uuid_column` parameter.
 
 {% endnote %}
 
-### Example of usage
+### Usage example
 
 #### Creating a table
-Let's create a new column-based table in any existing {{ ydb-short-name }} database with the columns we need. For a primary key we will use a random value generated by the plugin.
+Create a new column-oriented table with the necessary columns in any existing {{ ydb-short-name }} database. For example, the table below uses a random value generated by the plugin.
 
 ```sql
 CREATE TABLE `logstash_demo` (
@@ -90,28 +90,28 @@ WITH (STORE = COLUMN);
 
 #### Setup plugin in Logstash pipeline config
 
-For activation of plugin we can add `ydb_storage` block in `output` section of Logstash pipeline [config](https://www.elastic.co/guide/en/logstash/current/configuration.html). Additionally let's add `http` block in `input` section for the creation of test messages by http requests:
+To activate the plugin, add the `ydb_storage` block in the `output` section of the Logstash pipeline [config](https://www.elastic.co/guide/en/logstash/current/configuration.html). Additionally, add the `http` block in the `input` section for creating test messages via HTTP requests:
 
 ```ruby
 output {
   ydb_storage {
-    connection_string => "..."    # connection string to  {{ ydb-short-name }}
+    connection_string => "..."    # {{ ydb-short-name }} connection string
     table_name => "logstash_demo" # the table name
-    uuid_column => "uuid"         # the primary key column with random uuid
-    timestamp_column => "ts"      # the key for storing the event timestamp
+    uuid_column => "uuid"         # the primary key column with a random UUID
+    timestamp_column => "ts"      # the column for storing the event timestamp
   }
 }
 
 input {
   http {
-    port => 9876 # You can specify any free port
+    port => 9876 # Any free port
   }
 }
 ```
-For applying the changes we need to restart `Logstash`.
+To apply these changes, restart Logstash.
 
-#### Sent test messages
-Then we can sent a few test messages:
+#### Send test messages
+Send a few test messages:
 ```bash
 curl -H "content-type: application/json" -XPUT 'http://127.0.0.1:9876/http/ping' -d '{ "user" : "demo_user", "message" : "demo message", "level": 4}'
 curl -H "content-type: application/json" -XPUT 'http://127.0.0.1:9876/http/ping' -d '{ "user" : "test1", "level": 1}'
@@ -120,11 +120,12 @@ curl -H "content-type: application/json" -XPUT 'http://127.0.0.1:9876/http/ping'
 All commands return `ok` if the messages are sent.
 
 #### Check that the messages are stored in {{ ydb-short-name }} 
-Now we can check that all sent messages are written in the table. Let's execute query (for work with the column-based table we must use [ScanQuery mode](../reference/ydb-cli/commands/scan-query.md)):
+
+To check that all sent messages are written to the table, execute the following query using [ScanQuery mode](../reference/ydb-cli/commands/scan-query.md):
 ```sql
 SELECT * FROM `logstash_demo`;
 ```
-and we will get a list of written events:
+The query will return a list of written events:
 ```
 ┌───────┬────────────────┬───────────────────────────────┬─────────────┬────────────────────────────────────────┐
 │ level │ message        │ ts                            │  user       │ uuid                                   │
@@ -138,20 +139,20 @@ and we will get a list of written events:
 
 ## {{ ydb-short-name }} Topic Input Plugin
 
-This plugin allows to read events from the {{ ydb-short-name }} [topic](../concepts/topic.md) and transform them to  the `Logstash` events.
+This plugin allows reading messages from {{ ydb-short-name }} [topics](../concepts/topic.md) and transforming them into `Logstash` events.
 
 ### Configuration
 
-The plugin configuration is making by adding `ydb_topic` block to the `input` section of Logstash pipeline [config](https://www.elastic.co/guide/en/logstash/current/configuration.html).The plugin supports standard set of [connection parameters](#configure-ydb-connection) and a few additional options:
+The plugin configuration is done by adding a `ydb_topic` block to the `input` section of the Logstash pipeline [config](https://www.elastic.co/guide/en/logstash/current/configuration.html). The plugin supports the standard set of [connection parameters](#configure-ydb-connection) and a few additional options:
 
-* `topic_path` — required the full path of the topic for reading;
-* `consumer_name` — required the name of the topic [consumer](../concepts/topic.md#consumer);
-* `schema` — optional mode of the processing of the {{ ydb-short-name }} events. By default the plugin reads and sent the message as binary data, but if you specify `JSON` mode - every message will be parsed as JSON object.
+* `topic_path` — the required the full path of the topic for reading.
+* `consumer_name` — the required the name of the topic [consumer](../concepts/topic.md#consumer).
+* `schema` — the optional mode for processing of the {{ ydb-short-name }} events. By default, the plugin reads and sends messages as binary data, but if you specify the `JSON` mode, each message will be parsed as a JSON object.
 
-### Example of usage
+### Usage example
 
-#### Creating a topic
-Let's create a topic and a consumer in any existing {{ ydb-short-name }} database:
+#### Create a topic
+Create a topic and add a consumer to it in any existing {{ ydb-short-name }} database:
 
 ```bash
 ydb -e grpc://localhost:2136 -d /local topic create /local/logstash_demo_topic
@@ -160,36 +161,34 @@ ydb -e grpc://localhost:2136 -d /local topic consumer add --consumer logstash-co
 
 #### Setup plugin in Logstash pipeline config
 
-For the plugin activation we can add `ydb_topic` block in `input` section of Logstash pipeline [config](https://www.elastic.co/guide/en/logstash/current/configuration.html). Additionally let's add `stdout` plugin in `output` section for logging all `Logstash` events:
+To activate the plugin, add the `ydb_topic` block in the `input` section of the Logstash pipeline [config](https://www.elastic.co/guide/en/logstash/current/configuration.html). Additionally, add the `stdout` plugin in the `output` section for logging all `Logstash` events:
 
 ```ruby
 input {
   ydb_topic {
-    connection_string => "grpc://localhost:2136/local" # Connection string to {{ ydb-short-name }}
+    connection_string => "grpc://localhost:2136/local" # {{ ydb-short-name }} connection string
     topic_path => "/local/logstash_demo_topic"         # The full path of the topic to read
-    consumer_name => "logstash-consumer"               # The name of the consumer
+    consumer_name => "logstash-consumer"               # The consumer name
     schema => "JSON"                                   # Use JSON mode
   }
 }
 
 output {
-  stdout {
-    codec => rubydebug
-  }
+  stdout { }
 }
 ```
-For applying the changes we need to restart `Logstash`.
+To apply these changes, restart Logstash.
 
 #### Write a test message to the topic
-Then we can send a few test messages:
+Send a few test messages to the topic:
 ```bash
 echo '{"message":"test"}' | ydb -e grpc://localhost:2136 -d /local topic write /local/logstash_demo_topic
 echo '{"user":123}' | ydb -e grpc://localhost:2136 -d /local topic write /local/logstash_demo_topic
 ```
 
-#### Check if the message was processed by Logstash
+#### Check if Logstash processed the messages
 
-The plugin `stdout` allows to see the messages in `Logstash` logs:
+The `stdout` plugin writes the messages to the Logstash logs:
 ```
 {
        "message" => "test",
@@ -206,18 +205,18 @@ The plugin `stdout` allows to see the messages in `Logstash` logs:
 
 ## {{ ydb-short-name }} Topic Output Plugin
 
-This plugin allows to write `Logstash` event to the {{ ydb-short-name }} [topic](../concepts/topic.md).
+This plugin allows writing `Logstash` events to a {{ ydb-short-name }} [topic](../concepts/topic.md).
 
 ### Configuration
 
-The plugin configuration is making by adding `ydb_topic` block to the `output` section of Logstash pipeline [config](https://www.elastic.co/guide/en/logstash/current/configuration.html).The plugin supports standard set of [connection parameters](#configure-ydb-connection) and a few additional options:
+The plugin configuration is done by adding a `ydb_topic` block to the `output` section of the Logstash pipeline [config](https://www.elastic.co/guide/en/logstash/current/configuration.html). The plugin supports the standard set of [connection parameters](#configure-ydb-connection) and a few additional options:
 
-* `topic_path` — required the full path of the topic for writing.
+* `topic_path` — the required the full path of the topic for writing.
 
-### Example of usage
+### Usage example
 
-#### Creation a topic
-Let's create a topic in any existing {{ ydb-short-name }} database:
+#### Create a topic
+Create a topic in any existing {{ ydb-short-name }} database:
 
 ```bash
 ydb -e grpc://localhost:2136 -d /local topic create /local/logstash_demo_topic
@@ -225,38 +224,38 @@ ydb -e grpc://localhost:2136 -d /local topic create /local/logstash_demo_topic
 
 #### Setup plugin in Logstash pipeline config
 
-For the plugin activation we can add `ydb_topic` block in `output` section of Logstash pipeline [config](https://www.elastic.co/guide/en/logstash/current/configuration.html). Additionally let's add `http` block in `input` section for the creation of test messages by http requests:
+To activate the plugin, add the `ydb_topic` block in the `output` section of the Logstash pipeline [config](https://www.elastic.co/guide/en/logstash/current/configuration.html). Additionally, add the `http` block in the `input` section for creating test messages via HTTP requests:
 
 ```ruby
 output {
   ydb_topic {
-    connection_string => "grpc://localhost:2136/local" # Connection string to {{ ydb-short-name }}
+    connection_string => "grpc://localhost:2136/local" # {{ ydb-short-name }} connection string
     topic_path => "/local/logstash_demo_topic"         # The topic name for writing
   }
 }
 
 input {
   http {
-    port => 9876 # You can specify any free port
+    port => 9876 # Any free port
   }
 }
 ```
-For applying the changes we need to restart `Logstash`.
+To apply these changes, restart Logstash.
 
 #### Send a test message
-Let's send a test message via `http` plugin:
+Send a test message via the `http` plugin:
 ```bash
 curl -H "content-type: application/json" -XPUT 'http://127.0.0.1:9876/http/ping' -d '{ "user" : "demo_user", "message" : "demo message", "level": 4}'
 ```
-We get `ok` if the message sending is successful.
+The command returns `ok` if the message has been sent successfully.
 
 #### Reading the message from the topic
-We can check that the plugin wrote the message to the topic successful with reading this message by CLI:
+Check that the plugin wrote the message to the topic successfully by reading this message via CLI:
 ```bash
 ydb -e grpc://localhost:2136 -d /local topic consumer add --consumer logstash-consumer /local/logstash_demo_topic
 ydb -e grpc://localhost:2136 -d /local topic read /local/logstash_demo_topic --consumer logstash-consumer --commit true
 ```
-And there will be a content of the message:
+The latter command will return the message content:
 ```json
 {"level":4,"message":"demo message","timestamp":1716470292640,"user":"demo_user"}
 ```

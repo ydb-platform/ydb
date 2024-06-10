@@ -12,9 +12,7 @@ The subcommand responsible for this operation is `ydbops restart`.
 
 ## General algorithm
 
-There are multiple options to `ydbops restart` that act as filters. Filters are implicitly connected with and `AND` condition, meaning that if you supply multiple filters, only the nodes that satisfy all of them at once will be targeted.
-
-Therefore, specifying no filters at all will target all nodes for restart.
+There are multiple options for `ydbops restart` that act as filters. Filters are implicitly connected with a logical "and", meaning that if you supply multiple filters, only the nodes that satisfy all of them at once will be targeted. Therefore, specifying no filters targets all nodes for restart.
 
 There are two special filters that are an exception to these rule: `--storage` and `--tenant`: 
 - specifying only `--storage` will filter storage nodes only;

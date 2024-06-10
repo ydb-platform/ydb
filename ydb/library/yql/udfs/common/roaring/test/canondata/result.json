@@ -1,0 +1,22 @@
+{
+    "test.test[cardinality]": [
+        {
+            "uri": "file://test.test_cardinality_/results.txt"
+        }
+    ],
+    "test.test[intersect]": [
+        {
+            "uri": "file://test.test_intersect_/results.txt"
+        }
+    ],
+    "test.test[serialize_deserialize]": [
+        {
+            "uri": "file://test.test_serialize_deserialize_/results.txt"
+        }
+    ],
+    "test.test[union]": [
+        {
+            "uri": "file://test.test_union_/results.txt"
+        }
+    ]
+}

@@ -677,18 +677,6 @@ void TClusterInfo::ApplyActionWithoutLog(const NKikimrCms::TAction &action)
             }
         }
         break;
-    case TAction::DECOMISSION_DISK:
-        for (const auto &device : action.GetDevices()) {
-            if (HasPDisk(device)) {
-                auto pdisk = &PDiskRef(device);
-                for (auto &nodeGroup: NodeRef(pdisk->NodeId).NodeGroups) {
-                    if (!nodeGroup->IsNodeLocked(pdisk->NodeId)) {
-                        nodeGroup->LockNode(pdisk->NodeId);
-                    }
-                }
-            }
-        }
-        break;
 
     default:
         break;
@@ -1079,18 +1067,6 @@ void TOperationLogManager::ApplyAction(const NKikimrCms::TAction &action,
                         AddNodeLockOperation(vdisk->NodeId, nodeGroup);
                     }
                 }     
-            }
-        }
-        break;
-    case TAction::DECOMISSION_DISK:
-        for (const auto &device : action.GetDevices()) {
-            if (clusterState->HasPDisk(device)) {
-                auto pdisk = &clusterState->PDisk(device);
-                for (auto &nodeGroup: clusterState->NodeRef(pdisk->NodeId).NodeGroups) {
-                    if (!nodeGroup->IsNodeLocked(pdisk->NodeId)) {
-                        AddNodeLockOperation(pdisk->NodeId, nodeGroup);
-                    }
-                }       
             }
         }
         break;

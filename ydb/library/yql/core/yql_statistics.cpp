@@ -1,6 +1,8 @@
 #include <util/generic/yexception.h>
 #include "yql_statistics.h"
 
+#include <library/cpp/json/json_reader.h>
+
 using namespace NYql;
 
 static TString ConvertToStatisticsTypeString(EStatisticsType type) {
@@ -20,8 +22,10 @@ static TString ConvertToStatisticsTypeString(EStatisticsType type) {
 std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) {
     os << "Type: " << ConvertToStatisticsTypeString(s.Type) << ", Nrows: " << s.Nrows
         << ", Ncols: " << s.Ncols << ", ByteSize: " << s.ByteSize << ", Cost: " << s.Cost;
-    for (const auto& c : s.KeyColumns) {
-        os << ", " << c;
+    if (s.KeyColumns) {
+        for (const auto& c : s.KeyColumns->Data) {
+            os << ", " << c;
+        }
     }
     return os;
 }
@@ -36,7 +40,8 @@ TOptimizerStatistics::TOptimizerStatistics(
     int ncols,
     double byteSize,
     double cost,
-    const TVector<TString>& keyColumns,
+    TIntrusivePtr<TKeyColumns> keyColumns,
+    TIntrusivePtr<TColumnStatMap> columnMap,
     std::unique_ptr<IProviderStatistics> specific)
     : Type(type)
     , Nrows(nrows)
@@ -44,6 +49,7 @@ TOptimizerStatistics::TOptimizerStatistics(
     , ByteSize(byteSize)
     , Cost(cost)
     , KeyColumns(keyColumns)
+    , ColumnStatistics(columnMap)
     , Specific(std::move(specific))
 {
 }
@@ -56,4 +62,59 @@ TOptimizerStatistics& TOptimizerStatistics::operator+=(const TOptimizerStatistic
     return *this;
 }
 
-const TVector<TString>& TOptimizerStatistics::EmptyColumns = TVector<TString>();
+std::shared_ptr<TOptimizerStatistics> NYql::OverrideStatistics(const NYql::TOptimizerStatistics& s, const TStringBuf& tablePath, const TString& statHints) {
+    TOptimizerStatistics* res = new TOptimizerStatistics(s.Type, s.Nrows, s.Ncols, s.ByteSize, s.Cost, s.KeyColumns, s.ColumnStatistics);
+
+    NJson::TJsonValue root;
+    NJson::ReadJsonTree(statHints, &root, true);
+    auto dbStats = root.GetMapSafe();
+
+    if (!dbStats.contains(tablePath)){
+        return std::shared_ptr<TOptimizerStatistics>(res);
+    }
+
+    auto tableStats = dbStats.at(tablePath).GetMapSafe();
+
+    if (tableStats.contains("key_columns")) {
+        TVector<TString> cols;
+        for (auto c : tableStats.at("key_columns").GetArraySafe()) {
+            cols.push_back(c.GetStringSafe());
+        }
+        res->KeyColumns = TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(new TOptimizerStatistics::TKeyColumns(cols));
+    }
+
+    if (tableStats.contains("n_rows")) {
+        res->Nrows = tableStats.at("n_rows").GetDoubleSafe();
+    }
+    if (tableStats.contains("byte_size")) {
+        res->ByteSize = tableStats.at("byte_size").GetDoubleSafe();
+    }
+    if (tableStats.contains("n_attrs")) {
+        res->Ncols = tableStats.at("n_attrs").GetIntegerSafe();
+    }
+
+    if (tableStats.contains("columns")) {
+        if (!res->ColumnStatistics) {
+            res->ColumnStatistics = TIntrusivePtr<TOptimizerStatistics::TColumnStatMap>(new TOptimizerStatistics::TColumnStatMap());
+        }
+
+        for (auto col : tableStats.at("columns").GetArraySafe()) {
+            auto colMap = col.GetMapSafe();
+
+            TColumnStatistics cStat;
+
+            auto column_name = colMap.at("name").GetStringSafe();
+
+            if (colMap.contains("n_unique_vals")) {
+                cStat.NuniqueVals = colMap.at("n_unique_vals").GetDoubleSafe();
+            }
+            if (colMap.contains("hyperloglog")) {
+                cStat.HyperLogLog = colMap.at("hyperloglog").GetDoubleSafe();
+            }
+
+            res->ColumnStatistics->Data[column_name] = cStat;
+        }
+    }
+
+    return std::shared_ptr<TOptimizerStatistics>(res);
+}

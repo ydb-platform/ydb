@@ -22,6 +22,11 @@ class TChangeRecord;
 
 }
 
+struct TBaseChangeRecordContainer {
+    virtual ~TBaseChangeRecordContainer() = default;
+    virtual TString Out() = 0;
+};
+
 template <class T>
 struct TChangeRecordContainer {};
 

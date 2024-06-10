@@ -15,6 +15,7 @@
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
 #include <util/memory/pool.h>
+#include <util/string/join.h>
 
 namespace NKikimr::NReplication::NService {
 
@@ -116,12 +117,29 @@ public:
 namespace NKikimr {
 
 template <>
-struct TChangeRecordContainer<NReplication::NService::TChangeRecord> {
+struct TChangeRecordContainer<NReplication::NService::TChangeRecord>
+    : public TBaseChangeRecordContainer
+{
+    TChangeRecordContainer() = default;
+
+    explicit TChangeRecordContainer(TVector<NReplication::NService::TChangeRecord::TPtr>&& records)
+        : Records(std::move(records))
+    {}
+
+
     TVector<NReplication::NService::TChangeRecord::TPtr> Records;
+
+    TString Out() override {
+        return TStringBuilder() << "[" << JoinSeq(",", Records) << "]";
+    }
 };
 
 }
 
 Y_DECLARE_OUT_SPEC(inline, NKikimr::NReplication::NService::TChangeRecord, out, value) {
     return value.Out(out);
+}
+
+Y_DECLARE_OUT_SPEC(inline, NKikimr::NReplication::NService::TChangeRecord::TPtr, out, value) {
+    return value->Out(out);
 }

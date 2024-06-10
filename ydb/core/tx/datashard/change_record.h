@@ -10,6 +10,7 @@
 #include <ydb/services/lib/sharding/sharding.h>
 
 #include <util/generic/maybe.h>
+#include <util/string/join.h>
 
 namespace NKikimrChangeExchange {
     class TChangeRecord;
@@ -171,12 +172,28 @@ public:
 namespace NKikimr {
 
 template <>
-struct TChangeRecordContainer<NDataShard::TChangeRecord> {
+struct TChangeRecordContainer<NDataShard::TChangeRecord>
+    : public TBaseChangeRecordContainer
+{
+    TChangeRecordContainer() = default;
+
+    explicit TChangeRecordContainer(TVector<NDataShard::TChangeRecord::TPtr>&& records)
+        : Records(std::move(records))
+    {}
+
     TVector<NDataShard::TChangeRecord::TPtr> Records;
+
+    TString Out() override {
+        return TStringBuilder() << "[" << JoinSeq(",", Records) << "]";
+    }
 };
 
 }
 
 Y_DECLARE_OUT_SPEC(inline, NKikimr::NDataShard::TChangeRecord, out, value) {
     return value.Out(out);
+}
+
+Y_DECLARE_OUT_SPEC(inline, NKikimr::NDataShard::TChangeRecord::TPtr, out, value) {
+    return value->Out(out);
 }

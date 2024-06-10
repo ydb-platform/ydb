@@ -390,6 +390,10 @@ void TStrategyBase::Prepare3dcPartPlacement(const TBlobState &state,
 
 ui32 TStrategyBase::MakeSlowSubgroupDiskMask(TBlobState &state, const TBlobStorageGroupInfo &info, TBlackboard &blackboard,
         bool isPut) {
+    if (info.GetTotalVDisksNum() == 1) {
+        // when there is only one disk, we consider it not slow
+        return 0;
+    }
     // Find the slowest disk
     switch (blackboard.AccelerationMode) {
         case TBlackboard::AccelerationModeSkipOneSlowest: {

@@ -5,6 +5,7 @@
 #include <ydb/library/pdisk_io/file_params.h>
 #include <ydb/core/base/nameservice.h>
 
+#include <ydb/core/protos/key.pb.h>
 
 using namespace NKikimr;
 using namespace NStorage;

@@ -2,6 +2,10 @@
 
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 
+namespace NKikimrConfig {
+    class TQueryServiceConfig;
+    class TMetadataProviderConfig;
+}
 
 namespace NKikimr::NKqp {
 

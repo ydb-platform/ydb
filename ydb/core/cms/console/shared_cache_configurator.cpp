@@ -7,6 +7,8 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
+#include <ydb/core/protos/bootstrap.pb.h>
+
 namespace NKikimr::NConsole {
 
 class TSharedCacheConfigurator : public TActorBootstrapped<TSharedCacheConfigurator> {

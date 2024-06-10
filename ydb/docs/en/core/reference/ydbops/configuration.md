@@ -1,4 +1,4 @@
-## Configuring ydbops
+# Configuring ydbops
 
 {% note info %}
 

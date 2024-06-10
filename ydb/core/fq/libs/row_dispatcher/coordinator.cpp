@@ -7,6 +7,7 @@
 #include <ydb/core/fq/libs/ydb/util.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
+#include <ydb/core/fq/libs/row_dispatcher/leader_election.h>
 #include <ydb/library/actors/core/interconnect.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -52,11 +53,15 @@ struct TEvAcquireSemaphoreResult : NActors::TEventLocal<TEvAcquireSemaphoreResul
 class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
 
     NConfig::TRowDispatcherCoordinatorConfig Config;
-    TYdbConnectionPtr YdbConnection;
-    TString CoordinationNodePath;
-    TMaybe<NYdb::NCoordination::TSession> Session;
-    TActorId RowDispatcherActorId;
+    const NKikimr::TYdbCredentialsProviderFactory& CredentialsProviderFactory;
+    TYqSharedResources::TPtr YqSharedResources;
     TMaybe<TActorId> LeaderActorId;
+
+    struct NodeInfo {
+        bool Connected = false;
+    };
+    std::map<ui32, NodeInfo> RowDispatchersByNode; 
+    bool IsLeader = false;
 
 public:
     TActorCoordinator(
@@ -69,183 +74,90 @@ public:
 
     static constexpr char ActorName[] = "YQ_RD_COORDINATOR";
 
-
-    void Handle(NFq::TEvents::TEvSchemaCreated::TPtr& ev);
-    void Handle(NFq::TEvCreateSessionResult::TPtr& ev);
-    void Handle(NFq::TEvCreateSemaphoreResult::TPtr& ev);
-    void Handle(NFq::TEvAcquireSemaphoreResult::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev);
-
     void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev);
     void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev);
-    void Handle(NActors::TEvents::TEvUndelivered::TPtr &ev) ;
+    void Handle(NActors::TEvents::TEvUndelivered::TPtr &ev);
+    void Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev);
 
     STRICT_STFUNC(
         StateFunc, {
-        hFunc(NFq::TEvents::TEvSchemaCreated, Handle);
-        hFunc(NFq::TEvCreateSessionResult, Handle);
-        hFunc(NFq::TEvCreateSemaphoreResult, Handle);
-        hFunc(NFq::TEvAcquireSemaphoreResult, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvStartSession, Handle);
         hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
         hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
         hFunc(NActors::TEvents::TEvUndelivered, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvCoordinatorChanged, Handle);
     })
 
 private:
-    void CreateSemaphore();
-    void AcquireSemaphore();
+    void DebugPrint();
 };
 
 TActorCoordinator::TActorCoordinator(
-    NActors::TActorId rowDispatcherId,
+    NActors::TActorId /*rowDispatcherId*/,
     const NConfig::TRowDispatcherCoordinatorConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources)
     : Config(config)
-    , YdbConnection(NewYdbConnection(config.GetStorage(), credentialsProviderFactory, yqSharedResources->UserSpaceYdbDriver))
-    , CoordinationNodePath(JoinPath(YdbConnection->TablePathPrefix, Config.GetNodePath()))
-    , RowDispatcherActorId(rowDispatcherId) {
-}
-
-ERetryErrorClass RetryFunc(const NYdb::TStatus& status) {
-    if (status.IsSuccess()) {
-        return ERetryErrorClass::NoRetry;
-    }
-
-    if (status.IsTransportError()) {
-        return ERetryErrorClass::ShortRetry;
-    }
-
-    const NYdb::EStatus st = status.GetStatus();
-    if (st == NYdb::EStatus::INTERNAL_ERROR || st == NYdb::EStatus::UNAVAILABLE ||
-        st == NYdb::EStatus::TIMEOUT || st == NYdb::EStatus::BAD_SESSION ||
-        st == NYdb::EStatus::SESSION_EXPIRED ||
-        st == NYdb::EStatus::SESSION_BUSY) {
-        return ERetryErrorClass::ShortRetry;
-    }
-
-    if (st == NYdb::EStatus::OVERLOADED) {
-        return ERetryErrorClass::LongRetry;
-    }
-
-    return ERetryErrorClass::NoRetry;
-}
-
-TYdbSdkRetryPolicy::TPtr MakeSchemaRetryPolicy() {
-    static auto policy = TYdbSdkRetryPolicy::GetExponentialBackoffPolicy(RetryFunc, TDuration::MilliSeconds(10), TDuration::Seconds(1), TDuration::Seconds(5));
-    return policy;
+    , CredentialsProviderFactory(credentialsProviderFactory)
+    , YqSharedResources(yqSharedResources) {
 }
 
 void TActorCoordinator::Bootstrap() {
     Become(&TActorCoordinator::StateFunc);
     LOG_YQ_ROW_DISPATCHER_DEBUG("Coordinator: Successfully bootstrapped coordinator, id " << SelfId());
-
-    Register(MakeCreateCoordinationNodeActor(
-        SelfId(),
-        NKikimrServices::YQ_ROW_DISPATCHER,
-        YdbConnection,
-        CoordinationNodePath,
-        MakeSchemaRetryPolicy()));
-}
-
-void TActorCoordinator::CreateSemaphore() {
-    LOG_YQ_ROW_DISPATCHER_DEBUG("Coordinator: CreateSemaphore");
-
-    Session->CreateSemaphore("my-semaphore", 1, "my-data")
-        .Subscribe(
-        [actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](const NYdb::NCoordination::TAsyncResult<void>& future) {
-            actorSystem->Send(actorId, new TEvCreateSemaphoreResult(future.GetValue()));
-        }); 
-}
-
-void TActorCoordinator::AcquireSemaphore() {
-    LOG_YQ_ROW_DISPATCHER_DEBUG("AcquireSemaphore");
-
-    NActorsProto::TActorId protoId;
-    ActorIdToProto(SelfId(), &protoId);
-    TString strActorId;
-    if (!protoId.SerializeToString(&strActorId)) {
-        Y_ABORT("SerializeToString");
-    }
-    
-    Session->AcquireSemaphore(
-        "my-semaphore",
-        NYdb::NCoordination::TAcquireSemaphoreSettings().Count(1).Data(strActorId))
-        .Subscribe(
-            [actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](const NYdb::NCoordination::TAsyncResult<bool>& future) {
-                actorSystem->Send(actorId, new TEvAcquireSemaphoreResult(future.GetValue()));
-            });
-}
-
-void TActorCoordinator::Handle(NFq::TEvents::TEvSchemaCreated::TPtr& ev) {
-    if (!IsTableCreated(ev->Get()->Result)) {
-        LOG_YQ_ROW_DISPATCHER_DEBUG("Coordinator: Schema created error " << ev->Get()->Result.GetIssues());
-        return;
-    }
-    LOG_YQ_ROW_DISPATCHER_DEBUG("Coordinator: Coordination node successfully created");
-    
-    YdbConnection->CoordinationClient
-        .StartSession(CoordinationNodePath)
-        .Subscribe([actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](const NYdb::NCoordination::TAsyncSessionResult& future) {
-                actorSystem->Send(actorId, new TEvCreateSessionResult(future.GetValue()));
-            });
-}
-
-void TActorCoordinator::Handle(NFq::TEvCreateSessionResult::TPtr& ev) {
-    if (!ev->Get()->Result.IsSuccess()) {
-
-        LOG_YQ_ROW_DISPATCHER_DEBUG("Coordinator: StartSession fail, " << ev->Get()->Result.GetIssues());
-        return;
-    }
-    Session =  ev->Get()->Result.GetResult();
-    LOG_YQ_ROW_DISPATCHER_DEBUG("Coordinator: Session successfully created");
-    CreateSemaphore();
-}
-
-void TActorCoordinator::Handle(NFq::TEvCreateSemaphoreResult::TPtr& ev) {
-    if (!IsTableCreated(ev->Get()->Result)) {
-        LOG_YQ_ROW_DISPATCHER_DEBUG("Coordinator: Semaphore creating error " << ev->Get()->Result.GetIssues());
-        return;
-    }
-    LOG_YQ_ROW_DISPATCHER_DEBUG("Coordinator: Semaphore successfully created");
-    AcquireSemaphore();
-}
-
-void TActorCoordinator::Handle(NFq::TEvAcquireSemaphoreResult::TPtr& ev) {
-    if (!ev->Get()->Result.IsSuccess()) {
-        LOG_YQ_ROW_DISPATCHER_DEBUG("Coordinator: Acquired fail " << ev->Get()->Result.GetIssues());
-        return;
-    }
-    LOG_YQ_ROW_DISPATCHER_DEBUG("Coordinator: Semaphore successfully acquired");
+    Register(NewLeaderElection(SelfId(), Config, CredentialsProviderFactory, YqSharedResources).release());
 }
 
 void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     LOG_YQ_ROW_DISPATCHER_DEBUG("Coordinator: StartSession received, " << ev->Sender);
 
+    ui32 nodeId = ev->Sender.NodeId();
+    auto& nodeInfo = RowDispatchersByNode[nodeId];
+    nodeInfo.Connected = true;
+
+    DebugPrint();
     Send(ev->Sender, new TEvRowDispatcher::TEvCoordinatorInfo(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
+}
+
+void TActorCoordinator::DebugPrint() {
+    LOG_YQ_ROW_DISPATCHER_DEBUG("Coordinator: RowDispatchers: ");
+
+    for (const auto& [nodeId, nodeInfo] : RowDispatchersByNode) {
+            LOG_YQ_ROW_DISPATCHER_DEBUG("   node " << nodeId << ", connected " << nodeInfo.Connected);
+    }
 }
 
 void TActorCoordinator::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr &ev) {
     LOG_YQ_ROW_DISPATCHER_DEBUG("Coordinator: EvNodeConnected " << ev->Get()->NodeId);
 }
 
-
 void TActorCoordinator::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
     LOG_YQ_ROW_DISPATCHER_DEBUG("Coordinator: TEvNodeDisconnected " << ev->Get()->NodeId);
+    auto& nodeInfo = RowDispatchersByNode[ev->Get()->NodeId];
+    nodeInfo.Connected = false;
 }
 
 void TActorCoordinator::Handle(NActors::TEvents::TEvUndelivered::TPtr &ev) {
 
     LOG_YQ_ROW_DISPATCHER_DEBUG("Coordinator: TEvUndelivered, ev: " << ev->Get()->ToString());
     LOG_YQ_ROW_DISPATCHER_DEBUG("Coordinator: TEvUndelivered, Reason: " << ev->Get()->Reason);
-    //Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup());
+    auto& nodeInfo = RowDispatchersByNode[ev->Sender.NodeId()];
+    nodeInfo.Connected = false;
 }
+
+void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev) {
+    LOG_YQ_ROW_DISPATCHER_DEBUG("Coordinator: new leader " << ev->Get()->LeaderActorId);
+
+    IsLeader = SelfId() == ev->Get()->LeaderActorId;
+    LOG_YQ_ROW_DISPATCHER_DEBUG("IsLeader " << IsLeader);
+}
+
 } // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::unique_ptr<NActors::IActor> NewRDCoordinator(
+std::unique_ptr<NActors::IActor> NewCoordinator(
     NActors::TActorId rowDispatcherId,
     const NConfig::TRowDispatcherCoordinatorConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
